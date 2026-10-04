@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Longer Reach",
+    "description": "Place blocks ~50% further away (7.5 instead of 5 blocks).",
+    "uuid": "98ffbad6-9113-4c97-958e-ad23db1950c9",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "0b70a099-d5b4-49c8-8ad8-cfc6d0c9cbec",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}
