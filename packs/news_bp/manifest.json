@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Realm News & Tips",
+    "description": "News popup on join when something's new, plus rotating chat tips. /news:show",
+    "uuid": "6cb00063-90ec-42cd-b7e5-cafc4e0b517a",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "92d14f6a-cf31-40e3-82a7-2b9e6fbe0cc9",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

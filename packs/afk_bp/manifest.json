@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "AFK + Smart Sleep",
+    "description": "Tags idle players [AFK] and skips the night without waiting for them. /afk:now",
+    "uuid": "d3d25600-cd40-4fd2-8b46-da10218c855e",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "d89abb73-4769-42a5-8cbd-d1d9c9c97d16",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}
