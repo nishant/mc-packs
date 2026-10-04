@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc -p . && node tools/check-docs.mjs",
+    "check": "tsc -p . && node tools/check-docs.mjs && node tools/check-commands.mjs",
     "build": "node tools/build.mjs",
     "bundle": "node tools/bundle.mjs"
   },

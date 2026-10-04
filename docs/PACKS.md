@@ -49,14 +49,15 @@ What each pack in this repo does, how to use it, and how to configure it.
 
 ### Commands
 
-- Every command has a namespace prefix: `/welcome:show`, `/stats:show`, … Type the prefix (e.g. `/stats`) to see that pack's commands in autocomplete.
+- **Every command starts with `/realm:`**, e.g. `/realm:welcome`, `/realm:stats`. Type `/realm` to see all of them in autocomplete.
+- All packs share the `realm` namespace because Bedrock requires **one command namespace per add-on**. A bundle is one add-on, so if packs used different namespaces, only the first pack's commands would register and the rest would show as "unknown command". `npm run check` and the bundler both enforce this.
 - **Everyone** commands work for all players. **Ops** commands (permission level `GameDirectors`) only work for, and are only shown to, operators.
 
 ### Two ways to configure
 
 | | Where | Who | Takes effect | Notes |
 |---|---|---|---|---|
-| **In-game** | Commands like `/welcome:edit`, `/news:edit`, `/news:tips`, `/stats:sidebar` | Operators | Immediately | Saved in the world, and overrides `config.js` |
+| **In-game** | Commands like `/realm:welcome_edit`, `/realm:news_edit`, `/realm:news_tips`, `/realm:stats_sidebar` | Operators | Immediately | Saved in the world, and overrides `config.js` |
 | **`config.js`** | `packs/<folder>/scripts/config.js` | Whoever builds the pack | After rebuilding and re-applying the pack | Defaults and options that have no in-game editor |
 
 ### Updating a pack
@@ -91,11 +92,11 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 
 | Command | Who | What it does |
 |---|---|---|
-| `/welcome:show` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
-| `/welcome:edit` | Ops | Opens an editor: title, body, button text, and toggles for show once, chat copy and big on-screen title. If chat or the inventory stays open, it retries for about 20 s and then says so once |
-| `/welcome:reset` | Ops | Discards in-game edits and goes back to the `config.js` defaults |
+| `/realm:welcome` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
+| `/realm:welcome_edit` | Ops | Opens an editor: title, body, button text, and toggles for show once, chat copy and big on-screen title. If chat or the inventory stays open, it retries for about 20 s and then says so once |
+| `/realm:welcome_reset` | Ops | Discards in-game edits and goes back to the `config.js` defaults |
 
-Every save from `/welcome:edit` counts as a new revision. With **show once** turned on, everyone sees the edited message one more time.
+Every save from `/realm:welcome_edit` counts as a new revision. With **show once** turned on, everyone sees the edited message one more time.
 
 ### Placeholders
 
@@ -106,7 +107,7 @@ Every save from `/welcome:edit` counts as a new revision. With **show once** tur
 
 ### Configuration (`scripts/config.js` → `DEFAULTS`)
 
-These are defaults. Once an op saves with `/welcome:edit`, the saved values win until `/welcome:reset`.
+These are defaults. Once an op saves with `/realm:welcome_edit`, the saved values win until `/realm:welcome_reset`.
 
 | Option | Default | In-game? | Description |
 |---|---|---|---|
@@ -150,7 +151,7 @@ Warns players before a tool, weapon or armor piece breaks.
 
 | Command | Who | What it does |
 |---|---|---|
-| `/durability:toggle` | Everyone | Turns warnings off or on **for yourself**. Remembered between sessions |
+| `/realm:durability` | Everyone | Turns warnings off or on **for yourself**. Remembered between sessions |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -213,7 +214,7 @@ This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanil
 
 | Command | Who | What it does |
 |---|---|---|
-| `/afk:now` | Everyone | Marks you AFK right away. Small movements in the next 3 seconds (closing chat, the camera settling) are ignored. Move to come back |
+| `/realm:afk` | Everyone | Marks you AFK right away. Small movements in the next 3 seconds (closing chat, the camera settling) are ignored. Move to come back |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -245,7 +246,7 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 
 ### Stats
 
-| ID (for `/stats:sidebar`) | Label | How it's counted |
+| ID (for `/realm:stats_sidebar`) | Label | How it's counted |
 |---|---|---|
 | `playtime` | Playtime | +1 min per 60 s online. Paused while the player has the `afkTag` tag |
 | `deaths` | Deaths | Player deaths |
@@ -268,8 +269,8 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 
 | Command | Who | What it does |
 |---|---|---|
-| `/stats:show` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date) or **Leaderboards** (pick a stat to see the top `leaderboardSize`, with your own position underneath if you're outside it) |
-| `/stats:sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through every stat every `sidebarCycleSeconds`) or **`off`** |
+| `/realm:stats` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date) or **Leaderboards** (pick a stat to see the top `leaderboardSize`, with your own position underneath if you're outside it) |
+| `/realm:stats_sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through every stat every `sidebarCycleSeconds`) or **`off`** |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -308,7 +309,7 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 
 - When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join.
 - The popup is timed after the welcome popup (`delayTicks` = 5 s). If another popup is still open, it waits up to about 90 s.
-- If it still can't show, chat says `📰 There's new Realm news! Run /news:show` (after the "welcome back" notice, if there is one), and the player sees it next join instead.
+- If it still can't show, chat says `📰 There's new Realm news! Run /realm:news` (after the "welcome back" notice, if there is one), and the player sees it next join instead.
 - Saving **unchecked** is a quiet edit (e.g. a typo fix). Players who already saw the news don't see it again.
 - An empty body means no news.
 
@@ -319,15 +320,15 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 ### Tips
 
 - A tip from the list is posted in chat every `tipIntervalMinutes` (20), as `[Tip] …` (`tipPrefix`), only while someone is online.
-- The default tips cover your other add-ons: tree felling, vein mining, the Waypoint Menu, `/stats:show` and `/afk:now`.
+- The default tips cover your other add-ons: tree felling, vein mining, the Waypoint Menu, `/realm:stats` and `/realm:afk`.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/news:show` | Everyone | Shows the current news |
-| `/news:edit` | Ops | Editor: title, body, and the "pop up on next join" toggle |
-| `/news:tips` | Ops | Tips menu: **+ Add a tip**, **Settings** (on/off, interval 5–120 min in steps of 5), **Post the next tip now**, or tap a tip to edit or delete it |
+| `/realm:news` | Everyone | Shows the current news |
+| `/realm:news_edit` | Ops | Editor: title, body, and the "pop up on next join" toggle |
+| `/realm:news_tips` | Ops | Tips menu: **+ Add a tip**, **Settings** (on/off, interval 5–120 min in steps of 5), **Post the next tip now**, or tap a tip to edit or delete it |
 
 ### Configuration (`scripts/config.js`)
 
@@ -335,11 +336,11 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 
 | Option | Default | In-game? | Description |
 |---|---|---|---|
-| `news.title` | `§l§bRealm News` | ✅ `/news:edit` | News popup title |
-| `news.body` | *(empty)* | ✅ `/news:edit` | News text. Empty = no news |
-| `tips` | 5 tips about your add-ons | ✅ `/news:tips` | Starting tip list |
-| `tipIntervalMinutes` | `20` | ✅ `/news:tips` → Settings | Minutes between tips |
-| `tipsEnabled` | `true` | ✅ `/news:tips` → Settings | Post tips at all |
+| `news.title` | `§l§bRealm News` | ✅ `/realm:news_edit` | News popup title |
+| `news.body` | *(empty)* | ✅ `/realm:news_edit` | News text. Empty = no news |
+| `tips` | 5 tips about your add-ons | ✅ `/realm:news_tips` | Starting tip list |
+| `tipIntervalMinutes` | `20` | ✅ `/realm:news_tips` → Settings | Minutes between tips |
+| `tipsEnabled` | `true` | ✅ `/realm:news_tips` → Settings | Post tips at all |
 | `delayTicks` | `100` | ❌ | Ticks after joining before showing the news (after the welcome popup's `40`) |
 | `awayNoticeHours` | `12` | ❌ | Minimum time away for the welcome-back notice. `0` = never |
 | `tipPrefix` | `§b[Tip]§r ` | ❌ | Text before each tip in chat |
@@ -391,7 +392,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 |---|---|
 | AFK → Stats | Stats pauses playtime for players with the `afk` tag. Keep AFK `tag` and Stats `afkTag` the same |
 | Welcome → News | Both popups show on join, welcome first (`delayTicks` 40 vs 100). News waits until the welcome popup is closed |
-| News tips → others | The default tips mention `/stats:show` and `/afk:now`. Edit them with `/news:tips` if you don't use those packs |
+| News tips → others | The default tips mention `/realm:stats` and `/realm:afk`. Edit them with `/realm:news_tips` if you don't use those packs |
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
 
 None of the packs depend on each other. Any combination works.
@@ -402,10 +403,10 @@ None of the packs depend on each other. Any combination works.
 
 | Problem | Check |
 |---|---|
-| A command doesn't show up | Type it with its prefix (`/stats:show`). Is the pack **Active**, not just Available? Minecraft 1.21.100+? Rejoin after activating. Ops-only commands are hidden from regular members |
+| A command doesn't show up | Type `/realm` to list them all (e.g. `/realm:stats`). Is the pack **Active**, not just Available? Minecraft 1.21.100+? Rejoin after activating. Ops-only commands are hidden from regular members |
 | Commands missing after adding a bundle | The individual packs and the bundle are both active, so duplicates fail. Keep only one |
 | Popup never appears | Close chat/inventory. The welcome popup retries for 30 s, news for about 90 s. Check the content log |
-| Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/welcome:reset`) |
+| Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with `[welcome]`, `[afk]`, `[stats]`, `[news]` or `[durability]` |
@@ -417,7 +418,7 @@ None of the packs depend on each other. Any combination works.
 `npm run check` runs `tools/check-docs.mjs` after the type check, and fails if this file is missing any of:
 
 - a `##` section whose heading contains `` `<folder>` `` for **every pack** in `packs/`
-- **every command** a pack registers, e.g. `` `/stats:show` ``
+- **every command** a pack registers, e.g. `` `/realm:stats` ``
 - **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
 
 When adding or changing a pack: update its section here, and the pack table in `README.md`, in the same commit.

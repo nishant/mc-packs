@@ -18,6 +18,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { join, relative, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { walk, zip } from "./lib/zip.mjs";
+import { namespaceOf, registeredNames } from "./lib/commands.mjs";
 
 const root = join(import.meta.dirname, "..");
 const packsDir = join(root, "packs");
@@ -107,6 +108,24 @@ if (selected.length === 0) fail("no packs selected");
 const resource = selected.filter((p) => p.kind !== "behavior");
 if (resource.length) fail(`resource packs can't be bundled yet: ${resource.map((p) => p.folder).join(", ")}`);
 if (!/^[a-z0-9_-]+$/.test(/** @type {string} */ (args.name))) fail("--name may only contain a-z, 0-9, _ and -");
+
+// A bundle is one add-on, and Bedrock allows one command namespace per add-on:
+// a second namespace throws NamespaceMismatch and those commands never register.
+/** @type {Map<string, string[]>} namespace → "pack: name" */
+const namespaces = new Map();
+for (const p of selected) {
+  const { commands, enums } = registeredNames(p.dir);
+  for (const name of [...commands, ...enums]) {
+    const ns = namespaceOf(name);
+    namespaces.set(ns, [...(namespaces.get(ns) ?? []), `${p.folder}: ${name}`]);
+  }
+}
+if (namespaces.size > 1) {
+  fail(
+    `packs use different command namespaces, so only one would work in a bundle:\n` +
+      [...namespaces].map(([ns, names]) => `  ${ns}:  ${names.join(", ")}`).join("\n")
+  );
+}
 
 // ---------------------------------------------------------------------------
 

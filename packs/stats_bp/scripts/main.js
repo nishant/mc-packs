@@ -299,11 +299,11 @@ const playerOf = (origin) => {
 };
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
-  customCommandRegistry.registerEnum("stats:sidebar_stat", [...STATS.map((s) => s.id), "cycle", "off"]);
+  customCommandRegistry.registerEnum("realm:sidebar_stat", [...STATS.map((s) => s.id), "cycle", "off"]);
 
   customCommandRegistry.registerCommand(
     {
-      name: "stats:show",
+      name: "realm:stats",
       description: "Show your stats and the leaderboards",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -318,11 +318,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
   customCommandRegistry.registerCommand(
     {
-      name: "stats:sidebar",
+      name: "realm:stats_sidebar",
       description: "Show a stat on everyone's sidebar, rotate through all of them, or turn it off",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
-      mandatoryParameters: [{ name: "stats:sidebar_stat", type: CustomCommandParamType.Enum }],
+      mandatoryParameters: [{ name: "realm:sidebar_stat", type: CustomCommandParamType.Enum }],
     },
     (_origin, /** @type {string} */ choice) => {
       system.run(() => setSidebar(choice));

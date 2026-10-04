@@ -106,7 +106,7 @@ function itemName(item) {
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
-      name: "durability:toggle",
+      name: "realm:durability",
       description: "Turn low-durability warnings on or off for yourself",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,

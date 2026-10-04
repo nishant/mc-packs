@@ -3,6 +3,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { registeredNames } from "./lib/commands.mjs";
 
 const root = join(import.meta.dirname, "..");
 const docsPath = join(root, "docs", "PACKS.md");
@@ -40,12 +41,8 @@ for (const folder of packs) {
   }
   const scripts = join(root, "packs", folder, "scripts");
 
-  const main = join(scripts, "main.js");
-  if (existsSync(main)) {
-    const src = readFileSync(main, "utf8");
-    for (const [, name] of src.matchAll(/registerCommand\(\s*\{\s*name:\s*"([^"]+)"/g)) {
-      if (!section.includes(`\`/${name}`)) problems.push(`${folder}: command \`/${name}\` not documented`);
-    }
+  for (const name of registeredNames(join(root, "packs", folder)).commands) {
+    if (!section.includes(`\`/${name}`)) problems.push(`${folder}: command \`/${name}\` not documented`);
   }
 
   const config = join(scripts, "config.js");

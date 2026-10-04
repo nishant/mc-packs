@@ -187,13 +187,13 @@ function checkSleep() {
 }
 
 // ---------------------------------------------------------------------------
-// /afk:now
+// /realm:afk
 // ---------------------------------------------------------------------------
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
-      name: "afk:now",
+      name: "realm:afk",
       description: "Mark yourself as AFK (move to come back)",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,

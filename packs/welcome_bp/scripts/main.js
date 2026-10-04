@@ -10,7 +10,7 @@ import { DEFAULTS } from "./config.js";
 
 /** @typedef {import("./config.js").WelcomeSettings} WelcomeSettings */
 
-const PROP_SETTINGS = "welcome:settings"; // world: JSON overrides saved by /welcome:edit
+const PROP_SETTINGS = "welcome:settings"; // world: JSON overrides saved by /realm:welcome_edit
 const PROP_REVISION = "welcome:revision"; // world: bumped on every save
 const PROP_SEEN = "welcome:seen"; // player: revision they last saw
 
@@ -184,7 +184,7 @@ async function openEditor(player) {
     screenTitle: screenTitle === true,
     delayTicks: s.delayTicks,
   });
-  player.sendMessage("§aWelcome message saved.§r Run §b/welcome:show§r to preview it.");
+  player.sendMessage("§aWelcome message saved.§r Run §b/realm:welcome§r to preview it.");
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ function playerCommand(action) {
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
-      name: "welcome:show",
+      name: "realm:welcome",
       description: "Show the welcome message to yourself",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -227,7 +227,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
   customCommandRegistry.registerCommand(
     {
-      name: "welcome:edit",
+      name: "realm:welcome_edit",
       description: "Edit the welcome message (operators only)",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
@@ -237,7 +237,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
   customCommandRegistry.registerCommand(
     {
-      name: "welcome:reset",
+      name: "realm:welcome_reset",
       description: "Reset the welcome message to the pack defaults (operators only)",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,

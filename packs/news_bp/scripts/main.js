@@ -133,7 +133,7 @@ async function onJoin(player, lastSeen) {
   const shown = await showNews(player, away ? `§7${away}§r\n\n` : "");
   if (!player.isValid) return;
   if (shown) player.setDynamicProperty(PROP_SEEN, revision);
-  else player.sendMessage(`${away ? `§7${away}§r ` : ""}§b📰 There's new Realm news!§r Run §b/news:show§r to read it.`);
+  else player.sendMessage(`${away ? `§7${away}§r ` : ""}§b📰 There's new Realm news!§r Run §b/realm:news§r to read it.`);
 }
 
 // Keep lastSeen fresh while online (leave events can't write player data).
@@ -199,7 +199,7 @@ async function editNews(player) {
 
   player.sendMessage(
     announce === true
-      ? "§aNews saved.§r Everyone sees it on their next join. Online players: §b/news:show§r."
+      ? "§aNews saved.§r Everyone sees it on their next join. Online players: §b/realm:news§r."
       : "§aNews saved quietly§r (won't pop up again for people who've seen it)."
   );
 }
@@ -292,7 +292,7 @@ function playerCommand(action) {
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
-      name: "news:show",
+      name: "realm:news",
       description: "Show the latest Realm news",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -301,7 +301,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
   customCommandRegistry.registerCommand(
     {
-      name: "news:edit",
+      name: "realm:news_edit",
       description: "Edit the Realm news (operators only)",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
@@ -310,7 +310,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
   customCommandRegistry.registerCommand(
     {
-      name: "news:tips",
+      name: "realm:news_tips",
       description: "Add, edit or delete chat tips (operators only)",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,

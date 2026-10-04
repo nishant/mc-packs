@@ -1,8 +1,8 @@
 // Default welcome settings.
 //
 // These are only the *defaults*. Once an operator saves changes in-game with
-// /welcome:edit, the saved version (stored in the world) wins. Run
-// /welcome:reset to go back to what's in this file.
+// /realm:welcome_edit, the saved version (stored in the world) wins. Run
+// /realm:welcome_reset to go back to what's in this file.
 //
 // Formatting:
 //   \n          new line

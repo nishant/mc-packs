@@ -7,7 +7,8 @@ Minecraft Bedrock behavior packs for a Realm. Each folder in `packs/` is a stand
 - **Docs stay current.** Any change to a pack's behaviour, commands, config options or saved data must update `docs/PACKS.md` (and the pack table in `README.md` if the summary or commands change) **in the same commit**. `npm run check` fails if a pack, a registered command or a `config.js` option is missing from the docs. That only checks coverage, so make sure descriptions and defaults are still accurate too.
 - **New pack:** add `packs/<folder>/`, a `## <Name> — \`<folder>\`` section in `docs/PACKS.md` (same layout as the others: what players see, Commands, Configuration, Saved data), a row in the README table, and a mention in "How the packs work together" if it interacts with other packs.
 - **Stable APIs only:** `@minecraft/server` 2.1.0 / `@minecraft/server-ui` 2.0.0, no beta modules or experiments, because the packs run on a Realm.
-- **Packs stay independent:** no imports between packs. Coordinate through tags or scoreboards, like the AFK pack's `afk` tag that the Stats pack reads. Prefix command names and dynamic property keys with the pack's namespace.
+- **Packs stay independent:** no imports between packs. Coordinate through tags or scoreboards, like the AFK pack's `afk` tag that the Stats pack reads. Dynamic property keys use the pack's own prefix (`news:…`, `stats:…`).
+- **Commands all use the `realm:` namespace**, named `realm:<pack>` or `realm:<pack>_<action>` (e.g. `realm:news_edit`). Bedrock allows only one command namespace per add-on, and a bundle is one add-on: a second namespace throws `NamespaceMismatch` and those commands never register. `npm run check` and `npm run bundle` fail on any other namespace.
 - **Version bumps:** increase `header.version` in a pack's `manifest.json` whenever its contents change.
 
 ## Commands

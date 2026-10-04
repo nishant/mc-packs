@@ -1,6 +1,6 @@
 // Defaults only. Ops can change everything in-game:
-//   /news:edit   edit the news popup
-//   /news:tips   add/edit/delete tips, change how often they're posted
+//   /realm:news_edit   edit the news popup
+//   /realm:news_tips   add/edit/delete tips, change how often they're posted
 
 export const DEFAULTS = {
   news: {
@@ -12,8 +12,8 @@ export const DEFAULTS = {
     "Sneak while breaking a log to fell the whole tree.",
     "Sneak while mining ore to mine the whole vein.",
     "Use the Waypoint Menu item to save and share teleport points.",
-    "Run /stats:show to see your stats and the leaderboards.",
-    "Going AFK? Run /afk:now, then the night can be skipped without you.",
+    "Run /realm:stats to see your stats and the leaderboards.",
+    "Going AFK? Run /realm:afk, then the night can be skipped without you.",
   ],
 
   /** Post a tip in chat every N minutes (only while someone is online). */
