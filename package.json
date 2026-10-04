@@ -1,0 +1,14 @@
+{
+  "name": "mc-packs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p .",
+    "build": "node tools/build.mjs"
+  },
+  "devDependencies": {
+    "@minecraft/server": "2.1.0",
+    "@minecraft/server-ui": "2.0.0",
+    "typescript": "^5.9.0"
+  }
+}
