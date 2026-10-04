@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Stats & Leaderboards",
+    "description": "Tracks playtime, deaths, kills, blocks and distance. /stats:show",
+    "uuid": "ab36401f-cbe4-4c51-a817-3c7a2633373a",
+    "version": [1, 0, 1],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "861e9db5-fdc3-4b76-a8d7-2b9d2efecc0b",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}
