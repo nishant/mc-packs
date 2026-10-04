@@ -5,6 +5,7 @@ import {
   DisplaySlotId,
   ObjectiveSortOrder,
   Player,
+  ScoreboardIdentityType,
   system,
   world,
 } from "@minecraft/server";
@@ -40,19 +41,42 @@ function objective(id) {
   return world.scoreboard.getObjective(objId) ?? world.scoreboard.addObjective(objId, stat?.sidebar ?? id);
 }
 
-/** @param {Player} player @param {string} id @param {number} [n] */
+/**
+ * Scores are kept under the player's *name* (a "fake player" participant)
+ * rather than the player entity. Bedrock shows offline entity participants as
+ * "Player Offline", so this way leaderboards and the sidebar keep real names.
+ * @param {Player} player @param {string} id @param {number} [n]
+ */
 function add(player, id, n = 1) {
   if (n <= 0 || !player.isValid) return;
   try {
-    objective(id).addScore(player, n);
+    objective(id).addScore(player.name, n);
   } catch (e) {
     console.warn(`[stats] ${id}: ${e}`);
+  }
+}
+
+/** Moves scores stored on the player entity (pack v1.0.0) to their name. @param {Player} player */
+function migrateEntityScores(player) {
+  for (const stat of STATS) {
+    const obj = objective(stat.id);
+    const old = obj.getScore(player);
+    if (old === undefined) continue;
+    obj.addScore(player.name, old);
+    obj.removeParticipant(player);
   }
 }
 
 // ---------------------------------------------------------------------------
 // Tracking
 // ---------------------------------------------------------------------------
+
+/**
+ * Sub-unit progress kept in memory between ticks (seconds, fractional blocks).
+ * @type {Map<string, { seconds: number, travelled: number, flown: number, last?: { x: number, y: number, z: number, dim: string } }>}
+ */
+const pending = new Map();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => pending.delete(playerId));
 
 world.afterEvents.playerBreakBlock.subscribe(({ player }) => add(player, "mined"));
 world.afterEvents.playerPlaceBlock.subscribe(({ player }) => add(player, "placed"));
@@ -68,19 +92,21 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 });
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  // Spawning (joining or respawning) moves the player without travelling.
+  const p = pending.get(player.id);
+  if (p) p.last = undefined;
+
   if (!initialSpawn) return;
+  try {
+    migrateEntityScores(player);
+  } catch (e) {
+    console.warn(`[stats] migrate: ${e}`);
+  }
   add(player, "joins");
   if (player.getDynamicProperty(PROP_FIRST_JOIN) === undefined) {
     player.setDynamicProperty(PROP_FIRST_JOIN, Date.now());
   }
 });
-
-/**
- * Sub-unit progress kept in memory between ticks (seconds, fractional blocks).
- * @type {Map<string, { seconds: number, travelled: number, flown: number, last?: { x: number, y: number, z: number, dim: string } }>}
- */
-const pending = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => pending.delete(playerId));
 
 system.runInterval(() => {
   for (const player of world.getAllPlayers()) {
@@ -173,7 +199,8 @@ const fmt = (stat, n) => (stat.format ? stat.format(n) : n.toLocaleString());
 function ranked(id) {
   return objective(id)
     .getScores()
-    .filter((s) => s.score > 0)
+    // Skip entity participants: v1.0.0 scores not migrated yet (the player hasn't rejoined), shown as "Player Offline".
+    .filter((s) => s.score > 0 && s.participant.type !== ScoreboardIdentityType.Player)
     .sort((a, b) => b.score - a.score);
 }
 
@@ -194,7 +221,7 @@ async function mainMenu(player) {
 async function myStats(player) {
   const lines = STATS.map((stat) => {
     const list = ranked(stat.id);
-    const score = objective(stat.id).getScore(player) ?? 0;
+    const score = objective(stat.id).getScore(player.name) ?? 0;
     const rank = list.findIndex((s) => s.participant.displayName === player.name) + 1;
     return `§7${stat.label}:§r ${fmt(stat, score)}${rank > 0 ? ` §8(#${rank} of ${list.length})` : ""}`;
   });

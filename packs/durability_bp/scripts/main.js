@@ -98,6 +98,7 @@ function itemName(item) {
   return item.typeId
     .replace(/^[^:]+:/, "")
     .split("_")
+    .filter(Boolean)
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(" ");
 }

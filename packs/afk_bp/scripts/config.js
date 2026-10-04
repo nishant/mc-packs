@@ -21,7 +21,7 @@ export const CONFIG = {
     /** Count players in the Nether/End (who can't sleep) as needing to sleep, like vanilla. */
     countOtherDimensions: false,
 
-    /** How long the condition must hold before skipping, in ticks (vanilla is ~100). */
-    requiredTicks: 100,
+    /** How long the condition must hold before skipping, in ticks. Minimum 140, so it never races vanilla's ~100-tick skip. */
+    requiredTicks: 160,
   },
 };

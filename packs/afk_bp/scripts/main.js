@@ -12,6 +12,10 @@ const CHECK_TICKS = 20;
 const AFK_TICKS = CONFIG.afkMinutes * 60 * 20;
 /** After /afk, ignore small movements (closing chat, camera settling) for this long. */
 const MANUAL_GRACE_TICKS = 60;
+/** Stick input below this counts as no input (controller drift). */
+const STICK_DEADZONE = 0.1;
+/** Vanilla wakes everyone after ~100 ticks asleep. Waiting longer means we never skip a night it's already skipping. */
+const MIN_SLEEP_TICKS = 140;
 
 /**
  * @typedef {{ lastActive: number, afkSince?: number, graceUntil: number, yaw: number, pitch: number }} AfkState
@@ -23,6 +27,11 @@ const players = new Map();
 function getState(player) {
   let s = players.get(player.id);
   if (!s) {
+    // No state yet but still tagged: left over from before a script reload.
+    if (player.hasTag(CONFIG.tag)) {
+      player.removeTag(CONFIG.tag);
+      player.nameTag = player.name;
+    }
     const r = player.getRotation();
     s = { lastActive: system.currentTick, graceUntil: 0, yaw: r.y, pitch: r.x };
     players.set(player.id, s);
@@ -102,7 +111,7 @@ system.runInterval(() => {
       const turned = Math.abs(r.y - s.yaw) > 0.5 || Math.abs(r.x - s.pitch) > 0.5;
       const mv = player.inputInfo.getMovementVector();
       // Movement keys/stick, not position: water streams and minecarts don't count.
-      const moving = mv.x !== 0 || mv.y !== 0;
+      const moving = Math.hypot(mv.x, mv.y) > STICK_DEADZONE;
       s.yaw = r.y;
       s.pitch = r.x;
 
@@ -149,8 +158,19 @@ function checkSleep() {
     sleepTicks = 0;
     return;
   }
+
+  // If vanilla's own rule is met, let vanilla skip the night. Doing it too would
+  // race it, and the second skip lands a full day later. Counting every player
+  // here is the strictest reading of the gamerule, so if this holds, vanilla
+  // skips whichever way it counts.
+  const vanillaPercent = world.gameRules.playersSleepingPercentage;
+  if (sleeping.length >= Math.max(1, Math.ceil((all.length * vanillaPercent) / 100))) {
+    sleepTicks = 0;
+    return;
+  }
+
   sleepTicks += CHECK_TICKS;
-  if (sleepTicks < CONFIG.sleep.requiredTicks) return;
+  if (sleepTicks < Math.max(CONFIG.sleep.requiredTicks, MIN_SLEEP_TICKS)) return;
   sleepTicks = 0;
 
   const timeOfDay = world.getTimeOfDay();

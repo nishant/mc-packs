@@ -92,7 +92,7 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 | Command | Who | What it does |
 |---|---|---|
 | `/welcome:show` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
-| `/welcome:edit` | Ops | Opens an editor: title, body, button text, and toggles for show once, chat copy and big on-screen title |
+| `/welcome:edit` | Ops | Opens an editor: title, body, button text, and toggles for show once, chat copy and big on-screen title. If chat or the inventory stays open, it retries for about 20 s and then says so once |
 | `/welcome:reset` | Ops | Discards in-game edits and goes back to the `config.js` defaults |
 
 Every save from `/welcome:edit` counts as a new revision. With **show once** turned on, everyone sees the edited message one more time.
@@ -180,7 +180,7 @@ A player counts as **active** when they do any of these:
 
 | Signal | Notes |
 |---|---|
-| Movement keys or stick | Checks the actual movement input, so being pushed by water streams, pistons or minecarts **doesn't** count |
+| Movement keys or stick | Checks the actual movement input, so being pushed by water streams, pistons or minecarts **doesn't** count. Tiny stick input (< 10%, controller drift) is ignored |
 | Turning the camera | More than 0.5° |
 | Breaking, placing, interacting with blocks or entities | |
 | Using an item, hitting a block or entity | |
@@ -192,7 +192,7 @@ After `afkMinutes` (5) with none of these:
 - The player gets the `afk` tag (`tag`). Other packs and commands can use it, e.g. `@a[tag=!afk]`.
 - Chat shows `Name is now AFK` (`announce`).
 
-Any activity brings them back, with `Name is back (AFK 12m)` in chat. Sleeping players are never marked AFK. When a player rejoins, any leftover AFK name or tag from the last session is cleared.
+Any activity brings them back, with `Name is back (AFK 12m)` in chat. Sleeping players are never marked AFK. Leftover AFK names or tags are cleared when a player rejoins, and after a script reload.
 
 ### Smart sleep (night skip)
 
@@ -201,12 +201,13 @@ Checked every second while at least one player is in bed:
 1. **Counted players** = everyone asleep, plus every non-AFK player in the Overworld (also those in the Nether/End if `sleep.countOtherDimensions` is on).
 2. **Needed** = `ceil(counted × sleep.percent / 100)`, at least 1.
 3. While anyone is in bed, Overworld players see `🛏 2/2 sleeping (1 AFK ignored)` above the hotbar.
-4. Once enough players have been asleep for `sleep.requiredTicks` (5 s):
+4. **If vanilla's own rule already covers it**, i.e. enough players are asleep to meet the `playersSleepingPercentage` gamerule counting *everyone*, the pack does nothing and lets vanilla skip the night. That's always the case when nobody is AFK and everyone is in bed. Doing both would race, and the second skip would land a full day later.
+5. Otherwise, once enough players have been asleep for `sleep.requiredTicks` (8 s, and never less than 7 s, so vanilla always gets to act first):
    - **At night:** moves to the **next morning**. Absolute time moves forward, so the day counter (`showdaysplayed`) stays correct. The weather clears too.
    - **During a daytime thunderstorm:** only clears the weather.
    - Chat shows `☀ Good morning! (1 AFK player skipped)`.
 
-This works **alongside** the vanilla `playerssleepingpercentage` gamerule. Whichever condition is met first skips the night.
+This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanilla handles everything it can, and this pack only covers what vanilla wouldn't, such as nights blocked by AFK players or by players in other dimensions.
 
 ### Commands
 
@@ -225,7 +226,7 @@ This works **alongside** the vanilla `playerssleepingpercentage` gamerule. Which
 | `sleep.enabled` | `true` | Turn smart sleep on or off |
 | `sleep.percent` | `100` | % of counted players that must be asleep |
 | `sleep.countOtherDimensions` | `false` | Also count non-AFK players in the Nether/End (who can't sleep), like vanilla |
-| `sleep.requiredTicks` | `100` | How long enough players must be asleep before skipping (20 = 1 s) |
+| `sleep.requiredTicks` | `160` | How long enough players must be asleep before skipping (20 = 1 s). Values below `140` are raised to `140`, so vanilla's ~100-tick skip always comes first |
 
 ### Saved data
 
@@ -256,8 +257,11 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 | `flown` | Elytra distance | Blocks moved while gliding |
 | `joins` | Times joined | Each join |
 
-- Movement faster than `maxSpeed` blocks/s is treated as a teleport and not counted.
-- Each stat is the scoreboard objective **`stats_<id>`** (e.g. `stats_deaths`). Offline players stay on the leaderboards, and vanilla commands work too, e.g. `/scoreboard players list`.
+- Movement faster than `maxSpeed` blocks/s is treated as a teleport and not counted. Respawning isn't counted either.
+- Each stat is the scoreboard objective **`stats_<id>`** (e.g. `stats_deaths`). Scores are stored under the player's **name** (a "fake player" participant), not the player entity. Bedrock shows offline entity participants as "Player Offline", so this keeps real names on leaderboards and the sidebar when people are offline.
+- Vanilla commands work too, e.g. `/scoreboard players list "Steve"`.
+- If someone changes their gamertag, their stats start again under the new name, and the old name stays on the leaderboard.
+- Scores from pack v1.0.0, which stored them on the player entity, move to the name automatically the next time that player joins. Until then they're hidden from the menus, and the vanilla sidebar may still show them as "Player Offline".
 - First-joined date is saved per player, from the first join after the pack was added.
 
 ### Commands
@@ -280,13 +284,19 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 
 | Key | Scope | Contents |
 |---|---|---|
-| `stats_playtime`, `stats_deaths`, `stats_mobkills`, `stats_pvpkills`, `stats_mined`, `stats_placed`, `stats_travelled`, `stats_flown`, `stats_joins` | World scoreboard | The stats. **Kept** when switching between the individual pack and a bundle |
+| `stats_playtime`, `stats_deaths`, `stats_mobkills`, `stats_pvpkills`, `stats_mined`, `stats_placed`, `stats_travelled`, `stats_flown`, `stats_joins` | World scoreboard | The stats, one participant per player name. **Kept** when switching between the individual pack and a bundle |
 | `stats:sidebar` | World | Current sidebar mode (`<stat>` / `cycle`) |
 | `stats:firstJoin` | Player | First join time (ms since epoch) |
 
 ### Resetting stats
 
-Use vanilla commands (cheats needed): `/scoreboard players reset * stats_deaths` resets one stat for everyone, `/scoreboard objectives remove stats_deaths` removes it entirely. The pack recreates missing objectives automatically.
+Use vanilla commands (cheats needed):
+
+- `/scoreboard players reset * stats_deaths` resets one stat for everyone.
+- `/scoreboard players reset "Steve" stats_deaths` resets it for one player.
+- `/scoreboard objectives remove stats_deaths` removes the stat entirely.
+
+ The pack recreates missing objectives automatically.
 
 ---
 
@@ -298,7 +308,7 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 
 - When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join.
 - The popup is timed after the welcome popup (`delayTicks` = 5 s). If another popup is still open, it waits up to about 90 s.
-- If it still can't show, chat says `📰 There's new Realm news! Run /news:show` and the player sees it next join instead.
+- If it still can't show, chat says `📰 There's new Realm news! Run /news:show` (after the "welcome back" notice, if there is one), and the player sees it next join instead.
 - Saving **unchecked** is a quiet edit (e.g. a typo fix). Players who already saw the news don't see it again.
 - An empty body means no news.
 

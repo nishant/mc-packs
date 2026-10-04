@@ -114,6 +114,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 /** @param {Player} player @param {number | undefined} lastSeen */
 async function onJoin(player, lastSeen) {
+  if (!player.isValid) return; // left during the join delay
   const awayMs = lastSeen ? Date.now() - lastSeen : 0;
   const away =
     CONFIG.awayNoticeHours > 0 && awayMs >= CONFIG.awayNoticeHours * 3_600_000
@@ -132,7 +133,7 @@ async function onJoin(player, lastSeen) {
   const shown = await showNews(player, away ? `§7${away}§r\n\n` : "");
   if (!player.isValid) return;
   if (shown) player.setDynamicProperty(PROP_SEEN, revision);
-  else player.sendMessage("§b📰 There's new Realm news!§r Run §b/news:show§r to read it.");
+  else player.sendMessage(`${away ? `§7${away}§r ` : ""}§b📰 There's new Realm news!§r Run §b/news:show§r to read it.`);
 }
 
 // Keep lastSeen fresh while online (leave events can't write player data).

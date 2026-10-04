@@ -4,7 +4,7 @@
     "name": "AFK + Smart Sleep",
     "description": "Tags idle players [AFK] and skips the night without waiting for them. /afk:now",
     "uuid": "d3d25600-cd40-4fd2-8b46-da10218c855e",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

@@ -100,7 +100,7 @@ let selected;
 if (args.all) {
   selected = packs.filter((p) => p.kind === "behavior");
 } else {
-  const wanted = /** @type {string} */ (args.packs).split(",").map((s) => s.trim()).filter(Boolean);
+  const wanted = [...new Set(/** @type {string} */ (args.packs).split(",").map((s) => s.trim()).filter(Boolean))];
   selected = wanted.map((w) => packs.find((p) => p.folder === w) ?? fail(`unknown pack "${w}". Run with --list.`));
 }
 if (selected.length === 0) fail("no packs selected");

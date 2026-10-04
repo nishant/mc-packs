@@ -93,6 +93,7 @@ async function showPopup(player, settings, attempt = 1) {
  * @param {{ force?: boolean }} [opts] force = ignore showOnce (used for previews)
  */
 async function welcome(player, { force = false } = {}) {
+  if (!player.isValid) return; // left during the join delay
   const settings = getSettings();
   const revision = getRevision();
 
@@ -127,6 +128,22 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 // In-game editor
 // ---------------------------------------------------------------------------
 
+/**
+ * Shows a form, retrying while the client is busy (chat still closing, inventory open).
+ * @param {Player} player
+ * @param {ModalFormData} form
+ * @returns {Promise<import("@minecraft/server-ui").ModalFormResponse | undefined>} undefined if it never got shown
+ */
+async function showForm(player, form, maxAttempts = 20) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), RETRY_INTERVAL_TICKS));
+  }
+  return undefined;
+}
+
 /** Text fields are single-line, so real newlines are shown as a literal "\n". */
 const escapeNewlines = (/** @type {string} */ s) => s.replaceAll("\n", "\\n");
 const unescapeNewlines = (/** @type {string} */ s) => s.replaceAll("\\n", "\n");
@@ -147,14 +164,12 @@ async function openEditor(player) {
     .toggle("Also flash big on-screen title", { defaultValue: s.screenTitle })
     .submitButton("Save");
 
-  const response = await form.show(player);
-  if (response.canceled || !response.formValues) {
-    if (response.cancelationReason === FormCancelationReason.UserBusy) {
-      player.sendMessage("§eClose chat to see the editor — retrying…");
-      system.runTimeout(() => openEditor(player), RETRY_INTERVAL_TICKS);
-    }
+  const response = await showForm(player, form);
+  if (!response) {
+    if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
     return;
   }
+  if (response.canceled || !response.formValues) return;
 
   const [title, body, button, showOnce, chat, screenTitle] = response.formValues;
   const str = (/** @type {unknown} */ v, /** @type {string} */ fallback) =>
