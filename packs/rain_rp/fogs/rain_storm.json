@@ -1,0 +1,16 @@
+{
+  "format_version": "1.16.100",
+  "minecraft:fog_settings": {
+    "description": {
+      "identifier": "realm:rain_storm"
+    },
+    "distance": {
+      "weather": {
+        "fog_start": 0.08,
+        "fog_end": 0.35,
+        "fog_color": "#4E5763",
+        "render_distance_type": "render"
+      }
+    }
+  }
+}

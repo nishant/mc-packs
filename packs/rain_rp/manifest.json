@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Realistic Rain",
+    "description": "Heavier, gloomier blue rain: denser rain fog, new rain and thunder sounds, softer splashes. Put it at the top of Resource Packs.",
+    "uuid": "7ebf32a5-cfd1-4bdc-b5b4-38e869345cda",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "da9d16a4-4910-4785-954d-36779eb19fa1",
+      "version": [1, 0, 0]
+    }
+  ]
+}

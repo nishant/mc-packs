@@ -29,6 +29,8 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Quick Stack & Sort — `stash_bp`](#quick-stack--sort--stash_bp)
 - [Chest Finder — `find_bp`](#chest-finder--find_bp)
 - [Chairs — `chairs_bp`](#chairs--chairs_bp)
+- [Realistic Rain — `rain_rp`](#realistic-rain--rain_rp)
+- [Rain Extras — `rain_bp`](#rain-extras--rain_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -60,7 +62,9 @@ The realm runs everything as one pack, **Realm Bundle**, and that is the downloa
 
 **Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
 
-**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. Switching between them starts the features' in-game settings over (welcome and news text, tips, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
+**Standalone packs:** the two rain packs are never in the Realm Bundle and are made to run next to it: [Realistic Rain](#realistic-rain--rain_rp) (a resource pack) and [Rain Extras](#rain-extras--rain_bp) (a behavior pack). Download each from its card under **Standalone packs** and open it, then in the realm's settings activate Realistic Rain under **Resource Packs**, at the top of the list, and Rain Extras under **Behavior Packs**, next to the Realm Bundle. Players get both automatically when they join.
+
+**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. (The standalone packs above aren't in the bundle, so they go with either.) Switching between them starts the features' in-game settings over (welcome and news text, tips, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
 ### Installing on a Realm
 
@@ -68,11 +72,11 @@ For whoever builds the packs from this repo:
 
 1. Build the packs with `npm run build` (one `dist/<folder>.mcpack` per pack), or `npm run bundle -- --all` for a single bundle.
 2. Open the `.mcpack` on a device with Minecraft. It imports automatically.
-3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**.
+3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**. A resource pack (`rain_rp`) goes under **Resource Packs** instead, at the top of the active list.
    *Another way:* download the Realm world, activate the pack under the world's **Behavior Packs**, and upload the world again.
 4. Rejoin. Commands are registered when the world loads.
 
-> ⚠️ Activate **either** the individual packs **or** a bundle that contains them, never both. Otherwise every command is registered twice, and the duplicate commands fail to load.
+> ⚠️ Activate **either** the individual packs **or** a bundle that contains them, never both. Otherwise every command is registered twice, and the duplicate commands fail to load. Standalone packs (listed in `tools/standalone.json`, like `rain_bp`) are never in a bundle: activate them next to it.
 
 ### Commands
 
@@ -127,7 +131,7 @@ One help page for every realm command: how each feature works, and each command 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:help [feature]` | Everyone | Opens the help menu, or the page for `feature` (`afk`, `chairs`, `durability`, `farm`, `find`, `guard`, `harvest`, `news`, `phantom`, `stash`, `stats`, `welcome`) or `all` |
+| `/realm:help [feature]` | Everyone | Opens the help menu, or the page for `feature` (`afk`, `chairs`, `durability`, `farm`, `find`, `guard`, `harvest`, `news`, `phantom`, `rain`, `stash`, `stats`, `welcome`) or `all` |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -801,6 +805,125 @@ None. Seats are entities and are cleaned up; any left over from before a restart
 
 ---
 
+## Realistic Rain — `rain_rp`
+
+Heavier, gloomier rain that stays blue like vanilla: denser blue-gray rain fog, new rain and thunder sounds, and smaller, softer splashes. A **resource pack** that runs next to the Realm Bundle, never inside it, and costs no more frames than vanilla rain.
+
+### How to use
+
+1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
+2. Wait for rain, or ask an operator for `/weather rain` or `/weather thunder`.
+3. For storm fog, ground mist and drips under leaves and roof edges, the realm also needs [Rain Extras](#rain-extras--rain_bp).
+4. **Operators:** download Realistic Rain from its card on mc.nish.software/realm and open it. In the realm's settings, activate it under **Resource Packs** and move it to the **top** of the active list, above Firewolf and the others, so its rain wins.
+
+### What players see
+
+- **Rain:** streaks in vanilla's blue (`#6F8FD4`, a little lighter), half as wide as vanilla's and about three times as many (25 lanes instead of 8), each fading from a faint tail (25%) to a brighter head (85%). Overall the rain is about 1.2× as dense as vanilla. **Snow is unchanged.**
+- **Fog while it rains:** starts at 15% of your render distance and is solid by 55% (vanilla: 23% → 70%), in a gloomy blue-gray `#5F6B79` instead of vanilla's gray `#666666`. At 10 chunks that's 24 → 88 blocks. Pale gardens and sulfur caves keep their own fog colors with the new distances. Bedrock has one fog for rain and snowfall, so snowfall gets the same fog.
+- **Sound:** new rain at about 125% of vanilla's volume (a soft hiss, dense patter and the odd heavier drop), long rolling thunder in the distance, and a sharp crack with a low boom for close lightning. Explosions keep their vanilla sound.
+- **Splashes:** the rain splash is smaller (0.10 blocks instead of 0.175) and softer (70% opacity, a cool tint).
+- **With Rain Extras:** storm fog, ground mist and drips. Their fog and particle files are in this pack.
+
+### Performance
+
+- Everything replaces a vanilla file one for one: the game draws the same rain and plays rain and thunder as often as before, so this pack costs no extra frames on any device.
+- Rain clips are short (2.6–3.0 s) like vanilla's, so the copies the game keeps starting don't pile up. The whole pack is about 0.5 MB.
+
+### Saved data
+
+None. It's a resource pack: no scripts, no commands, nothing to configure in game.
+
+### Known limits
+
+- Made for **Fancy** graphics. Under **Vibrant Visuals** the rain, sounds and splashes change the same way; how much of the denser fog shows depends on Vibrant Visuals' own atmosphere.
+- A resource pack higher in the list that also changes the weather texture, fog or rain sounds wins: keep Realistic Rain at the top.
+- The texture tiles the way vanilla's does; how big the streaks look on screen depends on the game, not the pack.
+
+### How it's made
+
+Everything in `packs/rain_rp/` is generated by `npm run gen:rain` (`tools/gen-rain/`), from Mojang's vanilla files in `tools/gen-rain/vanilla/` (see its README):
+
+| Files | Generator | |
+|---|---|---|
+| `textures/environment/weather.png` | `textures.mjs` | The weather atlas at 4× (128×128). Snow and every other non-rain pixel is vanilla upscaled; only the rain rows are redrawn |
+| `textures/particle/realm_rain_mist.png`, `pack_icon.png` | `textures.mjs` | Rain Extras' mist sprite and the pack icon |
+| `fogs/*_fog_setting.json` | `fogs.mjs` | The vanilla fogs that have a weather fog, with only `distance.weather` changed |
+| `fogs/rain_storm*.json` | `fogs.mjs` | The three storm fogs Rain Extras pushes (`realm:rain_storm_1`, `realm:rain_storm_2`, `realm:rain_storm`) |
+| `sounds/realistic_rain/*.ogg` | `sounds.mjs` | Synthesized (needs ffmpeg) and loudness-normalized: rain −25, thunder −17.5, cracks about −14 LUFS. Thunder is authored about 1.25× and cracks about 2× higher in pitch, because the game plays them at 0.6–1.0 and 0.3–0.7 |
+| `sounds/sound_definitions.json`, `particles/*.json`, `manifest.json` | by hand | Rain at volume `0.025` (vanilla `0.020`); the splash, `realm:rain_mist` and `realm:rain_drip` particles |
+
+`npm run check` fails if the textures or fogs differ from what the generators make.
+
+---
+
+## Rain Extras — `rain_bp`
+
+Storm fog, ground mist and drips under leaves and roof edges, for the Realistic Rain resource pack. A **standalone** behavior pack: it runs next to the Realm Bundle, not inside it.
+
+### How to use
+
+1. When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops.
+2. In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, and low mist drifts along the ground around you when you're outdoors. Both clear the same way when the storm passes.
+3. Run `/realm:rain` to turn these extras off for yourself, on a slower device for example. Chat says `Rain extras off for you (storm fog, mist and drips). Run it again to turn them back on.` The choice is remembered.
+4. **Operators:** add Rain Extras under **Behavior Packs**, next to the Realm Bundle (it's never part of the bundle), and add [Realistic Rain](#realistic-rain--rain_rp) under **Resource Packs** at the top of the list. The storm fogs and particles come from Realistic Rain, so without it nothing shows.
+
+### What players see
+
+- **Drips:** small blue drops form under the lowest leaves of a tree and under roof edges where the next column is at least 2 blocks lower, hang for 0.2–1.2 s and fall. Up to `drips.perSecond` (5) per second within `drips.radius` (6) blocks of you, and for `drips.afterRainSeconds` (30) seconds after the rain, tapering off.
+- **Ground mist** (thunderstorms only, outdoors, near the ground): soft gray-blue puffs 5–9 blocks away, mostly in front of you, each fading in and out over about 4 s. `mist.puffsPerSecond` (2) puffs of 4 sprites a second, so about 32 on screen.
+- **Storm fog:** three steps from 12% → 48% to 8% → 35% of your render distance, darkening from `#59646F` to `#4E5763`, over `stormFog.fadeSeconds` (12) seconds. Plain rain keeps Realistic Rain's 15% → 55%.
+- Mist and drips are shown only to the player they're for, so each player's particles cost only their own device.
+- None of it happens in the Nether or the End, deep underground (more than 24 blocks under the surface), or on sand, terracotta, snow or ice: deserts and badlands get no rain, and snowy places get snow.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:rain` | Everyone | Turns storm fog, ground mist and drips off or on **for yourself** (on by default, `defaultOff`). Remembered between sessions |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `defaultOff` | `false` | Start with the extras off for players who never ran `/realm:rain` |
+| `stormFog.enabled` | `true` | Thunderstorms roll in denser, darker fog |
+| `stormFog.fadeSeconds` | `12` | Seconds the storm fog takes to roll in, and again to clear, in three steps |
+| `mist.enabled` | `true` | Ground mist around players outdoors during thunderstorms |
+| `mist.puffsPerSecond` | `2` | Mist puffs per second per player. Each is 4 sprites that live about 4 s |
+| `drips.enabled` | `true` | Drips from leaves and roof edges while it rains |
+| `drips.perSecond` | `5` | Drips per second per player |
+| `drips.afterRainSeconds` | `30` | Seconds drips keep falling after the rain stops, tapering off. `0` stops them with the rain |
+| `drips.radius` | `6` | How far from the player (blocks) to look for leaves and roof edges |
+| `drips.lookupsPerSecond` | `6` | Block lookups per second per player for drips and mist: the main cost on the server |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `rain:off` | Player | `true` when the player turned the extras off, `false` when they turned them on while `defaultOff` is `true`. Not set = `defaultOff` |
+| `rain:weather` | World | The overworld weather at the last change: `Clear`, `Rain` or `Thunder`. The stable Script API can't read the current weather, so this is how the pack knows it after a restart |
+
+### Performance
+
+- **Nothing runs in clear weather.** The pack's loop exists only while it rains, while drips finish after the rain, or while a storm fog is still on someone.
+- While it runs, it handles a quarter of the players 4 times a second, so each player costs one update a second: at most `drips.lookupsPerSecond` (6) block lookups, `drips.perSecond` (5) drips and `mist.puffsPerSecond` × 4 (8) mist sprites. Drip spots are remembered (up to 8) until the player moves 4 blocks.
+- Storm fog is one `/fog` command per player, run only when it changes step: 3 times as a storm arrives and 3 times as it leaves.
+- Each player's particles go to that player only. On a weak device, `/realm:rain` turns everything off for that player alone.
+
+### Known limits
+
+- Added while it's already raining? The extras start at the next weather change.
+- Storm fog uses the `/fog` command, run by the script. If that fails, the content log shows `[rain] /fog` and the mist and drips still work.
+- Drips come from the highest block of each column: leaves under a roof, or overhangs inside caves, don't drip.
+
+### How it works
+
+- `weatherChange` in the overworld sets the weather (and saves it as `rain:weather`). The storm fog steps toward dense during thunder and back to none otherwise, with `/fog @s push realm:rain_storm… rain_storm` and `/fog @s remove rain_storm`, so only this pack's fog entries are ever touched. Joining clears any leftover storm fog, and the next update puts back what the weather calls for.
+- Each update: one `getTopmostBlock` above the player decides outdoors, underground or dry ground. Mist picks spots in front of the player and checks the ground there. Drips probe random columns within `drips.radius` for leaves with air under them, or a solid block whose neighbor is 2+ lower, and remember them.
+- Particles use `Player.spawnParticle`, so they're sent to that player only. `realm:rain_mist` and `realm:rain_drip` are defined in Realistic Rain.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -810,8 +933,8 @@ Merges several packs into one `.mcpack`, so the Realm lists one pack instead of 
 **Yourself:**
 
 ```bash
-npm run bundle -- --list                                 # available packs
-npm run bundle -- --all                                  # → dist/realm_bundle.mcpack
+npm run bundle -- --list                                 # available packs, and which --all bundles
+npm run bundle -- --all                                  # → dist/realm_bundle.mcpack (bundled packs only)
 npm run bundle -- --packs welcome_bp,stats_bp            # some packs, in this order
 npm run bundle -- --all --name my_bundle --title "My Bundle"
 ```
@@ -823,7 +946,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Identity | UUIDs are derived from `--name`. Rebuilding with the same name, even with a different selection, **updates** the existing pack on the Realm |
 | Version | Build time `[YYYY, MMDD, HHMM]` (UTC), so it always increases |
 | Conflicts | Two packs with the same non-script file and different contents → error |
-| Limits | Behavior packs only, for now |
+| Limits | Behavior packs only. `--all` also leaves out the **standalone** packs listed in `tools/standalone.json` (`rain_bp`), which run as their own add-on next to the bundle; `--list` shows which packs are bundled |
 
 > ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list (the ticking areas themselves stay loaded) and what Chest Finder remembers. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
 
@@ -844,8 +967,11 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
 | Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
 | Realm Help ← every pack | `/realm:help` lists the packs that answer its script event, so it only shows what's installed. Its text is generated from this file |
+| Rain Extras → Realistic Rain | Rain Extras' storm fogs and its mist and drip particles are defined in Realistic Rain, so it needs that resource pack. Realistic Rain works on its own |
+| Rain Extras → Realm Bundle | Standalone: it runs as its own add-on next to the bundle and still answers `/realm:help` (`/realm:help rain`). `/realm:rain` shares the `realm:` namespace, so it can join the bundle later without a rename |
+| AFK smart sleep → Rain Extras | Skipping the night clears the weather, so a storm fog clears and drips taper off as after any rain |
 
-None of the packs depend on each other. Any combination works.
+Only Rain Extras needs another pack (Realistic Rain). Any other combination works.
 
 ---
 
@@ -861,7 +987,10 @@ None of the packs depend on each other. Any combination works.
 | Settings reset after switching to or from a bundle | Expected: Bedrock keeps each pack's saved data separately, so in-game settings (welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list, what Chest Finder remembers) start fresh. Scoreboard stats are kept |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows how many are asleep (x) and how many are needed (y). Players in other dimensions only count if `sleep.countOtherDimensions` is on |
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
-| The pack shows a pink and black placeholder icon | Harmless. No pack has a `pack_icon.png` yet, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
+| Rain looks and sounds like vanilla | Is Realistic Rain active under **Resource Packs**, at the top of the list? A resource pack above it that changes rain wins. Players must accept the resource pack download when they join |
+| No storm fog, mist or drips | Is Rain Extras active under **Behavior Packs**, and Realistic Rain under **Resource Packs**? Run `/realm:rain` in case they're off for you. If the pack was added during rain, they start at the next weather change. Nothing shows in deserts, badlands or snowy places, or deep underground |
+| Storm fog stays after a storm | Rejoin: Rain Extras clears its fog when you join. Running `/realm:rain` twice also resets it |
+| The pack shows a pink and black placeholder icon | Harmless. Only Realistic Rain has a `pack_icon.png` so far, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
 
 ---
 
@@ -874,7 +1003,7 @@ None of the packs depend on each other. Any combination works.
 - **every command** a pack registers, e.g. `` `/realm:stats` ``
 - **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
 
-It also runs `tools/help-catalog.mjs --check`: the in-game `/realm:help` text is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs`. It also fails if a pack doesn't answer `/realm:help`'s `realm:help_ping` script event.
+It also runs `tools/gen-rain/textures.mjs --check` and `tools/gen-rain/fogs.mjs --check`, which fail if Realistic Rain's textures or fogs differ from what `npm run gen:rain` generates, and `tools/help-catalog.mjs --check`: the in-game `/realm:help` text is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs`. It also fails if a pack doesn't answer `/realm:help`'s `realm:help_ping` script event. Resource packs have no scripts, so they're left out of the help.
 
 When adding or changing a pack: update its section here, and the pack table in `README.md`, in the same commit.
 
@@ -886,10 +1015,10 @@ The [Our realm](https://mc.nish.software/realm/) page shows this file to players
 
 | | |
 |---|---|
-| What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first), plus every section marked `<!-- on the site -->` |
+| What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first; bundled packs under the Realm Bundle, standalone and resource packs under **Standalone packs**), plus every section marked `<!-- on the site -->` |
 | What stays behind "For operators" | A pack's `### Configuration…`, `### Saved data` and `### Resetting…` subsections, collapsed |
 | How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`), then commit and push there. `--check` fails if the page is out of date |
-| Downloads | `node tools/publish-packs.mjs --notes "what changed"` there builds the Realm Bundle and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"). A single pack is only published when its `header.version` goes up |
+| Downloads | `node tools/publish-packs.mjs --notes "what changed"` there builds the Realm Bundle and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"). A single pack is only published when its `header.version` goes up. Standalone packs and resource packs are published the same way, and the realm page lists them under **Standalone packs** instead of the Realm Bundle |
 | When | After every change to this file that players should see, and with every new bundle or pack version published on the site |
 
 Links in this file to its own sections (`#…`) are dropped on the site; links to web pages are kept.
