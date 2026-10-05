@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG, DEFAULTS } from "./config.js";
 import { get } from "./settings.js";
@@ -188,10 +188,13 @@ function broadcastTip() {
 // Editors (ops)
 // ---------------------------------------------------------------------------
 
-/** @param {Player} player */
-async function editNews(player) {
+/**
+ * @param {Player} player
+ * @param {string} [draft] a body pasted with /realm:news_body, shown in the boxes instead of the saved one
+ */
+async function editNews(player, draft) {
   const news = getNews();
-  const parts = splitBody(escapeNewlines(news.body));
+  const parts = splitBody(escapeNewlines(draft ?? news.body));
   const form = new ModalFormData()
     .title("Edit Realm news")
     .textField("Title", DEFAULTS.news.title, { defaultValue: news.title })
@@ -342,6 +345,29 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       cheatsRequired: false,
     },
     playerCommand(editNews)
+  );
+  // Chat takes far longer text than a form's 100-character boxes, so a long body can be pasted
+  // here in one go; the editor then opens with it split over the boxes, ready to check and save.
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:news_body",
+      description: "Paste a long news body in one go, in quotes; opens the editor with it filled in (operators only)",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "text", type: CustomCommandParamType.String }],
+    },
+    (origin, text) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) {
+        return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      }
+      const body = String(text ?? "");
+      system.run(() => editNews(player, body).catch((e) => console.warn(`[news] ${e}`)));
+      return {
+        status: CustomCommandStatus.Success,
+        message: `Got ${body.length} characters. Close chat: the editor opens with them filled in. Check the title, then tap Save.`,
+      };
+    }
   );
   customCommandRegistry.registerCommand(
     {

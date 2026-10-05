@@ -219,7 +219,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:news_edit§r writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them: paste a long message 100 characters per box, and type §e\\n§r for a new line. Leave \"Pop up for everyone on their next join\" on to announce it, or turn it off for a quiet fix such as a typo. §e/realm:news_tips§r adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.",
+        "text": "§lOperators:§r §e/realm:news_edit§r writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type §e\\n§r for a new line. Easier for a long message: paste it all into chat as §e/realm:news_body \"<text>\"§r and the editor opens with every box filled in; check the title and tap §lSave§r. Leave \"Pop up for everyone on their next join\" on to announce it, or turn it off for a quiet fix such as a typo. §e/realm:news_tips§r adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.",
         "ops": true
       }
     ],
@@ -235,6 +235,12 @@ export const PACKS = [
         "ops": true,
         "who": "Ops",
         "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If chat stays open for about 20 s, it says it couldn't open"
+      },
+      {
+        "usage": "/realm:news_body \"<text>\"",
+        "ops": true,
+        "who": "Ops",
+        "text": "Paste a whole news body in one go (chat takes far more than a form's 100-character boxes). Opens the editor with it split over the boxes; nothing is saved until you tap §lSave§r. Put the text in double quotes, use §e\\n§r for new lines, and §e'§r rather than §e\"§r inside it"
       },
       {
         "usage": "/realm:news_tips",
