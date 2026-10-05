@@ -10,8 +10,8 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "requireHoe", type: "bool", scope: "world", label: "Only harvest with a hoe in hand" },
-  { key: "damageHoe", type: "bool", scope: "world", label: "Harvesting costs the hoe durability" },
+  { key: "requireHoe", type: "bool", scope: "world", label: "Hoe required to harvest" },
+  { key: "damageHoe", type: "bool", scope: "world", label: "Harvesting wears the hoe" },
   { key: "replantCostsSeed", type: "bool", scope: "world", label: "Replanting uses a seed", help: "From the drops, else from the inventory; with none, the crop isn't replanted" },
 ];
 
@@ -39,6 +39,8 @@ const OPTIONS = [
  * @property {number} [max]
  * @property {number} [step]
  * @property {string[]} [choices] enum only
+ * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
+ * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
@@ -68,12 +70,12 @@ function fileDefault(key) {
 function problem(opt, v) {
   switch (opt.type) {
     case "bool":
-      return typeof v === "boolean" ? undefined : "must be on or off";
+      return typeof v === "boolean" ? undefined : "must be enabled or disabled";
     case "int":
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
-      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "…"} to ${opt.max ?? "…"}`;
+      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
       return typeof v === "string" && (opt.choices ?? []).includes(v) ? undefined : `must be one of ${(opt.choices ?? []).join(", ")}`;
@@ -265,6 +267,8 @@ function describe(player) {
       max: o.max,
       step: o.step,
       choices: o.choices,
+      names: o.names,
+      invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
     };

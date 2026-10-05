@@ -289,7 +289,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     customCommandRegistry.registerCommand(
       {
         name: "realm:rain",
-        description: "Turn the rain extras (storm fog, ground mist and drips) off or on for yourself",
+        description: "Enable or disable the rain extras (storm fog, ground mist and drips) for yourself",
         permissionLevel: CommandPermissionLevel.Any,
         cheatsRequired: false,
       },
@@ -303,8 +303,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return {
           status: CustomCommandStatus.Success,
           message: nowOff
-            ? "Rain extras off for you (storm fog, mist and drips). Run it again to turn them back on."
-            : "Rain extras on for you. Run it again to turn them off.",
+            ? "Rain extras (storm fog, mist, drips): Disabled. Run /realm:rain again to enable them."
+            : "Rain extras (storm fog, mist, drips): Enabled. Run /realm:rain again to disable them.",
         };
       }
     );

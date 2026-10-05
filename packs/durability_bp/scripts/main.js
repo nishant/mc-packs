@@ -89,12 +89,12 @@ function levelFor(left, max) {
 function notify(player, name, left, max, level) {
   const pct = ((left / max) * 100).toFixed(left / max < 0.1 ? 1 : 0);
   if (level === CRITICAL) {
-    const text = `§c§l⚠ ${name} is about to break!§r §c${left}/${max} (${pct}%)`;
+    const text = `§c§l! ${name} is about to break!§r §c${left}/${max} (${pct}%)`;
     player.onScreenDisplay.setActionBar(text);
     if (get("chatOnCritical")) player.sendMessage(text);
     player.playSound("random.anvil_land", { volume: 0.4, pitch: 1.4 });
   } else {
-    player.onScreenDisplay.setActionBar(`§e⚠ ${name} is low: ${left}/${max} (${pct}%)`);
+    player.onScreenDisplay.setActionBar(`§e! ${name} is low: ${left}/${max} (${pct}%)`);
     player.playSound("note.pling", { volume: 0.7, pitch: 0.8 });
   }
 }
@@ -114,7 +114,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:durability",
-      description: "Turn low-durability warnings on or off for yourself",
+      description: "Enable or disable low-durability warnings for yourself",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
@@ -128,8 +128,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       return {
         status: CustomCommandStatus.Success,
         message: nowOff
-          ? "Durability warnings off for you. Run /realm:durability again to turn them back on."
-          : "Durability warnings on for you.",
+          ? "Low-durability warnings: Disabled. Run /realm:durability again to enable them."
+          : "Low-durability warnings: Enabled. Run /realm:durability again to disable them.",
       };
     }
   );

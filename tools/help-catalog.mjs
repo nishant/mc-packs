@@ -15,9 +15,29 @@ const out = join(root, "packs", HELP, "scripts", "catalog.js");
 const manifestPath = join(root, "packs", HELP, "manifest.json");
 const check = process.argv.includes("--check");
 
+/**
+ * Bedrock draws a whole line in a smaller fallback font when it holds a character its default font
+ * lacks (…, –, “, → and the like), so in-game text is plain ASCII; only § codes stay.
+ */
+const ASCII = [
+  [/[\u2018\u2019]/g, "'"],
+  [/[\u201c\u201d]/g, '"'],
+  [/[\u2013\u2014]/g, "-"],
+  [/\u2026/g, "..."],
+  [/\u2192/g, "->"],
+  [/\u2190/g, "<-"],
+  [/\u00d7/g, "x"],
+  [/[\u00b7\u2022]/g, "-"],
+  [/\u00a0/g, " "],
+];
+export function ascii(/** @type {string} */ s) {
+  for (const [re, to] of ASCII) s = s.replace(/** @type {RegExp} */ (re), /** @type {string} */ (to));
+  return s;
+}
+
 /** Markdown inline → Minecraft formatting codes: `code` yellow, **bold** bold, links as their text. */
 function mc(/** @type {string} */ md) {
-  return md
+  return ascii(md)
     .replaceAll("§", "&") // a literal section sign would start a formatting code in game
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/`([^`]+)`/g, "§e$1§r")
@@ -42,7 +62,7 @@ function steps(/** @type {string[]} */ lines) {
     const step = line.match(/^\d+\.\s+(.*)$/);
     const bullet = line.match(/^\s+[-*]\s+(.*)$/);
     if (step) out.push({ text: mc(step[1]), ops: /^\*\*Operators\b/.test(step[1]) });
-    else if (bullet && out.length) out.at(-1).text += `\n  • ${mc(bullet[1])}`;
+    else if (bullet && out.length) out.at(-1).text += `\n  - ${mc(bullet[1])}`;
     else if (line.trim() && out.length) out.at(-1).text += ` ${mc(line)}`;
   }
   return out;
@@ -53,7 +73,7 @@ function commands(/** @type {string[]} */ lines) {
   const rows = lines.filter((l) => l.startsWith("|")).slice(2); // header and separator rows
   return rows.map((row) => {
     const cells = row.slice(1, -1).split(/(?<!\\)\|/).map((c) => c.trim());
-    const usage = cells[0].replace(/`/g, "");
+    const usage = ascii(cells[0].replace(/`/g, ""));
     return { usage, ops: /^ops\b/i.test(cells[1]), who: mc(cells[1]), text: mc(cells[2]) };
   });
 }
@@ -76,7 +96,7 @@ for (let i = 0; i < docs.length; i++) {
   packs.push({
     folder: head[2],
     topic: head[2].replace(/_bp$/, ""),
-    name: head[1],
+    name: ascii(head[1]),
     summary: mc(lines.slice(first, blank < 0 ? undefined : blank).join(" ")),
     steps: steps(subsection(lines, "How to use")),
     commands: commands(subsection(lines, "Commands")),

@@ -37,7 +37,7 @@ const dimName = (/** @type {string} */ id) => id.replace(/^minecraft:/, "").repl
 
 /** @param {Farm} f */
 const describe = (f) =>
-  `§e${f.name}§r · ${dimName(f.dim)} ${f.x}, ${f.z} · radius ${f.radius} · by ${f.by} · ${new Date(f.at).toISOString().slice(0, 10)}`;
+  `§e${f.name}§r - ${dimName(f.dim)} ${f.x}, ${f.z} - radius ${f.radius} - by ${f.by} - ${new Date(f.at).toISOString().slice(0, 10)}`;
 
 /** @param {Player} player */
 const canEdit = (player) => CONFIG.everyoneCanAdd || player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
@@ -184,7 +184,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       }
       const r = radius ?? get("defaultRadius");
       if (r < MIN_RADIUS || r > MAX_RADIUS) {
-        return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS}–${MAX_RADIUS} chunks.` };
+        return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS} to ${MAX_RADIUS} chunks.` };
       }
       system.run(() => addFarm(player, name, r));
       return { status: CustomCommandStatus.Success };
