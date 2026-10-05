@@ -27,6 +27,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Farm Loader — `farm_bp`](#farm-loader--farm_bp)
 - [Quick Stack & Sort — `stash_bp`](#quick-stack--sort--stash_bp)
 - [Chest Finder — `find_bp`](#chest-finder--find_bp)
+- [Chairs — `chairs_bp`](#chairs--chairs_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -687,6 +688,55 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 
 ---
 
+## Chairs — `chairs_bp`
+
+Sit on any stair or bottom slab, which makes the furnished houses on mc.nish.software feel lived in.
+
+### How to use
+
+1. Tap a stair or a bottom slab with an empty hand, standing within 2.5 blocks of it. You sit on it, facing away from the stair's back.
+2. Sneak to stand up (on touch screens, the dismount button).
+3. Run `/realm:sit` to sit down right where you stand.
+
+### What players see
+
+- Works on every stair that isn't upside down and every bottom slab, in any wood or stone: oak, stone brick and quartz stairs alike. Upside-down stairs, top slabs and double slabs do nothing.
+- The two blocks above the seat must be air, so you can't sit with your head in a ceiling.
+- One player per seat: tapping a taken seat says `Someone is already sitting there`.
+- Breaking the stair or slab stands its rider up. Seats nobody sits on vanish within a second.
+- You can still use blocks and items while seated. The AFK pack still marks a seated, idle player as AFK, and sitting adds nothing to the Stats pack's distance.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:sit` | Everyone | Sits you down where you stand (on the ground). Sneak to stand up |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `blocks` | `["*_stairs", "*_slab"]` | What can be sat on, `*` as a wildcard. Stairs must not be upside down and slabs must be bottom slabs |
+| `maxReach` | `2.5` | Farthest the seat may be from the player's feet, in blocks |
+| `cleanupTicks` | `20` | How often (ticks) empty seats, and seats whose block is gone, are removed |
+| `seatHeight` | `0.25` | Height of the seat above the bottom of the block. Raise or lower it in steps of `0.05` if players sit too high or too low |
+
+### Saved data
+
+None. Seats are entities and are cleaned up; any left over from before a restart are removed as soon as their chunk loads.
+
+### The seat entity
+
+`entities/seat.json` defines `realm:seat`: not spawnable naturally, summonable, a tiny collision box, no gravity or collision, not pushable, immune to all damage, no AI, and a `minecraft:rideable` with one seat for players. The pack has no resource pack, so the game has no model for it and draws nothing. If a seat ever shows up under a player, a `chairs_rp` resource pack with an empty model is the fix.
+
+### How it works
+
+- `world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the hand is empty, the player isn't sneaking or already riding, the block can be sat on, the two blocks above are air and the seat is within `maxReach`.
+- On the next tick the pack spawns `realm:seat` in the block, turns the player to face away from a stair's back (its `weirdo_direction` state; slabs keep your facing) and adds them as its rider.
+- Every `cleanupTicks`, seats without a rider, and block seats whose stair or slab is gone, are removed.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -728,6 +778,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
 | Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items. Sneak-tap sorting a sorter's chest is harmless |
 | Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
+| Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
 
 None of the packs depend on each other. Any combination works.
 
@@ -744,7 +795,7 @@ None of the packs depend on each other. Any combination works.
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
-| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[find]` |
+| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
 | The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
 
 ---

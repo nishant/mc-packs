@@ -1,0 +1,27 @@
+{
+  "format_version": "1.20.80",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "realm:seat",
+      "is_spawnable": false,
+      "is_summonable": true,
+      "is_experimental": false
+    },
+    "components": {
+      "minecraft:type_family": { "family": ["realm_seat", "inanimate"] },
+      "minecraft:collision_box": { "width": 0.01, "height": 0.01 },
+      "minecraft:physics": { "has_gravity": false, "has_collision": false },
+      "minecraft:pushable": { "is_pushable": false, "is_pushable_by_piston": false },
+      "minecraft:damage_sensor": { "triggers": { "cause": "all", "deals_damage": false } },
+      "minecraft:knockback_resistance": { "value": 1 },
+      "minecraft:rideable": {
+        "seat_count": 1,
+        "family_types": ["player"],
+        "interact_text": "",
+        "pull_in_entities": false,
+        "rider_can_interact": true,
+        "seats": { "position": [0, 0, 0] }
+      }
+    }
+  }
+}
