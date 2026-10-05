@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Farm Loader",
+    "description": "Keeps named farms loaded with ticking areas, so crops grow and furnaces smelt while you're away. /realm:farm",
+    "uuid": "e54db611-b451-4a5f-bb05-7669c539f030",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "93c96e2e-e9bd-412d-8335-e341343434c8",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

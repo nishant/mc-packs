@@ -24,6 +24,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Creeper Guard — `guard_bp`](#creeper-guard--guard_bp)
 - [Phantom Opt-out — `phantom_bp`](#phantom-opt-out--phantom_bp)
 - [Right-click Harvest — `harvest_bp`](#right-click-harvest--harvest_bp)
+- [Farm Loader — `farm_bp`](#farm-loader--farm_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -538,6 +539,53 @@ None.
 ### How it works
 
 `world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the player isn't sneaking, the hand is empty or holds a `*_hoe`, and the block is a listed crop at its ripe value. On the next tick the pack runs `loot spawn <center> mine <block> mainhand` as the player, then sets the crop's state back to 0. If `/loot` ever fails from a script, it switches to a built-in drop table close to vanilla (without Fortune) and logs `[harvest] /loot failed` once.
+
+---
+
+## Farm Loader — `farm_bp`
+
+Keeps named farms loaded with Bedrock ticking areas, so crops grow, furnaces smelt and redstone runs while everyone is elsewhere.
+
+### How to use
+
+1. Run `/realm:farm` to see which farms are kept loaded: name, dimension, coordinates, size, who added it and when.
+2. **Operators:** stand in the middle of a farm and run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
+3. **Operators:** `/realm:farm_remove <name>` stops keeping it loaded, or tap **Remove** next to it in `/realm:farm`.
+
+### What keeps running, and what doesn't
+
+Bedrock rules, worth knowing before you add a farm:
+
+- **Keeps running:** random ticks (crops, kelp, sugar cane, bamboo, cactus and trees grow), furnaces, smokers and blast furnaces, hoppers, redstone, pistons, observers and flowing water.
+- **Doesn't:** mob spawning. Mobs only spawn near a player, so iron farms, mob farms and the slime farm still need someone nearby.
+- **Costs performance:** every loaded chunk costs the realm. A radius of 2 chunks covers a circle about 5 chunks (80 blocks) across. Bedrock allows 10 ticking areas per world, and the pack refuses an 11th before the game does.
+- The game keeps the ticking areas across realm restarts by itself. The pack only keeps the list for the menu.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:farm` | Everyone | Lists the loaded farms. Operators also get a **Remove** button for each |
+| `/realm:farm_add <name> [radius]` | Ops (everyone if `everyoneCanAdd`) | Adds a ticking area centered on you, `radius` 1–4 chunks (default `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique |
+| `/realm:farm_remove <name>` | Ops (everyone if `everyoneCanAdd`) | Removes it |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `everyoneCanAdd` | `false` | Let everyone add and remove farms, not just operators |
+| `defaultRadius` | `2` | Radius in chunks when `/realm:farm_add` is given none |
+| `maxAreas` | `10` | Most farms at once. Bedrock's limit is 10 ticking areas per world, including any made with `/tickingarea` by hand |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `farm:areas` | World | JSON list of farms `{ name, dim, x, z, radius, by, at }` for the menu. The ticking areas themselves are saved by the game |
+
+### How it works
+
+`/realm:farm_add` runs `tickingarea add circle <x> <y> <z> <radius> "<name>" true` in your dimension. If the game reports no success (for example, the world already has 10 ticking areas), the pack says so and saves nothing. `/realm:farm_remove` runs `tickingarea remove "<name>"`. A ticking area removed by hand with `/tickingarea remove` stays in the menu until it is removed there too.
 
 ---
 
