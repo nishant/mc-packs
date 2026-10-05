@@ -2,12 +2,15 @@
 
 What each pack in this repo does, how to use it, and how to configure it.
 
-> **Keep this file up to date.** Any change to a pack's behaviour, commands or `config.js` must update this file in the same commit. `npm run check` fails if a pack, command or config option is missing from this file (see [Keeping this file current](#keeping-this-file-current)).
+> **Keep this file up to date.** Any change to a pack's behavior, commands or `config.js` must update this file in the same commit. `npm run check` fails if a pack, command, config option or `### How to use` section is missing from this file (see [Keeping this file current](#keeping-this-file-current)).
+>
+> **This file is also the players' documentation.** The [Our realm](https://mc.nish.software/realm/) page on mc.nish.software is generated from it (in the `nishant/hosting` repo: `cd minecraft && node tools/pack-docs.mjs`). Every pack section is published, plus the sections marked `<!-- on the site -->`. Write in plain American English, and quote in-game text and ids exactly as the code has them (in backticks), even where the game text is British (`Distance travelled`). See [Publishing to mc.nish.software](#publishing-to-mcnishsoftware).
 
 ## Contents
 
 - [Common to all packs](#common-to-all-packs)
   - [Requirements](#requirements)
+  - [Installing from mc.nish.software](#installing-from-mcnishsoftware)
   - [Installing on a Realm](#installing-on-a-realm)
   - [Commands](#commands)
   - [Two ways to configure](#two-ways-to-configure)
@@ -22,6 +25,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
 - [Keeping this file current](#keeping-this-file-current)
+- [Publishing to mc.nish.software](#publishing-to-mcnishsoftware)
 
 ---
 
@@ -37,7 +41,20 @@ What each pack in this repo does, how to use it, and how to configure it.
 | Cheats | **Not required** for any command (`cheatsRequired: false`) |
 | Achievements | Any non-Marketplace behavior pack turns off achievements for the world (that's how Bedrock works) |
 
+### Installing from mc.nish.software
+<!-- on the site -->
+
+The realm runs everything as one pack, **Realm Bundle**. To install or update it:
+
+1. **Download** the latest `.mcpack` from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open it. Minecraft starts and imports it as "Realm Bundle".
+2. **Open the realm's settings** (the pencil next to the realm), go to **Behavior Packs**, find Realm Bundle under **Available** and activate it. Minecraft uploads it to the realm.
+3. **Join** once the realm restarts. The welcome popup and the `/realm:` commands mean it's running.
+
+**Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time (`YYYY.MMDD.HHMM`), so every build is higher than the last, which Minecraft needs to treat it as an update.
+
 ### Installing on a Realm
+
+For whoever builds the packs from this repo:
 
 1. Build the packs with `npm run build` (one `dist/<folder>.mcpack` per pack), or `npm run bundle -- --all` for a single bundle.
 2. Open the `.mcpack` on a device with Minecraft. It imports automatically.
@@ -67,13 +84,14 @@ What each pack in this repo does, how to use it, and how to configure it.
 3. `npm run build`, then re-import and re-apply the pack.
 
 ### Formatting codes
+<!-- on the site -->
 
-Text you can edit (popups, news, tips) supports:
+Text that operators edit in game (the welcome popup, news, tips) supports:
 
 | Code | Effect |
 |---|---|
 | `\n` | New line. The in-game text boxes are one line, so type a literal `\n` |
-| `§0`–`§9`, `§a`–`§f` | Colours: `§a` green, `§b` aqua, `§c` red, `§e` yellow, `§6` gold, `§7` grey |
+| `§0`–`§9`, `§a`–`§f` | Colors: `§a` green, `§b` aqua, `§c` red, `§e` yellow, `§6` gold, `§7` gray |
 | `§l` `§o` `§r` | Bold, italic, reset |
 
 ---
@@ -81,6 +99,12 @@ Text you can edit (popups, news, tips) supports:
 ## Welcome Message — `welcome_bp`
 
 Shows a popup when a player joins the Realm. Operators can edit the popup in-game.
+
+### How to use
+
+1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
+2. Run `/realm:welcome` any time to see it again.
+3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the three switches, then submit. Players see the new text on their next join (with "show once" on, each player sees it one more time). `/realm:welcome_reset` goes back to the pack's default text.
 
 ### What players see
 
@@ -133,6 +157,12 @@ These are defaults. Once an op saves with `/realm:welcome_edit`, the saved value
 
 Warns players before a tool, weapon or armor piece breaks.
 
+### How to use
+
+1. Nothing to set up: hold or wear any tool, weapon or armor piece. At **10%** durability left a yellow warning appears above the hotbar with a soft chime; at **3%** a red "about to break!" warning, an anvil sound and the same line in chat.
+2. Repair the item (Mending, an anvil) or swap it before it breaks. A repaired item warns again the next time it runs low.
+3. Don't want the warnings? Run `/realm:durability` to turn them off for yourself; run it again to turn them back on. The choice is remembered.
+
 ### What players see
 
 | Level | When | Shows |
@@ -174,6 +204,12 @@ Warns players before a tool, weapon or armor piece breaks.
 ## AFK + Smart Sleep — `afk_bp`
 
 Marks idle players as AFK, and skips the night without waiting for them.
+
+### How to use
+
+1. **Going AFK:** just stop playing. After 5 minutes your name shows `[AFK]` and chat says so. To go AFK right away (so the night can be skipped without you), run `/realm:afk`.
+2. **Coming back:** move or look around. Chat says you're back and for how long.
+3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, the bar above the hotbar shows who is still needed (`🛏 1/2 sleeping`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
 
 ### AFK detection
 
@@ -244,6 +280,12 @@ Nothing is saved. AFK state is kept in memory and resets on rejoin. While a play
 
 Tracks player stats as scoreboards, with leaderboard menus and an optional sidebar.
 
+### How to use
+
+1. Play: stats count on their own (playtime, except while AFK; deaths; mob and player kills; blocks mined and placed; distance; elytra distance; joins).
+2. Run `/realm:stats` and pick **My stats** to see every stat with your rank (`#2 of 7`) and the date you first joined, or **Leaderboards** and a stat to see the top 10.
+3. **Operators:** `/realm:stats_sidebar <stat>` shows one stat on everyone's sidebar. Use a stat ID from the table below (for example `/realm:stats_sidebar travelled`), `cycle` to rotate through all of them every 30 seconds, or `off`.
+
 ### Stats
 
 | ID (for `/realm:stats_sidebar`) | Label | How it's counted |
@@ -254,7 +296,7 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 | `pvpkills` | Player kills | Other players killed |
 | `mined` | Blocks mined | Blocks broken by the player. Essentials+ tree felling and vein mining only count the first block |
 | `placed` | Blocks placed | Blocks placed by the player |
-| `travelled` | Distance travelled | Blocks moved per second, not gliding. Includes walking, swimming, boats and minecarts |
+| `travelled` | `Distance travelled` | Blocks moved, not gliding, measured every second. Includes walking, swimming, boats and minecarts |
 | `flown` | Elytra distance | Blocks moved while gliding |
 | `joins` | Times joined | Each join |
 
@@ -304,6 +346,13 @@ Use vanilla commands (cheats needed):
 ## Realm News & Tips — `news_bp`
 
 A news popup that operators edit in-game, a "welcome back" notice, and rotating chat tips.
+
+### How to use
+
+1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it.
+2. Missed it, or want to read it again? Run `/realm:news`.
+3. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
+4. **Operators:** `/realm:news_edit` writes the news. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
 
 ### News popup
 
@@ -387,6 +436,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 ---
 
 ## How the packs work together
+<!-- on the site -->
 
 | Pair | Interaction |
 |---|---|
@@ -400,6 +450,7 @@ None of the packs depend on each other. Any combination works.
 ---
 
 ## Troubleshooting
+<!-- on the site -->
 
 | Problem | Check |
 |---|---|
@@ -410,6 +461,7 @@ None of the packs depend on each other. Any combination works.
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with `[welcome]`, `[afk]`, `[stats]`, `[news]` or `[durability]` |
+| The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
 
 ---
 
@@ -418,7 +470,23 @@ None of the packs depend on each other. Any combination works.
 `npm run check` runs `tools/check-docs.mjs` after the type check, and fails if this file is missing any of:
 
 - a `##` section whose heading contains `` `<folder>` `` for **every pack** in `packs/`
+- a `### How to use` section in every pack section: short numbered steps for players, operators last
 - **every command** a pack registers, e.g. `` `/realm:stats` ``
 - **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
 
 When adding or changing a pack: update its section here, and the pack table in `README.md`, in the same commit.
+
+---
+
+## Publishing to mc.nish.software
+
+The [Our realm](https://mc.nish.software/realm/) page shows this file to players. It is generated, never hand-written, so the site and this repo can't drift:
+
+| | |
+|---|---|
+| What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first), plus every section marked `<!-- on the site -->` |
+| What stays behind "For operators" | A pack's `### Configuration…`, `### Saved data` and `### Resetting…` subsections, collapsed |
+| How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`), then commit and push there. `--check` fails if the page is out of date |
+| When | After every change to this file that players should see, and with every new bundle version published on the site |
+
+Links in this file to its own sections (`#…`) are dropped on the site; links to web pages are kept.
