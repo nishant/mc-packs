@@ -77,6 +77,18 @@ async function show(player, form, maxAttempts = 20) {
 const escapeNewlines = (/** @type {string} */ s) => s.replaceAll("\n", "\\n");
 const unescapeNewlines = (/** @type {string} */ s) => s.replaceAll("\\n", "\n");
 
+/** Minecraft's text boxes keep at most this many characters, so the news body is edited in parts. */
+const BODY_PART = 100;
+const MIN_PARTS = 10;
+
+/** The body in BODY_PART pieces, with room to grow: at least MIN_PARTS boxes and one empty box at the end. @param {string} text */
+function splitBody(text) {
+  const parts = [];
+  for (let i = 0; i < text.length; i += BODY_PART) parts.push(text.slice(i, i + BODY_PART));
+  while (parts.length < MIN_PARTS || parts.at(-1) !== "") parts.push("");
+  return parts;
+}
+
 /** @param {Player} player @param {string} [header] */
 async function showNews(player, header = "") {
   const news = getNews();
@@ -179,24 +191,26 @@ function broadcastTip() {
 /** @param {Player} player */
 async function editNews(player) {
   const news = getNews();
-  const res = await show(
-    player,
-    new ModalFormData()
-      .title("Edit Realm news")
-      .textField("Title", DEFAULTS.news.title, { defaultValue: news.title })
-      .textField("Body  (\\n = new line, § colors; empty = no news)", "What's new...", {
-        defaultValue: escapeNewlines(news.body),
-      })
-      .toggle("Pop up for everyone on their next join", { defaultValue: true })
-      .submitButton("Save")
-  );
+  const parts = splitBody(escapeNewlines(news.body));
+  const form = new ModalFormData()
+    .title("Edit Realm news")
+    .textField("Title", DEFAULTS.news.title, { defaultValue: news.title })
+    .label(`§7Minecraft's text boxes take ${BODY_PART} characters each, so the body is split over ${parts.length} boxes that are joined in order, with nothing added between them. Type \\n for a new line and § for colors. All boxes empty = no news.`);
+  parts.forEach((part, i) => form.textField(`Body, part ${i + 1}`, i === 0 ? "What's new..." : "", { defaultValue: part }));
+  form.toggle("Pop up for everyone on their next join", { defaultValue: true }).submitButton("Save");
+  const res = await show(player, form);
   if (!res) {
     if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
     return;
   }
   if (res.canceled || !res.formValues) return;
 
-  const [title, body, announce] = res.formValues;
+  const values = res.formValues;
+  // Labels may or may not take a place in formValues: the title is the first string, the toggle the last value.
+  const strings = values.filter((v) => typeof v === "string");
+  const title = strings[0];
+  const body = strings.slice(1).join("");
+  const announce = values.at(-1);
   writeJson(PROP_NEWS, {
     title: typeof title === "string" && title.trim() ? title : DEFAULTS.news.title,
     body: typeof body === "string" ? unescapeNewlines(body) : "",

@@ -505,7 +505,7 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `Realm news updated. Run /realm:news to read it.`
 2. Missed it, or want to read it again? Run `/realm:news`.
 3. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
-4. **Operators:** `/realm:news_edit` writes the news. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
+4. **Operators:** `/realm:news_edit` writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them: paste a long message 100 characters per box, and type `\n` for a new line. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
 
 ### News popup
 
@@ -530,7 +530,7 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:news` | Everyone | Shows the current news, which also counts as having seen its popup |
-| `/realm:news_edit` | Ops | Editor: title, body, and the "pop up on next join" toggle. If chat stays open for about 20 s, it says it couldn't open |
+| `/realm:news_edit` | Ops | Editor: title, the body in 100-character parts (at least 10, joined in order), and the "pop up on next join" toggle. If chat stays open for about 20 s, it says it couldn't open |
 | `/realm:news_tips` | Ops | Tips menu: **+ Add a tip**, **Settings** (on/off, interval 5–120 min in steps of 5), **Post the next tip now**, or tap a tip to edit or delete it |
 
 ### Configuration (`scripts/config.js`)
