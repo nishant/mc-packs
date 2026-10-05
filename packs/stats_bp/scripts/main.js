@@ -257,7 +257,7 @@ async function leaderboardMenu(player) {
 /** @param {Player} player @param {(typeof STATS)[number]} stat */
 async function leaderboard(player, stat) {
   const list = ranked(stat.id);
-  const medals = ["§6①", "§7②", "§c③"];
+  const medals = ["§6§l1.§r", "§7§l2.§r", "§c§l3.§r"];
   const size = get("leaderboardSize");
   const lines = list.slice(0, size).map((s, i) => {
     const me = s.participant.displayName === player.name;
@@ -266,7 +266,7 @@ async function leaderboard(player, stat) {
   });
   const myRank = list.findIndex((s) => s.participant.displayName === player.name);
   if (myRank >= size) {
-    lines.push("§8…", `§8${myRank + 1}. §b${player.name}§r  ${fmt(stat, list[myRank].score)}`);
+    lines.push("§8...", `§8${myRank + 1}. §b${player.name}§r  ${fmt(stat, list[myRank].score)}`);
   }
 
   const res = await show(

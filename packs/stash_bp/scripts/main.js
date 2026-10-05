@@ -375,9 +375,9 @@ async function openMenu(player, dimension, at) {
   const inv = player.getComponent("minecraft:inventory")?.container;
 
   const body = [];
-  if (container) body.push(`${name} · ${usedSlots(container, 0, container.size)} of ${container.size} slots used`);
+  if (container) body.push(`${name} - ${usedSlots(container, 0, container.size)} of ${container.size} slots used`);
   else body.push(`§7${name}: add-ons can't see inside, so it can't be sorted.§r`);
-  if (inv) body.push(`Your inventory · ${usedSlots(inv, MAIN_FIRST, MAIN_END)} of ${MAIN_END - MAIN_FIRST} slots used`);
+  if (inv) body.push(`Your inventory - ${usedSlots(inv, MAIN_FIRST, MAIN_END)} of ${MAIN_END - MAIN_FIRST} slots used`);
   body.push("", "§8All the details: /realm:stash_help");
 
   /** @type {{ text: string, run: (p: Player) => void }[]} */
@@ -464,9 +464,9 @@ async function showHelp(player) {
       tap === "menu"
         ? [
             `Sneak and tap a ${storageKinds(player)} with an empty hand, or holding a tool, weapon or armor. It doesn't open; this menu does:`,
-            "§e• Sort this chest§r (or barrel, shulker box…): merges partial stacks of the same item, then orders the slots by item, the biggest stack first, empty slots last.",
-            "§e• Quick stack my inventory§r: the same as §e/realm:stash§r.",
-            "§e• Sort my inventory§r: the same as §e/realm:sort§r.",
+            "§e- Sort this chest§r (or barrel, shulker box...): merges partial stacks of the same item, then orders the slots by item, the biggest stack first, empty slots last.",
+            "§e- Quick stack my inventory§r: the same as §e/realm:stash§r.",
+            "§e- Sort my inventory§r: the same as §e/realm:sort§r.",
             "§7An ender chest's menu has no Sort button: add-ons can't see inside one. Holding anything else (a block, a hopper, honeycomb) keeps its usual sneak-tap use.",
           ].join("\n")
         : `Sneak and tap a ${storageKinds(player)} with an empty hand, or holding a tool, weapon or armor, to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
@@ -497,7 +497,7 @@ async function showHelp(player) {
   form.label(
     [
       "§7Usage:§r §e/realm:sort",
-      `Sorts your main inventory${sortHotbar ? " and your hotbar" : " (slots 9–35)"}: partial stacks merge, then everything is ordered by item, the biggest stack first, empty slots last.`,
+      `Sorts your main inventory${sortHotbar ? " and your hotbar" : " (slots 9 to 35)"}: partial stacks merge, then everything is ordered by item, the biggest stack first, empty slots last.`,
       sortHotbar ? "§7Your hotbar is sorted too." : "§7Your hotbar stays exactly as it is. To sort it too, turn that on in /realm:prefs.",
     ].join("\n")
   );
@@ -508,9 +508,9 @@ async function showHelp(player) {
   form.divider().header("Good to know");
   form.label(
     [
-      `• One sort or stash per ${seconds} s per player.`,
-      "• Enchanted items and items with a custom name or lore are never merged, only moved, so they stay exactly as they were: gear, written books, filled maps, banners, shulker boxes with their contents.",
-      "• Another player having the chest open is fine.",
+      `- One sort or stash per ${seconds} s per player.`,
+      "- Enchanted items and items with a custom name or lore are never merged, only moved, so they stay exactly as they were: gear, written books, filled maps, banners, shulker boxes with their contents.",
+      "- Another player having the chest open is fine.",
     ].join("\n")
   );
 

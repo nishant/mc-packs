@@ -157,8 +157,8 @@ function checkSleep() {
 
   // Name the few still awake, so everyone knows who the night is waiting for.
   const awake = counted.filter((p) => !p.isSleeping);
-  const names = awake.length && awake.length <= 3 ? ` §7· awake: ${awake.map((p) => p.name).join(", ")}` : "";
-  const status = `§e🛏 ${sleeping.length}/${needed} sleeping${names}${afkCount ? ` §7(${afkCount} AFK ignored)` : ""}`;
+  const names = awake.length && awake.length <= 3 ? ` §7- awake: ${awake.map((p) => p.name).join(", ")}` : "";
+  const status = `§eZzz ${sleeping.length}/${needed} sleeping${names}${afkCount ? ` §7(${afkCount} AFK ignored)` : ""}`;
   for (const p of all) if (p.dimension.id === "minecraft:overworld") p.onScreenDisplay.setActionBar(status);
 
   if (sleeping.length < needed) {
@@ -190,7 +190,7 @@ function checkSleep() {
   }
   world.getDimension("overworld").setWeather(WeatherType.Clear);
   thundering = false;
-  world.sendMessage(afkCount ? `§e☀ Good morning! §7(${afkCount} AFK player${afkCount > 1 ? "s" : ""} skipped)` : "§e☀ Good morning!");
+  world.sendMessage(afkCount ? `§eGood morning! §7(${afkCount} AFK player${afkCount > 1 ? "s" : ""} skipped)` : "§eGood morning!");
 }
 
 // ---------------------------------------------------------------------------

@@ -163,7 +163,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       }
       const r = radius ?? get("defaultRadius");
       if (r < MIN_RADIUS || r > MAX_RADIUS) {
-        return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS}–${MAX_RADIUS} blocks.` };
+        return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS} to ${MAX_RADIUS} blocks.` };
       }
       const list = getZones();
       const taken = list.find((z) => named(z, name));

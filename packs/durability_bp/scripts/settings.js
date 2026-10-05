@@ -10,12 +10,12 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "warnPercent", type: "int", scope: "world", label: "Warn at this % of durability left", min: 1, max: 50, step: 1 },
-  { key: "criticalPercent", type: "int", scope: "world", label: "Critical warning at this % left", min: 1, max: 25, step: 1 },
-  { key: "maxUsesForWarning", type: "int", scope: "world", label: "Never warn with more uses left than this (0 = off)", min: 0, max: 500, step: 10 },
-  { key: "chatOnCritical", type: "bool", scope: "world", label: "Also post critical warnings in chat" },
-  { key: "checkIntervalTicks", type: "int", scope: "world", label: "Ticks between checks", restart: true },
-  { key: "off", type: "bool", scope: "player", default: false, prop: "durability:off", label: "Turn off low-durability warnings for me", help: "The same switch as /realm:durability" },
+  { key: "warnPercent", type: "int", scope: "world", label: "Warning at durability left (%)", min: 1, max: 50, step: 1 },
+  { key: "criticalPercent", type: "int", scope: "world", label: "Critical warning at durability left (%)", min: 1, max: 25, step: 1 },
+  { key: "maxUsesForWarning", type: "int", scope: "world", label: "Skip warnings above this many uses left (0 = always warn)", min: 0, max: 500, step: 10 },
+  { key: "chatOnCritical", type: "bool", scope: "world", label: "Critical warnings in chat" },
+  { key: "checkIntervalTicks", type: "int", scope: "world", label: "Ticks between durability checks", restart: true },
+  { key: "off", type: "bool", scope: "player", default: false, prop: "durability:off", invert: true, label: "Low-durability warnings", help: "The same switch as /realm:durability" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
@@ -42,6 +42,8 @@ const OPTIONS = [
  * @property {number} [max]
  * @property {number} [step]
  * @property {string[]} [choices] enum only
+ * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
+ * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
@@ -71,12 +73,12 @@ function fileDefault(key) {
 function problem(opt, v) {
   switch (opt.type) {
     case "bool":
-      return typeof v === "boolean" ? undefined : "must be on or off";
+      return typeof v === "boolean" ? undefined : "must be enabled or disabled";
     case "int":
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
-      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "…"} to ${opt.max ?? "…"}`;
+      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
       return typeof v === "string" && (opt.choices ?? []).includes(v) ? undefined : `must be one of ${(opt.choices ?? []).join(", ")}`;
@@ -268,6 +270,8 @@ function describe(player) {
       max: o.max,
       step: o.step,
       choices: o.choices,
+      names: o.names,
+      invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
     };

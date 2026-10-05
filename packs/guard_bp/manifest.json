@@ -4,7 +4,7 @@
     "name": "Creeper Guard",
     "description": "Creeper explosions still hurt but break no blocks. TNT is left alone. /realm:guard",
     "uuid": "83f151fe-90fa-43c8-ac72-74bab0dc32b6",
-    "version": [1, 2, 0],
+    "version": [1, 3, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

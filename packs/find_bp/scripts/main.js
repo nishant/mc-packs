@@ -347,7 +347,7 @@ function rowText(h, player) {
     h.dist === Infinity
       ? title(h.dim)
       : `${Math.round(h.dist)} blocks ${direction(h.x + 0.5 - player.location.x, h.z + 0.5 - player.location.z)}`;
-  return `${title(h.entry.b)} · ${items}${more}\n§8${where} · seen ${ago(Date.now() - h.entry.at)}`;
+  return `${title(h.entry.b)} - ${items}${more}\n§8${where} - seen ${ago(Date.now() - h.entry.at)}`;
 }
 
 /** @param {Player} player @param {string} query */

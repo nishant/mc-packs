@@ -6,7 +6,7 @@
 //
 // Formatting:
 //   \n          new line
-//   §a §b §e …  colour codes (§l bold, §o italic, §r reset)
+//   §a §b §e ...  color codes (§l bold, §o italic, §r reset)
 //   {player}    the joining player's name
 //   {online}    number of players currently online
 
@@ -20,9 +20,9 @@ export const DEFAULTS = {
   body:
     "Hey §b{player}§r, glad you're here!\n\n" +
     "§eRules§r\n" +
-    "§7•§r Be kind, no griefing\n" +
-    "§7•§r Ask before building near someone else\n" +
-    "§7•§r Have fun\n\n" +
+    "§7-§r Be kind, no griefing\n" +
+    "§7-§r Ask before building near someone else\n" +
+    "§7-§r Have fun\n\n" +
     "Type §b/realm:help§r to see everything this realm adds.\n\n" +
     "§7Players online: {online}",
 
