@@ -596,39 +596,48 @@ Bedrock rules, worth knowing before you add a farm:
 
 ## Quick Stack & Sort — `stash_bp`
 
-Sort a chest with one tap, and empty your inventory into the chests that already hold each item, the way Terraria's quick stack works.
+Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory.
 
 ### How to use
 
-1. **Sort a chest:** sneak and tap a chest, trapped chest or barrel with an empty hand. It doesn't open; its stacks merge and sort, and the bar above the hotbar says `Sorted 31 stacks`.
-2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into a container within 8 blocks that already holds the same item. The bar says `Stashed 143 items into 3 chests`, and each chest that got something sparkles.
+1. **Open the menu:** sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand. It doesn't open; a **Quick Stack & Sort** menu does, with three buttons:
+   - **Sort this chest** (or barrel, shulker box…): its stacks merge and sort, and the bar above the hotbar says `Sorted 31 stacks`.
+   - **Quick stack my inventory:** the same as `/realm:stash`, below.
+   - **Sort my inventory:** the same as `/realm:sort`, below.
+2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into storage within 8 blocks that already holds the same item. The bar says `Stashed 143 items into 3 chests`, and each container that got something sparkles.
 3. **Sort your inventory:** run `/realm:sort`. Your main inventory is sorted; the hotbar stays as it is.
+4. **Help:** run `/realm:stash_help` for a page that explains the menu and every command with its usage. `/help realm:stash` and `/help realm:sort` also describe them.
 
 ### What players see
 
-- Sorting merges partial stacks of the same item, then orders the slots by item id, the biggest stack first, with empty slots at the end. A chest with 3 partial stacks of cobblestone ends with 1 full stack plus the rest.
+- **The menu** shows how full the container is and how full your inventory is (`Barrel · 18 of 27 slots used`, `Your inventory · 22 of 27 slots used`), then the three buttons. Close it to do nothing. Holding something in your hand skips the menu, so sneak-placing a hopper on a chest works as usual.
+- **Ender chests** get the menu without **Sort this**: add-ons can't see inside an ender chest, so it can't be sorted or stashed into.
+- **Sorting** merges partial stacks of the same item, then orders the slots by item id, the biggest stack first, with empty slots at the end. A chest with 3 partial stacks of cobblestone ends with 1 full stack plus the rest.
 - Items with a custom name, lore or enchantments are never merged, only moved, and moving keeps every item exactly as it was: enchanted gear, named items, written books, filled maps, banners and shulker boxes with their contents.
-- `/realm:stash` only takes from your main inventory (slots 9–35): never the hotbar, armor or offhand. Named items stay with you unless `stashNamedItems` is on. A container that holds the item gets matching stacks topped up first, then its empty slots, nearest container first.
-- Double chests count once. Ender chests and shulker boxes are never used. Containers in chunks that aren't loaded are never touched. Another player having the chest open is fine.
-- Each player can sort or stash once per second (`cooldownTicks`).
+- `/realm:stash` only takes from your main inventory (slots 9–35): never the hotbar, armor or offhand. Named items stay with you unless `stashNamedItems` is on. A container that holds the item gets matching stacks topped up first, then its empty slots, nearest container first. Chests, trapped chests, copper chests, barrels and placed shulker boxes all receive stashes.
+- Double chests (copper ones too) count once. Ender chests are never used. Containers in chunks that aren't loaded are never touched. Another player having the chest open is fine.
+- Each player can sort or stash once per second (`cooldownTicks`). A menu button pressed sooner says `Too fast. Try again in a moment.`
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:stash` | Everyone | Quick stack: puts your items into nearby containers that already hold the same items |
-| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched unless `sortHotbar` is on |
+| `/realm:stash` | Everyone | Quick stack: puts your main inventory into storage within 8 blocks that already holds the same items. Same as the menu's **Quick stack my inventory** |
+| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched unless `sortHotbar` is on. Same as the menu's **Sort my inventory** |
+| `/realm:stash_help` | Everyone | Opens the help page: the sneak-tap menu, then each command with its usage and what it never touches |
+
+None of them take parameters. The help page and the `/help` descriptions follow `config.js`, so a different `stashRadius` or `sortHotbar` shows up there too.
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
 | Option | Default | Description |
 |---|---|---|
 | `stashRadius` | `8` | Blocks around the player to look for containers (a 17 × 17 × 17 cube) |
-| `containerTypes` | chest, trapped chest, barrel | Block ids that sort and receive stashes. Shulker boxes are left out on purpose |
-| `sneakTapSorts` | `true` | Sneak and tap with an empty hand to sort a container. While on, sneak-tapping doesn't open it |
+| `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that get the sneak-tap menu, can be sorted and receive stashes. Ids this game version doesn't have are skipped. Ender chests get the menu regardless and are never sorted or stashed into |
+| `sneakTap` | `"menu"` | What sneak-tapping a container with an empty hand does: `"menu"` opens the menu, `"sort"` sorts it right away (no menu, no ender chests), `"off"` does nothing so it opens as usual. With `"menu"` or `"sort"`, sneak-tapping never opens it |
 | `stashNamedItems` | `false` | `/realm:stash` also moves items with a custom name |
-| `sortHotbar` | `false` | `/realm:sort` also sorts the hotbar |
-| `cooldownTicks` | `20` | Minimum time between uses per player (20 = 1 s) |
+| `sortHotbar` | `false` | `/realm:sort` and the menu's **Sort my inventory** also sort the hotbar |
+| `cooldownTicks` | `20` | Minimum time between sorts and stashes per player (20 = 1 s). Opening the menu or the help page doesn't count |
 
 ### Saved data
 
@@ -636,9 +645,10 @@ None.
 
 ### How it works
 
+- **Menu:** `world.beforeEvents.playerInteractWithBlock` cancels the tap when the player is sneaking, the hand is empty and the block is a listed container or an ender chest. On the next tick an `ActionFormData` from `@minecraft/server-ui` shows the menu; a player can have one open at a time. The chosen action re-reads the block, so a container broken while the menu was open is left alone.
 - **Sort:** stacks are merged by changing the amount of the slot that stays (`ContainerSlot.amount`) and ordered with `swapItems`. Both are native moves, so no item is ever copied or re-created and nothing about it can be lost.
 - **Stash:** one `dimension.getBlocks` query finds the listed containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
-- When both halves of a double chest report the whole 54 slots, the second half is recognized (same contents, same facing, side by side; in a row of identical chests, counted from the row's end) and skipped.
+- When both halves of a double chest report the whole 54 slots, the second half is recognized (same kind of chest, same contents, same facing, side by side; in a row of identical chests, counted from the row's end) and skipped. Copper chests of different stages count as the same kind.
 - If `transferItem` ever hands a leftover back instead of leaving it in the slot, the pack puts it back, so nothing is lost.
 
 ---
@@ -779,7 +789,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
 | AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
 | Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
-| Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items. Sneak-tap sorting a sorter's chest is harmless |
+| Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items, and a copper golem's copper chest if it already holds them. Sorting a sorter's chest from the sneak-tap menu is harmless |
 | Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
 | Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
 
