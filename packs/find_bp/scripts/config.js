@@ -1,3 +1,8 @@
+const COPPER_CHESTS = ["", "exposed_", "weathered_", "oxidized_"].flatMap((stage) => [
+  `minecraft:${stage}copper_chest`,
+  `minecraft:waxed_${stage}copper_chest`,
+]);
+
 const SHULKER_BOXES = [
   "undyed", "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
   "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black",
@@ -16,6 +21,9 @@ export const CONFIG = {
   /** How long the particle column over a chosen container shows, in seconds. */
   highlightSeconds: 10,
 
-  /** Block ids that are remembered and searched: chests, trapped chests, barrels and placed shulker boxes. */
-  containerTypes: ["minecraft:chest", "minecraft:trapped_chest", "minecraft:barrel", ...SHULKER_BOXES],
+  /**
+   * Block ids that are remembered and searched: chests, trapped chests, copper chests (every stage,
+   * waxed or not), barrels and placed shulker boxes. Ids this game version doesn't have are skipped.
+   */
+  containerTypes: ["minecraft:chest", "minecraft:trapped_chest", ...COPPER_CHESTS, "minecraft:barrel", ...SHULKER_BOXES],
 };

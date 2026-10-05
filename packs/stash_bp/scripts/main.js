@@ -1,17 +1,22 @@
 import {
   Block,
+  BlockTypes,
   BlockVolume,
   CommandPermissionLevel,
   Container,
   CustomCommandStatus,
+  Dimension,
   ItemStack,
   Player,
   system,
   world,
 } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 
 const containerTypes = new Set(CONFIG.containerTypes);
+const keepItems = new Set(CONFIG.keepItems);
+const ENDER_CHEST = "minecraft:ender_chest"; // add-ons can't see inside: menu only, never sorted or stashed into
 const MAIN_FIRST = 9; // player inventory: 0–8 hotbar, 9–35 main
 const MAIN_END = 36;
 const SIDES = [
@@ -21,13 +26,56 @@ const SIDES = [
   { x: 0, y: 0, z: -1 },
 ];
 
+/** "Chest", "Copper chest", "Shulker box"…: one name per kind, whatever its color or stage. @param {string} typeId */
+function nameOf(typeId) {
+  const id = typeId.replace(/^minecraft:/, "");
+  const kind = id.endsWith("shulker_box") ? "shulker box" : id.endsWith("copper_chest") ? "copper chest" : id.replaceAll("_", " ");
+  return kind[0].toUpperCase() + kind.slice(1);
+}
+
+/** "a, b or c" @param {string[]} words @param {string} [last] */
+const orList = (words, last = "or") =>
+  words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} ${last} ${words.at(-1)}`;
+
+/** "chest, trapped chest, copper chest…": one name per kind. @param {string[]} ids */
+const kindsOf = (ids) => [...new Set(ids.map((id) => nameOf(id).toLowerCase()))];
+
+/** The kinds of storage the sneak-tap works on, e.g. "chest, trapped chest, copper chest, barrel or shulker box". */
+function storageKinds() {
+  const kinds = kindsOf(CONFIG.containerTypes);
+  if (CONFIG.sneakTap === "menu") kinds.push("ender chest");
+  return orList(kinds);
+}
+
+/** Empty, or gear (a tool, weapon or armor: anything with durability), which has no sneak-tap use on a chest. @param {ItemStack | undefined} item */
+const freeHand = (item) => !item || !!item.getComponent("minecraft:durability");
+
+/** Items /realm:stash leaves with the player. @param {ItemStack} item */
+function kept(item) {
+  if (keepItems.has(item.typeId)) return true;
+  if (item.nameTag && !CONFIG.stashNamedItems) return true;
+  return !CONFIG.stashGear && !!item.getComponent("minecraft:durability");
+}
+
+/** @param {Container} c @param {number} from @param {number} to */
+function usedSlots(c, from, to) {
+  let n = 0;
+  for (let i = from; i < to; i++) if (c.getItem(i)) n++;
+  return n;
+}
+
 // ---------------------------------------------------------------------------
 // Cooldown
 // ---------------------------------------------------------------------------
 
 /** @type {Map<string, number>} player id → tick of last use */
 const lastUse = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => lastUse.delete(playerId));
+/** @type {Set<string>} player ids with the sneak-tap menu open, so a second tap doesn't stack another */
+const menuOpen = new Set();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  lastUse.delete(playerId);
+  menuOpen.delete(playerId);
+});
 
 /** @param {Player} player @returns {boolean} true if the player may act now (and starts the cooldown) */
 function ready(player) {
@@ -117,23 +165,6 @@ function sortInventory(player) {
   player.onScreenDisplay.setActionBar(`§aSorted ${stacks} stack${stacks === 1 ? "" : "s"} in your inventory`);
 }
 
-world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
-  const { player, block, itemStack, isFirstEvent } = event;
-  if (!CONFIG.sneakTapSorts || !player.isSneaking || itemStack || !containerTypes.has(block.typeId)) return;
-  event.cancel = true; // sneak-tap sorts instead of opening
-  if (!isFirstEvent || !ready(player)) return;
-  const { x, y, z } = block.location;
-  const dimension = block.dimension;
-  system.run(() => {
-    try {
-      const b = dimension.getBlock({ x, y, z });
-      if (b && containerTypes.has(b.typeId) && player.isValid) sortBlock(player, b);
-    } catch (e) {
-      console.warn(`[stash] ${e}`);
-    }
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Quick stack
 // ---------------------------------------------------------------------------
@@ -149,6 +180,9 @@ function signature(c) {
   }
   return parts.join(",");
 }
+
+/** Copper chests of any stage, waxed or not, are one kind. @param {string} typeId */
+const family = (typeId) => (typeId.endsWith("copper_chest") ? "copper_chest" : typeId);
 
 /** A chest's facing, from whichever state this game version uses. @param {Block} b */
 function facingOf(b) {
@@ -174,7 +208,7 @@ function partnerOf(block, sigOf) {
   const alongZ = facing === "east" || facing === "west" || facing === 4 || facing === 5;
   const dirs = SIDES.filter((d) => (alongX ? d.x !== 0 : alongZ ? d.z !== 0 : true));
   /** @param {Block | undefined} b */
-  const twin = (b) => !!b && b.typeId === block.typeId && facingOf(b) === facing && sigOf(b) === sig;
+  const twin = (b) => !!b && family(b.typeId) === family(block.typeId) && facingOf(b) === facing && sigOf(b) === sig;
   const found = dirs.filter((d) => twin(block.offset(d)));
   if (found.length < 2) return found.length ? block.offset(found[0]) : undefined;
   const d = found.find((f) => found.some((g) => g.x === -f.x && g.z === -f.z));
@@ -200,6 +234,11 @@ function signatures() {
   };
 }
 
+/** @type {string[] | undefined} */
+let knownTypes;
+/** The listed container ids this game version has (copper chests are newer than 1.21.100). */
+const stashTypes = () => (knownTypes ??= CONFIG.stashTypes.filter((id) => BlockTypes.get(id)));
+
 /**
  * Finds the listed containers within stashRadius, nearest first, reading a few per tick.
  * @param {Player} player
@@ -215,7 +254,7 @@ function* findTargets(player) {
   // One native query for the whole cube; locations in unloaded chunks are skipped.
   const found = dimension.getBlocks(
     new BlockVolume({ x: p.x - r, y: minY, z: p.z - r }, { x: p.x + r, y: maxY, z: p.z + r }),
-    { includeTypes: [...containerTypes] },
+    { includeTypes: stashTypes() },
     true
   );
 
@@ -268,7 +307,7 @@ function* quickStack(player) {
   const received = new Set();
   for (let slot = MAIN_FIRST; slot < MAIN_END; slot++) {
     const item = inv.getItem(slot);
-    if (!item || (item.nameTag && !CONFIG.stashNamedItems)) continue;
+    if (!item || kept(item)) continue;
     let left = item.amount;
     for (const t of targets) {
       if (!t.ids.has(item.typeId) || !t.container.isValid) continue;
@@ -305,16 +344,192 @@ function* quickStack(player) {
 }
 
 // ---------------------------------------------------------------------------
+// Sneak-tap menu
+// ---------------------------------------------------------------------------
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @param {Player} player @param {ActionFormData} form @param {number} attempts one a second
+ * @returns {Promise<import("@minecraft/server-ui").ActionFormResponse | undefined>} undefined if it never got shown
+ */
+async function show(player, form, attempts = 20) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/**
+ * Sort this container, quick stack, or sort your inventory.
+ * @param {Player} player @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at the tapped block
+ */
+async function openMenu(player, dimension, at) {
+  const block = dimension.getBlock(at);
+  if (!block || menuOpen.has(player.id)) return;
+  const name = nameOf(block.typeId);
+  const container = block.typeId === ENDER_CHEST ? undefined : containerOf(block);
+  const inv = player.getComponent("minecraft:inventory")?.container;
+
+  const body = [];
+  if (container) body.push(`${name} · ${usedSlots(container, 0, container.size)} of ${container.size} slots used`);
+  else body.push(`§7${name}: add-ons can't see inside, so it can't be sorted.§r`);
+  if (inv) body.push(`Your inventory · ${usedSlots(inv, MAIN_FIRST, MAIN_END)} of ${MAIN_END - MAIN_FIRST} slots used`);
+  body.push("", "§8All the details: /realm:stash_help");
+
+  /** @type {{ text: string, run: (p: Player) => void }[]} */
+  const actions = [];
+  if (container) {
+    actions.push({
+      text: `Sort this ${name.toLowerCase()}\n§8Merge stacks, order by item`,
+      run: (p) => {
+        const b = dimension.getBlock(at);
+        if (b && containerTypes.has(b.typeId)) sortBlock(p, b);
+      },
+    });
+  }
+  actions.push({
+    text: `Quick stack my inventory\n§8Into storage within ${CONFIG.stashRadius} blocks`,
+    run: (p) => system.runJob(stash(p)),
+  });
+  actions.push({
+    text: `Sort my inventory\n§8${CONFIG.sortHotbar ? "Hotbar included" : "The hotbar stays as it is"}`,
+    run: sortInventory,
+  });
+
+  const form = new ActionFormData().title("§lQuick Stack & Sort").body(body.join("\n"));
+  for (const a of actions) form.button(a.text);
+
+  menuOpen.add(player.id);
+  try {
+    // Only a short retry: a menu popping up long after the tap would be a surprise.
+    const res = await show(player, form, 3);
+    if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+    if (!ready(player)) {
+      player.onScreenDisplay.setActionBar("§7Too fast. Try again in a moment.");
+      return;
+    }
+    actions[res.selection]?.run(player);
+  } finally {
+    menuOpen.delete(player.id);
+  }
+}
+
+world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+  const { player, block, itemStack, isFirstEvent } = event;
+  if (CONFIG.sneakTap === "off" || !player.isSneaking || !freeHand(itemStack)) return;
+  const menu = CONFIG.sneakTap === "menu";
+  if (!containerTypes.has(block.typeId) && !(menu && block.typeId === ENDER_CHEST)) return;
+  event.cancel = true; // the sneak-tap replaces opening it
+  if (!isFirstEvent || (!menu && !ready(player))) return;
+  const { x, y, z } = block.location;
+  const { dimension } = block;
+  system.run(() => {
+    if (!player.isValid) return;
+    if (menu) {
+      openMenu(player, dimension, { x, y, z }).catch((e) => console.warn(`[stash] ${e}`));
+      return;
+    }
+    try {
+      const b = dimension.getBlock({ x, y, z });
+      if (b && containerTypes.has(b.typeId)) sortBlock(player, b);
+    } catch (e) {
+      console.warn(`[stash] ${e}`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Help
+// ---------------------------------------------------------------------------
+
+/** @param {Player} player */
+async function showHelp(player) {
+  const r = CONFIG.stashRadius;
+  const seconds = +(CONFIG.cooldownTicks / 20).toFixed(2);
+  const form = new ActionFormData()
+    .title("§lQuick Stack & Sort: help")
+    .body("Sort your storage with one tap, and empty your inventory into the chests that already hold each item.");
+
+  if (CONFIG.sneakTap !== "off") {
+    form.divider().header("Sneak-tap");
+    form.label(
+      CONFIG.sneakTap === "menu"
+        ? [
+            `Sneak and tap a ${storageKinds()} with an empty hand, or holding a tool, weapon or armor. It doesn't open; this menu does:`,
+            "§e• Sort this chest§r (or barrel, shulker box…): merges partial stacks of the same item, then orders the slots by item, the biggest stack first, empty slots last.",
+            "§e• Quick stack my inventory§r: the same as §e/realm:stash§r.",
+            "§e• Sort my inventory§r: the same as §e/realm:sort§r.",
+            "§7An ender chest's menu has no Sort button: add-ons can't see inside one. Holding anything else (a block, a hopper, honeycomb) keeps its usual sneak-tap use.",
+          ].join("\n")
+        : `Sneak and tap a ${storageKinds()} with an empty hand, or holding a tool, weapon or armor, to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
+    );
+  }
+
+  form.divider().header("/realm:stash");
+  form.label(
+    [
+      "§7Usage:§r §e/realm:stash",
+      `Quick stack. Every item in your main inventory goes into a ${orList(kindsOf(CONFIG.stashTypes))} within ${r} blocks that already holds the same item, nearest first. Matching stacks are topped up first, then empty slots.`,
+      `The bar says §eStashed 143 items into 3 chests§r, and every container that got something sparkles.`,
+      `§7Never takes from your hotbar, armor or offhand. Stays with you: ${orList(
+        [
+          ...(CONFIG.stashGear ? [] : ["gear (tools, weapons, armor)"]),
+          ...(CONFIG.stashNamedItems ? [] : ["items with a custom name"]),
+          ...(CONFIG.keepItems.some((id) => id.endsWith("shulker_box")) ? ["shulker boxes"] : []),
+          ...(CONFIG.keepItems.some((id) => id.endsWith("bundle")) ? ["bundles"] : []),
+          ...(keepItems.has("minecraft:totem_of_undying") ? ["totems"] : []),
+          ...(CONFIG.keepItems.some((id) => /map|compass|clock/.test(id)) ? ["what you find your way with (maps, compasses, clocks)"] : []),
+        ],
+        "and"
+      )}. Double chests count once; ${CONFIG.stashTypes.some((id) => id.endsWith("shulker_box")) ? "" : "placed shulker boxes and "}ender chests never receive anything; containers in unloaded chunks are never touched.`,
+    ].join("\n")
+  );
+
+  form.divider().header("/realm:sort");
+  form.label(
+    [
+      "§7Usage:§r §e/realm:sort",
+      `Sorts your main inventory${CONFIG.sortHotbar ? " and your hotbar" : " (slots 9–35)"}: partial stacks merge, then everything is ordered by item, the biggest stack first, empty slots last.`,
+      CONFIG.sortHotbar ? "§7Your hotbar is sorted too." : "§7Your hotbar stays exactly as it is.",
+    ].join("\n")
+  );
+
+  form.divider().header("/realm:stash_help");
+  form.label("§7Usage:§r §e/realm:stash_help\nShows this page.");
+
+  form.divider().header("Good to know");
+  form.label(
+    [
+      `• One sort or stash per ${seconds} s per player.`,
+      "• Enchanted items and items with a custom name or lore are never merged, only moved, so they stay exactly as they were: gear, written books, filled maps, banners, shulker boxes with their contents.",
+      "• Another player having the chest open is fine.",
+    ].join("\n")
+  );
+
+  form.button("Close");
+  await show(player, form);
+}
+
+// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
+
+/** @param {import("@minecraft/server").CustomCommandOrigin} origin */
+function originPlayer(origin) {
+  const player = origin.initiator ?? origin.sourceEntity;
+  return player instanceof Player ? player : undefined;
+}
 
 /**
  * @param {import("@minecraft/server").CustomCommandOrigin} origin
  * @param {(player: Player) => void} run
  */
 function playerCommand(origin, run) {
-  const player = origin.initiator ?? origin.sourceEntity;
-  if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+  const player = originPlayer(origin);
+  if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
   if (!ready(player)) return { status: CustomCommandStatus.Failure, message: "Too fast. Try again in a moment." };
   system.run(() => {
     try {
@@ -326,11 +541,12 @@ function playerCommand(origin, run) {
   return { status: CustomCommandStatus.Success };
 }
 
+// The descriptions are what /help and autocomplete show.
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:stash",
-      description: "Put your items into nearby chests that already hold the same items",
+      description: `Quick stack: moves your main inventory into storage within ${CONFIG.stashRadius} blocks that already holds the same items. More: /realm:stash_help`,
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
@@ -340,10 +556,33 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:sort",
-      description: "Sort your inventory (the hotbar stays as it is)",
+      description: `Sorts your inventory: merges stacks, then orders by item${CONFIG.sortHotbar ? ", hotbar included" : "; the hotbar stays as it is"}. More: /realm:stash_help`,
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
     (origin) => playerCommand(origin, sortInventory)
   );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:stash_help",
+      description: "How Quick Stack & Sort works: the sneak-tap menu, /realm:stash and /realm:sort, with usage",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => showHelp(player).catch((e) => console.warn(`[stash] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stash_bp");
+  },
+  { namespaces: ["realm"] }
+);

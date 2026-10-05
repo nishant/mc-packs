@@ -62,6 +62,7 @@ function harvest(player, block, crop) {
     block.setPermutation(block.permutation.withState(/** @type {any} */ (crop.state), 0));
   } else {
     block.setType("minecraft:air");
+    player.onScreenDisplay.setActionBar("§7No seed to replant it");
   }
   block.dimension.playSound(crop.sound, center);
   if (CONFIG.damageHoe) damageHeldHoe(player);
@@ -139,3 +140,11 @@ function damageHeldHoe(player) {
   durability.damage += 1;
   container.setItem(slot, item);
 }
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "harvest_bp");
+  },
+  { namespaces: ["realm"] }
+);

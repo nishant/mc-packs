@@ -65,7 +65,8 @@ function sit(player, dim, at, yaw, onBlock) {
     seat.setRotation({ x: 0, y: yaw });
     player.teleport(player.location, { rotation: { x: player.getRotation().x, y: yaw } });
   }
-  if (!seat.getComponent("minecraft:rideable")?.addRider(player)) seat.remove();
+  if (seat.getComponent("minecraft:rideable")?.addRider(player)) player.onScreenDisplay.setActionBar("§7Sneak to stand up");
+  else seat.remove();
 }
 
 /** @param {Player} player */
@@ -151,7 +152,15 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
           console.warn(`[chairs] ${e}`);
         }
       });
-      return { status: CustomCommandStatus.Success, message: "Sneak to stand up." };
+      return { status: CustomCommandStatus.Success };
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "chairs_bp");
+  },
+  { namespaces: ["realm"] }
+);

@@ -50,15 +50,27 @@ function saveZones(list) {
  * @param {import("@minecraft/server").Vector3} p
  */
 function inAnyZone(dim, p) {
+  return !!zoneAt(dim, p);
+}
+
+/**
+ * The first zone holding block `p`.
+ * @param {string} dim
+ * @param {import("@minecraft/server").Vector3} p
+ */
+function zoneAt(dim, p) {
   for (const z of getZones()) {
     if (z.dim !== dim) continue;
     const dx = p.x + 0.5 - z.x;
     const dy = p.y + 0.5 - z.y;
     const dz = p.z + 0.5 - z.z;
-    if (dx * dx + dy * dy + dz * dz <= z.radius * z.radius) return true;
+    if (dx * dx + dy * dy + dz * dz <= z.radius * z.radius) return z;
   }
-  return false;
+  return undefined;
 }
+
+/** Zone names match whatever their case. @param {Zone} z @param {string} name */
+const named = (z, name) => z.name.toLowerCase() === name.toLowerCase();
 
 // ---------------------------------------------------------------------------
 // The guard itself
@@ -92,9 +104,18 @@ const shortId = (/** @type {string} */ id) => id.replace(/^minecraft:/, "").repl
 const describeZone = (z) =>
   `§e${z.name}§r: ${shortId(z.dim)} ${Math.floor(z.x)}, ${Math.floor(z.y)}, ${Math.floor(z.z)}, radius ${z.radius}`;
 
-function statusText() {
+/** @param {Player | undefined} player */
+function statusText(player) {
   const list = getZones();
+  /** @type {string[]} */
+  let here = [];
+  if (player && sources.size) {
+    const { x, y, z } = player.location;
+    const zone = zonesMode ? zoneAt(player.dimension.id, { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }) : undefined;
+    here = [zonesMode ? (zone ? `§aWhere you stand: protected (zone §e${zone.name}§a)` : "§cWhere you stand: not protected") : "§aWhere you stand: protected"];
+  }
   const lines = [
+    ...here,
     `§6Creeper Guard§r: ${
       zonesMode ? "only inside the zones below" : "everywhere (zones are only used in zones mode)"
     }`,
@@ -119,7 +140,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    () => ({ status: CustomCommandStatus.Success, message: statusText() })
+    (origin) => ({ status: CustomCommandStatus.Success, message: statusText(originPlayer(origin)) })
   );
 
   customCommandRegistry.registerCommand(
@@ -142,10 +163,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS}–${MAX_RADIUS} blocks.` };
       }
       const list = getZones();
-      if (list.some((z) => z.name === name)) {
+      const taken = list.find((z) => named(z, name));
+      if (taken) {
         return {
           status: CustomCommandStatus.Failure,
-          message: `There is already a zone "${name}". Remove it first with /realm:guard_remove ${name}.`,
+          message: `There is already a zone "${taken.name}". Remove it first with /realm:guard_remove ${taken.name}.`,
         };
       }
       if (list.length >= MAX_ZONES) {
@@ -171,11 +193,20 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       mandatoryParameters: [{ name: "name", type: CustomCommandParamType.String }],
     },
     (_origin, /** @type {string} */ name) => {
-      if (!getZones().some((z) => z.name === name)) {
+      const zone = getZones().find((z) => named(z, name));
+      if (!zone) {
         return { status: CustomCommandStatus.Failure, message: `No zone "${name}". /realm:guard lists them.` };
       }
-      system.run(() => saveZones(getZones().filter((z) => z.name !== name)));
-      return { status: CustomCommandStatus.Success, message: `Zone "${name}" removed.` };
+      system.run(() => saveZones(getZones().filter((z) => z.name !== zone.name)));
+      return { status: CustomCommandStatus.Success, message: `Zone "${zone.name}" removed.` };
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "guard_bp");
+  },
+  { namespaces: ["realm"] }
+);

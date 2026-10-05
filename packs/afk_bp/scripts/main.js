@@ -116,6 +116,7 @@ system.runInterval(() => {
       s.pitch = r.x;
 
       if (turned || moving) markActive(player);
+      else if (player.isSleeping) s.lastActive = now; // lying in bed waiting for the night isn't AFK
       else if (s.afkSince === undefined && !player.isSleeping && now - s.lastActive >= AFK_TICKS) setAfk(player, true);
     } catch (e) {
       console.warn(`[afk] ${e}`);
@@ -151,7 +152,10 @@ function checkSleep() {
   const afkCount = all.filter((p) => !p.isSleeping && isAfk(p)).length;
   const needed = Math.max(1, Math.ceil((counted.length * CONFIG.sleep.percent) / 100));
 
-  const status = `§e🛏 ${sleeping.length}/${needed} sleeping${afkCount ? ` §7(${afkCount} AFK ignored)` : ""}`;
+  // Name the few still awake, so everyone knows who the night is waiting for.
+  const awake = counted.filter((p) => !p.isSleeping);
+  const names = awake.length && awake.length <= 3 ? ` §7· awake: ${awake.map((p) => p.name).join(", ")}` : "";
+  const status = `§e🛏 ${sleeping.length}/${needed} sleeping${names}${afkCount ? ` §7(${afkCount} AFK ignored)` : ""}`;
   for (const p of all) if (p.dimension.id === "minecraft:overworld") p.onScreenDisplay.setActionBar(status);
 
   if (sleeping.length < needed) {
@@ -206,8 +210,17 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       system.run(() => {
         getState(player).graceUntil = system.currentTick + MANUAL_GRACE_TICKS;
         setAfk(player, true);
+        if (!CONFIG.announce) player.sendMessage("§7You're AFK. Move to come back.");
       });
       return { status: CustomCommandStatus.Success };
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "afk_bp");
+  },
+  { namespaces: ["realm"] }
+);
