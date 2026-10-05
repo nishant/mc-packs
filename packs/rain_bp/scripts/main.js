@@ -1,8 +1,10 @@
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { get, getFor, onChange, setFor } from "./settings.js";
 
 const PROP_WEATHER = "rain:weather"; // world: overworld weather from the last change ("Clear", "Rain" or "Thunder"); scripts can't read the current weather
-const PROP_OFF = "rain:off"; // player: true = extras off, false = on (only stored when it differs from defaultOff)
+// Player property "rain:off" (true = extras off, false = on, only stored when it differs from defaultOff)
+// is the "off" preference in settings.js, which /realm:prefs changes too.
 
 const OVERWORLD = "minecraft:overworld";
 const MIST = "realm:rain_mist"; // particles and fogs come from the Realistic Rain resource pack
@@ -37,8 +39,7 @@ const players = new Map();
 
 /** @param {Player} player */
 function extrasOff(player) {
-  const v = player.getDynamicProperty(PROP_OFF);
-  return typeof v === "boolean" ? v : CONFIG.defaultOff;
+  return getFor(player, "off") === true;
 }
 
 /** @param {Player} player @returns {State} */
@@ -118,7 +119,7 @@ function tick() {
 
 /** Steps the storm fog toward dense (thunder) or none (anything else): the first step at once, the last after fadeSeconds. */
 function stepStormFog(/** @type {number} */ dt) {
-  const target = CONFIG.stormFog.enabled && weather === WeatherType.Thunder ? STORM_FOGS.length : 0;
+  const target = get("stormFog.enabled") && weather === WeatherType.Thunder ? STORM_FOGS.length : 0;
   if (stormLevel === target) {
     stormStepIn = 0;
     return;
@@ -145,8 +146,8 @@ function update(player, st) {
 
   const outdoors = here.location.y < feet.y; // nothing over the player's head
   const nearGround = feet.y - here.location.y < 6;
-  if (CONFIG.mist.enabled && weather === WeatherType.Thunder && outdoors && nearGround) mist(player, st, feet, budget);
-  if (CONFIG.drips.enabled) drips(player, st, feet, raining, budget);
+  if (get("mist.enabled") && weather === WeatherType.Thunder && outdoors && nearGround) mist(player, st, feet, budget);
+  if (get("drips.enabled")) drips(player, st, feet, raining, budget);
 }
 
 /** Highest block in a column, or undefined when out of budget or unloaded. @param {Dimension} dimension @param {{ lookups: number }} budget */
@@ -264,8 +265,24 @@ function probe(dimension, x, z, feetY, budget) {
 }
 
 // ---------------------------------------------------------------------------
-// /realm:rain
+// /realm:rain, and changes from Realm Settings
 // ---------------------------------------------------------------------------
+
+/** Applies a player's on/off right away: their fog follows, their drip spots are dropped. @param {Player} player */
+function applyChoice(player) {
+  const off = extrasOff(player);
+  const st = stateOf(player);
+  if (off) st.spots = [];
+  const fog = off ? 0 : stormLevel;
+  if (st.fog !== fog) setFog(player, st, fog);
+  wake();
+}
+
+// A player's own switch (/realm:rain, /realm:prefs), or the realm's defaultOff for everyone who never chose.
+onChange((key, player) => {
+  if (player && key === "off") applyChoice(player);
+  else if (!player && (key === "defaultOff" || key === "*")) for (const p of world.getAllPlayers()) applyChoice(p);
+});
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   try {
@@ -282,14 +299,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
           return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
         }
         const nowOff = !extrasOff(player);
-        system.run(() => {
-          player.setDynamicProperty(PROP_OFF, nowOff === CONFIG.defaultOff ? undefined : nowOff);
-          const st = stateOf(player);
-          if (nowOff) st.spots = [];
-          const fog = nowOff ? 0 : stormLevel;
-          if (st.fog !== fog) setFog(player, st, fog);
-          wake();
-        });
+        system.run(() => setFor(player, "off", nowOff));
         return {
           status: CustomCommandStatus.Success,
           message: nowOff

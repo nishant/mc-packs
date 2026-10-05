@@ -13,6 +13,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { get, getFor } from "./settings.js";
 
 const containerTypes = new Set(CONFIG.containerTypes);
 const keepItems = new Set(CONFIG.keepItems);
@@ -40,10 +41,10 @@ const orList = (words, last = "or") =>
 /** "chest, trapped chest, copper chest…": one name per kind. @param {string[]} ids */
 const kindsOf = (ids) => [...new Set(ids.map((id) => nameOf(id).toLowerCase()))];
 
-/** The kinds of storage the sneak-tap works on, e.g. "chest, trapped chest, copper chest, barrel or shulker box". */
-function storageKinds() {
+/** The kinds of storage the sneak-tap works on, e.g. "chest, trapped chest, copper chest, barrel or shulker box". @param {Player} player */
+function storageKinds(player) {
   const kinds = kindsOf(CONFIG.containerTypes);
-  if (CONFIG.sneakTap === "menu") kinds.push("ender chest");
+  if (getFor(player, "sneakTap") === "menu") kinds.push("ender chest");
   return orList(kinds);
 }
 
@@ -53,8 +54,8 @@ const freeHand = (item) => !item || !!item.getComponent("minecraft:durability");
 /** Items /realm:stash leaves with the player. @param {ItemStack} item */
 function kept(item) {
   if (keepItems.has(item.typeId)) return true;
-  if (item.nameTag && !CONFIG.stashNamedItems) return true;
-  return !CONFIG.stashGear && !!item.getComponent("minecraft:durability");
+  if (item.nameTag && !get("stashNamedItems")) return true;
+  return !get("stashGear") && !!item.getComponent("minecraft:durability");
 }
 
 /** @param {Container} c @param {number} from @param {number} to */
@@ -80,7 +81,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 /** @param {Player} player @returns {boolean} true if the player may act now (and starts the cooldown) */
 function ready(player) {
   const now = system.currentTick;
-  if (now - (lastUse.get(player.id) ?? -Infinity) < CONFIG.cooldownTicks) return false;
+  if (now - (lastUse.get(player.id) ?? -Infinity) < get("cooldownTicks")) return false;
   lastUse.set(player.id, now);
   return true;
 }
@@ -161,7 +162,7 @@ function sortBlock(player, block) {
 function sortInventory(player) {
   const container = player.getComponent("minecraft:inventory")?.container;
   if (!container) return;
-  const stacks = sortRange(container, CONFIG.sortHotbar ? 0 : MAIN_FIRST, MAIN_END);
+  const stacks = sortRange(container, getFor(player, "sortHotbar") ? 0 : MAIN_FIRST, MAIN_END);
   player.onScreenDisplay.setActionBar(`§aSorted ${stacks} stack${stacks === 1 ? "" : "s"} in your inventory`);
 }
 
@@ -395,7 +396,7 @@ async function openMenu(player, dimension, at) {
     run: (p) => system.runJob(stash(p)),
   });
   actions.push({
-    text: `Sort my inventory\n§8${CONFIG.sortHotbar ? "Hotbar included" : "The hotbar stays as it is"}`,
+    text: `Sort my inventory\n§8${getFor(player, "sortHotbar") ? "Hotbar included" : "The hotbar stays as it is"}`,
     run: sortInventory,
   });
 
@@ -419,8 +420,10 @@ async function openMenu(player, dimension, at) {
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, itemStack, isFirstEvent } = event;
-  if (CONFIG.sneakTap === "off" || !player.isSneaking || !freeHand(itemStack)) return;
-  const menu = CONFIG.sneakTap === "menu";
+  if (!player.isSneaking || !freeHand(itemStack)) return;
+  const tap = getFor(player, "sneakTap"); // the realm's choice, or the player's own from /realm:prefs
+  if (tap === "off") return;
+  const menu = tap === "menu";
   if (!containerTypes.has(block.typeId) && !(menu && block.typeId === ENDER_CHEST)) return;
   event.cancel = true; // the sneak-tap replaces opening it
   if (!isFirstEvent || (!menu && !ready(player))) return;
@@ -448,23 +451,25 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
 /** @param {Player} player */
 async function showHelp(player) {
   const r = CONFIG.stashRadius;
-  const seconds = +(CONFIG.cooldownTicks / 20).toFixed(2);
+  const seconds = +(get("cooldownTicks") / 20).toFixed(2);
+  const tap = getFor(player, "sneakTap");
+  const sortHotbar = getFor(player, "sortHotbar");
   const form = new ActionFormData()
     .title("§lQuick Stack & Sort: help")
     .body("Sort your storage with one tap, and empty your inventory into the chests that already hold each item.");
 
-  if (CONFIG.sneakTap !== "off") {
+  if (tap !== "off") {
     form.divider().header("Sneak-tap");
     form.label(
-      CONFIG.sneakTap === "menu"
+      tap === "menu"
         ? [
-            `Sneak and tap a ${storageKinds()} with an empty hand, or holding a tool, weapon or armor. It doesn't open; this menu does:`,
+            `Sneak and tap a ${storageKinds(player)} with an empty hand, or holding a tool, weapon or armor. It doesn't open; this menu does:`,
             "§e• Sort this chest§r (or barrel, shulker box…): merges partial stacks of the same item, then orders the slots by item, the biggest stack first, empty slots last.",
             "§e• Quick stack my inventory§r: the same as §e/realm:stash§r.",
             "§e• Sort my inventory§r: the same as §e/realm:sort§r.",
             "§7An ender chest's menu has no Sort button: add-ons can't see inside one. Holding anything else (a block, a hopper, honeycomb) keeps its usual sneak-tap use.",
           ].join("\n")
-        : `Sneak and tap a ${storageKinds()} with an empty hand, or holding a tool, weapon or armor, to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
+        : `Sneak and tap a ${storageKinds(player)} with an empty hand, or holding a tool, weapon or armor, to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
     );
   }
 
@@ -476,8 +481,8 @@ async function showHelp(player) {
       `The bar says §eStashed 143 items into 3 chests§r, and every container that got something sparkles.`,
       `§7Never takes from your hotbar, armor or offhand. Stays with you: ${orList(
         [
-          ...(CONFIG.stashGear ? [] : ["gear (tools, weapons, armor)"]),
-          ...(CONFIG.stashNamedItems ? [] : ["items with a custom name"]),
+          ...(get("stashGear") ? [] : ["gear (tools, weapons, armor)"]),
+          ...(get("stashNamedItems") ? [] : ["items with a custom name"]),
           ...(CONFIG.keepItems.some((id) => id.endsWith("shulker_box")) ? ["shulker boxes"] : []),
           ...(CONFIG.keepItems.some((id) => id.endsWith("bundle")) ? ["bundles"] : []),
           ...(keepItems.has("minecraft:totem_of_undying") ? ["totems"] : []),
@@ -492,8 +497,8 @@ async function showHelp(player) {
   form.label(
     [
       "§7Usage:§r §e/realm:sort",
-      `Sorts your main inventory${CONFIG.sortHotbar ? " and your hotbar" : " (slots 9–35)"}: partial stacks merge, then everything is ordered by item, the biggest stack first, empty slots last.`,
-      CONFIG.sortHotbar ? "§7Your hotbar is sorted too." : "§7Your hotbar stays exactly as it is.",
+      `Sorts your main inventory${sortHotbar ? " and your hotbar" : " (slots 9–35)"}: partial stacks merge, then everything is ordered by item, the biggest stack first, empty slots last.`,
+      sortHotbar ? "§7Your hotbar is sorted too." : "§7Your hotbar stays exactly as it is. To sort it too, turn that on in /realm:prefs.",
     ].join("\n")
   );
 
@@ -556,7 +561,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:sort",
-      description: `Sorts your inventory: merges stacks, then orders by item${CONFIG.sortHotbar ? ", hotbar included" : "; the hotbar stays as it is"}. More: /realm:stash_help`,
+      description: "Sorts your inventory: merges stacks, then orders by item. The hotbar too if that's on in /realm:prefs. More: /realm:stash_help",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },

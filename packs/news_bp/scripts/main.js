@@ -1,11 +1,12 @@
 import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG, DEFAULTS } from "./config.js";
+import { get } from "./settings.js";
 
 const PROP_NEWS = "news:news"; // world: JSON { title, body }
 const PROP_REVISION = "news:revision"; // world: bumped when news should be re-shown
 const PROP_TIPS = "news:tips"; // world: JSON string[]
-const PROP_TIP_SETTINGS = "news:tipSettings"; // world: JSON { enabled, intervalMinutes }
+const PROP_TIP_SETTINGS = "news:tipSettings"; // world: JSON { enabled, intervalMinutes }, also set in /realm:config (settings.js)
 const PROP_SEEN = "news:seen"; // player: revision last seen
 const PROP_LAST_SEEN = "news:lastSeen"; // player: epoch ms, refreshed while online
 
@@ -116,8 +117,9 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 async function onJoin(player, lastSeen) {
   if (!player.isValid) return; // left during the join delay
   const awayMs = lastSeen ? Date.now() - lastSeen : 0;
+  const awayHours = get("awayNoticeHours");
   const away =
-    CONFIG.awayNoticeHours > 0 && awayMs >= CONFIG.awayNoticeHours * 3_600_000
+    awayHours > 0 && awayMs >= awayHours * 3_600_000
       ? `Welcome back! You were away ${formatDuration(awayMs)}.`
       : "";
 

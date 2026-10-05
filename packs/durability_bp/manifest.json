@@ -4,7 +4,7 @@
     "name": "Low Durability Warning",
     "description": "Warns you before your tools, weapons or armor break. /realm:durability",
     "uuid": "94d6caa0-e4ac-4f32-9bc7-5b6d66747377",
-    "version": [1, 0, 3],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

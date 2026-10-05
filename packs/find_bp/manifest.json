@@ -4,7 +4,7 @@
     "name": "Chest Finder",
     "description": "Remembers what each chest held and points you to it: which chest has the iron? /realm:find",
     "uuid": "f143c0a5-58c3-43aa-aef8-ea85fe1ebbb6",
-    "version": [1, 1, 0],
+    "version": [1, 2, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

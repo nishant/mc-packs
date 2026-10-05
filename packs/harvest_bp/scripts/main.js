@@ -1,5 +1,6 @@
 import { Block, ItemStack, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { get } from "./settings.js";
 
 /** @typedef {{ block: string, state: string, ripe: number, seed: string, sound: string }} Crop */
 
@@ -35,7 +36,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, itemStack, isFirstEvent } = event;
   if (!isFirstEvent || player.isSneaking) return;
   // Seeds, bone meal and anything else in hand keep their vanilla use.
-  if (itemStack ? !isHoe(itemStack) : CONFIG.requireHoe) return;
+  if (itemStack ? !isHoe(itemStack) : get("requireHoe")) return;
   const crop = ripeCrop(block);
   if (!crop) return;
 
@@ -58,14 +59,14 @@ function harvest(player, block, crop) {
   dropLoot(player, block, center);
 
   // Replant: back to its first growth stage. Other states (cocoa's direction) stay as they are.
-  if (!CONFIG.replantCostsSeed || takeSeed(player, crop.seed, center)) {
+  if (!get("replantCostsSeed") || takeSeed(player, crop.seed, center)) {
     block.setPermutation(block.permutation.withState(/** @type {any} */ (crop.state), 0));
   } else {
     block.setType("minecraft:air");
     player.onScreenDisplay.setActionBar("§7No seed to replant it");
   }
   block.dimension.playSound(crop.sound, center);
-  if (CONFIG.damageHoe) damageHeldHoe(player);
+  if (get("damageHoe")) damageHeldHoe(player);
 }
 
 /**

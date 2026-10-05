@@ -14,6 +14,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { get } from "./settings.js";
 
 const PROP_SHARD = "find:idx:"; // world: find:idx:0, find:idx:1, … JSON shards of the index
 const SHARD_CHARS = 30000; // Bedrock caps a string property at ~32k characters
@@ -271,7 +272,7 @@ const direction = (dx, dz) => COMPASS[(Math.round(Math.atan2(dx, -dz) / (Math.PI
 /** @param {Player} player */
 function* liveScan(player) {
   const { dimension } = player;
-  const r = CONFIG.liveScanRadius;
+  const r = get("liveScanRadius");
   const p = { x: Math.floor(player.location.x), y: Math.floor(player.location.y), z: Math.floor(player.location.z) };
   const minY = Math.max(dimension.heightRange.min, p.y - r);
   const maxY = Math.min(dimension.heightRange.max - 1, p.y + r);
@@ -354,14 +355,15 @@ function* search(player, query) {
   const q = normalize(query);
   yield* liveScan(player);
   if (!player.isValid) return;
-  const hits = stillThere(matches(player, q).slice(0, CONFIG.maxResults * 2)).slice(0, CONFIG.maxResults);
+  const maxResults = get("maxResults");
+  const hits = stillThere(matches(player, q).slice(0, maxResults * 2)).slice(0, maxResults);
   if (!hits.length) {
-    player.sendMessage(`§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${CONFIG.liveScanRadius} blocks.`);
+    player.sendMessage(`§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${get("liveScanRadius")} blocks.`);
     return;
   }
   const form = new ActionFormData()
     .title(`Find: ${q}`)
-    .body(`${hits.length === CONFIG.maxResults ? `The nearest ${hits.length}` : hits.length} container${hits.length === 1 ? "" : "s"}, nearest first. Tap one to mark it.`);
+    .body(`${hits.length === maxResults ? `The nearest ${hits.length}` : hits.length} container${hits.length === 1 ? "" : "s"}, nearest first. Tap one to mark it.`);
   for (const h of hits) form.button(rowText(h, player));
   system.run(() => pick(player, form, hits).catch((e) => console.warn(`[find] ${e}`)));
 }
@@ -388,8 +390,9 @@ function highlight(player, h) {
     player.sendMessage(`§e${title(h.entry.b)}§r at ${at} in ${title(h.dim)}.`);
     return;
   }
-  player.sendMessage(`§e${title(h.entry.b)}§r at ${at}, marked for ${CONFIG.highlightSeconds} s.`);
-  const until = system.currentTick + CONFIG.highlightSeconds * 20;
+  const seconds = get("highlightSeconds");
+  player.sendMessage(`§e${title(h.entry.b)}§r at ${at}, marked for ${seconds} s.`);
+  const until = system.currentTick + seconds * 20;
   const run = system.runInterval(() => {
     if (!player.isValid || system.currentTick > until || short(player.dimension.id) !== h.dim) {
       system.clearRun(run);

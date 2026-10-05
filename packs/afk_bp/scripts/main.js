@@ -7,9 +7,9 @@ import {
   world,
 } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { get, getFor } from "./settings.js";
 
 const CHECK_TICKS = 20;
-const AFK_TICKS = CONFIG.afkMinutes * 60 * 20;
 /** After /afk, ignore small movements (closing chat, camera settling) for this long. */
 const MANUAL_GRACE_TICKS = 60;
 /** Stick input below this counts as no input (controller drift). */
@@ -80,6 +80,9 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => players.delete(playerId));
 
+/** AFK and back messages: on for the realm (/realm:config) and not turned off by the player (/realm:prefs). @param {Player} player */
+const announces = (player) => get("announce") === true && getFor(player, "announce") === true;
+
 /**
  * @param {Player} player
  * @param {boolean} afk
@@ -92,13 +95,13 @@ function setAfk(player, afk) {
     s.afkSince = system.currentTick;
     player.nameTag = CONFIG.nameTagPrefix + player.name;
     player.addTag(CONFIG.tag);
-    if (CONFIG.announce) world.sendMessage(`§7${player.name} is now AFK`);
+    if (announces(player)) world.sendMessage(`§7${player.name} is now AFK`);
   } else {
     const minutes = Math.round((system.currentTick - (s.afkSince ?? system.currentTick)) / 1200);
     s.afkSince = undefined;
     player.nameTag = player.name;
     player.removeTag(CONFIG.tag);
-    if (CONFIG.announce) world.sendMessage(`§7${player.name} is back${minutes > 0 ? ` (AFK ${minutes}m)` : ""}`);
+    if (announces(player)) world.sendMessage(`§7${player.name} is back${minutes > 0 ? ` (AFK ${minutes}m)` : ""}`);
   }
 }
 
@@ -117,12 +120,12 @@ system.runInterval(() => {
 
       if (turned || moving) markActive(player);
       else if (player.isSleeping) s.lastActive = now; // lying in bed waiting for the night isn't AFK
-      else if (s.afkSince === undefined && !player.isSleeping && now - s.lastActive >= AFK_TICKS) setAfk(player, true);
+      else if (s.afkSince === undefined && !player.isSleeping && now - s.lastActive >= get("afkMinutes") * 60 * 20) setAfk(player, true);
     } catch (e) {
       console.warn(`[afk] ${e}`);
     }
   }
-  if (CONFIG.sleep.enabled) checkSleep();
+  if (get("sleep.enabled")) checkSleep();
 }, CHECK_TICKS);
 
 // ---------------------------------------------------------------------------
@@ -147,10 +150,10 @@ function checkSleep() {
   const counted = all.filter(
     (p) =>
       p.isSleeping ||
-      (!isAfk(p) && (CONFIG.sleep.countOtherDimensions || p.dimension.id === "minecraft:overworld"))
+      (!isAfk(p) && (get("sleep.countOtherDimensions") || p.dimension.id === "minecraft:overworld"))
   );
   const afkCount = all.filter((p) => !p.isSleeping && isAfk(p)).length;
-  const needed = Math.max(1, Math.ceil((counted.length * CONFIG.sleep.percent) / 100));
+  const needed = Math.max(1, Math.ceil((counted.length * get("sleep.percent")) / 100));
 
   // Name the few still awake, so everyone knows who the night is waiting for.
   const awake = counted.filter((p) => !p.isSleeping);
@@ -174,7 +177,7 @@ function checkSleep() {
   }
 
   sleepTicks += CHECK_TICKS;
-  if (sleepTicks < Math.max(CONFIG.sleep.requiredTicks, MIN_SLEEP_TICKS)) return;
+  if (sleepTicks < Math.max(get("sleep.requiredTicks"), MIN_SLEEP_TICKS)) return;
   sleepTicks = 0;
 
   const timeOfDay = world.getTimeOfDay();
@@ -210,7 +213,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       system.run(() => {
         getState(player).graceUntil = system.currentTick + MANUAL_GRACE_TICKS;
         setAfk(player, true);
-        if (!CONFIG.announce) player.sendMessage("§7You're AFK. Move to come back.");
+        if (!announces(player)) player.sendMessage("§7You're AFK. Move to come back.");
       });
       return { status: CustomCommandStatus.Success };
     }
