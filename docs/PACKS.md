@@ -199,7 +199,7 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 | Quick Stack & Sort | `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `cooldownTicks` | When I sneak-tap a container (`menu`, `sort` or `off`); sorting my inventory includes my hotbar |
 | Chest Finder | `liveScanRadius`, `maxResults`, `highlightSeconds` | |
 | Chairs | `maxReach`; `cleanupTicks` is shown, restart only | |
-| Rain Extras | `defaultOff`, `stormFog.enabled`, `mist.enabled`, `drips.enabled` | Turn off storm fog, mist and drips for me (`/realm:rain`) |
+| Rain Extras | `defaultOff`, `stormFog.enabled`, `haze.enabled`, `mist.enabled`, `drips.enabled`, `wind.enabled`, `wind.inThunder`, `wind.inRain`, `roof.enabled`, `roof.volume` | Turn off the rain extras for me (`/realm:rain`) |
 
 Everything else (lists such as crops, `keepItems` and container types, texts such as name tag prefixes, tick intervals, and command permissions) stays in `config.js`.
 
@@ -929,27 +929,29 @@ Seats are entities and are cleaned up; any left over from before a restart are r
 
 ## Realistic Rain — `rain_rp`
 
-Heavier, gloomier rain that stays blue like vanilla: denser blue-gray rain fog, new rain and thunder sounds, and smaller, softer splashes. A **resource pack** that runs next to the Realm Bundle, never inside it, and costs no more frames than vanilla rain.
+Thicker, heavier rain that stays blue like vanilla, pitter-patter rain sounds, thunder and lightning modeled on real strikes, denser blue-gray rain fog, and smaller, softer splashes. A **resource pack** that runs next to the Realm Bundle, never inside it, and costs no more frames than vanilla rain.
 
 ### How to use
 
 1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
 2. Wait for rain, or ask an operator for `/weather rain` or `/weather thunder`.
-3. For storm fog, ground mist and drips under leaves and roof edges, the realm also needs [Rain Extras](#rain-extras--rain_bp).
+3. For storm fog, a darker haze on Vibrant Visuals, ground mist, drips, storm wind and rain on the roof, the realm also needs [Rain Extras](#rain-extras--rain_bp).
 4. **Operators:** download Realistic Rain from its card on mc.nish.software/realm and open it. In the realm's settings, activate it under **Resource Packs** and move it to the **top** of the active list, above Firewolf and the others, so its rain wins.
 
 ### What players see
 
-- **Rain:** streaks in vanilla's blue (`#6F8FD4`, a little lighter), half as wide as vanilla's and about three times as many (25 lanes instead of 8), each fading from a faint tail (25%) to a brighter head (85%). Overall the rain is about 1.2× as dense as vanilla. **Snow is unchanged.**
+- **Rain:** vanilla's own streaks (as wide, in its blue `#4465C1`, at its opacity), but 13 lanes of them instead of 8 and longer, each fading from a fainter tail (34%) to a solid head (96%). Overall about 1.8× as much rain on screen as vanilla. **Snow is unchanged.**
 - **Fog while it rains:** starts at 15% of your render distance and is solid by 55% (vanilla: 23% → 70%), in a gloomy blue-gray `#5F6B79` instead of vanilla's gray `#666666`. At 10 chunks that's 24 → 88 blocks. Pale gardens and sulfur caves keep their own fog colors with the new distances. Bedrock has one fog for rain and snowfall, so snowfall gets the same fog.
-- **Sound:** new rain at about 125% of vanilla's volume (a soft hiss, dense patter and the odd heavier drop), long rolling thunder in the distance, and a sharp crack with a low boom for close lightning. Explosions keep their vanilla sound.
+- **Rain sound:** a pitter-patter at 125% of vanilla's volume: a soft shower with distinct drops in it (taps, plinks into puddles, fat drops on leaves, the odd steady drip). Vanilla's rain is a smooth hiss.
+- **Thunder:** modeled on real lightning: every bolt's channel is a kilometer or two of zigzag, and each stretch of it sends out its own clap that reaches you a little later than the one before, softened by the air the farther it travels. So nearby thunder claps and then rolls, distant thunder is a deep, long rumble, and no two strikes sound alike (5 thunders, 7.5–10 s).
+- **Lightning strike** (only when it hits near you): the bolt tearing past, a bang and the rumble of the rest of the bolt (4 sounds, about 4 s). Both play at their natural pitch: vanilla plays them pitched far down, so this pack sets lightning's pitch to 0.9–1.1. Explosions keep their vanilla sound.
 - **Splashes:** the rain splash is smaller (0.10 blocks instead of 0.175) and softer (70% opacity, a cool tint).
-- **With Rain Extras:** storm fog, ground mist and drips. Their fog and particle files are in this pack.
+- **With Rain Extras:** storm fog, a darker haze on Vibrant Visuals, ground mist, drips, storm wind and rain on the roof. Their fogs, particles and sounds are in this pack.
 
 ### Performance
 
 - Everything replaces a vanilla file one for one: the game draws the same rain and plays rain and thunder as often as before, so this pack costs no extra frames on any device.
-- Rain clips are short (2.6–3.0 s) like vanilla's, so the copies the game keeps starting don't pile up. The whole pack is about 0.5 MB.
+- Rain clips are 2.0–2.4 s, like vanilla's 2 s, so the copies the game keeps starting (about 15 at once) don't pile up any more than vanilla's. The whole pack is about 0.8 MB.
 
 ### Saved data
 
@@ -957,7 +959,7 @@ None. It's a resource pack: no scripts, no commands, nothing to configure in gam
 
 ### Known limits
 
-- Made for **Fancy** graphics. Under **Vibrant Visuals** the rain, sounds and splashes change the same way; how much of the denser fog shows depends on Vibrant Visuals' own atmosphere.
+- **Vibrant Visuals ignores fog colors**, so on its own this pack's blue-gray rain fog only shows on **Fancy**; Vibrant Visuals players see the game's pale gray rain haze. [Rain Extras](#rain-extras--rain_bp) fixes that with a darker haze of its own. The rain, sounds and splashes change the same way under both.
 - A resource pack higher in the list that also changes the weather texture, fog or rain sounds wins: keep Realistic Rain at the top.
 - The texture tiles the way vanilla's does; how big the streaks look on screen depends on the game, not the pack.
 
@@ -971,8 +973,10 @@ Everything in `packs/rain_rp/` is generated by `npm run gen:rain` (`tools/gen-ra
 | `textures/particle/realm_rain_mist.png`, `pack_icon.png` | `textures.mjs` | Rain Extras' mist sprite and the pack icon |
 | `fogs/*_fog_setting.json` | `fogs.mjs` | The vanilla fogs that have a weather fog, with only `distance.weather` changed |
 | `fogs/rain_storm*.json` | `fogs.mjs` | The three storm fogs Rain Extras pushes (`realm:rain_storm_1`, `realm:rain_storm_2`, `realm:rain_storm`) |
-| `sounds/realistic_rain/*.ogg` | `sounds.mjs` | Synthesized (needs ffmpeg) and loudness-normalized: rain −25, thunder −17.5, cracks about −14 LUFS. Thunder is authored about 1.25× and cracks about 2× higher in pitch, because the game plays them at 0.6–1.0 and 0.3–0.7 |
-| `sounds/sound_definitions.json`, `particles/*.json`, `manifest.json` | by hand | Rain at volume `0.025` (vanilla `0.020`); the splash, `realm:rain_mist` and `realm:rain_drip` particles |
+| `fogs/rain_gloom*.json` | `fogs.mjs` | The Vibrant Visuals haze Rain Extras pushes in rain (`realm:rain_gloom_1`, `realm:rain_gloom`): only volumetric air fog, denser below y 64 and gone above 256, absorbing about as much light as it scatters so it reads darker. Fancy ignores it |
+| `sounds/realistic_rain/*.ogg` | `sounds.mjs` | Synthesized (needs ffmpeg) and loudness-normalized. Rain: a bed plus ~4 drops a second per clip, tuned on a simulation of how the game stacks them. Thunder and strikes: N-waves from a modeled lightning channel, through distance and air absorption, then an outdoor echo. Wind and rain on the roof for Rain Extras. `--audition <file.mp3>` also writes a mix of rain, indoors and a storm at in-game levels |
+| `sounds/sound_definitions.json`, `sounds.json` | `sounds.mjs` | Each sound's volume, computed from its measured loudness: the rain stack lands 25% above vanilla's (measured from Mojang's decoded rain), thunder and strikes about at vanilla's level. `sounds.json` sets lightning's pitch to 0.9–1.1 |
+| `particles/*.json`, `manifest.json` | by hand | The splash, `realm:rain_mist` (drifts with the storm wind) and `realm:rain_drip` particles |
 
 `npm run check` fails if the textures or fogs differ from what the generators make.
 
@@ -980,28 +984,32 @@ Everything in `packs/rain_rp/` is generated by `npm run gen:rain` (`tools/gen-ra
 
 ## Rain Extras — `rain_bp`
 
-Storm fog, ground mist and drips under leaves and roof edges, for the Realistic Rain resource pack. A **standalone** behavior pack: it runs next to the Realm Bundle, not inside it.
+Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, storm wind and rain on the roof, for the Realistic Rain resource pack. A **standalone** behavior pack: it runs next to the Realm Bundle, not inside it.
 
 ### How to use
 
-1. When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops.
-2. In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, and low mist drifts along the ground around you when you're outdoors. Both clear the same way when the storm passes.
-3. Run `/realm:rain`, or use the same switch in `/realm:prefs`, to turn these extras off for yourself, on a slower device for example. Chat says `Rain extras off for you (storm fog, mist and drips). Run it again to turn them back on.` The choice is remembered.
-4. **Operators:** add Rain Extras under **Behavior Packs**, next to the Realm Bundle (it's never part of the bundle), and add [Realistic Rain](#realistic-rain--rain_rp) under **Resource Packs** at the top of the list. The storm fogs and particles come from Realistic Rain, so without it nothing shows.
+1. When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops. Outdoors a soft breeze blows; indoors you hear the rain drumming on the roof.
+2. In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, strong wind gusts howl (muffled when you're inside), and low mist drifts along the ground with the wind when you're outdoors. It all clears the same way when the storm passes.
+3. On **Vibrant Visuals**, rain also brings a darker blue-gray haze that settles in the valleys, since Vibrant Visuals ignores fog colors. Fancy keeps Realistic Rain's fog.
+4. Run `/realm:rain`, or use the same switch in `/realm:prefs`, to turn these extras off for yourself, on a slower device for example. Chat says `Rain extras off for you (storm fog, haze, mist, drips, wind and roof sounds). Run it again to turn them back on.` The choice is remembered.
+5. **Operators:** add Rain Extras under **Behavior Packs**, next to the Realm Bundle (it's never part of the bundle), and add [Realistic Rain](#realistic-rain--rain_rp) under **Resource Packs** at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. `/realm:config` → Rain Extras turns each extra on or off and sets the wind and roof volumes.
 
 ### What players see
 
 - **Drips:** small blue drops form under the lowest leaves of a tree and under roof edges where the next column is at least 2 blocks lower, hang for 0.2–1.2 s and fall. Up to `drips.perSecond` (5) per second within `drips.radius` (6) blocks of you, and for `drips.afterRainSeconds` (30) seconds after the rain, tapering off.
 - **Ground mist** (thunderstorms only, outdoors, near the ground): soft gray-blue puffs 5–9 blocks away, mostly in front of you, each fading in and out over about 4 s. `mist.puffsPerSecond` (2) puffs of 4 sprites a second, so about 32 on screen.
 - **Storm fog:** three steps from 12% → 48% to 8% → 35% of your render distance, darkening from `#59646F` to `#4E5763`, over `stormFog.fadeSeconds` (12) seconds. Plain rain keeps Realistic Rain's 15% → 55%.
-- Mist and drips are shown only to the player they're for, so each player's particles cost only their own device.
+- **Vibrant Visuals haze** (rain and thunderstorms): a volumetric fog that is densest below y 64 and gone by y 256, darker and slightly blue, in two steps over `haze.fadeSeconds` (10) seconds. It only sets Vibrant Visuals' volumetric fog, so Fancy and the storm fog are untouched. Lifted in caves and in the Nether and the End.
+- **Wind:** gusts with a faint whistle at the peaks, every 8 s (10 s clips that crossfade): full volume in thunderstorms (`wind.inThunder`, 1), a soft breeze in plain rain (`wind.inRain`, 0.35). Under a roof you hear the muffled version (with a rattle in the strongest gusts); under trees, the outdoor wind. Walking in or out swaps them at once.
+- **Rain on the roof:** while it rains and there's a roof 2 to `roof.maxHeadroom` (10) blocks over your head (not leaves), a muffled drumming with a soft gutter trickle, every 3 s, at `roof.volume` (0.8).
+- Mist, drips, haze and sounds are only for the player they're for, so each player's extras cost only their own device.
 - None of it happens in the Nether or the End, deep underground (more than 24 blocks under the surface), or on sand, terracotta, snow or ice: deserts and badlands get no rain, and snowy places get snow.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:rain` | Everyone | Turns storm fog, ground mist and drips off or on **for yourself** (on by default, `defaultOff`). Remembered between sessions |
+| `/realm:rain` | Everyone | Turns storm fog, haze, ground mist, drips, wind and roof sounds off or on **for yourself** (on by default, `defaultOff`). Remembered between sessions |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -1010,6 +1018,8 @@ Storm fog, ground mist and drips under leaves and roof edges, for the Realistic 
 | `defaultOff` | `false` | Start with the extras off for players who never ran `/realm:rain` |
 | `stormFog.enabled` | `true` | Thunderstorms roll in denser, darker fog |
 | `stormFog.fadeSeconds` | `12` | Seconds the storm fog takes to roll in, and again to clear, in three steps |
+| `haze.enabled` | `true` | A darker, blue-gray haze in rain and thunderstorms for players on Vibrant Visuals (Fancy is unaffected) |
+| `haze.fadeSeconds` | `10` | Seconds the haze takes to thicken, and again to clear, in two steps |
 | `mist.enabled` | `true` | Ground mist around players outdoors during thunderstorms |
 | `mist.puffsPerSecond` | `2` | Mist puffs per second per player. Each is 4 sprites that live about 4 s |
 | `drips.enabled` | `true` | Drips from leaves and roof edges while it rains |
@@ -1017,8 +1027,14 @@ Storm fog, ground mist and drips under leaves and roof edges, for the Realistic 
 | `drips.afterRainSeconds` | `30` | Seconds drips keep falling after the rain stops, tapering off. `0` stops them with the rain |
 | `drips.radius` | `6` | How far from the player (blocks) to look for leaves and roof edges |
 | `drips.lookupsPerSecond` | `6` | Block lookups per second per player for drips and mist: the main cost on the server |
+| `wind.enabled` | `true` | Gusting wind while it rains, muffled indoors |
+| `wind.inThunder` | `1` | Wind volume in thunderstorms, 0–1 |
+| `wind.inRain` | `0.35` | Wind volume in plain rain, 0–1 |
+| `roof.enabled` | `true` | Rain drumming on the roof while a player is indoors |
+| `roof.volume` | `0.8` | Rain on the roof volume, 0–1 |
+| `roof.maxHeadroom` | `10` | Highest roof (blocks above the player's feet) that still counts as indoors for the roof sound |
 
-Operators can change `defaultOff`, `stormFog.enabled`, `mist.enabled` and `drips.enabled` in game with `/realm:config` when Realm Settings is installed (in the Realm Bundle or as its own pack). The numbers stay in `config.js`.
+Operators can change `defaultOff`, `stormFog.enabled`, `haze.enabled`, `mist.enabled`, `drips.enabled`, `wind.enabled`, `wind.inThunder`, `wind.inRain`, `roof.enabled` and `roof.volume` in game with `/realm:config` when Realm Settings is installed (in the Realm Bundle or as its own pack). The other numbers stay in `config.js`.
 
 ### Saved data
 
@@ -1030,22 +1046,25 @@ Operators can change `defaultOff`, `stormFog.enabled`, `mist.enabled` and `drips
 
 ### Performance
 
-- **Nothing runs in clear weather.** The pack's loop exists only while it rains, while drips finish after the rain, or while a storm fog is still on someone.
+- **Nothing runs in clear weather.** The pack's loop exists only while it rains, while drips finish after the rain, or while a storm fog or haze is still on someone.
 - While it runs, it handles a quarter of the players 4 times a second, so each player costs one update a second: at most `drips.lookupsPerSecond` (6) block lookups, `drips.perSecond` (5) drips and `mist.puffsPerSecond` × 4 (8) mist sprites. Drip spots are remembered (up to 8) until the player moves 4 blocks.
-- Storm fog is one `/fog` command per player, run only when it changes step: 3 times as a storm arrives and 3 times as it leaves.
-- Each player's particles go to that player only. On a weak device, `/realm:rain` turns everything off for that player alone.
+- Storm fog and haze are one `/fog` command per player, run only when they change step: 3 + 2 times as a storm arrives and again as it leaves, and when a player goes into or out of a cave.
+- Wind and roof reuse the block lookup the update already makes: one sound every 8 s and one every 3 s at most, per player, each played to that player only (one or two extra voices on their device).
+- Each player's particles and sounds go to that player only. On a weak device, `/realm:rain` turns everything off for that player alone.
 
 ### Known limits
 
 - Added while it's already raining? The extras start at the next weather change.
-- Storm fog uses the `/fog` command, run by the script. If that fails, the content log shows `[rain] /fog` and the mist and drips still work.
+- Storm fog and haze use the `/fog` command, run by the script. If that fails, the content log shows `[rain] /fog` and the mist, drips and sounds still work.
 - Drips come from the highest block of each column: leaves under a roof, or overhangs inside caves, don't drip.
+- Indoors and outdoors are judged from the block over your head: standing under a single overhanging block counts as indoors.
+- Sounds can't be filtered live, so indoors plays separate muffled recordings, swapped when you walk in or out. The vanilla rain sound itself keeps playing indoors, as in vanilla.
 
 ### How it works
 
-- `weatherChange` in the overworld sets the weather (and saves it as `rain:weather`). The storm fog steps toward dense during thunder and back to none otherwise, with `/fog @s push realm:rain_storm… rain_storm` and `/fog @s remove rain_storm`, so only this pack's fog entries are ever touched. Joining clears any leftover storm fog, and the next update puts back what the weather calls for.
-- Each update: one `getTopmostBlock` above the player decides outdoors, underground or dry ground. Mist picks spots in front of the player and checks the ground there. Drips probe random columns within `drips.radius` for leaves with air under them, or a solid block whose neighbor is 2+ lower, and remember them.
-- Particles use `Player.spawnParticle`, so they're sent to that player only. `realm:rain_mist` and `realm:rain_drip` are defined in Realistic Rain.
+- `weatherChange` in the overworld sets the weather (and saves it as `rain:weather`). The storm fog steps toward dense during thunder and back to none otherwise, with `/fog @s push realm:rain_storm… rain_storm` and `/fog @s remove rain_storm`. The haze does the same in rain and thunder with `realm:rain_gloom…` under the id `rain_gloom`. Each fog only sets its own part (the storm fog the weather fog distance, the haze Vibrant Visuals' volumetric fog), so they stack, and only this pack's fog entries are ever touched. Joining clears any leftover fog, and the next update puts back what the weather calls for.
+- Each update: one `getTopmostBlock` above the player decides outdoors (nothing 2+ blocks over your head), under a tree, indoors, underground or dry ground. Mist picks spots in front of the player and checks the ground there. Drips probe random columns within `drips.radius` for leaves with air under them, or a solid block whose neighbor is 2+ lower, and remember them.
+- Particles use `Player.spawnParticle` and sounds `Player.playSound` (`realm.storm.wind`, `realm.storm.wind_inside`, `realm.rain.roof`), so they reach that player only; walking in or out runs `/stopsound` for the wind. The particles and sounds are defined in Realistic Rain.
 
 ---
 
@@ -1094,9 +1113,9 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Realm Help ← every pack | `/realm:help` lists the packs that answer its script event, so it only shows what's installed. Its text is generated from this file |
 | Realm Settings ↔ every behavior pack | `/realm:config` and `/realm:prefs` list the packs that answer the `realm:cfg_ping` script event, and send changes back the same way, so each pack keeps its own settings. Rain Extras answers too, from outside the bundle. Without Realm Settings, every pack still works, with its saved settings or `config.js` |
 | Realm Settings → Welcome, News | `/realm:config` changes the same saved values as `/realm:welcome_edit` (`showOnce`, `chat`, `screenTitle`) and `/realm:news_tips` → **Settings** (tips on or off, interval) |
-| Rain Extras → Realistic Rain | Rain Extras' storm fogs and its mist and drip particles are defined in Realistic Rain, so it needs that resource pack. Realistic Rain works on its own |
+| Rain Extras → Realistic Rain | Rain Extras' storm fogs, haze, mist and drip particles, and wind and roof sounds are defined in Realistic Rain, so it needs that resource pack. Realistic Rain works on its own |
 | Rain Extras → Realm Bundle | Standalone: it runs as its own add-on next to the bundle and still answers `/realm:help` (`/realm:help rain`). `/realm:rain` shares the `realm:` namespace, so it can join the bundle later without a rename |
-| AFK smart sleep → Rain Extras | Skipping the night clears the weather, so a storm fog clears and drips taper off as after any rain |
+| AFK smart sleep → Rain Extras | Skipping the night clears the weather, so the storm fog and haze clear, the wind stops and drips taper off as after any rain |
 
 Only Rain Extras needs another pack (Realistic Rain). Any other combination works.
 
@@ -1116,8 +1135,9 @@ Only Rain Extras needs another pack (Realistic Rain). Any other combination work
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows how many are asleep (x) and how many are needed (y). Players in other dimensions only count if `sleep.countOtherDimensions` is on |
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
 | Rain looks and sounds like vanilla | Is Realistic Rain active under **Resource Packs**, at the top of the list? A resource pack above it that changes rain wins. Players must accept the resource pack download when they join |
-| No storm fog, mist or drips | Is Rain Extras active under **Behavior Packs**, and Realistic Rain under **Resource Packs**? Run `/realm:rain` in case they're off for you. If the pack was added during rain, they start at the next weather change. Nothing shows in deserts, badlands or snowy places, or deep underground |
-| Storm fog stays after a storm | Rejoin: Rain Extras clears its fog when you join. Running `/realm:rain` twice also resets it |
+| No storm fog, haze, mist, drips, wind or roof sound | Is Rain Extras active under **Behavior Packs**, and Realistic Rain under **Resource Packs**? Run `/realm:rain` in case they're off for you, and check `/realm:config` → Rain Extras. If the pack was added during rain, they start at the next weather change. Nothing shows in deserts, badlands or snowy places, or deep underground. The haze only shows on Vibrant Visuals |
+| Storm fog or haze stays after a storm | Rejoin: Rain Extras clears its fogs when you join. Running `/realm:rain` twice also resets them |
+| Wind or rain on the roof too loud or too quiet | Operators: `/realm:config` → Rain Extras → **Storm wind volume**, **Rain breeze volume**, **Rain on the roof volume**. Everyone: the game's **Weather** volume slider covers them too |
 | The pack shows a pink and black placeholder icon | Harmless. Only Realistic Rain has a `pack_icon.png` so far, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
 
 ---

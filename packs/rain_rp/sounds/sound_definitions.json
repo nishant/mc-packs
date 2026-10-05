@@ -5,12 +5,33 @@
       "__use_legacy_max_distance": "true",
       "category": "weather",
       "max_distance": null,
-      "min_distance": 100.0,
+      "min_distance": 100,
       "sounds": [
-        { "load_on_low_memory": true, "name": "sounds/realistic_rain/rain1", "volume": 0.025 },
-        { "name": "sounds/realistic_rain/rain2", "volume": 0.025 },
-        { "name": "sounds/realistic_rain/rain3", "volume": 0.025 },
-        { "name": "sounds/realistic_rain/rain4", "volume": 0.025 }
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/rain1",
+          "volume": 0.045
+        },
+        {
+          "name": "sounds/realistic_rain/rain2",
+          "volume": 0.045
+        },
+        {
+          "name": "sounds/realistic_rain/rain3",
+          "volume": 0.045
+        },
+        {
+          "name": "sounds/realistic_rain/rain4",
+          "volume": 0.045
+        },
+        {
+          "name": "sounds/realistic_rain/rain5",
+          "volume": 0.045
+        },
+        {
+          "name": "sounds/realistic_rain/rain6",
+          "volume": 0.045
+        }
       ],
       "subtitle": "subtitles.weather.rain"
     },
@@ -18,12 +39,29 @@
       "__use_legacy_max_distance": "true",
       "category": "weather",
       "max_distance": null,
-      "min_distance": 100.0,
+      "min_distance": 100,
       "sounds": [
-        { "load_on_low_memory": true, "name": "sounds/realistic_rain/thunder1" },
-        "sounds/realistic_rain/thunder2",
-        "sounds/realistic_rain/thunder3",
-        "sounds/realistic_rain/thunder4"
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/thunder1",
+          "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/thunder2",
+          "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/thunder3",
+          "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/thunder4",
+          "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/thunder5",
+          "volume": 1
+        }
       ],
       "subtitle": "subtitles.entity.lightning_bolt.thunder"
     },
@@ -31,14 +69,91 @@
       "__use_legacy_max_distance": "true",
       "category": "weather",
       "max_distance": null,
-      "min_distance": 100.0,
+      "min_distance": 100,
       "sounds": [
-        "sounds/realistic_rain/crack1",
-        "sounds/realistic_rain/crack2",
-        "sounds/realistic_rain/crack3",
-        "sounds/realistic_rain/crack4"
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/crack1",
+          "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/crack2",
+          "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/crack3",
+          "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/crack4",
+          "volume": 1
+        }
       ],
       "subtitle": "subtitles.entity.generic.explode"
+    },
+    "realm.storm.wind": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100,
+      "sounds": [
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/wind1",
+          "volume": 0.204
+        },
+        {
+          "name": "sounds/realistic_rain/wind2",
+          "volume": 0.207
+        },
+        {
+          "name": "sounds/realistic_rain/wind3",
+          "volume": 0.204
+        }
+      ]
+    },
+    "realm.storm.wind_inside": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100,
+      "sounds": [
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/wind_inside1",
+          "volume": 0.18
+        },
+        {
+          "name": "sounds/realistic_rain/wind_inside2",
+          "volume": 0.182
+        }
+      ]
+    },
+    "realm.rain.roof": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100,
+      "sounds": [
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/roof1",
+          "volume": 0.182
+        },
+        {
+          "name": "sounds/realistic_rain/roof2",
+          "volume": 0.182
+        },
+        {
+          "name": "sounds/realistic_rain/roof3",
+          "volume": 0.18
+        },
+        {
+          "name": "sounds/realistic_rain/roof4",
+          "volume": 0.18
+        }
+      ],
+      "subtitle": "subtitles.weather.rain"
     }
   }
 }

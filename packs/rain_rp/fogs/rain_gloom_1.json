@@ -1,0 +1,36 @@
+{
+  "format_version": "1.21.90",
+  "minecraft:fog_settings": {
+    "description": {
+      "identifier": "realm:rain_gloom_1"
+    },
+    "volumetric": {
+      "density": {
+        "air": {
+          "max_density": 0.04,
+          "zero_density_height": 256,
+          "max_density_height": 64
+        }
+      },
+      "media_coefficients": {
+        "air": {
+          "scattering": [
+            0.05,
+            0.056,
+            0.064
+          ],
+          "absorption": [
+            0.05,
+            0.046,
+            0.038
+          ]
+        }
+      },
+      "henyey_greenstein_g": {
+        "air": {
+          "henyey_greenstein_g": 0.5
+        }
+      }
+    }
+  }
+}

@@ -14,7 +14,13 @@ const OPTIONS = [
   { key: "stormFog.enabled", type: "bool", scope: "world", label: "Storm fog in thunderstorms" },
   { key: "mist.enabled", type: "bool", scope: "world", label: "Ground mist in thunderstorms" },
   { key: "drips.enabled", type: "bool", scope: "world", label: "Drips from leaves and roof edges" },
-  { key: "off", type: "bool", scope: "player", base: "defaultOff", prop: "rain:off", label: "Turn off storm fog, mist and drips for me", help: "The same switch as /realm:rain" },
+  { key: "haze.enabled", type: "bool", scope: "world", label: "Darker haze in rain (Vibrant Visuals)", help: "Vibrant Visuals ignores fog colors, so rain looks pale without it. Fancy is unaffected" },
+  { key: "wind.enabled", type: "bool", scope: "world", label: "Wind in rain and thunderstorms" },
+  { key: "wind.inThunder", type: "float", scope: "world", label: "Storm wind volume", min: 0, max: 1, step: 0.05 },
+  { key: "wind.inRain", type: "float", scope: "world", label: "Rain breeze volume", min: 0, max: 1, step: 0.05 },
+  { key: "roof.enabled", type: "bool", scope: "world", label: "Rain on the roof when indoors" },
+  { key: "roof.volume", type: "float", scope: "world", label: "Rain on the roof volume", min: 0, max: 1, step: 0.05 },
+  { key: "off", type: "bool", scope: "player", base: "defaultOff", prop: "rain:off", label: "Turn off the rain extras for me (fog, haze, mist, drips, wind, roof)", help: "The same switch as /realm:rain" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

@@ -20,8 +20,8 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 | [Quick Stack & Sort](docs/PACKS.md#quick-stack--sort--stash_bp) | `stash_bp` | Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into nearby storage holding the same items, sort your inventory | `/realm:stash` · `/realm:sort` · `/realm:stash_help` |
 | [Chest Finder](docs/PACKS.md#chest-finder--find_bp) | `find_bp` | Remembers what each chest holds and points you to the one with the item you need | `/realm:find` |
 | [Chairs](docs/PACKS.md#chairs--chairs_bp) | `chairs_bp` | Sit on stairs and bottom slabs; adds the `realm:seat` entity | `/realm:sit` |
-| [Realistic Rain](docs/PACKS.md#realistic-rain--rain_rp) | `rain_rp` | **Resource pack, standalone.** Heavier, gloomier blue rain: denser rain fog, new rain and thunder sounds, softer splashes | none |
-| [Rain Extras](docs/PACKS.md#rain-extras--rain_bp) | `rain_bp` | **Standalone**, next to the bundle. Storm fog, ground mist and drips under leaves and roof edges (needs Realistic Rain) | `/realm:rain` |
+| [Realistic Rain](docs/PACKS.md#realistic-rain--rain_rp) | `rain_rp` | **Resource pack, standalone.** Thicker, heavier blue rain, pitter-patter rain sounds, modeled thunder and lightning, gloomier rain fog, softer splashes | none |
+| [Rain Extras](docs/PACKS.md#rain-extras--rain_bp) | `rain_bp` | **Standalone**, next to the bundle. Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips, storm wind and rain on the roof (needs Realistic Rain) | `/realm:rain` |
 
 `/realm:config` and commands with `edit`, `reset`, `tips`, `sidebar`, `add` or `remove` in the name are ops-only. None of the commands need cheats. In game, `/realm:help` explains every installed command, with usage.
 
@@ -52,7 +52,7 @@ npm run bundle    # merge packs into one (--list, --all, --packs a,b, --name, --
 | `docs/PACKS.md` | Documentation, also published on mc.nish.software/realm. **Update it in the same commit as any pack change**; `npm run check` enforces it |
 | `tools/build.mjs`, `tools/bundle.mjs` | Packaging, with no dependencies |
 | `tools/standalone.json` | Behavior packs that `bundle --all` leaves out because they run next to the bundle (`rain_bp`) |
-| `tools/gen-rain/` | Generates `rain_rp` from Mojang's vanilla files in `tools/gen-rain/vanilla/` (`npm run gen:rain`); `npm run check` fails if its textures or fogs are stale |
+| `tools/gen-rain/` | Generates `rain_rp` from Mojang's vanilla files in `tools/gen-rain/vanilla/` (`npm run gen:rain`; `node tools/gen-rain/sounds.mjs --audition out.mp3` also writes a listening mix); `npm run check` fails if its textures or fogs are stale |
 | `tools/check-docs.mjs` | Fails if a pack, its `### How to use`, a command or a config option is missing from the docs |
 | `tools/check-commands.mjs` | Fails if a command or enum isn't in the `realm:` namespace, or two share a name |
 | `tools/settings-shared.js`, `tools/sync-settings.mjs` | The Realm Settings helper every behavior pack copies into its `scripts/settings.js` (packs never import each other); `sync-settings.mjs` copies it, `--check` (part of `npm run check`) fails on a missing or stale copy |

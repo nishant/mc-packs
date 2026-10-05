@@ -1,5 +1,5 @@
-// Generates packs/rain_rp/fogs/: denser, gloomier rain fog for the overworld, plus the storm fogs that
-// Rain Extras pushes during thunderstorms.
+// Generates packs/rain_rp/fogs/: denser, gloomier rain fog for the overworld, plus the fogs Rain Extras pushes
+// per player: storm fogs in thunderstorms, and a darker haze in rain and storms for Vibrant Visuals.
 //
 // A pack's fog file replaces the vanilla definition with the same identifier wholesale, so each override is a
 // verbatim copy of the vanilla file (tools/gen-rain/vanilla/fogs/) with only `distance.weather` changed.
@@ -20,12 +20,24 @@ const check = process.argv.includes("--check");
 const RAIN = { start: 0.15, end: 0.55, color: "#5F6B79" };
 /** Biome fogs that keep their own weather color (only the density changes). */
 const KEEP_COLOR = new Set(["pale_garden_fog_setting.json", "sulfur_cave_fog_setting.json"]);
-/** Thunderstorm fogs, pushed per player by Rain Extras with /fog in three steps so the fog rolls in. */
+/** Thunderstorm fogs, pushed per player by Rain Extras with /fog in three steps so the fog rolls in. Fancy and VV. */
 const STORM = [
   { file: "rain_storm_1.json", id: "realm:rain_storm_1", start: 0.12, end: 0.48, color: "#59646F" },
   { file: "rain_storm_2.json", id: "realm:rain_storm_2", start: 0.1, end: 0.41, color: "#545D69" },
   { file: "rain_storm.json", id: "realm:rain_storm", start: 0.08, end: 0.35, color: "#4E5763" },
 ];
+
+/**
+ * Rain haze for Vibrant Visuals, pushed per player by Rain Extras in rain and thunder (two steps). VV ignores fog_color,
+ * so its rain is a pale gray haze; this volumetric air fog is denser in the valleys (full at y ≤ 64, none above 256)
+ * and absorbs about as much light as it scatters, so the haze reads darker and slightly blue. Only `volumetric` is set:
+ * Fancy ignores it, and the storm fogs (which set only `distance`) layer on top of it unchanged.
+ */
+const GLOOM = [
+  { file: "rain_gloom_1.json", id: "realm:rain_gloom_1", density: 0.04 },
+  { file: "rain_gloom.json", id: "realm:rain_gloom", density: 0.08 },
+];
+const GLOOM_AIR = { scattering: [0.05, 0.056, 0.064], absorption: [0.05, 0.046, 0.038], g: 0.5, fullBelow: 64, noneAbove: 256 };
 
 /** Rewrites the numbers in the "weather" block of a fog file's text, keeping Mojang's formatting. */
 function patchWeather(/** @type {string} */ text, /** @type {string} */ name) {
@@ -51,6 +63,21 @@ function storm(/** @type {typeof STORM[number]} */ s) {
   return JSON.stringify(fog, null, 2) + "\n";
 }
 
+function gloom(/** @type {typeof GLOOM[number]} */ s) {
+  const fog = {
+    format_version: "1.21.90",
+    "minecraft:fog_settings": {
+      description: { identifier: s.id },
+      volumetric: {
+        density: { air: { max_density: s.density, zero_density_height: GLOOM_AIR.noneAbove, max_density_height: GLOOM_AIR.fullBelow } },
+        media_coefficients: { air: { scattering: GLOOM_AIR.scattering, absorption: GLOOM_AIR.absorption } },
+        henyey_greenstein_g: { air: { henyey_greenstein_g: GLOOM_AIR.g } },
+      },
+    },
+  };
+  return JSON.stringify(fog, null, 2) + "\n";
+}
+
 /** @type {Map<string, string>} file name → contents */
 const files = new Map();
 const problems = [];
@@ -67,6 +94,12 @@ for (const name of readdirSync(vanillaDir).sort()) {
   files.set(name, text);
 }
 for (const s of STORM) files.set(s.file, storm(s));
+for (const s of GLOOM) files.set(s.file, gloom(s));
+// Guard: the haze must set nothing but volumetric air fog, or it would override Fancy's rain fog for whoever has it pushed.
+for (const s of GLOOM) {
+  const f = JSON.parse(files.get(s.file))["minecraft:fog_settings"];
+  if (Object.keys(f).join() !== "description,volumetric" || Object.values(f.volumetric).some((v) => Object.keys(v).join() !== "air")) problems.push(`${s.file}: may only set volumetric air fog`);
+}
 
 if (check) {
   const expected = new Set(files.keys());
