@@ -23,6 +23,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Realm News & Tips — `news_bp`](#realm-news--tips--news_bp)
 - [Creeper Guard — `guard_bp`](#creeper-guard--guard_bp)
 - [Phantom Opt-out — `phantom_bp`](#phantom-opt-out--phantom_bp)
+- [Right-click Harvest — `harvest_bp`](#right-click-harvest--harvest_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -493,6 +494,53 @@ Lets each player turn phantoms off for themselves. Phantoms come from not sleepi
 
 ---
 
+## Right-click Harvest — `harvest_bp`
+
+Tap a ripe crop to harvest it and replant it in one go, so fields never need re-seeding.
+
+### How to use
+
+1. Tap (use) a fully grown crop with an empty hand or a hoe. It pops its normal drops and goes back to a seedling, with the break sound.
+2. Unripe crops behave as in vanilla, and so does anything else in your hand: seeds still plant, bone meal still grows.
+3. Sneak while tapping to skip the harvest for that tap.
+
+### Crops
+
+| Crop | Block id | Ripe when |
+|---|---|---|
+| Wheat | `minecraft:wheat` | `growth` = 7 |
+| Carrots | `minecraft:carrots` | `growth` = 7 |
+| Potatoes | `minecraft:potatoes` | `growth` = 7 |
+| Beetroots | `minecraft:beetroot` | `growth` = 7 |
+| Nether wart | `minecraft:nether_wart` | `age` = 3 |
+| Cocoa | `minecraft:cocoa` | `age` = 2 (keeps the direction it faces) |
+
+### What players see
+
+- Drops come from the block's own Bedrock loot table, as if you had broken it with what's in your hand, so the counts match vanilla and a Fortune hoe raises carrot, potato and other yields.
+- Only one harvest per tap. Holding the button down doesn't sweep a field.
+- Villager farmers are unaffected, and a farm guide's water-flush harvest still works on the same field.
+- Harvests don't count as **Blocks mined** in the Stats pack, because no block is broken.
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `crops` | the table above | Which blocks harvest: `block`, the growth `state`, its `ripe` value, the `seed` item a replant uses and the harvest `sound` |
+| `requireHoe` | `false` | Only harvest when a hoe is held |
+| `damageHoe` | `false` | A held hoe loses one durability per harvest (Unbreaking applies, and the hoe can break) |
+| `replantCostsSeed` | `false` | The replant uses one seed (or carrot, potato, wart, cocoa bean): from the drops, else from your inventory. With none, the crop is harvested and not replanted |
+
+### Saved data
+
+None.
+
+### How it works
+
+`world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the player isn't sneaking, the hand is empty or holds a `*_hoe`, and the block is a listed crop at its ripe value. On the next tick the pack runs `loot spawn <center> mine <block> mainhand` as the player, then sets the crop's state back to 0. If `/loot` ever fails from a script, it switches to a built-in drop table close to vanilla (without Fortune) and logs `[harvest] /loot failed` once.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -531,6 +579,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | News tips → others | The default tips mention `/realm:stats` and `/realm:afk`. Edit them with `/realm:news_tips` if you don't use those packs |
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
 | AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
+| Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
 
 None of the packs depend on each other. Any combination works.
 
@@ -547,7 +596,7 @@ None of the packs depend on each other. Any combination works.
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
-| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[phantom]` |
+| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[harvest]` |
 | The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
 
 ---

@@ -13,6 +13,7 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a standalone 
 | [Realm News & Tips](docs/PACKS.md#realm-news--tips--news_bp) | `news_bp` | News popup when something's new, "you were away 3d", rotating chat tips | `/realm:news` · `/realm:news_edit` · `/realm:news_tips` |
 | [Creeper Guard](docs/PACKS.md#creeper-guard--guard_bp) | `guard_bp` | Creeper explosions still hurt but break no blocks; TNT untouched. Optional zones mode | `/realm:guard` · `/realm:guard_add` · `/realm:guard_remove` |
 | [Phantom Opt-out](docs/PACKS.md#phantom-opt-out--phantom_bp) | `phantom_bp` | Each player can turn phantoms off for themselves | `/realm:phantoms` |
+| [Right-click Harvest](docs/PACKS.md#right-click-harvest--harvest_bp) | `harvest_bp` | Tap a ripe crop to harvest and replant it | none |
 
 Commands with `edit`, `reset`, `tips`, `sidebar`, `add` or `remove` in the name are ops-only. None of the commands need cheats.
 
