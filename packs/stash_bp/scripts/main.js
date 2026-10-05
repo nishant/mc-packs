@@ -140,7 +140,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
 
 /** @typedef {{ block: Block, container: Container, ids: Set<string>, dist: number }} Target */
 
-/** "typeId:amount,…" for every slot, to tell the two halves of one double chest apart from two chests. @param {Container} c */
+/** "typeId:amount,…" for every slot, to recognize the two halves of one double chest. @param {Container} c */
 function signature(c) {
   const parts = [];
   for (let i = 0; i < c.size; i++) {
@@ -148,6 +148,56 @@ function signature(c) {
     parts.push(it ? `${it.typeId}:${it.amount}` : "");
   }
   return parts.join(",");
+}
+
+/** A chest's facing, from whichever state this game version uses. @param {Block} b */
+function facingOf(b) {
+  const s = b.permutation.getAllStates();
+  return s["minecraft:cardinal_direction"] ?? s["facing_direction"];
+}
+
+/**
+ * The other half of a double chest whose halves both report the whole 54 slots. The halves share
+ * a type, a facing and (being one container) the same contents, and sit side by side across the
+ * facing. In a row of identical double chests the pairs start at the row's end, so the number of
+ * identical chests behind a half says which side its partner is on.
+ * @param {Block} block
+ * @param {(b: Block) => string | undefined} sigOf contents signature of a 54-slot container, else undefined
+ * @returns {Block | undefined}
+ */
+function partnerOf(block, sigOf) {
+  const sig = sigOf(block);
+  if (sig === undefined) return undefined;
+  const facing = facingOf(block);
+  // north/south (or facing_direction 2/3) pair along x, east/west (4/5) along z
+  const alongX = facing === "north" || facing === "south" || facing === 2 || facing === 3;
+  const alongZ = facing === "east" || facing === "west" || facing === 4 || facing === 5;
+  const dirs = SIDES.filter((d) => (alongX ? d.x !== 0 : alongZ ? d.z !== 0 : true));
+  /** @param {Block | undefined} b */
+  const twin = (b) => !!b && b.typeId === block.typeId && facingOf(b) === facing && sigOf(b) === sig;
+  const found = dirs.filter((d) => twin(block.offset(d)));
+  if (found.length < 2) return found.length ? block.offset(found[0]) : undefined;
+  const d = found.find((f) => found.some((g) => g.x === -f.x && g.z === -f.z));
+  if (!d) return block.offset(found[0]);
+  const back = { x: -d.x, y: 0, z: -d.z };
+  let behind = 0;
+  for (let b = block.offset(back); behind < 64 && twin(b); b = b?.offset(back)) behind++;
+  return block.offset(behind % 2 === 0 ? d : back);
+}
+
+/** Caches contents signatures for one pass: "typeId:amount,…" per slot, 54-slot containers only. */
+function signatures() {
+  /** @type {Map<string, string | undefined>} */
+  const cache = new Map();
+  /** @param {Block} b */
+  return (b) => {
+    const key = `${b.x},${b.y},${b.z}`;
+    if (!cache.has(key)) {
+      const c = containerOf(b);
+      cache.set(key, c && c.size > 27 ? signature(c) : undefined);
+    }
+    return cache.get(key);
+  };
 }
 
 /**
@@ -171,8 +221,9 @@ function* findTargets(player) {
 
   /** @type {Target[]} */
   const targets = [];
-  /** @type {Map<string, string>} "x,y,z" → contents signature, for 54-slot (double) chests */
-  const doubles = new Map();
+  /** @type {Set<string>} "x,y,z" of the double-chest halves already counted */
+  const counted = new Set();
+  const sigOf = signatures();
   let read = 0;
   for (const loc of found.getBlockLocationIterator()) {
     const block = dimension.getBlock(loc);
@@ -185,10 +236,9 @@ function* findTargets(player) {
     }
     if (container.size > 27) {
       // Either half of a double chest may report the whole 54 slots: count it once.
-      const sig = signature(container);
-      const twin = SIDES.some((d) => doubles.get(`${loc.x + d.x},${loc.y},${loc.z + d.z}`) === sig);
-      doubles.set(`${loc.x},${loc.y},${loc.z}`, sig);
-      if (twin) continue;
+      const other = partnerOf(block, sigOf);
+      counted.add(`${loc.x},${loc.y},${loc.z}`);
+      if (other && counted.has(`${other.x},${other.y},${other.z}`)) continue;
     }
     const dx = loc.x - p.x, dy = loc.y - p.y, dz = loc.z - p.z;
     if (ids.size) targets.push({ block, container, ids, dist: dx * dx + dy * dy + dz * dz });
@@ -223,7 +273,9 @@ function* quickStack(player) {
     for (const t of targets) {
       if (!t.ids.has(item.typeId) || !t.container.isValid) continue;
       const rest = inv.transferItem(slot, t.container); // native move: fills matching stacks, then empty slots
-      const now = rest?.amount ?? 0;
+      // The leftover should stay in the slot; if it was handed back instead, put it back.
+      if (rest && !inv.getItem(slot)) inv.setItem(slot, rest);
+      const now = inv.getItem(slot)?.amount ?? 0;
       if (now < left) {
         moved += left - now;
         received.add(t);

@@ -88,14 +88,17 @@ function save() {
   dirty = false;
 }
 
-system.runInterval(() => {
+function saveIfDirty() {
   if (!dirty) return;
   try {
     save();
   } catch (e) {
     console.warn(`[find] save failed: ${e}`);
   }
-}, SAVE_EVERY_TICKS);
+}
+system.runInterval(saveIfDirty, SAVE_EVERY_TICKS);
+// A realm shuts down once the last player has left: save on every leave so the last 30 s aren't lost.
+world.afterEvents.playerLeave.subscribe(saveIfDirty);
 
 const short = (/** @type {string} */ id) => id.replace(/^minecraft:/, "");
 /** @param {Dimension} dim @param {import("@minecraft/server").Vector3} p */
@@ -114,6 +117,56 @@ function signature(c) {
   return parts.join(",");
 }
 
+/** A chest's facing, from whichever state this game version uses. @param {Block} b */
+function facingOf(b) {
+  const s = b.permutation.getAllStates();
+  return s["minecraft:cardinal_direction"] ?? s["facing_direction"];
+}
+
+/**
+ * The other half of a double chest whose halves both report the whole 54 slots. The halves share
+ * a type, a facing and (being one container) the same contents, and sit side by side across the
+ * facing. In a row of identical double chests the pairs start at the row's end, so the number of
+ * identical chests behind a half says which side its partner is on.
+ * @param {Block} block
+ * @param {(b: Block) => string | undefined} sigOf contents signature of a 54-slot container, else undefined
+ * @returns {Block | undefined}
+ */
+function partnerOf(block, sigOf) {
+  const sig = sigOf(block);
+  if (sig === undefined) return undefined;
+  const facing = facingOf(block);
+  // north/south (or facing_direction 2/3) pair along x, east/west (4/5) along z
+  const alongX = facing === "north" || facing === "south" || facing === 2 || facing === 3;
+  const alongZ = facing === "east" || facing === "west" || facing === 4 || facing === 5;
+  const dirs = SIDES.filter((d) => (alongX ? d.x !== 0 : alongZ ? d.z !== 0 : true));
+  /** @param {Block | undefined} b */
+  const twin = (b) => !!b && b.typeId === block.typeId && facingOf(b) === facing && sigOf(b) === sig;
+  const found = dirs.filter((d) => twin(block.offset(d)));
+  if (found.length < 2) return found.length ? block.offset(found[0]) : undefined;
+  const d = found.find((f) => found.some((g) => g.x === -f.x && g.z === -f.z));
+  if (!d) return block.offset(found[0]);
+  const back = { x: -d.x, y: 0, z: -d.z };
+  let behind = 0;
+  for (let b = block.offset(back); behind < 64 && twin(b); b = b?.offset(back)) behind++;
+  return block.offset(behind % 2 === 0 ? d : back);
+}
+
+/** Caches contents signatures for one pass: "typeId:amount,…" per slot, 54-slot containers only. */
+function signatures() {
+  /** @type {Map<string, string | undefined>} */
+  const cache = new Map();
+  /** @param {Block} b */
+  return (b) => {
+    const key = `${b.x},${b.y},${b.z}`;
+    if (!cache.has(key)) {
+      const c = containerOf(b);
+      cache.set(key, c && c.size > 27 ? signature(c) : undefined);
+    }
+    return cache.get(key);
+  };
+}
+
 /**
  * The block a container is remembered under. When both halves of a double chest report the whole
  * 54 slots, both map to the half with the smaller coordinates, so it is listed once.
@@ -122,16 +175,10 @@ function signature(c) {
  */
 function canonical(block, container) {
   if (container.size <= 27) return { main: block };
-  const sig = signature(container);
-  for (const d of SIDES) {
-    const nb = block.offset(d);
-    if (!nb || nb.typeId !== block.typeId) continue;
-    const c2 = containerOf(nb);
-    if (!c2 || c2.size !== container.size || signature(c2) !== sig) continue;
-    const nbFirst = nb.x < block.x || (nb.x === block.x && nb.z < block.z);
-    return nbFirst ? { main: nb, other: block } : { main: block, other: nb };
-  }
-  return { main: block };
+  const nb = partnerOf(block, signatures());
+  if (!nb) return { main: block };
+  const nbFirst = nb.x < block.x || (nb.x === block.x && nb.z < block.z);
+  return nbFirst ? { main: nb, other: block } : { main: block, other: nb };
 }
 
 /** Reads a container into the index (or drops it if it's gone or empty). @param {Block} block */
@@ -180,7 +227,10 @@ world.afterEvents.playerBreakBlock.subscribe(({ block, brokenBlockPermutation })
   const p = block.location;
   if (getIndex().delete(keyOf(dimension, p))) dirty = true;
   // The other half of a double chest is now a single chest, possibly remembered under this key.
-  for (const d of SIDES) recordAt(dimension, { x: p.x + d.x, y: p.y, z: p.z + d.z });
+  // Read it a moment later, once it reports its own 27 slots.
+  system.runTimeout(() => {
+    for (const d of SIDES) recordAt(dimension, { x: p.x + d.x, y: p.y, z: p.z + d.z });
+  }, 2);
 });
 
 // ---------------------------------------------------------------------------

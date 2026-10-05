@@ -19,7 +19,7 @@ const FALLBACK_DROPS = {
   "minecraft:nether_wart": [["minecraft:nether_wart", 2, 4]],
   "minecraft:cocoa": [["minecraft:cocoa_beans", 2, 3]],
 };
-let lootWorks = true;
+let lootWarned = false;
 
 /** @param {import("@minecraft/server").ItemStack | undefined} item */
 const isHoe = (item) => !!item && item.typeId.endsWith("_hoe");
@@ -73,14 +73,16 @@ function harvest(player, block, crop) {
  */
 function dropLoot(player, block, at) {
   const { x, y, z } = block.location;
-  if (lootWorks) {
-    try {
-      const res = player.runCommand(`loot spawn ${at.x} ${at.y} ${at.z} mine ${x} ${y} ${z} mainhand`);
-      if (res.successCount > 0) return;
-    } catch (e) {
-      console.warn(`[harvest] /loot failed, using built-in drops from now on: ${e}`);
-    }
-    lootWorks = false;
+  let problem = "no success";
+  try {
+    const res = player.runCommand(`loot spawn ${at.x} ${at.y} ${at.z} mine ${x} ${y} ${z} mainhand`);
+    if (res.successCount > 0) return;
+  } catch (e) {
+    problem = String(e);
+  }
+  if (!lootWarned) {
+    lootWarned = true;
+    console.warn(`[harvest] /loot failed (${problem}); using built-in drops when it does`);
   }
   for (const [item, min, max] of FALLBACK_DROPS[block.typeId] ?? []) {
     const count = min + Math.floor(Math.random() * (max - min + 1));

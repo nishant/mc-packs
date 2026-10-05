@@ -543,7 +543,7 @@ None.
 
 ### How it works
 
-`world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the player isn't sneaking, the hand is empty or holds a `*_hoe`, and the block is a listed crop at its ripe value. On the next tick the pack runs `loot spawn <center> mine <block> mainhand` as the player, then sets the crop's state back to 0. If `/loot` ever fails from a script, it switches to a built-in drop table close to vanilla (without Fortune) and logs `[harvest] /loot failed` once.
+`world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the player isn't sneaking, the hand is empty or holds a `*_hoe`, and the block is a listed crop at its ripe value. On the next tick the pack runs `loot spawn <center> mine <block> mainhand` as the player, then sets the crop's state back to 0. If `/loot` fails for a harvest, that harvest drops from a built-in table close to vanilla (without Fortune), and the first failure logs `[harvest] /loot failed`.
 
 ---
 
@@ -638,7 +638,8 @@ None.
 
 - **Sort:** stacks are merged by changing the amount of the slot that stays (`ContainerSlot.amount`) and ordered with `swapItems`. Both are native moves, so no item is ever copied or re-created and nothing about it can be lost.
 - **Stash:** one `dimension.getBlocks` query finds the listed containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
-- When both halves of a double chest report the whole 54 slots, the second half is recognized by its identical contents and skipped.
+- When both halves of a double chest report the whole 54 slots, the second half is recognized (same contents, same facing, side by side; in a row of identical chests, counted from the row's end) and skipped.
+- If `transferItem` ever hands a leftover back instead of leaving it in the slot, the pack puts it back, so nothing is lost.
 
 ---
 
@@ -654,7 +655,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 
 ### What players see
 
-- **Matching:** the item id first. `/realm:find diamond` finds diamonds only, because an item is called exactly that. When nothing is called exactly what you typed, every item whose id contains it is listed: `/realm:find iron` finds iron ingots, iron blocks, raw iron, iron swords and so on. Spaces work like `_` (`/realm:find iron ingot`).
+- **Matching:** the item id first. `/realm:find diamond` finds diamonds only, because an item is called exactly that. When nothing is called exactly what you typed, every item whose id contains it is listed: `/realm:find iron` finds iron ingots, iron blocks, raw iron, iron swords and so on. Type one word, or use `_` for a space: `/realm:find iron_ingot` (or quote it: `/realm:find "iron ingot"`).
 - **Always current nearby:** containers within `liveScanRadius` (16 blocks) are read at search time, so a chest filled by hoppers that nobody ever opened is still found. Farther ones show what they held when last seen, hence `seen 2h ago`: hoppers and the copper golem sorter may have changed them since.
 - Results in your dimension are sorted by distance; containers in other dimensions are listed after them, without a distance.
 - A double chest is listed once. A broken container disappears from the results. One that was removed some other way (an explosion, say) disappears the next time a search finds its spot loaded and empty.
@@ -680,13 +681,13 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 
 | Key | Scope | Contents |
 |---|---|---|
-| `find:idx:0`, `find:idx:1`, … | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId } }`, ids without the `minecraft:` prefix. Written at most once every 30 seconds |
+| `find:idx:0`, `find:idx:1`, … | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId } }`, ids without the `minecraft:` prefix. Written at most once every 30 seconds, and whenever a player leaves |
 
 ### How it works
 
 - **Remembering:** on `world.afterEvents.playerInteractWithBlock` with a listed container, its contents are counted per item id right away and again 10 seconds later, after the player has put things in or taken them out. `playerBreakBlock` removes the entry. Empty containers aren't kept.
 - **Searching:** one `dimension.getBlocks` query finds the containers within `liveScanRadius`, which are read a few per tick with `system.runJob`, then the whole index is matched in one pass and sorted by distance.
-- **Double chests:** when both halves report the whole 54 slots, both are stored under the half with the smaller coordinates.
+- **Double chests:** when both halves report the whole 54 slots, both are stored under the half with the smaller coordinates. The halves are told apart from a neighboring double chest with the same contents by their facing and, in a row of identical chests, by counting from the row's end.
 
 ---
 
@@ -702,7 +703,7 @@ Sit on any stair or bottom slab, which makes the furnished houses on mc.nish.sof
 
 ### What players see
 
-- Works on every stair that isn't upside down and every bottom slab, in any wood or stone: oak, stone brick and quartz stairs alike. Upside-down stairs, top slabs and double slabs do nothing.
+- Works on every stair that isn't upside down and every bottom slab, in any wood or stone: oak, stone brick and quartz stairs alike. Upside-down stairs, top slabs and double slabs (copper ones included) do nothing.
 - The two blocks above the seat must be air, so you can't sit with your head in a ceiling.
 - One player per seat: tapping a taken seat says `Someone is already sitting there`.
 - Breaking the stair or slab stands its rider up. Seats nobody sits on vanish within a second.

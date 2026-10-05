@@ -12,7 +12,9 @@ function phantomsOff(player) {
 // Natural phantom spawns appear high above a player who hasn't slept. Each phantom of a
 // group gets its own event; only its nearest player's choice counts.
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
-  if (cause !== EntityInitializationCause.Spawned || entity.typeId !== "minecraft:phantom") return;
+  if (entity.typeId !== "minecraft:phantom") return;
+  // Insomnia spawns are natural (Spawned), possibly reported as a game event (Event); never Loaded or Born.
+  if (cause !== EntityInitializationCause.Spawned && cause !== EntityInitializationCause.Event) return;
   try {
     const at = entity.location;
     const [nearest] = entity.dimension.getPlayers({ location: at, maxDistance: CONFIG.searchRadius, closest: 1 });

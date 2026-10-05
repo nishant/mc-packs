@@ -32,7 +32,7 @@ function seatFor(block) {
     return { yaw: typeof dir === "number" ? STAIR_YAW[dir] : undefined };
   }
   if (id.endsWith("_slab")) {
-    if (id.includes("double_slab") || perm.getState("minecraft:vertical_half") !== "bottom") return undefined;
+    if (id.includes("double") || perm.getState("minecraft:vertical_half") !== "bottom") return undefined;
     return {};
   }
   return undefined;
@@ -51,7 +51,8 @@ const riders = (seat) => seat.getComponent("minecraft:rideable")?.getRiders() ??
  */
 function sit(player, dim, at, yaw, onBlock) {
   for (const old of seatsNear(dim, at)) {
-    if (riders(old).length) {
+    // A seat spawned this moment may not list its rider yet: it's taken too.
+    if (riders(old).length || system.currentTick - (born.get(old.id) ?? -Infinity) < GRACE_TICKS) {
       player.onScreenDisplay.setActionBar("§7Someone is already sitting there");
       return;
     }
