@@ -1,4 +1,4 @@
-// Fails if docs/PACKS.md is missing a pack, a command or a config option.
+// Fails if docs/PACKS.md is missing a pack, its "### How to use" section, a command or a config option.
 // Runs as part of `npm run check`.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -40,6 +40,9 @@ for (const folder of packs) {
     continue;
   }
   const scripts = join(root, "packs", folder, "scripts");
+
+  // Players read this section on mc.nish.software/realm/, so it starts with how to use the pack.
+  if (!/^### How to use\s*$/m.test(section)) problems.push(`${folder}: no "### How to use" section`);
 
   for (const name of registeredNames(join(root, "packs", folder)).commands) {
     if (!section.includes(`\`/${name}`)) problems.push(`${folder}: command \`/${name}\` not documented`);

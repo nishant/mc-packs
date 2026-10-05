@@ -2,7 +2,7 @@
 
 Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a standalone behavior pack. They all use only the stable Script API (Minecraft **1.21.100+**), so no experimental toggles are needed.
 
-📖 **Full documentation (what each pack does, every command and config option): [`docs/PACKS.md`](docs/PACKS.md)**
+📖 **Full documentation (what each pack does, how to use it, every command and config option): [`docs/PACKS.md`](docs/PACKS.md).** Players read the same text on **[mc.nish.software/realm](https://mc.nish.software/realm/)**, which is generated from it.
 
 | Pack | Folder | What it does | Commands |
 |---|---|---|---|
@@ -37,7 +37,7 @@ npm run bundle  # merge packs into one (--list, --all, --packs a,b, --name, --ti
 | Path | |
 |---|---|
 | `packs/<folder>/` | One behavior pack: `manifest.json`, `scripts/main.js`, `scripts/config.js` |
-| `docs/PACKS.md` | Documentation. **Update it in the same commit as any pack change**; `npm run check` enforces it |
+| `docs/PACKS.md` | Documentation, also published on mc.nish.software/realm. **Update it in the same commit as any pack change**; `npm run check` enforces it |
 | `tools/build.mjs`, `tools/bundle.mjs` | Packaging, with no dependencies |
 | `tools/check-docs.mjs` | Fails if a pack, command or config option is missing from the docs |
 | `.claude/skills/bundle-packs/` | The `/bundle-packs` skill |
