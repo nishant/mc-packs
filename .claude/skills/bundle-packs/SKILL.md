@@ -13,14 +13,14 @@ description: Combine behavior packs from this repo's packs/ folder into a single
    ```bash
    node tools/bundle.mjs --list --json
    ```
-   Only `"kind": "behavior"` packs can be bundled. Leave out resource packs and mention them if any exist.
+   Only `"kind": "behavior"` packs can be bundled. Leave out resource packs and mention them if any exist. Packs with `"bundled": false` and `"kind": "behavior"` are **standalone** (listed in `tools/standalone.json`, e.g. `rain_bp`): `--all` leaves them out because they run as their own add-on next to the Realm Bundle. Mention them too, and only include one if the user names it.
 
 2. **Pick the packs.** Skip this step if the args already say `all` or name pack folders. Check the folders against the list and stop on unknown ones.
 
    Otherwise, use `AskUserQuestion`:
 
    - **Question 1** (single select, header `Packs`): "Which packs should go in the bundle?"
-     - Option 1 **must be first**: label `All packs (Recommended)`, description = the pack names joined with ", ".
+     - Option 1 **must be first**: label `All packs (Recommended)`, description = the names of the `"bundled": true` packs joined with ", ".
      - Option 2: label `Let me choose`, description `Pick individual packs`.
    - If they picked **Let me choose**, ask one more `AskUserQuestion` call with `multiSelect: true`:
      - One option per pack: label = pack `name` (≤ 5 words), description = the pack's `description` plus its folder in backticks.
@@ -29,7 +29,7 @@ description: Combine behavior packs from this repo's packs/ folder into a single
 
 3. **Build it.** Default name `realm_bundle`, title `Realm Bundle`, unless the args override them:
    ```bash
-   npm run bundle -- --all                                  # everything
+   npm run bundle -- --all                                  # every bundled (non-standalone) behavior pack
    npm run bundle -- --packs welcome_bp,stats_bp            # a selection (keep the user's order)
    npm run bundle -- --packs a,b --name my_bundle --title "My Bundle"
    ```

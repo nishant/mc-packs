@@ -1,7 +1,7 @@
 // Merges several behavior packs from packs/ into one .mcpack.
 //
-//   node tools/bundle.mjs --list [--json]            show available packs
-//   node tools/bundle.mjs --all [--name realm_bundle]
+//   node tools/bundle.mjs --list [--json]            show available packs and whether --all bundles them
+//   node tools/bundle.mjs --all [--name realm_bundle]  every behavior pack except the standalone ones (tools/standalone.json)
 //   node tools/bundle.mjs --packs welcome_bp,stats_bp [--name realm_bundle] [--title "Realm Bundle"]
 //
 // How the merge works:
@@ -23,6 +23,8 @@ import { namespaceOf, registeredNames } from "./lib/commands.mjs";
 const root = join(import.meta.dirname, "..");
 const packsDir = join(root, "packs");
 const distDir = join(root, "dist");
+/** Behavior packs that stay their own add-on: --all leaves them out. */
+const standalone = new Set(JSON.parse(readFileSync(join(root, "tools", "standalone.json"), "utf8")).standalone);
 
 const { values: args } = parseArgs({
   options: {
@@ -35,7 +37,7 @@ const { values: args } = parseArgs({
   },
 });
 
-/** @typedef {{ folder: string, dir: string, manifest: any, name: string, description: string, version: string, kind: "behavior" | "resource" }} Pack */
+/** @typedef {{ folder: string, dir: string, manifest: any, name: string, description: string, version: string, kind: "behavior" | "resource", bundled: boolean }} Pack */
 
 /** @returns {Pack[]} */
 function loadPacks() {
@@ -54,6 +56,7 @@ function loadPacks() {
         description: manifest.header.description,
         version: manifest.header.version.join("."),
         kind: isResource ? "resource" : "behavior",
+        bundled: !isResource && !standalone.has(folder), // part of --all
       };
     });
 }
@@ -84,12 +87,13 @@ function compareVersions(a, b) {
 const maxEngine = (a, b) => (compareVersions(a.join("."), b.join(".")) >= 0 ? a : b);
 
 const packs = loadPacks();
+for (const f of standalone) if (!packs.some((p) => p.folder === f)) fail(`tools/standalone.json lists "${f}", which isn't a pack in packs/`);
 
 if (args.list) {
   if (args.json) {
-    console.log(JSON.stringify(packs.map(({ folder, name, description, version, kind }) => ({ folder, name, description, version, kind })), null, 2));
+    console.log(JSON.stringify(packs.map(({ folder, name, description, version, kind, bundled }) => ({ folder, name, description, version, kind, bundled })), null, 2));
   } else {
-    for (const p of packs) console.log(`${p.folder.padEnd(16)} ${p.kind.padEnd(9)} v${p.version.padEnd(7)} ${p.name} — ${p.description}`);
+    for (const p of packs) console.log(`${p.folder.padEnd(16)} ${p.kind.padEnd(9)} ${(p.bundled ? "bundled" : "standalone").padEnd(11)} v${p.version.padEnd(7)} ${p.name} — ${p.description}`);
   }
   process.exit(0);
 }
@@ -99,7 +103,7 @@ if (!args.all && !args.packs) fail("pass --all, --packs a,b,c, or --list");
 /** @type {Pack[]} */
 let selected;
 if (args.all) {
-  selected = packs.filter((p) => p.kind === "behavior");
+  selected = packs.filter((p) => p.bundled);
 } else {
   const wanted = [...new Set(/** @type {string} */ (args.packs).split(",").map((s) => s.trim()).filter(Boolean))];
   selected = wanted.map((w) => packs.find((p) => p.folder === w) ?? fail(`unknown pack "${w}". Run with --list.`));

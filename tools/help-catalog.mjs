@@ -1,6 +1,7 @@
 // Writes packs/help_bp/scripts/catalog.js, the in-game /realm:help text, from docs/PACKS.md: each pack's
 // summary, "### How to use" steps and "### Commands" table. The docs are the one source, so the help
-// can't drift from them. Also checks that every pack answers /realm:help's ping.
+// can't drift from them. Also checks that every pack answers /realm:help's ping. Resource packs are left
+// out: they have no script to answer the ping, so /realm:help could never list them.
 //
 //   node tools/help-catalog.mjs           write the catalog (and bump help_bp's patch version once)
 //   node tools/help-catalog.mjs --check   fail if the catalog is out of date or a pack doesn't answer
@@ -57,11 +58,17 @@ function commands(/** @type {string[]} */ lines) {
   });
 }
 
+/** A resource pack has no scripts, so it can't answer the ping. */
+function isResourcePack(/** @type {string} */ folder) {
+  const manifest = join(root, "packs", folder, "manifest.json");
+  return existsSync(manifest) && JSON.parse(readFileSync(manifest, "utf8")).modules.some((/** @type {any} */ m) => m.type === "resources");
+}
+
 const docs = readFileSync(join(root, "docs", "PACKS.md"), "utf8").split("\n");
 const packs = [];
 for (let i = 0; i < docs.length; i++) {
   const head = docs[i].match(/^## (.+?) — `(\w+)`\s*$/);
-  if (!head) continue;
+  if (!head || isResourcePack(head[2])) continue;
   const end = docs.findIndex((l, j) => j > i && l.startsWith("## "));
   const lines = docs.slice(i + 1, end < 0 ? undefined : end);
   const first = lines.findIndex((l) => l.trim());

@@ -1,0 +1,4 @@
+{
+  "why": "Behavior packs here are their own add-on, next to the Realm Bundle: bundle.mjs --all and publish-packs.mjs leave them out of the bundle. Resource packs are never bundled. To bundle one of these, remove it from the list.",
+  "standalone": ["rain_bp"]
+}

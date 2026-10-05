@@ -28,7 +28,7 @@ export const PACKS = [
         "usage": "/realm:help [feature]",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens the help menu, or the page for §efeature§r (§eafk§r, §echairs§r, §edurability§r, §efarm§r, §efind§r, §eguard§r, §eharvest§r, §enews§r, §ephantom§r, §estash§r, §estats§r, §ewelcome§r) or §eall§r"
+        "text": "Opens the help menu, or the page for §efeature§r (§eafk§r, §echairs§r, §edurability§r, §efarm§r, §efind§r, §eguard§r, §eharvest§r, §enews§r, §ephantom§r, §erain§r, §estash§r, §estats§r, §ewelcome§r) or §eall§r"
       }
     ]
   },
@@ -432,6 +432,38 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Sits you down where you stand (on the ground). Sneak to stand up"
+      }
+    ]
+  },
+  {
+    "folder": "rain_bp",
+    "topic": "rain",
+    "name": "Rain Extras",
+    "summary": "Storm fog, ground mist and drips under leaves and roof edges, for the Realistic Rain resource pack. A §lstandalone§r behavior pack: it runs next to the Realm Bundle, not inside it.",
+    "steps": [
+      {
+        "text": "When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops.",
+        "ops": false
+      },
+      {
+        "text": "In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, and low mist drifts along the ground around you when you're outdoors. Both clear the same way when the storm passes.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:rain§r to turn these extras off for yourself, on a slower device for example. Chat says §eRain extras off for you (storm fog, mist and drips). Run it again to turn them back on.§r The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r add Rain Extras under §lBehavior Packs§r, next to the Realm Bundle (it's never part of the bundle), and add Realistic Rain under §lResource Packs§r at the top of the list. The storm fogs and particles come from Realistic Rain, so without it nothing shows.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:rain",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Turns storm fog, ground mist and drips off or on §lfor yourself§r (on by default, §edefaultOff§r). Remembered between sessions"
       }
     ]
   }

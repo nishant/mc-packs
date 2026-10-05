@@ -1,0 +1,44 @@
+{
+  "format_version": "1.20.20",
+  "sound_definitions": {
+    "ambient.weather.rain": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100.0,
+      "sounds": [
+        { "load_on_low_memory": true, "name": "sounds/realistic_rain/rain1", "volume": 0.025 },
+        { "name": "sounds/realistic_rain/rain2", "volume": 0.025 },
+        { "name": "sounds/realistic_rain/rain3", "volume": 0.025 },
+        { "name": "sounds/realistic_rain/rain4", "volume": 0.025 }
+      ],
+      "subtitle": "subtitles.weather.rain"
+    },
+    "ambient.weather.thunder": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100.0,
+      "sounds": [
+        { "load_on_low_memory": true, "name": "sounds/realistic_rain/thunder1" },
+        "sounds/realistic_rain/thunder2",
+        "sounds/realistic_rain/thunder3",
+        "sounds/realistic_rain/thunder4"
+      ],
+      "subtitle": "subtitles.entity.lightning_bolt.thunder"
+    },
+    "ambient.weather.lightning.impact": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100.0,
+      "sounds": [
+        "sounds/realistic_rain/crack1",
+        "sounds/realistic_rain/crack2",
+        "sounds/realistic_rain/crack3",
+        "sounds/realistic_rain/crack4"
+      ],
+      "subtitle": "subtitles.entity.generic.explode"
+    }
+  }
+}
