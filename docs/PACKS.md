@@ -25,6 +25,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Phantom Opt-out — `phantom_bp`](#phantom-opt-out--phantom_bp)
 - [Right-click Harvest — `harvest_bp`](#right-click-harvest--harvest_bp)
 - [Farm Loader — `farm_bp`](#farm-loader--farm_bp)
+- [Quick Stack & Sort — `stash_bp`](#quick-stack--sort--stash_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -589,6 +590,54 @@ Bedrock rules, worth knowing before you add a farm:
 
 ---
 
+## Quick Stack & Sort — `stash_bp`
+
+Sort a chest with one tap, and empty your inventory into the chests that already hold each item, the way Terraria's quick stack works.
+
+### How to use
+
+1. **Sort a chest:** sneak and tap a chest, trapped chest or barrel with an empty hand. It doesn't open; its stacks merge and sort, and the bar above the hotbar says `Sorted 31 stacks`.
+2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into a container within 8 blocks that already holds the same item. The bar says `Stashed 143 items into 3 chests`, and each chest that got something sparkles.
+3. **Sort your inventory:** run `/realm:sort`. Your main inventory is sorted; the hotbar stays as it is.
+
+### What players see
+
+- Sorting merges partial stacks of the same item, then orders the slots by item id, the biggest stack first, with empty slots at the end. A chest with 3 partial stacks of cobblestone ends with 1 full stack plus the rest.
+- Items with a custom name, lore or enchantments are never merged, only moved, and moving keeps every item exactly as it was: enchanted gear, named items, written books, filled maps, banners and shulker boxes with their contents.
+- `/realm:stash` only takes from your main inventory (slots 9–35): never the hotbar, armor or offhand. Named items stay with you unless `stashNamedItems` is on. A container that holds the item gets matching stacks topped up first, then its empty slots, nearest container first.
+- Double chests count once. Ender chests and shulker boxes are never used. Containers in chunks that aren't loaded are never touched. Another player having the chest open is fine.
+- Each player can sort or stash once per second (`cooldownTicks`).
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:stash` | Everyone | Quick stack: puts your items into nearby containers that already hold the same items |
+| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched unless `sortHotbar` is on |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `stashRadius` | `8` | Blocks around the player to look for containers (a 17 × 17 × 17 cube) |
+| `containerTypes` | chest, trapped chest, barrel | Block ids that sort and receive stashes. Shulker boxes are left out on purpose |
+| `sneakTapSorts` | `true` | Sneak and tap with an empty hand to sort a container. While on, sneak-tapping doesn't open it |
+| `stashNamedItems` | `false` | `/realm:stash` also moves items with a custom name |
+| `sortHotbar` | `false` | `/realm:sort` also sorts the hotbar |
+| `cooldownTicks` | `20` | Minimum time between uses per player (20 = 1 s) |
+
+### Saved data
+
+None.
+
+### How it works
+
+- **Sort:** stacks are merged by changing the amount of the slot that stays (`ContainerSlot.amount`) and ordered with `swapItems`. Both are native moves, so no item is ever copied or re-created and nothing about it can be lost.
+- **Stash:** one `dimension.getBlocks` query finds the listed containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
+- When both halves of a double chest report the whole 54 slots, the second half is recognized by its identical contents and skipped.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -628,6 +677,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
 | AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
 | Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
+| Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items. Sneak-tap sorting a sorter's chest is harmless |
 
 None of the packs depend on each other. Any combination works.
 
@@ -644,7 +694,7 @@ None of the packs depend on each other. Any combination works.
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
-| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[harvest]` |
+| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[stash]` |
 | The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
 
 ---
