@@ -22,6 +22,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Stats & Leaderboards — `stats_bp`](#stats--leaderboards--stats_bp)
 - [Realm News & Tips — `news_bp`](#realm-news--tips--news_bp)
 - [Creeper Guard — `guard_bp`](#creeper-guard--guard_bp)
+- [Phantom Opt-out — `phantom_bp`](#phantom-opt-out--phantom_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -453,6 +454,45 @@ The pack listens to `world.beforeEvents.explosion`. When the exploding entity's 
 
 ---
 
+## Phantom Opt-out — `phantom_bp`
+
+Lets each player turn phantoms off for themselves. Phantoms come from not sleeping, and with smart sleep the night can be skipped without everyone in bed, so some players never need to sleep.
+
+### How to use
+
+1. Run `/realm:phantoms`. Chat says `Phantoms off for you. Run it again to turn them back on.` The choice is remembered.
+2. Phantoms that spawn for you now vanish the moment they appear, with no drops. Everyone else's phantoms are untouched.
+3. Run `/realm:phantoms` again to get them back (for phantom membranes, say).
+
+### What players see
+
+- Bedrock spawns phantoms at night, in small groups high above a player who hasn't slept for 3 or more in-game days. When the nearest player to a new phantom has phantoms off, and the phantom appeared at least `minHeightAbovePlayer` (10) blocks above them, it is removed on the spot.
+- Every phantom in a group is checked the same way. If two players stand close together, only the nearest one's choice counts.
+- Phantoms from spawn eggs or `/summon` near a player are left alone, because they don't appear high overhead.
+- Turning phantoms off doesn't reset the game's own "time since rest" counter. A player who turns them back on without sleeping may get phantoms that same night.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:phantoms` | Everyone | Turns phantoms off or on **for yourself**. Remembered between sessions |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `defaultOff` | `false` | Start with phantoms off for players who never ran `/realm:phantoms` |
+| `minHeightAbovePlayer` | `10` | Only remove phantoms that appear at least this many blocks above their nearest player, as natural spawns do |
+| `searchRadius` | `64` | How far (blocks) to look for a new phantom's nearest player. Phantoms with no player this close are left alone |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `phantom:off` | Player | `true` when the player turned phantoms off, `false` when they turned them back on while `defaultOff` is `true`. Not set = `defaultOff` |
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -490,6 +530,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Welcome → News | Both popups show on join, welcome first (`delayTicks` 40 vs 100). News waits until the welcome popup is closed |
 | News tips → others | The default tips mention `/realm:stats` and `/realm:afk`. Edit them with `/realm:news_tips` if you don't use those packs |
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
+| AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
 
 None of the packs depend on each other. Any combination works.
 
@@ -506,7 +547,7 @@ None of the packs depend on each other. Any combination works.
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
-| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[guard]` |
+| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[phantom]` |
 | The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
 
 ---
