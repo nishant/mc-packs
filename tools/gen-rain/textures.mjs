@@ -34,7 +34,10 @@ function put(img, x, y, rgba) {
 // ---------------------------------------------------------------------------
 const SCALE = 4;
 const RAIN_TOP = 5 * SCALE, RAIN_ROWS = 15 * SCALE; // rows 20..79
-const STREAK = { color: [0x6f, 0x8f, 0xd4], width: 2, alphaTail: 0.25, alphaHead: 0.85 };
+/** Vanilla's streaks: 1 texel wide (4 px here), its blue, its opacity range (0.31–0.96). 13 lanes instead of 8. */
+const STREAK = { color: [68, 101, 193], width: SCALE, lanes: 13, alphaTail: 0.4, alphaHead: 0.96 };
+/** Coverage × alpha of the rain strip, as a fraction (vanilla: 0.100). Guards against thinning the rain out by accident. */
+const INK = { min: 0.17, max: 0.23 };
 
 function weather() {
   const vanilla = decode(readFileSync(join(import.meta.dirname, "vanilla", "weather.png")));
@@ -47,28 +50,32 @@ function weather() {
       put(img, x, y, [...vanilla.data.subarray(o, o + 4)]);
     }
   }
-  // About 26 lanes of 2 px streaks (vanilla has 8 lanes of 1 px, i.e. 4 px here). Each lane has one or two
-  // streaks that fade from a faint tail (top) to a brighter head (bottom), wrapping vertically so the
-  // strip tiles without a seam as the game scrolls it. Coverage × alpha comes to ~11.8% of the strip,
-  // 1.18× vanilla's 10.0%: heavier rain from thinner, softer, more numerous streaks.
-  let x = 1;
-  while (x < size - STREAK.width) {
-    const lane = x;
-    x += 3 + Math.floor(hash(lane, 3, 41) * 5);
-    const segments = hash(lane, 1, 42) < 0.45 ? 2 : 1;
-    const dim = 0.8 + hash(lane, 2, 43) * 0.2;
-    const tint = 0.9 + hash(lane, 4, 46) * 0.2;
+  // 13 lanes of vanilla-width streaks (vanilla has 8), about 10 px apart with a little jitter. Each lane has
+  // one long streak or two shorter ones that fade from a fainter tail (top) to a solid head (bottom),
+  // wrapping vertically so the strip tiles without a seam as the game scrolls it. Coverage × alpha comes to
+  // about 19% of the strip, nearly twice vanilla's 10%: the same thick blue rain, more of it.
+  const pitch = size / STREAK.lanes;
+  for (let i = 0; i < STREAK.lanes; i++) {
+    const lane = Math.round(1 + i * pitch + (hash(i, 3, 41) - 0.5) * 3);
+    const segments = hash(i, 1, 42) < 0.4 ? 2 : 1;
+    const dim = 0.85 + hash(i, 2, 43) * 0.15;
+    const tint = 0.94 + hash(i, 4, 46) * 0.12;
+    const first = Math.floor(hash(i, 0, 45) * RAIN_ROWS);
     for (let s = 0; s < segments; s++) {
-      const len = segments === 2 ? 22 + Math.floor(hash(lane, s, 44) * 12) : 28 + Math.floor(hash(lane, s, 44) * 30);
-      const start = Math.floor(hash(lane, s, 45) * RAIN_ROWS) + s * (RAIN_ROWS / 2);
-      for (let i = 0; i < len; i++) {
-        const t = i / (len - 1); // 0 = tail, 1 = head
+      const len = segments === 2 ? 20 + Math.floor(hash(i, s, 44) * 13) : 34 + Math.floor(hash(i, s, 44) * 25);
+      const start = first + s * (RAIN_ROWS / 2);
+      for (let k = 0; k < len; k++) {
+        const t = k / (len - 1); // 0 = tail, 1 = head
         const alpha = (STREAK.alphaTail + (STREAK.alphaHead - STREAK.alphaTail) * Math.pow(t, 1.5)) * dim;
-        const y = RAIN_TOP + ((start + i) % RAIN_ROWS);
+        const y = RAIN_TOP + ((start + k) % RAIN_ROWS);
         for (let w = 0; w < STREAK.width; w++) put(img, lane + w, y, [...STREAK.color.map((c) => c * tint), alpha * 255]);
       }
     }
   }
+  let ink = 0;
+  for (let y = RAIN_TOP; y < RAIN_TOP + RAIN_ROWS; y++) for (let x = 0; x < size; x++) ink += img.data[(y * size + x) * 4 + 3] / 255;
+  ink /= size * RAIN_ROWS;
+  if (ink < INK.min || ink > INK.max) throw new Error(`rain ink ${(ink * 100).toFixed(1)}% is outside ${INK.min * 100}–${INK.max * 100}%`);
   return img;
 }
 

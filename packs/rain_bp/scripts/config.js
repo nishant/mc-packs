@@ -9,6 +9,13 @@ export const CONFIG = {
     fadeSeconds: 12,
   },
 
+  haze: {
+    /** A darker, blue-gray haze in rain and thunderstorms for players on Vibrant Visuals, which ignores fog colors. Fancy is unaffected. */
+    enabled: true,
+    /** Seconds the haze takes to thicken, and again to clear, in two steps. */
+    fadeSeconds: 10,
+  },
+
   mist: {
     /** Low mist near the ground around each player during thunderstorms, when outdoors. */
     enabled: true,
@@ -27,5 +34,23 @@ export const CONFIG = {
     radius: 6,
     /** Block lookups per second per player for drips and mist: the main server cost. */
     lookupsPerSecond: 6,
+  },
+
+  wind: {
+    /** Gusting wind while it rains: strong in thunderstorms, a soft breeze in plain rain, muffled indoors. */
+    enabled: true,
+    /** Wind volume in thunderstorms, 0-1. */
+    inThunder: 1,
+    /** Wind volume in plain rain, 0-1. */
+    inRain: 0.35,
+  },
+
+  roof: {
+    /** Rain drumming on the roof while you're indoors (a roof 2 to maxHeadroom blocks over your head, not leaves). */
+    enabled: true,
+    /** Volume, 0-1. */
+    volume: 0.8,
+    /** Highest roof (blocks above your feet) that still counts as being indoors. */
+    maxHeadroom: 10,
   },
 };

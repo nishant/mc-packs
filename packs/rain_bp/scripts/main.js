@@ -7,15 +7,24 @@ const PROP_WEATHER = "rain:weather"; // world: overworld weather from the last c
 // is the "off" preference in settings.js, which /realm:prefs changes too.
 
 const OVERWORLD = "minecraft:overworld";
-const MIST = "realm:rain_mist"; // particles and fogs come from the Realistic Rain resource pack
+const MIST = "realm:rain_mist"; // particles, fogs and sounds come from the Realistic Rain resource pack
 const DRIP = "realm:rain_drip";
-const FOG_ID = "rain_storm"; // id of our /fog entries, so only ours are ever removed
+const FOG_ID = "rain_storm"; // ids of our /fog entries, so only ours are ever removed
+const HAZE_ID = "rain_gloom";
 const STORM_FOGS = ["realm:rain_storm_1", "realm:rain_storm_2", "realm:rain_storm"]; // lightest → densest
+// Vibrant Visuals haze: only volumetric fog, which Fancy ignores, so it layers under the storm fogs unchanged.
+const HAZE_FOGS = ["realm:rain_gloom_1", "realm:rain_gloom"];
+const WIND = "realm.storm.wind";
+const WIND_INSIDE = "realm.storm.wind_inside";
+const ROOF = "realm.rain.roof";
+const WIND_EVERY = 8; // seconds between wind plays: the clips are 10 s with 2 s crossfades
+const ROOF_EVERY = 3; // the roof clips are 3.6 s
 
 // Performance: the loop only exists while there's something to do, runs 4 times a second and handles a
 // quarter of the players each time, so every player costs about one update per second.
 const RUN_TICKS = 5;
 const GROUPS = 4;
+const UPDATE_SECONDS = (RUN_TICKS * GROUPS) / 20; // how often each player is updated
 const MAX_SPOTS = 8; // drip spots remembered per player
 const RESCAN_DISTANCE = 4; // forget a player's drip spots once they move this far (blocks)
 const MAX_HEADROOM = 24; // deeper underground than this, there's no rain to see
@@ -23,12 +32,16 @@ const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no ra
 const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }];
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
-/** @typedef {{ group: number, fog: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number }} State */
+/** @typedef {"out" | "in" | "none"} Place where the player hears the weather from: outdoors (or under a tree), indoors, or out of its reach */
+/** @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number, windIn: number, roofIn: number, place: Place }} State */
+/** @typedef {{ level: number, stepIn: number }} Roll a fog that rolls in or out in steps */
 
 /** @type {WeatherType} */
 let weather = WeatherType.Clear;
-let stormLevel = 0; // 0 = no storm fog, 1–3 = step in STORM_FOGS
-let stormStepIn = 0; // seconds until stormLevel moves one step toward the weather's target
+/** @type {Roll} 0 = no storm fog, 1–3 = step in STORM_FOGS */
+const storm = { level: 0, stepIn: 0 };
+/** @type {Roll} 0 = no haze, 1–2 = step in HAZE_FOGS */
+const haze = { level: 0, stepIn: 0 };
 let dripSeconds = 0; // seconds of after-rain drips left
 /** @type {number | undefined} */
 let loop;
@@ -45,7 +58,7 @@ function extrasOff(player) {
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let st = players.get(player.id);
-  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, spots: [], dripDebt: 0, mistDebt: 0 }));
+  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, place: "none" }));
   return st;
 }
 
@@ -68,16 +81,18 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
 world.afterEvents.worldLoad.subscribe(() => {
   const saved = world.getDynamicProperty(PROP_WEATHER);
   if (saved === WeatherType.Rain || saved === WeatherType.Thunder) weather = saved;
-  // After a script reload our fog may still be on players we no longer track: clear it, the loop re-adds it.
-  for (const player of world.getAllPlayers()) clearFog(player);
+  // After a script reload our fogs may still be on players we no longer track: clear them, the loop re-adds them.
+  for (const player of world.getAllPlayers()) clearFogs(player);
   wake();
 });
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
-  // A storm fog can survive a relog: clear ours, and the loop puts back whatever the weather calls for.
-  clearFog(player);
-  stateOf(player).fog = 0;
+  // Our fogs can survive a relog: clear them, and the loop puts back whatever the weather calls for.
+  clearFogs(player);
+  const st = stateOf(player);
+  st.fog = 0;
+  st.haze = 0;
   wake();
 });
 
@@ -88,8 +103,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => players.delete(playerI
 // ---------------------------------------------------------------------------
 
 function needsLoop() {
-  if (weather !== WeatherType.Clear || dripSeconds > 0 || stormLevel > 0) return true;
-  for (const st of players.values()) if (st.fog > 0) return true;
+  if (weather !== WeatherType.Clear || dripSeconds > 0 || storm.level > 0 || haze.level > 0) return true;
+  for (const st of players.values()) if (st.fog > 0 || st.haze > 0) return true;
   return false;
 }
 
@@ -100,7 +115,9 @@ function wake() {
 function tick() {
   const dt = RUN_TICKS / 20;
   if (weather === WeatherType.Clear) dripSeconds = Math.max(0, dripSeconds - dt);
-  stepStormFog(dt);
+  const raining = weather !== WeatherType.Clear;
+  step(storm, get("stormFog.enabled") && weather === WeatherType.Thunder ? STORM_FOGS.length : 0, STORM_FOGS.length, CONFIG.stormFog.fadeSeconds, dt);
+  step(haze, get("haze.enabled") && raining ? HAZE_FOGS.length : 0, HAZE_FOGS.length, CONFIG.haze.fadeSeconds, dt);
   const group = run++ % GROUPS;
   for (const player of world.getAllPlayers()) {
     const st = stateOf(player);
@@ -117,37 +134,52 @@ function tick() {
   }
 }
 
-/** Steps the storm fog toward dense (thunder) or none (anything else): the first step at once, the last after fadeSeconds. */
-function stepStormFog(/** @type {number} */ dt) {
-  const target = get("stormFog.enabled") && weather === WeatherType.Thunder ? STORM_FOGS.length : 0;
-  if (stormLevel === target) {
-    stormStepIn = 0;
+/** Steps a fog toward `target`: the first step at once, the last after fadeSeconds. @param {Roll} roll */
+function step(roll, /** @type {number} */ target, /** @type {number} */ steps, /** @type {number} */ fadeSeconds, /** @type {number} */ dt) {
+  if (roll.level === target) {
+    roll.stepIn = 0;
     return;
   }
-  stormStepIn -= dt;
-  if (stormStepIn > 0) return;
-  stormLevel += Math.sign(target - stormLevel);
-  stormStepIn = CONFIG.stormFog.fadeSeconds / (STORM_FOGS.length - 1);
+  roll.stepIn -= dt;
+  if (roll.stepIn > 0) return;
+  roll.level += Math.sign(target - roll.level);
+  roll.stepIn = fadeSeconds / Math.max(1, steps - 1);
 }
 
-/** One player's second: storm fog, then mist and drips around them. @param {Player} player @param {State} st */
+/** One player's second: fogs, then mist, drips and sounds around them. @param {Player} player @param {State} st */
 function update(player, st) {
   const off = extrasOff(player);
-  const fog = off ? 0 : stormLevel;
+  const fog = off ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
-  if (off || player.dimension.id !== OVERWORLD) return;
+  if (off || player.dimension.id !== OVERWORLD) {
+    leave(player, st); // no haze in the Nether or the End: it would replace their own volumetric fog
+    return;
+  }
 
   const raining = weather !== WeatherType.Clear;
-  if (!raining && dripSeconds <= 0) return;
+  if (!raining && dripSeconds <= 0 && haze.level === 0 && st.haze === 0) return;
   const budget = { lookups: CONFIG.drips.lookupsPerSecond };
   const feet = player.location;
   const here = topmost(player.dimension, feet.x, feet.z, budget);
-  if (!here || DRY_GROUND.test(here.typeId) || here.location.y - feet.y > MAX_HEADROOM) return;
+  if (!here || DRY_GROUND.test(here.typeId) || here.location.y - feet.y > MAX_HEADROOM) {
+    leave(player, st); // deserts, badlands and snow get no rain; caves get none of the haze
+    return;
+  }
+  if (st.haze !== haze.level) setHaze(player, st, haze.level);
 
-  const outdoors = here.location.y < feet.y; // nothing over the player's head
+  const above = here.location.y - Math.floor(feet.y); // 0 or 1: grass or a fence at your side; 2+: over your head
+  const outdoors = above < 2;
+  const underTree = !outdoors && here.typeId.includes("leaves");
   const nearGround = feet.y - here.location.y < 6;
   if (get("mist.enabled") && weather === WeatherType.Thunder && outdoors && nearGround) mist(player, st, feet, budget);
   if (get("drips.enabled")) drips(player, st, feet, raining, budget);
+  if (raining) sounds(player, st, outdoors || underTree ? "out" : "in", !outdoors && !underTree && above <= CONFIG.roof.maxHeadroom);
+}
+
+/** Out of the rain's reach (another dimension, underground, a desert, extras off): no haze, no weather sounds. @param {Player} player @param {State} st */
+function leave(player, st) {
+  if (st.haze) setHaze(player, st, 0);
+  if (st.place !== "none") stopSounds(player, st);
 }
 
 /** Highest block in a column, or undefined when out of budget or unloaded. @param {Dimension} dimension @param {{ lookups: number }} budget */
@@ -166,9 +198,25 @@ function topmost(dimension, /** @type {number} */ x, /** @type {number} */ z, bu
 // ---------------------------------------------------------------------------
 
 /** @param {Player} player */
-function clearFog(player) {
+/** @param {Player} player @param {string} id */
+function removeFog(player, id) {
   try {
-    player.runCommand(`fog @s remove ${FOG_ID}`);
+    player.runCommand(`fog @s remove ${id}`);
+  } catch (e) {
+    console.warn(`[rain] /fog: ${e}`);
+  }
+}
+
+/** @param {Player} player */
+function clearFogs(player) {
+  removeFog(player, FOG_ID);
+  removeFog(player, HAZE_ID);
+}
+
+/** @param {Player} player @param {string} fogId @param {string} id */
+function pushFog(player, fogId, id) {
+  try {
+    player.runCommand(`fog @s push ${fogId} ${id}`);
   } catch (e) {
     console.warn(`[rain] /fog: ${e}`);
   }
@@ -176,15 +224,55 @@ function clearFog(player) {
 
 /** @param {Player} player @param {State} st @param {number} level 0 = none */
 function setFog(player, st, level) {
-  clearFog(player);
-  if (level > 0) {
+  removeFog(player, FOG_ID);
+  if (level > 0) pushFog(player, STORM_FOGS[level - 1], FOG_ID);
+  st.fog = level; // even after an error, so a broken /fog isn't retried every second
+}
+
+/** @param {Player} player @param {State} st @param {number} level 0 = none */
+function setHaze(player, st, level) {
+  removeFog(player, HAZE_ID);
+  if (level > 0) pushFog(player, HAZE_FOGS[level - 1], HAZE_ID);
+  st.haze = level;
+}
+
+// ---------------------------------------------------------------------------
+// Wind and rain on the roof (Player.playSound: only that player hears them)
+// ---------------------------------------------------------------------------
+
+/** @param {Player} player @param {State} st @param {Place} place @param {boolean} roofNear a roof low enough to hear the rain on it */
+function sounds(player, st, place, roofNear) {
+  if (place !== st.place) {
+    // Walking in or out: cut the wind you were hearing and start the other one now.
+    if (st.place !== "none") stopSounds(player, st);
+    st.place = place;
+    st.windIn = 0;
+    st.roofIn = 0;
+  }
+  st.windIn -= UPDATE_SECONDS;
+  st.roofIn -= UPDATE_SECONDS;
+  if (get("wind.enabled") && st.windIn <= 0) {
+    const volume = weather === WeatherType.Thunder ? get("wind.inThunder") : get("wind.inRain");
+    if (volume > 0) player.playSound(place === "out" ? WIND : WIND_INSIDE, { volume });
+    st.windIn = WIND_EVERY;
+  }
+  if (roofNear && get("roof.enabled") && st.roofIn <= 0) {
+    const volume = get("roof.volume");
+    if (volume > 0) player.playSound(ROOF, { volume });
+    st.roofIn = ROOF_EVERY;
+  }
+}
+
+/** @param {Player} player @param {State} st */
+function stopSounds(player, st) {
+  for (const id of [WIND, WIND_INSIDE]) {
     try {
-      player.runCommand(`fog @s push ${STORM_FOGS[level - 1]} ${FOG_ID}`);
+      player.runCommand(`stopsound @s ${id}`);
     } catch (e) {
-      console.warn(`[rain] /fog: ${e}`);
+      console.warn(`[rain] /stopsound: ${e}`);
     }
   }
-  st.fog = level; // even after an error, so a broken /fog isn't retried every second
+  st.place = "none";
 }
 
 // ---------------------------------------------------------------------------
@@ -268,12 +356,15 @@ function probe(dimension, x, z, feetY, budget) {
 // /realm:rain, and changes from Realm Settings
 // ---------------------------------------------------------------------------
 
-/** Applies a player's on/off right away: their fog follows, their drip spots are dropped. @param {Player} player */
+/** Applies a player's on/off right away: their fogs and sounds follow, their drip spots are dropped. @param {Player} player */
 function applyChoice(player) {
   const off = extrasOff(player);
   const st = stateOf(player);
-  if (off) st.spots = [];
-  const fog = off ? 0 : stormLevel;
+  if (off) {
+    st.spots = [];
+    leave(player, st);
+  }
+  const fog = off ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
   wake();
 }
@@ -289,7 +380,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     customCommandRegistry.registerCommand(
       {
         name: "realm:rain",
-        description: "Enable or disable the rain extras (storm fog, ground mist and drips) for yourself",
+        description: "Enable or disable the rain extras (storm fog, haze, ground mist, drips, wind and roof sounds) for yourself",
         permissionLevel: CommandPermissionLevel.Any,
         cheatsRequired: false,
       },
@@ -303,8 +394,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return {
           status: CustomCommandStatus.Success,
           message: nowOff
-            ? "Rain extras (storm fog, mist, drips): Disabled. Run /realm:rain again to enable them."
-            : "Rain extras (storm fog, mist, drips): Enabled. Run /realm:rain again to disable them.",
+            ? "Rain extras (storm fog, haze, mist, drips, wind, roof): Disabled. Run /realm:rain again to enable them."
+            : "Rain extras (storm fog, haze, mist, drips, wind, roof): Enabled. Run /realm:rain again to disable them.",
         };
       }
     );
