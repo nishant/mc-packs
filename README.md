@@ -39,7 +39,8 @@ npm run bundle  # merge packs into one (--list, --all, --packs a,b, --name, --ti
 | `packs/<folder>/` | One behavior pack: `manifest.json`, `scripts/main.js`, `scripts/config.js` |
 | `docs/PACKS.md` | Documentation, also published on mc.nish.software/realm. **Update it in the same commit as any pack change**; `npm run check` enforces it |
 | `tools/build.mjs`, `tools/bundle.mjs` | Packaging, with no dependencies |
-| `tools/check-docs.mjs` | Fails if a pack, command or config option is missing from the docs |
+| `tools/check-docs.mjs` | Fails if a pack, its `### How to use`, a command or a config option is missing from the docs |
+| `tools/check-commands.mjs` | Fails if a command or enum isn't in the `realm:` namespace, or two share a name |
 | `.claude/skills/bundle-packs/` | The `/bundle-packs` skill |
 
 Script errors show up in the content log (**Settings → Creator → Enable Content Log GUI**).
