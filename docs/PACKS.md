@@ -21,6 +21,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [AFK + Smart Sleep — `afk_bp`](#afk--smart-sleep--afk_bp)
 - [Stats & Leaderboards — `stats_bp`](#stats--leaderboards--stats_bp)
 - [Realm News & Tips — `news_bp`](#realm-news--tips--news_bp)
+- [Creeper Guard — `guard_bp`](#creeper-guard--guard_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -407,6 +408,51 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 
 ---
 
+## Creeper Guard — `guard_bp`
+
+Creepers still hurt, but their explosions break no blocks, so nobody comes home to a crater. TNT is left alone.
+
+### How to use
+
+1. Nothing to set up: a creeper that explodes still damages and knocks back players and mobs, but the ground and your builds stay intact.
+2. Run `/realm:guard` to see the mode, which blasts are covered and any protected zones.
+3. **Operators:** to keep creeper craters in the wild and protect only bases, set `mode` to `zones` in `config.js`, then stand in a base and run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). `/realm:guard_remove <name>` removes a zone.
+
+### What players see
+
+- **`everywhere` mode (default):** every blast from a listed source (`sources`, creepers by default) hurts and knocks back as usual but breaks no blocks.
+- **`zones` mode:** blocks inside a zone are kept; the rest of the blast breaks blocks as in vanilla. A creeper at the edge of a zone breaks only the part of its crater that lies outside.
+- Charged creepers are covered too. TNT, beds in the Nether or End, respawn anchors and end crystals are never touched, because they aren't listed (beds and anchors have no source entity at all).
+- Unlike the `mobGriefing` gamerule, this changes nothing else: villagers still farm, sheep still eat grass (the Wool Farm guide needs that) and endermen still pick up blocks.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:guard` | Everyone | Shows the mode, the covered blast sources and the zones |
+| `/realm:guard_add <name> [radius]` | Ops | Protects a sphere around you, `radius` 8–256 blocks (default `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique. Only matters in `zones` mode |
+| `/realm:guard_remove <name>` | Ops | Removes a zone |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `mode` | `everywhere` | `everywhere`: listed blasts never break blocks. `zones`: only inside the zones from `/realm:guard_add` |
+| `sources` | `["minecraft:creeper"]` | Exploding entity types to neutralize. Add `minecraft:fireball` (ghast fireballs) or `minecraft:wither_skull` if wanted |
+| `defaultRadius` | `64` | Zone radius in blocks when `/realm:guard_add` is given none |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `guard:zones` | World | JSON list of zones `{ name, dim, x, y, z, radius }`, up to 100 |
+
+### How it works
+
+The pack listens to `world.beforeEvents.explosion`. When the exploding entity's type is in `sources`, it empties the list of blocks the blast will break (`everywhere`), or drops the blocks inside a zone from it (`zones`). It never cancels the explosion, which would also remove the damage and drops.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -460,7 +506,7 @@ None of the packs depend on each other. Any combination works.
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
-| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with `[welcome]`, `[afk]`, `[stats]`, `[news]` or `[durability]` |
+| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[guard]` |
 | The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
 
 ---

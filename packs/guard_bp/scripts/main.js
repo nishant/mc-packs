@@ -1,0 +1,181 @@
+import {
+  CommandPermissionLevel,
+  CustomCommandParamType,
+  CustomCommandStatus,
+  Player,
+  system,
+  world,
+} from "@minecraft/server";
+import { CONFIG } from "./config.js";
+
+const PROP_ZONES = "guard:zones"; // world: JSON Zone[]
+
+const MIN_RADIUS = 8;
+const MAX_RADIUS = 256;
+const MAX_ZONES = 100;
+const NAME_RE = /^[A-Za-z0-9_-]{1,24}$/;
+
+/** @typedef {{ name: string, dim: string, x: number, y: number, z: number, radius: number }} Zone */
+
+const sources = new Set(CONFIG.sources);
+const zonesMode = CONFIG.mode === "zones";
+
+// ---------------------------------------------------------------------------
+// Zones (cached: the explosion before event may read but never write)
+// ---------------------------------------------------------------------------
+
+/** @type {Zone[] | undefined} */
+let zones;
+
+/** @returns {Zone[]} */
+function getZones() {
+  if (zones) return zones;
+  const raw = world.getDynamicProperty(PROP_ZONES);
+  try {
+    zones = typeof raw === "string" ? JSON.parse(raw) : [];
+  } catch {
+    zones = [];
+  }
+  return /** @type {Zone[]} */ (zones);
+}
+
+/** @param {Zone[]} list */
+function saveZones(list) {
+  zones = list;
+  world.setDynamicProperty(PROP_ZONES, list.length ? JSON.stringify(list) : undefined);
+}
+
+/**
+ * @param {string} dim
+ * @param {import("@minecraft/server").Vector3} p
+ */
+function inAnyZone(dim, p) {
+  for (const z of getZones()) {
+    if (z.dim !== dim) continue;
+    const dx = p.x + 0.5 - z.x;
+    const dy = p.y + 0.5 - z.y;
+    const dz = p.z + 0.5 - z.z;
+    if (dx * dx + dy * dy + dz * dz <= z.radius * z.radius) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// The guard itself
+// ---------------------------------------------------------------------------
+
+// Don't cancel the event: that would also remove the damage, knockback and drops.
+world.beforeEvents.explosion.subscribe((event) => {
+  const type = event.source?.typeId;
+  if (!type || !sources.has(type)) return; // TNT, beds, respawn anchors: no source or not listed
+  try {
+    if (!zonesMode) {
+      event.setImpactedBlocks([]);
+      return;
+    }
+    const dim = event.dimension.id;
+    const blocks = event.getImpactedBlocks();
+    const kept = blocks.filter((b) => !inAnyZone(dim, b.location));
+    if (kept.length !== blocks.length) event.setImpactedBlocks(kept);
+  } catch (e) {
+    console.warn(`[guard] ${e}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+const shortId = (/** @type {string} */ id) => id.replace(/^minecraft:/, "").replaceAll("_", " ");
+
+/** @param {Zone} z */
+const describeZone = (z) =>
+  `§e${z.name}§r: ${shortId(z.dim)} ${Math.floor(z.x)}, ${Math.floor(z.y)}, ${Math.floor(z.z)}, radius ${z.radius}`;
+
+function statusText() {
+  const list = getZones();
+  const lines = [
+    `§6Creeper Guard§r: ${
+      zonesMode ? "only inside the zones below" : "everywhere (zones are only used in zones mode)"
+    }`,
+    `Blasts that break no blocks: ${[...sources].map(shortId).join(", ") || "none"}`,
+    list.length ? `Zones (${list.length}):` : "No zones.",
+    ...list.map((z) => ` - ${describeZone(z)}`),
+  ];
+  return lines.join("\n");
+}
+
+/** @param {import("@minecraft/server").CustomCommandOrigin} origin */
+const originPlayer = (origin) => {
+  const p = origin.initiator ?? origin.sourceEntity;
+  return p instanceof Player ? p : undefined;
+};
+
+system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:guard",
+      description: "Show the Creeper Guard mode, blast sources and protected zones",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    () => ({ status: CustomCommandStatus.Success, message: statusText() })
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:guard_add",
+      description: "Protect a sphere around you from creeper blasts (zones mode)",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "name", type: CustomCommandParamType.String }],
+      optionalParameters: [{ name: "radius", type: CustomCommandParamType.Integer }],
+    },
+    (origin, /** @type {string} */ name, /** @type {number | undefined} */ radius) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      if (!NAME_RE.test(name)) {
+        return { status: CustomCommandStatus.Failure, message: "Zone names use letters, digits, _ and - (up to 24)." };
+      }
+      const r = radius ?? CONFIG.defaultRadius;
+      if (r < MIN_RADIUS || r > MAX_RADIUS) {
+        return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS}–${MAX_RADIUS} blocks.` };
+      }
+      const list = getZones();
+      if (list.some((z) => z.name === name)) {
+        return {
+          status: CustomCommandStatus.Failure,
+          message: `There is already a zone "${name}". Remove it first with /realm:guard_remove ${name}.`,
+        };
+      }
+      if (list.length >= MAX_ZONES) {
+        return { status: CustomCommandStatus.Failure, message: `At most ${MAX_ZONES} zones.` };
+      }
+      const { x, y, z } = player.location;
+      /** @type {Zone} */
+      const zone = { name, dim: player.dimension.id, x: Math.round(x), y: Math.round(y), z: Math.round(z), radius: r };
+      system.run(() => saveZones([...getZones(), zone]));
+      return {
+        status: CustomCommandStatus.Success,
+        message: `Zone added: ${describeZone(zone)}${zonesMode ? "" : "\n§7Mode is everywhere, so zones have no effect until mode is set to zones in config.js."}`,
+      };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:guard_remove",
+      description: "Remove a Creeper Guard zone",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "name", type: CustomCommandParamType.String }],
+    },
+    (_origin, /** @type {string} */ name) => {
+      if (!getZones().some((z) => z.name === name)) {
+        return { status: CustomCommandStatus.Failure, message: `No zone "${name}". /realm:guard lists them.` };
+      }
+      system.run(() => saveZones(getZones().filter((z) => z.name !== name)));
+      return { status: CustomCommandStatus.Success, message: `Zone "${name}" removed.` };
+    }
+  );
+});
