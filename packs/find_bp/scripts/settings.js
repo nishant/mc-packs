@@ -10,9 +10,9 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "liveScanRadius", type: "int", scope: "world", label: "Read containers this close live (blocks)", min: 0, max: 32, step: 2 },
-  { key: "maxResults", type: "int", scope: "world", label: "Rows in the results menu", min: 5, max: 50, step: 5 },
-  { key: "highlightSeconds", type: "int", scope: "world", label: "Seconds a chosen container stays marked", min: 3, max: 60, step: 1 },
+  { key: "liveScanRadius", type: "int", scope: "world", label: "Live scan radius (blocks)", help: "Containers this close are read fresh; farther ones come from the index", min: 0, max: 32, step: 2 },
+  { key: "maxResults", type: "int", scope: "world", label: "Results shown", min: 5, max: 50, step: 5 },
+  { key: "highlightSeconds", type: "int", scope: "world", label: "Highlight time (seconds)", min: 3, max: 60, step: 1 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
@@ -39,6 +39,8 @@ const OPTIONS = [
  * @property {number} [max]
  * @property {number} [step]
  * @property {string[]} [choices] enum only
+ * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
+ * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
@@ -68,12 +70,12 @@ function fileDefault(key) {
 function problem(opt, v) {
   switch (opt.type) {
     case "bool":
-      return typeof v === "boolean" ? undefined : "must be on or off";
+      return typeof v === "boolean" ? undefined : "must be enabled or disabled";
     case "int":
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
-      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "…"} to ${opt.max ?? "…"}`;
+      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
       return typeof v === "string" && (opt.choices ?? []).includes(v) ? undefined : `must be one of ${(opt.choices ?? []).join(", ")}`;
@@ -265,6 +267,8 @@ function describe(player) {
       max: o.max,
       step: o.step,
       choices: o.choices,
+      names: o.names,
+      invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
     };

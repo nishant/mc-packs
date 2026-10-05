@@ -3,14 +3,14 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { CONFIG } from "./config.js";
 
 // This pack holds no other pack's data. It asks the installed packs what they can change
-// (realm:cfg_ping → realm:cfg_schema), shows forms, and sends the changes back
+// (realm:cfg_ping -> realm:cfg_schema), shows forms, and sends the changes back
 // (realm:cfg_set / realm:cfg_reset → realm:cfg_ack). Each pack's scripts/settings.js answers.
 
 /**
  * @typedef {{
  *   key: string, type: "bool" | "int" | "float" | "enum" | "text", label: string, help?: string,
- *   value: any, default: any, min?: number, max?: number, step?: number, choices?: string[],
- *   scope: "world" | "player", restart?: boolean
+ *   value: any, default: any, min?: number, max?: number, step?: number, choices?: string[], names?: string[],
+ *   scope: "world" | "player", restart?: boolean, invert?: boolean
  * }} Option
  * @typedef {{ pack: string, title: string, options: Option[] }} Pack
  * @typedef {{ pack: Pack, option: Option }} Slot one input of a form
@@ -114,19 +114,30 @@ async function show(player, form) {
   return undefined;
 }
 
+/** A switch's position: an `invert` option is stored as "off" but shown as "enabled". @param {Option} o @param {unknown} v */
+const switchOn = (o, v) => (o.invert ? v !== true : v === true);
+
+/** How a choice reads in the menu. @param {Option} o @param {unknown} v */
+const choiceName = (o, v) => {
+  const i = (o.choices ?? []).indexOf(/** @type {string} */ (v));
+  return i >= 0 && o.names?.[i] ? o.names[i] : String(v);
+};
+
 /** A value as players read it. @param {Option} o @param {unknown} v */
 function fmt(o, v) {
-  if (o.type === "bool") return v ? "on" : "off";
+  if (o.type === "bool") return switchOn(o, v) ? "Enabled" : "Disabled";
+  if (o.type === "enum") return choiceName(o, v);
   if (o.type === "text") return v ? `"${v}§r"` : "(empty)";
   return String(v);
 }
 
 /** @param {ModalFormData} form @param {Option} o */
 function addControl(form, o) {
-  const tooltip = [o.help, `Default: ${fmt(o, o.default)}`].filter(Boolean).join("\n");
+  const range = (o.type === "int" || o.type === "float") && o.min !== undefined && o.max !== undefined ? `Range: ${o.min} to ${o.max}` : undefined;
+  const tooltip = [o.help, `Default: ${fmt(o, o.default)}`, range].filter(Boolean).join("\n");
   switch (o.type) {
     case "bool":
-      form.toggle(o.label, { defaultValue: o.value === true, tooltip });
+      form.toggle(o.label, { defaultValue: switchOn(o, o.value), tooltip });
       break;
     case "int":
     case "float": {
@@ -138,7 +149,7 @@ function addControl(form, o) {
     }
     case "enum": {
       const choices = o.choices ?? [];
-      form.dropdown(o.label, choices, { defaultValueIndex: Math.max(0, choices.indexOf(o.value)), tooltip });
+      form.dropdown(o.label, choices.map((c) => choiceName(o, c)), { defaultValueIndex: Math.max(0, choices.indexOf(o.value)), tooltip });
       break;
     }
     default:
@@ -150,7 +161,7 @@ function addControl(form, o) {
 function valueOf(o, raw) {
   switch (o.type) {
     case "bool":
-      return raw === true;
+      return o.invert ? raw !== true : raw === true;
     case "int":
       return typeof raw === "number" ? Math.round(raw) : o.value;
     case "float": {
@@ -196,7 +207,7 @@ async function save(player, answers, forPlayer) {
   if (!player.isValid) return;
   changed.forEach(({ slot }, i) => {
     const ack = acks.get(i);
-    const what = `${slot.pack.title}, ${slot.option.label}`;
+    const what = `${slot.pack.title} > ${slot.option.label}`;
     if (!ack) player.sendMessage(`§cNot saved:§r ${what}: the pack didn't answer. Try again.`);
     else if (!ack.ok) player.sendMessage(`§cNot saved:§r ${what}: ${ack.error ?? "refused"}.`);
     else player.sendMessage(`§aSaved:§r ${what}: §e${fmt(slot.option, ack.value)}`);
@@ -224,7 +235,7 @@ async function configMenu(player) {
     }
     const form = new ActionFormData()
       .title("§lRealm Settings")
-      .body("Pick a pack to change its settings for everyone. Changes apply right away and are saved in the world.\n§7Players choose their own preferences with /realm:prefs.");
+      .body("Pick a pack to change its settings for everyone. Changes apply right away.\n§7Hold or hover over §f!§7 for what a setting does. Players set their own preferences with /realm:prefs.");
     for (const p of packs) {
       const n = worldOptions(p).filter((o) => !o.restart).length;
       form.button(`${p.title}\n§8${n} setting${n === 1 ? "" : "s"}`);
@@ -245,7 +256,7 @@ async function editPack(player, pack) {
   const slots = [];
   for (const option of worldOptions(pack)) {
     if (option.restart) {
-      form.label(`§7${option.label}: §f${fmt(option, option.value)}§7 (set in config.js; needs a world restart)`);
+      form.label(`§7${option.label}: §f${fmt(option, option.value)}§7 (change in config.js, then restart the world)`);
       slots.push(null);
     } else {
       addControl(form, option);

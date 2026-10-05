@@ -10,13 +10,13 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "afkMinutes", type: "int", scope: "world", label: "Minutes idle before a player is AFK", min: 1, max: 60, step: 1 },
-  { key: "announce", type: "bool", scope: "world", label: "Post AFK and back messages in chat" },
-  { key: "sleep.enabled", type: "bool", scope: "world", label: "Smart sleep: skip the night without AFK players" },
-  { key: "sleep.percent", type: "int", scope: "world", label: "Percent of counted players who must sleep", min: 5, max: 100, step: 5 },
-  { key: "sleep.countOtherDimensions", type: "bool", scope: "world", label: "Count players in the Nether and the End", help: "Like vanilla: they can't sleep, so the night waits for them" },
-  { key: "sleep.requiredTicks", type: "int", scope: "world", label: "Ticks asleep before skipping (20 = 1 s)", min: 140, max: 600, step: 20 },
-  { key: "announce", type: "bool", scope: "player", base: "announce", label: "Tell chat when I go AFK or come back", help: "Only while the realm announces AFK players at all" },
+  { key: "afkMinutes", type: "int", scope: "world", label: "Minutes idle before AFK", min: 1, max: 60, step: 1 },
+  { key: "announce", type: "bool", scope: "world", label: "AFK announcements in chat", help: "Posts when a player goes AFK and comes back" },
+  { key: "sleep.enabled", type: "bool", scope: "world", label: "Smart sleep", help: "AFK players don't block skipping the night" },
+  { key: "sleep.percent", type: "int", scope: "world", label: "Sleepers needed to skip the night (%)", min: 5, max: 100, step: 5 },
+  { key: "sleep.countOtherDimensions", type: "bool", scope: "world", label: "Players in the Nether and End count toward sleep", help: "Like vanilla: they can't sleep, so the night waits for them" },
+  { key: "sleep.requiredTicks", type: "int", scope: "world", label: "Ticks asleep before the night skips (20 = 1 s)", min: 140, max: 600, step: 20 },
+  { key: "announce", type: "bool", scope: "player", base: "announce", label: "Announce when I go AFK", help: "Only while the realm has AFK announcements enabled" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
@@ -43,6 +43,8 @@ const OPTIONS = [
  * @property {number} [max]
  * @property {number} [step]
  * @property {string[]} [choices] enum only
+ * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
+ * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
@@ -72,12 +74,12 @@ function fileDefault(key) {
 function problem(opt, v) {
   switch (opt.type) {
     case "bool":
-      return typeof v === "boolean" ? undefined : "must be on or off";
+      return typeof v === "boolean" ? undefined : "must be enabled or disabled";
     case "int":
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
-      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "…"} to ${opt.max ?? "…"}`;
+      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
       return typeof v === "string" && (opt.choices ?? []).includes(v) ? undefined : `must be one of ${(opt.choices ?? []).join(", ")}`;
@@ -269,6 +271,8 @@ function describe(player) {
       max: o.max,
       step: o.step,
       choices: o.choices,
+      names: o.names,
+      invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
     };

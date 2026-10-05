@@ -10,17 +10,17 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "defaultOff", type: "bool", scope: "world", label: "Extras start off for every player", help: "For players who never chose with /realm:rain" },
-  { key: "stormFog.enabled", type: "bool", scope: "world", label: "Storm fog in thunderstorms" },
-  { key: "mist.enabled", type: "bool", scope: "world", label: "Ground mist in thunderstorms" },
-  { key: "drips.enabled", type: "bool", scope: "world", label: "Drips from leaves and roof edges" },
-  { key: "haze.enabled", type: "bool", scope: "world", label: "Darker haze in rain (Vibrant Visuals)", help: "Vibrant Visuals ignores fog colors, so rain looks pale without it. Fancy is unaffected" },
-  { key: "wind.enabled", type: "bool", scope: "world", label: "Wind in rain and thunderstorms" },
+  { key: "defaultOff", type: "bool", scope: "world", invert: true, label: "Rain extras for new players", help: "For players who never chose with /realm:rain" },
+  { key: "stormFog.enabled", type: "bool", scope: "world", label: "Storm fog", help: "Thicker fog in thunderstorms" },
+  { key: "haze.enabled", type: "bool", scope: "world", label: "Vibrant Visuals haze", help: "A darker haze in rain. Vibrant Visuals ignores fog colors, so rain looks pale without it. Fancy is unaffected" },
+  { key: "mist.enabled", type: "bool", scope: "world", label: "Ground mist", help: "Low mist in thunderstorms" },
+  { key: "drips.enabled", type: "bool", scope: "world", label: "Drips", help: "Drops falling from leaves and roof edges in rain" },
+  { key: "wind.enabled", type: "bool", scope: "world", label: "Wind", help: "Gusts in thunderstorms, a breeze in rain, muffled indoors" },
   { key: "wind.inThunder", type: "float", scope: "world", label: "Storm wind volume", min: 0, max: 1, step: 0.05 },
   { key: "wind.inRain", type: "float", scope: "world", label: "Rain breeze volume", min: 0, max: 1, step: 0.05 },
-  { key: "roof.enabled", type: "bool", scope: "world", label: "Rain on the roof when indoors" },
+  { key: "roof.enabled", type: "bool", scope: "world", label: "Rain on the roof", help: "Rain drumming on the roof while you're indoors" },
   { key: "roof.volume", type: "float", scope: "world", label: "Rain on the roof volume", min: 0, max: 1, step: 0.05 },
-  { key: "off", type: "bool", scope: "player", base: "defaultOff", prop: "rain:off", label: "Turn off the rain extras for me (fog, haze, mist, drips, wind, roof)", help: "The same switch as /realm:rain" },
+  { key: "off", type: "bool", scope: "player", base: "defaultOff", prop: "rain:off", invert: true, label: "Rain extras (fog, haze, mist, drips, wind, roof)", help: "The same switch as /realm:rain" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
@@ -47,6 +47,8 @@ const OPTIONS = [
  * @property {number} [max]
  * @property {number} [step]
  * @property {string[]} [choices] enum only
+ * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
+ * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
@@ -76,12 +78,12 @@ function fileDefault(key) {
 function problem(opt, v) {
   switch (opt.type) {
     case "bool":
-      return typeof v === "boolean" ? undefined : "must be on or off";
+      return typeof v === "boolean" ? undefined : "must be enabled or disabled";
     case "int":
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
-      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "…"} to ${opt.max ?? "…"}`;
+      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
       return typeof v === "string" && (opt.choices ?? []).includes(v) ? undefined : `must be one of ${(opt.choices ?? []).join(", ")}`;
@@ -273,6 +275,8 @@ function describe(player) {
       max: o.max,
       step: o.step,
       choices: o.choices,
+      names: o.names,
+      invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
     };

@@ -39,7 +39,7 @@ export const PACKS = [
     "summary": "Change the packs' settings in game: operators set them for everyone with §e/realm:config§r, and every player picks their own preferences with §e/realm:prefs§r.",
     "steps": [
       {
-        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as turning off durability warnings, phantoms or the rain extras for yourself, what sneak-tapping a chest does, and whether chat announces you going AFK. Change what you like and tap §lSave§r. Chat confirms each change, for example §eSaved: Phantom Opt-out, Turn off phantoms for me: on§r.",
+        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r. Chat confirms each change, for example §eSaved: Phantom Opt-out > Phantoms near me: Disabled§r.",
         "ops": false
       },
       {
@@ -47,7 +47,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r run §e/realm:config§r, or use any item renamed §eRealm Settings§r on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap §lSave§r. They apply right away for everyone, and chat confirms each one. A setting marked §eneeds a world restart§r can only be changed in the pack's §econfig.js§r.",
+        "text": "§lOperators:§r run §e/realm:config§r, or use any item renamed §eRealm Settings§r on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap §lSave§r. They apply right away for everyone, and chat confirms each one. A setting shown as text with §e(change in config.js, then restart the world)§r can only be changed there.",
         "ops": true
       },
       {
@@ -81,7 +81,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:welcome§r any time to see it again. Don't want the popup when you join? Turn off §lShow me the welcome popup when I join§r in §e/realm:prefs§r.",
+        "text": "Run §e/realm:welcome§r any time to see it again. Don't want the popup when you join? Disable §lWelcome popup when I join§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
@@ -134,7 +134,7 @@ export const PACKS = [
         "usage": "/realm:durability",
         "ops": false,
         "who": "Everyone",
-        "text": "Turns warnings off or on §lfor yourself§r. Remembered between sessions. Turning them off says §eRun /realm:durability again to turn them back on.§r"
+        "text": "Enables or disables warnings §lfor yourself§r. Remembered between sessions. Chat says §eLow-durability warnings: Disabled. Run /realm:durability again to enable them.§r"
       }
     ]
   },
@@ -149,11 +149,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lComing back:§r move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK. Rather chat didn't announce you? Turn off §lTell chat when I go AFK or come back§r in §e/realm:prefs§r.",
+        "text": "§lComing back:§r move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK. Rather chat didn't announce you? Disable §lAnnounce when I go AFK§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
-        "text": "§lSkipping the night:§r get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar, and, when only 1 to 3 counted players are still up, who they are (§e🛏 1/2 sleeping · awake: Sam§r). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.",
+        "text": "§lSkipping the night:§r get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar, and, when only 1 to 3 counted players are still up, who they are (§eZzz 1/2 sleeping - awake: Sam§r). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.",
         "ops": false
       }
     ],
@@ -207,7 +207,7 @@ export const PACKS = [
     "summary": "A news popup that operators edit in-game, a \"welcome back\" notice, and rotating chat tips.",
     "steps": [
       {
-        "text": "When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap §eGot it§r to close it. If you're online when it's posted, chat says §e📰 Realm news updated. Run /realm:news to read it.§r",
+        "text": "When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap §eGot it§r to close it. If you're online when it's posted, chat says §eRealm news updated. Run /realm:news to read it.§r",
         "ops": false
       },
       {
@@ -240,7 +240,7 @@ export const PACKS = [
         "usage": "/realm:news_tips",
         "ops": true,
         "who": "Ops",
-        "text": "Tips menu: §l+ Add a tip§r, §lSettings§r (on/off, interval 5–120 min in steps of 5), §lPost the next tip now§r, or tap a tip to edit or delete it"
+        "text": "Tips menu: §l+ Add a tip§r, §lSettings§r (on/off, interval 5-120 min in steps of 5), §lPost the next tip now§r, or tap a tip to edit or delete it"
       }
     ]
   },
@@ -274,7 +274,7 @@ export const PACKS = [
         "usage": "/realm:guard_add <name> [radius]",
         "ops": true,
         "who": "Ops",
-        "text": "Protects a sphere around you, §eradius§r 8–256 blocks (default 64, §edefaultRadius§r). Names use letters, digits, §e_§r and §e-§r, up to 24, and must be unique whatever their case (§ehome§r and §eHome§r are the same zone). Only matters in §ezones§r mode"
+        "text": "Protects a sphere around you, §eradius§r 8-256 blocks (default 64, §edefaultRadius§r). Names use letters, digits, §e_§r and §e-§r, up to 24, and must be unique whatever their case (§ehome§r and §eHome§r are the same zone). Only matters in §ezones§r mode"
       },
       {
         "usage": "/realm:guard_remove <name>",
@@ -288,10 +288,10 @@ export const PACKS = [
     "folder": "phantom_bp",
     "topic": "phantom",
     "name": "Phantom Opt-out",
-    "summary": "Lets each player turn phantoms off for themselves. Phantoms come from not sleeping, and with smart sleep the night can be skipped without everyone in bed, so some players never need to sleep.",
+    "summary": "Lets each player disable phantoms for themselves. Phantoms come from not sleeping, and with smart sleep the night can be skipped without everyone in bed, so some players never need to sleep.",
     "steps": [
       {
-        "text": "Run §e/realm:phantoms§r, or turn on §lTurn off phantoms for me§r in §e/realm:prefs§r. Chat says §ePhantoms off for you. Run it again to turn them back on.§r The choice is remembered.",
+        "text": "Run §e/realm:phantoms§r, or disable §lPhantoms near me§r in §e/realm:prefs§r. Chat says §ePhantoms near you: Disabled. Run /realm:phantoms again to enable them.§r The choice is remembered.",
         "ops": false
       },
       {
@@ -308,7 +308,7 @@ export const PACKS = [
         "usage": "/realm:phantoms",
         "ops": false,
         "who": "Everyone",
-        "text": "Turns phantoms off or on §lfor yourself§r. Remembered between sessions"
+        "text": "Enables or disables phantoms §lfor yourself§r. Remembered between sessions"
       }
     ]
   },
@@ -363,7 +363,7 @@ export const PACKS = [
         "usage": "/realm:farm_add <name> [radius]",
         "ops": true,
         "who": "Ops (everyone if §eeveryoneCanAdd§r)",
-        "text": "Adds a ticking area centered on you, §eradius§r 1–4 chunks (default 2, §edefaultRadius§r). Names use letters, digits, §e_§r and §e-§r, up to 24, and must be unique"
+        "text": "Adds a ticking area centered on you, §eradius§r 1-4 chunks (default 2, §edefaultRadius§r). Names use letters, digits, §e_§r and §e-§r, up to 24, and must be unique"
       },
       {
         "usage": "/realm:farm_remove <name>",
@@ -380,7 +380,7 @@ export const PACKS = [
     "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory.",
     "steps": [
       {
-        "text": "§lOpen the menu:§r sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a §lQuick Stack & Sort§r menu does, with three buttons:\n  • §lSort this chest§r (or barrel, shulker box…): its stacks merge and sort, and the bar above the hotbar says §eSorted 31 stacks§r.\n  • §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  • §lSort my inventory:§r the same as §e/realm:sort§r, below.",
+        "text": "§lOpen the menu:§r sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a §lQuick Stack & Sort§r menu does, with three buttons:\n  - §lSort this chest§r (or barrel, shulker box...): its stacks merge and sort, and the bar above the hotbar says §eSorted 31 stacks§r.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
         "ops": false
       },
       {
@@ -411,7 +411,7 @@ export const PACKS = [
         "usage": "/realm:sort",
         "ops": false,
         "who": "Everyone",
-        "text": "Sorts your inventory, slots 9–35. The hotbar is untouched, unless you turned that on in §e/realm:prefs§r (default off, §esortHotbar§r). Same as the menu's §lSort my inventory§r"
+        "text": "Sorts your inventory, slots 9-35. The hotbar is untouched, unless you turned that on in §e/realm:prefs§r (default off, §esortHotbar§r). Same as the menu's §lSort my inventory§r"
       },
       {
         "usage": "/realm:stash_help",
@@ -432,7 +432,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:find iron§r, or just §e/realm:find§r while holding the item. A menu lists the containers that have it, nearest first, for example §eChest · 23 Iron Ingot§r with §e35 blocks NE · seen 2h ago§r under it.",
+        "text": "Run §e/realm:find iron§r, or just §e/realm:find§r while holding the item. A menu lists the containers that have it, nearest first, for example §eChest - 23 Iron Ingot§r with §e35 blocks NE - seen 2h ago§r under it.",
         "ops": false
       },
       {
@@ -496,11 +496,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:rain§r, or use the same switch in §e/realm:prefs§r, to turn these extras off for yourself, on a slower device for example. Chat says §eRain extras off for you (storm fog, haze, mist, drips, wind and roof sounds). Run it again to turn them back on.§r The choice is remembered.",
+        "text": "Run §e/realm:rain§r, or use the same switch in §e/realm:prefs§r, to disable these extras for yourself, on a slower device for example. Chat says §eRain extras (storm fog, haze, mist, drips, wind, roof): Disabled. Run /realm:rain again to enable them.§r The choice is remembered.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r add Rain Extras under §lBehavior Packs§r, next to the Realm Bundle (it's never part of the bundle), and add Realistic Rain under §lResource Packs§r at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. §e/realm:config§r → Rain Extras turns each extra on or off and sets the wind and roof volumes.",
+        "text": "§lOperators:§r add Rain Extras under §lBehavior Packs§r, next to the Realm Bundle (it's never part of the bundle), and add Realistic Rain under §lResource Packs§r at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. §e/realm:config§r -> Rain Extras enables or disables each extra and sets the wind and roof volumes.",
         "ops": true
       }
     ],
@@ -509,7 +509,7 @@ export const PACKS = [
         "usage": "/realm:rain",
         "ops": false,
         "who": "Everyone",
-        "text": "Turns storm fog, haze, ground mist, drips, wind and roof sounds off or on §lfor yourself§r (on by default, §edefaultOff§r). Remembered between sessions"
+        "text": "Enables or disables storm fog, haze, ground mist, drips, wind and roof sounds §lfor yourself§r (enabled by default, §edefaultOff§r). Remembered between sessions"
       }
     ]
   }

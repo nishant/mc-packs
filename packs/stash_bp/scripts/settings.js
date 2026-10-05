@@ -10,13 +10,13 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "sneakTap", type: "enum", scope: "world", choices: ["menu", "sort", "off"], label: "Sneak-tapping a container", help: "menu: open the menu. sort: sort it right away. off: it opens as usual" },
-  { key: "sortHotbar", type: "bool", scope: "world", label: "Sorting your inventory includes the hotbar" },
-  { key: "stashGear", type: "bool", scope: "world", label: "/realm:stash also moves tools, weapons and armor" },
-  { key: "stashNamedItems", type: "bool", scope: "world", label: "/realm:stash also moves named items" },
-  { key: "cooldownTicks", type: "int", scope: "world", label: "Ticks between sorts or stashes per player", min: 0, max: 100, step: 5 },
-  { key: "sneakTap", type: "enum", scope: "player", base: "sneakTap", choices: ["menu", "sort", "off"], label: "When I sneak-tap a container", help: "menu: open the menu. sort: sort it right away. off: it opens as usual" },
-  { key: "sortHotbar", type: "bool", scope: "player", base: "sortHotbar", label: "Sorting my inventory includes my hotbar" },
+  { key: "sneakTap", type: "enum", scope: "world", choices: ["menu", "sort", "off"], names: ["Open the menu", "Sort it right away", "Nothing (opens as usual)"], label: "Sneak-tapping a container" },
+  { key: "sortHotbar", type: "bool", scope: "world", label: "Inventory sort includes the hotbar" },
+  { key: "stashGear", type: "bool", scope: "world", label: "Quick stack moves tools, weapons and armor" },
+  { key: "stashNamedItems", type: "bool", scope: "world", label: "Quick stack moves named items" },
+  { key: "cooldownTicks", type: "int", scope: "world", label: "Cooldown between sorts (ticks)", min: 0, max: 100, step: 5 },
+  { key: "sneakTap", type: "enum", scope: "player", base: "sneakTap", choices: ["menu", "sort", "off"], names: ["Open the menu", "Sort it right away", "Nothing (opens as usual)"], label: "When I sneak-tap a container" },
+  { key: "sortHotbar", type: "bool", scope: "player", base: "sortHotbar", label: "My inventory sort includes my hotbar" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
@@ -43,6 +43,8 @@ const OPTIONS = [
  * @property {number} [max]
  * @property {number} [step]
  * @property {string[]} [choices] enum only
+ * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
+ * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
@@ -72,12 +74,12 @@ function fileDefault(key) {
 function problem(opt, v) {
   switch (opt.type) {
     case "bool":
-      return typeof v === "boolean" ? undefined : "must be on or off";
+      return typeof v === "boolean" ? undefined : "must be enabled or disabled";
     case "int":
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
-      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "…"} to ${opt.max ?? "…"}`;
+      if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
       return typeof v === "string" && (opt.choices ?? []).includes(v) ? undefined : `must be one of ${(opt.choices ?? []).join(", ")}`;
@@ -269,6 +271,8 @@ function describe(player) {
       max: o.max,
       step: o.step,
       choices: o.choices,
+      names: o.names,
+      invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
     };

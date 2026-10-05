@@ -73,8 +73,8 @@ const PARAMS_NOTE = "§7In a usage, §e<name>§7 is something you must type and 
 function buttonLine(pack, ops) {
   const names = visible(pack, ops).commands.map((c) => c.usage.split(" ")[0]);
   if (!names.length) return "No commands: it just works";
-  const line = names.join(" · ");
-  return line.length > 44 ? `${names.slice(0, 2).join(" · ")} · +${names.length - 2} more` : line;
+  const line = names.join(" | ");
+  return line.length > 44 ? `${names.slice(0, 2).join(" | ")} | +${names.length - 2} more` : line;
 }
 
 /** @param {Player} player @param {Pack[]} packs @returns {Promise<"back" | undefined>} */
@@ -159,7 +159,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:help",
-      description: "Help for every realm feature and command, with usage. Add a feature (stash, find, stats…) or all to jump straight there",
+      description: "Help for every realm feature and command. Add a feature name (stash, find, stats...) or all to jump there",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
       optionalParameters: [{ name: "realm:help_topic", type: CustomCommandParamType.Enum }],

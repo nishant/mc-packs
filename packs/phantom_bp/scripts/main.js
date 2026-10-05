@@ -29,7 +29,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:phantoms",
-      description: "Turn phantoms off or on for yourself",
+      description: "Enable or disable phantoms for yourself",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
@@ -43,8 +43,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       return {
         status: CustomCommandStatus.Success,
         message: nowOff
-          ? "Phantoms off for you. Run it again to turn them back on."
-          : "Phantoms on for you. Run it again to turn them off.",
+          ? "Phantoms near you: Disabled. Run /realm:phantoms again to enable them."
+          : "Phantoms near you: Enabled. Run /realm:phantoms again to disable them.",
       };
     }
   );

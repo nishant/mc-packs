@@ -161,7 +161,7 @@ async function openEditor(player) {
   const form = new ModalFormData()
     .title("Edit welcome message")
     .textField("Title", DEFAULTS.title, { defaultValue: s.title })
-    .textField("Body  (\\n = new line, {player}, {online}, § colours)", "Message…", {
+    .textField("Body  (\\n = new line, {player}, {online}, § colors)", "Message...", {
       defaultValue: escapeNewlines(s.body),
     })
     .textField("Button text", DEFAULTS.button, { defaultValue: s.button })

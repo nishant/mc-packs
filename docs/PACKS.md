@@ -162,17 +162,18 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 
 ### How to use
 
-1. Run `/realm:prefs` to open **My preferences**: one form with your own choices from every installed pack, such as turning off durability warnings, phantoms or the rain extras for yourself, what sneak-tapping a chest does, and whether chat announces you going AFK. Change what you like and tap **Save**. Chat confirms each change, for example `Saved: Phantom Opt-out, Turn off phantoms for me: on`.
+1. Run `/realm:prefs` to open **My preferences**: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means **Enabled**. Change what you like and tap **Save**. Chat confirms each change, for example `Saved: Phantom Opt-out > Phantoms near me: Disabled`.
 2. Your choices are remembered. `/realm:durability`, `/realm:phantoms` and `/realm:rain` flip the same switches as the form.
-3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone, and chat confirms each one. A setting marked `needs a world restart` can only be changed in the pack's `config.js`.
+3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone, and chat confirms each one. A setting shown as text with `(change in config.js, then restart the world)` can only be changed there.
 4. **Operators:** **Reset a pack to defaults**, at the bottom of the menu, puts one pack's settings back to its `config.js` values after asking. Players' own preferences are kept.
 
 ### What players see
 
 - Only installed packs are listed: each pack answers when the menu asks, as with `/realm:help`. Rain Extras is listed too when it runs next to the Realm Bundle.
-- Each setting has a `!` icon: hover over it or tap it for what the setting does and its default.
+- Each setting has a `!` icon: hover over it or tap it for what the setting does, its default and, for a slider, its range.
+- Switches read the same everywhere: the setting is named for what it does, the switch on means **Enabled**, and chat says `Enabled` or `Disabled`. Lists show plain choices, such as `Open the menu` or `Only in protected zones`.
 - A preference set to what the realm has follows the realm: if an operator changes that setting later, you get the new value. A preference set to something else stays yours.
-- If a pack doesn't confirm a change within half a second, chat says `Not saved: … the pack didn't answer. Try again.`; a value the pack refuses says why.
+- If a pack doesn't confirm a change within half a second, chat says `Not saved: <pack> > <setting>: the pack didn't answer. Try again.`; a value the pack refuses says why.
 - Players who aren't operators and use an item named `Realm Settings` are pointed to `/realm:prefs`.
 
 ### Commands
@@ -187,19 +188,19 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 | Pack | `/realm:config` (for everyone) | `/realm:prefs` (each player) |
 |---|---|---|
 | Realm Help | `showOpsToEveryone` | |
-| Welcome Message | `showOnce`, `chat`, `screenTitle` (the same switches as `/realm:welcome_edit`) | Show me the welcome popup when I join |
-| Low Durability Warning | `warnPercent`, `criticalPercent`, `maxUsesForWarning`, `chatOnCritical`; `checkIntervalTicks` is shown, restart only | Turn off low-durability warnings for me (`/realm:durability`) |
-| AFK + Smart Sleep | `afkMinutes`, `announce`, `sleep.enabled`, `sleep.percent`, `sleep.countOtherDimensions`, `sleep.requiredTicks` | Tell chat when I go AFK or come back |
+| Welcome Message | `showOnce`, `chat`, `screenTitle` (the same switches as `/realm:welcome_edit`) | Welcome popup when I join |
+| Low Durability Warning | `warnPercent`, `criticalPercent`, `maxUsesForWarning`, `chatOnCritical`; `checkIntervalTicks` is shown, restart only | Low-durability warnings (`/realm:durability`) |
+| AFK + Smart Sleep | `afkMinutes`, `announce`, `sleep.enabled`, `sleep.percent`, `sleep.countOtherDimensions`, `sleep.requiredTicks` | Announce when I go AFK |
 | Stats & Leaderboards | `sidebarCycleSeconds`, `leaderboardSize` | |
 | Realm News & Tips | `tipsEnabled` and `tipIntervalMinutes` (the same values as `/realm:news_tips` → **Settings**), `awayNoticeHours` | |
 | Creeper Guard | `mode`, `defaultRadius` | |
-| Phantom Opt-out | `defaultOff` | Turn off phantoms for me (`/realm:phantoms`) |
+| Phantom Opt-out | `defaultOff` (shown as **Phantoms for new players**) | Phantoms near me (`/realm:phantoms`) |
 | Right-click Harvest | `requireHoe`, `damageHoe`, `replantCostsSeed` | |
 | Farm Loader | `defaultRadius`, `maxAreas`; `everyoneCanAdd` is shown, restart only | |
-| Quick Stack & Sort | `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `cooldownTicks` | When I sneak-tap a container (`menu`, `sort` or `off`); sorting my inventory includes my hotbar |
+| Quick Stack & Sort | `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `cooldownTicks` | When I sneak-tap a container (`Open the menu`, `Sort it right away` or `Nothing (opens as usual)`); My inventory sort includes my hotbar |
 | Chest Finder | `liveScanRadius`, `maxResults`, `highlightSeconds` | |
 | Chairs | `maxReach`; `cleanupTicks` is shown, restart only | |
-| Rain Extras | `defaultOff`, `stormFog.enabled`, `haze.enabled`, `mist.enabled`, `drips.enabled`, `wind.enabled`, `wind.inThunder`, `wind.inRain`, `roof.enabled`, `roof.volume` | Turn off the rain extras for me (`/realm:rain`) |
+| Rain Extras | `defaultOff` (shown as **Rain extras for new players**), `stormFog.enabled`, `haze.enabled`, `mist.enabled`, `drips.enabled`, `wind.enabled`, `wind.inThunder`, `wind.inRain`, `roof.enabled`, `roof.volume` | Rain extras (fog, haze, mist, drips, wind, roof) (`/realm:rain`) |
 
 Everything else (lists such as crops, `keepItems` and container types, texts such as name tag prefixes, tick intervals, and command permissions) stays in `config.js`.
 
@@ -225,6 +226,8 @@ None in this pack. Each pack saves its own settings, so they stay with that pack
 
 - Every other behavior pack has a `scripts/settings.js` that lists what can change in game. The pack reads those options through it (`get(key)`: the world's saved value over `config.js`; `getFor(player, key)`: the player's own value over the world's), so a change applies on the next use, with no restart.
 - The packs never import each other. This pack sends the script event `realm:cfg_ping` (`{id, player}`), and each pack answers `realm:cfg_schema` with its options and their current values (`{id, pack, title, part, parts, options}`), split into parts under the 2048-character limit of a script event message. Saving sends `realm:cfg_set` (`{id, pack, key, value, player?}`) and resetting `realm:cfg_reset` (`{id, pack}`). The pack checks the value (type, range, choices), ignores keys it doesn't have, saves it and answers `realm:cfg_ack` (`{id, pack, key, ok, value, error?}`), which is what chat confirms.
+- An option can carry `invert` (a switch stored as `off` but shown as **Enabled**, so no label is a double negative) and `names` (readable words for a list's choices). Labels name what the setting does, never "Turn off ...".
+- In-game text is plain ASCII: Bedrock draws a whole line in a smaller fallback font when it holds a character like `…`, `–`, `•` or an emoji, which is why `/realm:help` once looked different in `/help`. `npm run check` (`tools/check-ascii.mjs`) fails on any other character in pack code, and `tools/help-catalog.mjs` converts the docs' typography when it builds the help.
 - The part of `settings.js` that does this is the same in every pack: it's copied from `tools/settings-shared.js` by `node tools/sync-settings.mjs`, and `npm run check` fails if a copy is missing or out of date.
 - Operators with cheats on could send the same script events with `/scriptevent`; that does nothing an operator can't do in the menu.
 
@@ -237,7 +240,7 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 ### How to use
 
 1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
-2. Run `/realm:welcome` any time to see it again. Don't want the popup when you join? Turn off **Show me the welcome popup when I join** in `/realm:prefs`.
+2. Run `/realm:welcome` any time to see it again. Don't want the popup when you join? Disable **Welcome popup when I join** in `/realm:prefs`.
 3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
 
 ### What players see
@@ -265,7 +268,7 @@ Every save from `/realm:welcome_edit` counts as a new revision. With **show once
 
 ### Configuration (`scripts/config.js` → `DEFAULTS`)
 
-These are defaults. Once an op saves with `/realm:welcome_edit`, the saved values win until `/realm:welcome_reset`. The switches `showOnce`, `chat` and `screenTitle` are also in `/realm:config`, saved in the same place, so both menus always show the same values. Each player can turn the popup on join off for themselves in `/realm:prefs` (`/realm:welcome` still shows it).
+These are defaults. Once an op saves with `/realm:welcome_edit`, the saved values win until `/realm:welcome_reset`. The switches `showOnce`, `chat` and `screenTitle` are also in `/realm:config`, saved in the same place, so both menus always show the same values. Each player can disable the popup on join for themselves in `/realm:prefs` (`/realm:welcome` still shows it).
 
 | Option | Default | In-game? | Description |
 |---|---|---|---|
@@ -302,8 +305,8 @@ Warns players before a tool, weapon or armor piece breaks.
 
 | Level | When | Shows |
 |---|---|---|
-| **Warning** | ≤ `warnPercent` (10%) left | Yellow message above the hotbar: `⚠ Diamond Pickaxe is low: 141/1561 (9.0%)` + soft "pling" |
-| **Critical** | ≤ `criticalPercent` (3%) left | Red message `⚠ … is about to break!` above the hotbar **and in chat** (`chatOnCritical`) + anvil sound |
+| **Warning** | ≤ `warnPercent` (10%) left | Yellow message above the hotbar: `! Diamond Pickaxe is low: 141/1561 (9.0%)` + soft "pling" |
+| **Critical** | ≤ `criticalPercent` (3%) left | Red message `! Diamond Pickaxe is about to break!` above the hotbar **and in chat** (`chatOnCritical`) + anvil sound |
 
 - Checks the **main hand, offhand, helmet, chestplate (including elytra), leggings and boots** every `checkIntervalTicks`.
 - Warns **once per level**. It only warns again when the item drops to the next level.
@@ -316,7 +319,7 @@ Warns players before a tool, weapon or armor piece breaks.
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:durability` | Everyone | Turns warnings off or on **for yourself**. Remembered between sessions. Turning them off says `Run /realm:durability again to turn them back on.` |
+| `/realm:durability` | Everyone | Enables or disables warnings **for yourself**. Remembered between sessions. Chat says `Low-durability warnings: Disabled. Run /realm:durability again to enable them.` |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -346,8 +349,8 @@ Marks idle players as AFK, and skips the night without waiting for them.
 ### How to use
 
 1. **Going AFK:** just stop playing. After 5 minutes your name shows `[AFK]` and chat says so. To go AFK right away (so the night can be skipped without you), run `/realm:afk`.
-2. **Coming back:** move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK. Rather chat didn't announce you? Turn off **Tell chat when I go AFK or come back** in `/realm:prefs`.
-3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar, and, when only 1 to 3 counted players are still up, who they are (`🛏 1/2 sleeping · awake: Sam`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
+2. **Coming back:** move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK. Rather chat didn't announce you? Disable **Announce when I go AFK** in `/realm:prefs`.
+3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar, and, when only 1 to 3 counted players are still up, who they are (`Zzz 1/2 sleeping - awake: Sam`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
 
 ### AFK detection
 
@@ -375,14 +378,14 @@ Checked every second while at least one player is in bed:
 
 1. **Counted players** = everyone asleep, plus every non-AFK player in the Overworld (also those in the Nether/End if `sleep.countOtherDimensions` is on).
 2. **Needed** = `ceil(counted × sleep.percent / 100)`, at least 1.
-3. While anyone is in bed, Overworld players see `🛏 1/2 sleeping · awake: Sam (1 AFK ignored)` above the hotbar. The names show when 1 to 3 counted players are awake.
+3. While anyone is in bed, Overworld players see `Zzz 1/2 sleeping - awake: Sam (1 AFK ignored)` above the hotbar. The names show when 1 to 3 counted players are awake.
 
 Lying in bed counts as activity, so a player who waits in bed for a long night isn't marked AFK when they get up.
 4. **If vanilla's own rule already covers it**, i.e. enough players are asleep to meet the `playerssleepingpercentage` gamerule counting *everyone*, the pack does nothing and lets vanilla skip the night. That's always the case when nobody is AFK and everyone is in bed. Doing both would race, and the second skip would land a full day later.
 5. Otherwise, once enough players have been asleep for `sleep.requiredTicks` (about 8 s, and never less than about 7 s, so vanilla's ~5 s skip always comes first):
    - **At night:** moves to the **next morning**. Absolute time moves forward, so the day counter (`showdaysplayed`) stays correct. The weather clears too.
    - **During a daytime thunderstorm:** only clears the weather. The pack only knows about storms that started while it was running, so a storm already going when the realm started isn't cleared.
-   - Chat shows `☀ Good morning! (1 AFK player skipped)`.
+   - Chat shows `Good morning! (1 AFK player skipped)`.
 
 This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanilla handles everything it can, and this pack only covers what vanilla wouldn't, such as nights blocked by AFK players or by players in other dimensions.
 
@@ -499,16 +502,16 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 
 ### How to use
 
-1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `📰 Realm news updated. Run /realm:news to read it.`
+1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `Realm news updated. Run /realm:news to read it.`
 2. Missed it, or want to read it again? Run `/realm:news`.
 3. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
 4. **Operators:** `/realm:news_edit` writes the news. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
 
 ### News popup
 
-- When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join, and everyone online gets `📰 Realm news updated. Run /realm:news to read it.` in chat. Reading it with `/realm:news` counts, so a player who already read it isn't shown the popup again.
+- When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join, and everyone online gets `Realm news updated. Run /realm:news to read it.` in chat. Reading it with `/realm:news` counts, so a player who already read it isn't shown the popup again.
 - The popup is timed after the welcome popup (`delayTicks` = 5 s). If another popup is still open, it waits up to about 90 s.
-- If it still can't show, chat says `📰 There's new Realm news! Run /realm:news to read it.` (on the same line after the "welcome back" notice, if there is one), and the player sees the popup on their next join instead.
+- If it still can't show, chat says `There's new Realm news! Run /realm:news to read it.` (on the same line after the "welcome back" notice, if there is one), and the player sees the popup on their next join instead.
 - Saving **unchecked** is a quiet edit (e.g. a typo fix). Players who already saw the news don't see it again.
 - An empty body means no news.
 
@@ -609,11 +612,11 @@ The pack listens to `world.beforeEvents.explosion`. When the exploding entity's 
 
 ## Phantom Opt-out — `phantom_bp`
 
-Lets each player turn phantoms off for themselves. Phantoms come from not sleeping, and with smart sleep the night can be skipped without everyone in bed, so some players never need to sleep.
+Lets each player disable phantoms for themselves. Phantoms come from not sleeping, and with smart sleep the night can be skipped without everyone in bed, so some players never need to sleep.
 
 ### How to use
 
-1. Run `/realm:phantoms`, or turn on **Turn off phantoms for me** in `/realm:prefs`. Chat says `Phantoms off for you. Run it again to turn them back on.` The choice is remembered.
+1. Run `/realm:phantoms`, or disable **Phantoms near me** in `/realm:prefs`. Chat says `Phantoms near you: Disabled. Run /realm:phantoms again to enable them.` The choice is remembered.
 2. Phantoms that spawn for you now vanish the moment they appear, with no drops. Everyone else's phantoms are untouched.
 3. Run `/realm:phantoms` again to get them back (for phantom membranes, say).
 
@@ -628,7 +631,7 @@ Lets each player turn phantoms off for themselves. Phantoms come from not sleepi
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:phantoms` | Everyone | Turns phantoms off or on **for yourself**. Remembered between sessions |
+| `/realm:phantoms` | Everyone | Enables or disables phantoms **for yourself**. Remembered between sessions |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -991,8 +994,8 @@ Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leave
 1. When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops. Outdoors a soft breeze blows; indoors you hear the rain drumming on the roof.
 2. In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, strong wind gusts howl (muffled when you're inside), and low mist drifts along the ground with the wind when you're outdoors. It all clears the same way when the storm passes.
 3. On **Vibrant Visuals**, rain also brings a darker blue-gray haze that settles in the valleys, since Vibrant Visuals ignores fog colors. Fancy keeps Realistic Rain's fog.
-4. Run `/realm:rain`, or use the same switch in `/realm:prefs`, to turn these extras off for yourself, on a slower device for example. Chat says `Rain extras off for you (storm fog, haze, mist, drips, wind and roof sounds). Run it again to turn them back on.` The choice is remembered.
-5. **Operators:** add Rain Extras under **Behavior Packs**, next to the Realm Bundle (it's never part of the bundle), and add [Realistic Rain](#realistic-rain--rain_rp) under **Resource Packs** at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. `/realm:config` → Rain Extras turns each extra on or off and sets the wind and roof volumes.
+4. Run `/realm:rain`, or use the same switch in `/realm:prefs`, to disable these extras for yourself, on a slower device for example. Chat says `Rain extras (storm fog, haze, mist, drips, wind, roof): Disabled. Run /realm:rain again to enable them.` The choice is remembered.
+5. **Operators:** add Rain Extras under **Behavior Packs**, next to the Realm Bundle (it's never part of the bundle), and add [Realistic Rain](#realistic-rain--rain_rp) under **Resource Packs** at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. `/realm:config` → Rain Extras enables or disables each extra and sets the wind and roof volumes.
 
 ### What players see
 
@@ -1009,7 +1012,7 @@ Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leave
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:rain` | Everyone | Turns storm fog, haze, ground mist, drips, wind and roof sounds off or on **for yourself** (on by default, `defaultOff`). Remembered between sessions |
+| `/realm:rain` | Everyone | Enables or disables storm fog, haze, ground mist, drips, wind and roof sounds **for yourself** (enabled by default, `defaultOff`). Remembered between sessions |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -1105,7 +1108,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Welcome → News | Both popups show on join, welcome first (`delayTicks` 40 vs 100). News waits until the welcome popup is closed |
 | News tips → others | The default tips mention `/realm:stats`, `/realm:afk`, `/realm:help`, the stash sneak-tap and `/realm:find`. Edit them with `/realm:news_tips` if you don't use those packs |
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
-| AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
+| AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can disable them for themselves with `/realm:phantoms` |
 | Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
 | Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items, and a copper golem's copper chest if it already holds them. Sorting a sorter's chest from the sneak-tap menu is harmless |
 | Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
@@ -1132,7 +1135,7 @@ Only Rain Extras needs another pack (Realistic Rain). Any other combination work
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults: `/realm:config` → **Reset a pack to defaults** clears that pack's settings, `/realm:welcome_reset` clears welcome edits; news, tips and tip settings saved in game always win over `config.js`. A player's own choice in `/realm:prefs` wins over both for that player |
 | A pack is missing from `/realm:config` or `/realm:prefs` | It isn't installed or active, or it has nothing to change there (`/realm:prefs` only lists packs with preferences of their own). If a pack answers too slowly on a busy realm, raise Realm Settings' `answerTicks` |
 | Settings reset after switching to or from a bundle | Expected: Bedrock keeps each pack's saved data separately, so in-game settings (welcome text, news, tips, `/realm:config` settings, per-player toggles and preferences, first-joined dates, Creeper Guard zones, the Farm Loader list, what Chest Finder remembers) start fresh. Scoreboard stats are kept |
-| Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows how many are asleep (x) and how many are needed (y). Players in other dimensions only count if `sleep.countOtherDimensions` is on |
+| Night doesn't skip | Is `sleep.enabled` on? The `Zzz x/y sleeping` status shows how many are asleep (x) and how many are needed (y). Players in other dimensions only count if `sleep.countOtherDimensions` is on |
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
 | Rain looks and sounds like vanilla | Is Realistic Rain active under **Resource Packs**, at the top of the list? A resource pack above it that changes rain wins. Players must accept the resource pack download when they join |
 | No storm fog, haze, mist, drips, wind or roof sound | Is Rain Extras active under **Behavior Packs**, and Realistic Rain under **Resource Packs**? Run `/realm:rain` in case they're off for you, and check `/realm:config` → Rain Extras. If the pack was added during rain, they start at the next weather change. Nothing shows in deserts, badlands or snowy places, or deep underground. The haze only shows on Vibrant Visuals |

@@ -135,7 +135,7 @@ async function onJoin(player, lastSeen) {
   const shown = await showNews(player, away ? `§7${away}§r\n\n` : "");
   if (!player.isValid) return;
   if (shown) player.setDynamicProperty(PROP_SEEN, revision);
-  else player.sendMessage(`${away ? `§7${away}§r ` : ""}§b📰 There's new Realm news!§r Run §b/realm:news§r to read it.`);
+  else player.sendMessage(`${away ? `§7${away}§r ` : ""}§bThere's new Realm news!§r Run §b/realm:news§r to read it.`);
 }
 
 // Keep lastSeen fresh while online (leave events can't write player data).
@@ -184,7 +184,7 @@ async function editNews(player) {
     new ModalFormData()
       .title("Edit Realm news")
       .textField("Title", DEFAULTS.news.title, { defaultValue: news.title })
-      .textField("Body  (\\n = new line, § colours; empty = no news)", "What's new…", {
+      .textField("Body  (\\n = new line, § colors; empty = no news)", "What's new...", {
         defaultValue: escapeNewlines(news.body),
       })
       .toggle("Pop up for everyone on their next join", { defaultValue: true })
@@ -205,7 +205,7 @@ async function editNews(player) {
   if (announce === true) {
     world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
     // Online players would otherwise only hear about it on their next join.
-    if (hasBody) world.sendMessage("§b📰 Realm news updated.§r Run §b/realm:news§r to read it.");
+    if (hasBody) world.sendMessage("§bRealm news updated.§r Run §b/realm:news§r to read it.");
   }
 
   player.sendMessage(
@@ -227,7 +227,7 @@ async function tipsMenu(player) {
     .button("§2+ Add a tip")
     .button("Settings")
     .button("Post the next tip now");
-  for (const tip of tips) form.button(tip.length > 40 ? `${tip.slice(0, 38).replace(/§$/, "")}…` : tip);
+  for (const tip of tips) form.button(tip.length > 40 ? `${tip.slice(0, 38).replace(/§$/, "")}...` : tip);
 
   const res = await show(player, form);
   if (!res) {
@@ -247,7 +247,7 @@ async function editTip(player, index) {
   const tips = getTips();
   const form = new ModalFormData()
     .title(index < 0 ? "New tip" : "Edit tip")
-    .textField("Tip", "Did you know…", { defaultValue: index < 0 ? "" : tips[index] });
+    .textField("Tip", "Did you know...", { defaultValue: index < 0 ? "" : tips[index] });
   if (index >= 0) form.toggle("§cDelete this tip", { defaultValue: false });
   form.submitButton("Save");
 
