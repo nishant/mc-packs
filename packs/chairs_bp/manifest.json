@@ -1,0 +1,25 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Chairs",
+    "description": "Sit on stairs and bottom slabs: tap one with an empty hand. /realm:sit",
+    "uuid": "3b7ce3cd-fe2b-406a-af26-d20922acfba7",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "d58add0e-9dfa-4379-9e78-e121d315750b",
+      "version": [1, 0, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "cfd09fef-3fb7-4d5a-adf5-8ffcc3715fbf",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}

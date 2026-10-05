@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Phantom Opt-out",
+    "description": "Turn phantoms off for yourself, for players who never need to sleep. /realm:phantoms",
+    "uuid": "db2ac1b5-1b91-413b-b8f8-df6ffaf592d0",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "203d3af6-fd26-4b2d-aca8-9bea49a52147",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}

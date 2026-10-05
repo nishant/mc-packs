@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Quick Stack & Sort",
+    "description": "Sneak-tap a chest to sort it; stash your inventory into nearby chests that hold the same items. /realm:stash /realm:sort",
+    "uuid": "c4cceedd-39c2-4b29-8276-2a1cc1afe7b4",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "c685332d-8a4e-461b-8c77-fb858e660dd8",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}

@@ -21,6 +21,13 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [AFK + Smart Sleep — `afk_bp`](#afk--smart-sleep--afk_bp)
 - [Stats & Leaderboards — `stats_bp`](#stats--leaderboards--stats_bp)
 - [Realm News & Tips — `news_bp`](#realm-news--tips--news_bp)
+- [Creeper Guard — `guard_bp`](#creeper-guard--guard_bp)
+- [Phantom Opt-out — `phantom_bp`](#phantom-opt-out--phantom_bp)
+- [Right-click Harvest — `harvest_bp`](#right-click-harvest--harvest_bp)
+- [Farm Loader — `farm_bp`](#farm-loader--farm_bp)
+- [Quick Stack & Sort — `stash_bp`](#quick-stack--sort--stash_bp)
+- [Chest Finder — `find_bp`](#chest-finder--find_bp)
+- [Chairs — `chairs_bp`](#chairs--chairs_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -44,13 +51,15 @@ What each pack in this repo does, how to use it, and how to configure it.
 ### Installing from mc.nish.software
 <!-- on the site -->
 
-The realm runs everything as one pack, **Realm Bundle**. To install or update it:
+The realm runs everything as one pack, **Realm Bundle**, and that is the download to pick. To install or update it:
 
-1. **Download** the latest `.mcpack` from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open it. Minecraft starts and imports it as "Realm Bundle".
+1. **Download** the latest Realm Bundle `.mcpack` from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open it. Minecraft starts and imports it as "Realm Bundle".
 2. **Open the realm's settings** (the pencil next to the realm), go to **Behavior Packs**, find Realm Bundle under **Available** and activate it. Minecraft uploads it to the realm.
 3. **Join** once the realm restarts. The welcome popup and the `/realm:` commands mean it's running.
 
 **Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
+
+**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. Switching between them starts the features' in-game settings over (welcome and news text, tips, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
 ### Installing on a Realm
 
@@ -407,6 +416,330 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 
 ---
 
+## Creeper Guard — `guard_bp`
+
+Creepers still hurt, but their explosions break no blocks, so nobody comes home to a crater. TNT is left alone.
+
+### How to use
+
+1. Nothing to set up: a creeper that explodes still damages and knocks back players and mobs, but the ground and your builds stay intact.
+2. Run `/realm:guard` to see the mode, which blasts are covered and any protected zones.
+3. **Operators:** to keep creeper craters in the wild and protect only bases, set `mode` to `zones` in `config.js`, then stand in a base and run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). `/realm:guard_remove <name>` removes a zone.
+
+### What players see
+
+- **`everywhere` mode (default):** every blast from a listed source (`sources`, creepers by default) hurts and knocks back as usual but breaks no blocks.
+- **`zones` mode:** blocks inside a zone are kept; the rest of the blast breaks blocks as in vanilla. A creeper at the edge of a zone breaks only the part of its crater that lies outside.
+- Charged creepers are covered too. TNT, beds in the Nether or End, respawn anchors and end crystals are never touched, because they aren't listed (beds and anchors have no source entity at all).
+- Unlike the `mobGriefing` gamerule, this changes nothing else: villagers still farm, sheep still eat grass (the Wool Farm guide needs that) and endermen still pick up blocks.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:guard` | Everyone | Shows the mode, the covered blast sources and the zones |
+| `/realm:guard_add <name> [radius]` | Ops | Protects a sphere around you, `radius` 8–256 blocks (default `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique. Only matters in `zones` mode |
+| `/realm:guard_remove <name>` | Ops | Removes a zone |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `mode` | `everywhere` | `everywhere`: listed blasts never break blocks. `zones`: only inside the zones from `/realm:guard_add` |
+| `sources` | `["minecraft:creeper"]` | Exploding entity types to neutralize. Add `minecraft:fireball` (ghast fireballs) or `minecraft:wither_skull` if wanted |
+| `defaultRadius` | `64` | Zone radius in blocks when `/realm:guard_add` is given none |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `guard:zones` | World | JSON list of zones `{ name, dim, x, y, z, radius }`, up to 100 |
+
+### How it works
+
+The pack listens to `world.beforeEvents.explosion`. When the exploding entity's type is in `sources`, it empties the list of blocks the blast will break (`everywhere`), or drops the blocks inside a zone from it (`zones`). It never cancels the explosion, which would also remove the damage and drops.
+
+---
+
+## Phantom Opt-out — `phantom_bp`
+
+Lets each player turn phantoms off for themselves. Phantoms come from not sleeping, and with smart sleep the night can be skipped without everyone in bed, so some players never need to sleep.
+
+### How to use
+
+1. Run `/realm:phantoms`. Chat says `Phantoms off for you. Run it again to turn them back on.` The choice is remembered.
+2. Phantoms that spawn for you now vanish the moment they appear, with no drops. Everyone else's phantoms are untouched.
+3. Run `/realm:phantoms` again to get them back (for phantom membranes, say).
+
+### What players see
+
+- Bedrock spawns phantoms at night, in small groups high above a player who hasn't slept for 3 or more in-game days. When the nearest player to a new phantom has phantoms off, and the phantom appeared at least `minHeightAbovePlayer` (10) blocks above them, it is removed on the spot.
+- Every phantom in a group is checked the same way. If two players stand close together, only the nearest one's choice counts.
+- Phantoms from spawn eggs or `/summon` near a player are left alone, because they don't appear high overhead.
+- Turning phantoms off doesn't reset the game's own "time since rest" counter. A player who turns them back on without sleeping may get phantoms that same night.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:phantoms` | Everyone | Turns phantoms off or on **for yourself**. Remembered between sessions |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `defaultOff` | `false` | Start with phantoms off for players who never ran `/realm:phantoms` |
+| `minHeightAbovePlayer` | `10` | Only remove phantoms that appear at least this many blocks above their nearest player, as natural spawns do |
+| `searchRadius` | `64` | How far (blocks) to look for a new phantom's nearest player. Phantoms with no player this close are left alone |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `phantom:off` | Player | `true` when the player turned phantoms off, `false` when they turned them back on while `defaultOff` is `true`. Not set = `defaultOff` |
+
+---
+
+## Right-click Harvest — `harvest_bp`
+
+Tap a ripe crop to harvest it and replant it in one go, so fields never need re-seeding.
+
+### How to use
+
+1. Tap (use) a fully grown crop with an empty hand or a hoe. It pops its normal drops and goes back to a seedling, with the break sound.
+2. Unripe crops behave as in vanilla, and so does anything else in your hand: seeds still plant, bone meal still grows.
+3. Sneak while tapping to skip the harvest for that tap.
+
+### Crops
+
+| Crop | Block id | Ripe when |
+|---|---|---|
+| Wheat | `minecraft:wheat` | `growth` = 7 |
+| Carrots | `minecraft:carrots` | `growth` = 7 |
+| Potatoes | `minecraft:potatoes` | `growth` = 7 |
+| Beetroots | `minecraft:beetroot` | `growth` = 7 |
+| Nether wart | `minecraft:nether_wart` | `age` = 3 |
+| Cocoa | `minecraft:cocoa` | `age` = 2 (keeps the direction it faces) |
+
+### What players see
+
+- Drops come from the block's own Bedrock loot table, as if you had broken it with what's in your hand, so the counts match vanilla and a Fortune hoe raises carrot, potato and other yields.
+- Only one harvest per tap. Holding the button down doesn't sweep a field.
+- Villager farmers are unaffected, and a farm guide's water-flush harvest still works on the same field.
+- Harvests don't count as **Blocks mined** in the Stats pack, because no block is broken.
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `crops` | the table above | Which blocks harvest: `block`, the growth `state`, its `ripe` value, the `seed` item a replant uses and the harvest `sound` |
+| `requireHoe` | `false` | Only harvest when a hoe is held |
+| `damageHoe` | `false` | A held hoe loses one durability per harvest (Unbreaking applies, and the hoe can break) |
+| `replantCostsSeed` | `false` | The replant uses one seed (or carrot, potato, wart, cocoa bean): from the drops, else from your inventory. With none, the crop is harvested and not replanted |
+
+### Saved data
+
+None.
+
+### How it works
+
+`world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the player isn't sneaking, the hand is empty or holds a `*_hoe`, and the block is a listed crop at its ripe value. On the next tick the pack runs `loot spawn <center> mine <block> mainhand` as the player, then sets the crop's state back to 0. If `/loot` fails for a harvest, that harvest drops from a built-in table close to vanilla (without Fortune), and the first failure logs `[harvest] /loot failed`.
+
+---
+
+## Farm Loader — `farm_bp`
+
+Keeps named farms loaded with Bedrock ticking areas, so crops grow, furnaces smelt and redstone runs while everyone is elsewhere.
+
+### How to use
+
+1. Run `/realm:farm` to see which farms are kept loaded: name, dimension, coordinates, size, who added it and when.
+2. **Operators:** stand in the middle of a farm and run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
+3. **Operators:** `/realm:farm_remove <name>` stops keeping it loaded, or tap **Remove** next to it in `/realm:farm`.
+
+### What keeps running, and what doesn't
+
+Bedrock rules, worth knowing before you add a farm:
+
+- **Keeps running:** random ticks (crops, kelp, sugar cane, bamboo, cactus and trees grow), furnaces, smokers and blast furnaces, hoppers, redstone, pistons, observers and flowing water.
+- **Doesn't:** mob spawning. Mobs only spawn near a player, so iron farms, mob farms and the slime farm still need someone nearby.
+- **Costs performance:** every loaded chunk costs the realm. A radius of 2 chunks covers a circle about 5 chunks (80 blocks) across. Bedrock allows 10 ticking areas per world, and the pack refuses an 11th before the game does.
+- The game keeps the ticking areas across realm restarts by itself. The pack only keeps the list for the menu.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:farm` | Everyone | Lists the loaded farms. Operators also get a **Remove** button for each |
+| `/realm:farm_add <name> [radius]` | Ops (everyone if `everyoneCanAdd`) | Adds a ticking area centered on you, `radius` 1–4 chunks (default `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique |
+| `/realm:farm_remove <name>` | Ops (everyone if `everyoneCanAdd`) | Removes it |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `everyoneCanAdd` | `false` | Let everyone add and remove farms, not just operators |
+| `defaultRadius` | `2` | Radius in chunks when `/realm:farm_add` is given none |
+| `maxAreas` | `10` | Most farms at once. Bedrock's limit is 10 ticking areas per world, including any made with `/tickingarea` by hand |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `farm:areas` | World | JSON list of farms `{ name, dim, x, z, radius, by, at }` for the menu. The ticking areas themselves are saved by the game |
+
+### How it works
+
+`/realm:farm_add` runs `tickingarea add circle <x> <y> <z> <radius> "<name>" true` in your dimension. If the game reports no success (for example, the world already has 10 ticking areas), the pack says so and saves nothing. `/realm:farm_remove` runs `tickingarea remove "<name>"`. A ticking area removed by hand with `/tickingarea remove` stays in the menu until it is removed there too.
+
+---
+
+## Quick Stack & Sort — `stash_bp`
+
+Sort a chest with one tap, and empty your inventory into the chests that already hold each item, the way Terraria's quick stack works.
+
+### How to use
+
+1. **Sort a chest:** sneak and tap a chest, trapped chest or barrel with an empty hand. It doesn't open; its stacks merge and sort, and the bar above the hotbar says `Sorted 31 stacks`.
+2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into a container within 8 blocks that already holds the same item. The bar says `Stashed 143 items into 3 chests`, and each chest that got something sparkles.
+3. **Sort your inventory:** run `/realm:sort`. Your main inventory is sorted; the hotbar stays as it is.
+
+### What players see
+
+- Sorting merges partial stacks of the same item, then orders the slots by item id, the biggest stack first, with empty slots at the end. A chest with 3 partial stacks of cobblestone ends with 1 full stack plus the rest.
+- Items with a custom name, lore or enchantments are never merged, only moved, and moving keeps every item exactly as it was: enchanted gear, named items, written books, filled maps, banners and shulker boxes with their contents.
+- `/realm:stash` only takes from your main inventory (slots 9–35): never the hotbar, armor or offhand. Named items stay with you unless `stashNamedItems` is on. A container that holds the item gets matching stacks topped up first, then its empty slots, nearest container first.
+- Double chests count once. Ender chests and shulker boxes are never used. Containers in chunks that aren't loaded are never touched. Another player having the chest open is fine.
+- Each player can sort or stash once per second (`cooldownTicks`).
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:stash` | Everyone | Quick stack: puts your items into nearby containers that already hold the same items |
+| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched unless `sortHotbar` is on |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `stashRadius` | `8` | Blocks around the player to look for containers (a 17 × 17 × 17 cube) |
+| `containerTypes` | chest, trapped chest, barrel | Block ids that sort and receive stashes. Shulker boxes are left out on purpose |
+| `sneakTapSorts` | `true` | Sneak and tap with an empty hand to sort a container. While on, sneak-tapping doesn't open it |
+| `stashNamedItems` | `false` | `/realm:stash` also moves items with a custom name |
+| `sortHotbar` | `false` | `/realm:sort` also sorts the hotbar |
+| `cooldownTicks` | `20` | Minimum time between uses per player (20 = 1 s) |
+
+### Saved data
+
+None.
+
+### How it works
+
+- **Sort:** stacks are merged by changing the amount of the slot that stays (`ContainerSlot.amount`) and ordered with `swapItems`. Both are native moves, so no item is ever copied or re-created and nothing about it can be lost.
+- **Stash:** one `dimension.getBlocks` query finds the listed containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
+- When both halves of a double chest report the whole 54 slots, the second half is recognized (same contents, same facing, side by side; in a row of identical chests, counted from the row's end) and skipped.
+- If `transferItem` ever hands a leftover back instead of leaving it in the slot, the pack puts it back, so nothing is lost.
+
+---
+
+## Chest Finder — `find_bp`
+
+Answers "which chest has the iron?" for a shared base: it remembers what each container held the last time anyone opened it, and points you to it.
+
+### How to use
+
+1. Open chests as usual. The pack quietly remembers what's in them.
+2. Run `/realm:find iron`, or just `/realm:find` while holding the item. A menu lists the containers that have it, nearest first, for example `Chest · 23 Iron Ingot` with `35 blocks NE · seen 2h ago` under it.
+3. Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates.
+
+### What players see
+
+- **Matching:** the item id first. `/realm:find diamond` finds diamonds only, because an item is called exactly that. When nothing is called exactly what you typed, every item whose id contains it is listed: `/realm:find iron` finds iron ingots, iron blocks, raw iron, iron swords and so on. Type one word, or use `_` for a space: `/realm:find iron_ingot` (or quote it: `/realm:find "iron ingot"`).
+- **Always current nearby:** containers within `liveScanRadius` (16 blocks) are read at search time, so a chest filled by hoppers that nobody ever opened is still found. Farther ones show what they held when last seen, hence `seen 2h ago`: hoppers and the copper golem sorter may have changed them since.
+- Results in your dimension are sorted by distance; containers in other dimensions are listed after them, without a distance.
+- A double chest is listed once. A broken container disappears from the results. One that was removed some other way (an explosion, say) disappears the next time a search finds its spot loaded and empty.
+- Only containers and their contents are remembered, never who opened them.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:find [item]` | Everyone | Searches remembered and nearby containers for `item` (any part of an item id), or for the item in your hand if you leave it out |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `liveScanRadius` | `16` | Containers this close (blocks) are read live at search time, so nearby results are always current |
+| `maxContainers` | `2000` | Most containers remembered; the ones seen longest ago are forgotten first |
+| `maxResults` | `20` | Rows in the results menu |
+| `highlightSeconds` | `10` | How long the particle column shows |
+| `containerTypes` | chest, trapped chest, barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `find:idx:0`, `find:idx:1`, … | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId } }`, ids without the `minecraft:` prefix. Written at most once every 30 seconds, and whenever a player leaves |
+
+### How it works
+
+- **Remembering:** on `world.afterEvents.playerInteractWithBlock` with a listed container, its contents are counted per item id right away and again 10 seconds later, after the player has put things in or taken them out. `playerBreakBlock` removes the entry. Empty containers aren't kept.
+- **Searching:** one `dimension.getBlocks` query finds the containers within `liveScanRadius`, which are read a few per tick with `system.runJob`, then the whole index is matched in one pass and sorted by distance.
+- **Double chests:** when both halves report the whole 54 slots, both are stored under the half with the smaller coordinates. The halves are told apart from a neighboring double chest with the same contents by their facing and, in a row of identical chests, by counting from the row's end.
+
+---
+
+## Chairs — `chairs_bp`
+
+Sit on any stair or bottom slab, which makes the furnished houses on mc.nish.software feel lived in.
+
+### How to use
+
+1. Tap a stair or a bottom slab with an empty hand, standing within 2.5 blocks of it. You sit on it, facing away from the stair's back.
+2. Sneak to stand up (on touch screens, the dismount button).
+3. Run `/realm:sit` to sit down right where you stand.
+
+### What players see
+
+- Works on every stair that isn't upside down and every bottom slab, in any wood or stone: oak, stone brick and quartz stairs alike. Upside-down stairs, top slabs and double slabs (copper ones included) do nothing.
+- The two blocks above the seat must be air, so you can't sit with your head in a ceiling.
+- One player per seat: tapping a taken seat says `Someone is already sitting there`.
+- Breaking the stair or slab stands its rider up. Seats nobody sits on vanish within a second.
+- You can still use blocks and items while seated. The AFK pack still marks a seated, idle player as AFK, and sitting adds nothing to the Stats pack's distance.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:sit` | Everyone | Sits you down where you stand (on the ground). Sneak to stand up |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `blocks` | `["*_stairs", "*_slab"]` | What can be sat on, `*` as a wildcard. Stairs must not be upside down and slabs must be bottom slabs |
+| `maxReach` | `2.5` | Farthest the seat may be from the player's feet, in blocks |
+| `cleanupTicks` | `20` | How often (ticks) empty seats, and seats whose block is gone, are removed |
+| `seatHeight` | `0.25` | Height of the seat above the bottom of the block. Raise or lower it in steps of `0.05` if players sit too high or too low |
+
+### Saved data
+
+None. Seats are entities and are cleaned up; any left over from before a restart are removed as soon as their chunk loads.
+
+### The seat entity
+
+`entities/seat.json` defines `realm:seat`: not spawnable naturally, summonable, a tiny collision box, no gravity or collision, not pushable, immune to all damage, no AI, and a `minecraft:rideable` with one seat for players. The pack has no resource pack, so the game has no model for it and draws nothing. If a seat ever shows up under a player, a `chairs_rp` resource pack with an empty model is the fix.
+
+### How it works
+
+- `world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the hand is empty, the player isn't sneaking or already riding, the block can be sat on, the two blocks above are air and the seat is within `maxReach`.
+- On the next tick the pack spawns `realm:seat` in the block, turns the player to face away from a stair's back (its `weirdo_direction` state; slabs keep your facing) and adds them as its rider.
+- Every `cleanupTicks`, seats without a rider, and block seats whose stair or slab is gone, are removed.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -431,7 +764,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Conflicts | Two packs with the same non-script file and different contents → error |
 | Limits | Behavior packs only, for now |
 
-> ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, per-player toggles, first-joined dates. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
+> ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list (the ticking areas themselves stay loaded) and what Chest Finder remembers. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
 
 ---
 
@@ -444,6 +777,11 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Welcome → News | Both popups show on join, welcome first (`delayTicks` 40 vs 100). News waits until the welcome popup is closed |
 | News tips → others | The default tips mention `/realm:stats` and `/realm:afk`. Edit them with `/realm:news_tips` if you don't use those packs |
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
+| AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
+| Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
+| Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items. Sneak-tap sorting a sorter's chest is harmless |
+| Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
+| Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
 
 None of the packs depend on each other. Any combination works.
 
@@ -458,9 +796,9 @@ None of the packs depend on each other. Any combination works.
 | Commands missing after adding a bundle | The individual packs and the bundle are both active, so duplicates fail. Keep only one |
 | Popup never appears | Close chat/inventory. The welcome popup retries for 30 s, news for about 90 s. Check the content log |
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults: `/realm:welcome_reset` clears welcome edits; news, tips and tip settings saved in game always win over `config.js` |
-| Settings reset after switching to or from a bundle | Expected: Bedrock keeps each pack's saved data separately, so in-game settings (welcome text, news, tips, per-player toggles, first-joined dates) start fresh. Scoreboard stats are kept |
+| Settings reset after switching to or from a bundle | Expected: Bedrock keeps each pack's saved data separately, so in-game settings (welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list, what Chest Finder remembers) start fresh. Scoreboard stats are kept |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows how many are asleep (x) and how many are needed (y). Players in other dimensions only count if `sleep.countOtherDimensions` is on |
-| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with `[welcome]`, `[afk]`, `[stats]`, `[news]` or `[durability]` |
+| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
 | The pack shows a pink and black placeholder icon | Harmless. No pack has a `pack_icon.png` yet, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
 
 ---
@@ -487,6 +825,7 @@ The [Our realm](https://mc.nish.software/realm/) page shows this file to players
 | What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first), plus every section marked `<!-- on the site -->` |
 | What stays behind "For operators" | A pack's `### Configuration…`, `### Saved data` and `### Resetting…` subsections, collapsed |
 | How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`), then commit and push there. `--check` fails if the page is out of date |
-| When | After every change to this file that players should see, and with every new bundle version published on the site |
+| Downloads | `node tools/publish-packs.mjs --notes "what changed"` there builds the Realm Bundle and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"). A single pack is only published when its `header.version` goes up |
+| When | After every change to this file that players should see, and with every new bundle or pack version published on the site |
 
 Links in this file to its own sections (`#…`) are dropped on the site; links to web pages are kept.
