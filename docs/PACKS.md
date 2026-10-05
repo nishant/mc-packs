@@ -57,7 +57,7 @@ The realm runs everything as one pack, **Realm Bundle**, and that is the downloa
 2. **Open the realm's settings** (the pencil next to the realm), go to **Behavior Packs**, find Realm Bundle under **Available** and activate it. Minecraft uploads it to the realm.
 3. **Join** once the realm restarts. The welcome popup and the `/realm:` commands mean it's running.
 
-**Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time (`YYYY.MMDD.HHMM`), so every build is higher than the last, which Minecraft needs to treat it as an update.
+**Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
 
 **Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. Switching between them starts the features' in-game settings over (welcome and news text, tips, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
@@ -95,11 +95,11 @@ For whoever builds the packs from this repo:
 ### Formatting codes
 <!-- on the site -->
 
-Text that operators edit in game (the welcome popup, news, tips) supports:
+Text that operators edit in game (the welcome popup, news, tips) supports these codes:
 
 | Code | Effect |
 |---|---|
-| `\n` | New line. The in-game text boxes are one line, so type a literal `\n` |
+| `\n` | New line, in the welcome and news **body** only (not in titles, the button or tips). The in-game text boxes are one line, so type a literal `\n` |
 | `§0`–`§9`, `§a`–`§f` | Colors: `§a` green, `§b` aqua, `§c` red, `§e` yellow, `§6` gold, `§7` gray |
 | `§l` `§o` `§r` | Bold, italic, reset |
 
@@ -150,7 +150,7 @@ These are defaults. Once an op saves with `/realm:welcome_edit`, the saved value
 | `showOnce` | `false` | ✅ | `true` = only once per player, shown again after each edit. `false` = every join |
 | `chat` | `false` | ✅ | Also post the title + body in that player's chat |
 | `screenTitle` | `false` | ✅ | Also flash the title as big on-screen text |
-| `delayTicks` | `40` | ❌ | Ticks after spawn before the first try (20 ticks = 1 s) |
+| `delayTicks` | `40` | ❌ | Ticks after spawn before the first try (20 ticks = 1 s). Not editable in game, but `/realm:welcome_edit` saves the current value with everything else, so after an edit a new value here only applies after `/realm:welcome_reset` |
 
 ### Saved data
 
@@ -181,7 +181,7 @@ Warns players before a tool, weapon or armor piece breaks.
 
 - Checks the **main hand, offhand, helmet, chestplate (including elytra), leggings and boots** every `checkIntervalTicks`.
 - Warns **once per level**. It only warns again when the item drops to the next level.
-- A different item, or a repair (Mending, anvil, grindstone), resets it.
+- A different kind of item in that slot, emptying the slot, or a repair (Mending, anvil, grindstone) resets it. Another item of the same kind that's just as worn doesn't warn again.
 - Each **hotbar slot** is tracked separately, so switching to another worn tool warns for that one too.
 - Items without durability (blocks, torches, …) are ignored.
 - Named items use their custom name (e.g. `Excalibur is low`).
@@ -217,8 +217,8 @@ Marks idle players as AFK, and skips the night without waiting for them.
 ### How to use
 
 1. **Going AFK:** just stop playing. After 5 minutes your name shows `[AFK]` and chat says so. To go AFK right away (so the night can be skipped without you), run `/realm:afk`.
-2. **Coming back:** move or look around. Chat says you're back and for how long.
-3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, the bar above the hotbar shows who is still needed (`🛏 1/2 sleeping`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
+2. **Coming back:** move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK.
+3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar (`🛏 1/2 sleeping`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
 
 ### AFK detection
 
@@ -238,7 +238,7 @@ After `afkMinutes` (5) with none of these:
 - The player gets the `afk` tag (`tag`). Other packs and commands can use it, e.g. `@a[tag=!afk]`.
 - Chat shows `Name is now AFK` (`announce`).
 
-Any activity brings them back, with `Name is back (AFK 12m)` in chat. Sleeping players are never marked AFK. Leftover AFK names or tags are cleared when a player rejoins, and after a script reload.
+Any activity brings them back, with `Name is back (AFK 12m)` in chat (minutes since being marked AFK; left out under 30 seconds). Sleeping players are never marked AFK. Leftover AFK names or tags are cleared when a player rejoins, and after a script reload.
 
 ### Smart sleep (night skip)
 
@@ -247,10 +247,10 @@ Checked every second while at least one player is in bed:
 1. **Counted players** = everyone asleep, plus every non-AFK player in the Overworld (also those in the Nether/End if `sleep.countOtherDimensions` is on).
 2. **Needed** = `ceil(counted × sleep.percent / 100)`, at least 1.
 3. While anyone is in bed, Overworld players see `🛏 2/2 sleeping (1 AFK ignored)` above the hotbar.
-4. **If vanilla's own rule already covers it**, i.e. enough players are asleep to meet the `playersSleepingPercentage` gamerule counting *everyone*, the pack does nothing and lets vanilla skip the night. That's always the case when nobody is AFK and everyone is in bed. Doing both would race, and the second skip would land a full day later.
-5. Otherwise, once enough players have been asleep for `sleep.requiredTicks` (8 s, and never less than 7 s, so vanilla always gets to act first):
+4. **If vanilla's own rule already covers it**, i.e. enough players are asleep to meet the `playerssleepingpercentage` gamerule counting *everyone*, the pack does nothing and lets vanilla skip the night. That's always the case when nobody is AFK and everyone is in bed. Doing both would race, and the second skip would land a full day later.
+5. Otherwise, once enough players have been asleep for `sleep.requiredTicks` (about 8 s, and never less than about 7 s, so vanilla's ~5 s skip always comes first):
    - **At night:** moves to the **next morning**. Absolute time moves forward, so the day counter (`showdaysplayed`) stays correct. The weather clears too.
-   - **During a daytime thunderstorm:** only clears the weather.
+   - **During a daytime thunderstorm:** only clears the weather. The pack only knows about storms that started while it was running, so a storm already going when the realm started isn't cleared.
    - Chat shows `☀ Good morning! (1 AFK player skipped)`.
 
 This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanilla handles everything it can, and this pack only covers what vanilla wouldn't, such as nights blocked by AFK players or by players in other dimensions.
@@ -259,7 +259,7 @@ This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanil
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:afk` | Everyone | Marks you AFK right away. Small movements in the next 3 seconds (closing chat, the camera settling) are ignored. Move to come back |
+| `/realm:afk` | Everyone | Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -292,8 +292,8 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 ### How to use
 
 1. Play: stats count on their own (playtime, except while AFK; deaths; mob and player kills; blocks mined and placed; distance; elytra distance; joins).
-2. Run `/realm:stats` and pick **My stats** to see every stat with your rank (`#2 of 7`) and the date you first joined, or **Leaderboards** and a stat to see the top 10.
-3. **Operators:** `/realm:stats_sidebar <stat>` shows one stat on everyone's sidebar. Use a stat ID from the table below (for example `/realm:stats_sidebar travelled`), `cycle` to rotate through all of them every 30 seconds, or `off`.
+2. Run `/realm:stats` and pick **My stats** to see every stat, with your rank (`#2 of 7`) in each one you've scored in, and the date you first joined (UTC), or **Leaderboards** and a stat to see the top 10.
+3. **Operators:** `/realm:stats_sidebar <stat>` shows one stat on everyone's sidebar. Use a stat ID (`playtime`, `deaths`, `mobkills`, `pvpkills`, `mined`, `placed`, `travelled`, `flown`, `joins`), for example `/realm:stats_sidebar travelled`, `cycle` to rotate through all of them every 30 seconds, or `off`.
 
 ### Stats
 
@@ -313,7 +313,7 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 - Each stat is the scoreboard objective **`stats_<id>`** (e.g. `stats_deaths`). Scores are stored under the player's **name** (a "fake player" participant), not the player entity. Bedrock shows offline entity participants as "Player Offline", so this keeps real names on leaderboards and the sidebar when people are offline.
 - Vanilla commands work too, e.g. `/scoreboard players list "Steve"`.
 - If someone changes their gamertag, their stats start again under the new name, and the old name stays on the leaderboard.
-- Scores from pack v1.0.0, which stored them on the player entity, move to the name automatically the next time that player joins. Until then they're hidden from the menus, and the vanilla sidebar may still show them as "Player Offline".
+- Scores from the first Stats pack (v1.0.0, before the Realm Bundle), which stored them on the player entity, move to the name automatically the next time that player joins. Until then they're hidden from the menus, and the vanilla sidebar may still show them as "Player Offline".
 - First-joined date is saved per player, from the first join after the pack was added.
 
 ### Commands
@@ -365,9 +365,9 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 
 ### News popup
 
-- When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join.
+- When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join. Reading it with `/realm:news` doesn't count, so the popup still shows on the next join.
 - The popup is timed after the welcome popup (`delayTicks` = 5 s). If another popup is still open, it waits up to about 90 s.
-- If it still can't show, chat says `📰 There's new Realm news! Run /realm:news` (after the "welcome back" notice, if there is one), and the player sees it next join instead.
+- If it still can't show, chat says `📰 There's new Realm news! Run /realm:news to read it.` (on the same line after the "welcome back" notice, if there is one), and the player sees the popup on their next join instead.
 - Saving **unchecked** is a quiet edit (e.g. a typo fix). Players who already saw the news don't see it again.
 - An empty body means no news.
 
@@ -378,7 +378,7 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 ### Tips
 
 - A tip from the list is posted in chat every `tipIntervalMinutes` (20), as `[Tip] …` (`tipPrefix`), only while someone is online.
-- The default tips cover your other add-ons: tree felling, vein mining, the Waypoint Menu, `/realm:stats` and `/realm:afk`.
+- The default tips cover the realm's other add-ons (tree felling, vein mining, the Waypoint Menu) and two commands from these packs (`/realm:stats`, `/realm:afk`).
 
 ### Commands
 
@@ -396,7 +396,7 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 |---|---|---|---|
 | `news.title` | `§l§bRealm News` | ✅ `/realm:news_edit` | News popup title |
 | `news.body` | *(empty)* | ✅ `/realm:news_edit` | News text. Empty = no news |
-| `tips` | 5 tips about your add-ons | ✅ `/realm:news_tips` | Starting tip list |
+| `tips` | 5 tips about the realm's add-ons and commands | ✅ `/realm:news_tips` | Starting tip list |
 | `tipIntervalMinutes` | `20` | ✅ `/realm:news_tips` → Settings | Minutes between tips |
 | `tipsEnabled` | `true` | ✅ `/realm:news_tips` → Settings | Post tips at all |
 | `delayTicks` | `100` | ❌ | Ticks after joining before showing the news (after the welcome popup's `40`) |
@@ -795,11 +795,11 @@ None of the packs depend on each other. Any combination works.
 | A command doesn't show up | Type `/realm` to list them all (e.g. `/realm:stats`). Is the pack **Active**, not just Available? Minecraft 1.21.100+? Rejoin after activating. Ops-only commands are hidden from regular members |
 | Commands missing after adding a bundle | The individual packs and the bundle are both active, so duplicates fail. Keep only one |
 | Popup never appears | Close chat/inventory. The welcome popup retries for 30 s, news for about 90 s. Check the content log |
-| Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
-| Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
-| Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
+| Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults: `/realm:welcome_reset` clears welcome edits; news, tips and tip settings saved in game always win over `config.js` |
+| Settings reset after switching to or from a bundle | Expected: Bedrock keeps each pack's saved data separately, so in-game settings (welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list, what Chest Finder remembers) start fresh. Scoreboard stats are kept |
+| Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows how many are asleep (x) and how many are needed (y). Players in other dimensions only count if `sleep.countOtherDimensions` is on |
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
-| The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
+| The pack shows a pink and black placeholder icon | Harmless. No pack has a `pack_icon.png` yet, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
 
 ---
 
