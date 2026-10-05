@@ -219,7 +219,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:news_edit§r writes the news. Leave \"Pop up for everyone on their next join\" on to announce it, or turn it off for a quiet fix such as a typo. §e/realm:news_tips§r adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.",
+        "text": "§lOperators:§r §e/realm:news_edit§r writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them: paste a long message 100 characters per box, and type §e\\n§r for a new line. Leave \"Pop up for everyone on their next join\" on to announce it, or turn it off for a quiet fix such as a typo. §e/realm:news_tips§r adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.",
         "ops": true
       }
     ],
@@ -234,7 +234,7 @@ export const PACKS = [
         "usage": "/realm:news_edit",
         "ops": true,
         "who": "Ops",
-        "text": "Editor: title, body, and the \"pop up on next join\" toggle. If chat stays open for about 20 s, it says it couldn't open"
+        "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If chat stays open for about 20 s, it says it couldn't open"
       },
       {
         "usage": "/realm:news_tips",
