@@ -26,6 +26,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Right-click Harvest — `harvest_bp`](#right-click-harvest--harvest_bp)
 - [Farm Loader — `farm_bp`](#farm-loader--farm_bp)
 - [Quick Stack & Sort — `stash_bp`](#quick-stack--sort--stash_bp)
+- [Chest Finder — `find_bp`](#chest-finder--find_bp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -638,6 +639,54 @@ None.
 
 ---
 
+## Chest Finder — `find_bp`
+
+Answers "which chest has the iron?" for a shared base: it remembers what each container held the last time anyone opened it, and points you to it.
+
+### How to use
+
+1. Open chests as usual. The pack quietly remembers what's in them.
+2. Run `/realm:find iron`, or just `/realm:find` while holding the item. A menu lists the containers that have it, nearest first, for example `Chest · 23 Iron Ingot` with `35 blocks NE · seen 2h ago` under it.
+3. Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates.
+
+### What players see
+
+- **Matching:** the item id first. `/realm:find diamond` finds diamonds only, because an item is called exactly that. When nothing is called exactly what you typed, every item whose id contains it is listed: `/realm:find iron` finds iron ingots, iron blocks, raw iron, iron swords and so on. Spaces work like `_` (`/realm:find iron ingot`).
+- **Always current nearby:** containers within `liveScanRadius` (16 blocks) are read at search time, so a chest filled by hoppers that nobody ever opened is still found. Farther ones show what they held when last seen, hence `seen 2h ago`: hoppers and the copper golem sorter may have changed them since.
+- Results in your dimension are sorted by distance; containers in other dimensions are listed after them, without a distance.
+- A double chest is listed once. A broken container disappears from the results. One that was removed some other way (an explosion, say) disappears the next time a search finds its spot loaded and empty.
+- Only containers and their contents are remembered, never who opened them.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:find [item]` | Everyone | Searches remembered and nearby containers for `item` (any part of an item id), or for the item in your hand if you leave it out |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `liveScanRadius` | `16` | Containers this close (blocks) are read live at search time, so nearby results are always current |
+| `maxContainers` | `2000` | Most containers remembered; the ones seen longest ago are forgotten first |
+| `maxResults` | `20` | Rows in the results menu |
+| `highlightSeconds` | `10` | How long the particle column shows |
+| `containerTypes` | chest, trapped chest, barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched |
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `find:idx:0`, `find:idx:1`, … | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId } }`, ids without the `minecraft:` prefix. Written at most once every 30 seconds |
+
+### How it works
+
+- **Remembering:** on `world.afterEvents.playerInteractWithBlock` with a listed container, its contents are counted per item id right away and again 10 seconds later, after the player has put things in or taken them out. `playerBreakBlock` removes the entry. Empty containers aren't kept.
+- **Searching:** one `dimension.getBlocks` query finds the containers within `liveScanRadius`, which are read a few per tick with `system.runJob`, then the whole index is matched in one pass and sorted by distance.
+- **Double chests:** when both halves report the whole 54 slots, both are stored under the half with the smaller coordinates.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -678,6 +727,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
 | Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
 | Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items. Sneak-tap sorting a sorter's chest is harmless |
+| Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
 
 None of the packs depend on each other. Any combination works.
 
@@ -694,7 +744,7 @@ None of the packs depend on each other. Any combination works.
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults (use `/realm:welcome_reset`) |
 | Settings reset after switching to or from a bundle | Expected: each pack keeps its own saved data (see [Bundling](#bundling-packs-into-one)) |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows who's still needed. Players in other dimensions only count if `sleep.countOtherDimensions` is on |
-| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[stash]` |
+| Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[find]` |
 | The pack shows a pink and black placeholder icon | The bundle has no `pack_icon.png` yet. Harmless; add a square PNG next to `manifest.json` in a future build |
 
 ---
