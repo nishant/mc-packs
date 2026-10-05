@@ -51,13 +51,15 @@ What each pack in this repo does, how to use it, and how to configure it.
 ### Installing from mc.nish.software
 <!-- on the site -->
 
-The realm runs everything as one pack, **Realm Bundle**. To install or update it:
+The realm runs everything as one pack, **Realm Bundle**, and that is the download to pick. To install or update it:
 
-1. **Download** the latest `.mcpack` from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open it. Minecraft starts and imports it as "Realm Bundle".
+1. **Download** the latest Realm Bundle `.mcpack` from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open it. Minecraft starts and imports it as "Realm Bundle".
 2. **Open the realm's settings** (the pencil next to the realm), go to **Behavior Packs**, find Realm Bundle under **Available** and activate it. Minecraft uploads it to the realm.
 3. **Join** once the realm restarts. The welcome popup and the `/realm:` commands mean it's running.
 
 **Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time (`YYYY.MMDD.HHMM`), so every build is higher than the last, which Minecraft needs to treat it as an update.
+
+**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. Switching between them starts the features' in-game settings over (welcome and news text, tips, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
 ### Installing on a Realm
 
@@ -761,7 +763,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Conflicts | Two packs with the same non-script file and different contents → error |
 | Limits | Behavior packs only, for now |
 
-> ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, per-player toggles, first-joined dates. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
+> ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list (the ticking areas themselves stay loaded) and what Chest Finder remembers. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
 
 ---
 
@@ -822,6 +824,7 @@ The [Our realm](https://mc.nish.software/realm/) page shows this file to players
 | What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first), plus every section marked `<!-- on the site -->` |
 | What stays behind "For operators" | A pack's `### Configuration…`, `### Saved data` and `### Resetting…` subsections, collapsed |
 | How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`), then commit and push there. `--check` fails if the page is out of date |
-| When | After every change to this file that players should see, and with every new bundle version published on the site |
+| Downloads | `node tools/publish-packs.mjs --notes "what changed"` there builds the Realm Bundle and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"). A single pack is only published when its `header.version` goes up |
+| When | After every change to this file that players should see, and with every new bundle or pack version published on the site |
 
 Links in this file to its own sections (`#…`) are dropped on the site; links to web pages are kept.
