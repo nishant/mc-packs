@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Realm News & Tips",
-    "description": "News popup on join when something's new, plus rotating chat tips. /realm:news",
-    "uuid": "6cb00063-90ec-42cd-b7e5-cafc4e0b517a",
-    "version": [1, 1, 0],
+    "name": "Realm Help",
+    "description": "One help page for every realm command: how each feature works and its commands, with usage. /realm:help",
+    "uuid": "78e7236e-4b6d-45ec-8a7f-1f8055a47395",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "92d14f6a-cf31-40e3-82a7-2b9e6fbe0cc9",
+      "uuid": "8f0ca99a-d3f7-4ce6-8358-35ffac60a85c",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

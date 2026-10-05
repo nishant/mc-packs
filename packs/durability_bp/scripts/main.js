@@ -123,8 +123,18 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       });
       return {
         status: CustomCommandStatus.Success,
-        message: nowOff ? "Durability warnings off." : "Durability warnings on.",
+        message: nowOff
+          ? "Durability warnings off for you. Run /realm:durability again to turn them back on."
+          : "Durability warnings on for you.",
       };
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "durability_bp");
+  },
+  { namespaces: ["realm"] }
+);

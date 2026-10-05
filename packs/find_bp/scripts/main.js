@@ -19,6 +19,7 @@ const PROP_SHARD = "find:idx:"; // world: find:idx:0, find:idx:1, … JSON shard
 const SHARD_CHARS = 30000; // Bedrock caps a string property at ~32k characters
 const SAVE_EVERY_TICKS = 600; // write the index at most once every 30 s
 const RECHECK_TICKS = 200; // read an opened container again 10 s later
+const LATE_RECHECK_TICKS = 1200; // and once more after a minute, for long sorting sessions
 const SIDES = [
   { x: 1, y: 0, z: 0 },
   { x: -1, y: 0, z: 0 },
@@ -117,6 +118,9 @@ function signature(c) {
   return parts.join(",");
 }
 
+/** Copper chests of any stage, waxed or not, are one kind. @param {string} typeId */
+const family = (typeId) => (typeId.endsWith("copper_chest") ? "copper_chest" : typeId);
+
 /** A chest's facing, from whichever state this game version uses. @param {Block} b */
 function facingOf(b) {
   const s = b.permutation.getAllStates();
@@ -141,7 +145,7 @@ function partnerOf(block, sigOf) {
   const alongZ = facing === "east" || facing === "west" || facing === 4 || facing === 5;
   const dirs = SIDES.filter((d) => (alongX ? d.x !== 0 : alongZ ? d.z !== 0 : true));
   /** @param {Block | undefined} b */
-  const twin = (b) => !!b && b.typeId === block.typeId && facingOf(b) === facing && sigOf(b) === sig;
+  const twin = (b) => !!b && family(b.typeId) === family(block.typeId) && facingOf(b) === facing && sigOf(b) === sig;
   const found = dirs.filter((d) => twin(block.offset(d)));
   if (found.length < 2) return found.length ? block.offset(found[0]) : undefined;
   const d = found.find((f) => found.some((g) => g.x === -f.x && g.z === -f.z));
@@ -219,6 +223,7 @@ world.afterEvents.playerInteractWithBlock.subscribe(({ block }) => {
   const p = block.location;
   recordAt(dimension, p);
   system.runTimeout(() => recordAt(dimension, p), RECHECK_TICKS); // after the player put things in or took them out
+  system.runTimeout(() => recordAt(dimension, p), LATE_RECHECK_TICKS);
 });
 
 world.afterEvents.playerBreakBlock.subscribe(({ block, brokenBlockPermutation }) => {
@@ -437,3 +442,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "find_bp");
+  },
+  { namespaces: ["realm"] }
+);

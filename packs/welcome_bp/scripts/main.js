@@ -5,7 +5,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { DEFAULTS } from "./config.js";
 
 /** @typedef {import("./config.js").WelcomeSettings} WelcomeSettings */
@@ -35,10 +35,13 @@ function getSettings() {
   }
 }
 
-/** @param {Partial<WelcomeSettings> | undefined} overrides */
-function saveSettings(overrides) {
+/**
+ * @param {Partial<WelcomeSettings> | undefined} overrides
+ * @param {boolean} [reshow] count it as a new revision, so "show once" shows it to everyone again
+ */
+function saveSettings(overrides, reshow = true) {
   world.setDynamicProperty(PROP_SETTINGS, overrides ? JSON.stringify(overrides) : undefined);
-  world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
+  if (reshow) world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
 }
 
 function getRevision() {
@@ -121,7 +124,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   system.runTimeout(() => {
     welcome(player).catch((e) => console.warn(`[welcome] ${e}`));
-  }, getSettings().delayTicks);
+  }, DEFAULTS.delayTicks); // not editable in game, so always config.js's
 });
 
 // ---------------------------------------------------------------------------
@@ -130,14 +133,15 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 /**
  * Shows a form, retrying while the client is busy (chat still closing, inventory open).
+ * @template {ModalFormData | MessageFormData} F
  * @param {Player} player
- * @param {ModalFormData} form
- * @returns {Promise<import("@minecraft/server-ui").ModalFormResponse | undefined>} undefined if it never got shown
+ * @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>} undefined if it never got shown
  */
 async function showForm(player, form, maxAttempts = 20) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    const res = /** @type {any} */ (await form.show(player));
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), RETRY_INTERVAL_TICKS));
   }
@@ -162,6 +166,7 @@ async function openEditor(player) {
     .toggle("Show only once per player (re-shows after each edit)", { defaultValue: s.showOnce })
     .toggle("Also post in chat", { defaultValue: s.chat })
     .toggle("Also flash big on-screen title", { defaultValue: s.screenTitle })
+    .toggle("Show it again to players who've seen it (turn off for a typo fix)", { defaultValue: true })
     .submitButton("Save");
 
   const response = await showForm(player, form);
@@ -171,20 +176,24 @@ async function openEditor(player) {
   }
   if (response.canceled || !response.formValues) return;
 
-  const [title, body, button, showOnce, chat, screenTitle] = response.formValues;
+  const [title, body, button, showOnce, chat, screenTitle, reshow] = response.formValues;
   const str = (/** @type {unknown} */ v, /** @type {string} */ fallback) =>
     typeof v === "string" && v.trim() !== "" ? v : fallback;
 
-  saveSettings({
-    title: str(title, DEFAULTS.title),
-    body: unescapeNewlines(str(body, DEFAULTS.body)),
-    button: str(button, DEFAULTS.button),
-    showOnce: showOnce === true,
-    chat: chat === true,
-    screenTitle: screenTitle === true,
-    delayTicks: s.delayTicks,
-  });
-  player.sendMessage("§aWelcome message saved.§r Run §b/realm:welcome§r to preview it.");
+  saveSettings(
+    {
+      title: str(title, DEFAULTS.title),
+      body: unescapeNewlines(str(body, DEFAULTS.body)),
+      button: str(button, DEFAULTS.button),
+      showOnce: showOnce === true,
+      chat: chat === true,
+      screenTitle: screenTitle === true,
+    },
+    reshow !== false
+  );
+  player.sendMessage(
+    `§aWelcome message saved${reshow === false ? " quietly" : ""}.§r Run §b/realm:welcome§r to preview it.`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -242,9 +251,30 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
     },
-    playerCommand((player) => {
+    playerCommand(async (player) => {
+      // One mistyped command would otherwise throw away the edited text for good.
+      const res = await showForm(
+        player,
+        new MessageFormData()
+          .title("Reset the welcome message?")
+          .body("This throws away the edited title, body, button and switches, and goes back to the pack's defaults. There's no undo.")
+          .button1("§cReset")
+          .button2("Keep it")
+      );
+      if (!res || res.canceled || res.selection !== 0 || !player.isValid) {
+        if (player.isValid) player.sendMessage("§7Welcome message kept.");
+        return;
+      }
       saveSettings(undefined);
       player.sendMessage("§aWelcome message reset to the pack defaults.");
     })
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "welcome_bp");
+  },
+  { namespaces: ["realm"] }
+);

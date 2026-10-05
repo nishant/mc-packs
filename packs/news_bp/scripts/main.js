@@ -188,18 +188,27 @@ async function editNews(player) {
       .toggle("Pop up for everyone on their next join", { defaultValue: true })
       .submitButton("Save")
   );
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res) {
+    if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
+    return;
+  }
+  if (res.canceled || !res.formValues) return;
 
   const [title, body, announce] = res.formValues;
   writeJson(PROP_NEWS, {
     title: typeof title === "string" && title.trim() ? title : DEFAULTS.news.title,
     body: typeof body === "string" ? unescapeNewlines(body) : "",
   });
-  if (announce === true) world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
+  const hasBody = typeof body === "string" && body.trim() !== "";
+  if (announce === true) {
+    world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
+    // Online players would otherwise only hear about it on their next join.
+    if (hasBody) world.sendMessage("§b📰 Realm news updated.§r Run §b/realm:news§r to read it.");
+  }
 
   player.sendMessage(
     announce === true
-      ? "§aNews saved.§r Everyone sees it on their next join. Online players: §b/realm:news§r."
+      ? "§aNews saved.§r Everyone who hasn't read it sees it on their next join."
       : "§aNews saved quietly§r (won't pop up again for people who've seen it)."
   );
 }
@@ -216,10 +225,14 @@ async function tipsMenu(player) {
     .button("§2+ Add a tip")
     .button("Settings")
     .button("Post the next tip now");
-  for (const tip of tips) form.button(tip.length > 40 ? `${tip.slice(0, 38)}…` : tip);
+  for (const tip of tips) form.button(tip.length > 40 ? `${tip.slice(0, 38).replace(/§$/, "")}…` : tip);
 
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined) return;
+  if (!res) {
+    if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
+    return;
+  }
+  if (res.canceled || res.selection === undefined) return;
 
   if (res.selection === 0) await editTip(player, -1);
   else if (res.selection === 1) await tipSettings(player);
@@ -240,12 +253,15 @@ async function editTip(player, index) {
   if (!res || res.canceled || !res.formValues) return tipsMenu(player);
 
   const [text, remove] = res.formValues;
-  if (remove === true) tips.splice(index, 1);
-  else if (typeof text === "string" && text.trim()) {
+  // Save only real changes: once saved, the list wins over config.js for good.
+  if (remove === true) {
+    tips.splice(index, 1);
+    writeJson(PROP_TIPS, tips);
+  } else if (typeof text === "string" && text.trim() && text.trim() !== tips[index]) {
     if (index < 0) tips.push(text.trim());
     else tips[index] = text.trim();
+    writeJson(PROP_TIPS, tips);
   }
-  writeJson(PROP_TIPS, tips);
   return tipsMenu(player);
 }
 
@@ -297,7 +313,10 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    playerCommand((player) => showNews(player))
+    playerCommand(async (player) => {
+      // Read it here, and it won't pop up again on the next join.
+      if ((await showNews(player)) && player.isValid && getNews().body.trim()) player.setDynamicProperty(PROP_SEEN, getRevision());
+    })
   );
   customCommandRegistry.registerCommand(
     {
@@ -318,3 +337,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     playerCommand(tipsMenu)
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "news_bp");
+  },
+  { namespaces: ["realm"] }
+);

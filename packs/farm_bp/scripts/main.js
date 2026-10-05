@@ -133,7 +133,9 @@ async function openMenu(player) {
       .button1("Remove")
       .button2("Cancel")
   );
-  if (confirm && !confirm.canceled && confirm.selection === 0 && player.isValid) removeFarm(player, farm.name);
+  if (!confirm || confirm.canceled || !player.isValid) return;
+  if (confirm.selection === 0) removeFarm(player, farm.name);
+  return openMenu(player); // back to the list, to remove another or check the result
 }
 
 // ---------------------------------------------------------------------------
@@ -203,3 +205,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "farm_bp");
+  },
+  { namespaces: ["realm"] }
+);

@@ -15,6 +15,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 
 const containerTypes = new Set(CONFIG.containerTypes);
+const keepItems = new Set(CONFIG.keepItems);
 const ENDER_CHEST = "minecraft:ender_chest"; // add-ons can't see inside: menu only, never sorted or stashed into
 const MAIN_FIRST = 9; // player inventory: 0–8 hotbar, 9–35 main
 const MAIN_END = 36;
@@ -32,14 +33,28 @@ function nameOf(typeId) {
   return kind[0].toUpperCase() + kind.slice(1);
 }
 
-/** "a, b or c" @param {string[]} words */
-const orList = (words) => (words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} or ${words.at(-1)}`);
+/** "a, b or c" @param {string[]} words @param {string} [last] */
+const orList = (words, last = "or") =>
+  words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} ${last} ${words.at(-1)}`;
+
+/** "chest, trapped chest, copper chest…": one name per kind. @param {string[]} ids */
+const kindsOf = (ids) => [...new Set(ids.map((id) => nameOf(id).toLowerCase()))];
 
 /** The kinds of storage the sneak-tap works on, e.g. "chest, trapped chest, copper chest, barrel or shulker box". */
 function storageKinds() {
-  const kinds = [...new Set(CONFIG.containerTypes.map((id) => nameOf(id).toLowerCase()))];
+  const kinds = kindsOf(CONFIG.containerTypes);
   if (CONFIG.sneakTap === "menu") kinds.push("ender chest");
   return orList(kinds);
+}
+
+/** Empty, or gear (a tool, weapon or armor: anything with durability), which has no sneak-tap use on a chest. @param {ItemStack | undefined} item */
+const freeHand = (item) => !item || !!item.getComponent("minecraft:durability");
+
+/** Items /realm:stash leaves with the player. @param {ItemStack} item */
+function kept(item) {
+  if (keepItems.has(item.typeId)) return true;
+  if (item.nameTag && !CONFIG.stashNamedItems) return true;
+  return !CONFIG.stashGear && !!item.getComponent("minecraft:durability");
 }
 
 /** @param {Container} c @param {number} from @param {number} to */
@@ -222,7 +237,7 @@ function signatures() {
 /** @type {string[] | undefined} */
 let knownTypes;
 /** The listed container ids this game version has (copper chests are newer than 1.21.100). */
-const stashTypes = () => (knownTypes ??= CONFIG.containerTypes.filter((id) => BlockTypes.get(id)));
+const stashTypes = () => (knownTypes ??= CONFIG.stashTypes.filter((id) => BlockTypes.get(id)));
 
 /**
  * Finds the listed containers within stashRadius, nearest first, reading a few per tick.
@@ -292,7 +307,7 @@ function* quickStack(player) {
   const received = new Set();
   for (let slot = MAIN_FIRST; slot < MAIN_END; slot++) {
     const item = inv.getItem(slot);
-    if (!item || (item.nameTag && !CONFIG.stashNamedItems)) continue;
+    if (!item || kept(item)) continue;
     let left = item.amount;
     for (const t of targets) {
       if (!t.ids.has(item.typeId) || !t.container.isValid) continue;
@@ -404,7 +419,7 @@ async function openMenu(player, dimension, at) {
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, itemStack, isFirstEvent } = event;
-  if (CONFIG.sneakTap === "off" || !player.isSneaking || itemStack) return;
+  if (CONFIG.sneakTap === "off" || !player.isSneaking || !freeHand(itemStack)) return;
   const menu = CONFIG.sneakTap === "menu";
   if (!containerTypes.has(block.typeId) && !(menu && block.typeId === ENDER_CHEST)) return;
   event.cancel = true; // the sneak-tap replaces opening it
@@ -443,13 +458,13 @@ async function showHelp(player) {
     form.label(
       CONFIG.sneakTap === "menu"
         ? [
-            `Sneak and tap a ${storageKinds()} with an empty hand. It doesn't open; this menu does:`,
+            `Sneak and tap a ${storageKinds()} with an empty hand, or holding a tool, weapon or armor. It doesn't open; this menu does:`,
             "§e• Sort this chest§r (or barrel, shulker box…): merges partial stacks of the same item, then orders the slots by item, the biggest stack first, empty slots last.",
             "§e• Quick stack my inventory§r: the same as §e/realm:stash§r.",
             "§e• Sort my inventory§r: the same as §e/realm:sort§r.",
-            "§7An ender chest's menu has no Sort button: add-ons can't see inside one.",
+            "§7An ender chest's menu has no Sort button: add-ons can't see inside one. Holding anything else (a block, a hopper, honeycomb) keeps its usual sneak-tap use.",
           ].join("\n")
-        : `Sneak and tap a ${storageKinds()} with an empty hand to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
+        : `Sneak and tap a ${storageKinds()} with an empty hand, or holding a tool, weapon or armor, to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
     );
   }
 
@@ -457,9 +472,19 @@ async function showHelp(player) {
   form.label(
     [
       "§7Usage:§r §e/realm:stash",
-      `Quick stack. Every item in your main inventory goes into storage within ${r} blocks that already holds the same item, nearest first. Matching stacks are topped up first, then empty slots.`,
+      `Quick stack. Every item in your main inventory goes into a ${orList(kindsOf(CONFIG.stashTypes))} within ${r} blocks that already holds the same item, nearest first. Matching stacks are topped up first, then empty slots.`,
       `The bar says §eStashed 143 items into 3 chests§r, and every container that got something sparkles.`,
-      `§7Never takes from your hotbar, armor or offhand. ${CONFIG.stashNamedItems ? "Items with a custom name go too." : "Items with a custom name stay with you."} Double chests count once, ender chests are never used, and containers in unloaded chunks are never touched.`,
+      `§7Never takes from your hotbar, armor or offhand. Stays with you: ${orList(
+        [
+          ...(CONFIG.stashGear ? [] : ["gear (tools, weapons, armor)"]),
+          ...(CONFIG.stashNamedItems ? [] : ["items with a custom name"]),
+          ...(CONFIG.keepItems.some((id) => id.endsWith("shulker_box")) ? ["shulker boxes"] : []),
+          ...(CONFIG.keepItems.some((id) => id.endsWith("bundle")) ? ["bundles"] : []),
+          ...(keepItems.has("minecraft:totem_of_undying") ? ["totems"] : []),
+          ...(CONFIG.keepItems.some((id) => /map|compass|clock/.test(id)) ? ["what you find your way with (maps, compasses, clocks)"] : []),
+        ],
+        "and"
+      )}. Double chests count once; ${CONFIG.stashTypes.some((id) => id.endsWith("shulker_box")) ? "" : "placed shulker boxes and "}ender chests never receive anything; containers in unloaded chunks are never touched.`,
     ].join("\n")
   );
 
@@ -553,3 +578,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stash_bp");
+  },
+  { namespaces: ["realm"] }
+);

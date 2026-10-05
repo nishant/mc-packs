@@ -16,6 +16,7 @@ What each pack in this repo does, how to use it, and how to configure it.
   - [Two ways to configure](#two-ways-to-configure)
   - [Updating a pack](#updating-a-pack)
   - [Formatting codes](#formatting-codes)
+- [Realm Help — `help_bp`](#realm-help--help_bp)
 - [Welcome Message — `welcome_bp`](#welcome-message--welcome_bp)
 - [Low Durability Warning — `durability_bp`](#low-durability-warning--durability_bp)
 - [AFK + Smart Sleep — `afk_bp`](#afk--smart-sleep--afk_bp)
@@ -75,7 +76,7 @@ For whoever builds the packs from this repo:
 
 ### Commands
 
-- **Every command starts with `/realm:`**, e.g. `/realm:welcome`, `/realm:stats`. Type `/realm` to see all of them in autocomplete.
+- **Every command starts with `/realm:`**, e.g. `/realm:welcome`, `/realm:stats`. Type `/realm` to see all of them in autocomplete, or run `/realm:help` for a page that explains each one, with usage.
 - All packs share the `realm` namespace because Bedrock requires **one command namespace per add-on**. A bundle is one add-on, so if packs used different namespaces, only the first pack's commands would register and the rest would show as "unknown command". `npm run check` and the bundler both enforce this.
 - **Everyone** commands work for all players. **Ops** commands (permission level `GameDirectors`) only work for, and are only shown to, operators.
 
@@ -105,6 +106,47 @@ Text that operators edit in game (the welcome popup, news, tips) supports these 
 
 ---
 
+## Realm Help — `help_bp`
+
+One help page for every realm command: how each feature works, and each command with its usage.
+
+### How to use
+
+1. Run `/realm:help`. A **Realm help** menu lists every feature installed on this realm, with its commands under its name.
+2. Tap **All commands** to see every command with its usage on one page, or tap a feature for its how-to steps and its commands. **Back** returns to the menu.
+3. Jump straight to a page with `/realm:help <feature>`, for example `/realm:help stash` or `/realm:help find`, or `/realm:help all` for every command. Chat autocompletes the feature names.
+4. **Operators** also see the operator-only commands and steps, marked `(operators)`.
+
+### What players see
+
+- Only features that are installed show up: each pack answers when the help asks, so a realm running a few single packs gets help for just those.
+- Usages follow the usual notation: `<name>` must be typed, `[name]` is optional.
+- The text is the same as on mc.nish.software/realm: it's generated from this file.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:help [feature]` | Everyone | Opens the help menu, or the page for `feature` (`afk`, `chairs`, `durability`, `farm`, `find`, `guard`, `harvest`, `news`, `phantom`, `stash`, `stats`, `welcome`) or `all` |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `answerTicks` | `10` | Ticks to wait for the installed packs to answer before the help opens (20 = 1 s) |
+| `showOpsToEveryone` | `false` | Show operator-only commands and steps to everyone |
+
+### Saved data
+
+None.
+
+### How it works
+
+- `scripts/catalog.js` holds every pack's summary, `### How to use` steps and Commands table from this file, converted to Minecraft formatting. `node tools/help-catalog.mjs` writes it (and bumps this pack's patch version once per commit); `npm run check` fails when it's out of date.
+- `/realm:help` sends the script event `realm:help_ping`. Every other pack answers `realm:help_pong` with its folder name, and the help lists the packs that answered within `answerTicks`. Script events cross pack boundaries without imports, so the packs stay independent, and work the same in the Realm Bundle and as single packs.
+
+---
+
 ## Welcome Message — `welcome_bp`
 
 Shows a popup when a player joins the Realm. Operators can edit the popup in-game.
@@ -113,7 +155,7 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 
 1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
 2. Run `/realm:welcome` any time to see it again.
-3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the three switches, then submit. Players see the new text on their next join (with "show once" on, each player sees it one more time). `/realm:welcome_reset` goes back to the pack's default text.
+3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
 
 ### What players see
 
@@ -126,8 +168,8 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:welcome` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
-| `/realm:welcome_edit` | Ops | Opens an editor: title, body, button text, and toggles for show once, chat copy and big on-screen title. If chat or the inventory stays open, it retries for about 20 s and then says so once |
-| `/realm:welcome_reset` | Ops | Discards in-game edits and goes back to the `config.js` defaults |
+| `/realm:welcome_edit` | Ops | Opens an editor: title, body, button text, and toggles for show once, chat copy, big on-screen title and "Show it again to players who've seen it" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once |
+| `/realm:welcome_reset` | Ops | Asks `Reset the welcome message?` first, then discards in-game edits and goes back to the `config.js` defaults |
 
 Every save from `/realm:welcome_edit` counts as a new revision. With **show once** turned on, everyone sees the edited message one more time.
 
@@ -145,12 +187,12 @@ These are defaults. Once an op saves with `/realm:welcome_edit`, the saved value
 | Option | Default | In-game? | Description |
 |---|---|---|---|
 | `title` | `§l§6Welcome to the Realm!` | ✅ | Popup title |
-| `body` | Greeting + 3 rules + online count | ✅ | Popup body. Supports placeholders and formatting |
+| `body` | Greeting + 3 rules + a pointer to `/realm:help` + online count | ✅ | Popup body. Supports placeholders and formatting |
 | `button` | `§lLet's go!` | ✅ | Close button text |
-| `showOnce` | `false` | ✅ | `true` = only once per player, shown again after each edit. `false` = every join |
+| `showOnce` | `false` | ✅ | `true` = only once per player, shown again after each edit (unless the edit turns that off). `false` = every join |
 | `chat` | `false` | ✅ | Also post the title + body in that player's chat |
 | `screenTitle` | `false` | ✅ | Also flash the title as big on-screen text |
-| `delayTicks` | `40` | ❌ | Ticks after spawn before the first try (20 ticks = 1 s). Not editable in game, but `/realm:welcome_edit` saves the current value with everything else, so after an edit a new value here only applies after `/realm:welcome_reset` |
+| `delayTicks` | `40` | ❌ | Ticks after spawn before the first try (20 ticks = 1 s). Not editable in game, so a new value here always applies, edits or not |
 
 ### Saved data
 
@@ -190,7 +232,7 @@ Warns players before a tool, weapon or armor piece breaks.
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:durability` | Everyone | Turns warnings off or on **for yourself**. Remembered between sessions |
+| `/realm:durability` | Everyone | Turns warnings off or on **for yourself**. Remembered between sessions. Turning them off says `Run /realm:durability again to turn them back on.` |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -218,7 +260,7 @@ Marks idle players as AFK, and skips the night without waiting for them.
 
 1. **Going AFK:** just stop playing. After 5 minutes your name shows `[AFK]` and chat says so. To go AFK right away (so the night can be skipped without you), run `/realm:afk`.
 2. **Coming back:** move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK.
-3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar (`🛏 1/2 sleeping`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
+3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar, and, when only 1 to 3 counted players are still up, who they are (`🛏 1/2 sleeping · awake: Sam`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
 
 ### AFK detection
 
@@ -246,7 +288,9 @@ Checked every second while at least one player is in bed:
 
 1. **Counted players** = everyone asleep, plus every non-AFK player in the Overworld (also those in the Nether/End if `sleep.countOtherDimensions` is on).
 2. **Needed** = `ceil(counted × sleep.percent / 100)`, at least 1.
-3. While anyone is in bed, Overworld players see `🛏 2/2 sleeping (1 AFK ignored)` above the hotbar.
+3. While anyone is in bed, Overworld players see `🛏 1/2 sleeping · awake: Sam (1 AFK ignored)` above the hotbar. The names show when 1 to 3 counted players are awake.
+
+Lying in bed counts as activity, so a player who waits in bed for a long night isn't marked AFK when they get up.
 4. **If vanilla's own rule already covers it**, i.e. enough players are asleep to meet the `playerssleepingpercentage` gamerule counting *everyone*, the pack does nothing and lets vanilla skip the night. That's always the case when nobody is AFK and everyone is in bed. Doing both would race, and the second skip would land a full day later.
 5. Otherwise, once enough players have been asleep for `sleep.requiredTicks` (about 8 s, and never less than about 7 s, so vanilla's ~5 s skip always comes first):
    - **At night:** moves to the **next morning**. Absolute time moves forward, so the day counter (`showdaysplayed`) stays correct. The weather clears too.
@@ -259,7 +303,7 @@ This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanil
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:afk` | Everyone | Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back |
+| `/realm:afk` | Everyone | Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back. With `announce` off, only you get a confirmation |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -291,7 +335,7 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 
 ### How to use
 
-1. Play: stats count on their own (playtime, except while AFK; deaths; mob and player kills; blocks mined and placed; distance; elytra distance; joins).
+1. Play: stats count on their own (playtime and distance, except while AFK; deaths; mob and player kills; blocks mined and placed; elytra distance; joins).
 2. Run `/realm:stats` and pick **My stats** to see every stat, with your rank (`#2 of 7`) in each one you've scored in, and the date you first joined (UTC), or **Leaderboards** and a stat to see the top 10.
 3. **Operators:** `/realm:stats_sidebar <stat>` shows one stat on everyone's sidebar. Use a stat ID (`playtime`, `deaths`, `mobkills`, `pvpkills`, `mined`, `placed`, `travelled`, `flown`, `joins`), for example `/realm:stats_sidebar travelled`, `cycle` to rotate through all of them every 30 seconds, or `off`.
 
@@ -305,7 +349,7 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 | `pvpkills` | Player kills | Other players killed |
 | `mined` | Blocks mined | Blocks broken by the player. Essentials+ tree felling and vein mining only count the first block |
 | `placed` | Blocks placed | Blocks placed by the player |
-| `travelled` | `Distance travelled` | Blocks moved, not gliding, measured every second. Includes walking, swimming, boats and minecarts |
+| `travelled` | `Distance travelled` | Blocks moved, not gliding, measured every second. Includes walking, swimming, boats and minecarts. Not counted while AFK, so a water stream or minecart loop doesn't climb the board |
 | `flown` | Elytra distance | Blocks moved while gliding |
 | `joins` | Times joined | Each join |
 
@@ -320,8 +364,8 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:stats` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date) or **Leaderboards** (pick a stat to see the top `leaderboardSize`, with your own position underneath if you're outside it) |
-| `/realm:stats_sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through every stat every `sidebarCycleSeconds`) or **`off`** |
+| `/realm:stats` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date) or **Leaderboards** (pick a stat to see the top 10, `leaderboardSize`, with your own position underneath if you're outside it) |
+| `/realm:stats_sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through every stat every 30 seconds, `sidebarCycleSeconds`) or **`off`** |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -358,14 +402,14 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 
 ### How to use
 
-1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it.
+1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `📰 Realm news updated. Run /realm:news to read it.`
 2. Missed it, or want to read it again? Run `/realm:news`.
 3. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
 4. **Operators:** `/realm:news_edit` writes the news. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
 
 ### News popup
 
-- When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join. Reading it with `/realm:news` doesn't count, so the popup still shows on the next join.
+- When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join, and everyone online gets `📰 Realm news updated. Run /realm:news to read it.` in chat. Reading it with `/realm:news` counts, so a player who already read it isn't shown the popup again.
 - The popup is timed after the welcome popup (`delayTicks` = 5 s). If another popup is still open, it waits up to about 90 s.
 - If it still can't show, chat says `📰 There's new Realm news! Run /realm:news to read it.` (on the same line after the "welcome back" notice, if there is one), and the player sees the popup on their next join instead.
 - Saving **unchecked** is a quiet edit (e.g. a typo fix). Players who already saw the news don't see it again.
@@ -378,14 +422,15 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 ### Tips
 
 - A tip from the list is posted in chat every `tipIntervalMinutes` (20), as `[Tip] …` (`tipPrefix`), only while someone is online.
-- The default tips cover the realm's other add-ons (tree felling, vein mining, the Waypoint Menu) and two commands from these packs (`/realm:stats`, `/realm:afk`).
+- The default tips cover the realm's other add-ons (tree felling, vein mining, the Waypoint Menu) and these packs (`/realm:stats`, `/realm:afk`, `/realm:help`, the Quick Stack & Sort sneak-tap and `/realm:find`). A world that already saved its own tips keeps them; add the new ones with `/realm:news_tips`.
+- Opening **+ Add a tip** and saving it empty changes nothing. Only a real change saves the list, and from then on the saved list is used instead of `config.js`.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:news` | Everyone | Shows the current news |
-| `/realm:news_edit` | Ops | Editor: title, body, and the "pop up on next join" toggle |
+| `/realm:news` | Everyone | Shows the current news, which also counts as having seen its popup |
+| `/realm:news_edit` | Ops | Editor: title, body, and the "pop up on next join" toggle. If chat stays open for about 20 s, it says it couldn't open |
 | `/realm:news_tips` | Ops | Tips menu: **+ Add a tip**, **Settings** (on/off, interval 5–120 min in steps of 5), **Post the next tip now**, or tap a tip to edit or delete it |
 
 ### Configuration (`scripts/config.js`)
@@ -437,9 +482,9 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:guard` | Everyone | Shows the mode, the covered blast sources and the zones |
-| `/realm:guard_add <name> [radius]` | Ops | Protects a sphere around you, `radius` 8–256 blocks (default `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique. Only matters in `zones` mode |
-| `/realm:guard_remove <name>` | Ops | Removes a zone |
+| `/realm:guard` | Everyone | Shows whether the spot you're standing on is protected (and by which zone), then the mode, the covered blast sources and the zones |
+| `/realm:guard_add <name> [radius]` | Ops | Protects a sphere around you, `radius` 8–256 blocks (default 64, `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique whatever their case (`home` and `Home` are the same zone). Only matters in `zones` mode |
+| `/realm:guard_remove <name>` | Ops | Removes a zone (any case) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -525,6 +570,7 @@ Tap a ripe crop to harvest it and replant it in one go, so fields never need re-
 
 - Drops come from the block's own Bedrock loot table, as if you had broken it with what's in your hand, so the counts match vanilla and a Fortune hoe raises carrot, potato and other yields.
 - Only one harvest per tap. Holding the button down doesn't sweep a field.
+- With `replantCostsSeed` on and no seed to spare, the bar above the hotbar says `No seed to replant it` and the spot is left empty.
 - Villager farmers are unaffected, and a farm guide's water-flush harvest still works on the same field.
 - Harvests don't count as **Blocks mined** in the Stats pack, because no block is broken.
 
@@ -555,7 +601,7 @@ Keeps named farms loaded with Bedrock ticking areas, so crops grow, furnaces sme
 
 1. Run `/realm:farm` to see which farms are kept loaded: name, dimension, coordinates, size, who added it and when.
 2. **Operators:** stand in the middle of a farm and run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
-3. **Operators:** `/realm:farm_remove <name>` stops keeping it loaded, or tap **Remove** next to it in `/realm:farm`.
+3. **Operators:** `/realm:farm_remove <name>` stops keeping it loaded, or tap **Remove** next to it in `/realm:farm`; the menu comes back afterwards, so you can remove another.
 
 ### What keeps running, and what doesn't
 
@@ -571,8 +617,8 @@ Bedrock rules, worth knowing before you add a farm:
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:farm` | Everyone | Lists the loaded farms. Operators also get a **Remove** button for each |
-| `/realm:farm_add <name> [radius]` | Ops (everyone if `everyoneCanAdd`) | Adds a ticking area centered on you, `radius` 1–4 chunks (default `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique |
-| `/realm:farm_remove <name>` | Ops (everyone if `everyoneCanAdd`) | Removes it |
+| `/realm:farm_add <name> [radius]` | Ops (everyone if `everyoneCanAdd`) | Adds a ticking area centered on you, `radius` 1–4 chunks (default 2, `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique |
+| `/realm:farm_remove <name>` | Ops (everyone if `everyoneCanAdd`) | Stops keeping the farm loaded and removes it from the list |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -600,30 +646,31 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into
 
 ### How to use
 
-1. **Open the menu:** sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand. It doesn't open; a **Quick Stack & Sort** menu does, with three buttons:
+1. **Open the menu:** sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a **Quick Stack & Sort** menu does, with three buttons:
    - **Sort this chest** (or barrel, shulker box…): its stacks merge and sort, and the bar above the hotbar says `Sorted 31 stacks`.
    - **Quick stack my inventory:** the same as `/realm:stash`, below.
    - **Sort my inventory:** the same as `/realm:sort`, below.
-2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into storage within 8 blocks that already holds the same item. The bar says `Stashed 143 items into 3 chests`, and each container that got something sparkles.
+2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into a chest, copper chest or barrel within 8 blocks that already holds the same item. Your gear, shulker boxes, bundles, totems, maps and compasses stay with you. The bar says `Stashed 143 items into 3 chests`, and each container that got something sparkles.
 3. **Sort your inventory:** run `/realm:sort`. Your main inventory is sorted; the hotbar stays as it is.
 4. **Help:** run `/realm:stash_help` for a page that explains the menu and every command with its usage. `/help realm:stash` and `/help realm:sort` also describe them.
 
 ### What players see
 
-- **The menu** shows how full the container is and how full your inventory is (`Barrel · 18 of 27 slots used`, `Your inventory · 22 of 27 slots used`), then the three buttons. Close it to do nothing. Holding something in your hand skips the menu, so sneak-placing a hopper on a chest works as usual.
+- **The menu** shows how full the container is and how full your inventory is (`Barrel · 18 of 27 slots used`, `Your inventory · 22 of 27 slots used`), then the three buttons. Close it to do nothing. Holding anything other than gear (a block, a hopper, honeycomb) skips the menu, so sneak-placing a hopper on a chest or waxing a copper chest works as usual. To scrape a copper chest with an axe, don't sneak.
 - **Ender chests** get the menu without **Sort this**: add-ons can't see inside an ender chest, so it can't be sorted or stashed into.
 - **Sorting** merges partial stacks of the same item, then orders the slots by item id, the biggest stack first, with empty slots at the end. A chest with 3 partial stacks of cobblestone ends with 1 full stack plus the rest.
 - Items with a custom name, lore or enchantments are never merged, only moved, and moving keeps every item exactly as it was: enchanted gear, named items, written books, filled maps, banners and shulker boxes with their contents.
-- `/realm:stash` only takes from your main inventory (slots 9–35): never the hotbar, armor or offhand. Named items stay with you unless `stashNamedItems` is on. A container that holds the item gets matching stacks topped up first, then its empty slots, nearest container first. Chests, trapped chests, copper chests, barrels and placed shulker boxes all receive stashes.
-- Double chests (copper ones too) count once. Ender chests are never used. Containers in chunks that aren't loaded are never touched. Another player having the chest open is fine.
+- `/realm:stash` only takes from your main inventory (slots 9–35): never the hotbar, armor or offhand. It also leaves you your gear (anything with durability: tools, weapons, armor, elytra; `stashGear`), named items (`stashNamedItems`) and everything in `keepItems`: shulker boxes, bundles, the totem of undying, filled maps, compasses and clocks. A container that holds the item gets matching stacks topped up first, then its empty slots, nearest container first.
+- **What receives stashes:** chests, trapped chests, copper chests and barrels (`stashTypes`). Placed shulker boxes don't: they're a kit you pick up and carry, so they only get the menu and sorting.
+- Double chests (copper ones too) count once. Ender chests never receive anything. Containers in chunks that aren't loaded are never touched. Another player having the chest open is fine.
 - Each player can sort or stash once per second (`cooldownTicks`). A menu button pressed sooner says `Too fast. Try again in a moment.`
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:stash` | Everyone | Quick stack: puts your main inventory into storage within 8 blocks that already holds the same items. Same as the menu's **Quick stack my inventory** |
-| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched unless `sortHotbar` is on. Same as the menu's **Sort my inventory** |
+| `/realm:stash` | Everyone | Quick stack: puts your main inventory into chests and barrels within 8 blocks that already hold the same items, keeping your gear and carried items. Same as the menu's **Quick stack my inventory** |
+| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched (unless `sortHotbar` is on). Same as the menu's **Sort my inventory** |
 | `/realm:stash_help` | Everyone | Opens the help page: the sneak-tap menu, then each command with its usage and what it never touches |
 
 None of them take parameters. The help page and the `/help` descriptions follow `config.js`, so a different `stashRadius` or `sortHotbar` shows up there too.
@@ -633,9 +680,12 @@ None of them take parameters. The help page and the `/help` descriptions follow 
 | Option | Default | Description |
 |---|---|---|
 | `stashRadius` | `8` | Blocks around the player to look for containers (a 17 × 17 × 17 cube) |
-| `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that get the sneak-tap menu, can be sorted and receive stashes. Ids this game version doesn't have are skipped. Ender chests get the menu regardless and are never sorted or stashed into |
-| `sneakTap` | `"menu"` | What sneak-tapping a container with an empty hand does: `"menu"` opens the menu, `"sort"` sorts it right away (no menu, no ender chests), `"off"` does nothing so it opens as usual. With `"menu"` or `"sort"`, sneak-tapping never opens it |
+| `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that get the sneak-tap menu and can be sorted. Ender chests get the menu regardless and are never sorted or stashed into |
+| `stashTypes` | chest, trapped chest, copper chest (all 8), barrel | Block ids that receive `/realm:stash`. Ids this game version doesn't have are skipped. Shulker boxes are left out on purpose |
+| `sneakTap` | `"menu"` | What sneak-tapping a container with an empty hand or gear in it does: `"menu"` opens the menu, `"sort"` sorts it right away (no menu, no ender chests), `"off"` does nothing so it opens as usual. With `"menu"` or `"sort"`, sneak-tapping never opens it |
 | `stashNamedItems` | `false` | `/realm:stash` also moves items with a custom name |
+| `stashGear` | `false` | `/realm:stash` also moves gear: anything with durability (tools, weapons, armor, elytra, shields…) |
+| `keepItems` | shulker boxes (17), bundles (17), `totem_of_undying`, `filled_map`, `compass`, `lodestone_compass`, `recovery_compass`, `clock` | Item ids `/realm:stash` never moves |
 | `sortHotbar` | `false` | `/realm:sort` and the menu's **Sort my inventory** also sort the hotbar |
 | `cooldownTicks` | `20` | Minimum time between sorts and stashes per player (20 = 1 s). Opening the menu or the help page doesn't count |
 
@@ -645,9 +695,9 @@ None.
 
 ### How it works
 
-- **Menu:** `world.beforeEvents.playerInteractWithBlock` cancels the tap when the player is sneaking, the hand is empty and the block is a listed container or an ender chest. On the next tick an `ActionFormData` from `@minecraft/server-ui` shows the menu; a player can have one open at a time. The chosen action re-reads the block, so a container broken while the menu was open is left alone.
+- **Menu:** `world.beforeEvents.playerInteractWithBlock` cancels the tap when the player is sneaking, the hand is empty or holds an item with a `minecraft:durability` component, and the block is a listed container or an ender chest. On the next tick an `ActionFormData` from `@minecraft/server-ui` shows the menu; a player can have one open at a time. The chosen action re-reads the block, so a container broken while the menu was open is left alone.
 - **Sort:** stacks are merged by changing the amount of the slot that stays (`ContainerSlot.amount`) and ordered with `swapItems`. Both are native moves, so no item is ever copied or re-created and nothing about it can be lost.
-- **Stash:** one `dimension.getBlocks` query finds the listed containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
+- **Stash:** one `dimension.getBlocks` query finds the `stashTypes` containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
 - When both halves of a double chest report the whole 54 slots, the second half is recognized (same kind of chest, same contents, same facing, side by side; in a row of identical chests, counted from the row's end) and skipped. Copper chests of different stages count as the same kind.
 - If `transferItem` ever hands a leftover back instead of leaving it in the slot, the pack puts it back, so nothing is lost.
 
@@ -668,7 +718,8 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 - **Matching:** the item id first. `/realm:find diamond` finds diamonds only, because an item is called exactly that. When nothing is called exactly what you typed, every item whose id contains it is listed: `/realm:find iron` finds iron ingots, iron blocks, raw iron, iron swords and so on. Type one word, or use `_` for a space: `/realm:find iron_ingot` (or quote it: `/realm:find "iron ingot"`).
 - **Always current nearby:** containers within `liveScanRadius` (16 blocks) are read at search time, so a chest filled by hoppers that nobody ever opened is still found. Farther ones show what they held when last seen, hence `seen 2h ago`: hoppers and the copper golem sorter may have changed them since.
 - Results in your dimension are sorted by distance; containers in other dimensions are listed after them, without a distance.
-- A double chest is listed once. A broken container disappears from the results. One that was removed some other way (an explosion, say) disappears the next time a search finds its spot loaded and empty.
+- Copper chests count, in every stage, waxed or not, and the result names the exact one (`Waxed Oxidized Copper Chest`), which helps tell them apart.
+- A double chest (copper ones too) is listed once. A broken container disappears from the results. One that was removed some other way (an explosion, say) disappears the next time a search finds its spot loaded and empty.
 - Only containers and their contents are remembered, never who opened them.
 
 ### Commands
@@ -685,7 +736,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 | `maxContainers` | `2000` | Most containers remembered; the ones seen longest ago are forgotten first |
 | `maxResults` | `20` | Rows in the results menu |
 | `highlightSeconds` | `10` | How long the particle column shows |
-| `containerTypes` | chest, trapped chest, barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched |
+| `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched. Ids this game version doesn't have are skipped |
 
 ### Saved data
 
@@ -695,9 +746,9 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 
 ### How it works
 
-- **Remembering:** on `world.afterEvents.playerInteractWithBlock` with a listed container, its contents are counted per item id right away and again 10 seconds later, after the player has put things in or taken them out. `playerBreakBlock` removes the entry. Empty containers aren't kept.
+- **Remembering:** on `world.afterEvents.playerInteractWithBlock` with a listed container, its contents are counted per item id right away, again 10 seconds later, after the player has put things in or taken them out, and once more after a minute, for long sorting sessions. `playerBreakBlock` removes the entry. Empty containers aren't kept.
 - **Searching:** one `dimension.getBlocks` query finds the containers within `liveScanRadius`, which are read a few per tick with `system.runJob`, then the whole index is matched in one pass and sorted by distance.
-- **Double chests:** when both halves report the whole 54 slots, both are stored under the half with the smaller coordinates. The halves are told apart from a neighboring double chest with the same contents by their facing and, in a row of identical chests, by counting from the row's end.
+- **Double chests:** when both halves report the whole 54 slots, both are stored under the half with the smaller coordinates. Copper chests of different stages count as the same kind of chest. The halves are told apart from a neighboring double chest with the same contents by their facing and, in a row of identical chests, by counting from the row's end.
 
 ---
 
@@ -708,7 +759,7 @@ Sit on any stair or bottom slab, which makes the furnished houses on mc.nish.sof
 ### How to use
 
 1. Tap a stair or a bottom slab with an empty hand, standing within 2.5 blocks of it. You sit on it, facing away from the stair's back.
-2. Sneak to stand up (on touch screens, the dismount button).
+2. Sneak to stand up (on touch screens, the dismount button). The bar above the hotbar reminds you when you sit.
 3. Run `/realm:sit` to sit down right where you stand.
 
 ### What players see
@@ -785,13 +836,14 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 |---|---|
 | AFK → Stats | Stats pauses playtime for players with the `afk` tag. Keep AFK `tag` and Stats `afkTag` the same |
 | Welcome → News | Both popups show on join, welcome first (`delayTicks` 40 vs 100). News waits until the welcome popup is closed |
-| News tips → others | The default tips mention `/realm:stats` and `/realm:afk`. Edit them with `/realm:news_tips` if you don't use those packs |
+| News tips → others | The default tips mention `/realm:stats`, `/realm:afk`, `/realm:help`, the stash sneak-tap and `/realm:find`. Edit them with `/realm:news_tips` if you don't use those packs |
 | Bedrock Essentials+ | Tree felling and vein mining only count 1 block in `mined`. No other overlap |
 | AFK smart sleep → Phantom Opt-out | Smart sleep lets the night pass without everyone in bed, so some players build up phantoms. They can turn them off for themselves with `/realm:phantoms` |
 | Right-click Harvest → Stats | Harvesting by tap breaks no block, so it doesn't count toward `mined` |
 | Quick Stack & Sort → sorters | `/realm:stash` also fills the chests of an item sorter (hoppers or copper golems), since they already hold the same items, and a copper golem's copper chest if it already holds them. Sorting a sorter's chest from the sneak-tap menu is harmless |
 | Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
 | Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
+| Realm Help ← every pack | `/realm:help` lists the packs that answer its script event, so it only shows what's installed. Its text is generated from this file |
 
 None of the packs depend on each other. Any combination works.
 
@@ -802,7 +854,7 @@ None of the packs depend on each other. Any combination works.
 
 | Problem | Check |
 |---|---|
-| A command doesn't show up | Type `/realm` to list them all (e.g. `/realm:stats`). Is the pack **Active**, not just Available? Minecraft 1.21.100+? Rejoin after activating. Ops-only commands are hidden from regular members |
+| A command doesn't show up | Run `/realm:help` to see the features this realm has, or type `/realm` to list the commands (e.g. `/realm:stats`). Is the pack **Active**, not just Available? Minecraft 1.21.100+? Rejoin after activating. Ops-only commands are hidden from regular members |
 | Commands missing after adding a bundle | The individual packs and the bundle are both active, so duplicates fail. Keep only one |
 | Popup never appears | Close chat/inventory. The welcome popup retries for 30 s, news for about 90 s. Check the content log |
 | Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults: `/realm:welcome_reset` clears welcome edits; news, tips and tip settings saved in game always win over `config.js` |
@@ -821,6 +873,8 @@ None of the packs depend on each other. Any combination works.
 - a `### How to use` section in every pack section: short numbered steps for players, operators last
 - **every command** a pack registers, e.g. `` `/realm:stats` ``
 - **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
+
+It also runs `tools/help-catalog.mjs --check`: the in-game `/realm:help` text is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs`. It also fails if a pack doesn't answer `/realm:help`'s `realm:help_ping` script event.
 
 When adding or changing a pack: update its section here, and the pack table in `README.md`, in the same commit.
 

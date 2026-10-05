@@ -4,7 +4,7 @@
     "name": "Chairs",
     "description": "Sit on stairs and bottom slabs: tap one with an empty hand. /realm:sit",
     "uuid": "3b7ce3cd-fe2b-406a-af26-d20922acfba7",
-    "version": [1, 0, 0],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

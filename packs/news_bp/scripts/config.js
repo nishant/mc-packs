@@ -14,6 +14,9 @@ export const DEFAULTS = {
     "Use the Waypoint Menu item to save and share teleport points.",
     "Run /realm:stats to see your stats and the leaderboards.",
     "Going AFK? Run /realm:afk, then the night can be skipped without you.",
+    "Run /realm:help to see every realm command and how to use it.",
+    "Sneak and tap a chest to sort it, or to quick stack your inventory into the chests nearby.",
+    "Lost track of where something is? /realm:find iron points to the chest that has it.",
   ],
 
   /** Post a tip in chat every N minutes (only while someone is online). */

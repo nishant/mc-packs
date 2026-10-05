@@ -114,7 +114,8 @@ system.runInterval(() => {
       let p = pending.get(player.id);
       if (!p) pending.set(player.id, (p = { seconds: 0, travelled: 0, flown: 0 }));
 
-      if (!CONFIG.afkTag || !player.hasTag(CONFIG.afkTag)) {
+      const afk = !!CONFIG.afkTag && player.hasTag(CONFIG.afkTag);
+      if (!afk) {
         if (++p.seconds >= 60) {
           p.seconds -= 60;
           add(player, "playtime");
@@ -123,7 +124,8 @@ system.runInterval(() => {
 
       const loc = player.location;
       const dim = player.dimension.id;
-      if (p.last && p.last.dim === dim) {
+      // AFK players carried by water or a minecart loop don't climb the distance boards.
+      if (!afk && p.last && p.last.dim === dim) {
         const d = Math.hypot(loc.x - p.last.x, loc.y - p.last.y, loc.z - p.last.z);
         if (d <= CONFIG.maxSpeed) {
           const key = player.isGliding ? "flown" : "travelled";
@@ -330,3 +332,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     }
   );
 });
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stats_bp");
+  },
+  { namespaces: ["realm"] }
+);

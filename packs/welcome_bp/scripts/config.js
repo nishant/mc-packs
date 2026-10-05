@@ -23,6 +23,7 @@ export const DEFAULTS = {
     "§7•§r Be kind, no griefing\n" +
     "§7•§r Ask before building near someone else\n" +
     "§7•§r Have fun\n\n" +
+    "Type §b/realm:help§r to see everything this realm adds.\n\n" +
     "§7Players online: {online}",
 
   /** Text on the close button. */
