@@ -2,6 +2,7 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Pl
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
+import { get } from "./settings.js";
 
 /** @typedef {typeof PACKS[number]} Pack */
 
@@ -55,7 +56,7 @@ async function show(player, form) {
 }
 
 /** @param {Player} player */
-const seesOps = (player) => CONFIG.showOpsToEveryone || player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+const seesOps = (player) => get("showOpsToEveryone") === true || player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 
 /** The commands and steps this player may use. @param {Pack} pack @param {boolean} ops */
 const visible = (pack, ops) => ({

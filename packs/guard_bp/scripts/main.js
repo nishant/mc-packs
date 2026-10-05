@@ -7,6 +7,7 @@ import {
   world,
 } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { get } from "./settings.js";
 
 const PROP_ZONES = "guard:zones"; // world: JSON Zone[]
 
@@ -18,7 +19,8 @@ const NAME_RE = /^[A-Za-z0-9_-]{1,24}$/;
 /** @typedef {{ name: string, dim: string, x: number, y: number, z: number, radius: number }} Zone */
 
 const sources = new Set(CONFIG.sources);
-const zonesMode = CONFIG.mode === "zones";
+/** The mode can change in game (/realm:config): read it each time. The value is cached, so explosions stay cheap. */
+const zonesMode = () => get("mode") === "zones";
 
 // ---------------------------------------------------------------------------
 // Zones (cached: the explosion before event may read but never write)
@@ -81,7 +83,7 @@ world.beforeEvents.explosion.subscribe((event) => {
   const type = event.source?.typeId;
   if (!type || !sources.has(type)) return; // TNT, beds, respawn anchors: no source or not listed
   try {
-    if (!zonesMode) {
+    if (!zonesMode()) {
       event.setImpactedBlocks([]);
       return;
     }
@@ -111,13 +113,14 @@ function statusText(player) {
   let here = [];
   if (player && sources.size) {
     const { x, y, z } = player.location;
-    const zone = zonesMode ? zoneAt(player.dimension.id, { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }) : undefined;
-    here = [zonesMode ? (zone ? `§aWhere you stand: protected (zone §e${zone.name}§a)` : "§cWhere you stand: not protected") : "§aWhere you stand: protected"];
+    const inZonesMode = zonesMode();
+    const zone = inZonesMode ? zoneAt(player.dimension.id, { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }) : undefined;
+    here = [inZonesMode ? (zone ? `§aWhere you stand: protected (zone §e${zone.name}§a)` : "§cWhere you stand: not protected") : "§aWhere you stand: protected"];
   }
   const lines = [
     ...here,
     `§6Creeper Guard§r: ${
-      zonesMode ? "only inside the zones below" : "everywhere (zones are only used in zones mode)"
+      zonesMode() ? "only inside the zones below" : "everywhere (zones are only used in zones mode)"
     }`,
     `Blasts that break no blocks: ${[...sources].map(shortId).join(", ") || "none"}`,
     list.length ? `Zones (${list.length}):` : "No zones.",
@@ -158,7 +161,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!NAME_RE.test(name)) {
         return { status: CustomCommandStatus.Failure, message: "Zone names use letters, digits, _ and - (up to 24)." };
       }
-      const r = radius ?? CONFIG.defaultRadius;
+      const r = radius ?? get("defaultRadius");
       if (r < MIN_RADIUS || r > MAX_RADIUS) {
         return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS}–${MAX_RADIUS} blocks.` };
       }
@@ -179,7 +182,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       system.run(() => saveZones([...getZones(), zone]));
       return {
         status: CustomCommandStatus.Success,
-        message: `Zone added: ${describeZone(zone)}${zonesMode ? "" : "\n§7Mode is everywhere, so zones have no effect until mode is set to zones in config.js."}`,
+        message: `Zone added: ${describeZone(zone)}${zonesMode() ? "" : "\n§7Mode is everywhere, so zones have no effect until an operator sets the mode to zones in /realm:config."}`,
       };
     }
   );

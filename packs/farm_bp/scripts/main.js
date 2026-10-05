@@ -8,6 +8,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { get } from "./settings.js";
 
 const PROP_AREAS = "farm:areas"; // world: JSON Farm[] (the game keeps the ticking areas; this is for the menu)
 
@@ -62,7 +63,8 @@ function tryCommand(dimension, command) {
 function addFarm(player, name, radius) {
   const list = getFarms();
   if (list.some((f) => f.name === name)) return player.sendMessage(`§cThere is already a farm "${name}".`);
-  if (list.length >= CONFIG.maxAreas) return player.sendMessage(`§cAll ${CONFIG.maxAreas} farms are in use. Remove one first (/realm:farm).`);
+  const maxAreas = get("maxAreas");
+  if (list.length >= maxAreas) return player.sendMessage(`§cAll ${maxAreas} farms are in use. Remove one first (/realm:farm).`);
 
   const x = Math.floor(player.location.x);
   const y = Math.floor(player.location.y);
@@ -73,7 +75,7 @@ function addFarm(player, name, radius) {
   }
   list.push({ name, dim: player.dimension.id, x, z, radius, by: player.name, at: Date.now() });
   saveFarms(list);
-  player.sendMessage(`§aFarm "${name}" stays loaded (radius ${radius} chunk${radius > 1 ? "s" : ""}, ${list.length}/${CONFIG.maxAreas} used)`);
+  player.sendMessage(`§aFarm "${name}" stays loaded (radius ${radius} chunk${radius > 1 ? "s" : ""}, ${list.length}/${maxAreas} used)`);
 }
 
 /** @param {Player} player @param {string} name */
@@ -118,7 +120,7 @@ async function openMenu(player) {
   const edit = canEdit(player);
   const form = new ActionFormData()
     .title("Loaded farms")
-    .body(`${list.length}/${CONFIG.maxAreas} in use.\n\n${list.map(describe).join("\n")}`);
+    .body(`${list.length}/${get("maxAreas")} in use.\n\n${list.map(describe).join("\n")}`);
   if (edit) for (const f of list) form.button(`Remove ${f.name}`);
   form.button("Close");
 
@@ -180,7 +182,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!NAME_RE.test(name)) {
         return { status: CustomCommandStatus.Failure, message: "Farm names use letters, digits, _ and - (up to 24)." };
       }
-      const r = radius ?? CONFIG.defaultRadius;
+      const r = radius ?? get("defaultRadius");
       if (r < MIN_RADIUS || r > MAX_RADIUS) {
         return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS}–${MAX_RADIUS} chunks.` };
       }

@@ -17,6 +17,7 @@ What each pack in this repo does, how to use it, and how to configure it.
   - [Updating a pack](#updating-a-pack)
   - [Formatting codes](#formatting-codes)
 - [Realm Help — `help_bp`](#realm-help--help_bp)
+- [Realm Settings — `settings_bp`](#realm-settings--settings_bp)
 - [Welcome Message — `welcome_bp`](#welcome-message--welcome_bp)
 - [Low Durability Warning — `durability_bp`](#low-durability-warning--durability_bp)
 - [AFK + Smart Sleep — `afk_bp`](#afk--smart-sleep--afk_bp)
@@ -64,7 +65,7 @@ The realm runs everything as one pack, **Realm Bundle**, and that is the downloa
 
 **Standalone packs:** the two rain packs are never in the Realm Bundle and are made to run next to it: [Realistic Rain](#realistic-rain--rain_rp) (a resource pack) and [Rain Extras](#rain-extras--rain_bp) (a behavior pack). Download each from its card under **Standalone packs** and open it, then in the realm's settings activate Realistic Rain under **Resource Packs**, at the top of the list, and Rain Extras under **Behavior Packs**, next to the Realm Bundle. Players get both automatically when they join.
 
-**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. (The standalone packs above aren't in the bundle, so they go with either.) Switching between them starts the features' in-game settings over (welcome and news text, tips, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
+**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. (The standalone packs above aren't in the bundle, so they go with either.) Switching between them starts the features' in-game settings over (welcome and news text, tips, settings from `/realm:config`, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
 ### Installing on a Realm
 
@@ -88,8 +89,10 @@ For whoever builds the packs from this repo:
 
 | | Where | Who | Takes effect | Notes |
 |---|---|---|---|---|
-| **In-game** | Commands like `/realm:welcome_edit`, `/realm:news_edit`, `/realm:news_tips`, `/realm:stats_sidebar` | Operators | Immediately | Saved in the world, and overrides `config.js` |
-| **`config.js`** | `packs/<folder>/scripts/config.js` | Whoever builds the pack | After rebuilding and re-applying the pack | Defaults and options that have no in-game editor |
+| **In-game, every pack** | `/realm:config` ([Realm Settings](#realm-settings--settings_bp)), or an item named `Realm Settings` | Operators | Immediately | The options that make sense to change live, in every installed pack: switches, numbers and choices. Saved in the world, and overrides `config.js`. **Reset a pack to defaults** goes back to `config.js` |
+| **In-game, per player** | `/realm:prefs`, and toggles such as `/realm:durability`, `/realm:phantoms`, `/realm:rain` | Every player, for themselves | Immediately | Overrides the realm's value for that player only |
+| **In-game editors** | `/realm:welcome_edit`, `/realm:news_edit`, `/realm:news_tips`, `/realm:stats_sidebar` | Operators | Immediately | Texts, tips and the sidebar. Saved in the world, and overrides `config.js` |
+| **`config.js`** | `packs/<folder>/scripts/config.js` | Whoever builds the pack | After rebuilding and re-applying the pack | Defaults for all of the above, and the options that have no in-game editor: lists, texts, tick intervals and command permissions |
 
 ### Updating a pack
 
@@ -131,23 +134,99 @@ One help page for every realm command: how each feature works, and each command 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:help [feature]` | Everyone | Opens the help menu, or the page for `feature` (`afk`, `chairs`, `durability`, `farm`, `find`, `guard`, `harvest`, `news`, `phantom`, `rain`, `stash`, `stats`, `welcome`) or `all` |
+| `/realm:help [feature]` | Everyone | Opens the help menu, or the page for `feature` (`afk`, `chairs`, `durability`, `farm`, `find`, `guard`, `harvest`, `news`, `phantom`, `rain`, `settings`, `stash`, `stats`, `welcome`) or `all` |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
 | Option | Default | Description |
 |---|---|---|
 | `answerTicks` | `10` | Ticks to wait for the installed packs to answer before the help opens (20 = 1 s) |
-| `showOpsToEveryone` | `false` | Show operator-only commands and steps to everyone |
+| `showOpsToEveryone` | `false` | Show operator-only commands and steps to everyone. Operators can change it in game with `/realm:config` |
 
 ### Saved data
 
-None.
+| Key | Scope | Contents |
+|---|---|---|
+| `help:cfg` | World | Settings changed in `/realm:config` (`showOpsToEveryone`) |
 
 ### How it works
 
 - `scripts/catalog.js` holds every pack's summary, `### How to use` steps and Commands table from this file, converted to Minecraft formatting. `node tools/help-catalog.mjs` writes it (and bumps this pack's patch version once per commit); `npm run check` fails when it's out of date.
 - `/realm:help` sends the script event `realm:help_ping`. Every other pack answers `realm:help_pong` with its folder name, and the help lists the packs that answered within `answerTicks`. Script events cross pack boundaries without imports, so the packs stay independent, and work the same in the Realm Bundle and as single packs.
+
+---
+
+## Realm Settings — `settings_bp`
+
+Change the packs' settings in game: operators set them for everyone with `/realm:config`, and every player picks their own preferences with `/realm:prefs`.
+
+### How to use
+
+1. Run `/realm:prefs` to open **My preferences**: one form with your own choices from every installed pack, such as turning off durability warnings, phantoms or the rain extras for yourself, what sneak-tapping a chest does, and whether chat announces you going AFK. Change what you like and tap **Save**. Chat confirms each change, for example `Saved: Phantom Opt-out, Turn off phantoms for me: on`.
+2. Your choices are remembered. `/realm:durability`, `/realm:phantoms` and `/realm:rain` flip the same switches as the form.
+3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone, and chat confirms each one. A setting marked `needs a world restart` can only be changed in the pack's `config.js`.
+4. **Operators:** **Reset a pack to defaults**, at the bottom of the menu, puts one pack's settings back to its `config.js` values after asking. Players' own preferences are kept.
+
+### What players see
+
+- Only installed packs are listed: each pack answers when the menu asks, as with `/realm:help`. Rain Extras is listed too when it runs next to the Realm Bundle.
+- Each setting has a `!` icon: hover over it or tap it for what the setting does and its default.
+- A preference set to what the realm has follows the realm: if an operator changes that setting later, you get the new value. A preference set to something else stays yours.
+- If a pack doesn't confirm a change within half a second, chat says `Not saved: … the pack didn't answer. Try again.`; a value the pack refuses says why.
+- Players who aren't operators and use an item named `Realm Settings` are pointed to `/realm:prefs`.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:prefs` | Everyone | Opens **My preferences**: your own choices from every installed pack, in one form |
+| `/realm:config` | Ops | Opens **Realm Settings**: every installed pack's settings for everyone, then **Reset a pack to defaults**. Using an item named `Realm Settings` opens it too (`itemName`) |
+
+### What each pack offers
+
+| Pack | `/realm:config` (for everyone) | `/realm:prefs` (each player) |
+|---|---|---|
+| Realm Help | `showOpsToEveryone` | |
+| Welcome Message | `showOnce`, `chat`, `screenTitle` (the same switches as `/realm:welcome_edit`) | Show me the welcome popup when I join |
+| Low Durability Warning | `warnPercent`, `criticalPercent`, `maxUsesForWarning`, `chatOnCritical`; `checkIntervalTicks` is shown, restart only | Turn off low-durability warnings for me (`/realm:durability`) |
+| AFK + Smart Sleep | `afkMinutes`, `announce`, `sleep.enabled`, `sleep.percent`, `sleep.countOtherDimensions`, `sleep.requiredTicks` | Tell chat when I go AFK or come back |
+| Stats & Leaderboards | `sidebarCycleSeconds`, `leaderboardSize` | |
+| Realm News & Tips | `tipsEnabled` and `tipIntervalMinutes` (the same values as `/realm:news_tips` → **Settings**), `awayNoticeHours` | |
+| Creeper Guard | `mode`, `defaultRadius` | |
+| Phantom Opt-out | `defaultOff` | Turn off phantoms for me (`/realm:phantoms`) |
+| Right-click Harvest | `requireHoe`, `damageHoe`, `replantCostsSeed` | |
+| Farm Loader | `defaultRadius`, `maxAreas`; `everyoneCanAdd` is shown, restart only | |
+| Quick Stack & Sort | `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `cooldownTicks` | When I sneak-tap a container (`menu`, `sort` or `off`); sorting my inventory includes my hotbar |
+| Chest Finder | `liveScanRadius`, `maxResults`, `highlightSeconds` | |
+| Chairs | `maxReach`; `cleanupTicks` is shown, restart only | |
+| Rain Extras | `defaultOff`, `stormFog.enabled`, `mist.enabled`, `drips.enabled` | Turn off storm fog, mist and drips for me (`/realm:rain`) |
+
+Everything else (lists such as crops, `keepItems` and container types, texts such as name tag prefixes, tick intervals, and command permissions) stays in `config.js`.
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `answerTicks` | `10` | Ticks to wait for the installed packs to answer, and for each change to be confirmed (20 = 1 s) |
+| `itemName` | `Realm Settings` | Operators who use an item with exactly this name (renamed on an anvil) open `/realm:config`. `""` turns it off |
+
+### Saved data
+
+None in this pack. Each pack saves its own settings, so they stay with that pack and still apply when Realm Settings is removed:
+
+| Key | Scope | Contents |
+|---|---|---|
+| `<prefix>:cfg` (`afk:cfg`, `stash:cfg`, …) | World | JSON of the settings changed in `/realm:config` that differ from `config.js` |
+| `<prefix>:pref` (`afk:pref`, `stash:pref`, `welcome:pref`) | Player | JSON of the player's own preferences that differ from the realm's |
+| `durability:off`, `phantom:off`, `rain:off` | Player | The existing switches, kept so nobody's earlier choice is lost |
+| `news:tipSettings`, `welcome:settings` | World | Shared with `/realm:news_tips` and `/realm:welcome_edit`, so both menus show the same values |
+
+### How it works
+
+- Every other behavior pack has a `scripts/settings.js` that lists what can change in game. The pack reads those options through it (`get(key)`: the world's saved value over `config.js`; `getFor(player, key)`: the player's own value over the world's), so a change applies on the next use, with no restart.
+- The packs never import each other. This pack sends the script event `realm:cfg_ping` (`{id, player}`), and each pack answers `realm:cfg_schema` with its options and their current values (`{id, pack, title, part, parts, options}`), split into parts under the 2048-character limit of a script event message. Saving sends `realm:cfg_set` (`{id, pack, key, value, player?}`) and resetting `realm:cfg_reset` (`{id, pack}`). The pack checks the value (type, range, choices), ignores keys it doesn't have, saves it and answers `realm:cfg_ack` (`{id, pack, key, ok, value, error?}`), which is what chat confirms.
+- The part of `settings.js` that does this is the same in every pack: it's copied from `tools/settings-shared.js` by `node tools/sync-settings.mjs`, and `npm run check` fails if a copy is missing or out of date.
+- Operators with cheats on could send the same script events with `/scriptevent`; that does nothing an operator can't do in the menu.
 
 ---
 
@@ -158,7 +237,7 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 ### How to use
 
 1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
-2. Run `/realm:welcome` any time to see it again.
+2. Run `/realm:welcome` any time to see it again. Don't want the popup when you join? Turn off **Show me the welcome popup when I join** in `/realm:prefs`.
 3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
 
 ### What players see
@@ -186,7 +265,7 @@ Every save from `/realm:welcome_edit` counts as a new revision. With **show once
 
 ### Configuration (`scripts/config.js` → `DEFAULTS`)
 
-These are defaults. Once an op saves with `/realm:welcome_edit`, the saved values win until `/realm:welcome_reset`.
+These are defaults. Once an op saves with `/realm:welcome_edit`, the saved values win until `/realm:welcome_reset`. The switches `showOnce`, `chat` and `screenTitle` are also in `/realm:config`, saved in the same place, so both menus always show the same values. Each player can turn the popup on join off for themselves in `/realm:prefs` (`/realm:welcome` still shows it).
 
 | Option | Default | In-game? | Description |
 |---|---|---|---|
@@ -205,6 +284,7 @@ These are defaults. Once an op saves with `/realm:welcome_edit`, the saved value
 | `welcome:settings` | World | JSON of in-game edits |
 | `welcome:revision` | World | Increases on every save or reset |
 | `welcome:seen` | Player | Last revision the player saw (used by `showOnce`) |
+| `welcome:pref` | Player | JSON `{ popup: false }` when the player turned the popup on join off in `/realm:prefs` |
 
 ---
 
@@ -216,7 +296,7 @@ Warns players before a tool, weapon or armor piece breaks.
 
 1. Nothing to set up: hold or wear any tool, weapon or armor piece. At **10%** durability left a yellow warning appears above the hotbar with a soft chime; at **3%** a red "about to break!" warning, an anvil sound and the same line in chat.
 2. Repair the item (Mending, an anvil) or swap it before it breaks. A repaired item warns again the next time it runs low.
-3. Don't want the warnings? Run `/realm:durability` to turn them off for yourself; run it again to turn them back on. The choice is remembered.
+3. Don't want the warnings? Run `/realm:durability` to turn them off for yourself; run it again to turn them back on. The same switch is in `/realm:prefs`. The choice is remembered.
 
 ### What players see
 
@@ -246,13 +326,16 @@ Warns players before a tool, weapon or armor piece breaks.
 | `criticalPercent` | `3` | Critical level, in % left |
 | `maxUsesForWarning` | `0` | If > 0, never warn while more than this many uses are left, even under the % (useful for netherite). `0` = off |
 | `chatOnCritical` | `true` | Also post critical warnings in chat |
-| `checkIntervalTicks` | `10` | How often to check (20 = 1 s) |
+| `checkIntervalTicks` | `10` | How often to check (20 = 1 s). Read when the world starts, so `/realm:config` only shows it |
+
+Operators can change `warnPercent`, `criticalPercent`, `maxUsesForWarning` and `chatOnCritical` in game with `/realm:config`; they apply at the next check.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `durability:off` | Player | `true` when the player turned warnings off |
+| `durability:off` | Player | `true` when the player turned warnings off (`/realm:durability` or `/realm:prefs`) |
+| `durability:cfg` | World | Settings changed in `/realm:config` |
 
 ---
 
@@ -263,7 +346,7 @@ Marks idle players as AFK, and skips the night without waiting for them.
 ### How to use
 
 1. **Going AFK:** just stop playing. After 5 minutes your name shows `[AFK]` and chat says so. To go AFK right away (so the night can be skipped without you), run `/realm:afk`.
-2. **Coming back:** move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK.
+2. **Coming back:** move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK. Rather chat didn't announce you? Turn off **Tell chat when I go AFK or come back** in `/realm:prefs`.
 3. **Skipping the night:** get in a bed. Players who are AFK, and players in the Nether or the End, aren't waited for. While anyone is in bed, Overworld players see how many are asleep out of how many are needed, above the hotbar, and, when only 1 to 3 counted players are still up, who they are (`🛏 1/2 sleeping · awake: Sam`). Once everyone needed is in bed, it's morning within about 8 seconds, and rain or thunder stops.
 
 ### AFK detection
@@ -307,7 +390,7 @@ This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanil
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:afk` | Everyone | Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back. With `announce` off, only you get a confirmation |
+| `/realm:afk` | Everyone | Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back. With announcements off (`announce`, or yours in `/realm:prefs`), only you get a confirmation |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -322,9 +405,16 @@ This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanil
 | `sleep.countOtherDimensions` | `false` | Also count non-AFK players in the Nether/End (who can't sleep), like vanilla |
 | `sleep.requiredTicks` | `160` | How long enough players must be asleep before skipping (20 = 1 s). Values below `140` are raised to `140`, so vanilla's ~100-tick skip always comes first |
 
+Operators can change `afkMinutes`, `announce` and every `sleep.` option in game with `/realm:config`; they apply within a second. Each player can stop chat announcing them in `/realm:prefs`. With `announce` off, nobody is announced.
+
 ### Saved data
 
-Nothing is saved. AFK state is kept in memory and resets on rejoin. While a player is AFK, their name tag and the `afk` tag are changed.
+| Key | Scope | Contents |
+|---|---|---|
+| `afk:cfg` | World | Settings changed in `/realm:config` |
+| `afk:pref` | Player | JSON `{ announce: false }` when the player turned their announcements off in `/realm:prefs` |
+
+AFK state itself isn't saved: it's kept in memory and resets on rejoin. While a player is AFK, their name tag and the `afk` tag are changed.
 
 ### Known limits
 
@@ -380,6 +470,8 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 | `sidebarCycleSeconds` | `30` | Seconds per stat in `cycle` mode |
 | `maxSpeed` | `100` | Faster movement (blocks/s) counts as a teleport and isn't added to distance |
 
+Operators can change `leaderboardSize` and `sidebarCycleSeconds` in game with `/realm:config`. A new cycle length applies from the next second.
+
 ### Saved data
 
 | Key | Scope | Contents |
@@ -387,6 +479,7 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 | `stats_playtime`, `stats_deaths`, `stats_mobkills`, `stats_pvpkills`, `stats_mined`, `stats_placed`, `stats_travelled`, `stats_flown`, `stats_joins` | World scoreboard | The stats, one participant per player name. **Kept** when switching between the individual pack and a bundle |
 | `stats:sidebar` | World | Current sidebar mode (`<stat>` / `cycle`) |
 | `stats:firstJoin` | Player | First join time (ms since epoch) |
+| `stats:cfg` | World | Settings changed in `/realm:config` |
 
 ### Resetting stats
 
@@ -439,17 +532,17 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 
 ### Configuration (`scripts/config.js`)
 
-`DEFAULTS` are starting values that ops can change in-game. `CONFIG` options can only be changed in the file.
+`DEFAULTS` are starting values that ops can change in-game. Of the `CONFIG` options, `awayNoticeHours` is in `/realm:config`; the others can only be changed in the file.
 
 | Option | Default | In-game? | Description |
 |---|---|---|---|
 | `news.title` | `§l§bRealm News` | ✅ `/realm:news_edit` | News popup title |
 | `news.body` | *(empty)* | ✅ `/realm:news_edit` | News text. Empty = no news |
 | `tips` | 5 tips about the realm's add-ons and commands | ✅ `/realm:news_tips` | Starting tip list |
-| `tipIntervalMinutes` | `20` | ✅ `/realm:news_tips` → Settings | Minutes between tips |
-| `tipsEnabled` | `true` | ✅ `/realm:news_tips` → Settings | Post tips at all |
+| `tipIntervalMinutes` | `20` | ✅ `/realm:news_tips` → Settings, or `/realm:config` | Minutes between tips |
+| `tipsEnabled` | `true` | ✅ `/realm:news_tips` → Settings, or `/realm:config` | Post tips at all |
 | `delayTicks` | `100` | ❌ | Ticks after joining before showing the news (after the welcome popup's `40`) |
-| `awayNoticeHours` | `12` | ❌ | Minimum time away for the welcome-back notice. `0` = never |
+| `awayNoticeHours` | `12` | ✅ `/realm:config` | Minimum time away for the welcome-back notice. `0` = never |
 | `tipPrefix` | `§b[Tip]§r ` | ❌ | Text before each tip in chat |
 
 ### Saved data
@@ -459,7 +552,8 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 | `news:news` | World | JSON `{ title, body }` |
 | `news:revision` | World | Increases on each announced save |
 | `news:tips` | World | JSON list of tips, once edited in-game |
-| `news:tipSettings` | World | JSON `{ enabled, intervalMinutes }` |
+| `news:tipSettings` | World | JSON `{ enabled, intervalMinutes }`, from `/realm:news_tips` or `/realm:config` |
+| `news:cfg` | World | Other settings changed in `/realm:config` (`awayNoticeHours`) |
 | `news:seen` | Player | Last revision the player saw |
 | `news:lastSeen` | Player | Last time online (ms since epoch) |
 
@@ -473,7 +567,7 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 
 1. Nothing to set up: a creeper that explodes still damages and knocks back players and mobs, but the ground and your builds stay intact.
 2. Run `/realm:guard` to see the mode, which blasts are covered and any protected zones.
-3. **Operators:** to keep creeper craters in the wild and protect only bases, set `mode` to `zones` in `config.js`, then stand in a base and run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). `/realm:guard_remove <name>` removes a zone.
+3. **Operators:** to keep creeper craters in the wild and protect only bases, set the mode to `zones` in `/realm:config` (or `mode` in `config.js`), then stand in a base and run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). `/realm:guard_remove <name>` removes a zone.
 
 ### What players see
 
@@ -498,11 +592,14 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 | `sources` | `["minecraft:creeper"]` | Exploding entity types to neutralize. Add `minecraft:fireball` (ghast fireballs) or `minecraft:wither_skull` if wanted |
 | `defaultRadius` | `64` | Zone radius in blocks when `/realm:guard_add` is given none |
 
+Operators can change `mode` and `defaultRadius` in game with `/realm:config`; a new mode applies to the next explosion. `sources` stays in `config.js`.
+
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `guard:zones` | World | JSON list of zones `{ name, dim, x, y, z, radius }`, up to 100 |
+| `guard:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
@@ -516,7 +613,7 @@ Lets each player turn phantoms off for themselves. Phantoms come from not sleepi
 
 ### How to use
 
-1. Run `/realm:phantoms`. Chat says `Phantoms off for you. Run it again to turn them back on.` The choice is remembered.
+1. Run `/realm:phantoms`, or turn on **Turn off phantoms for me** in `/realm:prefs`. Chat says `Phantoms off for you. Run it again to turn them back on.` The choice is remembered.
 2. Phantoms that spawn for you now vanish the moment they appear, with no drops. Everyone else's phantoms are untouched.
 3. Run `/realm:phantoms` again to get them back (for phantom membranes, say).
 
@@ -541,11 +638,14 @@ Lets each player turn phantoms off for themselves. Phantoms come from not sleepi
 | `minHeightAbovePlayer` | `10` | Only remove phantoms that appear at least this many blocks above their nearest player, as natural spawns do |
 | `searchRadius` | `64` | How far (blocks) to look for a new phantom's nearest player. Phantoms with no player this close are left alone |
 
+Operators can change `defaultOff` in game with `/realm:config`. Players who already chose keep their choice.
+
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `phantom:off` | Player | `true` when the player turned phantoms off, `false` when they turned them back on while `defaultOff` is `true`. Not set = `defaultOff` |
+| `phantom:off` | Player | `true` when the player turned phantoms off, `false` when they turned them back on while `defaultOff` is `true`. Not set = `defaultOff`. Set by `/realm:phantoms` and `/realm:prefs` |
+| `phantom:cfg` | World | Settings changed in `/realm:config` |
 
 ---
 
@@ -587,9 +687,13 @@ Tap a ripe crop to harvest it and replant it in one go, so fields never need re-
 | `damageHoe` | `false` | A held hoe loses one durability per harvest (Unbreaking applies, and the hoe can break) |
 | `replantCostsSeed` | `false` | The replant uses one seed (or carrot, potato, wart, cocoa bean): from the drops, else from your inventory. With none, the crop is harvested and not replanted |
 
+Operators can change `requireHoe`, `damageHoe` and `replantCostsSeed` in game with `/realm:config`; they apply to the next harvest. `crops` stays in `config.js`.
+
 ### Saved data
 
-None.
+| Key | Scope | Contents |
+|---|---|---|
+| `harvest:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
@@ -632,11 +736,14 @@ Bedrock rules, worth knowing before you add a farm:
 | `defaultRadius` | `2` | Radius in chunks when `/realm:farm_add` is given none |
 | `maxAreas` | `10` | Most farms at once. Bedrock's limit is 10 ticking areas per world, including any made with `/tickingarea` by hand |
 
+Operators can change `defaultRadius` and `maxAreas` in game with `/realm:config`. `everyoneCanAdd` sets who may run the commands, which is fixed when the world starts, so `/realm:config` only shows it.
+
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `farm:areas` | World | JSON list of farms `{ name, dim, x, z, radius, by, at }` for the menu. The ticking areas themselves are saved by the game |
+| `farm:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
@@ -656,7 +763,8 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into
    - **Sort my inventory:** the same as `/realm:sort`, below.
 2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into a chest, copper chest or barrel within 8 blocks that already holds the same item. Your gear, shulker boxes, bundles, totems, maps and compasses stay with you. The bar says `Stashed 143 items into 3 chests`, and each container that got something sparkles.
 3. **Sort your inventory:** run `/realm:sort`. Your main inventory is sorted; the hotbar stays as it is.
-4. **Help:** run `/realm:stash_help` for a page that explains the menu and every command with its usage. `/help realm:stash` and `/help realm:sort` also describe them.
+4. **Your way:** in `/realm:prefs`, choose what sneak-tapping a container does for you (`menu`, `sort` right away, or `off` so it just opens), and whether sorting your inventory includes your hotbar.
+5. **Help:** run `/realm:stash_help` for a page that explains the menu and every command with its usage. `/help realm:stash` and `/help realm:sort` also describe them.
 
 ### What players see
 
@@ -674,10 +782,10 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:stash` | Everyone | Quick stack: puts your main inventory into chests and barrels within 8 blocks that already hold the same items, keeping your gear and carried items. Same as the menu's **Quick stack my inventory** |
-| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched (unless `sortHotbar` is on). Same as the menu's **Sort my inventory** |
+| `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched, unless you turned that on in `/realm:prefs` (default off, `sortHotbar`). Same as the menu's **Sort my inventory** |
 | `/realm:stash_help` | Everyone | Opens the help page: the sneak-tap menu, then each command with its usage and what it never touches |
 
-None of them take parameters. The help page and the `/help` descriptions follow `config.js`, so a different `stashRadius` or `sortHotbar` shows up there too.
+None of them take parameters. The help page follows the settings in force, yours from `/realm:prefs` included; the `/help` description of `/realm:stash` follows `stashRadius` in `config.js`.
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -693,9 +801,14 @@ None of them take parameters. The help page and the `/help` descriptions follow 
 | `sortHotbar` | `false` | `/realm:sort` and the menu's **Sort my inventory** also sort the hotbar |
 | `cooldownTicks` | `20` | Minimum time between sorts and stashes per player (20 = 1 s). Opening the menu or the help page doesn't count |
 
+Operators can change `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems` and `cooldownTicks` in game with `/realm:config`. Each player can choose their own `sneakTap` and `sortHotbar` in `/realm:prefs`, which wins over the realm's for them. `stashRadius` and the lists stay in `config.js`.
+
 ### Saved data
 
-None.
+| Key | Scope | Contents |
+|---|---|---|
+| `stash:cfg` | World | Settings changed in `/realm:config` |
+| `stash:pref` | Player | JSON of the player's own `sneakTap` and `sortHotbar` from `/realm:prefs` |
 
 ### How it works
 
@@ -742,10 +855,13 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 | `highlightSeconds` | `10` | How long the particle column shows |
 | `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched. Ids this game version doesn't have are skipped |
 
+Operators can change `liveScanRadius`, `maxResults` and `highlightSeconds` in game with `/realm:config`; they apply to the next search.
+
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
+| `find:cfg` | World | Settings changed in `/realm:config` |
 | `find:idx:0`, `find:idx:1`, … | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId } }`, ids without the `minecraft:` prefix. Written at most once every 30 seconds, and whenever a player leaves |
 
 ### How it works
@@ -789,9 +905,15 @@ Sit on any stair or bottom slab, which makes the furnished houses on mc.nish.sof
 | `cleanupTicks` | `20` | How often (ticks) empty seats, and seats whose block is gone, are removed |
 | `seatHeight` | `0.25` | Height of the seat above the bottom of the block. Raise or lower it in steps of `0.05` if players sit too high or too low |
 
+Operators can change `maxReach` in game with `/realm:config`. `cleanupTicks` is fixed when the world starts, so `/realm:config` only shows it.
+
 ### Saved data
 
-None. Seats are entities and are cleaned up; any left over from before a restart are removed as soon as their chunk loads.
+| Key | Scope | Contents |
+|---|---|---|
+| `chairs:cfg` | World | Settings changed in `/realm:config` |
+
+Seats are entities and are cleaned up; any left over from before a restart are removed as soon as their chunk loads.
 
 ### The seat entity
 
@@ -864,7 +986,7 @@ Storm fog, ground mist and drips under leaves and roof edges, for the Realistic 
 
 1. When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops.
 2. In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, and low mist drifts along the ground around you when you're outdoors. Both clear the same way when the storm passes.
-3. Run `/realm:rain` to turn these extras off for yourself, on a slower device for example. Chat says `Rain extras off for you (storm fog, mist and drips). Run it again to turn them back on.` The choice is remembered.
+3. Run `/realm:rain`, or use the same switch in `/realm:prefs`, to turn these extras off for yourself, on a slower device for example. Chat says `Rain extras off for you (storm fog, mist and drips). Run it again to turn them back on.` The choice is remembered.
 4. **Operators:** add Rain Extras under **Behavior Packs**, next to the Realm Bundle (it's never part of the bundle), and add [Realistic Rain](#realistic-rain--rain_rp) under **Resource Packs** at the top of the list. The storm fogs and particles come from Realistic Rain, so without it nothing shows.
 
 ### What players see
@@ -896,11 +1018,14 @@ Storm fog, ground mist and drips under leaves and roof edges, for the Realistic 
 | `drips.radius` | `6` | How far from the player (blocks) to look for leaves and roof edges |
 | `drips.lookupsPerSecond` | `6` | Block lookups per second per player for drips and mist: the main cost on the server |
 
+Operators can change `defaultOff`, `stormFog.enabled`, `mist.enabled` and `drips.enabled` in game with `/realm:config` when Realm Settings is installed (in the Realm Bundle or as its own pack). The numbers stay in `config.js`.
+
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `rain:off` | Player | `true` when the player turned the extras off, `false` when they turned them on while `defaultOff` is `true`. Not set = `defaultOff` |
+| `rain:off` | Player | `true` when the player turned the extras off, `false` when they turned them on while `defaultOff` is `true`. Not set = `defaultOff`. Set by `/realm:rain` and `/realm:prefs` |
+| `rain:cfg` | World | Settings changed in `/realm:config` |
 | `rain:weather` | World | The overworld weather at the last change: `Clear`, `Rain` or `Thunder`. The stable Script API can't read the current weather, so this is how the pack knows it after a restart |
 
 ### Performance
@@ -948,7 +1073,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Conflicts | Two packs with the same non-script file and different contents → error |
 | Limits | Behavior packs only. `--all` also leaves out the **standalone** packs listed in `tools/standalone.json` (`rain_bp`), which run as their own add-on next to the bundle; `--list` shows which packs are bundled |
 
-> ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list (the ticking areas themselves stay loaded) and what Chest Finder remembers. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
+> ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, `/realm:config` settings, per-player toggles and preferences, first-joined dates, Creeper Guard zones, the Farm Loader list (the ticking areas themselves stay loaded) and what Chest Finder remembers. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
 
 ---
 
@@ -967,6 +1092,8 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Chest Finder ↔ Quick Stack & Sort | Both read the same chests and change nothing about each other. A stash or sort changes what Chest Finder remembers only once the chest is opened again or searched within 16 blocks |
 | Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
 | Realm Help ← every pack | `/realm:help` lists the packs that answer its script event, so it only shows what's installed. Its text is generated from this file |
+| Realm Settings ↔ every behavior pack | `/realm:config` and `/realm:prefs` list the packs that answer the `realm:cfg_ping` script event, and send changes back the same way, so each pack keeps its own settings. Rain Extras answers too, from outside the bundle. Without Realm Settings, every pack still works, with its saved settings or `config.js` |
+| Realm Settings → Welcome, News | `/realm:config` changes the same saved values as `/realm:welcome_edit` (`showOnce`, `chat`, `screenTitle`) and `/realm:news_tips` → **Settings** (tips on or off, interval) |
 | Rain Extras → Realistic Rain | Rain Extras' storm fogs and its mist and drip particles are defined in Realistic Rain, so it needs that resource pack. Realistic Rain works on its own |
 | Rain Extras → Realm Bundle | Standalone: it runs as its own add-on next to the bundle and still answers `/realm:help` (`/realm:help rain`). `/realm:rain` shares the `realm:` namespace, so it can join the bundle later without a rename |
 | AFK smart sleep → Rain Extras | Skipping the night clears the weather, so a storm fog clears and drips taper off as after any rain |
@@ -983,8 +1110,9 @@ Only Rain Extras needs another pack (Realistic Rain). Any other combination work
 | A command doesn't show up | Run `/realm:help` to see the features this realm has, or type `/realm` to list the commands (e.g. `/realm:stats`). Is the pack **Active**, not just Available? Minecraft 1.21.100+? Rejoin after activating. Ops-only commands are hidden from regular members |
 | Commands missing after adding a bundle | The individual packs and the bundle are both active, so duplicates fail. Keep only one |
 | Popup never appears | Close chat/inventory. The welcome popup retries for 30 s, news for about 90 s. Check the content log |
-| Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults: `/realm:welcome_reset` clears welcome edits; news, tips and tip settings saved in game always win over `config.js` |
-| Settings reset after switching to or from a bundle | Expected: Bedrock keeps each pack's saved data separately, so in-game settings (welcome text, news, tips, per-player toggles, first-joined dates, Creeper Guard zones, the Farm Loader list, what Chest Finder remembers) start fresh. Scoreboard stats are kept |
+| Changes to `config.js` don't show up | Increase `header.version` in `manifest.json`, rebuild, and re-apply. In-game edits override `config.js` defaults: `/realm:config` → **Reset a pack to defaults** clears that pack's settings, `/realm:welcome_reset` clears welcome edits; news, tips and tip settings saved in game always win over `config.js`. A player's own choice in `/realm:prefs` wins over both for that player |
+| A pack is missing from `/realm:config` or `/realm:prefs` | It isn't installed or active, or it has nothing to change there (`/realm:prefs` only lists packs with preferences of their own). If a pack answers too slowly on a busy realm, raise Realm Settings' `answerTicks` |
+| Settings reset after switching to or from a bundle | Expected: Bedrock keeps each pack's saved data separately, so in-game settings (welcome text, news, tips, `/realm:config` settings, per-player toggles and preferences, first-joined dates, Creeper Guard zones, the Farm Loader list, what Chest Finder remembers) start fresh. Scoreboard stats are kept |
 | Night doesn't skip | Is `sleep.enabled` on? The `🛏 x/y sleeping` status shows how many are asleep (x) and how many are needed (y). Players in other dimensions only count if `sleep.countOtherDimensions` is on |
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
 | Rain looks and sounds like vanilla | Is Realistic Rain active under **Resource Packs**, at the top of the list? A resource pack above it that changes rain wins. Players must accept the resource pack download when they join |
@@ -1002,6 +1130,8 @@ Only Rain Extras needs another pack (Realistic Rain). Any other combination work
 - a `### How to use` section in every pack section: short numbered steps for players, operators last
 - **every command** a pack registers, e.g. `` `/realm:stats` ``
 - **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
+
+It also runs `tools/sync-settings.mjs --check`, which fails if a behavior pack (other than Realm Settings) has no `scripts/settings.js`, or its copy of the shared Realm Settings helper differs from `tools/settings-shared.js`. Change the helper there, then run `node tools/sync-settings.mjs` and bump the version of every pack it updates.
 
 It also runs `tools/gen-rain/textures.mjs --check` and `tools/gen-rain/fogs.mjs --check`, which fail if Realistic Rain's textures or fogs differ from what `npm run gen:rain` generates, and `tools/help-catalog.mjs --check`: the in-game `/realm:help` text is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs`. It also fails if a pack doesn't answer `/realm:help`'s `realm:help_ping` script event. Resource packs have no scripts, so they're left out of the help.
 

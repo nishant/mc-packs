@@ -28,7 +28,45 @@ export const PACKS = [
         "usage": "/realm:help [feature]",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens the help menu, or the page for §efeature§r (§eafk§r, §echairs§r, §edurability§r, §efarm§r, §efind§r, §eguard§r, §eharvest§r, §enews§r, §ephantom§r, §erain§r, §estash§r, §estats§r, §ewelcome§r) or §eall§r"
+        "text": "Opens the help menu, or the page for §efeature§r (§eafk§r, §echairs§r, §edurability§r, §efarm§r, §efind§r, §eguard§r, §eharvest§r, §enews§r, §ephantom§r, §erain§r, §esettings§r, §estash§r, §estats§r, §ewelcome§r) or §eall§r"
+      }
+    ]
+  },
+  {
+    "folder": "settings_bp",
+    "topic": "settings",
+    "name": "Realm Settings",
+    "summary": "Change the packs' settings in game: operators set them for everyone with §e/realm:config§r, and every player picks their own preferences with §e/realm:prefs§r.",
+    "steps": [
+      {
+        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as turning off durability warnings, phantoms or the rain extras for yourself, what sneak-tapping a chest does, and whether chat announces you going AFK. Change what you like and tap §lSave§r. Chat confirms each change, for example §eSaved: Phantom Opt-out, Turn off phantoms for me: on§r.",
+        "ops": false
+      },
+      {
+        "text": "Your choices are remembered. §e/realm:durability§r, §e/realm:phantoms§r and §e/realm:rain§r flip the same switches as the form.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r run §e/realm:config§r, or use any item renamed §eRealm Settings§r on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap §lSave§r. They apply right away for everyone, and chat confirms each one. A setting marked §eneeds a world restart§r can only be changed in the pack's §econfig.js§r.",
+        "ops": true
+      },
+      {
+        "text": "§lOperators:§r §lReset a pack to defaults§r, at the bottom of the menu, puts one pack's settings back to its §econfig.js§r values after asking. Players' own preferences are kept.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:prefs",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens §lMy preferences§r: your own choices from every installed pack, in one form"
+      },
+      {
+        "usage": "/realm:config",
+        "ops": true,
+        "who": "Ops",
+        "text": "Opens §lRealm Settings§r: every installed pack's settings for everyone, then §lReset a pack to defaults§r. Using an item named §eRealm Settings§r opens it too (§eitemName§r)"
       }
     ]
   },
@@ -43,7 +81,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:welcome§r any time to see it again.",
+        "text": "Run §e/realm:welcome§r any time to see it again. Don't want the popup when you join? Turn off §lShow me the welcome popup when I join§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
@@ -87,7 +125,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Don't want the warnings? Run §e/realm:durability§r to turn them off for yourself; run it again to turn them back on. The choice is remembered.",
+        "text": "Don't want the warnings? Run §e/realm:durability§r to turn them off for yourself; run it again to turn them back on. The same switch is in §e/realm:prefs§r. The choice is remembered.",
         "ops": false
       }
     ],
@@ -111,7 +149,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lComing back:§r move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK.",
+        "text": "§lComing back:§r move or look around. Chat says you're back and, after 30 seconds or more, how many minutes you were marked AFK. Rather chat didn't announce you? Turn off §lTell chat when I go AFK or come back§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
@@ -124,7 +162,7 @@ export const PACKS = [
         "usage": "/realm:afk",
         "ops": false,
         "who": "Everyone",
-        "text": "Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back. With §eannounce§r off, only you get a confirmation"
+        "text": "Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back. With announcements off (§eannounce§r, or yours in §e/realm:prefs§r), only you get a confirmation"
       }
     ]
   },
@@ -221,7 +259,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r to keep creeper craters in the wild and protect only bases, set §emode§r to §ezones§r in §econfig.js§r, then stand in a base and run §e/realm:guard_add <name> [radius]§r (for example §e/realm:guard_add home 64§r). §e/realm:guard_remove <name>§r removes a zone.",
+        "text": "§lOperators:§r to keep creeper craters in the wild and protect only bases, set the mode to §ezones§r in §e/realm:config§r (or §emode§r in §econfig.js§r), then stand in a base and run §e/realm:guard_add <name> [radius]§r (for example §e/realm:guard_add home 64§r). §e/realm:guard_remove <name>§r removes a zone.",
         "ops": true
       }
     ],
@@ -253,7 +291,7 @@ export const PACKS = [
     "summary": "Lets each player turn phantoms off for themselves. Phantoms come from not sleeping, and with smart sleep the night can be skipped without everyone in bed, so some players never need to sleep.",
     "steps": [
       {
-        "text": "Run §e/realm:phantoms§r. Chat says §ePhantoms off for you. Run it again to turn them back on.§r The choice is remembered.",
+        "text": "Run §e/realm:phantoms§r, or turn on §lTurn off phantoms for me§r in §e/realm:prefs§r. Chat says §ePhantoms off for you. Run it again to turn them back on.§r The choice is remembered.",
         "ops": false
       },
       {
@@ -354,6 +392,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lYour way:§r in §e/realm:prefs§r, choose what sneak-tapping a container does for you (§emenu§r, §esort§r right away, or §eoff§r so it just opens), and whether sorting your inventory includes your hotbar.",
+        "ops": false
+      },
+      {
         "text": "§lHelp:§r run §e/realm:stash_help§r for a page that explains the menu and every command with its usage. §e/help realm:stash§r and §e/help realm:sort§r also describe them.",
         "ops": false
       }
@@ -369,7 +411,7 @@ export const PACKS = [
         "usage": "/realm:sort",
         "ops": false,
         "who": "Everyone",
-        "text": "Sorts your inventory, slots 9–35. The hotbar is untouched (unless §esortHotbar§r is on). Same as the menu's §lSort my inventory§r"
+        "text": "Sorts your inventory, slots 9–35. The hotbar is untouched, unless you turned that on in §e/realm:prefs§r (default off, §esortHotbar§r). Same as the menu's §lSort my inventory§r"
       },
       {
         "usage": "/realm:stash_help",
@@ -450,7 +492,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:rain§r to turn these extras off for yourself, on a slower device for example. Chat says §eRain extras off for you (storm fog, mist and drips). Run it again to turn them back on.§r The choice is remembered.",
+        "text": "Run §e/realm:rain§r, or use the same switch in §e/realm:prefs§r, to turn these extras off for yourself, on a slower device for example. Chat says §eRain extras off for you (storm fog, mist and drips). Run it again to turn them back on.§r The choice is remembered.",
         "ops": false
       },
       {

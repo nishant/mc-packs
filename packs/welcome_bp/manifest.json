@@ -4,7 +4,7 @@
     "name": "Welcome Message",
     "description": "Shows a configurable welcome popup when players join. Ops: /realm:welcome_edit",
     "uuid": "8d4497dd-0565-4a62-95f2-328e3dca116e",
-    "version": [1, 1, 0],
+    "version": [1, 2, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

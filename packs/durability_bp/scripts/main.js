@@ -1,7 +1,8 @@
 import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { get, getFor, onChange, setFor } from "./settings.js";
 
-const PROP_OFF = "durability:off"; // player: true = warnings disabled
+// Player property "durability:off" (true = warnings off) is the "off" preference in settings.js.
 
 const SLOTS = [
   EquipmentSlot.Mainhand,
@@ -31,9 +32,14 @@ system.runInterval(() => {
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => state.delete(playerId));
 
+// Turning warnings back on (here, in /realm:prefs or with /realm:durability) starts the levels over.
+onChange((key, player) => {
+  if (player && key === "off") state.delete(player.id);
+});
+
 /** @param {Player} player */
 function check(player) {
-  if (player.getDynamicProperty(PROP_OFF) === true) return;
+  if (getFor(player, "off") === true) return;
   const equippable = player.getComponent("minecraft:equippable");
   if (!equippable) return;
 
@@ -65,10 +71,11 @@ function check(player) {
 
 /** @param {number} left @param {number} max */
 function levelFor(left, max) {
-  if (CONFIG.maxUsesForWarning > 0 && left > CONFIG.maxUsesForWarning) return OK;
+  const maxUses = get("maxUsesForWarning");
+  if (maxUses > 0 && left > maxUses) return OK;
   const pct = (left / max) * 100;
-  if (pct <= CONFIG.criticalPercent) return CRITICAL;
-  if (pct <= CONFIG.warnPercent) return WARN;
+  if (pct <= get("criticalPercent")) return CRITICAL;
+  if (pct <= get("warnPercent")) return WARN;
   return OK;
 }
 
@@ -84,7 +91,7 @@ function notify(player, name, left, max, level) {
   if (level === CRITICAL) {
     const text = `§c§l⚠ ${name} is about to break!§r §c${left}/${max} (${pct}%)`;
     player.onScreenDisplay.setActionBar(text);
-    if (CONFIG.chatOnCritical) player.sendMessage(text);
+    if (get("chatOnCritical")) player.sendMessage(text);
     player.playSound("random.anvil_land", { volume: 0.4, pitch: 1.4 });
   } else {
     player.onScreenDisplay.setActionBar(`§e⚠ ${name} is low: ${left}/${max} (${pct}%)`);
@@ -116,11 +123,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!(player instanceof Player)) {
         return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       }
-      const nowOff = player.getDynamicProperty(PROP_OFF) !== true;
-      system.run(() => {
-        player.setDynamicProperty(PROP_OFF, nowOff ? true : undefined);
-        state.delete(player.id);
-      });
+      const nowOff = getFor(player, "off") !== true;
+      system.run(() => setFor(player, "off", nowOff));
       return {
         status: CustomCommandStatus.Success,
         message: nowOff

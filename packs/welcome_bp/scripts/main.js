@@ -7,10 +7,11 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { DEFAULTS } from "./config.js";
+import { getFor } from "./settings.js";
 
 /** @typedef {import("./config.js").WelcomeSettings} WelcomeSettings */
 
-const PROP_SETTINGS = "welcome:settings"; // world: JSON overrides saved by /realm:welcome_edit
+const PROP_SETTINGS = "welcome:settings"; // world: JSON overrides saved by /realm:welcome_edit (and /realm:config, see settings.js)
 const PROP_REVISION = "welcome:revision"; // world: bumped on every save
 const PROP_SEEN = "welcome:seen"; // player: revision they last saw
 
@@ -122,6 +123,7 @@ async function welcome(player, { force = false } = {}) {
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   // initialSpawn is true when the player joins, false on respawn after death.
   if (!initialSpawn) return;
+  if (getFor(player, "popup") === false) return; // turned off in /realm:prefs; /realm:welcome still shows it
   system.runTimeout(() => {
     welcome(player).catch((e) => console.warn(`[welcome] ${e}`));
   }, DEFAULTS.delayTicks); // not editable in game, so always config.js's

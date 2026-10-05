@@ -11,6 +11,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { get } from "./settings.js";
 
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
 
@@ -157,11 +158,15 @@ function showOnSidebar(id) {
 }
 
 let cycleIndex = 0;
+let cycleSeconds = 0;
+// Counts seconds rather than scheduling every sidebarCycleSeconds, so a change in /realm:config applies at once.
 system.runInterval(() => {
   if (world.getDynamicProperty(PROP_SIDEBAR) !== "cycle") return;
+  if (++cycleSeconds < get("sidebarCycleSeconds")) return;
+  cycleSeconds = 0;
   cycleIndex = (cycleIndex + 1) % STATS.length;
   showOnSidebar(STATS[cycleIndex].id);
-}, CONFIG.sidebarCycleSeconds * 20);
+}, 20);
 
 /** @param {string} choice */
 function setSidebar(choice) {
@@ -170,6 +175,7 @@ function setSidebar(choice) {
     world.scoreboard.clearObjectiveAtDisplaySlot(DisplaySlotId.Sidebar);
   } else {
     world.setDynamicProperty(PROP_SIDEBAR, choice);
+    cycleSeconds = 0;
     showOnSidebar(choice === "cycle" ? STATS[(cycleIndex = 0)].id : choice);
   }
 }
@@ -252,13 +258,14 @@ async function leaderboardMenu(player) {
 async function leaderboard(player, stat) {
   const list = ranked(stat.id);
   const medals = ["§6①", "§7②", "§c③"];
-  const lines = list.slice(0, CONFIG.leaderboardSize).map((s, i) => {
+  const size = get("leaderboardSize");
+  const lines = list.slice(0, size).map((s, i) => {
     const me = s.participant.displayName === player.name;
     const place = medals[i] ?? `§8${i + 1}.`;
     return `${place} ${me ? "§b§l" : "§r"}${s.participant.displayName}§r  ${fmt(stat, s.score)}`;
   });
   const myRank = list.findIndex((s) => s.participant.displayName === player.name);
-  if (myRank >= CONFIG.leaderboardSize) {
+  if (myRank >= size) {
     lines.push("§8…", `§8${myRank + 1}. §b${player.name}§r  ${fmt(stat, list[myRank].score)}`);
   }
 

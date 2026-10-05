@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Quick Stack & Sort",
-    "description": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into nearby storage, sort your inventory. /realm:stash /realm:sort /realm:stash_help",
-    "uuid": "c4cceedd-39c2-4b29-8276-2a1cc1afe7b4",
-    "version": [1, 2, 0],
+    "name": "Realm Settings",
+    "description": "Change every pack's settings in game: /realm:config for operators, /realm:prefs for your own.",
+    "uuid": "ecf9196e-a6aa-4566-9de4-92089023bde0",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "c685332d-8a4e-461b-8c77-fb858e660dd8",
+      "uuid": "cc34189d-ef5b-4523-83dd-bc67bf831fba",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

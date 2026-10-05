@@ -1,5 +1,6 @@
 import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { get } from "./settings.js";
 
 const SEAT = "realm:seat"; // entities/seat.json: invisible, invulnerable, one rider
 const BLOCK_TAG = "chairs:block"; // on seats placed on a stair or slab (not by /realm:sit)
@@ -79,7 +80,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   if (!seat || !block.above(1)?.isAir || !block.above(2)?.isAir) return;
   const { x, y, z } = block.location;
   const p = player.location;
-  if (Math.hypot(x + 0.5 - p.x, y + 0.5 - p.y, z + 0.5 - p.z) > CONFIG.maxReach || isRiding(player)) return;
+  if (Math.hypot(x + 0.5 - p.x, y + 0.5 - p.y, z + 0.5 - p.z) > get("maxReach") || isRiding(player)) return;
 
   event.cancel = true;
   const dim = block.dimension;

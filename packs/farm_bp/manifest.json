@@ -4,7 +4,7 @@
     "name": "Farm Loader",
     "description": "Keeps named farms loaded with ticking areas, so crops grow and furnaces smelt while you're away. /realm:farm",
     "uuid": "e54db611-b451-4a5f-bb05-7669c539f030",
-    "version": [1, 1, 0],
+    "version": [1, 2, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

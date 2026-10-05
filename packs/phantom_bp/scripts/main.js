@@ -1,13 +1,12 @@
 import { CommandPermissionLevel, CustomCommandStatus, EntityInitializationCause, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { getFor, setFor } from "./settings.js";
 
-const PROP_OFF = "phantom:off"; // player: true = phantoms off, false = on (only stored when it differs from defaultOff)
+// Player property "phantom:off" (true = off, false = on, only stored when it differs from defaultOff)
+// is the "off" preference in settings.js, which /realm:prefs changes too.
 
 /** @param {Player} player */
-function phantomsOff(player) {
-  const v = player.getDynamicProperty(PROP_OFF);
-  return typeof v === "boolean" ? v : CONFIG.defaultOff;
-}
+const phantomsOff = (player) => getFor(player, "off") === true;
 
 // Natural phantom spawns appear high above a player who hasn't slept. Each phantom of a
 // group gets its own event; only its nearest player's choice counts.
@@ -40,7 +39,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       }
       const nowOff = !phantomsOff(player);
-      system.run(() => player.setDynamicProperty(PROP_OFF, nowOff === CONFIG.defaultOff ? undefined : nowOff));
+      system.run(() => setFor(player, "off", nowOff));
       return {
         status: CustomCommandStatus.Success,
         message: nowOff
