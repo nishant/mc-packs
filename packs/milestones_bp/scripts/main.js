@@ -302,9 +302,12 @@ async function pickPlayer(player) {
     "§lWhose milestones?",
     list.length ? "Everyone who has played since milestones were added, online players first." : "Nobody else has played since milestones were added.",
     [
-      ...list.map(([id, r]) => ({ text: `${r.n}${online.has(id) ? " §a(online)" : ""}\n§8${unlockedCount(r)} of ${totalTiers} unlocked`, run: () => showRecord(player, id) })),
+      ...list.map(([id, r]) => ({
+        text: `${r.n}${online.has(id) ? " §a(online)" : ""}\n§8${unlockedCount(r)} of ${totalTiers} unlocked`,
+        run: () => showRecord(player, id),
+      })),
       { text: "Back", run: () => showRecord(player, player.id) },
-    ]
+    ],
   );
 }
 
@@ -328,7 +331,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         showRecord(player, player.id).catch((e) => console.warn(`[milestones] ${e}`));
       });
       return { status: CustomCommandStatus.Success };
-    }
+    },
   );
 });
 
@@ -337,5 +340,5 @@ system.afterEvents.scriptEventReceive.subscribe(
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "milestones_bp");
   },
-  { namespaces: ["realm"] }
+  { namespaces: ["realm"] },
 );

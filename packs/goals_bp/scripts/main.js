@@ -107,16 +107,19 @@ const LOOK = `Look at a chest, barrel or other container within ${CONFIG.linkDis
 // Donating
 // ---------------------------------------------------------------------------
 
-/** @param {Goal} g */
-function announce(g) {
+/** @param {Goal} g @param {Player} donor */
+function announce(g, donor) {
   const q = g.got >= g.target ? 4 : Math.floor((g.got * 4) / g.target);
   if (q <= g.m) return;
   g.m = q;
   if (q === 4) {
     g.done = 1;
     const top = topText(g, 3);
-    world.sendMessage(`§6Community goal §e${g.n}§6 reached: ${fmt(g.target)} ${itemName(g.item)}!${top ? ` Top contributors: ${top}.` : ""} Thanks, everyone!`);
-    for (const p of world.getAllPlayers()) p.playSound("random.levelup", { pitch: 1, volume: 0.8 });
+    const line = `§6Community goal §e${g.n}§6 reached: ${fmt(g.target)} ${itemName(g.item)}!${top ? ` Top contributors: ${top}.` : ""} Thanks, everyone!`;
+    const everyone = get("announce") === true;
+    if (everyone) world.sendMessage(line);
+    else donor.sendMessage(line);
+    for (const p of everyone ? world.getAllPlayers() : [donor]) p.playSound("random.levelup", { pitch: 1, volume: 0.8 });
   } else if (get("announce") === true) {
     world.sendMessage(`§6Community goal §e${g.n}§6: ${q * 25} percent there (${fmt(g.got)} / ${fmt(g.target)} ${itemName(g.item)}). /realm:goals to help`);
     for (const p of world.getAllPlayers()) p.playSound("note.pling", { pitch: 1.2, volume: 0.6 });
@@ -147,26 +150,33 @@ function donate(player, id) {
       continue;
     }
     const before = item.amount;
-    let now;
-    if (before > left) {
-      // Only part of the stack is still needed: put a copy of that many in, then take them off the stack.
-      const part = item.clone();
-      part.amount = left;
-      const rest = chest.addItem(part);
-      const placed = left - (rest?.amount ?? 0);
-      if (placed > 0) inv.getSlot(slot).amount = before - placed;
-      now = before - placed;
-    } else {
-      const rest = inv.transferItem(slot, chest); // native move: fills matching stacks, then empty slots
-      // The leftover should stay in the slot; if it was handed back instead, put it back.
-      if (rest && !inv.getItem(slot)) inv.setItem(slot, rest);
+    let now = before;
+    try {
+      if (before > left) {
+        // Only part of the stack is still needed: put a copy of that many in, then take them off the stack.
+        const part = item.clone();
+        part.amount = left;
+        const rest = chest.addItem(part);
+        const placed = left - (rest?.amount ?? 0);
+        if (placed > 0) inv.getSlot(slot).amount = before - placed;
+        now = before - placed;
+      } else {
+        const rest = inv.transferItem(slot, chest); // native move: fills matching stacks, then empty slots
+        // The leftover should stay in the slot; if it was handed back instead, put it back.
+        if (rest && !inv.getItem(slot)) inv.setItem(slot, rest);
+        const after = inv.getItem(slot);
+        now = after?.typeId === g.item ? after.amount : 0;
+      }
+    } catch (e) {
+      console.warn(`[goals] donate: ${e}`);
       const after = inv.getItem(slot);
       now = after?.typeId === g.item ? after.amount : 0;
+      full = true;
     }
     const gave = before - now;
     moved += gave;
     left -= gave;
-    if (now > 0 && left > 0) {
+    if (full || (now > 0 && left > 0)) {
       full = true;
       break;
     }
@@ -176,7 +186,7 @@ function donate(player, id) {
     g.got += moved;
     const mine = g.c[player.id];
     g.c[player.id] = [player.name, (mine?.[1] ?? 0) + moved];
-    announce(g);
+    announce(g, player);
     save(g);
     player.sendMessage(`§aYou gave ${fmt(moved)} ${itemName(g.item)} to ${g.n}. §7Now ${fmt(g.got)} / ${fmt(g.target)} (${pct(g)} percent).`);
     player.playSound("random.orb", { pitch: 1.3, volume: 0.6 });
@@ -186,7 +196,7 @@ function donate(player, id) {
     player.sendMessage(
       kept
         ? `§eYou only have ${itemName(g.item)} with a custom name, and those are never donated.`
-        : `§eYou have no ${itemName(g.item)} to give. Bring some and try again.`
+        : `§eYou have no ${itemName(g.item)} to give. Bring some and try again.`,
     );
   }
 }
@@ -225,10 +235,11 @@ function bar(g) {
 function carried(player, item) {
   const inv = player.getComponent("minecraft:inventory")?.container;
   let n = 0;
-  if (inv) for (let i = 0; i < inv.size; i++) {
-    const it = inv.getItem(i);
-    if (it?.typeId === item) n += it.amount;
-  }
+  if (inv)
+    for (let i = 0; i < inv.size; i++) {
+      const it = inv.getItem(i);
+      if (it?.typeId === item) n += it.amount;
+    }
   return n;
 }
 
@@ -250,7 +261,13 @@ async function showGoal(player, id) {
   const actions = [];
   if (!g.done) {
     const have = carried(player, g.item);
-    actions.push({ text: `Donate from my inventory\n§8You carry ${fmt(have)} ${itemName(g.item)}`, run: () => { donate(player, g.id); return showGoal(player, g.id); } });
+    actions.push({
+      text: `Donate from my inventory\n§8You carry ${fmt(have)} ${itemName(g.item)}`,
+      run: () => {
+        donate(player, g.id);
+        return showGoal(player, g.id);
+      },
+    });
   }
   if (isOp(player)) {
     if (!g.done) {
@@ -262,7 +279,9 @@ async function showGoal(player, id) {
           now.done = 1;
           save(now);
           const t = topText(now, 3);
-          world.sendMessage(`§6Community goal §e${now.n}§6 is finished: ${fmt(now.got)} ${itemName(now.item)} given.${t ? ` Top contributors: ${t}.` : ""} Thanks, everyone!`);
+          world.sendMessage(
+            `§6Community goal §e${now.n}§6 is finished: ${fmt(now.got)} ${itemName(now.item)} given.${t ? ` Top contributors: ${t}.` : ""} Thanks, everyone!`,
+          );
         },
       });
       actions.push({
@@ -327,7 +346,7 @@ async function mainMenu(player) {
           player,
           "§lAdd a goal",
           `Put a chest or barrel where donations should go, look at it and run\n\n§e/realm:goals_add <item> <amount> [name]§r\n\nfor example /realm:goals_add cobblestone 10000 Colosseum. The realm can have ${CONFIG.maxGoals} goals at a time, finished ones included.`,
-          [{ text: "Back", run: () => mainMenu(player) }]
+          [{ text: "Back", run: () => mainMenu(player) }],
         ),
     });
   }
@@ -342,7 +361,8 @@ async function mainMenu(player) {
 function addGoal(player, item, amount, name) {
   const block = lookedAtContainer(player);
   if (!block) return player.sendMessage(`§c${LOOK}`);
-  if (goals().size >= CONFIG.maxGoals) return player.sendMessage(`§cThe realm already has ${CONFIG.maxGoals} goals. Remove a finished one first (/realm:goals).`);
+  if (goals().size >= CONFIG.maxGoals)
+    return player.sendMessage(`§cThe realm already has ${CONFIG.maxGoals} goals. Remove a finished one first (/realm:goals).`);
   const taken = [...goals().values()].find((g) => !g.done && g.dim === block.dimension.id && g.x === block.x && g.y === block.y && g.z === block.z);
   if (taken) return player.sendMessage(`§cThat container already collects for ${taken.n}. Use another one.`);
   const next = world.getDynamicProperty(PROP_NEXT);
@@ -383,7 +403,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       system.run(() => mainMenu(player).catch((e) => console.warn(`[goals] ${e}`)));
       return { status: CustomCommandStatus.Success };
-    }
+    },
   );
 
   customCommandRegistry.registerCommand(
@@ -403,7 +423,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       const item = /** @type {{ id?: string }} */ (itemType)?.id;
       if (typeof item !== "string") return { status: CustomCommandStatus.Failure, message: "Unknown item." };
-      if (typeof amount !== "number" || amount < 1 || amount > MAX_TARGET) return { status: CustomCommandStatus.Failure, message: `The amount must be 1 to ${fmt(MAX_TARGET)}.` };
+      if (typeof amount !== "number" || amount < 1 || amount > MAX_TARGET)
+        return { status: CustomCommandStatus.Failure, message: `The amount must be 1 to ${fmt(MAX_TARGET)}.` };
       system.run(() => {
         try {
           addGoal(player, item, amount, typeof name === "string" ? name : undefined);
@@ -412,7 +433,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         }
       });
       return { status: CustomCommandStatus.Success };
-    }
+    },
   );
 });
 
@@ -421,5 +442,5 @@ system.afterEvents.scriptEventReceive.subscribe(
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "goals_bp");
   },
-  { namespaces: ["realm"] }
+  { namespaces: ["realm"] },
 );

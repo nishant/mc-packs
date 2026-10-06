@@ -385,7 +385,10 @@ async function showQuests(player) {
   const lines = day.q.map((p) => {
     const q = pool.get(p.id);
     if (!q) return "§7(a quest that was removed from the realm's list)";
-    const rewardText = [q.reward.levels ? `${q.reward.levels} level${q.reward.levels === 1 ? "" : "s"}` : "", q.reward.item ? `${q.reward.amount ?? 1} ${itemName(q.reward.item)}` : ""]
+    const rewardText = [
+      q.reward.levels ? `${q.reward.levels} level${q.reward.levels === 1 ? "" : "s"}` : "",
+      q.reward.item ? `${q.reward.amount ?? 1} ${itemName(q.reward.item)}` : "",
+    ]
       .filter(Boolean)
       .join(", ");
     return p.done
@@ -416,7 +419,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       system.run(() => showQuests(player).catch((e) => console.warn(`[quests] ${e}`)));
       return { status: CustomCommandStatus.Success };
-    }
+    },
   );
 });
 
@@ -425,5 +428,5 @@ system.afterEvents.scriptEventReceive.subscribe(
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "quests_bp");
   },
-  { namespaces: ["realm"] }
+  { namespaces: ["realm"] },
 );

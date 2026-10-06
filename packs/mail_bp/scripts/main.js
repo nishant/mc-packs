@@ -104,15 +104,18 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   } catch (e) {
     console.warn(`[mail] ${e}`);
   }
-  system.runTimeout(() => {
-    try {
-      if (!player.isValid || getFor(player, "joinNotice") !== true) return;
-      const n = unreadCount(player.id);
-      if (n) player.sendMessage(`§eYou have ${n} unread letter${n === 1 ? "" : "s"}: /realm:mail`);
-    } catch (e) {
-      console.warn(`[mail] ${e}`);
-    }
-  }, Math.max(1, CONFIG.notifyDelaySeconds * 20));
+  system.runTimeout(
+    () => {
+      try {
+        if (!player.isValid || getFor(player, "joinNotice") !== true) return;
+        const n = unreadCount(player.id);
+        if (n) player.sendMessage(`§eYou have ${n} unread letter${n === 1 ? "" : "s"}: /realm:mail`);
+      } catch (e) {
+        console.warn(`[mail] ${e}`);
+      }
+    },
+    Math.max(1, CONFIG.notifyDelaySeconds * 20),
+  );
 });
 
 // Players already online when the pack is added (a /reload) join the roster too.
@@ -206,7 +209,10 @@ async function write(player, draft = {}) {
     return;
   }
   const here = new Set(world.getAllPlayers().map((p) => p.id));
-  const index = Math.max(0, others.findIndex((m) => m.i === draft.to));
+  const index = Math.max(
+    0,
+    others.findIndex((m) => m.i === draft.to),
+  );
   const subjectMax = CONFIG.subjectLength;
   const bodyMax = CONFIG.bodyLength;
   const form = new ModalFormData()
@@ -214,7 +220,7 @@ async function write(player, draft = {}) {
     .dropdown(
       `${draft.problem ? `§c${draft.problem}§r\n\n` : ""}To (everyone who has joined the realm; offline players get it when they're back)`,
       others.map((m) => (here.has(m.i) ? `${m.n} §a(online)` : m.n)),
-      { defaultValueIndex: index }
+      { defaultValueIndex: index },
     )
     .textField(`Subject (up to ${subjectMax} characters)`, "Hello!", { defaultValue: draft.subject ?? "" })
     .textField(`Letter (up to ${bodyMax} characters; type \\n for a new line)`, "Write your letter here", { defaultValue: draft.body ?? "" })
@@ -392,7 +398,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       system.run(() => mainMenu(player).catch((e) => console.warn(`[mail] ${e}`)));
       return { status: CustomCommandStatus.Success };
-    }
+    },
   );
 });
 
@@ -401,5 +407,5 @@ system.afterEvents.scriptEventReceive.subscribe(
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "mail_bp");
   },
-  { namespaces: ["realm"] }
+  { namespaces: ["realm"] },
 );
