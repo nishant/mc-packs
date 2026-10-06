@@ -372,7 +372,7 @@ async function mainMenu(player) {
   const total = inboxOf(player.id).length;
   const body = [
     n ? `§eYou have ${n} unread letter${n === 1 ? "" : "s"}.§r` : "No unread letters.",
-    "Write to anyone who has joined the realm. Letters to offline players wait for them. Letters carry words only: to send items, use the Player Mailroom build.",
+    "Write to anyone who has joined the realm. Letters to offline players wait for them. Letters carry words only: to send items, use the Player Mailroom build (mc.nish.software/mailroom).",
   ].join("\n\n");
   await menu(player, "§lRealm Mail", body, [
     { text: `Inbox\n§8${total} letter${total === 1 ? "" : "s"}, ${n} unread`, run: () => inbox(player) },

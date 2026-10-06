@@ -3,8 +3,8 @@ import { get, getFor } from "./settings.js";
 
 // Player property "death:last": JSON { d, x, y, z, told, used } of the player's last death: the
 // dimension id, the block they died in, whether the respawn message was sent and whether
-// /realm:back was used for it. World property "death:areas": JSON list of the temporary ticking
-// areas /realm:back added and hasn't removed yet, so a restart can clean them up.
+// /realm:death_back was used for it. World property "death:areas": JSON list of the temporary ticking
+// areas /realm:death_back added and hasn't removed yet, so a restart can clean them up.
 
 const LAST_PROP = "death:last";
 const AREAS_PROP = "death:areas";
@@ -129,16 +129,16 @@ function describe(player, point) {
     }
   }
   if (get("backEnabled") === true) {
-    lines.push(point.used ? "§7You already used /realm:back for this death." : "§7Run /realm:back to teleport there (once per death).");
+    lines.push(point.used ? "§7You already used /realm:death_back for this death." : "§7Run /realm:death_back to teleport there (once per death).");
   }
   return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
-// /realm:back
+// /realm:death_back
 // ---------------------------------------------------------------------------
 
-/** Player ids with a /realm:back in progress. */
+/** Player ids with a /realm:death_back in progress. */
 const busy = new Set();
 
 /** @param {Dimension} dim @param {number} x @param {number} y @param {number} z */
@@ -226,7 +226,7 @@ function removeArea(dimId, name) {
   saveAreas(savedAreas().filter((n) => n !== `${dimId}|${name}`));
 }
 
-// Ticking areas left over from a restart in the middle of a /realm:back.
+// Ticking areas left over from a restart in the middle of a /realm:death_back.
 world.afterEvents.worldLoad.subscribe(() => {
   for (const entry of savedAreas()) {
     const [dimId, name] = entry.split("|");
@@ -300,7 +300,7 @@ function finishBack(player, point, spot) {
     return;
   }
   saveDeath(player, { ...current, used: true });
-  player.sendMessage(`§aTeleported back to your death point (${spot.x}, ${spot.y}, ${spot.z}).§7 /realm:back works again after your next death.`);
+  player.sendMessage(`§aTeleported back to your death point (${spot.x}, ${spot.y}, ${spot.z}).§7 /realm:death_back works again after your next death.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +332,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
   customCommandRegistry.registerCommand(
     {
-      name: "realm:back",
+      name: "realm:death_back",
       description: "Teleport to your last death point, once per death (when an operator enabled it)",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -348,7 +348,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       }
       const point = lastDeath(player);
       if (!point) return { status: CustomCommandStatus.Failure, message: "No death point saved yet." };
-      if (point.used) return { status: CustomCommandStatus.Failure, message: "You already went back to this death point. /realm:back works once per death." };
+      if (point.used) return { status: CustomCommandStatus.Failure, message: "You already went back to this death point. /realm:death_back works once per death." };
       if (busy.has(player.id)) return { status: CustomCommandStatus.Failure, message: "Still looking for a safe spot near your death point..." };
       busy.add(player.id);
       system.run(() => {

@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, ItemLockMode, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -130,7 +130,12 @@ function announce(g, donor) {
 function donate(player, id) {
   const g = goals().get(id);
   if (!g || g.done) return player.sendMessage("§cThat goal is finished or was removed.");
-  const block = world.getDimension(g.dim).getBlock({ x: g.x, y: g.y, z: g.z });
+  let block;
+  try {
+    block = world.getDimension(g.dim).getBlock({ x: g.x, y: g.y, z: g.z });
+  } catch {
+    block = undefined; // its chunk isn't loaded
+  }
   if (!block) return player.sendMessage(`§cThe goal's chest at ${where(g)} isn't loaded. Go closer to it and try again.`);
   const chest = block.getComponent("minecraft:inventory")?.container;
   if (!chest) return player.sendMessage(`§cThe goal's chest at ${where(g)} is gone. Ask an operator to link the goal to a new one.`);
@@ -144,7 +149,7 @@ function donate(player, id) {
   let kept = 0;
   for (let slot = 0; slot < inv.size && left > 0; slot++) {
     const item = inv.getItem(slot);
-    if (!item || item.typeId !== g.item) continue;
+    if (!item || item.typeId !== g.item || item.lockMode !== ItemLockMode.none) continue; // locked items stay put
     if (keepNamed && item.nameTag) {
       kept += item.amount;
       continue;

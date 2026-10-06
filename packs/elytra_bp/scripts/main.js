@@ -46,17 +46,31 @@ function hud(player) {
   return `§b${speed.toFixed(1)} blocks/s  §fY ${y}  §fElytra ${elytraLeft(player)}  ${n ? "§e" : "§7"}Rockets ${n}`;
 }
 
+const INTERVAL = Math.max(1, CONFIG.intervalTicks);
+/** How long (ticks) each request asks the Coordinates HUD to leave the action bar alone; renewed every third of that while gliding. */
+const HOLD_TICKS = Math.max(30, INTERVAL * 3);
+/** player id -> tick of the last realm:actionbar request */
+const heldAt = new Map();
+
 system.runInterval(() => {
   if (get("enabled") !== true) return;
+  const now = system.currentTick;
   for (const player of world.getAllPlayers()) {
     try {
       if (!player.isGliding || hudOff(player)) continue;
       player.onScreenDisplay.setActionBar(hud(player));
+      // Ask the Coordinates HUD, if installed, to leave the action bar to this HUD while gliding.
+      if (now - (heldAt.get(player.id) ?? -Infinity) >= HOLD_TICKS / 3) {
+        heldAt.set(player.id, now);
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HOLD_TICKS }));
+      }
     } catch {
       // left or changed dimension meanwhile
     }
   }
-}, Math.max(1, CONFIG.intervalTicks));
+}, INTERVAL);
+
+world.afterEvents.playerLeave.subscribe(({ playerId }) => heldAt.delete(playerId));
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
