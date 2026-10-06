@@ -3,24 +3,24 @@
 //   rain1-6         2.0-2.4 s, like vanilla's 2 s clips (the game starts a new one every few ticks and about 15 play
 //                   at once, all at full volume): a hiss with dense patter and soft pats, nothing tonal, matched to
 //                   vanilla's tone octave by octave (matchEq), so it sounds like vanilla's rain, heavier and textured.
-//   thunder1-5      7-10 s, played for every bolt. Physically modeled: N-waves from a tortuous lightning channel,
-//                   delayed by distance, softened by air over distance, then rolled through a terrain echo.
-//   crack1-4        about 4 s, played only near the bolt: the same model heard from 30-90 m away, with short N-waves
-//                   and no low end (the thunder that plays with it carries the boom), so it's a sharp, high crack as
-//                   the low channel tears past, then the rest of the bolt rumbling in, not an explosion.
+//   thunder1-5      11-14 s, played for every bolt: real rolling thunder, cut from field recordings (recordings.json).
+//   crack1-4        5-6 s, played only near the bolt: real close strikes from the same recordings, starting right on
+//                   the crack and fading as the roll (from the thunder that plays with it) takes over.
 //   wind1-3         10 s storm gusts with a faint whistle, played by Rain Extras; wind_inside1-2 is the same heard
 //                   through walls. roof1-4: 3.6 s of rain on the roof above, muffled, also played by Rain Extras.
 // Every file is deterministic (seeded) and normalized with ffmpeg's EBU R128 meter. The definitions' volumes are
 // computed from the measured loudness, so each event lands at its target level in game whatever the file's level.
 // Vanilla reference (bedrock-samples 1.26.50.4, decoded): rain -15.1 LUFS at volume 0.02, thunder -17.3 LUFS,
 // lightning impact -12.6 LUFS.
-// Needs ffmpeg with libvorbis (and libmp3lame for --audition) on PATH. Not part of npm run check (outputs are committed).
+// Needs ffmpeg with libvorbis (and libmp3lame for --audition) on PATH, and network access the first time (the thunder
+// recordings are downloaded and checked against their sha256). Not part of npm run check (outputs are committed).
 //
 //   node tools/gen-rain/sounds.mjs                        write the sounds and their definitions
 //   node tools/gen-rain/sounds.mjs --audition docs/media/rain   also write listening clips at in-game relative levels:
 //                                                             rain.mp3 (Realistic Rain) and extras.mp3 (Rain Extras)
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
@@ -29,7 +29,6 @@ const pack = join(root, "packs", "rain_rp");
 const outDir = join(pack, "sounds", "realistic_rain");
 const SR = 44100;
 const TAU = Math.PI * 2;
-const C = 343; // speed of sound, m/s
 const auditionArg = process.argv.indexOf("--audition");
 const audition = auditionArg > 0 ? process.argv[auditionArg + 1] : undefined;
 
@@ -166,59 +165,6 @@ function fft(/** @type {Float64Array} */ re, /** @type {Float64Array} */ im, inv
     }
   }
   if (inv) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
-}
-
-/** Linear convolution by FFT, trimmed to x's length. @returns {Float64Array} */
-function convolve(/** @type {Float64Array} */ x, /** @type {Float64Array} */ h) {
-  let n = 1;
-  while (n < x.length + h.length) n <<= 1;
-  const ar = new Float64Array(n), ai = new Float64Array(n), br = new Float64Array(n), bi = new Float64Array(n);
-  ar.set(x); br.set(h);
-  fft(ar, ai); fft(br, bi);
-  for (let i = 0; i < n; i++) {
-    const r = ar[i] * br[i] - ai[i] * bi[i];
-    ai[i] = ar[i] * bi[i] + ai[i] * br[i];
-    ar[i] = r;
-  }
-  fft(ar, ai, true);
-  return ar.slice(0, x.length);
-}
-
-/**
- * Outdoor echo: decaying noise that gets darker as it goes (highs die first), plus a few discrete echoes off
- * hills and tree lines. Unit energy, so convolving keeps the level about the same.
- */
-function impulse(/** @type {() => number} */ rnd, { seconds, t60, bright, dark, echoes }) {
-  const n = Math.round(seconds * SR), ir = white(rnd, n);
-  for (let i = 0; i < n; i++) ir[i] *= Math.exp((-6.91 * i) / (t60 * SR)) * Math.min(1, i / (0.012 * SR));
-  for (let e = 0; e < echoes; e++) {
-    const at = Math.round(between(rnd, 0.15, seconds * 0.6) * SR);
-    ir[at] += between(rnd, 25, 60) * Math.exp((-6.91 * at) / (t60 * SR));
-  }
-  sweepLP(ir, (t) => bright * Math.pow(dark / bright, t / seconds));
-  return scale(ir, 1 / Math.sqrt(ir.reduce((s, v) => s + v * v, 0)));
-}
-
-/**
- * Feed-forward compressor (peak follower, `attack`/`release` in seconds), like the one on a field recorder: brings the
- * rumble up toward the crack so the limiter only has to shave the very tops. Threshold is relative to the peak.
- */
-function compress(/** @type {Float64Array} */ x, thresholdDb, ratio, attack = 0.004, release = 0.25) {
-  const thr = peak(x) * Math.pow(10, thresholdDb / 20), a = Math.exp(-1 / (attack * SR)), r = Math.exp(-1 / (release * SR));
-  let env = 0;
-  for (let i = 0; i < x.length; i++) {
-    const v = Math.abs(x[i]);
-    env = v > env ? v + (env - v) * a : v + (env - v) * r;
-    if (env > thr) x[i] *= Math.pow(env / thr, 1 / ratio - 1);
-  }
-  return x;
-}
-
-/** Soft clipping above `kneeDb` under the peak (tanh): a close crack overloads the mic and rounds off like this. */
-function saturate(/** @type {Float64Array} */ x, kneeDb) {
-  const t = peak(x) * Math.pow(10, kneeDb / 20);
-  for (let i = 0; i < x.length; i++) x[i] = t * Math.tanh(x[i] / t);
-  return x;
 }
 
 /** Short fades so overlapping copies blend without clicks; `equalPower` for long crossfades. */
@@ -375,100 +321,40 @@ function wind(/** @type {number} */ seed, /** @type {number} */ seconds, inside 
 }
 
 // ---------------------------------------------------------------------------
-// Thunder and lightning: a physical model
+// Thunder and lightning: excerpts of real recordings (recordings.json)
 // ---------------------------------------------------------------------------
-//
-// A bolt is a tortuous channel kilometers long. When it heats, every few meters of it sends out a short pressure pulse
-// (an N-wave, a few ms long). You hear the sum: each segment's pulse arrives after r/c seconds, is weaker with distance,
-// is dulled by the air over distance, and is smeared over L·|cos θ|/c, so segments broadside to you arrive all at once
-// (a clap) and segments pointing at you arrive as a drawn-out rumble. Close by, the low channel tears past within a few
-// milliseconds (the crack); farther away, the kilometers of channel and its branches arrive over many seconds (the roll).
 
-/** @typedef {{ p: number[], q: number[], w: number }} Segment */
+const RECORDINGS = JSON.parse(readFileSync(join(import.meta.dirname, "recordings.json"), "utf8")).sources;
+const cacheDir = join(tmpdir(), "gen-rain-sources");
 
-/** A tortuous walk: `steps` of 2-8 m (wider in the cloud) around `dir`, each ~16° off on average. @returns {Segment[]} */
-function walk(/** @type {() => number} */ rnd, /** @type {number[]} */ from, /** @type {number[]} */ dir, /** @type {number} */ length, /** @type {number} */ weight, stepRange = [2, 8]) {
-  const segs = [];
-  let p = from, done = 0;
-  while (done < length) {
-    const d = [dir[0] + gauss(rnd) * 0.3, dir[1] + gauss(rnd) * 0.3, dir[2] + gauss(rnd) * 0.3];
-    const len = Math.hypot(...d), L = between(rnd, stepRange[0], stepRange[1]);
-    const q = [p[0] + (d[0] / len) * L, p[1] + (d[1] / len) * L, p[2] + (d[2] / len) * L];
-    segs.push({ p, q, w: weight * (1 - 0.5 * (done / length)) });
-    p = q;
-    done += L;
+/** A source recording on disk: downloaded once into the cache and checked against its sha256. */
+function source(/** @type {string} */ id) {
+  const rec = RECORDINGS[id], file = join(cacheDir, `${id}${rec.url.slice(rec.url.lastIndexOf("."))}`);
+  const ok = () => existsSync(file) && createHash("sha256").update(readFileSync(file)).digest("hex") === rec.sha256;
+  if (!ok()) {
+    mkdirSync(cacheDir, { recursive: true });
+    execFileSync("curl", ["-sSfL", "--max-time", "300", "-o", file, rec.url]);
+    if (!ok()) throw new Error(`${id}: ${rec.url} doesn't match its sha256 in recordings.json`);
   }
-  return segs;
+  return file;
 }
 
 /**
- * @param {number} seed
- * @param {{ seconds: number, distance: number, height: number, branches: number, cloud: number, echo: object, wet: number, knee: number, nwave: number, lowCut: number, bass: number, sizzle?: boolean }} o
- *   nwave: shortest N-wave (s) near the channel; lowCut (Hz) and bass (dB shelf at 160 Hz) shape the low end
+ * `seconds` of a recording from `start`, mono 44.1 kHz, with the rumble below 30 Hz removed and short fades.
+ * Cracks start right on the strike (fade in 5 ms); rolls fade in over 0.4 s from the quiet before them.
  */
-function lightning(seed, o) {
-  const rnd = mulberry32(seed), n = Math.round(o.seconds * SR);
-  // The channel: ground to cloud base, branches hanging off it, then a run along the cloud base.
-  const main = walk(rnd, [0, 0, 0], [0, 0, 1], o.height, 1);
-  const segs = [...main];
-  for (let b = 0; b < o.branches; b++) {
-    const from = main[Math.floor(between(rnd, 0.25, 0.9) * main.length)].q, az = rnd() * TAU;
-    segs.push(...walk(rnd, from, [Math.cos(az), Math.sin(az), -0.7], between(rnd, 80, 450), between(rnd, 0.35, 0.6)));
-  }
-  const top = main[main.length - 1].q, caz = rnd() * TAU;
-  segs.push(...walk(rnd, top, [Math.cos(caz), Math.sin(caz), 0.05], o.cloud, between(rnd, 0.55, 0.75), [4, 12]));
-
-  const oaz = rnd() * TAU, ear = [o.distance * Math.cos(oaz), o.distance * Math.sin(oaz), 1.7];
-  // Distance bands, each softened by the air like a microphone that far away (absorption grows with distance).
-  const edges = [0, 60, 150, 400, 1000, 2500, 6000, Infinity];
-  const bands = edges.slice(1).map(() => new Float64Array(n));
-  const cutoff = (/** @type {number} */ r) => Math.max(140, Math.min(16000, 20000 * Math.pow(50 / r, 0.9)));
-  const arrivals = segs.map((s) => {
-    const m = [(s.p[0] + s.q[0]) / 2, (s.p[1] + s.q[1]) / 2, (s.p[2] + s.q[2]) / 2];
-    const v = [m[0] - ear[0], m[1] - ear[1], m[2] - ear[2]], r = Math.hypot(...v);
-    const d = [s.q[0] - s.p[0], s.q[1] - s.p[1], s.q[2] - s.p[2]], L = Math.hypot(...d);
-    const cos = Math.abs((d[0] * v[0] + d[1] * v[1] + d[2] * v[2]) / (L * r));
-    return { r, L, spread: (L * cos) / C, w: s.w };
-  });
-  const first = Math.min(...arrivals.map((a) => a.r));
-  const preroll = o.sizzle ? 0.06 : between(rnd, 0.12, 0.3);
-  for (const a of arrivals) {
-    const t0 = preroll + (a.r - first) / C;
-    const tau = o.nwave * (1 + rnd() * 1.6) + a.r * 3e-6; // N-waves lengthen as they travel
-    const amp = (a.w * a.L) / Math.pow(Math.max(a.r, 45), 0.75);
-    const parts = Math.max(1, Math.ceil(a.spread / tau));
-    const band = bands[edges.findIndex((e, i) => a.r >= e && a.r < edges[i + 1])];
-    for (let k = 0; k < parts; k++) {
-      const start = Math.round((t0 - a.spread / 2 + (a.spread * (k + 0.5)) / parts) * SR), len = Math.max(2, Math.round(tau * SR));
-      if (start < 0 || start + len >= n) continue;
-      for (let i = 0; i < len; i++) band[start + i] += (amp / parts) * (1 - (2 * i) / (len - 1)); // N-wave: + to - ramp
-    }
-  }
-  const dry = new Float64Array(n);
-  bands.forEach((b, i) => {
-    const r = i === 0 ? 35 : i === bands.length - 1 ? 9000 : Math.sqrt(edges[i] * edges[i + 1]);
-    biquad(biquad(b, "lp", cutoff(r)), "lp", cutoff(r) * 1.4);
-    mixIn(dry, b, 0);
-  });
-  if (o.sizzle) {
-    // The hiss some people hear a split second before a very close strike.
-    const len = Math.round(0.035 * SR), at = Math.round((preroll - 0.04) * SR), hiss = biquad(white(rnd, len), "hp", 4500);
-    for (let i = 0; i < len; i++) hiss[i] *= Math.pow(i / len, 2);
-    mixIn(dry, hiss, at, peak(dry) * 0.06);
-  }
-  // Rolling echoes off the land, then weight in the low end small speakers can still carry.
-  const wet = convolve(dry, impulse(rnd, o.echo));
-  const out = new Float64Array(n);
-  for (let i = 0; i < n; i++) out[i] = dry[i] + wet[i] * o.wet;
-  biquad(out, "hp", o.lowCut);
-  if (o.bass) biquad(out, "lowshelf", 160, 0.707, o.bass);
-  saturate(out, o.knee);
-  compress(out, -12, 2.5, 0.0005);
-  return fades(out, 0.002, Math.min(1.5, o.seconds * 0.2));
+function excerpt(/** @type {string} */ id, /** @type {number} */ start, /** @type {number} */ seconds, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut) {
+  const raw = execFileSync("ffmpeg", ["-v", "error", "-ss", String(start), "-t", String(seconds), "-i", source(id), "-ac", "1", "-ar", String(SR), "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
+  const x = Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
+  return fades(biquad(biquad(x, "hp", 30), "hp", 30), fadeIn, fadeOut, true);
 }
 
-const THUNDER_ECHO = { seconds: 4.5, t60: 4.2, bright: 2600, dark: 260, echoes: 5 };
-const CRACK_ECHO = { seconds: 2.5, t60: 2.2, bright: 7000, dark: 420, echoes: 2 };
+/** CREDITS.txt for the pack: every recording used, with its author and license (CC BY asks for exactly this). */
+function credits() {
+  const lines = ["Realistic Rain: sound credits", "", "The thunder and lightning-strike sounds are excerpts of these recordings, cut, made mono, faded and", "loudness-normalized (sounds/realistic_rain/thunder*.ogg, crack*.ogg). The rain, wind and roof sounds are synthesized.", ""];
+  for (const r of Object.values(RECORDINGS)) lines.push(`- "${r.title}" by ${r.author}, ${r.license} (${r.licenseUrl}), ${r.page}`);
+  return lines.join("\n") + "\n";
+}
 
 // ---------------------------------------------------------------------------
 // Files, loudness and definitions
@@ -521,23 +407,18 @@ const EVENTS = [
     files: [2.2, 2.0, 2.4, 2.1, 2.3, 2.0].map((s, i) => ({ name: `rain${i + 1}`, make: () => rain(1100 + i, s) })),
   },
   {
-    event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -16.5, ceiling: -2, level: -16.5,
+    event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -18, ceiling: -1, level: -18,
+    // Rolls, each starting about a second before its main hit (source onsets: 135.15, 197.75, 14.6, 611.35 s; 21.55 s).
     files: [
-      { distance: 700, height: 1400, branches: 4, cloud: 1400, seconds: 7.5 },
-      { distance: 1100, height: 1700, branches: 5, cloud: 2000, seconds: 7.5 },
-      { distance: 1600, height: 1500, branches: 3, cloud: 2400, seconds: 8.5 },
-      { distance: 2600, height: 1800, branches: 4, cloud: 2800, seconds: 10 },
-      { distance: 3600, height: 1600, branches: 3, cloud: 4500, seconds: 10 },
-    ].map((o, i) => ({ name: `thunder${i + 1}`, make: () => lightning(2100 + i, { ...o, echo: THUNDER_ECHO, wet: 0.6, knee: -10, nwave: 0.0025, lowCut: 25, bass: 3 }) })),
+      ["quendel", 134.15, 11], ["quendel", 196.75, 11], ["quendel", 13.6, 12], ["quendel", 610.35, 13], ["wuxiascrub", 20.55, 14],
+    ].map(([id, start, seconds], i) => ({ name: `thunder${i + 1}`, make: () => excerpt(/** @type {string} */ (id), /** @type {number} */ (start), /** @type {number} */ (seconds), 0.4, 2.5) })),
   },
   {
-    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -16, ceiling: -2, level: -16,
+    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -15.5, ceiling: -1, level: -15.5,
+    // Close strikes, each starting 80 ms before its crack (source onsets: 1.15, 642.85, 296.2, 537.8 s).
     files: [
-      { distance: 30, height: 1300, branches: 4, cloud: 500, seconds: 4.2 },
-      { distance: 50, height: 1500, branches: 3, cloud: 700, seconds: 4.4 },
-      { distance: 70, height: 1200, branches: 5, cloud: 400, seconds: 4 },
-      { distance: 90, height: 1600, branches: 4, cloud: 800, seconds: 4.5 },
-    ].map((o, i) => ({ name: `crack${i + 1}`, make: () => lightning(3100 + i, { ...o, echo: CRACK_ECHO, wet: 0.3, knee: -18, nwave: 0.0004, lowCut: 180, bass: 0, sizzle: true }) })),
+      ["inspectorj", 1.07, 6], ["quendel", 642.77, 6], ["quendel", 296.12, 5], ["quendel", 537.72, 5],
+    ].map(([id, start, seconds], i) => ({ name: `crack${i + 1}`, make: () => excerpt(/** @type {string} */ (id), /** @type {number} */ (start), /** @type {number} */ (seconds), 0.005, 2) })),
   },
   {
     event: "realm.storm.wind", target: -20, ceiling: -3, level: -34,
@@ -571,7 +452,7 @@ function definitions(/** @type {Map<string, number>} */ volumes) {
 }
 
 // Vanilla's lightning_bolt entry from sounds.json (volume 1000, both events), with the pitch near 1 instead of
-// 0.3-0.7 (impact) and 0.6-1.0 (thunder), so the modeled sounds play as made. The whole entity entry is included so
+// 0.3-0.7 (impact) and 0.6-1.0 (thunder), so the recordings play at their real pitch. The whole entity entry is included so
 // it replaces vanilla's either way packs merge it.
 const SOUNDS_JSON = {
   entity_sounds: {
@@ -596,14 +477,14 @@ const SOUNDS_JSON = {
 const STRIKE_GAIN = Math.pow(10, -12 / 20);
 const AUDITION = {
   // Realistic Rain on its own: rain, a far thunder, then a close strike (the impact and the thunder together).
-  rain: { seconds: 26, play: [["ambient.weather.thunder", "thunder4", 9, STRIKE_GAIN], ["ambient.weather.thunder", "thunder2", 18, STRIKE_GAIN], ["ambient.weather.lightning.impact", "crack2", 18, STRIKE_GAIN]] },
+  rain: { seconds: 34, play: [["ambient.weather.thunder", "thunder3", 6, STRIKE_GAIN], ["ambient.weather.thunder", "thunder1", 20, STRIKE_GAIN], ["ambient.weather.lightning.impact", "crack1", 20, STRIKE_GAIN]] },
   // Rain Extras: a breeze outdoors in rain, then indoors (rain on the roof, muffled wind), then outdoors in a storm.
   extras: {
-    seconds: 30,
+    seconds: 32,
     play: [
       ["realm.storm.wind", "wind1", 0, 0.35], ["realm.storm.wind", "wind2", 8, 0.35],
       ["realm.rain.roof", "roof1", 10, 0.8], ["realm.rain.roof", "roof2", 13, 0.8], ["realm.rain.roof", "roof3", 16, 0.8], ["realm.storm.wind_inside", "wind_inside1", 10, 0.35],
-      ["realm.storm.wind", "wind3", 19, 1], ["realm.storm.wind", "wind1", 27, 1], ["ambient.weather.thunder", "thunder5", 21, STRIKE_GAIN],
+      ["realm.storm.wind", "wind3", 19, 1], ["realm.storm.wind", "wind1", 27, 1], ["ambient.weather.thunder", "thunder2", 20, STRIKE_GAIN],
     ],
   },
 };
@@ -651,6 +532,7 @@ try {
   for (const name of readdirSync(outDir)) if (!keep.has(name)) rmSync(join(outDir, name)); // retired files
   writeFileSync(join(pack, "sounds", "sound_definitions.json"), definitions(volumes));
   writeFileSync(join(pack, "sounds.json"), JSON.stringify(SOUNDS_JSON, null, 2) + "\n");
+  writeFileSync(join(pack, "CREDITS.txt"), credits());
   if (audition) writeAudition(audition, tmp);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
