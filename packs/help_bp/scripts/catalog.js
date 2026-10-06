@@ -389,10 +389,10 @@ export const PACKS = [
     "folder": "stash_bp",
     "topic": "stash",
     "name": "Quick Stack & Sort",
-    "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory.",
+    "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory.",
     "steps": [
       {
-        "text": "§lOpen the menu:§r sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a §lQuick Stack & Sort§r menu does, with three buttons:\n  - §lSort this chest§r (or barrel, shulker box...): its stacks merge and sort, and the bar above the hotbar says §eSorted 31 stacks§r.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
+        "text": "§lOpen the menu:§r sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a §lQuick Stack & Sort§r menu does, with these buttons:\n  - §lSort this chest§r (or barrel, shulker box...): its stacks merge and sort, and the bar above the hotbar says §eSorted 31 stacks§r.\n  - §lLock this chest:§r only you can open, sort or break it. Once it's yours, the button reads §lShare or unlock§r: share it with players who are online, stop sharing, or unlock it.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
         "ops": false
       },
       {
@@ -408,8 +408,12 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lHelp:§r run §e/realm:stash_help§r for a page that explains the menu and every command with its usage. §e/help realm:stash§r and §e/help realm:sort§r also describe them.",
+        "text": "§lHelp:§r run §e/realm:stash_help§r for a page that explains the menu, chest locks and every command with its usage. §e/help realm:stash§r and §e/help realm:sort§r also describe them.",
         "ops": false
+      },
+      {
+        "text": "§lOperators:§r sneak-tap someone else's locked container for §lRemove the lock (operator)§r. To switch chest locks off for the realm, disable §lChest locks§r in §e/realm:config§r (existing locks are kept for when they're enabled again).",
+        "ops": true
       }
     ],
     "commands": [
@@ -458,6 +462,42 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Searches remembered and nearby containers for §eitem§r (any part of an item id), or for the item in your hand if you leave it out"
+      }
+    ]
+  },
+  {
+    "folder": "claims_bp",
+    "topic": "claims",
+    "name": "Land Claims",
+    "summary": "Claim the land around your base so other players can't break, place or open anything there. §lOff until an operator enables it§r: until then §e/realm:claim§r only says so and nothing is protected.",
+    "steps": [
+      {
+        "text": "Once an operator has enabled land claims, stand in the middle of your base and run §e/realm:claim§r, then pick §lClaim this land§r. You get 33 x 33 blocks around you (default radius 16, §eradius§r), from the bottom of the world to the top, and green sparkles show its borders.",
+        "ops": false
+      },
+      {
+        "text": "Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees §eThis land is claimed by Sam§r.",
+        "ops": false
+      },
+      {
+        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). The same menu stops sharing, shows its borders or removes the claim.",
+        "ops": false
+      },
+      {
+        "text": "§lWhere are the borders?§r §e/realm:claim§r -> §lShow claim borders§r sparkles the edges of every claim near you for 10 seconds. Walking in or out of one says §eEntering Sam's claim§r / §eLeaving Sam's claim§r above the hotbar.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r enable it in §e/realm:config§r -> §lLand Claims§r -> §lLand claims§r, and set the claim size and how many each player gets there. §e/realm:claim§r -> §lAll claims (operator)§r lists every claim to remove any of them.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:claim",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the Land Claims menu: claim the land around you (default 33 x 33 blocks, §eradius§r 16), show nearby claim borders, share or remove your claims (default 2 each, §emaxClaims§r); operators also get every claim, to remove any. Only works once an operator has enabled land claims (default disabled, §eenabled§r)"
       }
     ]
   },

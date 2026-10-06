@@ -6,6 +6,7 @@ import {
   Container,
   CustomCommandStatus,
   Dimension,
+  Direction,
   ItemStack,
   Player,
   system,
@@ -269,6 +270,7 @@ function* findTargets(player) {
     const block = dimension.getBlock(loc);
     const container = block && containerOf(block);
     if (!block || !container) continue;
+    if (lockedOut(player, block, sigOf)) continue; // someone else's locked chest
     const ids = new Set();
     for (let i = 0; i < container.size; i++) {
       const it = container.getItem(i);
@@ -344,6 +346,244 @@ function* quickStack(player) {
   if (moved) player.playSound("random.pop", { pitch: 0.8 });
 }
 
+
+// ---------------------------------------------------------------------------
+// Chest locks
+// ---------------------------------------------------------------------------
+
+// One world property per locked block: "stash:lock:<dimension>:<x>,<y>,<z>" → JSON Lock. Both halves
+// of a double chest get one; the second half carries `h` so it isn't counted twice.
+const LOCK_PREFIX = "stash:lock:";
+const CHEST_ITEMS = new Set(["minecraft:chest", "minecraft:trapped_chest", "minecraft:hopper", ...CONFIG.containerTypes.filter((id) => id.endsWith("copper_chest"))]);
+
+/** @typedef {{ o: string, n: string, s: { i: string, n: string }[], h?: 1 }} Lock owner id and name, shared with, second half */
+
+/** @type {Map<string, Lock> | undefined} key (without the prefix) → lock; this pack is the only writer */
+let lockCache;
+
+/** @returns {Map<string, Lock>} */
+function locks() {
+  if (lockCache) return lockCache;
+  /** @type {Map<string, Lock>} */
+  const map = new Map();
+  try {
+    for (const id of world.getDynamicPropertyIds()) {
+      if (!id.startsWith(LOCK_PREFIX)) continue;
+      try {
+        const raw = world.getDynamicProperty(id);
+        const lock = typeof raw === "string" ? JSON.parse(raw) : undefined;
+        if (lock && typeof lock.o === "string") map.set(id.slice(LOCK_PREFIX.length), { ...lock, s: Array.isArray(lock.s) ? lock.s : [] });
+      } catch {
+        // a corrupt entry is no lock
+      }
+    }
+  } catch {
+    return map; // the world isn't loaded yet: no locks for now, and read them again next time
+  }
+  return (lockCache = map);
+}
+
+/** @param {string} dim @param {import("@minecraft/server").Vector3} p */
+const lockKey = (dim, p) => `${dim}:${p.x},${p.y},${p.z}`;
+
+/** @param {string} key @param {Lock | undefined} lock */
+function saveLock(key, lock) {
+  if (lock) locks().set(key, lock);
+  else locks().delete(key);
+  world.setDynamicProperty(LOCK_PREFIX + key, lock ? JSON.stringify(lock) : undefined);
+}
+
+const locksOn = () => get("locks") === true;
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/**
+ * The lock on this block or, for a double chest, on its other half.
+ * @param {Block} block @param {(b: Block) => string | undefined} [sigOf]
+ * @returns {Lock | undefined}
+ */
+function lockAt(block, sigOf) {
+  if (!containerTypes.has(block.typeId)) return undefined;
+  const all = locks();
+  if (!all.size) return undefined;
+  const own = all.get(lockKey(block.dimension.id, block.location));
+  if (own) return own;
+  if (!block.typeId.endsWith("chest") || (containerOf(block)?.size ?? 0) <= 27) return undefined;
+  const other = partnerOf(block, sigOf ?? signatures());
+  return other ? all.get(lockKey(block.dimension.id, other.location)) : undefined;
+}
+
+/** @param {Player} player @param {Lock} lock */
+const allowed = (player, lock) => lock.o === player.id || lock.s.some((s) => s.i === player.id);
+
+/** Locked, and not to this player. @param {Player} player @param {Block} block @param {(b: Block) => string | undefined} [sigOf] */
+function lockedOut(player, block, sigOf) {
+  if (!locksOn()) return false;
+  const lock = lockAt(block, sigOf);
+  return !!lock && !allowed(player, lock);
+}
+
+/** @param {string} id @returns {number} containers this player has locked (a double chest once) */
+const lockCount = (id) => [...locks().values()].filter((l) => l.o === id && !l.h).length;
+
+/** The block next to `block` on `face`. @param {Block} block @param {Direction} face */
+function across(block, face) {
+  const d = {
+    [Direction.Down]: { x: 0, y: -1, z: 0 },
+    [Direction.Up]: { x: 0, y: 1, z: 0 },
+    [Direction.North]: { x: 0, y: 0, z: -1 },
+    [Direction.South]: { x: 0, y: 0, z: 1 },
+    [Direction.West]: { x: -1, y: 0, z: 0 },
+    [Direction.East]: { x: 1, y: 0, z: 0 },
+  }[face];
+  return d ? block.offset(d) : undefined;
+}
+
+/**
+ * Someone else's locked container next to where this item would be placed: a hopper could drain it
+ * and a chest could join it into a double chest the placer could open.
+ * @param {Player} player @param {Block} block @param {Direction} face @param {ItemStack | undefined} item
+ * @returns {Lock | undefined}
+ */
+function lockNextToPlacement(player, block, face, item) {
+  if (!item || !CHEST_ITEMS.has(item.typeId) || !locks().size) return undefined;
+  const at = block.isAir || block.isLiquid ? block : across(block, face);
+  if (!at) return undefined;
+  for (const d of [...SIDES, { x: 0, y: 1, z: 0 }, { x: 0, y: -1, z: 0 }]) {
+    const next = at.offset(d);
+    const lock = next && lockAt(next);
+    if (lock && !allowed(player, lock)) return lock;
+  }
+  return undefined;
+}
+
+/** "Locked by Sam" in the bar above the hotbar, from a before event. @param {Player} player @param {Lock} lock */
+function sayLocked(player, lock) {
+  system.run(() => {
+    if (player.isValid) player.onScreenDisplay.setActionBar(`§cLocked by ${lock.n}`);
+  });
+}
+
+/**
+ * Locks the container at `at` (both halves of a double chest) to the player.
+ * @param {Player} player @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at
+ */
+function lock(player, dimension, at) {
+  const block = dimension.getBlock(at);
+  if (!block || !containerTypes.has(block.typeId) || !locksOn()) return;
+  if (lockAt(block)) {
+    player.onScreenDisplay.setActionBar("§7It's already locked");
+    return;
+  }
+  const max = get("maxLocks");
+  if (lockCount(player.id) >= max) {
+    player.onScreenDisplay.setActionBar(`§cYou already have ${max} locked containers. Unlock one first.`);
+    return;
+  }
+  /** @type {Lock} */
+  const l = { o: player.id, n: player.name, s: [] };
+  saveLock(lockKey(dimension.id, at), l);
+  const other = (containerOf(block)?.size ?? 0) > 27 ? partnerOf(block, signatures()) : undefined;
+  if (other) saveLock(lockKey(dimension.id, other.location), { ...l, h: 1 });
+  player.onScreenDisplay.setActionBar(`§aLocked: only you can open this ${nameOf(block.typeId).toLowerCase()}`);
+  player.playSound("random.door_close", { pitch: 1.4, volume: 0.6 });
+}
+
+/**
+ * Every key (one, or both halves) holding the lock on this block.
+ * @param {Block} block @returns {string[]}
+ */
+function lockKeys(block) {
+  const keys = [lockKey(block.dimension.id, block.location)];
+  const other = block.typeId.endsWith("chest") && (containerOf(block)?.size ?? 0) > 27 ? partnerOf(block, signatures()) : undefined;
+  if (other) keys.push(lockKey(block.dimension.id, other.location));
+  return keys.filter((k) => locks().has(k));
+}
+
+/** Changes (or removes, with undefined) the lock on every half. @param {Block} block @param {(l: Lock) => Lock | undefined} change */
+function updateLock(block, change) {
+  for (const key of lockKeys(block)) {
+    const l = locks().get(key);
+    if (l) saveLock(key, change(l));
+  }
+}
+
+/**
+ * The owner's lock menu: share with a player online, stop sharing, unlock.
+ * @param {Player} player @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at
+ */
+async function lockMenu(player, dimension, at) {
+  const block = dimension.getBlock(at);
+  const l = block && lockAt(block);
+  if (!block || !l || l.o !== player.id) return;
+  const name = nameOf(block.typeId).toLowerCase();
+  const others = world.getAllPlayers().filter((p) => p.id !== player.id && !l.s.some((s) => s.i === p.id));
+
+  /** @type {{ text: string, run: () => void }[]} */
+  const actions = [];
+  if (l.s.length < CONFIG.maxShared) {
+    for (const p of others) {
+      actions.push({
+        text: `Share with ${p.name}\n§8They can open and sort it too`,
+        run: () => updateLock(block, (x) => ({ ...x, s: [...x.s, { i: p.id, n: p.name }] })),
+      });
+    }
+  }
+  for (const s of l.s) {
+    actions.push({ text: `Stop sharing with ${s.n}`, run: () => updateLock(block, (x) => ({ ...x, s: x.s.filter((y) => y.i !== s.i) })) });
+  }
+  actions.push({ text: `Unlock this ${name}\n§8Anyone can open it again`, run: () => updateLock(block, () => undefined) });
+
+  const body = [
+    `Only you${l.s.length ? ` and ${orList(l.s.map((s) => s.n), "and")}` : ""} can open, sort or break this ${name}.`,
+    l.s.length >= CONFIG.maxShared
+      ? `§7Shared with the most players allowed (${CONFIG.maxShared}).`
+      : others.length
+        ? "§7You can share it with players who are online now."
+        : "§7To share it, come back when the other player is online.",
+  ];
+  const form = new ActionFormData().title("§lChest lock").body(body.join("\n"));
+  for (const a of actions) form.button(a.text);
+  const res = await show(player, form, 3);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const now = dimension.getBlock(at);
+  if (!now || lockAt(now)?.o !== player.id) return; // broken or unlocked meanwhile
+  actions[res.selection]?.run();
+  player.onScreenDisplay.setActionBar("§aLock updated");
+}
+
+// Breaking: only the owner and the players it's shared with.
+world.beforeEvents.playerBreakBlock.subscribe((event) => {
+  const { player, block } = event;
+  if (!containerTypes.has(block.typeId) || !lockedOut(player, block)) return;
+  event.cancel = true;
+  const lock = lockAt(block);
+  if (lock) sayLocked(player, lock);
+});
+
+// A broken or replaced block takes its lock with it.
+world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
+  const key = lockKey(block.dimension.id, block.location);
+  if (locks().has(key)) saveLock(key, undefined);
+});
+world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
+  const key = lockKey(block.dimension.id, block.location);
+  if (locks().has(key)) saveLock(key, undefined); // a leftover of a container that went some other way
+});
+
+// Explosions never break a locked container (the blast still hurts as usual).
+world.beforeEvents.explosion.subscribe((event) => {
+  if (!locksOn() || !locks().size) return;
+  try {
+    const dim = event.dimension.id;
+    const blocks = event.getImpactedBlocks();
+    const kept = blocks.filter((b) => !locks().has(lockKey(dim, b.location)));
+    if (kept.length !== blocks.length) event.setImpactedBlocks(kept);
+  } catch (e) {
+    console.warn(`[stash] ${e}`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Sneak-tap menu
 // ---------------------------------------------------------------------------
@@ -371,16 +611,22 @@ async function openMenu(player, dimension, at) {
   const block = dimension.getBlock(at);
   if (!block || menuOpen.has(player.id)) return;
   const name = nameOf(block.typeId);
-  const container = block.typeId === ENDER_CHEST ? undefined : containerOf(block);
+  const lockOn = locksOn() && containerTypes.has(block.typeId);
+  const l = lockOn ? lockAt(block) : undefined;
+  const mine = !!l && l.o === player.id;
+  const open = !l || allowed(player, l);
+  const container = block.typeId === ENDER_CHEST || !open ? undefined : containerOf(block);
   const inv = player.getComponent("minecraft:inventory")?.container;
 
   const body = [];
   if (container) body.push(`${name} - ${usedSlots(container, 0, container.size)} of ${container.size} slots used`);
+  else if (!open) body.push(`§c${name}: locked by ${l?.n}.§r`);
   else body.push(`§7${name}: add-ons can't see inside, so it can't be sorted.§r`);
+  if (l && open) body.push(`§6Locked by ${mine ? "you" : l.n}${l.s.length ? `, shared with ${orList(l.s.map((s) => s.n), "and")}` : ""}§r`);
   if (inv) body.push(`Your inventory - ${usedSlots(inv, MAIN_FIRST, MAIN_END)} of ${MAIN_END - MAIN_FIRST} slots used`);
   body.push("", "§8All the details: /realm:stash_help");
 
-  /** @type {{ text: string, run: (p: Player) => void }[]} */
+  /** @type {{ text: string, run: (p: Player) => void, free?: boolean }[]} free: not a sort, so no cooldown */
   const actions = [];
   if (container) {
     actions.push({
@@ -389,6 +635,21 @@ async function openMenu(player, dimension, at) {
         const b = dimension.getBlock(at);
         if (b && containerTypes.has(b.typeId)) sortBlock(p, b);
       },
+    });
+  }
+  if (lockOn && !l) {
+    actions.push({ text: `Lock this ${name.toLowerCase()}\n§8Only you can open or break it`, run: (p) => lock(p, dimension, at), free: true });
+  } else if (mine) {
+    actions.push({ text: `Share or unlock\n§8${l.s.length ? `Shared with ${l.s.length} player${l.s.length === 1 ? "" : "s"}` : "Only you can open it"}`, run: (p) => lockMenu(p, dimension, at).catch((e) => console.warn(`[stash] ${e}`)), free: true });
+  } else if (l && isOp(player)) {
+    actions.push({
+      text: `Remove the lock (operator)\n§8Locked by ${l.n}`,
+      run: (p) => {
+        const b = dimension.getBlock(at);
+        if (b) updateLock(b, () => undefined);
+        p.onScreenDisplay.setActionBar(`§aRemoved ${l.n}'s lock`);
+      },
+      free: true,
     });
   }
   actions.push({
@@ -408,6 +669,11 @@ async function openMenu(player, dimension, at) {
     // Only a short retry: a menu popping up long after the tap would be a surprise.
     const res = await show(player, form, 3);
     if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+    const chosen = actions[res.selection];
+    if (chosen?.free) {
+      chosen.run(player);
+      return;
+    }
     if (!ready(player)) {
       player.onScreenDisplay.setActionBar("§7Too fast. Try again in a moment.");
       return;
@@ -419,9 +685,26 @@ async function openMenu(player, dimension, at) {
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
-  const { player, block, itemStack, isFirstEvent } = event;
-  if (!player.isSneaking || !freeHand(itemStack)) return;
+  const { player, block, itemStack, isFirstEvent, blockFace } = event;
+  if (event.cancel) return; // another pack (Land Claims) already refused this tap
+  if (locksOn()) {
+    const near = lockNextToPlacement(player, block, blockFace, itemStack);
+    if (near) {
+      event.cancel = true; // no hopper under it, no chest joining it
+      if (isFirstEvent) sayLocked(player, near);
+      return;
+    }
+  }
   const tap = getFor(player, "sneakTap"); // the realm's choice, or the player's own from /realm:prefs
+  const menuTap = player.isSneaking && freeHand(itemStack) && tap === "menu";
+  // Someone else's locked container doesn't open; the sneak-tap menu still shows (who locked it, inventory buttons).
+  if (!menuTap && containerTypes.has(block.typeId) && lockedOut(player, block)) {
+    event.cancel = true;
+    const l = lockAt(block);
+    if (isFirstEvent && l) sayLocked(player, l);
+    return;
+  }
+  if (!player.isSneaking || !freeHand(itemStack)) return;
   if (tap === "off") return;
   const menu = tap === "menu";
   if (!containerTypes.has(block.typeId) && !(menu && block.typeId === ENDER_CHEST)) return;
@@ -470,6 +753,18 @@ async function showHelp(player) {
             "§7An ender chest's menu has no Sort button: add-ons can't see inside one. Holding anything else (a block, a hopper, honeycomb) keeps its usual sneak-tap use.",
           ].join("\n")
         : `Sneak and tap a ${storageKinds(player)} with an empty hand, or holding a tool, weapon or armor, to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
+    );
+  }
+
+  if (locksOn() && tap === "menu") {
+    form.divider().header("Chest locks");
+    form.label(
+      [
+        "§e- Lock this chest§r (or barrel, shulker box...) in the sneak-tap menu: only you can open, sort, break or quick stack into it. Both halves of a double chest are locked.",
+        `§e- Share or unlock§r: share it with up to ${CONFIG.maxShared} players who are online, stop sharing, or unlock it.`,
+        "Others who tap it see §cLocked by <name>§r. Nobody else can put a hopper under it or a chest next to it, and explosions don't break it.",
+        `§7Up to ${get("maxLocks")} locked containers each. Operators can remove any lock from the menu. A hopper that was already under it still empties it.`,
+      ].join("\n")
     );
   }
 
