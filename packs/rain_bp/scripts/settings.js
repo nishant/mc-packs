@@ -18,9 +18,11 @@ const OPTIONS = [
   { key: "wind.enabled", type: "bool", scope: "world", label: "Wind", help: "Gusts in thunderstorms, a breeze in rain, muffled indoors" },
   { key: "wind.inThunder", type: "float", scope: "world", label: "Storm wind volume", min: 0, max: 1, step: 0.05 },
   { key: "wind.inRain", type: "float", scope: "world", label: "Rain breeze volume", min: 0, max: 1, step: 0.05 },
+  { key: "stormSound.enabled", type: "bool", scope: "world", label: "Thunderstorm sound", help: "The storm recording plays around you during thunderstorms, muffled indoors" },
+  { key: "stormSound.volume", type: "float", scope: "world", label: "Thunderstorm sound volume", min: 0, max: 1, step: 0.05 },
   { key: "roof.enabled", type: "bool", scope: "world", label: "Rain on the roof", help: "Rain drumming on the roof while you're indoors" },
   { key: "roof.volume", type: "float", scope: "world", label: "Rain on the roof volume", min: 0, max: 1, step: 0.05 },
-  { key: "off", type: "bool", scope: "player", base: "defaultOff", prop: "rain:off", invert: true, label: "Rain extras (fog, haze, mist, drips, wind, roof)", help: "The same switch as /realm:rain" },
+  { key: "off", type: "bool", scope: "player", base: "defaultOff", prop: "rain:off", invert: true, label: "Rain extras (fog, haze, mist, drips and sounds)", help: "The same switch as /realm:rain" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

@@ -10,27 +10,35 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain1",
-          "volume": 0.043
+          "volume": 0.041
         },
         {
           "name": "sounds/realistic_rain/rain2",
-          "volume": 0.043
+          "volume": 0.041
         },
         {
           "name": "sounds/realistic_rain/rain3",
-          "volume": 0.043
+          "volume": 0.041
         },
         {
           "name": "sounds/realistic_rain/rain4",
-          "volume": 0.043
+          "volume": 0.041
         },
         {
           "name": "sounds/realistic_rain/rain5",
-          "volume": 0.043
+          "volume": 0.041
         },
         {
           "name": "sounds/realistic_rain/rain6",
-          "volume": 0.043
+          "volume": 0.041
+        },
+        {
+          "name": "sounds/realistic_rain/rain7",
+          "volume": 0.041
+        },
+        {
+          "name": "sounds/realistic_rain/rain8",
+          "volume": 0.041
         }
       ],
       "subtitle": "subtitles.weather.rain"
@@ -61,6 +69,10 @@
         {
           "name": "sounds/realistic_rain/thunder5",
           "volume": 1
+        },
+        {
+          "name": "sounds/realistic_rain/thunder6",
+          "volume": 1
         }
       ],
       "subtitle": "subtitles.entity.lightning_bolt.thunder"
@@ -90,6 +102,48 @@
         }
       ],
       "subtitle": "subtitles.entity.generic.explode"
+    },
+    "realm.storm.bed": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100,
+      "sounds": [
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/bed1",
+          "volume": 0.324
+        },
+        {
+          "name": "sounds/realistic_rain/bed2",
+          "volume": 0.32
+        },
+        {
+          "name": "sounds/realistic_rain/bed3",
+          "volume": 0.32
+        },
+        {
+          "name": "sounds/realistic_rain/bed4",
+          "volume": 0.327
+        }
+      ]
+    },
+    "realm.storm.bed_inside": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100,
+      "sounds": [
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/bed_inside1",
+          "volume": 0.254
+        },
+        {
+          "name": "sounds/realistic_rain/bed_inside2",
+          "volume": 0.254
+        }
+      ]
     },
     "realm.storm.wind": {
       "__use_legacy_max_distance": "true",
