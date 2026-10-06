@@ -39,7 +39,7 @@ export const PACKS = [
     "summary": "Change the packs' settings in game: operators set them for everyone with §e/realm:config§r, and every player picks their own preferences with §e/realm:prefs§r.",
     "steps": [
       {
-        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r. Chat confirms each change, for example §eSaved: Phantom Opt-out > Phantoms near me: Disabled§r.",
+        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r. A summary pops up with how many changes were saved and each one as before -> after, for example §e1 change saved§r and §ePhantom Opt-out > Phantoms near me: Enabled -> Disabled§r (chat gets the same). Tap §lBack to my preferences§r to change more, or §lDone§r.",
         "ops": false
       },
       {
@@ -47,7 +47,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r run §e/realm:config§r, or use any item renamed §eRealm Settings§r on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap §lSave§r. They apply right away for everyone, and chat confirms each one. A setting shown as text with §e(change in config.js, then restart the world)§r can only be changed there.",
+        "text": "§lOperators:§r run §e/realm:config§r, or use any item renamed §eRealm Settings§r on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap §lSave§r. They apply right away for everyone. A summary pops up with how many changes were saved and each one as before -> after, such as §eStorm wind volume: 70% -> 50%§r; tap §lBack to Realm Settings§r for another pack, or §lDone§r. A setting shown as text with §e(change in config.js, then restart the world)§r can only be changed there.",
         "ops": true
       },
       {
