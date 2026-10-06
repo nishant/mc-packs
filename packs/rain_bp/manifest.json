@@ -4,7 +4,7 @@
     "name": "Rain Extras",
     "description": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips, the thunderstorm recording, storm wind and rain on the roof, for the Realistic Rain resource pack. /realm:rain",
     "uuid": "7195c60d-0298-456b-b3e5-6eb5322d9be7",
-    "version": [1, 4, 1],
+    "version": [1, 5, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

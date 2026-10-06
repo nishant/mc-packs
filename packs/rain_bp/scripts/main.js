@@ -19,9 +19,12 @@ const WIND_INSIDE = "realm.storm.wind_inside";
 const ROOF = "realm.rain.roof";
 const BED = "realm.storm.bed";
 const BED_INSIDE = "realm.storm.bed_inside";
+const RAIN = "ambient.weather.rain"; // the game's own rain sound (Realistic Rain's clips)
+const RAIN_INSIDE = "realm.rain.inside";
 const WIND_EVERY = 8; // seconds between wind plays: the clips are 10 s with 2 s crossfades
 const ROOF_EVERY = 3; // the roof clips are 3.6 s
 const BED_EVERY = 18; // the thunderstorm clips are 20 s with 2 s crossfades
+const INSIDE_EVERY = 18; // the muffled rain clips are 20 s with 2 s crossfades
 
 // Performance: the loop only exists while there's something to do, runs 4 times a second and handles a
 // quarter of the players each time, so every player costs about one update per second.
@@ -36,7 +39,10 @@ const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {"out" | "in" | "none"} Place where the player hears the weather from: outdoors (or under a tree), indoors, or out of its reach */
-/** @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number, windIn: number, roofIn: number, bedIn: number, place: Place }} State */
+/**
+ * @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number,
+ *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean }} State muffle: stop the game's rain for this player
+ */
 /** @typedef {{ level: number, stepIn: number }} Roll a fog that rolls in or out in steps */
 
 /** @type {WeatherType} */
@@ -61,7 +67,7 @@ function extrasOff(player) {
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let st = players.get(player.id);
-  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, place: "none" }));
+  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false }));
   return st;
 }
 
@@ -124,12 +130,16 @@ function tick() {
   const group = run++ % GROUPS;
   for (const player of world.getAllPlayers()) {
     const st = stateOf(player);
-    if (st.group !== group) continue;
-    try {
-      update(player, st);
-    } catch (e) {
-      console.warn(`[rain] ${e}`); // usually an unloaded chunk at the edge of the world
+    if (st.group === group) {
+      try {
+        update(player, st);
+      } catch (e) {
+        console.warn(`[rain] ${e}`); // usually an unloaded chunk at the edge of the world
+      }
     }
+    // Muffled rain indoors: the game starts a rain clip every 2-4 ticks, wherever you are. Stopping them every run
+    // (4 times a second) leaves only clips under 0.25 s old, still in Realistic Rain's 0.8 s fade-in, so nearly silent.
+    if (st.muffle && raining) stopSound(player, RAIN);
   }
   if (!needsLoop() && loop !== undefined) {
     system.clearRun(loop);
@@ -151,6 +161,7 @@ function step(roll, /** @type {number} */ target, /** @type {number} */ steps, /
 
 /** One player's second: fogs, then mist, drips and sounds around them. @param {Player} player @param {State} st */
 function update(player, st) {
+  st.muffle = false;
   const off = extrasOff(player);
   const fog = off ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
@@ -164,6 +175,7 @@ function update(player, st) {
   const budget = { lookups: CONFIG.drips.lookupsPerSecond };
   const feet = player.location;
   const here = topmost(player.dimension, feet.x, feet.z, budget);
+  if (here && raining && here.location.y - feet.y > MAX_HEADROOM && !DRY_GROUND.test(here.typeId)) st.muffle = get("roof.muffleRain"); // deep underground: no rain to hear
   if (!here || DRY_GROUND.test(here.typeId) || here.location.y - feet.y > MAX_HEADROOM) {
     leave(player, st); // deserts, badlands and snow get no rain; caves get none of the haze
     return;
@@ -176,7 +188,10 @@ function update(player, st) {
   const nearGround = feet.y - here.location.y < 6;
   if (get("mist.enabled") && weather === WeatherType.Thunder && outdoors && nearGround) mist(player, st, feet, budget);
   if (get("drips.enabled")) drips(player, st, feet, raining, budget);
-  if (raining) sounds(player, st, outdoors || underTree ? "out" : "in", !outdoors && !underTree && above <= CONFIG.roof.maxHeadroom);
+  if (!raining) return;
+  const place = outdoors || underTree ? "out" : "in";
+  st.muffle = place === "in" && get("roof.muffleRain");
+  sounds(player, st, place, !outdoors && !underTree && above <= CONFIG.roof.maxHeadroom);
 }
 
 /** Out of the rain's reach (another dimension, underground, a desert, extras off): no haze, no weather sounds. @param {Player} player @param {State} st */
@@ -252,10 +267,17 @@ function sounds(player, st, place, roofNear) {
     st.windIn = 0;
     st.roofIn = 0;
     st.bedIn = 0;
+    st.insideIn = 0;
   }
   st.windIn -= UPDATE_SECONDS;
   st.roofIn -= UPDATE_SECONDS;
   st.bedIn -= UPDATE_SECONDS;
+  st.insideIn -= UPDATE_SECONDS;
+  if (st.muffle && st.insideIn <= 0) {
+    const volume = get("roof.volume");
+    if (volume > 0) player.playSound(RAIN_INSIDE, { volume });
+    st.insideIn = INSIDE_EVERY;
+  }
   if (weather === WeatherType.Thunder && get("stormSound.enabled") && st.bedIn <= 0) {
     const volume = get("stormSound.volume");
     if (volume > 0) player.playSound(place === "out" ? BED : BED_INSIDE, { volume });
@@ -275,14 +297,17 @@ function sounds(player, st, place, roofNear) {
 
 /** @param {Player} player @param {State} st */
 function stopSounds(player, st) {
-  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE]) {
-    try {
-      player.runCommand(`stopsound @s ${id}`);
-    } catch (e) {
-      console.warn(`[rain] /stopsound: ${e}`);
-    }
-  }
+  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE, RAIN_INSIDE]) stopSound(player, id);
   st.place = "none";
+}
+
+/** @param {Player} player @param {string} id */
+function stopSound(player, id) {
+  try {
+    player.runCommand(`stopsound @s ${id}`);
+  } catch (e) {
+    console.warn(`[rain] /stopsound: ${e}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

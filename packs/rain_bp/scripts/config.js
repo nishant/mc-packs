@@ -59,5 +59,10 @@ export const CONFIG = {
     volume: 0.8,
     /** Highest roof (blocks above your feet) that still counts as being indoors. */
     maxHeadroom: 10,
+    /**
+     * Muffled rain indoors: under a roof (or deep underground) the game's own rain sound is stopped for you, and under a
+     * roof you hear the rain muffled through it instead (at `volume`). Bedrock plays its rain the same indoors and out.
+     */
+    muffleRain: true,
   },
 };
