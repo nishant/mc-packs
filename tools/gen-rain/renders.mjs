@@ -6,7 +6,10 @@
 // shows is calibrated to an in-game screenshot (see STREAKS).
 //   rain-vanilla.webp   vanilla rain (animated, 1.5 s loop)
 //   rain.webp           Realistic Rain (animated)
-//   storm.webp          a thunderstorm with Rain Extras: storm fog, ground mist and drips (animated)
+//   storm-vanilla.webp  a vanilla thunderstorm (animated)
+//   storm-rain.webp     a thunderstorm with Realistic Rain only (animated)
+//   storm.webp          a thunderstorm with Rain Extras too: storm fog, ground mist and drips (animated)
+// All from the same spot, so the site can show them as before/after pairs.
 //   weather-atlas.png   the weather texture: vanilla 32x32 at 8x, Realistic Rain 128x128 at 2x
 // Deterministic. Needs ffmpeg with libwebp on PATH. Not part of npm run check (the outputs are committed).
 //
@@ -311,12 +314,16 @@ const VANILLA_RAIN = region(VANILLA, 5, 15);
 const NEW_RAIN = region(NEW, 20, 60);
 const VANILLA_SPLASH = { size: 0.175 * 0.5, color: hex("#C8D4F0"), alpha: 0.95 };
 const NEW_SPLASH = { size: 0.1 * 0.5, color: hex("#A9BCE6"), alpha: 0.7 };
+/** How the game darkens the sky, the world and the rain in a thunderstorm, with or without the packs. */
+const THUNDER = { skyDark: 0.8, worldDark: 0.6, rainLight: 0.85 };
 /** @type {Record<string, Scene>} */
 const SCENES = {
   "rain-vanilla": { fog: "#666666", fogStart: 0.23, fogEnd: 0.7, skyTop: "#62676E", skyDark: 1, worldDark: 0.74, rainLight: 1, region: VANILLA_RAIN, splash: VANILLA_SPLASH },
   rain: { fog: "#5F6B79", fogStart: 0.15, fogEnd: 0.55, skyTop: "#62676E", skyDark: 1, worldDark: 0.74, rainLight: 1, region: NEW_RAIN, splash: NEW_SPLASH },
+  "storm-vanilla": { fog: "#666666", fogStart: 0.23, fogEnd: 0.7, skyTop: "#62676E", ...THUNDER, region: VANILLA_RAIN, splash: VANILLA_SPLASH },
+  "storm-rain": { fog: "#5F6B79", fogStart: 0.15, fogEnd: 0.55, skyTop: "#62676E", ...THUNDER, region: NEW_RAIN, splash: NEW_SPLASH },
   storm: {
-    fog: "#4E5763", fogStart: 0.08, fogEnd: 0.35, skyTop: "#62676E", skyDark: 0.8, worldDark: 0.6, rainLight: 0.85, region: NEW_RAIN, splash: NEW_SPLASH,
+    fog: "#4E5763", fogStart: 0.08, fogEnd: 0.35, skyTop: "#62676E", ...THUNDER, region: NEW_RAIN, splash: NEW_SPLASH,
     mistColor: "#7C8794", mistAlpha: 0.2, drips: true,
   },
 };
