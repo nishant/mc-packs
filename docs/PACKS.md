@@ -955,8 +955,8 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions` and `
 ### How it works
 
 - Claims are read into memory once and kept in step as they change, so the checks below never read saved data.
-- `beforeEvents.playerBreakBlock` and `beforeEvents.playerInteractWithBlock` are cancelled inside someone else's claim. The tap is checked at the block and at the spot a block would be placed, since the stable API has no "before place" event and placing starts with that tap. `afterEvents.playerPlaceBlock` removes anything that still got placed. `beforeEvents.playerInteractWithEntity` is cancelled for `protectedEntities`.
-- `beforeEvents.explosion` takes the blocks inside claims out of the blast without cancelling it.
+- `beforeEvents.playerBreakBlock` and `beforeEvents.playerInteractWithBlock` are canceled inside someone else's claim. The tap is checked at the block and at the spot a block would be placed, since the stable API has no "before place" event and placing starts with that tap. `afterEvents.playerPlaceBlock` removes anything that still got placed. `beforeEvents.playerInteractWithEntity` is canceled for `protectedEntities`.
+- `beforeEvents.explosion` takes the blocks inside claims out of the blast without canceling it.
 - Once a second, each player's claim is looked up to say when they walk in or out of one.
 
 ---
