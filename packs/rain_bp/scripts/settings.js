@@ -22,6 +22,7 @@ const OPTIONS = [
   { key: "stormSound.volume", type: "float", scope: "world", label: "Thunderstorm sound volume", min: 0, max: 1, step: 0.05 },
   { key: "roof.enabled", type: "bool", scope: "world", label: "Rain on the roof", help: "Rain drumming on the roof while you're indoors" },
   { key: "roof.volume", type: "float", scope: "world", label: "Rain on the roof volume", min: 0, max: 1, step: 0.05 },
+  { key: "roof.muffleRain", type: "bool", scope: "world", label: "Muffled rain indoors", help: "Under a roof the game's rain is stopped for you and you hear it muffled through the roof instead (at the rain on the roof volume); deep underground it's silent" },
   { key: "off", type: "bool", scope: "player", base: "defaultOff", prop: "rain:off", invert: true, label: "Rain extras (fog, haze, mist, drips and sounds)", help: "The same switch as /realm:rain" },
 ];
 

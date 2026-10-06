@@ -10,35 +10,35 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain1",
-          "volume": 0.041
+          "volume": 0.042
         },
         {
           "name": "sounds/realistic_rain/rain2",
-          "volume": 0.041
+          "volume": 0.042
         },
         {
           "name": "sounds/realistic_rain/rain3",
-          "volume": 0.041
+          "volume": 0.042
         },
         {
           "name": "sounds/realistic_rain/rain4",
-          "volume": 0.041
+          "volume": 0.042
         },
         {
           "name": "sounds/realistic_rain/rain5",
-          "volume": 0.041
+          "volume": 0.042
         },
         {
           "name": "sounds/realistic_rain/rain6",
-          "volume": 0.041
+          "volume": 0.042
         },
         {
           "name": "sounds/realistic_rain/rain7",
-          "volume": 0.041
+          "volume": 0.042
         },
         {
           "name": "sounds/realistic_rain/rain8",
-          "volume": 0.041
+          "volume": 0.042
         }
       ],
       "subtitle": "subtitles.weather.rain"
@@ -52,7 +52,7 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/thunder1",
-          "volume": 0.851
+          "volume": 0.841
         },
         {
           "name": "sounds/realistic_rain/thunder2",
@@ -64,15 +64,15 @@
         },
         {
           "name": "sounds/realistic_rain/thunder4",
-          "volume": 0.841
-        },
-        {
-          "name": "sounds/realistic_rain/thunder5",
           "volume": 0.851
         },
         {
+          "name": "sounds/realistic_rain/thunder5",
+          "volume": 0.841
+        },
+        {
           "name": "sounds/realistic_rain/thunder6",
-          "volume": 0.861
+          "volume": 0.851
         }
       ],
       "subtitle": "subtitles.entity.lightning_bolt.thunder"
@@ -86,19 +86,19 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/crack1",
-          "volume": 0.881
+          "volume": 0.741
         },
         {
           "name": "sounds/realistic_rain/crack2",
-          "volume": 0.871
+          "volume": 0.733
         },
         {
           "name": "sounds/realistic_rain/crack3",
-          "volume": 0.871
+          "volume": 0.724
         },
         {
           "name": "sounds/realistic_rain/crack4",
-          "volume": 0.881
+          "volume": 0.741
         }
       ],
       "subtitle": "subtitles.entity.generic.explode"
@@ -144,6 +144,24 @@
           "volume": 0.16
         }
       ]
+    },
+    "realm.rain.inside": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100,
+      "sounds": [
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/rain_inside1",
+          "volume": 0.064
+        },
+        {
+          "name": "sounds/realistic_rain/rain_inside2",
+          "volume": 0.064
+        }
+      ],
+      "subtitle": "subtitles.weather.rain"
     },
     "realm.storm.wind": {
       "__use_legacy_max_distance": "true",

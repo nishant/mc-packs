@@ -123,28 +123,61 @@ const choiceName = (o, v) => {
   return i >= 0 && o.names?.[i] ? o.names[i] : String(v);
 };
 
+// Bedrock's sliders only stop on whole numbers: a 0-1 slider in steps of 0.05 can only be 0 or 1, and saving the
+// form would snap an untouched value too. So a 0-1 setting (a volume) is shown as a 0-100% slider, and any other
+// setting with fractional steps as a dropdown of its exact values.
+
+/** A 0-1 setting, shown and read as a percentage. @param {Option} o */
+const isPercent = (o) => o.type === "float" && o.min === 0 && o.max === 1;
+
+/** Decimal places of a step, so 0.05 * 7 reads 0.35, not 0.35000000000000003. @param {number} step */
+const decimalsOf = (step) => (String(step).split(".")[1] ?? "").length;
+
+/** Snaps a number to its option's step grid. @param {Option} o @param {number} v */
+function onGrid(o, v) {
+  const step = o.step ?? 0.1, from = o.min ?? 0;
+  return Number((from + Math.round((v - from) / step) * step).toFixed(decimalsOf(step)));
+}
+
+/** A fractional setting that isn't 0-1 (seat reach 1 to 5 in 0.5s): its values, for a dropdown. undefined = slider. @param {Option} o */
+function choicesOf(o) {
+  if (o.type !== "float" || isPercent(o) || o.min === undefined || o.max === undefined) return undefined;
+  const step = o.step ?? 0.1, out = [];
+  for (let v = o.min; v <= o.max + 1e-9 && out.length < 100; v = onGrid(o, v + step)) out.push(v);
+  return out;
+}
+
 /** A value as players read it. @param {Option} o @param {unknown} v */
 function fmt(o, v) {
   if (o.type === "bool") return switchOn(o, v) ? "Enabled" : "Disabled";
   if (o.type === "enum") return choiceName(o, v);
   if (o.type === "text") return v ? `"${v}§r"` : "(empty)";
+  if (isPercent(o) && typeof v === "number") return `${Math.round(v * 100)}%`;
   return String(v);
 }
 
 /** @param {ModalFormData} form @param {Option} o */
 function addControl(form, o) {
-  const range = (o.type === "int" || o.type === "float") && o.min !== undefined && o.max !== undefined ? `Range: ${o.min} to ${o.max}` : undefined;
+  const range = (o.type === "int" || o.type === "float") && o.min !== undefined && o.max !== undefined ? `Range: ${fmt(o, o.min)} to ${fmt(o, o.max)}` : undefined;
   const tooltip = [o.help, `Default: ${fmt(o, o.default)}`, range].filter(Boolean).join("\n");
+  const choices = choicesOf(o);
   switch (o.type) {
     case "bool":
       form.toggle(o.label, { defaultValue: switchOn(o, o.value), tooltip });
       break;
-    case "int":
-    case "float": {
-      const min = o.min ?? 0;
-      const max = o.max ?? Math.max(min + 1, Number(o.value) || 0);
-      const value = Math.min(max, Math.max(min, Number(o.value) || 0));
-      form.slider(o.label, min, max, { defaultValue: value, valueStep: o.step ?? (o.type === "int" ? 1 : 0.1), tooltip });
+    case "float":
+    case "int": {
+      if (choices) {
+        const at = choices.reduce((best, c, i) => (Math.abs(c - Number(o.value)) < Math.abs(choices[best] - Number(o.value)) ? i : best), 0);
+        form.dropdown(o.label, choices.map((c) => fmt(o, c)), { defaultValueIndex: at, tooltip });
+        break;
+      }
+      const k = isPercent(o) ? 100 : 1; // percentages: 0-100 in whole steps
+      const min = (o.min ?? 0) * k;
+      const max = o.max !== undefined ? o.max * k : Math.max(min + 1, (Number(o.value) || 0) * k);
+      const value = Math.min(max, Math.max(min, Math.round((Number(o.value) || 0) * k)));
+      const step = Math.max(1, Math.round((o.step ?? 1) * k));
+      form.slider(isPercent(o) ? `${o.label} (%)` : o.label, min, max, { defaultValue: value, valueStep: step, tooltip });
       break;
     }
     case "enum": {
@@ -166,9 +199,11 @@ function valueOf(o, raw) {
       return typeof raw === "number" ? Math.round(raw) : o.value;
     case "float": {
       if (typeof raw !== "number") return o.value;
-      const step = o.step ?? 0.1;
-      const decimals = (String(step).split(".")[1] ?? "").length;
-      return Number((Math.round(raw / step) * step).toFixed(decimals)); // 2.5, not 2.5000000000000004
+      const choices = choicesOf(o);
+      if (choices) return choices[raw] ?? o.value; // a dropdown answers with an index
+      const picked = onGrid(o, isPercent(o) ? raw / 100 : raw);
+      // An untouched control keeps the exact saved value, even one an operator put off the grid in config.js.
+      return isPercent(o) && Math.round(Number(o.value) * 100) === Math.round(raw) ? o.value : picked;
     }
     case "enum":
       return typeof raw === "number" ? (o.choices ?? [])[raw] ?? o.value : o.value;
@@ -194,24 +229,39 @@ function answersOf(res, slots) {
 }
 
 /**
- * Saves what changed and tells the player, one line per change.
+ * Saves what changed. The result says how many changes were saved and lists each as old -> new.
  * @param {Player} player @param {{ slot: Slot, value: unknown }[]} answers @param {string} [forPlayer] player id, for preferences
+ * @returns {Promise<{ title: string, lines: string[] }>}
  */
 async function save(player, answers, forPlayer) {
   const changed = answers.filter(({ slot, value }) => value !== slot.option.value);
-  if (!changed.length) {
-    player.sendMessage("§7Nothing changed.");
-    return;
-  }
+  if (!changed.length) return { title: "No changes", lines: ["§7Nothing was different, so nothing was saved."] };
   const acks = await send(changed.map(({ slot, value }) => ({ pack: slot.pack.pack, key: slot.option.key, value, player: forPlayer })));
-  if (!player.isValid) return;
-  changed.forEach(({ slot }, i) => {
-    const ack = acks.get(i);
-    const what = `${slot.pack.title} > ${slot.option.label}`;
-    if (!ack) player.sendMessage(`§cNot saved:§r ${what}: the pack didn't answer. Try again.`);
-    else if (!ack.ok) player.sendMessage(`§cNot saved:§r ${what}: ${ack.error ?? "refused"}.`);
-    else player.sendMessage(`§aSaved:§r ${what}: §e${fmt(slot.option, ack.value)}`);
+  const packs = new Set(changed.map(({ slot }) => slot.pack.title));
+  let saved = 0;
+  const lines = changed.map(({ slot }, i) => {
+    const ack = acks.get(i), o = slot.option;
+    const name = packs.size > 1 ? `${slot.pack.title} > ${o.label}` : o.label;
+    if (!ack?.ok) return `§c- ${name}:§r not saved, ${ack ? `${ack.error ?? "refused"}` : "the pack didn't answer. Try again"}`;
+    saved++;
+    return `§a- ${name}:§r ${fmt(o, o.value)} -> §e${fmt(o, ack.value)}`;
   });
+  const failed = changed.length - saved;
+  const where = packs.size === 1 ? ` in ${[...packs][0]}` : "";
+  const title = `${saved} change${saved === 1 ? "" : "s"} saved${failed ? `, ${failed} not saved` : ""}`;
+  return { title, lines: [`§l${title}${where}§r`, ...lines] };
+}
+
+/**
+ * Shows what a save did: in chat, and in a dialog so it isn't hidden behind the next menu.
+ * @param {Player} player @param {{ title: string, lines: string[] }} result @param {string} back the other button
+ * @returns {Promise<boolean>} true = the player picked `back`
+ */
+async function report(player, result, back) {
+  if (!player.isValid) return false;
+  player.sendMessage(result.lines.join("\n"));
+  const res = await show(player, new MessageFormData().title(result.title).body(result.lines.join("\n")).button1(back).button2("Done"));
+  return !!res && !res.canceled && res.selection === 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,11 +295,11 @@ async function configMenu(player) {
     const res = await show(player, form);
     if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
     if (res.selection === packs.length) await resetMenu(player, packs);
-    else await editPack(player, packs[res.selection]);
+    else if (!(await editPack(player, packs[res.selection]))) return;
   }
 }
 
-/** @param {Player} player @param {Pack} pack */
+/** @param {Player} player @param {Pack} pack @returns {Promise<boolean>} true = back to the list of packs */
 async function editPack(player, pack) {
   const form = new ModalFormData().title(pack.title).submitButton("Save");
   /** @type {(Slot | null)[]} */
@@ -264,13 +314,14 @@ async function editPack(player, pack) {
     }
   }
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid || !isOp(player)) return;
+  if (!res || !player.isValid || !isOp(player)) return false;
+  if (res.canceled) return true;
   const answers = answersOf(res, slots);
   if (!answers) {
     player.sendMessage("§cCouldn't read the form, so nothing was saved.");
-    return;
+    return true;
   }
-  await save(player, answers);
+  return report(player, await save(player, answers), "Back to Realm Settings");
 }
 
 /** @param {Player} player @param {Pack[]} packs */
@@ -316,11 +367,16 @@ async function resetMenu(player, packs) {
 
 /** @param {Player} player */
 async function prefsMenu(player) {
+  while (player.isValid && (await prefsForm(player)));
+}
+
+/** @param {Player} player @returns {Promise<boolean>} true = show the preferences again */
+async function prefsForm(player) {
   const packs = (await collect(player)).filter((p) => p.options.some((o) => o.scope === "player"));
-  if (!player.isValid) return;
+  if (!player.isValid) return false;
   if (!packs.length) {
     player.sendMessage("§7No installed pack has preferences of your own.");
-    return;
+    return false;
   }
   const form = new ModalFormData().title("§lMy preferences").submitButton("Save");
   /** @type {(Slot | null)[]} */
@@ -334,13 +390,13 @@ async function prefsMenu(player) {
     }
   }
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid) return false;
   const answers = answersOf(res, slots);
   if (!answers) {
     player.sendMessage("§cCouldn't read the form, so nothing was saved.");
-    return;
+    return false;
   }
-  await save(player, answers, player.id);
+  return report(player, await save(player, answers, player.id), "Back to my preferences");
 }
 
 // ---------------------------------------------------------------------------
