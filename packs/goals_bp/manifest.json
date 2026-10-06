@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Community Goals",
+    "description": "Operators set shared goals, like 10,000 cobblestone for the Colosseum, and everyone donates from their inventory into the goal's chest. /realm:goals /realm:goals_add",
+    "uuid": "4cc68378-9cc3-4882-b630-bb9d184b1f14",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "7fb53391-d8b4-4219-a299-75a3dca10daa",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

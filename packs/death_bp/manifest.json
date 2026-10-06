@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Death Point",
+    "description": "Tells you where you died when you respawn, with the distance and direction back. /realm:death /realm:back",
+    "uuid": "843be9c1-ed65-4c17-8760-d1987684afc0",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "ad59a4ee-dfb0-4d25-8194-e5d0b59e1f50",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}

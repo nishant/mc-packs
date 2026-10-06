@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Elytra HUD",
+    "description": "Speed, height, elytra durability and rockets above the hotbar while you glide. /realm:elytra",
+    "uuid": "6fbd7ece-edee-4e78-944c-cc46ccc9b6e6",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "defeace6-6c05-4545-bde1-4d64424792b3",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" }
+  ]
+}
