@@ -360,7 +360,8 @@ function draftCommand(append) {
     if (!(player instanceof Player)) {
       return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
     }
-    const chunk = String(text ?? "");
+    // The command parser drops the backslash of \n, so pasted text marks new lines with | instead.
+    const chunk = String(text ?? "").replaceAll("|", "\n");
     const draft = (append ? getDraft(player) : "") + chunk;
     if (draft.length > MAX_DRAFT) {
       return {
