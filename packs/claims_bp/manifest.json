@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Realm Help",
-    "description": "One help page for every realm command: how each feature works and its commands, with usage. /realm:help",
-    "uuid": "78e7236e-4b6d-45ec-8a7f-1f8055a47395",
-    "version": [1, 1, 10],
+    "name": "Land Claims",
+    "description": "Claim the land around your base so others can't break, place or open anything there. Off until an operator enables it. /realm:claim",
+    "uuid": "de26b2d1-ca56-469f-ad77-71a6736cafd2",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "8f0ca99a-d3f7-4ce6-8358-35ffac60a85c",
+      "uuid": "911d5c25-116f-406c-85f1-41a11f705a46",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

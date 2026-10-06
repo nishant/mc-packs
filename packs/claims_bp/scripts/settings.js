@@ -3,22 +3,18 @@
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
-const PACK = "stash_bp";
-const PREFIX = "stash";
-const TITLE = "Quick Stack & Sort";
+const PACK = "claims_bp";
+const PREFIX = "claims";
+const TITLE = "Land Claims";
 const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "sneakTap", type: "enum", scope: "world", choices: ["menu", "sort", "off"], names: ["Open the menu", "Sort it right away", "Nothing (opens as usual)"], label: "Sneak-tapping a container" },
-  { key: "sortHotbar", type: "bool", scope: "world", label: "Inventory sort includes the hotbar" },
-  { key: "stashGear", type: "bool", scope: "world", label: "Quick stack moves tools, weapons and armor" },
-  { key: "stashNamedItems", type: "bool", scope: "world", label: "Quick stack moves named items" },
-  { key: "cooldownTicks", type: "int", scope: "world", label: "Cooldown between sorts (ticks)", min: 0, max: 100, step: 5 },
-  { key: "locks", type: "bool", scope: "world", label: "Chest locks", help: "The sneak-tap menu can lock a container to its owner. Disabled: no Lock button, and existing locks aren't enforced (they're kept)" },
-  { key: "maxLocks", type: "int", scope: "world", label: "Locked containers per player", min: 1, max: 500, step: 5 },
-  { key: "sneakTap", type: "enum", scope: "player", base: "sneakTap", choices: ["menu", "sort", "off"], names: ["Open the menu", "Sort it right away", "Nothing (opens as usual)"], label: "When I sneak-tap a container" },
-  { key: "sortHotbar", type: "bool", scope: "player", base: "sortHotbar", label: "My inventory sort includes my hotbar" },
+  { key: "enabled", type: "bool", scope: "world", label: "Land claims", help: "Players can claim land with /realm:claim. Disabled: nothing is protected and claims are kept for later" },
+  { key: "radius", type: "int", scope: "world", label: "New claim radius (blocks)", help: "16 = 33 x 33 blocks. Existing claims keep their size", min: 4, max: 64, step: 4 },
+  { key: "maxClaims", type: "int", scope: "world", label: "Claims per player", min: 1, max: 10, step: 1 },
+  { key: "protectExplosions", type: "bool", scope: "world", label: "Explosions break nothing in claims" },
+  { key: "operatorsBypass", type: "bool", scope: "world", label: "Operators can build in any claim" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

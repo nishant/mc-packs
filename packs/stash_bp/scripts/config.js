@@ -57,4 +57,16 @@ export const CONFIG = {
 
   /** Minimum time between uses per player, in ticks (20 = 1 s). */
   cooldownTicks: 20,
+
+  /**
+   * Chest locks: the sneak-tap menu can lock a container to you (and the players you share it
+   * with). Disabled = no Lock button and existing locks aren't enforced (they're kept for later).
+   */
+  locks: true,
+
+  /** Most containers one player can have locked at a time (a double chest counts once). */
+  maxLocks: 50,
+
+  /** Most players one locked container can be shared with. */
+  maxShared: 10,
 };
