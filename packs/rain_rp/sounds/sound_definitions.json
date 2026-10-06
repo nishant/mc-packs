@@ -52,27 +52,27 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/thunder1",
-          "volume": 0.841
+          "volume": 0.794
         },
         {
           "name": "sounds/realistic_rain/thunder2",
-          "volume": 0.861
+          "volume": 0.781
         },
         {
           "name": "sounds/realistic_rain/thunder3",
-          "volume": 0.851
+          "volume": 0.795
         },
         {
           "name": "sounds/realistic_rain/thunder4",
-          "volume": 0.851
+          "volume": 0.797
         },
         {
           "name": "sounds/realistic_rain/thunder5",
-          "volume": 0.841
+          "volume": 0.794
         },
         {
           "name": "sounds/realistic_rain/thunder6",
-          "volume": 0.851
+          "volume": 0.729
         }
       ],
       "subtitle": "subtitles.entity.lightning_bolt.thunder"
@@ -86,19 +86,19 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/crack1",
-          "volume": 0.741
+          "volume": 0.743
         },
         {
           "name": "sounds/realistic_rain/crack2",
-          "volume": 0.733
+          "volume": 0.797
         },
         {
           "name": "sounds/realistic_rain/crack3",
-          "volume": 0.724
+          "volume": 0.714
         },
         {
           "name": "sounds/realistic_rain/crack4",
-          "volume": 0.741
+          "volume": 0.803
         }
       ],
       "subtitle": "subtitles.entity.generic.explode"

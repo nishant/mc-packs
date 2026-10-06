@@ -274,143 +274,37 @@ const muffled = (/** @type {Float64Array | undefined} */ x) => x && biquad(biqua
 
 // ---------------------------------------------------------------------------
 // Taking the rain out of the thunder. The thunderstorm recording has rain under every roll, and a roll plays about
-// 20 dB over the game's rain, so its rain would swell with each bolt. A spectral gate learns the rain from the whole
-// recording (per frequency, a low percentile of the level: the rain is always there, the thunder isn't) and turns down
-// only what doesn't rise clearly above it for a few frames. Thunder, rumble and the crack of a strike pass; the rain
-// under them drops by GATE.floorDb. Gains are smoothed over time and frequency so the rain fades out instead of
-// fluttering.
+// 20 dB over the game's rain, so its rain would swell with each bolt. Above about 1 kHz the recording holds little
+// thunder and nearly all of that rain hiss, so a fixed low-pass takes it out and leaves the rumble as recorded. It's
+// fixed on purpose: a gate that opened and closed per frequency (1.2.2) made the thunder whoosh and rattle. A strike
+// keeps its full sound for the hit, then crossfades to the same low-pass.
 // ---------------------------------------------------------------------------
 
-const FRAME = 2048, HOP = 512, BINS = FRAME / 2 + 1;
-const WINDOW = Float64Array.from({ length: FRAME }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / FRAME));
-const GATE = { percentile: 0.1, thresholdDb: 10, floorDb: -30, attackMs: 30, releaseMs: 180, spreadBins: 3 };
+const ROLL_LOWPASS = 900;
+const STRIKE = { lowpass: 900, holdSeconds: 0.4, fadeSeconds: 0.4 };
 
-/** In-place radix-2 FFT (length a power of two). */
-function fft(/** @type {Float64Array} */ re, /** @type {Float64Array} */ im) {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      [re[i], re[j]] = [re[j], re[i]];
-      [im[i], im[j]] = [im[j], im[i]];
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang), half = len >> 1;
-    for (let i = 0; i < n; i += len) {
-      let cr = 1, ci = 0;
-      for (let k = 0; k < half; k++) {
-        const a = i + k, b = a + half, tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
-        re[b] = re[a] - tr;
-        im[b] = im[a] - ti;
-        re[a] += tr;
-        im[a] += ti;
-        const nr = cr * wr - ci * wi;
-        ci = cr * wi + ci * wr;
-        cr = nr;
-      }
-    }
-  }
-}
+/** A thunder roll without the rain hiss. */
+const rollWithoutRain = (/** @type {Float64Array | undefined} */ x) => x && biquad(x, "lp", ROLL_LOWPASS);
 
-/** Short-time spectra of x (Hann windows, 75% overlap, padded by a frame each side). */
-function stft(/** @type {Float64Array} */ x) {
-  const pad = new Float64Array(x.length + 2 * FRAME);
-  pad.set(x, FRAME);
-  const frames = [];
-  for (let s = 0; s + FRAME <= pad.length; s += HOP) {
-    const re = new Float64Array(FRAME), im = new Float64Array(FRAME);
-    for (let i = 0; i < FRAME; i++) re[i] = pad[s + i] * WINDOW[i];
-    fft(re, im);
-    frames.push({ re, im });
-  }
-  return frames;
-}
-
-/** Each frame's power per bin, averaged over the neighboring bins so single bins don't flicker. */
-function smoothPower(/** @type {{ re: Float64Array, im: Float64Array }} */ f) {
-  const p = new Float64Array(BINS), out = new Float64Array(BINS);
-  for (let b = 0; b < BINS; b++) p[b] = f.re[b] * f.re[b] + f.im[b] * f.im[b];
-  for (let b = 0; b < BINS; b++) {
-    let s = 0, n = 0;
-    for (let k = Math.max(0, b - 2); k <= Math.min(BINS - 1, b + 2); k++, n++) s += p[k];
-    out[b] = s / n;
-  }
-  return out;
-}
-
-/** The rain's level per bin: a low percentile of the smoothed power over the whole recording (every 4th frame, a minute
- * at a time), where the storm is quietest. A local window doesn't work: some strikes sit inside a minute of rumble. */
-const profiles = new Map();
-function rainProfile(/** @type {string} */ id) {
-  if (profiles.has(id)) return profiles.get(id);
-  const rows = [];
-  for (let from = 0; ; from += 60) {
-    const x = decodeRange(id, from, 60);
-    if (!x || x.length < FRAME * 4) break;
-    stft(x).slice(4, -4).forEach((f, i) => i % 4 === 0 && rows.push(Float32Array.from(smoothPower(f))));
-    if (x.length < 60 * SR - SR) break;
-  }
-  const profile = new Float64Array(BINS), column = new Float64Array(rows.length);
-  for (let b = 0; b < BINS; b++) {
-    rows.forEach((p, i) => (column[i] = p[b]));
-    column.sort();
-    profile[b] = column[Math.floor(GATE.percentile * (column.length - 1))];
-  }
-  profiles.set(id, profile);
-  return profile;
-}
-
-/** x with the rain under it turned down (see GATE). */
-function derain(/** @type {Float64Array} */ x, /** @type {Float64Array} */ profile) {
-  const frames = stft(x), F = frames.length, gains = new Float64Array(F * BINS);
-  const pass = Math.pow(10, GATE.thresholdDb / 10), floor = Math.pow(10, GATE.floorDb / 20);
-  // A bin opens only if it stays over the rain for three frames (about 35 ms): thunder does, a single loud drop doesn't.
-  const powers = frames.map(smoothPower);
-  for (let i = 0; i < F; i++) {
-    for (let b = 0; b < BINS; b++) {
-      const held = Math.min(powers[Math.max(0, i - 1)][b], powers[i][b], powers[Math.min(F - 1, i + 1)][b]);
-      gains[i * BINS + b] = held > profile[b] * pass ? 1 : floor;
-    }
-  }
-  // Opens within attackMs before the thunder, closes over releaseMs after it.
-  const rel = Math.pow(floor, HOP / SR / (GATE.releaseMs / 1000)), att = Math.pow(floor, HOP / SR / (GATE.attackMs / 1000));
-  for (let b = 0; b < BINS; b++) {
-    for (let i = 1; i < F; i++) gains[i * BINS + b] = Math.max(gains[i * BINS + b], gains[(i - 1) * BINS + b] * rel);
-    for (let i = F - 2; i >= 0; i--) gains[i * BINS + b] = Math.max(gains[i * BINS + b], gains[(i + 1) * BINS + b] * att);
-  }
-  const out = new Float64Array(x.length + 2 * FRAME), norm = new Float64Array(out.length), g = new Float64Array(BINS);
-  frames.forEach((f, i) => {
-    for (let b = 0; b < BINS; b++) {
-      let s = 0, n = 0;
-      for (let k = Math.max(0, b - GATE.spreadBins); k <= Math.min(BINS - 1, b + GATE.spreadBins); k++, n++) s += Math.log(gains[i * BINS + k]);
-      g[b] = Math.exp(s / n);
-    }
-    for (let b = 0; b < FRAME; b++) {
-      const k = b < BINS ? b : FRAME - b;
-      f.re[b] *= g[k];
-      f.im[b] = -f.im[b] * g[k]; // conjugate: the forward FFT then computes the inverse
-    }
-    fft(f.re, f.im);
-    for (let j = 0; j < FRAME; j++) {
-      out[i * HOP + j] += (f.re[j] / FRAME) * WINDOW[j];
-      norm[i * HOP + j] += WINDOW[j] * WINDOW[j];
-    }
+/** A strike: the full hit, then the rumble without the rain hiss (one smooth crossfade, nothing that opens and closes). */
+function strikeWithoutRain(/** @type {Float64Array | undefined} */ x) {
+  if (!x) return x;
+  const lp = biquad(Float64Array.from(x), "lp", STRIKE.lowpass);
+  const hold = STRIKE.holdSeconds * SR, fade = STRIKE.fadeSeconds * SR;
+  return Float64Array.from(x, (v, i) => {
+    const w = i < hold ? 1 : i < hold + fade ? 0.5 + 0.5 * Math.cos((Math.PI * (i - hold)) / fade) : 0;
+    return lp[i] + w * (v - lp[i]);
   });
-  return Float64Array.from(x, (_, i) => out[i + FRAME] / Math.max(1e-6, norm[i + FRAME]));
 }
 
-/** Like cuts(), with the recording's rain taken out of each excerpt (thunder rolls and strikes). */
-const rainlessCuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {number[][]} */ list, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut) =>
-  list.map(([start, seconds], i) => ({
-    name: `${name}${i + 1}`,
-    make: () => {
-      const x = decodeRange(id, start, seconds);
-      return x && fades(derain(x, rainProfile(id)), fadeIn, fadeOut, true);
-    },
-  }));
+/** A clip's thunder level: RMS below 300 Hz, in dB. Thunder clips are set by this, not by loudness, so taking the
+ * hiss out doesn't change how loud the thunder itself plays. @param {Float64Array} x */
+function thunderBand(x) {
+  const y = biquad(biquad(Float64Array.from(x), "lp", 300), "lp", 300);
+  let sum = 0;
+  for (const v of y) sum += v * v;
+  return 10 * Math.log10(sum / y.length);
+}
 
 /** CREDITS.txt for the pack. */
 function credits() {
@@ -468,11 +362,21 @@ const cuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {n
  *   `level`    one copy at full volume: file LUFS + 20·log10(volume).
  *   `layered`  rain only: the loudness of layered() at the definition volume, since the game stacks rain clips: vanilla's
  *              plus 25%.
- * Thunder and the impact land a little under vanilla (-17.3 and -12.6 LUFS). With the rain taken out of them, the
- * impact sits 1.4 dB lower than before so the thunder itself plays at the same level on average. The Rain Extras sounds sit well under the
+ *   `thunder`  thunder and strikes: each clip's thunderBand() in game, per file (THUNDER_LEVELS).
+ * Thunder and the impact land a little under vanilla (-17.3 and -12.6 LUFS). The Rain Extras sounds sit well under the
  * thunder (the thunderstorm bed about 6 dB over the rain), and Rain Extras scales them further. Times are seconds into
  * the recordings (thunder: rolls start 1.5 s before their loudest moment, strikes right on the hit).
  */
+/**
+ * Each thunder clip's level below 300 Hz in game, in dB: as in Realistic Rain 1.2.1, which the owner liked, 1.5 dB
+ * quieter. Pinning the thunder itself keeps each roll as loud as before relative to the others, whatever the low-pass
+ * takes out above it.
+ */
+const THUNDER_LEVELS = {
+  roll: [-18.87, -19.19, -20.89, -18.85, -19.08, -21.81].map((db) => db - 1.5),
+  strike: [-18.44, -15.39, -17.67, -15.33].map((db) => db - 1.5),
+};
+
 const EVENTS = [
   {
     event: "ambient.weather.rain", subtitle: "subtitles.weather.rain", target: -23, ceiling: -1.5, layered: VANILLA_RAIN_LAYERED + 20 * Math.log10(1.25),
@@ -481,12 +385,12 @@ const EVENTS = [
     files: cuts("rain", "rain", [30, 95, 160, 225, 290, 355, 420, 485].map((t) => [t, 2.4]), RAIN_FADE_IN, 0.15),
   },
   {
-    event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -18, ceiling: -1, level: -19.5,
-    files: rainlessCuts("thunder", "thunder", [26.55, 196.45, 274.2, 323.9, 551.3, 585.55].map((t) => [t, 8]), 0.4, 2),
+    event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -19.5, ceiling: -1, thunder: THUNDER_LEVELS.roll,
+    files: cuts("thunder", "thunder", [26.55, 196.45, 274.2, 323.9, 551.3, 585.55].map((t) => [t, 8]), 0.4, 2, rollWithoutRain),
   },
   {
-    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -15.5, ceiling: -1, level: -18.4,
-    files: rainlessCuts("crack", "thunder", [100.3, 169.25, 204.2, 465.6].map((t) => [t, 4.5]), 0.01, 2),
+    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -17, ceiling: -1, thunder: THUNDER_LEVELS.strike,
+    files: cuts("crack", "thunder", [100.3, 169.25, 204.2, 465.6].map((t) => [t, 4.5]), 0.01, 2, strikeWithoutRain),
   },
   {
     event: "realm.storm.bed", target: -18, ceiling: -1, level: -33,
@@ -603,6 +507,7 @@ try {
         const kept = Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
         const m = summary(ogg);
         if (e.level !== undefined) volumes.set(f.name, toVolume(e.level - m.lufs));
+        if (e.thunder) volumes.set(f.name, toVolume(e.thunder[e.files.indexOf(f)] - thunderBand(kept)));
         made.set(f.name, kept);
         rows.push({ file: f.name, seconds: (kept.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: "kept", kb: (statSync(ogg).size / 1024).toFixed(1) });
         continue;
@@ -622,6 +527,10 @@ try {
       execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-ac", "1", "-ar", String(SR), "-c:a", "libvorbis", "-q:a", "3", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", ogg]);
       const m = summary(ogg);
       if (e.level !== undefined) volumes.set(f.name, toVolume(e.level - m.lufs));
+      if (e.thunder) {
+        const raw = execFileSync("ffmpeg", ["-v", "error", "-i", ogg, "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
+        volumes.set(f.name, toVolume(e.thunder[e.files.indexOf(f)] - thunderBand(Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4)))));
+      }
       made.set(f.name, x);
       rows.push({ file: f.name, seconds: (x.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: reduction.toFixed(1), kb: (statSync(ogg).size / 1024).toFixed(1) });
     }
