@@ -1,13 +1,13 @@
 // Synthesizes the Realistic Rain sounds into packs/rain_rp/sounds/realistic_rain/ (mono Ogg Vorbis, 44.1 kHz) and
 // writes the definitions that play them (sounds/sound_definitions.json, and sounds.json for the lightning pitch):
-//   rain1-6         2.0-2.4 s, like vanilla's 2 s clips: the game starts a new one every few ticks and about 15 play at
-//                   once, all at full volume. So each clip is a soft bed plus only ~4 distinct drops a second (taps,
-//                   puddle plinks, fat plops, the odd steady drip); together they make a pitter-patter of ~60 drops a
-//                   second instead of one hiss.
+//   rain1-6         2.0-2.4 s, like vanilla's 2 s clips (the game starts a new one every few ticks and about 15 play
+//                   at once, all at full volume): a hiss with dense patter and soft pats, nothing tonal, matched to
+//                   vanilla's tone octave by octave (matchEq), so it sounds like vanilla's rain, heavier and textured.
 //   thunder1-5      7-10 s, played for every bolt. Physically modeled: N-waves from a tortuous lightning channel,
 //                   delayed by distance, softened by air over distance, then rolled through a terrain echo.
-//   crack1-4        about 4 s, played only near the bolt: the same model heard from 30-90 m away, so the low
-//                   channel tears past at once (the crack) and the rest of the bolt rumbles in after it.
+//   crack1-4        about 4 s, played only near the bolt: the same model heard from 30-90 m away, with short N-waves
+//                   and no low end (the thunder that plays with it carries the boom), so it's a sharp, high crack as
+//                   the low channel tears past, then the rest of the bolt rumbling in, not an explosion.
 //   wind1-3         10 s storm gusts with a faint whistle, played by Rain Extras; wind_inside1-2 is the same heard
 //                   through walls. roof1-4: 3.6 s of rain on the roof above, muffled, also played by Rain Extras.
 // Every file is deterministic (seeded) and normalized with ffmpeg's EBU R128 meter. The definitions' volumes are
@@ -250,66 +250,62 @@ function limit(/** @type {Float64Array} */ x, ceiling) {
 // Rain: a soft bed and a few distinct drops per clip
 // ---------------------------------------------------------------------------
 
-/** One drop, peak-normalized. A tap is an impact click ringing in a surface; a plink is a drop into a puddle (a
- * Minnaert bubble, whose pitch chirps upward); a plop is a fat drop on a leaf or a plank. */
-function drop(/** @type {() => number} */ rnd, /** @type {"tap"|"plink"|"plop"} */ kind, /** @type {number} */ f) {
-  let x;
-  if (kind === "tap") {
-    const n = Math.round(between(rnd, 0.006, 0.014) * SR), tau = between(rnd, 0.0005, 0.0014) * SR;
-    x = Float64Array.from({ length: n }, (_, k) => (rnd() * 2 - 1) * Math.exp(-k / tau));
-    biquad(x, "bp", f, between(rnd, 3, 7));
-  } else if (kind === "plink") {
-    const tau = between(rnd, 0.007, 0.02) * SR, n = Math.round(tau * 5), rise = between(rnd, 5, 14);
-    x = new Float64Array(n);
-    let ph = 0;
-    for (let k = 0; k < n; k++) {
-      ph += (TAU * f * (1 + rise * (k / SR))) / SR;
-      x[k] = Math.sin(ph) * Math.exp(-k / tau) * Math.min(1, k / 30);
-    }
-    // the splash that starts it
-    for (let k = 0; k < 90; k++) x[k] += (rnd() * 2 - 1) * 0.35 * Math.exp(-k / 18);
-  } else {
-    const tau = between(rnd, 0.005, 0.012) * SR, n = Math.round(tau * 5);
-    x = new Float64Array(n);
-    let ph = 0;
-    for (let k = 0; k < n; k++) {
-      ph += (TAU * f * (1 - 0.2 * (k / n))) / SR;
-      x[k] = Math.sin(ph) * Math.exp(-k / tau) + (rnd() * 2 - 1) * 0.5 * Math.exp(-k / (tau * 0.3));
-    }
-    biquad(x, "lp", 2400);
-  }
-  return scale(x, 1 / Math.max(1e-9, peak(x)));
-}
+// 1.0's rain (a hiss with dense patter), without anything tonal: 1.1's puddle plinks and ringing taps read as
+// high-pitched bubbles. Then matchEq() gives each clip vanilla's tonal balance (VANILLA_RAIN_OCTAVES), 2 dB darker on top.
+const RAIN = { hiss: 0.55, patter: 0.5, pats: 0.5 };
+/** Vanilla rain1 (decoded) per octave band, dB relative to its total: strongest at 500-1000 Hz. */
+const VANILLA_RAIN_OCTAVES = { 63: -47, 125: -26, 250: -13, 500: -6, 1000: -3, 2000: -10, 4000: -12, 8000: -18, 16000: -34 };
 
-// Tuned on the layered mix (see layered()): with this bed, ~18 drops a second stand out at 3x the background
-// (vanilla's rain: none), and the bed still reads as a continuous shower.
-const RAIN = { dropsPerSecond: 4, bedRms: 0.011 };
+/** Static FFT equalizer: moves each octave band's share of the energy to `target` (dB, as VANILLA_RAIN_OCTAVES), with the
+ * gain interpolated smoothly between band centers and kept within ±18 dB. */
+function matchEq(/** @type {Float64Array} */ x, /** @type {Record<number, number>} */ target) {
+  let n = 1;
+  while (n < x.length) n <<= 1;
+  const re = new Float64Array(n), im = new Float64Array(n);
+  re.set(x);
+  fft(re, im);
+  const centers = Object.keys(target).map(Number);
+  const band = (/** @type {number} */ c) => [Math.round((c / Math.SQRT2) * n / SR), Math.min(n / 2, Math.round(c * Math.SQRT2 * n / SR))];
+  const energy = centers.map((c) => { const [a, b] = band(c); let e = 0; for (let k = a; k < b; k++) e += re[k] ** 2 + im[k] ** 2; return e; });
+  const total = energy.reduce((a, b) => a + b, 0);
+  const gains = centers.map((c, i) => Math.max(-18, Math.min(18, target[c] - 10 * Math.log10(energy[i] / total + 1e-12))));
+  for (let k = 1; k < n / 2; k++) {
+    const lf = Math.log2((k * SR) / n), pos = Math.max(0, Math.min(centers.length - 1, lf - Math.log2(centers[0])));
+    const i = Math.min(centers.length - 2, Math.floor(pos)), g = Math.pow(10, (gains[i] + (gains[i + 1] - gains[i]) * (pos - i)) / 20);
+    re[k] *= g; im[k] *= g; re[n - k] *= g; im[n - k] *= g;
+  }
+  re[0] = 0; im[0] = 0;
+  fft(re, im, true);
+  x.set(re.subarray(0, x.length));
+  return x;
+}
 
 function rain(/** @type {number} */ seed, /** @type {number} */ seconds) {
   const rnd = mulberry32(seed), n = Math.round(seconds * SR);
-  // Bed: dense, warm, low-heavy noise like vanilla's rain, so the drops sit on a continuous shower.
-  const out = biquad(biquad(pink(rnd, n), "hp", 140), "lp", 3200);
-  scale(out, RAIN.bedRms / rms(out));
-  const drops = new Float64Array(n);
-  const place = (/** @type {number} */ s, /** @type {"tap"|"plink"|"plop"} */ kind, /** @type {number} */ f, /** @type {number} */ amp) =>
-    mixIn(drops, drop(rnd, kind, f), Math.round(s * SR), amp);
-  for (let s = 0.04 + (-Math.log(1 - rnd()) / RAIN.dropsPerSecond); s < seconds - 0.08; s += -Math.log(1 - rnd()) / RAIN.dropsPerSecond) {
-    const r = rnd();
-    const kind = r < 0.5 ? "tap" : r < 0.8 ? "plink" : "plop";
-    const f = kind === "tap" ? between(rnd, 1500, 5000) : kind === "plink" ? between(rnd, 1000, 3400) : between(rnd, 380, 900);
-    const amp = Math.min(3, Math.exp(0.5 * gauss(rnd))) / 3; // log-normal: mostly soft, now and then a loud one
-    place(s, kind, f, amp);
-    // Now and then water gathers somewhere and drips in a steady beat.
-    if (rnd() < 0.12) {
-      const beat = between(rnd, 0.18, 0.4);
-      for (let k = 1, at = s + beat; k <= 1 + Math.floor(rnd() * 3) && at < seconds - 0.08; k++, at += beat) place(at, kind, f * between(rnd, 0.98, 1.02), amp * between(rnd, 0.75, 1));
-    }
+  // Hiss: pink noise from 250 Hz up, rolled off early on top.
+  const hiss = biquad(biquad(biquad(pink(rnd, n), "hp", 300), "lp", 2200), "lp", 9000);
+  scale(hiss, 1 / rms(hiss));
+  // Patter: many tiny ticks (Poisson, ~900 a second), noise only, so they blend into a crackle instead of ringing.
+  const patter = new Float64Array(n);
+  for (let t = 0; t < n; t += Math.max(1, Math.round((-Math.log(1 - rnd()) / 900) * SR))) {
+    const amp = -Math.log(1 - rnd()), len = Math.round((0.0015 + rnd() * 0.004) * SR), tau = len / 3;
+    for (let k = 0; k < len && t + k < n; k++) patter[t + k] += (rnd() * 2 - 1) * amp * Math.exp(-k / tau);
   }
-  biquad(drops, "lp", 8000); // warm, not glassy
+  biquad(biquad(biquad(patter, "hp", 450), "lp", 1700), "lp", 7000);
+  scale(patter, 1 / rms(patter));
+  // Pats: softer, fuller drops on leaves and ground (~30 a second): short noise bursts, low-passed, never tuned.
+  const pats = new Float64Array(n);
+  for (let t = 0; t < n; t += Math.max(1, Math.round((-Math.log(1 - rnd()) / 30) * SR))) {
+    const len = Math.round(between(rnd, 0.006, 0.016) * SR), tau = len / 4, amp = Math.min(3, Math.exp(0.45 * gauss(rnd)));
+    const burst = Float64Array.from({ length: len }, (_, k) => (rnd() * 2 - 1) * Math.exp(-k / tau));
+    biquad(biquad(burst, "lp", between(rnd, 700, 1500)), "hp", 260);
+    mixIn(pats, burst, t, amp);
+  }
+  scale(pats, 1 / rms(pats));
   // Slow swell so consecutive copies don't sound identical.
-  const sf = between(rnd, 0.25, 0.6), sph = rnd() * TAU;
-  for (let i = 0; i < n; i++) out[i] = (out[i] + drops[i]) * (0.9 + 0.1 * Math.sin((TAU * sf * i) / SR + sph));
-  return fades(out, 0.05, 0.12);
+  const f = between(rnd, 0.25, 0.6), ph = rnd() * TAU, out = new Float64Array(n);
+  for (let i = 0; i < n; i++) out[i] = (hiss[i] * RAIN.hiss + patter[i] * RAIN.patter + pats[i] * RAIN.pats) * (0.9 + 0.1 * Math.sin((TAU * f * i) / SR + ph));
+  return fades(matchEq(out, VANILLA_RAIN_OCTAVES), 0.05, 0.15);
 }
 
 /** Rain on the roof, heard from inside: a dense, muffled drumming with a soft gutter trickle. */
@@ -326,11 +322,15 @@ function roof(/** @type {number} */ seed, /** @type {number} */ seconds) {
     for (let k = 0; k < len; k++) body[k] = body[k] * 2.2 + tick[k] * 0.5;
     mixIn(taps, body, Math.round(s * SR), Math.min(3, Math.exp(0.45 * gauss(rnd))) * 0.06);
   }
-  // Gutter: a thin trickle with the occasional drip into the downspout.
+  // Gutter: a thin trickle with the occasional soft drip into the downspout (noise, never tuned).
   const trickle = sweep(white(rnd, n), "bp", (t) => 1100 + 250 * Math.sin(TAU * 0.7 * t), 1.6);
   const tm = between(rnd, 0.2, 0.4), tph = rnd() * TAU;
   for (let i = 0; i < n; i++) trickle[i] *= 0.012 * (0.6 + 0.4 * Math.sin((TAU * tm * i) / SR + tph));
-  for (let s = rnd() * 0.3; s < seconds - 0.1; s += -Math.log(1 - rnd()) / 5) mixIn(trickle, drop(rnd, "plink", between(rnd, 600, 1300)), Math.round(s * SR), between(rnd, 0.03, 0.08));
+  for (let s = rnd() * 0.3; s < seconds - 0.1; s += -Math.log(1 - rnd()) / 5) {
+    const len = Math.round(between(rnd, 0.01, 0.025) * SR), tau = len / 4;
+    const pat = biquad(Float64Array.from({ length: len }, (_, k) => (rnd() * 2 - 1) * Math.exp(-k / tau)), "lp", between(rnd, 600, 1100));
+    mixIn(trickle, scale(pat, 1 / Math.max(1e-9, peak(pat))), Math.round(s * SR), between(rnd, 0.03, 0.08));
+  }
   for (let i = 0; i < n; i++) out[i] += taps[i] + trickle[i];
   biquad(biquad(out, "lp", 1700), "lp", 2200); // through the roof
   return fades(out, 0.35, 0.35, true);
@@ -403,7 +403,8 @@ function walk(/** @type {() => number} */ rnd, /** @type {number[]} */ from, /**
 
 /**
  * @param {number} seed
- * @param {{ seconds: number, distance: number, height: number, branches: number, cloud: number, echo: object, wet: number, knee: number, sizzle?: boolean }} o
+ * @param {{ seconds: number, distance: number, height: number, branches: number, cloud: number, echo: object, wet: number, knee: number, nwave: number, lowCut: number, bass: number, sizzle?: boolean }} o
+ *   nwave: shortest N-wave (s) near the channel; lowCut (Hz) and bass (dB shelf at 160 Hz) shape the low end
  */
 function lightning(seed, o) {
   const rnd = mulberry32(seed), n = Math.round(o.seconds * SR);
@@ -433,7 +434,7 @@ function lightning(seed, o) {
   const preroll = o.sizzle ? 0.06 : between(rnd, 0.12, 0.3);
   for (const a of arrivals) {
     const t0 = preroll + (a.r - first) / C;
-    const tau = 0.0025 + rnd() * 0.004 + a.r * 3e-6; // N-waves lengthen as they travel
+    const tau = o.nwave * (1 + rnd() * 1.6) + a.r * 3e-6; // N-waves lengthen as they travel
     const amp = (a.w * a.L) / Math.pow(Math.max(a.r, 45), 0.75);
     const parts = Math.max(1, Math.ceil(a.spread / tau));
     const band = bands[edges.findIndex((e, i) => a.r >= e && a.r < edges[i + 1])];
@@ -459,8 +460,8 @@ function lightning(seed, o) {
   const wet = convolve(dry, impulse(rnd, o.echo));
   const out = new Float64Array(n);
   for (let i = 0; i < n; i++) out[i] = dry[i] + wet[i] * o.wet;
-  biquad(out, "hp", 25);
-  biquad(out, "lowshelf", 160, 0.707, 3);
+  biquad(out, "hp", o.lowCut);
+  if (o.bass) biquad(out, "lowshelf", 160, 0.707, o.bass);
   saturate(out, o.knee);
   compress(out, -12, 2.5, 0.0005);
   return fades(out, 0.002, Math.min(1.5, o.seconds * 0.2));
@@ -527,16 +528,16 @@ const EVENTS = [
       { distance: 1600, height: 1500, branches: 3, cloud: 2400, seconds: 8.5 },
       { distance: 2600, height: 1800, branches: 4, cloud: 2800, seconds: 10 },
       { distance: 3600, height: 1600, branches: 3, cloud: 4500, seconds: 10 },
-    ].map((o, i) => ({ name: `thunder${i + 1}`, make: () => lightning(2100 + i, { ...o, echo: THUNDER_ECHO, wet: 0.6, knee: -10 }) })),
+    ].map((o, i) => ({ name: `thunder${i + 1}`, make: () => lightning(2100 + i, { ...o, echo: THUNDER_ECHO, wet: 0.6, knee: -10, nwave: 0.0025, lowCut: 25, bass: 3 }) })),
   },
   {
-    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -14.5, ceiling: -2, level: -14,
+    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -16, ceiling: -2, level: -16,
     files: [
       { distance: 30, height: 1300, branches: 4, cloud: 500, seconds: 4.2 },
       { distance: 50, height: 1500, branches: 3, cloud: 700, seconds: 4.4 },
       { distance: 70, height: 1200, branches: 5, cloud: 400, seconds: 4 },
       { distance: 90, height: 1600, branches: 4, cloud: 800, seconds: 4.5 },
-    ].map((o, i) => ({ name: `crack${i + 1}`, make: () => lightning(3100 + i, { ...o, echo: CRACK_ECHO, wet: 0.3, knee: -16, sizzle: true }) })),
+    ].map((o, i) => ({ name: `crack${i + 1}`, make: () => lightning(3100 + i, { ...o, echo: CRACK_ECHO, wet: 0.3, knee: -18, nwave: 0.0004, lowCut: 180, bass: 0, sizzle: true }) })),
   },
   {
     event: "realm.storm.wind", target: -20, ceiling: -3, level: -34,
