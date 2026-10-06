@@ -493,14 +493,14 @@ export const PACKS = [
     "folder": "rain_bp",
     "topic": "rain",
     "name": "Rain Extras",
-    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, storm wind and rain on the roof, for the Realistic Rain resource pack. A §lstandalone§r behavior pack: it runs next to the Realm Bundle, not inside it.",
+    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind and rain on the roof, for the Realistic Rain resource pack. A §lstandalone§r behavior pack: it runs next to the Realm Bundle, not inside it.",
     "steps": [
       {
         "text": "When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops. Outdoors a soft breeze blows; indoors you hear the rain drumming on the roof.",
         "ops": false
       },
       {
-        "text": "In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, strong wind gusts howl (muffled when you're inside), and low mist drifts along the ground with the wind when you're outdoors. It all clears the same way when the storm passes.",
+        "text": "In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, the storm rumbles all around you with strong wind gusts (both muffled when you're inside), and low mist drifts along the ground with the wind when you're outdoors. It all clears the same way when the storm passes.",
         "ops": false
       },
       {
@@ -508,11 +508,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:rain§r, or use the same switch in §e/realm:prefs§r, to disable these extras for yourself, on a slower device for example. Chat says §eRain extras (storm fog, haze, mist, drips, wind, roof): Disabled. Run /realm:rain again to enable them.§r The choice is remembered.",
+        "text": "Run §e/realm:rain§r, or use the same switch in §e/realm:prefs§r, to disable these extras for yourself, on a slower device for example. Chat says §eRain extras (fog, haze, mist, drips and sounds): Disabled. Run /realm:rain again to enable them.§r The choice is remembered.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r add Rain Extras under §lBehavior Packs§r, next to the Realm Bundle (it's never part of the bundle), and add Realistic Rain under §lResource Packs§r at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. §e/realm:config§r -> Rain Extras enables or disables each extra and sets the wind and roof volumes.",
+        "text": "§lOperators:§r add Rain Extras under §lBehavior Packs§r, next to the Realm Bundle (it's never part of the bundle), and add Realistic Rain under §lResource Packs§r at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. §e/realm:config§r -> Rain Extras enables or disables each extra and sets the wind, thunderstorm and roof volumes.",
         "ops": true
       }
     ],
@@ -521,7 +521,7 @@ export const PACKS = [
         "usage": "/realm:rain",
         "ops": false,
         "who": "Everyone",
-        "text": "Enables or disables storm fog, haze, ground mist, drips, wind and roof sounds §lfor yourself§r (enabled by default, §edefaultOff§r). Remembered between sessions"
+        "text": "Enables or disables storm fog, haze, ground mist, drips and the wind, thunderstorm and roof sounds §lfor yourself§r (enabled by default, §edefaultOff§r). Remembered between sessions"
       }
     ]
   }

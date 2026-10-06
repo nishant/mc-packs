@@ -40,9 +40,16 @@ export const CONFIG = {
     /** Gusting wind while it rains: strong in thunderstorms, a soft breeze in plain rain, muffled indoors. */
     enabled: true,
     /** Wind volume in thunderstorms, 0-1. */
-    inThunder: 1,
+    inThunder: 0.7,
     /** Wind volume in plain rain, 0-1. */
     inRain: 0.35,
+  },
+
+  stormSound: {
+    /** The thunderstorm recording, played around each player for as long as a thunderstorm lasts, muffled indoors. */
+    enabled: true,
+    /** Volume, 0-1. */
+    volume: 1,
   },
 
   roof: {

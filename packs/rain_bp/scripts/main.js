@@ -17,8 +17,11 @@ const HAZE_FOGS = ["realm:rain_gloom_1", "realm:rain_gloom"];
 const WIND = "realm.storm.wind";
 const WIND_INSIDE = "realm.storm.wind_inside";
 const ROOF = "realm.rain.roof";
+const BED = "realm.storm.bed";
+const BED_INSIDE = "realm.storm.bed_inside";
 const WIND_EVERY = 8; // seconds between wind plays: the clips are 10 s with 2 s crossfades
 const ROOF_EVERY = 3; // the roof clips are 3.6 s
+const BED_EVERY = 18; // the thunderstorm clips are 20 s with 2 s crossfades
 
 // Performance: the loop only exists while there's something to do, runs 4 times a second and handles a
 // quarter of the players each time, so every player costs about one update per second.
@@ -33,7 +36,7 @@ const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {"out" | "in" | "none"} Place where the player hears the weather from: outdoors (or under a tree), indoors, or out of its reach */
-/** @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number, windIn: number, roofIn: number, place: Place }} State */
+/** @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number, windIn: number, roofIn: number, bedIn: number, place: Place }} State */
 /** @typedef {{ level: number, stepIn: number }} Roll a fog that rolls in or out in steps */
 
 /** @type {WeatherType} */
@@ -58,7 +61,7 @@ function extrasOff(player) {
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let st = players.get(player.id);
-  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, place: "none" }));
+  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, place: "none" }));
   return st;
 }
 
@@ -243,14 +246,21 @@ function setHaze(player, st, level) {
 /** @param {Player} player @param {State} st @param {Place} place @param {boolean} roofNear a roof low enough to hear the rain on it */
 function sounds(player, st, place, roofNear) {
   if (place !== st.place) {
-    // Walking in or out: cut the wind you were hearing and start the other one now.
+    // Walking in or out: cut the wind and storm sound you were hearing and start the other ones now.
     if (st.place !== "none") stopSounds(player, st);
     st.place = place;
     st.windIn = 0;
     st.roofIn = 0;
+    st.bedIn = 0;
   }
   st.windIn -= UPDATE_SECONDS;
   st.roofIn -= UPDATE_SECONDS;
+  st.bedIn -= UPDATE_SECONDS;
+  if (weather === WeatherType.Thunder && get("stormSound.enabled") && st.bedIn <= 0) {
+    const volume = get("stormSound.volume");
+    if (volume > 0) player.playSound(place === "out" ? BED : BED_INSIDE, { volume });
+    st.bedIn = BED_EVERY;
+  }
   if (get("wind.enabled") && st.windIn <= 0) {
     const volume = weather === WeatherType.Thunder ? get("wind.inThunder") : get("wind.inRain");
     if (volume > 0) player.playSound(place === "out" ? WIND : WIND_INSIDE, { volume });
@@ -265,7 +275,7 @@ function sounds(player, st, place, roofNear) {
 
 /** @param {Player} player @param {State} st */
 function stopSounds(player, st) {
-  for (const id of [WIND, WIND_INSIDE]) {
+  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE]) {
     try {
       player.runCommand(`stopsound @s ${id}`);
     } catch (e) {
@@ -380,7 +390,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     customCommandRegistry.registerCommand(
       {
         name: "realm:rain",
-        description: "Enable or disable the rain extras (storm fog, haze, ground mist, drips, wind and roof sounds) for yourself",
+        description: "Enable or disable the rain extras (fog, haze, mist, drips and sounds) for yourself",
         permissionLevel: CommandPermissionLevel.Any,
         cheatsRequired: false,
       },
@@ -394,8 +404,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return {
           status: CustomCommandStatus.Success,
           message: nowOff
-            ? "Rain extras (storm fog, haze, mist, drips, wind, roof): Disabled. Run /realm:rain again to enable them."
-            : "Rain extras (storm fog, haze, mist, drips, wind, roof): Enabled. Run /realm:rain again to disable them.",
+            ? "Rain extras (fog, haze, mist, drips and sounds): Disabled. Run /realm:rain again to enable them."
+            : "Rain extras (fog, haze, mist, drips and sounds): Enabled. Run /realm:rain again to disable them.",
         };
       }
     );
