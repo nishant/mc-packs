@@ -52,7 +52,8 @@ npm run bundle    # merge packs into one (--list, --all, --packs a,b, --name, --
 | `docs/PACKS.md` | Documentation, also published on mc.nish.software/realm. **Update it in the same commit as any pack change**; `npm run check` enforces it |
 | `tools/build.mjs`, `tools/bundle.mjs` | Packaging, with no dependencies |
 | `tools/standalone.json` | Behavior packs that `bundle --all` leaves out because they run next to the bundle (`rain_bp`) |
-| `tools/gen-rain/` | Generates `rain_rp` from Mojang's vanilla files in `tools/gen-rain/vanilla/` (`npm run gen:rain`; `node tools/gen-rain/sounds.mjs --audition out.mp3` also writes a listening mix); `npm run check` fails if its textures or fogs are stale |
+| `tools/gen-rain/` | Generates `rain_rp` from Mojang's vanilla files in `tools/gen-rain/vanilla/` (`npm run gen:rain`); `npm run check` fails if its textures or fogs are stale. `renders.mjs` and `sounds.mjs --audition docs/media/rain` make the rain packs' pictures and sound clips |
+| `docs/media/` | Pictures and sound clips shown in `docs/PACKS.md` (`### See and hear it`) and on the realm page |
 | `tools/check-docs.mjs` | Fails if a pack, its `### How to use`, a command or a config option is missing from the docs |
 | `tools/check-commands.mjs` | Fails if a command or enum isn't in the `realm:` namespace, or two share a name |
 | `tools/settings-shared.js`, `tools/sync-settings.mjs` | The Realm Settings helper every behavior pack copies into its `scripts/settings.js` (packs never import each other); `sync-settings.mjs` copies it, `--check` (part of `npm run check`) fails on a missing or stale copy |

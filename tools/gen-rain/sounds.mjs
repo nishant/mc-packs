@@ -17,7 +17,8 @@
 // Needs ffmpeg with libvorbis (and libmp3lame for --audition) on PATH. Not part of npm run check (outputs are committed).
 //
 //   node tools/gen-rain/sounds.mjs                        write the sounds and their definitions
-//   node tools/gen-rain/sounds.mjs --audition <file.mp3>  also write an in-game-like mix: rain, indoors, a storm
+//   node tools/gen-rain/sounds.mjs --audition docs/media/rain   also write listening clips at in-game relative levels:
+//                                                             rain.mp3 (Realistic Rain) and extras.mp3 (Rain Extras)
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -585,6 +586,27 @@ const SOUNDS_JSON = {
   },
 };
 
+/**
+ * Listening clips for the docs and the site, each a scene the game could play: rain stacked the way the game stacks it
+ * (a clip every 2-4 ticks), plus what the scene adds at its definition and Rain Extras volumes. In game a strike is
+ * about 23 dB louder than the rain, which leaves the rain inaudible in a clip, so strikes play STRIKE_GAIN quieter here.
+ * Normalized to -18 LUFS and limited.
+ */
+const STRIKE_GAIN = Math.pow(10, -12 / 20);
+const AUDITION = {
+  // Realistic Rain on its own: rain, a far thunder, then a close strike (the impact and the thunder together).
+  rain: { seconds: 26, play: [["ambient.weather.thunder", "thunder4", 9, STRIKE_GAIN], ["ambient.weather.thunder", "thunder2", 18, STRIKE_GAIN], ["ambient.weather.lightning.impact", "crack2", 18, STRIKE_GAIN]] },
+  // Rain Extras: a breeze outdoors in rain, then indoors (rain on the roof, muffled wind), then outdoors in a storm.
+  extras: {
+    seconds: 30,
+    play: [
+      ["realm.storm.wind", "wind1", 0, 0.35], ["realm.storm.wind", "wind2", 8, 0.35],
+      ["realm.rain.roof", "roof1", 10, 0.8], ["realm.rain.roof", "roof2", 13, 0.8], ["realm.rain.roof", "roof3", 16, 0.8], ["realm.storm.wind_inside", "wind_inside1", 10, 0.35],
+      ["realm.storm.wind", "wind3", 19, 1], ["realm.storm.wind", "wind1", 27, 1], ["ambient.weather.thunder", "thunder5", 21, STRIKE_GAIN],
+    ],
+  },
+};
+
 mkdirSync(outDir, { recursive: true });
 const tmp = mkdtempSync(join(tmpdir(), "gen-rain-"));
 const rows = [];
@@ -639,26 +661,29 @@ console.log(`total ${(rows.reduce((s, r) => s + Number(r.kb), 0) / 1024).toFixed
 // Audition: roughly what a player hears, at in-game relative levels
 // ---------------------------------------------------------------------------
 
-/** 50 s: rain outdoors, then indoors (roof, muffled storm wind later), then a thunderstorm outdoors with a far and a close strike. */
-function writeAudition(/** @type {string} */ file, /** @type {string} */ dir) {
-  const rnd = mulberry32(99), seconds = 50, mix = new Float64Array(seconds * SR);
+function writeAudition(/** @type {string} */ dir, /** @type {string} */ tmpDir) {
+  mkdirSync(dir, { recursive: true });
   const defs = JSON.parse(definitions(volumes)).sound_definitions;
-  const vol = (/** @type {string} */ event, /** @type {string} */ name) => defs[event].sounds.find((s) => s.name.endsWith(`/${name}`)).volume;
-  const play = (/** @type {string} */ event, /** @type {string} */ name, /** @type {number} */ at, gain = 1) => mixIn(mix, made.get(name), Math.round(at * SR), vol(event, name) * gain);
-  // Rain: the game starts a clip every 2-4 ticks, all at full volume.
-  for (let t = 0; t < seconds; t += (2 + Math.floor(rnd() * 3)) / 20) play("ambient.weather.rain", `rain${1 + Math.floor(rnd() * 6)}`, t);
-  // 0-15 s outdoors in rain: soft breeze (Rain Extras, inRain 0.35) every 8 s.
-  for (let t = 0; t < 15; t += 8) play("realm.storm.wind", `wind${1 + Math.floor(rnd() * 3)}`, t, 0.35);
-  // 15-27 s indoors: rain on the roof every 3 s; the storm starts at 21 s (muffled wind).
-  for (let t = 15; t < 27; t += 3) play("realm.rain.roof", `roof${1 + Math.floor(rnd() * 4)}`, t, 0.8);
-  play("realm.storm.wind_inside", "wind_inside1", 21);
-  // 27-50 s outdoors in the storm: gusts every 8 s, a far strike, then a close one (impact + thunder together).
-  for (let t = 27; t < seconds; t += 8) play("realm.storm.wind", `wind${1 + Math.floor(rnd() * 3)}`, t, 1);
-  play("ambient.weather.thunder", "thunder4", 29);
-  play("ambient.weather.thunder", "thunder2", 38);
-  play("ambient.weather.lightning.impact", "crack2", 38);
-  const wav = join(dir, "audition.wav");
-  writeWav(scale(mix, 1 / Math.max(1e-9, peak(mix)) * 0.89), wav);
-  execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-c:a", "libmp3lame", "-q:a", "2", file]);
-  console.log(`audition: ${file}`);
+  const vol = (/** @type {string} */ event, /** @type {string} */ name) => defs[event].sounds.find((/** @type {{ name: string }} */ s) => s.name.endsWith(`/${name}`)).volume;
+  for (const [name, scene] of Object.entries(AUDITION)) {
+    const rnd = mulberry32(99), mix = new Float64Array(scene.seconds * SR);
+    for (let t = 0; t < scene.seconds; t += (2 + Math.floor(rnd() * 3)) / 20) {
+      const clip = `rain${1 + Math.floor(rnd() * 6)}`;
+      mixIn(mix, /** @type {Float64Array} */ (made.get(clip)), Math.round(t * SR), vol("ambient.weather.rain", clip));
+    }
+    for (const [event, clip, at, gain = 1] of /** @type {[string, string, number, number?][]} */ (scene.play)) mixIn(mix, /** @type {Float64Array} */ (made.get(clip)), Math.round(at * SR), vol(event, clip) * gain);
+    fades(mix, 0.5, 1.5);
+    const wav = join(tmpDir, `${name}-audition.wav`);
+    for (let pass = 0; pass < 4; pass++) {
+      writeWav(mix, wav);
+      const { lufs } = summary(wav);
+      if (pass > 0 && Math.abs(-18 - lufs) < 0.3) break;
+      scale(mix, Math.pow(10, (-18 - lufs) / 20));
+      limit(mix, Math.pow(10, -1.5 / 20));
+    }
+    writeWav(mix, wav);
+    const out = join(dir, `${name}.mp3`);
+    execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-ac", "1", "-c:a", "libmp3lame", "-q:a", "4", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", out]);
+    console.log(`audition: ${relative(root, out)} (${scene.seconds} s, ${(statSync(out).size / 1024).toFixed(0)} KB)`);
+  }
 }
