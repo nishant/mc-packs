@@ -321,9 +321,9 @@ const cuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {n
  *   `level`    one copy at full volume: file LUFS + 20·log10(volume).
  *   `layered`  rain only: the loudness of layered() at the definition volume, since the game stacks rain clips: vanilla's
  *              plus 25%.
- * Thunder and the impact land at about vanilla's level (-17.3 and -12.6 LUFS); the Rain Extras sounds sit under the
- * thunder, and Rain Extras scales them further. Times are seconds into the recordings (thunder: rolls start 1.5 s before
- * their loudest moment, strikes right on the hit).
+ * Thunder and the impact land a little under vanilla (-17.3 and -12.6 LUFS). The Rain Extras sounds sit well under the
+ * thunder (the thunderstorm bed about 6 dB over the rain), and Rain Extras scales them further. Times are seconds into
+ * the recordings (thunder: rolls start 1.5 s before their loudest moment, strikes right on the hit).
  */
 const EVENTS = [
   {
@@ -331,19 +331,19 @@ const EVENTS = [
     files: cuts("rain", "rain", [30, 95, 160, 225, 290, 355, 420, 485].map((t) => [t, 2.4]), 0.05, 0.15),
   },
   {
-    event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -18, ceiling: -1, level: -18,
+    event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -18, ceiling: -1, level: -19.5,
     files: cuts("thunder", "thunder", [26.55, 196.45, 274.2, 323.9, 551.3, 585.55].map((t) => [t, 8]), 0.4, 2),
   },
   {
-    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -15.5, ceiling: -1, level: -15.5,
+    event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -15.5, ceiling: -1, level: -17,
     files: cuts("crack", "thunder", [100.3, 169.25, 204.2, 465.6].map((t) => [t, 4.5]), 0.01, 2),
   },
   {
-    event: "realm.storm.bed", target: -18, ceiling: -1, level: -28,
+    event: "realm.storm.bed", target: -18, ceiling: -1, level: -33,
     files: cuts("bed", "thunder", [40, 230, 360, 490].map((t) => [t, 20]), 2, 2),
   },
   {
-    event: "realm.storm.bed_inside", target: -24, ceiling: -1, level: -36,
+    event: "realm.storm.bed_inside", target: -24, ceiling: -1, level: -40,
     files: cuts("bed_inside", "thunder", [40, 360].map((t) => [t, 20]), 2, 2, muffled),
   },
   {
@@ -397,10 +397,11 @@ const SOUNDS_JSON = {
 /**
  * Listening clips for the docs and the site, each a scene the game could play: rain stacked the way the game stacks it
  * (a clip every 2-4 ticks), plus what the scene adds at its definition and Rain Extras volumes. In game a strike is
- * about 23 dB louder than the rain, which leaves the rain inaudible in a clip, so strikes play STRIKE_GAIN quieter here.
- * Normalized to -18 LUFS and limited.
+ * about 21 dB louder than the rain, which leaves the rain inaudible in a clip, so strikes play STRIKE_GAIN quieter here.
+ * The rain stack sits at RAIN_AT in every clip, so a level change between versions is heard as one; peaks are limited.
  */
 const STRIKE_GAIN = Math.pow(10, -12 / 20);
+const RAIN_AT = -27;
 const AUDITION = {
   // Realistic Rain on its own: rain, a distant roll, then a close strike (the strike and a roll together).
   rain: { seconds: 26, play: [["ambient.weather.thunder", "thunder3", 7, STRIKE_GAIN], ["ambient.weather.thunder", "thunder1", 16, STRIKE_GAIN], ["ambient.weather.lightning.impact", "crack2", 16, STRIKE_GAIN]] },
@@ -411,7 +412,7 @@ const AUDITION = {
     play: [
       ["realm.storm.wind", "wind1", 0, 0.35], ["realm.storm.wind", "wind2", 8, 0.35],
       ["realm.rain.roof", "roof1", 10, 0.8], ["realm.rain.roof", "roof2", 13, 0.8], ["realm.rain.roof", "roof3", 16, 0.8], ["realm.storm.wind_inside", "wind_inside1", 10, 0.35],
-      ["realm.storm.bed", "bed1", 19, 1], ["realm.storm.wind", "wind3", 19, 1], ["realm.storm.wind", "wind1", 27, 1],
+      ["realm.storm.bed", "bed1", 19, 1], ["realm.storm.wind", "wind3", 19, 0.7], ["realm.storm.wind", "wind1", 27, 0.7],
     ],
   },
 };
@@ -492,19 +493,16 @@ function writeAudition(/** @type {string} */ dir, /** @type {string} */ tmpDir) 
       const clip = `rain${1 + Math.floor(rnd() * 6)}`;
       mixIn(mix, /** @type {Float64Array} */ (made.get(clip)), Math.round(t * SR), vol("ambient.weather.rain", clip));
     }
-    for (const [event, clip, at, gain = 1] of /** @type {[string, string, number, number?][]} */ (scene.play)) mixIn(mix, /** @type {Float64Array} */ (made.get(clip)), Math.round(at * SR), vol(event, clip) * gain);
-    fades(mix, 0.5, 1.5);
     const wav = join(tmpDir, `${name}-audition.wav`);
-    for (let pass = 0; pass < 4; pass++) {
-      writeWav(mix, wav);
-      const { lufs } = summary(wav);
-      if (pass > 0 && Math.abs(-18 - lufs) < 0.3) break;
-      scale(mix, Math.pow(10, (-18 - lufs) / 20));
-      limit(mix, Math.pow(10, -1.5 / 20));
-    }
+    writeWav(mix, wav);
+    const gain = Math.pow(10, (RAIN_AT - summary(wav).lufs) / 20);
+    for (const [event, clip, at, g = 1] of /** @type {[string, string, number, number?][]} */ (scene.play)) mixIn(mix, /** @type {Float64Array} */ (made.get(clip)), Math.round(at * SR), vol(event, clip) * g);
+    scale(mix, gain);
+    fades(mix, 0.5, 1.5);
+    const limited = limit(mix, Math.pow(10, -1.5 / 20));
     writeWav(mix, wav);
     const out = join(dir, `${name}.mp3`);
     execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-ac", "1", "-c:a", "libmp3lame", "-q:a", "4", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", out]);
-    console.log(`audition: ${relative(root, out)} (${scene.seconds} s, ${(statSync(out).size / 1024).toFixed(0)} KB)`);
+    console.log(`audition: ${relative(root, out)} (${scene.seconds} s, ${(statSync(out).size / 1024).toFixed(0)} KB, peaks limited ${limited.toFixed(1)} dB)`);
   }
 }

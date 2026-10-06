@@ -40,7 +40,7 @@ export const CONFIG = {
     /** Gusting wind while it rains: strong in thunderstorms, a soft breeze in plain rain, muffled indoors. */
     enabled: true,
     /** Wind volume in thunderstorms, 0-1. */
-    inThunder: 1,
+    inThunder: 0.7,
     /** Wind volume in plain rain, 0-1. */
     inRain: 0.35,
   },
