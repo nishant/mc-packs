@@ -9,6 +9,7 @@ const PROP_TIPS = "news:tips"; // world: JSON string[]
 const PROP_TIP_SETTINGS = "news:tipSettings"; // world: JSON { enabled, intervalMinutes }, also set in /realm:config (settings.js)
 const PROP_SEEN = "news:seen"; // player: revision last seen
 const PROP_LAST_SEEN = "news:lastSeen"; // player: epoch ms, refreshed while online
+const PROP_DRAFT = "news:draft"; // player: unsaved body pasted in chunks with /realm:news_add
 
 // ---------------------------------------------------------------------------
 // Storage
@@ -80,6 +81,17 @@ const unescapeNewlines = (/** @type {string} */ s) => s.replaceAll("\\n", "\n");
 /** Minecraft's text boxes keep at most this many characters, so the news body is edited in parts. */
 const BODY_PART = 100;
 const MIN_PARTS = 10;
+/** Longest draft /realm:news_add builds up (100 boxes in the editor). */
+const MAX_DRAFT = 10_000;
+
+/** @param {Player} player */
+function getDraft(player) {
+  const draft = player.getDynamicProperty(PROP_DRAFT);
+  return typeof draft === "string" ? draft : "";
+}
+
+/** @param {Player} player @param {string} draft empty = no draft */
+const setDraft = (player, draft) => player.setDynamicProperty(PROP_DRAFT, draft || undefined);
 
 /** The body in BODY_PART pieces, with room to grow: at least MIN_PARTS boxes and one empty box at the end. @param {string} text */
 function splitBody(text) {
@@ -189,40 +201,52 @@ function broadcastTip() {
 // ---------------------------------------------------------------------------
 
 /**
+ * Opens the news editor. A draft from /realm:news_add or /realm:news_body is shown instead of the
+ * saved body, and kept until it's saved or discarded, so closing the editor by mistake loses nothing.
  * @param {Player} player
- * @param {string} [draft] a body pasted with /realm:news_body, shown in the boxes instead of the saved one
  */
-async function editNews(player, draft) {
+async function editNews(player) {
   const news = getNews();
-  const parts = splitBody(escapeNewlines(draft ?? news.body));
+  const draft = getDraft(player);
+  const parts = splitBody(escapeNewlines(draft || news.body));
   const form = new ModalFormData()
     .title("Edit Realm news")
-    .textField("Title", DEFAULTS.news.title, { defaultValue: news.title })
-    .label(`§7Minecraft's text boxes take ${BODY_PART} characters each, so the body is split over ${parts.length} boxes that are joined in order, with nothing added between them. Type \\n for a new line and § for colors. All boxes empty = no news.`);
+    .textField("Title", DEFAULTS.news.title, { defaultValue: news.title });
+  if (draft) form.label(`§eShowing your unsaved draft (${draft.length} characters), not the saved news.`);
+  form.label(`§7Minecraft's text boxes take ${BODY_PART} characters each, so the body is split over ${parts.length} boxes that are joined in order, with nothing added between them. Type \\n for a new line and § for colors. All boxes empty = no news.`);
   parts.forEach((part, i) => form.textField(`Body, part ${i + 1}`, i === 0 ? "What's new..." : "", { defaultValue: part }));
-  form.toggle("Pop up for everyone on their next join", { defaultValue: true }).submitButton("Save");
+  form.toggle("Pop up for everyone on their next join", { defaultValue: true });
+  if (draft) form.toggle("Discard the draft instead (the saved news stays as it is)", { defaultValue: false });
+  form.submitButton("Save");
   const res = await show(player, form);
   if (!res) {
     if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
     return;
   }
-  if (res.canceled || !res.formValues) return;
+  if (res.canceled || !res.formValues) {
+    if (draft && player.isValid) player.sendMessage("§7Draft kept.§r §b/realm:news_add§r adds more, §b/realm:news_edit§r opens it again.");
+    return;
+  }
 
   const values = res.formValues;
-  // Labels may or may not take a place in formValues: the title is the first string, the toggle the last value.
+  // Labels may or may not take a place in formValues: the title is the first string, the toggles the booleans.
   const strings = values.filter((v) => typeof v === "string");
+  const [announce, discard] = values.filter((v) => typeof v === "boolean");
+  if (draft) setDraft(player, "");
+  if (discard === true) {
+    player.sendMessage("§7Draft discarded.§r The news is unchanged.");
+    return;
+  }
   const title = strings[0];
   const body = strings.slice(1).join("");
-  const announce = values.at(-1);
   writeJson(PROP_NEWS, {
     title: typeof title === "string" && title.trim() ? title : DEFAULTS.news.title,
-    body: typeof body === "string" ? unescapeNewlines(body) : "",
+    body: unescapeNewlines(body),
   });
-  const hasBody = typeof body === "string" && body.trim() !== "";
   if (announce === true) {
     world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
     // Online players would otherwise only hear about it on their next join.
-    if (hasBody) world.sendMessage("§bRealm news updated.§r Run §b/realm:news§r to read it.");
+    if (body.trim() !== "") world.sendMessage("§bRealm news updated.§r Run §b/realm:news§r to read it.");
   }
 
   player.sendMessage(
@@ -324,6 +348,40 @@ function playerCommand(action) {
   };
 }
 
+/**
+ * /realm:news_body (append = false: a new draft, then the editor) and /realm:news_add (append to the
+ * draft, no editor, so several chunks can be pasted in a row).
+ * @param {boolean} append
+ */
+function draftCommand(append) {
+  /** @param {import("@minecraft/server").CustomCommandOrigin} origin @param {unknown} text */
+  return (origin, text) => {
+    const player = origin.initiator ?? origin.sourceEntity;
+    if (!(player instanceof Player)) {
+      return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+    }
+    const chunk = String(text ?? "");
+    const draft = (append ? getDraft(player) : "") + chunk;
+    if (draft.length > MAX_DRAFT) {
+      return {
+        status: CustomCommandStatus.Failure,
+        message: `The draft would be ${draft.length} characters; the most is ${MAX_DRAFT}. Nothing was added.`,
+      };
+    }
+    // Dynamic properties can't be written in this read-only callback.
+    system.run(() => {
+      setDraft(player, draft);
+      if (!append) editNews(player).catch((e) => console.warn(`[news] ${e}`));
+    });
+    return {
+      status: CustomCommandStatus.Success,
+      message: append
+        ? `Added ${chunk.length} characters; the draft has ${draft.length}. Paste the next part with /realm:news_add, or run /realm:news_edit to check and save it.`
+        : `Got ${chunk.length} characters. Close chat: the editor opens with them filled in. To paste more first, use /realm:news_add, then /realm:news_edit.`,
+    };
+  };
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
@@ -346,28 +404,27 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
     playerCommand(editNews)
   );
-  // Chat takes far longer text than a form's 100-character boxes, so a long body can be pasted
-  // here in one go; the editor then opens with it split over the boxes, ready to check and save.
+  // Chat takes longer text than a form's 100-character boxes, but it has a limit of its own, so a
+  // long body is pasted in chunks: /realm:news_body starts a draft, /realm:news_add adds to it.
   customCommandRegistry.registerCommand(
     {
       name: "realm:news_body",
-      description: "Paste a long news body in one go, in quotes; opens the editor with it filled in (operators only)",
+      description: "Start the news body from text pasted in quotes, then opens the editor (operators only)",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
       mandatoryParameters: [{ name: "text", type: CustomCommandParamType.String }],
     },
-    (origin, text) => {
-      const player = origin.initiator ?? origin.sourceEntity;
-      if (!(player instanceof Player)) {
-        return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      }
-      const body = String(text ?? "");
-      system.run(() => editNews(player, body).catch((e) => console.warn(`[news] ${e}`)));
-      return {
-        status: CustomCommandStatus.Success,
-        message: `Got ${body.length} characters. Close chat: the editor opens with them filled in. Check the title, then tap Save.`,
-      };
-    }
+    draftCommand(false)
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:news_add",
+      description: "Add pasted text, in quotes, to the end of your news draft (operators only)",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "text", type: CustomCommandParamType.String }],
+    },
+    draftCommand(true)
   );
   customCommandRegistry.registerCommand(
     {
