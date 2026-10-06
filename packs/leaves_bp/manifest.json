@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Fast Leaf Decay",
+    "description": "Leaves left without a log drop within a few seconds after you chop a tree, with their usual saplings, sticks and apples.",
+    "uuid": "3e22fb71-2ead-432f-be86-5880288df9d3",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "db57bda4-c432-419d-9373-45c50d58518e",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" }
+  ]
+}

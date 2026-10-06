@@ -502,6 +502,403 @@ export const PACKS = [
     ]
   },
   {
+    "folder": "death_bp",
+    "topic": "death",
+    "name": "Death Point",
+    "summary": "Tells you where you died once you respawn, and points you back there. The realm keeps inventories on death, so nothing is lying on the ground waiting for you: this is for finding your way back to where you were, say a cave you were exploring or a long trip through the Nether.",
+    "steps": [
+      {
+        "text": "Nothing to set up: when you respawn after dying, chat says §eYou died at 120, 64, -340 in the Overworld.§r",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:death§r any time to see your last death point again, how far it is from where you stand and in which direction, for example §eIt's 245 blocks to the NE, 12 blocks down.§r",
+        "ops": false
+      },
+      {
+        "text": "Don't want the chat message? Disable §lTell me where I died§r in §e/realm:prefs§r. §e/realm:death§r still works.",
+        "ops": false
+      },
+      {
+        "text": "If an operator has enabled it, run §e/realm:death_back§r to teleport to your last death point, once per death. It only lands you somewhere safe to stand, and says so when there isn't such a place.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r enable §e/realm:death_back§r in §e/realm:config§r -> §lDeath Point§r -> §lTeleport back to the death point (/realm:death_back)§r. The same page turns the respawn message off for everyone.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:death",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows your last death point (x, y, z and dimension), with the distance and direction from where you stand, or which dimension it's in"
+      },
+      {
+        "usage": "/realm:death_back",
+        "ops": false,
+        "who": "Everyone, once an operator enables it",
+        "text": "Teleports you to a safe spot at your last death point, once per death (default disabled, §ebackEnabled§r). Refuses with a reason when there's no safe place to stand"
+      }
+    ]
+  },
+  {
+    "folder": "refill_bp",
+    "topic": "refill",
+    "name": "Hotbar Refill",
+    "summary": "When the stack in your hand runs out, or your tool breaks, the same slot is refilled from your inventory, so you keep building, eating or fighting without opening it.",
+    "steps": [
+      {
+        "text": "Nothing to set up: keep spare stacks and spare tools in your main inventory (above the hotbar). Place your last block, eat your last steak, throw your last snowball or ender pearl, or break your pickaxe, and a matching stack or tool from your inventory moves into that hotbar slot.",
+        "ops": false
+      },
+      {
+        "text": "Don't want it? Run §e/realm:refill§r to disable it for yourself; run it again to enable it. The same switch is §lRefill my hotbar§r in §e/realm:prefs§r. The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lHotbar Refill§r disables it for the whole realm, stops it replacing broken tools, or changes what new players start with.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:refill",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Enables or disables hotbar refills §lfor yourself§r (default enabled, §edefaultOn§r). Remembered between sessions. Chat says §eHotbar refill: Disabled. Run /realm:refill again to enable it.§r"
+      }
+    ]
+  },
+  {
+    "folder": "hud_bp",
+    "topic": "hud",
+    "name": "Coordinates HUD",
+    "summary": "Your own coordinates, the direction you're facing and the day and time, on the bar above the hotbar, for players who enable it. Handy for building, mapping and meeting up without opening a map.",
+    "steps": [
+      {
+        "text": "Run §e/realm:hud§r. Above your hotbar you now see §eXYZ 120 64 -340  Facing NE  Day 12 at 6:30 AM§r, updated as you move. Only you see yours.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:hud§r again to hide it. The choice is remembered. The same switch is §lCoordinates HUD above my hotbar§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "Only want the coordinates? Disable §lHUD shows the day and time§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lCoordinates HUD§r disables it for the whole realm (for servers that play without coordinates), shows it to new players from the start, or switches the facing to 4 directions.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:hud",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows or hides your coordinates, facing and the day and time above the hotbar, §lfor yourself§r (default hidden, §edefaultOn§r). Remembered between sessions. Says so when an operator has disabled it for the realm (§eenabled§r)"
+      }
+    ]
+  },
+  {
+    "folder": "mobhp_bp",
+    "topic": "mobhp",
+    "name": "Mob Health",
+    "summary": "Hit a mob and its name and health show above your hotbar, so you know how close it is to going down.",
+    "steps": [
+      {
+        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the bar above your hotbar shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
+        "ops": false
+      },
+      {
+        "text": "Don't want it? Run §e/realm:mobhp§r to hide it for yourself; run it again to show it. The same switch is §lShow the health of mobs I hit§r in §e/realm:prefs§r. The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lMob Health§r disables it for the whole realm, shows players' health too when one player hurts another, changes the bar length, or changes what new players start with.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:mobhp",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows or hides the health of mobs you hit, §lfor yourself§r (default shown, §edefaultOn§r). Remembered between sessions. Chat says §eMob health: Disabled. Run /realm:mobhp again to show it.§r"
+      }
+    ]
+  },
+  {
+    "folder": "elytra_bp",
+    "topic": "elytra",
+    "name": "Elytra HUD",
+    "summary": "While you glide, the bar above the hotbar shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
+    "steps": [
+      {
+        "text": "Put on an elytra and glide. Above the hotbar you see something like §e31.4 blocks/s  Y 142  Elytra 87%  Rockets 12§r, updated 4 times a second.",
+        "ops": false
+      },
+      {
+        "text": "Don't want it? Run §e/realm:elytra§r, or disable §lElytra HUD while gliding§r in §e/realm:prefs§r. Chat says §eElytra HUD: Disabled. Run /realm:elytra again to enable it.§r The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r to turn it off for everyone, disable §lElytra HUD§r in §e/realm:config§r -> §lElytra HUD§r. The same page sets when durability turns red.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:elytra",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Enables or disables the gliding HUD §lfor yourself§r (enabled by default). Remembered between sessions. Works while the HUD is enabled for the realm (default enabled, §eenabled§r)"
+      }
+    ]
+  },
+  {
+    "folder": "mail_bp",
+    "topic": "mail",
+    "name": "Realm Mail",
+    "summary": "Write letters to anyone who has played on the realm, online or not. Letters to offline players wait in their inbox, and they're told about them when they join. Letters carry words only: for items, see the Player Mailroom build.",
+    "steps": [
+      {
+        "text": "Run §e/realm:mail§r and pick §lWrite a letter§r. Choose who it's for (everyone who has joined since the pack was added, with §e(online)§r after the ones playing now), type a subject and the letter, and press §lSend§r. Type §e\\n§r in the letter for a new line.",
+        "ops": false
+      },
+      {
+        "text": "If they're online, they see §eNew letter from Sam: \"Hello!\". Read it with /realm:mail§r in chat. If not, the letter waits: the next time they join, chat says §eYou have 2 unread letters: /realm:mail§r.",
+        "ops": false
+      },
+      {
+        "text": "§lRead your letters:§r §e/realm:mail§r -> §lInbox§r. New letters are marked §e[New]§r. Open one to read it, then §lReply§r or §lDelete§r it. §lDelete all read letters§r clears out the rest.",
+        "ops": false
+      },
+      {
+        "text": "§lSee what you sent:§r §e/realm:mail§r -> §lSent§r shows your recent letters and whether each was read yet.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the chat line on joining? Disable §lUnread letters notice on join§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lRealm Mail§r sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:mail",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens Realm Mail: your §lInbox§r (read, reply, delete; default 50 letters each, §einboxLimit§r), §lWrite a letter§r to any player who has joined, even offline, and §lSent§r (your last 30 letters, §esentLimit§r)"
+      }
+    ]
+  },
+  {
+    "folder": "nick_bp",
+    "topic": "nick",
+    "name": "Nicknames",
+    "summary": "Pick a nickname and a color to show above your head instead of your gamertag. Chat, the player list and death messages still show gamertags: the stable Script API can't change chat.",
+    "steps": [
+      {
+        "text": "Run §e/realm:nick§r, type a nickname (3 to 16 letters A-Z, digits, spaces or §e_§r), pick a color and tap §lSave§r. It shows above your head right away, with your gamertag in gray underneath.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:nick§r again to change it, or enable §lRemove my nickname§r there to show your gamertag again. Your nickname stays when you leave, die or the realm restarts.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:nick§r -> §lPlayers' nicknames (operator)§r lists every saved nickname; tap one to clear it, even for players who are offline. To turn nicknames off for everyone, disable §lNicknames§r in §e/realm:config§r -> §lNicknames§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:nick",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Set, change or remove your nickname and its color, shown above your head (3 to 16 letters, digits, spaces or §e_§r). Operators also get every saved nickname, to clear any of them. Works while nicknames are enabled (default enabled, §eenabled§r)"
+      }
+    ]
+  },
+  {
+    "folder": "quests_bp",
+    "topic": "quests",
+    "name": "Daily Quests",
+    "summary": "Every player gets three quests a day, such as mining coal, defeating zombies, harvesting wheat or traveling 1,000 blocks, each with a reward of XP levels or items. New quests come at midnight UTC.",
+    "steps": [
+      {
+        "text": "Play: about 10 seconds after you join, chat lists today's quests, for example §eNew daily quests: Mine 12 coal ore, Defeat 10 zombies, Travel 1,000 blocks.§r They count as you play; nothing to start.",
+        "ops": false
+      },
+      {
+        "text": "A note above the hotbar shows your progress at each quarter (§eQuest: Mine 12 coal ore 6/12§r). Finishing one says §eQuest complete: Mine 12 coal ore! Reward: 16 Torch§r in chat and gives the reward.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:quests§r to see today's quests with progress bars, their rewards and the time until new ones (§eNew quests in 5h 12m§r).",
+        "ops": false
+      },
+      {
+        "text": "Don't want the progress notes? Disable §lQuest progress notes§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lDaily Quests§r sets the hour new quests come (UTC), how many each player gets, and whether creative mode counts. The quests themselves and their rewards are the §epool§r in §econfig.js§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:quests",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows today's quests (default 3, §equestsPerDay§r) with your progress and rewards, and the time until new ones (default midnight UTC, §eresetHourUtc§r)"
+      }
+    ]
+  },
+  {
+    "folder": "milestones_bp",
+    "topic": "milestones",
+    "name": "Milestones",
+    "summary": "Realm achievements in tiers: play 1, 10 and 100 hours, mine 1,000, 10,000 and 100,000 blocks, travel a million blocks and more. Unlocks are announced in chat, and anyone can look at anyone's progress.",
+    "steps": [
+      {
+        "text": "Play: milestones count on their own. Reaching one tells everyone in chat, for example §eSam reached a milestone: Miner II (Mine 10,000 blocks)§r, with a sound.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:milestones§r to see yours: each milestone with the tier you have, a progress bar toward the next one and what it takes (§eMine 100,000 blocks§r).",
+        "ops": false
+      },
+      {
+        "text": "Pick §lAnother player's milestones§r to see anyone who has played since the pack was added, online or not.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r to keep unlocks out of public chat, disable §lAnnounce unlocks to everyone§r in §e/realm:config§r -> §lMilestones§r; then only the player is told. The milestones and their tiers are §emilestones§r in §econfig.js§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:milestones",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows your milestones with progress toward the next tier, and §lAnother player's milestones§r for anyone who has played since the pack was added. Unlocks are announced to everyone (default enabled, §eannounce§r)"
+      }
+    ]
+  },
+  {
+    "folder": "goals_bp",
+    "topic": "goals",
+    "name": "Community Goals",
+    "summary": "Shared goals for the whole realm, like 10,000 cobblestone for the Colosseum. Operators set the item, the amount and the chest it goes into; everyone donates from their inventory, and chat cheers each quarter of the way.",
+    "steps": [
+      {
+        "text": "Run §e/realm:goals§r to see the realm's goals, each with how far along it is (§eColosseum: 23 percent§r, §e2,340 / 10,000 Cobblestone§r).",
+        "ops": false
+      },
+      {
+        "text": "Pick a goal, then §lDonate from my inventory§r: every matching item you carry (hotbar included) goes into the goal's chest, up to what the goal still needs. Chat says §eYou gave 320 Cobblestone to Colosseum.§r",
+        "ops": false
+      },
+      {
+        "text": "The goal's page shows a progress bar, where its chest is, what you gave and the top contributors.",
+        "ops": false
+      },
+      {
+        "text": "At 25, 50 and 75 percent everyone sees it in chat, and when a goal is reached chat thanks its top contributors.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r place a chest or barrel for the donations, look at it and run §e/realm:goals_add <item> <amount> [name]§r, for example §e/realm:goals_add cobblestone 10000 Colosseum§r. In a goal's page, §lMark finished§r stops donations early, §lLink to the block I'm looking at§r moves the goal to another container, and §lRemove this goal§r deletes it (the items stay in its chest).",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:goals",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Lists the community goals with their progress; pick one to donate from your inventory and see the top contributors (default 5, §etopContributors§r). Operators can mark a goal finished, move it to another container or remove it there"
+      },
+      {
+        "usage": "/realm:goals_add <item> <amount> [name]",
+        "ops": true,
+        "who": "Ops",
+        "text": "Adds a goal collected into the chest, barrel or other container you're looking at (within 8 blocks, §elinkDistance§r): §eitem§r is the item id, §eamount§r 1 to 1,000,000, §ename§r up to 32 characters (default: the item's name). Up to 30 goals at a time, finished ones included (§emaxGoals§r)"
+      }
+    ]
+  },
+  {
+    "folder": "leaves_bp",
+    "topic": "leaves",
+    "name": "Fast Leaf Decay",
+    "summary": "Chop a tree and its leaves fall within a few seconds instead of hanging in the air for minutes, dropping the usual saplings, sticks and apples. Leaves you placed yourself are never touched.",
+    "steps": [
+      {
+        "text": "Chop down a tree as usual, log by log or all at once with a sneak-break (Bedrock Essentials+ tree felling).",
+        "ops": false
+      },
+      {
+        "text": "About a second after the last log breaks, the leaves that no longer reach a log start breaking on their own, a few at a time, with their normal drops. Pick up the saplings and apples underneath.",
+        "ops": false
+      },
+      {
+        "text": "Leaves still held by another tree's logs stay, as in vanilla. So do leaves you placed, sheared ones included.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r to go back to vanilla leaf decay, disable §lFast leaf decay§r in §e/realm:config§r -> §lFast Leaf Decay§r. The same page sets how many leaves break per tick.",
+        "ops": true
+      }
+    ],
+    "commands": []
+  },
+  {
+    "folder": "cleanup_bp",
+    "topic": "cleanup",
+    "name": "Lag Cleanup",
+    "summary": "When too many dropped items pile up (a broken farm, a big explosion), the realm warns everyone and clears them 30 seconds later, so the server doesn't lag. Renamed items, rare items and items right next to a player are kept.",
+    "steps": [
+      {
+        "text": "Nothing to set up. If more than 500 dropped items (§ethreshold§r) lie around, chat says §eClearing 612 dropped items in 30 s: pick up what you need§r. Pick up anything you want to keep.",
+        "ops": false
+      },
+      {
+        "text": "30 seconds later they're removed, and chat says §eCleared 580 dropped items. (32 kept: renamed, rare or near a player)§r.",
+        "ops": false
+      },
+      {
+        "text": "Items renamed on an anvil, shulker boxes, elytra, nether stars, totems and the other items in §ekeepItems§r, and items within 4 blocks of a player (§enearPlayerRadius§r) are never cleared.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:cleanup§r to see how many dropped items there are in each dimension.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:cleanup§r opens a menu to clear now, clear after a warning, or call off a coming cleanup. Change the threshold, timing and what's kept in §e/realm:config§r -> §lLag Cleanup§r, or disable §lAutomatic cleanup§r there.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:cleanup",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows the dropped items in each dimension and when they're cleared (above 500, §ethreshold§r, counted every 60 s, §echeckSeconds§r). Operators get a menu to clear them now, clear after a 30 s warning (§ewarnSeconds§r) or call off a coming cleanup"
+      }
+    ]
+  },
+  {
     "folder": "chairs_bp",
     "topic": "chairs",
     "name": "Chairs",

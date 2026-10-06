@@ -9,11 +9,16 @@
 //   storm-vanilla.webp  a vanilla thunderstorm (animated)
 //   storm-rain.webp     a thunderstorm with Realistic Rain only (animated)
 //   storm.webp          a thunderstorm with Rain Extras too: storm fog, ground mist and drips (animated)
+//   snow-vanilla.webp   vanilla snowfall over the same spot under snow (animated, 2 s loop)
+//   snow.webp           Realistic Rain's snowflakes and snow fog (animated)
 // All from the same spot, so the site can show them as before/after pairs.
+// Snowflakes are drawn as small falling sprites cut from the flake cells of each weather.png (rows 0-2 of vanilla's
+// 32x32, the same cells at 4x), the same number of them in both; only the flakes and the fog differ.
 //   weather-atlas.png   the weather texture: vanilla 32x32 at 8x, Realistic Rain 128x128 at 2x
 // Deterministic. Needs ffmpeg with libwebp on PATH. Not part of npm run check (the outputs are committed).
 //
-//   node tools/gen-rain/renders.mjs
+//   node tools/gen-rain/renders.mjs              all of them
+//   node tools/gen-rain/renders.mjs snow rain    only those scenes (and the atlas)
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -114,7 +119,11 @@ for (let z = 2; z < N - 2; z++) {
 const CY = Hm[Math.floor(CZ) * N + Math.floor(CX)] + 1.62;
 const TOP = { [GRASS]: hex("#7FA650"), [SAND]: hex("#D9CC98"), [STONE]: hex("#808080"), [WATER]: hex("#3A62B0"), [LEAVES]: hex("#4F8A34") };
 const DIRT = hex("#8A6A48");
-const sideColor = (/** @type {number} */ t, /** @type {number} */ below) => (t === GRASS ? (below < 0.19 ? TOP[GRASS] : DIRT) : TOP[t]);
+/** The same world under snow: snow on the ground, stone and leaves (a thin layer on the sides' tops), the lake frozen. */
+const SNOW_TOP = { [GRASS]: hex("#EEF2F6"), [SAND]: hex("#EEF2F6"), [STONE]: hex("#E4E9EF"), [WATER]: hex("#9DBBEA"), [LEAVES]: hex("#DCE3EA") };
+const SNOW_SIDE = { [GRASS]: DIRT, [SAND]: hex("#D9CC98"), [STONE]: hex("#808080"), [WATER]: hex("#9DBBEA"), [LEAVES]: hex("#3B5B37") };
+const sideColor = (/** @type {number} */ t, /** @type {number} */ below, /** @type {boolean} */ snowy) =>
+  snowy ? (below < 0.13 ? SNOW_TOP[t] : SNOW_SIDE[t]) : t === GRASS ? (below < 0.19 ? TOP[GRASS] : DIRT) : TOP[t];
 
 function proj(/** @type {number} */ wx, /** @type {number} */ wy, /** @type {number} */ wz) {
   const rx = wx - CX, rz = wz - CZ, d = rx * FWD[0] + rz * FWD[1], lat = rx * RIGHT[0] + rz * RIGHT[1];
@@ -122,7 +131,8 @@ function proj(/** @type {number} */ wx, /** @type {number} */ wy, /** @type {num
 }
 
 /** @typedef {{ data: Uint8ClampedArray }} Frame */
-/** @typedef {{ fog: string, fogStart: number, fogEnd: number, skyTop: string, skyDark: number, worldDark: number, rainLight: number, region: Region, splash: { size: number, color: number[], alpha: number }, mistColor?: string, mistAlpha?: number, drips?: boolean }} Scene */
+/** @typedef {{ fog: string, fogStart: number, fogEnd: number, skyTop: string, skyDark: number, worldDark: number, rainLight: number, region?: Region, splash?: { size: number, color: number[], alpha: number }, mistColor?: string, mistAlpha?: number, drips?: boolean, flakes?: Sprite[] }} Scene */
+/** @typedef {{ w: number, h: number, px: Uint8Array }} Sprite one snowflake cell of a weather.png */
 /** @typedef {{ w: number, h: number, px: Uint8Array }} Region the rain strip of a weather.png */
 
 /** The terrain with distance fog, ray-marched per screen column. @param {Scene} P */
@@ -157,11 +167,11 @@ function renderTerrain(P) {
           let base, tex;
           if (side) {
             const wy = CY - ((y - HOR) * z) / F, below = h - wy;
-            base = sideColor(t, below);
+            base = sideColor(t, below, !!P.flakes);
             const u = xface ? wz - Math.floor(wz) : wx - Math.floor(wx);
             tex = hash(bx * 16 + Math.floor(u * 16), Math.floor(below * 16) + bz * 7, t);
           } else {
-            base = TOP[t];
+            base = P.flakes ? SNOW_TOP[t] : TOP[t];
             tex = hash(bx * 16 + Math.floor((wx - bx) * 16), bz * 16 + Math.floor((wz - bz) * 16), t + 11);
           }
           const j = (0.9 + tex * 0.2) * shade * P.worldDark, o = (y * PW + i) * 4;
@@ -307,6 +317,49 @@ function drawDrips(d, depth, /** @type {number} */ t) {
   }
 }
 
+// Snow: in every column within RAIN_R, flakes every SNOW.every blocks up to SNOW.above over the eye, falling at
+// about SNOW.speed blocks a second and swaying, each drawn as a SNOW.size-block square from one of the flake cells.
+const SNOW = { every: 2.6, above: 10, speed: 1.3, size: 0.16, alpha: 0.9, loop: 2 };
+const FLAKES = QUADS.flatMap((q, i) => {
+  const n = Math.ceil((CY + SNOW.above - q.ground) / SNOW.every);
+  return Array.from({ length: n }, (_, k) => ({ q, k, off: hash(i, k, 91), lat: (hash(i, k, 92) - 0.5) * 0.8, sway: hash(i, k, 93) * Math.PI * 2, pick: hash(i, k, 94) }));
+});
+/** The flake cells of a weather.png: the 3x3-texel footprints of vanilla's 8 flakes (x, +, speck, x, +, speck, x, +), scaled to this texture. */
+function sprites(/** @type {import("./png.mjs").Image} */ img) {
+  const k = img.width / 32;
+  return [0, 4, 8, 12, 16, 20, 24, 28].map((x) => {
+    const w = 3 * k, px = new Uint8Array(w * w * 4);
+    for (let y = 0; y < w; y++) px.set(img.data.subarray((y * img.width + x * k) * 4, (y * img.width + x * k + w) * 4), y * w * 4);
+    return { w, h: w, px };
+  });
+}
+/** @param {Uint8ClampedArray} d @param {Float32Array} depth @param {Scene} P */
+function drawSnow(d, depth, P, /** @type {number} */ t) {
+  const S = /** @type {Sprite[]} */ (P.flakes), fs = P.fogStart * R, fe = P.fogEnd * R;
+  const travel = Math.max(1, Math.round((SNOW.speed * SNOW.loop) / SNOW.every)) * SNOW.every; // loops seamlessly
+  for (const f of FLAKES) {
+    const span = Math.ceil((CY + SNOW.above - f.q.ground) / SNOW.every) * SNOW.every;
+    const wy = f.q.ground + ((((f.k + f.off) * SNOW.every - travel * (t / SNOW.loop)) % span) + span) % span;
+    if (wy > CY + SNOW.above) continue;
+    const sway = Math.sin(f.sway + (t / SNOW.loop) * Math.PI * 2) * 0.15;
+    const lat = (f.q.sx - PW / 2) * f.q.d / F + f.lat + sway;
+    const x0 = PW / 2 + (lat * F) / f.q.d, y0 = HOR + ((CY - wy) * F) / f.q.d, sz = (SNOW.size * F) / f.q.d;
+    if (sz < 0.6) continue;
+    const fog = Math.min(1, Math.max(0, (f.q.d - fs) / (fe - fs)));
+    const fade = (1 - fog) * Math.min(1, f.q.d / 1.6) * P.rainLight * SNOW.alpha;
+    const sp = S[Math.floor(f.pick * S.length)];
+    for (let y = Math.max(0, Math.floor(y0 - sz / 2)); y < Math.min(PH, y0 + sz / 2); y++) {
+      for (let x = Math.max(0, Math.floor(x0 - sz / 2)); x < Math.min(PW, x0 + sz / 2); x++) {
+        if (depth[y * PW + x] < f.q.d) continue;
+        const u = Math.floor(((x + 0.5 - (x0 - sz / 2)) / sz) * sp.w), v = Math.floor(((y + 0.5 - (y0 - sz / 2)) / sz) * sp.h);
+        if (u < 0 || v < 0 || u >= sp.w || v >= sp.h) continue;
+        const so = (v * sp.w + u) * 4, a = (sp.px[so + 3] / 255) * fade;
+        if (a > 0) blend(d, x, y, [sp.px[so] * P.rainLight, sp.px[so + 1] * P.rainLight, sp.px[so + 2] * P.rainLight], a);
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // The scenes, with each pack's numbers (fogs.mjs, particles/rain_splash.json)
 // ---------------------------------------------------------------------------
@@ -326,6 +379,9 @@ const SCENES = {
     fog: "#4E5763", fogStart: 0.08, fogEnd: 0.35, skyTop: "#62676E", ...THUNDER, region: NEW_RAIN, splash: NEW_SPLASH,
     mistColor: "#7C8794", mistAlpha: 0.2, drips: true,
   },
+  // Snowfall: vanilla's weather fog (the same as rain), then fogs.mjs's snow fog. Same sky and light as rain.
+  "snow-vanilla": { fog: "#666666", fogStart: 0.23, fogEnd: 0.7, skyTop: "#62676E", skyDark: 1, worldDark: 0.74, rainLight: 1, flakes: sprites(VANILLA) },
+  snow: { fog: "#A9B3BE", fogStart: 0.12, fogEnd: 0.5, skyTop: "#62676E", skyDark: 1, worldDark: 0.74, rainLight: 1, flakes: sprites(NEW) },
 };
 
 /** The weather texture side by side: vanilla 32x32 at 8x, Realistic Rain 128x128 at 2x, on a dark checkerboard with a darker divider. */
@@ -351,15 +407,18 @@ function atlas() {
 mkdirSync(outDir, { recursive: true });
 const tmp = mkdtempSync(join(tmpdir(), "rain-renders-"));
 try {
+  const only = process.argv.slice(2);
   for (const [name, P] of Object.entries(SCENES)) {
+    if (only.length && !only.includes(name)) continue;
     const base = renderTerrain(P);
-    const frames = Math.round(LOOP_S * FPS);
+    const loop = P.flakes ? SNOW.loop : LOOP_S, frames = Math.round(loop * FPS);
     for (let f = 0; f < frames; f++) {
-      const t = (f / frames) * LOOP_S;
+      const t = (f / frames) * loop;
       const d = Uint8ClampedArray.from(base.d), depth = Float32Array.from(base.depth);
       if (P.mistColor) drawMist(d, depth, P, t);
-      drawRain(d, depth, P, t);
-      drawSplashes(d, depth, P.splash, t);
+      if (P.flakes) drawSnow(d, depth, P, t);
+      if (P.region) drawRain(d, depth, P, t);
+      if (P.splash) drawSplashes(d, depth, P.splash, t);
       if (P.drips) drawDrips(d, depth, t);
       writeFileSync(join(tmp, `${name}-${String(f).padStart(3, "0")}.png`), encode({ width: PW, height: PH, data: d }));
     }

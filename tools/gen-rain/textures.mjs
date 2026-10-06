@@ -1,5 +1,5 @@
 // Generates the Realistic Rain textures into packs/rain_rp/:
-//   textures/environment/weather.png     the weather atlas at 4× vanilla (128×128): new rain, vanilla snow
+//   textures/environment/weather.png     the weather atlas at 4× vanilla (128×128): new rain, heavier snowflakes
 //   textures/particle/realm_rain_mist.png soft blob for the Rain Extras ground mist (32×32)
 //   pack_icon.png                         128×128
 // Deterministic: the same code always produces the same pixels.
@@ -30,7 +30,7 @@ function put(img, x, y, rgba) {
 // ---------------------------------------------------------------------------
 // weather.png: vanilla is 32×32 with snowflakes in rows 0–2, rain streaks in rows 5–19 (8 lanes of
 // 1 px blue streaks) and four 3×3 swatches in rows 20–30. Everything is upscaled 4× nearest-neighbor
-// so snow and swatches stay pixel-identical, then the rain rows (20–79 at 4×) are redrawn.
+// so the swatches stay pixel-identical, then the rain rows (20–79 at 4×) and the snowflakes (0–11 at 4×) are redrawn.
 // ---------------------------------------------------------------------------
 const SCALE = 4;
 const RAIN_TOP = 5 * SCALE, RAIN_ROWS = 15 * SCALE; // rows 20..79
@@ -76,7 +76,89 @@ function weather() {
   for (let y = RAIN_TOP; y < RAIN_TOP + RAIN_ROWS; y++) for (let x = 0; x < size; x++) ink += img.data[(y * size + x) * 4 + 3] / 255;
   ink /= size * RAIN_ROWS;
   if (ink < INK.min || ink > INK.max) throw new Error(`rain ink ${(ink * 100).toFixed(1)}% is outside ${INK.min * 100}–${INK.max * 100}%`);
+  snow(vanilla, img);
   return img;
+}
+
+// ---------------------------------------------------------------------------
+// Snowflakes: vanilla's rows 0–2 hold three kinds of flake in each 12-texel period, each centered in a 3×3 cell 4
+// texels apart: an "x" (5 texels), a "+" (5 texels) and a single-texel speck; 8 flakes, as the last period has no
+// speck. Each is redrawn inside its own 3×3 footprint (12×12 px at 4×), so wherever the game samples a flake it finds
+// a bigger, solider one in the same place: a round core with four arms (the speck becomes a small one), white with a
+// cool rim so it stays readable against the pale snow fog. Nothing outside the footprints changes, so no flake bleeds into the rain.
+// ---------------------------------------------------------------------------
+const SNOW_ROWS = 3;
+/** Pure white core, a cool rim (vanilla's snowball-particle tint, #DFE5ED) where the flake thins out. */
+const FLAKE = { core: [255, 255, 255], rim: [223, 229, 237], coreAlpha: 1, rimAlpha: 0.82 };
+/** Coverage × alpha inside the eight vanilla footprints (vanilla: 32 of 72 texels, 0.44; here 0.56): round, solid flakes instead of vanilla's thin, gappy ones, but still flakes with arms and gaps between them, not blobs. */
+const SNOW_INK = { min: 0.52, max: 0.6 };
+
+/** The 3×3 footprints of vanilla's flakes (connected white texels in rows 0–2; a lone speck is centered in one), in texels. */
+function footprints(/** @type {import("./png.mjs").Image} */ vanilla) {
+  const seen = new Set(), boxes = [];
+  const lit = (/** @type {number} */ x, /** @type {number} */ y) => x >= 0 && x < vanilla.width && y >= 0 && y < SNOW_ROWS && vanilla.data[(y * vanilla.width + x) * 4 + 3] > 0;
+  for (let y = 0; y < SNOW_ROWS; y++) {
+    for (let x = 0; x < vanilla.width; x++) {
+      if (!lit(x, y) || seen.has(`${x},${y}`)) continue;
+      const box = { x0: x, y0: y, x1: x, y1: y }, todo = [[x, y]];
+      seen.add(`${x},${y}`);
+      while (todo.length) {
+        const [cx, cy] = /** @type {number[]} */ (todo.pop());
+        Object.assign(box, { x0: Math.min(box.x0, cx), y0: Math.min(box.y0, cy), x1: Math.max(box.x1, cx), y1: Math.max(box.y1, cy) });
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (lit(cx + dx, cy + dy) && !seen.has(`${cx + dx},${cy + dy}`)) {
+              seen.add(`${cx + dx},${cy + dy}`);
+              todo.push([cx + dx, cy + dy]);
+            }
+          }
+        }
+      }
+      // The "x" has its arms on the diagonals, the "+" on the axes: keep the same kind of flake in each place.
+      const speck = box.x0 === box.x1 && box.y0 === box.y1;
+      if (speck) Object.assign(box, { x0: box.x0 - 1, y0: box.y0 - 1, x1: box.x1 + 1, y1: box.y1 + 1 });
+      const kind = speck ? "speck" : lit(box.x0, box.y0) ? "x" : "+";
+      boxes.push({ ...box, kind });
+    }
+  }
+  if (boxes.length !== 8 || boxes.some((b) => b.x0 < 0 || b.y0 < 0 || b.y1 >= SNOW_ROWS || b.x1 - b.x0 !== 2 || b.y1 - b.y0 !== 2)) throw new Error(`expected eight 3×3 vanilla snowflakes, found ${boxes.length}`);
+  return boxes;
+}
+
+/**
+ * One flake in an n×n px box at (ox, oy): a disc of radius `core` plus four arms `arm` px wide out to the box edge,
+ * on the diagonals or the axes. Pixels in the outer ring of the shape get the rim color.
+ */
+function flake(/** @type {import("./png.mjs").Image} */ img, /** @type {number} */ ox, /** @type {number} */ oy, /** @type {number} */ n, /** @type {boolean} */ diagonal, /** @type {number} */ core, /** @type {number} */ arm) {
+  const c = (n - 1) / 2;
+  const inside = (/** @type {number} */ x, /** @type {number} */ y) => {
+    const dx = x - c, dy = y - c, r = Math.hypot(dx, dy);
+    if (r <= core) return true;
+    const [u, v] = diagonal ? [(dx + dy) / Math.SQRT2, (dx - dy) / Math.SQRT2] : [dx, dy];
+    return r <= (diagonal ? c * Math.SQRT2 : c + 0.5) && (Math.abs(u) <= arm / 2 || Math.abs(v) <= arm / 2);
+  };
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      if (!inside(x, y)) continue;
+      const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+      put(img, ox + x, oy + y, edge ? [...FLAKE.rim, FLAKE.rimAlpha * 255] : [...FLAKE.core, FLAKE.coreAlpha * 255]);
+    }
+  }
+}
+
+function snow(/** @type {import("./png.mjs").Image} */ vanilla, /** @type {import("./png.mjs").Image} */ img) {
+  const boxes = footprints(vanilla);
+  for (const b of boxes) for (let y = b.y0 * SCALE; y < (b.y1 + 1) * SCALE; y++) for (let x = b.x0 * SCALE; x < (b.x1 + 1) * SCALE; x++) put(img, x, y, [0, 0, 0, 0]);
+  for (const b of boxes) {
+    if (b.kind === "speck") flake(img, b.x0 * SCALE + 2, b.y0 * SCALE + 2, 8, hash(b.x0, 0, 51) < 0.5, 3.3, 2.6); // 8×8 px, centered
+    else flake(img, b.x0 * SCALE, b.y0 * SCALE, 3 * SCALE, b.kind === "x", 4.7, 4.2);
+  }
+  let ink = 0;
+  for (const b of boxes) {
+    for (let y = b.y0 * SCALE; y < (b.y1 + 1) * SCALE; y++) for (let x = b.x0 * SCALE; x < (b.x1 + 1) * SCALE; x++) ink += img.data[(y * img.width + x) * 4 + 3] / 255;
+  }
+  ink /= boxes.length * (3 * SCALE) ** 2;
+  if (ink < SNOW_INK.min || ink > SNOW_INK.max) throw new Error(`snow ink ${(ink * 100).toFixed(1)}% is outside ${SNOW_INK.min * 100}–${SNOW_INK.max * 100}%`);
 }
 
 // Ground mist: a soft, slightly lumpy white blob; the particle tints it gray-blue and fades it.

@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Coordinates HUD",
+    "description": "Your coordinates, facing and the time of day above the hotbar, for players who enable it. /realm:hud",
+    "uuid": "ca1eb1d2-63ec-4bd0-aec5-8f7c1318f5bb",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "23089dea-d8ad-47b3-afd2-6eb887321a79",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}

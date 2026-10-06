@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Milestones",
+    "description": "Realm achievements in tiers for time played, blocks mined and placed, distance, mob kills and more, announced in chat. /realm:milestones",
+    "uuid": "d76a32ff-8a08-4e6f-abd5-ace129fbaf28",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "03900774-76fe-4481-895c-8e6dc9e755b0",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

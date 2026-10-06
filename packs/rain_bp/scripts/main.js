@@ -35,6 +35,7 @@ const MAX_SPOTS = 8; // drip spots remembered per player
 const RESCAN_DISTANCE = 4; // forget a player's drip spots once they move this far (blocks)
 const MAX_HEADROOM = 24; // deeper underground than this, there's no rain to see
 const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no rain; snowy places get snow
+const SNOWY = /snow|ice/; // the snowy part of DRY_GROUND: no storm fog there either
 const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }];
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -163,18 +164,21 @@ function step(roll, /** @type {number} */ target, /** @type {number} */ steps, /
 function update(player, st) {
   st.muffle = false;
   const off = extrasOff(player);
-  const fog = off ? 0 : storm.level;
+  const overworld = player.dimension.id === OVERWORLD;
+  const raining = weather !== WeatherType.Clear;
+  const active = !off && overworld && (raining || dripSeconds > 0 || haze.level > 0 || st.haze > 0);
+  const budget = { lookups: CONFIG.drips.lookupsPerSecond };
+  const feet = player.location;
+  const here = active ? topmost(player.dimension, feet.x, feet.z, budget) : undefined;
+  // Where it snows, no storm fog: it would cover Realistic Rain's snow fog.
+  const fog = off || (here && SNOWY.test(here.typeId)) ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
-  if (off || player.dimension.id !== OVERWORLD) {
+  if (off || !overworld) {
     leave(player, st); // no haze in the Nether or the End: it would replace their own volumetric fog
     return;
   }
 
-  const raining = weather !== WeatherType.Clear;
-  if (!raining && dripSeconds <= 0 && haze.level === 0 && st.haze === 0) return;
-  const budget = { lookups: CONFIG.drips.lookupsPerSecond };
-  const feet = player.location;
-  const here = topmost(player.dimension, feet.x, feet.z, budget);
+  if (!active) return;
   if (here && raining && here.location.y - feet.y > MAX_HEADROOM && !DRY_GROUND.test(here.typeId)) st.muffle = get("roof.muffleRain"); // deep underground: no rain to hear
   if (!here || DRY_GROUND.test(here.typeId) || here.location.y - feet.y > MAX_HEADROOM) {
     leave(player, st); // deserts, badlands and snow get no rain; caves get none of the haze
