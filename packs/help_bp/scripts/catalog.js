@@ -493,10 +493,10 @@ export const PACKS = [
     "folder": "rain_bp",
     "topic": "rain",
     "name": "Rain Extras",
-    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind and rain on the roof, for the Realistic Rain resource pack. A §lstandalone§r behavior pack: it runs next to the Realm Bundle, not inside it.",
+    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. A §lstandalone§r behavior pack: it runs next to the Realm Bundle, not inside it.",
     "steps": [
       {
-        "text": "When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops. Outdoors a soft breeze blows; indoors you hear the rain drumming on the roof.",
+        "text": "When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops. Outdoors a soft breeze blows; indoors the rain sounds muffled through the roof, and drums on it.",
         "ops": false
       },
       {
@@ -521,7 +521,7 @@ export const PACKS = [
         "usage": "/realm:rain",
         "ops": false,
         "who": "Everyone",
-        "text": "Enables or disables storm fog, haze, ground mist, drips and the wind, thunderstorm and roof sounds §lfor yourself§r (enabled by default, §edefaultOff§r). Remembered between sessions"
+        "text": "Enables or disables storm fog, haze, ground mist, drips, the wind, thunderstorm and roof sounds and the muffled rain indoors §lfor yourself§r (enabled by default, §edefaultOff§r). Remembered between sessions"
       }
     ]
   }

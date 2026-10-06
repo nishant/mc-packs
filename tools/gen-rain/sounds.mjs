@@ -455,6 +455,8 @@ function layered(/** @type {Float64Array[]} */ clips, seconds = 20) {
 
 /** Vanilla's rain1-4 (decoded from bedrock-samples' .fsb, resampled to 44.1 kHz) through layered() at volume 0.02. */
 const VANILLA_RAIN_LAYERED = -41.3;
+/** Seconds each rain clip fades in over (see the rain event). */
+const RAIN_FADE_IN = 0.8;
 
 /** Excerpts of a recording as an event's files: `${name}1`, `${name}2`, ... from each [start, seconds]. */
 const cuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {number[][]} */ list, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut, post = (/** @type {Float64Array | undefined} */ x) => x) =>
@@ -474,7 +476,9 @@ const cuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {n
 const EVENTS = [
   {
     event: "ambient.weather.rain", subtitle: "subtitles.weather.rain", target: -23, ceiling: -1.5, layered: VANILLA_RAIN_LAYERED + 20 * Math.log10(1.25),
-    files: cuts("rain", "rain", [30, 95, 160, 225, 290, 355, 420, 485].map((t) => [t, 2.4]), 0.05, 0.15),
+    // A slow fade-in, so a clip Rain Extras stops early (to muffle the rain indoors) has barely started; in the stack the
+    // clips overlap anyway, so the rain sounds the same.
+    files: cuts("rain", "rain", [30, 95, 160, 225, 290, 355, 420, 485].map((t) => [t, 2.4]), RAIN_FADE_IN, 0.15),
   },
   {
     event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -18, ceiling: -1, level: -19.5,
@@ -491,6 +495,12 @@ const EVENTS = [
   {
     event: "realm.storm.bed_inside", target: -24, ceiling: -1, level: -40,
     files: cuts("bed_inside", "thunder", [40, 360].map((t) => [t, 20]), 2, 2, muffled),
+  },
+  {
+    // The rain heard through a roof, for Rain Extras to play while it stops the game's rain indoors: about 9 dB under the
+    // rain outdoors, and dull.
+    event: "realm.rain.inside", subtitle: "subtitles.weather.rain", target: -24, ceiling: -1, level: -48,
+    files: cuts("rain_inside", "rain", [60, 300].map((t) => [t, 20]), 2, 2, muffled),
   },
   {
     event: "realm.storm.wind", target: -20, ceiling: -3, level: -34,
@@ -547,17 +557,26 @@ const SOUNDS_JSON = {
  * The rain stack sits at RAIN_AT in every clip, so a level change between versions is heard as one; peaks are limited.
  */
 const STRIKE_GAIN = Math.pow(10, -12 / 20);
+/** Rain Extras indoors: it notices within MUFFLE.noticeSeconds and then stops the game's rain every MUFFLE.everySeconds. */
+const MUFFLE = { noticeSeconds: 0.5, everySeconds: 0.25 };
+/** When a rain clip playing from `t` for `seconds` gets stopped by the muffling during [from, to), or undefined. */
+function stoppedAt(/** @type {number} */ t, /** @type {number} */ seconds, /** @type {number[]} */ [from, to]) {
+  for (let s = from + MUFFLE.noticeSeconds; s < to; s += MUFFLE.everySeconds) if (s > t && s < t + seconds) return s;
+  return undefined;
+}
 const RAIN_AT = -27;
 const AUDITION = {
   // Realistic Rain on its own: rain, a distant roll, then a close strike (the strike and a roll together).
   rain: { seconds: 26, play: [["ambient.weather.thunder", "thunder3", 7, STRIKE_GAIN], ["ambient.weather.thunder", "thunder1", 16, STRIKE_GAIN], ["ambient.weather.lightning.impact", "crack2", 16, STRIKE_GAIN]] },
-  // Rain Extras: a breeze outdoors in rain, then indoors (rain on the roof, muffled wind), then outdoors in a thunderstorm
-  // (the storm recording, gusts).
+  // Rain Extras: a breeze outdoors in rain, then indoors (the game's rain stopped and heard through the roof instead, rain
+  // on the roof, muffled wind), then outdoors in a thunderstorm (the storm recording, gusts).
   extras: {
     seconds: 34,
+    indoors: [10, 19], // the game's rain stopped as Rain Extras does it (see MUFFLE)
     play: [
       ["realm.storm.wind", "wind1", 0, 0.35], ["realm.storm.wind", "wind2", 8, 0.35],
       ["realm.rain.roof", "roof1", 10, 0.8], ["realm.rain.roof", "roof2", 13, 0.8], ["realm.rain.roof", "roof3", 16, 0.8], ["realm.storm.wind_inside", "wind_inside1", 10, 0.35],
+      ["realm.rain.inside", "rain_inside1", 10, 0.8],
       ["realm.storm.bed", "bed1", 19, 1], ["realm.storm.wind", "wind3", 19, 0.7], ["realm.storm.wind", "wind1", 27, 0.7],
     ],
   },
@@ -637,7 +656,11 @@ function writeAudition(/** @type {string} */ dir, /** @type {string} */ tmpDir) 
     const rnd = mulberry32(99), mix = new Float64Array(scene.seconds * SR);
     for (let t = 0; t < scene.seconds; t += (2 + Math.floor(rnd() * 3)) / 20) {
       const clip = `rain${1 + Math.floor(rnd() * 6)}`;
-      mixIn(mix, /** @type {Float64Array} */ (made.get(clip)), Math.round(t * SR), vol("ambient.weather.rain", clip));
+      /** @type {Float64Array} */
+      let x = /** @type {Float64Array} */ (made.get(clip));
+      const stop = scene.indoors && stoppedAt(t, x.length / SR, scene.indoors);
+      if (stop !== undefined) x = fades(x.slice(0, Math.max(1, Math.round((stop - t) * SR))), 0, 0.01);
+      mixIn(mix, x, Math.round(t * SR), vol("ambient.weather.rain", clip));
     }
     const wav = join(tmpDir, `${name}-audition.wav`);
     writeWav(mix, wav);
