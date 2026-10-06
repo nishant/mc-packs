@@ -2,16 +2,16 @@
   "format_version": 2,
   "header": {
     "name": "Realistic Rain",
-    "description": "Thicker, heavier blue rain, warmer and heavier rain sounds, modeled thunder and lightning, gloomier rain fog, softer splashes. Put it at the top of Resource Packs.",
+    "description": "Thicker, heavier blue rain, warmer and heavier rain sounds, real recorded thunder and lightning, gloomier rain fog, softer splashes. Put it at the top of Resource Packs.",
     "uuid": "7ebf32a5-cfd1-4bdc-b5b4-38e869345cda",
-    "version": [1, 1, 1],
+    "version": [1, 1, 2],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "resources",
       "uuid": "da9d16a4-4910-4785-954d-36779eb19fa1",
-      "version": [1, 1, 1]
+      "version": [1, 1, 2]
     }
   ]
 }

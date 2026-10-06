@@ -1,0 +1,8 @@
+Realistic Rain: sound credits
+
+The thunder and lightning-strike sounds are excerpts of these recordings, cut, made mono, faded and
+loudness-normalized (sounds/realistic_rain/thunder*.ogg, crack*.ogg). The rain, wind and roof sounds are synthesized.
+
+- "Thunder / Lightning Ambience - Field Recording" by Gregor Quendel, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), https://opengameart.org/content/thunder-lightning-ambience-field-recording
+- "Thunder, Very Close, Rain, 01" by InspectorJ (www.jshaw.co.uk), CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/), https://opengameart.org/content/thunder-very-close-rain-01
+- "Rain + Long Thunder" by wuxiascrub, CC0 (https://creativecommons.org/publicdomain/zero/1.0/), https://opengameart.org/content/rain-long-thunder
