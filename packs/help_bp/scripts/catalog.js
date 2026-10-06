@@ -219,7 +219,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:news_edit§r writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type §e\\n§r for a new line. Easier for a long message: paste it all into chat as §e/realm:news_body \"<text>\"§r and the editor opens with every box filled in; check the title and tap §lSave§r. Leave \"Pop up for everyone on their next join\" on to announce it, or turn it off for a quiet fix such as a typo. §e/realm:news_tips§r adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.",
+        "text": "§lOperators:§r §e/realm:news_edit§r writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type §e\\n§r for a new line. Easier for a long message: paste it into chat as §e/realm:news_body \"<text>\"§r and the editor opens with every box filled in; check the title and tap §lSave§r. Chat has a length limit too, so for a message longer than one paste, paste it in parts: the first part with §e/realm:news_body§r (close the editor that opens, or just keep chat open), each next part with §e/realm:news_add \"<text>\"§r, then run §e/realm:news_edit§r to check and save the whole draft. Parts are joined exactly as pasted, so end a part on a space or start the next one with one. Leave \"Pop up for everyone on their next join\" on to announce it, or turn it off for a quiet fix such as a typo. §e/realm:news_tips§r adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.",
         "ops": true
       }
     ],
@@ -234,13 +234,19 @@ export const PACKS = [
         "usage": "/realm:news_edit",
         "ops": true,
         "who": "Ops",
-        "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If chat stays open for about 20 s, it says it couldn't open"
+        "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If you have a draft from §e/realm:news_body§r or §e/realm:news_add§r, it shows the draft instead of the saved news, with a toggle to discard it. §lSave§r saves the news and clears the draft; closing the editor keeps the draft. If chat stays open for about 20 s, it says it couldn't open"
       },
       {
         "usage": "/realm:news_body \"<text>\"",
         "ops": true,
         "who": "Ops",
-        "text": "Paste a whole news body in one go (chat takes far more than a form's 100-character boxes). Opens the editor with it split over the boxes; nothing is saved until you tap §lSave§r. Put the text in double quotes, use §e\\n§r for new lines, and §e'§r rather than §e\"§r inside it"
+        "text": "Starts a news draft from pasted text (chat takes more than a form's 100-character boxes) and opens the editor with it split over the boxes. Put the text in double quotes, use §e\\n§r for new lines, and §e'§r rather than §e\"§r inside it"
+      },
+      {
+        "usage": "/realm:news_add \"<text>\"",
+        "ops": true,
+        "who": "Ops",
+        "text": "Adds pasted text to the end of your draft, for news longer than chat lets you paste at once. Doesn't open the editor; it says how long the draft is now (10,000 characters at most)"
       },
       {
         "usage": "/realm:news_tips",

@@ -505,7 +505,7 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `Realm news updated. Run /realm:news to read it.`
 2. Missed it, or want to read it again? Run `/realm:news`.
 3. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
-4. **Operators:** `/realm:news_edit` writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type `\n` for a new line. Easier for a long message: paste it all into chat as `/realm:news_body "<text>"` and the editor opens with every box filled in; check the title and tap **Save**. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
+4. **Operators:** `/realm:news_edit` writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type `\n` for a new line. Easier for a long message: paste it into chat as `/realm:news_body "<text>"` and the editor opens with every box filled in; check the title and tap **Save**. Chat has a length limit too, so for a message longer than one paste, paste it in parts: the first part with `/realm:news_body` (close the editor that opens, or just keep chat open), each next part with `/realm:news_add "<text>"`, then run `/realm:news_edit` to check and save the whole draft. Parts are joined exactly as pasted, so end a part on a space or start the next one with one. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
 
 ### News popup
 
@@ -530,8 +530,9 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:news` | Everyone | Shows the current news, which also counts as having seen its popup |
-| `/realm:news_edit` | Ops | Editor: title, the body in 100-character parts (at least 10, joined in order), and the "pop up on next join" toggle. If chat stays open for about 20 s, it says it couldn't open |
-| `/realm:news_body "<text>"` | Ops | Paste a whole news body in one go (chat takes far more than a form's 100-character boxes). Opens the editor with it split over the boxes; nothing is saved until you tap **Save**. Put the text in double quotes, use `\n` for new lines, and `'` rather than `"` inside it |
+| `/realm:news_edit` | Ops | Editor: title, the body in 100-character parts (at least 10, joined in order), and the "pop up on next join" toggle. If you have a draft from `/realm:news_body` or `/realm:news_add`, it shows the draft instead of the saved news, with a toggle to discard it. **Save** saves the news and clears the draft; closing the editor keeps the draft. If chat stays open for about 20 s, it says it couldn't open |
+| `/realm:news_body "<text>"` | Ops | Starts a news draft from pasted text (chat takes more than a form's 100-character boxes) and opens the editor with it split over the boxes. Put the text in double quotes, use `\n` for new lines, and `'` rather than `"` inside it |
+| `/realm:news_add "<text>"` | Ops | Adds pasted text to the end of your draft, for news longer than chat lets you paste at once. Doesn't open the editor; it says how long the draft is now (10,000 characters at most) |
 | `/realm:news_tips` | Ops | Tips menu: **+ Add a tip**, **Settings** (on/off, interval 5–120 min in steps of 5), **Post the next tip now**, or tap a tip to edit or delete it |
 
 ### Configuration (`scripts/config.js`)
@@ -560,6 +561,7 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 | `news:cfg` | World | Other settings changed in `/realm:config` (`awayNoticeHours`) |
 | `news:seen` | Player | Last revision the player saw |
 | `news:lastSeen` | Player | Last time online (ms since epoch) |
+| `news:draft` | Player | Unsaved news body from `/realm:news_body` and `/realm:news_add`, until it's saved or discarded in the editor |
 
 ---
 
