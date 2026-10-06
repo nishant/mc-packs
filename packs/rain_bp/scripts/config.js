@@ -45,6 +45,13 @@ export const CONFIG = {
     inRain: 0.35,
   },
 
+  stormSound: {
+    /** The thunderstorm recording, played around each player for as long as a thunderstorm lasts, muffled indoors. */
+    enabled: true,
+    /** Volume, 0-1. */
+    volume: 1,
+  },
+
   roof: {
     /** Rain drumming on the roof while you're indoors (a roof 2 to maxHeadroom blocks over your head, not leaves). */
     enabled: true,

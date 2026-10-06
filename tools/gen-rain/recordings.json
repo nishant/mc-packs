@@ -1,32 +1,17 @@
 {
-  "why": "Real thunder recordings that sounds.mjs cuts into the thunder and lightning-strike sounds. It downloads each source once, checks its sha256, and caches it in the system temp folder. Credit the CC BY ones wherever the pack is described (docs/PACKS.md, Realistic Rain's credits).",
+  "why": "The realm owner's rain and thunder recordings, which sounds.mjs cuts into the rain, thunder, lightning-strike and thunderstorm sounds. The files are 10 minutes each, so they aren't committed: put them in tools/gen-rain/sources/ (git-ignored) to regenerate those sounds. Without them, sounds.mjs keeps the committed clips. The sha256 makes sure the right files are used.",
   "sources": {
-    "quendel": {
-      "title": "Thunder / Lightning Ambience - Field Recording",
-      "author": "Gregor Quendel",
-      "license": "CC BY 4.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
-      "page": "https://opengameart.org/content/thunder-lightning-ambience-field-recording",
-      "url": "https://opengameart.org/sites/default/files/gregor_quendel_-_free_thunder_ambience_-_mp3_0.mp3",
-      "sha256": "996d34046faa8e3e886f49eda1450c9a501bdec0e02f35804a2f1d0507d1bf78"
+    "rain": {
+      "file": "sources/rain.mp3",
+      "title": "Rain (10 minutes, steady)",
+      "author": "supplied by the realm owner",
+      "sha256": "287ccf3c34b5edc82d184dff55720a0a681c878d372a87ee57cecc2bb1889121"
     },
-    "inspectorj": {
-      "title": "Thunder, Very Close, Rain, 01",
-      "author": "InspectorJ (www.jshaw.co.uk)",
-      "license": "CC BY 3.0",
-      "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
-      "page": "https://opengameart.org/content/thunder-very-close-rain-01",
-      "url": "https://opengameart.org/sites/default/files/Thunder%2C%20Very%20Close%2C%20Rain%2C%2001.wav",
-      "sha256": "b62c7184cf3241862698a596c0c824cfd0717a6cec0089436d46270fe94cb00a"
-    },
-    "wuxiascrub": {
-      "title": "Rain + Long Thunder",
-      "author": "wuxiascrub",
-      "license": "CC0",
-      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "page": "https://opengameart.org/content/rain-long-thunder",
-      "url": "https://opengameart.org/sites/default/files/rain-thunder.ogg",
-      "sha256": "9499fd1aefa3b5d8ba3764ea46d15c00ab449be7e19c029290a1f52228f1434c"
+    "thunder": {
+      "file": "sources/thunder.mp3",
+      "title": "Thunderstorm (10 minutes, continuous rolls)",
+      "author": "supplied by the realm owner",
+      "sha256": "49fa7d55154a8f0b10401059d77a0df44c0964bd69e946809f61262f71979512"
     }
   }
 }

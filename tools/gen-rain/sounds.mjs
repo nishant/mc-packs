@@ -1,21 +1,23 @@
-// Synthesizes the Realistic Rain sounds into packs/rain_rp/sounds/realistic_rain/ (mono Ogg Vorbis, 44.1 kHz) and
-// writes the definitions that play them (sounds/sound_definitions.json, and sounds.json for the lightning pitch):
-//   rain1-6         2.0-2.4 s, like vanilla's 2 s clips (the game starts a new one every few ticks and about 15 play
-//                   at once, all at full volume): a hiss with dense patter and soft pats, nothing tonal, matched to
-//                   vanilla's tone octave by octave (matchEq), so it sounds like vanilla's rain, heavier and textured.
-//   thunder1-5      11-14 s, played for every bolt: real rolling thunder, cut from field recordings (recordings.json).
-//   crack1-4        5-6 s, played only near the bolt: real close strikes from the same recordings, starting right on
-//                   the crack and fading as the roll (from the thunder that plays with it) takes over.
+// Makes the Realistic Rain sounds in packs/rain_rp/sounds/realistic_rain/ (mono Ogg Vorbis, 44.1 kHz) and writes the
+// definitions that play them (sounds/sound_definitions.json, and sounds.json for the lightning pitch). The rain and thunder
+// are the realm owner's recordings (recordings.json), cut and otherwise left as they are:
+//   rain1-8         2.4 s excerpts of the rain recording. The game starts a rain sound every few ticks and about 15 play at
+//                   once, so short clips from different places in the recording blend back into steady rain.
+//   thunder1-6      8 s rolls from the thunderstorm recording, played for every lightning bolt.
+//   crack1-4        4.5 s of its sharpest hits, played only when a bolt strikes near you.
+//   bed1-4          20 s stretches of the thunderstorm recording, which Rain Extras plays back to back during thunderstorms;
+//                   bed_inside1-2 is the same heard through walls (low-passed).
 //   wind1-3         10 s storm gusts with a faint whistle, played by Rain Extras; wind_inside1-2 is the same heard
 //                   through walls. roof1-4: 3.6 s of rain on the roof above, muffled, also played by Rain Extras.
-// Every file is deterministic (seeded) and normalized with ffmpeg's EBU R128 meter. The definitions' volumes are
-// computed from the measured loudness, so each event lands at its target level in game whatever the file's level.
-// Vanilla reference (bedrock-samples 1.26.50.4, decoded): rain -15.1 LUFS at volume 0.02, thunder -17.3 LUFS,
-// lightning impact -12.6 LUFS.
-// Needs ffmpeg with libvorbis (and libmp3lame for --audition) on PATH, and network access the first time (the thunder
-// recordings are downloaded and checked against their sha256). Not part of npm run check (outputs are committed).
+//                   These are synthesized.
+// The definitions' volumes are computed from the measured loudness (ffmpeg's EBU R128 meter), so each event lands at its
+// target level in game whatever the file's level. Vanilla reference (bedrock-samples 1.26.50.4, decoded): rain -15.1 LUFS
+// at volume 0.02, thunder -17.3 LUFS, lightning impact -12.6 LUFS.
+// Needs ffmpeg with libvorbis (and libmp3lame for --audition) on PATH. The recordings aren't committed (10 minutes each):
+// without them in tools/gen-rain/sources/, the clips cut from them are kept as committed and only the rest is remade.
+// Not part of npm run check (outputs are committed).
 //
-//   node tools/gen-rain/sounds.mjs                        write the sounds and their definitions
+//   node tools/gen-rain/sounds.mjs                              write the sounds and their definitions
 //   node tools/gen-rain/sounds.mjs --audition docs/media/rain   also write listening clips at in-game relative levels:
 //                                                             rain.mp3 (Realistic Rain) and extras.mp3 (Rain Extras)
 import { execFileSync, spawnSync } from "node:child_process";
@@ -141,32 +143,6 @@ function mixIn(/** @type {Float64Array} */ dst, /** @type {Float64Array} */ src,
   for (let i = start; i < end; i++) dst[i] += src[i - at] * gain;
 }
 
-/** In-place radix-2 FFT of (re, im); inverse when `inv`. */
-function fft(/** @type {Float64Array} */ re, /** @type {Float64Array} */ im, inv = false) {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      [re[i], re[j]] = [re[j], re[i]];
-      [im[i], im[j]] = [im[j], im[i]];
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const half = len >> 1, ang = ((inv ? 2 : -2) * Math.PI) / len;
-    for (let k = 0; k < half; k++) {
-      const wr = Math.cos(ang * k), wi = Math.sin(ang * k);
-      for (let i = k; i < n; i += len) {
-        const b = i + half, tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
-        re[b] = re[i] - tr; im[b] = im[i] - ti;
-        re[i] += tr; im[i] += ti;
-      }
-    }
-  }
-  if (inv) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
-}
-
 /** Short fades so overlapping copies blend without clicks; `equalPower` for long crossfades. */
 function fades(/** @type {Float64Array} */ x, inS, outS, equalPower = false) {
   const a = Math.round(inS * SR), b = Math.round(outS * SR);
@@ -195,64 +171,6 @@ function limit(/** @type {Float64Array} */ x, ceiling) {
 // ---------------------------------------------------------------------------
 // Rain: a soft bed and a few distinct drops per clip
 // ---------------------------------------------------------------------------
-
-// 1.0's rain (a hiss with dense patter), without anything tonal: 1.1's puddle plinks and ringing taps read as
-// high-pitched bubbles. Then matchEq() gives each clip vanilla's tonal balance (VANILLA_RAIN_OCTAVES), 2 dB darker on top.
-const RAIN = { hiss: 0.55, patter: 0.5, pats: 0.5 };
-/** Vanilla rain1 (decoded) per octave band, dB relative to its total: strongest at 500-1000 Hz. */
-const VANILLA_RAIN_OCTAVES = { 63: -47, 125: -26, 250: -13, 500: -6, 1000: -3, 2000: -10, 4000: -12, 8000: -18, 16000: -34 };
-
-/** Static FFT equalizer: moves each octave band's share of the energy to `target` (dB, as VANILLA_RAIN_OCTAVES), with the
- * gain interpolated smoothly between band centers and kept within ±18 dB. */
-function matchEq(/** @type {Float64Array} */ x, /** @type {Record<number, number>} */ target) {
-  let n = 1;
-  while (n < x.length) n <<= 1;
-  const re = new Float64Array(n), im = new Float64Array(n);
-  re.set(x);
-  fft(re, im);
-  const centers = Object.keys(target).map(Number);
-  const band = (/** @type {number} */ c) => [Math.round((c / Math.SQRT2) * n / SR), Math.min(n / 2, Math.round(c * Math.SQRT2 * n / SR))];
-  const energy = centers.map((c) => { const [a, b] = band(c); let e = 0; for (let k = a; k < b; k++) e += re[k] ** 2 + im[k] ** 2; return e; });
-  const total = energy.reduce((a, b) => a + b, 0);
-  const gains = centers.map((c, i) => Math.max(-18, Math.min(18, target[c] - 10 * Math.log10(energy[i] / total + 1e-12))));
-  for (let k = 1; k < n / 2; k++) {
-    const lf = Math.log2((k * SR) / n), pos = Math.max(0, Math.min(centers.length - 1, lf - Math.log2(centers[0])));
-    const i = Math.min(centers.length - 2, Math.floor(pos)), g = Math.pow(10, (gains[i] + (gains[i + 1] - gains[i]) * (pos - i)) / 20);
-    re[k] *= g; im[k] *= g; re[n - k] *= g; im[n - k] *= g;
-  }
-  re[0] = 0; im[0] = 0;
-  fft(re, im, true);
-  x.set(re.subarray(0, x.length));
-  return x;
-}
-
-function rain(/** @type {number} */ seed, /** @type {number} */ seconds) {
-  const rnd = mulberry32(seed), n = Math.round(seconds * SR);
-  // Hiss: pink noise from 250 Hz up, rolled off early on top.
-  const hiss = biquad(biquad(biquad(pink(rnd, n), "hp", 300), "lp", 2200), "lp", 9000);
-  scale(hiss, 1 / rms(hiss));
-  // Patter: many tiny ticks (Poisson, ~900 a second), noise only, so they blend into a crackle instead of ringing.
-  const patter = new Float64Array(n);
-  for (let t = 0; t < n; t += Math.max(1, Math.round((-Math.log(1 - rnd()) / 900) * SR))) {
-    const amp = -Math.log(1 - rnd()), len = Math.round((0.0015 + rnd() * 0.004) * SR), tau = len / 3;
-    for (let k = 0; k < len && t + k < n; k++) patter[t + k] += (rnd() * 2 - 1) * amp * Math.exp(-k / tau);
-  }
-  biquad(biquad(biquad(patter, "hp", 450), "lp", 1700), "lp", 7000);
-  scale(patter, 1 / rms(patter));
-  // Pats: softer, fuller drops on leaves and ground (~30 a second): short noise bursts, low-passed, never tuned.
-  const pats = new Float64Array(n);
-  for (let t = 0; t < n; t += Math.max(1, Math.round((-Math.log(1 - rnd()) / 30) * SR))) {
-    const len = Math.round(between(rnd, 0.006, 0.016) * SR), tau = len / 4, amp = Math.min(3, Math.exp(0.45 * gauss(rnd)));
-    const burst = Float64Array.from({ length: len }, (_, k) => (rnd() * 2 - 1) * Math.exp(-k / tau));
-    biquad(biquad(burst, "lp", between(rnd, 700, 1500)), "hp", 260);
-    mixIn(pats, burst, t, amp);
-  }
-  scale(pats, 1 / rms(pats));
-  // Slow swell so consecutive copies don't sound identical.
-  const f = between(rnd, 0.25, 0.6), ph = rnd() * TAU, out = new Float64Array(n);
-  for (let i = 0; i < n; i++) out[i] = (hiss[i] * RAIN.hiss + patter[i] * RAIN.patter + pats[i] * RAIN.pats) * (0.9 + 0.1 * Math.sin((TAU * f * i) / SR + ph));
-  return fades(matchEq(out, VANILLA_RAIN_OCTAVES), 0.05, 0.15);
-}
 
 /** Rain on the roof, heard from inside: a dense, muffled drumming with a soft gutter trickle. */
 function roof(/** @type {number} */ seed, /** @type {number} */ seconds) {
@@ -325,34 +243,35 @@ function wind(/** @type {number} */ seed, /** @type {number} */ seconds, inside 
 // ---------------------------------------------------------------------------
 
 const RECORDINGS = JSON.parse(readFileSync(join(import.meta.dirname, "recordings.json"), "utf8")).sources;
-const cacheDir = join(tmpdir(), "gen-rain-sources");
 
-/** A source recording on disk: downloaded once into the cache and checked against its sha256. */
+/** A recording's path, if it's in tools/gen-rain/sources/ and matches its sha256; otherwise undefined. */
 function source(/** @type {string} */ id) {
-  const rec = RECORDINGS[id], file = join(cacheDir, `${id}${rec.url.slice(rec.url.lastIndexOf("."))}`);
-  const ok = () => existsSync(file) && createHash("sha256").update(readFileSync(file)).digest("hex") === rec.sha256;
-  if (!ok()) {
-    mkdirSync(cacheDir, { recursive: true });
-    execFileSync("curl", ["-sSfL", "--max-time", "300", "-o", file, rec.url]);
-    if (!ok()) throw new Error(`${id}: ${rec.url} doesn't match its sha256 in recordings.json`);
-  }
+  const rec = RECORDINGS[id], file = join(import.meta.dirname, rec.file);
+  if (!existsSync(file)) return undefined;
+  if (createHash("sha256").update(readFileSync(file)).digest("hex") !== rec.sha256) throw new Error(`${rec.file} isn't the recording in recordings.json (sha256 differs)`);
   return file;
 }
 
 /**
- * `seconds` of a recording from `start`, mono 44.1 kHz, with the rumble below 30 Hz removed and short fades.
- * Cracks start right on the strike (fade in 5 ms); rolls fade in over 0.4 s from the quiet before them.
+ * `seconds` of a recording from `start`, mono 44.1 kHz, with only sub-bass below 25 Hz removed and fades, or undefined
+ * when the recording isn't there (the committed clip is kept).
  */
 function excerpt(/** @type {string} */ id, /** @type {number} */ start, /** @type {number} */ seconds, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut) {
-  const raw = execFileSync("ffmpeg", ["-v", "error", "-ss", String(start), "-t", String(seconds), "-i", source(id), "-ac", "1", "-ar", String(SR), "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
+  const file = source(id);
+  if (!file) return undefined;
+  const raw = execFileSync("ffmpeg", ["-v", "error", "-ss", String(start), "-t", String(seconds), "-i", file, "-ac", "1", "-ar", String(SR), "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
   const x = Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
-  return fades(biquad(biquad(x, "hp", 30), "hp", 30), fadeIn, fadeOut, true);
+  return fades(biquad(x, "hp", 25), fadeIn, fadeOut, true);
 }
 
-/** CREDITS.txt for the pack: every recording used, with its author and license (CC BY asks for exactly this). */
+/** The same, heard through walls: low-passed. */
+const muffled = (/** @type {Float64Array | undefined} */ x) => x && biquad(biquad(x, "lp", 450), "lp", 600);
+
+/** CREDITS.txt for the pack. */
 function credits() {
-  const lines = ["Realistic Rain: sound credits", "", "The thunder and lightning-strike sounds are excerpts of these recordings, cut, made mono, faded and", "loudness-normalized (sounds/realistic_rain/thunder*.ogg, crack*.ogg). The rain, wind and roof sounds are synthesized.", ""];
-  for (const r of Object.values(RECORDINGS)) lines.push(`- "${r.title}" by ${r.author}, ${r.license} (${r.licenseUrl}), ${r.page}`);
+  const lines = ["Realistic Rain: sound credits", "", "The rain, thunder, lightning-strike and thunderstorm sounds are excerpts of recordings supplied by the realm owner:", ""];
+  for (const r of Object.values(RECORDINGS)) lines.push(`- ${r.title}, ${r.author}`);
+  lines.push("", "The wind and rain-on-the-roof sounds are synthesized (tools/gen-rain/sounds.mjs in nishant/mc-packs).");
   return lines.join("\n") + "\n";
 }
 
@@ -392,33 +311,40 @@ function layered(/** @type {Float64Array[]} */ clips, seconds = 20) {
 /** Vanilla's rain1-4 (decoded from bedrock-samples' .fsb, resampled to 44.1 kHz) through layered() at volume 0.02. */
 const VANILLA_RAIN_LAYERED = -41.3;
 
+/** Excerpts of a recording as an event's files: `${name}1`, `${name}2`, ... from each [start, seconds]. */
+const cuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {number[][]} */ list, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut, post = (/** @type {Float64Array | undefined} */ x) => x) =>
+  list.map(([start, seconds], i) => ({ name: `${name}${i + 1}`, make: () => post(excerpt(id, start, seconds, fadeIn, fadeOut)) }));
+
 /**
  * Each event: its files, the file loudness to normalize to (as loud as the peaks allow) and the level it should play at
  * in game, which sets the definition volume:
  *   `level`    one copy at full volume: file LUFS + 20·log10(volume).
- *   `layered`  rain only: the loudness of layered() at the definition volume. Per-file loudness doesn't predict how
- *              sparse drops add up, so the stacked mix itself is matched: vanilla's plus 25%.
+ *   `layered`  rain only: the loudness of layered() at the definition volume, since the game stacks rain clips: vanilla's
+ *              plus 25%.
  * Thunder and the impact land at about vanilla's level (-17.3 and -12.6 LUFS); the Rain Extras sounds sit under the
- * thunder, and Rain Extras scales them further.
+ * thunder, and Rain Extras scales them further. Times are seconds into the recordings (thunder: rolls start 1.5 s before
+ * their loudest moment, strikes right on the hit).
  */
 const EVENTS = [
   {
     event: "ambient.weather.rain", subtitle: "subtitles.weather.rain", target: -23, ceiling: -1.5, layered: VANILLA_RAIN_LAYERED + 20 * Math.log10(1.25),
-    files: [2.2, 2.0, 2.4, 2.1, 2.3, 2.0].map((s, i) => ({ name: `rain${i + 1}`, make: () => rain(1100 + i, s) })),
+    files: cuts("rain", "rain", [30, 95, 160, 225, 290, 355, 420, 485].map((t) => [t, 2.4]), 0.05, 0.15),
   },
   {
     event: "ambient.weather.thunder", subtitle: "subtitles.entity.lightning_bolt.thunder", target: -18, ceiling: -1, level: -18,
-    // Rolls, each starting about a second before its main hit (source onsets: 135.15, 197.75, 14.6, 611.35 s; 21.55 s).
-    files: [
-      ["quendel", 134.15, 11], ["quendel", 196.75, 11], ["quendel", 13.6, 12], ["quendel", 610.35, 13], ["wuxiascrub", 20.55, 14],
-    ].map(([id, start, seconds], i) => ({ name: `thunder${i + 1}`, make: () => excerpt(/** @type {string} */ (id), /** @type {number} */ (start), /** @type {number} */ (seconds), 0.4, 2.5) })),
+    files: cuts("thunder", "thunder", [26.55, 196.45, 274.2, 323.9, 551.3, 585.55].map((t) => [t, 8]), 0.4, 2),
   },
   {
     event: "ambient.weather.lightning.impact", subtitle: "subtitles.entity.generic.explode", target: -15.5, ceiling: -1, level: -15.5,
-    // Close strikes, each starting 80 ms before its crack (source onsets: 1.15, 642.85, 296.2, 537.8 s).
-    files: [
-      ["inspectorj", 1.07, 6], ["quendel", 642.77, 6], ["quendel", 296.12, 5], ["quendel", 537.72, 5],
-    ].map(([id, start, seconds], i) => ({ name: `crack${i + 1}`, make: () => excerpt(/** @type {string} */ (id), /** @type {number} */ (start), /** @type {number} */ (seconds), 0.005, 2) })),
+    files: cuts("crack", "thunder", [100.3, 169.25, 204.2, 465.6].map((t) => [t, 4.5]), 0.01, 2),
+  },
+  {
+    event: "realm.storm.bed", target: -18, ceiling: -1, level: -28,
+    files: cuts("bed", "thunder", [40, 230, 360, 490].map((t) => [t, 20]), 2, 2),
+  },
+  {
+    event: "realm.storm.bed_inside", target: -24, ceiling: -1, level: -36,
+    files: cuts("bed_inside", "thunder", [40, 360].map((t) => [t, 20]), 2, 2, muffled),
   },
   {
     event: "realm.storm.wind", target: -20, ceiling: -3, level: -34,
@@ -476,15 +402,16 @@ const SOUNDS_JSON = {
  */
 const STRIKE_GAIN = Math.pow(10, -12 / 20);
 const AUDITION = {
-  // Realistic Rain on its own: rain, a far thunder, then a close strike (the impact and the thunder together).
-  rain: { seconds: 34, play: [["ambient.weather.thunder", "thunder3", 6, STRIKE_GAIN], ["ambient.weather.thunder", "thunder1", 20, STRIKE_GAIN], ["ambient.weather.lightning.impact", "crack1", 20, STRIKE_GAIN]] },
-  // Rain Extras: a breeze outdoors in rain, then indoors (rain on the roof, muffled wind), then outdoors in a storm.
+  // Realistic Rain on its own: rain, a distant roll, then a close strike (the strike and a roll together).
+  rain: { seconds: 26, play: [["ambient.weather.thunder", "thunder3", 7, STRIKE_GAIN], ["ambient.weather.thunder", "thunder1", 16, STRIKE_GAIN], ["ambient.weather.lightning.impact", "crack2", 16, STRIKE_GAIN]] },
+  // Rain Extras: a breeze outdoors in rain, then indoors (rain on the roof, muffled wind), then outdoors in a thunderstorm
+  // (the storm recording, gusts).
   extras: {
-    seconds: 32,
+    seconds: 34,
     play: [
       ["realm.storm.wind", "wind1", 0, 0.35], ["realm.storm.wind", "wind2", 8, 0.35],
       ["realm.rain.roof", "roof1", 10, 0.8], ["realm.rain.roof", "roof2", 13, 0.8], ["realm.rain.roof", "roof3", 16, 0.8], ["realm.storm.wind_inside", "wind_inside1", 10, 0.35],
-      ["realm.storm.wind", "wind3", 19, 1], ["realm.storm.wind", "wind1", 27, 1], ["ambient.weather.thunder", "thunder2", 20, STRIKE_GAIN],
+      ["realm.storm.bed", "bed1", 19, 1], ["realm.storm.wind", "wind3", 19, 1], ["realm.storm.wind", "wind1", 27, 1],
     ],
   },
 };
@@ -502,6 +429,18 @@ try {
   for (const e of EVENTS) {
     for (const f of e.files) {
       const x = f.make();
+      const ogg = join(outDir, `${f.name}.ogg`);
+      if (!x) {
+        // Cut from a recording that isn't in tools/gen-rain/sources/: keep the committed clip as it is.
+        if (!existsSync(ogg)) throw new Error(`${f.name}.ogg needs the recordings in tools/gen-rain/sources/ (see recordings.json)`);
+        const raw = execFileSync("ffmpeg", ["-v", "error", "-i", ogg, "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
+        const kept = Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
+        const m = summary(ogg);
+        if (e.level !== undefined) volumes.set(f.name, toVolume(e.level - m.lufs));
+        made.set(f.name, kept);
+        rows.push({ file: f.name, seconds: (kept.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: "kept", kb: (statSync(ogg).size / 1024).toFixed(1) });
+        continue;
+      }
       const wav = join(tmp, `${f.name}.wav`);
       const ceil = Math.pow(10, e.ceiling / 20);
       // Gain to the target, limit peaks, and repeat: limiting lowers the loudness a little each time.
@@ -514,7 +453,6 @@ try {
         reduction = Math.max(reduction, limit(x, ceil));
       }
       writeWav(x, wav);
-      const ogg = join(outDir, `${f.name}.ogg`);
       execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-ac", "1", "-ar", String(SR), "-c:a", "libvorbis", "-q:a", "3", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", ogg]);
       const m = summary(ogg);
       if (e.level !== undefined) volumes.set(f.name, toVolume(e.level - m.lufs));

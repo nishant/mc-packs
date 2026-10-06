@@ -4,7 +4,7 @@
     "name": "Realm Help",
     "description": "One help page for every realm command: how each feature works and its commands, with usage. /realm:help",
     "uuid": "78e7236e-4b6d-45ec-8a7f-1f8055a47395",
-    "version": [1, 1, 4],
+    "version": [1, 1, 5],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
