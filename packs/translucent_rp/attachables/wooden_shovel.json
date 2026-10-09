@@ -1,0 +1,29 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:attachable": {
+    "description": {
+      "identifier": "minecraft:wooden_shovel",
+      "materials": {
+        "default": "entity_alphablend"
+      },
+      "textures": {
+        "default": "textures/translucent_tools/wood_shovel",
+        "shape": "textures/translucent_tools/shape/wood_shovel"
+      },
+      "geometry": {
+        "default": "geometry.realm_translucent.tool"
+      },
+      "animations": {
+        "wield": "animation.realm_translucent.tool.wield"
+      },
+      "scripts": {
+        "animate": [
+          "wield"
+        ]
+      },
+      "render_controllers": [
+        "controller.render.realm_translucent.item"
+      ]
+    }
+  }
+}

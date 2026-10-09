@@ -45,6 +45,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Chairs — `chairs_bp`](#chairs--chairs_bp)
 - [Realistic Rain — `rain_rp`](#realistic-rain--rain_rp)
 - [Rain Extras — `rain_bp`](#rain-extras--rain_bp)
+- [Translucent Tools — `translucent_rp`](#translucent-tools--translucent_rp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -76,7 +77,7 @@ The realm runs everything as one pack, **Realm Bundle**, and that is the downloa
 
 **Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
 
-**Standalone packs:** the two rain packs are never in the Realm Bundle and are made to run next to it: [Realistic Rain](#realistic-rain--rain_rp) (a resource pack) and [Rain Extras](#rain-extras--rain_bp) (a behavior pack). Download each from its card under **Standalone packs** and open it, then in the realm's settings activate Realistic Rain under **Resource Packs**, at the top of the list, and Rain Extras under **Behavior Packs**, next to the Realm Bundle. Players get both automatically when they join.
+**Standalone packs:** the two rain packs and Translucent Tools are never in the Realm Bundle and are made to run next to it: [Realistic Rain](#realistic-rain--rain_rp) and [Translucent Tools](#translucent-tools--translucent_rp) (resource packs) and [Rain Extras](#rain-extras--rain_bp) (a behavior pack). Download each from its card under **Standalone packs** and open it, then in the realm's settings activate Realistic Rain and Translucent Tools under **Resource Packs**, at the top of the list, and Rain Extras under **Behavior Packs**, next to the Realm Bundle. Players get both automatically when they join.
 
 **Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. (The standalone packs above aren't in the bundle, so they go with either.) Switching between them starts the features' in-game settings over (welcome and news text, tips, settings from `/realm:config`, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
@@ -86,7 +87,7 @@ For whoever builds the packs from this repo:
 
 1. Build the packs with `npm run build` (one `dist/<folder>.mcpack` per pack), or `npm run bundle -- --all` for a single bundle.
 2. Open the `.mcpack` on a device with Minecraft. It imports automatically.
-3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**. A resource pack (`rain_rp`) goes under **Resource Packs** instead, at the top of the active list.
+3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**. A resource pack (`rain_rp`, `translucent_rp`) goes under **Resource Packs** instead, at the top of the active list.
    *Another way:* download the Realm world, activate the pack under the world's **Behavior Packs**, and upload the world again.
 4. Rejoin. Commands are registered when the world loads.
 
@@ -1908,6 +1909,57 @@ Operators can change `defaultOff`, `stormFog.enabled`, `haze.enabled`, `mist.ena
 
 ---
 
+## Translucent Tools — `translucent_rp`
+
+Tools, weapons and the shield are half see-through in your hand, so they block less of the screen. Swords, pickaxes, axes, shovels and hoes of every material, the mace, bow, crossbow, trident and shield are drawn at 50% opacity, in their usual shape and place. A **resource pack** that runs next to the Realm Bundle, never inside it.
+
+### See and hear it
+
+![The textures: vanilla on top, Translucent Tools below, on a checkerboard so the see-through shows](media/translucent/textures.png)
+
+A picture of the textures, not an in-game screenshot: where a tool sits and how big it looks on screen is the game's, and stays the same as vanilla.
+
+### How to use
+
+1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
+2. Hold any tool, weapon or a shield: you can see through it. It works in first person and in third person, for every player and mob holding one.
+3. **Operators:** download Translucent Tools from its card on mc.nish.software/realm and open it. In the realm's settings, activate it under **Resource Packs**, near the top of the list (above Firewolf and any pack that changes how held items look).
+
+### What players see
+
+- **40 items at 50% opacity:** swords, pickaxes, axes, shovels and hoes in wood, stone, copper, iron, gold, diamond and netherite (35), plus the mace, bow (and each frame as you draw it), crossbow (loaded or not), trident and shield.
+- **Same shape and place:** each item keeps vanilla's pixels, thickness and animations; only the opacity changes. Tools sit the way vanilla holds a bow, which is how Bedrock holds a sprite item, and the bow, crossbow, trident and shield keep their own vanilla poses (blocking, drawing, throwing).
+- **Enchanted items:** Bedrock has no material that is both see-through and glinting, so in your hand an enchanted item shows a soft purple shimmer instead of the glint. Its inventory icon keeps the glint.
+- **Unchanged:** inventory and hotbar icons, dropped items, item frames, armor, and items this pack doesn't list (fishing rod, shears, flint and steel, brush, spears).
+
+### Saved data
+
+None. It's a resource pack: no scripts, no commands, nothing to configure in game.
+
+### Known limits
+
+- **See-through things behind a tool** (water, glass, rain, other translucent blocks) can disappear behind it for a moment: Bedrock doesn't always sort see-through models against them.
+- **Shields with a banner pattern** haven't been tried: the pattern may show solid, or not at all.
+- **Other resource packs:** a pack higher in the list with its own models for these items (3D swords, custom shields) wins. Packs that only retexture items, like Firewolf, still show their art in the inventory, but in your hand the tools use vanilla's textures, since this pack carries its own see-through copies.
+- **Mobs** holding these items (zombies, vindicators, piglins, skeletons) show them see-through too, like players.
+
+### How it's made
+
+Everything in `packs/translucent_rp/` except `manifest.json` is generated by `npm run gen:translucent` (`tools/gen-translucent/generate.mjs`), from Mojang's vanilla files in `tools/gen-translucent/vanilla/` (see its README):
+
+| Files | |
+|---|---|
+| `textures/translucent_tools/<item>.png` | The vanilla texture with every pixel at 50% opacity (`OPACITY` in the generator) |
+| `textures/translucent_tools/shape/<item>.png` | The vanilla texture, opaque. The game builds the held item's 3D outline from it (`texture_meshes`), so the outline is exactly vanilla's whatever the opacity |
+| `attachables/<item>.json` | One per tool and the mace (vanilla draws those without an attachable), with the `entity_alphablend` material. The bow, crossbow, shield and trident files are vanilla's with only the material, textures and render controller swapped |
+| `models/entity/translucent_tools.geo.json`, `animations/translucent_tools.animation.json` | The tool mesh and pose, copied from vanilla's bow (`geometry.bow_standby`, `animation.bow.wield`), and the bow and crossbow frames |
+| `render_controllers/translucent_tools.render_controllers.json` | The see-through material for every item, and the purple shimmer when enchanted |
+| `pack_icon.png`, `docs/media/translucent/textures.png` | The pack icon and the picture above |
+
+`npm run check` fails if any of these differ from what the generator makes.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -1978,7 +2030,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Rain Extras → Realm Bundle | Standalone: it runs as its own add-on next to the bundle and still answers `/realm:help` (`/realm:help rain`). `/realm:rain` shares the `realm:` namespace, so it can join the bundle later without a rename |
 | AFK smart sleep → Rain Extras | Skipping the night clears the weather, so the storm fog and haze clear, the wind stops and drips taper off as after any rain |
 
-Only Rain Extras needs another pack (Realistic Rain). Any other combination works.
+Only Rain Extras needs another pack (Realistic Rain). Any other combination works. Translucent Tools only changes how held items are drawn, so it has nothing to coordinate with the other packs.
 
 ---
 
@@ -1997,10 +2049,11 @@ Only Rain Extras needs another pack (Realistic Rain). Any other combination work
 | Script errors | **Settings → Creator → Enable Content Log GUI**, then rejoin. Errors start with the pack's name in brackets, such as `[welcome]`, `[stats]` or `[chairs]` |
 | Rain looks and sounds like vanilla | Is Realistic Rain active under **Resource Packs**, at the top of the list? A resource pack above it that changes rain wins. Players must accept the resource pack download when they join |
 | No storm fog, haze, mist, drips, wind or roof sound | Is Rain Extras active under **Behavior Packs**, and Realistic Rain under **Resource Packs**? Run `/realm:rain` in case they're off for you, and check `/realm:config` → Rain Extras. If the pack was added during rain, they start at the next weather change. Nothing shows in deserts, badlands or snowy places, or deep underground. The haze only shows on Vibrant Visuals |
+| Tools still look solid in your hand | Is Translucent Tools active under **Resource Packs**, above other packs that change held items? Did you accept the resource pack download when you joined? Inventory icons stay solid; only the item in your hand is see-through |
 | Storm fog or haze stays after a storm | Rejoin: Rain Extras clears its fogs when you join. Running `/realm:rain` twice also resets them |
 | Wind, thunderstorm or rain on the roof too loud or too quiet | Operators: `/realm:config` → Rain Extras → **Storm wind volume**, **Rain breeze volume**, **Thunderstorm sound volume**, **Rain on the roof volume** (also the muffled rain indoors). Everyone: the game's **Weather** volume slider covers them too |
 | Rain as loud indoors as outdoors | Is **Muffled rain indoors** enabled (`/realm:config` → Rain Extras), and are the extras on for you (`/realm:rain`)? It needs Realistic Rain 1.3 or newer, whose rain clips fade in slowly enough to be stopped quietly. Leaves don't count as a roof |
-| The pack shows a pink and black placeholder icon | Harmless. Only Realistic Rain has a `pack_icon.png` so far, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
+| The pack shows a pink and black placeholder icon | Harmless. Only Realistic Rain and Translucent Tools have a `pack_icon.png` so far, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
 
 ---
 
@@ -2015,7 +2068,7 @@ Only Rain Extras needs another pack (Realistic Rain). Any other combination work
 
 It also runs `tools/sync-settings.mjs --check`, which fails if a behavior pack (other than Realm Settings) has no `scripts/settings.js`, or its copy of the shared Realm Settings helper differs from `tools/settings-shared.js`. Change the helper there, then run `node tools/sync-settings.mjs` and bump the version of every pack it updates.
 
-It also runs `tools/gen-rain/textures.mjs --check` and `tools/gen-rain/fogs.mjs --check`, which fail if Realistic Rain's textures or fogs differ from what `npm run gen:rain` generates, and `tools/help-catalog.mjs --check`: the in-game `/realm:help` text is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs`. It also fails if a pack doesn't answer `/realm:help`'s `realm:help_ping` script event. Resource packs have no scripts, so they're left out of the help.
+It also runs `tools/gen-rain/textures.mjs --check` and `tools/gen-rain/fogs.mjs --check`, which fail if Realistic Rain's textures or fogs differ from what `npm run gen:rain` generates, `tools/gen-translucent/generate.mjs --check`, which fails if any file in Translucent Tools differs from what `npm run gen:translucent` generates, and `tools/help-catalog.mjs --check`: the in-game `/realm:help` text is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs`. It also fails if a pack doesn't answer `/realm:help`'s `realm:help_ping` script event. Resource packs have no scripts, so they're left out of the help.
 
 When adding or changing a pack: update its section here, and the pack table in `README.md`, in the same commit.
 

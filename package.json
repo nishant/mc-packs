@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc -p . && node tools/check-ascii.mjs && node tools/check-docs.mjs && node tools/check-commands.mjs && node tools/sync-settings.mjs --check && node tools/help-catalog.mjs --check && node tools/gen-rain/textures.mjs --check && node tools/gen-rain/fogs.mjs --check",
+    "check": "tsc -p . && node tools/check-ascii.mjs && node tools/check-docs.mjs && node tools/check-commands.mjs && node tools/sync-settings.mjs --check && node tools/help-catalog.mjs --check && node tools/gen-rain/textures.mjs --check && node tools/gen-rain/fogs.mjs --check && node tools/gen-translucent/generate.mjs --check",
     "build": "node tools/build.mjs",
     "bundle": "node tools/bundle.mjs",
-    "gen:rain": "node tools/gen-rain/textures.mjs && node tools/gen-rain/fogs.mjs && node tools/gen-rain/sounds.mjs"
+    "gen:rain": "node tools/gen-rain/textures.mjs && node tools/gen-rain/fogs.mjs && node tools/gen-rain/sounds.mjs",
+    "gen:translucent": "node tools/gen-translucent/generate.mjs"
   },
   "devDependencies": {
     "@minecraft/server": "2.1.0",
