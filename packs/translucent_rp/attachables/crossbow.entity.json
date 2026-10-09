@@ -1,0 +1,51 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:attachable": {
+    "description": {
+      "identifier": "minecraft:crossbow",
+      "materials": {
+        "default": "entity_alphablend"
+      },
+      "textures": {
+        "default": "textures/translucent_tools/crossbow_standby",
+        "shape_default": "textures/translucent_tools/shape/crossbow_standby",
+        "crossbow_pulling_0": "textures/translucent_tools/crossbow_pulling_0",
+        "shape_crossbow_pulling_0": "textures/translucent_tools/shape/crossbow_pulling_0",
+        "crossbow_pulling_1": "textures/translucent_tools/crossbow_pulling_1",
+        "shape_crossbow_pulling_1": "textures/translucent_tools/shape/crossbow_pulling_1",
+        "crossbow_pulling_2": "textures/translucent_tools/crossbow_pulling_2",
+        "shape_crossbow_pulling_2": "textures/translucent_tools/shape/crossbow_pulling_2",
+        "crossbow_arrow": "textures/translucent_tools/crossbow_arrow",
+        "shape_crossbow_arrow": "textures/translucent_tools/shape/crossbow_arrow",
+        "crossbow_rocket": "textures/translucent_tools/crossbow_firework",
+        "shape_crossbow_rocket": "textures/translucent_tools/shape/crossbow_firework"
+      },
+      "geometry": {
+        "crossbow_pulling_0": "geometry.realm_translucent.crossbow_pulling_0",
+        "crossbow_pulling_1": "geometry.realm_translucent.crossbow_pulling_1",
+        "crossbow_pulling_2": "geometry.realm_translucent.crossbow_pulling_2",
+        "default": "geometry.realm_translucent.crossbow_standby",
+        "crossbow_arrow": "geometry.realm_translucent.crossbow_arrow",
+        "crossbow_rocket": "geometry.realm_translucent.crossbow_rocket"
+      },
+      "animations": {
+        "wield": "animation.crossbow.wield",
+        "wield_first_person_pull": "animation.crossbow.wield_first_person_pull"
+      },
+      "scripts": {
+        "pre_animation": [
+          "variable.charge_amount = math.clamp((query.main_hand_item_max_duration - (query.main_hand_item_use_duration - query.frame_alpha + 1.0)) / 10.0, 0.0, 1.0f);"
+        ],
+        "animate": [
+          "wield",
+          {
+            "wield_first_person_pull": "query.main_hand_item_use_duration > 0.0f && c.is_first_person"
+          }
+        ]
+      },
+      "render_controllers": [
+        "controller.render.realm_translucent.crossbow"
+      ]
+    }
+  }
+}

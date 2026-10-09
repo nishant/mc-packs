@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Translucent Tools",
+    "description": "Swords, pickaxes, axes, shovels, hoes, the mace, bow, crossbow, trident and shield are half see-through in your hand, so they block less of your view.",
+    "uuid": "b0bb9677-db03-46bf-b35b-7f381d339928",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "a1eeb335-0c4a-403b-9d49-173b90beb8fd",
+      "version": [1, 0, 0]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:attachable": {
+    "description": {
+      "identifier": "minecraft:netherite_sword",
+      "materials": {
+        "default": "entity_alphablend"
+      },
+      "textures": {
+        "default": "textures/translucent_tools/netherite_sword",
+        "shape": "textures/translucent_tools/shape/netherite_sword"
+      },
+      "geometry": {
+        "default": "geometry.realm_translucent.tool"
+      },
+      "animations": {
+        "wield": "animation.realm_translucent.tool.wield"
+      },
+      "scripts": {
+        "animate": [
+          "wield"
+        ]
+      },
+      "render_controllers": [
+        "controller.render.realm_translucent.item"
+      ]
+    }
+  }
+}

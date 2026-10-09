@@ -1,0 +1,96 @@
+{
+  "format_version": "1.10.0",
+  "render_controllers": {
+    "controller.render.realm_translucent.item": {
+      "geometry": "geometry.default",
+      "materials": [
+        {
+          "*": "material.default"
+        }
+      ],
+      "textures": [
+        "texture.default"
+      ],
+      "overlay_color": {
+        "r": 0.6,
+        "g": 0.35,
+        "b": 1,
+        "a": "variable.is_enchanted ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
+      }
+    },
+    "controller.render.realm_translucent.bow": {
+      "arrays": {
+        "textures": {
+          "array.bow_texture_frames": [
+            "texture.default",
+            "texture.bow_pulling_0",
+            "texture.bow_pulling_1",
+            "texture.bow_pulling_2"
+          ]
+        },
+        "geometries": {
+          "array.bow_geo_frames": [
+            "geometry.default",
+            "geometry.bow_pulling_0",
+            "geometry.bow_pulling_1",
+            "geometry.bow_pulling_2"
+          ]
+        }
+      },
+      "geometry": "array.bow_geo_frames[query.get_animation_frame]",
+      "materials": [
+        {
+          "*": "material.default"
+        }
+      ],
+      "textures": [
+        "array.bow_texture_frames[query.get_animation_frame]"
+      ],
+      "overlay_color": {
+        "r": 0.6,
+        "g": 0.35,
+        "b": 1,
+        "a": "variable.is_enchanted ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
+      }
+    },
+    "controller.render.realm_translucent.crossbow": {
+      "arrays": {
+        "textures": {
+          "array.crossbow_texture_frames": [
+            "texture.default",
+            "texture.crossbow_pulling_0",
+            "texture.crossbow_pulling_1",
+            "texture.crossbow_pulling_2",
+            "texture.crossbow_arrow",
+            "texture.crossbow_rocket"
+          ]
+        },
+        "geometries": {
+          "array.crossbow_geo_frames": [
+            "geometry.default",
+            "geometry.crossbow_pulling_0",
+            "geometry.crossbow_pulling_1",
+            "geometry.crossbow_pulling_2",
+            "geometry.crossbow_arrow",
+            "geometry.crossbow_rocket"
+          ]
+        }
+      },
+      "geometry": "array.crossbow_geo_frames[query.get_animation_frame]",
+      "materials": [
+        {
+          "*": "material.default"
+        }
+      ],
+      "textures": [
+        "array.crossbow_texture_frames[query.get_animation_frame]"
+      ],
+      "overlay_color": {
+        "r": 0.6,
+        "g": 0.35,
+        "b": 1,
+        "a": "variable.is_enchanted ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
+      }
+    }
+  }
+}
