@@ -229,8 +229,9 @@ function frame() {
 function move(t) {
   const step = (t.speed * FRAME_TICKS) / 20;
   const nx = t.x + Math.cos(t.heading) * step, nz = t.z + Math.sin(t.heading) * step;
-  if (fromSpawn(nx, nz) < get("avoidSpawn")) {
-    // Turn to head straight away from spawn and wait for the next frame.
+  const next = fromSpawn(nx, nz);
+  if (next < get("avoidSpawn") && next < fromSpawn(t.x, t.z)) {
+    // Heading into the spawn area: turn to head straight away from spawn and wait for the next frame.
     const s = world.getDefaultSpawnLocation();
     t.heading = Math.atan2(t.z - s.z, t.x - s.x) + rand(-0.4, 0.4);
     return;

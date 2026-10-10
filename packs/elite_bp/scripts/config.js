@@ -8,7 +8,7 @@ export const CONFIG = {
   /** During a Blood Moon (the `realm:moon` event from the Blood Moon pack) the chance is multiplied by this. */
   bloodMoonMultiplier: 3,
 
-  /** Natural champions only appear while this many or fewer champions are loaded in the world. Champions other packs ask for don't count against it. */
+  /** Natural champions only appear while fewer than this many champions are loaded in the world. Operators and other packs can still spawn more. */
   maxAlive: 8,
 
   /** Natural champions only appear at night (time of day 13000 to 23000). */

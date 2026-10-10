@@ -369,6 +369,7 @@ function expire(p0) {
 
 /** @param {Player | undefined} player */
 function describe(player) {
+  load();
   const p0 = pot;
   const now = Date.now();
   if (!p0 || now >= p0.expires) return "No rainbow right now.";

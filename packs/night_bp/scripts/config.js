@@ -28,14 +28,20 @@ export const CONFIG = {
   },
 
   wish: {
-    /** Sneaking just after a shooting star makes a wish: Luck I, once a night. */
+    /** Sneaking just after a shooting star makes a wish (an `effect` for a few minutes), once a night. */
     enabled: true,
 
     /** Seconds after a shooting star that sneaking still counts as a wish. */
     windowSeconds: 3,
 
-    /** Minutes of Luck I a wish gives. */
-    luckMinutes: 5,
+    /** Minutes the wish's effect lasts. */
+    minutes: 5,
+
+    /**
+     * The effect a wish gives, level I. Bedrock has no Luck effect, so the default is Hero of the Village
+     * (cheaper trades with villagers): lucky with traders.
+     */
+    effect: "village_hero",
   },
 
   /** The show for players who never ran `/realm:night` (each player can switch it for themselves). */

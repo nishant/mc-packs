@@ -1265,7 +1265,7 @@ system.runInterval(() => {
 // Events
 // ---------------------------------------------------------------------------
 
-world.afterEvents.leverAction.subscribe(({ block, player }) => {
+world.afterEvents.leverAction.subscribe(({ block, player, isPowered }) => {
   try {
     for (const run of runs.values()) {
       if (run.phase !== "active" || run.solved) continue;
@@ -1273,7 +1273,8 @@ world.afterEvents.leverAction.subscribe(({ block, player }) => {
       const spots = puzzleSpots(run.o, run.lay, pi);
       const k = spots.levers.findIndex((l) => l.x === block.x && l.y === block.y && l.z === block.z);
       if (k < 0 || block.dimension.id !== OVERWORLD) continue;
-      const states = spots.levers.map((at) => {
+      const states = spots.levers.map((at, i) => {
+        if (i === k) return isPowered; // the one just pulled: straight from the event
         const b = overworld().getBlock(at);
         return b?.typeId === "minecraft:lever" && b.permutation.getState("open_bit") === true;
       });
