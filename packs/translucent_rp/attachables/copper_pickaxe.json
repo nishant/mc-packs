@@ -1,0 +1,29 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:attachable": {
+    "description": {
+      "identifier": "minecraft:copper_pickaxe",
+      "materials": {
+        "default": "entity_alphablend"
+      },
+      "textures": {
+        "default": "textures/translucent_tools/copper_pickaxe",
+        "shape": "textures/translucent_tools/shape/copper_pickaxe"
+      },
+      "geometry": {
+        "default": "geometry.realm_translucent.tool"
+      },
+      "animations": {
+        "wield": "animation.realm_translucent.tool.wield"
+      },
+      "scripts": {
+        "animate": [
+          "wield"
+        ]
+      },
+      "render_controllers": [
+        "controller.render.realm_translucent.item"
+      ]
+    }
+  }
+}
