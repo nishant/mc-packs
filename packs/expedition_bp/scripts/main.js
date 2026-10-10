@@ -705,10 +705,14 @@ async function ask(p, leader, d) {
     .body(`${leader} is starting an expedition: §e${dungeonLabel(d)}§r.\n\nYou'll be taken to a dungeon deep underground and brought back when it ends. Join?`)
     .button1("Join")
     .button2("Not this time");
-  const answer = show(p, form, deadline).then((res) => !!res && !res.canceled && res.selection === 0);
+  let answered = false;
+  const answer = show(p, form, deadline).then((res) => {
+    answered = true;
+    return !!res && !res.canceled && res.selection === 0;
+  });
   const timeout = sleep(ticks).then(() => {
     try {
-      if (p.isValid) uiManager.closeAllForms(p);
+      if (!answered && p.isValid) uiManager.closeAllForms(p); // only our question, still open
     } catch {
       // gone
     }
