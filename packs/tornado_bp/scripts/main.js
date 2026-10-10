@@ -10,6 +10,7 @@ const DEBRIS = "realm:sky_debris";
 const FRAME_TICKS = 2; // the funnel is redrawn every 2 ticks
 const FRAMES_PER_SECOND = 20 / FRAME_TICKS;
 const NEAR = 64; // beyond this, players get half the rings
+const REDRAW_FRAMES = 5; // each ring is redrawn every 5 frames (half a second)
 const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
 const WIND_EVERY = 5; // seconds
@@ -113,7 +114,8 @@ world.afterEvents.worldLoad.subscribe(() => {
 
 // Every 5 s: is it time for this thunderstorm's tornado?
 system.runInterval(() => {
-  if (!pending || system.currentTick < pending.at) return;
+  const plan = pending;
+  if (!plan || system.currentTick < plan.at) return;
   if (weather !== WeatherType.Thunder || !get("enabled") || tornado) {
     pending = undefined;
     return;
@@ -127,9 +129,9 @@ system.runInterval(() => {
     console.warn(`[tornado] ${e}`);
   }
   // No open ground near anyone (or no one in the Overworld): try again a little later.
-  pending.attempts++;
-  pending.at = system.currentTick + RETRY_TICKS;
-  if (pending.attempts >= MAX_ATTEMPTS) pending = undefined;
+  plan.attempts++;
+  plan.at = system.currentTick + RETRY_TICKS;
+  if (plan.attempts >= MAX_ATTEMPTS) pending = undefined;
 }, 100);
 
 /** Looks for open ground near a random player in the Overworld and starts a tornado there. @returns {boolean} */
@@ -303,24 +305,24 @@ function soundToward(player, t, dist, id, volume, pitch, range) {
 /** The funnel, for each player near it (Player.spawnParticle: each player gets only their own). @param {Tornado} t */
 function draw(t) {
   const density = get("density");
-  const height = CONFIG.height;
   const time = t.frame / FRAMES_PER_SECOND;
-  const phase = (t.frame * 0.13) % 1; // the rings climb a little each frame
-  const top = Math.min(height, 318 - t.y);
+  const top = Math.min(CONFIG.height, 318 - t.y);
   for (const { player, dist } of t.viewers) {
     if (!player.isValid) continue;
-    const rings = Math.max(2, Math.round(get("rings") * density * (dist > NEAR ? 0.5 : 1)));
+    // Each ring lives about 1.2 s, so each frame redraws a slice of the funnel: every ring once in REDRAW_FRAMES.
+    const rings = Math.max(4, Math.round(get("rings") * density * (dist > NEAR ? 0.5 : 1)));
+    const slice = Math.ceil(rings / REDRAW_FRAMES);
     try {
-      for (let i = 0; i < rings; i++) {
-        const f = (i + phase) / rings; // 0 at the ground, 1 at the top
-        const h = f * top;
+      for (let k = 0; k < slice; k++) {
+        const i = (t.frame * slice + k) % rings;
+        const f = (i + Math.random()) / rings; // 0 at the ground, 1 at the top
         const sway = Math.sin(time * 0.6 + f * 3) * f * 4; // the funnel bends and sways
         vars.setFloat("variable.radius", 1 + 10 * f ** 1.7);
         vars.setFloat("variable.spin", 5 - 3 * f);
-        player.spawnParticle(RING, { x: t.x + Math.cos(t.lean) * sway, y: t.y + h, z: t.z + Math.sin(t.lean) * sway }, vars);
+        player.spawnParticle(RING, { x: t.x + Math.cos(t.lean) * sway, y: t.y + f * top, z: t.z + Math.sin(t.lean) * sway }, vars);
       }
-      if (dist <= NEAR) {
-        const bits = Math.max(1, Math.round(2 * density));
+      if (dist <= NEAR && t.frame % 2 === 0) {
+        const bits = Math.max(1, Math.round(density));
         for (let i = 0; i < bits; i++) {
           vars.setFloat("variable.radius", rand(2, 5));
           player.spawnParticle(DEBRIS, { x: t.x + rand(-3, 3), y: t.y + rand(0.3, 2), z: t.z + rand(-3, 3) }, vars);

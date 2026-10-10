@@ -3,21 +3,20 @@
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
-const PACK = "tornado_bp";
-const PREFIX = "tornado";
-const TITLE = "Tornadoes";
+const PACK = "party_bp";
+const PREFIX = "party";
+const TITLE = "Parties";
 const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Tornadoes in thunderstorms", help: "/realm:tornado_spawn works either way" },
-  { key: "chance", type: "float", scope: "world", label: "Chance a thunderstorm brings a tornado", help: "0 to 1, rolled when the thunderstorm starts", min: 0, max: 1, step: 0.05 },
-  { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 512, step: 16 },
-  { key: "density", type: "float", scope: "world", label: "Funnel density", help: "Lower it if the funnel slows devices down", min: 0.25, max: 1.5, step: 0.25 },
-  { key: "pullRadius", type: "int", scope: "world", label: "Pull radius (blocks)", help: "Mobs, items and players this close are pulled in and lifted", min: 4, max: 24, step: 1 },
-  { key: "throwPlayers", type: "bool", scope: "world", label: "Throw players", help: "Players close to the funnel are thrown a few blocks and land with Slow Falling" },
-  { key: "viewDistance", type: "int", scope: "world", label: "Funnel view distance (blocks)", min: 32, max: 192, step: 16 },
-  { key: "rings", type: "int", scope: "world", label: "Funnel rings", help: "Rings of dust stacked up the funnel, for each nearby player", min: 4, max: 32, step: 1 },
+  { key: "enabled", type: "bool", scope: "world", label: "Parties", help: "Disabled: no party commands or HUD; parties are kept" },
+  { key: "maxSize", type: "int", scope: "world", label: "Party size", help: "Most players in a party, leader included", min: 2, max: 12, step: 1 },
+  { key: "inviteSeconds", type: "int", scope: "world", label: "Invites last (seconds)", min: 30, max: 600, step: 30 },
+  { key: "partyHud", type: "bool", scope: "world", label: "Party HUD", help: "Party mates' health, distance and direction above the hotbar" },
+  { key: "hudRange", type: "int", scope: "world", label: "Party HUD range (blocks)", min: 16, max: 512, step: 16 },
+  { key: "hudMates", type: "int", scope: "world", label: "Mates shown on the HUD", min: 1, max: 8, step: 1 },
+  { key: "partyHud", type: "bool", scope: "player", base: "partyHud", label: "Party HUD", help: "Party mates' health, distance and direction above the hotbar" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

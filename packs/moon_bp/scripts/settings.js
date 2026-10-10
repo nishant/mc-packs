@@ -3,21 +3,22 @@
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
-const PACK = "tornado_bp";
-const PREFIX = "tornado";
-const TITLE = "Tornadoes";
+const PACK = "moon_bp";
+const PREFIX = "moon";
+const TITLE = "Blood Moon & Harvest Moon";
 const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Tornadoes in thunderstorms", help: "/realm:tornado_spawn works either way" },
-  { key: "chance", type: "float", scope: "world", label: "Chance a thunderstorm brings a tornado", help: "0 to 1, rolled when the thunderstorm starts", min: 0, max: 1, step: 0.05 },
-  { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 512, step: 16 },
-  { key: "density", type: "float", scope: "world", label: "Funnel density", help: "Lower it if the funnel slows devices down", min: 0.25, max: 1.5, step: 0.25 },
-  { key: "pullRadius", type: "int", scope: "world", label: "Pull radius (blocks)", help: "Mobs, items and players this close are pulled in and lifted", min: 4, max: 24, step: 1 },
-  { key: "throwPlayers", type: "bool", scope: "world", label: "Throw players", help: "Players close to the funnel are thrown a few blocks and land with Slow Falling" },
-  { key: "viewDistance", type: "int", scope: "world", label: "Funnel view distance (blocks)", min: 32, max: 192, step: 16 },
-  { key: "rings", type: "int", scope: "world", label: "Funnel rings", help: "Rings of dust stacked up the funnel, for each nearby player", min: 4, max: 32, step: 1 },
+  { key: "enabled", type: "bool", scope: "world", label: "Blood Moons and Harvest Moons", help: "Disabled, every night is normal" },
+  { key: "bloodChance", type: "float", scope: "world", label: "Blood Moon chance (each full moon)", min: 0, max: 1, step: 0.01 },
+  { key: "harvestChance", type: "float", scope: "world", label: "Harvest Moon chance (full moons that aren't Blood Moons)", min: 0, max: 1, step: 0.01 },
+  { key: "avoidSpawn", type: "int", scope: "world", label: "No extra monsters this close to world spawn (blocks)", min: 0, max: 512, step: 8 },
+  { key: "blood.spawnSeconds", type: "int", scope: "world", label: "Seconds between Blood Moon monster waves", min: 5, max: 120, step: 5 },
+  { key: "blood.maxExtraPerPlayer", type: "int", scope: "world", label: "Most Blood Moon monsters around a player", min: 0, max: 24, step: 1 },
+  { key: "blood.rewardLevels", type: "int", scope: "world", label: "Blood Moon survivor reward (levels)", min: 0, max: 30, step: 1 },
+  { key: "blood.rewardCrowns", type: "int", scope: "world", label: "Blood Moon survivor reward (Crowns)", min: 0, max: 1000, step: 5 },
+  { key: "harvest.tickSpeed", type: "int", scope: "world", label: "Harvest Moon growth speed (randomTickSpeed)", help: "Vanilla is 1. Put back at dawn", min: 1, max: 10, step: 1 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

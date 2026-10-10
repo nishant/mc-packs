@@ -26,8 +26,11 @@ export const CONFIG = {
   /** Height of the funnel in blocks. */
   height: 40,
 
-  /** Funnel rings drawn for each nearby player every 2 ticks (half as many beyond 64 blocks). */
-  rings: 14,
+  /**
+   * Rings of dust stacked from the ground to the top of the funnel, for each player near it (half as many
+   * beyond 64 blocks). The funnel is redrawn in slices every 2 ticks, each ring every half second.
+   */
+  rings: 16,
 
   /** Multiplies `rings` and the debris: lower it if the funnel slows devices down, 0.25 to 1.5. */
   density: 1,

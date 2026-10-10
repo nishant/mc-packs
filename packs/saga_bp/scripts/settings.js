@@ -3,21 +3,22 @@
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
-const PACK = "tornado_bp";
-const PREFIX = "tornado";
-const TITLE = "Tornadoes";
+const PACK = "saga_bp";
+const PREFIX = "saga";
+const TITLE = "Story Questlines";
 const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Tornadoes in thunderstorms", help: "/realm:tornado_spawn works either way" },
-  { key: "chance", type: "float", scope: "world", label: "Chance a thunderstorm brings a tornado", help: "0 to 1, rolled when the thunderstorm starts", min: 0, max: 1, step: 0.05 },
-  { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 512, step: 16 },
-  { key: "density", type: "float", scope: "world", label: "Funnel density", help: "Lower it if the funnel slows devices down", min: 0.25, max: 1.5, step: 0.25 },
-  { key: "pullRadius", type: "int", scope: "world", label: "Pull radius (blocks)", help: "Mobs, items and players this close are pulled in and lifted", min: 4, max: 24, step: 1 },
-  { key: "throwPlayers", type: "bool", scope: "world", label: "Throw players", help: "Players close to the funnel are thrown a few blocks and land with Slow Falling" },
-  { key: "viewDistance", type: "int", scope: "world", label: "Funnel view distance (blocks)", min: 32, max: 192, step: 16 },
-  { key: "rings", type: "int", scope: "world", label: "Funnel rings", help: "Rings of dust stacked up the funnel, for each nearby player", min: 4, max: 32, step: 1 },
+  { key: "enabled", type: "bool", scope: "world", label: "Story questlines", help: "Disabled, no story offers and no progress; the story log still opens" },
+  { key: "tracker", type: "bool", scope: "world", label: "Story tracker", help: "Default for players: where to go next, above the hotbar" },
+  { key: "partyShare", type: "bool", scope: "world", label: "Party mates share story progress", help: "Defeat, survive and reach objectives, on the same chapter" },
+  { key: "partyRange", type: "int", scope: "world", label: "Party sharing range (blocks)", min: 8, max: 256, step: 8 },
+  { key: "skipCreative", type: "bool", scope: "world", label: "Creative mode makes no story progress" },
+  { key: "opHints", type: "bool", scope: "world", label: "Operator hints for unset places", help: "Tells operators when a player's chapter needs a place nobody set" },
+  { key: "championFallback", type: "bool", scope: "world", label: "Story champions without the Champions pack", help: "Spawn the story's mob ourselves when no Champions pack answers" },
+  { key: "championRetrySeconds", type: "int", scope: "world", label: "Seconds before a story champion comes again", min: 30, max: 1800, step: 30 },
+  { key: "tracker", type: "bool", scope: "player", base: "tracker", label: "Story tracker", help: "Where to go next for your story, above the hotbar" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

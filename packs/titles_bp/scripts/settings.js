@@ -3,21 +3,18 @@
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
-const PACK = "tornado_bp";
-const PREFIX = "tornado";
-const TITLE = "Tornadoes";
+const PACK = "titles_bp";
+const PREFIX = "titles";
+const TITLE = "Titles & Trails";
 const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Tornadoes in thunderstorms", help: "/realm:tornado_spawn works either way" },
-  { key: "chance", type: "float", scope: "world", label: "Chance a thunderstorm brings a tornado", help: "0 to 1, rolled when the thunderstorm starts", min: 0, max: 1, step: 0.05 },
-  { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 512, step: 16 },
-  { key: "density", type: "float", scope: "world", label: "Funnel density", help: "Lower it if the funnel slows devices down", min: 0.25, max: 1.5, step: 0.25 },
-  { key: "pullRadius", type: "int", scope: "world", label: "Pull radius (blocks)", help: "Mobs, items and players this close are pulled in and lifted", min: 4, max: 24, step: 1 },
-  { key: "throwPlayers", type: "bool", scope: "world", label: "Throw players", help: "Players close to the funnel are thrown a few blocks and land with Slow Falling" },
-  { key: "viewDistance", type: "int", scope: "world", label: "Funnel view distance (blocks)", min: 32, max: 192, step: 16 },
-  { key: "rings", type: "int", scope: "world", label: "Funnel rings", help: "Rings of dust stacked up the funnel, for each nearby player", min: 4, max: 32, step: 1 },
+  { key: "enabled", type: "bool", scope: "world", label: "Built-in titles and trails", help: "Disabled: no trails, built-in titles stop counting; other packs' titles are still recorded" },
+  { key: "trails", type: "bool", scope: "world", label: "Trails", help: "Particle trails behind players who chose one" },
+  { key: "trailTicks", type: "int", scope: "world", label: "Trail puff every (ticks)", help: "20 ticks = 1 second", min: 2, max: 20, step: 1 },
+  { key: "trailBudget", type: "int", scope: "world", label: "Trail puffs at a time", help: "Shared by everyone", min: 1, max: 40, step: 1 },
+  { key: "announceUnlocks", type: "bool", scope: "world", label: "Announce new titles to everyone" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

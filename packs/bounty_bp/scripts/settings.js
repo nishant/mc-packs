@@ -3,21 +3,24 @@
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
-const PACK = "tornado_bp";
-const PREFIX = "tornado";
-const TITLE = "Tornadoes";
+const PACK = "bounty_bp";
+const PREFIX = "bounty";
+const TITLE = "Bounty Board";
 const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Tornadoes in thunderstorms", help: "/realm:tornado_spawn works either way" },
-  { key: "chance", type: "float", scope: "world", label: "Chance a thunderstorm brings a tornado", help: "0 to 1, rolled when the thunderstorm starts", min: 0, max: 1, step: 0.05 },
-  { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 512, step: 16 },
-  { key: "density", type: "float", scope: "world", label: "Funnel density", help: "Lower it if the funnel slows devices down", min: 0.25, max: 1.5, step: 0.25 },
-  { key: "pullRadius", type: "int", scope: "world", label: "Pull radius (blocks)", help: "Mobs, items and players this close are pulled in and lifted", min: 4, max: 24, step: 1 },
-  { key: "throwPlayers", type: "bool", scope: "world", label: "Throw players", help: "Players close to the funnel are thrown a few blocks and land with Slow Falling" },
-  { key: "viewDistance", type: "int", scope: "world", label: "Funnel view distance (blocks)", min: 32, max: 192, step: 16 },
-  { key: "rings", type: "int", scope: "world", label: "Funnel rings", help: "Rings of dust stacked up the funnel, for each nearby player", min: 4, max: 32, step: 1 },
+  { key: "enabled", type: "bool", scope: "world", label: "Post new bounties every day", help: "Disabled, no new bounties and no targets spawn" },
+  { key: "resetHourUtc", type: "int", scope: "world", label: "New bounties at (hour, UTC)", help: "0 = midnight UTC. Changing it can post new bounties early once", min: 0, max: 23, step: 1 },
+  { key: "count", type: "int", scope: "world", label: "Bounties per day", help: "Applies from the next day's bounties", min: 1, max: 8, step: 1 },
+  { key: "champions", type: "int", scope: "world", label: "Champion targets per day", help: "The rest are cull bounties. Needs the Champions pack", min: 0, max: 5, step: 1 },
+  { key: "minDistance", type: "int", scope: "world", label: "Targets at least (blocks from the board)", min: 50, max: 5000, step: 50 },
+  { key: "maxDistance", type: "int", scope: "world", label: "Targets at most (blocks from the board)", min: 100, max: 10000, step: 50 },
+  { key: "spawnDistance", type: "int", scope: "world", label: "Target appears within (blocks)", help: "A target appears when a player comes this close to its spot", min: 16, max: 128, step: 8 },
+  { key: "rewards.champion", type: "int", scope: "world", label: "Crowns for a champion target", min: 0, max: 10000, step: 5 },
+  { key: "rewards.helper", type: "int", scope: "world", label: "Crowns for each helper", min: 0, max: 10000, step: 5 },
+  { key: "rewards.cull", type: "int", scope: "world", label: "Crowns for a cull bounty (each)", min: 0, max: 10000, step: 5 },
+  { key: "notes", type: "bool", scope: "player", default: true, label: "Bounty progress notes", help: "A note above the hotbar when a kill counts toward a cull bounty" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

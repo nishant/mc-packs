@@ -3,21 +3,21 @@
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
-const PACK = "tornado_bp";
-const PREFIX = "tornado";
-const TITLE = "Tornadoes";
+const PACK = "elite_bp";
+const PREFIX = "elite";
+const TITLE = "Champions";
 const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Tornadoes in thunderstorms", help: "/realm:tornado_spawn works either way" },
-  { key: "chance", type: "float", scope: "world", label: "Chance a thunderstorm brings a tornado", help: "0 to 1, rolled when the thunderstorm starts", min: 0, max: 1, step: 0.05 },
-  { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 512, step: 16 },
-  { key: "density", type: "float", scope: "world", label: "Funnel density", help: "Lower it if the funnel slows devices down", min: 0.25, max: 1.5, step: 0.25 },
-  { key: "pullRadius", type: "int", scope: "world", label: "Pull radius (blocks)", help: "Mobs, items and players this close are pulled in and lifted", min: 4, max: 24, step: 1 },
-  { key: "throwPlayers", type: "bool", scope: "world", label: "Throw players", help: "Players close to the funnel are thrown a few blocks and land with Slow Falling" },
-  { key: "viewDistance", type: "int", scope: "world", label: "Funnel view distance (blocks)", min: 32, max: 192, step: 16 },
-  { key: "rings", type: "int", scope: "world", label: "Funnel rings", help: "Rings of dust stacked up the funnel, for each nearby player", min: 4, max: 32, step: 1 },
+  { key: "enabled", type: "bool", scope: "world", label: "Champions appear on their own", help: "Disabled, only operators and other packs (the Bounty Board) make champions" },
+  { key: "chance", type: "float", scope: "world", label: "Champion chance", help: "Share of hostile night spawns that become champions (0.025 = 1 in 40)", min: 0, max: 0.25, step: 0.005 },
+  { key: "bloodMoonMultiplier", type: "float", scope: "world", label: "Blood Moon multiplier", help: "The chance is multiplied by this during a Blood Moon", min: 1, max: 10, step: 0.5 },
+  { key: "maxAlive", type: "int", scope: "world", label: "Most champions at once", help: "No new natural champions while this many are loaded", min: 1, max: 32, step: 1 },
+  { key: "nightOnly", type: "bool", scope: "world", label: "Only at night" },
+  { key: "surfaceOnly", type: "bool", scope: "world", label: "Only under the open sky", help: "Keeps caves and mob farms from making champions" },
+  { key: "announceRadius", type: "int", scope: "world", label: "Alert radius (blocks)", help: "Players this close get a chat line when a champion appears. 0 = no alerts", min: 0, max: 128, step: 8 },
+  { key: "alerts", type: "bool", scope: "player", default: true, label: "Champion alerts in chat", help: "A chat line when a champion appears near you" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

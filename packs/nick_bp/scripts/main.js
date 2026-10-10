@@ -8,6 +8,10 @@ import { get, onChange } from "./settings.js";
 //
 // The AFK pack sets the same name tag (to "[AFK] Name" and back), so twice a second this pack puts the
 // nickname back on anyone whose tag differs, keeping the AFK prefix while the player has the afk tag.
+//
+// A title from the Titles & Trails pack (the player tag `realm_title:<text>`) shows as a gray line
+// under the name, with or without a nickname. Tags can change at any time, so the same twice-a-second
+// check picks it up, and puts the plain gamertag back once the title is gone.
 
 /** @typedef {{ n: string, c: string, g: string }} Nick nickname, color code (one character after §), gamertag when last seen */
 
@@ -82,14 +86,25 @@ const shown = new Set();
 /** @param {Player} player */
 const afkPrefix = (player) => (player.hasTag(CONFIG.afkTag) ? CONFIG.afkPrefix : "");
 
+const TITLE_TAG = "realm_title:"; // set by the Titles & Trails pack: one per player
+
+/** The line under the name for the player's title, or "". @param {Player} player */
+function titleLine(player) {
+  const tag = player.getTags().find((t) => t.startsWith(TITLE_TAG));
+  const title = tag ? tag.slice(TITLE_TAG.length).replace(/§./g, "").trim() : "";
+  return title ? `\n§7${title}` : "";
+}
+
 /** What the player's name tag should be, or undefined to leave it alone. @param {Player} player */
 function wanted(player) {
   const nick = enabled() ? nicks().get(player.id) : undefined;
+  const title = titleLine(player);
   if (nick) {
     const second = get("showGamertag") === true ? `\n§7${player.name}` : "";
-    return `${afkPrefix(player)}§${nick.c}${nick.n}§r${second}`;
+    return `${afkPrefix(player)}§${nick.c}${nick.n}§r${second}${title}`;
   }
-  // Nicknamed while nicknames are disabled, or was nicknamed: the gamertag.
+  if (title) return `${afkPrefix(player)}${player.name}§r${title}`;
+  // Nicknamed while nicknames are disabled, or was nicknamed or titled: the gamertag.
   if (shown.has(player.id) || nicks().has(player.id)) return `${afkPrefix(player)}${player.name}`;
   return undefined;
 }
@@ -100,7 +115,7 @@ function refresh(player, force = false) {
     const want = wanted(player) ?? (force ? `${afkPrefix(player)}${player.name}` : undefined);
     if (want === undefined) return;
     if (player.nameTag !== want) player.nameTag = want;
-    if (enabled() && nicks().has(player.id)) shown.add(player.id);
+    if ((enabled() && nicks().has(player.id)) || titleLine(player)) shown.add(player.id);
     else shown.delete(player.id);
   } catch {
     // left meanwhile
