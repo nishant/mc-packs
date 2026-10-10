@@ -1260,9 +1260,9 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 
 ### How to use
 
-1. Run `/realm:mail` and pick **Write a letter**. Choose who it's for (everyone who has joined since the pack was added, with `(online)` after the ones playing now), type a subject and the letter, and press **Send**. Type `\n` in the letter for a new line.
+1. Run `/realm:mail` and pick **Write a letter**. Choose who it's for (everyone who has joined since the pack was added, with `(online)` after the ones playing now), type a subject and the letter, and press **Send**. Minecraft's text boxes hold only 100 characters each, so the letter has several boxes (6 for the default 600 characters): a full box runs straight on into the next, and after a box that isn't full the next one starts a new line. You can also type `\n` for a new line.
 2. If they're online, they see `New letter from Sam: "Hello!". Read it with /realm:mail` in chat. If not, the letter waits: the next time they join, chat says `You have 2 unread letters: /realm:mail`.
-3. **Read your letters:** `/realm:mail` → **Inbox**. New letters are marked `[New]`. Open one to read it, then **Reply** or **Delete** it. **Delete all read letters** clears out the rest.
+3. **Read your letters:** `/realm:mail` → **Inbox**. New letters are marked `[New]`. Open one to read it, then **Reply** or **Delete** it. **Delete all read letters** clears out the rest and shows the inbox again.
 4. **See what you sent:** `/realm:mail` → **Sent** shows your recent letters and whether each was read yet.
 5. Don't want the chat line on joining? Disable **Unread letters notice on join** in `/realm:prefs`.
 6. **Operators:** `/realm:config` → **Realm Mail** sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining.
@@ -1270,9 +1270,9 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 ### What players see
 
 - **The menu** says how many unread letters you have, then **Inbox** (`3 letters, 1 unread`), **Write a letter** and **Sent**.
-- **Writing:** the recipient list holds every player who has joined since the pack was added (up to 400, `maxRoster`; the ones seen longest ago are forgotten first). The subject is shortened to 40 characters (`subjectLength`) and the letter to 600 (`bodyLength`); chat says `(It was shortened to fit.)` when that happens. An empty letter brings the form back with `Write something in the letter first.` A letter without a subject gets `(no subject)`.
-- **Waiting between letters:** each player can send one letter every 10 seconds (`sendCooldownSeconds`); sending sooner says `Wait 4 more seconds before sending another letter.`
-- **Full inboxes:** an inbox holds 50 letters (`inboxLimit`). When a letter arrives in a full inbox, the oldest letters its owner has already read are dropped to make room. If every letter in it is still unread, the letter isn't sent and the writer sees `Alex's mailbox is full of unread letters. Try again once they've read some.`
+- **Writing:** the recipient list holds every player who has joined since the pack was added (up to 400, `maxRoster`; the ones seen longest ago are forgotten first). The subject is shortened to 40 characters (`subjectLength`) and the letter to 600 (`bodyLength`); chat says `(It was shortened to fit.)` when that happens. An empty letter brings the form back with `Write something in the letter first.` A letter without a subject gets `(no subject)`. The subject is at most 100 characters whatever `subjectLength` says, the most a text box takes.
+- **Waiting between letters:** each player can send one letter every 10 seconds (`sendCooldownSeconds`); sending sooner brings the form back, filled in, with `Wait 4 more seconds before sending another letter, then press Send again.` at the top
+- **Full inboxes:** an inbox holds 50 letters (`inboxLimit`). When a letter arrives in a full inbox, the oldest letters its owner has already read are dropped to make room. If every letter in it is still unread, the letter isn't sent: the form comes back, filled in, with `Alex's mailbox is full of unread letters. Try again once they've read some.` at the top, so you can pick someone else or keep the text.
 - **Reading** a letter shows who sent it and when (`3h ago (2026-10-06 14:05 UTC)`), and marks it read. **Reply** opens the letter form with the sender picked and the subject `Re: ...`.
 - **Sent** keeps your last 30 letters (`sentLimit`), each marked `read`, `not read yet` or `deleted` (by the recipient). **Remove from Sent** removes your copy only; the recipient keeps theirs.
 - **No items:** letters can't carry items, because an item's full data can't be stored safely by an add-on. To send items, use the [Player Mailroom](https://mc.nish.software/mailroom/) build (the mail menu points to `mc.nish.software/mailroom`).
@@ -1290,7 +1290,7 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 | `inboxLimit` | `50` | Most letters one inbox holds. A new letter in a full inbox drops the oldest read letters first; if all are unread, it isn't sent (10–200 in game) |
 | `sentLimit` | `30` | Most letters kept in each player's Sent list; the oldest drop off first. `0` keeps none (0–100 in game) |
 | `subjectLength` | `40` | Longest subject, in characters |
-| `bodyLength` | `600` | Longest letter, in characters |
+| `bodyLength` | `600` | Longest letter, in characters. The form gets one 100-character box per 100 characters |
 | `notifyOnJoin` | `true` | Players with unread letters get `You have 2 unread letters: /realm:mail` in chat on joining |
 | `notifyDelaySeconds` | `8` | Seconds after joining before that line, so it comes after the welcome and news popups |
 | `sendCooldownSeconds` | `10` | Seconds a player waits between two letters. `0` = no wait (0–120 in game) |
@@ -2956,13 +2956,13 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 - **Other packs:** finding a treasure finishes a `treasure` quest (`realm:quest_done`), gives 10 Wayfarers reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp) (`reputation`), 50 Exploration XP in [Skills](#skills--skills_bp) (`skillXp`) and the `treasure` page entry in the [Field Journal](#field-journal--journal_bp). One treasure in 10 (`relicChance`) also holds a relic from [Relics](#relics--relics_bp) (`relics`): `Something old and strange glints among the coins...`
 - **Giving up** (`/realm:maps` → **Give up this hunt**) removes the hunt and its map; the Crowns aren't paid back. A chest that was already buried stays where it is.
 
-**Treasure chests never touch builds.** A chest only replaces natural ground (grass, dirt, sand, gravel, clay, stone, snow, natural terracotta and the like), with natural ground above it. Before burying one, the pack checks the 9 x 9 columns around the spot, from 4 blocks over the ground to 4 below, and skips the spot if it finds anything a player likely made: planks, glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpet, concrete, glazed terracotta, bricks, slabs, stairs, crafting tables, furnaces, rails, farmland, paths, cobblestone and more. It never buries one within 64 blocks of world spawn (`avoidSpawn`), and skips columns it can't read. Packs can't read [Land Claims](#land-claims--claims_bp), so this check is what keeps chests out of claimed builds.
+**Treasure chests never touch builds.** A chest only replaces natural ground (grass, dirt, sand, gravel, clay, stone, snow, natural terracotta and the like), with natural ground above it. Before burying one, the pack checks the 9 x 9 columns around the spot, from 4 blocks over the ground to 4 below, and skips the spot if it finds anything a player likely made: planks, glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpet, concrete, glazed terracotta, terracotta in colors the badlands don't have, bricks, tiles, slabs, stairs, crafted wood, metal and other crafted blocks, heads, crafting tables, furnaces, rails, farmland, paths, cobblestone and more. It never buries one within 64 blocks of world spawn (`avoidSpawn`), and skips columns it can't read. Packs can't read [Land Claims](#land-claims--claims_bp), so this check is what keeps chests out of claimed builds.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:maps` | Everyone | Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map and to give the hunt up |
+| `/realm:maps` | Everyone | Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up |
 | `/realm:maps_give <player>` | Operators | Gives the players picked (`@a` works) a free treasure map, starting where each one stands. Skips players outside the Overworld or already on as many hunts as allowed (default 1, `maxHunts`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3359,12 +3359,12 @@ The weather depends on where you stand: when it rains, deserts and badlands get 
 
 ### What players see
 
-- **Where:** decided once a second for each player in the overworld from the highest block over them and over one random column within 4 blocks: sand, red sand, sandstone, terracotta, cactus or dead bushes mean desert or badlands; snow, powder snow or ice mean a snowy place. The Script API can't read biomes, so this is a guess from the ground (as [Rain Extras](#rain-extras--rain_bp) does). Outdoors means nothing 2 or more blocks over your head.
+- **Where:** decided once a second for each player in the overworld from the highest block over them and over one random column within 4 blocks: sand, red sand, sandstone, terracotta, cactus or dead bushes mean desert or badlands (cut, smooth and chiseled sandstone, sandstone stairs, slabs and walls, and glazed terracotta are building blocks and don't count); snow, powder snow or ice mean a snowy place. Sand with water within 8 blocks (and no more than 3 below your feet) is a beach or a riverbank, where it really rains, so no sandstorm there. The Script API can't read biomes, so this is a guess from the ground (as [Rain Extras](#rain-extras--rain_bp) does). Outdoors means nothing 2 or more blocks over your head, and not flying more than 16 blocks over the ground.
 - **Sandstorm** (rain or thunder, outdoors on desert ground): the `realm:sky_sandstorm` fog (tan, about 6 to 20 blocks of sight) and 2 bursts of blowing sand a second (`particlesPerSecond`) from upwind. The wind (`wind.speed`, 6 blocks a second) slowly turns (`wind.turnDegrees`, 2° a second), so the sand drifts from a different side over a few minutes. Slowness I without a helmet (`slowness`, `sandstorm.helmetProtects`).
 - **Blizzard** (rain or thunder, outdoors on snow or ice): the `realm:sky_blizzard` white-out fog, driving snow from upwind, and Slowness I. A lit campfire or soul campfire within 4 blocks (`blizzard.campfireRadius`) or a roof ends it for you.
 - **Fog bank** (no rain): from time 23000 (sunrise) to 2500 (mid-morning) (`fogbank.fromTime`, `fogbank.toTime`), within 30 real minutes of the last rain ending (`fogbank.minutesAfterRain`), outdoors, below y 80 (`fogbank.maxY`), with water within 6 blocks to the side (`fogbank.waterRadius`) and no more than 3 below your feet (`fogbank.waterBelow`): the `realm:sky_fogbank` fog and pale fog puffs on the ground around you, one a second.
 - A condition lingers 3 seconds after you step out of it (`lingerSeconds`), so a patch of grass in a desert doesn't make it flicker. The note above the hotbar shows at most once every 2 minutes for each condition.
-- **Slowness** is Slowness I for 2 seconds, renewed every second while you're in it, without particles. A stronger or longer Slowness (a potion) is left alone.
+- **Slowness** is Slowness I for 2 seconds, renewed every second while you're in it, without particles. A stronger or longer Slowness (a potion) is left alone. None in creative or spectator mode.
 - The fogs and particles are only for the player they're for. Rain itself still comes from [Realistic Rain](#realistic-rain--rain_rp) and [Rain Extras](#rain-extras--rain_bp), which leave deserts and snowy places alone.
 - The first time you're in each condition, the [Journal](#field-journal--journal_bp) records it on its weather page (`sandstorm`, `blizzard`, `fogbank`).
 
@@ -3411,14 +3411,15 @@ Operators can change `enabled`, `slowness`, `sandstorm.enabled`, `sandstorm.helm
 ### How it works
 
 - `weatherChange` in the overworld keeps the weather (saved as `climate:weather`), and a change to clear after rain saves the time as `climate:dry`. The pack's loop only runs while it rains, during the fog bank window after rain, or while a player still has its fog; it runs twice a second and updates half of the players each time, so each player once a second.
-- Each update: one `getTopmostBlock` over the player (outdoors, and the ground) and, in rain, one over a random column within 4 blocks. In a blizzard, a lit campfire is looked for with `Dimension.getBlocks` in the 9 x 9 x 9 blocks around the player every 3 seconds; for a fog bank, water with `Dimension.containsBlock` every 5 seconds. Both are single native calls.
+- Each update: one `getTopmostBlock` over the player (outdoors, and the ground) and, in rain, one over a random column within 4 blocks. In a blizzard, a lit campfire is looked for with `Dimension.getBlocks` in the 9 x 9 x 9 blocks around the player every 3 seconds; on sand, water (for a beach) with `Dimension.containsBlock` in the 17 x 17 blocks around and up to 3 below every 5 seconds; for a fog bank, water the same way every 5 seconds. Each is a single native call.
 - Fogs use `/fog @s push realm:sky_… climate_sky` and `/fog @s remove climate_sky`, so only this pack's fog entry is ever touched; joining clears it and the next update puts back what's needed. Particles use `Player.spawnParticle` with the wind in `variable.wx` and `variable.wz`, so only that player sees them.
 - Slowness uses `addEffect("slowness", 40, { amplifier: 0, showParticles: false })`, skipped while a stronger or longer Slowness is on.
 - The first time in each condition sends `realm:journal` `{ player, page: "weather", entry, label }` and the note above the hotbar sends `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside.
 
 ### Known limits
 
-- Biomes can't be read, so a sandstone roof or a snow-covered field counts as desert or snowy ground. Rain or thunder anywhere is a sandstorm or blizzard on that ground.
+- Biomes can't be read, so a plain sandstone or terracotta roof or a snow-covered field counts as desert or snowy ground, and the sand by a desert river or well counts as a riverbank. Rain or thunder anywhere is a sandstorm or blizzard on that ground.
+- Fogs stack, and the one pushed last shows. Rain Extras leaves its storm fog off on sand, terracotta, snow and ice, and Blood Moon & Harvest Moon leaves its moon fog off while it rains, so a sandstorm or blizzard fog is never covered by theirs.
 - Realm Skies has one fog for each condition, so the fog comes and goes in one step rather than rolling in by stages like the storm fog of Rain Extras.
 
 ---

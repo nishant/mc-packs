@@ -4,7 +4,7 @@
     "name": "Treasure Maps & Riddles",
     "description": "Buy a treasure map from the cartographer and follow riddle clues across the land to a buried chest. /realm:maps",
     "uuid": "97dc98bb-727a-4f76-995c-69c4386b21a1",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

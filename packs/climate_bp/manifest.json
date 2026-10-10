@@ -4,7 +4,7 @@
     "name": "Regional Weather",
     "description": "Sandstorms in deserts, blizzards in snowy places and morning fog banks by the water, decided for each player from where they stand. /realm:climate",
     "uuid": "573bbe13-7714-44f2-974d-7004d9b7d329",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

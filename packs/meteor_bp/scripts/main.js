@@ -67,6 +67,19 @@ const isNatural = (id) => NATURAL.has(id) || ORE.test(id) || PLANT.test(id);
 /** @param {string} id */
 const isBuilt = (id) => !isNatural(id) && BUILT.test(id);
 
+/** Leaves a player placed (hedges, tree builds) keep `persistent_bit`; natural leaves don't. @param {import("@minecraft/server").Block} b */
+function placedLeaves(b) {
+  if (!b.typeId.endsWith("leaves")) return false;
+  try {
+    return b.permutation.getState("persistent_bit") === true;
+  } catch {
+    return false;
+  }
+}
+
+/** A block the crater must never touch and that rules a spot out. @param {import("@minecraft/server").Block} b */
+const isBuiltBlock = (b) => isBuilt(b.typeId) || placedLeaves(b);
+
 // ---------------------------------------------------------------------------
 // Saved impacts
 // ---------------------------------------------------------------------------
@@ -236,24 +249,32 @@ function streak(f) {
     let end;
     let scale = 1;
     const tries = dist <= PROXY_DISTANCE ? [dist] : [PROXY_DISTANCE, 70, 45];
+    let shown = false;
     for (const d of tries) {
       if (dist <= PROXY_DISTANCE) end = { x: f.impact.x + 0.5, y: f.y, z: f.impact.z + 0.5 };
       else {
-        scale = d / PROXY_DISTANCE; // closer stand-ins are drawn smaller, so it looks the same size
+        scale = d / PROXY_DISTANCE; // closer stand-ins are drawn smaller and slower, so it looks the same
         end = { x: l.x + (dx / dist) * d, y: l.y + 8, z: l.z + (dz / dist) * d };
       }
-      const life = Math.max(0.5, Math.min(STREAK_SECONDS, (MAX_Y - end.y) / (FALL_SPEED.down * scale)));
+      const full = Math.max(0.5, Math.min(STREAK_SECONDS, (MAX_Y - end.y) / (FALL_SPEED.down * scale)));
       const v = { x: f.vel.x * scale, y: f.vel.y * scale, z: f.vel.z * scale };
       vars.setFloat("variable.dx", v.x);
       vars.setFloat("variable.dy", v.y);
       vars.setFloat("variable.dz", v.z);
-      vars.setFloat("variable.life", life);
-      try {
-        player.spawnParticle(METEOR, { x: end.x - v.x * life, y: end.y - v.y * life, z: end.z - v.z * life }, vars);
-        break;
-      } catch {
-        // that spot isn't loaded for this player: try closer
+      vars.setFloat("variable.size", scale);
+      // The particle starts where the streak begins, up to ~90 blocks sideways and ~135 up from its end: if that
+      // isn't loaded, start it later on the same path (a shorter streak).
+      for (const life of [full, full / 2, full / 4]) {
+        vars.setFloat("variable.life", life);
+        try {
+          player.spawnParticle(METEOR, { x: end.x - v.x * life, y: end.y - v.y * life, z: end.z - v.z * life }, vars);
+          shown = true;
+          break;
+        } catch {
+          // not loaded there: start it closer to its end
+        }
       }
+      if (shown) break;
     }
   }
 }
@@ -351,12 +372,17 @@ function groundAt(dim, x, z) {
 /**
  * Is a crater safe here? Natural ground, not near spawn, and no player-made block in the 9 x 9 columns
  * around it (surface - 4 to + 4, and each column's topmost block, for roofs). Yields once per column.
- * @param {Dimension} dim @param {number} x @param {number} z @param {{ ok: boolean, y: number }} out
+ * `out.unloaded` is set when part of it isn't loaded, so the crater can wait instead of giving up.
+ * @param {Dimension} dim @param {number} x @param {number} z @param {{ ok: boolean, y: number, unloaded: boolean }} out
  * @returns {Generator<void, void, void>}
  */
 function* checkSpot(dim, x, z, out) {
   out.ok = false;
   if (fromSpawn(x, z) < get("avoidSpawn")) return;
+  if (!topAt(dim, x, z)) {
+    out.unloaded = true;
+    return;
+  }
   const ground = groundAt(dim, x, z);
   if (!ground || !isNatural(ground.typeId)) return;
   const sy = ground.location.y;
@@ -364,8 +390,11 @@ function* checkSpot(dim, x, z, out) {
   for (let dx = -SCAN; dx <= SCAN; dx++) {
     for (let dz = -SCAN; dz <= SCAN; dz++) {
       const top = topAt(dim, x + dx, z + dz);
-      if (!top) return; // unloaded
-      if (isBuilt(top.typeId)) return;
+      if (!top) {
+        out.unloaded = true;
+        return;
+      }
+      if (isBuiltBlock(top)) return;
       if (top.isLiquid && ++wet > 12) return; // a lake or the sea
       for (let y = sy - SCAN; y <= sy + SCAN; y++) {
         let b;
@@ -374,8 +403,11 @@ function* checkSpot(dim, x, z, out) {
         } catch {
           b = undefined;
         }
-        if (!b) return;
-        if (isBuilt(b.typeId)) return;
+        if (!b) {
+          out.unloaded = true;
+          return;
+        }
+        if (isBuiltBlock(b)) return;
       }
       yield;
     }
@@ -389,13 +421,14 @@ function* makeCrater(impact) {
   try {
     const dim = overworld();
     if (!get("craters")) {
+      if (!topAt(dim, impact.x, impact.z)) return; // not loaded yet: stays "pending"
       const g = groundAt(dim, impact.x, impact.z);
       impact.y = g ? g.location.y : undefined;
       impact.state = g ? "made" : "none";
       if (g) smoke(dim, { x: impact.x + 0.5, y: g.location.y + 1, z: impact.z + 0.5 });
       return;
     }
-    const out = { ok: false, y: 0 };
+    const out = { ok: false, y: 0, unloaded: false };
     let x = impact.x, z = impact.z;
     yield* checkSpot(dim, x, z, out);
     for (let i = 0; i < ALTERNATES && !out.ok; i++) {
@@ -405,6 +438,7 @@ function* makeCrater(impact) {
       z = Math.floor(impact.z + Math.sin(angle) * d);
       yield* checkSpot(dim, x, z, out);
     }
+    if (!out.ok && out.unloaded) return; // part of it isn't loaded yet: stays "pending", tried again when someone is near
     if (!out.ok) {
       impact.state = "none";
       for (const p of dim.getPlayers()) {
@@ -444,7 +478,7 @@ function* carve(dim, cx, sy, cz) {
     try {
       const b = dim.getBlock({ x, y, z });
       if (!b || b.isLiquid) return;
-      if (b.isAir ? !airToo || type === "minecraft:air" : !isNatural(b.typeId) && !isOurs(b.typeId)) return;
+      if (b.isAir ? !airToo || type === "minecraft:air" : (!isNatural(b.typeId) && !isOurs(b.typeId)) || placedLeaves(b)) return;
       if (b.typeId !== type) b.setType(type);
     } catch {
       // unloaded or out of the world

@@ -4,7 +4,7 @@
     "name": "Blood Moon & Harvest Moon",
     "description": "Some full moons rise as a Blood Moon (more monsters, a reward for surviving) or a Harvest Moon (crops grow faster). /realm:moon",
     "uuid": "0232d9ae-a9b5-4b8d-94c2-aa2e59720fa1",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

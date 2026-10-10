@@ -9,10 +9,10 @@ export const CONFIG = {
   /** Most letters kept in each player's Sent list; the oldest drop off the list first. */
   sentLimit: 30,
 
-  /** Longest subject, in characters. Longer subjects are shortened. */
+  /** Longest subject, in characters (at most 100, the most a text box takes). Longer subjects are shortened. */
   subjectLength: 40,
 
-  /** Longest letter, in characters. Longer letters are shortened. */
+  /** Longest letter, in characters. Longer letters are shortened. The form gets one text box per 100 characters (a text box's limit). */
   bodyLength: 600,
 
   /** On joining, players with unread letters get a chat line such as "You have 2 unread letters: /realm:mail". */
