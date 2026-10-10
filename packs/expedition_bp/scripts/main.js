@@ -1013,7 +1013,7 @@ async function endRun(run, why) {
   if (why) tell(run, why);
   for (const id of [...run.members.keys()]) {
     const p = online(id);
-    if (p) sendBack(p);
+    if (p && returnSpot(p)) sendBack(p); // members still getting ready were never taken anywhere
   }
   run.members.clear();
   for (const m of run.mobs) if (m.isValid) m.remove();
