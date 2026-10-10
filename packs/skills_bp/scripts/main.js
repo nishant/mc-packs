@@ -338,7 +338,7 @@ const crops = new Map(CONFIG.farming.crops.map((c) => [c.block, c]));
 // make placed logs and stone count again. Pistons move blocks, so everything a piston moves (and
 // the spots next to it) counts as placed too: a place-push-break loop gives nothing.
 const PLACED_PROP = "skills:placed";
-const PLACED_PER_PROP = 1500; // about 16 characters each: well under the 32,000 limit
+const PLACED_PER_PROP = 1200; // at most about 20 characters each: well under the 32,000 limit
 /** @type {Set<string> | undefined} */
 let placedSet;
 let placedDirty = false;
@@ -387,6 +387,8 @@ function markPlaced(key) {
 
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
+    // Planted crops with a growth state count anyway once grown: no need to remember them.
+    if (crops.get(block.typeId)?.state !== undefined) return;
     markPlaced(spot(block.dimension.id, block.location));
   } catch (e) {
     console.warn(`[skills] ${e}`);
@@ -395,8 +397,11 @@ world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
 
 world.afterEvents.pistonActivate.subscribe(({ dimension, piston }) => {
   try {
-    const locs = piston.getAttachedBlocksLocations();
-    if (locs.length > 13) return; // a piston moves at most 12 blocks
+    // Only blocks that give XP matter (flying machines of slime and observers mark nothing).
+    const locs = piston
+      .getAttachedBlocks()
+      .filter((b) => mineBlocks.has(b.typeId) || logs.has(b.typeId) || (crops.has(b.typeId) && crops.get(b.typeId)?.state === undefined))
+      .map((b) => b.location);
     for (const l of locs) {
       for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
         markPlaced(spot(dimension.id, { x: l.x + dx, y: l.y + dy, z: l.z + dz }));
