@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Expeditions",
+    "description": "Dungeon runs for you and your party: fight through generated rooms, solve the lever puzzle, beat the boss and race the clock for treasure. /realm:expedition",
+    "uuid": "6b3b08c0-7abc-41b2-91e1-6c6ea26d158a",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "538189c8-9fca-4f23-9261-a1aab7260a53",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

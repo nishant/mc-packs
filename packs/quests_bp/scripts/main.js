@@ -157,6 +157,12 @@ function complete(player, q, day) {
   const got = reward(player, q.reward);
   player.sendMessage(`§aQuest complete: ${q.label}!${got ? ` §7Reward: ${got}` : ""}`);
   player.playSound("random.levelup", { pitch: 1.1, volume: 0.8 });
+  // Tell other packs (Guilds, Skills, Titles, Journal...) a quest was finished. Nobody listening is fine.
+  try {
+    system.sendScriptEvent("realm:quest_done", JSON.stringify({ player: player.id, pack: "quests_bp", id: q.id, label: q.label, kind: q.kind }));
+  } catch (e) {
+    console.warn(`[quests] quest_done: ${e}`);
+  }
   if (day.q.every((p) => p.done || !pool.has(p.id))) player.sendMessage(`§6All of today's quests are done. New ones in ${untilReset()}.`);
 }
 
@@ -238,7 +244,9 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
     const key = spot(block.dimension.id, block.location);
     const wasPlaced = placed.delete(key);
     if (!wasPlaced) progress(player, "mine", id);
-    if (!wasPlaced && ripe(brokenBlockPermutation)) progress(player, "harvest", id);
+    // Planting seeds is a block place too, so a grown crop counts even where it was planted lately;
+    // a melon or pumpkin (no growth state) a player placed doesn't.
+    if (ripe(brokenBlockPermutation) && (!wasPlaced || crops.get(id)?.state !== undefined)) progress(player, "harvest", id);
   } catch (e) {
     console.warn(`[quests] ${e}`);
   }

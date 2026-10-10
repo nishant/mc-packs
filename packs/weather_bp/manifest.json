@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Weather Almanac",
+    "description": "Plans the overworld weather hours ahead (clear spells, rain and thunderstorms) so players can read the forecast. /realm:weather",
+    "uuid": "5bb71a49-4684-41ab-85f8-a2faeeb33d8e",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "b40ef148-019e-4ccc-90fa-b26a822b96da",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

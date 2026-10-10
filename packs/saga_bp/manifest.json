@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Story Questlines",
+    "description": "Multi-chapter story quests told by the townsfolk, with choices, a tracker and rewards: The Drowned Bell and The Cartographer's Last Map. /realm:saga",
+    "uuid": "6e363486-40b0-40b4-9497-7fb5fd1770f1",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "1341c78a-89bb-4f5c-9c63-2fec5e67fffc",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

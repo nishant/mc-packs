@@ -703,7 +703,7 @@ export const PACKS = [
     "folder": "nick_bp",
     "topic": "nick",
     "name": "Nicknames",
-    "summary": "Pick a nickname and a color to show above your head instead of your gamertag. Chat, the player list and death messages still show gamertags: the stable Script API can't change chat.",
+    "summary": "Pick a nickname and a color to show above your head instead of your gamertag. Chat, the player list and death messages still show gamertags: the stable Script API can't change chat. With Titles & Trails, the title a player wears shows in gray on a line under the name, with or without a nickname.",
     "steps": [
       {
         "text": "Run §e/realm:nick§r, type a nickname (3 to 16 letters A-Z, digits, spaces or §e_§r), pick a color and tap §lSave§r. It shows above your head right away, with your gamertag in gray underneath.",
@@ -711,6 +711,10 @@ export const PACKS = [
       },
       {
         "text": "Run §e/realm:nick§r again to change it, or enable §lRemove my nickname§r there to show your gamertag again. Your nickname stays when you leave, die or the realm restarts.",
+        "ops": false
+      },
+      {
+        "text": "Wear a title from §e/realm:titles§r (the Titles & Trails pack) and it shows in gray on its own line under your name, whether or not you have a nickname. Choose §lNone§r there to take it off.",
         "ops": false
       },
       {
@@ -923,6 +927,1220 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Sits you down where you stand (on the ground). Sneak to stand up"
+      }
+    ]
+  },
+  {
+    "folder": "npc_bp",
+    "topic": "npc",
+    "name": "Townsfolk",
+    "summary": "Eight named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith and Sol the Sky-reader. They turn to face you as you walk up, mutter to themselves now and then, go home at night and come back at dawn, and greet you depending on the time of day and the weather. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from Crowns, the stories of Story Questlines or Sol's forecast from the Weather Almanac. The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.",
+    "steps": [
+      {
+        "text": "Run §e/realm:npc§r to see who lives on the realm and where: each townsfolk with the distance and direction from you, like §eMara the Cartographer - 240m NE (cartographer)§r.",
+        "ops": false
+      },
+      {
+        "text": "Walk up to one. They turn to face you, and now and then say something above their head (§eWhere did I leave my compass?§r).",
+        "ops": false
+      },
+      {
+        "text": "Tap them to talk. The menu greets you (§eMara: \"Morning, Steve! The light's perfect for surveying.\"§r) and lists what they can do for you, then §lWho lives here?§r (where everyone is) and §lGoodbye§r. What's on the list depends on which packs the realm has: Quill opens the §lMarket§r, for example.",
+        "ops": false
+      },
+      {
+        "text": "At night, townsfolk with a home go there; they're back at their post at dawn.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r stand where an NPC should live, face the way it should look back, and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). Set where it sleeps with §e/realm:npc_home <id>§r (run it at its post to clear the home), list everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. §e/realm:config§r -> §lTownsfolk§r switches the turning, idle lines and night routine.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:npc",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Lists the townsfolk on the realm with their distance and direction from you, and their roles"
+      },
+      {
+        "usage": "/realm:npc_add <id>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed)"
+      },
+      {
+        "usage": "/realm:npc_remove",
+        "ops": false,
+        "who": "Operators",
+        "text": "Removes the nearest townsfolk within 5 blocks (§eremoveRange§r) and forgets its spot"
+      },
+      {
+        "usage": "/realm:npc_home <id>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Where that townsfolk goes at night (time 13000 to 23000, §enightStart§r/§enightEnd§r); in the same dimension as its post. Run it within 2 blocks of the post to clear the home"
+      },
+      {
+        "usage": "/realm:npc_list",
+        "ops": false,
+        "who": "Operators",
+        "text": "Every placed townsfolk with its coordinates, dimension, home and whether it's loaded, and the ids not placed yet"
+      }
+    ]
+  },
+  {
+    "folder": "crowns_bp",
+    "topic": "crowns",
+    "name": "Crowns",
+    "summary": "The realm's currency. Crowns are paid by other packs (quests, bounties, stories and more), earned by selling harvest, loot and ores at the market, and spent on supplies there or on rare goods from the Merchant Caravan. Everyone gets a small bonus for their first visit of each day, can pay other players, and can see who's richest. The market is Quill the Trader's: tap a merchant from Townsfolk and pick §lMarket§r.",
+    "steps": [
+      {
+        "text": "Run §e/realm:crowns§r to see your balance, your rank and the top 10.",
+        "ops": false
+      },
+      {
+        "text": "Log in each day for the daily bonus: §e+5 Crowns (Daily login bonus. Balance: 25)§r in chat, once per UTC day.",
+        "ops": false
+      },
+      {
+        "text": "To sell or buy, find Quill the Trader (§e/realm:npc§r says where), tap them and pick §lMarket§r. §lSell§r lists what you carry that the market buys; pick one and slide how many. §lBuy§r lists the supplies for sale.",
+        "ops": false
+      },
+      {
+        "text": "Pay a friend with §e/realm:crowns_pay <player> <amount>§r, for example §e/realm:crowns_pay Steve 25§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:crowns_give <player> <amount>§r gives Crowns (a negative amount takes them). §e/realm:config§r -> §lCrowns§r sets the daily bonus, the starting balance, whether the market is open and whether §e/realm:crowns_market§r opens it anywhere. Prices are the §esell§r and §ebuy§r lists in §econfig.js§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:crowns",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Your balance, rank and the top 10 (§etopCount§r)"
+      },
+      {
+        "usage": "/realm:crowns_pay <player> <amount>",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Pays one online player from your balance (1 to 100,000, §emaxPay§r)"
+      },
+      {
+        "usage": "/realm:crowns_market",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the market if it's open anywhere (disabled by default, §emarketAnywhere§r); otherwise tells you to visit Quill the Trader (§emerchantName§r)"
+      },
+      {
+        "usage": "/realm:crowns_give <player> <amount>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Gives Crowns to the players picked (§e@a§r works); a negative amount takes them, down to 0"
+      }
+    ]
+  },
+  {
+    "folder": "caravan_bp",
+    "topic": "caravan",
+    "name": "Merchant Caravan",
+    "summary": "Once a week a merchant caravan comes to town: three traders and their pack llamas set up at one of the arrival spots operators picked, stay for 40 real minutes (about two in-game days) and sell rare goods for Crowns: a Mending book, a totem, music discs, armor trims, pottery sherds, golden apples, Storm Glass and more, a different selection each visit and only a few of each. They also buy Storm Glass and Relic Shards. Chat announces when the caravan arrives and when it leaves, and §e/realm:caravan§r tells you when the next one comes.",
+    "steps": [
+      {
+        "text": "Run §e/realm:caravan§r to see when the next caravan comes (§eThe next merchant caravan comes in 3d 5h (Saturday 18:00 UTC), and stays 40m.§r) or, while it's here, where it is (§eat Market Square (120, -45), 240m NE of you. It leaves in 23m.§r).",
+        "ops": false
+      },
+      {
+        "text": "When it arrives, chat says §eA merchant caravan has arrived at Market Square (120, -45)! It stays 40m. Tap a trader to buy rare goods for Crowns.§r Go there.",
+        "ops": false
+      },
+      {
+        "text": "Tap any trader. The shop lists this visit's goods with their price and how many are left; pick one and choose how many. Chat confirms: §e-60 Crowns (Caravan: bought 1 Enchanted Book (Mending))§r.",
+        "ops": false
+      },
+      {
+        "text": "Have Storm Glass or Relic Shards? Pick §lSell to the caravan§r in the shop.",
+        "ops": false
+      },
+      {
+        "text": "Five minutes before it leaves, chat warns you; then it packs up and is gone until next time.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r stand where the caravan should set up and run §e/realm:caravan_spot [name]§r (for example §e/realm:caravan_spot \"Market Square\"§r); add a few and each visit picks one at random. §e/realm:caravan_spot_remove§r removes the nearest one. §e/realm:caravan_call§r brings the caravan now. §e/realm:config§r -> §lMerchant Caravan§r sets how often it comes, which day, the hour, how long it stays and how many goods it brings. The goods are §egoods§r in §econfig.js§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:caravan",
+        "ops": false,
+        "who": "Everyone",
+        "text": "When the next caravan comes (every 7 days at 18:00 UTC, §eeveryDays§r, §ehourUtc§r), or where it is and when it leaves. Operators also see the arrival spots"
+      },
+      {
+        "usage": "/realm:caravan_spot [name]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Adds an arrival spot where you stand (up to 20); without a name it's §eSpot 1§r, §eSpot 2§r..."
+      },
+      {
+        "usage": "/realm:caravan_spot_remove",
+        "ops": false,
+        "who": "Operators",
+        "text": "Removes the nearest arrival spot within 32 blocks (§eremoveRange§r)"
+      },
+      {
+        "usage": "/realm:caravan_call",
+        "ops": false,
+        "who": "Operators",
+        "text": "Brings the caravan now, for the usual stay (40 minutes, §estayMinutes§r). It counts as the visit due most recently"
+      }
+    ]
+  },
+  {
+    "folder": "saga_bp",
+    "topic": "saga",
+    "name": "Story Questlines",
+    "summary": "Multi-chapter stories told by the realm's townsfolk. Each chapter starts with a conversation, gives you a few things to do (go somewhere, defeat something, bring something, keep watch in a storm), and ends when you report back, sometimes with a choice that changes how the story ends and which guild thanks you. Two stories come with it: §lThe Drowned Bell§r (6 chapters, about 3 hours) and §lThe Cartographer's Last Map§r (4 chapters). A tracker above the hotbar points the way, and §e/realm:saga§r is your story log. Needs the Townsfolk pack: the stories are told through its NPCs.",
+    "steps": [
+      {
+        "text": "Tap §lOld Tobin§r (the fisherman) or §lMara the Cartographer§r and pick §eStory: The Drowned Bell§r or §eStory: The Cartographer's Last Map§r. Read the pages with §lNext§r, then pick §lAccept§r (or §lNot now§r: you can come back any time).",
+        "ops": false
+      },
+      {
+        "text": "Chat lists the chapter's objectives. Do them in any order; §e/realm:saga§r shows them with your progress, and the tracker above the hotbar points to the next place to go (§eDrowned Bell: Lighthouse NE 240m§r).",
+        "ops": false
+      },
+      {
+        "text": "When everything is done, chat says §e[Story] The Drowned Bell: chapter 1 is done. Go back to Old Tobin.§r Tap that NPC and pick §eStory: The Drowned Bell§r (§eChapter 1 done: report back§r) to hear how it ends and get the reward. Some chapters end with a choice: pick carefully, it changes the story's ending.",
+        "ops": false
+      },
+      {
+        "text": "The next chapter is told by the NPC chat names (§eNext: talk to Warden Reyes for chapter 2, The Drowned Choir.§r). Tapping the NPC mid-chapter shows your objectives and lets you hear the chapter again.",
+        "ops": false
+      },
+      {
+        "text": "In a party (the Parties pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the tracker? Disable §lStory tracker§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r the stories need three places: stand on each one and run §e/realm:saga_place lighthouse§r, §e/realm:saga_place sunken_bell§r and §e/realm:saga_place old_chapel§r (§e/realm:saga_place§r alone lists them). Pick a lighthouse on the coast, a spot in the sea with a §lbell§r block placed underwater (players ring it in chapter 5, and the Bell Warden comes there in chapter 6), and an old chapel or ruin. Until a place is set, its chapter says §eask an operator to set place lighthouse§r and operators online get a hint. §e/realm:saga_reset <player>§r starts a player's stories over; §e/realm:config§r -> §lStory Questlines§r has the switches.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:saga",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Your story log: stories in progress with the current chapter and each objective's progress and direction, stories you can start (and who starts them), finished stories, and the choices you made. §lRead§r buttons replay a chapter's intro"
+      },
+      {
+        "usage": "/realm:saga_place [name]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Sets a story place (§elighthouse§r, §esunken_bell§r, §eold_chapel§r) where you stand. Without a name, lists the places, where they are, who set them and which stories use them"
+      },
+      {
+        "usage": "/realm:saga_reset <player>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Starts the player's stories over: progress, finished chapters and choices. Rewards already given are kept"
+      }
+    ]
+  },
+  {
+    "folder": "guilds_bp",
+    "topic": "guilds",
+    "name": "Guilds & Reputation",
+    "summary": "Four guilds you rise through by playing: the Miners, the Growers, the Wardens (combat) and the Wayfarers (exploration and the sea). Finished quests and bounties earn reputation with the guild they suit, and so do plain mining, farming, fighting and traveling, a little at a time. Each guild has five ranks from Initiate to Master; higher ranks unlock more of the guild's shop (paid in Crowns), a small perk at Journeyman, and the titles §eExpert Miner§r and §eMaster Miner§r (and so on) for the Titles & Trails pack.",
+    "steps": [
+      {
+        "text": "Play: mining ores, harvesting grown crops, defeating monsters and traveling slowly earn reputation with the Miners, Growers, Wardens and Wayfarers. Finished Daily Quests, Story Questlines chapters and Bounty Board bounties earn more, with a chat line such as §e+10 Miners rep (Mine 12 coal ore)§r.",
+        "ops": false
+      },
+      {
+        "text": "Rank up: chat says §eMiners' Guild: you are now a Journeyman! (300 rep)§r, with any new perk and new shop stock. Reaching Expert or Master is announced to everyone and unlocks a title.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:guilds§r to see your rank in all four guilds, a bar to the next rank (§eJourneyman at 300 (120 to go)§r), each guild's perk and your Crowns. Its buttons open each guild's shop.",
+        "ops": false
+      },
+      {
+        "text": "In a shop, tap an item to buy it with Crowns. Gray items need a higher rank, shown under them (§e[Expert]§r).",
+        "ops": false
+      },
+      {
+        "text": "Talk to a guildmaster (the Townsfolk pack's Warden Reyes) and pick §lGuild hall§r for the same menu.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the reputation lines in chat? Disable §lReputation notes in chat§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lGuilds & Reputation§r sets whether plain play earns reputation and how much, whether the perks are on, and the rank they need. Ranks, shops, titles and quest rewards are in §econfig.js§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:guilds",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Your rank, reputation and progress to the next rank in all four guilds, their perks (from Journeyman, §eperkRank§r), and buttons for each guild's shop"
+      }
+    ]
+  },
+  {
+    "folder": "bounty_bp",
+    "topic": "bounty",
+    "name": "Bounty Board",
+    "summary": "A lectern at spawn with realm-wide bounties that change every day: named champions to hunt down, with a hint where they were last seen (§eGerald the Unexploded - last seen near 1240, -380 (NE of here, about 900 blocks)§r), and cull bounties such as §eDefeat 30 drowned§r that everyone works on together. Rewards are paid in Crowns, and bounties also count as finished quests and Wardens reputation for Guilds & Reputation.",
+    "steps": [
+      {
+        "text": "Tap the bounty board (a lectern near spawn) to see today's bounties, or run §e/realm:bounty§r anywhere (it also says where the board is). You don't need to accept anything: every bounty is open to everyone.",
+        "ops": false
+      },
+      {
+        "text": "§lChampion targets:§r head the way the board says. When you come within 64 blocks of the spot, the target appears, and chat says §eA champion stirs nearby: Gerald the Unexploded§r. Whoever defeats it gets 100 Crowns; everyone who hit it in its last 30 seconds, and the killer's party mates within 64 blocks, get 30 Crowns each. Chat tells everyone: §e[Bounty] Steve claimed the bounty on Gerald the Unexploded! (with 2 helpers)§r.",
+        "ops": false
+      },
+      {
+        "text": "§lCull bounties:§r every mob of the right kind that anyone defeats counts (§eBounty: Defeat 30 drowned 12/30§r above your hotbar). When the count is reached, everyone who defeated at least one gets 40 Crowns.",
+        "ops": false
+      },
+      {
+        "text": "Talk to a warden (the Townsfolk pack's Warden Reyes) and pick §lBounties§r for the same list.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the cull progress notes? Disable §lBounty progress notes§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r look at a lectern within 6 blocks and run §e/realm:bounty_board§r to make it a board (§e/realm:bounty_board_remove§r makes it an ordinary lectern again; breaking it does too). To put a book on a board, sneak and tap it in creative mode. §e/realm:config§r -> §lBounty Board§r sets the hour new bounties come, how many, the target distances and the rewards. Champion targets need the Champions pack.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:bounty",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows today's bounties (default 4, §ecount§r) with directions from you, where the board is, and the time until new ones (default midnight UTC, §eresetHourUtc§r)"
+      },
+      {
+        "usage": "/realm:bounty_board",
+        "ops": false,
+        "who": "Operators",
+        "text": "Makes the lectern you are looking at (within 6 blocks) a bounty board"
+      },
+      {
+        "usage": "/realm:bounty_board_remove",
+        "ops": false,
+        "who": "Operators",
+        "text": "Makes the bounty board you are looking at an ordinary lectern again"
+      }
+    ]
+  },
+  {
+    "folder": "elite_bp",
+    "topic": "elite",
+    "name": "Champions",
+    "summary": "About one in 40 monsters that spawn in the overworld at night becomes a champion: a named, tougher monster with a trait, such as §eGerald the Stormcaller§r, who calls lightning in thunderstorms. Champions stay until someone deals with them, and defeating one drops Relic Shards and a burst of XP. A Blood Moon makes them three times as common, and the Bounty Board sends players after named ones.",
+    "steps": [
+      {
+        "text": "Play at night: when a champion appears within 48 blocks of you, chat says §eA champion stirs nearby: Gerald the Stormcaller§r. Champions have a red name over their head.",
+        "ops": false
+      },
+      {
+        "text": "Fight it like any monster, but expect more: it takes less damage, has more health and has a trait (below). Friends can help: everyone who hit it in its last 30 seconds is a helper.",
+        "ops": false
+      },
+      {
+        "text": "Defeat it for 1 to 3 Relic Shards and about 20 XP orbs. Chat says §eYou defeated Gerald the Stormcaller! (Champions defeated: 3)§r; helpers get §eGerald the Stormcaller is defeated. You helped.§r",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:champions§r to see the champions within 64 blocks of you, which way they are and how far (§eGerald the Stormcaller NE, 23m§r), and how many you have defeated.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the chat line when one appears? Disable §lChampion alerts in chat§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:champions_spawn§r spawns a champion 3 blocks in front of you (add a trait, such as §e/realm:champions_spawn stormcaller§r, or leave it out for a random one). §e/realm:config§r -> §lChampions§r sets the chance, the Blood Moon multiplier, the most at once, night-only and open-sky-only, and the alert radius.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:champions",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Lists the champions within 64 blocks of you, with direction and distance, and how many you have defeated"
+      },
+      {
+        "usage": "/realm:champions_spawn [trait]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Spawns a champion 3 blocks in front of you (where you stand if that's blocked), with the trait you name (§estormcaller§r, §efrostbound§r, §evampiric§r, §esplitting§r, §eshielded§r) or a random one, even when §emaxAlive§r champions are already loaded"
+      }
+    ]
+  },
+  {
+    "folder": "skills_bp",
+    "topic": "skills",
+    "name": "Skills",
+    "summary": "Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and Exploration. Each goes from level 1 to 50 with XP from what you already do (mining ores, chopping trees, harvesting grown crops, fishing, defeating mobs and exploring new land), and every 10 levels unlocks a small perk such as a chance of a double ore drop or a short burst of Speed. Playing near a party mate gives 10% more XP, and level 50 in a skill unlocks a title such as §eMaster Miner§r.",
+    "steps": [
+      {
+        "text": "Play: XP counts by itself. Mine stone and ores, chop logs, harvest fully grown crops, catch things with a fishing rod, defeat mobs and travel to places you have never been. A note above the hotbar shows what you gained, for example §e+5 Mining XP (level 3: 40/104)§r.",
+        "ops": false
+      },
+      {
+        "text": "On a level up the screen shows §eMining 12§r with §eLevel up!§r, and chat says §eMining is now level 12!§r, plus any new perk (§eNew perk: 5% chance of a double ore drop.§r).",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:skills§r to see every skill's level with a progress bar, then tap a skill for its total XP, how to gain it and its perks, unlocked (§e[x]§r) and still to come (§e[ ]§r).",
+        "ops": false
+      },
+      {
+        "text": "Play near a friend in a party (Parties, §e/realm:party§r): while a party mate is within 64 blocks in the same dimension, you gain 10% more XP.",
+        "ops": false
+      },
+      {
+        "text": "Reach level 50 to unlock a title for the Titles & Trails pack: §eMaster Miner§r, §eMaster Woodcutter§r, §eMaster Farmer§r, §eMaster Angler§r, §eMaster Warrior§r or §eMaster Explorer§r.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the XP notes? Disable §lSkill XP notes§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lSkills§r switches skills, perks and creative-mode XP, and sets the XP multiplier and the party bonus. XP per block, mob and catch, and the perks, are in §econfig.js§r. Each skill's XP is a scoreboard (§eskill_mining§r, §eskill_woodcutting§r, §eskill_farming§r, §eskill_fishing§r, §eskill_combat§r, §eskill_exploration§r), so §e/scoreboard§r can show or change it.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:skills",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows your six skills (levels 1 to 50, default §emaxLevel§r) with progress bars; tap one for its XP, how to gain it and its perks, unlocked and to come"
+      }
+    ]
+  },
+  {
+    "folder": "party_bp",
+    "topic": "party",
+    "name": "Parties",
+    "summary": "Team up with up to five friends. Party mates see each other's health, distance and direction above the hotbar, can send messages only the party reads, and share credit in packs that offer it, such as 10% more Skills XP while playing near each other. A party stays together when its members log off.",
+    "steps": [
+      {
+        "text": "Run §e/realm:party§r and tap §lStart a party§r, then pick a player from the list (nearest first) and tap §lInvite§r. Or type §e/realm:party_invite Steve§r (put a name with spaces in quotes: §e/realm:party_invite \"Some Name\"§r); that starts a party for you if you have none.",
+        "ops": false
+      },
+      {
+        "text": "The invited player sees §e[Party] Ann invited you to their party.§r and joins with §e/realm:party_accept§r, or with the §lAccept§r button in §e/realm:party§r. An invite lasts 2 minutes.",
+        "ops": false
+      },
+      {
+        "text": "While a mate is within 128 blocks in the same dimension, the bar above your hotbar shows them every 2 seconds: §eAnn 18hp 40m NE | Bob 9hp 120m S§r (health, distance in blocks, and which way to look). Don't want it? Disable §lParty HUD§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "Talk to the party only: §e/realm:party_chat \"meet at the portal\"§r (in quotes for more than one word), or §lSend a message§r in §e/realm:party§r. Everyone in the party who is online sees §e[Party] Ann: meet at the portal§r.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:party§r to see every member with their health and where they are (or §eoffline§r), and to invite more players. The leader can also §lRemove a member§r. Leave with §e/realm:party_leave§r or §lLeave the party§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lParties§r switches parties on or off and sets the party size, how long invites last and the HUD's range.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:party",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Your party: members with health, distance and direction, invite players (up to 6 in a party, default §emaxSize§r), send a party message, remove a member (leader), leave. Without a party: start one or accept an invite"
+      },
+      {
+        "usage": "/realm:party_invite <player>",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Invites an online player (gamertag or nickname; quote names with spaces) to your party, starting one if you have none. The invite lasts 120 seconds (default, §einviteSeconds§r)"
+      },
+      {
+        "usage": "/realm:party_accept",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Joins the party you were last invited to"
+      },
+      {
+        "usage": "/realm:party_leave",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Leaves your party; the next member leads if you led it"
+      },
+      {
+        "usage": "/realm:party_chat <message>",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Sends a message only your party sees, as §e[Party] Name: message§r. Put it in double quotes for more than one word"
+      }
+    ]
+  },
+  {
+    "folder": "titles_bp",
+    "topic": "titles",
+    "name": "Titles & Trails",
+    "summary": "Collect titles and wear one on a line under your name, like §eStormchaser§r or §eMaster Miner§r, and pick a particle trail that follows you as you move: a little rain cloud over your head, falling leaves, embers or sparkles. Some titles you earn by playing (travel far, stay up at night, stand out in thunderstorms); other packs give more, such as Skills at level 50.",
+    "steps": [
+      {
+        "text": "Play: three titles count up by themselves. §eWanderer§r after traveling 10,000 blocks, §eNight Owl§r after 2 hours played at night, and §eStormchaser§r after 10 minutes outdoors in thunderstorms. Each comes with a trail. Unlocking one says §eNew title unlocked: Stormchaser. Wear it with /realm:titles§r in chat.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:titles§r to see your title, your trail and how far along you are with each title to earn (§eWanderer: 3,400/10,000 blocks traveled§r).",
+        "ops": false
+      },
+      {
+        "text": "Tap §lChoose a title§r and pick one (or §lNone§r). With the Nicknames pack installed, it shows in gray on a line under your name above your head.",
+        "ops": false
+      },
+      {
+        "text": "Tap §lChoose a trail§r and pick one (or §lNone§r). It follows you whenever you move. Trails need the Realm Skies resource pack (§esky_rp§r) on the realm; without it nothing shows.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:titles_give Steve \"Hero of the Realm\"§r gives a player a title, and §e/realm:titles_give Steve trail:ember§r a trail (players who are offline too, if they've played since the pack was added). §e/realm:config§r -> §lTitles & Trails§r switches the built-in titles and trails and sets how often trails puff.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:titles",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default §etrailTicks§r)"
+      },
+      {
+        "usage": "/realm:titles_give <player> <title>",
+        "ops": true,
+        "who": "Ops",
+        "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r or §etrail:sparkle§r. Works for offline players this pack has seen"
+      }
+    ]
+  },
+  {
+    "folder": "relics_bp",
+    "topic": "relics",
+    "name": "Relics",
+    "summary": "Ten rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Relics come from adventures in other packs (champions, bounties, treasure maps, story chapters, caravans) or are forged from 8 Relic Shards at a relicsmith. Relics never break and stay with you when you die.",
+    "steps": [
+      {
+        "text": "Find relics: other packs hand them out as rewards, and champions drop §lRelic Shards§r (purple amethyst shards named §eRelic Shard§r). Getting one says §eYou received a relic: Storm Staff (Legendary). Use in a thunderstorm: lightning strikes what you look at.§r in chat.",
+        "ops": false
+      },
+      {
+        "text": "Keep a relic where it works: some in your main hand, some anywhere in your hotbar, boots and the lamp worn. Its lore says what it does; §e/realm:relics§r says where it works.",
+        "ops": false
+      },
+      {
+        "text": "Bring 8 Relic Shards to a relicsmith (Ida the Relicsmith, from the Townsfolk pack): tap her and pick §lRelic forge§r, then §lForge a relic§r. You get a random relic you haven't had yet; rarer ones are less likely.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:relics§r to see the relics you've found, what each does and how many are left to find.",
+        "ops": false
+      },
+      {
+        "text": "Holding the Storm Meter shows the nearest storm cell above the hotbar. Don't want that? Disable §lStorm Meter readout§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:relics_give <player> <relic>§r gives a relic. §e/realm:config§r -> §lRelics§r enables or disables the abilities, sets the shards a forge takes, lets players forge anywhere, and sets whether relics wear out and whether the Storm Staff can strike players.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:relics",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Lists the relics you've found and what they do. Forging needs a relicsmith unless operators allow it anywhere (default disabled, §eforgeAnywhere§r)"
+      },
+      {
+        "usage": "/realm:relics_give <player> <relic>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Gives the player a new relic: §estorm_staff§r, §erain_charm§r, §etide_boots§r, §elantern_deep§r, §estorm_meter§r, §ecompass_echoes§r, §efrost_band§r, §esun_pendant§r, §eminers_lamp§r or §ewayfarer_boots§r"
+      }
+    ]
+  },
+  {
+    "folder": "journal_bp",
+    "topic": "journal",
+    "name": "Field Journal",
+    "summary": "A journal that fills itself as you play: the mobs you've defeated, the places you've been, the fish you've caught, the weather and sky events you've seen, the relics you've had and the story chapters you've finished. Each page shows how complete it is, and finishing a page gives XP levels, Crowns and a title.",
+    "steps": [
+      {
+        "text": "Play: entries are added on their own. The first time you defeat a creeper, chat says §eJournal: New entry in Mobs - Creeper§r.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:journal§r to open the journal: your overall completion, then a button per page with its progress (§eMobs 12/30 (40%)§r). Open a page to see what you've found (§e[x]§r) and what's still missing (§e[ ]§r), with a short note on each mob you've met.",
+        "ops": false
+      },
+      {
+        "text": "Find every entry on a page to finish it: chat says §eJournal page complete: Mobs! Reward: 10 levels, the title Naturalist§r and §e+200 Crowns (Journal: Mobs)§r.",
+        "ops": false
+      },
+      {
+        "text": "Don't want a chat line for every entry? Disable §lNew journal entry notes§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lField Journal§r enables or disables new entries, the page rewards and the entry notes. The pages, their entries and rewards, and how biomes are recognized are in §econfig.js§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:journal",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens your journal: completion overall and per page, then each page's entries (default rewards, §epages§r)"
+      }
+    ]
+  },
+  {
+    "folder": "fishing_bp",
+    "topic": "fishing",
+    "name": "Fishing 2.0",
+    "summary": "Every fish you catch with a rod becomes one of 40 species, from the common Atlantic Cod to the legendary Old Whiskers, with a size in cm and your name on it. Which species bite depends on the weather, the time of day and the water you fish in (ocean, river, frozen water, swamp, jungle or cave). Your fish log keeps your personal bests, the realm keeps the biggest fish of each species, and every Sunday evening there's a fishing tournament with Crowns for the top three. Old Tobin the fisherman, from Townsfolk, buys your fish.",
+    "steps": [
+      {
+        "text": "Fish with a rod as usual. When a cod, salmon, tropical fish or pufferfish comes up, it's a species: chat says §eYou caught a Storm Eel (82 cm)!§r, with §eNew realm record!§r, §ePersonal best!§r or §eNew species for your log (12/40).§r when it is one.",
+        "ops": false
+      },
+      {
+        "text": "Fish in different places and weathers to find more: some only bite in thunderstorms, at night, at dawn, in caves, in frozen water, in swamps or in the jungle.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:fishing§r to see your fish log: how many species you've caught out of 40, how many of each and your biggest. Species you haven't caught yet show as §e???§r with a hint, like §e??? (Rare: thunderstorms)§r.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:fishing_top§r to see the realm's biggest fish of each species and who caught them.",
+        "ops": false
+      },
+      {
+        "text": "Join the weekly tournament (Sundays at 18:00 UTC, for an hour): the biggest fish for its kind wins. Chat tells everyone 10 minutes before and when it starts.",
+        "ops": false
+      },
+      {
+        "text": "Sell your fish: tap Old Tobin (or any NPC with the §efisher§r role) and pick §lSell fish§r. §lFish records§r there shows the realm's records.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:fishing_tournament§r starts a tournament now. §e/realm:config§r -> §lFishing 2.0§r switches the species and the tournament, sets the tournament's day, hour and length, and whether legendary catches are announced. The species themselves are the §especies§r list in §econfig.js§r.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:fishing",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Your fish log: species caught out of 40, how many of each and your biggest, hints for the rest, and the tournament"
+      },
+      {
+        "usage": "/realm:fishing_top",
+        "ops": false,
+        "who": "Everyone",
+        "text": "The realm's biggest fish of each species, who caught it and when, and the tournament"
+      },
+      {
+        "usage": "/realm:fishing_tournament",
+        "ops": false,
+        "who": "Operators",
+        "text": "Starts a tournament now, for the usual length (default 60 minutes, §etournamentMinutes§r)"
+      }
+    ]
+  },
+  {
+    "folder": "maps_bp",
+    "topic": "maps",
+    "name": "Treasure Maps & Riddles",
+    "summary": "Buy a treasure map from Mara the Cartographer and follow its riddles across the land: each clue tells you which way to walk and roughly how far, and where it ends the next clue appears. After two or three clues, 800 to 2,000 blocks from where you bought the map, a chest lies buried. Hold the map and it tells you whether you're getting warmer. Finding the treasure pays Crowns, and the chest holds gold, iron, emeralds and sometimes a diamond or even a relic.",
+    "steps": [
+      {
+        "text": "Find Mara the Cartographer (or any NPC with the §ecartographer§r role, from Townsfolk), tap her and pick §lBuy a treasure map (50 Crowns)§r. You get a piece of paper named §eTreasure Map§r, and chat reads the first clue, for example §e\"Walk toward the setting sun for about twelve hundred paces, and there the next riddle waits.\"§r",
+        "ops": false
+      },
+      {
+        "text": "Work out the direction: the North Star is north, the rising sun is east, the setting sun is west, and \"with the North Star at your back\" is south. A pace is a block.",
+        "ops": false
+      },
+      {
+        "text": "Hold the map in your hand: every 2 seconds the line above the hotbar says §eWarmer§r, §eColder§r or §eVery warm§r, with which clue you're on.",
+        "ops": false
+      },
+      {
+        "text": "Get within 30 blocks of where the clue points and the next clue appears in chat and on the map. As you get close, the map also names what the spot looks like (§eThe spot lies among the trees.§r).",
+        "ops": false
+      },
+      {
+        "text": "On the last clue, once you're close, the map grows hot: the chest is buried nearby, 1 to 3 blocks down. Follow §eHot§r to §eBurning hot! Dig here.§r; standing over it pays the Crowns. Then dig up the chest for the rest.",
+        "ops": false
+      },
+      {
+        "text": "Lost the map, or the clue? Run §e/realm:maps§r for your hunt's clue, a new copy of the map, or to give the hunt up.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:maps_give <player>§r gives a free map. §e/realm:config§r -> §lTreasure Maps & Riddles§r sets the price, how far maps lead, how many hunts a player can have, the Crowns found, the distance from world spawn and the hints.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:maps",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map and to give the hunt up"
+      },
+      {
+        "usage": "/realm:maps_give <player>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Gives the players picked (§e@a§r works) a free treasure map, starting where each one stands. Skips players outside the Overworld or already on as many hunts as allowed (default 1, §emaxHunts§r)"
+      }
+    ]
+  },
+  {
+    "folder": "waystone_bp",
+    "topic": "waystone",
+    "name": "Waystones & Inns",
+    "summary": "Fast travel you build yourself. Put a sign saying §eWaystone: <name>§r next to a lodestone and tap the lodestone: it becomes a waystone. Everyone who finds it (by tapping it or walking up to it) can later travel there from any other waystone, for a few Crowns per 100 blocks after standing still for 10 seconds. Innkeepers, like Elsie from Townsfolk, rent beds that make the inn your respawn point and leave you Well Rested, and pass on the latest news.",
+    "steps": [
+      {
+        "text": "Make a waystone: place a lodestone, put a sign next to it (on it, beside it or on the block next to it, standing or on a wall) and write §eWaystone: River Gate§r on the sign. Then tap the lodestone with an empty hand. Chat says §eYou raised the waystone River Gate!§r",
+        "ops": false
+      },
+      {
+        "text": "Discover waystones by tapping them or walking within 4 blocks of one: §eWaystone discovered: River Gate.§r",
+        "ops": false
+      },
+      {
+        "text": "To travel, tap any waystone with an empty hand. Pick a waystone you've discovered; each button shows how far it is and what it costs (§e240m NE, 3 Crowns§r).",
+        "ops": false
+      },
+      {
+        "text": "Stand still for 10 seconds while the countdown runs above the hotbar (§eTraveling to River Gate in 7...§r). Moving more than a block or getting hurt cancels the trip. The screen fades and you arrive next to the other waystone; the trip is paid then.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:waystones§r to list the waystones you've discovered and how far they are.",
+        "ops": false
+      },
+      {
+        "text": "At an inn, tap the innkeeper: §lRent a bed§r (10 Crowns) makes the inn your respawn point and gives you Well Rested; §lHear the news§r tells what's happened lately (tornadoes, meteors, caravans...).",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r look at a waystone's lodestone or sign and run §e/realm:waystones_remove§r to remove it. §e/realm:config§r -> §lWaystones & Inns§r sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, and the inn's price and Well Rested time.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:waystones",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Lists the waystones you've discovered, with distance and direction. With travel from anywhere enabled (default off, §etravelAnywhere§r), opens the travel menu instead"
+      },
+      {
+        "usage": "/realm:waystones_remove",
+        "ops": false,
+        "who": "Operators",
+        "text": "Removes the waystone whose lodestone or sign you're looking at (within 8 blocks). The lodestone and sign stay"
+      }
+    ]
+  },
+  {
+    "folder": "expedition_bp",
+    "topic": "expedition",
+    "name": "Expeditions",
+    "summary": "Dungeon runs for you and your party. Pick a dungeon (the Crypt, the Drowned Vault or Frost Hollow), and a fresh dungeon is built for you deep underground: 6 to 8 rooms joined by corridors, with waves of mobs, a lever puzzle, a boss and a treasure chest. The clock runs from the moment you arrive; the fastest clears of each dungeon go on a leaderboard. Finishing pays Crowns, Warden reputation in Guilds & Reputation, a page in the Field Journal and sometimes a relic. No structure files: every dungeon is generated from a random seed, and the ground is filled back in after each run, so the next one is new.",
+    "steps": [
+      {
+        "text": "Run §e/realm:expedition§r and pick a dungeon: §lCrypt (Easy)§r, §lDrowned Vault (Normal)§r or §lFrost Hollow (Hard)§r. Tap §lStart§r. If you're in a party, your party members within 32 blocks are asked §eAnn is starting an expedition: Crypt (Easy). ... Join?§r and have 20 seconds to tap §lJoin§r. Without a party you go alone.",
+        "ops": false
+      },
+      {
+        "text": "The screen fades and you arrive in the entry room, with the title §eCrypt§r and the clock running. The bar above the hotbar shows the dungeon, the time and what to do next, like §eCrypt 2:41 | Room 3/7: defeat the wave (2 left)§r.",
+        "ops": false
+      },
+      {
+        "text": "Walk into each room. §lCombat rooms§r send 2 to 4 waves of the dungeon's mobs (§eWave 1 of 2!§r); when the last one falls, the iron bars on the way out rise (§eThe bars rise. Onward!§r). The §lpuzzle room§r has four levers on red, blue, yellow and green wool, and signs with clues like §e2 levers are on§r and §eRED and GREEN differ§r; set the levers to fit every clue to open the bars (chat repeats the clues, and pulling a lever shows all four above the hotbar). In the §lboss room§r a named boss appears, like §eThe Crypt Lord§r.",
+        "ops": false
+      },
+      {
+        "text": "Defeat the boss: §eExpedition complete§r and your time fill the screen, everyone still in the dungeon is paid, and the treasure room opens. You have 30 seconds to empty the chest, then you're taken back to where you started.",
+        "ops": false
+      },
+      {
+        "text": "To give up, run §e/realm:expedition_leave§r (or §lLeave the expedition§r in §e/realm:expedition§r): you go back to where you started. If you die in the dungeon you're out of the run, you respawn as usual and are then sent back to where you started, and the items you dropped are given back to you.",
+        "ops": false
+      },
+      {
+        "text": "§e/realm:expedition§r -> §lFastest clears§r shows the top 10 times for each dungeon. Only one expedition runs at a time; while one is going, the menu says §eAn expedition is in progress (Ann's party, Crypt, 6:12)§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r stand somewhere far from spawn and from anyone's builds and mines, and run §e/realm:expedition_site§r once (or §e/realm:expedition_site <x> <z>§r). The dungeon is built deep underground at y -41 to -33 around that spot, and the site is refused if it's within 88 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. §e/realm:expedition_reset§r ends a run in progress and fills the dungeon back in. §e/realm:config§r -> §lExpeditions§r sets the party size, the time limit, the time to collect the treasure and more.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:expedition",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Start an expedition with your party members nearby (up to 4 players, default §emaxParty§r), see how your run is going and leave it, or see the fastest clears of each dungeon"
+      },
+      {
+        "usage": "/realm:expedition_leave",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Leave your expedition and go back to where you started it"
+      },
+      {
+        "usage": "/realm:expedition_site [x] [z]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Sets where dungeons are built: where you stand, or at x z. Refused within 88 blocks of world spawn (default 64, §eavoidSpawn§r, plus half the dungeon) or where anything but natural underground blocks is in the way, with what and where"
+      },
+      {
+        "usage": "/realm:expedition_reset",
+        "ops": false,
+        "who": "Operators",
+        "text": "Ends every expedition in progress (players are sent back) and fills the dungeon back in"
+      }
+    ]
+  },
+  {
+    "folder": "town_bp",
+    "topic": "town",
+    "name": "Town Projects",
+    "summary": "Grow the realm's towns together. Operators add a town; its mayor (Mayor Bram from Townsfolk, or any NPC with the §emayor§r role) takes deliveries of materials for the town's projects: a well and a notice board, then lamp posts and a garden plot, a market stall and a dock, and finally a bell tower. When a project has everything it needs, it is built on the spot the operators chose, fireworks go up and the top contributors are paid in Crowns. Finishing every project of a level raises the town: Settlement, Village, Town, City and Capital. This is separate from Community Goals, which collect one item into a chest: town projects take several items, are delivered through the mayor, and build something.",
+    "steps": [
+      {
+        "text": "Find your town's mayor, tap them and pick §lTown projects (Riverside)§r. You see the town's level and this level's projects with progress bars.",
+        "ops": false
+      },
+      {
+        "text": "Pick a project to see what it needs (§eOak Planks: 32 / 64 (you carry 20)§r) and who has helped, then tap §lDeliver what I have§r. It takes what you carry of the needed items, up to what's still needed: partial deliveries count. Chat says §eYou delivered 20 Oak Planks, 4 Iron Ingot for Riverside's Dock. Now 52 percent.§r",
+        "ops": false
+      },
+      {
+        "text": "When the last item is in, everyone hears §eRiverside finished its Dock! Top contributors: Ann 64, Bob 32. Thank you, everyone!§r, the dock is built where the operators chose and fireworks rise over it. The top three contributors get 60, 35 and 20 Crowns, and everyone who helped gets reputation in Guilds & Reputation (if you're offline, it's waiting when you join).",
+        "ops": false
+      },
+      {
+        "text": "When every project of a level is finished, the town levels up: §eRiverside is now a Town (level 3)§r on everyone's screen, with the new projects.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:town§r anywhere to see the nearest town's level, projects, progress and contributors (§lOther towns§r lists the rest).",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r stand in the middle of a town and run §e/realm:town_add Riverside§r (quotes for a name with spaces). Then, for each project, stand where it should be built, facing the way it should face, and run §e/realm:town_spot <project>§r (§ewell§r, §enotice_board§r, §elamps§r, §egarden§r, §estall§r, §edock§r, §ebell_tower§r). A project finished before it has a spot waits, and operators are reminded when they join. §e/realm:town_remove§r removes the town you're in. §e/realm:config§r -> §lTown Projects§r sets the town radius, announcements and more.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:town",
+        "ops": false,
+        "who": "Everyone",
+        "text": "The nearest town's level, its projects with progress bars, what each still needs and who has helped. Delivering is at the town's mayor (or here, inside a town, with §edeliverWithCommand§r, default off)"
+      },
+      {
+        "usage": "/realm:town_add <name>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Adds a town centered where you stand. Towns must be at least 48 blocks apart (half of default 96, §etownRadius§r)"
+      },
+      {
+        "usage": "/realm:town_spot <project>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Sets where a project of the town you're in (within 96 blocks of its center, default, §etownRadius§r) is built: where you stand, facing the way you face. Builds it right away if it's already finished"
+      },
+      {
+        "usage": "/realm:town_remove",
+        "ops": false,
+        "who": "Operators",
+        "text": "Removes the town you're in and its project progress, after asking. What's built stays standing"
+      }
+    ]
+  },
+  {
+    "folder": "weather_bp",
+    "topic": "weather",
+    "name": "Weather Almanac",
+    "summary": "Plans the overworld weather hours ahead, so the realm has a forecast: clear spells, rain and thunderstorms come and go on a schedule in real time, and anyone can look up what's coming with §e/realm:weather§r (or ask Sol the Sky-reader). Rain and storms last a realistic while, a clear spell always ends in rain or a storm, and rain can build into a thunderstorm.",
+    "steps": [
+      {
+        "text": "About 10 seconds after you first join each day (UTC), chat gives the day's forecast in one line, for example §eForecast: clear now, rain in about 25 minutes. More with /realm:weather§r. Don't want it? Disable §lDaily forecast in chat§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:weather§r to see the forecast for the next 3 hours: what the weather is now and how long it lasts, then every spell coming up with its start time (in UTC) and length, and a summary such as §eRain in 25 min, for about 12 min. Thunderstorm likely around 14:40 UTC.§r",
+        "ops": false
+      },
+      {
+        "text": "With the Townsfolk pack, tap Sol the Sky-reader (or any townsfolk with the §eskymage§r role) and pick §lForecast§r for the same.",
+        "ops": false
+      },
+      {
+        "text": "Sleeping through rain or a thunderstorm ends it, as in vanilla: the sky clears and the plan carries on from there (the forecast updates).",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:weather_set <clear|rain|thunder> <minutes>§r starts that weather now for that many real minutes, and the plan carries on after it. Vanilla §e/weather§r doesn't stick while the almanac runs: it's put back within a second. §e/realm:config§r -> §lWeather Almanac§r sets how long each kind of weather lasts and how likely thunder is, or disables the almanac to give the weather back to the game.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:weather",
+        "ops": false,
+        "who": "Everyone",
+        "text": "The forecast for the next 3 hours (§ehorizonHours§r): the weather now and when it changes, every spell coming up, in real time (UTC)"
+      },
+      {
+        "usage": "/realm:weather_set <clear\\|rain\\|thunder> <minutes>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Starts that weather now for 1 to 1440 real minutes; the plan carries on after it. With the almanac disabled it just sets the weather, and the game's weather cycle takes over after"
+      }
+    ]
+  },
+  {
+    "folder": "climate_bp",
+    "topic": "climate",
+    "name": "Regional Weather",
+    "summary": "The weather depends on where you stand: when it rains, deserts and badlands get a sandstorm and snowy places a blizzard, and on the morning after rain a fog bank rolls in off lakes, rivers and the sea. Each player gets the condition of the ground around them, with its own fog and blowing sand or snow; sandstorms and blizzards also slow you down.",
+    "steps": [
+      {
+        "text": "§lSandstorm:§r when it rains or storms and you're outdoors in a desert or badlands, the air turns tan, sand blows past you on the wind and you get Slowness I. Wear any helmet to keep the sand out of your eyes: no Slowness. Above the hotbar: §eSandstorm! A helmet keeps the sand out of your eyes.§r",
+        "ops": false
+      },
+      {
+        "text": "§lBlizzard:§r when it rains or storms and you're outdoors where snow or ice lies on top, it's a white-out with driving snow and Slowness I. Get under a roof, or within 4 blocks of a lit campfire, and it's gone. Above the hotbar: §eBlizzard! Get under a roof or near a lit campfire.§r",
+        "ops": false
+      },
+      {
+        "text": "§lFog bank:§r for 30 real minutes after rain ends, dawn (from sunrise to mid-morning) brings a low, pale fog when you're by water and below y 80. Above the hotbar: §eA fog bank rolls in off the water.§r",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:climate§r, or use the same switch in §e/realm:prefs§r, to disable the fog and particles for yourself (on a slower device, say). Slowness still applies. The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r: the fogs and particles come from it, so without it only the Slowness happens. §e/realm:config§r -> §lRegional Weather§r enables or disables each condition and the Slowness, sets the campfire distance and the fog bank window.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:climate",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Enables or disables the sandstorm, blizzard and fog bank fog and particles §lfor yourself§r (enabled by default). Slowness still applies. Remembered between sessions"
+      }
+    ]
+  },
+  {
+    "folder": "storm_bp",
+    "topic": "storm",
+    "name": "Storm Chasing",
+    "summary": "Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, throwing lightning as it grows and fades. Chase it with a clock or the Storm Meter relic, and set out lightning rods: a rod lightning strikes becomes charged, and tapping it gives Storm Glass.",
+    "steps": [
+      {
+        "text": "In a thunderstorm, chat soon says §eA storm cell is forming to the NE.§r The cell forms 200 to 500 blocks from one of the players online, drifts 1 to 3 blocks a second and lasts 4 to 8 minutes.",
+        "ops": false
+      },
+      {
+        "text": "Hold a clock and run §e/realm:storm§r for a reading: §eCell: 340m NE, strength 7/10§r. Holding the Storm Meter relic (Relics) shows the reading all the time.",
+        "ops": false
+      },
+      {
+        "text": "Near the cell, lightning lands every 3 to 8 seconds, more often as it grows. Watch out: it hurts. Getting within 64 blocks of the cell adds §lStorm cell§r to the Weather page of your Field Journal.",
+        "ops": false
+      },
+      {
+        "text": "Place lightning rods where the storm goes. When lightning strikes one you placed (the cell's, or ordinary storm lightning), it sparks blue and is charged. Tap a charged rod to collect 1 or 2 §lStorm Glass§r, and it can be charged again.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the chat line when a cell forms? Disable §lStorm cell notes§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:storm_cell§r starts a cell 48 to 96 blocks from you during a thunderstorm; §e/realm:storm_cell true§r starts one even without a storm. §e/realm:config§r -> §lStorm Chasing§r enables or disables the cells, their lightning and the chat line, and sets the wait between cells.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:storm",
+        "ops": false,
+        "who": "Everyone",
+        "text": "With a clock in your hand: the storm cell's distance, direction and strength (§eCell: 340m NE, strength 7/10§r)"
+      },
+      {
+        "usage": "/realm:storm_cell [force]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Starts a storm cell 48 to 96 blocks from you now (default, §ecommandMinDistance§r to §ecommandMaxDistance§r), replacing any other. Needs a thunderstorm unless §eforce§r is §etrue§r; a forced cell lasts its full time even if the weather clears"
+      }
+    ]
+  },
+  {
+    "folder": "tornado_bp",
+    "topic": "tornado",
+    "name": "Tornadoes",
+    "summary": "Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wanders across open country for a couple of minutes, sweeping up mobs and dropped items and flinging players who get too close. It never breaks or places a single block, so builds are safe even when it passes right by them, and it leaves a few Storm Glass behind where it dies down. The funnel is drawn with particles from Realm Skies: without that resource pack the tornado still pulls, throws and warns, but you can't see it.",
+    "steps": [
+      {
+        "text": "When a thunderstorm starts, there's a chance (§echance§r, 0.2) that a tornado touches down during it, 1 to 4 minutes in, somewhere 80 to 160 blocks from one of the players in the Overworld, on open grass, dirt or sand.",
+        "ops": false
+      },
+      {
+        "text": "Anyone within 150 blocks gets a warning in chat, such as §e&cTornado! 140m to the SW, moving NE.§r, and hears a warning horn every 20 seconds while it lasts. Closer in you hear the wind roar and the storm rumble from its direction.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:tornado§r any time to see where it is and which way it's heading, or §eNo tornado right now.§r",
+        "ops": false
+      },
+      {
+        "text": "Want a closer look? Mobs and items near the funnel circle it and get lifted; get within about 6 blocks and you're thrown a few blocks up and out, then float down with Slow Falling, so it's a ride, not a death trap. Creative and spectator players are left alone.",
+        "ops": false
+      },
+      {
+        "text": "When it dies down (after 1.5 to 3 minutes), chat says §e&7The tornado has died down.§r and 2 to 5 §lStorm Glass§r lie on the ground at the end of its path. Go pick them up.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the funnel. §e/realm:tornado_spawn§r makes a tornado 40 blocks in front of you right away, in any weather. §e/realm:config§r -> §lTornadoes§r enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, the funnel's density and view distance, the pull radius and whether players are thrown.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:tornado",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Where the tornado is and where it's heading (§e&cTornado! 140m to the SW, moving NE.§r), or §eNo tornado right now.§r"
+      },
+      {
+        "usage": "/realm:tornado_spawn",
+        "ops": false,
+        "who": "Operators",
+        "text": "A tornado forms 40 blocks in front of you now, in any weather (one at a time). It lasts and drifts like a natural one, but doesn't end with the storm"
+      }
+    ]
+  },
+  {
+    "folder": "rainbow_bp",
+    "topic": "rainbow",
+    "name": "Rainbows & the Pot of Gold",
+    "summary": "When rain clears in the morning or the evening, a big rainbow often arches across the sky, and it really does end somewhere: a pot of gold waits at its foot, 150 to 300 blocks away. Race your friends to it. The first one there gets Crowns, the chest of gold and dyes, and sometimes a relic. The rainbow is drawn with a particle from Realm Skies: without that resource pack there's no rainbow to see, but the chat hint, §e/realm:rainbow§r and the pot of gold still work.",
+    "steps": [
+      {
+        "text": "When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (§echance§r, 0.7) of a rainbow. Chat says where its end is, for example §e&eA rainbow! Its end is somewhere to the NE.§r",
+        "ops": false
+      },
+      {
+        "text": "Look that way: the rainbow stands over the horizon, one end coming down right in the direction of the pot. It stays up for 2.5 minutes (§edurationSeconds§r). Run §e/realm:rainbow§r any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).",
+        "ops": false
+      },
+      {
+        "text": "Head that way. As you get close, the rainbow comes down at its real spot, and a §lchest§r appears where it touches the ground.",
+        "ops": false
+      },
+      {
+        "text": "The first player to get within 3 blocks of it wins: §e&6+50 Crowns &7(Pot of gold)§r and everyone reads §e&6Ann found the pot of gold at the rainbow's end!§r The chest is yours to empty: gold ingots and nuggets, rare dyes, maybe a golden apple or emeralds. Sometimes (§erelicChance§r, 0.1) a relic comes with it.",
+        "ops": false
+      },
+      {
+        "text": "Missed the rainbow? The pot stays findable for 15 minutes (§epotMinutes§r) after it appeared: §e/realm:rainbow§r says §eThe rainbow has faded, but its pot of gold is still out there, somewhere to the NE.§r",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the rainbow. §e/realm:rainbow_now§r puts a rainbow up right away, with its pot of gold 150 to 300 blocks from you. §e/realm:config§r -> §lRainbows & the Pot of Gold§r enables or disables rainbows after rain and sets the chance, how long rainbows and pots last, the Crowns and relic chance, the distance kept from spawn and the rainbow's size.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:rainbow",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Whether a rainbow is up, and which way its end is from you (§e&eA rainbow is up! Its end is somewhere to the NE.§r); after it fades, whether its pot of gold is still out there and which way, or who found it"
+      },
+      {
+        "usage": "/realm:rainbow_now",
+        "ops": false,
+        "who": "Operators",
+        "text": "A rainbow now, in any weather and at any time, for §edurationSeconds§r (150), with its pot of gold 150-300 blocks from you. An unfound earlier pot is replaced (its chest, if placed, stays)"
+      }
+    ]
+  },
+  {
+    "folder": "night_bp",
+    "topic": "night",
+    "name": "Aurora & Shooting Stars",
+    "summary": "Clear nights in the Overworld get a sky show. Every so often a shooting star streaks across the sky; sneak right after one to make a wish. On some nights, the northern lights ripple in green and purple curtains over snowy lands. The show is drawn with particles from Realm Skies: without that resource pack there's nothing to see.",
+    "steps": [
+      {
+        "text": "On a clear night (no rain), step outdoors in the Overworld and look up: every 15 to 30 seconds a shooting star streaks across the sky, usually somewhere in front of you.",
+        "ops": false
+      },
+      {
+        "text": "§lMake a wish:§r sneak within 3 seconds after a shooting star. Chat says §e&bYou made a wish.§r and you get Hero of the Village I for 5 minutes (better prices from villagers). One wish per night.",
+        "ops": false
+      },
+      {
+        "text": "On an aurora night (§eaurora.chance§r, 0.4 of nights), stand on or near snowy ground (snow or ice on top) and look north: rippling curtains of green, teal and purple light hang high over the northern sky.",
+        "ops": false
+      },
+      {
+        "text": "Rather not see it, on a slower device for example? Run §e/realm:night§r, or use §lNight sky show§r in §e/realm:prefs§r. Chat says §eNight sky (aurora and shooting stars): Disabled. Run /realm:night again to enable it.§r The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the show. §e/realm:config§r -> §lAurora & Shooting Stars§r enables or disables the whole show, the shooting stars, wishes and the aurora, and sets the aurora chance, the time to make a wish, and whether new players start with the show on.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:night",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Enables or disables the night sky show (shooting stars and aurora) §lfor yourself§r (on by default, §edefaultOn§r). Remembered between sessions"
+      }
+    ]
+  },
+  {
+    "folder": "meteor_bp",
+    "topic": "meteor",
+    "name": "Meteor Strikes",
+    "summary": "Some nights a meteor falls. Chat gives a minute's warning and the coordinates, then a fiery streak crosses the sky for everyone in the Overworld and comes down with a boom you feel. Where it lands it leaves a small smoking crater with a meteorite core of ancient debris in magma, for whoever gets there first. Meteors land far from spawn and never in builds: a crater only replaces natural ground. The streak and the smoke come from Realm Skies: without that resource pack you still get the warning, the boom and the crater, but no streak or smoke.",
+    "steps": [
+      {
+        "text": "Some nights (§echance§r, 0.33), at a random time, chat warns everyone: §e&6A meteor is falling! It will land near 1240, -380 in 60 seconds.§r",
+        "ops": false
+      },
+      {
+        "text": "Look up: a few seconds before it lands, a glowing meteor with a fiery trail streaks down from the sky toward the spot. Near it you hear the explosion and the thunder and the screen shakes; far away you hear a distant rumble.",
+        "ops": false
+      },
+      {
+        "text": "Go find it: at the spot (or a few blocks from it) there's a crater 3 to 4 blocks across each way, lined with blackstone, magma and obsidian, still smoking, with 1 to 3 §lancient debris§r in its middle. Bring a diamond pickaxe or better. The first player to reach it is announced: §e&6Ann found the meteor crater!§r",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:meteor§r to see where the last meteor fell and whether its crater has been found.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the streak and smoke. §e/realm:meteor_now§r drops a meteor 100 blocks in front of you, after the usual warning. §e/realm:config§r -> §lMeteor Strikes§r enables or disables meteors at night and sets the chance, the warning time, the distance kept from spawn, and whether meteors make craters.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:meteor",
+        "ops": false,
+        "who": "Everyone",
+        "text": "While one is falling, where it will land and in how many seconds; otherwise where the last meteor fell (with its height once its crater is made) and who found its crater, or §eNo meteor has fallen yet.§r"
+      },
+      {
+        "usage": "/realm:meteor_now",
+        "ops": false,
+        "who": "Operators",
+        "text": "A meteor falls §enowDistance§r (100) blocks in front of you after the usual §ewarningSeconds§r warning, in any weather or time (pushed out past §eavoidSpawn§r if that's near spawn). One at a time"
+      }
+    ]
+  },
+  {
+    "folder": "moon_bp",
+    "topic": "moon",
+    "name": "Blood Moon & Harvest Moon",
+    "summary": "Some full moons are special. About one in three rises as a §lBlood Moon§r: a red sky, more monsters all night, and a reward for everyone who makes it to dawn without dying. About one in three of the rest is a §lHarvest Moon§r: a golden sky and crops that grow three times as fast until morning.",
+    "steps": [
+      {
+        "text": "At dusk on a full moon, watch the screen: §eBlood Moon§r (§eSurvive until dawn§r) or §eHarvest Moon§r (§eCrops grow faster tonight§r) appears with a sound, and chat says what it means. Most full moons are still ordinary.",
+        "ops": false
+      },
+      {
+        "text": "§lBlood Moon:§r outdoors the sky turns dark red and red motes drift up around you. Every 20 seconds a zombie, skeleton, spider or creeper or two appears 16 to 32 blocks away, never inside or next to anything built. Stay online from dusk to dawn without dying, and at dawn you get 3 levels and 25 Crowns (§eYou survived the Blood Moon!§r), plus the §lBlood Moon Survivor§r title the first time (with the Titles pack). Blood Moon monsters drop extra experience orbs, and the ones still around at dawn vanish.",
+        "ops": false
+      },
+      {
+        "text": "§lHarvest Moon:§r the sky turns soft gold, golden motes drift around you, and crops, saplings and grass grow three times as fast until dawn. A good night to stand by the farm.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:moon§r to see tonight's moon, the moon phase and how many days until the next full moon.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:moon_set <blood|harvest|normal>§r makes tonight a Blood Moon, a Harvest Moon or an ordinary night: at once if it's night, else at dusk. §e/realm:config§r -> §lBlood Moon & Harvest Moon§r sets the chances, the monster waves, the survivor reward and the Harvest Moon's growth speed. Add Realm Skies under §lResource Packs§r for the red and gold skies and the motes.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:moon",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Tonight's moon (Blood Moon, Harvest Moon or ordinary), the moon phase and the days until the next full moon"
+      },
+      {
+        "usage": "/realm:moon_set <blood\\|harvest\\|normal>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Makes tonight a Blood Moon, a Harvest Moon or an ordinary night: right away if it's night (dusk 12000 to dawn 23000, §eduskTime§r, §edawnTime§r), else from the next dusk, full moon or not"
       }
     ]
   },

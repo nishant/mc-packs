@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Bounty Board",
+    "description": "A lectern board with realm-wide bounties every day: named champions to hunt and mobs to cull, paid in Crowns. /realm:bounty",
+    "uuid": "024072be-c81c-43a1-a427-cf9492881d35",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "d41cc1a9-4bbb-4562-8ac3-1e646227281b",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

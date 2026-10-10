@@ -1,0 +1,61 @@
+{
+  "format_version": "1.10.0",
+  "particle_effect": {
+    "description": {
+      "identifier": "realm:sky_aurora",
+      "basic_render_parameters": {
+        "material": "particles_add",
+        "texture": "textures/particle/realm_sky_aurora"
+      }
+    },
+    "components": {
+      "minecraft:emitter_rate_instant": {
+        "num_particles": 1
+      },
+      "minecraft:emitter_lifetime_once": {
+        "active_time": 0
+      },
+      "minecraft:emitter_shape_point": {},
+      "minecraft:particle_initial_speed": 0,
+      "minecraft:particle_lifetime_expression": {
+        "max_lifetime": "(variable.life > 0 ? variable.life : 20)"
+      },
+      "minecraft:particle_appearance_billboard": {
+        "size": [
+          "(variable.size > 0 ? variable.size : 40) * 0.25 * (1 + 0.08 * Math.sin(variable.particle_age * 40 + variable.particle_random_1 * 360))",
+          "(variable.size > 0 ? variable.size : 40) / 2"
+        ],
+        "facing_camera_mode": "rotate_y",
+        "uv": {
+          "texture_width": 256,
+          "texture_height": 128,
+          "flipbook": {
+            "base_UV": [
+              0,
+              0
+            ],
+            "size_UV": [
+              32,
+              128
+            ],
+            "step_UV": [
+              32,
+              0
+            ],
+            "frames_per_second": 5,
+            "max_frame": 8,
+            "loop": true
+          }
+        }
+      },
+      "minecraft:particle_appearance_tinting": {
+        "color": [
+          "0.25 + 0.5 * Math.clamp(variable.hue, 0, 1)",
+          "1 - 0.65 * Math.clamp(variable.hue, 0, 1)",
+          "0.55 + 0.45 * Math.clamp(variable.hue, 0, 1)",
+          "Math.clamp(Math.min(variable.particle_age / 2, (variable.particle_lifetime - variable.particle_age) / 2), 0, 1) * (0.75 + 0.15 * Math.sin(variable.particle_age * 25 + variable.particle_random_2 * 360))"
+        ]
+      }
+    }
+  }
+}

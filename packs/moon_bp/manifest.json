@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Blood Moon & Harvest Moon",
+    "description": "Some full moons rise as a Blood Moon (more monsters, a reward for surviving) or a Harvest Moon (crops grow faster). /realm:moon",
+    "uuid": "0232d9ae-a9b5-4b8d-94c2-aa2e59720fa1",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "3be3c8dd-1e6f-4822-ae7a-1f4c19bb8ce7",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}

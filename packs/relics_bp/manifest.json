@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Relics",
+    "description": "Ten rare relics with powers of their own, found on adventures or forged from 8 Relic Shards at a relicsmith. /realm:relics",
+    "uuid": "3f87cd9a-92f5-4535-9f1b-543834bf03bc",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "41c29734-8b7f-4eff-8b15-c0d2513b9946",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

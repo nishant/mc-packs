@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Fishing 2.0",
+    "description": "About 40 fish species that depend on weather, time and place, with sizes, personal bests, realm records and a weekly tournament. /realm:fishing",
+    "uuid": "265187c0-b689-468c-ae99-b86545f9280c",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "272fedf4-c3f7-46d3-99e5-06699943ecb9",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

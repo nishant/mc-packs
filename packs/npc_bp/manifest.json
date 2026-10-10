@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Townsfolk",
+    "description": "Named townsfolk who greet you, chat, keep a daily routine and offer what the realm's other packs have when you tap them. /realm:npc",
+    "uuid": "72e17e31-5236-4502-8a92-6c9498444093",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "1018cd81-0169-4a63-9651-e91329e4f389",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

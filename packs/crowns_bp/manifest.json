@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Crowns",
+    "description": "The realm's currency: earn Crowns, pay other players and sell or buy goods at the market. /realm:crowns",
+    "uuid": "9a0b727a-bc5a-4e75-931f-c271c7f98e1a",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "386ef36a-afdd-4f0c-8dd1-6a4246071683",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

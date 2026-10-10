@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Treasure Maps & Riddles",
+    "description": "Buy a treasure map from the cartographer and follow riddle clues across the land to a buried chest. /realm:maps",
+    "uuid": "97dc98bb-727a-4f76-995c-69c4386b21a1",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "bb94f64a-a7fd-4969-88c9-9a9940f687f9",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

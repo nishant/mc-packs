@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Merchant Caravan",
+    "description": "Every week a merchant caravan visits for a while and sells rare goods for Crowns. /realm:caravan",
+    "uuid": "caf88624-ed95-4060-88eb-c8874d4d2857",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "14515d3d-faab-4805-a112-1e1d6c97dc37",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

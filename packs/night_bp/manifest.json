@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Aurora & Shooting Stars",
+    "description": "Clear nights bring shooting stars to wish on, and northern lights over snowy lands. /realm:night",
+    "uuid": "6b3e8560-bf54-4a9c-88e6-7b6ef342a46e",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "c44b6a24-8c8e-4651-aac4-7c61c28ccf45",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" }
+  ]
+}

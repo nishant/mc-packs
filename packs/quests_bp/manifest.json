@@ -4,7 +4,7 @@
     "name": "Daily Quests",
     "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
     "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 0, 0],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

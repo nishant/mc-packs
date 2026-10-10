@@ -1,0 +1,22 @@
+{
+  "format_version": "1.16.100",
+  "minecraft:fog_settings": {
+    "description": {
+      "identifier": "realm:sky_blizzard"
+    },
+    "distance": {
+      "air": {
+        "fog_start": 4,
+        "fog_end": 16,
+        "fog_color": "#E4EAF0",
+        "render_distance_type": "fixed"
+      },
+      "weather": {
+        "fog_start": 4,
+        "fog_end": 14,
+        "fog_color": "#DCE3EA",
+        "render_distance_type": "fixed"
+      }
+    }
+  }
+}

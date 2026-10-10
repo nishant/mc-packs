@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Skills",
+    "description": "Six skills that level up from 1 to 50 as you mine, chop, farm, fish, fight and explore, with small perks along the way. /realm:skills",
+    "uuid": "b8c1711d-eb89-49e7-bd7c-89b2f324c021",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "350c3d27-1e20-48f1-b01f-82393e9221ea",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}
