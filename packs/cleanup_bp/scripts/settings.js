@@ -16,6 +16,7 @@ const OPTIONS = [
   { key: "warnSeconds", type: "int", scope: "world", label: "Warning before clearing (seconds)", min: 0, max: 120, step: 5 },
   { key: "keepNearPlayers", type: "bool", scope: "world", label: "Keep items near players" },
   { key: "nearPlayerRadius", type: "int", scope: "world", label: "Near a player means within (blocks)", min: 1, max: 16, step: 1 },
+  { key: "keepDeathDropsMinutes", type: "int", scope: "world", label: "Keep a dead player's drops for (minutes, 0 = don't)", help: "Items within 8 blocks of where a player died", min: 0, max: 30, step: 1 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
