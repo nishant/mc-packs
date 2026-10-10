@@ -566,8 +566,50 @@ function stormStaff(player, def) {
     actionbar(player, `§7${def.name}: the sky won't strike this close to spawn`);
     return;
   }
-  player.dimension.spawnEntity("minecraft:lightning_bolt", at);
+  // Lightning turns villagers into witches, hurts pets and anyone standing near: never there.
+  const bystander = player.dimension.getEntities({ location: at, maxDistance: STRIKE_CLEAR }).find((e) => protectedFromStaff(e, player));
+  if (bystander) {
+    actionbar(player, `§7${def.name}: too close to ${bystander instanceof Player ? (bystander.id === player.id ? "you" : bystander.name) : "someone who'd get hurt"}`);
+    return;
+  }
+  const dimension = player.dimension;
+  dimension.spawnEntity("minecraft:lightning_bolt", at);
   startCooldown(player, def);
+  // Lightning sets fire where it lands; put it out so the staff can't burn anyone's build.
+  for (const delay of [1, 5, 15]) system.runTimeout(() => putOutFire(dimension, at), delay);
+}
+
+const STRIKE_CLEAR = 5; // blocks around a strike that must be free of players, villagers, pets and townsfolk
+const PROTECTED_TYPES = new Set(["minecraft:villager", "minecraft:villager_v2", "minecraft:wandering_trader", "minecraft:npc", "minecraft:armor_stand", "minecraft:item_frame", "minecraft:glow_item_frame", "minecraft:painting"]);
+
+/** Would a strike near this entity hurt something it shouldn't? @param {import("@minecraft/server").Entity} e @param {Player} caster */
+function protectedFromStaff(e, caster) {
+  try {
+    if (e instanceof Player) return e.id === caster.id || get("staffHitsPlayers") !== true;
+    if (PROTECTED_TYPES.has(e.typeId) || e.hasTag("realm:npc")) return true;
+    return !!e.getComponent("minecraft:is_tamed");
+  } catch {
+    return false;
+  }
+}
+
+/** Removes fire in a small box around a strike (only fire: nothing else is touched). @param {import("@minecraft/server").Dimension} dimension @param {Vector3} at */
+function putOutFire(dimension, at) {
+  const cx = Math.floor(at.x);
+  const cy = Math.floor(at.y);
+  const cz = Math.floor(at.z);
+  for (let x = cx - 2; x <= cx + 2; x++) {
+    for (let y = cy - 2; y <= cy + 2; y++) {
+      for (let z = cz - 2; z <= cz + 2; z++) {
+        try {
+          const b = dimension.getBlock({ x, y, z });
+          if (b?.typeId === "minecraft:fire") b.setType("minecraft:air");
+        } catch {
+          // unloaded
+        }
+      }
+    }
+  }
 }
 
 /** @param {Player} player @param {Relic} def */
@@ -585,6 +627,28 @@ function compass(player, def) {
   player.sendMessage(`§d${def.name}: §fa champion (${name}§f) is ${Math.round(Math.hypot(dx, dz))}m ${direction(dx, dz)}.`);
   player.playSound("block.bell.hit", { pitch: 1.6, volume: 0.6 });
 }
+
+// The Storm Staff is a trident: using it would throw it (and it could be lost in lava or the void).
+// Its use is the staff's power instead, so the throw is canceled.
+world.beforeEvents.itemUse.subscribe((ev) => {
+  try {
+    if (ev.itemStack.typeId === "minecraft:trident" && relicOf(ev.itemStack)?.id === "storm_staff") ev.cancel = true;
+  } catch {
+    // not a relic
+  }
+});
+
+// A relic disc put in a jukebox might lose its data: keep relics out of jukeboxes.
+world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  try {
+    if (ev.block.typeId !== "minecraft:jukebox" || !relicOf(ev.itemStack)) return;
+    ev.cancel = true;
+    const player = ev.player;
+    if (ev.isFirstEvent) system.run(() => player.isValid && actionbar(player, "§7Relics don't go in a jukebox"));
+  } catch {
+    // not a relic
+  }
+});
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   try {

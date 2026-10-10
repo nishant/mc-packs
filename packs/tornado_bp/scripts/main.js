@@ -28,7 +28,15 @@ const OPEN_GROUND = new Set(["minecraft:grass_block", "minecraft:dirt", "minecra
 // Low plants on top of the ground: look at the block under them.
 const PLANT = /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|lily_of_the_valley|bush|petals|sapling|leaf_litter|dry_grass|snow_layer|_roots$/;
 // Entities a tornado leaves alone: townsfolk, decorations and vehicles (minecarts and boats are "inanimate").
-const LEAVE_ALONE = ["minecraft:npc", "minecraft:armor_stand", "minecraft:painting", "minecraft:leash_knot", "minecraft:ender_crystal", "minecraft:fishing_hook"];
+// Also falling blocks (moving one would set it down somewhere else), primed TNT, projectiles that teleport or explode,
+// and effect clouds and lightning.
+const LEAVE_ALONE = [
+  "minecraft:npc", "minecraft:armor_stand", "minecraft:painting", "minecraft:leash_knot", "minecraft:ender_crystal", "minecraft:fishing_hook",
+  "minecraft:falling_block", "minecraft:tnt", "minecraft:ender_pearl", "minecraft:eye_of_ender_signal", "minecraft:fireworks_rocket",
+  "minecraft:fireball", "minecraft:small_fireball", "minecraft:wither_skull", "minecraft:wither_skull_dangerous", "minecraft:dragon_fireball",
+  "minecraft:wind_charge_projectile", "minecraft:breeze_wind_charge_projectile", "minecraft:area_effect_cloud", "minecraft:lightning_bolt",
+  "minecraft:evocation_fang", "minecraft:shulker_bullet", "minecraft:llama_spit",
+];
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */

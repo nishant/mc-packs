@@ -253,7 +253,7 @@ export const STORIES = [
             place: "sunken_bell",
             radius: 32,
             count: 1,
-            champion: { tag: "saga_bell_warden", mob: "minecraft:drowned", name: "The Bell Warden", warn: "The water around the bell goes cold. Something is coming." },
+            champion: { tag: "realm:saga:bell_warden", mob: "minecraft:drowned", name: "The Bell Warden", warn: "The water around the bell goes cold. Something is coming." },
           },
         ],
         outro: [
