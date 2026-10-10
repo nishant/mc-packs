@@ -1,0 +1,76 @@
+{
+  "format_version": "1.10.0",
+  "particle_effect": {
+    "description": {
+      "identifier": "realm:sky_star",
+      "basic_render_parameters": {
+        "material": "particles_add",
+        "texture": "textures/particle/realm_sky_glow"
+      }
+    },
+    "components": {
+      "minecraft:emitter_rate_steady": {
+        "spawn_rate": 90,
+        "max_particles": 80
+      },
+      "minecraft:emitter_lifetime_once": {
+        "active_time": "(variable.life > 0 ? variable.life : 1.2)"
+      },
+      "minecraft:emitter_shape_point": {
+        "offset": [
+          "variable.dx * variable.emitter_age",
+          "variable.dy * variable.emitter_age",
+          "variable.dz * variable.emitter_age"
+        ]
+      },
+      "minecraft:particle_initial_speed": 0,
+      "minecraft:particle_lifetime_expression": {
+        "max_lifetime": 0.45
+      },
+      "minecraft:particle_appearance_billboard": {
+        "size": [
+          "0.3 * (1 - (variable.particle_age / variable.particle_lifetime))",
+          "0.3 * (1 - (variable.particle_age / variable.particle_lifetime))"
+        ],
+        "facing_camera_mode": "lookat_xyz",
+        "uv": {
+          "texture_width": 32,
+          "texture_height": 32,
+          "uv": [
+            0,
+            0
+          ],
+          "uv_size": [
+            32,
+            32
+          ]
+        }
+      },
+      "minecraft:particle_appearance_tinting": {
+        "color": {
+          "interpolant": "(variable.particle_age / variable.particle_lifetime)",
+          "gradient": {
+            "0.0": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "0.3": [
+              0.85,
+              0.9,
+              1,
+              0.8
+            ],
+            "1.0": [
+              0.5,
+              0.6,
+              1,
+              0
+            ]
+          }
+        }
+      }
+    }
+  }
+}

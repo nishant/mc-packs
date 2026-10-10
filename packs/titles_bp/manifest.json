@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Titles & Trails",
+    "description": "Earn titles shown under your name and particle trails that follow you, from your adventures and other packs. /realm:titles",
+    "uuid": "636d3728-2a13-4e7f-8598-117e3b7faf14",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "852b0706-9ad8-4ade-9ef2-8acc8daa8310",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

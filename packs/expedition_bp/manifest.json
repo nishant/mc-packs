@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Expeditions",
+    "description": "Dungeon runs for you and your party: fight through generated rooms, solve the lever puzzle, beat the boss and race the clock for treasure. /realm:expedition",
+    "uuid": "6b3b08c0-7abc-41b2-91e1-6c6ea26d158a",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "538189c8-9fca-4f23-9261-a1aab7260a53",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

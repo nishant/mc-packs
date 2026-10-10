@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Waystones & Inns",
+    "description": "Lodestones with a Waystone sign become fast-travel points you discover and travel between, and innkeepers rent beds. /realm:waystones",
+    "uuid": "de27f013-0398-4ff4-9cbc-6557431a476e",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "04982d71-b93f-43f9-9130-3c17c0d424d4",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

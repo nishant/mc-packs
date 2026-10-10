@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Bounty Board",
+    "description": "A lectern board with realm-wide bounties every day: named champions to hunt and mobs to cull, paid in Crowns. /realm:bounty",
+    "uuid": "024072be-c81c-43a1-a427-cf9492881d35",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "d41cc1a9-4bbb-4562-8ac3-1e646227281b",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

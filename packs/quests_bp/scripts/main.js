@@ -157,6 +157,12 @@ function complete(player, q, day) {
   const got = reward(player, q.reward);
   player.sendMessage(`§aQuest complete: ${q.label}!${got ? ` §7Reward: ${got}` : ""}`);
   player.playSound("random.levelup", { pitch: 1.1, volume: 0.8 });
+  // Tell other packs (Guilds, Skills, Titles, Journal...) a quest was finished. Nobody listening is fine.
+  try {
+    system.sendScriptEvent("realm:quest_done", JSON.stringify({ player: player.id, pack: "quests_bp", id: q.id, label: q.label, kind: q.kind }));
+  } catch (e) {
+    console.warn(`[quests] quest_done: ${e}`);
+  }
   if (day.q.every((p) => p.done || !pool.has(p.id))) player.sendMessage(`§6All of today's quests are done. New ones in ${untilReset()}.`);
 }
 

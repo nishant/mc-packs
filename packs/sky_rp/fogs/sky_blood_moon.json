@@ -1,0 +1,22 @@
+{
+  "format_version": "1.16.100",
+  "minecraft:fog_settings": {
+    "description": {
+      "identifier": "realm:sky_blood_moon"
+    },
+    "distance": {
+      "air": {
+        "fog_start": 0.2,
+        "fog_end": 0.85,
+        "fog_color": "#7A1612",
+        "render_distance_type": "render"
+      },
+      "weather": {
+        "fog_start": 0.15,
+        "fog_end": 0.6,
+        "fog_color": "#5E1410",
+        "render_distance_type": "render"
+      }
+    }
+  }
+}

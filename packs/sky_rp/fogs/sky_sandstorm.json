@@ -1,0 +1,22 @@
+{
+  "format_version": "1.16.100",
+  "minecraft:fog_settings": {
+    "description": {
+      "identifier": "realm:sky_sandstorm"
+    },
+    "distance": {
+      "air": {
+        "fog_start": 6,
+        "fog_end": 20,
+        "fog_color": "#C9A46E",
+        "render_distance_type": "fixed"
+      },
+      "weather": {
+        "fog_start": 5,
+        "fog_end": 17,
+        "fog_color": "#B3946A",
+        "render_distance_type": "fixed"
+      }
+    }
+  }
+}

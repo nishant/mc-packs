@@ -1,0 +1,20 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Regional Weather",
+    "description": "Sandstorms in deserts, blizzards in snowy places and morning fog banks by the water, decided for each player from where they stand. /realm:climate",
+    "uuid": "573bbe13-7714-44f2-974d-7004d9b7d329",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "cf0a2f42-28b7-4c59-bd20-cc1d8b007530",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}

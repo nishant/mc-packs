@@ -1,0 +1,22 @@
+{
+  "format_version": "1.16.100",
+  "minecraft:fog_settings": {
+    "description": {
+      "identifier": "realm:sky_fogbank"
+    },
+    "distance": {
+      "air": {
+        "fog_start": 0.04,
+        "fog_end": 0.35,
+        "fog_color": "#C8CFD6",
+        "render_distance_type": "render"
+      },
+      "weather": {
+        "fog_start": 0.03,
+        "fog_end": 0.3,
+        "fog_color": "#AEB6BF",
+        "render_distance_type": "render"
+      }
+    }
+  }
+}

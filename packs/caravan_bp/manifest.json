@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Merchant Caravan",
+    "description": "Every week a merchant caravan visits for a while and sells rare goods for Crowns. /realm:caravan",
+    "uuid": "caf88624-ed95-4060-88eb-c8874d4d2857",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "14515d3d-faab-4805-a112-1e1d6c97dc37",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

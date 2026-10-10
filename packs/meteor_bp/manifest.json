@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Meteor Strikes",
+    "description": "Some nights a meteor falls far from spawn, announced a minute ahead, leaving a smoking crater with ancient debris. /realm:meteor",
+    "uuid": "5f18da59-6d29-44e2-a81a-7c37e3f51e60",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "eb967740-afc1-4e7d-a5af-7ed89f666192",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" }
+  ]
+}

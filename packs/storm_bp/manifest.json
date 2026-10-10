@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Storm Chasing",
+    "description": "Thunderstorms bring a drifting storm cell full of lightning to hunt down, and struck lightning rods give Storm Glass. /realm:storm",
+    "uuid": "6540ee31-3904-4ab5-a977-d106937548d6",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "3cd47162-5243-4a21-80e9-bd646fee6830",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

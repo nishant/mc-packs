@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Treasure Maps & Riddles",
+    "description": "Buy a treasure map from the cartographer and follow riddle clues across the land to a buried chest. /realm:maps",
+    "uuid": "97dc98bb-727a-4f76-995c-69c4386b21a1",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "bb94f64a-a7fd-4969-88c9-9a9940f687f9",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

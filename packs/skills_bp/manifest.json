@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Skills",
+    "description": "Six skills that level up from 1 to 50 as you mine, chop, farm, fish, fight and explore, with small perks along the way. /realm:skills",
+    "uuid": "b8c1711d-eb89-49e7-bd7c-89b2f324c021",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "350c3d27-1e20-48f1-b01f-82393e9221ea",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }

@@ -1,17 +1,17 @@
 {
   "format_version": 2,
   "header": {
-    "name": "Daily Quests",
-    "description": "Three new quests for each player every day: mine, fight, farm, build, travel, eat or fish for XP and item rewards. /realm:quests",
-    "uuid": "f1421658-f03b-415f-b0c4-af61fc294915",
-    "version": [1, 1, 0],
+    "name": "Town Projects",
+    "description": "Grow your towns together: deliver materials to the mayor for wells, docks, market stalls and bell towers, built right where operators chose. /realm:town",
+    "uuid": "9aec6547-60b1-4a50-b021-0eb214d95561",
+    "version": [1, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
-      "uuid": "64668a6a-74b2-4c43-b326-4133f42cefc4",
+      "uuid": "e89f3e0d-27b4-4f83-8d11-34de52186851",
       "version": [1, 0, 0],
       "entry": "scripts/main.js"
     }
