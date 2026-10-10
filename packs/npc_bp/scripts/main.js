@@ -61,6 +61,7 @@ const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
 /** @type {Placed[]} */
 let list = [];
 let ready = false;
+let loadFailed = false; // a corrupt list: leave the NPCs alone rather than remove them all
 /** @type {WeatherType} */
 let weather = WeatherType.Clear;
 /** @type {Map<string, State>} townsfolk id -> runtime state */
@@ -118,6 +119,7 @@ function load() {
   } catch (e) {
     console.warn(`[npc] ${PROP_LIST} is corrupt: ${e}`);
     list = [];
+    loadFailed = true;
   }
 }
 
@@ -255,7 +257,7 @@ function audit(entity) {
   const rec = id ? placedOf(id) : undefined;
   const t = id ? folk.get(id) : undefined;
   if (!rec || !t) {
-    entity.remove();
+    if (!loadFailed) entity.remove();
     return;
   }
   if (rec.eid !== entity.id) {

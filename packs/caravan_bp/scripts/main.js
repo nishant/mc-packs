@@ -337,9 +337,7 @@ function arrive(slot) {
   let spot;
   let surface = false;
   if (spots.length) {
-    const prev = visit?.spot.name;
-    const choices = spots.length > 1 ? spots.filter((s) => s.name !== prev) : spots;
-    spot = { ...choices[Math.floor(Math.random() * choices.length)] };
+    spot = { ...spots[Math.floor(Math.random() * spots.length)] };
   } else {
     const s = world.getDefaultSpawnLocation();
     spot = { name: "world spawn", dim: OVERWORLD, x: Math.floor(s.x) + 0.5, y: s.y, z: Math.floor(s.z) + 0.5 };

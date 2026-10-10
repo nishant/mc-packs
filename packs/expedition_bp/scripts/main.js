@@ -1,5 +1,6 @@
 import {
   BlockPermutation,
+  BlockTypes,
   BlockVolume,
   CommandPermissionLevel,
   CustomCommandParamType,
@@ -64,11 +65,11 @@ const DIFFICULTY = ["", "Easy", "Normal", "Hard"];
 const ORES = ["coal", "iron", "copper", "gold", "redstone", "lapis", "diamond", "emerald"].flatMap((o) => [`minecraft:${o}_ore`, `minecraft:deepslate_${o}_ore`]);
 
 /** What the deep underground is made of: the only blocks a dungeon may replace (with lush caves, geodes and the deep dark's sculk). */
-const NATURAL = [
+const NATURAL_IDS = [
   ...ORES,
   "minecraft:lit_redstone_ore",
   "minecraft:lit_deepslate_redstone_ore",
-  ...["air", "stone", "deepslate", "tuff", "granite", "diorite", "andesite", "calcite", "gravel", "dirt", "coarse_dirt", "rooted_dirt", "clay"],
+  ...["air", "stone", "deepslate", "tuff", "granite", "diorite", "andesite", "calcite", "gravel", "dirt", "coarse_dirt", "dirt_with_roots", "clay"],
   ...["water", "flowing_water", "lava", "flowing_lava", "obsidian", "magma", "smooth_basalt", "infested_stone", "infested_deepslate"],
   ...["raw_iron_block", "raw_copper_block", "amethyst_block", "budding_amethyst", "small_amethyst_bud", "medium_amethyst_bud", "large_amethyst_bud", "amethyst_cluster"],
   ...["dripstone_block", "pointed_dripstone", "moss_block", "moss_carpet", "azalea", "flowering_azalea", "azalea_leaves", "azalea_leaves_flowered"],
@@ -84,16 +85,34 @@ const COLORS = [
   { name: "GREEN", code: "§2", wool: "minecraft:green_wool" },
 ];
 
-/** Every block a dungeon places. The box holds only NATURAL blocks before a run, so any of these in it are the dungeon's own. */
-const OURS = [
+/** Every block a dungeon places. The box holds only NATURAL_IDS blocks before a run, so any of these in it are the dungeon's own. */
+const OURS_IDS = [
   ...CONFIG.dungeons.flatMap((d) => [d.wall, d.floor, d.accent, d.light, d.door]),
   ...COLORS.map((c) => c.wool),
   "minecraft:lever",
   "minecraft:standing_sign",
   "minecraft:chest",
 ];
-const REPLACEABLE = [...new Set([...NATURAL, ...OURS])];
-const FILL = { blockFilter: { includeTypes: REPLACEABLE } };
+
+/** @type {{ natural: string[], replaceable: string[] } | undefined} */
+let lists;
+/**
+ * The block lists, without ids this game version doesn't know (a block filter would reject the whole
+ * call). Built on first use, after the world has loaded, when block types can be looked up.
+ */
+function blockLists() {
+  if (lists) return lists;
+  /** @param {string} id */
+  const known = (id) => {
+    try {
+      return !!BlockTypes.get(id);
+    } catch {
+      return true;
+    }
+  };
+  const natural = NATURAL_IDS.filter(known);
+  return (lists = { natural, replaceable: [...new Set([...natural, ...OURS_IDS.filter(known)])] });
+}
 /** Mobs a reset may remove from the box: the dungeons' own kinds. Anything else (a pet) is moved to the surface. */
 const DUNGEON_MOBS = new Set(CONFIG.dungeons.flatMap((d) => [...d.mobs, d.boss.mob]));
 const LITTER = new Set(["minecraft:item", "minecraft:xp_orb", "minecraft:arrow", "minecraft:thrown_trident", "minecraft:snowball"]);
@@ -361,13 +380,13 @@ const signFacing = (d) => (d.z > 0 ? 0 : d.x < 0 ? 4 : d.z < 0 ? 8 : 12);
 
 /** @param {Dimension} dim @param {Vector3} from @param {Vector3} to @param {string | BlockPermutation} block */
 function fill(dim, from, to, block) {
-  dim.fillBlocks(new BlockVolume(from, to), block, FILL);
+  dim.fillBlocks(new BlockVolume(from, to), block, { blockFilter: { includeTypes: blockLists().replaceable } });
 }
 
 /** @param {Dimension} dim @param {Vector3} at @param {BlockPermutation} p */
 function place(dim, at, p) {
   const block = dim.getBlock(at);
-  if (block && REPLACEABLE.includes(block.typeId)) block.setPermutation(p);
+  if (block && blockLists().replaceable.includes(block.typeId)) block.setPermutation(p);
   return block;
 }
 
@@ -462,8 +481,7 @@ function buildSteps(run) {
     sign(dim, { x: entry.x + out.x * 3, y: entry.y, z: entry.z + out.z * 3 }, signFacing({ x: -out.x, z: -out.z }), `§l${d.name}§r\nClear each room\nto open the bars`);
     const pi = lay.rooms.findIndex((r) => r.kind === "puzzle");
     const spots = puzzleSpots(o, lay, pi);
-    spots.signs.forEach((at, k) => sign(dim, at, spots.facing, `§lClue ${k + 1} of ${lay.clues.length}§r\n${lay.clues[k] ?? ""}`));
-    if (lay.clues.length < 4) for (const at of spots.signs.slice(lay.clues.length)) place(dim, at, perm("minecraft:air"));
+    lay.clues.forEach((clue, k) => sign(dim, spots.signs[k], spots.facing, `§lClue ${k + 1} of ${lay.clues.length}§r\n${clue}`));
     spots.levers.forEach((at, k) => {
       place(dim, { x: at.x, y: at.y - 1, z: at.z }, perm(COLORS[k].wool));
       place(dim, at, perm("minecraft:lever", { lever_direction: "up_north_south", open_bit: false }));
@@ -510,7 +528,7 @@ const removeArea = (slot) => tryCommand(overworld(), `tickingarea remove realm_e
  */
 function findForeign(o) {
   const dim = overworld();
-  const filter = { excludeTypes: NATURAL };
+  const filter = { excludeTypes: blockLists().natural };
   /** @param {Vector3} a @param {Vector3} b @returns {Vector3 | undefined} */
   const search = (a, b) => {
     if (!dim.containsBlock(new BlockVolume(a, b), filter, false)) return undefined;
@@ -1153,7 +1171,12 @@ function tickRun(run, players) {
   }
   if (run.phase === "finishing") {
     if (now >= run.finishAt) endRun(run, "§aThe expedition is over. Welcome back!").catch((e) => console.warn(`[expedition] ${e}`));
-    else if ((now / LOOP_TICKS) % 2 === 0) for (const id of run.members.keys()) { const p = players.get(id); if (p) actionbar(p, `§e${run.dungeon.name} §f${clock(run.clearMs)} §7| ${objective(run)}`); }
+    else if (beat % 2 === 0) {
+      for (const id of run.members.keys()) {
+        const p = players.get(id);
+        if (p) actionbar(p, `§e${run.dungeon.name} §f${clock(run.clearMs)} §7| ${objective(run)}`);
+      }
+    }
     return;
   }
   if (Date.now() > run.deadline) {
@@ -1202,7 +1225,7 @@ function tickRun(run, players) {
       }
     }
   }
-  if ((now / LOOP_TICKS) % 2 === 0) {
+  if (beat % 2 === 0) {
     const t = clock(Date.now() - run.started);
     for (const id of run.members.keys()) {
       const p = players.get(id);
@@ -1222,7 +1245,9 @@ function clearRoom(run) {
   tell(run, "§aThe bars rise. Onward!");
 }
 
+let beat = 0; // loop runs: the actionbar is refreshed every other one (once a second)
 system.runInterval(() => {
+  beat++;
   if (!runs.size) return;
   /** @type {Map<string, Player>} */
   const players = new Map(world.getAllPlayers().map((p) => [p.id, p]));
