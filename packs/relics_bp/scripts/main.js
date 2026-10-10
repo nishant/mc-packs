@@ -632,7 +632,20 @@ function compass(player, def) {
 // Its use is the staff's power instead, so the throw is canceled.
 world.beforeEvents.itemUse.subscribe((ev) => {
   try {
-    if (ev.itemStack.typeId === "minecraft:trident" && relicOf(ev.itemStack)?.id === "storm_staff") ev.cancel = true;
+    if (ev.itemStack.typeId !== "minecraft:trident") return;
+    const def = relicOf(ev.itemStack);
+    if (def?.id !== "storm_staff") return;
+    ev.cancel = true; // a canceled use has no afterEvents.itemUse: the power runs from here
+    const player = ev.source;
+    system.run(() => {
+      try {
+        if (!player.isValid) return;
+        markFound(player, def);
+        if (get("enabled") === true) stormStaff(player, def);
+      } catch (e) {
+        console.warn(`[relics] ${e}`);
+      }
+    });
   } catch {
     // not a relic
   }
@@ -656,7 +669,7 @@ world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
     const def = relicOf(itemStack);
     if (!def) return;
     markFound(source, def);
-    if (def.id === "storm_staff") stormStaff(source, def);
+    if (def.id === "storm_staff" && itemStack.typeId !== "minecraft:trident") stormStaff(source, def); // a staff made as another item (the fallback)
     else if (def.id === "compass_echoes") compass(source, def);
   } catch (e) {
     console.warn(`[relics] ${e}`);

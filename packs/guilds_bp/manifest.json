@@ -4,7 +4,7 @@
     "name": "Guilds & Reputation",
     "description": "Rise through the Miners, Growers, Wardens and Wayfarers guilds by playing, for shop stock, titles and small perks. /realm:guilds",
     "uuid": "b264a22c-1d80-4878-b722-4ded4a5856eb",
-    "version": [1, 0, 0],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

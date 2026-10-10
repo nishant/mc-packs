@@ -4,7 +4,7 @@
     "name": "Bounty Board",
     "description": "A lectern board with realm-wide bounties every day: named champions to hunt and mobs to cull, paid in Crowns. /realm:bounty",
     "uuid": "024072be-c81c-43a1-a427-cf9492881d35",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

@@ -489,7 +489,7 @@ function championNear(player, obj) {
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
       mob.addTag(champ.tag);
-      const long = 20 * 60 * 30;
+      const long = 20000000; // as long as the game allows: the mob is removed on the next restart anyway
       mob.addEffect("health_boost", long, { amplifier: 4, showParticles: false });
       mob.addEffect("resistance", long, { amplifier: 1, showParticles: false });
       mob.addEffect("strength", long, { amplifier: 1, showParticles: false });
