@@ -9,7 +9,7 @@ import { get, getFor } from "./settings.js";
 const LAST_PROP = "death:last";
 const AREAS_PROP = "death:areas";
 
-/** Blocks a player can stand in: the feet and head of a landing spot. */
+/** Blocks a player can stand in: the feet and head of a landing spot (plants and other blocks without collision). */
 const PASSABLE = new Set([
   "minecraft:air",
   "minecraft:short_grass",
@@ -17,6 +17,33 @@ const PASSABLE = new Set([
   "minecraft:fern",
   "minecraft:large_fern",
   "minecraft:deadbush",
+  "minecraft:dead_bush",
+  "minecraft:short_dry_grass",
+  "minecraft:tall_dry_grass",
+  "minecraft:bush",
+  "minecraft:dandelion",
+  "minecraft:poppy",
+  "minecraft:blue_orchid",
+  "minecraft:allium",
+  "minecraft:azure_bluet",
+  "minecraft:red_tulip",
+  "minecraft:orange_tulip",
+  "minecraft:white_tulip",
+  "minecraft:pink_tulip",
+  "minecraft:oxeye_daisy",
+  "minecraft:cornflower",
+  "minecraft:lily_of_the_valley",
+  "minecraft:torchflower",
+  "minecraft:sunflower",
+  "minecraft:lilac",
+  "minecraft:rose_bush",
+  "minecraft:peony",
+  "minecraft:pink_petals",
+  "minecraft:wildflowers",
+  "minecraft:leaf_litter",
+  "minecraft:vine",
+  "minecraft:glow_lichen",
+  "minecraft:torch",
 ]);
 /** Blocks never to land on. */
 const BAD_GROUND = new Set([
@@ -141,32 +168,44 @@ function describe(player, point) {
 /** Player ids with a /realm:death_back in progress. */
 const busy = new Set();
 
-/** @param {Dimension} dim @param {number} x @param {number} y @param {number} z */
-function blockAt(dim, x, y, z) {
+/**
+ * The block's type id, or undefined when its chunk isn't loaded. One search reads each block once:
+ * neighboring spots share their ground, feet, head and sides.
+ * @param {Dimension} dim @param {number} x @param {number} y @param {number} z @param {Map<string, string | undefined>} [seen]
+ */
+function blockAt(dim, x, y, z, seen) {
+  const key = `${x},${y},${z}`;
+  if (seen?.has(key)) return seen.get(key);
+  let id;
   try {
-    return dim.getBlock({ x, y, z });
+    id = dim.getBlock({ x, y, z })?.typeId;
   } catch {
-    return undefined; // unloaded chunk
+    id = undefined; // unloaded chunk
   }
+  seen?.set(key, id);
+  return id;
 }
+
+const AIRS = new Set(["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]);
+const LIQUIDS = new Set(["minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava", "minecraft:bubble_column"]);
 
 /**
  * Can a player stand with their feet in this block? true, false, or undefined when its chunk isn't loaded.
  * @param {Dimension} dim @param {number} x @param {number} y @param {number} z
  */
-function safeAt(dim, x, y, z) {
+function safeAt(dim, x, y, z, seen = new Map()) {
   const range = dim.heightRange;
   if (y - 1 < range.min || y + 1 >= range.max) return false;
-  const ground = blockAt(dim, x, y - 1, z);
-  const feet = blockAt(dim, x, y, z);
-  const head = blockAt(dim, x, y + 1, z);
+  const ground = blockAt(dim, x, y - 1, z, seen);
+  const feet = blockAt(dim, x, y, z, seen);
+  const head = blockAt(dim, x, y + 1, z, seen);
   if (!ground || !feet || !head) return undefined;
-  if (!PASSABLE.has(feet.typeId) || !PASSABLE.has(head.typeId)) return false;
-  if (ground.isAir || ground.isLiquid || PASSABLE.has(ground.typeId) || BAD_GROUND.has(ground.typeId)) return false;
+  if (!PASSABLE.has(feet) || !PASSABLE.has(head)) return false;
+  if (AIRS.has(ground) || LIQUIDS.has(ground) || PASSABLE.has(ground) || BAD_GROUND.has(ground)) return false;
   for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const side = blockAt(dim, x + ox, y, z + oz);
+    const side = blockAt(dim, x + ox, y, z + oz, seen);
     if (!side) return undefined;
-    if (HOT.has(side.typeId)) return false;
+    if (HOT.has(side)) return false;
   }
   return true;
 }
@@ -180,6 +219,8 @@ function findSpot(point) {
   if (!blockAt(dim, point.x, Math.min(Math.max(point.y, dim.heightRange.min), dim.heightRange.max - 1), point.z)) return "unloaded";
   const r = get("backSearchRadius");
   const h = get("backSearchHeight");
+  /** @type {Map<string, string | undefined>} */
+  const seen = new Map();
   /** @type {[number, number, number][]} */
   const offsets = [];
   for (let dy = -h; dy <= h; dy++) for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) offsets.push([dx, dy, dz]);
@@ -190,7 +231,7 @@ function findSpot(point) {
     const x = point.x + dx;
     const y = point.y + dy;
     const z = point.z + dz;
-    const ok = safeAt(dim, x, y, z);
+    const ok = safeAt(dim, x, y, z, seen);
     if (ok) return { x, y, z };
     if (ok === undefined) unloaded = true;
   }
@@ -246,7 +287,8 @@ function startBack(player, point) {
 
   // Far away: load the death point with a small temporary ticking area, then look again.
   const dim = world.getDimension(point.d);
-  const name = `death_back_${Date.now().toString(36)}`;
+  const name = `death_back_${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`; // unique even for two players in one tick
+  const pid = player.id; // still readable once the player has left
   const y = Math.min(Math.max(point.y, dim.heightRange.min), dim.heightRange.max - 1); // a death below the world
   if (!tryCommand(dim, `tickingarea add circle ${point.x} ${y} ${point.z} 1 "${name}" true`)) {
     busy.delete(player.id);
@@ -265,9 +307,9 @@ function startBack(player, point) {
     if (result === "unloaded" && player.isValid && system.currentTick < deadline) return;
     system.clearRun(job);
     try {
-      if (!player.isValid) busy.delete(player.id);
+      if (!player.isValid) busy.delete(pid);
       else if (result === "unloaded") {
-        busy.delete(player.id);
+        busy.delete(pid);
         player.sendMessage("§cYour death point didn't load in time, so you weren't teleported. Try again in a moment.");
       } else finishBack(player, point, result);
     } finally {

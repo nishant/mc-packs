@@ -183,6 +183,11 @@ function takeOver() {
     console.warn(`[weather] doWeatherCycle: ${e}`);
   }
   active = true;
+  try {
+    lastAbsolute = world.getAbsoluteTime(); // so time that passed while it was disabled doesn't look like a skipped night
+  } catch {
+    lastAbsolute = undefined;
+  }
   loadPlan();
   extend(Date.now());
   savePlan();
@@ -388,7 +393,9 @@ function summary() {
     const change = !after ? "" : after.w === "Clear" ? "clearing" : after.w === "Rain" ? "easing to rain" : "building to a thunderstorm";
     parts.push(`${NAME[cur.w]} now${change ? `, ${change} in ${short(cur.e - now)}` : ""}.`);
   }
-  const storm = spells.find((s, i) => i > 0 && s.w === "Thunder" && !(cur.w === "Clear" && s === nextWet));
+  // A thunderstorm further on (the one the first sentence already names isn't repeated).
+  const named = cur.w === "Clear" ? nextWet : spells[1];
+  const storm = spells.find((s, i) => i > 0 && s.w === "Thunder" && s !== named);
   if (storm) parts.push(`Thunderstorm likely around ${utc(storm.s)}.`);
   return parts.join(" ");
 }

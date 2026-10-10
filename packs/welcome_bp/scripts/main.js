@@ -29,7 +29,13 @@ function getSettings() {
   const raw = world.getDynamicProperty(PROP_SETTINGS);
   if (typeof raw !== "string") return { ...DEFAULTS };
   try {
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const saved = JSON.parse(raw);
+    const s = { ...DEFAULTS, ...(saved && typeof saved === "object" ? saved : {}) };
+    // A value of the wrong type (a hand-edited or corrupt property) falls back to its default.
+    for (const key of /** @type {(keyof WelcomeSettings)[]} */ (Object.keys(DEFAULTS))) {
+      if (typeof s[key] !== typeof DEFAULTS[key]) /** @type {any} */ (s)[key] = DEFAULTS[key];
+    }
+    return s;
   } catch {
     console.warn("[welcome] Saved settings are corrupt, using defaults.");
     return { ...DEFAULTS };
@@ -154,16 +160,31 @@ async function showForm(player, form, maxAttempts = 20) {
 const escapeNewlines = (/** @type {string} */ s) => s.replaceAll("\n", "\\n");
 const unescapeNewlines = (/** @type {string} */ s) => s.replaceAll("\\n", "\n");
 
+/** Minecraft's text boxes keep at most this many characters, so the body is edited in parts (as in the news editor). */
+const BODY_PART = 100;
+const MIN_PARTS = 4;
+
+/** The body in BODY_PART pieces, with room to grow: at least MIN_PARTS boxes and one empty box at the end. @param {string} text */
+function splitBody(text) {
+  const parts = [];
+  for (let i = 0; i < text.length; i += BODY_PART) parts.push(text.slice(i, i + BODY_PART));
+  while (parts.length < MIN_PARTS || parts.at(-1) !== "") parts.push("");
+  return parts;
+}
+
 /** @param {Player} player */
 async function openEditor(player) {
   const s = getSettings();
+  const parts = splitBody(escapeNewlines(s.body));
 
   const form = new ModalFormData()
     .title("Edit welcome message")
     .textField("Title", DEFAULTS.title, { defaultValue: s.title })
-    .textField("Body  (\\n = new line, {player}, {online}, § colors)", "Message...", {
-      defaultValue: escapeNewlines(s.body),
-    })
+    .label(
+      `§7Minecraft's text boxes take ${BODY_PART} characters each, so the body is split over ${parts.length} boxes that are joined in order, with nothing added between them. Type \\n for a new line, {player} for the player's name, {online} for how many are online, and § for colors. All boxes empty = the default text.`
+    );
+  parts.forEach((part, i) => form.textField(`Body, part ${i + 1}`, i === 0 ? "Message..." : "", { defaultValue: part }));
+  form
     .textField("Button text", DEFAULTS.button, { defaultValue: s.button })
     .toggle("Show only once per player (re-shows after each edit)", { defaultValue: s.showOnce })
     .toggle("Also post in chat", { defaultValue: s.chat })
@@ -176,16 +197,21 @@ async function openEditor(player) {
     if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
     return;
   }
-  if (response.canceled || !response.formValues) return;
+  if (response.canceled || !response.formValues || !player.isValid) return;
 
-  const [title, body, button, showOnce, chat, screenTitle, reshow] = response.formValues;
+  // Labels may or may not take a place in formValues: the text boxes are the strings, in order, and the switches the booleans.
+  const strings = response.formValues.filter((v) => typeof v === "string");
+  const [showOnce, chat, screenTitle, reshow] = response.formValues.filter((v) => typeof v === "boolean");
+  const title = strings[0];
+  const body = strings.slice(1, -1).join("");
+  const button = strings.at(-1);
   const str = (/** @type {unknown} */ v, /** @type {string} */ fallback) =>
     typeof v === "string" && v.trim() !== "" ? v : fallback;
 
   saveSettings(
     {
       title: str(title, DEFAULTS.title),
-      body: unescapeNewlines(str(body, DEFAULTS.body)),
+      body: unescapeNewlines(str(body, escapeNewlines(DEFAULTS.body))),
       button: str(button, DEFAULTS.button),
       showOnce: showOnce === true,
       chat: chat === true,

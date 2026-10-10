@@ -57,6 +57,7 @@ function sit(player, dim, at, yaw, onBlock) {
       player.onScreenDisplay.setActionBar("§7Someone is already sitting there");
       return;
     }
+    born.delete(old.id);
     old.remove();
   }
   const seat = dim.spawnEntity(SEAT, at);
@@ -67,7 +68,10 @@ function sit(player, dim, at, yaw, onBlock) {
     player.teleport(player.location, { rotation: { x: player.getRotation().x, y: yaw } });
   }
   if (seat.getComponent("minecraft:rideable")?.addRider(player)) player.onScreenDisplay.setActionBar("§7Sneak to stand up");
-  else seat.remove();
+  else {
+    born.delete(seat.id);
+    seat.remove();
+  }
 }
 
 /** @param {Player} player */
@@ -101,6 +105,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
 
 /** @param {Entity} seat */
 function removeSeat(seat) {
+  born.delete(seat.id);
   seat.getComponent("minecraft:rideable")?.ejectRiders();
   seat.remove();
 }

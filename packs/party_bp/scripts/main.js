@@ -16,6 +16,7 @@ const PROP = "party:data"; // world: JSON { <code>: Party }
 const TAG = "realm_party:";
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O or 1/I
 const HUD_TICKS = 40;
+const SAVE_LIMIT = 30000; // a string property holds at most about 32,000 characters
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const DIMENSION_NAMES = /** @type {Record<string, string>} */ ({
   "minecraft:overworld": "the Overworld",
@@ -64,7 +65,15 @@ function parties() {
 function save(code) {
   const all = parties();
   try {
-    world.setDynamicProperty(PROP, all.size ? JSON.stringify(Object.fromEntries(all)) : undefined);
+    let json = JSON.stringify(Object.fromEntries(all));
+    if (json.length > SAVE_LIMIT) {
+      // Room for more: forget parties of one whose only member is offline (they'd start a new one).
+      const here = new Set(world.getAllPlayers().map((p) => p.id));
+      for (const [c, p] of all) if (p.m.length < 2 && !here.has(p.m[0][0])) all.delete(c);
+      json = JSON.stringify(Object.fromEntries(all));
+    }
+    if (json.length > SAVE_LIMIT) throw new Error(`too many parties (${json.length} characters)`);
+    world.setDynamicProperty(PROP, all.size ? json : undefined);
   } catch (e) {
     console.warn(`[party] save: ${e}`);
   }

@@ -100,6 +100,13 @@ function lookedAtContainer(player) {
   return container ? block : undefined;
 }
 
+/**
+ * The open goal (other than `except`) that already collects into this container, if any.
+ * @param {import("@minecraft/server").Block} block @param {number} [except]
+ */
+const collectorAt = (block, except) =>
+  [...goals().values()].find((g) => g.id !== except && !g.done && g.dim === block.dimension.id && g.x === block.x && g.y === block.y && g.z === block.z);
+
 /** "Look at a chest ..." when the player isn't looking at a container. */
 const LOOK = `Look at a chest, barrel or other container within ${CONFIG.linkDistance} blocks, then try again.`;
 
@@ -296,6 +303,8 @@ async function showGoal(player, id) {
           const now = goals().get(g.id);
           if (!now) return;
           if (!block) return player.sendMessage(`§c${LOOK}`);
+          const taken = collectorAt(block, now.id);
+          if (taken) return player.sendMessage(`§cThat container already collects for ${taken.n}. Use another one.`);
           Object.assign(now, { dim: block.dimension.id, x: block.x, y: block.y, z: block.z });
           save(now);
           player.sendMessage(`§a${now.n} now collects into the container at ${where(now)}.`);
@@ -368,7 +377,7 @@ function addGoal(player, item, amount, name) {
   if (!block) return player.sendMessage(`§c${LOOK}`);
   if (goals().size >= CONFIG.maxGoals)
     return player.sendMessage(`§cThe realm already has ${CONFIG.maxGoals} goals. Remove a finished one first (/realm:goals).`);
-  const taken = [...goals().values()].find((g) => !g.done && g.dim === block.dimension.id && g.x === block.x && g.y === block.y && g.z === block.z);
+  const taken = collectorAt(block);
   if (taken) return player.sendMessage(`§cThat container already collects for ${taken.n}. Use another one.`);
   const next = world.getDynamicProperty(PROP_NEXT);
   const id = typeof next === "number" ? next : 1;

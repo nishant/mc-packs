@@ -1,12 +1,14 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG, DEFAULTS } from "./config.js";
-import { get } from "./settings.js";
+import { get, set } from "./settings.js";
 
 const PROP_NEWS = "news:news"; // world: JSON { title, body }
 const PROP_REVISION = "news:revision"; // world: bumped when news should be re-shown
 const PROP_TIPS = "news:tips"; // world: JSON string[]
-const PROP_TIP_SETTINGS = "news:tipSettings"; // world: JSON { enabled, intervalMinutes }, also set in /realm:config (settings.js)
+// world "news:tipSettings": JSON { enabled, intervalMinutes }, read and written through settings.js (shared with /realm:config)
+/** Minecraft's text boxes keep at most this many characters: the most a tip typed in the editor can have. */
+const TIP_MAX = 100;
 const PROP_SEEN = "news:seen"; // player: revision last seen
 const PROP_LAST_SEEN = "news:lastSeen"; // player: epoch ms, refreshed while online
 const PROP_DRAFT = "news:draft"; // player: unsaved body pasted in chunks with /realm:news_add
@@ -37,15 +39,17 @@ const writeJson = (prop, value) => world.setDynamicProperty(prop, JSON.stringify
 /** @returns {{ title: string, body: string }} */
 const getNews = () => ({ ...DEFAULTS.news, ...readJson(PROP_NEWS, {}) });
 
-/** @returns {string[]} */
-const getTips = () => readJson(PROP_TIPS, DEFAULTS.tips);
+/** @returns {string[]} a copy, safe to change */
+function getTips() {
+  const tips = readJson(PROP_TIPS, DEFAULTS.tips);
+  return Array.isArray(tips) ? tips.filter((t) => typeof t === "string" && t.trim()) : [...DEFAULTS.tips];
+}
 
-/** @returns {{ enabled: boolean, intervalMinutes: number }} */
-const getTipSettings = () => ({
-  enabled: DEFAULTS.tipsEnabled,
-  intervalMinutes: DEFAULTS.tipIntervalMinutes,
-  ...readJson(PROP_TIP_SETTINGS, {}),
-});
+/**
+ * Read through settings.js, which checks the saved values (in news:tipSettings, shared with /realm:config).
+ * @returns {{ enabled: boolean, intervalMinutes: number }}
+ */
+const getTipSettings = () => ({ enabled: get("tipsEnabled") === true, intervalMinutes: Number(get("tipIntervalMinutes")) || DEFAULTS.tipIntervalMinutes });
 
 function getRevision() {
   const rev = world.getDynamicProperty(PROP_REVISION);
@@ -285,10 +289,10 @@ async function tipsMenu(player) {
 
 /** @param {Player} player @param {number} index -1 = new tip */
 async function editTip(player, index) {
-  const tips = getTips();
+  const before = getTips()[index] ?? "";
   const form = new ModalFormData()
     .title(index < 0 ? "New tip" : "Edit tip")
-    .textField("Tip", "Did you know...", { defaultValue: index < 0 ? "" : tips[index] });
+    .textField(`Tip (up to ${TIP_MAX} characters)`, "Did you know...", { defaultValue: before });
   if (index >= 0) form.toggle("§cDelete this tip", { defaultValue: false });
   form.submitButton("Save");
 
@@ -296,6 +300,13 @@ async function editTip(player, index) {
   if (!res || res.canceled || !res.formValues) return tipsMenu(player);
 
   const [text, remove] = res.formValues;
+  // Another operator may have changed the list meanwhile: find this tip again by its text.
+  const tips = getTips();
+  if (index >= 0) index = tips.indexOf(before);
+  if (index < 0 && before) {
+    player.sendMessage("§eThat tip was changed or deleted meanwhile, so nothing was saved.");
+    return tipsMenu(player);
+  }
   // Save only real changes: once saved, the list wins over config.js for good.
   if (remove === true) {
     tips.splice(index, 1);
@@ -321,10 +332,9 @@ async function tipSettings(player) {
   );
   if (res && !res.canceled && res.formValues) {
     const [enabled, interval] = res.formValues;
-    writeJson(PROP_TIP_SETTINGS, {
-      enabled: enabled === true,
-      intervalMinutes: typeof interval === "number" ? interval : s.intervalMinutes,
-    });
+    // Through settings.js, so the values are checked and /realm:config shows the same.
+    const errors = [set("tipsEnabled", enabled === true), typeof interval === "number" ? set("tipIntervalMinutes", interval) : undefined].filter(Boolean);
+    if (errors.length) player.sendMessage(`§cNot saved: ${errors.join(", ")}`);
   }
   return tipsMenu(player);
 }

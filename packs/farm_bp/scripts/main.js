@@ -24,7 +24,11 @@ function getFarms() {
   const raw = world.getDynamicProperty(PROP_AREAS);
   if (typeof raw !== "string") return [];
   try {
-    return JSON.parse(raw);
+    const list = JSON.parse(raw);
+    // Keep only well-formed entries, so one damaged entry can't break the menu or the commands.
+    return Array.isArray(list)
+      ? list.filter((f) => f && typeof f.name === "string" && typeof f.dim === "string" && typeof f.radius === "number")
+      : [];
   } catch {
     return [];
   }
@@ -37,7 +41,7 @@ const dimName = (/** @type {string} */ id) => id.replace(/^minecraft:/, "").repl
 
 /** @param {Farm} f */
 const describe = (f) =>
-  `§e${f.name}§r - ${dimName(f.dim)} ${f.x}, ${f.z} - radius ${f.radius} - by ${f.by} - ${new Date(f.at).toISOString().slice(0, 10)}`;
+  `§e${f.name}§r - ${dimName(f.dim)} ${f.x}, ${f.z} - radius ${f.radius} - by ${f.by} - ${Number.isFinite(f.at) ? new Date(f.at).toISOString().slice(0, 10) : "?"}`;
 
 /** @param {Player} player */
 const canEdit = (player) => CONFIG.everyoneCanAdd || player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
@@ -61,6 +65,7 @@ function tryCommand(dimension, command) {
 
 /** @param {Player} player @param {string} name @param {number} radius */
 function addFarm(player, name, radius) {
+  if (!player.isValid) return; // left before the command's next tick
   const list = getFarms();
   if (list.some((f) => f.name === name)) return player.sendMessage(`§cThere is already a farm "${name}".`);
   const maxAreas = get("maxAreas");
@@ -80,6 +85,7 @@ function addFarm(player, name, radius) {
 
 /** @param {Player} player @param {string} name */
 function removeFarm(player, name) {
+  if (!player.isValid) return;
   const list = getFarms();
   const farm = list.find((f) => f.name === name);
   if (!farm) return player.sendMessage(`§cNo farm "${name}". /realm:farm lists them.`);

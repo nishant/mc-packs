@@ -59,6 +59,15 @@ function kept(item) {
   return !get("stashGear") && !!item.getComponent("minecraft:durability");
 }
 
+/**
+ * A short message above the hotbar. Asks the Coordinates HUD, if installed, to leave it there a moment.
+ * @param {Player} player @param {string} text
+ */
+function bar(player, text) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50 }));
+  player.onScreenDisplay.setActionBar(text);
+}
+
 /** @param {Container} c @param {number} from @param {number} to */
 function usedSlots(c, from, to) {
   let n = 0;
@@ -155,7 +164,7 @@ function sortBlock(player, block) {
   const container = containerOf(block);
   if (!container) return;
   const stacks = sortRange(container, 0, container.size);
-  player.onScreenDisplay.setActionBar(`§aSorted ${stacks} stack${stacks === 1 ? "" : "s"}`);
+  bar(player, `§aSorted ${stacks} stack${stacks === 1 ? "" : "s"}`);
   player.playSound("random.click", { pitch: 1.4, volume: 0.5 });
 }
 
@@ -164,7 +173,7 @@ function sortInventory(player) {
   const container = player.getComponent("minecraft:inventory")?.container;
   if (!container) return;
   const stacks = sortRange(container, getFor(player, "sortHotbar") ? 0 : MAIN_FIRST, MAIN_END);
-  player.onScreenDisplay.setActionBar(`§aSorted ${stacks} stack${stacks === 1 ? "" : "s"} in your inventory`);
+  bar(player, `§aSorted ${stacks} stack${stacks === 1 ? "" : "s"} in your inventory`);
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +345,8 @@ function* quickStack(player) {
     }
   }
   const noun = [...received].every((t) => t.block.typeId.endsWith("chest")) ? "chest" : "container";
-  player.onScreenDisplay.setActionBar(
+  bar(
+    player,
     moved
       ? `§aStashed ${moved} item${moved === 1 ? "" : "s"} into ${received.size} ${noun}${received.size === 1 ? "" : "s"}`
       : targets.length
@@ -460,7 +470,7 @@ function lockNextToPlacement(player, block, face, item) {
 /** "Locked by Sam" in the bar above the hotbar, from a before event. @param {Player} player @param {Lock} lock */
 function sayLocked(player, lock) {
   system.run(() => {
-    if (player.isValid) player.onScreenDisplay.setActionBar(`§cLocked by ${lock.n}`);
+    if (player.isValid) bar(player, `§cLocked by ${lock.n}`);
   });
 }
 
@@ -472,12 +482,12 @@ function lock(player, dimension, at) {
   const block = dimension.getBlock(at);
   if (!block || !containerTypes.has(block.typeId) || !locksOn()) return;
   if (lockAt(block)) {
-    player.onScreenDisplay.setActionBar("§7It's already locked");
+    bar(player, "§7It's already locked");
     return;
   }
   const max = get("maxLocks");
   if (lockCount(player.id) >= max) {
-    player.onScreenDisplay.setActionBar(`§cYou already have ${max} locked containers. Unlock one first.`);
+    bar(player, `§cYou already have ${max} locked containers. Unlock one first.`);
     return;
   }
   /** @type {Lock} */
@@ -485,7 +495,7 @@ function lock(player, dimension, at) {
   saveLock(lockKey(dimension.id, at), l);
   const other = (containerOf(block)?.size ?? 0) > 27 ? partnerOf(block, signatures()) : undefined;
   if (other) saveLock(lockKey(dimension.id, other.location), { ...l, h: 1 });
-  player.onScreenDisplay.setActionBar(`§aLocked: only you can open this ${nameOf(block.typeId).toLowerCase()}`);
+  bar(player, `§aLocked: only you can open this ${nameOf(block.typeId).toLowerCase()}`);
   player.playSound("random.door_close", { pitch: 1.4, volume: 0.6 });
 }
 
@@ -554,7 +564,7 @@ async function lockMenu(player, dimension, at) {
   const chosen = actions[res.selection];
   if (!chosen) return;
   chosen.run(now);
-  player.onScreenDisplay.setActionBar("§aLock updated");
+  bar(player, "§aLock updated");
 }
 
 // Breaking: only the owner and the players it's shared with.
@@ -670,7 +680,7 @@ async function openMenu(player, dimension, at) {
       run: (p) => {
         const b = dimension.getBlock(at);
         if (b) updateLock(b, () => undefined);
-        p.onScreenDisplay.setActionBar(`§aRemoved ${l.n}'s lock`);
+        bar(p, `§aRemoved ${l.n}'s lock`);
       },
       free: true,
     });
@@ -698,7 +708,7 @@ async function openMenu(player, dimension, at) {
       return;
     }
     if (!ready(player)) {
-      player.onScreenDisplay.setActionBar("§7Too fast. Try again in a moment.");
+      bar(player, "§7Too fast. Try again in a moment.");
       return;
     }
     actions[res.selection]?.run(player);

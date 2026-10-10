@@ -18,12 +18,12 @@ const SKILLS = ["mining", "woodcutting", "farming", "fishing", "combat", "explor
 const NAMES = { mining: "Mining", woodcutting: "Woodcutting", farming: "Farming", fishing: "Fishing", combat: "Combat", exploration: "Exploration" };
 /** @type {Record<Skill, string>} */
 const HOW = {
-  mining: "Mine stone and ores (blocks placed lately don't count).",
+  mining: "Mine stone and ores (blocks placed lately don't count, nor ores mined with Silk Touch).",
   woodcutting: "Chop logs and stems (logs placed lately don't count).",
   farming: "Harvest fully grown crops: break them, or tap them with the Right-click Harvest pack.",
   fishing: "Catch fish, treasure and junk with a fishing rod.",
   combat: "Defeat mobs. Champions give much more.",
-  exploration: "Travel, and enter chunks (16 x 16 areas) you have never been in.",
+  exploration: "Enter chunks (16 x 16 areas) you have never been in, and travel through places you haven't been lately.",
 };
 const PARTY_TAG = "realm_party:"; // the Parties pack's tag, `realm_party:<code>`
 const CHAMPION_TAG = "realm:champion"; // the Champions pack's tag
@@ -756,7 +756,9 @@ function bits(n) {
   return c;
 }
 
-/** @type {Map<string, { last?: { x: number, y: number, z: number, dim: string }, chunk: string, blocks: number, minute: number, found: number }>} */
+/** Chunks each player was in lately: traveling in them again gives no distance XP. */
+const RECENT_CHUNKS = 128;
+/** @type {Map<string, { last?: { x: number, y: number, z: number, dim: string }, chunk: string, fresh: boolean, recent: Set<string>, blocks: number, minute: number, found: number }>} */
 const travel = new Map();
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
@@ -796,8 +798,22 @@ system.runInterval(() => {
       const loc = player.location;
       const dim = player.dimension.id;
       let t = travel.get(player.id);
-      if (!t) travel.set(player.id, (t = { chunk: "", blocks: 0, minute: seconds, found: 0 }));
-      if (t.last && t.last.dim === dim) {
+      if (!t) travel.set(player.id, (t = { chunk: "", fresh: false, recent: new Set(), blocks: 0, minute: seconds, found: 0 }));
+      const d = DIMS[dim] ?? dim;
+      const cx = Math.floor(loc.x / 16);
+      const cz = Math.floor(loc.z / 16);
+      const chunk = `${d}${cx},${cz}`;
+      const entered = chunk !== t.chunk;
+      if (entered) {
+        // Distance counts only in chunks you haven't been in lately, so riding a rail loop, a
+        // water stream or circling your base earns nothing after the first lap.
+        t.chunk = chunk;
+        t.fresh = !t.recent.has(chunk);
+        t.recent.delete(chunk);
+        t.recent.add(chunk);
+        while (t.recent.size > RECENT_CHUNKS) t.recent.delete(/** @type {string} */ (t.recent.values().next().value));
+      }
+      if (t.last && t.last.dim === dim && t.fresh) {
         const dist = Math.hypot(loc.x - t.last.x, loc.y - t.last.y, loc.z - t.last.z);
         if (dist <= CONFIG.exploration.maxSpeed) t.blocks += dist;
       }
@@ -809,14 +825,7 @@ system.runInterval(() => {
         award(player, "exploration", xp, { quiet: true }); // a note every few seconds while walking would be too much
       }
 
-      const d = DIMS[dim];
-      if (!d) continue;
-      const cx = Math.floor(loc.x / 16);
-      const cz = Math.floor(loc.z / 16);
-      const chunk = `${d}${cx},${cz}`;
-      if (chunk === t.chunk) continue;
-      t.chunk = chunk;
-      if (!visit(player, d, cx, cz)) continue;
+      if (!entered || !DIMS[dim] || !visit(player, d, cx, cz)) continue;
       if (seconds - t.minute >= 60) {
         t.minute = seconds;
         t.found = 0;

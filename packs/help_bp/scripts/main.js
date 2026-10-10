@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
@@ -52,6 +52,7 @@ async function show(player, form) {
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await system.waitTicks(20);
   }
+  if (player.isValid) player.sendMessage("§eCouldn't open the help. Close chat or your inventory and try again.");
   return undefined;
 }
 
@@ -153,6 +154,10 @@ async function openHelp(player, topic) {
 // /realm:help [topic]
 // ---------------------------------------------------------------------------
 
+/** @type {Set<string>} players with the help open */
+const open = new Set();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => open.delete(playerId));
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerEnum("realm:help_topic", [ALL, ...PACKS.filter((p) => p.folder !== SELF).map((p) => p.topic)]);
 
@@ -167,7 +172,14 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (origin, /** @type {string | undefined} */ topic) => {
       const player = origin.initiator ?? origin.sourceEntity;
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      system.run(() => openHelp(player, topic).catch((e) => console.warn(`[help] ${e}`)));
+      system.run(() => {
+        // A second /realm:help while the first is still waiting for answers or open would stack another menu.
+        if (open.has(player.id)) return;
+        open.add(player.id);
+        openHelp(player, topic)
+          .catch((e) => console.warn(`[help] ${e}`))
+          .finally(() => open.delete(player.id));
+      });
       return { status: CustomCommandStatus.Success };
     }
   );

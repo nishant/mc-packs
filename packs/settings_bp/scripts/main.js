@@ -156,28 +156,41 @@ function fmt(o, v) {
   return String(v);
 }
 
+/**
+ * How a number option is shown: a dropdown of its exact values, or a whole-number slider. `untouched` holds the
+ * answers that mean the control was left as it opened: the shown value, and where the slider may snap it to its
+ * step. A value from config.js that is off the grid or outside the in-game range is shown at the nearest place it
+ * can be, so without this, saving another setting in the same form would quietly change it.
+ * @param {Option} o
+ */
+function numberControl(o) {
+  const choices = choicesOf(o);
+  if (choices) {
+    const at = choices.reduce((best, c, i) => (Math.abs(c - Number(o.value)) < Math.abs(choices[best] - Number(o.value)) ? i : best), 0);
+    return { choices, at, min: 0, max: 0, value: 0, step: 1, untouched: [at] };
+  }
+  const k = isPercent(o) ? 100 : 1; // percentages: 0-100 in whole steps
+  const min = (o.min ?? 0) * k;
+  const max = o.max !== undefined ? o.max * k : Math.max(min + 1, (Number(o.value) || 0) * k);
+  const value = Math.min(max, Math.max(min, Math.round((Number(o.value) || 0) * k)));
+  const step = Math.max(1, Math.round((o.step ?? 1) * k));
+  const snapped = Math.min(max, min + Math.round((value - min) / step) * step);
+  return { choices: undefined, at: 0, min, max, value, step, untouched: [value, snapped] };
+}
+
 /** @param {ModalFormData} form @param {Option} o */
 function addControl(form, o) {
   const range = (o.type === "int" || o.type === "float") && o.min !== undefined && o.max !== undefined ? `Range: ${fmt(o, o.min)} to ${fmt(o, o.max)}` : undefined;
   const tooltip = [o.help, `Default: ${fmt(o, o.default)}`, range].filter(Boolean).join("\n");
-  const choices = choicesOf(o);
   switch (o.type) {
     case "bool":
       form.toggle(o.label, { defaultValue: switchOn(o, o.value), tooltip });
       break;
     case "float":
     case "int": {
-      if (choices) {
-        const at = choices.reduce((best, c, i) => (Math.abs(c - Number(o.value)) < Math.abs(choices[best] - Number(o.value)) ? i : best), 0);
-        form.dropdown(o.label, choices.map((c) => fmt(o, c)), { defaultValueIndex: at, tooltip });
-        break;
-      }
-      const k = isPercent(o) ? 100 : 1; // percentages: 0-100 in whole steps
-      const min = (o.min ?? 0) * k;
-      const max = o.max !== undefined ? o.max * k : Math.max(min + 1, (Number(o.value) || 0) * k);
-      const value = Math.min(max, Math.max(min, Math.round((Number(o.value) || 0) * k)));
-      const step = Math.max(1, Math.round((o.step ?? 1) * k));
-      form.slider(isPercent(o) ? `${o.label} (%)` : o.label, min, max, { defaultValue: value, valueStep: step, tooltip });
+      const c = numberControl(o);
+      if (c.choices) form.dropdown(o.label, c.choices.map((v) => fmt(o, v)), { defaultValueIndex: c.at, tooltip });
+      else form.slider(isPercent(o) ? `${o.label} (%)` : o.label, c.min, c.max, { defaultValue: c.value, valueStep: c.step, tooltip });
       break;
     }
     case "enum": {
@@ -190,23 +203,26 @@ function addControl(form, o) {
   }
 }
 
-/** What a control returned, as the option's type. @param {Option} o @param {unknown} raw */
+/** What a control returned, as the option's type. An untouched control keeps the exact saved value. @param {Option} o @param {unknown} raw */
 function valueOf(o, raw) {
   switch (o.type) {
     case "bool":
       return o.invert ? raw !== true : raw === true;
     case "int":
-      return typeof raw === "number" ? Math.round(raw) : o.value;
     case "float": {
       if (typeof raw !== "number") return o.value;
-      const choices = choicesOf(o);
-      if (choices) return choices[raw] ?? o.value; // a dropdown answers with an index
-      const picked = onGrid(o, isPercent(o) ? raw / 100 : raw);
-      // An untouched control keeps the exact saved value, even one an operator put off the grid in config.js.
-      return isPercent(o) && Math.round(Number(o.value) * 100) === Math.round(raw) ? o.value : picked;
+      const c = numberControl(o);
+      if (c.untouched.includes(raw)) return o.value;
+      if (c.choices) return c.choices[raw] ?? o.value; // a dropdown answers with an index
+      if (o.type === "int") return Math.round(raw);
+      return onGrid(o, isPercent(o) ? raw / 100 : raw);
     }
-    case "enum":
-      return typeof raw === "number" ? (o.choices ?? [])[raw] ?? o.value : o.value;
+    case "enum": {
+      const choices = o.choices ?? [];
+      if (typeof raw !== "number") return o.value;
+      if (raw === 0 && !choices.includes(o.value)) return o.value; // shown as the first choice, left alone
+      return choices[raw] ?? o.value;
+    }
     default:
       return typeof raw === "string" ? raw : o.value;
   }
