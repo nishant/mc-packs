@@ -148,4 +148,10 @@ export const CONFIG = {
 
   /** Movement faster than this (blocks per second) is a teleport and doesn't count as travel. */
   maxSpeed: 100,
+
+  /**
+   * Players with this tag (the AFK pack's, keep it the same as AFK `tag`) earn no Wayfarers
+   * reputation for moving, so an idle ride around a minecart or ice-boat loop doesn't count. "" = no check.
+   */
+  afkTag: "afk",
 };

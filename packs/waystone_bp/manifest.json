@@ -4,7 +4,7 @@
     "name": "Waystones & Inns",
     "description": "Lodestones with a Waystone sign become fast-travel points you discover and travel between, and innkeepers rent beds. /realm:waystones",
     "uuid": "de27f013-0398-4ff4-9cbc-6557431a476e",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

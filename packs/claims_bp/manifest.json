@@ -4,7 +4,7 @@
     "name": "Land Claims",
     "description": "Claim the land around your base so others can't break, place or open anything there. Off until an operator enables it. /realm:claim",
     "uuid": "de26b2d1-ca56-469f-ad77-71a6736cafd2",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

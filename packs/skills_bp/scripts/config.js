@@ -125,7 +125,7 @@ export const CONFIG = {
     passiveXp: 2,
 
     /** Animals and other peaceful mobs: less XP. */
-    passive: ["cow", "pig", "sheep", "chicken", "rabbit", "horse", "donkey", "mule", "llama", "trader_llama", "cod", "salmon", "tropical_fish", "pufferfish", "squid", "glow_squid", "bat", "mooshroom", "goat", "camel", "armadillo", "sniffer", "frog", "tadpole", "turtle", "axolotl", "fox", "panda", "parrot", "ocelot", "cat", "wolf", "villager", "villager_v2", "wandering_trader", "allay", "strider", "dolphin", "polar_bear", "bee"].map((m) => `minecraft:${m}`),
+    passive: ["cow", "pig", "sheep", "chicken", "rabbit", "horse", "donkey", "mule", "llama", "trader_llama", "cod", "salmon", "tropical_fish", "pufferfish", "squid", "glow_squid", "bat", "mooshroom", "goat", "camel", "armadillo", "sniffer", "frog", "tadpole", "turtle", "axolotl", "fox", "panda", "parrot", "ocelot", "cat", "wolf", "villager", "villager_v2", "wandering_trader", "allay", "strider", "dolphin", "polar_bear", "bee", "snow_golem", "iron_golem", "skeleton_horse", "zombie_horse"].map((m) => `minecraft:${m}`),
 
     /** Big mobs with their own XP instead of `xp`. @type {{ mob: string, xp: number }[]} */
     bosses: [
@@ -140,15 +140,15 @@ export const CONFIG = {
     /** A champion (tag `realm:champion`, from the Champions pack) gives this many times the XP. */
     championMultiplier: 5,
 
-    /** Never give XP for these. */
-    ignore: ["minecraft:armor_stand", "minecraft:npc", "minecraft:player"],
+    /** Never give XP for these (things that aren't really mobs, or can be made and broken again and again). */
+    ignore: ["armor_stand", "npc", "player", "ender_crystal", "boat", "chest_boat", "minecart", "chest_minecart", "hopper_minecart", "tnt_minecart", "command_block_minecart", "painting", "leash_knot"].map((m) => `minecraft:${m}`),
   },
 
   exploration: {
     /** XP for each 16 x 16 chunk you enter for the first time (per dimension). */
     chunkXp: 4,
 
-    /** One XP for every this many blocks traveled (any way but teleporting). */
+    /** One XP for every this many blocks traveled (any way but teleporting) in chunks you haven't been in lately (the last 128). */
     blocksPerXp: 50,
 
     /** At most this many new chunks a minute give XP (fast elytra flights find many); the rest are still remembered. */

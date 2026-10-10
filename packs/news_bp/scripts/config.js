@@ -8,6 +8,7 @@ export const DEFAULTS = {
     body: "",
   },
 
+  /** The starting tip list, posted in turn. Once an operator edits the list in /realm:news_tips, the saved list is used. Keep each tip to 100 characters, the most the tip editor's box takes. */
   tips: [
     "Sneak while breaking a log to fell the whole tree.",
     "Sneak while mining ore to mine the whole vein.",
@@ -17,6 +18,10 @@ export const DEFAULTS = {
     "Run /realm:help to see every realm command and how to use it.",
     "Sneak and tap a chest to sort it, or to quick stack your inventory into the chests nearby.",
     "Lost track of where something is? /realm:find iron points to the chest that has it.",
+    "Run /realm:prefs to choose your own settings: warnings, phantoms, rain extras and more.",
+    "Run /realm:mail to write a letter to any player, even one who is offline.",
+    "Run /realm:quests to see today's quests and their rewards.",
+    "Run /realm:nick to show a nickname in your own color above your head.",
   ],
 
   /** Post a tip in chat every N minutes (only while someone is online). */

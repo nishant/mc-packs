@@ -1,6 +1,6 @@
 # mc-packs
 
-Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contained pack: behavior packs (`*_bp`) and three resource packs (`rain_rp`, `sky_rp`, `translucent_rp`). They all use only the stable Script API (Minecraft **1.21.100+**), so no experimental toggles are needed. Most behavior packs ship together as the **Realm Bundle**; the rain packs, Realm Skies and Translucent Tools are **standalone** and run next to it.
+Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contained pack: behavior packs (`*_bp`) and three resource packs (`rain_rp`, `sky_rp`, `translucent_rp`). They all use only the stable Script API (Minecraft **1.21.100+**), so no experimental toggles are needed. Every behavior pack ships in the **Realm Bundle** and every resource pack in **Realm Resources**, so the realm needs only two packs; each is also downloadable on its own.
 
 📖 **Full documentation (what each pack does, how to use it, every command and config option): [`docs/PACKS.md`](docs/PACKS.md).** Players read the same text on **[mc.nish.software/realm](https://mc.nish.software/realm/)**, which is generated from it.
 
@@ -58,10 +58,10 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 | [Aurora & Shooting Stars](docs/PACKS.md#aurora--shooting-stars--night_bp) | `night_bp` | Shooting stars to wish on, and northern lights over snowy lands, on clear nights; needs Realm Skies | `/realm:night` |
 | [Meteor Strikes](docs/PACKS.md#meteor-strikes--meteor_bp) | `meteor_bp` | Some nights a meteor falls far from spawn, announced a minute ahead, leaving a smoking crater with ancient debris; needs Realm Skies for the streak | `/realm:meteor` · `/realm:meteor_now` |
 | [Blood Moon & Harvest Moon](docs/PACKS.md#blood-moon--harvest-moon--moon_bp) | `moon_bp` | Some full moons rise as a Blood Moon (red sky, more monsters, a reward for surviving until dawn) or a Harvest Moon (gold sky, crops grow 3x faster) | `/realm:moon` · `/realm:moon_set` |
-| [Realistic Rain](docs/PACKS.md#realistic-rain--rain_rp) | `rain_rp` | **Resource pack, standalone.** Thicker, heavier blue rain, the realm's own rain and thunderstorm recordings, gloomier rain fog, softer splashes, and heavier snowflakes with a whiter snow fog | none |
-| [Rain Extras](docs/PACKS.md#rain-extras--rain_bp) | `rain_bp` | **Standalone**, next to the bundle. Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips, the thunderstorm recording, storm wind, rain on the roof and the rain muffled indoors (needs Realistic Rain) | `/realm:rain` |
-| [Realm Skies](docs/PACKS.md#realm-skies--sky_rp) | `sky_rp` | **Resource pack, standalone.** Rainbows, auroras, shooting stars, meteors, tornado dust, sandstorms, blizzards, fog banks, blood and harvest moon glows and player trails for the sky packs (they work without it, just without the visuals) | none |
-| [Translucent Tools](docs/PACKS.md#translucent-tools--translucent_rp) | `translucent_rp` | **Resource pack, standalone.** Tools, weapons and the shield are 50% see-through in your hand (40 items), so they block less of the screen | none |
+| [Realistic Rain](docs/PACKS.md#realistic-rain--rain_rp) | `rain_rp` | **Resource pack**, in Realm Resources. Thicker, heavier blue rain, the realm's own rain and thunderstorm recordings, gloomier rain fog, softer splashes, and heavier snowflakes with a whiter snow fog | none |
+| [Rain Extras](docs/PACKS.md#rain-extras--rain_bp) | `rain_bp` | Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips, the thunderstorm recording, storm wind, rain on the roof and the rain muffled indoors (needs Realistic Rain) | `/realm:rain` |
+| [Realm Skies](docs/PACKS.md#realm-skies--sky_rp) | `sky_rp` | **Resource pack**, in Realm Resources. Rainbows, auroras, shooting stars, meteors, tornado dust, sandstorms, blizzards, fog banks, blood and harvest moon glows and player trails for the sky packs (they work without it, just without the visuals) | none |
+| [Translucent Tools](docs/PACKS.md#translucent-tools--translucent_rp) | `translucent_rp` | **Resource pack**, in Realm Resources. Tools, weapons and the shield are 50% see-through in your hand (40 items), so they block less of the screen | none |
 
 `/realm:config` and commands with `edit`, `reset`, `tips`, `sidebar`, `add` or `remove` in the name are ops-only. None of the commands need cheats. In game, `/realm:help` explains every installed command, with usage.
 
@@ -70,10 +70,11 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 ```bash
 npm install
 npm run build                 # dist/<folder>.mcpack for every pack
-npm run bundle -- --all       # or: everything in one dist/realm_bundle.mcpack
+npm run bundle -- --all       # or: every behavior pack in one dist/realm_bundle.mcpack
+npm run bundle -- --resources # and every resource pack in one dist/realm_resources.mcpack
 ```
 
-Open the `.mcpack` on a device with Minecraft, then go to **Realms → ✏️ Edit Realm → Behavior Packs** and activate it (**Resource Packs** for `rain_rp`, `sky_rp` and `translucent_rp`, at the top of the list). Use the individual packs **or** a bundle, never both; the standalone packs (`tools/standalone.json`) are never in the bundle and go next to it. See [Installing](docs/PACKS.md#installing-on-a-realm) and [Bundling](docs/PACKS.md#bundling-packs-into-one).
+Open the `.mcpack` on a device with Minecraft, then go to **Realms → ✏️ Edit Realm → Behavior Packs** and activate it (**Resource Packs** for `realm_resources` or a single resource pack, at the top of the list). Use the individual packs **or** a bundle, never both. See [Installing](docs/PACKS.md#installing-on-a-realm) and [Bundling](docs/PACKS.md#bundling-packs-into-one).
 
 With Claude, `/bundle-packs` asks which packs to include (**All packs** is the first option) and builds the bundle.
 
@@ -83,7 +84,7 @@ With Claude, `/bundle-packs` asks which packs to include (**All packs** is the f
 npm run check     # type-check against @minecraft/server 2.1.0 / server-ui 2.0.0, check docs/PACKS.md is complete and every settings.js is current
 npm run gen:rain  # regenerate Realistic Rain's textures, fogs and sounds (sounds need ffmpeg)
 npm run build     # one .mcpack per pack
-npm run bundle    # merge packs into one (--list, --all, --packs a,b, --name, --title)
+npm run bundle    # merge packs into one (--list, --all, --resources, --packs a,b, --name, --title, --icon)
 ```
 
 | Path | |
@@ -91,7 +92,7 @@ npm run bundle    # merge packs into one (--list, --all, --packs a,b, --name, --
 | `packs/<folder>/` | One behavior pack: `manifest.json`, `scripts/main.js`, `scripts/config.js`, and `scripts/settings.js` (what Realm Settings can change in it). `rain_rp` and `sky_rp` are resource packs (textures, fogs, client biomes, sounds, particles), generated by `tools/gen-rain/` and `tools/gen-sky/`; `translucent_rp` is a resource pack (attachables, textures), generated by `tools/gen-translucent/` |
 | `docs/PACKS.md` | Documentation, also published on mc.nish.software/realm. **Update it in the same commit as any pack change**; `npm run check` enforces it |
 | `tools/build.mjs`, `tools/bundle.mjs` | Packaging, with no dependencies |
-| `tools/standalone.json` | Behavior packs that `bundle --all` leaves out because they run next to the bundle (`rain_bp`) |
+| `tools/standalone.json` | Packs that `bundle --all` / `--resources` leave out, to run next to the bundles (none today) |
 | `tools/gen-rain/` | Generates `rain_rp` from Mojang's vanilla files in `tools/gen-rain/vanilla/` and the realm owner's rain and thunder recordings (`recordings.json`; the originals go in the git-ignored `tools/gen-rain/sources/`) (`npm run gen:rain`); `npm run check` fails if its textures, fogs or client biomes are stale. `renders.mjs` and `sounds.mjs --audition docs/media/rain` make the rain packs' pictures and sound clips |
 | `tools/gen-sky/` | Generates `sky_rp` (Realm Skies: the particles and fogs of the weather, sky and trail packs) from code, no source files (`npm run gen:sky`); `npm run check` fails if `sky_rp` is stale |
 | `tools/gen-translucent/` | Generates `translucent_rp` from Mojang's vanilla files in `tools/gen-translucent/vanilla/` (`npm run gen:translucent`); `npm run check` fails if any of its files are stale |

@@ -1,4 +1,4 @@
-import { BlockVolume, CommandPermissionLevel, CustomCommandStatus, Dimension, EquipmentSlot, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
+import { BlockVolume, CommandPermissionLevel, CustomCommandStatus, Dimension, EquipmentSlot, GameMode, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 
@@ -13,8 +13,13 @@ const GROUPS = 2; // each player is updated every RUN_TICKS * GROUPS = 20 ticks,
 const SLOW_TICKS = 40; // Slowness we give lasts 2 s and is refreshed every second
 const CAMPFIRE_EVERY = 60; // ticks between campfire scans for a player in a blizzard
 const WATER_EVERY = 100; // ticks between water scans for a player who might be in a fog bank
+const BEACH_EVERY = 100; // ticks between water scans for a player on sand in the rain
+const BEACH_RADIUS = 8; // sand with water this close (to the side, at most BEACH_BELOW down) is a beach or a riverbank: it rains there
+const BEACH_BELOW = 3;
+const HIGH_ABOVE = 16; // flying more than this many blocks over the ground: no sandstorm or blizzard around you
 const NOTICE_EVERY = 2400; // ticks: the note above the hotbar at most once in 2 minutes per condition
-const SAND = /sand|terracotta|cactus|dead_bush/; // deserts and badlands (glazed terracotta is player-made: excluded below)
+const SAND = /sand|terracotta|cactus|dead_bush/; // deserts and badlands
+const NOT_SAND = /glazed|soul|cut_|smooth_|chiseled_|stairs|slab|_wall/; // player-made sandstone and terracotta, and soul sand
 const SNOW = /snow|ice/; // snow layers, snow blocks, powder snow, ice: snowy places
 const CAMPFIRES = ["minecraft:campfire", "minecraft:soul_campfire"];
 const WATER = ["minecraft:water", "minecraft:flowing_water"];
@@ -29,7 +34,7 @@ const KINDS = {
 
 /**
  * @typedef {{ group: number, cond: Cond, until: number, fog: string, debt: number,
- *   fireAt: number, fire: boolean, waterAt: number, water: boolean, noted: Record<string, number> }} State
+ *   fireAt: number, fire: boolean, waterAt: number, water: boolean, beachAt: number, beach: boolean, noted: Record<string, number> }} State
  * cond: the condition the player is in; until: tick it lingers to after it was last seen;
  * fog: the fog id we pushed for them ("" = none); fire / water: cached scans and when they ran.
  */
@@ -49,7 +54,7 @@ const players = new Map();
 function stateOf(player) {
   let st = players.get(player.id);
   if (!st) {
-    st = { group: nextGroup++ % GROUPS, cond: "", until: 0, fog: "", debt: 0, fireAt: -1e9, fire: false, waterAt: -1e9, water: false, noted: {} };
+    st = { group: nextGroup++ % GROUPS, cond: "", until: 0, fog: "", debt: 0, fireAt: -1e9, fire: false, waterAt: -1e9, water: false, beachAt: -1e9, beach: false, noted: {} };
     players.set(player.id, st);
   }
   return st;
@@ -181,8 +186,9 @@ function detect(player, st) {
   if (raining) {
     // The ground under you, or a column nearby, so a single odd block doesn't decide it.
     const near = topmost(player.dimension, feet.x + (Math.random() * 2 - 1) * 4, feet.z + (Math.random() * 2 - 1) * 4);
+    if (feet.y - top.location.y > HIGH_ABOVE) return ""; // flying high over it
     const ids = [top.typeId, near?.typeId ?? ""];
-    if (get("sandstorm.enabled") === true && ids.some((id) => SAND.test(id) && !id.includes("glazed"))) return "sandstorm";
+    if (get("sandstorm.enabled") === true && ids.some((id) => SAND.test(id) && !NOT_SAND.test(id)) && !onBeach(player, st)) return "sandstorm";
     if (get("blizzard.enabled") === true && ids.some((id) => SNOW.test(id)) && !nearCampfire(player, st)) return "blizzard";
     return "";
   }
@@ -231,6 +237,25 @@ function nearWater(player, st) {
   return st.water;
 }
 
+/**
+ * Sand with water beside it (within BEACH_RADIUS, no more than BEACH_BELOW down) is a beach or a riverbank,
+ * where it really rains: no sandstorm there (scanned every 5 s). @param {Player} player @param {State} st
+ */
+function onBeach(player, st) {
+  const now = system.currentTick;
+  if (now - st.beachAt < BEACH_EVERY) return st.beach;
+  st.beachAt = now;
+  const r = BEACH_RADIUS, below = BEACH_BELOW;
+  const x = Math.floor(player.location.x), y = Math.floor(player.location.y), z = Math.floor(player.location.z);
+  try {
+    st.beach = player.dimension.containsBlock(new BlockVolume({ x: x - r, y: y - below, z: z - r }, { x: x + r, y, z: z + r }), { includeTypes: WATER }, true);
+  } catch (e) {
+    st.beach = false;
+    console.warn(`[climate] water scan: ${e}`);
+  }
+  return st.beach;
+}
+
 /** @param {Player} player */
 function helmet(player) {
   try {
@@ -240,9 +265,11 @@ function helmet(player) {
   }
 }
 
-/** Slowness I for 2 s, unless a stronger or longer Slowness (a potion, another pack) is already on. @param {Player} player */
+/** Slowness I for 2 s, unless a stronger or longer Slowness (a potion, another pack) is already on. Not in creative or spectator. @param {Player} player */
 function slow(player) {
   try {
+    const mode = player.getGameMode();
+    if (mode === GameMode.Creative || mode === GameMode.Spectator) return;
     const have = player.getEffect("slowness");
     if (have && (have.amplifier > 0 || have.duration > SLOW_TICKS)) return;
     player.addEffect("slowness", SLOW_TICKS, { amplifier: 0, showParticles: false });

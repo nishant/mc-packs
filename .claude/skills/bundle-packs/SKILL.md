@@ -1,11 +1,11 @@
 ---
 name: bundle-packs
-description: Combine behavior packs from this repo's packs/ folder into a single .mcpack (dist/<name>.mcpack) so the Realm only needs one pack. Use when the user asks to bundle, combine, merge or compile packs into one, or invokes /bundle-packs. Optional args - "all", or a comma/space-separated list of pack folders, and optionally "name=<file_name>" / "title=<display name>".
+description: Combine the packs from this repo's packs/ folder into bundles (dist/realm_bundle.mcpack for every behavior pack, dist/realm_resources.mcpack for every resource pack) so the Realm only needs two packs. Use when the user asks to bundle, combine, merge or compile packs into one, or invokes /bundle-packs. Optional args - "all", or a comma/space-separated list of pack folders, and optionally "name=<file_name>" / "title=<display name>".
 ---
 
 # Bundle packs into one .mcpack
 
-`tools/bundle.mjs` merges the selected behavior packs into one: each pack's `scripts/` goes to `scripts/<pack>/`, and a generated `scripts/main.js` imports each of them. Dependencies are merged to the highest version. The bundle's UUID comes from `--name`, so rebuilding updates the same pack on the Realm instead of adding a second one.
+`tools/bundle.mjs` merges the selected behavior packs into one: each pack's `scripts/` goes to `scripts/<pack>/`, and a generated `scripts/main.js` imports each of them. `--resources` merges every resource pack into one resource pack, Realm Resources (`dist/realm_resources.mcpack`); a pack can't hold both kinds, so behavior and resource packs are always two bundles. Dependencies are merged to the highest version. The bundle's UUID comes from `--name`, so rebuilding updates the same pack on the Realm instead of adding a second one.
 
 ## Steps
 
@@ -13,7 +13,7 @@ description: Combine behavior packs from this repo's packs/ folder into a single
    ```bash
    node tools/bundle.mjs --list --json
    ```
-   Only `"kind": "behavior"` packs can be bundled. Leave out resource packs and mention them if any exist. Packs with `"bundled": false` and `"kind": "behavior"` are **standalone** (listed in `tools/standalone.json`, e.g. `rain_bp`): `--all` leaves them out because they run as their own add-on next to the Realm Bundle. Mention them too, and only include one if the user names it.
+   `"bundle"` says which bundle takes each pack: `realm_bundle` (behavior packs, `--all`) or `realm_resources` (resource packs, `--resources`). Packs with `"bundled": false` are **standalone** (listed in `tools/standalone.json`, empty today): both flags leave them out. Mention them, and only include one if the user names it. Never mix the two kinds in one `--packs` list.
 
 2. **Pick the packs.** Skip this step if the args already say `all` or name pack folders. Check the folders against the list and stop on unknown ones.
 
@@ -30,6 +30,7 @@ description: Combine behavior packs from this repo's packs/ folder into a single
 3. **Build it.** Default name `realm_bundle`, title `Realm Bundle`, unless the args override them:
    ```bash
    npm run bundle -- --all                                  # every bundled (non-standalone) behavior pack
+   npm run bundle -- --resources                            # every bundled resource pack → dist/realm_resources.mcpack
    npm run bundle -- --packs welcome_bp,stats_bp            # a selection (keep the user's order)
    npm run bundle -- --packs a,b --name my_bundle --title "My Bundle"
    ```

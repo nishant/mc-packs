@@ -88,6 +88,8 @@ function levelFor(left, max) {
  */
 function notify(player, name, left, max, level) {
   const pct = ((left / max) * 100).toFixed(left / max < 0.1 ? 1 : 0);
+  // Ask the Coordinates HUD, if installed, to leave the warning on screen for a moment.
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 60 }));
   if (level === CRITICAL) {
     const text = `§c§l! ${name} is about to break!§r §c${left}/${max} (${pct}%)`;
     player.onScreenDisplay.setActionBar(text);

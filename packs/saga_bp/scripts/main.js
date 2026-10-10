@@ -132,7 +132,19 @@ function sagaOf(player) {
   try {
     const raw = player.getDynamicProperty(PROP_PLAYER);
     const parsed = typeof raw === "string" ? JSON.parse(raw) : undefined;
-    if (parsed && typeof parsed.s === "object" && parsed.s) saga = /** @type {Saga} */ (parsed);
+    if (parsed && typeof parsed.s === "object" && parsed.s && !Array.isArray(parsed.s)) {
+      saga = /** @type {Saga} */ (parsed);
+      // Drop story states that aren't objects and fill in missing lists, so a damaged save can't break the loop.
+      for (const [id, st] of Object.entries(saga.s)) {
+        if (!st || typeof st !== "object") delete saga.s[id];
+        else {
+          if (!Array.isArray(st.dn)) st.dn = [];
+          if (!Array.isArray(st.o)) st.o = [];
+          if (!st.f || typeof st.f !== "object") st.f = {};
+          if (!st.ch || typeof st.ch !== "object") st.ch = {};
+        }
+      }
+    }
   } catch {
     console.warn(`[saga] ${PROP_PLAYER} of ${player.name} is corrupt; starting over`);
   }
@@ -276,6 +288,9 @@ function bearing(player, loc, radius) {
   return `${compass(loc.x - p.x, loc.z - p.z)} ${Math.round(d)}m`;
 }
 
+/** Tick until which another note owns a player's actionbar: the tracker waits. @type {Map<string, number>} */
+const holdUntil = new Map();
+
 /** Last hint per place name. @type {Map<string, number>} */
 const hinted = new Map();
 
@@ -332,7 +347,8 @@ function bump(player, e, i, n, absolute = false) {
     // A note above the hotbar at each quarter, like Daily Quests.
     const step = need / 4;
     if (Math.floor(before / step) !== Math.floor(after / step)) {
-      send("realm:actionbar", { player: player.id, ticks: 40 });
+      send("realm:actionbar", { player: player.id, ticks: 40, from: PACK });
+      holdUntil.set(player.id, system.currentTick + 40);
       player.onScreenDisplay.setActionBar(`§b${e.story.short}: §f${obj.label} ${after}/${need}${obj.type === "survive" ? " s" : ""}`);
     }
   }
@@ -458,7 +474,7 @@ function championNear(player, obj) {
   if ((championNext.get(champ.tag) ?? 0) > now) return;
   const dim = player.dimension;
   const at = { x: loc.x + 0.5, y: loc.y ?? player.location.y, z: loc.z + 0.5 };
-  if (championAlive(champ.tag, dim, at)) {
+  if (championAlive(champ.tag, dim)) {
     championNext.set(champ.tag, now + 10000);
     return;
   }
@@ -468,12 +484,12 @@ function championNear(player, obj) {
   // No Champions pack? Spawn a tougher named mob ourselves, so the story can still be finished.
   system.runTimeout(() => {
     try {
-      if (get("championFallback") !== true || championAlive(champ.tag, dim, at)) return;
+      if (get("championFallback") !== true || championAlive(champ.tag, dim)) return;
       const mob = dim.spawnEntity(champ.mob, at);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
       mob.addTag(champ.tag);
-      const long = 20 * 60 * 30;
+      const long = 20000000; // as long as the game allows: the mob is removed on the next restart anyway
       mob.addEffect("health_boost", long, { amplifier: 4, showParticles: false });
       mob.addEffect("resistance", long, { amplifier: 1, showParticles: false });
       mob.addEffect("strength", long, { amplifier: 1, showParticles: false });
@@ -484,10 +500,14 @@ function championNear(player, obj) {
   }, 60);
 }
 
-/** @param {string} tag @param {import("@minecraft/server").Dimension} dim @param {Vector3} at */
-function championAlive(tag, dim, at) {
+/**
+ * Is a champion with this tag loaded anywhere in the dimension? (Not only near its place: a drowned
+ * can swim a long way, and a second one must not come while it's alive.)
+ * @param {string} tag @param {import("@minecraft/server").Dimension} dim
+ */
+function championAlive(tag, dim) {
   try {
-    return dim.getEntities({ tags: [tag], location: at, maxDistance: 96 }).length > 0;
+    return dim.getEntities({ tags: [tag] }).length > 0;
   } catch {
     return false;
   }
@@ -584,20 +604,41 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
   }
 });
 
+/** A tap or a hit on a block counts for interact objectives. @param {Player} player @param {import("@minecraft/server").Block} block */
+function interacted(player, block) {
+  const type = block.typeId;
+  const dim = block.dimension.id;
+  const b = block.location;
+  advance(player, (obj) => {
+    if (obj.type !== "interact" || !obj.blocks?.includes(type)) return 0;
+    const loc = locate(obj);
+    if (!loc || typeof loc === "string") return obj.place ? 0 : 1; // no place given: anywhere counts
+    if (loc.dim !== dim) return 0;
+    const d = loc.y === undefined ? across(b, loc) : Math.hypot(b.x - loc.x, b.y - loc.y, b.z - loc.z);
+    return d <= radiusOf(obj) ? 1 : 0;
+  });
+}
+
 world.afterEvents.playerInteractWithBlock.subscribe(({ player, block, isFirstEvent }) => {
   if (!isFirstEvent) return;
   try {
-    const type = block.typeId;
-    const dim = block.dimension.id;
-    const b = block.location;
-    advance(player, (obj) => {
-      if (obj.type !== "interact" || !obj.blocks?.includes(type)) return 0;
-      const loc = locate(obj);
-      if (!loc || typeof loc === "string") return obj.place ? 0 : 1; // no place given: anywhere counts
-      if (loc.dim !== dim) return 0;
-      const d = loc.y === undefined ? across(b, loc) : Math.hypot(b.x - loc.x, b.y - loc.y, b.z - loc.z);
-      return d <= radiusOf(obj) ? 1 : 0;
-    });
+    interacted(player, block);
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+/** Tick of each player's last counted hit: holding the button down is one strike, not many. @type {Map<string, number>} */
+const lastHit = new Map();
+
+// "Strike the bell": most players hit it rather than use it, so a hit counts like a tap.
+world.afterEvents.entityHitBlock.subscribe(({ damagingEntity, hitBlock }) => {
+  if (!(damagingEntity instanceof Player)) return;
+  try {
+    const now = system.currentTick;
+    if (now - (lastHit.get(damagingEntity.id) ?? -100) < 6) return;
+    lastHit.set(damagingEntity.id, now);
+    interacted(damagingEntity, hitBlock);
   } catch (e) {
     console.warn(`[saga] ${e}`);
   }
@@ -783,6 +824,8 @@ system.runInterval(() => {
 
 /** The tracker: where to go for the latest chapter with a place to be. @param {Player} player @param {Entry[]} list */
 function track(player, list) {
+  // Another pack's note (a quest, a bounty, mob health) is showing: don't write over it.
+  if (system.currentTick < (holdUntil.get(player.id) ?? 0)) return;
   const sorted = [...list].sort((a, b) => b.st.t - a.st.t);
   for (const e of sorted) {
     /** @type {string | undefined} */
@@ -804,7 +847,7 @@ function track(player, list) {
       }
     });
     if (!text) continue;
-    send("realm:actionbar", { player: player.id, ticks: 50 });
+    send("realm:actionbar", { player: player.id, ticks: 50, from: PACK });
     player.onScreenDisplay.setActionBar(`§b${e.story.short}: ${text}`);
     return;
   }
@@ -1158,6 +1201,20 @@ const PLACE_NAMES = Object.keys(PLACES);
 /** Which stories use a place, for the operators' list. @param {string} name */
 const usedBy = (name) => STORIES.filter((s) => s.chapters.some((c) => c.objectives.some((o) => o.place === name))).map((s) => s.title);
 
+/** What players must find at a place (blocks they tap or hit there), for the operator setting it. @param {string} name */
+function placeNeeds(name) {
+  /** @type {string[]} */
+  const out = [];
+  for (const s of STORIES)
+    for (const c of s.chapters)
+      for (const o of c.objectives) {
+        if (o.place !== name || o.type !== "interact" || !o.blocks?.length) continue;
+        const what = o.blocks.map(itemName).join(" or ");
+        out.push(`${s.title} needs a ${what} within ${radiusOf(o)} blocks of this spot: players strike it (${o.label}). Place one if there isn't one.`);
+      }
+  return out;
+}
+
 /** @param {Player} player */
 function listPlaces(player) {
   const saved = placesOf();
@@ -1205,6 +1262,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
           const spot = { dim: player.dimension.id, x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z), by: player.name };
           setPlace(name, spot);
           player.sendMessage(`§a[Story] Place "${name}" (${placeLabel(name)}) set to ${spot.x} ${spot.y} ${spot.z} in the ${dimName(spot.dim)}.`);
+          for (const need of placeNeeds(name)) player.sendMessage(`§e[Story] ${need}`);
           hinted.delete(name);
         } catch (e) {
           console.warn(`[saga] place: ${e}`);
@@ -1249,7 +1307,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
-    if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain") return;
+    if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain" && id !== "realm:actionbar") return;
     /** @type {any} */
     let msg;
     try {
@@ -1259,7 +1317,10 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (!msg || typeof msg !== "object") return;
     try {
-      if (id === "realm:npc_talk") onTalk(msg);
+      if (id === "realm:actionbar") {
+        if (msg.from !== PACK && typeof msg.player === "string" && typeof msg.ticks === "number" && msg.ticks > 0)
+          holdUntil.set(msg.player, system.currentTick + Math.min(200, msg.ticks));
+      } else if (id === "realm:npc_talk") onTalk(msg);
       else if (id === "realm:npc_choose") onChoose(msg);
       else if (typeof msg.tag === "string" && championTags.has(msg.tag)) {
         const ids = [msg.player, ...(Array.isArray(msg.helpers) ? msg.helpers : [])].filter((x) => typeof x === "string");
@@ -1276,6 +1337,8 @@ system.afterEvents.scriptEventReceive.subscribe(
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   cache.delete(playerId);
   busy.delete(playerId);
+  holdUntil.delete(playerId);
+  lastHit.delete(playerId);
 });
 
 /** Warns in the content log about mistakes in stories.js, once at start. */
@@ -1293,6 +1356,7 @@ function checkStories() {
         if ((o.type === "talk" || o.type === "deliver") && !o.npc) console.warn(`[saga] stories.js: ${s.id}/${c.id}: a ${o.type} objective needs an npc`);
         if ((o.type === "deliver" || o.type === "collect") && !o.item) console.warn(`[saga] stories.js: ${s.id}/${c.id}: a ${o.type} objective needs an item`);
         if (o.champion && !o.place && !o.at && !o.offset) console.warn(`[saga] stories.js: ${s.id}/${c.id}: a champion needs a place`);
+        if (o.champion && !/^realm:[\w:.-]{1,60}$/.test(o.champion.tag)) console.warn(`[saga] stories.js: ${s.id}/${c.id}: champion tag "${o.champion.tag}" must start with "realm:" (the Champions pack ignores other tags)`);
       }
     }
   }

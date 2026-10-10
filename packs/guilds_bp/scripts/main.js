@@ -456,6 +456,16 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   if (l) l.last = undefined; // respawning or joining isn't traveling
 });
 
+// Save the counters as the player leaves (the 30-second save would miss the last few).
+world.beforeEvents.playerLeave.subscribe(({ player }) => {
+  try {
+    const prog = progCache.get(player.id);
+    if (prog && dirty.has(player.id)) player.setDynamicProperty(PROP_PROG, JSON.stringify({ o: prog.o, c: prog.c, k: prog.k, b: Math.floor(prog.b) }));
+  } catch (e) {
+    console.warn(`[guilds] save on leave: ${e}`);
+  }
+});
+
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   live.delete(playerId);
   progCache.delete(playerId);
@@ -488,6 +498,8 @@ system.runInterval(() => {
       const last = l.last;
       l.last = { x: loc.x, y: loc.y, z: loc.z, dim };
       if (!last || last.dim !== dim || !playing(p)) continue;
+      // Idle players (the AFK pack's tag) earn nothing: riding a minecart or boat loop isn't traveling.
+      if (CONFIG.afkTag && p.hasTag(CONFIG.afkTag)) continue;
       const dist = Math.hypot(loc.x - last.x, loc.y - last.y, loc.z - last.z);
       if (dist > CONFIG.maxSpeed || dist < 0.05) continue;
       count(p, "b", dist, get("passive.blocksPerRep"), "wayfarers");

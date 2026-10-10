@@ -17,6 +17,9 @@ export const CONFIG = {
   /** Blocks around each player where items are kept (with keepNearPlayers). */
   nearPlayerRadius: 4,
 
-  /** Item ids never cleared. An entry matches an id that ends with it, so "shulker_box" covers every color. Items renamed on an anvil are always kept. */
-  keepItems: ["shulker_box", "minecraft:elytra", "minecraft:nether_star", "minecraft:totem_of_undying", "minecraft:dragon_egg", "minecraft:beacon", "minecraft:heavy_core"],
+  /** Keep items lying within 8 blocks of where a player died, for this many minutes after the death (vanilla removes dropped items after 5 minutes anyway). 0 = don't. */
+  keepDeathDropsMinutes: 5,
+
+  /** Item ids never cleared. An entry matches an id that ends with it, so "shulker_box" covers every color. Items renamed on an anvil and enchanted items are always kept. */
+  keepItems: ["shulker_box", "minecraft:elytra", "minecraft:nether_star", "minecraft:totem_of_undying", "minecraft:dragon_egg", "minecraft:beacon", "minecraft:heavy_core", "minecraft:enchanted_book"],
 };

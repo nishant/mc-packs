@@ -4,7 +4,7 @@
     "name": "Field Journal",
     "description": "A journal that fills itself as you explore: mobs, places, fish, weather, relics and story, with rewards for finishing a page. /realm:journal",
     "uuid": "3e48d841-f68d-4511-bc98-485b0984dca2",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

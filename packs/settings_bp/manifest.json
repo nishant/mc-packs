@@ -4,7 +4,7 @@
     "name": "Realm Settings",
     "description": "Change every pack's settings in game: /realm:config for operators, /realm:prefs for your own.",
     "uuid": "ecf9196e-a6aa-4566-9de4-92089023bde0",
-    "version": [1, 2, 0],
+    "version": [1, 2, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

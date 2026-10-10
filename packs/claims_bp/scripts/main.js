@@ -25,6 +25,14 @@ const protectedEntities = new Set(CONFIG.protectedEntities);
 const enabled = () => get("enabled") === true;
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/**
+ * A short message above the hotbar. Asks the Coordinates HUD, if installed, to leave it there a moment.
+ * @param {Player} player @param {string} text
+ */
+function bar(player, text) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50 }));
+  player.onScreenDisplay.setActionBar(text);
+}
 const DISABLED = "Land claims are disabled on this realm. An operator can enable them in /realm:config (Land Claims).";
 
 // ---------------------------------------------------------------------------
@@ -45,7 +53,10 @@ function claims() {
       try {
         const raw = world.getDynamicProperty(id);
         const c = typeof raw === "string" ? JSON.parse(raw) : undefined;
-        if (c && typeof c.o === "string" && typeof c.x === "number") map.set(c.id, { ...c, s: Array.isArray(c.s) ? c.s : [] });
+        const ok =
+          c && typeof c.id === "number" && typeof c.o === "string" && typeof c.dim === "string" &&
+          typeof c.x === "number" && typeof c.z === "number" && typeof c.r === "number";
+        if (ok) map.set(c.id, { ...c, n: String(c.n ?? "?"), s: Array.isArray(c.s) ? c.s : [] });
       } catch {
         // a corrupt entry is no claim
       }
@@ -108,7 +119,7 @@ const shortDim = (/** @type {string} */ id) => id.replace(/^minecraft:/, "").rep
 /** "This land is claimed by Sam", from a before event. @param {Player} player @param {Claim} c */
 function sayClaimed(player, c) {
   system.run(() => {
-    if (player.isValid) player.onScreenDisplay.setActionBar(`§cThis land is claimed by ${c.n}`);
+    if (player.isValid) bar(player, `§cThis land is claimed by ${c.n}`);
   });
 }
 
@@ -133,10 +144,12 @@ world.beforeEvents.playerBreakBlock.subscribe((event) => {
 });
 
 // Tapping a block: opening it, flipping it, and placing a block or pouring a bucket against it.
+// With an empty hand nothing can be placed, so only the tapped block itself counts: a door just
+// outside the border stays usable even when the face tapped points into the claim.
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
-  const { player, block, blockFace, isFirstEvent } = event;
+  const { player, block, blockFace, isFirstEvent, itemStack } = event;
   const dim = block.dimension.id;
-  const c = closedTo(player, dim, block.location) ?? closedTo(player, dim, across(block, blockFace));
+  const c = closedTo(player, dim, block.location) ?? (itemStack ? closedTo(player, dim, across(block, blockFace)) : undefined);
   if (!c) return;
   event.cancel = true;
   if (isFirstEvent) sayClaimed(player, c);
@@ -157,7 +170,7 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
   if (!c) return;
   try {
     block.setType("minecraft:air");
-    player.onScreenDisplay.setActionBar(`§cThis land is claimed by ${c.n}`);
+    bar(player, `§cThis land is claimed by ${c.n}`);
   } catch (e) {
     console.warn(`[claims] ${e}`);
   }
@@ -192,8 +205,8 @@ system.runInterval(() => {
       if (c?.id === before) continue;
       inClaim.set(player.id, c?.id);
       const was = before === undefined ? undefined : claims().get(before);
-      if (c) player.onScreenDisplay.setActionBar(c.o === player.id ? "§aEntering your claim" : `§eEntering ${c.n}'s claim`);
-      else if (was) player.onScreenDisplay.setActionBar(was.o === player.id ? "§7Leaving your claim" : `§7Leaving ${was.n}'s claim`);
+      if (c) bar(player, c.o === player.id ? "§aEntering your claim" : `§eEntering ${c.n}'s claim`);
+      else if (was) bar(player, was.o === player.id ? "§7Leaving your claim" : `§7Leaving ${was.n}'s claim`);
     } catch {
       // a player mid-respawn or changing dimension: next time
     }
@@ -204,19 +217,27 @@ system.runInterval(() => {
 // Borders
 // ---------------------------------------------------------------------------
 
+/** @type {Map<string, number>} player id → the run drawing their borders, so a new one replaces it */
+const drawing = new Map();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => drawing.delete(playerId));
+
 /**
  * Draws the edges of these claims near the player for borderSeconds, at the player's height.
  * @param {Player} player @param {Claim[]} list
  */
 function showBorders(player, list) {
   if (!list.length) {
-    player.onScreenDisplay.setActionBar("§7No claims nearby");
+    bar(player, "§7No claims nearby");
     return;
   }
   const until = system.currentTick + CONFIG.borderSeconds * 20;
+  const pid = player.id;
+  const previous = drawing.get(pid);
+  if (previous !== undefined) system.clearRun(previous);
   const id = system.runInterval(() => {
     if (!player.isValid || system.currentTick > until) {
       system.clearRun(id);
+      if (drawing.get(pid) === id) drawing.delete(pid);
       return;
     }
     const { x: px, y: py, z: pz } = player.location;
@@ -239,6 +260,7 @@ function showBorders(player, list) {
       }
     }
   }, 10);
+  drawing.set(pid, id);
 }
 
 /** @param {Player} player */
@@ -317,7 +339,12 @@ async function manage(player, c) {
   const actions = [{ text: "Show its borders", run: () => showBorders(player, [c]) }];
   if (c.s.length < CONFIG.maxShared) {
     for (const p of others) {
-      actions.push({ text: `Share with ${p.name}\n§8They can build here too`, run: () => change(player, c.id, (x) => ({ ...x, s: [...x.s, { i: p.id, n: p.name }] })) });
+      const { id, name } = p;
+      actions.push({
+        text: `Share with ${name}\n§8They can build here too`,
+        // Checked again: the menu may have been open while the claim changed.
+        run: () => change(player, c.id, (x) => (x.s.length >= CONFIG.maxShared || x.s.some((y) => y.i === id) ? x : { ...x, s: [...x.s, { i: id, n: name }] })),
+      });
     }
   }
   for (const s of c.s) {
@@ -343,7 +370,7 @@ function change(player, id, fn) {
   const c = claims().get(id);
   if (!c) return;
   saveClaim(fn(c));
-  player.onScreenDisplay.setActionBar("§aClaim updated");
+  bar(player, "§aClaim updated");
 }
 
 /** Operators: every claim, to remove any. @param {Player} player */

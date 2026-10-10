@@ -22,7 +22,7 @@
       },
       "minecraft:particle_appearance_billboard": {
         "size": [
-          "(variable.size > 0 ? variable.size : 40) * 0.25 * (1 + 0.08 * Math.sin(variable.particle_age * 40 + variable.particle_random_1 * 360))",
+          "(variable.size > 0 ? variable.size : 40) * 0.4 * (1 + 0.08 * Math.sin(variable.particle_age * 40 + variable.particle_random_1 * 360))",
           "(variable.size > 0 ? variable.size : 40) / 2"
         ],
         "facing_camera_mode": "rotate_y",

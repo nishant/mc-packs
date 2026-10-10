@@ -17,7 +17,7 @@ const SCAN = 4; // the player-build scan covers (2 * SCAN + 1)^2 columns around 
 const SCAN_DEPTH = 4; // and the surface block plus this many under it
 // Blocks players build with. A strike near one is skipped, so the storm never sets a build on fire.
 const BUILT =
-  /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed_terracotta|crafting_table|furnace|smoker|bookshelf|brick|slab|stairs|_wall$|lectern|anvil|ladder|scaffolding|hay_block|campfire|banner|smooth_stone|quartz|stripped_|lightning_rod|rail|redstone|hopper|dispenser|dropper|piston|observer|lever|button|pressure_plate|trapdoor|frame|flower_pot|composter|cauldron|brewing_stand|enchanting_table|beacon|shulker_box|loom|cartography_table|fletching_table|smithing_table|stonecutter|grindstone|bell|chain|candle|jukebox|noteblock|target|tnt|farmland|bamboo_block|beehive/;
+  /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed_terracotta|crafting_table|furnace|smoker|bookshelf|brick|slab|stairs|_wall$|lectern|anvil|ladder|scaffolding|hay_block|campfire|banner|smooth_stone|quartz|stripped_|lightning_rod|rail|redstone|hopper|dispenser|dropper|piston|observer|lever|button|pressure_plate|trapdoor|frame|flower_pot|composter|cauldron|brewing_stand|enchanting_table|beacon|shulker_box|loom|cartography_table|fletching_table|smithing_table|stonecutter|grindstone|bell|chain|candle|jukebox|noteblock|target|tnt|farmland|bamboo_block|beehive|polished|chiseled|cut_|copper(?!_ore)|_path$|item_frame|honeycomb_block|lodestone|respawn_anchor|crafter|vault|decorated_pot/;
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {{ x: number, z: number, heading: number, speed: number, age: number, life: number, peak: number, forced: boolean }} Cell heading: radians, 0 = north, clockwise */
@@ -430,20 +430,34 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   }
 });
 
-// Charged rods spark every 2 seconds while a player is near enough to see it.
+// Charged rods spark every 2 seconds while a player is near enough to see it. A rod that's gone (blown up, pushed
+// by a piston, broken by something other than a player) is forgotten then, so no sparks hang in the air.
 system.runInterval(() => {
   if (!rods.some((r) => r[4])) return;
   const players = world.getAllPlayers();
+  /** @type {Rod[]} */
+  const gone = [];
   for (const rod of rods) {
     if (!rod[4]) continue;
     const dimId = DIMS[rod[0]];
     const at = { x: rod[1] + 0.5, y: rod[2] + 1, z: rod[3] + 0.5 };
     if (!players.some((p) => p.dimension.id === dimId && Math.hypot(p.location.x - at.x, p.location.y - at.y, p.location.z - at.z) < 48)) continue;
     try {
-      world.getDimension(dimId).spawnParticle(SPARK, at);
+      const dim = world.getDimension(dimId);
+      const block = dim.getBlock({ x: rod[1], y: rod[2], z: rod[3] });
+      if (!block) continue; // unloaded
+      if (block.typeId !== ROD) {
+        gone.push(rod);
+        continue;
+      }
+      dim.spawnParticle(SPARK, at);
     } catch {
       // unloaded, or the resource pack isn't there
     }
+  }
+  if (gone.length) {
+    rods = rods.filter((r) => !gone.includes(r));
+    saveRods();
   }
 }, 40);
 

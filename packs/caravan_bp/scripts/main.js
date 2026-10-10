@@ -578,7 +578,7 @@ function faceTraders(vis) {
     const st = traderState.get(i);
     if (!st) return;
     const loc = entity.location;
-    const [near] = entity.dimension.getPlayers({ location: loc, maxDistance: range, closest: 1 });
+    const [near] = entity.dimension.getPlayers({ location: loc, maxDistance: range, closest: 1, excludeGameModes: [GameMode.Spectator] });
     if (!near) return;
     const yaw = yawTo(loc, near.location);
     const current = st.yaw ?? entity.getRotation().y;
@@ -759,10 +759,10 @@ async function buy(player, vis, id, trader) {
   const each = Math.max(1, Math.floor(g.amount));
   const what = `${each > 1 ? `${each} ` : ""}${goodName(g)}`;
   const n = await chooseAmount(player, trader, `How many times? (${what} for ${crownsText(price)}, ${entry.left} left)`, 1, most, `Buy ${what} for ${crownsText(price)}?`);
-  if (n === undefined || n < 1 || !player.isValid) return;
+  if (n === undefined || !Number.isFinite(n) || n < 1 || !player.isValid) return;
   // The visit, the stock or the balance may have changed while the form was open.
   if (visit !== vis) return player.sendMessage("§7The caravan has left.");
-  const count = Math.min(n, entry.left);
+  const count = Math.min(n, most, entry.left);
   if (count < 1) return player.sendMessage(`§c${goodName(g)} sold out meanwhile.`);
   const cost = count * price;
   if (!takeCrowns(player, cost)) return player.sendMessage(`§cYou need ${crownsText(cost)}; you have ${crownsText(crownsOf(player))}.`);
@@ -840,7 +840,7 @@ async function sellBack(player, trader) {
     player.sendMessage("§7The caravan has left.");
     return false;
   }
-  const sold = removeItems(player, b, Math.min(n, countOf(player, b)));
+  const sold = removeItems(player, b, Math.max(0, Math.min(n, have, countOf(player, b))));
   if (sold < 1) return true;
   addCrowns(player, sold * b.price);
   player.sendMessage(`§6+${crownsText(sold * b.price)} §7(Caravan: sold ${sold} ${b.name})`);

@@ -29,6 +29,12 @@ export const CONFIG = {
   /** See `areaSpacing`. */
   areaCooldownMinutes: 10,
 
+  /**
+   * Natural champions never appear next to anything player-made (the 5 x 5 blocks around the spawn,
+   * from under its feet to its head): bases, villages and the platforms of open-sky mob farms.
+   */
+  avoidBuilds: true,
+
   /** Mobs that can become champions. Mobs not listed here are never champions. */
   mobs: [
     "minecraft:zombie",

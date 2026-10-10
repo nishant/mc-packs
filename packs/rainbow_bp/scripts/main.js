@@ -12,6 +12,9 @@ const RAINBOW = "realm:sky_rainbow"; // particle from the Realm Skies resource p
 const DRAW_TICKS = 40; // the rainbow is redrawn for each player every 2 s...
 const LIFE = 3; // ...and each lasts 3 s (1 s fades), so they overlap with no gap
 const DRAW_DISTANCE = 100; // drawn this far away, toward its end (or at its real spot when closer)
+// Where the band's feet are, as a fraction of the half width: the Realm Skies texture's bands run from 0.7 to 0.97
+// of the half width from the middle, so the middle of a foot is 0.835 of it.
+const FOOT = 0.835;
 const PLACE_DISTANCE = 40; // the pot's chest is placed when a player comes this close (its chunk is loaded then)
 const FIND_DISTANCE = 3;
 const MAX_HEADROOM = 24; // deeper underground than this, no rainbow
@@ -152,6 +155,8 @@ function appear(player) {
     const top = topAt(dim, x, z); // usually not loaded this far out; when it is, skip water now
     if (top && top.isLiquid) continue;
     const now = Date.now();
+    // Replacing an earlier pot (an operator's /realm:rainbow_now, or one past its time): its chest goes if it's empty.
+    if (pot) expire(pot);
     pot = { id: now, x, z, until: now + get("durationSeconds") * 1000, expires: now + Math.max(get("durationSeconds") / 60, get("potMinutes")) * 60000, placed: false };
     saw.clear();
     savePot();
@@ -197,7 +202,8 @@ function draw() {
         molang().setFloat("variable.size", size);
         molang().setFloat("variable.life", LIFE);
         try {
-          player.spawnParticle(RAINBOW, { x: foot.x - uz * (size / 2), y: footY, z: foot.z + ux * (size / 2) }, molang());
+          const side = (size / 2) * FOOT;
+          player.spawnParticle(RAINBOW, { x: foot.x - uz * side, y: footY, z: foot.z + ux * side }, molang());
           break;
         } catch {
           // not loaded there: try closer
@@ -292,8 +298,11 @@ function* placePot(p0) {
       savePot();
       return;
     }
-    // No safe spot: the pot of gold is still there to find, and its loot goes straight to the finder.
+    // No safe spot: the pot of gold is still there to find, and its loot goes straight to the finder. Its height
+    // is the surface at its end, so flying high over it doesn't count as reaching it.
     if (pot === p0) {
+      const top = topAt(dim, p0.x, p0.z);
+      if (top) p0.y = top.location.y + 1;
       p0.missed = true;
       savePot();
     }

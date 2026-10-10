@@ -210,29 +210,33 @@ function curtain(player, time) {
   const l = player.location;
   const n = Math.max(1, CONFIG.aurora.segments);
   const life = CONFIG.aurora.refreshSeconds + 2;
-  for (const k of [1, 0.6, 0.4]) {
-    try {
-      for (let i = 0; i < n; i++) {
-        const f = n === 1 ? 0.5 : i / (n - 1);
-        const x = (f - 0.5) * AURORA_WIDTH;
-        const wave = Math.sin(f * 5 + time * 0.15);
-        const size = 34 + 8 * Math.sin(f * 7 + time * 0.2);
-        molang().setFloat("variable.size", size * k);
-        molang().setFloat("variable.life", life);
-        molang().setFloat("variable.hue", Math.max(0, Math.min(1, 0.3 + 0.3 * Math.sin(time * 0.05) + 0.25 * Math.sin(f * 4 + time * 0.1))));
-        const at = {
-          x: l.x + x * k,
-          y: Math.min(MAX_Y, l.y + (AURORA_LOW + 15 + 15 * Math.sin(f * 3 + time * 0.1)) * k),
-          z: l.z - (AURORA_NORTH + 15 * wave) * k,
-        };
+  let shown = false;
+  for (let i = 0; i < n; i++) {
+    const f = n === 1 ? 0.5 : i / (n - 1);
+    const x = (f - 0.5) * AURORA_WIDTH;
+    const wave = Math.sin(f * 5 + time * 0.15);
+    const size = 34 + 8 * Math.sin(f * 7 + time * 0.2);
+    molang().setFloat("variable.life", life);
+    molang().setFloat("variable.hue", Math.max(0, Math.min(1, 0.3 + 0.3 * Math.sin(time * 0.05) + 0.25 * Math.sin(f * 4 + time * 0.1))));
+    // Each segment on its own: one that isn't loaded that far out is drawn closer (and smaller, so it looks the same),
+    // and the others are never drawn twice.
+    for (const k of [1, 0.6, 0.4]) {
+      molang().setFloat("variable.size", size * k);
+      const at = {
+        x: l.x + x * k,
+        y: Math.min(MAX_Y, l.y + (AURORA_LOW + 15 + 15 * Math.sin(f * 3 + time * 0.1)) * k),
+        z: l.z - (AURORA_NORTH + 15 * wave) * k,
+      };
+      try {
         player.spawnParticle(AURORA, at, molang());
+        shown = true;
+        break;
+      } catch {
+        // not loaded that far: try closer
       }
-      return true;
-    } catch {
-      // not loaded that far: draw it closer (and smaller, so it looks the same)
     }
   }
-  return false;
+  return shown;
 }
 
 // ---------------------------------------------------------------------------

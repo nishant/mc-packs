@@ -16,6 +16,7 @@ const PROP_WEATHER = "titles:weather"; // world: overworld weather from the last
 const TITLE_TAG = "realm_title:";
 const OVERWORLD = "minecraft:overworld";
 const DRY_GROUND = /sand|terracotta/; // deserts and badlands: thunder, but no storm to stand in
+const MAX_TITLES = 300; // keeps a player's property far below the 32,000-character limit
 const SAVE_EVERY = 60; // seconds between saving stats that changed
 /** The trails (particles from the Realm Skies resource pack), with their names and where they show. */
 const TRAILS = /** @type {Record<string, { name: string, particle: string, y: number, behind: number }>} */ ({
@@ -117,6 +118,10 @@ function unlockTitle(id, text, name) {
   const d = dataOf(id);
   if (name) d.n = name;
   if (d.t.some((t) => t.toLowerCase() === title.toLowerCase())) return false;
+  if (d.t.length >= MAX_TITLES) {
+    console.warn(`[titles] ${id} has ${MAX_TITLES} titles already; ${title} not added`);
+    return false;
+  }
   d.t.push(title);
   save(id);
   const player = online(id);
@@ -287,7 +292,9 @@ system.runInterval(() => {
   let budget = Math.max(1, get("trailBudget"));
   // Start at a different player each time, so a busy realm shares the budget fairly.
   rotate = (rotate + 1) % players.length;
-  for (let i = 0; i < players.length && budget > 0; i++) {
+  // Every player's spot is noted even when the budget has run out, so their next puff isn't
+  // mistaken for a teleport.
+  for (let i = 0; i < players.length; i++) {
     const player = players[(rotate + i) % players.length];
     try {
       const d = cache.get(player.id) ?? dataOf(player.id);
@@ -297,7 +304,7 @@ system.runInterval(() => {
       const dim = player.dimension.id;
       const prev = trailSpot.get(player.id);
       trailSpot.set(player.id, { x: loc.x, y: loc.y, z: loc.z, dim });
-      if (!prev || prev.dim !== dim) continue;
+      if (budget <= 0 || !prev || prev.dim !== dim) continue;
       const dx = loc.x - prev.x;
       const dz = loc.z - prev.z;
       const moved = Math.hypot(dx, loc.y - prev.y, dz);

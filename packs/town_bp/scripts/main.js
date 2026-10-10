@@ -5,6 +5,7 @@ import {
   CustomCommandStatus,
   Dimension,
   ItemLockMode,
+  LiquidType,
   Player,
   StructureRotation,
   system,
@@ -180,7 +181,18 @@ function guildFor(p) {
 // ---------------------------------------------------------------------------
 
 /** @returns {Record<string, Owed>} */
-const owedAll = () => readJson(PROP_OWED) ?? {};
+function owedAll() {
+  const raw = readJson(PROP_OWED);
+  /** @type {Record<string, Owed>} */
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [pid, o] of Object.entries(raw)) {
+    if (!o || typeof o !== "object") continue;
+    const q = Array.isArray(o.q) ? o.q.filter((/** @type {unknown} */ x) => Array.isArray(x) && x.length === 3 && x.every((y) => typeof y === "string")) : [];
+    out[pid] = { cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q };
+  }
+  return out;
+}
 
 /** @param {Player} p @param {number} crowns @param {[string, string, string][]} quests @param {string} why */
 function payNow(p, crowns, quests, why) {
@@ -204,10 +216,16 @@ function owe(pid, crowns, quest) {
   const all = owedAll();
   const o = all[pid] ?? { cr: 0, q: [] };
   o.cr += crowns;
-  o.q = [...o.q, quest].slice(-20);
+  o.q = [...o.q, quest].slice(-10);
   all[pid] = o;
+  // Many offline contributors: keep everyone's Crowns, and only their latest finished projects.
+  let json = JSON.stringify(all);
+  for (let keep = 5; json.length > PROP_LIMIT && keep >= 0; keep--) {
+    for (const v of Object.values(all)) v.q = v.q.slice(-keep);
+    json = JSON.stringify(all);
+  }
   try {
-    world.setDynamicProperty(PROP_OWED, JSON.stringify(all));
+    world.setDynamicProperty(PROP_OWED, json);
   } catch (e) {
     console.warn(`[town] owed: ${e}`);
   }
@@ -228,6 +246,20 @@ function payOwed(p) {
 // Delivering
 // ---------------------------------------------------------------------------
 
+/**
+ * Can this stack go into a project? Never a locked item, an item with lore (Storm Glass, Relic Shards, relics and
+ * other packs' special items look like plain vanilla items otherwise) or, with `keepNamedItems`, a named one.
+ * @param {import("@minecraft/server").ItemStack} it @param {string} item @param {boolean} keepNamed
+ */
+function deliverable(it, item, keepNamed) {
+  if (it.typeId !== item || it.lockMode !== ItemLockMode.none || (keepNamed && it.nameTag)) return false;
+  try {
+    return it.getLore().length === 0;
+  } catch {
+    return true;
+  }
+}
+
 /** How many of an item the player carries that could be delivered. @param {Player} player @param {string} item */
 function carried(player, item) {
   const inv = player.getComponent("minecraft:inventory")?.container;
@@ -236,7 +268,7 @@ function carried(player, item) {
   if (inv)
     for (let i = 0; i < inv.size; i++) {
       const it = inv.getItem(i);
-      if (it?.typeId === item && it.lockMode === ItemLockMode.none && !(keepNamed && it.nameTag)) n += it.amount;
+      if (it && deliverable(it, item, keepNamed)) n += it.amount;
     }
   return n;
 }
@@ -249,7 +281,7 @@ function take(player, item, max) {
   let took = 0;
   for (let i = 0; i < inv.size && took < max; i++) {
     const it = inv.getItem(i);
-    if (!it || it.typeId !== item || it.lockMode !== ItemLockMode.none || (keepNamed && it.nameTag)) continue;
+    if (!it || !deliverable(it, item, keepNamed)) continue;
     const n = Math.min(it.amount, max - took);
     if (n >= it.amount) inv.setItem(i, undefined);
     else inv.getSlot(i).amount = it.amount - n;
@@ -520,24 +552,13 @@ function build(t, p, fresh) {
       placed = 1;
     } else {
       if (p.structure) console.warn(`[town] structure "${p.structure}" for ${p.id} isn't saved in this world; building the ${p.build} instead`);
-      const fwd = FORWARD[s.f] ?? FORWARD[0];
-      for (const pl of design(p.build)) {
-        const loc = toWorld(s, pl.x, pl.y, pl.z);
-        let block;
-        try {
-          block = dim.getBlock(loc);
-        } catch {
-          block = undefined;
-        }
-        if (!block || !canReplace(block.typeId, pl.mode)) {
-          // A cobblestone floor under a well, or posts under a dock, are only needed where it's open.
-          if (!(pl.mode === "wet" || (p.build === "well" && pl.y === -2) || (p.build === "garden" && pl.y === -2))) skipped++;
-          continue;
-        }
-        const states = pl.block === "minecraft:wall_sign" ? { facing_direction: wallFacing({ x: -fwd.x, z: -fwd.z }) } : pl.states;
-        block.setPermutation(perm(pl.block, states));
-        placed++;
+      const result = placeDesign(dim, s, p);
+      if (!result) {
+        // Part of it is in a chunk that isn't loaded: build all of it later rather than half of it now.
+        if (fresh) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} will be built when someone is near its spot (${s.x}, ${s.y}, ${s.z}).`);
+        return false;
       }
+      ({ placed, skipped } = result);
     }
   } catch (e) {
     console.warn(`[town] build ${p.id}: ${e}`);
@@ -554,6 +575,100 @@ function build(t, p, fresh) {
   if (placed && get("fireworks") === true) fireworks(dim, toWorld(s, 0, 1, 2));
   if (p.build === "notice_board") system.runTimeout(() => refreshBoard(t), 2);
   return true;
+}
+
+const SIDES = [
+  { x: 1, y: 0, z: 0 },
+  { x: -1, y: 0, z: 0 },
+  { x: 0, y: 0, z: 1 },
+  { x: 0, y: 0, z: -1 },
+  { x: 0, y: -1, z: 0 },
+];
+/** @param {Vector3} v */
+const keyOf = (v) => `${v.x},${v.y},${v.z}`;
+
+/**
+ * Places a built-in design. Returns undefined (and changes nothing) while any of its blocks is in an unloaded
+ * chunk. Blocks in the way are left alone. Water goes in last, and only where it's held in on every side and
+ * below (by a block, or by more of the design's water), so it can never spill out and wash away torches,
+ * redstone or crops nearby; a lily pad only goes on water that was placed.
+ * @param {Dimension} dim @param {Spot} s @param {Project} p
+ * @returns {{ placed: number, skipped: number } | undefined}
+ */
+function placeDesign(dim, s, p) {
+  const fwd = FORWARD[s.f] ?? FORWARD[0];
+  const { min, max } = dim.heightRange;
+  /** @type {{ pl: Place, loc: Vector3, block: import("@minecraft/server").Block }[]} */
+  const items = [];
+  let skipped = 0;
+  for (const pl of design(p.build)) {
+    const loc = toWorld(s, pl.x, pl.y, pl.z);
+    if (loc.y < min || loc.y >= max) {
+      skipped++;
+      continue;
+    }
+    let block;
+    try {
+      block = dim.getBlock(loc);
+    } catch {
+      block = undefined;
+    }
+    if (!block) return undefined; // not loaded
+    items.push({ pl, loc, block });
+  }
+  /** @param {Place} pl */
+  const optional = (pl) => pl.mode === "wet" || ((p.build === "well" || p.build === "garden") && pl.y === -2);
+  /** @param {Place} pl */
+  const later = (pl) => pl.block === "minecraft:water" || pl.block === "minecraft:waterlily";
+  let placed = 0;
+  /** @param {{ pl: Place, block: import("@minecraft/server").Block }} it */
+  const put = (it) => {
+    const states = it.pl.block === "minecraft:wall_sign" ? { facing_direction: wallFacing({ x: -fwd.x, z: -fwd.z }) } : it.pl.states;
+    it.block.setPermutation(perm(it.pl.block, states));
+    placed++;
+  };
+  // 1. Everything but water and lily pads, supports first.
+  for (const it of items) {
+    if (later(it.pl)) continue;
+    if (!canReplace(it.block.typeId, it.pl.mode)) {
+      // A cobblestone floor under a well, or posts under a dock, are only needed where it's open.
+      if (!optional(it.pl)) skipped++;
+      continue;
+    }
+    put(it);
+  }
+  // 2. Water, only where it can't spill.
+  const water = items.filter((it) => it.pl.block === "minecraft:water");
+  const want = new Map(water.filter((it) => canReplace(it.block.typeId, it.pl.mode)).map((it) => [keyOf(it.loc), it]));
+  /** @param {Vector3} at */
+  const holds = (at) => {
+    if (want.has(keyOf(at))) return true;
+    try {
+      const b = dim.getBlock(at);
+      if (!b) return false;
+      if (b.isLiquid) return true; // more water: it's already wet there
+      return !b.isAir && !b.canBeDestroyedByLiquidSpread(LiquidType.Water);
+    } catch {
+      return false;
+    }
+  };
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [k, it] of want) {
+      if (SIDES.every((d) => holds({ x: it.loc.x + d.x, y: it.loc.y + d.y, z: it.loc.z + d.z }))) continue;
+      want.delete(k);
+      changed = true;
+    }
+  }
+  skipped += water.length - want.size;
+  for (const it of want.values()) put(it);
+  // 3. Lily pads on the water just placed.
+  for (const it of items) {
+    if (it.pl.block !== "minecraft:waterlily") continue;
+    if (want.has(keyOf({ x: it.loc.x, y: it.loc.y - 1, z: it.loc.z })) && canReplace(it.block.typeId, it.pl.mode)) put(it);
+    else skipped++;
+  }
+  return { placed, skipped };
 }
 
 /** @param {Dimension} dim @param {Vector3} at */

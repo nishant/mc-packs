@@ -45,6 +45,14 @@ const containerTypes = () => (types ??= new Set(CONFIG.containerTypes.filter((t)
 let index;
 let dirty = false;
 
+/** An entry as saved, checked so one damaged entry can't break every search. @param {any} v @returns {v is Entry} */
+const valid = (v) =>
+  !!v && Array.isArray(v.t) && typeof v.at === "number" && typeof v.b === "string" &&
+  v.t.every((/** @type {any} */ p) => Array.isArray(p) && typeof p[0] === "string" && typeof p[1] === "number");
+
+/** The shards as last written, so a save only rewrites the ones that changed. @type {string[]} */
+let written = [];
+
 /** @returns {Map<string, Entry>} */
 function getIndex() {
   if (index) return index;
@@ -52,8 +60,9 @@ function getIndex() {
   for (let i = 0; ; i++) {
     const raw = world.getDynamicProperty(PROP_SHARD + i);
     if (typeof raw !== "string") break;
+    written.push(raw);
     try {
-      for (const [k, v] of Object.entries(JSON.parse(raw))) index.set(k, v);
+      for (const [k, v] of Object.entries(JSON.parse(raw))) if (valid(v)) index.set(k, v);
     } catch (e) {
       console.warn(`[find] shard ${i} unreadable: ${e}`);
     }
@@ -83,10 +92,13 @@ function save() {
     len += s.length + 1;
   }
   if (cur.length) shards.push(`{${cur.join(",")}}`);
-  shards.forEach((s, i) => world.setDynamicProperty(PROP_SHARD + i, s));
+  shards.forEach((s, i) => {
+    if (written[i] !== s) world.setDynamicProperty(PROP_SHARD + i, s);
+  });
   for (let i = shards.length; world.getDynamicProperty(PROP_SHARD + i) !== undefined; i++) {
     world.setDynamicProperty(PROP_SHARD + i, undefined);
   }
+  written = shards;
   dirty = false;
 }
 
@@ -175,26 +187,29 @@ function signatures() {
 /**
  * The block a container is remembered under. When both halves of a double chest report the whole
  * 54 slots, both map to the half with the smaller coordinates, so it is listed once.
- * @param {Block} block @param {Container} container
+ * @param {Block} block @param {Container} container @param {(b: Block) => string | undefined} sigOf
  * @returns {{ main: Block, other?: Block }}
  */
-function canonical(block, container) {
+function canonical(block, container, sigOf) {
   if (container.size <= 27) return { main: block };
-  const nb = partnerOf(block, signatures());
+  const nb = partnerOf(block, sigOf);
   if (!nb) return { main: block };
   const nbFirst = nb.x < block.x || (nb.x === block.x && nb.z < block.z);
   return nbFirst ? { main: nb, other: block } : { main: block, other: nb };
 }
 
-/** Reads a container into the index (or drops it if it's gone or empty). @param {Block} block */
-function record(block) {
+/**
+ * Reads a container into the index (or drops it if it's gone or empty).
+ * @param {Block} block @param {(b: Block) => string | undefined} [sigOf] shared by a whole scan, so a room of chests is read once
+ */
+function record(block, sigOf = signatures()) {
   const idx = getIndex();
   const container = containerTypes().has(block.typeId) ? containerOf(block) : undefined;
   if (!container) {
     if (idx.delete(keyOf(block.dimension, block.location))) dirty = true;
     return;
   }
-  const { main, other } = canonical(block, container);
+  const { main, other } = canonical(block, container, sigOf);
   if (other) idx.delete(keyOf(other.dimension, other.location));
   /** @type {Map<string, number>} */
   const counts = new Map();
@@ -208,11 +223,11 @@ function record(block) {
   dirty = true;
 }
 
-/** @param {Dimension} dimension @param {import("@minecraft/server").Vector3} p */
-function recordAt(dimension, p) {
+/** @param {Dimension} dimension @param {import("@minecraft/server").Vector3} p @param {(b: Block) => string | undefined} [sigOf] */
+function recordAt(dimension, p, sigOf) {
   try {
     const b = dimension.getBlock(p);
-    if (b) record(b);
+    if (b) record(b, sigOf);
   } catch {
     // chunk unloaded since: keep what we knew
   }
@@ -283,8 +298,9 @@ function* liveScan(player) {
     true
   );
   let n = 0;
+  const sigOf = signatures();
   for (const loc of found.getBlockLocationIterator()) {
-    recordAt(dimension, loc);
+    recordAt(dimension, loc, sigOf);
     if (++n % 4 === 0) yield;
   }
 }
@@ -383,7 +399,15 @@ async function pick(player, form, hits) {
   }
 }
 
-/** A particle column over the container, every 10 ticks, that only this player sees. @param {Player} player @param {Hit} h */
+/** @type {Map<string, number>} player id → the run drawing their current mark */
+const marks = new Map();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => marks.delete(playerId));
+
+/**
+ * A particle column over the container, every 10 ticks, that only this player sees. A new mark
+ * replaces the player's previous one.
+ * @param {Player} player @param {Hit} h
+ */
 function highlight(player, h) {
   const at = `${h.x}, ${h.y}, ${h.z}`;
   if (short(player.dimension.id) !== h.dim) {
@@ -393,9 +417,13 @@ function highlight(player, h) {
   const seconds = get("highlightSeconds");
   player.sendMessage(`§e${title(h.entry.b)}§r at ${at}, marked for ${seconds} s.`);
   const until = system.currentTick + seconds * 20;
+  const id = player.id;
+  const previous = marks.get(id);
+  if (previous !== undefined) system.clearRun(previous);
   const run = system.runInterval(() => {
     if (!player.isValid || system.currentTick > until || short(player.dimension.id) !== h.dim) {
       system.clearRun(run);
+      if (marks.get(id) === run) marks.delete(id);
       return;
     }
     for (let k = 0; k < 8; k++) {
@@ -406,6 +434,7 @@ function highlight(player, h) {
       }
     }
   }, 10);
+  marks.set(id, run);
 }
 
 // ---------------------------------------------------------------------------

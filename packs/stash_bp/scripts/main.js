@@ -59,6 +59,15 @@ function kept(item) {
   return !get("stashGear") && !!item.getComponent("minecraft:durability");
 }
 
+/**
+ * A short message above the hotbar. Asks the Coordinates HUD, if installed, to leave it there a moment.
+ * @param {Player} player @param {string} text
+ */
+function bar(player, text) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50 }));
+  player.onScreenDisplay.setActionBar(text);
+}
+
 /** @param {Container} c @param {number} from @param {number} to */
 function usedSlots(c, from, to) {
   let n = 0;
@@ -155,7 +164,7 @@ function sortBlock(player, block) {
   const container = containerOf(block);
   if (!container) return;
   const stacks = sortRange(container, 0, container.size);
-  player.onScreenDisplay.setActionBar(`§aSorted ${stacks} stack${stacks === 1 ? "" : "s"}`);
+  bar(player, `§aSorted ${stacks} stack${stacks === 1 ? "" : "s"}`);
   player.playSound("random.click", { pitch: 1.4, volume: 0.5 });
 }
 
@@ -164,7 +173,7 @@ function sortInventory(player) {
   const container = player.getComponent("minecraft:inventory")?.container;
   if (!container) return;
   const stacks = sortRange(container, getFor(player, "sortHotbar") ? 0 : MAIN_FIRST, MAIN_END);
-  player.onScreenDisplay.setActionBar(`§aSorted ${stacks} stack${stacks === 1 ? "" : "s"} in your inventory`);
+  bar(player, `§aSorted ${stacks} stack${stacks === 1 ? "" : "s"} in your inventory`);
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +345,8 @@ function* quickStack(player) {
     }
   }
   const noun = [...received].every((t) => t.block.typeId.endsWith("chest")) ? "chest" : "container";
-  player.onScreenDisplay.setActionBar(
+  bar(
+    player,
     moved
       ? `§aStashed ${moved} item${moved === 1 ? "" : "s"} into ${received.size} ${noun}${received.size === 1 ? "" : "s"}`
       : targets.length
@@ -460,7 +470,7 @@ function lockNextToPlacement(player, block, face, item) {
 /** "Locked by Sam" in the bar above the hotbar, from a before event. @param {Player} player @param {Lock} lock */
 function sayLocked(player, lock) {
   system.run(() => {
-    if (player.isValid) player.onScreenDisplay.setActionBar(`§cLocked by ${lock.n}`);
+    if (player.isValid) bar(player, `§cLocked by ${lock.n}`);
   });
 }
 
@@ -472,12 +482,12 @@ function lock(player, dimension, at) {
   const block = dimension.getBlock(at);
   if (!block || !containerTypes.has(block.typeId) || !locksOn()) return;
   if (lockAt(block)) {
-    player.onScreenDisplay.setActionBar("§7It's already locked");
+    bar(player, "§7It's already locked");
     return;
   }
   const max = get("maxLocks");
   if (lockCount(player.id) >= max) {
-    player.onScreenDisplay.setActionBar(`§cYou already have ${max} locked containers. Unlock one first.`);
+    bar(player, `§cYou already have ${max} locked containers. Unlock one first.`);
     return;
   }
   /** @type {Lock} */
@@ -485,7 +495,7 @@ function lock(player, dimension, at) {
   saveLock(lockKey(dimension.id, at), l);
   const other = (containerOf(block)?.size ?? 0) > 27 ? partnerOf(block, signatures()) : undefined;
   if (other) saveLock(lockKey(dimension.id, other.location), { ...l, h: 1 });
-  player.onScreenDisplay.setActionBar(`§aLocked: only you can open this ${nameOf(block.typeId).toLowerCase()}`);
+  bar(player, `§aLocked: only you can open this ${nameOf(block.typeId).toLowerCase()}`);
   player.playSound("random.door_close", { pitch: 1.4, volume: 0.6 });
 }
 
@@ -519,20 +529,23 @@ async function lockMenu(player, dimension, at) {
   const name = nameOf(block.typeId).toLowerCase();
   const others = world.getAllPlayers().filter((p) => p.id !== player.id && !l.s.some((s) => s.i === p.id));
 
-  /** @type {{ text: string, run: () => void }[]} */
+  // Each action gets the block as read again after the form closes.
+  /** @type {{ text: string, run: (b: Block) => void }[]} */
   const actions = [];
   if (l.s.length < CONFIG.maxShared) {
     for (const p of others) {
+      const { id, name: pName } = p;
       actions.push({
-        text: `Share with ${p.name}\n§8They can open and sort it too`,
-        run: () => updateLock(block, (x) => ({ ...x, s: [...x.s, { i: p.id, n: p.name }] })),
+        text: `Share with ${pName}\n§8They can open and sort it too`,
+        run: (b) =>
+          updateLock(b, (x) => (x.s.length >= CONFIG.maxShared || x.s.some((y) => y.i === id) ? x : { ...x, s: [...x.s, { i: id, n: pName }] })),
       });
     }
   }
   for (const s of l.s) {
-    actions.push({ text: `Stop sharing with ${s.n}`, run: () => updateLock(block, (x) => ({ ...x, s: x.s.filter((y) => y.i !== s.i) })) });
+    actions.push({ text: `Stop sharing with ${s.n}`, run: (b) => updateLock(b, (x) => ({ ...x, s: x.s.filter((y) => y.i !== s.i) })) });
   }
-  actions.push({ text: `Unlock this ${name}\n§8Anyone can open it again`, run: () => updateLock(block, () => undefined) });
+  actions.push({ text: `Unlock this ${name}\n§8Anyone can open it again`, run: (b) => updateLock(b, () => undefined) });
 
   const body = [
     `Only you${l.s.length ? ` and ${orList(l.s.map((s) => s.n), "and")}` : ""} can open, sort or break this ${name}.`,
@@ -548,8 +561,10 @@ async function lockMenu(player, dimension, at) {
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
   const now = dimension.getBlock(at);
   if (!now || lockAt(now)?.o !== player.id) return; // broken or unlocked meanwhile
-  actions[res.selection]?.run();
-  player.onScreenDisplay.setActionBar("§aLock updated");
+  const chosen = actions[res.selection];
+  if (!chosen) return;
+  chosen.run(now);
+  bar(player, "§aLock updated");
 }
 
 // Breaking: only the owner and the players it's shared with.
@@ -561,10 +576,28 @@ world.beforeEvents.playerBreakBlock.subscribe((event) => {
   if (lock) sayLocked(player, lock);
 });
 
-// A broken or replaced block takes its lock with it.
+// A broken or replaced block takes its lock with it. When that was the counted half of a double
+// chest, the half left standing (now a single chest, marked `h`) becomes the counted one, so the
+// owner's lock count stays right and the leftover can't sit outside the maxLocks limit.
 world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
-  const key = lockKey(block.dimension.id, block.location);
-  if (locks().has(key)) saveLock(key, undefined);
+  try {
+    const key = lockKey(block.dimension.id, block.location);
+    const gone = locks().get(key);
+    if (!gone) return;
+    saveLock(key, undefined);
+    if (gone.h) return;
+    for (const d of SIDES) {
+      const next = block.offset(d);
+      if (!next) continue;
+      const k = lockKey(block.dimension.id, next.location);
+      const l = locks().get(k);
+      if (!l?.h || l.o !== gone.o || (containerOf(next)?.size ?? 0) > 27) continue;
+      const { h, ...rest } = l;
+      saveLock(k, rest);
+    }
+  } catch (e) {
+    console.warn(`[stash] ${e}`);
+  }
 });
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   const key = lockKey(block.dimension.id, block.location);
@@ -647,7 +680,7 @@ async function openMenu(player, dimension, at) {
       run: (p) => {
         const b = dimension.getBlock(at);
         if (b) updateLock(b, () => undefined);
-        p.onScreenDisplay.setActionBar(`§aRemoved ${l.n}'s lock`);
+        bar(p, `§aRemoved ${l.n}'s lock`);
       },
       free: true,
     });
@@ -675,7 +708,7 @@ async function openMenu(player, dimension, at) {
       return;
     }
     if (!ready(player)) {
-      player.onScreenDisplay.setActionBar("§7Too fast. Try again in a moment.");
+      bar(player, "§7Too fast. Try again in a moment.");
       return;
     }
     actions[res.selection]?.run(player);

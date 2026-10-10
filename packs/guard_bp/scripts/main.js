@@ -33,11 +33,19 @@ let zones;
 function getZones() {
   if (zones) return zones;
   const raw = world.getDynamicProperty(PROP_ZONES);
+  /** @type {any} */
+  let list = [];
   try {
-    zones = typeof raw === "string" ? JSON.parse(raw) : [];
+    list = typeof raw === "string" ? JSON.parse(raw) : [];
   } catch {
-    zones = [];
+    // damaged: no zones rather than an error on every explosion
   }
+  // Keep only well-formed zones, so one bad entry can't break the explosion check or the commands.
+  zones = (Array.isArray(list) ? list : []).filter(
+    (/** @type {any} */ z) =>
+      z && typeof z.name === "string" && typeof z.dim === "string" &&
+      [z.x, z.y, z.z, z.radius].every((n) => typeof n === "number" && Number.isFinite(n))
+  );
   return /** @type {Zone[]} */ (zones);
 }
 
@@ -80,9 +88,9 @@ const named = (z, name) => z.name.toLowerCase() === name.toLowerCase();
 
 // Don't cancel the event: that would also remove the damage, knockback and drops.
 world.beforeEvents.explosion.subscribe((event) => {
-  const type = event.source?.typeId;
-  if (!type || !sources.has(type)) return; // TNT, beds, respawn anchors: no source or not listed
   try {
+    const type = event.source?.typeId;
+    if (!type || !sources.has(type)) return; // TNT, beds, respawn anchors: no source or not listed
     if (!zonesMode()) {
       event.setImpactedBlocks([]);
       return;
@@ -179,7 +187,10 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       const { x, y, z } = player.location;
       /** @type {Zone} */
       const zone = { name, dim: player.dimension.id, x: Math.round(x), y: Math.round(y), z: Math.round(z), radius: r };
-      system.run(() => saveZones([...getZones(), zone]));
+      system.run(() => {
+        const now = getZones();
+        if (!now.some((z) => named(z, name)) && now.length < MAX_ZONES) saveZones([...now, zone]); // same name added meanwhile: keep the first
+      });
       return {
         status: CustomCommandStatus.Success,
         message: `Zone added: ${describeZone(zone)}${zonesMode() ? "" : "\n§7Mode is everywhere, so zones have no effect until an operator sets the mode to zones in /realm:config."}`,

@@ -9,7 +9,7 @@ const PROP_NEXT = "waystone:next"; // world: the next waystone id (number)
 const PROP_KNOWN = "waystone:known"; // player: JSON number[]: ids of the waystones they discovered
 const PROP_NEWS = "waystone:news"; // world: JSON News[]: the latest sky events, newest first
 const LODESTONE = "minecraft:lodestone";
-const SIGN_PREFIX = /^\s*waystone\s*:/i;
+const SIGN_PREFIX = /^\s*waystone\b\s*:?/i; // "Waystone: River Gate", or "Waystone" on the first line and the name below
 const NAME_MAX = 24;
 const CHECK_RANGE = 96; // waystones this close to a player (so their chunk is loaded) are checked for a missing lodestone
 const CHECKS_PER_RUN = 8;
@@ -32,7 +32,7 @@ const NEWS_TEXT = /** @type {Record<string, string>} */ ({
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {{ i: number, n: string, d: string, x: number, y: number, z: number, by: string, t: number }} Waystone id, name, dimension, lodestone position, who made it, when */
 /** @typedef {{ k: string, t: number, text?: string, d?: string, x?: number, z?: number }} News */
-/** @typedef {{ to: Waystone, at: Vector3, dim: string, left: number, cost: number, hurt: boolean }} Channel */
+/** @typedef {{ to: Waystone, at: Vector3, dim: string, left: number, cost: number, hurt: boolean }} Channel at/dim: where the player started, and goes back to if the far waystone turns out unsafe */
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -544,8 +544,16 @@ function safeSpot(dim, w) {
   }
   const top = { x: w.x, y: w.y + 1, z: w.z };
   if (free(top) && free({ ...top, y: top.y + 1 })) return { x: w.x + 0.5, y: w.y + 1, z: w.z + 0.5 };
+  // Buried: the first open space with a safe floor straight above the lodestone (a waystone in a cellar).
+  for (let y = w.y + 2; y <= w.y + 40; y++) {
+    const feet = { x: w.x, y, z: w.z };
+    if (free(feet) && free({ ...feet, y: y + 1 }) && floor({ ...feet, y: y - 1 })) return { x: w.x + 0.5, y, z: w.z + 0.5 };
+  }
   return undefined;
 }
+
+/** A block a player can't stand in: anything solid, and lava or fire (water is fine). @param {import("@minecraft/server").Block | undefined} b */
+const blocked = (b) => !!b && !PASSABLE.test(b.typeId) && !/water|seagrass|kelp/.test(b.typeId);
 
 /** The wait is over: pay and jump. @param {Player} player @param {Channel} ch */
 function arrive(player, ch) {
@@ -560,7 +568,14 @@ function arrive(player, ch) {
   }
   const dim = world.getDimension(to.d);
   // The far waystone's chunk is usually unloaded: land on top of the lodestone, then step beside it once it loads.
-  const spot = safeSpot(dim, to) ?? { x: to.x + 0.5, y: to.y + 1, z: to.z + 0.5 };
+  // When it is loaded and there's nowhere safe to stand, don't go at all.
+  const loaded = !!blockAt(dim, to);
+  const found = safeSpot(dim, to);
+  if (loaded && !found) {
+    player.sendMessage(`§cThere's no safe place to stand at ${to.n}: the waystone is walled in. Your trip is canceled.`);
+    return;
+  }
+  const spot = found ?? { x: to.x + 0.5, y: to.y + 1, z: to.z + 0.5 };
   try {
     player.teleport(spot, { dimension: dim, facingLocation: center(to), keepVelocity: false });
   } catch (e) {
@@ -571,9 +586,10 @@ function arrive(player, ch) {
   }
   player.playSound("mob.endermen.portal", { volume: 0.8 });
   if (ch.cost > 0) player.sendMessage(`§7Paid ${price(ch.cost)} for the trip to ${to.n}.`);
-  // Twice: a far chunk (or another dimension) can take a moment to load.
-  system.runTimeout(() => settle(player, to), 10);
-  system.runTimeout(() => settle(player, to), 40);
+  // A few times: a far chunk (or another dimension) can take a moment to load.
+  system.runTimeout(() => settle(player, to, ch), 10);
+  system.runTimeout(() => settle(player, to, ch), 40);
+  system.runTimeout(() => settle(player, to, ch), 100);
 }
 
 /** @param {Player} player @param {number} n */
@@ -586,21 +602,40 @@ function refund(player, n) {
   }
 }
 
-/** After landing: the lodestone may be gone, and the spot may be blocked. @param {Player} player @param {Waystone} to */
-function settle(player, to) {
+/**
+ * After landing: the lodestone may be gone, and the spot may be blocked (inside a block, in lava, or over a drop
+ * where the lodestone was). Moves the player to a safe spot by the waystone, or else back to where they started,
+ * with the trip paid back.
+ * @param {Player} player @param {Waystone} to @param {Channel} ch
+ */
+function settle(player, to, ch) {
   try {
     if (!player.isValid || player.dimension.id !== to.d) return;
+    if (dist3(player.location, center(to)) > 8) return; // already walked off
     const dim = player.dimension;
     const b = blockAt(dim, to);
-    if (b && b.typeId !== LODESTONE && byId(to.i)) {
+    if (!b) return; // still loading: the next check looks again
+    const gone = b.typeId !== LODESTONE;
+    if (gone && byId(to.i)) {
       removeWaystone(to, `the lodestone is now ${b.typeId}`);
       player.sendMessage(`§7The waystone ${to.n} has crumbled: its lodestone is gone.`);
     }
-    const head = blockAt(dim, { ...player.location, y: player.location.y + 1 });
-    if (head && !PASSABLE.test(head.typeId)) {
-      const spot = safeSpot(dim, to);
-      if (spot) player.teleport(spot, { facingLocation: center(to) });
+    const loc = player.location;
+    const feet = blockAt(dim, loc);
+    const head = blockAt(dim, { ...loc, y: loc.y + 1 });
+    const under = blockAt(dim, { ...loc, y: loc.y - 1 });
+    const stuck = blocked(feet) || blocked(head);
+    const falling = gone && !!under && PASSABLE.test(under.typeId);
+    if (!stuck && !falling) return;
+    const spot = safeSpot(dim, to);
+    if (spot) {
+      player.teleport(spot, { facingLocation: center(to) });
+      return;
     }
+    // Nowhere safe here: back to where the trip started, paid back.
+    player.teleport(ch.at, { dimension: world.getDimension(ch.dim) });
+    if (ch.cost > 0) refund(player, ch.cost);
+    player.sendMessage(`§cThere's no safe place to stand at ${to.n}, so the waystone sent you back.${ch.cost > 0 ? ` Your ${price(ch.cost)} were paid back.` : ""}`);
   } catch (e) {
     console.warn(`[waystone] ${e}`);
   }

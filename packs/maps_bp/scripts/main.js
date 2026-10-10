@@ -25,7 +25,7 @@ const GROUND =
 const SOFT = /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|snow_layer|deadbush|dead_bush|bush|petals|leaf_litter|torchflower/;
 // Anything a player probably placed: a spot with one of these nearby is skipped (packs can't read Land Claims).
 const MADE =
-  /planks|glass|chest|barrel|sign|bed\b|_bed|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|slab|stairs|_wall|lectern|bookshelf|anvil|hopper|rail|ladder|scaffolding|campfire|bell|banner|lever|button|pressure_plate|shulker|smooth|polished|stripped|chiseled|cut_|beacon|cauldron|composter|loom|cartography|fletching|smithing|stonecutter|grindstone|brewing|enchanting|jukebox|noteblock|note_block|target|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|tnt|frame|flower_pot|farmland|grass_path|dirt_path|hay_block|cobblestone|candle|chain|bars|trapdoor|copper_bulb|copper_grate|lightning_rod|end_rod|sea_lantern|glowstone|quartz|purpur|prismarine_bricks|bamboo_mosaic|bamboo_block|crafter|vault|spawner/;
+  /planks|glass|chest|barrel|sign|bed\b|_bed|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|slab|stairs|_wall|lectern|bookshelf|anvil|hopper|rail|ladder|scaffolding|campfire|bell|banner|lever|button|pressure_plate|shulker|smooth|polished|stripped|chiseled|cut_|beacon|cauldron|composter|loom|cartography|fletching|smithing|stonecutter|grindstone|brewing|enchanting|jukebox|noteblock|note_block|target|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|tnt|frame|flower_pot|farmland|grass_path|dirt_path|hay_block|cobblestone|candle|chain|bars|trapdoor|copper_bulb|copper_grate|lightning_rod|end_rod|sea_lantern|glowstone|quartz|purpur|prismarine_bricks|bamboo_mosaic|bamboo_block|crafter|vault|spawner|tiles|_wood$|_hyphae$|:(black|blue|cyan|gray|green|light_blue|lime|magenta|pink|purple)_terracotta$|:(iron|gold|diamond|emerald|lapis|redstone|netherite|coal|raw_iron|raw_gold|raw_copper|honey|honeycomb|slime|dried_kelp|amethyst|resin)_block$|copper|packed_mud|sponge|skull|_head$|decorated_pot|cake|lodestone|respawn_anchor|light_block|mud_bricks|tinted/;
 const WATERY = /water|seagrass|kelp|bubble_column/;
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -560,7 +560,12 @@ function rollLoot() {
 function buried(player, hunt, spot) {
   const hunts = huntsOf(player);
   if (!hunts.includes(hunt) || hunt.chest) return; // given up meanwhile
-  const dim = player.dimension;
+  let dim;
+  try {
+    dim = world.getDimension(hunt.dim); // the player may have changed dimension while the spot was searched
+  } catch {
+    dim = player.dimension;
+  }
   if (spot) {
     const b = blockAt(dim, spot.x, spot.y, spot.z);
     if (b && GROUND.test(b.typeId)) {
@@ -694,6 +699,14 @@ async function showHunts(player) {
   const res = await show(player, new ActionFormData().title(`§lTreasure Map ${hunt.id}`).body(lines.join("\n")).button("A new copy of the map").button("Give up this hunt").button("Close"));
   if (!res || res.canceled || !player.isValid) return;
   if (res.selection === 0) {
+    if (!huntsOf(player).some((h) => h.id === hunt.id)) return; // found or given up while the menu was open
+    const inv = inventoryOf(player);
+    let carried = false;
+    for (let slot = 0; inv && slot < inv.size && !carried; slot++) carried = mapIdOf(inv.getItem(slot)) === hunt.id;
+    if (carried) {
+      player.sendMessage("§7You already carry this treasure map.");
+      return;
+    }
     giveMap(player, hunt);
     player.sendMessage("§7Here's a fresh copy of your treasure map.");
   } else if (res.selection === 1) {

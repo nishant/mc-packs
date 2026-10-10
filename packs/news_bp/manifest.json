@@ -4,7 +4,7 @@
     "name": "Realm News & Tips",
     "description": "News popup on join when something's new, plus rotating chat tips. /realm:news",
     "uuid": "6cb00063-90ec-42cd-b7e5-cafc4e0b517a",
-    "version": [1, 6, 1],
+    "version": [1, 6, 2],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

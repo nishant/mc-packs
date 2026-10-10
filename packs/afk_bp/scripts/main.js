@@ -23,15 +23,25 @@ const MIN_SLEEP_TICKS = 140;
  */
 const players = new Map();
 
+/** The name tag without our AFK prefix (another pack, such as Nicknames, may have set it). @param {Player} player */
+function baseNameTag(player) {
+  const tag = player.nameTag;
+  const base = tag.startsWith(CONFIG.nameTagPrefix) ? tag.slice(CONFIG.nameTagPrefix.length) : tag;
+  return base || player.name;
+}
+
+/** Takes our AFK prefix off the name tag, keeping whatever else is there (a nickname or title). @param {Player} player */
+function clearNameTag(player) {
+  if (player.nameTag.startsWith(CONFIG.nameTagPrefix)) player.nameTag = baseNameTag(player);
+}
+
 /** @param {Player} player */
 function getState(player) {
   let s = players.get(player.id);
   if (!s) {
     // No state yet but still tagged: left over from before a script reload.
-    if (player.hasTag(CONFIG.tag)) {
-      player.removeTag(CONFIG.tag);
-      player.nameTag = player.name;
-    }
+    if (player.hasTag(CONFIG.tag)) player.removeTag(CONFIG.tag);
+    clearNameTag(player);
     const r = player.getRotation();
     s = { lastActive: system.currentTick, graceUntil: 0, yaw: r.y, pitch: r.x };
     players.set(player.id, s);
@@ -73,9 +83,13 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   // Clean up anything left over from a previous session.
   players.delete(player.id);
-  player.nameTag = player.name;
-  player.removeTag(CONFIG.tag);
-  getState(player);
+  try {
+    clearNameTag(player);
+    player.removeTag(CONFIG.tag);
+    getState(player);
+  } catch (e) {
+    console.warn(`[afk] ${e}`);
+  }
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => players.delete(playerId));
@@ -93,13 +107,14 @@ function setAfk(player, afk) {
 
   if (afk) {
     s.afkSince = system.currentTick;
-    player.nameTag = CONFIG.nameTagPrefix + player.name;
+    // Prefix the current tag rather than the gamertag, so a nickname or title stays.
+    player.nameTag = CONFIG.nameTagPrefix + baseNameTag(player);
     player.addTag(CONFIG.tag);
     if (announces(player)) world.sendMessage(`§7${player.name} is now AFK`);
   } else {
     const minutes = Math.round((system.currentTick - (s.afkSince ?? system.currentTick)) / 1200);
     s.afkSince = undefined;
-    player.nameTag = player.name;
+    clearNameTag(player);
     player.removeTag(CONFIG.tag);
     if (announces(player)) world.sendMessage(`§7${player.name} is back${minutes > 0 ? ` (AFK ${minutes}m)` : ""}`);
   }
@@ -120,12 +135,16 @@ system.runInterval(() => {
 
       if (turned || moving) markActive(player);
       else if (player.isSleeping) s.lastActive = now; // lying in bed waiting for the night isn't AFK
-      else if (s.afkSince === undefined && !player.isSleeping && now - s.lastActive >= get("afkMinutes") * 60 * 20) setAfk(player, true);
+      else if (s.afkSince === undefined && now - s.lastActive >= get("afkMinutes") * 60 * 20) setAfk(player, true);
     } catch (e) {
       console.warn(`[afk] ${e}`);
     }
   }
-  if (get("sleep.enabled")) checkSleep();
+  try {
+    if (get("sleep.enabled")) checkSleep();
+  } catch (e) {
+    console.warn(`[afk] sleep: ${e}`);
+  }
 }, CHECK_TICKS);
 
 // ---------------------------------------------------------------------------
@@ -133,10 +152,34 @@ system.runInterval(() => {
 // ---------------------------------------------------------------------------
 
 let sleepTicks = 0;
-let thundering = false;
+/** Weather can't be read, only watched: saved so a storm that started before a restart is still known. */
+const PROP_THUNDER = "afk:thunder";
+/** @type {boolean | undefined} undefined until read from the world */
+let thundering;
+
+function isThundering() {
+  if (thundering === undefined) {
+    try {
+      thundering = world.getDynamicProperty(PROP_THUNDER) === true;
+    } catch {
+      return false;
+    }
+  }
+  return thundering;
+}
+
+/** @param {boolean} value */
+function setThundering(value) {
+  thundering = value;
+  try {
+    world.setDynamicProperty(PROP_THUNDER, value || undefined);
+  } catch (e) {
+    console.warn(`[afk] ${e}`);
+  }
+}
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension === "minecraft:overworld") thundering = newWeather === WeatherType.Thunder;
+  if (dimension === "minecraft:overworld") setThundering(newWeather === WeatherType.Thunder);
 });
 
 function checkSleep() {
@@ -159,7 +202,12 @@ function checkSleep() {
   const awake = counted.filter((p) => !p.isSleeping);
   const names = awake.length && awake.length <= 3 ? ` §7- awake: ${awake.map((p) => p.name).join(", ")}` : "";
   const status = `§eZzz ${sleeping.length}/${needed} sleeping${names}${afkCount ? ` §7(${afkCount} AFK ignored)` : ""}`;
-  for (const p of all) if (p.dimension.id === "minecraft:overworld") p.onScreenDisplay.setActionBar(status);
+  for (const p of all) {
+    if (p.dimension.id !== "minecraft:overworld") continue;
+    p.onScreenDisplay.setActionBar(status);
+    // Ask the Coordinates HUD, if installed, to leave the status on screen until the next check.
+    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: CHECK_TICKS * 2 }));
+  }
 
   if (sleeping.length < needed) {
     sleepTicks = 0;
@@ -182,14 +230,14 @@ function checkSleep() {
 
   const timeOfDay = world.getTimeOfDay();
   const night = timeOfDay >= 12000;
-  if (!night && !thundering) return; // vanilla already woke everyone up
+  if (!night && !isThundering()) return; // vanilla already woke everyone up
 
   if (night) {
     // Advance to the next morning (keeps the day counter correct, unlike setTimeOfDay).
     world.setAbsoluteTime(world.getAbsoluteTime() - timeOfDay + 24000);
   }
   world.getDimension("overworld").setWeather(WeatherType.Clear);
-  thundering = false;
+  setThundering(false);
   world.sendMessage(afkCount ? `§eGood morning! §7(${afkCount} AFK player${afkCount > 1 ? "s" : ""} skipped)` : "§eGood morning!");
 }
 

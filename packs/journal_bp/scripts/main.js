@@ -12,8 +12,10 @@ const OVERWORLD = "minecraft:overworld";
 const EXTRAS_PER_PAGE = 40; // entries other packs send that aren't in config.js, kept per page
 const ENTRY_ID = /^[a-z0-9_:.-]{1,40}$/;
 const LABEL_MAX = 40;
+const SAVE_LIMIT = 30000; // a string property holds at most about 32,000 characters
 const DEEP_SKY = 24; // deeper under the surface than this, you can't see the weather
-const FISH_TICKS = 20; // a catch appears within a second of its hook going
+const CATCH_TICKS = 4; // a catch appears within a few ticks of its hook going
+const MIN_HOOK_TICKS = 30; // a hook out for less than this can't have caught anything
 
 /** @typedef {typeof CONFIG.pages[number]} Page */
 /** @typedef {Page["id"]} PageId */
@@ -96,10 +98,18 @@ function dataOf(player) {
   return data;
 }
 
-/** @param {Player} player @param {Data} data */
+/** Saves the journal; false if it couldn't (too big for one property). @param {Player} player @param {Data} data */
 function save(player, data) {
   cache.set(player.id, data);
-  player.setDynamicProperty(PROP_DATA, JSON.stringify(data));
+  const json = JSON.stringify(data);
+  if (json.length > SAVE_LIMIT) return false;
+  try {
+    player.setDynamicProperty(PROP_DATA, json);
+    return true;
+  } catch (e) {
+    console.warn(`[journal] save: ${e}`);
+    return false;
+  }
 }
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -129,15 +139,28 @@ function addEntry(player, pageId, entry, label) {
   const list = (data.e[pageId] ??= []);
   if (list.includes(entry)) return false;
   const known = p.labels.has(entry);
+  const key = `${pageId}:${entry}`;
   if (!known) {
     const extras = list.filter((id) => !p.labels.has(id)).length;
     if (extras >= EXTRAS_PER_PAGE) return false;
-    data.l[`${pageId}:${entry}`] = (label || prettyId(entry)).slice(0, LABEL_MAX);
+    const text = String(label || "").replace(/§./g, "").trim().slice(0, LABEL_MAX);
+    if (text && text !== prettyId(entry)) data.l[key] = text; // the name from the id needs no saving
   }
   list.push(entry);
-  save(player, data);
+  if (!save(player, data)) {
+    if (known) {
+      // Full of other packs' entries: their saved names go (they show from their ids), real entries stay.
+      data.l = {};
+      if (!save(player, data)) return false;
+    } else {
+      // Full: undo, so the journal keeps saving what it already has.
+      list.pop();
+      delete data.l[key];
+      return false;
+    }
+  }
   if (getFor(player, "notes") === true) {
-    const name = known ? p.labels.get(entry) : data.l[`${pageId}:${entry}`];
+    const name = known ? p.labels.get(entry) : (data.l[key] ?? prettyId(entry));
     const hint = firstNote.has(player.id) ? "" : " §7(/realm:journal)";
     firstNote.add(player.id);
     player.sendMessage(`§aJournal: New entry in ${p.page.label} - ${name}${hint}`);
@@ -180,12 +203,15 @@ function checkComplete(player, data, page) {
 // Mobs
 // ---------------------------------------------------------------------------
 
+/** Things that "die" but aren't mobs: never a Mobs entry. */
+const NOT_MOBS = new Set(["npc", "armor_stand", "player", "ender_crystal", "boat", "chest_boat", "minecart", "chest_minecart", "hopper_minecart", "tnt_minecart", "command_block_minecart", "painting", "leash_knot", "item_frame", "glow_item_frame"].map((m) => `minecraft:${m}`));
+
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   const killer = damageSource.damagingEntity;
   if (!(killer instanceof Player) || deadEntity instanceof Player) return;
   try {
     const type = deadEntity.typeId;
-    if (type === "minecraft:npc" || type === "minecraft:armor_stand") return;
+    if (NOT_MOBS.has(type)) return;
     addEntry(killer, "mobs", type.startsWith("minecraft:") ? type.slice(10) : type);
   } catch (e) {
     console.warn(`[journal] ${e}`);
@@ -314,35 +340,64 @@ system.runInterval(() => {
 }, 40);
 
 // ---------------------------------------------------------------------------
-// Fish: a hook belongs to the player nearest to it when it appears; an item that appears where a
-// hook just was is that player's catch (the same way the Daily Quests pack sees catches).
+// Fish: a hook belongs to the player nearest to it when it appears. A catch is an item that appears
+// right where that hook was, in water, as the hook is reeled in (the same check as the Skills pack).
+// An item a player drops appears at their head instead, so dropping a fish by your hook doesn't count.
 // ---------------------------------------------------------------------------
 
 const fishPage = pages.get("fish");
 /** "minecraft:cod" -> "cod", for the fish entries in config.js. */
 const fishItems = new Map((fishPage?.page.entries ?? []).map((e) => [`minecraft:${e.id}`, e.id]));
-/** @type {Map<string, { hook: import("@minecraft/server").Entity, owner: Player, dim: string, at: import("@minecraft/server").Vector3, seen: number }>} */
+/** @type {Map<string, { hook: import("@minecraft/server").Entity, owner: Player, dim: string, at: import("@minecraft/server").Vector3, born: number, wet: boolean, gone?: number, item?: { id: string, tick: number } }>} */
 const hooks = new Map();
+
+/** @param {import("@minecraft/server").Dimension} dimension @param {import("@minecraft/server").Vector3} at */
+function isWater(dimension, at) {
+  const b = blockAt(dimension, at);
+  return !!b && (b.typeId === "minecraft:water" || b.typeId === "minecraft:flowing_water" || b.isWaterlogged);
+}
+
+/** Did this item appear at a player's head (dropped, not caught)? @param {import("@minecraft/server").Dimension} dimension @param {import("@minecraft/server").Vector3} at */
+function droppedByPlayer(dimension, at) {
+  for (const p of dimension.getPlayers({ location: at, maxDistance: 3 })) {
+    try {
+      const head = p.getHeadLocation();
+      if (Math.hypot(head.x - at.x, head.y - at.y, head.z - at.z) < 1.2) return true;
+    } catch {
+      // gone
+    }
+  }
+  return false;
+}
+
+/** @param {Player} owner @param {string} item */
+function caught(owner, item) {
+  const fish = fishItems.get(item);
+  if (fish && owner.isValid) addEntry(owner, "fish", fish);
+}
 
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
       if (get("enabled") !== true) return;
       const [owner] = entity.dimension.getPlayers({ location: entity.location, maxDistance: 4, closest: 1 });
-      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick });
+      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, born: system.currentTick, wet: false });
       return;
     }
     if (entity.typeId !== "minecraft:item" || !hooks.size) return;
     const stack = entity.getComponent("minecraft:item")?.itemStack;
     if (!stack) return;
     const at = entity.location;
+    const now = system.currentTick;
     for (const [id, h] of hooks) {
       if (h.dim !== entity.dimension.id) continue;
-      if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
-      hooks.delete(id);
-      const fish = fishItems.get(stack.typeId);
-      if (fish && h.owner.isValid) addEntry(h.owner, "fish", fish);
-      break;
+      if (Math.hypot(h.at.x - at.x, h.at.y - at.y, h.at.z - at.z) > 2) continue;
+      if (!h.wet || now - h.born < MIN_HOOK_TICKS || droppedByPlayer(entity.dimension, at)) return;
+      if (h.gone !== undefined || !h.hook.isValid) {
+        hooks.delete(id);
+        if (now - (h.gone ?? now) <= CATCH_TICKS) caught(h.owner, stack.typeId);
+      } else h.item = { id: stack.typeId, tick: now };
+      return;
     }
   } catch (e) {
     console.warn(`[journal] ${e}`);
@@ -351,17 +406,24 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
 
 system.runInterval(() => {
   if (!hooks.size) return;
+  const now = system.currentTick;
   for (const [id, h] of hooks) {
-    if (h.hook.isValid) {
+    if (h.gone === undefined && h.hook.isValid) {
       try {
         h.at = h.hook.location;
-        h.seen = system.currentTick;
+        if (!h.wet && now % 4 === 0) h.wet = isWater(h.hook.dimension, h.at) || isWater(h.hook.dimension, { x: h.at.x, y: h.at.y - 0.5, z: h.at.z });
       } catch {
         // unloaded
       }
-    } else if (system.currentTick - h.seen > FISH_TICKS) hooks.delete(id);
+      continue;
+    }
+    if (h.gone === undefined) h.gone = now;
+    if (h.item && now - h.item.tick <= CATCH_TICKS) {
+      hooks.delete(id);
+      caught(h.owner, h.item.id);
+    } else if (now - h.gone > CATCH_TICKS) hooks.delete(id);
   }
-}, 2);
+}, 1);
 
 // ---------------------------------------------------------------------------
 // Other packs: realm:journal, realm:sky_event, realm:moon

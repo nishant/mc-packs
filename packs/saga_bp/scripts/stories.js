@@ -22,8 +22,9 @@
  * - `deliver`: bring `count` of `item` to NPC `npc` (taken from your inventory when you talk to them).
  * - `collect`: have `count` of `item` in your inventory.
  * - `defeat`: defeat `count` mobs from `mobs` (any mob when left out), or with `champion` a champion
- *   spawned at the place when you come within `radius` (default 32).
- * - `interact`: tap (use) one of `blocks` `count` times within `radius` (default 8) of a place.
+ *   spawned at the place when you come within `radius` (default 32). The champion's `tag` must start
+ *   with `realm:` (`realm:saga:bell_warden`): the Champions pack ignores any other tag.
+ * - `interact`: tap (use) or hit one of `blocks` `count` times within `radius` (default 8) of a place.
  * - `survive`: be outdoors (nothing over your head) in a thunderstorm for `seconds`, within `radius`
  *   of the place when one is given.
  * - `mine`: break `count` of `blocks` (any when left out). `fish`: catch `count` of `items` (any).
@@ -253,7 +254,7 @@ export const STORIES = [
             place: "sunken_bell",
             radius: 32,
             count: 1,
-            champion: { tag: "saga_bell_warden", mob: "minecraft:drowned", name: "The Bell Warden", warn: "The water around the bell goes cold. Something is coming." },
+            champion: { tag: "realm:saga:bell_warden", mob: "minecraft:drowned", name: "The Bell Warden", warn: "The water around the bell goes cold. Something is coming." },
           },
         ],
         outro: [

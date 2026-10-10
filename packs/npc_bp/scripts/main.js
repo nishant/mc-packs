@@ -339,7 +339,10 @@ function turn(entity, st, at, yaw, snap) {
   if (Math.abs(diff) < TURN_MIN) return;
   const next = snap ? yaw : wrap(current + Math.max(-TURN_STEP, Math.min(TURN_STEP, diff)));
   const loc = entity.location;
-  entity.teleport(dist(loc, at) > 0.3 ? at : loc, { rotation: { x: 0, y: next } });
+  // Nudged a little: back onto its spot while turning. Far from it (home not loaded yet): turn in place, never
+  // teleport into a spot that may not be loaded.
+  const d = dist(loc, at);
+  entity.teleport(d > 0.3 && d <= MOVE_DISTANCE ? at : loc, { rotation: { x: 0, y: next } });
   st.yaw = next;
 }
 
@@ -361,8 +364,11 @@ function say(entity, t, line) {
 /** @param {string} line @param {string} name */
 const fill = (line, name) => line.split("{player}").join(name);
 
-/** @param {Placed} rec @param {Townsfolk} t @param {Entity} entity */
-function behave(rec, t, entity) {
+/**
+ * Keeps an NPC at its spot (always), and with `lively` turns it toward players and has it say idle lines.
+ * @param {Placed} rec @param {Townsfolk} t @param {Entity} entity @param {boolean} lively
+ */
+function behave(rec, t, entity, lively) {
   const st = stateOf(rec.id);
   const dim = world.getDimension(rec.dim);
   const at = anchorOf(rec);
@@ -374,14 +380,15 @@ function behave(rec, t, entity) {
     }
     return;
   }
+  if (!lively) return;
   const range = Number(get("faceRange")) || 0;
   const loc = entity.location;
-  const [near] = range > 0 ? dim.getPlayers({ location: loc, maxDistance: range, closest: 1 }) : [];
+  const [near] = range > 0 ? dim.getPlayers({ location: loc, maxDistance: range, closest: 1, excludeGameModes: [GameMode.Spectator] }) : [];
   turn(entity, st, at, near ? yawTo(loc, near.location) : rec.yaw, false);
 
   if (system.currentTick >= st.nextIdle) {
     st.nextIdle = system.currentTick + idleDelay();
-    const [listener] = dim.getPlayers({ location: loc, maxDistance: CONFIG.idleRange, closest: 1 });
+    const [listener] = dim.getPlayers({ location: loc, maxDistance: CONFIG.idleRange, closest: 1, excludeGameModes: [GameMode.Spectator] });
     if (!listener) return;
     // Mostly idle chatter, sometimes a remark that fits the time and weather.
     const line = Math.random() < 0.7 ? pick(t.idle) : pick(t.greetings[situation(rec.dim)] ?? []);
@@ -403,7 +410,7 @@ function loop() {
         continue;
       }
       stateOf(rec.id).missing = 0;
-      if (lively) behave(rec, t, entity);
+      behave(rec, t, entity, lively);
     } catch (e) {
       console.warn(`[npc] ${rec.id}: ${e}`); // usually an unloaded chunk
     }
@@ -528,6 +535,7 @@ system.afterEvents.scriptEventReceive.subscribe(
     try {
       const o = JSON.parse(message);
       if (!o || typeof o.req !== "string" || typeof o.pack !== "string" || typeof o.key !== "string" || typeof o.label !== "string") return;
+      if (o.pack === "npc_bp" || !o.label.trim()) return; // our own button is added below; an empty label makes a blank button
       const offers = rounds.get(o.req);
       if (!offers || offers.length >= MAX_OFFERS || offers.some((x) => x.pack === o.pack && x.key === o.key)) return;
       const order = typeof o.order === "number" && Number.isFinite(o.order) ? o.order : 50;
@@ -619,7 +627,11 @@ function addNpc(player, id) {
       moved = true;
     } catch (e) {
       console.warn(`[npc] move ${id}: ${e}`);
-      entity.remove();
+      try {
+        entity.remove();
+      } catch {
+        // gone already: the audit removes any leftover
+      }
     }
   }
   // Not loaded (or couldn't move): a new one here; the old one is removed when its chunk loads.

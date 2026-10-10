@@ -316,6 +316,12 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
     for (const [id, h] of hooks) {
       if (h.dim !== entity.dimension.id) continue;
       if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
+      // An item dropped from the inventory appears at the owner's head, not at the hook: dropping
+      // fish next to a hook close by isn't a catch.
+      if (h.owner.isValid) {
+        const head = h.owner.getHeadLocation();
+        if (Math.hypot(head.x - at.x, head.y - at.y, head.z - at.z) < 1) continue;
+      }
       hooks.delete(id);
       if (h.owner.isValid) progress(h.owner, "fish", stack.typeId, stack.amount);
       break;

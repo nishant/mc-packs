@@ -4,7 +4,7 @@
     "name": "Merchant Caravan",
     "description": "Every week a merchant caravan visits for a while and sells rare goods for Crowns. /realm:caravan",
     "uuid": "caf88624-ed95-4060-88eb-c8874d4d2857",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

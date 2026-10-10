@@ -4,7 +4,7 @@
     "name": "Champions",
     "description": "A few night monsters become named champions with a trait, tougher than the rest, that drop Relic Shards. /realm:champions",
     "uuid": "cb6d4753-c368-4fa9-bea6-371f06f65106",
-    "version": [1, 0, 0],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

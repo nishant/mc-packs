@@ -54,7 +54,8 @@ const DIFFICULTY = ["", "Easy", "Normal", "Hard"];
  * @typedef {{ id: number, slot: number, dungeon: Dungeon, seed: number, o: Vector3, lay: Layout, leaderName: string,
  *   members: Map<string, Member>, phase: "gathering" | "building" | "active" | "finishing" | "resetting",
  *   started: number, deadline: number, room: number, roomActive: boolean, wave: number, waves: number, mobs: Entity[],
- *   nextWaveAt: number, bossId?: string, bossGone: number, solved: boolean, finishAt: number, clearMs: number }} Run
+ *   nextWaveAt: number, bossId?: string, bossGone: number, solved: boolean, finishAt: number, clearMs: number, checked: boolean }} Run
+ * checked: the box was found to hold only natural blocks, so the dungeon may be built and later filled in
  */
 /** @typedef {{ t: number, n: string, at: number }} Best */
 
@@ -401,14 +402,16 @@ function sign(dim, at, facing, text) {
 
 /**
  * Runs the steps as a job, a few per tick, so a big fill never stalls the server. Resolves with how many failed.
- * @param {(() => void)[]} steps @returns {Promise<number>}
+ * Stops early once `live` says no.
+ * @param {(() => void)[]} steps @param {() => boolean} [live] @returns {Promise<number>}
  */
-function runSteps(steps) {
+function runSteps(steps, live = () => true) {
   return new Promise((resolve) => {
     system.runJob(
       (function* () {
         let failed = 0;
         for (const s of steps) {
+          if (!live()) break; // the run was ended meanwhile: its reset takes over
           try {
             s();
           } catch (e) {
@@ -598,8 +601,14 @@ async function resetBox(rec) {
     for (const e of dim.getEntities({ location: from, volume: { x: SIZE - 1, y: 8, z: SIZE - 1 } })) {
       if (!e.isValid) continue;
       if (e instanceof Player) {
-        e.teleport(out, { dimension: dim });
-        e.sendMessage("§eThe expedition dungeon was closed, so you were moved to the surface.");
+        const ret = returnSpot(e);
+        if (ret) {
+          teleportBack(e, ret);
+          e.sendMessage("§eThe expedition dungeon was closed, so you were sent back to where you started.");
+        } else {
+          e.teleport(out, { dimension: dim });
+          e.sendMessage("§eThe expedition dungeon was closed, so you were moved to the surface.");
+        }
       } else if (e.hasTag(MOB_TAG) || LITTER.has(e.typeId) || DUNGEON_MOBS.has(e.typeId)) e.remove();
       else e.teleport(out, { dimension: dim });
     }
@@ -778,12 +787,14 @@ async function start(leader, d) {
     solved: false,
     finishAt: 0,
     clearMs: 0,
+    checked: false,
   };
   runs.set(slot, run);
   try {
     const invite = others.filter((p) => p.isValid && !runOf(p.id));
     if (invite.length) leader.sendMessage(`§7Asking ${invite.map((p) => p.name).join(", ")}...`);
     const answers = await Promise.all(invite.map((p) => ask(p, leader.name, d)));
+    if (runs.get(slot) !== run || run.phase !== "gathering") return; // ended meanwhile (an operator's reset)
     invite.forEach((p, i) => {
       if (answers[i] && p.isValid && !runOf(p.id) && run.members.size < get("maxParty")) run.members.set(p.id, { name: p.name, since: 0, away: 0 });
       else if (p.isValid) leader.sendMessage(`§7${p.name} isn't coming.`);
@@ -802,19 +813,41 @@ async function start(leader, d) {
   }
 }
 
+/**
+ * Before the box is sealed: players (someone mining in a cave there), dropped items and pets in it are moved to
+ * the surface, so nobody and nothing of theirs is shut in the rock. @param {Run} run
+ */
+function clearBox(run) {
+  try {
+    const dim = overworld();
+    const { from } = box(run.o);
+    const out = surface(run.o);
+    for (const e of dim.getEntities({ location: from, volume: { x: SIZE - 1, y: 8, z: SIZE - 1 } })) {
+      if (!e.isValid) continue;
+      const keep = e instanceof Player || LITTER.has(e.typeId) || !!e.nameTag || !!e.getComponent("minecraft:is_tamed");
+      if (!keep) continue; // wild cave mobs are left to the rock, as any cave-in would
+      e.teleport(out, { dimension: dim });
+      if (e instanceof Player) e.sendMessage("§eAn expedition dungeon is being built where you were, so you were moved to the surface.");
+    }
+  } catch (e) {
+    console.warn(`[expedition] clear box: ${e}`);
+  }
+}
+
 /** Ticking area, checks, building, then everyone in. @param {Run} run */
 async function prepare(run) {
   run.phase = "building";
-  saveRun(run);
+  // The record is saved only once the box is checked (below): a restart before then has nothing to fill in.
   tell(run, `§7Preparing the ${run.dungeon.name}...`);
   if (!addArea(run.slot, run.o)) {
     // Already there after a reset cut short, or the world has its 10 ticking areas: the load check decides.
     console.warn(`[expedition] tickingarea add for slot ${run.slot} failed`);
   }
-  if (!(await waitLoaded(run.o, 30))) {
+  const loaded = await waitLoaded(run.o, 30);
+  if (run.phase !== "building") return; // ended meanwhile: endRun cleaned up
+  if (!loaded) {
     tell(run, "§cThe dungeon area couldn't be loaded (the world may already have 10 ticking areas). Ask an operator to check /tickingarea list.");
     removeArea(run.slot);
-    writeJson(PROP_RUN + run.slot, undefined);
     runs.delete(run.slot);
     return;
   }
@@ -830,11 +863,14 @@ async function prepare(run) {
     for (const p of world.getAllPlayers()) if (isOp(p)) p.sendMessage(`§c[Expeditions] Slot ${run.slot + 1}: found ${prettyId(foreign.type)} at ${where} in the dungeon area. Dungeons only replace natural underground blocks: pick another site with /realm:expedition_site.`);
     console.warn(`[expedition] slot ${run.slot}: ${foreign.type} at ${where}`);
     removeArea(run.slot);
-    writeJson(PROP_RUN + run.slot, undefined);
     runs.delete(run.slot);
     return;
   }
-  const failed = await runSteps(buildSteps(run));
+  run.checked = true;
+  saveRun(run);
+  clearBox(run);
+  const failed = await runSteps(buildSteps(run), () => run.phase === "building");
+  if (run.phase !== "building") return; // ended while building: its reset fills the box in
   if (failed) {
     tell(run, "§cThe dungeon couldn't be built. Try again in a moment.");
     await endRun(run, "");
@@ -913,33 +949,45 @@ function giveBack(p) {
   p.sendMessage(`§aThe items you dropped in the dungeon are back with you.${spilled ? " Some are at your feet: your inventory is full." : ""}`);
 }
 
+/** Where the player started their expedition, or undefined. @param {Player} p @returns {any} */
+function returnSpot(p) {
+  try {
+    const raw = p.getDynamicProperty(PROP_RETURN);
+    return typeof raw === "string" ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Teleports a player back to where they started (or the world spawn) right now. The spot is forgotten only once
+ * the teleport worked, so a failed one (a dead player, say) is tried again when they next spawn.
+ * @param {Player} p @param {any} ret
+ */
+function teleportBack(p, ret) {
+  let dim;
+  try {
+    dim = ret && typeof ret.d === "string" ? world.getDimension(ret.d) : undefined;
+  } catch {
+    dim = undefined;
+  }
+  if (dim && typeof ret.x === "number" && typeof ret.y === "number" && typeof ret.z === "number") p.teleport({ x: ret.x, y: ret.y, z: ret.z }, { dimension: dim });
+  else p.teleport(world.getDefaultSpawnLocation(), { dimension: overworld() });
+  p.setDynamicProperty(PROP_RETURN, undefined);
+  giveBack(p);
+}
+
 /**
  * Sends a player back to where they started the expedition (or the world spawn), and forgets the spot.
  * @param {Player} p @param {boolean} [withFade]
  */
 function sendBack(p, withFade = true) {
-  let ret;
-  try {
-    const raw = p.getDynamicProperty(PROP_RETURN);
-    ret = typeof raw === "string" ? JSON.parse(raw) : undefined;
-  } catch {
-    ret = undefined;
-  }
-  p.setDynamicProperty(PROP_RETURN, undefined);
+  const ret = returnSpot(p);
   if (withFade) fade(p);
   system.runTimeout(
     () => {
       try {
-        if (!p.isValid) return;
-        let dim;
-        try {
-          dim = ret && typeof ret.d === "string" ? world.getDimension(ret.d) : undefined;
-        } catch {
-          dim = undefined;
-        }
-        if (dim && typeof ret.x === "number") p.teleport({ x: ret.x, y: ret.y, z: ret.z }, { dimension: dim });
-        else p.teleport(world.getDefaultSpawnLocation(), { dimension: overworld() });
-        giveBack(p);
+        if (p.isValid) teleportBack(p, ret);
       } catch (e) {
         console.warn(`[expedition] send back: ${e}`);
       }
@@ -959,17 +1007,19 @@ function dropMember(run, id) {
 /** Ends a run: everyone out, then the box is reset and the slot freed. @param {Run} run @param {string} why */
 async function endRun(run, why) {
   if (run.phase === "resetting") return;
-  const wasBuilt = run.phase !== "gathering";
+  const wasBuilding = run.phase === "building";
+  const wasBuilt = run.checked; // only a box found clean was ever touched, so only that one is filled in
   run.phase = "resetting";
   if (why) tell(run, why);
   for (const id of [...run.members.keys()]) {
     const p = online(id);
-    if (p) sendBack(p);
+    if (p && returnSpot(p)) sendBack(p); // members still getting ready were never taken anywhere
   }
   run.members.clear();
   for (const m of run.mobs) if (m.isValid) m.remove();
   if (run.bossId) world.getEntity(run.bossId)?.remove();
   if (!wasBuilt) {
+    if (wasBuilding) removeArea(run.slot);
     runs.delete(run.slot);
     return;
   }
@@ -1217,6 +1267,10 @@ function tickRun(run, players) {
         }
       }
     } else if (room.kind === "puzzle") {
+      if (!run.solved && beat % 2 === 0 && leversSolved(run)) {
+        run.solved = true; // set right without a lever event we heard (before the room woke up, say)
+        tell(run, "§aClick. Something heavy moves behind the wall: the puzzle is solved!");
+      }
       if (run.solved) clearRoom(run);
     } else if (room.kind === "boss") {
       if (run.nextWaveAt && now >= run.nextWaveAt) {
@@ -1236,6 +1290,16 @@ function tickRun(run, players) {
       if (p) actionbar(p, `§e${run.dungeon.name} §f${t} §7| ${objective(run)}`);
     }
   }
+}
+
+/** Do the four levers match the solution? @param {Run} run */
+function leversSolved(run) {
+  const pi = run.lay.rooms.findIndex((r) => r.kind === "puzzle");
+  if (pi < 0) return false;
+  return puzzleSpots(run.o, run.lay, pi).levers.every((at, i) => {
+    const b = overworld().getBlock(at);
+    return b?.typeId === "minecraft:lever" && (b.permutation.getState("open_bit") === true) === run.lay.solution[i];
+  });
 }
 
 /** @param {Run} run */
@@ -1339,9 +1403,9 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
     if (typeof raw !== "string") return;
     if (runOf(player.id)) return; // still in a run (teleporting in)
     // Respawned after dying in a dungeon, or rejoined after leaving the game mid-run or after a restart.
-    system.runTimeout(() => {
+    system.run(() => {
       if (player.isValid && !runOf(player.id)) sendBack(player, false);
-    }, 5);
+    });
   } catch (e) {
     console.warn(`[expedition] spawn: ${e}`);
   }
@@ -1355,14 +1419,14 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   dropMember(run, playerId);
 });
 
-/** Is this spot in a dungeon that exists right now? @param {Vector3} p */
-const inDungeon = (p) => [...runs.values()].some((r) => r.phase !== "gathering" && inBox(r.o, p));
+/** Is this spot in a dungeon that exists right now (or one still waiting to be filled in)? @param {Vector3} p */
+const inDungeon = (p) => [...runs.values()].some((r) => r.checked && inBox(r.o, p)) || [...pending.values()].some((r) => inBox({ x: r.x, y: r.y, z: r.z }, p));
 /** @param {Player} p */
 const builder = (p) => isOp(p) && p.getGameMode() === GameMode.Creative;
 
 // The dungeon's walls hold the rooms together and its blocks must all be its own for the reset: no breaking...
 world.beforeEvents.playerBreakBlock.subscribe((ev) => {
-  if (!runs.size || ev.dimension.id !== OVERWORLD || !inDungeon(ev.block.location) || builder(ev.player)) return;
+  if ((!runs.size && !pending.size) || ev.dimension.id !== OVERWORLD || !inDungeon(ev.block.location) || builder(ev.player)) return;
   ev.cancel = true;
   const p = ev.player;
   system.run(() => {
@@ -1373,7 +1437,7 @@ world.beforeEvents.playerBreakBlock.subscribe((ev) => {
 // ...and blocks placed in it pop back out as items (with their contents, for a shulker box).
 world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
   try {
-    if (!runs.size || block.dimension.id !== OVERWORLD || !inDungeon(block.location) || builder(player)) return;
+    if ((!runs.size && !pending.size) || block.dimension.id !== OVERWORLD || !inDungeon(block.location) || builder(player)) return;
     block.dimension.runCommand(`setblock ${block.x} ${block.y} ${block.z} air destroy`);
     actionbar(player, "§7Blocks placed in the dungeon pop back out.");
   } catch (e) {
@@ -1383,16 +1447,25 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
 
 world.afterEvents.worldLoad.subscribe(() => {
   // Runs live in memory: one cut short by a restart can't go on, so its dungeon is reset. Its players
-  // are sent back by playerSpawn when they join.
-  system.runTimeout(async () => {
-    for (let slot = 0; slot < 3; slot++) {
-      const rec = readJson(PROP_RUN + slot);
-      if (!rec || typeof rec.seed !== "number" || typeof rec.x !== "number") {
-        removeArea(slot); // a leftover ticking area, if any
-        continue;
-      }
-      pending.set(slot, rec);
+  // are sent back by playerSpawn when they join. The records are read at once, so no new run can take
+  // their slot before the reset below.
+  for (let slot = 0; slot < 3; slot++) {
+    const rec = readJson(PROP_RUN + slot);
+    if (!rec || typeof rec.seed !== "number" || typeof rec.x !== "number" || typeof rec.y !== "number" || typeof rec.z !== "number") {
+      removeArea(slot); // a leftover ticking area, if any
+      continue;
     }
+    pending.set(slot, { ...rec, slot });
+  }
+  // After a script reload players are still online: anyone left in a dungeon goes back to where they started.
+  for (const p of world.getAllPlayers()) {
+    try {
+      if (!runOf(p.id) && typeof p.getDynamicProperty(PROP_RETURN) === "string") sendBack(p, false);
+    } catch (e) {
+      console.warn(`[expedition] reload: ${e}`);
+    }
+  }
+  system.runTimeout(async () => {
     try {
       for (const e of overworld().getEntities({ tags: [MOB_TAG] })) e.remove();
     } catch {

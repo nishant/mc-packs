@@ -4,7 +4,7 @@
     "name": "Storm Chasing",
     "description": "Thunderstorms bring a drifting storm cell full of lightning to hunt down, and struck lightning rods give Storm Glass. /realm:storm",
     "uuid": "6540ee31-3904-4ab5-a977-d106937548d6",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
@@ -16,8 +16,5 @@
       "entry": "scripts/main.js"
     }
   ],
-  "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
-  ]
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
 }

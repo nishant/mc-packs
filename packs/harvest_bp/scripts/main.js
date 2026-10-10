@@ -1,4 +1,4 @@
-import { Block, ItemStack, Player, system, world } from "@minecraft/server";
+import { Block, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 
@@ -34,11 +34,14 @@ function ripeCrop(block) {
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, itemStack, isFirstEvent } = event;
-  if (!isFirstEvent || player.isSneaking) return;
+  // Another pack already stopped this tap (Land Claims in someone else's claim): leave the crop alone.
+  if (event.cancel || !isFirstEvent || player.isSneaking) return;
   // Seeds, bone meal and anything else in hand keep their vanilla use.
   if (itemStack ? !isHoe(itemStack) : get("requireHoe")) return;
   const crop = ripeCrop(block);
   if (!crop) return;
+  // Adventure mode can't break blocks, so it can't harvest either (spectators can't tap blocks).
+  if (player.getGameMode() === GameMode.Adventure) return;
 
   event.cancel = true;
   const { x, y, z } = block.location;
@@ -63,10 +66,12 @@ function harvest(player, block, crop) {
     block.setPermutation(block.permutation.withState(/** @type {any} */ (crop.state), 0));
   } else {
     block.setType("minecraft:air");
+    // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
+    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
     player.onScreenDisplay.setActionBar("§7No seed to replant it");
   }
   block.dimension.playSound(crop.sound, center);
-  if (get("damageHoe")) damageHeldHoe(player);
+  if (get("damageHoe") && player.getGameMode() !== GameMode.Creative) damageHeldHoe(player);
 }
 
 /**

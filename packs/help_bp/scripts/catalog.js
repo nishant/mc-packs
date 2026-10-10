@@ -28,7 +28,7 @@ export const PACKS = [
         "usage": "/realm:help [feature]",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens the help menu, or the page for §efeature§r (§eafk§r, §echairs§r, §edurability§r, §efarm§r, §efind§r, §eguard§r, §eharvest§r, §enews§r, §ephantom§r, §erain§r, §esettings§r, §estash§r, §estats§r, §ewelcome§r) or §eall§r"
+        "text": "Opens the help menu, or the page for §efeature§r (a pack's folder name without §e_bp§r, such as §estash§r, §ecrowns§r or §equests§r; chat autocompletes them) or §eall§r"
       }
     ]
   },
@@ -85,7 +85,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text.",
+        "text": "§lOperators:§r run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type §e\\n§r for a new line. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text.",
         "ops": true
       }
     ],
@@ -100,7 +100,7 @@ export const PACKS = [
         "usage": "/realm:welcome_edit",
         "ops": true,
         "who": "Ops",
-        "text": "Opens an editor: title, body, button text, and toggles for show once, chat copy, big on-screen title and \"Show it again to players who've seen it\" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once"
+        "text": "Opens an editor: title, body (Minecraft's text boxes hold only 100 characters each, so the body is split over at least 4 boxes, joined in order with nothing between them; §e\\n§r is a new line; all boxes empty = the default text), button text, and toggles for show once, chat copy, big on-screen title and \"Show it again to players who've seen it\" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once"
       },
       {
         "usage": "/realm:welcome_reset",
@@ -369,7 +369,7 @@ export const PACKS = [
         "usage": "/realm:farm",
         "ops": false,
         "who": "Everyone",
-        "text": "Lists the loaded farms. Operators also get a §lRemove§r button for each"
+        "text": "Lists the loaded farms. Operators (everyone, with §eeveryoneCanAdd§r) also get a §lRemove§r button for each"
       },
       {
         "usage": "/realm:farm_add <name> [radius]",
@@ -452,7 +452,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates.",
+        "text": "Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark.",
         "ops": false
       }
     ],
@@ -484,7 +484,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lWhere are the borders?§r §e/realm:claim§r -> §lShow claim borders§r sparkles the edges of every claim near you for 10 seconds. Walking in or out of one says §eEntering Sam's claim§r / §eLeaving Sam's claim§r above the hotbar.",
+        "text": "§lWhere are the borders?§r §e/realm:claim§r -> §lShow claim borders§r sparkles the edges of every claim near you for 10 seconds (asking again starts over). Walking in or out of one says §eEntering Sam's claim§r / §eLeaving Sam's claim§r above the hotbar.",
         "ops": false
       },
       {
@@ -666,7 +666,7 @@ export const PACKS = [
     "summary": "Write letters to anyone who has played on the realm, online or not. Letters to offline players wait in their inbox, and they're told about them when they join. Letters carry words only: for items, see the Player Mailroom build.",
     "steps": [
       {
-        "text": "Run §e/realm:mail§r and pick §lWrite a letter§r. Choose who it's for (everyone who has joined since the pack was added, with §e(online)§r after the ones playing now), type a subject and the letter, and press §lSend§r. Type §e\\n§r in the letter for a new line.",
+        "text": "Run §e/realm:mail§r and pick §lWrite a letter§r. Choose who it's for (everyone who has joined since the pack was added, with §e(online)§r after the ones playing now), type a subject and the letter, and press §lSend§r. Minecraft's text boxes hold only 100 characters each, so the letter has several boxes (6 for the default 600 characters): a full box runs straight on into the next, and after a box that isn't full the next one starts a new line. You can also type §e\\n§r for a new line.",
         "ops": false
       },
       {
@@ -674,7 +674,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lRead your letters:§r §e/realm:mail§r -> §lInbox§r. New letters are marked §e[New]§r. Open one to read it, then §lReply§r or §lDelete§r it. §lDelete all read letters§r clears out the rest.",
+        "text": "§lRead your letters:§r §e/realm:mail§r -> §lInbox§r. New letters are marked §e[New]§r. Open one to read it, then §lReply§r or §lDelete§r it. §lDelete all read letters§r clears out the rest and shows the inbox again.",
         "ops": false
       },
       {
@@ -822,7 +822,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r place a chest or barrel for the donations, look at it and run §e/realm:goals_add <item> <amount> [name]§r, for example §e/realm:goals_add cobblestone 10000 Colosseum§r. In a goal's page, §lMark finished§r stops donations early, §lLink to the block I'm looking at§r moves the goal to another container, and §lRemove this goal§r deletes it (the items stay in its chest).",
+        "text": "§lOperators:§r place a chest or barrel for the donations, look at it and run §e/realm:goals_add <item> <amount> [name]§r, for example §e/realm:goals_add cobblestone 10000 Colosseum§r. In a goal's page, §lMark finished§r stops donations early, §lLink to the block I'm looking at§r moves the goal to another container (one that no other open goal collects into), and §lRemove this goal§r deletes it (the items stay in its chest).",
         "ops": true
       }
     ],
@@ -870,18 +870,18 @@ export const PACKS = [
     "folder": "cleanup_bp",
     "topic": "cleanup",
     "name": "Lag Cleanup",
-    "summary": "When too many dropped items pile up (a broken farm, a big explosion), the realm warns everyone and clears them 30 seconds later, so the server doesn't lag. Renamed items, rare items and items right next to a player are kept.",
+    "summary": "When too many dropped items pile up (a broken farm, a big explosion), the realm warns everyone and clears them 30 seconds later, so the server doesn't lag. Renamed, enchanted and rare items, items right next to a player and a player's death drops are kept.",
     "steps": [
       {
         "text": "Nothing to set up. If more than 500 dropped items (§ethreshold§r) lie around, chat says §eClearing 612 dropped items in 30 s: pick up what you need§r. Pick up anything you want to keep.",
         "ops": false
       },
       {
-        "text": "30 seconds later they're removed, and chat says §eCleared 580 dropped items. (32 kept: renamed, rare or near a player)§r.",
+        "text": "30 seconds later they're removed, and chat says §eCleared 580 dropped items. (32 kept: renamed, rare, enchanted, or near a player or a recent death)§r.",
         "ops": false
       },
       {
-        "text": "Items renamed on an anvil, shulker boxes, elytra, nether stars, totems and the other items in §ekeepItems§r, and items within 4 blocks of a player (§enearPlayerRadius§r) are never cleared.",
+        "text": "Items renamed on an anvil, enchanted items, shulker boxes, elytra, nether stars, totems, enchanted books and the other items in §ekeepItems§r, items within 4 blocks of a player (§enearPlayerRadius§r), and items within 8 blocks of where a player died in the last 5 minutes (§ekeepDeathDropsMinutes§r) are never cleared.",
         "ops": false
       },
       {
@@ -1133,7 +1133,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r the stories need three places: stand on each one and run §e/realm:saga_place lighthouse§r, §e/realm:saga_place sunken_bell§r and §e/realm:saga_place old_chapel§r (§e/realm:saga_place§r alone lists them). Pick a lighthouse on the coast, a spot in the sea with a §lbell§r block placed underwater (players ring it in chapter 5, and the Bell Warden comes there in chapter 6), and an old chapel or ruin. Until a place is set, its chapter says §eask an operator to set place lighthouse§r and operators online get a hint. §e/realm:saga_reset <player>§r starts a player's stories over; §e/realm:config§r -> §lStory Questlines§r has the switches.",
+        "text": "§lOperators:§r the stories need three places: stand on each one and run §e/realm:saga_place lighthouse§r, §e/realm:saga_place sunken_bell§r and §e/realm:saga_place old_chapel§r (§e/realm:saga_place§r alone lists them). Pick a lighthouse on the coast, a spot in the sea with a §lbell§r block placed underwater within 8 blocks of it (players strike it in chapter 5, and the Bell Warden comes there in chapter 6; setting the place reminds you), and an old chapel or ruin. Until a place is set, its chapter says §eask an operator to set place lighthouse§r and operators online get a hint. §e/realm:saga_reset <player>§r starts a player's stories over; §e/realm:config§r -> §lStory Questlines§r has the switches.",
         "ops": true
       }
     ],
@@ -1148,7 +1148,7 @@ export const PACKS = [
         "usage": "/realm:saga_place [name]",
         "ops": false,
         "who": "Operators",
-        "text": "Sets a story place (§elighthouse§r, §esunken_bell§r, §eold_chapel§r) where you stand. Without a name, lists the places, where they are, who set them and which stories use them"
+        "text": "Sets a story place (§elighthouse§r, §esunken_bell§r, §eold_chapel§r) where you stand, and says what players need to find there (a bell for §esunken_bell§r). Without a name, lists the places, where they are, who set them and which stories use them"
       },
       {
         "usage": "/realm:saga_reset <player>",
@@ -1628,7 +1628,7 @@ export const PACKS = [
         "usage": "/realm:maps",
         "ops": false,
         "who": "Everyone",
-        "text": "Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map and to give the hunt up"
+        "text": "Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up"
       },
       {
         "usage": "/realm:maps_give <player>",
@@ -2020,7 +2020,7 @@ export const PACKS = [
         "usage": "/realm:rainbow_now",
         "ops": false,
         "who": "Operators",
-        "text": "A rainbow now, in any weather and at any time, for §edurationSeconds§r (150), with its pot of gold 150-300 blocks from you. An unfound earlier pot is replaced (its chest, if placed, stays)"
+        "text": "A rainbow now, in any weather and at any time, for §edurationSeconds§r (150), with its pot of gold 150-300 blocks from you. An earlier pot is replaced: its chest stays if it still holds anything, an empty one is removed"
       }
     ]
   },
@@ -2075,7 +2075,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Go find it: at the spot (or a few blocks from it) there's a crater 3 to 4 blocks across each way, lined with blackstone, magma and obsidian, still smoking, with 1 to 3 §lancient debris§r in its middle. Bring a diamond pickaxe or better. The first player to reach it is announced: §e&6Ann found the meteor crater!§r",
+        "text": "Go find it: at the spot (or a few blocks from it) there's a crater about 7 to 9 blocks across, lined with blackstone, magma and obsidian, still smoking, with 1 to 3 §lancient debris§r in its middle. Bring a diamond pickaxe or better. The first player to reach it is announced: §e&6Ann found the meteor crater!§r",
         "ops": false
       },
       {
@@ -2148,7 +2148,7 @@ export const PACKS = [
     "folder": "rain_bp",
     "topic": "rain",
     "name": "Rain Extras",
-    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. A §lstandalone§r behavior pack: it runs next to the Realm Bundle, not inside it.",
+    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. Part of the Realm Bundle (it used to be standalone).",
     "steps": [
       {
         "text": "When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops. Outdoors a soft breeze blows; indoors the rain sounds muffled through the roof, and drums on it.",
@@ -2167,7 +2167,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r add Rain Extras under §lBehavior Packs§r, next to the Realm Bundle (it's never part of the bundle), and add Realistic Rain under §lResource Packs§r at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. §e/realm:config§r -> Rain Extras enables or disables each extra and sets the wind, thunderstorm and roof volumes.",
+        "text": "§lOperators:§r Rain Extras is in the Realm Bundle; its fogs, particles and sounds come from Realistic Rain (in Realm Resources), so without that nothing shows. §e/realm:config§r -> Rain Extras enables or disables each extra and sets the wind, thunderstorm and roof volumes.",
         "ops": true
       }
     ],
