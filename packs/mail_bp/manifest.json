@@ -4,7 +4,7 @@
     "name": "Realm Mail",
     "description": "Write letters to any player who has joined the realm, even while they're offline, and read your inbox. /realm:mail",
     "uuid": "79eeba8a-403a-4c70-9b23-f412728eeae9",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

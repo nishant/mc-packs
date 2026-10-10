@@ -31,9 +31,10 @@ export const CONFIG = {
     helper: 30,
     /** Crowns for every player who defeated at least one mob toward a finished cull bounty. */
     cull: 40,
-    /** Wardens reputation for the killer (on top of what the Guilds pack gives for the finished bounty). */
-    killerRep: 15,
-    /** Wardens reputation for each helper and each cull contributor. */
+    /**
+     * Wardens reputation for each helper of a champion target (Guilds pack). The killer and cull
+     * contributors get theirs from the finished quest (`realm:quest_done`), so it isn't counted twice.
+     */
     helperRep: 5,
   },
 

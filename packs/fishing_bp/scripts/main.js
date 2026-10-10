@@ -396,33 +396,73 @@ function caught(player, sp, size) {
 /** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number }>} */
 const hooks = new Map();
 
+/** The player who cast a hook: the projectile's owner when the game says, else the nearest player. @param {Entity} hook */
+function hookOwner(hook) {
+  try {
+    const owner = hook.getComponent("minecraft:projectile")?.owner;
+    if (owner instanceof Player) return owner;
+  } catch {
+    // no projectile component on this hook
+  }
+  const [near] = hook.dimension.getPlayers({ location: hook.location, maxDistance: 4, closest: 1 });
+  return near;
+}
+
+/** A dropped item appears at the dropping player's head: such an item is never a catch. @param {Entity} item */
+function droppedByPlayer(item) {
+  const at = item.location;
+  for (const p of item.dimension.getPlayers({ location: at, maxDistance: 3 })) {
+    try {
+      const head = p.getHeadLocation();
+      if (Math.abs(head.x - at.x) <= 1 && Math.abs(head.y - at.y) <= 1 && Math.abs(head.z - at.z) <= 1) return true;
+    } catch {
+      // gone
+    }
+  }
+  return false;
+}
+
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
-      const [owner] = entity.dimension.getPlayers({ location: entity.location, maxDistance: 4, closest: 1 });
+      const owner = hookOwner(entity);
       if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick });
       return;
     }
     if (entity.typeId !== "minecraft:item" || !hooks.size) return;
     const stack = entity.getComponent("minecraft:item")?.itemStack;
-    if (!stack || stack.nameTag) return; // our own replacements (and anything named) aren't catches
+    // A catch is one unnamed fish (our own replacements are named). A stack of several, or a fish a player
+    // drops near their bobber (it appears at their head), is never a catch.
+    if (!stack || stack.nameTag || !FISH_ITEMS.has(stack.typeId) || stack.amount !== 1) return;
+    if (droppedByPlayer(entity)) return;
     const at = entity.location;
     for (const [id, h] of hooks) {
       if (h.dim !== entity.dimension.id) continue;
-      if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
-      hooks.delete(id);
-      if (!FISH_ITEMS.has(stack.typeId) || get("enabled") !== true) break;
+      if (Math.abs(h.at.x - at.x) > 2 || Math.abs(h.at.y - at.y) > 2 || Math.abs(h.at.z - at.z) > 2) continue;
+      // The catch appears as the hook is reeled in: the hook must be gone now or within a few ticks. An item
+      // that turns up next to a hook that stays in the water (a fish mob killed by the bobber) isn't a catch.
+      if (!h.hook.isValid && system.currentTick - h.seen > 3) continue;
+      if (get("enabled") !== true) return;
       const owner = h.owner;
       const hookAt = h.at;
-      // Next tick, so every other pack's entitySpawn listener (Daily Quests counts fish) sees the vanilla item first.
-      system.run(() => {
+      const hook = h.hook;
+      let waited = 0;
+      // From the next tick, so every other pack's entitySpawn listener (Daily Quests counts fish) sees the vanilla item first.
+      const check = () => {
         try {
+          if (hook.isValid) {
+            if (++waited <= 3) system.run(check);
+            return; // the hook is still out: not a catch
+          }
+          if (!hooks.has(id)) return; // another item already took this catch
+          hooks.delete(id);
           replace(entity, owner, hookAt);
         } catch (e) {
           console.warn(`[fishing] catch: ${e}`);
         }
-      });
-      break;
+      };
+      system.run(check);
+      return;
     }
   } catch (e) {
     console.warn(`[fishing] ${e}`);
@@ -436,13 +476,13 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
 function replace(entity, owner, hookAt) {
   if (!entity.isValid || !owner.isValid) return;
   const stack = entity.getComponent("minecraft:item")?.itemStack;
-  if (!stack || !FISH_ITEMS.has(stack.typeId) || stack.nameTag) return;
+  if (!stack || !FISH_ITEMS.has(stack.typeId) || stack.nameTag || stack.amount !== 1) return;
   const dim = entity.dimension;
   const list = eligible(stack.typeId, dim, hookAt);
   if (!list.length) return; // no species for this item here: the vanilla fish stays
   const sp = pick(list);
   const size = rollSize(sp);
-  const fish = fishStack(sp, size, owner, stack.amount);
+  const fish = fishStack(sp, size, owner, 1);
   const loc = entity.location;
   let vel = { x: 0, y: 0, z: 0 };
   try {
@@ -452,16 +492,26 @@ function replace(entity, owner, hookAt) {
   }
   const made = dim.spawnItem(fish, loc); // throws in an unloaded chunk: then the vanilla fish stays
   try {
+    entity.remove();
+  } catch (e) {
+    // The vanilla fish couldn't be removed: take the new one back, so there's never one fish too many.
+    try {
+      made.remove();
+    } catch {
+      // nothing more to do
+    }
+    throw e;
+  }
+  try {
     made.clearVelocity();
     made.applyImpulse(vel);
   } catch {
     // it still drops where the fish was
   }
-  entity.remove();
   caught(owner, sp, size);
 }
 
-// Follow live hooks, and forget them a second after they're gone (the catch appears as the hook goes).
+// Follow live hooks every tick (a catch must appear as its hook goes), and forget them a second after they're gone.
 system.runInterval(() => {
   if (!hooks.size) return;
   for (const [id, h] of hooks) {
@@ -474,7 +524,7 @@ system.runInterval(() => {
       }
     } else if (system.currentTick - h.seen > 20) hooks.delete(id);
   }
-}, 2);
+}, 1);
 
 // ---------------------------------------------------------------------------
 // The weekly tournament
@@ -549,7 +599,7 @@ function pay(id, crowns, note, questId) {
   }
   const owed = loadWorld(PROP_OWED) ?? {};
   const prev = Array.isArray(owed[id]) ? owed[id] : [0, ""];
-  owed[id] = [prev[0] + crowns, note, questId];
+  owed[id] = [(Number(prev[0]) || 0) + crowns, note, questId];
   saveWorld(PROP_OWED, owed);
 }
 

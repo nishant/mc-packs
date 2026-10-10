@@ -4,7 +4,7 @@
     "name": "Crowns",
     "description": "The realm's currency: earn Crowns, pay other players and sell or buy goods at the market. /realm:crowns",
     "uuid": "9a0b727a-bc5a-4e75-931f-c271c7f98e1a",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

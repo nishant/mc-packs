@@ -333,16 +333,35 @@ const spawnState = new Map();
  * @param {Dimension} dim @param {number} x @param {number} z
  */
 function nearBuilt(dim, x, z) {
-  for (let dx = -4; dx <= 4; dx++)
-    for (let dz = -4; dz <= 4; dz++) {
-      const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
-      if (!top) return true;
-      for (let y = top.y; y >= top.y - 4; y--) {
-        const b = dim.getBlock({ x: x + dx, y, z: z + dz });
-        if (!b || BUILT.test(b.typeId)) return true;
+  try {
+    for (let dx = -4; dx <= 4; dx++)
+      for (let dz = -4; dz <= 4; dz++) {
+        const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
+        if (!top) return true;
+        for (let y = top.y; y >= top.y - 4; y--) {
+          const b = dim.getBlock({ x: x + dx, y, z: z + dz });
+          if (!b || BUILT.test(b.typeId)) return true;
+        }
       }
-    }
+  } catch {
+    return true; // part of it isn't loaded
+  }
   return false;
+}
+
+/** Is (x, z) too close to the world spawn for a target? @param {number} x @param {number} z */
+function nearSpawn(x, z) {
+  const spawn = world.getDefaultSpawnLocation();
+  return Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn;
+}
+
+/** The surface block at (x, z), or undefined where it isn't loaded. @param {Dimension} dim @param {number} x @param {number} z */
+function surfaceAt(dim, x, z) {
+  try {
+    return dim.getTopmostBlock({ x, z });
+  } catch {
+    return undefined;
+  }
 }
 
 /** The loaded target for a bounty, if any. @param {Hunt} h */
@@ -401,17 +420,28 @@ function tend(h, players) {
     x = Math.floor(h.lx + Math.cos(angle) * r);
     z = Math.floor(h.lz + Math.sin(angle) * r);
   }
-  const top = dim.getTopmostBlock({ x, z });
-  if (!top) return; // not loaded yet
+  const top = surfaceAt(dim, x, z);
+  if (!top) {
+    // Not loaded: the spot itself waits for players to come closer; a place around it is a try.
+    if (st.tries > 0) st.tries++;
+    return;
+  }
   let mob = h.mob;
-  if (nearBuilt(dim, x, z)) {
+  // Treetops count as a bad spot too: a target stuck up in the leaves is no hunt.
+  if (nearSpawn(x, z) || /leaves|_log$|_wood$/.test(top.typeId) || nearBuilt(dim, x, z)) {
     // Somebody's build (or land we can't see yet): look around it, and after a few tries move the
     // target 100 to 200 blocks away (the board shows the new place).
     if (++st.tries >= 6) {
-      const angle = Math.random() * Math.PI * 2;
-      const r = rand(100, 200);
-      h.lx = Math.floor(h.lx + Math.cos(angle) * r);
-      h.lz = Math.floor(h.lz + Math.sin(angle) * r);
+      for (let i = 0; i < 10; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = rand(100, 200);
+        const nx = Math.floor(h.lx + Math.cos(angle) * r);
+        const nz = Math.floor(h.lz + Math.sin(angle) * r);
+        if (nearSpawn(nx, nz)) continue;
+        h.lx = nx;
+        h.lz = nz;
+        break;
+      }
       st.tries = 0;
       dirty = true;
     }
@@ -521,8 +551,9 @@ function claim(h, killerId, helperIds) {
 
   const why = `Bounty: ${h.name}`;
   pay(killerId, get("rewards.champion"), why);
+  // Reputation goes through the finished quest only (Guilds gives it to the Wardens), so it isn't
+  // counted twice. Helpers finished nothing, so they get a little reputation directly.
   system.sendScriptEvent("realm:quest_done", JSON.stringify({ player: killerId, pack: "bounty_bp", id: h.id, label: why, kind: "bounty" }));
-  if (CONFIG.rewards.killerRep > 0) system.sendScriptEvent("realm:rep_add", JSON.stringify({ player: killerId, guild: "wardens", amount: CONFIG.rewards.killerRep, reason: why }));
   for (const id of helpers) {
     pay(id, get("rewards.helper"), `${why}, helper`);
     if (CONFIG.rewards.helperRep > 0) system.sendScriptEvent("realm:rep_add", JSON.stringify({ player: id, guild: "wardens", amount: CONFIG.rewards.helperRep, reason: why }));
@@ -542,7 +573,6 @@ function finishCull(c, finisher) {
   for (const id of ids) {
     pay(id, get("rewards.cull"), why);
     system.sendScriptEvent("realm:quest_done", JSON.stringify({ player: id, pack: "bounty_bp", id: c.id, label: why, kind: "bounty" }));
-    if (CONFIG.rewards.helperRep > 0) system.sendScriptEvent("realm:rep_add", JSON.stringify({ player: id, guild: "wardens", amount: CONFIG.rewards.helperRep, reason: why }));
   }
   const n = ids.length;
   for (const p of world.getAllPlayers()) p.sendMessage(`§6[Bounty] The realm finished "${c.label}"! §7${n} player${n === 1 ? "" : "s"} share the reward.`);

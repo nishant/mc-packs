@@ -4,7 +4,7 @@
     "name": "Titles & Trails",
     "description": "Earn titles shown under your name and particle trails that follow you, from your adventures and other packs. /realm:titles",
     "uuid": "636d3728-2a13-4e7f-8598-117e3b7faf14",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

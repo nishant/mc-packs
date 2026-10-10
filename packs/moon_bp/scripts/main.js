@@ -9,6 +9,7 @@ import {
   Entity,
   GameMode,
   Player,
+  WeatherType,
   system,
   world,
 } from "@minecraft/server";
@@ -22,6 +23,7 @@ const PROP_PENDING = "moon:pending"; // world: the state an operator chose for t
 const PROP_TICK = "moon:tick"; // world: JSON { was, set }: randomTickSpeed before a Harvest Moon raised it
 const PROP_SEEN = "moon:seen"; // player: moons already sent to the Journal, "blood,harvest"
 const PROP_SURVIVOR = "moon:survivor"; // player: true once they unlocked the survivor title
+const PROP_WEATHER = "moon:weather"; // world: overworld weather at the last change; scripts can't read the current weather
 
 const OVERWORLD = "minecraft:overworld";
 const FOG_ID = "moon_sky"; // our /fog entry's name, so only ours is ever removed
@@ -47,6 +49,10 @@ let night;
 /** @type {number | undefined} time of day at the last check, to tell a natural dawn from a skipped night */
 let lastTime;
 let seconds = 0;
+/** Has worldLoad read the saved night yet? The loop waits for it, so a restart never rolls tonight's moon again. */
+let ready = false;
+/** Is it raining or storming in the overworld? Clouds hide the moon: no moon fog then. */
+let wet = false;
 /** Fog id we pushed per player ("" or absent = none). @type {Map<string, string>} */
 const fogs = new Map();
 /** Players already counted as having seen tonight's moon. @type {Set<string>} */
@@ -218,8 +224,17 @@ function raiseTicks() {
     const target = Math.max(1, Math.floor(Number(get("harvest.tickSpeed")) || 1));
     const cur = world.gameRules.randomTickSpeed;
     if (cur >= target) return;
-    // Keep the first value we saw, if an earlier Harvest Moon never got to put it back.
-    if (world.getDynamicProperty(PROP_TICK) === undefined) world.setDynamicProperty(PROP_TICK, JSON.stringify({ was: cur, set: target }));
+    // Keep the first value we saw, if an earlier Harvest Moon never got to put it back, but always record what we
+    // set now: dawn only puts it back while the gamerule still holds the value we set.
+    let was = cur;
+    try {
+      const raw = world.getDynamicProperty(PROP_TICK);
+      const saved = typeof raw === "string" ? JSON.parse(raw) : undefined;
+      if (Number.isFinite(saved?.was)) was = saved.was;
+    } catch {
+      // corrupt: what's there now is the best guess
+    }
+    world.setDynamicProperty(PROP_TICK, JSON.stringify({ was, set: target }));
     world.gameRules.randomTickSpeed = target;
   } catch (e) {
     console.warn(`[moon] randomTickSpeed: ${e}`);
@@ -231,7 +246,12 @@ function restoreTicks() {
     const raw = world.getDynamicProperty(PROP_TICK);
     if (typeof raw !== "string") return;
     world.setDynamicProperty(PROP_TICK, undefined);
-    const saved = JSON.parse(raw);
+    let saved;
+    try {
+      saved = JSON.parse(raw);
+    } catch {
+      saved = undefined;
+    }
     // An operator who changed the gamerule during the night keeps their value.
     if (Number.isFinite(saved?.was) && world.gameRules.randomTickSpeed === saved.set) world.gameRules.randomTickSpeed = saved.was;
   } catch (e) {
@@ -248,6 +268,8 @@ world.afterEvents.worldLoad.subscribe(() => {
     loadNight();
     // Fogs may have survived a script reload: clear them, the loop puts back what tonight calls for.
     for (const p of world.getAllPlayers()) removeFog(p);
+    const w = world.getDynamicProperty(PROP_WEATHER);
+    wet = w === WeatherType.Rain || w === WeatherType.Thunder;
     const t = world.getTimeOfDay();
     const day = world.getDay();
     const going = night?.a && night.d === day && isNight(t) && get("enabled") === true;
@@ -258,9 +280,21 @@ world.afterEvents.worldLoad.subscribe(() => {
   } catch (e) {
     console.warn(`[moon] ${e}`);
   }
+  ready = true;
+});
+
+world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
+  if (dimension !== OVERWORLD) return;
+  wet = newWeather !== WeatherType.Clear;
+  try {
+    world.setDynamicProperty(PROP_WEATHER, newWeather);
+  } catch (e) {
+    console.warn(`[moon] ${e}`);
+  }
 });
 
 system.runInterval(() => {
+  if (!ready) return;
   try {
     seconds++;
     const t = world.getTimeOfDay();
@@ -299,7 +333,9 @@ function during(n) {
         journal(p, n.s);
       }
       const out = outdoors(p);
-      setFog(p, out ? fogId : "");
+      // No tint while it rains: the clouds hide the moon, and the weather's own fogs (rain, storm, sandstorm,
+      // blizzard) stay in charge instead of being covered by ours.
+      setFog(p, out && !wet ? fogId : "");
       if (out && (seconds + p.id.length) % MOTES_EVERY === 0) motes(p, blood ? "realm:sky_blood" : "realm:sky_harvest");
       if (wave) spawnWave(p);
     } catch (e) {

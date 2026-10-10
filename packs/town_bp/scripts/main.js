@@ -181,7 +181,18 @@ function guildFor(p) {
 // ---------------------------------------------------------------------------
 
 /** @returns {Record<string, Owed>} */
-const owedAll = () => readJson(PROP_OWED) ?? {};
+function owedAll() {
+  const raw = readJson(PROP_OWED);
+  /** @type {Record<string, Owed>} */
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [pid, o] of Object.entries(raw)) {
+    if (!o || typeof o !== "object") continue;
+    const q = Array.isArray(o.q) ? o.q.filter((/** @type {unknown} */ x) => Array.isArray(x) && x.length === 3 && x.every((y) => typeof y === "string")) : [];
+    out[pid] = { cr: Math.max(0, Math.floor(Number(o.cr) || 0)), q };
+  }
+  return out;
+}
 
 /** @param {Player} p @param {number} crowns @param {[string, string, string][]} quests @param {string} why */
 function payNow(p, crowns, quests, why) {

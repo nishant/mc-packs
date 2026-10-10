@@ -49,11 +49,11 @@
           "texture_width": 32,
           "texture_height": 16,
           "uv": [
-            "variable.particle_random_1 < 0.34 ? 16 : 0",
+            "variable.particle_random_1 < 0.34 ? 20 : 0",
             0
           ],
           "uv_size": [
-            16,
+            "variable.particle_random_1 < 0.34 ? 8 : 16",
             16
           ]
         }

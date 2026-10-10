@@ -171,12 +171,13 @@ One help page for every realm command: how each feature works, and each command 
 - Only features that are installed show up: each pack answers when the help asks, so a realm running a few single packs gets help for just those.
 - Usages follow the usual notation: `<name>` must be typed, `[name]` is optional.
 - The text is the same as on mc.nish.software/realm: it's generated from this file.
+- Running `/realm:help` again while the help is already open does nothing, so menus don't stack. If chat or another screen stays open for about 20 seconds, chat says `Couldn't open the help. Close chat or your inventory and try again.`
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:help [feature]` | Everyone | Opens the help menu, or the page for `feature` (`afk`, `chairs`, `durability`, `farm`, `find`, `guard`, `harvest`, `news`, `phantom`, `rain`, `settings`, `stash`, `stats`, `welcome`) or `all` |
+| `/realm:help [feature]` | Everyone | Opens the help menu, or the page for `feature` (a pack's folder name without `_bp`, such as `stash`, `crowns` or `quests`; chat autocompletes them) or `all` |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -213,7 +214,7 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 
 - Only installed packs are listed: each pack answers when the menu asks, as with `/realm:help`. Rain Extras is listed too when it runs next to the Realm Bundle.
 - Each setting has a `!` icon: hover over it or tap it for what the setting does, its default and, for a slider, its range.
-- Volumes and other 0 to 1 settings are sliders in percent (`Storm wind volume (%)`, 0 to 100 in steps of 5), and settings in fractional steps, such as Chairs' seat reach (1 to 5 blocks in 0.5s), are lists of their exact values: Bedrock's sliders only stop on whole numbers. A setting you don't touch is saved exactly as it was.
+- Volumes and other 0 to 1 settings are sliders in percent (`Storm wind volume (%)`, 0 to 100 in steps of 5), and settings in fractional steps, such as Chairs' seat reach (1 to 5 blocks in 0.5s), are lists of their exact values: Bedrock's sliders only stop on whole numbers. A setting you don't touch is saved exactly as it was, even a `config.js` value between the steps or outside the in-game range (shown at the nearest place the control can show it).
 - Tapping **Save** without changing anything says `No changes`.
 - Switches read the same everywhere: the setting is named for what it does, the switch on means **Enabled**, and chat says `Enabled` or `Disabled`. Lists show plain choices, such as `Open the menu` or `Only in protected zones`.
 - A preference set to what the realm has follows the realm: if an operator changes that setting later, you get the new value. A preference set to something else stays yours.
@@ -229,22 +230,7 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 
 ### What each pack offers
 
-| Pack | `/realm:config` (for everyone) | `/realm:prefs` (each player) |
-|---|---|---|
-| Realm Help | `showOpsToEveryone` | |
-| Welcome Message | `showOnce`, `chat`, `screenTitle` (the same switches as `/realm:welcome_edit`) | Welcome popup when I join |
-| Low Durability Warning | `warnPercent`, `criticalPercent`, `maxUsesForWarning`, `chatOnCritical`; `checkIntervalTicks` is shown, restart only | Low-durability warnings (`/realm:durability`) |
-| AFK + Smart Sleep | `afkMinutes`, `announce`, `sleep.enabled`, `sleep.percent`, `sleep.countOtherDimensions`, `sleep.requiredTicks` | Announce when I go AFK |
-| Stats & Leaderboards | `sidebarCycleSeconds`, `leaderboardSize` | |
-| Realm News & Tips | `tipsEnabled` and `tipIntervalMinutes` (the same values as `/realm:news_tips` → **Settings**), `awayNoticeHours` | |
-| Creeper Guard | `mode`, `defaultRadius` | |
-| Phantom Opt-out | `defaultOff` (shown as **Phantoms for new players**) | Phantoms near me (`/realm:phantoms`) |
-| Right-click Harvest | `requireHoe`, `damageHoe`, `replantCostsSeed` | |
-| Farm Loader | `defaultRadius`, `maxAreas`; `everyoneCanAdd` is shown, restart only | |
-| Quick Stack & Sort | `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `cooldownTicks` | When I sneak-tap a container (`Open the menu`, `Sort it right away` or `Nothing (opens as usual)`); My inventory sort includes my hotbar |
-| Chest Finder | `liveScanRadius`, `maxResults`, `highlightSeconds` | |
-| Chairs | `maxReach`; `cleanupTicks` is shown, restart only | |
-| Rain Extras | `defaultOff` (shown as **Rain extras for new players**), `stormFog.enabled`, `haze.enabled`, `mist.enabled`, `drips.enabled`, `wind.enabled`, `wind.inThunder`, `wind.inRain`, `stormSound.enabled`, `stormSound.volume`, `roof.enabled`, `roof.volume`, `roof.muffleRain` | Rain extras (fog, haze, mist, drips and sounds) (`/realm:rain`) |
+Each pack's own section says which of its options are in `/realm:config` and which are preferences in `/realm:prefs` (under its Configuration). With the whole Realm Bundle, `/realm:config` lists every pack that has settings (about 50) and `/realm:prefs` holds about 25 preferences in one form, such as **Welcome popup when I join**, **Low-durability warnings** (`/realm:durability`), **Phantoms near me** (`/realm:phantoms`), **Announce when I go AFK**, Quick Stack & Sort's sneak-tap and hotbar choices, **Unread letters notice on join** and **Rain extras** (`/realm:rain`).
 
 Everything else (lists such as crops, `keepItems` and container types, texts such as name tag prefixes, tick intervals, and command permissions) stays in `config.js`.
 
@@ -285,7 +271,7 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 
 1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
 2. Run `/realm:welcome` any time to see it again. Don't want the popup when you join? Disable **Welcome popup when I join** in `/realm:prefs`.
-3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
+3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type `\n` for a new line. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
 
 ### What players see
 
@@ -298,7 +284,7 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:welcome` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
-| `/realm:welcome_edit` | Ops | Opens an editor: title, body, button text, and toggles for show once, chat copy, big on-screen title and "Show it again to players who've seen it" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once |
+| `/realm:welcome_edit` | Ops | Opens an editor: title, body (Minecraft's text boxes hold only 100 characters each, so the body is split over at least 4 boxes, joined in order with nothing between them; `\n` is a new line; all boxes empty = the default text), button text, and toggles for show once, chat copy, big on-screen title and "Show it again to players who've seen it" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once |
 | `/realm:welcome_reset` | Ops | Asks `Reset the welcome message?` first, then discards in-game edits and goes back to the `config.js` defaults |
 
 Every save from `/realm:welcome_edit` counts as a new revision. With **show once** turned on, everyone sees the edited message one more time.
@@ -568,7 +554,8 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 ### Tips
 
 - A tip from the list is posted in chat every `tipIntervalMinutes` (20), as `[Tip] …` (`tipPrefix`), only while someone is online.
-- The default tips cover the realm's other add-ons (tree felling, vein mining, the Waypoint Menu) and these packs (`/realm:stats`, `/realm:afk`, `/realm:help`, the Quick Stack & Sort sneak-tap and `/realm:find`). A world that already saved its own tips keeps them; add the new ones with `/realm:news_tips`.
+- The default tips cover the realm's other add-ons (tree felling, vein mining, the Waypoint Menu) and these packs (`/realm:stats`, `/realm:afk`, `/realm:help`, the Quick Stack & Sort sneak-tap, `/realm:find`, `/realm:prefs`, `/realm:mail`, `/realm:quests` and `/realm:nick`). A world that already saved its own tips keeps them; add the new ones with `/realm:news_tips`.
+- A tip holds up to 100 characters, the most Minecraft's text box takes. If another operator changes or deletes a tip while you edit it, saving says `That tip was changed or deleted meanwhile, so nothing was saved.`
 - Opening **+ Add a tip** and saving it empty changes nothing. Only a real change saves the list, and from then on the saved list is used instead of `config.js`.
 
 ### Commands
@@ -589,7 +576,7 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 |---|---|---|---|
 | `news.title` | `§l§bRealm News` | ✅ `/realm:news_edit` | News popup title |
 | `news.body` | *(empty)* | ✅ `/realm:news_edit` | News text. Empty = no news |
-| `tips` | 5 tips about the realm's add-ons and commands | ✅ `/realm:news_tips` | Starting tip list |
+| `tips` | 12 tips about the realm's add-ons and commands | ✅ `/realm:news_tips` | Starting tip list |
 | `tipIntervalMinutes` | `20` | ✅ `/realm:news_tips` → Settings, or `/realm:config` | Minutes between tips |
 | `tipsEnabled` | `true` | ✅ `/realm:news_tips` → Settings, or `/realm:config` | Post tips at all |
 | `delayTicks` | `100` | ❌ | Ticks after joining before showing the news (after the welcome popup's `40`) |
@@ -777,7 +764,7 @@ Bedrock rules, worth knowing before you add a farm:
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:farm` | Everyone | Lists the loaded farms. Operators also get a **Remove** button for each |
+| `/realm:farm` | Everyone | Lists the loaded farms. Operators (everyone, with `everyoneCanAdd`) also get a **Remove** button for each |
 | `/realm:farm_add <name> [radius]` | Ops (everyone if `everyoneCanAdd`) | Adds a ticking area centered on you, `radius` 1–4 chunks (default 2, `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique |
 | `/realm:farm_remove <name>` | Ops (everyone if `everyoneCanAdd`) | Stops keeping the farm loaded and removes it from the list |
 
@@ -823,7 +810,7 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
 
 ### What players see
 
-- **The menu** shows how full the container is and how full your inventory is (`Barrel · 18 of 27 slots used`, `Your inventory · 22 of 27 slots used`), then the three buttons. Close it to do nothing. Holding anything other than gear (a block, a hopper, honeycomb) skips the menu, so sneak-placing a hopper on a chest or waxing a copper chest works as usual. To scrape a copper chest with an axe, don't sneak.
+- **The menu** shows how full the container is and how full your inventory is (`Barrel - 18 of 27 slots used`, `Your inventory - 22 of 27 slots used`), then the three buttons. Close it to do nothing. Holding anything other than gear (a block, a hopper, honeycomb) skips the menu, so sneak-placing a hopper on a chest or waxing a copper chest works as usual. To scrape a copper chest with an axe, don't sneak.
 - **Ender chests** get the menu without **Sort this**: add-ons can't see inside an ender chest, so it can't be sorted or stashed into.
 - **Sorting** merges partial stacks of the same item, then orders the slots by item id, the biggest stack first, with empty slots at the end. A chest with 3 partial stacks of cobblestone ends with 1 full stack plus the rest.
 - Items with a custom name, lore or enchantments are never merged, only moved, and moving keeps every item exactly as it was: enchanted gear, named items, written books, filled maps, banners and shulker boxes with their contents.
@@ -839,7 +826,7 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
 - **Sharing:** **Share or unlock** lists the players online now (up to 10 per container, `maxShared`); a shared player can open, sort and break it like you, and sees `Locked by Sam, shared with Alex` in the menu. The same menu stops sharing or unlocks it.
 - Explosions never break a locked container; the blast still hurts as usual.
 - Each player can have up to 50 locked containers (`maxLocks`); a double chest counts once.
-- Breaking a locked container (you can, as its owner) removes its lock.
+- Breaking a locked container (you can, as its owner) removes its lock. Breaking one half of a locked double chest leaves the other half locked, and it still counts once toward `maxLocks`.
 - **What a lock can't stop:** a hopper (or hopper minecart) that was already under it before it was locked, a copper golem that takes from a locked copper chest, and pistons. Chest Finder still points to a locked chest that holds what you search for; it can't open it.
 - Locks only show in the sneak-tap menu, so a player who chose `sort` or `off` for the sneak-tap in `/realm:prefs` locks nothing until they switch back to `menu`. Their own locks still hold.
 
@@ -888,6 +875,7 @@ Operators can change `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `
 - When both halves of a double chest report the whole 54 slots, the second half is recognized (same kind of chest, same contents, same facing, side by side; in a row of identical chests, counted from the row's end) and skipped. Copper chests of different stages count as the same kind.
 - If `transferItem` ever hands a leftover back instead of leaving it in the slot, the pack puts it back, so nothing is lost.
 - **Locks:** every lock is read into memory once and kept in step as it changes. `beforeEvents.playerInteractWithBlock` cancels opening someone else's locked container, and tapping a block with a hopper or chest in hand when the spot it would go is next to one (the stable API has no "before place" event, and placing starts with that tap). `beforeEvents.playerBreakBlock` cancels breaking it, and `beforeEvents.explosion` takes locked blocks out of the blast. A double chest's other half is found the same way as for stashing. A lock left where its block is gone some other way (a piston, a command) is removed when something is placed there.
+- Messages above the hotbar send `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) leaves them on screen for a moment.
 
 ---
 
@@ -898,8 +886,8 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 ### How to use
 
 1. Open chests as usual. The pack quietly remembers what's in them.
-2. Run `/realm:find iron`, or just `/realm:find` while holding the item. A menu lists the containers that have it, nearest first, for example `Chest · 23 Iron Ingot` with `35 blocks NE · seen 2h ago` under it.
-3. Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates.
+2. Run `/realm:find iron`, or just `/realm:find` while holding the item. A menu lists the containers that have it, nearest first, for example `Chest - 23 Iron Ingot` with `35 blocks NE - seen 2h ago` under it.
+3. Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark.
 
 ### What players see
 
@@ -952,7 +940,7 @@ Claim the land around your base so other players can't break, place or open anyt
 1. Once an operator has enabled land claims, stand in the middle of your base and run `/realm:claim`, then pick **Claim this land**. You get 33 × 33 blocks around you (default radius 16, `radius`), from the bottom of the world to the top, and green sparkles show its borders.
 2. Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees `This land is claimed by Sam`.
 3. **Share it:** `/realm:claim` → **My claim: 120, -340** → **Share with Alex** (players online now). The same menu stops sharing, shows its borders or removes the claim.
-4. **Where are the borders?** `/realm:claim` → **Show claim borders** sparkles the edges of every claim near you for 10 seconds. Walking in or out of one says `Entering Sam's claim` / `Leaving Sam's claim` above the hotbar.
+4. **Where are the borders?** `/realm:claim` → **Show claim borders** sparkles the edges of every claim near you for 10 seconds (asking again starts over). Walking in or out of one says `Entering Sam's claim` / `Leaving Sam's claim` above the hotbar.
 5. **Operators:** enable it in `/realm:config` → **Land Claims** → **Land claims**, and set the claim size and how many each player gets there. `/realm:claim` → **All claims (operator)** lists every claim to remove any of them.
 
 ### What players see
@@ -960,10 +948,10 @@ Claim the land around your base so other players can't break, place or open anyt
 - **While disabled** (`enabled`, disabled by default): `/realm:claim` answers `Land claims are disabled on this realm. An operator can enable them in /realm:config (Land Claims).` and nothing is protected. Disabling it later keeps every claim; they apply again once it's enabled.
 - **The menu** says whose land you're on and how many claims you have (`You have 1 of 2 claims`), then **Claim this land** (when you're on unclaimed land and have one left), **Show claim borders**, one **My claim** button per claim, and for operators **All claims (operator)**.
 - **Claiming** is refused with a reason when you already have 2 (`maxClaims`), or when the new square would overlap another claim (`That would overlap Sam's claim (-16, 48 to 16, 80). Move further away.`). A claim keeps the size it was made with when operators change `radius` later.
-- **What's protected** from everyone who isn't the owner or shared: breaking and placing blocks, tapping any block (chests, doors, trapdoors, buttons, levers, beds, crafting tables, buckets), and using the entities in `protectedEntities`. A block placed from outside onto the edge of a claim is refused too.
+- **What's protected** from everyone who isn't the owner or shared: breaking and placing blocks, tapping any block (chests, doors, trapdoors, buttons, levers, beds, crafting tables, buckets), and using the entities in `protectedEntities`. A block placed from outside onto the edge of a claim is refused too; with an empty hand you can still open a door or chest just outside the border.
 - **Explosions** break no blocks inside a claim (`protectExplosions`), whatever caused them; the damage is unchanged, and the part of the blast outside the claim breaks blocks as usual.
 - **Operators** can't build in other players' claims unless **Operators can build in any claim** is enabled (`operatorsBypass`), so a realm where everyone is an operator still gets protection. They can always remove a claim.
-- **What a claim doesn't stop:** mobs, hurting animals or pets, fire spreading, lava or water flowing in, pistons pushing blocks in from outside, and hoppers or minecarts pulling items across the border.
+- **What a claim doesn't stop:** mobs, hurting animals or pets, fire spreading, lava or water flowing in, pistons pushing blocks in from outside, hoppers or minecarts pulling items across the border, and hits: punching an armor stand to break it, or punching the item out of an item frame, isn't stopped (only tapping them is).
 
 ### Commands
 
@@ -999,7 +987,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions` and `
 - Claims are read into memory once and kept in step as they change, so the checks below never read saved data.
 - `beforeEvents.playerBreakBlock` and `beforeEvents.playerInteractWithBlock` are canceled inside someone else's claim. The tap is checked at the block and at the spot a block would be placed, since the stable API has no "before place" event and placing starts with that tap. `afterEvents.playerPlaceBlock` removes anything that still got placed. `beforeEvents.playerInteractWithEntity` is canceled for `protectedEntities`.
 - `beforeEvents.explosion` takes the blocks inside claims out of the blast without canceling it.
-- Once a second, each player's claim is looked up to say when they walk in or out of one.
+- Once a second, each player's claim is looked up to say when they walk in or out of one. Messages above the hotbar send `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) leaves them on screen.
 
 ---
 
@@ -1020,7 +1008,7 @@ Tells you where you died once you respawn, and points you back there. The realm 
 - **On respawn** (`announce`): `You died at 120, 64, -340 in the Overworld. Run /realm:death to see where that is from here.` A player who leaves on the death screen gets it when they next spawn.
 - **`/realm:death`** shows the block you died in and its dimension, then the distance along the ground, rounded to whole blocks, with one of 8 directions (N, NE, E, SE, S, SW, W, NW; north is toward negative Z) and how far up or down. Within 2 blocks it says `You're standing on it.` In another dimension it says which one you're in, with no distance. When `/realm:death_back` is enabled it adds whether you can still use it for this death.
 - **`/realm:death_back`** while disabled (`backEnabled`, disabled by default): `Teleporting back is disabled on this realm. An operator can enable it in /realm:config (Death Point). /realm:death still shows the way.`
-- **`/realm:death_back`** while enabled looks for the nearest safe spot within 2 blocks sideways (`backSearchRadius`) and 8 blocks up or down (`backSearchHeight`) of the death point: two blocks of air (or grass, ferns or a dead bush) to stand in, on a block that isn't air, water, lava, magma, fire, a campfire, cactus, a berry bush, a wither rose, powder snow or pointed dripstone, with no lava or fire right beside it. It works across dimensions. Then:
+- **`/realm:death_back`** while enabled looks for the nearest safe spot within 2 blocks sideways (`backSearchRadius`) and 8 blocks up or down (`backSearchHeight`) of the death point: two blocks of air (or grass, ferns, flowers, a dead bush, vines, glow lichen or a torch) to stand in, on a block that isn't air, water, lava, magma, fire, a campfire, cactus, a berry bush, a wither rose, powder snow or pointed dripstone, with no lava or fire right beside it. It works across dimensions. Then:
   - it teleports you and says `Teleported back to your death point (120, 65, -340).` Once per death: a second try says `You already went back to this death point.`
   - with no safe spot (you died in lava, deep water, inside a wall or below the world) it says so and doesn't move you, and you can try again after the lava cools or the water is drained.
   - a death point far from every player isn't loaded: it's loaded for a moment (up to 5 seconds, `backLoadSeconds`) and the search runs then. If it can't be loaded it says so.
@@ -1840,8 +1828,8 @@ Operators can change `enabled`, `faceRange`, `idleMinSeconds`, `idleMaxSeconds` 
 
 - Each townsfolk is a vanilla `minecraft:npc` with the tags `realm:npc`, `realm:npc_id:<id>`, `realm:npc_role:<role>` (one per role) and `realm:npc_owner:npc_bp`. Its `nameTag` is its name.
 - **One of each:** the saved entity id is the real one (entity ids stay the same across loads). An NPC entity of this pack that loads (`afterEvents.entityLoad`, and a check of loaded NPCs every 10 seconds) is removed if its townsfolk isn't placed any more, or if the saved one is loaded too; if the saved one isn't loaded, the newcomer takes over. A townsfolk whose entity isn't loaded, while its spot is loaded and a player has been near it for 3 checks 2 seconds apart, is looked for by its tags and otherwise spawned again.
-- **Every 10 ticks** each loaded townsfolk is teleported back if it's more than 1.5 blocks from where it belongs (post, or home at night), and otherwise turned up to 45 degrees toward the nearest player with a teleport in place (`rotation`).
-- **Taps** (`beforeEvents.playerInteractWithEntity`) on an NPC with `realm:npc_owner:npc_bp` are canceled, except an operator sneaking in creative mode, who gets the game's NPC editor. Then the offer round: `realm:npc_talk` `{ req, player, npc, roles, name }` goes out, `realm:npc_offer` `{ req, pack, key, label, order? }` answers are collected for 4 ticks, the menu lists them by `order` (default 50) then label, and a pick sends `realm:npc_choose` `{ player, npc, pack, key }` to the pack that offered it. `realm:npc_talk` also tells quest packs the player talked to that NPC. NPCs of other packs (the [Merchant Caravan](#merchant-caravan--caravan_bp)'s traders) carry their own owner tag and are left to them.
+- **Every 10 ticks** each loaded townsfolk is teleported back if it's more than 1.5 blocks from where it belongs (post, or home at night; with `enabled` off, always its post), and otherwise, with `enabled` on, turned up to 45 degrees toward the nearest player (not spectators) with a teleport in place (`rotation`). A tap turns it toward the player at once, in place.
+- **Taps** (`beforeEvents.playerInteractWithEntity`) on an NPC with `realm:npc_owner:npc_bp` are canceled, except an operator sneaking in creative mode, who gets the game's NPC editor. Then the offer round: `realm:npc_talk` `{ req, player, npc, roles, name }` goes out, `realm:npc_offer` `{ req, pack, key, label, order? }` answers are collected for 4 ticks, the menu lists them by `order` (default 50) then label (offers with an empty label, or claiming to be from `npc_bp`, are ignored), and a pick sends `realm:npc_choose` `{ player, npc, pack, key }` to the pack that offered it. `realm:npc_talk` also tells quest packs the player talked to that NPC. NPCs of other packs (the [Merchant Caravan](#merchant-caravan--caravan_bp)'s traders) carry their own owner tag and are left to them.
 - **Weather** can't be read by scripts, so the pack remembers the last `afterEvents.weatherChange` in the Overworld.
 
 ---
@@ -2644,7 +2632,7 @@ Operators can change `enabled`, `trails`, `trailTicks`, `trailBudget` and `annou
 
 | Key | Scope | Contents |
 |---|---|---|
-| `titles:p:<player id>` | World | One per player: JSON `{ n, t, r, tr, s }`, the gamertag when last seen, unlocked titles, unlocked trails, the chosen trail, and the built-in stats `{ d, n, w }` (blocks traveled, seconds at night, seconds in thunderstorms) |
+| `titles:p:<player id>` | World | One per player: JSON `{ n, t, r, tr, s }`, the gamertag when last seen, unlocked titles (at most 300 a player), unlocked trails, the chosen trail, and the built-in stats `{ d, n, w }` (blocks traveled, seconds at night, seconds in thunderstorms) |
 | `realm_title:<text>` | Player tag | The title the player wears (at most one); the Nicknames pack shows it |
 | `titles:weather` | World | The Overworld weather from the last change (`Clear`, `Rain` or `Thunder`) |
 | `titles:cfg` | World | Settings changed in `/realm:config` |
@@ -2934,7 +2922,7 @@ Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tourn
 
 ### How it works
 
-- **Catches:** there is no "caught a fish" event in the stable API, so the pack recognizes one as [Daily Quests](#daily-quests--quests_bp) does: a fishing hook belongs to the player nearest to it when it appears, its place is followed every 2 ticks, and an unnamed item that appears within 3 blocks of where a hook was in the last second is that player's catch. One tick later (so other packs, like Daily Quests, see the vanilla fish first) the pack spawns the named fish at the same spot with the same velocity, so it still flies to the player, and removes the vanilla one.
+- **Catches:** there is no "caught a fish" event in the stable API, so the pack recognizes one much as [Daily Quests](#daily-quests--quests_bp) does: a fishing hook belongs to the player who cast it (its projectile owner, else the player nearest to it when it appears), and its place is followed every tick. A single unnamed cod, salmon, tropical fish or pufferfish that appears within 2 blocks of a hook, as that hook is reeled in (the hook is gone then or within 3 ticks), is that player's catch, once per hook. A fish dropped from an inventory (it appears within 1 block of a player's head), a stack of several, or a fish that turns up next to a hook still in the water is never a catch, so dropping fish next to your bobber doesn't turn them into species. Then (a tick later, so other packs like Daily Quests see the vanilla fish first) the pack spawns the named fish at the same spot with the same velocity, so it still flies to the player, and removes the vanilla one. If the player picks the vanilla fish up first, it simply stays vanilla.
 - **Place:** one scan per catch, about 100 block reads: the water surface at the bobber, 48 samples at the water level 4 to 16 blocks around it (and the blocks above the nearer ones, for lily pads and snow), and the highest block of 12 columns 6 and 12 blocks away for trees and snow. Weather comes from `afterEvents.weatherChange`, saved so it survives a restart. Time of day is `world.getTimeOfDay()`.
 - **Fish are recognized** for selling by their name (a known species in a rarity color) and their lore (`<size> cm`, `Caught by ...`), which an anvil can't add. The sell menu checks each slot again before taking the fish.
 - **The tournament clock** checks every 5 seconds; the running tournament is saved, so it survives a restart and is finished on schedule. Prizes go into the `crowns` scoreboard; winners get `realm:quest_done` with `kind: "tournament"`.
@@ -3228,9 +3216,9 @@ Grow the realm's towns together. Operators add a town; its mayor (Mayor Bram fro
   | 3 | Dock | 64 oak planks, 32 oak logs, 16 iron ingots | A plank deck 3 wide reaching 10 blocks out over the water, on log posts down to the bottom, with fence rails and two lanterns at the end |
   | 4 | Bell Tower | 128 stone bricks, 16 gold ingots, 16 iron ingots | A stone brick tower 3 by 3 and 8 high with a bell hanging under its roof and a lightning rod on top |
 
-- **Delivering** takes the needed items from anywhere in your inventory, never more than still needed. Locked items stay, and so do items with a custom name (`keepNamedItems`). Items are used up by the project, not stored in a chest.
+- **Delivering** takes the needed items from anywhere in your inventory, never more than still needed. Locked items stay, and so do items with lore (Storm Glass, Relic Shards, relics and other special items) and items with a custom name (`keepNamedItems`). Items are used up by the project, not stored in a chest.
 - **The mayor:** an NPC with the `mayor` role (`npcRole`) offers **Town projects (Riverside)** for the nearest town within 96 blocks (`townRadius`) of the player; with no town that close, the mayor doesn't offer it. With `deliverWithCommand` enabled, `/realm:town` also takes deliveries while you're within a town's radius.
-- **Building:** every build starts at the spot where the operator stood and goes forward the way they faced. Builds only replace air, plants (grass, flowers, ferns, snow layers, bushes, mushrooms, vines), and for the well's water and the garden's farmland the grass or dirt they sit in, and for the dock, water. Anything else in the way (a build, a path, stone) is left alone and that block of the project is skipped; operators are told how many. If the spot isn't loaded, the project is built as soon as a player comes within 64 blocks of it. Chat says `Riverside's new Dock is built at 120, 63, -45.`
+- **Building:** every build starts at the spot where the operator stood and goes forward the way they faced. Builds only replace air, plants (grass, flowers, ferns, snow layers, bushes, mushrooms, vines), and for the well's water and the garden's farmland the grass or dirt they sit in, and for the dock, water. Anything else in the way (a build, a path, stone) is left alone and that block of the project is skipped; operators are told how many. Water (the well's and the garden's) goes in last and only where blocks or more of its water hold it in on every side and below, so it never spills onto anything nearby; a lily pad only goes on that water. A project is built all at once: while any part of it is in a chunk that isn't loaded, it waits, and it's built as soon as a player comes within 64 blocks of its spot with all of it loaded. Chat says `Riverside's new Dock is built at 120, 63, -45.`
 - **Structures instead:** a project with a `structure` id places that structure (saved by an operator with a structure block or `/structure save`) with its corner at the spot, turned to the way the operator faced (saved facing south), instead of the built-in design. It's placed as saved, replacing what's there. Without such a structure in the world, the built-in design is used.
 - **Rewards** for each finished project: Crowns for the top contributors (`topCrowns`: 60, 35, 20), shown as `+60 Crowns (Dock, Riverside)`; for every contributor, `repPerProject` (10) reputation to the Growers when the project is mostly wood, crops and wool, or the Miners when it's mostly stone and metal, plus a finished quest of kind `town` for other packs. Contributors who are offline get theirs when they next join (`Town projects you helped with were finished while you were away. Thank you!`).
 - **Announcements** (`announce`): finished projects, builds and level-ups go to everyone in chat, with fireworks (`fireworks`) and a title for level-ups. Disabled: only the contributors and the operators hear about it, and only players in the town see the level-up title.
@@ -3267,7 +3255,7 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 |---|---|---|
 | `town:t:<town>` | World | JSON `{ id, n, dim, x, y, z, lvl, spots, by, at }`: the town's name, center, level, and each project's build spot `{ x, y, z, f }` (`f`: 0 south, 1 west, 2 north, 3 east) |
 | `town:p:<town>:<project>` | World | JSON `{ got, c, done, built }`: items delivered, contributors `{ <player id>: [name, amount] }`, finished and built. Past about 30,000 characters the smallest contributors are dropped |
-| `town:owed` | World | JSON `{ <player id>: { cr, q } }`: Crowns and finished projects waiting for contributors who were offline |
+| `town:owed` | World | JSON `{ <player id>: { cr, q } }`: Crowns and finished projects (the latest 10 each) waiting for contributors who were offline |
 | `town:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works

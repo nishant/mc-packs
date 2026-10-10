@@ -300,7 +300,7 @@ function sparkle() {
   return img;
 }
 
-/** 32x16: a small cloud puff (left 16x16, white) and a raindrop (right half, centered 4x8, blue). */
+/** 32x16: a small cloud puff (left 16x16, white) and a raindrop (right half, about 6x10 around x 24, blue). */
 function cloud() {
   const img = blank(32, 16);
   const lobes = [[5, 9, 4], [9, 7, 5], [12, 9.5, 3.5], [8, 10.5, 4]];
@@ -471,9 +471,10 @@ const PARTICLES = {
     "minecraft:particle_initial_speed": 0,
     "minecraft:particle_lifetime_expression": { max_lifetime: or("life", 20) },
     "minecraft:particle_appearance_billboard": {
-      // Half as wide as tall; the width breathes a little so a row of segments doesn't look stamped.
+      // 0.8 times as wide as tall, so segments placed about 0.6 x size apart overlap at their soft edges and the
+      // curtain has no gaps; the width breathes a little so a row of segments doesn't look stamped.
       size: [
-        `${or("size", 40)} * 0.25 * (1 + 0.08 * Math.sin(variable.particle_age * 40 + variable.particle_random_1 * 360))`,
+        `${or("size", 40)} * 0.4 * (1 + 0.08 * Math.sin(variable.particle_age * 40 + variable.particle_random_1 * 360))`,
         `${or("size", 40)} / 2`,
       ],
       facing_camera_mode: "rotate_y",
@@ -517,7 +518,8 @@ const PARTICLES = {
   }),
 
   // A meteor: like the shooting star, but a big fireball head and a long fiery trail whose embers drift and cool
-  // from white through orange to dark red.
+  // from white through orange to dark red. variable.size scales the fireball (1 when unset), so a stand-in drawn
+  // closer than the real one can be drawn smaller.
   sky_meteor: effect("realm:sky_meteor", "meteor", "particles_add", {
     "minecraft:emitter_rate_steady": { spawn_rate: 70, max_particles: 160 },
     ...once(or("life", 3)),
@@ -531,8 +533,8 @@ const PARTICLES = {
     "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-90, 90)" },
     "minecraft:particle_appearance_billboard": {
       size: [
-        `(1.5 - 1.15 * Math.sqrt(${T})) * (0.85 + 0.3 * variable.particle_random_1)`,
-        `(1.5 - 1.15 * Math.sqrt(${T})) * (0.85 + 0.3 * variable.particle_random_1)`,
+        `(1.5 - 1.15 * Math.sqrt(${T})) * (0.85 + 0.3 * variable.particle_random_1) * ${or("size", 1)}`,
+        `(1.5 - 1.15 * Math.sqrt(${T})) * (0.85 + 0.3 * variable.particle_random_1) * ${or("size", 1)}`,
       ],
       facing_camera_mode: "lookat_xyz",
       uv: uv("meteor"),
@@ -558,7 +560,8 @@ const PARTICLES = {
     "minecraft:emitter_shape_disc": { plane_normal: "y", radius: 1.5, direction: "outwards" },
     "minecraft:particle_initial_speed": "Math.random(0.2, 0.6)",
     "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(3.5, 5.5)" },
-    "minecraft:particle_motion_dynamic": { linear_acceleration: [0.15, "Math.random(0.9, 1.4)", 0.05], linear_drag_coefficient: 0.6 },
+    // Per-particle rise from particle_random_2 (Math.random here would be rolled again every frame and jitter).
+    "minecraft:particle_motion_dynamic": { linear_acceleration: [0.15, "0.9 + variable.particle_random_2 * 0.5", 0.05], linear_drag_coefficient: 0.6 },
     "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-25, 25)" },
     "minecraft:particle_appearance_billboard": {
       size: [`(0.6 + 0.3 * variable.particle_random_1) * (1 + 1.6 * ${T})`, `(0.6 + 0.3 * variable.particle_random_1) * (1 + 1.6 * ${T})`],
@@ -741,7 +744,8 @@ const PARTICLES = {
         `variable.particle_random_1 < 0.34 ? 0.09 : (0.22 + variable.particle_random_2 * 0.1) * (1 + 0.3 * ${T})`,
       ],
       facing_camera_mode: "lookat_xyz",
-      uv: uv("cloud", ["variable.particle_random_1 < 0.34 ? 16 : 0", 0], [16, 16]),
+      // The drop's cell is cropped to the 8x16 around it, so the drop fills its 1:2 billboard.
+      uv: uv("cloud", ["variable.particle_random_1 < 0.34 ? 20 : 0", 0], ["variable.particle_random_1 < 0.34 ? 8 : 16", 16]),
     },
     "minecraft:particle_appearance_lighting": {},
     "minecraft:particle_appearance_tinting": {
@@ -864,10 +868,10 @@ const MANIFEST = {
     name: "Realm Skies",
     description: "Rainbows, auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 0, 0],
+    version: [1, 0, 1],
     min_engine_version: [1, 21, 100],
   },
-  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 0, 0] }],
+  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 0, 1] }],
 };
 
 // ---------------------------------------------------------------------------

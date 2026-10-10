@@ -54,7 +54,7 @@ export const CONFIG = {
   /** Names of the traders (one NPC each). */
   traders: ["Zahir the Spice Merchant", "Old Marisol", "Fennick the Peddler"],
 
-  /** Pack llamas that come along (tagged, leashed to a trader where the game allows, and taken away when it leaves). */
+  /** Pack llamas that come along (tagged, named, brought back if they stray, and taken away when the caravan leaves). */
   llamas: 2,
 
   /** A trader turns to face the nearest player within this many blocks. 0 = never turn. */

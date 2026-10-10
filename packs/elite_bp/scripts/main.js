@@ -100,6 +100,22 @@ function direction(from, to) {
   return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(((deg + 360) % 360) / 45) % 8];
 }
 
+/**
+ * The player behind some damage: the player themselves (arrows and tridents already name the
+ * shooter), or the owner of a tamed wolf or other pet that did it.
+ * @param {Entity | undefined} e @returns {string | undefined} the player's id
+ */
+function playerBehind(e) {
+  if (!e) return undefined;
+  if (e instanceof Player) return e.id;
+  try {
+    if (!e.isValid) return undefined;
+    return e.getComponent("minecraft:tameable")?.tamedToPlayerId || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Can this player be a target (not in creative or spectator)? @param {Player} p */
 function targetable(p) {
   try {
@@ -247,6 +263,8 @@ function convert(e) {
     const top = dim.getTopmostBlock({ x: Math.floor(at.x), z: Math.floor(at.z) });
     if (top && top.y > Math.floor(at.y) + 1) return; // a roof or a cave ceiling above it
   }
+  // Next to a build (a base, a village, a mob farm's platform): no champion there.
+  if (CONFIG.avoidBuilds && builtAround(dim, at)) return;
   const now = Date.now();
   const spacing = CONFIG.areaSpacing;
   recent = recent.filter((r) => now - r.at < CONFIG.areaCooldownMinutes * 60000);
@@ -272,10 +290,11 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource, damage }) =>
 /** @param {Entity} champ @param {Entity | undefined} attacker */
 function championHurt(champ, attacker) {
   if (!attacker) return; // fire, falls and the like don't count as hits
-  if (attacker instanceof Player) {
+  const pid = playerBehind(attacker);
+  if (pid) {
     let m = hitters.get(champ.id);
     if (!m) hitters.set(champ.id, (m = new Map()));
-    m.set(attacker.id, Date.now());
+    m.set(pid, Date.now());
   }
   if (traitOf(champ) !== "shielded") return;
   const hits = Number(champ.getDynamicProperty(PROP_HITS) ?? 0) + 1;
@@ -318,6 +337,15 @@ const BUILT =
  * @param {Dimension} dim @param {number} x @param {number} z
  */
 function nearBuilt(dim, x, z) {
+  try {
+    return scanBuilt(dim, x, z);
+  } catch {
+    return true; // unloaded
+  }
+}
+
+/** @param {Dimension} dim @param {number} x @param {number} z */
+function scanBuilt(dim, x, z) {
   for (let dx = -4; dx <= 4; dx++) {
     for (let dz = -4; dz <= 4; dz++) {
       const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
@@ -328,6 +356,28 @@ function nearBuilt(dim, x, z) {
         if (BUILT.test(b.typeId)) return true;
       }
     }
+  }
+  return false;
+}
+
+/**
+ * Is there anything player-made in the 5 x 5 blocks around a spawn spot, from the block under its
+ * feet to the one at its head (75 block reads)? Unloaded blocks count as built.
+ * @param {Dimension} dim @param {Vector3} at
+ */
+function builtAround(dim, at) {
+  const x = Math.floor(at.x);
+  const y = Math.floor(at.y);
+  const z = Math.floor(at.z);
+  try {
+    for (let dx = -2; dx <= 2; dx++)
+      for (let dz = -2; dz <= 2; dz++)
+        for (let dy = -1; dy <= 1; dy++) {
+          const b = dim.getBlock({ x: x + dx, y: y + dy, z: z + dz });
+          if (!b || BUILT.test(b.typeId)) return true;
+        }
+  } catch {
+    return true;
   }
   return false;
 }
@@ -470,7 +520,7 @@ function slain(info, killerEntity, hits) {
   const window = CONFIG.helperSeconds * 1000;
   // Players who hurt it lately, most recent first.
   const recentHitters = [...(hits ?? new Map()).entries()].filter(([, t]) => now - t <= window).sort((a, b) => b[1] - a[1]).map(([pid]) => pid);
-  const killerId = killerEntity instanceof Player ? killerEntity.id : recentHitters[0];
+  const killerId = playerBehind(killerEntity) ?? recentHitters[0];
   const helpers = recentHitters.filter((pid) => pid !== killerId);
   const dim = world.getDimension(info.dim);
   const at = info.at;

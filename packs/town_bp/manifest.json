@@ -4,7 +4,7 @@
     "name": "Town Projects",
     "description": "Grow your towns together: deliver materials to the mayor for wells, docks, market stalls and bell towers, built right where operators chose. /realm:town",
     "uuid": "9aec6547-60b1-4a50-b021-0eb214d95561",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

@@ -4,7 +4,7 @@
     "name": "Death Point",
     "description": "Tells you where you died when you respawn, with the distance and direction back. /realm:death /realm:death_back",
     "uuid": "843be9c1-ed65-4c17-8760-d1987684afc0",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

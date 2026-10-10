@@ -192,9 +192,22 @@ async function menu(player, title, body, actions) {
 const lastSent = new Map();
 world.afterEvents.playerLeave.subscribe(({ playerId }) => lastSent.delete(playerId));
 
+/** Minecraft's text boxes keep at most this many characters, so a long letter is written over several boxes. */
+const BOX = 100;
+
+/**
+ * The letter's boxes as one text: a full box runs straight on into the next (the box ran out mid-sentence);
+ * after a box that isn't full, the next one starts a new line.
+ * @param {string[]} parts
+ */
+function joinParts(parts) {
+  const filled = parts.filter((p) => p.trim());
+  return filled.map((p, i) => (i < filled.length - 1 && p.length < BOX ? `${p.trimEnd()}\n` : p)).join("");
+}
+
 /**
  * The letter form. `to` picks the recipient (a reply), and `draft` refills it after a problem.
- * @param {Player} player @param {{ to?: string, subject?: string, body?: string, problem?: string }} [draft]
+ * @param {Player} player @param {{ to?: string, subject?: string, parts?: string[], problem?: string }} [draft]
  */
 async function write(player, draft = {}) {
   const others = members()
@@ -213,8 +226,9 @@ async function write(player, draft = {}) {
     0,
     others.findIndex((m) => m.i === draft.to),
   );
-  const subjectMax = CONFIG.subjectLength;
+  const subjectMax = Math.min(BOX, CONFIG.subjectLength);
   const bodyMax = CONFIG.bodyLength;
+  const boxes = Math.max(1, Math.ceil(bodyMax / BOX));
   const form = new ModalFormData()
     .title("§lWrite a letter")
     .dropdown(
@@ -222,42 +236,44 @@ async function write(player, draft = {}) {
       others.map((m) => (here.has(m.i) ? `${m.n} §a(online)` : m.n)),
       { defaultValueIndex: index },
     )
-    .textField(`Subject (up to ${subjectMax} characters)`, "Hello!", { defaultValue: draft.subject ?? "" })
-    .textField(`Letter (up to ${bodyMax} characters; type \\n for a new line)`, "Write your letter here", { defaultValue: draft.body ?? "" })
-    .submitButton("Send");
+    .textField(`Subject (up to ${subjectMax} characters)`, "Hello!", { defaultValue: draft.subject ?? "" });
+  for (let i = 0; i < boxes; i++) {
+    const label =
+      i === 0
+        ? `Letter (up to ${bodyMax} characters; type \\n for a new line${boxes > 1 ? `. Each box takes ${BOX}: a full box runs on into the next, otherwise the next box starts a new line` : ""})`
+        : `Letter, part ${i + 1}`;
+    form.textField(label, i === 0 ? "Write your letter here" : "", { defaultValue: draft.parts?.[i] ?? "" });
+  }
+  form.submitButton("Send");
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
-  const [who, rawSubject, rawBody] = res.formValues;
+  const [who, rawSubject, ...rawParts] = res.formValues;
   const to = others[typeof who === "number" ? who : -1];
+  const parts = rawParts.map((v) => (typeof v === "string" ? v : ""));
   const subject = clean(rawSubject, subjectMax, false);
-  const body = clean(rawBody, bodyMax, true);
-  const again = { to: to?.i, subject: typeof rawSubject === "string" ? rawSubject : "", body: typeof rawBody === "string" ? rawBody : "" };
+  const body = clean(joinParts(parts), bodyMax, true);
+  const again = { to: to?.i, subject: typeof rawSubject === "string" ? rawSubject : "", parts };
   if (!to) return;
   if (!body.text) return write(player, { ...again, problem: "Write something in the letter first." });
-  send(player, to, subject.text || "(no subject)", body.text, subject.cut || body.cut);
+  const problem = send(player, to, subject.text || "(no subject)", body.text, subject.cut || body.cut);
+  // Nothing typed is lost: the form comes back filled in, with what went wrong at the top.
+  if (problem) return write(player, { ...again, problem });
 }
 
 /**
+ * Sends the letter, or says why it can't go yet.
  * @param {Player} player @param {Member} to @param {string} subject @param {string} body @param {boolean} shortened
+ * @returns {string | undefined} the problem, or undefined once it's sent
  */
 function send(player, to, subject, body, shortened) {
   const wait = get("sendCooldownSeconds") * 1000 - (Date.now() - (lastSent.get(player.id) ?? 0));
-  if (wait > 0) {
-    player.sendMessage(`§cWait ${Math.ceil(wait / 1000)} more seconds before sending another letter.`);
-    return;
-  }
-  if (letters().size >= MAX_LETTERS) {
-    player.sendMessage("§cThe realm's mail is full. Ask players to delete old letters.");
-    return;
-  }
+  if (wait > 0) return `Wait ${Math.ceil(wait / 1000)} more seconds before sending another letter, then press Send again.`;
+  if (letters().size >= MAX_LETTERS) return "The realm's mail is full. Ask players to delete old letters.";
   // Make room: the oldest letters the recipient has already read go first.
   const inbox = inboxOf(to.i);
   const limit = get("inboxLimit");
   const read = inbox.filter((l) => l.r).reverse(); // oldest first
-  if (inbox.length - read.length >= limit) {
-    player.sendMessage(`§c${to.n}'s mailbox is full of unread letters. Try again once they've read some.`);
-    return;
-  }
+  if (inbox.length - read.length >= limit) return `${to.n}'s mailbox is full of unread letters. Try again once they've read some.`;
   for (let n = inbox.length; n >= limit; n--) {
     const old = /** @type {Letter} */ (read.shift());
     save({ ...old, di: 1 });
@@ -283,6 +299,7 @@ function send(player, to, subject, body, shortened) {
     reader.sendMessage(`§eNew letter from ${player.name}: "${subject}§r§e". Read it with /realm:mail`);
     reader.playSound("random.orb", { pitch: 0.9, volume: 0.8 });
   }
+  return undefined;
 }
 
 /** @param {Player} player @param {Letter} l */
@@ -290,7 +307,7 @@ async function readLetter(player, l) {
   if (!l.r) save((l = { ...l, r: 1 }));
   const body = [`§7From:§r ${l.fn}`, `§7Sent:§r ${ago(l.at)} (${stamp(l.at)})`, "", `${l.b}§r`].join("\n");
   await menu(player, `§l${l.s}`, body, [
-    { text: "Reply", run: () => write(player, { to: l.f, subject: l.s.startsWith("Re: ") ? l.s : `Re: ${l.s}`.slice(0, CONFIG.subjectLength) }) },
+    { text: "Reply", run: () => write(player, { to: l.f, subject: (l.s.startsWith("Re: ") ? l.s : `Re: ${l.s}`).slice(0, Math.min(BOX, CONFIG.subjectLength)) }) },
     {
       text: "§cDelete",
       run: () => {
@@ -327,6 +344,7 @@ async function inbox(player) {
           if (now) save({ ...now, di: 1 });
         }
         player.onScreenDisplay.setActionBar(`§7Deleted ${read.length} letter${read.length === 1 ? "" : "s"}`);
+        return inbox(player);
       },
     });
   }
