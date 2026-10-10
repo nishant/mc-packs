@@ -95,29 +95,29 @@ What each pack in this repo does, how to use it, and how to configure it.
 ### Installing from mc.nish.software
 <!-- on the site -->
 
-The realm runs everything as one pack, **Realm Bundle**, and that is the download to pick. To install or update it:
+The realm runs everything as two packs: **Realm Bundle**, a behavior pack with every feature, and **Realm Resources**, a resource pack with every texture, particle, fog and sound. A pack can't be both kinds, so two is the fewest possible. To install or update them:
 
-1. **Download** the latest Realm Bundle `.mcpack` from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open it. Minecraft starts and imports it as "Realm Bundle".
-2. **Open the realm's settings** (the pencil next to the realm), go to **Behavior Packs**, find Realm Bundle under **Available** and activate it. Minecraft uploads it to the realm.
-3. **Join** once the realm restarts. The welcome popup and the `/realm:` commands mean it's running.
+1. **Download** the latest Realm Bundle and Realm Resources `.mcpack` files from [mc.nish.software/realm](https://mc.nish.software/realm/) on the device you play on (Windows, phone or tablet) and open each. Minecraft starts and imports them as "Realm Bundle" and "Realm Resources".
+2. **Open the realm's settings** (the pencil next to the realm). Under **Behavior Packs**, find Realm Bundle under **Available** and activate it. Under **Resource Packs**, activate Realm Resources and move it to the **top** of the active list, so its rain, sky and tools win over other resource packs. Minecraft uploads both to the realm.
+3. **Join** once the realm restarts, and accept the resource pack download if asked. The welcome popup and the `/realm:` commands mean it's running.
 
-**Updating:** download and open the newer version, then check that the realm's active Realm Bundle shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
+**Updating:** download and open the newer version, then check that the realm's active Realm Bundle (or Realm Resources) shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
 
-**Standalone packs:** four packs are never in the Realm Bundle and are made to run next to it: [Realistic Rain](#realistic-rain--rain_rp), [Realm Skies](#realm-skies--sky_rp) and [Translucent Tools](#translucent-tools--translucent_rp) (resource packs) and [Rain Extras](#rain-extras--rain_bp) (a behavior pack). Download each from its card under **Standalone packs** and open it, then in the realm's settings activate Realistic Rain, Realm Skies and Translucent Tools under **Resource Packs**, at the top of the list, and Rain Extras under **Behavior Packs**, next to the Realm Bundle. Players get them automatically when they join. Realm Skies draws the tornadoes, rainbows, aurora, shooting stars, meteors, sandstorms, blizzards, moon fogs and trails of the bundle's sky packs: without it those still happen, but you can't see them.
+**What's in each:** the Realm Bundle holds every behavior pack in this repo, Rain Extras included. Realm Resources holds the three resource packs: [Realistic Rain](#realistic-rain--rain_rp), [Realm Skies](#realm-skies--sky_rp) and [Translucent Tools](#translucent-tools--translucent_rp). Players get both packs automatically when they join. Realm Skies draws the tornadoes, rainbows, aurora, shooting stars, meteors, sandstorms, blizzards, moon fogs and trails of the bundle's sky packs: without it those still happen, but you can't see them.
 
-**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. (The standalone packs above aren't in the bundle, so they go with either.) Switching between them starts the features' in-game settings over (welcome and news text, tips, settings from `/realm:config`, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
+**Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. The same goes for Realm Resources and the single resource packs. If you had Realistic Rain, Realm Skies, Translucent Tools or Rain Extras active on their own before, remove them when you add the bundles. Switching between them starts the features' in-game settings over (welcome and news text, tips, settings from `/realm:config`, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
 ### Installing on a Realm
 
 For whoever builds the packs from this repo:
 
-1. Build the packs with `npm run build` (one `dist/<folder>.mcpack` per pack), or `npm run bundle -- --all` for a single bundle.
+1. Build the packs with `npm run build` (one `dist/<folder>.mcpack` per pack), or `npm run bundle -- --all` and `npm run bundle -- --resources` for the two bundles (`dist/realm_bundle.mcpack`, `dist/realm_resources.mcpack`).
 2. Open the `.mcpack` on a device with Minecraft. It imports automatically.
-3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**. A resource pack (`rain_rp`, `sky_rp`, `translucent_rp`) goes under **Resource Packs** instead, at the top of the active list.
+3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**. A resource pack (Realm Resources, or `rain_rp`, `sky_rp`, `translucent_rp` on their own) goes under **Resource Packs** instead, at the top of the active list.
    *Another way:* download the Realm world, activate the pack under the world's **Behavior Packs**, and upload the world again.
 4. Rejoin. Commands are registered when the world loads.
 
-> ⚠️ Activate **either** the individual packs **or** a bundle that contains them, never both. Otherwise every command is registered twice, and the duplicate commands fail to load. Standalone packs (listed in `tools/standalone.json`, like `rain_bp`) are never in a bundle: activate them next to it.
+> ⚠️ Activate **either** the individual packs **or** a bundle that contains them, never both. Otherwise every command is registered twice, and the duplicate commands fail to load. Packs listed in `tools/standalone.json` (none today) are never in a bundle: activate them next to it.
 
 ### Commands
 
@@ -212,7 +212,7 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 
 ### What players see
 
-- Only installed packs are listed: each pack answers when the menu asks, as with `/realm:help`. Rain Extras is listed too when it runs next to the Realm Bundle.
+- Only installed packs are listed: each pack answers when the menu asks, as with `/realm:help`. Rain Extras is listed too, from the bundle or on its own.
 - Each setting has a `!` icon: hover over it or tap it for what the setting does, its default and, for a slider, its range.
 - Volumes and other 0 to 1 settings are sliders in percent (`Storm wind volume (%)`, 0 to 100 in steps of 5), and settings in fractional steps, such as Chairs' seat reach (1 to 5 blocks in 0.5s), are lists of their exact values: Bedrock's sliders only stop on whole numbers. A setting you don't touch is saved exactly as it was, even a `config.js` value between the steps or outside the in-game range (shown at the nearest place the control can show it).
 - Tapping **Save** without changing anything says `No changes`.
@@ -3875,7 +3875,7 @@ Operators can change `enabled`, `bloodChance`, `harvestChance`, `avoidSpawn`, `b
 
 ## Realistic Rain — `rain_rp`
 
-Thicker, heavier rain that stays blue like vanilla, the realm's own rain and thunderstorm recordings, denser blue-gray rain fog, and smaller, softer splashes. Where it snows, bigger, solid snowflakes and a whiter, denser snow fog. A **resource pack** that runs next to the Realm Bundle, never inside it, and costs no more frames than vanilla rain.
+Thicker, heavier rain that stays blue like vanilla, the realm's own rain and thunderstorm recordings, denser blue-gray rain fog, and smaller, softer splashes. Where it snows, bigger, solid snowflakes and a whiter, denser snow fog. A **resource pack**, part of **Realm Resources** (or on its own), and costs no more frames than vanilla rain.
 
 ### See and hear it
 
@@ -3893,7 +3893,7 @@ The pictures are renders, not in-game screenshots: a simple scene drawn with thi
 1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
 2. Wait for rain, or ask an operator for `/weather rain` or `/weather thunder`. In snowy places (snowy plains, ice spikes, snowy taigas, frozen rivers and oceans, snowy beaches, groves, snowy slopes, and frozen and jagged peaks) the same weather brings the heavier snow and its whiter fog.
 3. For storm fog, a darker haze on Vibrant Visuals, ground mist, drips, storm wind, rain on the roof and the rain muffled indoors, the realm also needs [Rain Extras](#rain-extras--rain_bp).
-4. **Operators:** download Realistic Rain from its card on mc.nish.software/realm and open it. In the realm's settings, activate it under **Resource Packs** and move it to the **top** of the active list, above Firewolf and the others, so its rain wins.
+4. **Operators:** it comes with Realm Resources: activate that under **Resource Packs** at the **top** of the active list, above Firewolf and the others, so its rain wins. To use it alone instead, download Realistic Rain from its card and activate it the same way (not together with Realm Resources).
 
 ### What players see
 
@@ -3953,7 +3953,7 @@ The rain, thunder, lightning-strike and thunderstorm sounds are excerpts of reco
 
 ## Rain Extras — `rain_bp`
 
-Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. A **standalone** behavior pack: it runs next to the Realm Bundle, not inside it.
+Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. Part of the Realm Bundle (it used to be standalone).
 
 ### See and hear it
 
@@ -3969,7 +3969,7 @@ A render, not an in-game screenshot (see [Realistic Rain](#realistic-rain--rain_
 2. In a thunderstorm, the fog rolls in thicker and darker over about 12 seconds, the storm rumbles all around you with strong wind gusts (both muffled when you're inside), and low mist drifts along the ground with the wind when you're outdoors. It all clears the same way when the storm passes.
 3. On **Vibrant Visuals**, rain also brings a darker blue-gray haze that settles in the valleys, since Vibrant Visuals ignores fog colors. Fancy keeps Realistic Rain's fog.
 4. Run `/realm:rain`, or use the same switch in `/realm:prefs`, to disable these extras for yourself, on a slower device for example. Chat says `Rain extras (fog, haze, mist, drips and sounds): Disabled. Run /realm:rain again to enable them.` The choice is remembered.
-5. **Operators:** add Rain Extras under **Behavior Packs**, next to the Realm Bundle (it's never part of the bundle), and add [Realistic Rain](#realistic-rain--rain_rp) under **Resource Packs** at the top of the list. The fogs, particles and sounds come from Realistic Rain, so without it nothing shows. `/realm:config` → Rain Extras enables or disables each extra and sets the wind, thunderstorm and roof volumes.
+5. **Operators:** Rain Extras is in the Realm Bundle; its fogs, particles and sounds come from Realistic Rain (in Realm Resources), so without that nothing shows. `/realm:config` → Rain Extras enables or disables each extra and sets the wind, thunderstorm and roof volumes.
 
 ### What players see
 
@@ -4055,13 +4055,13 @@ Operators can change `defaultOff`, `stormFog.enabled`, `haze.enabled`, `mist.ena
 
 ## Realm Skies — `sky_rp`
 
-The pictures for the realm's sky events: rainbows, aurora curtains, shooting stars, meteors with fiery trails and smoking craters, tornado dust, sandstorms, blizzards, fog banks, the blood and harvest moons' glow, and the small trails players can earn. A **resource pack**, standalone like [Realistic Rain](#realistic-rain--rain_rp): it runs next to the Realm Bundle, never inside it. It adds only new particles and fogs and replaces nothing from vanilla, so it changes nothing until a behavior pack uses it, and those packs still work without it (their particles and fogs just don't show).
+The pictures for the realm's sky events: rainbows, aurora curtains, shooting stars, meteors with fiery trails and smoking craters, tornado dust, sandstorms, blizzards, fog banks, the blood and harvest moons' glow, and the small trails players can earn. A **resource pack**, part of **Realm Resources** with [Realistic Rain](#realistic-rain--rain_rp) (or on its own). It adds only new particles and fogs and replaces nothing from vanilla, so it changes nothing until a behavior pack uses it, and those packs still work without it (their particles and fogs just don't show).
 
 ### How to use
 
 1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
 2. Watch the sky. The behavior packs below decide when something happens; this pack is what you see when it does: a rainbow after the rain, an aurora on a clear night, a meteor shower, a tornado on the horizon.
-3. **Operators:** download Realm Skies from its card on mc.nish.software/realm and open it. In the realm's settings, activate it under **Resource Packs** at the **top** of the active list (next to Realistic Rain; the two don't overlap, so their order between themselves doesn't matter).
+3. **Operators:** it comes with Realm Resources: activate that under **Resource Packs** at the **top** of the active list. To use it alone instead, download Realm Skies from its card and activate it the same way (not together with Realm Resources).
 
 ### What players see
 
@@ -4141,7 +4141,7 @@ Everything in `packs/sky_rp/` is generated by `npm run gen:sky` (`tools/gen-sky/
 
 ## Translucent Tools — `translucent_rp`
 
-Tools, weapons and the shield are half see-through in your hand, so they block less of the screen. Swords, pickaxes, axes, shovels and hoes of every material, the mace, bow, crossbow, trident and shield are drawn at 50% opacity, in their usual shape and place. A **resource pack** that runs next to the Realm Bundle, never inside it.
+Tools, weapons and the shield are half see-through in your hand, so they block less of the screen. Swords, pickaxes, axes, shovels and hoes of every material, the mace, bow, crossbow, trident and shield are drawn at 50% opacity, in their usual shape and place. A **resource pack**, part of **Realm Resources** (or on its own).
 
 ### See and hear it
 
@@ -4153,7 +4153,7 @@ A picture of the textures, not an in-game screenshot: where a tool sits and how 
 
 1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
 2. Hold any tool, weapon or a shield: you can see through it. It works in first person and in third person, for every player and mob holding one.
-3. **Operators:** download Translucent Tools from its card on mc.nish.software/realm and open it. In the realm's settings, activate it under **Resource Packs**, near the top of the list (above Firewolf and any pack that changes how held items look).
+3. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**, near the top of the list (above Firewolf and any pack that changes how held items look). To use it alone instead, download Translucent Tools from its card and activate it the same way (not together with Realm Resources).
 
 ### What players see
 
@@ -4200,7 +4200,8 @@ Merges several packs into one `.mcpack`, so the Realm lists one pack instead of 
 
 ```bash
 npm run bundle -- --list                                 # available packs, and which --all bundles
-npm run bundle -- --all                                  # → dist/realm_bundle.mcpack (bundled packs only)
+npm run bundle -- --all                                  # → dist/realm_bundle.mcpack (every behavior pack)
+npm run bundle -- --resources                            # → dist/realm_resources.mcpack (every resource pack)
 npm run bundle -- --packs welcome_bp,stats_bp            # some packs, in this order
 npm run bundle -- --all --name my_bundle --title "My Bundle"
 ```
@@ -4211,8 +4212,10 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Dependencies | `@minecraft/*` versions merged to the highest. Packs needing different major versions can't be bundled |
 | Identity | UUIDs are derived from `--name`. Rebuilding with the same name, even with a different selection, **updates** the existing pack on the Realm |
 | Version | Build time `[YYYY, MMDD, HHMM]` (UTC), so it always increases |
-| Conflicts | Two packs with the same non-script file and different contents → error |
-| Limits | Behavior packs only. `--all` also leaves out the **standalone** packs listed in `tools/standalone.json` (`rain_bp`), which run as their own add-on next to the bundle; `--list` shows which packs are bundled |
+| Conflicts | Two packs with the same non-script file and different contents → error, except the JSON lists the game merges (`sounds.json`, `sound_definitions.json`, `*_texture.json`, `blocks.json`…), whose entries are merged as long as none is defined twice differently |
+| Icon | `pack_icon.png` of `--icon` (default `sky_rp`, Realm Skies' night sky) |
+| Resource packs | `--resources` merges every resource pack into **Realm Resources** (`dist/realm_resources.mcpack`): all files side by side, one manifest. Behavior and resource packs never share a bundle |
+| Limits | `--all` and `--resources` leave out packs listed in `tools/standalone.json` (none today); `--list` shows which bundle takes each pack |
 
 > ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, `/realm:config` settings, per-player toggles and preferences, first-joined dates, Creeper Guard zones, the Farm Loader list (the ticking areas themselves stay loaded) and what Chest Finder remembers. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
 
@@ -4237,12 +4240,12 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
 | Death Point ↔ Farm Loader | `/realm:death_back` adds a ticking area for a few seconds to load a faraway death point, so it counts toward the same 10 per world. If Farm Loader has used all 10, `/realm:death_back` says it can't load the death point; a `/realm:farm_add` during those seconds may be refused by the game |
 | Hotbar Refill ↔ Low Durability Warning | Separate: the warning still comes before a tool breaks, and Hotbar Refill moves a spare in once it has. The spare starts with no warning until it runs low |
-| Coordinates HUD ↔ packs with action bar messages | Low Durability Warning, Quick Stack & Sort, Land Claims, Chairs, AFK and others show short messages on the same bar. For a player with the HUD on, the HUD replaces them once its text changes (within half a second while walking). Mob Health, Elytra HUD and Daily Quests send `realm:actionbar`, so the HUD waits for them |
+| Coordinates HUD ↔ packs with action bar messages | Low Durability Warning, Quick Stack & Sort, Land Claims, Chairs, AFK and others show short messages on the same bar. For a player with the HUD on, the HUD replaces them once its text changes (within half a second while walking). Mob Health, Elytra HUD, Daily Quests, AFK's sleep status, Low Durability Warning, Quick Stack & Sort, Land Claims, Right-click Harvest and the adventure packs send `realm:actionbar`, so the HUD waits for them; Story Questlines' tracker also waits while another pack's note is showing |
 | Mob Health → Coordinates HUD | Each hit shows the mob's health and asks the HUD to hold off for `holdTicks` (2 seconds); then the coordinates come back |
 | Elytra HUD → Coordinates HUD | While a player glides, the Elytra HUD sends `realm:actionbar`, so the Coordinates HUD pauses for that player and comes back a second or two after landing |
 | Elytra HUD ↔ Low Durability Warning, Land Claims, AFK smart sleep | All write the bar above the hotbar. While gliding, their messages can show for a moment before the HUD's next update replaces them |
 | Realm Mail ↔ Welcome, News | The unread letters line comes 8 seconds after joining (`notifyDelaySeconds`), after the welcome and news popups |
-| AFK ↔ Nicknames | Both write the name above a player's head. Nicknames puts the nickname back within half a second of the AFK pack changing it, keeping `[AFK]` in front while the player has the `afk` tag. Keep Nicknames `afkTag` and `afkPrefix` the same as AFK `tag` and `nameTagPrefix` |
+| AFK ↔ Nicknames | Both write the name above a player's head. The AFK pack only adds or removes its own `[AFK]` prefix in front of whatever the tag shows, so a nickname and title stay put. Keep Nicknames `afkTag` and `afkPrefix` the same as AFK `tag` and `nameTagPrefix` |
 | Right-click Harvest → Daily Quests | A crop harvested by tapping counts for harvest quests, the same as breaking it |
 | Daily Quests ↔ Stats, Milestones | Separate counts: the same mining, kills and travel add to all of them |
 | Stats → Milestones | Milestones reads the `stats_<stat>` scoreboards when they exist and uses the larger of their number and its own, so history from Stats counts. Works without Stats |
@@ -4254,25 +4257,26 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Fast Leaf Decay → Lag Cleanup | The saplings and sticks from decayed leaves are dropped items like any others; a forest cleared in one go can push the count toward Lag Cleanup's `threshold` |
 | Lag Cleanup → Farm Loader, item farms | Items a farm drops count toward `threshold`. Items that sit in a farm's collection area with no player near can be cleared; hoppers under the drops keep the count low |
 | Realm Help ← every pack | `/realm:help` lists the packs that answer its script event, so it only shows what's installed. Its text is generated from this file |
-| Realm Settings ↔ every behavior pack | `/realm:config` and `/realm:prefs` list the packs that answer the `realm:cfg_ping` script event, and send changes back the same way, so each pack keeps its own settings. Rain Extras answers too, from outside the bundle. Without Realm Settings, every pack still works, with its saved settings or `config.js` |
+| Realm Settings ↔ every behavior pack | `/realm:config` and `/realm:prefs` list the packs that answer the `realm:cfg_ping` script event, and send changes back the same way, so each pack keeps its own settings. Without Realm Settings, every pack still works, with its saved settings or `config.js` |
 | Realm Settings → Welcome, News | `/realm:config` changes the same saved values as `/realm:welcome_edit` (`showOnce`, `chat`, `screenTitle`) and `/realm:news_tips` → **Settings** (tips on or off, interval) |
 | Rain Extras → Realistic Rain | Rain Extras' storm fogs, haze, mist and drip particles, and wind, thunderstorm, roof and muffled-rain sounds are defined in Realistic Rain, so it needs that resource pack. Realistic Rain works on its own |
-| Rain Extras → Realm Bundle | Standalone: it runs as its own add-on next to the bundle and still answers `/realm:help` (`/realm:help rain`). `/realm:rain` shares the `realm:` namespace, so it can join the bundle later without a rename |
+| Rain Extras ↔ Regional Weather, Blood Moon | Rain Extras' storm fog stays off on sand, terracotta, snow and ice, so Regional Weather's sandstorm and blizzard fogs show there; the moon fog is off while it rains. Each pack pushes `/fog` under its own name and only removes its own |
 | AFK smart sleep → Rain Extras | Skipping the night clears the weather, so the storm fog and haze clear, the wind stops and drips taper off as after any rain |
 | Townsfolk ↔ the adventure packs | Townsfolk owns the NPCs and their menus. When you tap one, it sends `realm:npc_talk`; Crowns (Market), Story Questlines, Guilds (Guild hall), Bounty Board, Relics (Relic forge), Fishing 2.0, Treasure Maps, Waystones & Inns, Town Projects and Weather Almanac (Forecast) answer with buttons for that NPC's roles. Without Townsfolk those menus can't be reached from an NPC; most packs also have a command |
 | Crowns ↔ every pack that pays or sells | They all use the `crowns` scoreboard directly, so rewards and prices work with or without the Crowns pack. Crowns adds the balance, the top list, paying other players and the Market |
-| Daily Quests, Story Questlines, Bounty Board, Treasure Maps, Fishing 2.0, Expeditions, Town Projects → Guilds | Each finished quest-like thing sends `realm:quest_done`; Guilds turns it into reputation (`questRep`, `kindGuild`). Some also send `realm:rep_add` directly for choices and bonuses |
-| Champions ↔ Bounty Board, Story Questlines, Guilds, Blood Moon | Bounty Board and Story Questlines ask Champions for named targets (`realm:champion_spawn`) and hear about kills (`realm:champion_slain`); Guilds gives Wardens reputation for them; a Blood Moon triples the champion chance (`realm:moon`). Story Questlines spawns its own boss if Champions isn't installed |
+| Daily Quests, Story Questlines, Bounty Board, Treasure Maps, Fishing 2.0, Expeditions, Town Projects → Guilds | Each finished quest-like thing sends `realm:quest_done`; Guilds turns it into reputation (`questRep`, `kindGuild`). Bounty Board gives reputation only that way (plus `realm:rep_add` for bounty helpers, who finish nothing themselves); Story Questlines adds `realm:rep_add` for its choices |
+| AFK → Guilds | Players with the `afk` tag earn no travel reputation (`afkTag`), so idle minecart or boat loops don't farm Wayfarers |
+| Champions ↔ Bounty Board, Story Questlines, Guilds, Blood Moon | Bounty Board and Story Questlines ask Champions for named targets (`realm:champion_spawn`) and hear about kills (`realm:champion_slain`); Guilds gives Wardens reputation for them; a Blood Moon triples the champion chance (`realm:moon`). Story Questlines spawns its own boss if Champions isn't installed. A `realm:champion_spawn` tag must start with `realm:`. Natural champions never appear in or next to player builds (`avoidBuilds`), so mob farms don't make them |
 | Skills, Bounty Board, Story Questlines, Expeditions ← Parties | Party mates carry the tag `realm_party:<code>`. Skills gives 10% more XP near a mate; bounties and story objectives count for mates within 64 blocks; Expeditions takes the party in together |
 | Titles & Trails → Nicknames | The title a player wears is the tag `realm_title:<text>`; Nicknames shows it in gray under the name. Guilds, Skills, Field Journal, Blood Moon and Story Questlines unlock titles with `realm:title_unlock` |
 | Relics ← Champions, Story Questlines, Treasure Maps, Rainbows, Expeditions | Champions drop Relic Shards; the others may give a relic with `realm:relic_give`. Relics' Storm Meter reads Storm Chasing's cell (`realm:storm_cell`) |
 | Field Journal ← many packs | Weather, sky, fishing, relic, story and place discoveries arrive as `realm:journal` and `realm:sky_event`, so the Journal fills in as you meet them |
-| Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it; sleeping through rain ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
-| Sky packs → Realm Skies | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |
+| Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it, so operators should use `/realm:weather_set` rather than `/weather`; sleeping through rain (or Smart Sleep) ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
+| Sky packs → Realm Skies (Realm Resources) | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |
 | Storm Chasing, Tornadoes, Rainbows, Meteor Strikes, Merchant Caravan, Fishing 2.0 → Waystones & Inns | Innkeepers remember the last few `realm:sky_event` announcements for **Hear the news** |
 | Weather Almanac ↔ Rain Extras | Rain Extras' fog, mist, drips and sounds follow the Almanac's planned rain and thunder like any other weather |
 
-Only Rain Extras needs another pack (Realistic Rain). The sky packs need Realm Skies to be seen, and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn, so it has nothing to coordinate with the other packs.
+Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn, so it has nothing to coordinate with the other packs.
 
 ---
 
@@ -4297,7 +4301,7 @@ Only Rain Extras needs another pack (Realistic Rain). The sky packs need Realm S
 | Wind, thunderstorm or rain on the roof too loud or too quiet | Operators: `/realm:config` → Rain Extras → **Storm wind volume**, **Rain breeze volume**, **Thunderstorm sound volume**, **Rain on the roof volume** (also the muffled rain indoors). Everyone: the game's **Weather** volume slider covers them too |
 | Rain as loud indoors as outdoors | Is **Muffled rain indoors** enabled (`/realm:config` → Rain Extras), and are the extras on for you (`/realm:rain`)? It needs Realistic Rain 1.3 or newer, whose rain clips fade in slowly enough to be stopped quietly. Leaves don't count as a roof |
 | Tools still look solid in your hand | Is Translucent Tools active under **Resource Packs**, above other packs that change held items? Did you accept the resource pack download when you joined? Inventory icons stay solid; only the item in your hand is see-through |
-| The pack shows a pink and black placeholder icon | Harmless. Only Realistic Rain, Realm Skies and Translucent Tools have a `pack_icon.png` so far, and `tools/bundle.mjs` leaves pack icons out of the bundle, so giving the bundle an icon needs a bundler change first |
+| The pack shows a pink and black placeholder icon | Harmless, and gone in current builds: both bundles now carry Realm Skies' icon (`--icon`). Single behavior packs still have none |
 
 ---
 
@@ -4324,11 +4328,11 @@ The [Our realm](https://mc.nish.software/realm/) page shows this file to players
 
 | | |
 |---|---|
-| What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first; bundled packs under the Realm Bundle, standalone and resource packs under **Standalone packs**), plus every section marked `<!-- on the site -->` |
+| What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first; behavior packs under the Realm Bundle, resource packs under **Realm Resources**), plus every section marked `<!-- on the site -->` |
 | What stays behind "For operators" | A pack's `### Configuration…`, `### Saved data` and `### Resetting…` subsections, collapsed |
 | Pictures and sound clips | A pack's `### See and hear it` subsection becomes a gallery at the top of its card: each `[label](media/….mp3)` link as a listening clip at the top (with a **Listen** button in the card's header, so it plays without opening the card), each `![caption](media/…)` image (`.webp`, `.png`, `.jpg`, `.gif`) with its caption, two images on one line (`![Before label](media/…) ![After label](media/…) caption`) as a before/after comparison you drag across, and any other paragraph as a note. The files live in `docs/media/` here, and `pack-docs.mjs` copies the ones the page uses to `site/realm/media/` |
 | How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`), then commit and push there. `--check` fails if the page is out of date |
-| Downloads | `node tools/publish-packs.mjs --notes "what changed"` there builds the Realm Bundle and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"). A single pack is only published when its `header.version` goes up. Standalone packs and resource packs are published the same way, and the realm page lists them under **Standalone packs** instead of the Realm Bundle |
+| Downloads | `node tools/publish-packs.mjs --notes "what changed"` there builds the Realm Bundle, Realm Resources and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"). A single pack is only published when its `header.version` goes up; a bundle whenever anything in it changed. The realm page leads with the two bundles, and every pack can still be downloaded on its own from its card |
 | When | After every change to this file that players should see, and with every new bundle or pack version published on the site |
 
 Links in this file to its own sections (`#…`) are dropped on the site; links to web pages are kept.

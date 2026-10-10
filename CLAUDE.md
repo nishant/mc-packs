@@ -16,7 +16,7 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 - **Stable APIs only:** `@minecraft/server` 2.1.0 / `@minecraft/server-ui` 2.0.0, no beta modules or experiments, because the packs run on a Realm.
 - **Packs stay independent:** no imports between packs. Coordinate through tags, scoreboards or script events, like the AFK pack's `afk` tag that the Stats pack reads, or the `realm:help_ping`/`realm:help_pong` script events `/realm:help` uses to see which packs are installed. Dynamic property keys use the pack's own prefix (`news:…`, `stats:…`).
 - **Commands all use the `realm:` namespace**, named `realm:<pack>` or `realm:<pack>_<action>` (e.g. `realm:news_edit`). Bedrock allows only one command namespace per add-on, and a bundle is one add-on: a second namespace throws `NamespaceMismatch` and those commands never register. `npm run check` and `npm run bundle` fail on any other namespace.
-- **Bundle or standalone:** `npm run bundle -- --all` (the Realm Bundle) takes every behavior pack except those in `tools/standalone.json` (`rain_bp`); resource packs are never bundled. Standalone and resource packs still follow every rule here (docs section, `realm:` namespace, the `/realm:help` responder for behavior packs) so they can join the bundle later; `tools/help-catalog.mjs` leaves resource packs out of the help, since they can't answer it.
+- **Bundles:** the realm runs two packs: `npm run bundle -- --all` (the Realm Bundle) takes every behavior pack and `npm run bundle -- --resources` (Realm Resources) every resource pack, except those in `tools/standalone.json` (empty today). A pack can't mix the two kinds, so two is the minimum; keep it that way. Every pack is still published on its own too. Resource packs are merged only at bundle time, in `dist/`: never merge them on disk (each generator deletes files it didn't make). Standalone and resource packs still follow every rule here (docs section, `realm:` namespace, the `/realm:help` responder for behavior packs) so they can join the bundle later; `tools/help-catalog.mjs` leaves resource packs out of the help, since they can't answer it.
 - **Pictures and sound clips** go in `docs/media/` and in a pack's `### See and hear it` subsection (`![caption](media/…)`, `[label](media/….mp3)`, and `![Before](media/…) ![After](media/…) caption` on one line for a before/after pair of the same spot); the realm page shows them as a gallery, with each pair as a comparison you drag across. The rain packs' are generated (`node tools/gen-rain/renders.mjs`, `node tools/gen-rain/sounds.mjs --audition docs/media/rain`): rerun them when the rain texture, fogs or sounds change. Label renders as renders, never as screenshots.
 - **Version bumps:** increase `header.version` in a pack's `manifest.json` whenever its contents change.
 
@@ -25,7 +25,7 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 ```bash
 npm run check     # tsc, ASCII game text, docs, commands, help catalog, rain_rp textures/fogs, sky_rp, translucent_rp. Run before every commit
 npm run build     # dist/<folder>.mcpack
-npm run bundle    # merge packs (see the bundle-packs skill)
+npm run bundle    # merge packs: -- --all (behavior), -- --resources (resource); see the bundle-packs skill
 npm run gen:rain  # regenerate rain_rp (sounds need ffmpeg with libvorbis)
 npm run gen:sky   # regenerate sky_rp
 npm run gen:translucent  # regenerate translucent_rp
