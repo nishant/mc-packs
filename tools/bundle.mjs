@@ -1,14 +1,19 @@
-// Merges several behavior packs from packs/ into one .mcpack.
+// Merges several packs from packs/ into one .mcpack: behavior packs into one behavior pack, resource packs
+// into one resource pack (a pack can't hold both kinds, so the realm needs two uploads at least).
 //
-//   node tools/bundle.mjs --list [--json]            show available packs and whether --all bundles them
-//   node tools/bundle.mjs --all [--name realm_bundle]  every behavior pack except the standalone ones (tools/standalone.json)
+//   node tools/bundle.mjs --list [--json]                 show available packs and which bundle takes them
+//   node tools/bundle.mjs --all [--name realm_bundle]       every behavior pack except the standalone ones (tools/standalone.json)
+//   node tools/bundle.mjs --resources [--name realm_resources]  every resource pack except the standalone ones
 //   node tools/bundle.mjs --packs welcome_bp,stats_bp [--name realm_bundle] [--title "Realm Bundle"]
+//   --icon <folder>   the pack whose pack_icon.png the bundle uses (default: Realm Skies, sky_rp)
 //
 // How the merge works:
 //   - each pack's scripts/ folder is copied to scripts/<pack>/, and a generated
 //     scripts/main.js imports every pack's entry point
-//   - any other files (recipes, entities, …) are copied as-is; two packs
-//     shipping the same path with different contents is an error
+//   - any other files (recipes, entities, textures, particles, fogs…) are copied as-is; two packs
+//     shipping the same path with different contents is an error, except the JSON files the game
+//     reads as one list (sounds.json, sound_definitions.json, *_texture.json, blocks.json…), whose
+//     entries are merged as long as no entry is defined twice differently
 //   - @minecraft/* dependencies are merged to the highest version (same major)
 //   - the bundle's UUIDs are derived from --name, so rebuilding with a different
 //     selection updates the same pack on the Realm instead of adding a new one
@@ -31,13 +36,19 @@ const { values: args } = parseArgs({
     list: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     all: { type: "boolean", default: false },
+    resources: { type: "boolean", default: false },
     packs: { type: "string" },
-    name: { type: "string", default: "realm_bundle" },
+    name: { type: "string" },
     title: { type: "string" },
+    icon: { type: "string", default: "sky_rp" },
   },
 });
 
-/** @typedef {{ folder: string, dir: string, manifest: any, name: string, description: string, version: string, kind: "behavior" | "resource", bundled: boolean }} Pack */
+/** @typedef {{ folder: string, dir: string, manifest: any, name: string, description: string, version: string, kind: "behavior" | "resource", bundled: boolean, bundle: string | null }} Pack */
+
+/** The bundle each kind of pack goes in with --all / --resources. */
+const BUNDLE_NAME = { behavior: "realm_bundle", resource: "realm_resources" };
+const BUNDLE_TITLE = { behavior: "Realm Bundle", resource: "Realm Resources" };
 
 /** @returns {Pack[]} */
 function loadPacks() {
@@ -56,7 +67,8 @@ function loadPacks() {
         description: manifest.header.description,
         version: manifest.header.version.join("."),
         kind: isResource ? "resource" : "behavior",
-        bundled: !isResource && !standalone.has(folder), // part of --all
+        bundled: !standalone.has(folder), // part of --all (behavior) or --resources (resource)
+        bundle: standalone.has(folder) ? null : BUNDLE_NAME[isResource ? "resource" : "behavior"],
       };
     });
 }
@@ -91,27 +103,30 @@ for (const f of standalone) if (!packs.some((p) => p.folder === f)) fail(`tools/
 
 if (args.list) {
   if (args.json) {
-    console.log(JSON.stringify(packs.map(({ folder, name, description, version, kind, bundled }) => ({ folder, name, description, version, kind, bundled })), null, 2));
+    console.log(JSON.stringify(packs.map(({ folder, name, description, version, kind, bundled, bundle }) => ({ folder, name, description, version, kind, bundled, bundle })), null, 2));
   } else {
-    for (const p of packs) console.log(`${p.folder.padEnd(16)} ${p.kind.padEnd(9)} ${(p.bundled ? "bundled" : "standalone").padEnd(11)} v${p.version.padEnd(7)} ${p.name} — ${p.description}`);
+    for (const p of packs) console.log(`${p.folder.padEnd(16)} ${p.kind.padEnd(9)} ${(p.bundle ?? "standalone").padEnd(16)} v${p.version.padEnd(7)} ${p.name} — ${p.description}`);
   }
   process.exit(0);
 }
 
-if (!args.all && !args.packs) fail("pass --all, --packs a,b,c, or --list");
+if (!args.all && !args.resources && !args.packs) fail("pass --all, --resources, --packs a,b,c, or --list");
 
 /** @type {Pack[]} */
 let selected;
 if (args.all) {
-  selected = packs.filter((p) => p.bundled);
+  selected = packs.filter((p) => p.bundled && p.kind === "behavior");
+} else if (args.resources) {
+  selected = packs.filter((p) => p.bundled && p.kind === "resource");
 } else {
   const wanted = [...new Set(/** @type {string} */ (args.packs).split(",").map((s) => s.trim()).filter(Boolean))];
   selected = wanted.map((w) => packs.find((p) => p.folder === w) ?? fail(`unknown pack "${w}". Run with --list.`));
 }
 if (selected.length === 0) fail("no packs selected");
-const resource = selected.filter((p) => p.kind !== "behavior");
-if (resource.length) fail(`resource packs can't be bundled yet: ${resource.map((p) => p.folder).join(", ")}`);
-if (!/^[a-z0-9_-]+$/.test(/** @type {string} */ (args.name))) fail("--name may only contain a-z, 0-9, _ and -");
+const kind = selected[0].kind;
+if (selected.some((p) => p.kind !== kind)) fail("a bundle holds behavior packs or resource packs, not both: bundle them separately (--all and --resources)");
+const bundleName = args.name ?? BUNDLE_NAME[kind];
+if (!/^[a-z0-9_-]+$/.test(bundleName)) fail("--name may only contain a-z, 0-9, _ and -");
 
 // A bundle is one add-on, and Bedrock allows one command namespace per add-on:
 // a second namespace throws NamespaceMismatch and those commands never register.
@@ -133,6 +148,29 @@ if (namespaces.size > 1) {
 
 // ---------------------------------------------------------------------------
 
+/** JSON files the game reads as one merged list, so two packs may each add entries to them. */
+const MERGEABLE = /^(sounds\.json|sounds\/sound_definitions\.json|blocks\.json|biomes_client\.json|textures\/(item_texture|terrain_texture|flipbook_textures)\.json|texts\/languages\.json)$/;
+
+/**
+ * Merges two parsed JSON files entry by entry: objects key by key, arrays concatenated (without repeats). The same
+ * entry defined differently in both is an error, since one pack would silently lose its version.
+ * @param {any} a @param {any} b @param {string} where @returns {any}
+ */
+function mergeJson(a, b, where) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const seen = new Set(a.map((x) => JSON.stringify(x)));
+    return [...a, ...b.filter((x) => !seen.has(JSON.stringify(x)))];
+  }
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+    /** @type {Record<string, any>} */
+    const out = { ...a };
+    for (const [k, v] of Object.entries(b)) out[k] = k in out ? mergeJson(out[k], v, `${where} → ${k}`) : v;
+    return out;
+  }
+  if (JSON.stringify(a) === JSON.stringify(b)) return a;
+  return fail(`${where}: both packs define it differently`);
+}
+
 /** @type {Map<string, { data: Buffer, from: string }>} */
 const files = new Map();
 /** @type {Map<string, string>} module_name → version */
@@ -150,6 +188,7 @@ for (const pack of selected) {
 
   for (const mod of manifest.modules) {
     if (mod.type === "data") hasData = true;
+    else if (mod.type === "resources") continue; // a resource pack is all files
     else if (mod.type === "script") {
       if (!mod.entry.startsWith("scripts/")) fail(`${folder}: script entry must be under scripts/ (got ${mod.entry})`);
       imports.push(`import "./${folder}/${mod.entry.slice("scripts/".length)}";`);
@@ -174,16 +213,29 @@ for (const pack of selected) {
     const out = rel.startsWith("scripts/") ? `scripts/${folder}/${rel.slice("scripts/".length)}` : rel;
     const data = readFileSync(abs);
     const existing = files.get(out);
-    if (existing && !existing.data.equals(data)) fail(`${out} exists in both ${existing.from} and ${folder}`);
+    if (existing && !existing.data.equals(data)) {
+      if (!MERGEABLE.test(out)) fail(`${out} exists in both ${existing.from} and ${folder}`);
+      const merged = mergeJson(JSON.parse(existing.data.toString("utf8")), JSON.parse(data.toString("utf8")), `${out} (${existing.from} + ${folder})`);
+      files.set(out, { data: Buffer.from(JSON.stringify(merged, null, 2) + "\n"), from: `${existing.from} + ${folder}` });
+      continue;
+    }
     files.set(out, { data, from: folder });
   }
 }
 
-if (files.has("scripts/main.js")) fail("a pack already has scripts/main.js at the bundle root");
-files.set("scripts/main.js", {
-  data: Buffer.from(`// Generated by tools/bundle.mjs — do not edit.\n${imports.join("\n")}\n`),
-  from: "bundle",
-});
+if (kind === "behavior") {
+  if (files.has("scripts/main.js")) fail("a pack already has scripts/main.js at the bundle root");
+  files.set("scripts/main.js", {
+    data: Buffer.from(`// Generated by tools/bundle.mjs — do not edit.\n${imports.join("\n")}\n`),
+    from: "bundle",
+  });
+}
+
+// One icon for the bundle (the packs' own icons would collide): Realm Skies' by default.
+const iconPack = packs.find((p) => p.folder === args.icon);
+const iconFile = iconPack && join(iconPack.dir, "pack_icon.png");
+if (iconFile && existsSync(iconFile)) files.set("pack_icon.png", { data: readFileSync(iconFile), from: args.icon });
+else console.warn(`note: no packs/${args.icon}/pack_icon.png, so the bundle has no icon`);
 
 const now = new Date();
 const version = [
@@ -195,16 +247,17 @@ const version = [
 const manifest = {
   format_version: 2,
   header: {
-    name: args.title ?? "Realm Bundle",
+    name: args.title ?? BUNDLE_TITLE[kind],
     description: `Bundle of: ${selected.map((p) => p.name).join(", ")}`,
-    uuid: uuidFrom(`${args.name}:header`),
+    uuid: uuidFrom(`${bundleName}:header`),
     version,
     min_engine_version: minEngine,
   },
   modules: [
-    ...(hasData ? [{ type: "data", uuid: uuidFrom(`${args.name}:data`), version: [1, 0, 0] }] : []),
+    ...(kind === "resource" ? [{ type: "resources", uuid: uuidFrom(`${bundleName}:resources`), version: [1, 0, 0] }] : []),
+    ...(hasData ? [{ type: "data", uuid: uuidFrom(`${bundleName}:data`), version: [1, 0, 0] }] : []),
     ...(imports.length
-      ? [{ type: "script", language: "javascript", uuid: uuidFrom(`${args.name}:script`), version: [1, 0, 0], entry: "scripts/main.js" }]
+      ? [{ type: "script", language: "javascript", uuid: uuidFrom(`${bundleName}:script`), version: [1, 0, 0], entry: "scripts/main.js" }]
       : []),
   ],
   dependencies: [
@@ -215,7 +268,7 @@ const manifest = {
 files.set("manifest.json", { data: Buffer.from(JSON.stringify(manifest, null, 2) + "\n"), from: "bundle" });
 
 mkdirSync(distDir, { recursive: true });
-const out = join(distDir, `${args.name}.mcpack`);
+const out = join(distDir, `${bundleName}.mcpack`);
 writeFileSync(out, zip([...files].map(([name, { data }]) => ({ name, data }))));
 
 console.log(`${relative(root, out)}  v${version.join(".")}  (${files.size} files)`);

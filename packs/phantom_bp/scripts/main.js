@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandStatus, EntityInitializationCause, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, EntityInitializationCause, GameMode, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { getFor, setFor } from "./settings.js";
 
@@ -16,7 +16,13 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   if (cause !== EntityInitializationCause.Spawned && cause !== EntityInitializationCause.Event) return;
   try {
     const at = entity.location;
-    const [nearest] = entity.dimension.getPlayers({ location: at, maxDistance: CONFIG.searchRadius, closest: 1 });
+    // Phantoms only come for players in survival or adventure, so creative and spectator players nearby don't count.
+    const [nearest] = entity.dimension.getPlayers({
+      location: at,
+      maxDistance: CONFIG.searchRadius,
+      closest: 1,
+      excludeGameModes: [GameMode.Creative, GameMode.Spectator],
+    });
     if (!nearest || !phantomsOff(nearest)) return;
     if (at.y - nearest.location.y < CONFIG.minHeightAbovePlayer) return; // spawn egg or summoned nearby
     entity.remove(); // removed, not killed: no drops, no membranes

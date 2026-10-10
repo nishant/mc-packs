@@ -519,20 +519,23 @@ async function lockMenu(player, dimension, at) {
   const name = nameOf(block.typeId).toLowerCase();
   const others = world.getAllPlayers().filter((p) => p.id !== player.id && !l.s.some((s) => s.i === p.id));
 
-  /** @type {{ text: string, run: () => void }[]} */
+  // Each action gets the block as read again after the form closes.
+  /** @type {{ text: string, run: (b: Block) => void }[]} */
   const actions = [];
   if (l.s.length < CONFIG.maxShared) {
     for (const p of others) {
+      const { id, name: pName } = p;
       actions.push({
-        text: `Share with ${p.name}\n§8They can open and sort it too`,
-        run: () => updateLock(block, (x) => ({ ...x, s: [...x.s, { i: p.id, n: p.name }] })),
+        text: `Share with ${pName}\n§8They can open and sort it too`,
+        run: (b) =>
+          updateLock(b, (x) => (x.s.length >= CONFIG.maxShared || x.s.some((y) => y.i === id) ? x : { ...x, s: [...x.s, { i: id, n: pName }] })),
       });
     }
   }
   for (const s of l.s) {
-    actions.push({ text: `Stop sharing with ${s.n}`, run: () => updateLock(block, (x) => ({ ...x, s: x.s.filter((y) => y.i !== s.i) })) });
+    actions.push({ text: `Stop sharing with ${s.n}`, run: (b) => updateLock(b, (x) => ({ ...x, s: x.s.filter((y) => y.i !== s.i) })) });
   }
-  actions.push({ text: `Unlock this ${name}\n§8Anyone can open it again`, run: () => updateLock(block, () => undefined) });
+  actions.push({ text: `Unlock this ${name}\n§8Anyone can open it again`, run: (b) => updateLock(b, () => undefined) });
 
   const body = [
     `Only you${l.s.length ? ` and ${orList(l.s.map((s) => s.n), "and")}` : ""} can open, sort or break this ${name}.`,
@@ -548,7 +551,9 @@ async function lockMenu(player, dimension, at) {
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
   const now = dimension.getBlock(at);
   if (!now || lockAt(now)?.o !== player.id) return; // broken or unlocked meanwhile
-  actions[res.selection]?.run();
+  const chosen = actions[res.selection];
+  if (!chosen) return;
+  chosen.run(now);
   player.onScreenDisplay.setActionBar("§aLock updated");
 }
 
@@ -561,10 +566,28 @@ world.beforeEvents.playerBreakBlock.subscribe((event) => {
   if (lock) sayLocked(player, lock);
 });
 
-// A broken or replaced block takes its lock with it.
+// A broken or replaced block takes its lock with it. When that was the counted half of a double
+// chest, the half left standing (now a single chest, marked `h`) becomes the counted one, so the
+// owner's lock count stays right and the leftover can't sit outside the maxLocks limit.
 world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
-  const key = lockKey(block.dimension.id, block.location);
-  if (locks().has(key)) saveLock(key, undefined);
+  try {
+    const key = lockKey(block.dimension.id, block.location);
+    const gone = locks().get(key);
+    if (!gone) return;
+    saveLock(key, undefined);
+    if (gone.h) return;
+    for (const d of SIDES) {
+      const next = block.offset(d);
+      if (!next) continue;
+      const k = lockKey(block.dimension.id, next.location);
+      const l = locks().get(k);
+      if (!l?.h || l.o !== gone.o || (containerOf(next)?.size ?? 0) > 27) continue;
+      const { h, ...rest } = l;
+      saveLock(k, rest);
+    }
+  } catch (e) {
+    console.warn(`[stash] ${e}`);
+  }
 });
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   const key = lockKey(block.dimension.id, block.location);

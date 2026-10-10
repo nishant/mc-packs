@@ -267,7 +267,7 @@ async function showBalance(player) {
     `Your balance: §6${crowns(mine)}§r`,
     rank ? `Rank: #${rank} of ${scores.length}` : "",
     "",
-    `§lTop ${Math.min(CONFIG.topCount, scores.length)}§r`,
+    `§lTop ${Math.max(1, Math.min(CONFIG.topCount, scores.length))}§r`,
     ...(top.length ? top : ["§7Nobody has any Crowns yet."]),
     "",
     "§7Earn Crowns from quests, bounties and selling at the market. Pay a friend with /realm:crowns_pay.",
@@ -445,7 +445,7 @@ async function sellMenu(player) {
   const amount = await chooseAmount(player, `§lSell ${entryName(e)}`, `How many ${entryName(e)}? (${rate}, you have ${fmt(chosen.have)})`, per, lots * per, per, `Sell ${per} ${entryName(e)} for ${crowns(e.price)}?`);
   if (amount === undefined || !player.isValid) return true;
   // The inventory may have changed while the form was open: count again.
-  const sellLots = Math.min(Math.floor(amount / per), Math.floor(countOf(player, e) / per));
+  const sellLots = Math.min(Math.floor(amount / per) || 0, lots, Math.floor(countOf(player, e) / per));
   if (sellLots <= 0) {
     player.sendMessage(`§cYou no longer have ${per} ${entryName(e)} to sell.`);
     return true;
@@ -478,7 +478,8 @@ async function buyMenu(player) {
   const label = `How many ${entryName(e)}? (${lot > 1 ? `${lot} for ` : ""}${crowns(price)}${lot > 1 ? "" : " each"}, you have ${crowns(crownsOf(player))})`;
   const amount = await chooseAmount(player, `§lBuy ${entryName(e)}`, label, lot, most * lot, lot, `Buy ${lot} ${entryName(e)} for ${crowns(price)}?`);
   if (amount === undefined || !player.isValid) return true;
-  const lots = Math.max(1, Math.floor(amount / lot));
+  // Never trust the slider's value as is: whole lots, 1 to what the form offered.
+  const lots = Math.min(most, Math.max(1, Math.floor(amount / lot) || 1));
   const cost = lots * price;
   if (!takeCrowns(player, cost)) {
     player.sendMessage(`§cYou need ${crowns(cost)}; you have ${crowns(crownsOf(player))}.`);

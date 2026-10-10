@@ -358,6 +358,7 @@ Warns players before a tool, weapon or armor piece breaks.
 - Each **hotbar slot** is tracked separately, so switching to another worn tool warns for that one too.
 - Items without durability (blocks, torches, …) are ignored.
 - Named items use their custom name (e.g. `Excalibur is low`).
+- The [Coordinates HUD](#coordinates-hud--hud_bp) steps aside for 3 seconds so the warning stays readable.
 
 ### Commands
 
@@ -410,7 +411,7 @@ A player counts as **active** when they do any of these:
 
 After `afkMinutes` (5) with none of these:
 
-- The name above the player's head becomes `[AFK] Name` (`nameTagPrefix`).
+- The name above the player's head becomes `[AFK] Name` (`nameTagPrefix`). The prefix goes in front of whatever the name tag already shows, so a nickname or title from [Nicknames](#nicknames--nick_bp) stays.
 - The player gets the `afk` tag (`tag`). Other packs and commands can use it, e.g. `@a[tag=!afk]`.
 - Chat shows `Name is now AFK` (`announce`).
 
@@ -422,14 +423,14 @@ Checked every second while at least one player is in bed:
 
 1. **Counted players** = everyone asleep, plus every non-AFK player in the Overworld (also those in the Nether/End if `sleep.countOtherDimensions` is on).
 2. **Needed** = `ceil(counted × sleep.percent / 100)`, at least 1.
-3. While anyone is in bed, Overworld players see `Zzz 1/2 sleeping - awake: Sam (1 AFK ignored)` above the hotbar. The names show when 1 to 3 counted players are awake.
-
-Lying in bed counts as activity, so a player who waits in bed for a long night isn't marked AFK when they get up.
+3. While anyone is in bed, Overworld players see `Zzz 1/2 sleeping - awake: Sam (1 AFK ignored)` above the hotbar. The names show when 1 to 3 counted players are awake. The [Coordinates HUD](#coordinates-hud--hud_bp) steps aside for it.
 4. **If vanilla's own rule already covers it**, i.e. enough players are asleep to meet the `playerssleepingpercentage` gamerule counting *everyone*, the pack does nothing and lets vanilla skip the night. That's always the case when nobody is AFK and everyone is in bed. Doing both would race, and the second skip would land a full day later.
 5. Otherwise, once enough players have been asleep for `sleep.requiredTicks` (about 8 s, and never less than about 7 s, so vanilla's ~5 s skip always comes first):
    - **At night:** moves to the **next morning**. Absolute time moves forward, so the day counter (`showdaysplayed`) stays correct. The weather clears too.
-   - **During a daytime thunderstorm:** only clears the weather. The pack only knows about storms that started while it was running, so a storm already going when the realm started isn't cleared.
+   - **During a daytime thunderstorm:** only clears the weather. The game doesn't let packs read the weather, so the pack remembers the last change it saw (saved, so it survives a restart); a storm that started before the pack was installed isn't cleared.
    - Chat shows `Good morning! (1 AFK player skipped)`.
+
+Lying in bed counts as activity, so a player who waits in bed for a long night isn't marked AFK when they get up.
 
 This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanilla handles everything it can, and this pack only covers what vanilla wouldn't, such as nights blocked by AFK players or by players in other dimensions.
 
@@ -447,7 +448,7 @@ This works **alongside** the vanilla `playerssleepingpercentage` gamerule: vanil
 | `announce` | `true` | Post AFK / back messages in chat |
 | `nameTagPrefix` | `§7[AFK]§r ` | Shown before the name above the player's head |
 | `tag` | `afk` | Tag added while AFK. The Stats pack's `afkTag` must match |
-| `sleep.enabled` | `true` | Turn smart sleep on or off |
+| `sleep.enabled` | `true` | Skip the night when enough non-AFK players are in bed |
 | `sleep.percent` | `100` | % of counted players that must be asleep |
 | `sleep.countOtherDimensions` | `false` | Also count non-AFK players in the Nether/End (who can't sleep), like vanilla |
 | `sleep.requiredTicks` | `160` | How long enough players must be asleep before skipping (20 = 1 s). Values below `140` are raised to `140`, so vanilla's ~100-tick skip always comes first |
@@ -460,13 +461,14 @@ Operators can change `afkMinutes`, `announce` and every `sleep.` option in game 
 |---|---|---|
 | `afk:cfg` | World | Settings changed in `/realm:config` |
 | `afk:pref` | Player | JSON `{ announce: false }` when the player turned their announcements off in `/realm:prefs` |
+| `afk:thunder` | World | `true` while the last Overworld weather change seen was a thunderstorm (for clearing a daytime storm) |
 
 AFK state itself isn't saved: it's kept in memory and resets on rejoin. While a player is AFK, their name tag and the `afk` tag are changed.
 
 ### Known limits
 
 - Being fully AFK while in a vehicle with no input still counts as AFK, which is intended.
-- Name-tag changes may clash with other packs that also change player name tags.
+- Name-tag changes may clash with other packs that also change player name tags. [Nicknames](#nicknames--nick_bp) keeps the prefix in step (its `afkPrefix` must match `nameTagPrefix`).
 
 ---
 
@@ -670,7 +672,7 @@ Lets each player disable phantoms for themselves. Phantoms come from not sleepin
 ### What players see
 
 - Bedrock spawns phantoms at night, in small groups high above a player who hasn't slept for 3 or more in-game days. When the nearest player to a new phantom has phantoms off, and the phantom appeared at least `minHeightAbovePlayer` (10) blocks above them, it is removed on the spot.
-- Every phantom in a group is checked the same way. If two players stand close together, only the nearest one's choice counts.
+- Every phantom in a group is checked the same way. If two players stand close together, only the nearest one's choice counts. Players in creative or spectator are skipped when looking for the nearest player, since phantoms never come for them.
 - Phantoms from spawn eggs or `/summon` near a player are left alone, because they don't appear high overhead.
 - Turning phantoms off doesn't reset the game's own "time since rest" counter. A player who turns them back on without sleeping may get phantoms that same night.
 

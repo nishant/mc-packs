@@ -30,6 +30,8 @@ const CHAMPION_TAG = "realm:champion"; // the Champions pack's tag
 const PLACED_MEMORY = 10000; // recently placed blocks remembered, so breaking them again gives no XP
 const NOTE_TICKS = 20; // XP notes are added up and shown at most this often
 const MAX_SCORE = 2000000000;
+/** One character per dimension, for compact saved keys. */
+const DIMS = /** @type {Record<string, string>} */ ({ "minecraft:overworld": "o", "minecraft:nether": "n", "minecraft:the_end": "e" });
 
 const enabled = () => get("enabled") === true;
 
@@ -331,19 +333,77 @@ for (const row of CONFIG.mining.blocks) for (const b of row.blocks) mineBlocks.s
 const logs = new Set(CONFIG.woodcutting.logs);
 const crops = new Map(CONFIG.farming.crops.map((c) => [c.block, c]));
 
-/** Blocks players placed lately, "dim:x,y,z": breaking one again gives no XP. @type {Set<string>} */
-const placed = new Set();
+// Blocks players placed lately, "<dim>x,y,z": breaking one again gives no XP. Kept in world
+// properties (skills:placed0, 1, ...) so a restart (a Realm closes when everyone leaves) doesn't
+// make placed logs and stone count again. Pistons move blocks, so everything a piston moves (and
+// the spots next to it) counts as placed too: a place-push-break loop gives nothing.
+const PLACED_PROP = "skills:placed";
+const PLACED_PER_PROP = 1500; // about 16 characters each: well under the 32,000 limit
+/** @type {Set<string> | undefined} */
+let placedSet;
+let placedDirty = false;
+
+/** @returns {Set<string>} */
+function placed() {
+  if (placedSet) return placedSet;
+  placedSet = new Set();
+  try {
+    for (let i = 0; ; i++) {
+      const raw = world.getDynamicProperty(`${PLACED_PROP}${i}`);
+      if (typeof raw !== "string") break;
+      for (const key of raw.split(";")) if (key) placedSet.add(key);
+    }
+  } catch (e) {
+    console.warn(`[skills] placed blocks: ${e}`);
+  }
+  return placedSet;
+}
+
+function savePlaced() {
+  if (!placedDirty || !placedSet) return;
+  try {
+    const keys = [...placedSet];
+    let i = 0;
+    for (; i * PLACED_PER_PROP < keys.length; i++) world.setDynamicProperty(`${PLACED_PROP}${i}`, keys.slice(i * PLACED_PER_PROP, (i + 1) * PLACED_PER_PROP).join(";"));
+    for (; world.getDynamicProperty(`${PLACED_PROP}${i}`) !== undefined; i++) world.setDynamicProperty(`${PLACED_PROP}${i}`, undefined);
+    placedDirty = false;
+  } catch (e) {
+    console.warn(`[skills] saving placed blocks: ${e}`);
+  }
+}
+system.runInterval(savePlaced, 600);
+
 /** @param {string} dim @param {Vector3} p */
-const spot = (dim, p) => `${dim}:${p.x},${p.y},${p.z}`;
+const spot = (dim, p) => `${DIMS[dim] ?? dim}${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`;
+
+/** @param {string} key */
+function markPlaced(key) {
+  const set = placed();
+  set.delete(key);
+  set.add(key);
+  while (set.size > PLACED_MEMORY) set.delete(/** @type {string} */ (set.values().next().value));
+  placedDirty = true;
+}
 
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
-    const key = spot(block.dimension.id, block.location);
-    placed.delete(key);
-    placed.add(key);
-    if (placed.size > PLACED_MEMORY) placed.delete(/** @type {string} */ (placed.values().next().value));
+    markPlaced(spot(block.dimension.id, block.location));
   } catch (e) {
     console.warn(`[skills] ${e}`);
+  }
+});
+
+world.afterEvents.pistonActivate.subscribe(({ dimension, piston }) => {
+  try {
+    const locs = piston.getAttachedBlocksLocations();
+    if (locs.length > 13) return; // a piston moves at most 12 blocks
+    for (const l of locs) {
+      for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        markPlaced(spot(dimension.id, { x: l.x + dx, y: l.y + dy, z: l.z + dz }));
+      }
+    }
+  } catch (e) {
+    console.warn(`[skills] piston: ${e}`);
   }
 });
 
@@ -402,14 +462,19 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
     if (!mine && !crop && !logs.has(id)) return;
     // A crop with a growth state proves it grew (planting seeds counts as placing the crop block);
     // anything else a player placed lately gives no XP.
-    const wasPlaced = placed.delete(spot(block.dimension.id, block.location));
+    const key = spot(block.dimension.id, block.location);
+    const wasPlaced = placed().delete(key);
+    if (wasPlaced) placedDirty = true;
     if (wasPlaced && !(crop && crop.state !== undefined)) return;
     if (!active(player)) return;
     const at = center(block.location);
     if (mine) {
+      // An ore mined with Silk Touch gives no XP (as in vanilla): it comes back as a block that
+      // could be placed and mined again.
+      if (mine.drop && silkTouch(itemStackBeforeBreak)) return;
       if (!award(player, "mining", mine.xp) || !mine.drop) return;
       oreStreak(player);
-      if (!silkTouch(itemStackBeforeBreak) && lucky(perkOf(player, "mining", "doubleOre"))) drop(block.dimension, at, mine.drop, mine.amount ?? 1);
+      if (lucky(perkOf(player, "mining", "doubleOre"))) drop(block.dimension, at, mine.drop, mine.amount ?? 1);
     } else if (logs.has(id)) {
       if (!award(player, "woodcutting", CONFIG.woodcutting.xp)) return;
       if (lucky(perkOf(player, "woodcutting", "extraLog"))) drop(block.dimension, at, id);
@@ -477,36 +542,67 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 // Fishing
 // ---------------------------------------------------------------------------
 
-// A hook belongs to the player nearest to where it appears. An item that appears where a hook just
-// was is that player's catch (as in Daily Quests: there is no "caught a fish" event).
-/** @type {Map<string, { hook: import("@minecraft/server").Entity, owner: Player, dim: string, at: Vector3, seen: number }>} */
+// A hook belongs to the player nearest to where it appears. There is no "caught a fish" event: a
+// catch is an item that appears right where the owner's hook was, in water, as the hook is reeled
+// in (the hook goes within a few ticks of the item appearing), from a hook that was out for a
+// moment. An item a player drops appears at their head instead, so dropping things next to your
+// own hook and reeling in counts for nothing.
+/** @typedef {{ hook: import("@minecraft/server").Entity, owner: Player, dim: string, at: Vector3, born: number, wet: boolean, gone?: number, item?: { id: string, tick: number } }} Hook */
+/** @type {Map<string, Hook>} */
 const hooks = new Map();
 const fishItems = new Set(CONFIG.fishing.fish);
 const treasure = new Set(CONFIG.fishing.treasure);
+const CATCH_TICKS = 4; // the hook goes and the catch appears within this many ticks of each other
+const MIN_HOOK_TICKS = 30; // a hook out for less than this can't have caught anything
 
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (!enabled()) return;
     if (entity.typeId === "minecraft:fishing_hook") {
       const [owner] = entity.dimension.getPlayers({ location: entity.location, maxDistance: 4, closest: 1 });
-      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick });
+      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, born: system.currentTick, wet: false });
       return;
     }
     if (entity.typeId !== "minecraft:item" || !hooks.size || ours.has(entity.id)) return;
     const stack = entity.getComponent("minecraft:item")?.itemStack;
     if (!stack) return;
     const at = entity.location;
+    const now = system.currentTick;
     for (const [id, h] of hooks) {
       if (h.dim !== entity.dimension.id) continue;
-      if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
-      hooks.delete(id);
-      if (h.owner.isValid) caught(h.owner, stack.typeId);
-      break;
+      if (Math.hypot(h.at.x - at.x, h.at.y - at.y, h.at.z - at.z) > 2) continue;
+      if (!h.wet || now - h.born < MIN_HOOK_TICKS || droppedByPlayer(entity.dimension, at)) return;
+      if (h.gone !== undefined || !h.hook.isValid) {
+        hooks.delete(id);
+        if (now - (h.gone ?? now) <= CATCH_TICKS && h.owner.isValid) caught(h.owner, stack.typeId);
+      } else {
+        h.item = { id: stack.typeId, tick: now }; // counted if the hook goes in the next few ticks
+      }
+      return;
     }
   } catch (e) {
     console.warn(`[skills] ${e}`);
   }
 });
+
+/** @param {Dimension} dimension @param {Vector3} at */
+function isWater(dimension, at) {
+  const b = dimension.getBlock(at);
+  return !!b && (b.typeId === "minecraft:water" || b.typeId === "minecraft:flowing_water" || b.isWaterlogged);
+}
+
+/** Did this item appear at a player's head (dropped, not caught)? @param {Dimension} dimension @param {Vector3} at */
+function droppedByPlayer(dimension, at) {
+  for (const p of dimension.getPlayers({ location: at, maxDistance: 3 })) {
+    try {
+      const head = p.getHeadLocation();
+      if (Math.hypot(head.x - at.x, head.y - at.y, head.z - at.z) < 1.2) return true;
+    } catch {
+      // gone
+    }
+  }
+  return false;
+}
 
 /** @param {Player} player @param {string} item */
 function caught(player, item) {
@@ -519,20 +615,31 @@ function caught(player, item) {
   }
 }
 
-// Follow live hooks, and forget them a second after they're gone (the catch appears as the hook goes).
+// Follow live hooks (and whether they're in water); when one goes, an item that appeared just
+// before is the catch. Forgotten a few ticks after they're gone.
 system.runInterval(() => {
   if (!hooks.size) return;
+  const now = system.currentTick;
   for (const [id, h] of hooks) {
-    if (h.hook.isValid) {
+    if (h.gone === undefined && h.hook.isValid) {
       try {
         h.at = h.hook.location;
-        h.seen = system.currentTick;
+        if (!h.wet && now % 4 === 0) {
+          // A floating hook sits at the top of the water block, or just above it.
+          h.wet = isWater(h.hook.dimension, h.at) || isWater(h.hook.dimension, { x: h.at.x, y: h.at.y - 0.5, z: h.at.z });
+        }
       } catch {
         // unloaded
       }
-    } else if (system.currentTick - h.seen > 20) hooks.delete(id);
+      continue;
+    }
+    if (h.gone === undefined) h.gone = now;
+    if (h.item && now - h.item.tick <= CATCH_TICKS) {
+      hooks.delete(id);
+      if (h.owner.isValid) caught(h.owner, h.item.id);
+    } else if (now - h.gone > CATCH_TICKS) hooks.delete(id);
   }
-}, 2);
+}, 1);
 
 // ---------------------------------------------------------------------------
 // Exploration
@@ -543,7 +650,6 @@ system.runInterval(() => {
 // two halves (6 + 6), in a 64-character alphabet. Records are spread over player properties
 // skills:map0, skills:map1, ... of at most PER_PROP records each, least recently visited first.
 const ALPHA = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
-const DIMS = /** @type {Record<string, string>} */ ({ "minecraft:overworld": "o", "minecraft:nether": "n", "minecraft:the_end": "e" });
 const RECORD = 21;
 const PER_PROP = 1000; // 21,000 characters per property
 const MAP_PROP = "skills:map";
