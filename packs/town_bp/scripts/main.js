@@ -194,7 +194,7 @@ function payNow(p, crowns, quests, why) {
   }
   const rep = get("repPerProject");
   for (const [id, label, guild] of quests) {
-    send("realm:quest_done", { player: p.id, pack: "town_bp", id, label, kind: "town" });
+    send("realm:quest_done", { player: p.id, pack: "town_bp", id, label, kind: "town", guild });
     if (rep > 0) send("realm:rep_add", { player: p.id, guild, amount: rep, reason: label });
   }
 }
@@ -330,6 +330,7 @@ function finishProject(t, p, pr) {
   });
   build(t, p, true);
   levelUp(t);
+  refreshBoard(t);
 }
 
 /** Raises the town while every project of its level is finished. @param {Town} t */

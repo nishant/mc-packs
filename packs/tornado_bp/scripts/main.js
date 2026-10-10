@@ -46,7 +46,9 @@ let pending;
 let tornado;
 /** @type {number | undefined} */
 let loop;
-const vars = new MolangVariableMap(); // reused: spawnParticle copies the values
+/** One map, made on first use: the stable API may refuse native objects while the world is still loading. @type {MolangVariableMap | undefined} */
+let varsMap;
+const molang = () => (varsMap ??= new MolangVariableMap()); // reused: spawnParticle copies the values
 
 const rand = (/** @type {number} */ min, /** @type {number} */ max) => min + Math.random() * (max - min);
 const randInt = (/** @type {number} */ min, /** @type {number} */ max) => Math.floor(rand(min, max + 1));
@@ -318,15 +320,15 @@ function draw(t) {
         const i = (t.frame * slice + k) % rings;
         const f = (i + Math.random()) / rings; // 0 at the ground, 1 at the top
         const sway = Math.sin(time * 0.6 + f * 3) * f * 4; // the funnel bends and sways
-        vars.setFloat("variable.radius", 1 + 10 * f ** 1.7);
-        vars.setFloat("variable.spin", 5 - 3 * f);
-        player.spawnParticle(RING, { x: t.x + Math.cos(t.lean) * sway, y: t.y + f * top, z: t.z + Math.sin(t.lean) * sway }, vars);
+        molang().setFloat("variable.radius", 1 + 10 * f ** 1.7);
+        molang().setFloat("variable.spin", 5 - 3 * f);
+        player.spawnParticle(RING, { x: t.x + Math.cos(t.lean) * sway, y: t.y + f * top, z: t.z + Math.sin(t.lean) * sway }, molang());
       }
       if (dist <= NEAR && t.frame % 2 === 0) {
         const bits = Math.max(1, Math.round(density));
         for (let i = 0; i < bits; i++) {
-          vars.setFloat("variable.radius", rand(2, 5));
-          player.spawnParticle(DEBRIS, { x: t.x + rand(-3, 3), y: t.y + rand(0.3, 2), z: t.z + rand(-3, 3) }, vars);
+          molang().setFloat("variable.radius", rand(2, 5));
+          player.spawnParticle(DEBRIS, { x: t.x + rand(-3, 3), y: t.y + rand(0.3, 2), z: t.z + rand(-3, 3) }, molang());
         }
       }
     } catch {

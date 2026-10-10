@@ -29,7 +29,9 @@ const players = new Map();
 /** @type {Set<string>} players sent the journal page this session, as "<entry>:<player id>" */
 const journaled = new Set();
 let announcedAurora = -1; // the night the aurora was announced
-const vars = new MolangVariableMap();
+/** One map, made on first use: the stable API may refuse native objects while the world is still loading. @type {MolangVariableMap | undefined} */
+let varsMap;
+const molang = () => (varsMap ??= new MolangVariableMap()); // reused: spawnParticle copies the values
 
 const rand = (/** @type {number} */ min, /** @type {number} */ max) => min + Math.random() * (max - min);
 
@@ -182,15 +184,15 @@ function star(player) {
   const heading = Math.random() * Math.PI * 2;
   const speed = rand(35, 55);
   const life = rand(0.8, 1.3);
-  vars.setFloat("variable.dx", Math.cos(heading) * speed);
-  vars.setFloat("variable.dy", -rand(5, 15));
-  vars.setFloat("variable.dz", Math.sin(heading) * speed);
-  vars.setFloat("variable.life", life);
+  molang().setFloat("variable.dx", Math.cos(heading) * speed);
+  molang().setFloat("variable.dy", -rand(5, 15));
+  molang().setFloat("variable.dz", Math.sin(heading) * speed);
+  molang().setFloat("variable.life", life);
   const d = rand(60, 100);
   for (const k of [1, 0.6, 0.4]) {
     try {
       const at = { x: l.x + Math.cos(angle) * d * k, y: Math.min(MAX_Y, l.y + rand(50, 80) * k), z: l.z + Math.sin(angle) * d * k };
-      player.spawnParticle(STAR, at, vars);
+      player.spawnParticle(STAR, at, molang());
       return true;
     } catch {
       // not loaded there: try closer
@@ -215,15 +217,15 @@ function curtain(player, time) {
         const x = (f - 0.5) * AURORA_WIDTH;
         const wave = Math.sin(f * 5 + time * 0.15);
         const size = 34 + 8 * Math.sin(f * 7 + time * 0.2);
-        vars.setFloat("variable.size", size * k);
-        vars.setFloat("variable.life", life);
-        vars.setFloat("variable.hue", Math.max(0, Math.min(1, 0.3 + 0.3 * Math.sin(time * 0.05) + 0.25 * Math.sin(f * 4 + time * 0.1))));
+        molang().setFloat("variable.size", size * k);
+        molang().setFloat("variable.life", life);
+        molang().setFloat("variable.hue", Math.max(0, Math.min(1, 0.3 + 0.3 * Math.sin(time * 0.05) + 0.25 * Math.sin(f * 4 + time * 0.1))));
         const at = {
           x: l.x + x * k,
           y: Math.min(MAX_Y, l.y + (AURORA_LOW + 15 + 15 * Math.sin(f * 3 + time * 0.1)) * k),
           z: l.z - (AURORA_NORTH + 15 * wave) * k,
         };
-        player.spawnParticle(AURORA, at, vars);
+        player.spawnParticle(AURORA, at, molang());
       }
       return true;
     } catch {

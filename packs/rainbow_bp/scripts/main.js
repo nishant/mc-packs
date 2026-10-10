@@ -37,7 +37,9 @@ let loaded = false;
 let busy = false; // looking for the chest's spot
 /** @type {Set<string>} players who saw this rainbow (journal sent) */
 const saw = new Set();
-const vars = new MolangVariableMap();
+/** One map, made on first use: the stable API may refuse native objects while the world is still loading. @type {MolangVariableMap | undefined} */
+let varsMap;
+const molang = () => (varsMap ??= new MolangVariableMap()); // reused: spawnParticle copies the values
 
 const rand = (/** @type {number} */ min, /** @type {number} */ max) => min + Math.random() * (max - min);
 const randInt = (/** @type {number} */ min, /** @type {number} */ max) => Math.floor(rand(min, max + 1));
@@ -192,10 +194,10 @@ function draw() {
         const size = (real ? Math.max(40, Math.min(1, dist / DRAW_DISTANCE) * get("size")) : (get("size") * d) / DRAW_DISTANCE);
         const footY = real && typeof p0.y === "number" ? p0.y : l.y - 6 * (d / DRAW_DISTANCE); // just under the horizon
         const foot = { x: l.x + ux * d, z: l.z + uz * d };
-        vars.setFloat("variable.size", size);
-        vars.setFloat("variable.life", LIFE);
+        molang().setFloat("variable.size", size);
+        molang().setFloat("variable.life", LIFE);
         try {
-          player.spawnParticle(RAINBOW, { x: foot.x - uz * (size / 2), y: footY, z: foot.z + ux * (size / 2) }, vars);
+          player.spawnParticle(RAINBOW, { x: foot.x - uz * (size / 2), y: footY, z: foot.z + ux * (size / 2) }, molang());
           break;
         } catch {
           // not loaded there: try closer

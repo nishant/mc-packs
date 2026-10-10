@@ -33,10 +33,10 @@ export const CONFIG = {
    * `kindGuild`; a quest that names a guild goes to that guild; anything else is split evenly
    * between all four.
    */
-  questRep: { mine: 10, kill: 10, harvest: 10, place: 10, travel: 10, eat: 10, fish: 10, story: 30, bounty: 25, treasure: 20, town: 15, tournament: 20, other: 10 },
+  questRep: { mine: 10, kill: 10, harvest: 10, place: 10, travel: 10, eat: 10, fish: 10, story: 30, bounty: 25, treasure: 20, town: 15, tournament: 20, expedition: 30, other: 10 },
 
   /** Which guild each quest kind counts for. */
-  kindGuild: { mine: "miners", place: "miners", harvest: "growers", eat: "growers", kill: "wardens", bounty: "wardens", travel: "wayfarers", fish: "wayfarers", treasure: "wayfarers" },
+  kindGuild: { mine: "miners", place: "miners", harvest: "growers", eat: "growers", kill: "wardens", bounty: "wardens", travel: "wayfarers", fish: "wayfarers", treasure: "wayfarers", expedition: "wardens" },
 
   /** Reputation from plain play, so it moves without the other packs. */
   passive: {

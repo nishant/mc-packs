@@ -736,7 +736,7 @@ async function start(leader, d) {
       .body(
         [
           `Start an expedition to the §e${dungeonLabel(d)}§r?`,
-          others.length ? `Your party members nearby will be asked to join: ${others.map((p) => p.name).join(", ")}.` : "You'll go alone (party members within 32 blocks are asked along).",
+          others.length ? `Your party members nearby will be asked to join: ${others.map((p) => p.name).join(", ")}.` : `You'll go alone (party members within ${CONFIG.partyRadius} blocks are asked along).`,
           `The clock starts when you arrive. Clear the rooms, solve the lever puzzle and defeat the boss within ${get("timeLimitMinutes")} minutes.`,
           "Leave any time with /realm:expedition_leave. If you die, you return to where you started.",
         ].join("\n\n"),
@@ -1092,7 +1092,7 @@ function finish(run) {
     p.onScreenDisplay.setTitle("§6Expedition complete", { subtitle: `§f${d.name} cleared in ${clock(run.clearMs)}`, fadeInDuration: 10, stayDuration: 80, fadeOutDuration: 20 });
     p.playSound("random.totem", { volume: 0.6 });
     payCrowns(p, d.crowns, `Expedition: ${d.name}`);
-    send("realm:quest_done", { player: p.id, pack: "expedition_bp", id: `expedition_${d.id}`, label: `Expedition: ${d.name} cleared`, kind: "expedition" });
+    send("realm:quest_done", { player: p.id, pack: "expedition_bp", id: `expedition_${d.id}`, label: `Expedition: ${d.name} cleared`, kind: "expedition", guild: "wardens" });
     if (CONFIG.rep > 0) send("realm:rep_add", { player: p.id, guild: "wardens", amount: CONFIG.rep, reason: `Expedition: ${d.name}` });
     send("realm:journal", { player: p.id, page: "places", entry: `expedition_${d.id}`, label: `Expedition: ${d.name}` });
     if (CONFIG.relics.length && Math.random() < get("relicChance")) send("realm:relic_give", { player: p.id, relic: CONFIG.relics[Math.floor(Math.random() * CONFIG.relics.length)] });
@@ -1474,7 +1474,7 @@ async function mainMenu(player) {
   if (active.length) body.push(...active.map((r) => `§eAn expedition is in progress (${statusLine(r)})§r`));
   if (get("enabled") !== true) body.push("New expeditions are disabled right now.");
   else if (!s) body.push(`The operators haven't picked an expedition site yet.${isOp(player) ? " Stand far from spawn and run /realm:expedition_site." : ""}`);
-  else if (canStart) body.push("Pick a dungeon. Your party members within 32 blocks are asked to join. Clear the rooms, solve the lever puzzle and defeat the boss for treasure, Crowns and a place on the leaderboard.");
+  else if (canStart) body.push(`Pick a dungeon. Your party members within ${CONFIG.partyRadius} blocks are asked to join. Clear the rooms, solve the lever puzzle and defeat the boss for treasure, Crowns and a place on the leaderboard.`);
   /** @type {Record<string, Best[]>} */
   const best = readJson(PROP_BEST) ?? {};
   const form = new ActionFormData().title("§lExpeditions").body(body.join("\n\n"));
