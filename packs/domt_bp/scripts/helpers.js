@@ -241,45 +241,64 @@ export function safeHop(p, minD, maxD) {
 }
 
 /**
- * Teleports a player far away, possibly into another dimension, where the chunk isn't loaded yet:
- * the player waits high in the air (held in place, with Slow Falling) until it loads, then lands
- * on the safest spot found near (x, z). Puts them back where they were if there's none.
- * @param {Player} p @param {Dimension} dim @param {number} x @param {number} z
+ * Teleports a player far away, possibly into another dimension, where the chunks aren't loaded yet:
+ * the player waits high in the air (held in place, with Slow Falling) until the place loads, then
+ * lands on the safest spot found near the first target that has one (ocean or lava sea: next
+ * target). Puts them back where they were if no target works.
+ * @param {Player} p @param {Dimension} dim @param {{ x: number, z: number }[]} targets
  * @returns {Promise<import("@minecraft/server").Vector3 | undefined>} where they landed
  */
-export async function farTeleport(p, dim, x, z) {
+export async function farTeleport(p, dim, targets) {
   const home = { dim: p.dimension, at: { ...p.location } };
   const hoverY = dim.id === "minecraft:nether" ? 130 : dim.heightRange.max - 4;
-  const hover = { x: Math.floor(x) + 0.5, y: hoverY, z: Math.floor(z) + 0.5 };
-  effect(p, "minecraft:slow_falling", 30);
-  effect(p, "minecraft:resistance", 15, 4);
-  p.teleport(hover, { dimension: dim, keepVelocity: false });
-  for (let t = 0; t < 30; t++) {
-    await wait(5);
-    if (!p.isValid) return undefined;
+  effect(p, "minecraft:slow_falling", 60);
+  effect(p, "minecraft:resistance", 30, 4);
+  /** @type {import("@minecraft/server").Vector3 | undefined} */
+  let landed;
+  for (const target of targets) {
+    if (landed || !p.isValid) break;
+    const hover = { x: Math.floor(target.x) + 0.5, y: hoverY, z: Math.floor(target.z) + 0.5 };
     attempt(() => p.teleport(hover, { dimension: dim, keepVelocity: false }));
-    if (!blockAt(dim, { x: hover.x, y: 64, z: hover.z })) continue; // not loaded yet
-    // Loaded: look for a spot in this column, then in a spiral around it.
-    for (let r = 0; r <= 12; r += 3) {
-      for (let k = 0; k < (r ? 8 : 1); k++) {
-        const a = (k / 8) * Math.PI * 2;
-        const spot = surface(dim, hover.x + Math.cos(a) * r, hover.z + Math.sin(a) * r);
-        if (spot) {
-          p.teleport(spot, { dimension: dim, keepVelocity: false });
-          p.removeEffect("minecraft:slow_falling");
-          p.removeEffect("minecraft:resistance");
-          return spot;
+    /** @type {string | undefined} a ticking area, if the player alone doesn't load the place quickly */
+    let area;
+    try {
+      for (let t = 0; t < 40; t++) {
+        await wait(5);
+        if (!p.isValid) return undefined;
+        attempt(() => p.teleport(hover, { dimension: dim, keepVelocity: false }));
+        if (!blockAt(dim, { x: hover.x, y: 64, z: hover.z })) {
+          if (t === 4 && !area) {
+            const name = `domt_${system.currentTick}`;
+            try {
+              dim.runCommand(`tickingarea add circle ${Math.floor(hover.x)} 64 ${Math.floor(hover.z)} 1 "${name}" true`);
+              area = name;
+            } catch {
+              // all ticking areas in use: keep waiting for the player to load it
+            }
+          }
+          continue;
         }
+        // Loaded: look for a spot in this column, then in rings around it.
+        for (let r = 0; r <= 12 && !landed; r += 2) {
+          for (let k = 0; k < (r ? 12 : 1) && !landed; k++) {
+            const a = (k / 12) * Math.PI * 2;
+            landed = surface(dim, hover.x + Math.cos(a) * r, hover.z + Math.sin(a) * r);
+          }
+        }
+        break;
+      }
+    } finally {
+      if (area) {
+        const name = area;
+        system.runTimeout(() => attempt(() => dim.runCommand(`tickingarea remove "${name}"`)), 100);
       }
     }
-    break;
   }
-  if (p.isValid) {
-    p.teleport(home.at, { dimension: home.dim, keepVelocity: false });
-    p.removeEffect("minecraft:slow_falling");
-    p.removeEffect("minecraft:resistance");
-  }
-  return undefined;
+  if (!p.isValid) return undefined;
+  p.teleport(landed ?? home.at, { dimension: landed ? dim : home.dim, keepVelocity: false });
+  p.removeEffect("minecraft:slow_falling");
+  p.removeEffect("minecraft:resistance");
+  return landed;
 }
 
 // ---------------------------------------------------------------------------

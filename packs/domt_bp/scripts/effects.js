@@ -190,10 +190,9 @@ export const CARDS = [
       const item = inv.getItem(slot);
       if (!item) return false;
       inv.setItem(slot, undefined);
-      const view = player.getViewDirection();
-      const at = player.getHeadLocation();
-      const dropped = player.dimension.spawnItem(item, { x: at.x + view.x, y: at.y - 0.3, z: at.z + view.z });
-      attempt(() => dropped.applyImpulse({ x: view.x * 0.2, y: 0.1, z: view.z * 0.2 }));
+      // A few blocks away, so it isn't picked straight back up.
+      const spot = randomSpot(player, 3, 5, 10) ?? player.location;
+      player.dimension.spawnItem(item, { x: spot.x, y: spot.y + 0.5, z: spot.z });
     },
   },
   {
@@ -300,12 +299,21 @@ export const CARDS = [
     text: "You are thrown 20 blocks into the sky, with Slow Falling.",
     expect: "move",
     run: ({ player }) => {
-      const at = player.location;
       const dim = player.dimension;
-      for (let y = 1; y <= 22; y++) {
-        const b = blockAt(dim, { x: at.x, y: at.y + y, z: at.z });
-        if (!b || !b.isAir) return false;
+      /** Open sky for 22 blocks above this spot? @param {import("@minecraft/server").Vector3} at */
+      const clear = (at) => {
+        for (let y = 1; y <= 22; y++) {
+          const b = blockAt(dim, { x: at.x, y: at.y + y, z: at.z });
+          if (!b || !b.isAir) return false;
+        }
+        return true;
+      };
+      let at = player.location;
+      for (let i = 0; i < 12 && !clear(at); i++) {
+        const spot = randomSpot(player, 1, 8, 4);
+        at = spot && clear(spot) ? spot : at;
       }
+      if (!clear(at)) return false;
       effect(player, "minecraft:slow_falling", 30);
       player.teleport({ x: at.x, y: at.y + 20, z: at.z }, { keepVelocity: false });
       sound(player, "mob.enderdragon.flap");
@@ -663,11 +671,14 @@ export const CARDS = [
     text: "You streak across the sky and land 150 to 300 blocks away.",
     expect: "far",
     run: async ({ player }) => {
-      const a = Math.random() * Math.PI * 2;
-      const d = between(150, 300);
       const at = player.location;
       if (player.dimension.id === "minecraft:the_end") return false;
-      const spot = await farTeleport(player, player.dimension, at.x + Math.cos(a) * d, at.z + Math.sin(a) * d);
+      const targets = [0, 1, 2, 3].map(() => {
+        const a = Math.random() * Math.PI * 2;
+        const d = between(150, 300);
+        return { x: at.x + Math.cos(a) * d, z: at.z + Math.sin(a) * d };
+      });
+      const spot = await farTeleport(player, player.dimension, targets);
       if (!spot) return false;
       return `You landed at ${Math.floor(spot.x)}, ${Math.floor(spot.y)}, ${Math.floor(spot.z)}.`;
     },
@@ -724,7 +735,8 @@ export const CARDS = [
       const at = player.location;
       const scale = from === "minecraft:nether" ? 8 : 1 / 8;
       effect(player, "minecraft:fire_resistance", 120);
-      const spot = await farTeleport(player, to, at.x * scale + between(-16, 16), at.z * scale + between(-16, 16));
+      const targets = [0, 1, 2, 3].map((i) => ({ x: at.x * scale + between(-16 - i * 24, 16 + i * 24), z: at.z * scale + between(-16 - i * 24, 16 + i * 24) }));
+      const spot = await farTeleport(player, to, targets);
       if (!spot) return false;
       give(player, "minecraft:obsidian", 10);
       give(player, "minecraft:flint_and_steel", 1);

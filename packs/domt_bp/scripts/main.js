@@ -430,6 +430,11 @@ function snapshot(p) {
       total += it.amount;
     }
   const at = { ...p.location };
+  // Items that didn't fit in a full inventory drop at the player's feet: count those too.
+  for (const e of p.dimension.getEntities({ location: at, maxDistance: 3, type: "minecraft:item" })) {
+    const it = e.getComponent("minecraft:item")?.itemStack;
+    if (it) items.set(it.typeId, (items.get(it.typeId) ?? 0) + it.amount);
+  }
   return {
     items,
     total,
@@ -541,12 +546,15 @@ async function testCard(p, card) {
   } catch (e) {
     console.warn(`[domt] test tidy: ${e}`);
   }
+  // An arena ends a few seconds after its player leaves it: let it go before the next card.
+  if (card.id === "the_arena") for (let t = 0; t < 30 && pendingTasks() > before.tasks; t++) await wait(10);
   return { id: card.id, ok, why };
 }
 
 /** @param {Player} p @param {string} which a card id, or "all" */
 async function runTests(p, which) {
-  const cards = which === "all" ? CARDS : CARDS.filter((c) => c.id === which);
+  const ids = which.split(",").map((s) => s.trim());
+  const cards = which === "all" ? CARDS : CARDS.filter((c) => ids.includes(c.id));
   if (!cards.length) return console.warn(`[domt] TEST unknown card ${which}`);
   const results = [];
   for (const card of cards) {
@@ -556,6 +564,9 @@ async function runTests(p, which) {
     system.sendScriptEvent("realm:domt_tested", JSON.stringify(r));
     await wait(cards.length > 1 ? 30 : 1);
   }
+  // Block changes (The Arena, The Spore) undo themselves 20 seconds after a test: wait for that.
+  for (let t = 0; t < 60 && pendingTasks() > 0; t++) await wait(20);
+  console.warn(`[domt] TEST restores still waiting: ${pendingTasks()}`);
   const passed = results.filter((r) => r.ok).length;
   console.warn(`[domt] TEST SUMMARY ${passed}/${results.length} passed${passed < results.length ? `; failed: ${results.filter((r) => !r.ok).map((r) => r.id).join(", ")}` : ""}`);
 }

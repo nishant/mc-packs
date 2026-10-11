@@ -206,7 +206,7 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 
 const NATURAL = /^minecraft:(grass_block|dirt|coarse_dirt|podzol|dirt_with_roots|rooted_dirt)$/;
 /** Blocks that mean someone built or farmed here. */
-const BUILT = /planks|log$|stripped|glass|brick|wool|concrete|terracotta|crafting_table|chest|furnace|smoker|barrel|bed$|door|fence|torch|lantern|stairs|slab|farmland|grass_path|dirt_path|rail|carpet|sign|cobblestone|stone_bricks|polished|smooth|quartz|bookshelf|lectern|campfire|hay_block|composter|anvil|bell|banner|ladder|scaffolding|wall$|bars|pane|trapdoor|workbench|loom|cartography|fletching|smithing|grindstone|stonecutter|beehive|flower_pot|mycelium/;
+const BUILT = /planks|stripped|glass|brick|wool|concrete|terracotta|crafting_table|chest|furnace|smoker|barrel|bed$|door|fence|torch|lantern|stairs|slab|farmland|grass_path|dirt_path|rail|carpet|sign|cobblestone|stone_bricks|polished|smooth|quartz|bookshelf|lectern|campfire|hay_block|composter|anvil|bell|banner|ladder|scaffolding|wall$|bars|pane|trapdoor|workbench|loom|cartography|fletching|smithing|grindstone|stonecutter|beehive|flower_pot|mycelium/;
 const SPORE_TYPES = ["minecraft:grass_block", "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:dirt_with_roots", "minecraft:rooted_dirt", "minecraft:mycelium", "minecraft:air", "minecraft:red_mushroom", "minecraft:brown_mushroom"];
 
 /** @param {Player} p @param {{ test?: boolean, minutes: number }} opts @returns {boolean | string} */
