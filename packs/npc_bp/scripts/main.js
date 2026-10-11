@@ -10,7 +10,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 
@@ -160,7 +160,7 @@ function entityOf(rec) {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return;
   weather = newWeather;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
@@ -473,7 +473,8 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
- * @param {Player} player @param {ActionFormData} form
+ * @template {{ show(p: Player): Promise<any> }} F
+ * @param {Player} player @param {F} form @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -595,10 +596,13 @@ const centered = (loc) => ({ x: Math.floor(loc.x) + 0.5, y: Math.round(loc.y * 1
 /** @param {Vector3} p */
 const coords = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
 
-/** @param {Player} player @param {string} id */
+/** Places (or moves) a townsfolk where the player stands, facing them. Returns an error, or undefined. @param {Player} player @param {string} id */
 function addNpc(player, id) {
   const t = folk.get(id);
-  if (!t) return player.sendMessage(`§cNo townsfolk "${id}" in config.js.`);
+  if (!t) {
+    player.sendMessage(`§cNo townsfolk "${id}" in config.js.`);
+    return `no townsfolk "${id}"`;
+  }
   const at = centered(player.location);
   const yaw = wrap(player.getRotation().y + 180); // facing the operator who placed it
   const dim = player.dimension;
@@ -637,6 +641,7 @@ function addNpc(player, id) {
   // Not loaded (or couldn't move): a new one here; the old one is removed when its chunk loads.
   if (!moved) spawn(rec, t, at);
   player.sendMessage(`§aPlaced ${plainName(t)} at ${coords(at)}.§7 Sneak and tap them in creative mode to pick a skin.${note}`);
+  return undefined;
 }
 
 /** @param {Player} player */
@@ -697,6 +702,45 @@ function listForPlayers(player) {
   player.sendMessage([`§6Townsfolk on the realm §7(tap one to talk):`, ...lines].join("\n"));
 }
 
+/** The /realm:npc menu: who lives here, and for operators every townsfolk tool. @param {Player} player */
+async function menu(player) {
+  const op = isOp(player);
+  /** @type {[string, () => unknown][]} */
+  const actions = [["Who lives here?", () => whoMenu(player)]];
+  if (op) {
+    actions.push(["Add or move a townsfolk here\n§8Operators", () => pickAndRun(player, "Add or move here", "They stand where you are, facing you.", (id) => addNpc(player, id))]);
+    actions.push(["Set a home here\n§8Operators", () => pickAndRun(player, "Set home", "They come here at night. Pick one standing at its post to clear its home.", (id) => setHome(player, id), true)]);
+    actions.push(["Remove the nearest townsfolk\n§8Operators", () => removeNpc(player)]);
+    actions.push(["List with coordinates\n§8Operators", () => listForOps(player)]);
+  }
+  const form = new ActionFormData().title("Townsfolk").body(op ? "Who lives on the realm, and the townsfolk tools." : "Who lives on the realm. Tap a townsfolk to talk.");
+  for (const [label] of actions) form.button(label);
+  form.button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length) return;
+  await actions[res.selection][1]();
+}
+
+/** Where everyone is, in a form. @param {Player} player */
+async function whoMenu(player) {
+  const lines = whereabouts(player);
+  await show(player, new ActionFormData().title("Who lives here?").body(lines.length ? lines.join("\n") : "No townsfolk live on this realm yet.").button("OK"));
+}
+
+/** A townsfolk picker, then `fn` with the id. @param {Player} player @param {string} title @param {string} help @param {(id: string) => unknown} fn @param {boolean} [placedOnly] */
+async function pickAndRun(player, title, help, fn, placedOnly = false) {
+  const ids = CONFIG.townsfolk.filter((t) => !placedOnly || placedOf(t.id)).map((t) => t.id);
+  if (!ids.length) return player.sendMessage("§cNobody is placed yet.");
+  const names = ids.map((id) => {
+    const t = /** @type {Townsfolk} */ (folk.get(id));
+    return `${plainName(t)}${placedOf(id) ? "" : " (not placed)"}`;
+  });
+  const res = await show(player, new ModalFormData().title(title).dropdown(help, names).submitButton("OK"));
+  if (!res || res.canceled) return;
+  const id = ids[Number(res.formValues?.[0] ?? 0)];
+  if (id) fn(id);
+}
+
 /**
  * Runs `fn` with the player who ran the command, outside the read-only command context.
  * @param {import("@minecraft/server").CustomCommandOrigin} origin @param {(player: Player) => void} fn
@@ -708,7 +752,10 @@ function withPlayer(origin, fn) {
   system.run(() => {
     try {
       if (!ready) return player.sendMessage("§cThe world is still loading. Try again in a moment.");
-      if (player.isValid) fn(player);
+      if (player.isValid) {
+        const r = /** @type {unknown} */ (fn(player));
+        if (r instanceof Promise) r.catch((e) => console.warn(`[npc] ${e}`));
+      }
     } catch (e) {
       console.warn(`[npc] ${e}`);
       if (player.isValid) player.sendMessage(`§cThat didn't work: ${e}`);
@@ -722,7 +769,11 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   const idParam = [{ name: "realm:npc_id", type: CustomCommandParamType.Enum }];
 
   customCommandRegistry.registerCommand(
-    { name: "realm:npc", description: "Townsfolk: who lives on the realm and where they are", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    { name: "realm:npc", description: "Townsfolk: menu (who lives here; operators: add, move, home, remove)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    (origin) => withPlayer(origin, menu),
+  );
+  customCommandRegistry.registerCommand(
+    { name: "realm:npc_who", description: "Townsfolk: who lives on the realm and where they are", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
     (origin) => withPlayer(origin, listForPlayers),
   );
   customCommandRegistry.registerCommand(
@@ -754,6 +805,37 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (origin, /** @type {string} */ id) => withPlayer(origin, (p) => setHome(p, id)),
   );
 });
+
+// realm:npc_summon { id, player }: another pack (Relics' relicsmith) places a townsfolk at an operator,
+// exactly like /realm:npc_add run by that player. Answers realm:npc_summoned { id, player, ok, error? }.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:npc_summon") return;
+    /** @type {any} */
+    let msg;
+    try {
+      msg = JSON.parse(message);
+    } catch {
+      return;
+    }
+    if (!msg || typeof msg.id !== "string" || typeof msg.player !== "string") return;
+    /** @param {boolean} ok @param {string} [error] */
+    const reply = (ok, error) => system.sendScriptEvent("realm:npc_summoned", JSON.stringify({ id: msg.id, player: msg.player, ok, ...(error ? { error } : {}) }));
+    try {
+      const player = world.getAllPlayers().find((p) => p.id === msg.player);
+      if (!player) return reply(false, "player not online");
+      if (player.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return reply(false, "not an operator");
+      if (!ready) return reply(false, "world still loading");
+      if (!folk.has(msg.id)) return reply(false, `no townsfolk "${msg.id}"`);
+      const err = addNpc(player, msg.id);
+      reply(!err, err);
+    } catch (e) {
+      console.warn(`[npc] summon: ${e}`);
+      reply(false, String(e));
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

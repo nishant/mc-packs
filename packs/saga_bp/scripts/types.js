@@ -28,6 +28,7 @@
  * @property {string[]} [chapters] chapters finished, as "story/chapter"
  * @property {When} [flags]
  * @property {Partial<Record<Guild, number>>} [rep] at least this much reputation
+ * @property {Record<string, number>} [minCount] counters at least this high (`{ "g:mercy": 3 }`)
  */
 
 /** @typedef {{ dim?: string, x: number, z: number }} At */

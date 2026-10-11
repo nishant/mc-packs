@@ -66,6 +66,10 @@ const PROLOGUE = [
     title: "The Drowned Bell",
     short: "Drowned Bell",
     giver: "tobin",
+    kind: "main",
+    act: 0,
+    tones: ["mystery", "eerie", "heroic"],
+    summary: "Old Tobin heard a bell ring last night. There hasn't been a bell for forty years.",
     chapters: [
       {
         id: "salt",
@@ -86,6 +90,7 @@ const PROLOGUE = [
           `${T}Go see Reyes again. If the drowned are coming ashore, she'll want a hand. Here, something warm for the climb.`,
         ],
         reward: { levels: 3, items: [{ item: "minecraft:cooked_cod", amount: 8 }] },
+        hint: "The lighthouse stands on the coast: the tracker above your hotbar points to it. Warden Reyes is one of the townsfolk; /realm:npc shows where she stands.",
       },
       {
         id: "choir",
@@ -107,6 +112,7 @@ const PROLOGUE = [
         ],
         reward: { levels: 4, crowns: 40, items: [{ item: "minecraft:arrow", amount: 16 }] },
         rep: [{ guild: "wardens", amount: 10 }],
+        hint: "Drowned come out of the sea at night, and in rivers and oceans in the day. Any fishing catch counts: fish, junk or treasure.",
       },
       {
         id: "vigil",
@@ -124,6 +130,7 @@ const PROLOGUE = [
           `${T}Ida the relicsmith works sea-iron. If anyone can make something to face that bell, it's her. Tell her Tobin sent you. She'll grumble, then she'll help.`,
         ],
         reward: { levels: 5, title: "Stormwatcher", journal: { entry: "storm_vigil", label: "The Storm Vigil" } },
+        hint: "Only a thunderstorm counts, and only outdoors with open sky above you, within 48 blocks of the lighthouse. Sleeping skips storms, so stay up when the sky darkens.",
       },
       {
         id: "iron",
@@ -160,6 +167,7 @@ const PROLOGUE = [
           },
         ],
         reward: { levels: 5, crowns: 60 },
+        hint: "Bring the iron and shards in as many trips as you like; Ida keeps count. Guardians around ocean monuments drop prismarine shards.",
       },
       {
         id: "sunken",
@@ -181,6 +189,7 @@ const PROLOGUE = [
           `${I}A roar? Then the bell had a keeper. Go to Mayor Bram before you go back down. If this becomes a fight, the town should know.`,
         ],
         reward: { levels: 5, items: [{ item: "minecraft:golden_apple", amount: 2 }] },
+        hint: "The sunken bell is under the sea where the old tower fell. Take water breathing or a turtle helmet. Tap or hit the bell block itself three times.",
       },
       {
         id: "warden",
@@ -211,6 +220,7 @@ const PROLOGUE = [
           `${T}Here. These were his. He'd want them walking somewhere, not sitting in a chest.`,
         ],
         reward: { levels: 10, crowns: 150, relic: "tide_boots", title: "Bellkeeper", journal: { entry: "drowned_bell", label: "The Drowned Bell" } },
+        hint: "The Bell Warden comes when you swim within 32 blocks of the sunken bell. Bring a good weapon, armor and something to breathe with. Party mates nearby share the kill.",
         rep: [
           { guild: "wardens", amount: 40, when: SILENCE },
           { guild: "wayfarers", amount: 40, when: RING },
@@ -223,6 +233,10 @@ const PROLOGUE = [
     title: "The Cartographer's Last Map",
     short: "Last Map",
     giver: "mara",
+    kind: "main",
+    act: 0,
+    tones: ["exploration", "mystery", "happy"],
+    summary: "Mara's old teacher left her an unfinished map with three pins, far from anything.",
     chapters: [
       {
         id: "pins",
@@ -230,41 +244,45 @@ const PROLOGUE = [
         intro: [
           `§eMara§r unrolls a map so old it cracks at the folds. Most of it is blank. Three faded pins stand in it, far from anything.\n\n${M}My teacher's. Aldous Fenn. Best cartographer this side of the mountains, and the worst at finishing things.`,
           `${M}He died last spring and left me this, and a note that just says FINISH IT. I mean to. But nobody walks off the edge of a map with an empty pack.`,
-          `${M}Bring a compass of your own, and paper. Eight sheets. Real cartographers carry their own; you'll be drawing as much as walking.`,
+          `${M}So here's the plan. First, show me you're ready: a compass of your own, and paper. Eight sheets. Then I'll send you out to his three pins.`,
+          `${M}Just have them on you when you come back. I don't need to keep them; real cartographers carry their own.`,
         ],
         objectives: [
           { type: "collect", label: "Have a compass", item: "minecraft:compass", count: 1 },
           { type: "collect", label: "Have 8 paper", item: "minecraft:paper", count: 8 },
         ],
         outro: [
-          `${M}Good. Now listen. Fenn pinned three spots, far out. He never wrote down what's there. I've copied the bearings onto your compass card.`,
+          `${M}Good. Now listen. Fenn pinned three spots, far out. He never wrote down what's there. I've copied them for you: your tracker will point to each one in turn.`,
           `${M}Take this blank map as well. You'll want it later. Fenn always said: carry one more map than you think you need.`,
         ],
         reward: { levels: 2, items: [{ item: "minecraft:empty_map", amount: 1 }, { item: "minecraft:bread", amount: 8 }] },
+        hint: "Craft a compass from 4 iron ingots and a redstone dust, and paper from 3 sugar cane. Just carry them; Mara doesn't take them.",
       },
       {
         id: "far",
         title: "Three Pins",
         intro: [
-          `${M}The first pin is far to the northeast. The second, a long way west. The third lies south, past where the roads give out.`,
-          `${M}Take your time. Fenn always said a rushed map is a wrong map. When you're standing on a pin, you'll know: he marked places that make you stop.`,
+          `${M}The three pins are far out: about 1,100 blocks northeast, 1,100 blocks west, and 1,200 blocks south of the world spawn. Visit them in any order.`,
+          `${M}The tracker above your hotbar shows the nearest pin you haven't stood on yet, with its direction and distance. Get within 24 blocks of a pin and it counts.`,
+          `${M}That's a long way on foot. Take a horse, a boat along the coast, or elytra if you have them, plus food and a bed. Fenn always said a rushed map is a wrong map.`,
         ],
         objectives: [
-          { type: "reach", label: "Stand on the first pin (far northeast)", offset: { x: 900, z: -700 }, mark: "First pin", radius: 24 },
-          { type: "reach", label: "Stand on the second pin (far west)", offset: { x: -1100, z: -200 }, mark: "Second pin", radius: 24 },
-          { type: "reach", label: "Stand on the third pin (far south)", offset: { x: 150, z: 1200 }, mark: "Third pin", radius: 24 },
+          { type: "reach", label: "Stand on the first pin (about 1,100 blocks northeast)", offset: { x: 900, z: -700 }, mark: "First pin", radius: 24 },
+          { type: "reach", label: "Stand on the second pin (about 1,100 blocks west)", offset: { x: -1100, z: -200 }, mark: "Second pin", radius: 24 },
+          { type: "reach", label: "Stand on the third pin (about 1,200 blocks south)", offset: { x: 150, z: 1200 }, mark: "Third pin", radius: 24 },
         ],
         outro: [
           `§eMara§r spreads your sketches beside Fenn's map and goes very still.\n\n${M}Look. Draw a line from each pin through the next one... they cross here. Near home. He was pointing back the whole time.`,
           `${M}There's only one old thing at that spot: the old chapel, the one nobody uses anymore. Fenn used to sit there for hours. I never asked him why.`,
         ],
         reward: { levels: 6, crowns: 60, journal: { entry: "fenn_pins", label: "Fenn's Three Pins" } },
+        hint: "Follow the tracker: it always points at the nearest pin you still need. Each pin is a spot counted from the world spawn, so the coordinates in this hint are exact.",
       },
       {
         id: "chapel",
         title: "The Old Chapel",
         intro: [
-          `${M}Go to the old chapel. Look for anything of his: a note, a map case, a scratch on the wall.`,
+          `${M}Go to the old chapel; the tracker knows the way. Look for anything of his: a note, a map case, a scratch on the wall.`,
           `${M}And ask Sol the Sky-reader about him on your way. Fenn and Sol argued about stars half the night, every night. If he hid a riddle in the sky, Sol will know.`,
         ],
         objectives: [
@@ -276,12 +294,13 @@ const PROLOGUE = [
           `${M}Sol said Fenn mapped the stars because they never change, and the land because it always does.\n\nShe laughs, a little wet.\n\n${M}That old fox. He didn't want me to find a place. He wanted me to make a map of my own.`,
         ],
         reward: { levels: 5, journal: { entry: "old_chapel", label: "The Old Chapel" } },
+        hint: "Walk within 12 blocks of the old chapel to find it. Sol the Sky-reader is one of the townsfolk: /realm:npc shows where everyone stands.",
       },
       {
         id: "last",
         title: "The Last Map",
         intro: [
-          `${M}So let's finish it. Take the blank map I gave you, fill it in somewhere you love, and bring it to me. Not a famous place. Your place.`,
+          `${M}So let's finish it. Take the blank map I gave you, open it (use it) somewhere you love and walk around until it's drawn, then bring it to me. Not a famous place. Your place.`,
           `${M}I'll copy it into the back of Fenn's book. The first page in his hand, the last in yours.`,
         ],
         objectives: [{ type: "deliver", label: "Bring Mara a filled map of a place you love", npc: "mara", item: "minecraft:filled_map", count: 1 }],
@@ -306,6 +325,7 @@ const PROLOGUE = [
           },
         ],
         reward: { levels: 8, crowns: 100, relic: "compass_echoes", title: "Cartographer", journal: { entry: "last_map", label: "The Cartographer's Last Map" } },
+        hint: "Use an empty map (from chapter 1, or a cartography table) to turn it into a filled map, then tap Mara with it in your inventory.",
       },
     ],
   },
