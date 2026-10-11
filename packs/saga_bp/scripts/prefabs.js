@@ -580,7 +580,10 @@ const BUILD = {
           } else {
             p.set(x, 0, z + dz, special === "lily" ? "grass_block" : mound);
             const r = p.r();
-            if (!special && dz === 2 && r < 0.25) p.set(x, 1, z + dz, "deadbush");
+            if (!special && dz === 2 && r < 0.25) {
+              p.set(x, 0, z + dz, "podzol");
+              p.set(x, 1, z + dz, "deadbush");
+            }
             else if (!special && dz === 1 && r > 0.85) p.set(x, 1, z + dz, "poppy");
           }
         }
@@ -622,7 +625,10 @@ const BUILD = {
     for (let x = 4; x <= 6; x++) for (let z = 4; z <= 6; z++) p.set(x, 0, z, "grass_block");
     for (let n = 0; n < 16; n++) {
       const x = Math.floor(p.r() * 15) - 7, z = Math.floor(p.r() * 15) - 7;
-      if (p.get(x, 1, z)?.k === AIR && x !== 0 && !(x >= 4 && z >= 4 && x <= 6 && z <= 6)) p.set(x, 1, z, p.r() < 0.6 ? "deadbush" : "short_grass");
+      if (p.get(x, 1, z)?.k !== AIR || x === 0 || (x >= 4 && z >= 4 && x <= 6 && z <= 6) || (Math.abs(x) <= 3 && z >= 2) || p.get(x, 0, z)?.b.id === "minecraft:air") continue;
+      const dead = p.r() < 0.6;
+      p.set(x, 0, z, dead ? "coarse_dirt" : "grass_block");
+      p.set(x, 1, z, dead ? "deadbush" : "short_grass");
     }
   },
 
@@ -1137,7 +1143,10 @@ const BUILD = {
     p.disc(10.3, (x, z, d) => {
       if (d <= 4.7) return;
       p.set(x, 0, z, d <= 6.5 ? mix(["blackstone", 3], [log("basalt"), 2], ["soul_soil", 2], ["sculk", 2], ["coarse_dirt", 1]) : mix(["coarse_dirt", 3], ["blackstone", 2], ["soul_soil", 1], ["sculk", 1], ["podzol", 1]));
-      if (d > 6.5 && p.r() < 0.06) p.set(x, 1, z, "deadbush");
+      if (d > 6.5 && p.r() < 0.06) {
+        p.set(x, 0, z, "coarse_dirt");
+        p.set(x, 1, z, "deadbush");
+      }
     });
     // the pit: blackened walls, soul soil floor, soul fire in the middle
     p.disc(4.7, (x, z, d) => {
@@ -1262,6 +1271,8 @@ function perm(blk) {
   return out;
 }
 
+/** Blocks that fall: a foundation replaces them so nothing caves in. */
+const FALLING = /^minecraft:(sand|red_sand|gravel|suspicious_sand|suspicious_gravel|[a-z_]+_concrete_powder)$/;
 const SOFT_GROUND = /grass$|fern|flower|bush|tulip|orchid|poppy|dandelion|allium|bluet|daisy|lily_of|cornflower|snow_layer|petals|leaf_litter|sapling|vine|seagrass|kelp|deadbush|lilac|peony|sunflower|leaves|mushroom$/;
 
 /**
@@ -1290,7 +1301,7 @@ export function* buildSteps(name, dimension, origin, facing) {
         const wasWater = block.isLiquid && id.includes("water");
         if (e.k === AIR && (block.isAir || block.isLiquid)) continue;
         if (e.k === WATER && (block.isAir || wasWater)) continue;
-        if (e.k === SOFT && !(block.isAir || block.isLiquid || SOFT_GROUND.test(id))) continue;
+        if (e.k === SOFT && !(block.isAir || block.isLiquid || SOFT_GROUND.test(id) || FALLING.test(id))) continue;
         const pm = perm({ id: e.b.id, s: rotStates(e.b.s, f) });
         if (!pm) continue;
         block.setPermutation(pm);
@@ -1339,21 +1350,45 @@ const NATURAL = /^minecraft:(grass_block|dirt|coarse_dirt|rooted_dirt|dirt_with_
 /**
  * What the top of a column is.
  * @param {Dimension} dim @param {number} x @param {number} z
- * @returns {{ kind: "ground" | "water" | "lava" | "tree" | "built" | "ice" | "none", y: number, floor?: number }}
+ * @returns {{ kind: "ground" | "water" | "lava" | "tree" | "built" | "ice" | "none", y: number, floor?: number, id?: string }}
  */
 function surface(dim, x, z) {
-  let blk;
   try {
-    blk = dim.getTopmostBlock({ x, z });
+    const top = dim.getTopmostBlock({ x, z });
+    if (!top) return { kind: "none", y: 0 };
+    // getTopmostBlock skips water (it answers with the sea floor), so look above it
+    let s = top, wet = top.isLiquid;
+    for (let i = 0; i < 160; i++) {
+      const a = s.above();
+      if (!a || !(a.isLiquid || WATER_PLANT.test(a.typeId))) break;
+      s = a;
+      if (a.isLiquid) wet = true;
+    }
+    if (wet) {
+      if (s.typeId.includes("lava")) return { kind: "lava", y: s.location.y };
+      let fl = /** @type {Block | undefined} */ (top);
+      for (let j = 0; j < 160 && fl && (fl.isLiquid || WATER_PLANT.test(fl.typeId)); j++) fl = fl.below();
+      return { kind: "water", y: s.location.y, floor: fl ? fl.location.y : top.location.y };
+    }
+    return surfaceOf(top);
   } catch {
-    return { kind: "none", y: 0 };
+    return { kind: "none", y: 0 }; // not loaded
   }
+}
+
+const WATER_PLANT = /seagrass|kelp|coral|sea_pickle|waterlily/;
+
+/**
+ * @param {Block | undefined} blk
+ * @returns {{ kind: "ground" | "water" | "lava" | "tree" | "built" | "ice" | "none", y: number, floor?: number, id?: string }}
+ */
+function surfaceOf(blk) {
   for (let i = 0; i < 48 && blk; i++) {
     const id = blk.typeId, y = blk.location.y;
     if (blk.isLiquid && id.includes("lava")) return { kind: "lava", y };
     if (blk.isLiquid || id.includes("water")) {
       let fl = blk.below();
-      for (let j = 0; j < 128 && fl && (fl.isLiquid || /seagrass|kelp|coral|sea_pickle/.test(fl.typeId)); j++) fl = fl.below();
+      for (let j = 0; j < 128 && fl && (fl.isLiquid || WATER_PLANT.test(fl.typeId)); j++) fl = fl.below();
       return { kind: "water", y, floor: fl ? fl.location.y : y - 128 };
     }
     if (/_leaves$|_log$|_wood$|mushroom_block|azalea|mangrove_roots$|bamboo/.test(id)) return { kind: "tree", y };
@@ -1367,7 +1402,7 @@ function surface(dim, x, z) {
         plant = false;
       }
     }
-    if (!plant) return { kind: "built", y };
+    if (!plant) return { kind: "built", y, id };
     blk = blk.below();
   }
   return { kind: "none", y: 0 };
@@ -1400,7 +1435,7 @@ function landOk(dim, info, x, z) {
     const s = surface(dim, sx, sz);
     if (s.kind === "none") return { ok: false, reason: "not loaded" };
     if (s.kind === "lava") return { ok: false, reason: "lava" };
-    if (s.kind === "built") return { ok: false, reason: "built up" };
+    if (s.kind === "built") return { ok: false, reason: `built up (${s.id})` };
     if (s.kind === "tree") {
       if (++trees > 3) return { ok: false, reason: "trees" };
       continue;
@@ -1461,7 +1496,7 @@ export function siteOk(name, dimension, x, z) {
       for (const [sx, sz] of samples(info, x, z, 3)) {
         const s = surface(dimension, sx, sz);
         if (s.kind === "none") return { ok: false, reason: "not loaded" };
-        if (s.kind !== "water" || s.floor === undefined) return { ok: false, reason: "not open water" };
+        if (s.kind !== "water" || s.floor === undefined) return { ok: false, reason: `not open water (${s.kind} at ${sx} ${s.y} ${sz})` };
         if (s.y - s.floor < (info.minDepth ?? above + 1)) return { ok: false, reason: `too shallow (${s.y - s.floor})` };
         floors.push(s.floor);
       }
