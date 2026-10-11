@@ -496,6 +496,7 @@ export const STORIES = [
       // 8. The Herald ------------------------------------------------------------------------
       {
         id: "herald",
+        sequential: true,
         title: "The Herald",
         npc: "elsie",
         intro: [

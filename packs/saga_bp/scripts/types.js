@@ -172,6 +172,7 @@
  * @property {Reward} [reward]
  * @property {Rep[]} [rep] reputation given when the chapter is finished
  * @property {string} [hint] what "Ask for a hint" says (the hint also reveals exact coordinates)
+ * @property {boolean} [sequential] objectives count one at a time, in order (a boss's phases); by default they all count at once
  */
 
 /**
