@@ -8,6 +8,7 @@ import {
   addCrowns,
   attempt,
   between,
+  blockAt,
   burst,
   crownsOf,
   effect,
@@ -302,7 +303,7 @@ export const CARDS = [
       const at = player.location;
       const dim = player.dimension;
       for (let y = 1; y <= 22; y++) {
-        const b = dim.getBlock({ x: at.x, y: at.y + y, z: at.z });
+        const b = blockAt(dim, { x: at.x, y: at.y + y, z: at.z });
         if (!b || !b.isAir) return false;
       }
       effect(player, "minecraft:slow_falling", 30);
@@ -611,7 +612,7 @@ export const CARDS = [
       let n = 0;
       for (let i = 0; i < 2; i++) {
         const loc = { x: at.x + between(-6, 6), y: at.y + 12, z: at.z + between(-6, 6) };
-        const b = player.dimension.getBlock(loc);
+        const b = blockAt(player.dimension, loc);
         if (!b || !b.isAir) continue;
         attempt(() => {
           player.dimension.spawnEntity("minecraft:phantom", loc);

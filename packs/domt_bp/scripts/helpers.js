@@ -267,6 +267,7 @@ export async function farTeleport(p, dim, x, z) {
         if (spot) {
           p.teleport(spot, { dimension: dim, keepVelocity: false });
           p.removeEffect("minecraft:slow_falling");
+          p.removeEffect("minecraft:resistance");
           return spot;
         }
       }
@@ -276,6 +277,7 @@ export async function farTeleport(p, dim, x, z) {
   if (p.isValid) {
     p.teleport(home.at, { dimension: home.dim, keepVelocity: false });
     p.removeEffect("minecraft:slow_falling");
+    p.removeEffect("minecraft:resistance");
   }
   return undefined;
 }
