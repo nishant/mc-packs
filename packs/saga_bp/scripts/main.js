@@ -104,7 +104,8 @@ function onChoose(msg) {
 
 /**
  * realm:saga_debug (operators and test scenarios; /scriptevent needs operator rights):
- * `{ player, action: "answer", text }` answers the player's first open riddle, `{ player, action: "state" }`
+ * `{ player, action: "answer", text }` answers the player's first open riddle, `{ player, action: "finish", story, flags? }`
+ * marks a whole story finished, `{ player, action: "places" }` tells the player every saved place, `{ player, action: "state" }`
  * prints their saved progress to the content log.
  * @param {any} msg
  */
@@ -130,6 +131,23 @@ function onDebug(msg) {
     Object.assign(st.f, typeof msg.flags === "object" && msg.flags ? msg.flags : {});
     invalidate(player.id);
     markDirty(player, true);
+  } else if (msg.action === "finish" && typeof msg.story === "string") {
+    // Marks a whole story finished (to test what it unlocks).
+    const story = storyById.get(msg.story);
+    if (!story) return;
+    endScenesOf(player.id);
+    const st = stateOf(sagaOf(player), story);
+    st.dn = story.chapters.map((c) => c.id);
+    st.a = 0;
+    delete st.cur;
+    delete st.o;
+    delete st.x;
+    st.fin = Date.now();
+    Object.assign(st.f, typeof msg.flags === "object" && msg.flags ? msg.flags : {});
+    invalidate(player.id);
+    markDirty(player, true);
+  } else if (msg.action === "places") {
+    player.sendMessage(`[saga places] ${JSON.stringify(placesOf())}`);
   } else if (msg.action === "state") {
     console.warn(`[saga] state of ${player.name}: ${JSON.stringify(sagaOf(player))}`);
     for (const e of entries(player)) console.warn(`[saga] entry ${e.story.id}/${e.chapter.id} o=${JSON.stringify(e.st.o)} keys=${e.chapter.objectives.map((_, i) => objKey(e, i)).join(",")}`);

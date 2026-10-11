@@ -1,11 +1,13 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG, DEFAULTS } from "./config.js";
+import { RELEASE } from "./release.js";
 import { get, set } from "./settings.js";
 
 const PROP_NEWS = "news:news"; // world: JSON { title, body }
 const PROP_REVISION = "news:revision"; // world: bumped when news should be re-shown
 const PROP_TIPS = "news:tips"; // world: JSON string[]
+const PROP_RELEASE = "news:release"; // world: id of the generated release news (release.js) last posted
 // world "news:tipSettings": JSON { enabled, intervalMinutes }, read and written through settings.js (shared with /realm:config)
 /** Minecraft's text boxes keep at most this many characters: the most a tip typed in the editor can have. */
 const TIP_MAX = 100;
@@ -124,6 +126,24 @@ async function showNews(player, header = "") {
 }
 
 // ---------------------------------------------------------------------------
+// Release news: release.js is generated from docs/NEWS.md for every bundle
+// ---------------------------------------------------------------------------
+
+/** Posts the bundle's release news once: it becomes the news and pops up for everyone. */
+function applyRelease() {
+  if (!CONFIG.releaseNews || !RELEASE.id || !RELEASE.body.trim()) return;
+  try {
+    if (world.getDynamicProperty(PROP_RELEASE) === RELEASE.id) return;
+    writeJson(PROP_NEWS, { title: RELEASE.title ? `§l§b${RELEASE.title}` : DEFAULTS.news.title, body: RELEASE.body });
+    world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
+    world.setDynamicProperty(PROP_RELEASE, RELEASE.id);
+  } catch (e) {
+    console.warn(`[news] release: ${e}`);
+  }
+}
+world.afterEvents.worldLoad.subscribe(() => applyRelease());
+
+// ---------------------------------------------------------------------------
 // Join: news popup + "you were away"
 // ---------------------------------------------------------------------------
 
@@ -144,6 +164,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 /** @param {Player} player @param {number | undefined} lastSeen */
 async function onJoin(player, lastSeen) {
   if (!player.isValid) return; // left during the join delay
+  applyRelease();
   const awayMs = lastSeen ? Date.now() - lastSeen : 0;
   const awayHours = get("awayNoticeHours");
   const away =

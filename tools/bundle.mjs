@@ -18,6 +18,7 @@
 //   - the bundle's UUIDs are derived from --name, so rebuilding with a different
 //     selection updates the same pack on the Realm instead of adding a new one
 //   - the version is the build time (UTC) [YYYY, MMDD, HHMM] so it always increases
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -26,6 +27,9 @@ import { walk, zip } from "./lib/zip.mjs";
 import { namespaceOf, registeredNames } from "./lib/commands.mjs";
 
 const root = join(import.meta.dirname, "..");
+
+// Realm News shows the newest docs/NEWS.md entry: refresh it before bundling.
+execFileSync(process.execPath, [join(root, "tools", "gen-news.mjs")], { stdio: "inherit" });
 const packsDir = join(root, "packs");
 const distDir = join(root, "dist");
 /** Behavior packs that stay their own add-on: --all leaves them out. */

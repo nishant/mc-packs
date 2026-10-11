@@ -30,6 +30,12 @@ export const DEFAULTS = {
 };
 
 export const CONFIG = {
+  /**
+   * Post each bundle's release news (scripts/release.js, generated from docs/NEWS.md) once: it
+   * replaces the news and pops up for everyone. false = only news operators write in game.
+   */
+  releaseNews: true,
+
   /** Ticks after joining before showing the news popup. Later than the welcome popup on purpose. */
   delayTicks: 100,
 

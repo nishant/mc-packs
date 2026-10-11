@@ -204,6 +204,9 @@ export function ensurePlace(name) {
 
 /** Places being built right now. @type {Set<string>} */
 const building = new Set();
+/** How often each picked place waited for unloaded ground (at most MAX_WAITS, then it moves). @type {Map<string, number>} */
+const waits = new Map();
+const MAX_WAITS = 8;
 /** When each picked place may be tried again (ms). @type {Map<string, number>} */
 const retryAt = new Map();
 
@@ -483,10 +486,13 @@ async function autoBuild(name, near) {
     } else tellOps(`§7[Story] Built ${named(name)} at ${f.x} ${f.y} ${f.z} (picked by the pack; /realm:saga_places to change it).`);
     return;
   }
-  if (res.unloaded > 0) {
+  if (res.unloaded > 0 && (waits.get(name) ?? 0) < MAX_WAITS) {
+    waits.set(name, (waits.get(name) ?? 0) + 1);
     retryAt.set(name, Date.now() + 4000);
     return; // part of the area isn't loaded yet: try again in a moment
   }
+  // The loaded part didn't suit it (or the rest never loaded): move on rather than wait forever.
+  waits.delete(name);
   // Nothing nearby suits it: move the spot.
   const mv = (rec.mv ?? 0) + 1;
   if (mv > MAX_MOVES) {
