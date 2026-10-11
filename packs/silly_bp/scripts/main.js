@@ -366,7 +366,10 @@ system.runInterval(() => {
 export function hyperJump(p, quiet) {
   const cd = Math.max(1, Math.floor(Number(get("hyperJumpCooldownSeconds")) || 4)) * 20;
   if (!ready(p, "hyper_jump", cd)) {
-    if (!quiet && (cooldowns.get(p.id)?.get("hyper_jump") ?? 0) - system.currentTick < cd - 5) p.onScreenDisplay.setActionBar("§7Hyper Jump is recharging");
+    if (!quiet && (cooldowns.get(p.id)?.get("hyper_jump") ?? 0) - system.currentTick < cd - 5) {
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 30 })); // other bar writers wait
+      p.onScreenDisplay.setActionBar("§7Hyper Jump is recharging");
+    }
     return false;
   }
   const strength = Math.min(2.5, Math.max(0.2, Number(CONFIG.hyperJumpStrength) || 1));

@@ -247,12 +247,13 @@ export const STORIES = [
           { text: `${T}Hear that? The bell. Tide's moving the clapper.\n\nHe almost smiles.\n\n${T}He'd have liked that. He hated quiet water. Said quiet water's just the sea holding its breath.`, when: RING },
           { text: `${T}Quiet. No bell. Good.\n\nHe looks at the flat dark sea a long time.\n\n${T}That bell killed him. I'm glad it's choking on Ida's band. Is that wrong? Don't answer.`, when: SILENCE },
           `When you've caught three, he takes the last fish off your hook himself, the way you'd do it for a boy.\n\n${T}Hal taught me that knot. I was six. He slapped my hand every time I got it wrong. I'd give the rest of my years for one more slap.`,
-          `${T}Take his rod. Been in my shed forty years, waiting for somebody worth it. Go on. And when you find whatever's under there, whatever he died fighting, you give it one from Hal.`,
+          `${T}Take his rod. And his compass: it always found the way home, which is more than he ever did. Been in my shed forty years, waiting for somebody worth it. Go on. And when you find whatever's under there, whatever he died fighting, you give it one from Hal.`,
         ],
         reward: {
           levels: 4,
           crowns: 50,
           items: [{ item: "minecraft:fishing_rod", amount: 1, name: "Hal's Rod", lore: ["He went for the town.", "Not for the boat."] }],
+          relic: "hal_compass", // the Relics pack's story relic (realm:relic_give); no other story gives it
           codex: {
             id: "act3_hal",
             title: "How Hal Died",

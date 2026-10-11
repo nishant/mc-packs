@@ -89,8 +89,10 @@ With Claude, `/bundle-packs` asks which packs to include (**All packs** is the f
 ## Development
 
 ```bash
-npm run check     # type-check against @minecraft/server 2.1.0 / server-ui 2.0.0, check docs/PACKS.md is complete and every settings.js and zones.js is current
+npm run check     # type-check against @minecraft/server 2.1.0 / server-ui 2.0.0; ASCII game text, docs/PACKS.md complete, realm: commands, stories, settings.js and zones.js copies, help and admin catalogs, news, generated resource packs
 npm run gen:rain  # regenerate Realistic Rain's textures, fogs and sounds (sounds need ffmpeg)
+npm run gen:sky   # regenerate Realm Skies
+npm run gen:translucent  # regenerate Translucent Tools
 npm run build     # one .mcpack per pack
 npm run bundle    # merge packs into one (--list, --all, --resources, --packs a,b, --name, --title, --icon)
 ```

@@ -402,6 +402,12 @@ function championAlive(tag, dim) {
   }
 }
 
+/**
+ * Mobs the Champions pack can turn into champions (its default `mobs`). For any other story mob (an elder
+ * guardian, a pillager, a phantom) it would spawn one of these instead, so those are always our own.
+ */
+const CHAMPION_MOBS = new Set(["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:zombie_villager_v2", "minecraft:skeleton", "minecraft:stray", "minecraft:spider", "minecraft:creeper", "minecraft:witch"]);
+
 const WATER_MOBS = new Set(["minecraft:guardian", "minecraft:elder_guardian", "minecraft:drowned", "minecraft:squid", "minecraft:glow_squid", "minecraft:dolphin"]);
 
 /** The nearest water within 24 blocks of a spot (a sea mob's champion swims there), or undefined. @param {Dimension} dim @param {Vector3} at */
@@ -460,13 +466,14 @@ function championNear(player, obj) {
   }
   if (WATER_MOBS.has(champ.mob)) at = waterNear(dim, at) ?? at;
   championNext.set(champ.tag, now + Number(get("championRetrySeconds")) * 1000);
-  send("realm:champion_spawn", { dim: dim.id, x: at.x, y: at.y, z: at.z, mob: champ.mob, trait: champ.trait, name: champ.name, tag: champ.tag, health: champ.health });
+  const viaPack = CHAMPION_MOBS.has(champ.mob);
+  if (viaPack) send("realm:champion_spawn", { dim: dim.id, x: at.x, y: at.y, z: at.z, mob: champ.mob, trait: champ.trait, name: champ.name, tag: champ.tag, health: champ.health });
   if (champ.warn) player.sendMessage(`§c[Story] ${champ.warn}`);
   const spawnAt = at;
-  // No Champions pack? Spawn a tougher named mob ourselves, so the story can still be finished.
+  // No Champions pack (or a mob it can't make)? Spawn a tougher named mob ourselves, so the story can still be finished.
   system.runTimeout(() => {
     try {
-      if (get("championFallback") !== true || championAlive(champ.tag, dim)) return;
+      if ((viaPack && get("championFallback") !== true) || championAlive(champ.tag, dim)) return;
       const mob = dim.spawnEntity(/** @type {any} */ (champ.mob), spawnAt);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);

@@ -384,6 +384,8 @@ export async function startChapter(player, story) {
     markDirty(player, true);
     const e = entries(player).find((x) => x.story.id === story.id);
     player.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
+    // Recipes the chapter asks you to cook; the Kitchen pack tells the player (nothing happens without it).
+    for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: player.id, recipe });
     if (e) {
       const missing = missingPlaces(e, saga); // picks unset places first, so the lines below can point at them
       for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));

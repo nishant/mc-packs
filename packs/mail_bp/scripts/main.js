@@ -97,6 +97,12 @@ function remember(player) {
 /** @param {string} id @returns {Player | undefined} */
 const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 
+/** A note above the hotbar; `realm:actionbar` first, so the Coordinates HUD and other bar writers wait. @param {Player} player @param {string} text */
+function note(player, text) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+  player.onScreenDisplay.setActionBar(text);
+}
+
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   try {
@@ -313,7 +319,7 @@ async function readLetter(player, l) {
       run: () => {
         const now = letters().get(l.id);
         if (now) save({ ...now, di: 1 });
-        player.onScreenDisplay.setActionBar("§7Letter deleted");
+        note(player, "§7Letter deleted");
         return inbox(player);
       },
     },
@@ -343,7 +349,7 @@ async function inbox(player) {
           const now = letters().get(l.id);
           if (now) save({ ...now, di: 1 });
         }
-        player.onScreenDisplay.setActionBar(`§7Deleted ${read.length} letter${read.length === 1 ? "" : "s"}`);
+        note(player, `§7Deleted ${read.length} letter${read.length === 1 ? "" : "s"}`);
         return inbox(player);
       },
     });
@@ -362,7 +368,7 @@ async function readSent(player, l) {
       run: () => {
         const now = letters().get(l.id);
         if (now) save({ ...now, ds: 1 });
-        player.onScreenDisplay.setActionBar("§7Removed from Sent");
+        note(player, "§7Removed from Sent");
         return sent(player);
       },
     },

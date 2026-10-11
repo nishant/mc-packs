@@ -167,6 +167,7 @@
  * @property {When} [when] the chapter only exists for players whose flags match (branches)
  * @property {Page[]} intro
  * @property {Choice[]} [introChoices] buttons after the intro, before the objectives start
+ * @property {string[]} [teach] Kitchen recipes (id or name) taught when the chapter is accepted (`realm:recipe_learn`)
  * @property {Objective[]} objectives
  * @property {Page[]} outro
  * @property {Choice[]} [choices]

@@ -64,7 +64,7 @@ the End, the Warden). Every big Minecraft structure gets a story reason to exist
    more years. If the Choir rings the "broken note" again during the pass, the seals fail and the
    Hollow rises. The finale is **Lantern Night**.
 7. **The last Starwright.** Elsie the innkeeper is far older than she looks. She is the last of the
-   Starwrights' line, kept young by a sliver of the Lantern sewn into her apron (Act IV reveal). She
+   Starwrights' line, kept young by a sliver of the Lantern sewn into her apron (revealed in Act III, *Elsie's Apron*; see "As shipped" below). She
    ran the inn so she could watch the chapel. She failed forty years ago and has carried that guilt
    since. In one ending she gives her life to become the new Sky Seal.
 
@@ -324,6 +324,38 @@ Tones: epic, heroic, violent, sad, scary. ~8 chapters plus epilogues.
 8. **Forty Winters** — final chapter: plant a tree at the graveyard for the lost (`place` a sapling),
    Tobin rings or doesn't ring the bell. Credits page.
 
+### As shipped (where the code differs from the outline above)
+
+The outline was the plan; the story files in `packs/saga_bp/scripts/stories/` are the truth. Where
+they differ (October 2026):
+
+- **Act I** has 10 chapters: *The Skipping Song* (`rhyme`) comes third. The Report or Pursue flag is
+  `act1:path` (`report` / `alone`), a flag of story `act1_signs`; other stories read it as
+  `act1_signs.act1:path`, not `act1:path`.
+- **Act II** has 12 chapters: 4a/4b are `double` and `raid`, and Vesna's price is its own chapter,
+  *A Tear from the Fire* (`tear`), after *The Witch of Hollow Fen*.
+- **Act III** has 10 chapters: *The Leaning Flame* (`flame`) comes after *Tobin's Silence*.
+  **Elsie's reveal is in Act III**, not Act IV: in *Elsie's Apron* Bea sends the player to Elsie
+  with a honey bottle and to sleep a night at the inn (a `sleep` objective whose dream shows Elsie's
+  past); Elsie confesses in the outro. The choice sets `act3_deep.elsie` (`forgive` / `condemn`) as
+  well as `g:mercy` / `g:iron`. *Tobin's Silence* gives `hal_compass` (Hal's Compass) along with
+  Hal's Rod.
+- **Act IV** orders the seals with its own flags `first`, `second` and `now` (not `act4:first`);
+  the promise is `act4:promise` (`allow` / `refuse`), read as `act4_seals.act4:promise`.
+- **Act V** has 13 chapters: the allies are four chapters (`smugglers`, `fen`, `chapel`, and
+  `alone` for a player with no allies), and Dawn is three chapters, one per ending
+  (`dawn_relight`, `dawn_gift`, `dawn_crown`). It sets `g:allies` and `g:ending`.
+- **Story relics:** `choir_mask` (Act II, *The Gray Ring Burns*), `lantern_shard` (Act III,
+  *Three Keys*), `hal_compass` (Act III, *Tobin's Silence*), `keeper_lamp` and `hollow_crown`
+  (Act V, the gift and crown Dawns), `singing_blade` (*The Forge That Sings*), `vesna_charm`
+  (*The Witch's Bargain*).
+- **Hearth and Table** teaches the Kitchen's story recipes with a chapter's `teach` (Lantern Cake in
+  *A Feast for Marta*, Starwright Bread in *Elsie's Old Recipe*), and every chapter that asks for a
+  dish has an "old way" with plain food, chosen in *Rations for the Wardens*.
+- **Story champions** whose mob the Champions pack can't make (the elder guardian, pillagers,
+  vindicators, evokers, guardians, the phantom) are spawned by Story Questlines itself, never sent
+  as `realm:champion_spawn`.
+
 ## 8. Side questlines
 
 Kind `side`. Each 4 to 8 chapters, each its own story with its own giver. Some require an act of the
@@ -394,6 +426,7 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
   when: { ... },       // optional: the chapter only exists for players whose flags match (branches)
   intro: [Page, ...],
   introChoices: [Choice, ...], // optional: buttons after the intro (sets flags before objectives)
+  teach: ["lantern_cake"],     // optional: Kitchen recipes taught when the chapter is accepted (realm:recipe_learn)
   objectives: [Objective, ...],
   outro: [Page, ...],
   choices: [Choice, ...],      // optional: buttons on the outro's last page
@@ -459,6 +492,10 @@ an act finale 10 levels, 150-300 Crowns and a title or relic. Hints cost 25% of 
 and Crowns (`hintPenalty`).
 
 ### Story relics (added to the Relics pack)
+
+The abilities below are the plan; the shipped ones differ in places (the Gray Choir Mask halves Choir
+damage and blocks Darkness, the Fen Charm keeps witches from hurting you rather than targeting you):
+the Relics section of `docs/PACKS.md` has them as they are.
 
 | Id | Name | Where | Ability |
 |---|---|---|---|

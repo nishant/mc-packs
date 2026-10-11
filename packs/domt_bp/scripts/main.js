@@ -157,7 +157,10 @@ function announce(msg) {
 async function reveal(p, card) {
   for (let i = 0; i < 3; i++) {
     if (!p.isValid) return;
-    attempt(() => p.onScreenDisplay.setActionBar(`§7The deck shuffles${".".repeat(i + 1)}`));
+    attempt(() => {
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 20 })); // other bar writers wait
+      p.onScreenDisplay.setActionBar(`§7The deck shuffles${".".repeat(i + 1)}`);
+    });
     sound(p, "item.book.page_turn", 0.8 + i * 0.2);
     burst(p.dimension, "minecraft:enchanting_table_particle", p.location, 10, 1.2);
     await wait(8);

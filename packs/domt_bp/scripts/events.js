@@ -142,7 +142,11 @@ async function runArena(p, seconds) {
       outcome = "win";
       break;
     }
-    if (s % 10 === 0) attempt(() => p.onScreenDisplay.setActionBar(`§cFoes left: ${left} §7| ${seconds - s}s`));
+    if (s % 10 === 0)
+      attempt(() => {
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 60 })); // other bar writers wait
+        p.onScreenDisplay.setActionBar(`§cFoes left: ${left} §7| ${seconds - s}s`);
+      });
   }
   await endArena(p, outcome);
 }
