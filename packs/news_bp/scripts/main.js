@@ -393,18 +393,79 @@ function draftCommand(append) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// /realm:news: the pack's menu
+// ---------------------------------------------------------------------------
+
+const isOp = (/** @type {Player} */ player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** /realm:news_read: show the news. Read here, it won't pop up again on the next join. @param {Player} player */
+async function readNews(player) {
+  if ((await showNews(player)) && player.isValid && getNews().body.trim()) player.setDynamicProperty(PROP_SEEN, getRevision());
+}
+
+/** @param {Player} player @param {string} title @param {string} body */
+async function infoPage(player, title, body) {
+  const res = await show(player, new ActionFormData().title(title).body(body).button("Back"));
+  if (res && !res.canceled && player.isValid) await packMenu(player);
+}
+
+/**
+ * /realm:news: every action this player may use. Players who aren't operators can only read the
+ * news, so they go straight to it, as before.
+ * @param {Player} player
+ */
+async function packMenu(player) {
+  /** @type {{ text: string, run: () => Promise<void> }[]} */
+  const entries = [{ text: "Read the news", run: () => readNews(player) }];
+  if (isOp(player)) {
+    entries.push({ text: "Edit the news\n§8Operators", run: () => editNews(player) });
+    entries.push({
+      text: "Paste a long news body\n§8Operators",
+      run: () =>
+        infoPage(
+          player,
+          "Paste a long news body",
+          `Chat takes longer text than the editor's ${BODY_PART}-character boxes. Copy the text, then in chat:\n\n§e/realm:news_body "first part"§r starts a draft and opens the editor.\n§e/realm:news_add "next part"§r adds more to the draft.\n§e/realm:news_edit§r checks and saves it.\n\nWrite | for a new line.`
+        ),
+    });
+    entries.push({ text: `Chat tips\n§8Operators, ${getTips().length} tips`, run: () => tipsMenu(player) });
+    entries.push({
+      text: "Settings\n§8Operators",
+      run: () =>
+        infoPage(
+          player,
+          "Settings",
+          "Operators change this pack's settings in §e/realm:config§r: pick §eRealm News & Tips§r there. Chat tips on or off, minutes between tips and the welcome back notice are all there."
+        ),
+    });
+  }
+  if (entries.length === 1) return entries[0].run();
+  const form = new ActionFormData().title("§lRealm News & Tips").body(getNews().body.trim() ? `Latest: §e${getNews().title}` : "No news right now.");
+  for (const e of entries) form.button(e.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await entries[res.selection]?.run();
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:news",
+      description: "Realm News: read the news (operators: a menu to edit the news and chat tips too)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    playerCommand(packMenu)
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:news_read",
       description: "Show the latest Realm news",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    playerCommand(async (player) => {
-      // Read it here, and it won't pop up again on the next join.
-      if ((await showNews(player)) && player.isValid && getNews().body.trim()) player.setDynamicProperty(PROP_SEEN, getRevision());
-    })
+    playerCommand(readNews)
   );
   customCommandRegistry.registerCommand(
     {

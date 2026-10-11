@@ -1,5 +1,5 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, ItemLockMode, Player, system, world } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, ItemLockMode, ItemTypes, Player, system, world } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 
@@ -353,13 +353,14 @@ async function mainMenu(player) {
   const actions = list.map((g) => ({ text: goalButton(g), run: () => showGoal(player, g.id) }));
   if (done) actions.push({ text: `Finished goals\n§8${done} goal${done === 1 ? "" : "s"}`, run: () => finished(player) });
   if (isOp(player)) {
+    actions.push({ text: "Add a goal\n§8Operators", run: () => addForm(player) });
     actions.push({
-      text: "Add a goal (operator)\n§8How it works",
+      text: "Settings\n§8Operators",
       run: () =>
         menu(
           player,
-          "§lAdd a goal",
-          `Put a chest or barrel where donations should go, look at it and run\n\n§e/realm:goals_add <item> <amount> [name]§r\n\nfor example /realm:goals_add cobblestone 10000 Colosseum. The realm can have ${CONFIG.maxGoals} goals at a time, finished ones included.`,
+          "§lSettings",
+          "Operators change this pack's settings in §e/realm:config§r: pick §eCommunity Goals§r there. Announcements, top contributors shown and named items are there.",
           [{ text: "Back", run: () => mainMenu(player) }],
         ),
     });
@@ -402,6 +403,46 @@ function addGoal(player, item, amount, name) {
   save(g);
   player.sendMessage(`§aGoal ${g.n} added: ${fmt(amount)} ${itemName(item)}, collected into the container at ${where(g)}.`);
   if (get("announce") === true) world.sendMessage(`§6New community goal: §e${g.n}§6, ${fmt(amount)} ${itemName(item)}. Donate with /realm:goals`);
+}
+
+/**
+ * The menu's "Add a goal": the same as /realm:goals_add, asked in a form. The container is the one
+ * the operator looks at while filling it in.
+ * @param {Player} player
+ */
+async function addForm(player) {
+  if (!lookedAtContainer(player)) {
+    await menu(
+      player,
+      "§lAdd a goal",
+      `Put a chest or barrel where donations should go and look at it, then choose Add a goal again (or run §e/realm:goals_add <item> <amount> [name]§r). The realm can have ${CONFIG.maxGoals} goals at a time, finished ones included.`,
+      [{ text: "Back", run: () => mainMenu(player) }],
+    );
+    return;
+  }
+  const held = player.getComponent("minecraft:inventory")?.container?.getItem(player.selectedSlotIndex)?.typeId ?? "";
+  const form = new ModalFormData()
+    .title("§lAdd a goal")
+    .textField("Item id (the item you hold is filled in)", "cobblestone", { defaultValue: held.replace(/^minecraft:/, "") })
+    .textField(`Amount (1 to ${fmt(MAX_TARGET)})`, "10000")
+    .textField("Name (optional)", "Colosseum")
+    .submitButton("Add");
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return;
+    const res = await form.show(player);
+    if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
+      await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+      continue;
+    }
+    if (res.canceled || !res.formValues || !player.isValid) return;
+    const [rawItem, rawAmount, name] = res.formValues.map((v) => String(v ?? "").trim());
+    const id = rawItem.toLowerCase().includes(":") ? rawItem.toLowerCase() : `minecraft:${rawItem.toLowerCase()}`;
+    const amount = Number(rawAmount.replace(/[, ]/g, ""));
+    if (!rawItem || !ItemTypes.get(id)) return player.sendMessage(`§cUnknown item "${rawItem}".`);
+    if (!Number.isInteger(amount) || amount < 1 || amount > MAX_TARGET) return player.sendMessage(`§cThe amount must be 1 to ${fmt(MAX_TARGET)}.`);
+    addGoal(player, id, amount, name || undefined);
+    return;
+  }
 }
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {

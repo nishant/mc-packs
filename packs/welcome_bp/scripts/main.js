@@ -141,7 +141,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 /**
  * Shows a form, retrying while the client is busy (chat still closing, inventory open).
- * @template {ModalFormData | MessageFormData} F
+ * @template {ActionFormData | ModalFormData | MessageFormData} F
  * @param {Player} player
  * @param {F} form
  * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>} undefined if it never got shown
@@ -251,15 +251,82 @@ function playerCommand(action) {
   };
 }
 
+/** /realm:welcome_show: the welcome message, even if this player has seen it. @param {Player} player */
+const showWelcome = (player) => welcome(player, { force: true });
+
+/** /realm:welcome_reset: back to the pack's defaults, after a confirmation. @param {Player} player */
+async function resetWelcome(player) {
+  // One mistyped command would otherwise throw away the edited text for good.
+  const res = await showForm(
+    player,
+    new MessageFormData()
+      .title("Reset the welcome message?")
+      .body("This throws away the edited title, body, button and switches, and goes back to the pack's defaults. There's no undo.")
+      .button1("§cReset")
+      .button2("Keep it")
+  );
+  if (!res || res.canceled || res.selection !== 0 || !player.isValid) {
+    if (player.isValid) player.sendMessage("§7Welcome message kept.");
+    return;
+  }
+  saveSettings(undefined);
+  player.sendMessage("§aWelcome message reset to the pack defaults.");
+}
+
+const isOp = (/** @type {Player} */ player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** @param {Player} player */
+async function settingsInfo(player) {
+  const res = await showForm(
+    player,
+    new ActionFormData()
+      .title("Settings")
+      .body("Operators change this pack's settings in §e/realm:config§r: pick §eWelcome Message§r there. The popup, chat and on-screen title switches are there too.")
+      .button("Back")
+  );
+  if (res && !res.canceled && player.isValid) await packMenu(player);
+}
+
+/**
+ * /realm:welcome: every action this player may use. Players who aren't operators can only see the
+ * message, so they go straight to it, as before.
+ * @param {Player} player
+ */
+async function packMenu(player) {
+  /** @type {{ text: string, run: () => Promise<void> }[]} */
+  const entries = [{ text: "Show the welcome message", run: () => showWelcome(player) }];
+  if (isOp(player)) {
+    entries.push({ text: "Edit the welcome message\n§8Operators", run: () => openEditor(player) });
+    entries.push({ text: "Reset to the defaults\n§8Operators", run: () => resetWelcome(player) });
+    entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
+  }
+  if (entries.length === 1) return entries[0].run();
+  const form = new ActionFormData().title("§lWelcome Message").body("The message new players see when they join.");
+  for (const e of entries) form.button(e.text);
+  const res = await showForm(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await entries[res.selection]?.run();
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:welcome",
+      description: "Welcome Message: see the welcome message (operators: a menu to edit or reset it too)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    playerCommand(packMenu)
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:welcome_show",
       description: "Show the welcome message to yourself",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    playerCommand((player) => welcome(player, { force: true }))
+    playerCommand(showWelcome)
   );
 
   customCommandRegistry.registerCommand(
@@ -279,23 +346,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
     },
-    playerCommand(async (player) => {
-      // One mistyped command would otherwise throw away the edited text for good.
-      const res = await showForm(
-        player,
-        new MessageFormData()
-          .title("Reset the welcome message?")
-          .body("This throws away the edited title, body, button and switches, and goes back to the pack's defaults. There's no undo.")
-          .button1("§cReset")
-          .button2("Keep it")
-      );
-      if (!res || res.canceled || res.selection !== 0 || !player.isValid) {
-        if (player.isValid) player.sendMessage("§7Welcome message kept.");
-        return;
-      }
-      saveSettings(undefined);
-      player.sendMessage("§aWelcome message reset to the pack defaults.");
-    })
+    playerCommand(resetWelcome)
   );
 });
 

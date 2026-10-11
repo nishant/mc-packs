@@ -274,8 +274,8 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 ### How to use
 
 1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
-2. Run `/realm:welcome` any time to see it again. Don't want the popup when you join? Disable **Welcome popup when I join** in `/realm:prefs`.
-3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type `\n` for a new line. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
+2. Run `/realm:welcome` (or `/realm:welcome_show`) any time to see it again. Don't want the popup when you join? Disable **Welcome popup when I join** in `/realm:prefs`.
+3. **Operators:** `/realm:welcome` opens the **Welcome Message** menu instead: `Show the welcome message`, `Edit the welcome message`, `Reset to the defaults` and `Settings` (which points to `/realm:config` → Welcome Message). The edit and reset buttons do the same as the commands below. Run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type `\n` for a new line. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
 
 ### What players see
 
@@ -287,7 +287,8 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:welcome` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
+| `/realm:welcome` | Everyone | Shows the welcome message to yourself, like `/realm:welcome_show`. Operators get the **Welcome Message** menu instead: show, edit, reset and `Settings` |
+| `/realm:welcome_show` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
 | `/realm:welcome_edit` | Ops | Opens an editor: title, body (Minecraft's text boxes hold only 100 characters each, so the body is split over at least 4 boxes, joined in order with nothing between them; `\n` is a new line; all boxes empty = the default text), button text, and toggles for show once, chat copy, big on-screen title and "Show it again to players who've seen it" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once |
 | `/realm:welcome_reset` | Ops | Asks `Reset the welcome message?` first, then discards in-game edits and goes back to the `config.js` defaults |
 
@@ -570,9 +571,9 @@ A news popup that operators edit in-game, a "welcome back" notice, and rotating 
 ### How to use
 
 1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `Realm news updated. Run /realm:news to read it.`
-2. Missed it, or want to read it again? Run `/realm:news`.
+2. Missed it, or want to read it again? Run `/realm:news` (or `/realm:news_read`).
 3. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
-4. **Operators:** `/realm:news_edit` writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type `\n` for a new line. Easier for a long message: paste it into chat as `/realm:news_body "<text>"`, with `|` for each new line, and the editor opens with every box filled in; check the title and tap **Save**. Chat has a length limit too, so for a message longer than one paste, paste it in parts: the first part with `/realm:news_body` (close the editor that opens, or just keep chat open), each next part with `/realm:news_add "<text>"`, then run `/realm:news_edit` to check and save the whole draft. Parts are joined exactly as pasted, so end a part on a space or start the next one with one. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
+4. **Operators:** `/realm:news` opens the **Realm News & Tips** menu instead: `Read the news`, `Edit the news`, `Paste a long news body` (how to use the chat commands below), `Chat tips` and `Settings` (which points to `/realm:config` → Realm News & Tips). `/realm:news_edit` writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type `\n` for a new line. Easier for a long message: paste it into chat as `/realm:news_body "<text>"`, with `|` for each new line, and the editor opens with every box filled in; check the title and tap **Save**. Chat has a length limit too, so for a message longer than one paste, paste it in parts: the first part with `/realm:news_body` (close the editor that opens, or just keep chat open), each next part with `/realm:news_add "<text>"`, then run `/realm:news_edit` to check and save the whole draft. Parts are joined exactly as pasted, so end a part on a space or start the next one with one. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
 
 ### News popup
 
@@ -597,7 +598,8 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:news` | Everyone | Shows the current news, which also counts as having seen its popup |
+| `/realm:news` | Everyone | Shows the current news, like `/realm:news_read`. Operators get the **Realm News & Tips** menu instead: read, edit, paste a long body, chat tips and `Settings` |
+| `/realm:news_read` | Everyone | Shows the current news, which also counts as having seen its popup |
 | `/realm:news_edit` | Ops | Editor: title, the body in 100-character parts (at least 10, joined in order), and the "pop up on next join" toggle. If you have a draft from `/realm:news_body` or `/realm:news_add`, it shows the draft instead of the saved news, with a toggle to discard it. **Save** saves the news and clears the draft; closing the editor keeps the draft. If chat stays open for about 20 s, it says it couldn't open |
 | `/realm:news_body "<text>"` | Ops | Starts a news draft from pasted text (chat takes more than a form's 100-character boxes) and opens the editor with it split over the boxes. Put the text in double quotes, use `|` for new lines (chat drops the backslash of `\n`), and `'` rather than `"` inside it |
 | `/realm:news_add "<text>"` | Ops | Adds pasted text to the end of your draft, for news longer than chat lets you paste at once. Doesn't open the editor; it says how long the draft is now (10,000 characters at most). `|` is a new line here too |
@@ -782,9 +784,9 @@ Keeps named farms loaded with Bedrock ticking areas, so crops grow, furnaces sme
 
 ### How to use
 
-1. Run `/realm:farm` to see which farms are kept loaded: name, dimension, coordinates, size, who added it and when.
-2. **Operators:** stand in the middle of a farm and run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
-3. **Operators:** `/realm:farm_remove <name>` stops keeping it loaded, or tap **Remove** next to it in `/realm:farm`; the menu comes back afterwards, so you can remove another.
+1. Run `/realm:farm` to open the **Farm Loader** menu: it lists which farms are kept loaded (name, dimension, coordinates, size, who added it and when).
+2. **Operators:** stand in the middle of a farm, run `/realm:farm` and tap `Add a farm here`: type a name and pick the radius (1 to 4 chunks). Or run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
+3. **Operators:** tap `Remove <name>` in `/realm:farm` (the menu comes back afterwards, so you can remove another), or run `/realm:farm_remove <name>`. The menu's `Settings` button points to `/realm:config` → Farm Loader.
 
 ### What keeps running, and what doesn't
 
@@ -799,7 +801,7 @@ Bedrock rules, worth knowing before you add a farm:
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:farm` | Everyone | Lists the loaded farms. Operators (everyone, with `everyoneCanAdd`) also get a **Remove** button for each |
+| `/realm:farm` | Everyone | The **Farm Loader** menu: lists the loaded farms. Operators (everyone, with `everyoneCanAdd`) also get `Add a farm here` (a name and a radius, like `/realm:farm_add`) and a `Remove <name>` button for each farm; operators also get `Settings` |
 | `/realm:farm_add <name> [radius]` | Ops (everyone if `everyoneCanAdd`) | Adds a ticking area centered on you, `radius` 1–4 chunks (default 2, `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique |
 | `/realm:farm_remove <name>` | Ops (everyone if `everyoneCanAdd`) | Stops keeping the farm loaded and removes it from the list |
 
@@ -1033,15 +1035,15 @@ Tells you where you died once you respawn, and points you back there. The realm 
 ### How to use
 
 1. Nothing to set up: when you respawn after dying, chat says `You died at 120, 64, -340 in the Overworld.`
-2. Run `/realm:death` any time to see your last death point again, how far it is from where you stand and in which direction, for example `It's 245 blocks to the NE, 12 blocks down.`
+2. Run `/realm:death` any time to see your last death point again, how far it is from where you stand and in which direction, for example `It's 245 blocks to the NE, 12 blocks down.` When teleporting back is enabled (or you're an operator) it opens the **Death Point** menu with that text and the buttons `Where I died` (the same in chat), `Teleport back` and, for operators, `Settings`; otherwise it answers in chat right away. `/realm:death_info` always answers in chat.
 3. Don't want the chat message? Disable **Tell me where I died** in `/realm:prefs`. `/realm:death` still works.
-4. If an operator has enabled it, run `/realm:death_back` to teleport to your last death point, once per death. It only lands you somewhere safe to stand, and says so when there isn't such a place.
+4. If an operator has enabled it, tap `Teleport back` in `/realm:death`, or run `/realm:death_back`, to teleport to your last death point, once per death. It only lands you somewhere safe to stand, and says so when there isn't such a place.
 5. **Operators:** enable `/realm:death_back` in `/realm:config` → **Death Point** → **Teleport back to the death point (/realm:death_back)**. The same page turns the respawn message off for everyone.
 
 ### What players see
 
 - **On respawn** (`announce`): `You died at 120, 64, -340 in the Overworld. Run /realm:death to see where that is from here.` A player who leaves on the death screen gets it when they next spawn.
-- **`/realm:death`** shows the block you died in and its dimension, then the distance along the ground, rounded to whole blocks, with one of 8 directions (N, NE, E, SE, S, SW, W, NW; north is toward negative Z) and how far up or down. Within 2 blocks it says `You're standing on it.` In another dimension it says which one you're in, with no distance. When `/realm:death_back` is enabled it adds whether you can still use it for this death.
+- **`/realm:death`** (or `/realm:death_info`) shows the block you died in and its dimension, then the distance along the ground, rounded to whole blocks, with one of 8 directions (N, NE, E, SE, S, SW, W, NW; north is toward negative Z) and how far up or down. Within 2 blocks it says `You're standing on it.` In another dimension it says which one you're in, with no distance. When `/realm:death_back` is enabled it adds whether you can still use it for this death.
 - **`/realm:death_back`** while disabled (`backEnabled`, disabled by default): `Teleporting back is disabled on this realm. An operator can enable it in /realm:config (Death Point). /realm:death still shows the way.`
 - **`/realm:death_back`** while enabled looks for the nearest safe spot within 2 blocks sideways (`backSearchRadius`) and 8 blocks up or down (`backSearchHeight`) of the death point: two blocks of air (or grass, ferns, flowers, a dead bush, vines, glow lichen or a torch) to stand in, on a block that isn't air, water, lava, magma, fire, a campfire, cactus, a berry bush, a wither rose, powder snow or pointed dripstone, with no lava or fire right beside it. It works across dimensions. Then:
   - it teleports you and says `Teleported back to your death point (120, 65, -340).` Once per death: a second try says `You already went back to this death point.`
@@ -1053,7 +1055,8 @@ Tells you where you died once you respawn, and points you back there. The realm 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:death` | Everyone | Shows your last death point (x, y, z and dimension), with the distance and direction from where you stand, or which dimension it's in |
+| `/realm:death` | Everyone | The **Death Point** menu: your last death point in its text, with `Where I died`, `Teleport back` (when `backEnabled` is on) and, for operators, `Settings`. With nothing else to choose it answers in chat like `/realm:death_info` |
+| `/realm:death_info` | Everyone | Shows your last death point (x, y, z and dimension), with the distance and direction from where you stand, or which dimension it's in |
 | `/realm:death_back` | Everyone, once an operator enables it | Teleports you to a safe spot at your last death point, once per death (default disabled, `backEnabled`). Refuses with a reason when there's no safe place to stand |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -1574,11 +1577,11 @@ Shared goals for the whole realm, like 10,000 cobblestone for the Colosseum. Ope
 2. Pick a goal, then **Donate from my inventory**: every matching item you carry (hotbar included) goes into the goal's chest, up to what the goal still needs. Chat says `You gave 320 Cobblestone to Colosseum.`
 3. The goal's page shows a progress bar, where its chest is, what you gave and the top contributors.
 4. At 25, 50 and 75 percent everyone sees it in chat, and when a goal is reached chat thanks its top contributors.
-5. **Operators:** place a chest or barrel for the donations, look at it and run `/realm:goals_add <item> <amount> [name]`, for example `/realm:goals_add cobblestone 10000 Colosseum`. In a goal's page, **Mark finished** stops donations early, **Link to the block I'm looking at** moves the goal to another container (one that no other open goal collects into), and **Remove this goal** deletes it (the items stay in its chest).
+5. **Operators:** place a chest or barrel for the donations, look at it, run `/realm:goals` and tap `Add a goal`: the item you hold is filled in; type the amount and, if you like, a name. Or run `/realm:goals_add <item> <amount> [name]`, for example `/realm:goals_add cobblestone 10000 Colosseum`. The menu's `Settings` button points to `/realm:config` → Community Goals. In a goal's page, **Mark finished** stops donations early, **Link to the block I'm looking at** moves the goal to another container (one that no other open goal collects into), and **Remove this goal** deletes it (the items stay in its chest).
 
 ### What players see
 
-- **The menu** lists the goals still open, oldest first, then **Finished goals** when there are any. Operators also get **Add a goal (operator)**, which explains `/realm:goals_add`.
+- **The menu** lists the goals still open, oldest first, then **Finished goals** when there are any. Operators also get `Add a goal` (the same as `/realm:goals_add`, in a form, for the container they look at; looking at none, it explains what to do) and `Settings`.
 - **Donating** moves stacks of the goal's item from anywhere in your inventory into the goal's container, as if you'd shift-clicked them. Only what the goal still needs is taken: the rest of a stack stays with you. Items with a custom name are never donated (`keepNamedItems`), so a named tool stays yours; `You only have Diamond Sword with a custom name, and those are never donated.` Items locked in their slot stay too.
 - **A full container** stops the donation: `The goal's chest at 120, 64, -340 (overworld) is full, so the rest stayed with you. An operator needs to empty it or link a bigger one.` What already went in still counts.
 - **The container must be loaded:** someone has to be near it (the same area as you, usually). Otherwise: `The goal's chest at 120, 64, -340 (overworld) isn't loaded. Go closer to it and try again.` If it was broken: `The goal's chest ... is gone. Ask an operator to link the goal to a new one.`
@@ -1590,7 +1593,7 @@ Shared goals for the whole realm, like 10,000 cobblestone for the Colosseum. Ope
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:goals` | Everyone | Lists the community goals with their progress; pick one to donate from your inventory and see the top contributors (default 5, `topContributors`). Operators can mark a goal finished, move it to another container or remove it there |
+| `/realm:goals` | Everyone | Lists the community goals with their progress; pick one to donate from your inventory and see the top contributors (default 5, `topContributors`). Operators can add a goal (`Add a goal`), mark a goal finished, move it to another container or remove it there |
 | `/realm:goals_add <item> <amount> [name]` | Ops | Adds a goal collected into the chest, barrel or other container you're looking at (within 8 blocks, `linkDistance`): `item` is the item id, `amount` 1 to 1,000,000, `name` up to 32 characters (default: the item's name). Up to 30 goals at a time, finished ones included (`maxGoals`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -2652,7 +2655,7 @@ Collect titles and wear one on a line under your name, like `Stormchaser` or `Ma
 2. Run `/realm:titles` to see your title, your trail and how far along you are with each title to earn (`Wanderer: 3,400/10,000 blocks traveled`).
 3. Tap **Choose a title** and pick one (or **None**). With the [Nicknames](#nicknames--nick_bp) pack installed, it shows in gray on a line under your name above your head.
 4. Tap **Choose a trail** and pick one (or **None**). It follows you whenever you move. Trails need the Realm Skies resource pack (`sky_rp`) on the realm; without it nothing shows.
-5. **Operators:** `/realm:titles_give Steve "Hero of the Realm"` gives a player a title, and `/realm:titles_give Steve trail:ember` a trail (players who are offline too, if they've played since the pack was added). `/realm:config` → **Titles & Trails** switches the built-in titles and trails and sets how often trails puff.
+5. **Operators:** `/realm:titles` also has `Give a title or trail` (pick a player online or type a name, then the title or `trail:ember`) and `Settings` (which points to `/realm:config` → Titles & Trails). In chat, `/realm:titles_give Steve "Hero of the Realm"` gives a player a title, and `/realm:titles_give Steve trail:ember` a trail (players who are offline too, if they've played since the pack was added). `/realm:config` → **Titles & Trails** switches the built-in titles and trails and sets how often trails puff.
 
 ### What players see
 
@@ -2675,7 +2678,7 @@ Collect titles and wear one on a line under your name, like `Stormchaser` or `Ma
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:titles` | Everyone | Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default `trailTicks`) |
+| `/realm:titles` | Everyone | Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default `trailTicks`). Operators also get `Give a title or trail` (like `/realm:titles_give`) and `Settings` |
 | `/realm:titles_give <player> <title>` | Ops | Gives a player a title (quote titles and names with spaces), or a trail with `trail:cloud`, `trail:leaves`, `trail:ember` or `trail:sparkle`. Works for offline players this pack has seen |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3162,8 +3165,8 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 3. Hold the map in your hand: every 2 seconds the line above the hotbar says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
 4. Get within 30 blocks of where the clue points and the next clue appears in chat and on the map. As you get close, the map also names what the spot looks like (`The spot lies among the trees.`).
 5. On the last clue, once you're close, the map grows hot: the chest is buried nearby, 1 to 3 blocks down. Follow `Hot` to `Burning hot! Dig here.`; standing over it pays the Crowns. Then dig up the chest for the rest.
-6. Lost the map, or the clue? Run `/realm:maps` for your hunt's clue, a new copy of the map, or to give the hunt up.
-7. **Operators:** `/realm:maps_give <player>` gives a free map. `/realm:config` → **Treasure Maps & Riddles** sets the price, how far maps lead, how many hunts a player can have, the Crowns found, the distance from world spawn and the hints.
+6. Lost the map, or the clue? Run `/realm:maps` (or `/realm:maps_hunts`) for your hunt's clue, a new copy of the map, or to give the hunt up.
+7. **Operators:** `/realm:maps` opens the **Treasure Maps** menu instead: `Your treasure hunts`, `Give a treasure map` (pick a player online) and `Settings` (which points to `/realm:config` → Treasure Maps & Riddles). `/realm:maps_give <player>` gives a free map from chat. `/realm:config` → **Treasure Maps & Riddles** sets the price, how far maps lead, how many hunts a player can have, the Crowns found, the distance from world spawn and the hints.
 
 ### What players see
 
@@ -3182,7 +3185,8 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:maps` | Everyone | Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up |
+| `/realm:maps` | Everyone | Your treasure hunt, like `/realm:maps_hunts`. Operators get the **Treasure Maps** menu instead: their hunts, `Give a treasure map` and `Settings` |
+| `/realm:maps_hunts` | Everyone | Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up |
 | `/realm:maps_give <player>` | Operators | Gives the players picked (`@a` works) a free treasure map, starting where each one stands. Skips players outside the Overworld or already on as many hunts as allowed (default 1, `maxHunts`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)

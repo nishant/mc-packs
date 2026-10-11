@@ -6,7 +6,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 
@@ -102,7 +102,7 @@ function removeFarm(player, name) {
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
- * @template {ActionFormData | MessageFormData} F
+ * @template {ActionFormData | MessageFormData | ModalFormData} F
  * @param {Player} player @param {F} form
  * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
@@ -116,23 +116,70 @@ async function show(player, form) {
   return undefined;
 }
 
+const isOp = (/** @type {Player} */ player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** The menu's "Add a farm here": a name and a radius, like /realm:farm_add. @param {Player} player */
+async function addForm(player) {
+  const res = await show(
+    player,
+    new ModalFormData()
+      .title("Add a farm here")
+      .label("§7The chunks around where you stand stay loaded. Names use letters, digits, _ and - (up to 24).")
+      .textField("Name", "wheat_farm")
+      .slider("Radius (chunks)", MIN_RADIUS, MAX_RADIUS, { valueStep: 1, defaultValue: Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, get("defaultRadius"))) })
+      .submitButton("Add")
+  );
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  // Labels may or may not take a place in formValues: the name is the string, the radius the number.
+  const name = String(res.formValues.find((v) => typeof v === "string") ?? "").trim();
+  const radius = Number(res.formValues.find((v) => typeof v === "number") ?? get("defaultRadius"));
+  if (!NAME_RE.test(name)) player.sendMessage("§cFarm names use letters, digits, _ and - (up to 24).");
+  else addFarm(player, name, radius);
+  return openMenu(player);
+}
+
 /** @param {Player} player */
+async function settingsInfo(player) {
+  const res = await show(
+    player,
+    new ActionFormData()
+      .title("Settings")
+      .body("Operators change this pack's settings in §e/realm:config§r: pick §eFarm Loader§r there. The default radius, the most farms and who can add them are there.")
+      .button("Back")
+  );
+  if (res && !res.canceled && player.isValid) await openMenu(player);
+}
+
+/**
+ * /realm:farm: the farms kept loaded and every action this player may use: add one here and remove
+ * one (when they can edit farms), and the settings for operators.
+ * @param {Player} player
+ */
 async function openMenu(player) {
   const list = getFarms();
-  if (!list.length) {
-    player.sendMessage(`§7No farms are kept loaded.${canEdit(player) ? " Stand in one and run /realm:farm_add <name>." : ""}`);
+  const edit = canEdit(player);
+  if (!list.length && !edit) {
+    player.sendMessage("§7No farms are kept loaded.");
     return;
   }
-  const edit = canEdit(player);
+  /** @type {{ text: string, run: () => void | Promise<void> }[]} */
+  const entries = [];
+  if (edit) entries.push({ text: `Add a farm here\n§8${list.length}/${get("maxAreas")} in use`, run: () => addForm(player) });
+  if (edit) for (const f of list) entries.push({ text: `Remove ${f.name}`, run: () => confirmRemove(player, f) });
+  if (isOp(player)) entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
   const form = new ActionFormData()
-    .title("Loaded farms")
-    .body(`${list.length}/${get("maxAreas")} in use.\n\n${list.map(describe).join("\n")}`);
-  if (edit) for (const f of list) form.button(`Remove ${f.name}`);
+    .title("Farm Loader")
+    .body(list.length ? `${list.length}/${get("maxAreas")} in use.\n\n${list.map(describe).join("\n")}` : "No farms are kept loaded. Stand in a farm and add it.");
+  for (const e of entries) form.button(e.text);
   form.button("Close");
 
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined || !edit || res.selection >= list.length) return;
-  const farm = list[res.selection];
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await entries[res.selection]?.run();
+}
+
+/** @param {Player} player @param {Farm} farm */
+async function confirmRemove(player, farm) {
   const confirm = await show(
     player,
     new MessageFormData()
@@ -161,7 +208,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:farm",
-      description: "List the farms kept loaded",
+      description: "Farm Loader: the farms kept loaded, with buttons to add and remove them",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
