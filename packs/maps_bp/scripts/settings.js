@@ -19,8 +19,8 @@ const OPTIONS = [
   { key: "crownsMin", type: "int", scope: "world", label: "Treasure Crowns (least)", min: 0, max: 1000, step: 5 },
   { key: "crownsMax", type: "int", scope: "world", label: "Treasure Crowns (most)", min: 0, max: 1000, step: 5 },
   { key: "avoidSpawn", type: "int", scope: "world", label: "No treasure within (blocks of world spawn)", min: 0, max: 1000, step: 16 },
-  { key: "showAt", type: "enum", scope: "world", choices: ["middle", "hotbar"], names: ["Middle of the screen", "Above the hotbar"], label: "Where Warmer / Colder shows (realm default)", help: "Middle of the screen: other add-ons that use the line above the hotbar (waypoint and compass add-ons) cannot cover it" },
-  { key: "where", type: "enum", scope: "player", base: "showAt", choices: ["middle", "hotbar"], names: ["Middle of the screen", "Above the hotbar"], label: "Where Warmer / Colder shows for me", help: "Middle of the screen can't be covered by other add-ons" },
+  { key: "showAt", type: "enum", scope: "world", choices: ["side", "middle", "hotbar"], names: ["Right side, above the scoreboard", "Middle of the screen", "Above the hotbar"], label: "Where Warmer / Colder shows (realm default)", help: "Middle of the screen: other add-ons that use the line above the hotbar (waypoint and compass add-ons) cannot cover it" },
+  { key: "where", type: "enum", scope: "player", base: "showAt", choices: ["middle", "hotbar"], names: ["Middle of the screen", "Above the hotbar"], label: "Where Warmer / Colder shows for me", help: "The right side and the middle can't be covered by other add-ons" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

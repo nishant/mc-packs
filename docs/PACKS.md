@@ -80,6 +80,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Realm Skies — `sky_rp`](#realm-skies--sky_rp)
 - [Translucent Tools — `translucent_rp`](#translucent-tools--translucent_rp)
 - [Translucent Tools Switch — `translucent_bp`](#translucent-tools-switch--translucent_bp)
+- [Side HUD — `hud_rp`](#side-hud--hud_rp)
 - [Bundling packs into one](#bundling-packs-into-one)
 - [How the packs work together](#how-the-packs-work-together)
 - [Troubleshooting](#troubleshooting)
@@ -111,7 +112,7 @@ The realm runs everything as two packs: **Realm Bundle**, a behavior pack with e
 
 **Updating:** download and open the newer version, then check that the realm's active Realm Bundle (or Realm Resources) shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
 
-**What's in each:** the Realm Bundle holds every behavior pack in this repo, Rain Extras included. Realm Resources holds the three resource packs: [Realistic Rain](#realistic-rain--rain_rp), [Realm Skies](#realm-skies--sky_rp) and [Translucent Tools](#translucent-tools--translucent_rp). Players get both packs automatically when they join. Realm Skies draws the tornadoes, rainbows, aurora, shooting stars, meteors, sandstorms, blizzards, moon fogs and trails of the bundle's sky packs: without it those still happen, but you can't see them.
+**What's in each:** the Realm Bundle holds every behavior pack in this repo, Rain Extras included. Realm Resources holds the four resource packs: [Realistic Rain](#realistic-rain--rain_rp), [Realm Skies](#realm-skies--sky_rp), [Translucent Tools](#translucent-tools--translucent_rp) and [Side HUD](#side-hud--hud_rp). Players get both packs automatically when they join. Realm Skies draws the tornadoes, rainbows, aurora, shooting stars, meteors, sandstorms, blizzards, moon fogs and trails of the bundle's sky packs: without it those still happen, but you can't see them.
 
 **Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. The same goes for Realm Resources and the single resource packs. If you had Realistic Rain, Realm Skies, Translucent Tools or Rain Extras active on their own before, remove them when you add the bundles. Switching between them starts the features' in-game settings over (welcome and news text, tips, settings from `/realm:config`, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
@@ -121,7 +122,7 @@ For whoever builds the packs from this repo:
 
 1. Build the packs with `npm run build` (one `dist/<folder>.mcpack` per pack), or `npm run bundle -- --all` and `npm run bundle -- --resources` for the two bundles (`dist/realm_bundle.mcpack`, `dist/realm_resources.mcpack`).
 2. Open the `.mcpack` on a device with Minecraft. It imports automatically.
-3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**. A resource pack (Realm Resources, or `rain_rp`, `sky_rp`, `translucent_rp` on their own) goes under **Resource Packs** instead, at the top of the active list.
+3. Go to **Play → Realms → ✏️ Edit Realm → Behavior Packs** and move the pack from **Available** to **Active**. A resource pack (Realm Resources, or `rain_rp`, `sky_rp`, `translucent_rp`, `hud_rp` on their own) goes under **Resource Packs** instead, at the top of the active list.
    *Another way:* download the Realm world, activate the pack under the world's **Behavior Packs**, and upload the world again.
 4. Rejoin. Commands are registered when the world loads.
 
@@ -1286,7 +1287,7 @@ Hit a mob and its name and health show in the middle of your screen (or above yo
 - Shown for melee hits and for arrows, tridents and other projectiles you fired, every time the mob is hurt by you.
 - **Other players** only when an operator enabled **Show players' health too** (`players`, disabled by default): then hurting a player shows their name and health the same way.
 - Enabled for every player until they disable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it.
-- **Where it shows** (`showAt`, default **Middle of the screen**): the subtitle line in the middle of the screen, for 2 seconds (`holdTicks`). Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover it there; that's why it never showed on realms with such an add-on. Each player can pick **Above the hotbar** instead (**Where the health of mobs I hit shows** in `/realm:prefs`); then, with the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD waits 2 seconds after each hit before it draws itself again.
+- **Where it shows** (`showAt`, default **Right side, above the scoreboard**): a small box on the right side of the screen, just above where the scoreboard sidebar sits, for 2 seconds (`holdTicks`). The box is drawn by [Side HUD](#side-hud--hud_rp) in Realm Resources; without it the text shows in the middle of the screen instead. Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover it there; that's why it never showed on realms with such an add-on. Each player can pick **Middle of the screen** or **Above the hotbar** instead (**Where the health of mobs I hit shows** in `/realm:prefs`); then, with the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD waits 2 seconds after each hit before it draws itself again.
 
 ### Commands
 
@@ -1302,7 +1303,7 @@ Hit a mob and its name and health show in the middle of your screen (or above yo
 | `defaultOn` | `true` | Players see it until they disable it for themselves |
 | `players` | `false` | Also show a player's health when you hurt another player |
 | `barLength` | `10` | How many `\|` characters make up the bar (5 to 20 in game) |
-| `showAt` | `"middle"` | Where it shows for players who haven't chosen: `middle` (the subtitle line in the middle of the screen, which other add-ons can't cover) or `hotbar` (the line above the hotbar) |
+| `showAt` | `"side"` | Where it shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
 | `holdTicks` | `40` | How long (ticks) the health stays on screen; above the hotbar, how long the Coordinates HUD leaves it before drawing itself again |
 
 Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt` in game with `/realm:config`. Players pick their own place with **Where the health of mobs I hit shows** in `/realm:prefs`. `holdTicks` stays in `config.js`. Each player switches it for themselves with `/realm:mobhp` or **Show the health of mobs I hit** in `/realm:prefs`; players who already chose keep their choice when `defaultOn` changes.
@@ -1327,7 +1328,7 @@ While you glide, the middle of your screen (or the line above your hotbar, if yo
 
 ### How to use
 
-1. Put on an elytra and glide. In the middle of the screen you see something like `31.4 blocks/s  Y 142  Elytra 87%  Rockets 12`, updated 4 times a second.
+1. Put on an elytra and glide. On the right side of the screen, above the scoreboard, you see something like `31.4 blocks/s  Y 142  Elytra 87%  Rockets 12`, updated 4 times a second.
 2. Don't want it? Run `/realm:elytra`, or disable **Elytra HUD while gliding** in `/realm:prefs`. Chat says `Elytra HUD: Disabled. Run /realm:elytra again to enable it.` The choice is remembered.
 3. **Operators:** to turn it off for everyone, disable **Elytra HUD** in `/realm:config` → **Elytra HUD**. The same page sets when durability turns red.
 
@@ -1337,7 +1338,7 @@ While you glide, the middle of your screen (or the line above your hotbar, if yo
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
 - The bar only shows while you're gliding and fades a moment after you land. Nothing is shown, and nothing is checked, for players who aren't gliding.
 - With the [Coordinates HUD](#coordinates-hud--hud_bp) on, it pauses while you glide, so the two don't take turns on the bar; your coordinates come back a second or two after you land.
-- **Where it shows** (`showAt`, default **Middle of the screen**): the subtitle line, which other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover; that's why it never showed on realms with such an add-on. Players can pick **Above the hotbar** in `/realm:prefs` (**Where my Elytra HUD shows**); there, other messages (low durability warnings, claim borders, the sleep count) can briefly swap places with it.
+- **Where it shows** (`showAt`, default **Right side, above the scoreboard**): a small box drawn by [Side HUD](#side-hud--hud_rp) (in the middle of the screen without it), which other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover; that's why it never showed on realms with such an add-on. Players can pick **Middle of the screen** or **Above the hotbar** in `/realm:prefs` (**Where my Elytra HUD shows**); there, other messages (low durability warnings, claim borders, the sleep count) can briefly swap places with it.
 
 ### Commands
 
@@ -1352,7 +1353,7 @@ While you glide, the middle of your screen (or the line above your hotbar, if yo
 | `enabled` | `true` | The gliding HUD for the whole realm. Disabled: nobody sees it and `/realm:elytra` says so |
 | `intervalTicks` | `5` | Ticks between HUD updates while gliding (5 = 4 times a second) |
 | `lowPercent` | `10` | Elytra durability left (percent) at or below which it shows in red (1 to 50 in game) |
-| `showAt` | `"middle"` | Where it shows for players who haven't chosen: `middle` (the subtitle line in the middle of the screen, which other add-ons can't cover) or `hotbar` (the line above the hotbar) |
+| `showAt` | `"side"` | Where it shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
 
 Operators can change `enabled`, `lowPercent` and `showAt` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`, and pick where it shows (**Where my Elytra HUD shows**).
 
@@ -3709,7 +3710,7 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 
 1. Find Mara the Cartographer (or any NPC with the `cartographer` role, from [Townsfolk](#townsfolk--npc_bp)), tap her and pick **Buy a treasure map (50 Crowns)**. You get a piece of paper named `Treasure Map`, and chat reads the first clue, for example `"Walk toward the setting sun for about twelve hundred paces, and there the next riddle waits."`
 2. Work out the direction: the North Star is north, the rising sun is east, the setting sun is west, and "with the North Star at your back" is south. A pace is a block.
-3. Hold the map in your hand: every 2 seconds the middle of the screen (or the line above the hotbar, if you choose it in `/realm:prefs`) says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
+3. Hold the map in your hand: every 2 seconds the box on the right side of the screen, above the scoreboard (or the middle of the screen or the line above the hotbar, if you choose it in `/realm:prefs`), says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
 4. Get within 30 blocks of where the clue points and the next clue appears in chat and on the map. As you get close, the map also names what the spot looks like (`The spot lies among the trees.`).
 5. On the last clue, once you're close, the map grows hot: the chest is buried nearby, 1 to 3 blocks down. Follow `Hot` to `Burning hot! Dig here.`; standing over it pays the Crowns. Then dig up the chest for the rest.
 6. Lost the map, or the clue? Run `/realm:maps` (or `/realm:maps_hunts`) for your hunt's clue, a new copy of the map, or to give the hunt up.
@@ -3752,7 +3753,7 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 | `searchRadius` | `32` | How far from the planned spot the chest may be buried |
 | `avoidSpawn` | `64` | Never bury a chest closer than this to world spawn |
 | `warmth` | `true` | Show Warmer / Colder / Very warm while holding a Treasure Map |
-| `showAt` | `"middle"` | Where Warmer / Colder shows for players who haven't chosen: `middle` (the subtitle line in the middle of the screen, which other add-ons that redraw the line above the hotbar can't cover; that's why it never showed on realms with a waypoint add-on) or `hotbar`. Players pick their own with **Where Warmer / Colder shows for me** in `/realm:prefs` |
+| `showAt` | `"side"` | Where Warmer / Colder shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar`. Other add-ons that redraw the line above the hotbar can cover only `hotbar`; that's why it never showed on realms with a waypoint add-on. Players pick their own with **Where Warmer / Colder shows for me** in `/realm:prefs` |
 | `veryWarm` | `40` | `Very warm` within this many blocks of the next clue or the chest |
 | `plainHints` | `false` | `/realm:maps` also shows the plain direction and distance from where you stand, like `(W, about 1,000 blocks)` |
 | `crownsMin` | `30` | Least Crowns found with a treasure |
@@ -5203,6 +5204,35 @@ Player preference, in `/realm:prefs` (**Translucent Tools**): **Translucent tool
 
 ---
 
+## Side HUD — `hud_rp`
+
+A small box on the right side of the screen, just above where the scoreboard sidebar sits, for the short readouts other packs show: [Mob Health](#mob-health--mobhp_bp), the [Elytra HUD](#elytra-hud--elytra_bp), treasure map [Warmer / Colder](#treasure-maps--maps_bp) and the [story tracker](#story-questlines--saga_bp). Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover it. A **resource pack**, part of **Realm Resources** (or on its own).
+
+### How to use
+
+1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join. Hit a mob, glide or hold a treasure map and the readout shows in the box on the right.
+2. Prefer another spot? Run `/realm:prefs`, pick the pack (Mob Health, Elytra HUD, Treasure Maps, Story Questlines) and change **Where ... shows** to **Middle of the screen** or **Above the hotbar**.
+3. **Operators:** it comes with Realm Resources. The realm default for each pack is its `showAt` setting in `/realm:config` (`side`).
+
+### What players see
+
+- **The box:** white text on a dark, half see-through background, right-aligned against the edge of the screen, its bottom 60 pixels above the middle of the right edge. The scoreboard sidebar is centered on that edge, so the box sits above a sidebar of up to about 10 rows (a taller one overlaps it).
+- **One readout at a time:** the last pack to write wins, and the box disappears when that readout ends (2 seconds after a hit, as soon as you land, 2 seconds after you stop holding the map).
+- **Without this pack** (or with an older Realm Resources) the same text shows in the middle of the screen instead, as a subtitle. Nothing breaks.
+- **Titles from commands and other packs** (`/title`, area names, boss intros) show in the middle as always.
+
+### Saved data
+
+None. It's a resource pack: no scripts and no commands.
+
+### How it works
+
+- `ui/hud_screen.json` adds to Minecraft's HUD (JSON UI `modifications`, so other packs that change the HUD still merge): a box anchored to the right edge that shows the subtitle text whenever the title text is exactly `§s§1§r` (color codes only, so it's invisible on its own), and a visibility binding on the vanilla title and subtitle that hides them for `§s§1§r` and `§s§0§r`. The vanilla title and subtitle frames are copied from Mojang's `hud_screen.json` with only that binding added; after a Minecraft update that changes them, copy them again.
+- A pack shows text with `setTitle("§s§1§r", { subtitle })` and clears the box with `setTitle("§s§0§r")` when its readout ends. The `realm:side` script event (in [How the packs work together](#how-the-packs-work-together)) makes sure only the last writer clears it.
+- Checked by reading against Mojang's files, not in a game client (a dedicated server doesn't draw the HUD). If the box sits in the wrong spot on some screen size, the numbers to change are `anchor_from`, `anchor_to` and `offset` of `realm_side_box`.
+
+---
+
 ## Bundling packs into one
 
 Merges several packs into one `.mcpack`, so the Realm lists one pack instead of many.
@@ -5315,6 +5345,8 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 - **Steady lines** that redraw every second or two wait while someone else's request lasts, then redraw: the Coordinates HUD, the stats ticker (without the HUD), Story Questlines' tracker, the Party HUD and an expedition's run line. So a note (a durability warning, skill XP, mob health, a sort result) stays readable instead of being drawn over within a second.
 - **`background: true`** marks a steady line that other steady lines needn't wait for. The Party HUD sends it, so an expedition's run line takes the bar during a party run; the Party HUD itself waits for the run line and for every note.
 - Packs that only show a short note now and then just send the request and write; they don't listen. Without any listener nothing happens.
+
+**The side box protocol** (one box on the right side, from [Side HUD](#side-hud--hud_rp)): a pack that writes the box sends `realm:side` `{ player, from, ticks }` right after, and every pack that uses the box remembers the last `from` per player. When its readout ends, a pack clears the box (`setTitle("§s§0§r")`) only if it is still the last writer, so it never wipes another pack's text. The story tracker, which redraws every 2 seconds, waits while another pack's `ticks` last, so a hit's mob health or a Warmer / Colder note stays readable. Mob Health, the Elytra HUD, Treasure Maps and Story Questlines use it.
 
 Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn; its one link is Translucent Tools Switch, which tells it per player whether to draw tools solid.
 

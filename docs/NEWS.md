@@ -19,7 +19,7 @@ The biggest update yet. Talk to the townsfolk: something is wrong with the sky.
 - Relics fixed: the Storm Staff calls lightning in storms again, Tide Boots work, and there are 7 new story relics. Rainbows show up again.
 - Safe zones: towns and claims can be protected from meteors, storms and other world events.
 - /realm:prefs: a stats ticker you can tune, a Translucent tools switch, and Measure my catches. /realm:fishing can make your fish stackable.
-- Mob Health, the Elytra HUD and treasure map Warmer / Colder now show in the middle of the screen, where other add-ons can't cover them (switch back to above the hotbar in /realm:prefs).
+- Mob Health, the Elytra HUD and treasure map Warmer / Colder now show in a box on the right side of the screen, above the scoreboard, where other add-ons can't cover them (pick the middle of the screen or above the hotbar in /realm:prefs).
 - Most commands now open a menu: try /realm:town, /realm:relics, /realm:meteor or /realm:champions.
 - Operators: you now carry a Realm Configuration star. Use it for every realm command with preset choices, a setup checklist and quick actions (weather, time, teleport, give).
 - Fixes from testing: helmets you drop near a champion stay put, town builds you remove or move keep what you placed around them, Stormchaser counts storms, dishes and recipe cards can't be faked with an anvil, dolphins keep all their vanilla behavior, and expedition mobs that teleport away no longer lock a room.

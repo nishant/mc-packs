@@ -38,14 +38,59 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
       attacker.onScreenDisplay.setActionBar(text);
       // Ask the Coordinates HUD, if installed, to leave this on screen for a moment.
       system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: attacker.id, ticks: CONFIG.holdTicks }));
-    } else {
+    } else if (getFor(attacker, "where") === "middle") {
       // The subtitle line in the middle of the screen: other add-ons that redraw the action bar can't cover it.
       attacker.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: CONFIG.holdTicks, fadeOutDuration: 6 });
+    } else {
+      showSide(attacker, text, CONFIG.holdTicks);
     }
   } catch (e) {
     console.warn(`[mobhp] ${e}`);
   }
 });
+
+// ---- The right side of the screen ----
+// Side HUD (hud_rp, in Realm Resources) shows the subtitle in a box above the scoreboard whenever the
+// title is exactly SIDE, and hides the vanilla title for SIDE and SIDE_CLEAR. Packs that share the box
+// say "realm:side" { player, from, ticks } when they write, so only the last writer clears it.
+const SIDE = "§s§1§r";
+const SIDE_CLEAR = "§s§0§r";
+/** player id -> the pack that last wrote the side box */
+const sideOwner = new Map();
+/** player id -> tick this pack's text is due to disappear */
+const sideUntil = new Map();
+
+/** Shows text on the right side for `ticks`, then clears it if nobody wrote there since. @param {Player} player @param {any} text @param {number} ticks */
+function showSide(player, text, ticks) {
+  player.onScreenDisplay.setTitle(SIDE, { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 0 });
+  sideOwner.set(player.id, "mobhp");
+  system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from: "mobhp", ticks }));
+  const until = system.currentTick + ticks;
+  sideUntil.set(player.id, until);
+  system.runTimeout(() => {
+    if (sideUntil.get(player.id) !== until) return;
+    sideUntil.delete(player.id);
+    if (sideOwner.get(player.id) !== "mobhp" || !player.isValid) return;
+    try {
+      player.onScreenDisplay.setTitle(SIDE_CLEAR, { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
+    } catch {
+      // left meanwhile
+    }
+  }, ticks);
+}
+
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:side") return;
+    try {
+      const m = JSON.parse(message);
+      if (typeof m?.player === "string" && typeof m.from === "string") sideOwner.set(m.player, m.from);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] }
+);
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
