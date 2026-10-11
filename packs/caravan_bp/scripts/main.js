@@ -858,8 +858,8 @@ const playerOf = (origin) => {
   return p instanceof Player ? p : undefined;
 };
 
-/** @param {Player} player */
-function status(player) {
+/** When the next caravan comes, or where it is now (operators also see the arrival spots). @param {Player} player */
+function statusLines(player) {
   const now = Date.now();
   /** @type {string[]} */
   const lines = [];
@@ -881,7 +881,63 @@ function status(player) {
   if (isOp(player)) {
     lines.push(spots.length ? `§8Arrival spots: ${spots.map((s) => s.name).join(", ")}` : "§8No arrival spots: caravans come to world spawn. Add one with /realm:caravan_spot.");
   }
-  player.sendMessage(lines.join("\n"));
+  return lines;
+}
+
+/** /realm:caravan_info @param {Player} player */
+function status(player) {
+  player.sendMessage(statusLines(player).join("\n"));
+}
+
+/** /realm:caravan: what the player may do. @param {Player} player */
+async function mainMenu(player) {
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [{ text: "Caravan info\n§8When it comes, or where it is", run: () => infoPage(player) }];
+  if (isOp(player)) {
+    actions.push({ text: "Add an arrival spot here\n§8Operators", run: () => addSpotForm(player) });
+    if (spots.length) actions.push({ text: "Remove an arrival spot\n§8Operators", run: () => removeSpotMenu(player) });
+    if (!visit) actions.push({ text: "Bring the caravan now\n§8Operators", run: () => call(player) });
+  }
+  const form = new ActionFormData().title("§lMerchant Caravan").body(statusLines(player).join("\n\n"));
+  for (const a of actions) form.button(a.text);
+  form.button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await actions[res.selection]?.run();
+}
+
+/** @param {Player} player */
+async function infoPage(player) {
+  const res = await show(player, new ActionFormData().title("§lMerchant Caravan").body(statusLines(player).join("\n\n")).button("Back").button("Close"));
+  if (res && !res.canceled && res.selection === 0 && player.isValid) await mainMenu(player);
+}
+
+/** @param {Player} player */
+async function addSpotForm(player) {
+  const res = await show(player, new ModalFormData().title("§lAdd an arrival spot").textField("Name (optional)", "Market Square").submitButton("Add spot"));
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const name = res.formValues.find((v) => typeof v === "string");
+  addSpot(player, typeof name === "string" ? name : undefined);
+}
+
+/** Operators: every arrival spot; pick one to remove it. @param {Player} player */
+async function removeSpotMenu(player) {
+  if (!isOp(player) || !spots.length) return;
+  const list = [...spots];
+  const form = new ActionFormData().title("§lRemove an arrival spot").body("Pick the spot to remove.");
+  for (const s of list) {
+    const d = s.dim === player.dimension.id ? `${Math.round(dist(s, player.location))}m away` : dimName(s.dim);
+    form.button(`${s.name}\n§8${Math.floor(s.x)}, ${s.y}, ${Math.floor(s.z)} (${d})`);
+  }
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const pick = list[res.selection];
+  if (!pick) return mainMenu(player);
+  if (!spots.includes(pick)) return player.sendMessage("§7That spot is already gone.");
+  spots = spots.filter((s) => s !== pick);
+  saveSpots();
+  player.sendMessage(`§aRemoved caravan spot "${pick.name}". §7${spots.length ? `${spots.length} left.` : "None left: caravans come to world spawn."}`);
 }
 
 /** @param {Player} player @param {string | undefined} name */
@@ -945,7 +1001,11 @@ function withPlayer(origin, fn) {
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
-    { name: "realm:caravan", description: "Merchant Caravan: when the next caravan comes, or where it is now", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    { name: "realm:caravan", description: "Merchant Caravan: a menu of what you can do (caravan info; operators: spots, call it)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    (origin) => withPlayer(origin, (p) => mainMenu(p).catch((e) => console.warn(`[caravan] ${e}`))),
+  );
+  customCommandRegistry.registerCommand(
+    { name: "realm:caravan_info", description: "Merchant Caravan: when the next caravan comes, or where it is now", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
     (origin) => withPlayer(origin, status),
   );
   customCommandRegistry.registerCommand(
