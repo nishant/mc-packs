@@ -1271,11 +1271,11 @@ Operators can change `enabled`, `defaultOn`, `showTime` and `eightWay` in game w
 
 ## Mob Health — `mobhp_bp`
 
-Hit a mob and its name and health show above your hotbar, so you know how close it is to going down.
+Hit a mob and its name and health show in the middle of your screen (or above your hotbar, if you prefer), so you know how close it is to going down.
 
 ### How to use
 
-1. Nothing to set up: hit a mob with anything, or shoot it, and the bar above your hotbar shows something like `Zombie  14/20 ||||||||||` with the bar in color. Only you see it.
+1. Nothing to set up: hit a mob with anything, or shoot it, and the subtitle line in the middle of your screen shows something like `Zombie  14/20 ||||||||||` with the bar in color. Only you see it.
 2. Don't want it? Run `/realm:mobhp` to hide it for yourself; run it again to show it. The same switch is **Show the health of mobs I hit** in `/realm:prefs`. The choice is remembered.
 3. **Operators:** `/realm:config` → **Mob Health** disables it for the whole realm, shows players' health too when one player hurts another, changes the bar length, or changes what new players start with.
 
@@ -1286,7 +1286,7 @@ Hit a mob and its name and health show above your hotbar, so you know how close 
 - Shown for melee hits and for arrows, tridents and other projectiles you fired, every time the mob is hurt by you.
 - **Other players** only when an operator enabled **Show players' health too** (`players`, disabled by default): then hurting a player shows their name and health the same way.
 - Enabled for every player until they disable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it.
-- The health uses the bar above the hotbar, like other packs' short messages. With the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD waits 2 seconds (`holdTicks`) after each hit before it draws itself again.
+- **Where it shows** (`showAt`, default **Middle of the screen**): the subtitle line in the middle of the screen, for 2 seconds (`holdTicks`). Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover it there; that's why it never showed on realms with such an add-on. Each player can pick **Above the hotbar** instead (**Where the health of mobs I hit shows** in `/realm:prefs`); then, with the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD waits 2 seconds after each hit before it draws itself again.
 
 ### Commands
 
@@ -1302,9 +1302,10 @@ Hit a mob and its name and health show above your hotbar, so you know how close 
 | `defaultOn` | `true` | Players see it until they disable it for themselves |
 | `players` | `false` | Also show a player's health when you hurt another player |
 | `barLength` | `10` | How many `\|` characters make up the bar (5 to 20 in game) |
-| `holdTicks` | `40` | How long (ticks) the Coordinates HUD leaves the health on the bar before drawing itself again |
+| `showAt` | `"middle"` | Where it shows for players who haven't chosen: `middle` (the subtitle line in the middle of the screen, which other add-ons can't cover) or `hotbar` (the line above the hotbar) |
+| `holdTicks` | `40` | How long (ticks) the health stays on screen; above the hotbar, how long the Coordinates HUD leaves it before drawing itself again |
 
-Operators can change `enabled`, `defaultOn`, `players` and `barLength` in game with `/realm:config`. `holdTicks` stays in `config.js`. Each player switches it for themselves with `/realm:mobhp` or **Show the health of mobs I hit** in `/realm:prefs`; players who already chose keep their choice when `defaultOn` changes.
+Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt` in game with `/realm:config`. Players pick their own place with **Where the health of mobs I hit shows** in `/realm:prefs`. `holdTicks` stays in `config.js`. Each player switches it for themselves with `/realm:mobhp` or **Show the health of mobs I hit** in `/realm:prefs`; players who already chose keep their choice when `defaultOn` changes.
 
 ### Saved data
 
@@ -1315,18 +1316,18 @@ Operators can change `enabled`, `defaultOn`, `players` and `barLength` in game w
 
 ### How it works
 
-- `world.afterEvents.entityHurt` gives the hurt mob and the damage source. When the damaging entity (the shooter, for a projectile) is a player with it on, the pack reads the mob's `minecraft:health` component and sets that player's action bar, with the mob's name as a translated text so it reads in each player's language.
+- `world.afterEvents.entityHurt` gives the hurt mob and the damage source. When the damaging entity (the shooter, for a projectile) is a player with it on, the pack reads the mob's `minecraft:health` component and shows it on that player's screen (the subtitle line, or the action bar for players who chose it), with the mob's name as a translated text so it reads in each player's language.
 - After each one it sends the script event `realm:actionbar` with `{"player":"<id>","ticks":40}`, which the Coordinates HUD understands. Without the HUD nothing listens and nothing happens.
 
 ---
 
 ## Elytra HUD — `elytra_bp`
 
-While you glide, the bar above the hotbar shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.
+While you glide, the middle of your screen (or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.
 
 ### How to use
 
-1. Put on an elytra and glide. Above the hotbar you see something like `31.4 blocks/s  Y 142  Elytra 87%  Rockets 12`, updated 4 times a second.
+1. Put on an elytra and glide. In the middle of the screen you see something like `31.4 blocks/s  Y 142  Elytra 87%  Rockets 12`, updated 4 times a second.
 2. Don't want it? Run `/realm:elytra`, or disable **Elytra HUD while gliding** in `/realm:prefs`. Chat says `Elytra HUD: Disabled. Run /realm:elytra again to enable it.` The choice is remembered.
 3. **Operators:** to turn it off for everyone, disable **Elytra HUD** in `/realm:config` → **Elytra HUD**. The same page sets when durability turns red.
 
@@ -1336,7 +1337,7 @@ While you glide, the bar above the hotbar shows your speed, height, how much dur
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
 - The bar only shows while you're gliding and fades a moment after you land. Nothing is shown, and nothing is checked, for players who aren't gliding.
 - With the [Coordinates HUD](#coordinates-hud--hud_bp) on, it pauses while you glide, so the two don't take turns on the bar; your coordinates come back a second or two after you land.
-- Other messages above the hotbar (low durability warnings, claim borders, the sleep count) can briefly swap places with it while you glide.
+- **Where it shows** (`showAt`, default **Middle of the screen**): the subtitle line, which other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover; that's why it never showed on realms with such an add-on. Players can pick **Above the hotbar** in `/realm:prefs` (**Where my Elytra HUD shows**); there, other messages (low durability warnings, claim borders, the sleep count) can briefly swap places with it.
 
 ### Commands
 
@@ -1351,8 +1352,9 @@ While you glide, the bar above the hotbar shows your speed, height, how much dur
 | `enabled` | `true` | The gliding HUD for the whole realm. Disabled: nobody sees it and `/realm:elytra` says so |
 | `intervalTicks` | `5` | Ticks between HUD updates while gliding (5 = 4 times a second) |
 | `lowPercent` | `10` | Elytra durability left (percent) at or below which it shows in red (1 to 50 in game) |
+| `showAt` | `"middle"` | Where it shows for players who haven't chosen: `middle` (the subtitle line in the middle of the screen, which other add-ons can't cover) or `hotbar` (the line above the hotbar) |
 
-Operators can change `enabled` and `lowPercent` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`.
+Operators can change `enabled`, `lowPercent` and `showAt` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`, and pick where it shows (**Where my Elytra HUD shows**).
 
 ### Saved data
 
@@ -3707,7 +3709,7 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 
 1. Find Mara the Cartographer (or any NPC with the `cartographer` role, from [Townsfolk](#townsfolk--npc_bp)), tap her and pick **Buy a treasure map (50 Crowns)**. You get a piece of paper named `Treasure Map`, and chat reads the first clue, for example `"Walk toward the setting sun for about twelve hundred paces, and there the next riddle waits."`
 2. Work out the direction: the North Star is north, the rising sun is east, the setting sun is west, and "with the North Star at your back" is south. A pace is a block.
-3. Hold the map in your hand: every 2 seconds the line above the hotbar says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
+3. Hold the map in your hand: every 2 seconds the middle of the screen (or the line above the hotbar, if you choose it in `/realm:prefs`) says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
 4. Get within 30 blocks of where the clue points and the next clue appears in chat and on the map. As you get close, the map also names what the spot looks like (`The spot lies among the trees.`).
 5. On the last clue, once you're close, the map grows hot: the chest is buried nearby, 1 to 3 blocks down. Follow `Hot` to `Burning hot! Dig here.`; standing over it pays the Crowns. Then dig up the chest for the rest.
 6. Lost the map, or the clue? Run `/realm:maps` (or `/realm:maps_hunts`) for your hunt's clue, a new copy of the map, or to give the hunt up.
@@ -3749,7 +3751,8 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 | `buryDistance` | `48` | The chest is buried once the player is this close to the treasure |
 | `searchRadius` | `32` | How far from the planned spot the chest may be buried |
 | `avoidSpawn` | `64` | Never bury a chest closer than this to world spawn |
-| `warmth` | `true` | Show Warmer / Colder / Very warm above the hotbar while holding a Treasure Map |
+| `warmth` | `true` | Show Warmer / Colder / Very warm while holding a Treasure Map |
+| `showAt` | `"middle"` | Where Warmer / Colder shows for players who haven't chosen: `middle` (the subtitle line in the middle of the screen, which other add-ons that redraw the line above the hotbar can't cover; that's why it never showed on realms with a waypoint add-on) or `hotbar`. Players pick their own with **Where Warmer / Colder shows for me** in `/realm:prefs` |
 | `veryWarm` | `40` | `Very warm` within this many blocks of the next clue or the chest |
 | `plainHints` | `false` | `/realm:maps` also shows the plain direction and distance from where you stand, like `(W, about 1,000 blocks)` |
 | `crownsMin` | `30` | Least Crowns found with a treasure |
@@ -3763,7 +3766,7 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 | `clues` | 4 riddles | Clues for a leg that ends at another clue, with `{dir}` and `{dist}`, e.g. `Walk {dir} for {dist} paces, and there the next riddle waits.` |
 | `finalClues` | 3 riddles | Clues for the last leg, e.g. `{dist} paces {dir}, and the X is beneath your feet.` |
 
-Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`, `plainHints`, `crownsMin`, `crownsMax` and `avoidSpawn` in game with `/realm:config` (**Treasure Maps & Riddles**). The rest stays in `config.js`. There are no player preferences.
+Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`, `showAt`, `plainHints`, `crownsMin`, `crownsMax` and `avoidSpawn` in game with `/realm:config` (**Treasure Maps & Riddles**). The rest stays in `config.js`. Each player picks where Warmer / Colder shows with **Where Warmer / Colder shows for me** in `/realm:prefs`.
 
 ### Saved data
 
@@ -3771,6 +3774,7 @@ Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`
 |---|---|---|
 | `maps:hunts` | Player | JSON list of the player's hunts: `{ id, dim, pts, leg, clue, place?, chest?, tries, t }`: the end of each leg (the last is the treasure), the leg being followed, its clue, what the spot looks like, where the chest was buried, failed chest spots and when the map was bought |
 | `maps:cfg` | World | Settings changed in `/realm:config` |
+| `maps:pref` | Player | The player's **Where Warmer / Colder shows for me** choice, when it differs from the realm's |
 | `crowns` | Scoreboard | The map's price is taken from, and the treasure's Crowns added to, the shared Crowns balance |
 
 ### How it works

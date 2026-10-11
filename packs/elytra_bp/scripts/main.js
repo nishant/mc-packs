@@ -58,6 +58,11 @@ system.runInterval(() => {
   for (const player of world.getAllPlayers()) {
     try {
       if (!player.isGliding || hudOff(player)) continue;
+      if (getFor(player, "where") !== "hotbar") {
+        // The subtitle line in the middle of the screen: other add-ons that redraw the action bar can't cover it.
+        player.onScreenDisplay.setTitle("§r", { subtitle: hud(player), fadeInDuration: 0, stayDuration: INTERVAL + 10, fadeOutDuration: 4 });
+        continue;
+      }
       player.onScreenDisplay.setActionBar(hud(player));
       // Ask the Coordinates HUD, if installed, to leave the action bar to this HUD while gliding.
       if (now - (heldAt.get(player.id) ?? -Infinity) >= HOLD_TICKS / 3) {

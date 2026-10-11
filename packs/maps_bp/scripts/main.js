@@ -1,7 +1,7 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, getFor } from "./settings.js";
 
 const PACK = "maps_bp";
 const PROP_HUNTS = "maps:hunts"; // player: JSON Hunt[]
@@ -418,9 +418,14 @@ system.runInterval(() => {
         else if (!trend) text = `§7The map is quiet ${leg}`;
         else text = trend > 0 ? `§6Warmer ${leg}` : `§bColder ${leg}`;
       }
-      // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
-      send("realm:actionbar", { player: player.id, ticks: 45 });
-      player.onScreenDisplay.setActionBar(text);
+      if (getFor(player, "where") === "hotbar") {
+        // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
+        send("realm:actionbar", { player: player.id, ticks: 45 });
+        player.onScreenDisplay.setActionBar(text);
+      } else {
+        // The subtitle line in the middle of the screen: other add-ons that redraw the action bar can't cover it.
+        player.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: 45, fadeOutDuration: 5 });
+      }
     } catch (e) {
       console.warn(`[maps] ${e}`);
     }

@@ -4,7 +4,7 @@
     "name": "Mob Health",
     "description": "Shows a mob's name and health above your hotbar when you hit it. /realm:mobhp",
     "uuid": "16bba1e2-c541-41a6-af73-8d15cf7d3145",
-    "version": [1, 0, 0],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
@@ -12,7 +12,7 @@
       "type": "script",
       "language": "javascript",
       "uuid": "ff29879a-f5bf-4aee-9d4e-08795ee8e3fa",
-      "version": [1, 0, 0],
+      "version": [1, 1, 0],
       "entry": "scripts/main.js"
     }
   ],

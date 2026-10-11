@@ -14,6 +14,8 @@ const OPTIONS = [
   { key: "lowPercent", type: "int", scope: "world", label: "Elytra durability in red at (percent left)", min: 1, max: 50, step: 1 },
   { key: "intervalTicks", type: "int", scope: "world", label: "Ticks between HUD updates", restart: true },
   { key: "off", type: "bool", scope: "player", default: false, invert: true, label: "Elytra HUD while gliding", help: "The same switch as /realm:elytra" },
+  { key: "showAt", type: "enum", scope: "world", choices: ["middle", "hotbar"], names: ["Middle of the screen", "Above the hotbar"], label: "Where the Elytra HUD shows (realm default)", help: "Middle of the screen: other add-ons that use the line above the hotbar (waypoint and compass add-ons) cannot cover it" },
+  { key: "where", type: "enum", scope: "player", base: "showAt", choices: ["middle", "hotbar"], names: ["Middle of the screen", "Above the hotbar"], label: "Where my Elytra HUD shows", help: "Middle of the screen can't be covered by other add-ons" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

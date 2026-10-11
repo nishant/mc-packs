@@ -1,6 +1,13 @@
 // Treasure Maps & Riddles: what a map costs, how far it leads, how it talks and what the chest holds.
 
 export const CONFIG = {
+  /**
+   * Where it shows for players who haven't chosen in /realm:prefs: "middle" (the subtitle line in the
+   * middle of the screen) or "hotbar" (the action bar above the hotbar). Other add-ons that redraw the
+   * action bar all the time, like waypoint and compass add-ons, can't cover the middle.
+   */
+  showAt: "middle",
+
   /** Crowns a treasure map costs at a cartographer. */
   price: 50,
 

@@ -33,11 +33,15 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
     if (!health) return;
     const max = Math.round(health.effectiveMax);
     const current = Math.max(0, Math.ceil(health.currentValue));
-    attacker.onScreenDisplay.setActionBar({
-      rawtext: [{ text: "§f" }, nameOf(hurtEntity), { text: `  §f${current}/${max} ${bar(current, max)}` }],
-    });
-    // Ask the Coordinates HUD, if installed, to leave this on screen for a moment.
-    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: attacker.id, ticks: CONFIG.holdTicks }));
+    const text = { rawtext: [{ text: "§f" }, nameOf(hurtEntity), { text: `  §f${current}/${max} ${bar(current, max)}` }] };
+    if (getFor(attacker, "where") === "hotbar") {
+      attacker.onScreenDisplay.setActionBar(text);
+      // Ask the Coordinates HUD, if installed, to leave this on screen for a moment.
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: attacker.id, ticks: CONFIG.holdTicks }));
+    } else {
+      // The subtitle line in the middle of the screen: other add-ons that redraw the action bar can't cover it.
+      attacker.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: CONFIG.holdTicks, fadeOutDuration: 6 });
+    }
   } catch (e) {
     console.warn(`[mobhp] ${e}`);
   }

@@ -1,4 +1,11 @@
 export const CONFIG = {
+  /**
+   * Where it shows for players who haven't chosen in /realm:prefs: "middle" (the subtitle line in the
+   * middle of the screen) or "hotbar" (the action bar above the hotbar). Other add-ons that redraw the
+   * action bar all the time, like waypoint and compass add-ons, can't cover the middle.
+   */
+  showAt: "middle",
+
   /** Mob health on the action bar for the whole realm. Disabled: nobody sees it, whatever they chose. */
   enabled: true,
 
