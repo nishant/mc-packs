@@ -2,9 +2,9 @@
   "format_version": 2,
   "header": {
     "name": "Story Questlines",
-    "description": "Multi-chapter story quests told by the townsfolk, with choices, a tracker and rewards: The Drowned Bell and The Cartographer's Last Map. /realm:saga",
+    "description": "An RPG quest engine told by the townsfolk: a five-act main story, side questlines, daily favors, choices, hints, a codex, a tracker and story places the pack builds. /realm:saga",
     "uuid": "6e363486-40b0-40b4-9497-7fb5fd1770f1",
-    "version": [1, 1, 0],
+    "version": [1, 2, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

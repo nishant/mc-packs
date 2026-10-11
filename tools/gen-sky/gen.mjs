@@ -459,8 +459,10 @@ const PARTICLES = {
       facing_camera_mode: "rotate_y",
       uv: uv("rainbow"),
     },
-    // Fades in over 1 s and out over 1 s; at most 55% opaque, so the sky shows through.
-    "minecraft:particle_appearance_tinting": { color: [1, 1, 1, `${fade(1, 1)} * 0.55`] },
+    // rainbow_bp redraws it every second with a life of 1.6 s, close to the player (far particles are lost in
+    // the fog): it fades in over 0.2 s and out over the last 0.4 s, so each drawing overlaps the next with no gap.
+    // At most 70% opaque, so the sky shows through.
+    "minecraft:particle_appearance_tinting": { color: [1, 1, 1, `${fade(0.2, 0.4)} * 0.7`] },
   }),
 
   // One segment of an aurora curtain: upright, rippling (an 8-frame flipbook), additive, tinted green to purple.
@@ -868,10 +870,10 @@ const MANIFEST = {
     name: "Realm Skies",
     description: "Rainbows, auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 0, 1],
+    version: [1, 0, 2],
     min_engine_version: [1, 21, 100],
   },
-  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 0, 1] }],
+  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 0, 2] }],
 };
 
 // ---------------------------------------------------------------------------

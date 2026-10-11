@@ -15,6 +15,7 @@ const OPTIONS = [
   { key: "forgeAnywhere", type: "bool", scope: "world", label: "Forge from /realm:relics anywhere", help: "Disabled, players forge at a relicsmith" },
   { key: "autoRepair", type: "bool", scope: "world", label: "Relics never wear out", help: "Durability is restored while a relic is held or worn" },
   { key: "staffHitsPlayers", type: "bool", scope: "world", label: "Storm Staff can strike players" },
+  { key: "avoidSpawn", type: "int", scope: "world", label: "Storm Staff: no lightning this close to spawn", help: "Blocks from world spawn; 0 = anywhere. Fires a bolt starts are put out either way", min: 0, max: 256, step: 8 },
   { key: "meterReadout", type: "bool", scope: "player", default: true, label: "Storm Meter readout", help: "Holding the Storm Meter shows the nearest storm cell above the hotbar" },
 ];
 

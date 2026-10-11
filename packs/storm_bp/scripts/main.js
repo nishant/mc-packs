@@ -1,6 +1,8 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { protectedBox } from "./zones.js";
 
 const PROP_WEATHER = "storm:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 const PROP_CELL = "storm:cell"; // world: JSON of the current storm cell, so it survives a restart
@@ -63,7 +65,7 @@ function reading(player) {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
   // A storm that just started gets its first cell 10 to 40 seconds in, not at once.
   if (newWeather === WeatherType.Thunder && weather !== WeatherType.Thunder) nextFormTick = Math.max(nextFormTick, system.currentTick + Math.floor(between(200, 800)));
   weather = newWeather;
@@ -222,13 +224,13 @@ function nearBuild(dim, x, z) {
       const top = topAt(dim, cx + dx, cz + dz);
       if (!top) return true;
       for (let i = 0; i <= SCAN_DEPTH; i++) {
-        let b;
         try {
-          b = i === 0 ? top : dim.getBlock({ x: cx + dx, y: top.location.y - i, z: cz + dz });
-        } catch {
-          b = undefined;
+          const b = i === 0 ? top : dim.getBlock({ x: cx + dx, y: top.location.y - i, z: cz + dz });
+          if (b && BUILT.test(b.typeId)) return true;
+        } catch (e) {
+          // A chunk that's loaded but not ticking throws on reading the block: count it as built, to be safe.
+          if (String(e).includes("Unloaded")) return true;
         }
-        if (b && BUILT.test(b.typeId)) return true;
       }
     }
   }
@@ -274,6 +276,8 @@ function strike(c) {
   if (!top) return; // that chunk isn't loaded: no strike this time
   const spawn = world.getDefaultSpawnLocation();
   if (Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn) return;
+  // Safe zones (scripts/zones.js): no strike in or next to one, so no fire can start there.
+  if (get("avoidZones") === true && protectedBox(OVERWORLD, { x: x - SCAN, z: z - SCAN }, { x: x + SCAN, z: z + SCAN })) return;
   if (nearBuild(dim, x, z)) return;
   bolt(dim, { x: Math.floor(x) + 0.5, y: top.location.y + 1, z: Math.floor(z) + 0.5 });
 }
@@ -471,10 +475,87 @@ function holdsClock(player) {
   return container?.getItem(player.selectedSlotIndex)?.typeId === "minecraft:clock";
 }
 
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** @param {Player} player */
+function readStorm(player) {
+  if (!holdsClock(player)) player.sendMessage("§7Hold a clock to read the storm.");
+  else player.sendMessage(`§9${reading(player)}`);
+}
+
+/** Starts a cell near the player. @param {Player} player @param {boolean} forced @returns {string | undefined} why it can't */
+function startCell(player, forced) {
+  if (player.dimension.id !== OVERWORLD) return "Storm cells only form in the overworld.";
+  if (get("enabled") !== true) return "Storm cells are disabled in /realm:config.";
+  if (!forced && weather !== WeatherType.Thunder) return "There's no thunderstorm. Use /realm:storm_cell true to start one anyway.";
+  form(player, CONFIG.commandMinDistance, CONFIG.commandMaxDistance, forced);
+  return undefined;
+}
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @param {Player} player @param {ActionFormData} form
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** /realm:storm @param {Player} player */
+async function mainMenu(player) {
+  const zones = get("avoidZones") === true ? " Its lightning never strikes in a safe zone." : "";
+  const body = `${cell ? "There's a storm cell out there. Hold a clock to read how far it is." : weather === WeatherType.Thunder ? "A thunderstorm, but no storm cell right now." : "No storm cell right now."}${zones}`;
+  /** @type {{ text: string, run: () => void }[]} */
+  const actions = [{ text: "Read the storm\n§8Hold a clock", run: () => readStorm(player) }];
+  if (isOp(player)) {
+    /** @param {boolean} forced */
+    const start = (forced) => {
+      const why = startCell(player, forced);
+      player.sendMessage(why ? `§c${why}` : "A storm cell is forming near you.");
+    };
+    if (weather === WeatherType.Thunder) actions.push({ text: "Start a storm cell (operator)\n§8Near you", run: () => start(false) });
+    actions.push({ text: "Start a storm cell anyway (operator)\n§8Even without a thunderstorm", run: () => start(true) });
+    if (cell) {
+      actions.push({
+        text: "End the storm cell (operator)",
+        run: () => {
+          if (cell) end();
+          player.sendMessage("§7The storm cell is gone.");
+        },
+      });
+    }
+  }
+  const f = new ActionFormData().title("§lStorm Chasing").body(body);
+  for (const a of actions) f.button(a.text);
+  const res = await show(player, f);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  actions[res.selection]?.run();
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:storm",
+      description: "Storm Chasing: the menu (read the storm with a clock; for operators: start or end a storm cell)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => mainMenu(player).catch((e) => console.warn(`[storm] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:storm_read",
       description: "Storm Chasing: read the storm cell's distance, direction and strength (hold a clock)",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -484,8 +565,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       system.run(() => {
         try {
-          if (!holdsClock(player)) player.sendMessage("§7Hold a clock to read the storm.");
-          else player.sendMessage(`§9${reading(player)}`);
+          readStorm(player);
         } catch (e) {
           console.warn(`[storm] ${e}`);
         }
@@ -512,7 +592,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       }
       system.run(() => {
         try {
-          form(player, CONFIG.commandMinDistance, CONFIG.commandMaxDistance, forced);
+          startCell(player, forced);
         } catch (e) {
           console.warn(`[storm] ${e}`);
         }

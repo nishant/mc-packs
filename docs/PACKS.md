@@ -4,7 +4,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 
 > **Keep this file up to date.** Any change to a pack's behavior, commands or `config.js` must update this file in the same commit. `npm run check` fails if a pack, command, config option or `### How to use` section is missing from this file (see [Keeping this file current](#keeping-this-file-current)).
 >
-> **This file is also the players' documentation.** The [Our realm](https://mc.nish.software/realm/) page on mc.nish.software is generated from it (in the `nishant/hosting` repo: `cd minecraft && node tools/pack-docs.mjs`). Every pack section is published, plus the sections marked `<!-- on the site -->`. Write in plain American English, and quote in-game text and ids exactly as the code has them (in backticks), even where the game text is British (`Distance travelled`). See [Publishing to mc.nish.software](#publishing-to-mcnishsoftware).
+> **This file is also the players' documentation.** The [Our realm](https://mc.nish.software/realm/) page on mc.nish.software is generated from it (in the `nishant/hosting` repo: `cd minecraft && node tools/pack-docs.mjs`). Every pack section is published, plus the sections marked `<!-- on the site -->`. Write in plain American English, and quote in-game text and ids exactly as the code has them (in backticks). See [Publishing to mc.nish.software](#publishing-to-mcnishsoftware).
 
 ## Contents
 
@@ -18,6 +18,7 @@ What each pack in this repo does, how to use it, and how to configure it.
   - [Formatting codes](#formatting-codes)
 - [Realm Help — `help_bp`](#realm-help--help_bp)
 - [Realm Settings — `settings_bp`](#realm-settings--settings_bp)
+- [Realm Configuration — `admin_bp`](#realm-configuration--admin_bp)
 - [Welcome Message — `welcome_bp`](#welcome-message--welcome_bp)
 - [Low Durability Warning — `durability_bp`](#low-durability-warning--durability_bp)
 - [AFK + Smart Sleep — `afk_bp`](#afk--smart-sleep--afk_bp)
@@ -56,10 +57,16 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Relics — `relics_bp`](#relics--relics_bp)
 - [Field Journal — `journal_bp`](#field-journal--journal_bp)
 - [Fishing 2.0 — `fishing_bp`](#fishing-20--fishing_bp)
+- [Kitchen — `cooking_bp`](#kitchen--cooking_bp)
+- [Deck of Many Things — `domt_bp`](#deck-of-many-things--domt_bp)
+- [Slot Machine — `slots_bp`](#slot-machine--slots_bp)
+- [Silly Enchants — `silly_bp`](#silly-enchants--silly_bp)
+- [Dolphin Friends — `dolphin_bp`](#dolphin-friends--dolphin_bp)
 - [Treasure Maps & Riddles — `maps_bp`](#treasure-maps--riddles--maps_bp)
 - [Waystones & Inns — `waystone_bp`](#waystones--inns--waystone_bp)
 - [Expeditions — `expedition_bp`](#expeditions--expedition_bp)
 - [Town Projects — `town_bp`](#town-projects--town_bp)
+- [Safe Zones — `zones_bp`](#safe-zones--zones_bp)
 - [Weather Almanac — `weather_bp`](#weather-almanac--weather_bp)
 - [Regional Weather — `climate_bp`](#regional-weather--climate_bp)
 - [Storm Chasing — `storm_bp`](#storm-chasing--storm_bp)
@@ -207,8 +214,9 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 
 1. Run `/realm:prefs` to open **My preferences**: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means **Enabled**. Change what you like and tap **Save**. A summary pops up with how many changes were saved and each one as before -> after, for example `1 change saved` and `Phantom Opt-out > Phantoms near me: Enabled -> Disabled` (chat gets the same). Tap **Back to my preferences** to change more, or **Done**.
 2. Your choices are remembered. `/realm:durability`, `/realm:phantoms` and `/realm:rain` flip the same switches as the form.
-3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone. A summary pops up with how many changes were saved and each one as before -> after, such as `Storm wind volume: 70% -> 50%`; tap **Back to Realm Settings** for another pack, or **Done**. A setting shown as text with `(change in config.js, then restart the world)` can only be changed there.
-4. **Operators:** **Reset a pack to defaults**, at the bottom of the menu, puts one pack's settings back to its `config.js` values after asking. Players' own preferences are kept.
+3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). The first button, **All settings**, holds every pack's settings with a heading per pack (see below); the buttons under it open one pack each. Change settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone. A summary pops up with how many changes were saved and each one as before -> after, such as `Storm wind volume: 70% -> 50%`; tap **Back to Realm Settings** for another pack, or **Done**. A setting shown as text with `(change in config.js, then restart the world)` can only be changed there.
+4. **Operators: All settings.** With the whole Realm Bundle that is about 300 settings, so they come on a few pages, `All settings (page 1 of 4)`, of about 100 lines each (`allPageSize`); a pack is never split across pages. The list at the top, **After saving, go to**, picks where **Save and go** takes you next: the next page (already chosen), any other page (each named by its first and last pack, such as `Page 2: Field Journal to Rain Extras`) or **Done (show what was saved)**. Each page saves its changes when you tap **Save and go**; closing a page saves nothing on it. At the end one summary lists every change from every page, each as `Pack > Setting: before -> after`. All settings and a pack's own page show the same saved values: change Leaderboard size on one and the other shows the new number the next time it opens.
+5. **Operators:** **Reset a pack to defaults**, at the bottom of the menu, puts one pack's settings back to its `config.js` values after asking. Players' own preferences are kept.
 
 ### What players see
 
@@ -226,11 +234,11 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:prefs` | Everyone | Opens **My preferences**: your own choices from every installed pack, in one form |
-| `/realm:config` | Ops | Opens **Realm Settings**: every installed pack's settings for everyone, then **Reset a pack to defaults**. Using an item named `Realm Settings` opens it too (`itemName`) |
+| `/realm:config` | Ops | Opens **Realm Settings**: **All settings** first (every pack's settings with a heading per pack, about 100 lines per page, `allPageSize`), then each installed pack's own page, then **Reset a pack to defaults**. Using an item named `Realm Settings` opens it too (`itemName`) |
 
 ### What each pack offers
 
-Each pack's own section says which of its options are in `/realm:config` and which are preferences in `/realm:prefs` (under its Configuration). With the whole Realm Bundle, `/realm:config` lists every pack that has settings (about 50) and `/realm:prefs` holds about 25 preferences in one form, such as **Welcome popup when I join**, **Low-durability warnings** (`/realm:durability`), **Phantoms near me** (`/realm:phantoms`), **Announce when I go AFK**, Quick Stack & Sort's sneak-tap and hotbar choices, **Unread letters notice on join** and **Rain extras** (`/realm:rain`).
+Each pack's own section says which of its options are in `/realm:config` and which are preferences in `/realm:prefs` (under its Configuration). With the whole Realm Bundle, `/realm:config` lists every pack that has settings (about 50) and `/realm:prefs` holds about 40 preferences in one form, with a heading per pack, such as **Stats ticker above my hotbar** and its stats, speed, style and colors (`/realm:stats_ticker`), **Welcome popup when I join**, **Low-durability warnings** (`/realm:durability`), **Phantoms near me** (`/realm:phantoms`), **Announce when I go AFK**, Quick Stack & Sort's sneak-tap and hotbar choices, **Unread letters notice on join** and **Rain extras** (`/realm:rain`).
 
 Everything else (lists such as crops, `keepItems` and container types, texts such as name tag prefixes, tick intervals, and command permissions) stays in `config.js`.
 
@@ -240,6 +248,7 @@ Everything else (lists such as crops, `keepItems` and container types, texts suc
 |---|---|---|
 | `answerTicks` | `10` | Ticks to wait for the installed packs to answer, and for each change to be confirmed (20 = 1 s) |
 | `itemName` | `Realm Settings` | Operators who use an item with exactly this name (renamed on an anvil) open `/realm:config`. `""` turns it off |
+| `allPageSize` | `100` | **All settings** puts at most this many lines on a page (a heading per pack plus a line per setting); a pack bigger than that gets a page of its own. `0` puts everything on one page (with the whole bundle about 300 controls and 47 KB of form, slow to open and to scroll on phones) |
 
 ### Saved data
 
@@ -254,12 +263,70 @@ None in this pack. Each pack saves its own settings, so they stay with that pack
 
 ### How it works
 
+- **All settings** and a pack's own page are two views of the same thing: both ask the packs for their current values (`realm:cfg_ping`) each time they open, draw each setting with the same control, and save through the same `realm:cfg_set`, so neither keeps a copy that could go stale. **My preferences** is one form with a heading per pack.
 - Every other behavior pack has a `scripts/settings.js` that lists what can change in game. The pack reads those options through it (`get(key)`: the world's saved value over `config.js`; `getFor(player, key)`: the player's own value over the world's), so a change applies on the next use, with no restart.
 - The packs never import each other. This pack sends the script event `realm:cfg_ping` (`{id, player}`), and each pack answers `realm:cfg_schema` with its options and their current values (`{id, pack, title, part, parts, options}`), split into parts under the 2048-character limit of a script event message. Saving sends `realm:cfg_set` (`{id, pack, key, value, player?}`) and resetting `realm:cfg_reset` (`{id, pack}`). The pack checks the value (type, range, choices), ignores keys it doesn't have, saves it and answers `realm:cfg_ack` (`{id, pack, key, ok, value, error?}`), which is what the save summary reports.
 - An option can carry `invert` (a switch stored as `off` but shown as **Enabled**, so no label is a double negative) and `names` (readable words for a list's choices). Labels name what the setting does, never "Turn off ...".
 - In-game text is plain ASCII: Bedrock draws a whole line in a smaller fallback font when it holds a character like `…`, `–`, `•` or an emoji, which is why `/realm:help` once looked different in `/help`. `npm run check` (`tools/check-ascii.mjs`) fails on any other character in pack code, and `tools/help-catalog.mjs` converts the docs' typography when it builds the help.
 - The part of `settings.js` that does this is the same in every pack: it's copied from `tools/settings-shared.js` by `node tools/sync-settings.mjs`, and `npm run check` fails if a copy is missing or out of date.
 - Operators with cheats on could send the same script events with `/scriptevent`; that does nothing an operator can't do in the menu.
+
+---
+
+## Realm Configuration — `admin_bp`
+
+Every operator carries a **Realm Configuration** item (a nether star with a gold name). Using it opens an admin menu that runs **every realm command** from one place: pick a category, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. The commands still work as typed; this is for when you'd rather not type them while playing. It isn't settings: settings are one button away, at the top.
+
+### How to use
+
+1. **Operators:** you get the `Realm Configuration` item when you join or respawn without one (and within 30 seconds of becoming an operator). It stays through death and can't be dropped or put in a chest. Lost it anyway? Run `/realm:admin_item`. `/realm:admin` opens the same menu.
+2. **Operators:** use the item (right-click or long press, like eating). The menu starts with **Realm Settings** (opens `/realm:config`), **Search commands**, **Recent**, **Server setup checklist** and **Quick actions**, then the categories: **World & weather**, **Story & townsfolk**, **Towns & places**, **Economy**, **Events & news**, **Players**, **Dungeons & loot**, **Fun**, **Utilities** (and **Other** for a pack the menu doesn't know yet). Each lists its commands with what they do; `(ops)` marks operator commands.
+3. **Operators:** pick a command. Without options it runs right away (a menu command such as `/realm:meteor` opens its own menu). With options, a form asks for them: lists for choices (`mara`, `thunder`, `storm_staff`...), a list of online players (with **Everyone online (@a)** where a command can take several, and a box for an offline name where it makes sense), sliders for amounts and radii, a switch for true or false, and your current position already filled in for coordinates. Leave an optional choice on `(leave out)` or its box empty to skip it. Press **Run**.
+4. **Operators:** chat says `[Realm Configuration] Ran /realm:...` with the exact command, or that it didn't run. Commands that remove or reset something, and a few with big effects (`/realm:meteor_now`, `/realm:tornado_spawn`, `/realm:caravan_call`, `/realm:crowns_give`, `/realm:domt_draw`), ask **Are you sure?** first.
+5. **Operators:** **Recent** keeps your last 8 commands with their options (`recentSize`): tap one to run it again. **Search commands** finds commands and quick actions by any word of their name or description.
+6. **Operators:** **Quick actions** are the vanilla things you'd otherwise type: set the weather (with the [Weather Almanac](#weather-almanac--weather_bp) installed this runs `/realm:weather_set`, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats.
+7. **Operators:** **Server setup checklist** lists the one-time jobs across the installed packs (place the townsfolk, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. Safe zones and towns show `[x]` with how many exist; the others can't be checked from here.
+
+### What players see
+
+- **Operators:** the item in their inventory, a chat line the first time (`You have the Realm Configuration item: use it to run any realm command from one menu.`), and the menu. The menu shows only the commands of installed packs that the operator's permission level allows.
+- **Everyone else:** nothing. A player who isn't an operator and uses an item with that name sees `Realm Configuration is for operators. Your own options: /realm:prefs` above the hotbar, and the real item is taken from them (`removeFromOthers`): `The Realm Configuration item is for operators, so it was put away.` An item renamed on an anvil is never taken (it has no Realm Configuration lore), it just doesn't open anything.
+- An item renamed `Realm Settings` on an anvil still opens [Realm Settings](#realm-settings--settings_bp) as before; the Realm Configuration menu's first button opens it too.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:admin` | Ops | Opens the Realm Configuration menu (the same as using the item) |
+| `/realm:admin_item [player]` | Ops | Gives you the Realm Configuration item if you don't carry one, or checks the named operators and gives them one. Players who aren't operators are refused |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `giveToOperators` | `true` | Operators without the item get one when they join or respawn, and within `checkSeconds` of becoming an operator |
+| `removeFromOthers` | `true` | Take the real item from players who aren't operators (an anvil-renamed item is left alone) |
+| `checkSeconds` | `30` | How often to check who carries the item, in seconds (5 to 300) |
+| `itemType` | `"minecraft:nether_star"` | The vanilla item it's made from. It gets the name, lore, keep on death and an inventory lock |
+| `recentSize` | `8` | How many of your last commands **Recent** keeps (1 to 20) |
+| `answerTicks` | `10` | Ticks to wait for the installed packs (and the safe zone lists, for the checklist) to answer (20 = 1 second) |
+
+Operators can change `giveToOperators`, `removeFromOthers`, `checkSeconds` and `recentSize` in game with `/realm:config` when Realm Settings is installed.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `admin:recent` | Player | JSON list of that operator's last commands, newest first: `{ t, l }` (a title and the command line) or `{ t, a, v }` (a quick action's id and its values, with player names rather than list positions) |
+| `admin:cfg` | World | Settings changed in `/realm:config` |
+
+### How it works
+
+- `scripts/catalog.js` lists every `realm:` command of every pack: name, description, permission level, parameters (type, optional, enum values) and the pack. `node tools/admin-catalog.mjs` writes it by loading each pack's `scripts/main.js` in Node with a stand-in for the Minecraft modules and recording what its startup handler registers, so enum values computed from `config.js` (townsfolk ids, relics, story places...) are exact. `npm run check` runs it with `--check` and fails when a command was added or changed and the catalog wasn't rewritten. `scripts/presets.js` (hand-written) adds categories, friendlier labels, slider ranges and defaults, the commands that ask first and the setup checklist; a command it doesn't mention still shows, with plain inputs.
+- Which packs are installed: the menu sends `realm:help_ping` like `/realm:help` and keeps the folders that answer (for a minute). If nobody answers, it shows everything.
+- Commands run with `player.runCommand`, so a command does exactly what it does when typed by that operator. When a command refuses (a bad name, too far from a town...), the game doesn't hand its reason to the script, so chat says `didn't run: the command refused` (some packs also explain in chat); a command that doesn't parse shows the game's own error.
+- The setup checklist pings the safe zones protocol (`realm:zones_ping`) and counts the `zones` and `town` lists it hears back.
+- The menu checks the operator level itself (`commandPermissionLevel` of `GameDirectors` or higher) before opening, and hides commands above the player's level.
 
 ---
 
@@ -270,8 +337,8 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 ### How to use
 
 1. Join the realm. The welcome popup appears after about 2 seconds; tap its button (`Let's go!` by default) to close it.
-2. Run `/realm:welcome` any time to see it again. Don't want the popup when you join? Disable **Welcome popup when I join** in `/realm:prefs`.
-3. **Operators:** run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type `\n` for a new line. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
+2. Run `/realm:welcome` (or `/realm:welcome_show`) any time to see it again. Don't want the popup when you join? Disable **Welcome popup when I join** in `/realm:prefs`.
+3. **Operators:** `/realm:welcome` opens the **Welcome Message** menu instead: `Show the welcome message`, `Edit the welcome message`, `Reset to the defaults` and `Settings` (which points to `/realm:config` → Welcome Message). The edit and reset buttons do the same as the commands below. Run `/realm:welcome_edit`, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type `\n` for a new line. Players see the new text on their next join (with "show once" on, each player sees it one more time, unless you turn off "Show it again to players who've seen it" for a typo fix). `/realm:welcome_reset` asks first, then goes back to the pack's default text.
 
 ### What players see
 
@@ -283,7 +350,8 @@ Shows a popup when a player joins the Realm. Operators can edit the popup in-gam
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:welcome` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
+| `/realm:welcome` | Everyone | Shows the welcome message to yourself, like `/realm:welcome_show`. Operators get the **Welcome Message** menu instead: show, edit, reset and `Settings` |
+| `/realm:welcome_show` | Everyone | Shows the welcome message to yourself (preview). Ignores `showOnce` |
 | `/realm:welcome_edit` | Ops | Opens an editor: title, body (Minecraft's text boxes hold only 100 characters each, so the body is split over at least 4 boxes, joined in order with nothing between them; `\n` is a new line; all boxes empty = the default text), button text, and toggles for show once, chat copy, big on-screen title and "Show it again to players who've seen it" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once |
 | `/realm:welcome_reset` | Ops | Asks `Reset the welcome message?` first, then discards in-game edits and goes back to the `config.js` defaults |
 
@@ -460,13 +528,16 @@ AFK state itself isn't saved: it's kept in memory and resets on rejoin. While a 
 
 ## Stats & Leaderboards — `stats_bp`
 
-Tracks player stats as scoreboards, with leaderboard menus and an optional sidebar.
+Tracks player stats as scoreboards, with leaderboard menus, a stats ticker above each player's hotbar that each player sets up for themselves, and an optional sidebar for everyone.
 
 ### How to use
 
 1. Play: stats count on their own (playtime and distance, except while AFK; deaths; mob and player kills; blocks mined and placed; elytra distance; joins).
-2. Run `/realm:stats` and pick **My stats** to see every stat, with your rank (`#2 of 7`) in each one you've scored in, and the date you first joined (UTC), or **Leaderboards** and a stat to see the top 10.
-3. **Operators:** `/realm:stats_sidebar <stat>` shows one stat on everyone's sidebar. Use a stat ID (`playtime`, `deaths`, `mobkills`, `pvpkills`, `mined`, `placed`, `travelled`, `flown`, `joins`), for example `/realm:stats_sidebar travelled`, `cycle` to rotate through all of them every 30 seconds, or `off`.
+2. Run `/realm:stats` to open **Realm Stats**. **My stats** shows every stat, with your rank (`#2 of 7`) in each one you've scored in, and the date you first joined (UTC); **Leaderboards** and a stat shows the top 10.
+3. Want your own stats on screen? Tap **Stats ticker** in the same menu (or run `/realm:stats_ticker`). Above your hotbar you now see one stat at a time, such as `Mob kills 120 #2 of 7`, changing every 5 seconds. Only you see yours.
+4. Tap **My ticker settings** (or open `/realm:prefs`, the same settings) to choose which stats it shows (one switch each), how many seconds each stays, **One stat at a time** or **Every chosen stat on one line**, the full style or a compact one (`Kills 120`), and the colors of the names and the numbers. Your choices are remembered.
+5. **Operators:** **Sidebar (everyone)** in `/realm:stats` (or `/realm:stats_sidebar <stat>`) picks what the sidebar shows: **Hidden**, one stat, or **Rotate through the stats**, how many seconds each stat stays and which stats the rotation includes. Bedrock shows the same sidebar to everyone, so players can't hide it for themselves; leave it **Hidden** and let players use the ticker if some don't want it. The stat IDs for the command are `playtime`, `deaths`, `mobkills`, `pvpkills`, `mined`, `placed`, `travelled`, `flown` and `joins`, plus `cycle` (rotate) and `off`, for example `/realm:stats_sidebar travelled`.
+6. **Operators:** `/realm:config` → **Stats & Leaderboards** has all of that, plus the leaderboard size, the ticker for the whole realm (**Stats ticker**), whether new players see it from the start, and what every ticker setting starts as for players who haven't chosen.
 
 ### Stats
 
@@ -478,7 +549,7 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 | `pvpkills` | Player kills | Other players killed |
 | `mined` | Blocks mined | Blocks broken by the player. Essentials+ tree felling and vein mining only count the first block |
 | `placed` | Blocks placed | Blocks placed by the player |
-| `travelled` | `Distance travelled` | Blocks moved, not gliding, measured every second. Includes walking, swimming, boats and minecarts. Not counted while AFK, so a water stream or minecart loop doesn't climb the board |
+| `travelled` | `Distance traveled` | Blocks moved, not gliding, measured every second. Includes walking, swimming, boats and minecarts. Not counted while AFK, so a water stream or minecart loop doesn't climb the board |
 | `flown` | Elytra distance | Blocks moved while gliding |
 | `joins` | Times joined | Each join |
 
@@ -489,12 +560,24 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 - Scores from the first Stats pack (v1.0.0, before the Realm Bundle), which stored them on the player entity, move to the name automatically the next time that player joins. Until then they're hidden from the menus, and the vanilla sidebar may still show them as "Player Offline".
 - First-joined date is saved per player, from the first join after the pack was added.
 
+### The stats ticker
+
+- **Off until a player enables it** (`tickerDefaultOn`), with **Stats ticker** in `/realm:stats`, `/realm:stats_ticker` or **Stats ticker above my hotbar** in `/realm:prefs` (all the same switch). While an operator has disabled it for the realm (`tickerEnabled`), nobody sees it, and the menu and `/realm:stats_ticker` say `The stats ticker is disabled on this realm.`
+- **Which stats:** one switch per stat, **Ticker shows Playtime** and so on. Players start with Playtime, Deaths, Mob kills, Blocks mined and Distance traveled (`tickerStats`). With none chosen, the ticker shows nothing.
+- **Speed:** **Ticker seconds per stat**, 2 to 60 (default 5, `tickerSeconds`), when it shows **One stat at a time** (`tickerMode`). **Every chosen stat on one line** shows them all at once, which gets long with many stats in the full style.
+- **Style:** **Name, value and rank** (`Mob kills 120 #2 of 7`) or **Compact: short name and value** (`Kills 120`, with the short names `Time`, `Deaths`, `Kills`, `PvP`, `Mined`, `Placed`, `Walked`, `Flown` and `Joins`) (`tickerStyle`).
+- **Colors:** **Ticker name color** (default gray) and **Ticker number color** (default white): White, Gray, Dark gray (dim), Gold, Yellow, Green, Aqua, Blue, Light purple or Red (`tickerLabelColor`, `tickerValueColor`). Dark gray for both is the closest to a faint, see-through ticker.
+- **Transparency:** scripts can't change how see-through the bar's dark background is. Each player sets that in Bedrock's own **Settings > Accessibility > Text Background Opacity**, which also changes chat and other text backgrounds.
+- **Sharing the bar:** the ticker uses the bar above the hotbar, like other packs' short notes. It waits while one is showing (packs that send `realm:actionbar`, such as Mob Health and the Elytra HUD while you glide) and redraws right after. With the [Coordinates HUD](#coordinates-hud--hud_bp) on, the ticker is a second line under your coordinates instead, so the two don't take turns.
+- It updates once a second and resends an unchanged line every 2 seconds, so it doesn't fade.
+
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:stats` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date) or **Leaderboards** (pick a stat to see the top 10, `leaderboardSize`, with your own position underneath if you're outside it) |
-| `/realm:stats_sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through every stat every 30 seconds, `sidebarCycleSeconds`) or **`off`** |
+| `/realm:stats` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date), **Leaderboards** (pick a stat to see the top 10, `leaderboardSize`, with your own position underneath if you're outside it), **Stats ticker** (shows or hides yours), **My ticker settings** (which stats, seconds per stat, style and colors). Operators also get **Sidebar (everyone)** |
+| `/realm:stats_ticker` | Everyone | Shows or hides your own stats above the hotbar (default hidden, `tickerDefaultOn`). Remembered between sessions. Says so when an operator has disabled the ticker for the realm (`tickerEnabled`) |
+| `/realm:stats_sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through the chosen stats every 30 seconds, `sidebarCycleSeconds`, `sidebarStats`) or **`off`** (hides it). The same setting as **Sidebar (everyone)** |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -502,19 +585,35 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 |---|---|---|
 | `afkTag` | `afk` | Playtime isn't counted while a player has this tag. Must match the AFK pack's `tag`. `""` = always count |
 | `leaderboardSize` | `10` | Number of players on a leaderboard |
+| `sidebar` | `off` | What everyone's sidebar shows until an operator chooses: `off`, `cycle` or a stat ID |
 | `sidebarCycleSeconds` | `30` | Seconds per stat in `cycle` mode |
+| `sidebarStats` | every stat | The stats the sidebar rotates through in `cycle` mode |
+| `tickerEnabled` | `true` | The stats ticker for the whole realm. Disabled: nobody sees it, whatever they chose |
+| `tickerDefaultOn` | `false` | Show the ticker to players who never chose |
+| `tickerMode` | `cycle` | What players start with: `cycle` (one stat at a time) or `all` (every chosen stat on one line) |
+| `tickerSeconds` | `5` | What players start with: seconds per stat in `cycle` mode (2 to 60 in game) |
+| `tickerStyle` | `full` | What players start with: `full` (name, value and rank) or `compact` (short name and value) |
+| `tickerLabelColor` | `gray` | What players start with: the color of the stat names. One of `white`, `gray`, `dark_gray`, `gold`, `yellow`, `green`, `aqua`, `blue`, `light_purple`, `red` |
+| `tickerValueColor` | `white` | What players start with: the color of the numbers (same colors) |
+| `tickerStats` | `playtime`, `deaths`, `mobkills`, `mined`, `travelled` | What players start with: the stats the ticker shows |
 | `maxSpeed` | `100` | Faster movement (blocks/s) counts as a teleport and isn't added to distance |
 
-Operators can change `leaderboardSize` and `sidebarCycleSeconds` in game with `/realm:config`. A new cycle length applies from the next second.
+Operators can change every option except `afkTag` and `maxSpeed` in game with `/realm:config` (27 settings; `sidebarStats` and `tickerStats` as one switch per stat, such as **Sidebar rotation includes Deaths** and **Ticker shows Deaths (players start with)**). A new cycle length applies from the next second. Each player chooses their own ticker (on or off, mode, seconds, style, both colors and a switch per stat: 15 preferences) in `/realm:prefs` or **My ticker settings**; a player who never chose follows the realm's value, including later changes to it.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `stats_playtime`, `stats_deaths`, `stats_mobkills`, `stats_pvpkills`, `stats_mined`, `stats_placed`, `stats_travelled`, `stats_flown`, `stats_joins` | World scoreboard | The stats, one participant per player name. **Kept** when switching between the individual pack and a bundle |
-| `stats:sidebar` | World | Current sidebar mode (`<stat>` / `cycle`) |
+| `stats:sidebar` | World | Current sidebar choice (`<stat>`, `cycle` or `off`) when it differs from `sidebar`. Set by `/realm:stats_sidebar`, **Sidebar (everyone)** and `/realm:config` |
 | `stats:firstJoin` | Player | First join time (ms since epoch) |
+| `stats:pref` | Player | JSON of the player's ticker choices that differ from the realm's |
 | `stats:cfg` | World | Settings changed in `/realm:config` |
+
+### How it works
+
+- The sidebar is a scoreboard display slot, which Bedrock has one of per world: everyone sees the same sidebar, and scripts can't hide it for one player. That's why the per-player display is the ticker on the bar above the hotbar (`onScreenDisplay.setActionBar`), which is each player's own.
+- Once a second the pack builds each ticker from the player's scores (and ranks, in the full style). While the [Coordinates HUD](#coordinates-hud--hud_bp) is on for that player, it sends the line to the HUD with the script event `realm:hud_line` (`{"player":"<id>","key":"stats","text":"...","ticks":80}`) instead of drawing it; the HUD says who sees it with `realm:hud_state`. The packs don't import each other: without the HUD, the ticker draws on its own.
 
 ### Resetting stats
 
@@ -530,17 +629,19 @@ Use vanilla commands (cheats needed):
 
 ## Realm News & Tips — `news_bp`
 
-A news popup that operators edit in-game, a "welcome back" notice, and rotating chat tips.
+A news popup with what changed in the latest update (written automatically for every bundle, from `docs/NEWS.md`), or news operators edit in game, a "welcome back" notice, and rotating chat tips.
 
 ### How to use
 
-1. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `Realm news updated. Run /realm:news to read it.`
-2. Missed it, or want to read it again? Run `/realm:news`.
-3. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
-4. **Operators:** `/realm:news_edit` writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type `\n` for a new line. Easier for a long message: paste it into chat as `/realm:news_body "<text>"`, with `|` for each new line, and the editor opens with every box filled in; check the title and tap **Save**. Chat has a length limit too, so for a message longer than one paste, paste it in parts: the first part with `/realm:news_body` (close the editor that opens, or just keep chat open), each next part with `/realm:news_add "<text>"`, then run `/realm:news_edit` to check and save the whole draft. Parts are joined exactly as pasted, so end a part on a space or start the next one with one. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
+1. After the realm's packs are updated, the update's news pops up once for everyone: what's new, written for players. Operators don't type it: it comes with the packs (`releaseNews`).
+2. When there's news, it pops up about 5 seconds after you join, after the welcome popup. Tap `Got it` to close it. If you're online when it's posted, chat says `Realm news updated. Run /realm:news to read it.`
+3. Missed it, or want to read it again? Run `/realm:news` (or `/realm:news_read`).
+4. Tips appear in chat every 20 minutes while someone is online, starting with `[Tip]`.
+5. **Operators:** `/realm:news` opens the **Realm News & Tips** menu instead: `Read the news`, `Edit the news`, `Paste a long news body` (how to use the chat commands below), `Chat tips` and `Settings` (which points to `/realm:config` → Realm News & Tips). `/realm:news_edit` writes the news. Minecraft's text boxes hold only 100 characters each, so the body is split over at least 10 boxes (1,000 characters) that are joined in order with nothing between them; type `\n` for a new line. Easier for a long message: paste it into chat as `/realm:news_body "<text>"`, with `|` for each new line, and the editor opens with every box filled in; check the title and tap **Save**. Chat has a length limit too, so for a message longer than one paste, paste it in parts: the first part with `/realm:news_body` (close the editor that opens, or just keep chat open), each next part with `/realm:news_add "<text>"`, then run `/realm:news_edit` to check and save the whole draft. Parts are joined exactly as pasted, so end a part on a space or start the next one with one. Leave "Pop up for everyone on their next join" on to announce it, or turn it off for a quiet fix such as a typo. `/realm:news_tips` adds, edits or deletes tips, posts the next one now, changes how often they're posted (5 to 120 minutes) or turns them off.
 
 ### News popup
 
+- **Release news:** each bundle carries `scripts/release.js`, generated by `node tools/gen-news.mjs` (which `npm run bundle` runs) from the newest `## ` entry of `docs/NEWS.md`. When the world loads (or a player joins) with a release id it hasn't posted (`news:release`), that entry becomes the news and pops up once for everyone, like news saved with the pop-up toggle. Operators can still write news in game; the next update's release news replaces it. `releaseNews` `false` turns this off.
 - When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join, and everyone online gets `Realm news updated. Run /realm:news to read it.` in chat. Reading it with `/realm:news` counts, so a player who already read it isn't shown the popup again.
 - The popup is timed after the welcome popup (`delayTicks` = 5 s). If another popup is still open, it waits up to about 90 s.
 - If it still can't show, chat says `There's new Realm news! Run /realm:news to read it.` (on the same line after the "welcome back" notice, if there is one), and the player sees the popup on their next join instead.
@@ -562,7 +663,8 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:news` | Everyone | Shows the current news, which also counts as having seen its popup |
+| `/realm:news` | Everyone | Shows the current news, like `/realm:news_read`. Operators get the **Realm News & Tips** menu instead: read, edit, paste a long body, chat tips and `Settings` |
+| `/realm:news_read` | Everyone | Shows the current news, which also counts as having seen its popup |
 | `/realm:news_edit` | Ops | Editor: title, the body in 100-character parts (at least 10, joined in order), and the "pop up on next join" toggle. If you have a draft from `/realm:news_body` or `/realm:news_add`, it shows the draft instead of the saved news, with a toggle to discard it. **Save** saves the news and clears the draft; closing the editor keeps the draft. If chat stays open for about 20 s, it says it couldn't open |
 | `/realm:news_body "<text>"` | Ops | Starts a news draft from pasted text (chat takes more than a form's 100-character boxes) and opens the editor with it split over the boxes. Put the text in double quotes, use `|` for new lines (chat drops the backslash of `\n`), and `'` rather than `"` inside it |
 | `/realm:news_add "<text>"` | Ops | Adds pasted text to the end of your draft, for news longer than chat lets you paste at once. Doesn't open the editor; it says how long the draft is now (10,000 characters at most). `|` is a new line here too |
@@ -582,6 +684,7 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 | `delayTicks` | `100` | ❌ | Ticks after joining before showing the news (after the welcome popup's `40`) |
 | `awayNoticeHours` | `12` | ✅ `/realm:config` | Minimum time away for the welcome-back notice. `0` = never |
 | `tipPrefix` | `§b[Tip]§r ` | ❌ | Text before each tip in chat |
+| `releaseNews` | `true` | ❌ | Post each update's release news (`scripts/release.js`, from `docs/NEWS.md`) once, as news that pops up for everyone |
 
 ### Saved data
 
@@ -589,6 +692,7 @@ Players returning after at least `awayNoticeHours` (12 h) get `Welcome back! You
 |---|---|---|
 | `news:news` | World | JSON `{ title, body }` |
 | `news:revision` | World | Increases on each announced save |
+| `news:release` | World | Id of the release news last posted, so each update's news pops up once |
 | `news:tips` | World | JSON list of tips, once edited in-game |
 | `news:tipSettings` | World | JSON `{ enabled, intervalMinutes }`, from `/realm:news_tips` or `/realm:config` |
 | `news:cfg` | World | Other settings changed in `/realm:config` (`awayNoticeHours`) |
@@ -605,13 +709,13 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 ### How to use
 
 1. Nothing to set up: a creeper that explodes still damages and knocks back players and mobs, but the ground and your builds stay intact.
-2. Run `/realm:guard` to see the mode, which blasts are covered and any protected zones.
-3. **Operators:** to keep creeper craters in the wild and protect only bases, set the mode to `zones` in `/realm:config` (or `mode` in `config.js`), then stand in a base and run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). `/realm:guard_remove <name>` removes a zone.
+2. Run `/realm:guard` for the menu: **Status** shows the mode, which blasts are covered and any protected zones (`/realm:guard_status` shows the same in chat). With [Safe Zones](#safe-zones--zones_bp) installed, **Safe zones** opens its menu.
+3. **Operators:** to keep creeper craters in the wild and protect only bases, set the mode to `zones` in `/realm:config` (or `mode` in `config.js`), then stand in a base and pick **Protect this spot** in `/realm:guard` (a name and a radius), or run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). **Remove a zone** or `/realm:guard_remove <name>` removes one. In `zones` mode, safe zones from [Safe Zones](#safe-zones--zones_bp), and towns and claims protected from world events, are protected too (`safeZones`).
 
 ### What players see
 
 - **`everywhere` mode (default):** every blast from a listed source (`sources`, creepers by default) hurts and knocks back as usual but breaks no blocks.
-- **`zones` mode:** blocks inside a zone are kept; the rest of the blast breaks blocks as in vanilla. A creeper at the edge of a zone breaks only the part of its crater that lies outside.
+- **`zones` mode:** blocks inside a zone are kept; the rest of the blast breaks blocks as in vanilla. A creeper at the edge of a zone breaks only the part of its crater that lies outside. With `safeZones` (default enabled), every safe zone counts as a zone too: [Safe Zones](#safe-zones--zones_bp), and towns and claims protected from world events, top to bottom. **Status** then says `Where you stand: protected (safe zone Home)`.
 - Charged creepers are covered too. TNT, beds in the Nether or End, respawn anchors and end crystals are never touched, because they aren't listed (beds and anchors have no source entity at all).
 - Unlike the `mobGriefing` gamerule, this changes nothing else: villagers still farm, sheep still eat grass (the Wool Farm guide needs that) and endermen still pick up blocks.
 
@@ -619,7 +723,8 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:guard` | Everyone | Shows whether the spot you're standing on is protected (and by which zone), then the mode, the covered blast sources and the zones |
+| `/realm:guard` | Everyone | Opens the Creeper Guard menu: **Status**, and for operators **Protect this spot** (a zone around you: a name and a radius, 8–256, default 64, `defaultRadius`) and **Remove a zone**; **Safe zones** when Safe Zones is installed |
+| `/realm:guard_status` | Everyone | Shows whether the spot you're standing on is protected (and by which zone or safe zone), then the mode, the covered blast sources and the zones |
 | `/realm:guard_add <name> [radius]` | Ops | Protects a sphere around you, `radius` 8–256 blocks (default 64, `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique whatever their case (`home` and `Home` are the same zone). Only matters in `zones` mode |
 | `/realm:guard_remove <name>` | Ops | Removes a zone (any case) |
 
@@ -627,11 +732,12 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 
 | Option | Default | Description |
 |---|---|---|
-| `mode` | `everywhere` | `everywhere`: listed blasts never break blocks. `zones`: only inside the zones from `/realm:guard_add` |
+| `mode` | `everywhere` | `everywhere`: listed blasts never break blocks. `zones`: only inside the zones from `/realm:guard_add` (and safe zones, with `safeZones`) |
+| `safeZones` | `true` | In `zones` mode, safe zones count as zones too: Safe Zones, and towns and claims protected from world events |
 | `sources` | `["minecraft:creeper"]` | Exploding entity types to neutralize. Add `minecraft:fireball` (ghast fireballs) or `minecraft:wither_skull` if wanted |
 | `defaultRadius` | `64` | Zone radius in blocks when `/realm:guard_add` is given none |
 
-Operators can change `mode` and `defaultRadius` in game with `/realm:config`; a new mode applies to the next explosion. `sources` stays in `config.js`.
+Operators can change `mode`, `safeZones` and `defaultRadius` in game with `/realm:config`; a new mode applies to the next explosion. `sources` stays in `config.js`.
 
 ### Saved data
 
@@ -642,7 +748,7 @@ Operators can change `mode` and `defaultRadius` in game with `/realm:config`; a 
 
 ### How it works
 
-The pack listens to `world.beforeEvents.explosion`. When the exploding entity's type is in `sources`, it empties the list of blocks the blast will break (`everywhere`), or drops the blocks inside a zone from it (`zones`). It never cancels the explosion, which would also remove the damage and drops.
+The pack listens to `world.beforeEvents.explosion`. When the exploding entity's type is in `sources`, it empties the list of blocks the blast will break (`everywhere`), or drops the blocks inside a zone from it (`zones`). It never cancels the explosion, which would also remove the damage and drops. Safe zones come from the safe zones protocol (`realm:zones`, see [How the packs work together](#how-the-packs-work-together)), kept in memory.
 
 ---
 
@@ -747,9 +853,9 @@ Keeps named farms loaded with Bedrock ticking areas, so crops grow, furnaces sme
 
 ### How to use
 
-1. Run `/realm:farm` to see which farms are kept loaded: name, dimension, coordinates, size, who added it and when.
-2. **Operators:** stand in the middle of a farm and run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
-3. **Operators:** `/realm:farm_remove <name>` stops keeping it loaded, or tap **Remove** next to it in `/realm:farm`; the menu comes back afterwards, so you can remove another.
+1. Run `/realm:farm` to open the **Farm Loader** menu: it lists which farms are kept loaded (name, dimension, coordinates, size, who added it and when).
+2. **Operators:** stand in the middle of a farm, run `/realm:farm` and tap `Add a farm here`: type a name and pick the radius (1 to 4 chunks). Or run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
+3. **Operators:** tap `Remove <name>` in `/realm:farm` (the menu comes back afterwards, so you can remove another), or run `/realm:farm_remove <name>`. The menu's `Settings` button points to `/realm:config` → Farm Loader.
 
 ### What keeps running, and what doesn't
 
@@ -764,7 +870,7 @@ Bedrock rules, worth knowing before you add a farm:
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:farm` | Everyone | Lists the loaded farms. Operators (everyone, with `everyoneCanAdd`) also get a **Remove** button for each |
+| `/realm:farm` | Everyone | The **Farm Loader** menu: lists the loaded farms. Operators (everyone, with `everyoneCanAdd`) also get `Add a farm here` (a name and a radius, like `/realm:farm_add`) and a `Remove <name>` button for each farm; operators also get `Settings` |
 | `/realm:farm_add <name> [radius]` | Ops (everyone if `everyoneCanAdd`) | Adds a ticking area centered on you, `radius` 1–4 chunks (default 2, `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique |
 | `/realm:farm_remove <name>` | Ops (everyone if `everyoneCanAdd`) | Stops keeping the farm loaded and removes it from the list |
 
@@ -941,7 +1047,8 @@ Claim the land around your base so other players can't break, place or open anyt
 2. Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees `This land is claimed by Sam`.
 3. **Share it:** `/realm:claim` → **My claim: 120, -340** → **Share with Alex** (players online now). The same menu stops sharing, shows its borders or removes the claim.
 4. **Where are the borders?** `/realm:claim` → **Show claim borders** sparkles the edges of every claim near you for 10 seconds (asking again starts over). Walking in or out of one says `Entering Sam's claim` / `Leaving Sam's claim` above the hotbar.
-5. **Operators:** enable it in `/realm:config` → **Land Claims** → **Land claims**, and set the claim size and how many each player gets there. `/realm:claim` → **All claims (operator)** lists every claim to remove any of them.
+5. Claims are safe zones for world events too: meteors, storm lightning and the other world-event packs break no blocks in them (see [Safe Zones](#safe-zones--zones_bp)).
+6. **Operators:** enable it in `/realm:config` → **Land Claims** → **Land claims**, and set the claim size and how many each player gets there. `/realm:claim` → **All claims (operator)** lists every claim to remove any of them. **Protect claims from world events** (`protectWorldEvents`) turns the safe zone part off.
 
 ### What players see
 
@@ -950,6 +1057,7 @@ Claim the land around your base so other players can't break, place or open anyt
 - **Claiming** is refused with a reason when you already have 2 (`maxClaims`), or when the new square would overlap another claim (`That would overlap Sam's claim (-16, 48 to 16, 80). Move further away.`). A claim keeps the size it was made with when operators change `radius` later.
 - **What's protected** from everyone who isn't the owner or shared: breaking and placing blocks, tapping any block (chests, doors, trapdoors, buttons, levers, beds, crafting tables, buckets), and using the entities in `protectedEntities`. A block placed from outside onto the edge of a claim is refused too; with an empty hand you can still open a door or chest just outside the border.
 - **Explosions** break no blocks inside a claim (`protectExplosions`), whatever caused them; the damage is unchanged, and the part of the blast outside the claim breaks blocks as usual.
+- **World events** (`protectWorldEvents`, default enabled): every claim is a safe zone, so no meteor crater, storm cell lightning or other world event changes blocks in it, and [Safe Zones](#safe-zones--zones_bp) lists it under **Towns and claims** as `Sam's claim`.
 - **Operators** can't build in other players' claims unless **Operators can build in any claim** is enabled (`operatorsBypass`), so a realm where everyone is an operator still gets protection. They can always remove a claim.
 - **What a claim doesn't stop:** mobs, hurting animals or pets, fire spreading, lava or water flowing in, pistons pushing blocks in from outside, hoppers or minecarts pulling items across the border, and hits: punching an armor stand to break it, or punching the item out of an item frame, isn't stopped (only tapping them is).
 
@@ -968,11 +1076,12 @@ Claim the land around your base so other players can't break, place or open anyt
 | `maxClaims` | `2` | Most claims one player can have (1–10 in game) |
 | `maxShared` | `10` | Most players one claim can be shared with |
 | `protectExplosions` | `true` | Explosions break no blocks inside a claim |
+| `protectWorldEvents` | `true` | Claims are safe zones: meteors, tornadoes, storm lightning and other world events break no blocks in them |
 | `operatorsBypass` | `false` | Operators can build, break and open things in anyone's claim |
 | `protectedEntities` | `armor_stand`, `chest_minecart`, `hopper_minecart`, `chest_boat` | Entities only a claim's players can use inside it |
 | `borderSeconds` | `10` | How long **Show claim borders** draws them |
 
-Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions` and `operatorsBypass` in game with `/realm:config`. The rest stays in `config.js`. The realm has room for 500 claims in all.
+Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `protectWorldEvents` and `operatorsBypass` in game with `/realm:config`. The rest stays in `config.js`. The realm has room for 500 claims in all.
 
 ### Saved data
 
@@ -987,6 +1096,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions` and `
 - Claims are read into memory once and kept in step as they change, so the checks below never read saved data.
 - `beforeEvents.playerBreakBlock` and `beforeEvents.playerInteractWithBlock` are canceled inside someone else's claim. The tap is checked at the block and at the spot a block would be placed, since the stable API has no "before place" event and placing starts with that tap. `afterEvents.playerPlaceBlock` removes anything that still got placed. `beforeEvents.playerInteractWithEntity` is canceled for `protectedEntities`.
 - `beforeEvents.explosion` takes the blocks inside claims out of the blast without canceling it.
+- The pack is the `claims` provider of the safe zones protocol: while claims are enabled and `protectWorldEvents` is on, it sends every claim as a square zone (`realm:zones`) whenever claims change, when the world starts and when asked (`realm:zones_ping`); otherwise it sends an empty list.
 - Once a second, each player's claim is looked up to say when they walk in or out of one. Messages above the hotbar send `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) leaves them on screen.
 
 ---
@@ -998,15 +1108,15 @@ Tells you where you died once you respawn, and points you back there. The realm 
 ### How to use
 
 1. Nothing to set up: when you respawn after dying, chat says `You died at 120, 64, -340 in the Overworld.`
-2. Run `/realm:death` any time to see your last death point again, how far it is from where you stand and in which direction, for example `It's 245 blocks to the NE, 12 blocks down.`
+2. Run `/realm:death` any time to see your last death point again, how far it is from where you stand and in which direction, for example `It's 245 blocks to the NE, 12 blocks down.` When teleporting back is enabled (or you're an operator) it opens the **Death Point** menu with that text and the buttons `Where I died` (the same in chat), `Teleport back` and, for operators, `Settings`; otherwise it answers in chat right away. `/realm:death_info` always answers in chat.
 3. Don't want the chat message? Disable **Tell me where I died** in `/realm:prefs`. `/realm:death` still works.
-4. If an operator has enabled it, run `/realm:death_back` to teleport to your last death point, once per death. It only lands you somewhere safe to stand, and says so when there isn't such a place.
+4. If an operator has enabled it, tap `Teleport back` in `/realm:death`, or run `/realm:death_back`, to teleport to your last death point, once per death. It only lands you somewhere safe to stand, and says so when there isn't such a place.
 5. **Operators:** enable `/realm:death_back` in `/realm:config` → **Death Point** → **Teleport back to the death point (/realm:death_back)**. The same page turns the respawn message off for everyone.
 
 ### What players see
 
 - **On respawn** (`announce`): `You died at 120, 64, -340 in the Overworld. Run /realm:death to see where that is from here.` A player who leaves on the death screen gets it when they next spawn.
-- **`/realm:death`** shows the block you died in and its dimension, then the distance along the ground, rounded to whole blocks, with one of 8 directions (N, NE, E, SE, S, SW, W, NW; north is toward negative Z) and how far up or down. Within 2 blocks it says `You're standing on it.` In another dimension it says which one you're in, with no distance. When `/realm:death_back` is enabled it adds whether you can still use it for this death.
+- **`/realm:death`** (or `/realm:death_info`) shows the block you died in and its dimension, then the distance along the ground, rounded to whole blocks, with one of 8 directions (N, NE, E, SE, S, SW, W, NW; north is toward negative Z) and how far up or down. Within 2 blocks it says `You're standing on it.` In another dimension it says which one you're in, with no distance. When `/realm:death_back` is enabled it adds whether you can still use it for this death.
 - **`/realm:death_back`** while disabled (`backEnabled`, disabled by default): `Teleporting back is disabled on this realm. An operator can enable it in /realm:config (Death Point). /realm:death still shows the way.`
 - **`/realm:death_back`** while enabled looks for the nearest safe spot within 2 blocks sideways (`backSearchRadius`) and 8 blocks up or down (`backSearchHeight`) of the death point: two blocks of air (or grass, ferns, flowers, a dead bush, vines, glow lichen or a torch) to stand in, on a block that isn't air, water, lava, magma, fire, a campfire, cactus, a berry bush, a wither rose, powder snow or pointed dripstone, with no lava or fire right beside it. It works across dimensions. Then:
   - it teleports you and says `Teleported back to your death point (120, 65, -340).` Once per death: a second try says `You already went back to this death point.`
@@ -1018,7 +1128,8 @@ Tells you where you died once you respawn, and points you back there. The realm 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:death` | Everyone | Shows your last death point (x, y, z and dimension), with the distance and direction from where you stand, or which dimension it's in |
+| `/realm:death` | Everyone | The **Death Point** menu: your last death point in its text, with `Where I died`, `Teleport back` (when `backEnabled` is on) and, for operators, `Settings`. With nothing else to choose it answers in chat like `/realm:death_info` |
+| `/realm:death_info` | Everyone | Shows your last death point (x, y, z and dimension), with the distance and direction from where you stand, or which dimension it's in |
 | `/realm:death_back` | Everyone, once an operator enables it | Teleports you to a safe spot at your last death point, once per death (default disabled, `backEnabled`). Refuses with a reason when there's no safe place to stand |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -1118,6 +1229,7 @@ Your own coordinates, the direction you're facing and the day and time, on the b
 - **Day and time** (`showTime`): the in-game day, counted from 1, and the time on a 12-hour clock in 10-minute steps, with sunrise at 6:00 AM and noon at 12:00 PM (an in-game day lasts 20 minutes, so 10 in-game minutes pass in about 8 seconds).
 - Off for every player until they enable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it and `/realm:hud` says `The coordinates HUD is disabled on this realm.`
 - It updates at most twice a second (`intervalTicks`), and only when the text changes, or every 2 seconds (`refreshTicks`) so it doesn't fade while you stand still.
+- **The stats ticker:** a player who also has the [Stats pack](#stats--leaderboards--stats_bp)'s ticker on sees it as a second line under the coordinates, such as `Mob kills 120 #2 of 7`, instead of the two taking turns on the bar.
 - **Sharing the bar with other packs:** the same bar also shows other packs' short messages: low-durability warnings, `Sorted 31 stacks` and other Quick Stack & Sort results, entering or leaving a claim, the Chairs reminder, AFK and others. The HUD can't see them, so a message is replaced by the HUD as soon as the HUD's text changes (within half a second while you walk) or after 2 seconds when you stand still. The low-durability warning's red line also goes to chat, so it isn't lost. [Mob Health](#mob-health--mobhp_bp) asks the HUD to wait 2 seconds after each hit, so the health stays readable, and so do [Daily Quests](#daily-quests--quests_bp) progress notes. While you glide, the [Elytra HUD](#elytra-hud--elytra_bp) keeps the bar to itself; the coordinates come back a second or two after you land. Other packs can do the same (see How it works).
 
 ### Commands
@@ -1151,6 +1263,8 @@ Operators can change `enabled`, `defaultOn`, `showTime` and `eightWay` in game w
 - Every `intervalTicks`, for each player with the HUD on, the pack builds the text from the player's location, `getRotation()` (the yaw), `world.getDay()` and `world.getTimeOfDay()`, and calls `onScreenDisplay.setActionBar` only if it changed or `refreshTicks` have passed.
 - Another pack that puts a message on the bar can send the script event `realm:actionbar` with `{"player":"<player id>","ticks":40}`; the HUD then leaves that player's bar alone for that many ticks (up to 200) and redraws right after. Mob Health, Elytra HUD and Daily Quests do this; the packs never import each other.
 - Turning the HUD off clears the bar right away.
+- Another pack can add a line under the HUD for one player with the script event `realm:hud_line` (`{"player":"<player id>","key":"stats","text":"...","ticks":80}`): it shows while the HUD is on, until `ticks` pass (up to 400; resend to keep it) or a message with `"text":""` removes it. Lines show in `key` order. The Stats pack's ticker uses it.
+- So those packs know whether to draw on their own, the HUD sends `realm:hud_state` (`{"players":["<player id>", ...]}`, the players who see it) when that changes, every 5 seconds, and in reply to `realm:hud_ping`.
 
 ---
 
@@ -1536,11 +1650,11 @@ Shared goals for the whole realm, like 10,000 cobblestone for the Colosseum. Ope
 2. Pick a goal, then **Donate from my inventory**: every matching item you carry (hotbar included) goes into the goal's chest, up to what the goal still needs. Chat says `You gave 320 Cobblestone to Colosseum.`
 3. The goal's page shows a progress bar, where its chest is, what you gave and the top contributors.
 4. At 25, 50 and 75 percent everyone sees it in chat, and when a goal is reached chat thanks its top contributors.
-5. **Operators:** place a chest or barrel for the donations, look at it and run `/realm:goals_add <item> <amount> [name]`, for example `/realm:goals_add cobblestone 10000 Colosseum`. In a goal's page, **Mark finished** stops donations early, **Link to the block I'm looking at** moves the goal to another container (one that no other open goal collects into), and **Remove this goal** deletes it (the items stay in its chest).
+5. **Operators:** place a chest or barrel for the donations, look at it, run `/realm:goals` and tap `Add a goal`: the item you hold is filled in; type the amount and, if you like, a name. Or run `/realm:goals_add <item> <amount> [name]`, for example `/realm:goals_add cobblestone 10000 Colosseum`. The menu's `Settings` button points to `/realm:config` → Community Goals. In a goal's page, **Mark finished** stops donations early, **Link to the block I'm looking at** moves the goal to another container (one that no other open goal collects into), and **Remove this goal** deletes it (the items stay in its chest).
 
 ### What players see
 
-- **The menu** lists the goals still open, oldest first, then **Finished goals** when there are any. Operators also get **Add a goal (operator)**, which explains `/realm:goals_add`.
+- **The menu** lists the goals still open, oldest first, then **Finished goals** when there are any. Operators also get `Add a goal` (the same as `/realm:goals_add`, in a form, for the container they look at; looking at none, it explains what to do) and `Settings`.
 - **Donating** moves stacks of the goal's item from anywhere in your inventory into the goal's container, as if you'd shift-clicked them. Only what the goal still needs is taken: the rest of a stack stays with you. Items with a custom name are never donated (`keepNamedItems`), so a named tool stays yours; `You only have Diamond Sword with a custom name, and those are never donated.` Items locked in their slot stay too.
 - **A full container** stops the donation: `The goal's chest at 120, 64, -340 (overworld) is full, so the rest stayed with you. An operator needs to empty it or link a bigger one.` What already went in still counts.
 - **The container must be loaded:** someone has to be near it (the same area as you, usually). Otherwise: `The goal's chest at 120, 64, -340 (overworld) isn't loaded. Go closer to it and try again.` If it was broken: `The goal's chest ... is gone. Ask an operator to link the goal to a new one.`
@@ -1552,7 +1666,7 @@ Shared goals for the whole realm, like 10,000 cobblestone for the Colosseum. Ope
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:goals` | Everyone | Lists the community goals with their progress; pick one to donate from your inventory and see the top contributors (default 5, `topContributors`). Operators can mark a goal finished, move it to another container or remove it there |
+| `/realm:goals` | Everyone | Lists the community goals with their progress; pick one to donate from your inventory and see the top contributors (default 5, `topContributors`). Operators can add a goal (`Add a goal`), mark a goal finished, move it to another container or remove it there |
 | `/realm:goals_add <item> <amount> [name]` | Ops | Adds a goal collected into the chest, barrel or other container you're looking at (within 8 blocks, `linkDistance`): `item` is the item id, `amount` 1 to 1,000,000, `name` up to 32 characters (default: the item's name). Up to 30 goals at a time, finished ones included (`maxGoals`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -1753,15 +1867,15 @@ Seats are entities and are cleaned up; any left over from before a restart are r
 
 ## Townsfolk — `npc_bp`
 
-Eight named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith and Sol the Sky-reader. They turn to face you as you walk up, mutter to themselves now and then, go home at night and come back at dawn, and greet you depending on the time of day and the weather. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from [Crowns](#crowns--crowns_bp), the stories of [Story Questlines](#story-questlines--saga_bp) or Sol's forecast from the [Weather Almanac](#weather-almanac--weather_bp). The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.
+Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. They turn to face you as you walk up, mutter to themselves now and then, go home at night and come back at dawn, and greet you depending on the time of day and the weather. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from [Crowns](#crowns--crowns_bp), the stories of [Story Questlines](#story-questlines--saga_bp) or Sol's forecast from the [Weather Almanac](#weather-almanac--weather_bp). The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.
 
 ### How to use
 
-1. Run `/realm:npc` to see who lives on the realm and where: each townsfolk with the distance and direction from you, like `Mara the Cartographer - 240m NE (cartographer)`.
+1. Run `/realm:npc` and pick **Who lives here?** (or run `/realm:npc_who` for the list in chat) to see who lives on the realm and where: each townsfolk with the distance and direction from you, like `Mara the Cartographer - 240m NE (cartographer)`.
 2. Walk up to one. They turn to face you, and now and then say something above their head (`Where did I leave my compass?`).
 3. Tap them to talk. The menu greets you (`Mara: "Morning, Steve! The light's perfect for surveying."`) and lists what they can do for you, then **Who lives here?** (where everyone is) and **Goodbye**. What's on the list depends on which packs the realm has: Quill opens the **Market**, for example.
 4. At night, townsfolk with a home go there; they're back at their post at dawn.
-5. **Operators:** stand where an NPC should live, face the way it should look back, and run `/realm:npc_add <id>` (`mara`, `tobin`, `reyes`, `elsie`, `bram`, `quill`, `ida`, `sol`). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from `config.js`). Set where it sleeps with `/realm:npc_home <id>` (run it at its post to clear the home), list everyone with `/realm:npc_list`, and remove the nearest NPC with `/realm:npc_remove`. `/realm:config` → **Townsfolk** switches the turning, idle lines and night routine.
+5. **Operators:** `/realm:npc` has every tool as a button: **Add or move a townsfolk here**, **Set a home here**, **Remove the nearest townsfolk** and **List with coordinates**. Or stand where an NPC should live, face the way it should look back, and run `/realm:npc_add <id>` (`mara`, `tobin`, `reyes`, `elsie`, `bram`, `quill`, `ida`, `sol`, `hollis`, `moss`, `wren`, `bea`). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from `config.js`). Set where it sleeps with `/realm:npc_home <id>` (run it at its post to clear the home), list everyone with `/realm:npc_list`, and remove the nearest NPC with `/realm:npc_remove`. `/realm:config` → **Townsfolk** switches the turning, idle lines and night routine.
 
 ### What players see
 
@@ -1775,23 +1889,28 @@ Eight named townsfolk that operators place around town: Mara the Cartographer, O
 
   | id | Name | Roles |
   |---|---|---|
-  | `mara` | Mara the Cartographer | `cartographer` |
+  | `mara` | Mara the Cartographer | `cartographer`, `questgiver` |
   | `tobin` | Old Tobin the Fisherman | `fisher`, `questgiver` |
   | `reyes` | Warden Reyes | `warden`, `guildmaster`, `questgiver` |
-  | `elsie` | Elsie the Innkeeper | `innkeeper` |
+  | `elsie` | Elsie the Innkeeper | `innkeeper`, `questgiver` |
   | `bram` | Mayor Bram | `mayor`, `questgiver` |
-  | `quill` | Quill the Trader | `merchant` |
+  | `quill` | Quill the Trader | `merchant`, `questgiver` |
   | `ida` | Ida the Relicsmith | `relicsmith`, `questgiver` |
-  | `sol` | Sol the Sky-reader | `skymage` |
+  | `sol` | Sol the Sky-reader | `skymage`, `questgiver` |
+  | `hollis` | Brother Hollis the Chapel Keeper | `priest`, `questgiver` |
+  | `moss` | Moss the Gravedigger | `gravedigger`, `questgiver` |
+  | `wren` | Wren the Stable Girl | `stablehand`, `questgiver` |
+  | `bea` | Bea the Cook | `chef`, `questgiver` |
 
-  Roles decide what other packs offer: `merchant` (the market of [Crowns](#crowns--crowns_bp)), `questgiver` (stories, [Story Questlines](#story-questlines--saga_bp) picks by NPC id), `skymage` (the forecast, [Weather Almanac](#weather-almanac--weather_bp)), and `guildmaster` (`guilds_bp`), `cartographer` (`maps_bp`), `fisher` (`fishing_bp`), `innkeeper` (`waystone_bp`), `mayor` (`town_bp`), `warden` (`bounty_bp`), `relicsmith` (`relics_bp`).
+  Roles decide what other packs offer: `merchant` (the market of [Crowns](#crowns--crowns_bp)), `questgiver` (stories and daily favors; [Story Questlines](#story-questlines--saga_bp) picks by NPC id, so the role is a label), `priest`, `gravedigger`, `stablehand` and `chef` (labels for the story cast and the cooking pack), `skymage` (the forecast, [Weather Almanac](#weather-almanac--weather_bp)), and `guildmaster` (`guilds_bp`), `cartographer` (`maps_bp`), `fisher` (`fishing_bp`), `innkeeper` (`waystone_bp`), `mayor` (`town_bp`), `warden` (`bounty_bp`), `relicsmith` (`relics_bp`).
 - **A missing NPC comes back:** if a townsfolk isn't where it belongs while a player has been within 24 blocks of that spot for about 6 seconds (`respawnRange`), it's found again by its tags or spawned again there. A spawned-again NPC has the default skin until an operator picks one again. Each townsfolk exists once: any second copy is removed when its chunk loads.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:npc` | Everyone | Lists the townsfolk on the realm with their distance and direction from you, and their roles |
+| `/realm:npc` | Everyone | The townsfolk menu: **Who lives here?**, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Remove the nearest townsfolk, List with coordinates |
+| `/realm:npc_who` | Everyone | Lists the townsfolk on the realm in chat with their distance and direction from you, and their roles |
 | `/realm:npc_add <id>` | Operators | Places that townsfolk where you stand, facing you (moves it there if it's already placed) |
 | `/realm:npc_remove` | Operators | Removes the nearest townsfolk within 5 blocks (`removeRange`) and forgets its spot |
 | `/realm:npc_home <id>` | Operators | Where that townsfolk goes at night (time 13000 to 23000, `nightStart`/`nightEnd`); in the same dimension as its post. Run it within 2 blocks of the post to clear the home |
@@ -1812,7 +1931,7 @@ Eight named townsfolk that operators place around town: Mara the Cartographer, O
 | `nightEnd` | `23000` | Night ends at this time of day (23000 = just before sunrise) |
 | `removeRange` | `5` | How far `/realm:npc_remove` looks, in blocks |
 | `respawnRange` | `24` | A missing NPC is spawned again once a player has been this close to its spot for a few seconds |
-| `townsfolk` | the 8 above | `{ id, name, title, roles, greetings: { morning, day, evening, night, rain, thunder }, idle }`: the name (yellow) and title (gray) above the NPC, its roles, and its lines. `{player}` in a line is the player's name. Keep the ids: saved spots, tags and other packs use them. An id removed here removes that NPC when its chunk loads |
+| `townsfolk` | the 12 above | `{ id, name, title, roles, greetings: { morning, day, evening, night, rain, thunder }, idle }`: the name (yellow) and title (gray) above the NPC, its roles, and its lines. `{player}` in a line is the player's name. Keep the ids: saved spots, tags and other packs use them. An id removed here removes that NPC when its chunk loads |
 
 Operators can change `enabled`, `faceRange`, `idleMinSeconds`, `idleMaxSeconds` and `nightRoutine` in game with `/realm:config` (**Townsfolk**). The rest stays in `config.js`.
 
@@ -1830,7 +1949,8 @@ Operators can change `enabled`, `faceRange`, `idleMinSeconds`, `idleMaxSeconds` 
 - **One of each:** the saved entity id is the real one (entity ids stay the same across loads). An NPC entity of this pack that loads (`afterEvents.entityLoad`, and a check of loaded NPCs every 10 seconds) is removed if its townsfolk isn't placed any more, or if the saved one is loaded too; if the saved one isn't loaded, the newcomer takes over. A townsfolk whose entity isn't loaded, while its spot is loaded and a player has been near it for 3 checks 2 seconds apart, is looked for by its tags and otherwise spawned again.
 - **Every 10 ticks** each loaded townsfolk is teleported back if it's more than 1.5 blocks from where it belongs (post, or home at night; with `enabled` off, always its post), and otherwise, with `enabled` on, turned up to 45 degrees toward the nearest player (not spectators) with a teleport in place (`rotation`). A tap turns it toward the player at once, in place.
 - **Taps** (`beforeEvents.playerInteractWithEntity`) on an NPC with `realm:npc_owner:npc_bp` are canceled, except an operator sneaking in creative mode, who gets the game's NPC editor. Then the offer round: `realm:npc_talk` `{ req, player, npc, roles, name }` goes out, `realm:npc_offer` `{ req, pack, key, label, order? }` answers are collected for 4 ticks, the menu lists them by `order` (default 50) then label (offers with an empty label, or claiming to be from `npc_bp`, are ignored), and a pick sends `realm:npc_choose` `{ player, npc, pack, key }` to the pack that offered it. `realm:npc_talk` also tells quest packs the player talked to that NPC. NPCs of other packs (the [Merchant Caravan](#merchant-caravan--caravan_bp)'s traders) carry their own owner tag and are left to them.
-- **Weather** can't be read by scripts, so the pack remembers the last `afterEvents.weatherChange` in the Overworld.
+- **Weather** can't be read by scripts, so the pack remembers the last `afterEvents.weatherChange` in the Overworld (the event names it `overworld` on current servers; both spellings are accepted).
+- **Summon for other packs:** `realm:npc_summon` `{ id, player }` places (or moves) townsfolk `id` at that player, exactly like `/realm:npc_add <id>` run by them, and answers `realm:npc_summoned` `{ id, player, ok, error? }`. Only honored when the player is an operator (`GameDirectors`); the Relics pack uses it to bring the relicsmith.
 
 ---
 
@@ -1840,17 +1960,18 @@ The realm's currency. Crowns are paid by other packs (quests, bounties, stories 
 
 ### How to use
 
-1. Run `/realm:crowns` to see your balance, your rank and the top 10.
+1. Run `/realm:crowns` for the Crowns menu: **Balance and top list** (your balance, your rank and the top 10; also `/realm:crowns_balance`), **Pay a player**, and **Market** where the realm opens it anywhere.
 2. Log in each day for the daily bonus: `+5 Crowns (Daily login bonus. Balance: 25)` in chat, once per UTC day.
 3. To sell or buy, find Quill the Trader (`/realm:npc` says where), tap them and pick **Market**. **Sell** lists what you carry that the market buys; pick one and slide how many. **Buy** lists the supplies for sale.
-4. Pay a friend with `/realm:crowns_pay <player> <amount>`, for example `/realm:crowns_pay Steve 25`.
-5. **Operators:** `/realm:crowns_give <player> <amount>` gives Crowns (a negative amount takes them). `/realm:config` → **Crowns** sets the daily bonus, the starting balance, whether the market is open and whether `/realm:crowns_market` opens it anywhere. Prices are the `sell` and `buy` lists in `config.js`.
+4. Pay a friend from the menu (**Pay a player**: pick who and type the amount) or with `/realm:crowns_pay <player> <amount>`, for example `/realm:crowns_pay Steve 25`.
+5. **Operators:** the menu's **Give Crowns** (one player or everyone online), or `/realm:crowns_give <player> <amount>`, gives Crowns (a negative amount takes them). `/realm:config` → **Crowns** sets the daily bonus, the starting balance, whether the market is open and whether `/realm:crowns_market` opens it anywhere. Prices are the `sell` and `buy` lists in `config.js`.
 
 ### What players see
 
-- **Balance:** `/realm:crowns` opens a menu with `Your balance: 120 Crowns`, `Rank: #3 of 12` and the top 10 (`topCount`), you in green. With the market open anywhere, it has a **Market** button.
+- **The menu:** `/realm:crowns` shows `Your balance: 120 Crowns` and a button for each thing you can do: **Balance and top list**, **Pay a player**, **Market** (only with the market open anywhere) and, for operators, **Give Crowns**.
+- **Balance:** **Balance and top list** (or `/realm:crowns_balance`) shows `Your balance: 120 Crowns`, `Rank: #3 of 12` and the top 10 (`topCount`), you in green. With the market open anywhere, it has a **Market** button.
 - **Getting Crowns:** any pack can pay into the `crowns` scoreboard; packs say so in chat, like `+25 Crowns (Bounty: Gerald the Unexploded)`. New players start with `startBalance` (default 0). The daily bonus (default 5, `dailyBonus`) comes about 10 seconds after your first join of each UTC day, or when a new UTC day starts while you play.
-- **Paying:** `/realm:crowns_pay` takes one online player and a whole amount from 1 to 100,000 (`maxPay`). You can't pay yourself or send more than you have. You see `You paid 25 Crowns to Steve. Balance: 75`; they see `+25 Crowns (from Alex. Balance: 125)`.
+- **Paying:** **Pay a player** picks an online player from a list and takes the amount as a typed whole number; `/realm:crowns_pay` takes one online player and a whole amount from 1 to 100,000 (`maxPay`). You can't pay yourself or send more than you have. You see `You paid 25 Crowns to Steve. Balance: 75`; they see `+25 Crowns (from Alex. Balance: 125)`.
 - **The market** (tap a townsfolk with the `merchant` role, `merchantRole`, and pick **Market**):
   - **Sell** shows only what you have enough of, like `Wheat: 64` / `8 for 1 Crown`. A slider picks how many, in whole lots; chat says `+8 Crowns (Sold 64 Wheat. Balance: 108)`. It counts your main inventory and hotbar (not armor or the offhand), and counts again when you confirm, so nothing sells twice. Storm Glass and Relic Shards are recognized by their lore; plain prismarine crystals and amethyst shards aren't bought, and relics never are.
   - **Buy** lists supplies with their price; a slider picks how many lots (up to 16, and what you can afford). Chat says `-6 Crowns (Bought 8 Bread. Balance: 102)`; what doesn't fit in your inventory drops at your feet.
@@ -1875,7 +1996,8 @@ The realm's currency. Crowns are paid by other packs (quests, bounties, stories 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:crowns` | Everyone | Your balance, rank and the top 10 (`topCount`) |
+| `/realm:crowns` | Everyone | The Crowns menu: balance and top list, pay a player, the market (where it's open anywhere, default off, `marketAnywhere`), and for operators, give Crowns |
+| `/realm:crowns_balance` | Everyone | Your balance, rank and the top 10 (`topCount`) |
 | `/realm:crowns_pay <player> <amount>` | Everyone | Pays one online player from your balance (1 to 100,000, `maxPay`) |
 | `/realm:crowns_market` | Everyone | Opens the market if it's open anywhere (disabled by default, `marketAnywhere`); otherwise tells you to visit Quill the Trader (`merchantName`) |
 | `/realm:crowns_give <player> <amount>` | Operators | Gives Crowns to the players picked (`@a` works); a negative amount takes them, down to 0 |
@@ -1922,12 +2044,12 @@ Once a week a merchant caravan comes to town: three traders and their pack llama
 
 ### How to use
 
-1. Run `/realm:caravan` to see when the next caravan comes (`The next merchant caravan comes in 3d 5h (Saturday 18:00 UTC), and stays 40m.`) or, while it's here, where it is (`at Market Square (120, -45), 240m NE of you. It leaves in 23m.`).
+1. Run `/realm:caravan` for the caravan menu; it and its **Caravan info** button (also `/realm:caravan_info`, in chat) say when the next caravan comes (`The next merchant caravan comes in 3d 5h (Saturday 18:00 UTC), and stays 40m.`) or, while it's here, where it is (`at Market Square (120, -45), 240m NE of you. It leaves in 23m.`).
 2. When it arrives, chat says `A merchant caravan has arrived at Market Square (120, -45)! It stays 40m. Tap a trader to buy rare goods for Crowns.` Go there.
 3. Tap any trader. The shop lists this visit's goods with their price and how many are left; pick one and choose how many. Chat confirms: `-60 Crowns (Caravan: bought 1 Enchanted Book (Mending))`.
 4. Have Storm Glass or Relic Shards? Pick **Sell to the caravan** in the shop.
 5. Five minutes before it leaves, chat warns you; then it packs up and is gone until next time.
-6. **Operators:** stand where the caravan should set up and run `/realm:caravan_spot [name]` (for example `/realm:caravan_spot "Market Square"`); add a few and each visit picks one at random. `/realm:caravan_spot_remove` removes the nearest one. `/realm:caravan_call` brings the caravan now. `/realm:config` → **Merchant Caravan** sets how often it comes, which day, the hour, how long it stays and how many goods it brings. The goods are `goods` in `config.js`.
+6. **Operators:** stand where the caravan should set up and pick **Add an arrival spot here** in `/realm:caravan` (or run `/realm:caravan_spot [name]`, for example `/realm:caravan_spot "Market Square"`); add a few and each visit picks one at random. **Remove an arrival spot** lists them to pick from (`/realm:caravan_spot_remove` removes the nearest one). **Bring the caravan now** (or `/realm:caravan_call`) brings it now. `/realm:config` → **Merchant Caravan** sets how often it comes, which day, the hour, how long it stays and how many goods it brings. The goods are `goods` in `config.js`.
 
 ### What players see
 
@@ -1943,7 +2065,8 @@ Once a week a merchant caravan comes to town: three traders and their pack llama
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:caravan` | Everyone | When the next caravan comes (every 7 days at 18:00 UTC, `everyDays`, `hourUtc`), or where it is and when it leaves. Operators also see the arrival spots |
+| `/realm:caravan` | Everyone | The caravan menu: caravan info, and for operators, add or remove an arrival spot and bring the caravan now |
+| `/realm:caravan_info` | Everyone | In chat: when the next caravan comes (every 7 days at 18:00 UTC, `everyDays`, `hourUtc`), or where it is and when it leaves. Operators also see the arrival spots |
 | `/realm:caravan_spot [name]` | Operators | Adds an arrival spot where you stand (up to 20); without a name it's `Spot 1`, `Spot 2`... |
 | `/realm:caravan_spot_remove` | Operators | Removes the nearest arrival spot within 32 blocks (`removeRange`) |
 | `/realm:caravan_call` | Operators | Brings the caravan now, for the usual stay (40 minutes, `stayMinutes`). It counts as the visit due most recently |
@@ -1991,58 +2114,99 @@ Operators can change `enabled`, `everyDays`, `offsetDays`, `hourUtc`, `stayMinut
 
 ## Story Questlines — `saga_bp`
 
-Multi-chapter stories told by the realm's townsfolk. Each chapter starts with a conversation, gives you a few things to do (go somewhere, defeat something, bring something, keep watch in a storm), and ends when you report back, sometimes with a choice that changes how the story ends and which guild thanks you. Two stories come with it: **The Drowned Bell** (6 chapters, about 3 hours) and **The Cartographer's Last Map** (4 chapters). A tracker above the hotbar points the way, and `/realm:saga` is your story log. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
+An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (about 40 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker above the hotbar points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
 
 ### How to use
 
-1. Tap **Old Tobin** (the fisherman) or **Mara the Cartographer** and pick `Story: The Drowned Bell` or `Story: The Cartographer's Last Map`. Read the pages with **Next**, then pick **Accept** (or **Not now**: you can come back any time).
-2. Chat lists the chapter's objectives. Do them in any order; `/realm:saga` shows them with your progress, and the tracker above the hotbar points to the next place to go (`Drowned Bell: Lighthouse NE 240m`).
-3. When everything is done, chat says `[Story] The Drowned Bell: chapter 1 is done. Go back to Old Tobin.` Tap that NPC and pick `Story: The Drowned Bell` (`Chapter 1 done: report back`) to hear how it ends and get the reward. Some chapters end with a choice: pick carefully, it changes the story's ending.
-4. The next chapter is told by the NPC chat names (`Next: talk to Warden Reyes for chapter 2, The Drowned Choir.`). Tapping the NPC mid-chapter shows your objectives and lets you hear the chapter again.
-5. In a party (the [Parties](#parties--party_bp) pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.
-6. Don't want the tracker? Disable **Story tracker** in `/realm:prefs`.
-7. **Operators:** the stories need three places: stand on each one and run `/realm:saga_place lighthouse`, `/realm:saga_place sunken_bell` and `/realm:saga_place old_chapel` (`/realm:saga_place` alone lists them). Pick a lighthouse on the coast, a spot in the sea with a **bell** block placed underwater within 8 blocks of it (players strike it in chapter 5, and the Bell Warden comes there in chapter 6; setting the place reminds you), and an old chapel or ruin. Until a place is set, its chapter says `ask an operator to set place lighthouse` and operators online get a hint. `/realm:saga_reset <player>` starts a player's stories over; `/realm:config` → **Story Questlines** has the switches.
+1. Tap a townsfolk with a story button: `Main story: The Drowned Bell` (Old Tobin) or `Main story: The Cartographer's Last Map` (Mara) to begin. Read the pages with **Next**, then pick **Accept** (or **Not now**: you can come back any time). Some intros end with a choice instead of Accept.
+2. Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker above the hotbar always shows where to go next (`Drowned Bell: Lighthouse NE 240m`), or who to report to.
+3. Stuck? Open `/realm:saga`, pick **Current quests** and the story, then **Ask for a hint**: it says what to do and gives the exact coordinates of every place in the chapter, for a quarter of the chapter's levels and Crowns (once per chapter).
+4. When everything is done, chat says `"Salt and Silence" is done. Go back to Old Tobin to hear what happens.` Tap that NPC and pick the story (`Done: report back`). If the chapter ends with a choice, nothing is final until you pick one: close the form and the report waits.
+5. Finished stories open new ones: chat names them, and **Available** in `/realm:saga` lists what you can start and what's still locked.
+6. Each questgiver also has a **Daily favor** button: a short job, a new one each day (UTC), for a few levels and Crowns.
+7. In a party (the [Parties](#parties--party_bp) pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.
+8. Don't want the tracker? Disable **Story tracker** in `/realm:prefs`.
+9. **Operators:** stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. `/realm:saga_places` (also in `/realm:saga`) lists every place with its status and lets you **Teleport**, **Set here**, **Build here** (a green outline preview with Build here, Rotate and Cancel), **Rebuild**, **Remove** (puts the terrain back exactly) and **Relocate**. `/realm:saga_place <name>` sets a spot where you stand without building. **Operator tools** in `/realm:saga` finish a stuck player's current step or reset their stories. `/realm:config` → **Story Questlines** has the switches.
 
 ### What players see
 
-- **Offers at the townsfolk:** an NPC with something for you shows `Story: The Drowned Bell` among its buttons (later chapters add a second line, `Chapter 2: The Drowned Choir`). There are three kinds: the intro of the next chapter (from the chapter's NPC), `Chapter 3 done: report back` (from the NPC you report to), and a reminder while you're working on it.
-- **Dialogues** are a few short pages from the NPC (`Chapter 2 of 6: The Drowned Choir` on top). Closing one is the same as **Not now**; nothing is lost.
-- **Objectives**, and what counts:
-  - **Talk:** tap the NPC (`Ask Warden Reyes what the night watch heard`).
-  - **Reach:** stand within the radius of a place (across, height doesn't matter): an operator's place, or a spot a set distance from world spawn.
-  - **Deliver:** tap the NPC with the items in your inventory: they take what you have (up to what's still needed) and keep count, so you can bring them in several trips. `You give Ida the Relicsmith 12 Iron Ingot (12/24).` Renamed items are never taken.
-  - **Collect:** have the items in your inventory (`Have 8 paper`); they aren't taken.
-  - **Defeat:** kill the mobs (`Defeat 12 drowned`). Story champions (the **Bell Warden**) come when you're within 32 blocks of their place.
-  - **Interact:** tap (use) or hit a block near a place, such as the sunken bell, 3 times.
-  - **Keep watch (survive):** stand outdoors, with nothing over your head, during a thunderstorm, near the place, for the number of seconds (`Keep watch outdoors at the lighthouse in a thunderstorm 40/120 s`). Only overworld thunderstorms count; the log says `Wait for a thunderstorm.` until one comes.
-  - **Mine** and **fish** count blocks broken and things caught with a rod (not used by the two stories, but available for new ones).
-- **Progress notes:** chat says `[Story] Defeat 12 drowned: done.` for each objective; for counts of 4 or more, a note above the hotbar shows each quarter (`Drowned Bell: Defeat 12 drowned 6/12`).
-- **The tracker** (every 2 seconds, while the chapter has somewhere to be): `Drowned Bell: Lighthouse NE 240m`, `here` once you're in range, `in the Nether` from another dimension, or `ask an operator to set place sunken_bell`. With several stories going, it follows the chapter you accepted last. It waits while another pack's note is showing there (a quest's progress, a mob's health), and with the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD steps aside for it (the pack sends `realm:actionbar`).
-- **Rewards** at the end of each chapter: XP levels and items (`[Story] Chapter complete: The Storm Vigil! Reward: 5 levels`), Crowns (`+150 Crowns (Story: The Drowned Bell)`, on the [Crowns](#crowns--crowns_bp) scoreboard), and, through other packs when they're installed, a relic ([Relics](#relics--relics_bp)), a title ([Titles & Trails](#titles--trails--titles_bp)), a `story` page in the [Field Journal](#field-journal--journal_bp) and guild reputation ([Guilds & Reputation](#guilds--reputation--guilds_bp)). Those packs announce their own rewards; without them, those parts are skipped.
+- **Offers at the townsfolk:** an NPC with something for you shows a button: `Main story: <title>` or `Story: <title>` with `New story`, `Chapter 3: <title>` (the next chapter), `Done: report back`, or a reminder while you're working on it; `Answer: <riddle>` when the chapter needs an answer from them; and `Daily favor: <job>`.
+- **Dialogues** are short pages from the NPC (`Chapter 2 of 6: The Drowned Choir` on top, and the story's tones as tags such as `[mystery] [eerie]`). Closing one is the same as **Not now**; nothing is lost. When the same NPC tells the next chapter, its intro opens right after the report.
+- **Branches:** choices set flags that decide which chapters you get, what people say, and which endings are offered later; some choices only appear if you made other choices before (or have enough guild reputation). Chapter numbers count the chapters you actually get.
+- **Objectives**, and what counts (the tracker shows the nearest unfinished one; `secret` steps show no arrow until you ask for a hint):
+  - **Talk:** tap the NPC.
+  - **Reach:** stand within the radius of a place or a spot a set distance from world spawn (across, height doesn't matter), or be in a dimension (`in the Nether`), below or above a height.
+  - **Deliver:** tap the NPC with the items: they take what you have (up to what's still needed) and keep count over several trips (`You give Ida the Relicsmith 12 Iron Ingot (12/24).`). Renamed items are never taken, unless the story asks for an item by name (a dish, a key): then only items with that name count, of any kind. Rename things at an anvil if a story asks you to.
+  - **Collect:** have the items (or an item with that name) in your inventory; they aren't taken.
+  - **Defeat:** kill the mobs, sometimes only at night, near a place, or within a time limit (`1:20 left` in the tracker; too slow and it starts over). **Champions** (named, tougher bosses) come when you're within 32 blocks of their place, or near you when they have no place; sea champions swim in the nearest water. Some call for help at half health.
+  - **Interact:** tap or hit a block near a place (strike a bell, light candles: lighting with flint and steel counts).
+  - **Keep watch (survive):** stand outdoors, with open sky above you, in a thunderstorm (or rain, or any weather, as the step says) near the place, for some seconds. The log says `Wait for a thunderstorm.` until one comes.
+  - **Vigil:** stay at a place for some seconds, sometimes at a time of night, outdoors, or sneaking.
+  - **Mine**, **fish:** blocks broken (not ones you placed yourself) and things caught with a rod.
+  - **Meet:** a story character (a ghost girl, a witch, an echo) appears at the place: walk up to them (or tap them) to talk. They can't be hurt and can't hurt you. Their conversation may end with a choice.
+  - **Inspect:** find clues around a place: faint green sparkles mark them. Walk onto one, or tap a block next to it, to read it (`[Clue 2/4] ...`).
+  - **Stealth:** guards walk their rounds around a place. Reach the spot the tracker shows without being seen: guards see about 120 degrees in front of them, up to 10 blocks away (4 while you sneak, or while you wear the disguise the story names), never through walls. Spotted, you're put back at the edge of the area (or the guards attack, in some chapters).
+  - **Escort:** someone waits at the start; walk up and they follow your exact path. Keep them alive (monsters may ambush you on the way) and bring them to the destination. If they're hurt, they run back and you try again.
+  - **Lead:** put a lead on the animal (some wait where they were lost, named) and bring it to the pen. It stays there as your animal.
+  - **Defend:** stand at the place to start; waves of monsters come one after another (the tracker shows `wave 2 of 3`). If the one you're guarding falls, you die, or you leave for 30 seconds, the defense resets to the first wave.
+  - **Follow:** go to where the trail starts; a glowing wisp drifts along the ground toward somewhere and waits whenever you fall behind. Lose it for 15 seconds and it goes back to the start.
+  - **Answer:** a riddle in a text box, from the NPC (`Answer:` button), at a place (it opens when you get there), or from the story log. Capitals, spaces and punctuation don't matter. A wrong answer may call monsters.
+  - **Place:** build with the blocks named (breaking them again takes the count back).
+  - **Tend**, **tame:** use an item on animals (feed, brush, name tag; each animal counts once) or tame them.
+  - **Ride:** ride something (a horse, a boat) a number of blocks.
+  - **Sleep:** sleep in a bed; some chapters show a dream when you wake.
+  - **Vision:** a short cutscene: the screen fades, titles show each scene (also written in chat), sometimes with darkness and sounds. Sneak to skip it.
+  - **Wear:** wear the named item (a helmet, a mask).
+  - **Use:** use an item (eat, drink, right-click), sometimes at a place.
+  - **Wait:** some real minutes or in-game days pass (`2 days left`); it counts while you're away too (in-game days only while the realm runs).
+- **Progress notes:** chat says `[Story] Defeat 12 drowned: done.` and the next step for each objective; for counts of 4 or more, a note above the hotbar shows each quarter.
+- **The tracker** (every 2 seconds): `Drowned Bell: Lighthouse NE 240m`, `here` once you're in range, `in the Nether`, a countdown for timed steps, `report to Old Tobin NE 40m` when the chapter is done, the wisp or the person you're escorting, or `Lighthouse isn't set yet`. With several stories going, it follows the chapter you accepted last. It waits while another pack's note is showing there.
+- **Hints:** **Ask for a hint** on a chapter's page shows the chapter's hint, each step's hint, and the exact coordinates of every place in the unfinished steps (and where the NPC you need stands, when loaded), and shows the tracker arrow for secret steps. It costs 25% of the chapter's levels and Crowns (`hintPenalty`, asked for once per chapter; items, relics and titles are kept).
+- **Rewards** at the end of each chapter: XP levels and items (some named, with a description), Crowns (on the [Crowns](#crowns--crowns_bp) scoreboard), a **Codex** entry (`[Codex] New entry: ...`), and, through other packs when they're installed, a relic ([Relics](#relics--relics_bp)), a title ([Titles & Trails](#titles--trails--titles_bp)), a `story` page in the [Field Journal](#field-journal--journal_bp) and guild reputation ([Guilds & Reputation](#guilds--reputation--guilds_bp)). Without those packs, those parts are skipped.
+- **The story log** (`/realm:saga`): the story you're on and its **Current step**, then **Current quests** (main story first, then side stories and favors; each opens the chapter's page with its objectives, distance and direction, who to report to, **Ask for a hint** and **Hear the intro again**), **Available** (stories to start and who starts them, and the next locked ones with what they need), **Finished** (each story's chapters, your choices and the ending), **Codex** (every lore entry you've found, to reread), **Daily favors** (each questgiver's favor today), and for operators **Story places** and **Operator tools**.
+- **Daily favors:** each questgiver offers one favor per player per real day (UTC), picked from that NPC's list (the same pick all day). Accept it at the NPC, do it like any objective, report back for a small reward. You can give one up from its page (no new one until tomorrow).
+- **Places:** a place an operator hasn't set is picked by the pack when a chapter first needs it, by the place's rules (coast, under water, deep underground, high ground, the sky; a distance band from world spawn), and built when a player comes within 64 blocks (`buildRange`), never over anything player-made (planks, glass, doors and the like): if the land doesn't suit, the spot moves and chat says so. The terrain is saved first, so an operator's **Remove** restores it exactly.
 - **Creative mode** makes no progress (`skipCreative`).
 
-The stories:
+### The stories
 
-| Story | Chapter | Told by → report to | Objectives | Reward |
-|---|---|---|---|---|
-| The Drowned Bell | 1. Salt and Silence | Old Tobin | Climb to the `lighthouse`; ask Warden Reyes | 3 levels, 8 cooked cod |
-| | 2. The Drowned Choir | Warden Reyes | Defeat 12 drowned; catch 5 things with a rod | 4 levels, 40 Crowns, 16 arrows, Wardens reputation |
-| | 3. The Storm Vigil | Old Tobin | Keep watch outdoors within 48 blocks of the `lighthouse` in a thunderstorm for 120 s | 5 levels, title `Stormwatcher`, journal |
-| | 4. Iron and Sea-Glass | Ida the Relicsmith | Bring Ida 24 iron ingots and 12 prismarine shards. **Choice:** `Silence the bell` (Wardens) or `Recast the bell` (Wayfarers) | 5 levels, 60 Crowns |
-| | 5. The Sunken Bell | Ida the Relicsmith | Dive to the `sunken_bell`; strike (tap or hit) a bell within 8 blocks of it 3 times | 5 levels, 2 golden apples |
-| | 6. The Bell Warden | Mayor Bram → Old Tobin | Defeat the champion **The Bell Warden** (a drowned) at the `sunken_bell`. The ending depends on the chapter 4 choice | 10 levels, 150 Crowns, relic `tide_boots`, title `Bellkeeper`, journal, 40 reputation with the guild of your choice |
-| The Cartographer's Last Map | 1. Pins in an Old Map | Mara the Cartographer | Have a compass and 8 paper | 2 levels, an empty map, 8 bread |
-| | 2. Three Pins | Mara | Reach 3 spots 24 blocks wide: 900 east and 700 north of world spawn, 1,100 west and 200 north, 150 east and 1,200 south | 6 levels, 60 Crowns, journal |
-| | 3. The Old Chapel | Mara | Find the `old_chapel`; ask Sol the Sky-reader | 5 levels, journal |
-| | 4. The Last Map | Mara | Bring Mara a filled map. **Choice:** `Share it with the realm` (Wayfarers) or `Keep the wild places wild` (Growers) | 8 levels, 100 Crowns, relic `compass_echoes`, title `Cartographer`, journal |
+21 stories and 151 chapters: about 40 hours if you play everything. Each story opens when the one before it is finished, so the side stories appear as the main story goes on. Chapters with branches are counted once each; a player plays most, but not all, of them.
+
+| Story | Kind | Told by | Opens after | Chapters | Feel |
+|---|---|---|---|---|---|
+| **The Drowned Bell** | Main, prologue | Old Tobin | - | 6 | mystery, eerie, heroic |
+| **The Cartographer's Last Map** | Main, prologue | Mara the Cartographer | - | 4 | exploration, mystery, happy |
+| **Signs in the Sky** | Main, act 1 | Sol the Sky-reader | The Drowned Bell, The Cartographer's Last Map | 10 | mystery, eerie, cozy, creepy |
+| **The Gray Choir** | Main, act 2 | Warden Reyes | Signs in the Sky | 12 | stealth, violent, mystery, tragic, dangerous |
+| **Into the Deep** | Main, act 3 | Ida the Relicsmith | The Gray Choir | 10 | scary, exploration, eerie, dangerous, mystery, sad |
+| **The Three Seals** | Main, act 4 | Elsie the Innkeeper | Into the Deep | 12 | epic, heroic, dangerous, exploration, sad |
+| **Lantern Night** | Main, act 5 | Mayor Bram | The Three Seals | 13 | epic, heroic, violent, sad, scary |
+| **A Room at the Inn** | Side | Elsie the Innkeeper | Signs in the Sky | 7 | creepy, sad, eerie |
+| **Graveyard Shift** | Side | Moss the Gravedigger | - | 6 | scary, funny, creepy |
+| **The Witch's Bargain** | Side | Moss the Gravedigger | The Gray Choir | 7 | creepy, mystery, dangerous |
+| **Lamp in the Window** | Side | Brother Hollis | The Gray Choir, saving Brother Hollis | 5 | sad, happy, cozy |
+| **Wren's Lost Lambs** | Side | Wren | - | 7 | adorable, happy, funny |
+| **The Star Kittens** | Side | Wren | Signs in the Sky | 6 | adorable, sad, cozy |
+| **Little Turtles** | Side | Old Tobin | The Drowned Bell | 5 | adorable, heroic, cozy |
+| **The One That Got Away** | Side | Old Tobin | - | 5 | happy, funny, heroic |
+| **Hearth and Table** | Side | Bea the Cook | - | 7 | cozy, happy, funny, sad |
+| **The Wardens' Oath** | Side | Warden Reyes | - | 7 | violent, heroic, dangerous, sad |
+| **Smuggler's Run** | Side | Quill the Trader | The Gray Choir | 5 | stealth, funny, dangerous |
+| **The Mayor's Burden** | Side | Mayor Bram | The Gray Choir | 5 | sad, funny, mystery |
+| **Edges of the Map** | Side | Mara the Cartographer | The Cartographer's Last Map | 7 | exploration, happy, dangerous |
+| **The Forge That Sings** | Side | Ida the Relicsmith | Signs in the Sky | 5 | dangerous, epic, mystery |
+
+The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, one a day each.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:saga` | Everyone | Your story log: stories in progress with the current chapter and each objective's progress and direction, stories you can start (and who starts them), finished stories, and the choices you made. **Read** buttons replay a chapter's intro |
-| `/realm:saga_place [name]` | Operators | Sets a story place (`lighthouse`, `sunken_bell`, `old_chapel`) where you stand, and says what players need to find there (a bell for `sunken_bell`). Without a name, lists the places, where they are, who set them and which stories use them |
-| `/realm:saga_reset <player>` | Operators | Starts the player's stories over: progress, finished chapters and choices. Rewards already given are kept |
+| `/realm:saga` | Everyone | The story log menu: current quests, available and finished stories, the codex, daily favors; for operators also story places and operator tools |
+| `/realm:saga_log` | Everyone | Straight to **Current quests**: each story you're on with its current step |
+| `/realm:saga_places` | Operators | Every story place with its status (set, picked, built, missing), coordinates and the stories that use it: Teleport, Set here, Build here (outline preview with Build here, Rotate, Cancel), Rebuild, Remove (terrain restored), Relocate |
+| `/realm:saga_place [name]` | Operators | Sets a story place where you stand, without a building (an earlier building of it is removed first). Without a name, lists the places in chat |
+| `/realm:saga_reset <player>` | Operators | Starts the player's stories over: progress, finished chapters, choices, codex and favors. Rewards already given are kept |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -2053,41 +2217,45 @@ The stories:
 | `partyShare` | `true` | Party mates on the same chapter share progress for defeat, survive and reach objectives |
 | `partyRange` | `64` | How close (blocks) a party mate must be to share progress |
 | `skipCreative` | `true` | Players in creative mode make no story progress |
-| `opHints` | `true` | Tell operators online when a player's chapter needs a place nobody has set (at most every 10 minutes per place) |
-| `championFallback` | `true` | When no [Champions](#champions--elite_bp) pack answers a story champion request within 3 seconds, spawn the story's mob itself: named, with health boost, resistance and strength |
-| `championRetrySeconds` | `120` | Seconds before a story champion is asked for again at the same place, once the last one is gone |
+| `opHints` | `true` | Tell operators online when a player's chapter needs a place nobody has set and the pack can't pick it (at most every 10 minutes per place) |
+| `championFallback` | `true` | When no [Champions](#champions--elite_bp) pack answers a story champion request within 3 seconds, spawn the story's mob itself: named, with extra health (the champion's `health`), resistance and strength |
+| `championRetrySeconds` | `120` | Seconds before a story champion is asked for again, once the last one is gone |
 | `offerOrder` | `20` | Where story offers sit among an NPC's buttons (lower is higher up; other offers default to 50) |
+| `hintPenalty` | `0.25` | Share of a chapter's levels and Crowns a hint costs (once per chapter). `0` = free hints |
+| `autoPlaces` | `true` | Places nobody set are picked by the pack and built when a player comes close. Disabled, operators set every place |
+| `buildRange` | `64` | How close (blocks) a player must come to a picked place before its building is built |
+| `actorTimeoutSeconds` | `300` | How long a story character (a ghost, guards, someone to escort) waits for its player to come back before it's removed; it comes back when needed |
+| `favors` | `true` | Questgivers offer a daily favor |
 
-Operators can change `enabled`, `tracker`, `partyShare`, `partyRange`, `skipCreative`, `opHints`, `championFallback` and `championRetrySeconds` in game with `/realm:config`. Each player can switch the tracker for themselves with **Story tracker** in `/realm:prefs`, which follows `tracker` until they choose. `offerOrder` stays in `config.js`.
+Operators can change every option but `offerOrder` in game with `/realm:config`. Each player can switch the tracker for themselves with **Story tracker** in `/realm:prefs`, which follows `tracker` until they choose.
 
-**The stories** are data in `scripts/stories.js`:
-
-- `STORIES`: each story is `{ id, title, short, giver, chapters }` (`short` is the tracker's name, `giver` the NPC id that starts it). Each chapter is `{ id, title, npc?, end?, intro, objectives, outro, choices?, reward?, rep? }`: `npc` tells the intro (default: the giver), `end` hears the report (default: `npc`). `intro` and `outro` are lists of pages; a page is text, or `{ text, when: { flag: value } }` to show it only after a choice set that flag.
-- Objectives: `{ type, label, ... }` with `talk` (`npc`), `reach` (`place`, `at: { dim?, x, z }` or `offset: { x, z }` from world spawn, `radius` 16, `mark` for the tracker), `deliver` (`npc`, `item`, `count`), `collect` (`item`, `count`), `defeat` (`mobs`, `count`; or `champion: { tag, mob, name, trait?, warn? }` with a `place`, `radius` 32; the `tag` must start with `realm:`, such as `realm:saga:bell_warden`, or the Champions pack ignores it), `interact` (`blocks`, `count`, `place`, `radius` 8; a tap or a hit counts), `survive` (`seconds`, optional `place` and `radius` 48), `mine` (`blocks`, `count`), `fish` (`items`, `count`).
-- `choices`: `[{ id, label, set: { flag: value }, rep: [{ guild, amount }], reply: [pages] }]`, shown as buttons on the outro's last page. `reward`: `{ levels, items: [{ item, amount }], crowns, relic, title, journal: { entry, label } }`. `rep` on a chapter: `[{ guild, amount, when? }]`, given when it's finished.
-- `PLACES`: the place names operators can set, and what the tracker calls them. `NPC_NAMES`: how the text names each NPC id.
-- Keep every `id` when editing: progress is saved by story, chapter and choice id. A chapter removed from under a player is offered again from the next chapter they haven't finished.
+**The stories** are data: the prologue in `scripts/stories.js` (with `NPC_NAMES` and `PLACES`), the acts, side questlines and favors in `scripts/stories/*.js`, typed by `scripts/types.js`. A story is `{ id, title, short, giver, kind, act?, tones, summary, requires?, chapters }`; a chapter `{ id, title, npc?, end?, when?, sequential?, intro, introChoices?, objectives, outro, choices?, reward, rep?, hint }`; flags are a story's own, `g:<name>` (player-wide, also counters with `inc`) or `<story>.<flag>`, matched exactly, with `!x` (not x, also unset) or `>=n`. `requires` checks finished stories and chapters, flags, counters (`minCount`) and guild reputation. Each objective type and its fields are listed in `types.js`; the place prefabs are in `scripts/prefabs.js`. `npm run check` runs `tools/check-stories.mjs`, which fails on unknown objective types, missing fields, unknown places or NPCs, duplicate ids and bad champion tags, and warns about flags that are read but never set. Keep every `id`: progress is saved by story, chapter and choice id.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `saga:p` | Player | JSON `{ s: { <story id>: { dn, a, cur, o, t, f, ch, fin? } } }`: finished chapter ids, whether the current chapter is accepted, its id and objective progress, when it was accepted, the story's flags, the choice id picked per chapter, and when the story was finished |
-| `saga:places` | World | JSON `{ <name>: { dim, x, y, z, by } }`: the places operators set, and who set them |
+| `saga:p` | Player | JSON `{ s: { <story id>: { dn, a?, cur?, o?, t?, f, ch, fin?, h?, x? } }, g?, cx?, fv? }`: per story the finished chapter ids, whether the current chapter is accepted, its id, objective progress, when it was accepted, the story's flags, the choices made (by chapter, `<chapter>#<step>` for a meet, `<chapter>@` for an intro choice), when it was finished, whether a hint was bought, and step extras (clues found, timer and wait starts). `g` is the player-wide flags and counters, `cx` the codex entries found, `fv` the daily favors by NPC `{ id, d, a?, o?, x?, c? }`. A finished story keeps only its chapters, flags and choices; saved a few seconds after a change and when the player leaves |
+| `saga:places` | World | JSON `{ <name>: { dim, x, y?, z, by?, f?, b?, a?, p?, mv?, s? } }`: each place's spot, who set it, the building's facing, whether it's built, picked by the pack, still waiting to be built, how often it moved, and its terrain snapshot (structure ids and corners) |
+| `saga:place_<name>_<n>` | World structures | The terrain under a built place, saved before building (`structureManager`), put back by Remove |
 | `saga:weather` | World | The overworld weather at the last change: `Clear`, `Rain` or `Thunder`. The stable Script API can't read the current weather |
 | `saga:pref` | Player | JSON of the player's own `tracker` choice from `/realm:prefs` |
 | `saga:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
-- **Townsfolk:** the pack answers the Townsfolk pack's `realm:npc_talk` with `realm:npc_offer` (`Story: <title>`, keys `start:`, `end:` and `info:` plus the story id) for the NPC ids its chapters use, and opens its dialogues on `realm:npc_choose`. The same `realm:npc_talk` counts talk objectives and takes deliveries, before the offers are worked out, so delivering the last item lets you report back in the same tap.
-- **Counting:** `entityDie` (killer from the damage source) for defeat, `playerBreakBlock` for mine (blocks placed lately don't count), `playerInteractWithBlock` (first tap only) and `entityHitBlock` (one hit per 6 ticks) for interact, a fishing hook followed as in Daily Quests for fish. Once a second a loop checks reach (distance across), collect (inventory count), and survive: overworld weather is `Thunder` (from `weatherChange`, saved as `saga:weather`) and `getTopmostBlock` over the player is no higher than 1 block above their feet.
-- **Champions:** within 32 blocks of a champion objective's place the pack sends `realm:champion_spawn` `{ dim, x, y, z, mob, name, tag }` (tag `realm:saga:bell_warden`; once per `championRetrySeconds`, and not while one with that tag is loaded anywhere in that dimension). If none appears within 3 seconds and `championFallback` is on, it spawns the mob itself, tagged `saga:champion`, and removes leftovers when the world loads. A `realm:champion_slain` with the story's tag (or the fallback's death) credits the killer, the helpers, everyone within 32 blocks on that objective, and their party mates.
-- **Party sharing** reads the `realm_party:<code>` tag: mates with the same tag, in the same dimension, within `partyRange`, whose current chapter is the same, get the same objective's progress (each player once per event).
-- **Finishing a chapter** gives the reward and sends `realm:quest_done` `{ player, pack: "saga_bp", id: "<story>:<chapter>", label, kind: "story" }`, `realm:rep_add` for the choice's and chapter's reputation, `realm:relic_give`, `realm:title_unlock` and `realm:journal` (page `story`). Crowns go straight onto the `crowns` scoreboard.
-- **Operator hints:** once a second the loop looks for chapters waiting on an unset place and tells operators online, at most every 10 minutes per place.
-- **The tracker** listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds). Its own `realm:actionbar` messages carry `from: "saga_bp"` so it can tell them apart.
-- Progress is saved on the player whenever it changes.
+- **Modules:** `data.js` (saved progress, flags, requirements, which chapter is current), `objectives.js` (what counts for each objective type, scenes), `actors.js` (story characters and mobs), `places.js` (places, building, snapshots, the places menu), `ui.js` (offers, dialogues, hints, rewards, tracker, story log), `main.js` (commands, script events, loops).
+- **Townsfolk:** the pack answers `realm:npc_talk` with `realm:npc_offer` (keys `start:`, `end:`, `info:` plus the story id, `ans:` for riddles, `fvstart:`/`fvinfo:`/`fvend:` plus the NPC for favors) and opens its dialogues on `realm:npc_choose`. The same `realm:npc_talk` counts talk objectives and takes deliveries first, so delivering the last item lets you report back in the same tap.
+- **The current chapter** is the accepted one, else the first unfinished chapter whose `when` matches; a story is finished when none is left. Objectives with a `when` that doesn't match don't exist for that player. In a `sequential` chapter only the first unfinished step counts, spawns and shows on the tracker.
+- **Counting:** events count defeat (`entityDie`, killer from the damage source), mine, place, interact, inspect taps, tend, tame (checked a few times after the interaction), use (`itemUse` and item taps on blocks) and fish (a hook followed as in Daily Quests). A loop once a second checks only the steps the player is working on (indexed by type): reach, collect, survive (overworld weather from `weatherChange`, accepting `overworld` and `minecraft:overworld`; nothing over the player's head), vigil, wear, ride (distance while the riding component's entity matches), wait, sleep, timers, champions, and starts or ends scenes. A fast loop every 5 ticks moves guards, escorts and wisps.
+- **Story characters** are spawned per player with the tags `saga:actor`, `saga:o:<player>` and `saga:k:<step>` and a name (so they never despawn). Characters you talk to and guards get resistance 5, weakness and slowness and are healed back each second; what they throw or summon near them (potions, arrows, tridents, fireballs, fangs, vexes) is removed. Escorts and wards can be hurt. Monsters of ambushes, waves, champion adds and wrong answers are tagged `saga:add` (and `saga:choir` for the Gray Choir, which the Relics pack's Gray Choir Mask reads). All of them go when the step is done, the chapter ends, the player leaves, after `actorTimeoutSeconds` away, after 10 minutes (story monsters), or at a restart; leftovers are removed when their chunk loads.
+- **Stealth detection** every 5 ticks: distance to each guard's eyes against `detect` or `detectSneak` (sneaking or wearing the `disguise`), within 60 degrees of the guard's facing, and a block ray (`getBlockFromRay`) for walls.
+- **Champions:** the pack sends `realm:champion_spawn` `{ dim, x, y, z, mob, name, tag, health }` (at most once per `championRetrySeconds`, and not while one with that tag is loaded in that dimension), spawns its own after 3 seconds with `championFallback`, and spawns the `adds` when a champion with that tag drops below half health. A `realm:champion_slain` with the story's tag (or the fallback's death) credits the killer, helpers, everyone within 32 blocks on that step, and their party mates.
+- **Places:** a picked place is built by a job that tries the picked spot and 32 spots around it within 48 blocks, asks the prefab's `siteOk` whether the column suits the place, checks that the building's box holds nothing player-made, saves the box with `structureManager.createFromWorld` (tiles of up to 64 by 64, saved in the world), then runs the prefab's build steps. After 3 moves any open land will do; after 6 it gives up and tells operators. Remove places the snapshot back and deletes it.
+- **Seals:** for the Relics pack's Lantern Shard, the pack sends `realm:seals` `{ player, seals: [{ name, dim, x, z }] }` with the seal places that are set and whose Act IV relight chapter that player hasn't finished, when it changes (checked every 5 seconds), at load and in reply to `realm:seals_ping`.
+- **Finishing a chapter** gives the reward (levels and Crowns cut by `hintPenalty` after a hint) and sends `realm:quest_done` `{ player, pack: "saga_bp", id: "<story>:<chapter>", label, kind: "story" }` (`kind: "favor"` for favors), `realm:rep_add` for the choice's and chapter's reputation, `realm:relic_give`, `realm:title_unlock` and `realm:journal` (page `story`). Crowns go straight onto the `crowns` scoreboard.
+- **The tracker** listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds); its own messages carry `from: "saga_bp"`.
+- **Testing hook:** `/scriptevent realm:saga_debug {"player":"<name>","action":"state"}` prints a player's saved progress to the content log; `"action":"finish","story":"<id>"` marks a whole story finished; `"action":"places"` sends the player every saved place as JSON; `"action":"jump","story":"<id>","chapter":"<id>"` marks every chapter before that one finished; `"action":"answer","text":"..."` answers the player's open riddle. Script events need operator rights.
 
 ---
 
@@ -2215,12 +2383,12 @@ A lectern at spawn with realm-wide bounties that change every day: named [champi
 
 ### How to use
 
-1. Tap the bounty board (a lectern near spawn) to see today's bounties, or run `/realm:bounty` anywhere (it also says where the board is). You don't need to accept anything: every bounty is open to everyone.
+1. Tap the bounty board (a lectern near spawn) to see today's bounties, or run `/realm:bounty` anywhere and pick **Today's bounties** (or run `/realm:bounty_list`; from anywhere it also says where the board is). You don't need to accept anything: every bounty is open to everyone.
 2. **Champion targets:** head the way the board says. When you come within 64 blocks of the spot, the target appears, and chat says `A champion stirs nearby: Gerald the Unexploded`. Whoever defeats it gets 100 Crowns; everyone who hit it in its last 30 seconds, and the killer's [party](#parties--party_bp) mates within 64 blocks, get 30 Crowns each. Chat tells everyone: `[Bounty] Steve claimed the bounty on Gerald the Unexploded! (with 2 helpers)`.
 3. **Cull bounties:** every mob of the right kind that anyone defeats counts (`Bounty: Defeat 30 drowned 12/30` above your hotbar). When the count is reached, everyone who defeated at least one gets 40 Crowns.
 4. Talk to a warden (the [Townsfolk](#townsfolk--npc_bp) pack's Warden Reyes) and pick **Bounties** for the same list.
 5. Don't want the cull progress notes? Disable **Bounty progress notes** in `/realm:prefs`.
-6. **Operators:** look at a lectern within 6 blocks and run `/realm:bounty_board` to make it a board (`/realm:bounty_board_remove` makes it an ordinary lectern again; breaking it does too). To put a book on a board, sneak and tap it in creative mode. `/realm:config` → **Bounty Board** sets the hour new bounties come, how many, the target distances and the rewards. Champion targets need the [Champions](#champions--elite_bp) pack.
+6. **Operators:** look at a lectern within 6 blocks and open `/realm:bounty`: **Make this lectern a bounty board** (or run `/realm:bounty_board`). Looking at a board, the menu offers **Make this board a lectern again** (or `/realm:bounty_board_remove`); **Remove a bounty board** lists every board to pick from, and breaking the lectern works too. To put a book on a board, sneak and tap it in creative mode. `/realm:config` → **Bounty Board** sets the hour new bounties come, how many, the target distances and the rewards. Champion targets need the [Champions](#champions--elite_bp) pack.
 
 ### What players see
 
@@ -2236,7 +2404,8 @@ A lectern at spawn with realm-wide bounties that change every day: named [champi
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:bounty` | Everyone | Shows today's bounties (default 4, `count`) with directions from you, where the board is, and the time until new ones (default midnight UTC, `resetHourUtc`) |
+| `/realm:bounty` | Everyone | The bounty menu: today's bounties, and for operators, make the lectern you look at a board (or a board a lectern again) and remove a board from a list |
+| `/realm:bounty_list` | Everyone | Shows today's bounties (default 4, `count`) with directions from you, where the board is, and the time until new ones (default midnight UTC, `resetHourUtc`) |
 | `/realm:bounty_board` | Operators | Makes the lectern you are looking at (within 6 blocks) a bounty board |
 | `/realm:bounty_board_remove` | Operators | Makes the bounty board you are looking at an ordinary lectern again |
 
@@ -2287,22 +2456,36 @@ Operators can change `enabled`, `resetHourUtc`, `count`, `champions`, `minDistan
 
 ## Champions — `elite_bp`
 
-About one in 40 monsters that spawn in the overworld at night becomes a champion: a named, tougher monster with a trait, such as `Gerald the Stormcaller`, who calls lightning in thunderstorms. Champions stay until someone deals with them, and defeating one drops Relic Shards and a burst of XP. A Blood Moon makes them three times as common, and the [Bounty Board](#bounty-board--bounty_bp) sends players after named ones.
+About one in 40 monsters that spawn in the overworld at night becomes a champion: a named, tougher monster with a trait, such as `Gerald the Stormcaller`, who calls lightning in thunderstorms. A badge before the name, a helmet and a small aura in the trait's color tell them apart from ordinary mobs. Champions stay until someone deals with them, and defeating one drops Relic Shards and a burst of XP. A Blood Moon makes them three times as common, and the [Bounty Board](#bounty-board--bounty_bp) sends players after named ones.
 
 ### How to use
 
-1. Play at night: when a champion appears within 48 blocks of you, chat says `A champion stirs nearby: Gerald the Stormcaller`. Champions have a red name over their head.
-2. Fight it like any monster, but expect more: it takes less damage, has more health and has a trait (below). Friends can help: everyone who hit it in its last 30 seconds is a helper.
-3. Defeat it for 1 to 3 Relic Shards and about 20 XP orbs. Chat says `You defeated Gerald the Stormcaller! (Champions defeated: 3)`; helpers get `Gerald the Stormcaller is defeated. You helped.`
-4. Run `/realm:champions` to see the champions within 64 blocks of you, which way they are and how far (`Gerald the Stormcaller NE, 23m`), and how many you have defeated.
-5. Don't want the chat line when one appears? Disable **Champion alerts in chat** in `/realm:prefs`.
-6. **Operators:** `/realm:champions_spawn` spawns a champion 3 blocks in front of you (add a trait, such as `/realm:champions_spawn stormcaller`, or leave it out for a random one). `/realm:config` → **Champions** sets the chance, the Blood Moon multiplier, the most at once, night-only and open-sky-only, and the alert radius.
+1. Play at night: when a champion appears within 48 blocks of you, chat says `A champion stirs nearby: Gerald the Stormcaller`, and you may hear a spell being cast. Champions are easy to spot: a red name with a colored badge in front (`[/] Gerald the Stormcaller`), a helmet in the trait's color on zombies and skeletons, and a small sparkling aura.
+2. Read the badge to know what you're fighting: yellow `[/]` Stormcaller, aqua `[*]` Frostbound, dark red `[v]` Vampiric, green `[%]` Splitting, blue `[#]` Shielded (it turns gray `[x]` once the shield breaks). `/realm:champions` → **What champions look like** shows the whole list.
+3. Fight it like any monster, but expect more: it takes less damage, has more health and has a trait (below). Friends can help: everyone who hit it in its last 30 seconds is a helper.
+4. Defeat it for 1 to 3 Relic Shards and about 20 XP orbs. Chat says `You defeated Gerald the Stormcaller! (Champions defeated: 3)`; helpers get `Gerald the Stormcaller is defeated. You helped.`
+5. Run `/realm:champions` for the menu: **Champions near you** lists the champions within 64 blocks of you, which way they are and how far (`Gerald the Stormcaller NE, 23m`), and how many you have defeated (`/realm:champions_near` puts the same list in chat).
+6. Don't want the chat line when one appears? Disable **Champion alerts in chat** in `/realm:prefs`.
+7. **Operators:** the menu also has **Spawn a champion** (pick a trait and a mob, or leave them random), **Remove champions near you** and **Aura cost** (how much time the aura takes). `/realm:champions_spawn` spawns one 3 blocks in front of you without the menu (add a trait, such as `/realm:champions_spawn stormcaller`, or leave it out for a random one). `/realm:config` → **Champions** sets the chance, the Blood Moon multiplier, the most at once, night-only and open-sky-only, the alert radius, and the looks: **Champion auras**, **Aura puff interval (ticks)**, **Champion helmets** and **Champion arrival effect**.
 
 ### What players see
 
 - **Who becomes a champion:** a zombie, husk, drowned, zombie villager, skeleton, stray, spider, creeper or witch (`mobs`) that spawns on its own in the overworld, with a 2.5% chance (`chance`), at night (`nightOnly`), under the open sky (`surfaceOnly`, so caves and dark-room mob farms don't make them), while fewer than 8 champions are loaded (`maxAlive`), and never next to anything player-made (`avoidBuilds`: a scan of the 5 x 5 blocks around the spawn, from under its feet to its head, for planks, glass, slabs, stairs, trapdoors, torches and the like), so bases, villages and open-sky mob farms don't make them. No other natural champion appears within 48 blocks of one for 10 minutes (`areaSpacing`, `areaCooldownMinutes`).
 - **Blood Moon:** while the [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) pack says a Blood Moon is up, the chance is three times higher (`bloodMoonMultiplier`).
-- **The name** is a first name and the trait, in red: `§cGerald the Stormcaller`. A champion the Bounty Board asks for has the bounty's name instead (`Gerald the Unexploded`).
+- **The name** is a first name and the trait, in red, after a badge in the trait's color: `§e[/] §cGerald the Stormcaller`. A champion the Bounty Board asks for has the bounty's name instead (`Gerald the Unexploded`), with the same badge. The name tag is put back every 5 seconds, so a name tag item can't hide a champion.
+- **The looks:** every champion carries its trait's colors, so it stands out from ordinary mobs at a glance. All of it is vanilla items and particles, so no resource pack is needed:
+
+  | Trait | Badge | Helmet | Aura |
+  |---|---|---|---|
+  | Stormcaller | yellow `[/]` | gold helmet | electric sparks |
+  | Frostbound | aqua `[*]` | diamond helmet | snowflakes |
+  | Vampiric | dark red `[v]` | netherite helmet | red dust |
+  | Splitting | green `[%]` | turtle shell | green sparkles |
+  | Shielded | blue `[#]`, gray `[x]` once the shield breaks | iron helmet | white glints, crit sparks once the shield breaks |
+
+  - **Helmets** (`looks.gear`) go on the mobs that show armor: zombies, husks, drowned, zombie villagers, skeletons and strays (and bogged, wither skeletons, zombified piglins, piglins and piglin brutes if they're added to `mobs`). Spiders, creepers and witches can't show one: they have the badge and the aura. The helmet adds its usual armor (2 or 3 points; diamond and netherite also some toughness). It never drops: when a champion dies, the pack removes the helmet it dropped (one helmet of that kind, without a custom name, within 2.5 blocks), so champion gear can't be farmed. The helmet goes on once; a champion that loses it (it can swap it for a better one it picks up) carries on without it. Disabling **Champion helmets** takes the pack's helmets off loaded champions within 5 seconds.
+  - **The aura** (`looks.aura`) is 2 particles around the champion's body every 10 ticks, half a second (`looks.auraTicks`), only while a player is within 64 blocks. With 20 champions near a player it took 1.1 to 1.8 ms per puff on a test server, 0.1 to 0.2 ms a tick on average; operators can see the live numbers under **Aura cost** in the menu.
+  - **Arrival** (`looks.spawnEffect`): a spell sound (the evoker's summoning sound, a little lower) and a burst of the aura where the champion appears.
 - **Every champion** has Resistance I (`resistanceLevel`), 8 extra health from Health Boost II (`healthBoostLevel`; Absorption instead on a mob that ignores Health Boost) and Fire Resistance, so daylight doesn't burn it (`fireResistance`). Named mobs don't despawn, so a champion stays until it's defeated.
 - **The traits:**
 
@@ -2323,7 +2506,8 @@ About one in 40 monsters that spawn in the overworld at night becomes a champion
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:champions` | Everyone | Lists the champions within 64 blocks of you, with direction and distance, and how many you have defeated |
+| `/realm:champions` | Everyone | Opens the Champions menu: the champions near you, what each trait looks like and does, and for operators spawning a champion, removing the ones near you and the aura's cost |
+| `/realm:champions_near` | Everyone | Lists the champions within 64 blocks of you in chat, with their badge, direction and distance, and how many you have defeated |
 | `/realm:champions_spawn [trait]` | Operators | Spawns a champion 3 blocks in front of you (where you stand if that's blocked), with the trait you name (`stormcaller`, `frostbound`, `vampiric`, `splitting`, `shielded`) or a random one, even when `maxAlive` champions are already loaded |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -2358,8 +2542,12 @@ About one in 40 monsters that spawn in the overworld at night becomes a champion
 | `helperSeconds` | `30` | Players who hit a champion this many seconds or less before it died are helpers |
 | `announceRadius` | `48` | Players within this many blocks get a chat line when a champion appears (0 = none) |
 | `avoidSpawn` | `64` | Stormcaller lightning never lands within this many blocks of the world spawn |
+| `looks.aura` | `true` | A small particle aura in the trait's color around every champion that has a player within 64 blocks |
+| `looks.auraTicks` | `10` | Ticks between aura puffs (20 ticks = 1 second; 2 particles per champion each time). Lower is busier |
+| `looks.gear` | `true` | Champions that can wear armor wear their trait's helmet. It never drops |
+| `looks.spawnEffect` | `true` | A spell sound and a burst of the aura when a champion appears |
 
-Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `nightOnly`, `surfaceOnly` and `announceRadius` in game with `/realm:config`. Each player can switch the chat alerts off for themselves with **Champion alerts in chat** in `/realm:prefs`. The rest stays in `config.js`.
+Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `nightOnly`, `surfaceOnly`, `announceRadius`, `looks.aura`, `looks.auraTicks`, `looks.gear` and `looks.spawnEffect` in game with `/realm:config`. Each player can switch the chat alerts off for themselves with **Champion alerts in chat** in `/realm:prefs`. The rest stays in `config.js`.
 
 ### Saved data
 
@@ -2367,6 +2555,7 @@ Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `ni
 |---|---|---|
 | `elite:name` | Entity (each champion) | Its plain name, `Gerald the Stormcaller` |
 | `elite:hits` | Entity (each champion) | Hits taken, for the Shielded trait |
+| `elite:gear` | Entity (each champion) | The helmet the pack put on it (`minecraft:golden_helmet`), so it is put on once and removed again when it dies or `looks.gear` is disabled |
 | `elite:kills` | Player | Champions this player has defeated |
 | `elite:weather` | World | The overworld weather from the last change (scripts can't read the weather) |
 | `elite:moon` | World | The last state the Blood Moon pack sent (`blood`, `harvest` or `normal`) |
@@ -2377,6 +2566,7 @@ Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `ni
 
 - A champion is a vanilla mob with the tags `realm:champion` and `realm:champion_trait:<trait>` (plus any tag a pack asked for, such as `realm:bounty:<id>`), a name tag, and effects that last as long as the game allows (about 11 days), saved with the mob. Every 5 seconds, and when one loads, missing effects and names are put back.
 - **New champions:** `afterEvents.entitySpawn` with the cause `Spawned` rolls the chance; a tick later the other rules are checked (our own spawns have their tags by then, so Splitting copies and requested champions are never converted again).
+- **Looks:** the helmet goes on with `/replaceitem entity @s slot.armor.head` (scripts can't reach a mob's equipment in `@minecraft/server` 2.1.0, and a mob's own drop chances can't be changed without overriding its behavior file), and on death the dropped helmet item is removed in the same tick and again over the next 5 ticks. The aura is `Dimension.spawnParticle` with vanilla particles (`minecraft:electric_spark_particle`, `minecraft:snowflake_particle`, `minecraft:redstone_ore_dust_particle`, `minecraft:villager_happy`, `minecraft:endrod`, `minecraft:basic_crit_particle`), from one loop over the loaded champions the pack already tracks, so it doesn't search the world. Changing how the mobs themselves render (a tint or overlay) would mean overriding the vanilla client entity files of every champion mob in a resource pack, which breaks whenever Mojang updates those mobs, so the pack doesn't.
 - **Traits:** `afterEvents.entityHurt` counts hits on champions (and remembers which players hit them, and when), and applies Frostbound and Vampiric when a champion is the attacker, ranged attacks included. Stormcallers are checked once a second while the last overworld weather change was to thunder (`afterEvents.weatherChange`, saved in `elite:weather`); lightning is a `minecraft:lightning_bolt` entity.
 - **Death:** `afterEvents.entityDie` drops the shards and XP, spawns Splitting copies, and sends `realm:champion_slain` `{ player?, helpers, name, trait, mob, tag?, dim, x, y, z }` (`player` is left out when no player had a hand in it). The killer also gets a [Field Journal](#field-journal--journal_bp) entry (`realm:journal`, page `mobs`, entry `champion_<trait>`).
 - **Other packs** ask for a champion with `realm:champion_spawn` `{ dim, x, y, z, mob?, trait?, name?, tag? }`: it spawns there (the chunk must be loaded) whether `enabled` is on or not, with the given name and tag. The Blood Moon pack's `realm:moon` `{ state }` switches the multiplier.
@@ -2589,7 +2779,7 @@ Collect titles and wear one on a line under your name, like `Stormchaser` or `Ma
 2. Run `/realm:titles` to see your title, your trail and how far along you are with each title to earn (`Wanderer: 3,400/10,000 blocks traveled`).
 3. Tap **Choose a title** and pick one (or **None**). With the [Nicknames](#nicknames--nick_bp) pack installed, it shows in gray on a line under your name above your head.
 4. Tap **Choose a trail** and pick one (or **None**). It follows you whenever you move. Trails need the Realm Skies resource pack (`sky_rp`) on the realm; without it nothing shows.
-5. **Operators:** `/realm:titles_give Steve "Hero of the Realm"` gives a player a title, and `/realm:titles_give Steve trail:ember` a trail (players who are offline too, if they've played since the pack was added). `/realm:config` → **Titles & Trails** switches the built-in titles and trails and sets how often trails puff.
+5. **Operators:** `/realm:titles` also has `Give a title or trail` (pick a player online or type a name, then the title or `trail:ember`) and `Settings` (which points to `/realm:config` → Titles & Trails). In chat, `/realm:titles_give Steve "Hero of the Realm"` gives a player a title, and `/realm:titles_give Steve trail:ember` a trail (players who are offline too, if they've played since the pack was added). `/realm:config` → **Titles & Trails** switches the built-in titles and trails and sets how often trails puff.
 
 ### What players see
 
@@ -2612,7 +2802,7 @@ Collect titles and wear one on a line under your name, like `Stormchaser` or `Ma
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:titles` | Everyone | Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default `trailTicks`) |
+| `/realm:titles` | Everyone | Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default `trailTicks`). Operators also get `Give a title or trail` (like `/realm:titles_give`) and `Settings` |
 | `/realm:titles_give <player> <title>` | Ops | Gives a player a title (quote titles and names with spaces), or a trail with `trail:cloud`, `trail:leaves`, `trail:ember` or `trail:sparkle`. Works for offline players this pack has seen |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -2650,40 +2840,53 @@ Operators can change `enabled`, `trails`, `trailTicks`, `trailBudget` and `annou
 
 ## Relics — `relics_bp`
 
-Ten rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Relics come from adventures in other packs (champions, bounties, treasure maps, story chapters, caravans) or are forged from 8 Relic Shards at a relicsmith. Relics never break and stay with you when you die.
+Seventeen rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Ten come from adventures in other packs (champions, bounties, treasure maps, caravans) or are forged from 8 Relic Shards at a relicsmith; seven more are story relics, earned only in the [Story Questlines](#story-questlines--saga_bp). Relics never break and stay with you when you die.
 
 ### How to use
 
 1. Find relics: other packs hand them out as rewards, and champions drop **Relic Shards** (purple amethyst shards named `Relic Shard`). Getting one says `You received a relic: Storm Staff (Legendary). Use in a thunderstorm: lightning strikes what you look at.` in chat.
-2. Keep a relic where it works: some in your main hand, some anywhere in your hotbar, boots and the lamp worn. Its lore says what it does; `/realm:relics` says where it works.
-3. Bring 8 Relic Shards to a relicsmith (Ida the Relicsmith, from the [Townsfolk](#townsfolk--npc_bp) pack): tap her and pick **Relic forge**, then **Forge a relic**. You get a random relic you haven't had yet; rarer ones are less likely.
-4. Run `/realm:relics` to see the relics you've found, what each does and how many are left to find.
+2. Keep a relic where it works: some in your main hand, some anywhere in your hotbar or off hand, helmets and boots worn. Its lore says what it does; **Your relics** in `/realm:relics` says where it works.
+3. Bring 8 Relic Shards to a relicsmith (Ida the Relicsmith, from the [Townsfolk](#townsfolk--npc_bp) pack): tap her and pick **Relic forge**, then **Forge a relic**. You get a random relic you haven't had yet; rarer ones are less likely. Story relics are never forged.
+4. Run `/realm:relics` for the menu: **Your relics** (also `/realm:relics_list`) lists the relics you've found, what each does and how many are left to find.
 5. Holding the Storm Meter shows the nearest storm cell above the hotbar. Don't want that? Disable **Storm Meter readout** in `/realm:prefs`.
-6. **Operators:** `/realm:relics_give <player> <relic>` gives a relic. `/realm:config` → **Relics** enables or disables the abilities, sets the shards a forge takes, lets players forge anywhere, and sets whether relics wear out and whether the Storm Staff can strike players.
+6. **Operators:** the `/realm:relics` menu also has **Give a relic** (pick a player and a relic; or `/realm:relics_give <player> <relic>`) and **Place a relicsmith here** (or `/realm:relics_smith`), which asks the Townsfolk pack to place Ida where you stand. `/realm:config` → **Relics** enables or disables the abilities, sets the shards a forge takes, lets players forge anywhere, and sets whether relics wear out, whether the Storm Staff can strike players and how close to spawn it may strike.
 
 ### What players see
 
-- **The relics** (`relics`):
+- **The relics** (`relics`). The first ten are found or forged:
+
+  | Relic | Item | Rarity | Where it works | What it does | How to get it (other packs' defaults) |
+  |---|---|---|---|---|---|
+  | Storm Staff (`storm_staff`) | Trident | Legendary | Main hand | Use it in a thunderstorm in the Overworld: lightning strikes the mob or block you look at, up to 48 blocks away (`staffRange`). Cooldown 30 s | Forge |
+  | Rain Charm (`rain_charm`) | Goat horn | Common | Hotbar or off hand | Regeneration I while you stand in the rain | Forge, pot of gold, treasure maps |
+  | Tide Boots (`tide_boots`) | Blue leather boots | Rare | Worn | Speed I and Jump Boost I while you're in the rain (Bedrock has no Dolphin's Grace effect; before 1.1.0 the boots asked for it, failed, and gave nothing) | Forge, expeditions, the story (The Drowned Bell) |
+  | Lantern of the Deep (`lantern_deep`) | Warped fungus on a stick | Common | Hotbar or off hand | Night Vision below y 0 | Forge, expeditions |
+  | Storm Meter (`storm_meter`) | Spyglass | Rare | Main hand | Shows `Storm Meter: Cell: 340m NE, strength 7/10` above the hotbar, or `No storm cell` | Forge |
+  | Compass of Echoes (`compass_echoes`) | Music disc (5); older ones are a brush | Rare | Main hand | Use it: chat says where the nearest champion is within 128 blocks (`compassRange`), e.g. `Compass of Echoes: a champion (Gerald the Unexploded) is 84m NE.` Cooldown 10 s | Forge, expeditions, treasure maps, the story (The Last Map) |
+  | Frost Band (`frost_band`) | Music disc (wait) | Rare | Hotbar or off hand | Your melee hits give Slowness I for 3 s | Forge, expeditions |
+  | Sun Pendant (`sun_pendant`) | Music disc (blocks) | Epic | Hotbar or off hand | When you catch fire: Fire Resistance for 10 s. Cooldown 120 s | Forge, pot of gold, treasure maps |
+  | Miner's Lamp (`miners_lamp`) | Golden helmet | Common | Worn | Haste I below y 30 | Forge, expeditions |
+  | Wayfarer Boots (`wayfarer_boots`) | Chainmail boots | Common | Worn | Speed I while you sprint outdoors in the Overworld | Forge, treasure maps |
+
+  The seven **story relics** are rewards from the [Story Questlines](#story-questlines--saga_bp) only (never forged, never in random drops):
 
   | Relic | Item | Rarity | Where it works | What it does |
   |---|---|---|---|---|
-  | Storm Staff (`storm_staff`) | Trident | Legendary | Main hand | Use it during a thunderstorm in the overworld: lightning strikes the mob or block you look at, up to 32 blocks away (`staffRange`). Cooldown 30 s |
-  | Rain Charm (`rain_charm`) | Goat horn | Common | Hotbar or off hand | Regeneration I while you stand in the rain |
-  | Tide Boots (`tide_boots`) | Blue leather boots | Rare | Worn | Dolphin's Grace and Speed I while you're in the rain |
-  | Lantern of the Deep (`lantern_deep`) | Warped fungus on a stick | Common | Hotbar or off hand | Night Vision below y 0 |
-  | Storm Meter (`storm_meter`) | Spyglass | Rare | Main hand | Shows `Storm Meter: Cell: 340m NE, strength 7/10` above the hotbar, or `No storm cell` |
-  | Compass of Echoes (`compass_echoes`) | Lodestone compass | Rare | Main hand | Use it: chat says where the nearest champion is within 128 blocks (`compassRange`), e.g. `Compass of Echoes: a champion (Gerald the Unexploded) is 84m NE.` Cooldown 10 s |
-  | Frost Band (`frost_band`) | Music disc (wait) | Rare | Hotbar or off hand | Your melee hits give Slowness I for 3 s |
-  | Sun Pendant (`sun_pendant`) | Music disc (blocks) | Epic | Hotbar or off hand | When you catch fire: Fire Resistance for 10 s. Cooldown 120 s |
-  | Miner's Lamp (`miners_lamp`) | Golden helmet | Common | Worn | Haste I below y 30 |
-  | Wayfarer Boots (`wayfarer_boots`) | Chainmail boots | Common | Worn | Speed I while you sprint outdoors in the overworld |
+  | Lantern Shard (`lantern_shard`) | Music disc (otherside) | Epic | Hotbar or off hand | Night Vision in the dark (at night, under cover below y 50, or in the Nether and the End). Held in your main hand, every few seconds it says where the nearest unlit seal is: `Lantern Shard: The Tide Seal pulls 340m NE` (when the story reports its seals) |
+  | Gray Choir Mask (`choir_mask`) | Gray leather helmet | Epic | Worn | Choir enemies (the story's mobs tagged `saga:choir`) only do half damage to you, unless you've hit one in the last 10 s; Darkness (wardens, sculk shriekers) is removed. Sneaking is already silent to sculk in the game |
+  | Hal's Compass (`hal_compass`) | Music disc (13) | Rare | Main hand | Use it: `Hal's Compass: Your last death: 340m NE (y 12). Home: 120m S (y 70).` (home is your bed or respawn point, else `World spawn`). Cooldown 5 s |
+  | Fen Charm (`vesna_charm`) | Music disc (chirp) | Rare | Hotbar or off hand | Poison never takes hold, and witches (their potions too) can't hurt you, unless you've hit a witch in the last 10 s |
+  | The Singing Blade (`singing_blade`) | Iron sword | Epic | Main hand | Each melee hit rings a bell note: monsters within 6 blocks of what you hit (`auraRange`) get Slowness II for 2 s; at most once every 2 s |
+  | The Hollow Crown (`hollow_crown`) | Chainmail helmet | Legendary | Worn | At night in the Overworld: Night Vision and Strength I. Villagers and wandering traders shun you: tapping one says `The villager shrinks away from the Hollow Crown` (no trading while you wear it) |
+  | Keeper's Lamp (`keeper_lamp`) | Music disc (strad) | Rare | Hotbar or off hand | In the dark: a ring of end rod light around you (everyone sees it), and monsters within 6 blocks (`auraRange`) slow down (Slowness I) |
 
-- **A relic** has a colored name (green common, blue rare, purple epic, gold legendary) and lore: its rarity, what it does and its cooldown. Relics are kept when you die (`keepOnDeath`) and their durability is restored while you hold or wear them (`autoRepair`), so they never break. The Storm Staff is a trident that can't be thrown (using it calls lightning instead), so it can't be lost in lava or the void; it still hits like a trident. Relics can't go in a jukebox. Don't put a relic in a crafting grid (to dye the Tide Boots, say): what comes out is a plain item.
-- **"In the rain"** means in the overworld while it rains or thunders, with nothing 2 or more blocks over your head (leaves count as cover), and not on sand, terracotta, snow or ice, where it doesn't rain.
+- **A relic** has a colored name (green common, blue rare, purple epic, gold legendary) and lore: its rarity, what it does and its cooldown. Relics are kept when you die (`keepOnDeath`) and their durability is restored while you hold or wear them (`autoRepair`), so they never break. The Storm Staff is a trident that can't be thrown or charged (using it calls lightning instead), so it can't be lost in lava or the void; it still hits like a trident. Relics can't go in a jukebox. Don't put a relic in a crafting grid (to dye the Tide Boots, say): what comes out is a plain item.
+- **"In the rain"** means in the Overworld while it rains or thunders, with nothing 2 or more blocks over your head (leaves count as cover), and not on sand, terracotta, snow or ice, where it doesn't rain.
 - **Effects** last about 10 seconds, are topped up while the condition holds and are removed within a second of it ending. A stronger or longer effect, such as a potion, is never shortened.
-- **Too soon:** using a relic on cooldown says `Storm Staff: ready in 12s` above the hotbar. The Storm Staff out of a thunderstorm says `Storm Staff: it only answers in a thunderstorm`; within 64 blocks of world spawn (`avoidSpawn`) it says `Storm Staff: the sky won't strike this close to spawn`, so the town can't be set on fire. It doesn't strike players (`staffHitsPlayers`) or townsfolk; it hits what's behind them. It won't strike within 5 blocks of you, another player (unless `staffHitsPlayers`), a villager or wandering trader, a tamed pet, a townsfolk NPC, an armor stand, an item frame or a painting (`Storm Staff: too close to you`), and any fire the bolt starts is put out right away, so it can't burn a build.
-- **The forge** takes 8 shards (`shardsPerForge`) from anywhere in your inventory and gives a random relic you haven't had yet, picked by rarity: common 50, rare 30, epic 15, legendary 5 (`rarityWeights`). Once you've had all ten, any relic. Without shards it says `You need 8 Relic Shards to forge a relic. You have 3.`
-- **`/realm:relics`** shows `Relics found: 3 of 10`, each relic you've had with its rarity, ability, cooldown and where it works (`- not with you` when it isn't in your inventory), then how many of each rarity are still to find. Opened from a relicsmith (or anywhere with `forgeAnywhere`), it has a **Forge a relic** button.
+- **The Storm Staff** answers when the pack knows it's thundering: the weather changed to a thunderstorm while the pack was running, a lightning bolt it didn't make struck in the Overworld in the last minute (so it also works in a storm that started before the pack was installed, once the first bolt falls), or you're within 160 blocks of a storm cell from [Storm Chasing](#storm-chasing--storm_bp). A strike says `Storm Staff: lightning! Ready again in 30s`. Otherwise it says why, above the hotbar: `Storm Staff: it only answers in a thunderstorm`, `Storm Staff: ready in 12s`, `Storm Staff: nothing to strike within 48 blocks`, `Storm Staff: the sky won't strike within 24 blocks of spawn` (`avoidSpawn`, 0 = anywhere), or `Storm Staff: too close to you`. It doesn't strike players (`staffHitsPlayers`) or townsfolk; it hits what's behind them. It won't strike within 5 blocks of you, another player (unless `staffHitsPlayers`), a villager or wandering trader, a tamed pet, a townsfolk NPC, an armor stand, an item frame or a painting, and any fire the bolt starts is put out (checked for 4 seconds), so it can't burn a build.
+- **The forge** takes 8 shards (`shardsPerForge`) from anywhere in your inventory and gives a random relic you haven't had yet from the first ten, picked by rarity: common 50, rare 30, epic 15, legendary 5 (`rarityWeights`). Once you've had all ten, any of them. Without shards it says `You need 8 Relic Shards to forge a relic. You have 3.`
+- **`/realm:relics`** opens a menu: **Your relics**, **Forge a relic** (only when operators let players forge anywhere, `forgeAnywhere`), and for operators **Give a relic** and **Place a relicsmith here**. **Your relics** shows `Relics found: 3 of 10`, each relic you've had with its rarity, ability, cooldown and where it works (`- not with you` when it isn't in your inventory), how many of each rarity are still to find, then `Story relics: 1 of 7` and the story relics you've had. Opened from a relicsmith, it's the **Relic forge** with a **Forge a relic** button.
+- **Place a relicsmith here** (operators) asks the [Townsfolk](#townsfolk--npc_bp) pack to place Ida the Relicsmith (`relicsmithId`) at your spot, facing your way, like `/realm:npc_add ida`: `The relicsmith is here.` Without the Townsfolk pack it says `No answer from the Townsfolk pack, so no relicsmith was placed.` and that the pack is needed. A relicsmith is any townsfolk with the `relicsmith` role (`npcRole`).
 - **Gifts for players who are offline** (from another pack) wait and are handed over 5 seconds after they next join.
 - The first time you get each relic, the [Field Journal](#field-journal--journal_bp) records it on its Relics page.
 
@@ -2691,8 +2894,10 @@ Ten rare relics, each a named item with a power of its own: a staff that calls l
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:relics` | Everyone | Lists the relics you've found and what they do. Forging needs a relicsmith unless operators allow it anywhere (default disabled, `forgeAnywhere`) |
-| `/realm:relics_give <player> <relic>` | Operators | Gives the player a new relic: `storm_staff`, `rain_charm`, `tide_boots`, `lantern_deep`, `storm_meter`, `compass_echoes`, `frost_band`, `sun_pendant`, `miners_lamp` or `wayfarer_boots` |
+| `/realm:relics` | Everyone | Opens the relics menu: your relics, the forge when players may forge anywhere (default disabled, `forgeAnywhere`), and for operators giving a relic and placing a relicsmith |
+| `/realm:relics_list` | Everyone | Lists the relics you've found and what they do |
+| `/realm:relics_give <player> <relic>` | Operators | Gives the player a new relic: `storm_staff`, `rain_charm`, `tide_boots`, `lantern_deep`, `storm_meter`, `compass_echoes`, `frost_band`, `sun_pendant`, `miners_lamp`, `wayfarer_boots`, or a story relic: `lantern_shard`, `choir_mask`, `hal_compass`, `vesna_charm`, `singing_blade`, `hollow_crown`, `keeper_lamp` |
+| `/realm:relics_smith` | Operators | Places the relicsmith (Ida, `relicsmithId`) where you stand; needs the Townsfolk pack |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -2702,19 +2907,21 @@ Ten rare relics, each a named item with a power of its own: a staff that calls l
 | `shardsPerForge` | `8` | Relic Shards it takes to forge one relic (1–64 in game) |
 | `forgeAnywhere` | `false` | Players can forge from `/realm:relics` anywhere, not only at a relicsmith |
 | `npcRole` | `"relicsmith"` | The townsfolk role that offers **Relic forge** |
+| `relicsmithId` | `"ida"` | The townsfolk **Place a relicsmith here** places (a Townsfolk pack id with the `npcRole` role) |
 | `keepOnDeath` | `true` | New relics stay with their owner on death (set when a relic is made) |
 | `autoRepair` | `true` | A relic's durability is restored while it's held or worn, so it never breaks |
 | `rarityWeights.common` | `50` | How likely the forge picks a common relic (relative to the others) |
 | `rarityWeights.rare` | `30` | The same for rare relics |
 | `rarityWeights.epic` | `15` | The same for epic relics |
 | `rarityWeights.legendary` | `5` | The same for legendary relics |
-| `staffRange` | `32` | How far the Storm Staff reaches (blocks) |
+| `staffRange` | `48` | How far the Storm Staff reaches (blocks) |
 | `staffHitsPlayers` | `false` | The Storm Staff can strike players |
-| `avoidSpawn` | `64` | No Storm Staff lightning within this many blocks of world spawn |
+| `avoidSpawn` | `24` | No Storm Staff lightning within this many blocks of world spawn (0 = anywhere; 0-256 in game). Fires a bolt starts are put out either way |
 | `compassRange` | `128` | How far the Compass of Echoes looks for a champion (blocks) |
-| `relics` | the 10 above | `{ id, name, item, rarity, where, cooldown, ability }` per relic. `id` is saved on items, so keep it. `item` must be an item that doesn't stack (relics carry data, which only those can); a stacking one is replaced with a brush. `where` is `hand`, `carry` (hotbar or off hand), `head` or `feet`. `cooldown` in seconds. `ability` is the lore text. The powers belong to the ids, so a new id would only be a keepsake |
+| `auraRange` | `6` | How far the Singing Blade's note and the Keeper's Lamp's slowing reach (blocks); the lamp's ring of light is drawn at up to 4 |
+| `relics` | the 17 above | `{ id, name, item, rarity, where, cooldown, ability, story? }` per relic. `id` is saved on items, so keep it. `item` must be an item that doesn't stack (relics carry data, which only those can); a stacking one is replaced with a brush. `where` is `hand`, `carry` (hotbar or off hand), `head` or `feet`. `cooldown` in seconds. `ability` is the lore text. `story: true` relics are never forged. The powers belong to the ids, so a new id would only be a keepsake |
 
-Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair` and `staffHitsPlayers` in game with `/realm:config`. Each player can switch the Storm Meter's readout with **Storm Meter readout** in `/realm:prefs`. The rest stays in `config.js`.
+Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair`, `staffHitsPlayers` and `avoidSpawn` in game with `/realm:config`. Each player can switch the Storm Meter's readout with **Storm Meter readout** in `/realm:prefs`. The rest stays in `config.js`.
 
 ### Saved data
 
@@ -2723,22 +2930,27 @@ Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair` 
 | `relic:id` | Item | The relic's id, on the relic item itself |
 | `relic:serial` | Item | A number unique to each relic made on this realm |
 | `relics:found` | Player | JSON array of the relic ids the player has had |
+| `relics:death` | Player | JSON `{ dim, x, y, z }`: where the player last died, for Hal's Compass |
 | `relics:pref` | Player | The player's own **Storm Meter readout** choice |
 | `relics:serial` | World | The last serial number handed out |
 | `relics:pending` | World | JSON `{ playerId: { r, s } }`: relics and shards waiting for players who were offline |
-| `relics:weather` | World | The overworld weather at the last change (`Clear`, `Rain` or `Thunder`); the stable Script API can't read it |
+| `relics:weather` | World | The Overworld weather at the last change (`Clear`, `Rain` or `Thunder`); the stable Script API can't read it |
 | `relics:cfg` | World | Settings changed in `/realm:config` |
 
 Cooldowns are kept in memory, so a restart makes every relic ready again.
 
 ### How it works
 
-- A relic is a vanilla item with a name, lore and the item dynamic property `relic:id`. Only items that don't stack can carry dynamic properties, which is why the relics are tools, armor, horns and discs. An anvil can rename any item but can't add the property, so a fake relic does nothing.
-- Once a second each player's hotbar, off hand, head and feet are read (12 slots). Wanted effects are added for 210 ticks (Night Vision 400, so it doesn't flicker) when they're missing or run low, and removed when no longer wanted if they're still level I and no longer than that. A durability-damaged relic in hand or worn is mended (`autoRepair`). "In the rain" and "outdoors" use one `getTopmostBlock` over the player, only when a relic needs it.
-- The Storm Staff uses `beforeEvents.itemUse`, which it cancels so the trident isn't thrown, and the Compass of Echoes `afterEvents.itemUse`. `beforeEvents.playerInteractWithBlock` keeps relics out of jukeboxes. The staff aims with `getEntitiesFromViewDirection` (players, items, projectiles and townsfolk skipped) and falls back to `getBlockFromViewDirection`, then spawns `minecraft:lightning_bolt` and removes `minecraft:fire` (nothing else) in the 5 x 5 x 5 blocks around the strike 1, 5 and 15 ticks later. The compass finds the closest entity tagged `realm:champion` ([Champions](#champions--elite_bp)).
-- The Frost Band and Sun Pendant use `afterEvents.entityHurt` (a melee hit by the player; fire, burning, lava or a campfire hurting the player). The pendant is also checked every second while the player is on fire.
-- The Storm Meter shows the last `realm:storm_cell` report from [Storm Chasing](#storm-chasing--storm_bp) (sent every 2 s); without one in the last 5 seconds it says `No storm cell`. Weather comes from `weatherChange` and is saved as `relics:weather`.
-- Other packs give relics and shards with the script events `realm:relic_give` `{ player, relic }` and `realm:shard_give` `{ player, amount }` (at most 640). A Relic Shard is `minecraft:amethyst_shard` named `Relic Shard` whose first lore line is `Bring 8 to a relicsmith`; that lore line is how the forge counts them. Townsfolk with the `relicsmith` role get the **Relic forge** offer in answer to `realm:npc_talk`, and `realm:npc_choose` opens the forge.
+- A relic is a vanilla item with a name, lore and the item dynamic property `relic:id`. Only items that don't stack can carry dynamic properties, which is why the relics are tools, armor, horns and discs. Compasses stack in Bedrock (64, lodestone compasses too), so the compass relics are discs; Compasses of Echoes made before 1.1.0 are brushes and still work. An anvil can rename any item but can't add the property, so a fake relic does nothing.
+- Once a second each player's hotbar, off hand, head and feet are read (12 slots). Wanted effects are added for 210 ticks (Night Vision 400, so it doesn't flicker) when they're missing or run low, and removed when no longer wanted if they're still level I and no longer than that. A durability-damaged relic in hand or worn is mended (`autoRepair`), and a relic whose lore is out of date (an ability that changed in an update) gets the current lore. "In the rain", "outdoors" and "under cover" use one `getTopmostBlock` over the player, only when a relic needs it. The stable API can't read light levels, so "in the dark" is night (time 13000-23000), under cover below y 50, or the Nether and the End.
+- **Used relics** (Storm Staff, Compass of Echoes, Hal's Compass) run from `beforeEvents.itemUse`; the staff's use is canceled so the trident never charges or flies. A tap that arrives as `beforeEvents.playerInteractWithBlock` (aiming at the ground) does the same, and `afterEvents.itemStartUse` is a safety net for the staff; one tap does one thing (4 ticks apart). `playerInteractWithBlock` also keeps relics out of jukeboxes.
+- **Weather:** the stable API can't read it, so it comes from `weatherChange` (saved as `relics:weather`, so it survives a restart; the event's dimension is matched with or without `minecraft:`), from `entitySpawn` of a `minecraft:lightning_bolt` the staff didn't make (a thunderstorm for the next minute), and from Storm Chasing's `realm:storm_cell` reports.
+- **The Storm Staff** aims with `getEntitiesFromViewDirection` (players, items, projectiles and townsfolk skipped) and falls back to `getBlockFromViewDirection` (water counts as a target), then spawns `minecraft:lightning_bolt` and removes `minecraft:fire` (nothing else) in the 7 x 7 x 7 blocks around the strike 1, 5, 15, 40 and 80 ticks later. The compass finds the closest entity tagged `realm:champion` ([Champions](#champions--elite_bp)).
+- **Hits** use `afterEvents.entityHurt`: the Frost Band and Singing Blade on a melee hit by the player (the blade's monsters are `families: ["monster"]`, its note is `note.bell`); the Sun Pendant when fire, burning, lava, magma or a campfire hurts the player (also checked every second while on fire). The stable API can't cancel damage or clear a mob's target, so the Gray Choir Mask and the Fen Charm give back the damage right after the hit (half for the mask, all for the charm), unless the player hit a mob tagged `saga:choir` (or a witch) in the last 10 s. `beforeEvents.effectAdd` cancels Poison for the Fen Charm; `beforeEvents.playerInteractWithEntity` turns villagers away from the Hollow Crown; `afterEvents.entityDie` saves the death point.
+- The Storm Meter shows the last `realm:storm_cell` report from [Storm Chasing](#storm-chasing--storm_bp) (sent every 2 s); without one in the last 5 seconds it says `No storm cell`.
+- **Seals** (Lantern Shard): the pack listens for `realm:seals` `{ player?, seals: [{ name, dim, x, z }] }`, the seals still unlit (for that player when `player` is given, else for everyone; an empty list clears it), and asks with `realm:seals_ping` `{}` 5 seconds after the world loads. The [Story Questlines](#story-questlines--saga_bp) is the pack meant to send it; without it the shard only gives Night Vision.
+- **The relicsmith:** **Place a relicsmith here** sends `realm:npc_summon` `{ id: "ida", player }` to the [Townsfolk](#townsfolk--npc_bp) pack and waits 1 second for `realm:npc_summoned` `{ id, player, ok, error? }`.
+- Other packs give relics and shards with the script events `realm:relic_give` `{ player, relic }` (story relics included: Story Questlines rewards them by id) and `realm:shard_give` `{ player, amount }` (at most 640). A Relic Shard is `minecraft:amethyst_shard` named `Relic Shard` whose first lore line is `Bring 8 to a relicsmith`; that lore line is how the forge counts them. Townsfolk with the `relicsmith` role get the **Relic forge** offer in answer to `realm:npc_talk`, and `realm:npc_choose` opens the forge.
 - The first time a player has a relic (given, forged, or seen in their hotbar or armor, for one traded to them), the pack sends `realm:journal` `{ page: "relics" }`.
 
 ---
@@ -2814,22 +3026,27 @@ Every fish you catch with a rod becomes one of 40 species, from the common Atlan
 
 1. Fish with a rod as usual. When a cod, salmon, tropical fish or pufferfish comes up, it's a species: chat says `You caught a Storm Eel (82 cm)!`, with `New realm record!`, `Personal best!` or `New species for your log (12/40).` when it is one.
 2. Fish in different places and weathers to find more: some only bite in thunderstorms, at night, at dawn, in caves, in frozen water, in swamps or in the jungle.
-3. Run `/realm:fishing` to see your fish log: how many species you've caught out of 40, how many of each and your biggest. Species you haven't caught yet show as `???` with a hint, like `??? (Rare: thunderstorms)`.
-4. Run `/realm:fishing_top` to see the realm's biggest fish of each species and who caught them.
-5. Join the weekly tournament (Sundays at 18:00 UTC, for an hour): the biggest fish for its kind wins. Chat tells everyone 10 minutes before and when it starts.
-6. Sell your fish: tap Old Tobin (or any NPC with the `fisher` role) and pick **Sell fish**. **Fish records** there shows the realm's records.
-7. **Operators:** `/realm:fishing_tournament` starts a tournament now. `/realm:config` → **Fishing 2.0** switches the species and the tournament, sets the tournament's day, hour and length, and whether legendary catches are announced. The species themselves are the `species` list in `config.js`.
+3. Run `/realm:fishing` for the fishing menu: **Fish log**, **Realm records**, **Make my fish stackable** and **Fishing settings** (operators also get **Start a tournament now**).
+4. **Fish log** (or `/realm:fishing_log`) shows how many species you've caught out of 40, how many of each and your biggest. Species you haven't caught yet show as `???` with a hint, like `??? (Rare: thunderstorms)`. **Realm records** (or `/realm:fishing_top`) shows the realm's biggest fish of each species and who caught them.
+5. Measured fish don't stack. To stack them, pick **Make my fish stackable** (or run `/realm:fishing_stack`): after you confirm, every measured raw fish in your inventory becomes a plain cod, salmon, tropical fish or pufferfish. Your log and the records keep them.
+6. In **Fishing settings** (or `/realm:prefs` → **Fishing 2.0**), disable **Measure my catches** to always get plain fish that stack, or enable **Only measure notable catches** to get a measured fish only for a new species, a personal best or a realm record. Either way, every catch still counts in your log, the records and the tournament.
+7. Join the weekly tournament (Sundays at 18:00 UTC, for an hour): the biggest fish for its kind wins. Chat tells everyone 10 minutes before and when it starts.
+8. Sell your fish: tap Old Tobin (or any NPC with the `fisher` role) and pick **Sell fish**. **Fish records** there shows the realm's records. Fishers only buy measured fish.
+9. **Operators:** **Start a tournament now** in the menu, or `/realm:fishing_tournament`, starts one. `/realm:config` → **Fishing 2.0** switches the species and the tournament, sets the tournament's day, hour and length, and whether legendary catches are announced. The species themselves are the `species` list in `config.js`.
 
 ### What players see
 
 - **A catch:** the fish that flies out of the water is named after its species in its rarity's color (white Common, green Uncommon, blue Rare, purple Epic, gold Legendary), with three lore lines: its size (`82 cm`), `Caught by Alex` and the date (`Oct 10, 2026`, UTC). Only cod, salmon, tropical fish and pufferfish change; junk and treasure stay as they are. A cod becomes one of the cod species, a salmon one of the salmon species, and so on. Fish with different sizes or catchers don't stack.
+- **Plain fish instead:** with **Measure my catches** disabled, the fish you reel in stays a plain vanilla fish that stacks; with **Only measure notable catches** enabled, only a new species, a personal best or a realm record comes measured. Chat still says what you caught (`You caught an Atlantic Cod (54 cm)!`), and the catch still goes in your log, the records, the tournament, the Field Journal and Skills.
+- **Make my fish stackable** (menu, or `/realm:fishing_stack`): asks `Turn your 5 measured raw fish into plain cod, salmon, tropical fish and pufferfish that stack?`, then replaces every measured raw cod, salmon, tropical fish and pufferfish in your inventory with plain vanilla ones, merged with the plain ones you already carry into as few stacks as possible, and says `5 fish are plain now and stack.` Cooked fish, renamed fish and anything this pack didn't measure are left alone. The plain fish are exactly vanilla (no name, no lore), so they stack with any other and the [Crowns](#crowns--crowns_bp) market buys them; a fisher doesn't.
 - **Which species:** among the species of that fish that can bite right there and then, rarer ones bite less often: Common 60, Uncommon 25, Rare 10, Epic 4 and Legendary 1 (`rarities`). Sizes lean small, so fish near the top of their range are rare.
 - **Conditions** (a species with several must have all of them):
   - **Weather:** clear, rain or thunderstorms, in the Overworld (elsewhere counts as clear). The Rainbow Trout only bites in the first 10 minutes after rain stops.
   - **Time:** dawn (game time 23000 to 1000), day, dusk (11500 to 13500) and night.
   - **Place**, guessed from the blocks around the bobber, since the game doesn't tell packs the biome: **ocean** when at least 70% of the water level around it, up to 16 blocks away, is water (`oceanShare`), otherwise **rivers and lakes**; **frozen water** with ice or snow nearby; **swamps** with lily pads, mangrove roots or mud; **jungle** with jungle trees or bamboo nearby; **caves** when the water is below height 50 (`caveBelowY`) with blocks over it.
 - **Chat:** `You caught a Storm Eel (82 cm)!`, plus `New realm record!` (the biggest of that species yet), `Personal best!` or `New species for your log (12/40).`, and `(Tournament: 2nd)` during a tournament. A level-up sound plays for a record or a new species. When someone catches a legendary fish, everyone else sees `Alex caught a legendary Old Whiskers (164 cm)!` (`announceLegendary`).
-- **The fish log** (`/realm:fishing`): `Species caught: 12/40   Fish caught: 57`, the tournament line, then every species by rarity: caught ones as `Storm Eel x3, best 82 cm`, the others as `???` with their rarity and conditions. A button opens the realm records.
+- **The menu** (`/realm:fishing`): the tournament line, then **Fish log**, **Realm records**, **Make my fish stackable** (with how many measured raw fish you carry), **Fishing settings** (with your **Measure my catches** setting) and, for operators, **Start a tournament now**.
+- **The fish log** (**Fish log**, or `/realm:fishing_log`): `Species caught: 12/40   Fish caught: 57`, the tournament line, then every species by rarity: caught ones as `Storm Eel x3, best 82 cm`, the others as `???` with their rarity and conditions. A button opens the realm records.
 - **Realm records** (`/realm:fishing_top`, or **Fish records** at a fisher): each species' biggest fish, `Storm Eel: 160 cm by Alex, Oct 10, 2026`, and the tournament line: `Tournament on! Ends in 23m. Leader: ...` or `Next tournament: Sunday at 18:00 UTC (in 2d 5h).`
 - **The tournament:** every week on `tournamentDay` (0 = Sunday) at `tournamentHourUtc` (18) UTC for `tournamentMinutes` (60). Chat says `A fishing tournament starts in 10m! Grab a rod.` 10 minutes before (`tournamentWarnMinutes`) and `The fishing tournament has begun! ... Prizes: 50, 30, 15 Crowns.` at the start. Each player's best fish counts, measured against its species' biggest size (an 82 cm Storm Eel is 46% of 180 cm), so a big Clownfish can beat a small Storm Eel. At the end chat lists the top three with their fish, and they get 50, 30 and 15 [Crowns](#crowns--crowns_bp) (`tournamentPrizes`): `+50 Crowns (Fishing tournament: 1st place)`. A winner who left before the end is paid the next time they join. If the realm was down when a tournament was due, it starts when the realm comes back, as long as it's still within the tournament's hour.
 - **Selling** (tap an NPC with the `fisher` role, `npcRole`, and pick **Sell fish**): the menu lists the fish you carry with what each pays, and **Sell all**. A fish pays its rarity's price (Common 2, Uncommon 5, Rare 12, Epic 30, Legendary 80 Crowns) x (0.5 + its size / the species' biggest size), so a record-sized fish pays one and a half times the price. Chat says `+25 Crowns (Sold 3 fish)`. Only fish this pack named are bought: a renamed vanilla fish has no size lore. The [Crowns](#crowns--crowns_bp) market doesn't buy named fish.
@@ -2884,7 +3101,9 @@ The species:
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:fishing` | Everyone | Your fish log: species caught out of 40, how many of each and your biggest, hints for the rest, and the tournament |
+| `/realm:fishing` | Everyone | The fishing menu: fish log, realm records, make your fish stackable, your fishing settings, and (operators) start a tournament |
+| `/realm:fishing_log` | Everyone | Your fish log: species caught out of 40, how many of each and your biggest, hints for the rest, and the tournament |
+| `/realm:fishing_stack` | Everyone | Turns every measured raw fish in your inventory into plain fish that stack (asks first) |
 | `/realm:fishing_top` | Everyone | The realm's biggest fish of each species, who caught it and when, and the tournament |
 | `/realm:fishing_tournament` | Operators | Starts a tournament now, for the usual length (default 60 minutes, `tournamentMinutes`) |
 
@@ -2906,7 +3125,14 @@ The species:
 | `tournamentPrizes` | `[50, 30, 15]` | Crowns for 1st, 2nd and 3rd place; add or remove numbers for more or fewer places |
 | `species` | 40 species (above) | `{ id, name, item, rarity, min, max, weather?, time?, places?, afterRain? }`: the fish `item` it replaces, its size range in cm and its conditions: `weather` (`Clear`, `Rain`, `Thunder`), `time` (`day`, `night`, `dawn`, `dusk`), `places` (`ocean`, `river`, `frozen`, `swamp`, `jungle`, `cave`) and `afterRain` (only this many minutes after rain stops). Keep each `id` when editing: logs and records are saved by it. Keep one species without conditions for each fish item, or some catches stay vanilla |
 
-Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tournamentDay`, `tournamentHourUtc` and `tournamentMinutes` in game with `/realm:config` (**Fishing 2.0**). The rest stays in `config.js`. There are no player preferences.
+Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tournamentDay`, `tournamentHourUtc` and `tournamentMinutes` in game with `/realm:config` (**Fishing 2.0**). The rest stays in `config.js`.
+
+Player preferences, in `/realm:prefs` (**Fishing 2.0**) or the menu's **Fishing settings**:
+
+| Preference | Default | |
+|---|---|---|
+| **Measure my catches** | Enabled | Your fish carry their species, size and your name. Disabled: plain fish that stack (the catch still counts) |
+| **Only measure notable catches** | Disabled | A catch that isn't a new species, a personal best or a realm record comes as a plain fish that stacks |
 
 ### Saved data
 
@@ -2920,18 +3146,557 @@ Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tourn
 | `fishing:weather` | World | The Overworld weather at the last change (`Clear`, `Rain` or `Thunder`): the stable Script API can't read the current weather |
 | `fishing:rainEnd` | World | When rain last stopped (ms), for the Rainbow Trout |
 | `fishing:cfg` | World | Settings changed in `/realm:config` |
+| `fishing:pref` | Player | JSON `{ measure?, notableOnly? }`: the player's own choices, only where they differ from the default |
 | `crowns` | Scoreboard | Prizes and fish sales are added to the shared Crowns balance |
 
 ### How it works
 
-- **Catches:** there is no "caught a fish" event in the stable API, so the pack recognizes one much as [Daily Quests](#daily-quests--quests_bp) does: a fishing hook belongs to the player who cast it (its projectile owner, else the player nearest to it when it appears), and its place is followed every tick. A single unnamed cod, salmon, tropical fish or pufferfish that appears within 2 blocks of a hook, as that hook is reeled in (the hook is gone then or within 3 ticks), is that player's catch, once per hook. A fish dropped from an inventory (it appears within 1 block of a player's head), a stack of several, or a fish that turns up next to a hook still in the water is never a catch, so dropping fish next to your bobber doesn't turn them into species. Then (a tick later, so other packs like Daily Quests see the vanilla fish first) the pack spawns the named fish at the same spot with the same velocity, so it still flies to the player, and removes the vanilla one. If the player picks the vanilla fish up first, it simply stays vanilla.
-- **Place:** one scan per catch, about 100 block reads: the water surface at the bobber, 48 samples at the water level 4 to 16 blocks around it (and the blocks above the nearer ones, for lily pads and snow), and the highest block of 12 columns 6 and 12 blocks away for trees and snow. Weather comes from `afterEvents.weatherChange`, saved so it survives a restart. Time of day is `world.getTimeOfDay()`.
+- **Catches:** there is no "caught a fish" event in the stable API, so the pack recognizes one much as [Daily Quests](#daily-quests--quests_bp) does: a fishing hook belongs to the player who cast it (its projectile owner, else the player nearest to it when it appears), and its place is followed every tick. A single unnamed cod, salmon, tropical fish or pufferfish that appears within 2 blocks of a hook, as that hook is reeled in (the hook is gone then or within 3 ticks), is that player's catch, once per hook. A fish dropped from an inventory (it appears within 1 block of a player's head), a stack of several, or a fish that turns up next to a hook still in the water is never a catch, so dropping fish next to your bobber doesn't turn them into species. Then (a tick later, so other packs like Daily Quests see the vanilla fish first) the pack spawns the named fish at the same spot with the same velocity, so it still flies to the player, and removes the vanilla one. If the player picks the vanilla fish up first, it simply stays vanilla. When the player's settings ask for a plain fish, the vanilla fish is left where it is and only the catch is recorded.
+- **Making fish stackable:** the pack finds measured fish the way the sell menu does (name and lore), empties those slots and the slots of plain fish of the same kinds, and adds back fresh vanilla `ItemStack`s of the total, up to 64 a stack; anything that wouldn't fit (it always should) drops at the player's feet. Nothing is written to the log or the records: they were written when the fish was caught.
+- **Place:** one scan per catch, about 100 block reads: the water surface at the bobber, 48 samples at the water level 4 to 16 blocks around it (and the blocks above the nearer ones, for lily pads and snow), and the highest block of 12 columns 6 and 12 blocks away for trees and snow. Weather comes from `afterEvents.weatherChange` (whose `dimension` is `overworld` on current servers, `minecraft:overworld` on older ones; both count), saved so it survives a restart. Time of day is `world.getTimeOfDay()`.
 - **Fish are recognized** for selling by their name (a known species in a rarity color) and their lore (`<size> cm`, `Caught by ...`), which an anvil can't add. The sell menu checks each slot again before taking the fish.
 - **The tournament clock** checks every 5 seconds; the running tournament is saved, so it survives a restart and is finished on schedule. Prizes go into the `crowns` scoreboard; winners get `realm:quest_done` with `kind: "tournament"`.
 - **Fishers:** on `realm:npc_talk` with the `fisher` role the pack answers `realm:npc_offer` with **Sell fish** (`order` 20) and **Fish records** (21).
 - Events sent: `realm:journal` `{ page: "fish", entry: <species id> }` and `realm:skill_xp` `{ skill: "fishing" }` on every catch, `realm:quest_done` `{ kind: "tournament" }` for prize winners, `realm:sky_event` `{ kind: "tournament" }` at the start.
 
 ---
+
+## Kitchen — `cooking_bp`
+
+Cook real dishes at a cooking pot (a cauldron over a lit campfire). Each dish is a food with a gentle, long-lasting buff when you eat it, like Haste I for 5 minutes or Night Vision for 10, and a few rolling dishes roll for a surprise instead: mostly a good buff, sometimes something silly. Everyone knows 6 basic recipes; Bea the Cook (from [Townsfolk](#townsfolk--npc_bp)) teaches more in her **Kitchen** for Crowns or ingredients, and the best dishes need rare ingredients like the Champion's Heart, dropped by [Champions](#champions--elite_bp), or the Storm Eel of [Fishing 2.0](#fishing-20--fishing_bp). There are 27 recipes and 8 rare ingredients.
+
+### How to use
+
+1. Build a cooking pot: put a cauldron on top of a lit campfire (or soul campfire). Water in the cauldron is optional.
+2. Tap the cauldron with an empty hand, or sneak and tap it with anything. The `Cooking Pot` menu lists the recipes you know, the ones you have everything for first (`Ready: 2 servings`), the others with what's missing (`Missing: 1 Kelp`).
+3. Pick a recipe to see its ingredients and effects, then **Cook 1 batch** or **Cook 3 batches**. The ingredients are taken, the pot bubbles for 3 seconds, and the dishes land in your inventory: `You cooked 2 Miner's Pasty.`
+4. Eat a dish like any food (when you're hungry). Chat says what you got: `Miner's Pasty: Haste I for 5m`. A rolling dish says what it rolled: `Mystery Stew: A rush of speed! (Speed II for 2m)`.
+5. Learn more recipes: tap Bea the Cook (or any NPC with the `chef` role) and pick **Kitchen**. She teaches each recipe for Crowns or for ingredients (`Learn: Warden's Ration` for `30 Crowns or 8 Cooked Beef`), and the rare ones for one of their rare ingredient plus Crowns. Story Questlines also teaches recipes, and recipe cards (paper named `Recipe Card: Lantern Cake`) dropped by champions teach theirs as soon as you open a pot, the Kitchen or `/realm:cooking`.
+6. Collect rare ingredients: defeat champions, catch a Storm Eel in a thunderstorm, harvest full beehives at night, and harvest crops during a Harvest Moon or after an aurora (see the table below). `/realm:cooking` → **Rare ingredients** lists them, what they're for and how many you carry.
+7. Run `/realm:cooking` for your recipes (**What can I cook?**, **My recipes**), the **Cookbook** of every recipe and how to learn it, and the rare ingredients. Disable the bubbling sounds in `/realm:prefs` → **Kitchen** → **Cooking sounds**.
+8. **Operators:** `/realm:cooking` also has **Teach or forget recipes** (one or all, for any online player) and **Give dishes and ingredients** (any dish, rare ingredient or recipe card). `/realm:config` → **Kitchen** sets the effect length multiplier, rolling dishes, the champion ingredient and recipe card chances, foraging and cooking anywhere.
+
+### What players see
+
+- **The cooking pot:** any cauldron with a lit `campfire` or `soul_campfire` right under it (`potFires`). An empty-hand tap or a sneak-tap opens the menu; a tap with a bucket or bottle without sneaking fills or empties the cauldron as usual (to use a bucket on a pot, don't sneak). With `cookAnywhere` on, the recipe pages of `/realm:cooking` have the cook buttons too.
+- **Cooking** takes `cookSeconds` (3) for any number of batches, up to `maxBatch` (16) at once: smoke rises from the pot, it bubbles (`bubble.pop`, if **Cooking sounds** is on) and ends with happy-villager sparkles and a ding. One cooking at a time per player. If you walk away the dish still goes to your inventory (or drops at your feet when it's full); if you leave the game, it drops at the pot.
+- **Ingredients:** a plain ingredient (`Wheat`, `Cooked Beef`) only counts items without a custom name, so cooking never uses up a named dish or fish. A rare ingredient counts only the real thing (its name and its `Rare ingredient` lore). Honey-Glazed Ham gives back the glass bottle.
+- **A dish** is the vanilla food item named after the dish, in plain text without color codes (`Harbor Chowder` is a `minecraft:rabbit_stew` named exactly `Harbor Chowder`), with lore: a gray line about it (`Warm and salty, like the docks at dawn`), its effects in blue with their base length (`Water Breathing I (8:00)`) or `Rolls for a surprise`, and `Kitchen dish` (gray) or `Rare dish` (gold). Servings of the same dish always have the same lore, so they stack like the food they are (stews and soups don't stack, as in vanilla, and give back their bowl when eaten). An anvil-renamed food is not a dish: anvils can't add lore.
+- **Eating:** the effects are added without particles. Lengths are multiplied by **Effect durations** (`durationMultiplier`, 1x) except Saturation, Levitation and Nausea. An effect never makes one you already have weaker or shorter, so eating the same dish twice doesn't stack the time; eating it when the effect is running low tops it up. The lore always shows the base length; chat shows the real one. Like any food, a dish can only be eaten when you're hungry (in survival).
+- **Rolling dishes** (Mystery Stew, Hiccup Cookies, Gambler's Goulash) roll one result: Speed II 2 min (weight 12), Strength I 3 min (10), Haste II 2 min (10), Regeneration I 40s (10), Absorption II 4 min (8), Jump Boost II and Slow Falling 2 min (8), Night Vision 10 min (8), Hero of the Village 10 min (4), the jackpot `JACKPOT! Everything at once!` (Strength, Speed and Absorption 4 min and Regeneration 30s, weight 3), or something silly: floating up for 3 seconds with Slow Falling to land softly (5), Nausea for 8 seconds (4), sparkles all over for 15 seconds (5), six hiccup hops (5), or a burp everyone within 16 blocks hears about (`Alex burps loudly.`, 4). Hiccup Cookies double the silly weights; Gambler's Goulash has 0.3x the silly weights and triple the jackpot. With **Rolling dishes** disabled (`rollingDishes`) they give their plain effect instead (table below).
+- **Bea's Kitchen** (tap an NPC with the `chef` role, `chefRole`, and pick **Kitchen**): Bea says a line (`Bea: "Hungry? Of course you are. Sit, sit!"`), how many recipes you know and your Crowns, then a **Learn: <dish>** button for each recipe she teaches that you don't know yet with its prices, **What can I cook?** and **Rare ingredients**. Picking a recipe shows each way to pay (`Pay 30 Crowns`, `Pay 8 Cooked Beef`); one you can't afford is gray. Paying teaches it: `New recipe: Warden's Ration! (taught by Bea)`.
+- **Recipe cards** drop from champions (`recipeCardChance`, 10%, killer only), one of the recipes marked "recipe card" below, at random. Opening a pot, the Kitchen or `/realm:cooking` with a card for a recipe you don't know teaches it and uses up the card; a card for a recipe you know stays, to give to someone else.
+- **Champions** (`realm:champion_slain`): the killer has a 60% chance (`championDropChance`) of a Champion's Heart, the same chance of its trait's ingredient (Stormcaller: Storm Eel, Frostbound: Frost Pepper, Vampiric: Moon Salt) and of an Ember Truffle when it died in the Nether; each helper has half the chance of a Champion's Heart. They go straight into your inventory: `Rare ingredient: Champion's Heart (Gerald the Stormcaller)`.
+- **Other packs:** each serving cooked gives 3 Farming XP in [Skills](#skills--skills_bp) (`skillXp`).
+
+The recipes (dish names are exact, for stories that deliver or reward them):
+
+| Dish | Item | Makes | Ingredients | When eaten | Learned from |
+|---|---|---|---|---|---|
+| `Harbor Chowder` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Cooked Cod, 1 Baked Potato, 1 Kelp | Water Breathing I 8 min | Everyone (basic) |
+| `Fisherman's Breakfast` | `minecraft:cooked_salmon` | 1 | 1 Cooked Salmon, 1 Bread, 1 Egg | Conduit Power I 3 min | Everyone (basic) |
+| `Miner's Pasty` | `minecraft:baked_potato` | 2 | 1 Cooked Beef, 2 Potato, 1 Wheat | Haste I 5 min | Everyone (basic) |
+| `Garden Salad` | `minecraft:beetroot_soup` | 1 | 1 Bowl, 2 Beetroot, 1 Carrot | Speed I 5 min | Everyone (basic) |
+| `Hearty Porridge` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 3 Wheat, 1 Sugar | Saturation (fills you up), Regeneration I 15s | Everyone (basic) |
+| `Campfire Kebab` | `minecraft:cooked_mutton` | 2 | 2 Cooked Mutton, 1 Carrot, 1 Stick | Jump Boost I 5 min | Everyone (basic) |
+| `Warden's Ration` | `minecraft:bread` | 3 | 2 Bread, 1 Cooked Beef, 2 Dried Kelp | Resistance I 4 min | Bea: 30 Crowns, or 8 Cooked Beef |
+| `Glow Berry Tart` | `minecraft:cookie` | 3 | 3 Glow Berries, 2 Wheat, 1 Sugar | Night Vision I 10 min | Bea: 25 Crowns, or 16 Glow Berries |
+| `Honey-Glazed Ham` | `minecraft:cooked_porkchop` | 2 | 2 Cooked Porkchop, 1 Honey Bottle, 1 Sugar (gives back 1 Glass Bottle) | Absorption I 6 min, Regeneration I 15s | Bea: 35 Crowns, or 4 Honey Bottle |
+| `Spiced Pumpkin Soup` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Pumpkin, 1 Sugar, 1 Cocoa Beans | Fire Resistance I 8 min | Bea: 40 Crowns, or 8 Pumpkin |
+| `Climber's Trail Mix` | `minecraft:cookie` | 4 | 1 Cocoa Beans, 2 Wheat, 2 Sweet Berries | Jump Boost II 3 min, Slow Falling I 3 min | Bea: 30 Crowns, or 16 Sweet Berries |
+| `Rabbit Ragout` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Cooked Rabbit, 1 Carrot, 1 Potato, 1 Brown Mushroom | Speed I 8 min, Jump Boost I 8 min | Bea: 40 Crowns, or 6 Rabbit Hide |
+| `Pathfinder's Carrots` | `minecraft:golden_carrot` | 2 | 2 Golden Carrot, 1 Sugar | Night Vision I 8 min, Speed I 4 min | Bea: 45 Crowns, or 16 Gold Nugget |
+| `Smith's Hotpot` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Cooked Beef, 1 Baked Potato, 1 Coal | Haste II 4 min | Bea: 50 Crowns, or 6 Iron Ingot |
+| `Sweet Berry Roll` | `minecraft:bread` | 2 | 1 Bread, 3 Sweet Berries, 1 Sugar | Regeneration I 45s | Bea: 25 Crowns, or 32 Wheat |
+| `Mystery Stew` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Red Mushroom, 1 Brown Mushroom, 1 Beetroot | **Rolls** (usual odds); with rolling off: Saturation (fills you up) | Bea: 20 Crowns, or 8 Red Mushroom |
+| `Hiccup Cookies` | `minecraft:cookie` | 4 | 2 Wheat, 1 Cocoa Beans, 1 Sugar | **Rolls** (twice the silly odds); with rolling off: Jump Boost I 1 min | Bea: 15 Crowns, or 8 Cocoa Beans |
+| `Gambler's Goulash` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Cooked Beef, 1 Carrot, 3 Gold Nugget | **Rolls** (few silly results, triple jackpot odds); with rolling off: Strength I 1 min | Bea: 60 Crowns, or 4 Gold Ingot; recipe card |
+| `Storm Eel Pie` | `minecraft:pumpkin_pie` | 2 | 1 Storm Eel, 3 Wheat, 1 Egg | Speed II 5 min, Haste II 5 min | Bea: 1 Storm Eel + 60 Crowns; recipe card |
+| `Frost Pepper Soup` | `minecraft:beetroot_soup` | 1 | 1 Bowl, 1 Frost Pepper, 2 Beetroot | Fire Resistance I 15 min, Resistance I 3 min | Bea: 1 Frost Pepper + 60 Crowns; recipe card |
+| `Ember Truffle Risotto` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Ember Truffle, 2 Wheat, 1 Brown Mushroom | Strength I 6 min, Fire Resistance I 6 min | Bea: 1 Ember Truffle + 60 Crowns; recipe card |
+| `Moon Salt Roast` | `minecraft:cooked_beef` | 2 | 2 Cooked Beef, 1 Moon Salt | Night Vision I 15 min, Strength I 5 min | Bea: 1 Moon Salt + 60 Crowns; recipe card |
+| `Golden Harvest Loaf` | `minecraft:bread` | 3 | 1 Harvest Saffron, 3 Wheat | Health Boost II 10 min, Saturation (fills you up) | Bea: 1 Harvest Saffron + 60 Crowns; recipe card |
+| `Champion's Heart Stew` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Champion's Heart, 1 Cooked Beef, 1 Carrot, 1 Baked Potato | Strength I 8 min, Health Boost II 8 min, Regeneration I 20s | Bea: 1 Champion's Heart + 80 Crowns; recipe card |
+| `Starwright Bread` | `minecraft:bread` | 2 | 1 Starwright Flour, 2 Wheat, 1 Glowstone Dust | Night Vision I 15 min, Slow Falling I 5 min, Jump Boost I 5 min | recipe card |
+| `Lantern Cake` | `minecraft:pumpkin_pie` | 2 | 1 Glow Honey, 3 Wheat, 2 Sugar, 1 Egg, 1 Glowstone Dust | Night Vision I 20 min, Regeneration I 1 min, Hero of the Village I 20 min | recipe card |
+| `Hearthkeeper's Feast` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Champion's Heart, 1 Glow Honey, 1 Harvest Saffron, 1 Cooked Beef | Health Boost II 15 min, Resistance I 15 min, Strength I 10 min, Regeneration I 1 min, Saturation (fills you up) | recipe card |
+
+The rare ingredients (each is a vanilla item with a custom name and `Rare ingredient` lore; eating or using one does nothing special):
+
+| Ingredient | Item | Where it comes from | Used in |
+|---|---|---|---|
+| `Champion's Heart` | `minecraft:beetroot` | Every champion: the killer 60%, helpers 30% (`championDropChance`) | Champion's Heart Stew, Hearthkeeper's Feast |
+| `Storm Eel` | `minecraft:cod` | The Storm Eel of [Fishing 2.0](#fishing-20--fishing_bp) (thunderstorms; any cod named `Storm Eel` with lore counts), and Stormcaller champions | Storm Eel Pie |
+| `Frost Pepper` | `minecraft:light_blue_dye` | Frostbound champions; 4% from each stray you kill (`forage.frostPepper`) | Frost Pepper Soup |
+| `Glow Honey` | `minecraft:honeycomb` | 30% when you harvest a full beehive or bee nest with a bottle or shears at night (time 13000 to 23000, `forage.glowHoney`) | Lantern Cake, Hearthkeeper's Feast |
+| `Starwright Flour` | `minecraft:sugar` | 10% from each ripe wheat you break within 10 minutes (`starMinutes`) of an aurora or a meteor (`forage.starwrightFlour`) | Starwright Bread |
+| `Ember Truffle` | `minecraft:magma_cream` | 3% from each ripe nether wart you break (`forage.emberTruffle`); champions that die in the Nether | Ember Truffle Risotto |
+| `Moon Salt` | `minecraft:quartz` | 5% from each hostile mob you kill during a Blood Moon (`forage.moonSalt`); Vampiric champions | Moon Salt Roast |
+| `Harvest Saffron` | `minecraft:orange_dye` | 8% from each ripe crop (wheat, carrots, potatoes, beetroot) you break during a Harvest Moon (`forage.harvestSaffron`) | Golden Harvest Loaf, Hearthkeeper's Feast |
+
+Foraging (everything but champions) can be disabled with **Foraging** (`foragingEnabled`). Crops harvested by tapping with [Right-click Harvest](#right-click-harvest--harvest_bp) break no block, so they don't forage; break them to try your luck.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:cooking` | Everyone | The Kitchen menu: what you can cook now, your recipes, the cookbook (every recipe, its ingredients, effects and how to learn it) and the rare ingredients you carry. Operators also teach or forget recipes and give dishes, ingredients and recipe cards |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Dishes give their effects when eaten. When `false` they are plain food |
+| `durationMultiplier` | `1` | Every dish effect's length is multiplied by this (0.25 to 4 in game), except Saturation, Levitation and Nausea |
+| `rollingDishes` | `true` | Rolling dishes roll on the surprise table; when `false` they give their plain effect |
+| `championDropChance` | `60` | Percent chance that a champion's killer gets a Champion's Heart, and the same for its trait's ingredient; helpers get half this chance of a heart |
+| `recipeCardChance` | `10` | Percent chance that a champion's killer also gets a recipe card |
+| `foragingEnabled` | `true` | Rare ingredients from harvesting, beehives and hunting (the chances below). Champions drop them either way |
+| `forage.glowHoney` | `30` | Percent: Glow Honey from a full beehive or bee nest harvested at night |
+| `forage.starwrightFlour` | `10` | Percent: Starwright Flour from ripe wheat soon after an aurora or a meteor |
+| `forage.harvestSaffron` | `8` | Percent: Harvest Saffron from a ripe crop during a Harvest Moon |
+| `forage.moonSalt` | `5` | Percent: Moon Salt from a hostile mob killed during a Blood Moon |
+| `forage.emberTruffle` | `3` | Percent: Ember Truffle from ripe nether wart |
+| `forage.frostPepper` | `4` | Percent: Frost Pepper from a stray |
+| `starMinutes` | `10` | After an aurora or a meteor, ripe wheat can give Starwright Flour for this many minutes |
+| `potFires` | `["minecraft:campfire", "minecraft:soul_campfire"]` | Blocks that make a cauldron on top of them a cooking pot (lit ones only) |
+| `cookAnywhere` | `false` | Players can cook from `/realm:cooking` anywhere, without a pot |
+| `cookSeconds` | `3` | How long one cooking takes, in seconds, for any number of batches |
+| `maxBatch` | `16` | Most batches cooked at once |
+| `chefRole` | `"chef"` | The NPC role whose townsfolk open the Kitchen (Bea the Cook has it) |
+| `chefName` | `"Bea the Cook"` | Who teaches recipes, in menus |
+| `skillXp` | `3` | Farming XP (Skills pack) per serving cooked; `0` = none |
+
+The dishes, rare ingredients, champion trait ingredients and the rolling table are in `scripts/recipes.js` (`DISHES`, `INGREDIENTS`, `TRAIT_INGREDIENT`, `ROLLS`): `{ id, name, base, tier, yield, needs, effects, blurb, learn?, card?, returns?, roll? }` per dish, where `needs` are `[item id, count]` (`"ing:<id>"` for a rare ingredient), `effects` are `[effect id, amplifier, seconds]` and `learn` the ways Bea teaches it (`{ crowns?, items? }`, any one). Keep the ids and names of existing dishes: players' recipes are saved by id, and stories use the names.
+
+Operators can change `enabled`, `durationMultiplier`, `rollingDishes`, `championDropChance`, `recipeCardChance`, `foragingEnabled` and `cookAnywhere` in game with `/realm:config` (**Kitchen**). Each player can disable **Cooking sounds** in `/realm:prefs` (**Kitchen**). The rest stays in `config.js`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `cooking:known` | Player | JSON `[recipe id]`: the recipes the player learned (the 6 basics aren't saved; everyone knows them) |
+| `cooking:stats` | Player | JSON `{ c, e }`: servings cooked and dishes eaten, shown in `/realm:cooking` |
+| `cooking:pending` | World | JSON `{ player id: [recipe id] }`: recipes a story taught a player who was offline, learned when they join |
+| `cooking:moon` | World | JSON `{ s, t }`: the Blood or Harvest Moon announced by `realm:moon` and when (forgotten after 20 minutes or when it sets) |
+| `cooking:star` | World | When the last aurora or meteor was announced (ms), for Starwright Flour |
+| `cooking:cfg` | World | Settings changed in `/realm:config` |
+| `cooking:pref` | Player | The player's **Cooking sounds** choice |
+| `crowns` | Scoreboard | Bea's lessons are paid from the shared Crowns balance |
+
+### How it works
+
+- **Pots:** `beforeEvents.playerInteractWithBlock` on a `minecraft:cauldron` whose block below is a lit `potFires` block (its `extinguished` state isn't set), with an empty hand or while sneaking, is canceled and opens the menu on the next tick (once per tap, `isFirstEvent`).
+- **Eating:** `afterEvents.itemCompleteUse` from a player with an item that is a dish (its type is the dish's `base`, its name without § codes is the dish's name, and it has lore). The vanilla food points are the base item's.
+- **Foraging:** `afterEvents.playerBreakBlock` on ripe crops (`growth` 7) and nether wart (`age` 3); `afterEvents.entityDie` with a player as the damaging entity; full hives (`honey_level` 5) tapped with a glass bottle or shears. Scripts can't read the moon or the sky, so the pack remembers the last `realm:moon` (`{ state: "blood" | "harvest" | "normal" }` from [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp)) and `realm:sky_event` with `kind` `aurora` ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)) or `meteor` ([Meteor Strikes](#meteor-strikes--meteor_bp)).
+- **Townsfolk:** on `realm:npc_talk` with the `chef` role the pack answers `realm:npc_offer` with **Kitchen** (`order` 15), and opens it on `realm:npc_choose`.
+- **Script events it listens to** (JSON; other packs and `/scriptevent` can send them):
+  - `realm:champion_slain` `{ player?, helpers, name, trait, dim, ... }` from Champions: rare ingredients and recipe cards.
+  - `realm:recipe_learn` `{ player, recipe }`: teaches a recipe, by id (`starwright_bread`) or name (`Starwright Bread`; case, spaces and punctuation ignored). A player who is offline learns it when they next join. Story Questlines uses it for rewards.
+  - `realm:dish_give` `{ player, dish, amount? }` and `realm:ingredient_give` `{ player, ingredient, amount? }`: give real dishes or rare ingredients (by id or name), with the right lore. Stories that reward a dish should use these (or give the item with the dish's `base`, exact name and any lore).
+  - `realm:cooking_cook` `{ player, recipe, times? }`: cooks a known recipe at the player's position from what they carry, like the pot (for tests and automation).
+  - `realm:cooking_eat` `{ player, dish }`: gives a dish's effects as if eaten, without an item (for tests).
+- Events sent: `realm:npc_offer` (above) and `realm:skill_xp` `{ skill: "farming" }` for each cooking.
+
+---
+
+## Deck of Many Things — `domt_bp`
+
+Draw a card from the Deck of Many Things for a random effect: 100 cards, from a loaf of bread or a dizzy spell to a sky arena, a champion on your heels, a trip to the Nether or, once in a hundred draws, a wish. Most cards are small and quick (70 common), some are a real treat or a real nuisance (20 uncommon), a few are big swings (9 rare) and one is legendary. Everyone draws, with a cooldown between draws, or, if an operator sets it up that way, only operators draw, for themselves or for any player.
+
+### How to use
+
+1. Run `/realm:domt` and pick **Draw a card**. The deck shuffles, the card's name shows on screen in its rarity's color, and chat says what it does, like `[Deck] You drew The Merchant (Uncommon): A wandering trader appears with wares to sell.`
+2. Then the deck rests: you can draw again after 20 real minutes. **My draws** shows your last cards and when you can draw next.
+3. **The odds** lists every card and the chance of each rarity: Common 70%, Uncommon 20%, Rare 9%, Legendary 1% by default.
+4. If you draw **The Wish**, choose one of the three boons it offers. If you close the window, the wish waits: **Make your wish** is at the top of `/realm:domt` until you choose.
+5. **Operators:** `/realm:domt_draw <player>` draws for a player (no cooldown), and **Draw for a player** in the menu can pick the card too. **Cards on/off** (or `/realm:domt_effects`) switches each card on or off, a page per rarity. **Reset a cooldown** lets a player draw again at once. `/realm:config` → **Deck of Many Things** sets who draws (everyone with a cooldown, or operators only), the cooldown, the rarity weights, whether rare draws are announced, whether block-changing cards are allowed and how long The Spore lasts.
+
+### What players see
+
+- **The draw:** three page turns with enchanting sparkles and `The deck shuffles...` above the hotbar, then the card's name as a title, in white (Common), green (Uncommon), aqua (Rare) or light purple (Legendary), with a sound and particles to match. Chat gives the card's line, and sometimes a second gray line with details (`You landed at 812, 71, -340.`).
+- **A card that can't happen where you are** (no safe spot to land, no creature to swap with, no wild ground for mushrooms) says `The Merchant crumbles to dust: it can't happen here. The deck draws again...` and another card is drawn, up to 5 times. If nothing works, your cooldown is given back.
+- **Rare and legendary draws** are told to everyone in chat (`announceRare`), like `[Deck] Alex drew The Gate and fell into the Nether!`.
+- **Teleports are always safe:** the deck lands you on a full block with two open blocks above, never in lava, water, fire or a wall, only in loaded chunks, and near your own height first (so a card drawn in a cave keeps you in caves). The far ones (The Comet, The Gate) hold you high in the air with Slow Falling and Resistance for a moment while the place loads (with a ticking area for a few seconds if it loads slowly), then land you; an ocean or lava sea makes them try up to 3 other places nearby, and if none is safe, you are put back and the deck draws again.
+- **Mobs** appear on safe spots around you, 3 to 12 blocks away. Wolves and the horse are already tamed to you.
+- **Skill XP** cards (The Mentor, The Archmage) send XP to a random skill through the [Skills](#skills--skills_bp) pack; without it, that part does nothing.
+- **Crowns** cards add to or take from the `crowns` scoreboard, never below 0, with or without the [Crowns](#crowns--crowns_bp) pack.
+- **The Rainbow** cycles your name above your head through rainbow colors for 5 minutes, then puts it back. If Nicknames or AFK change your name meanwhile, the rainbow stops and leaves theirs.
+- **The rare cards:**
+  - **The Gate:** to the Nether (near your Overworld position divided by 8), or out of it to the Overworld, on a safe spot, with 2 minutes of Fire Resistance, 10 obsidian and a flint and steel to build a portal home. Not in the End.
+  - **The Arena:** a 15 by 15 platform appears about 24 blocks above you (only where that space is completely empty), walled with invisible barriers, and you fight three husks, a vindicator and a pillager for up to 2 minutes. Win for an enchanted book and 15 Crowns. Win, lose or run out of time, you're sent back where you were and every arena block is removed. If the server restarts mid-fight, the arena is removed within 10 minutes and you're sent back when you join.
+  - **The Champion:** a champion monster appears 8 to 12 blocks away, from the [Champions](#champions--elite_bp) pack (`realm:champion_spawn`, named `the Deck's Champion`); without it, the deck sends its own: `The Deck's Champion`, a vindicator with extra health, Strength and Resistance.
+  - **The Spore:** wild grass and dirt within 9 blocks turns to mycelium, with a few red and brown mushrooms and two mooshrooms, for 60 minutes (`sporeMinutes`). It only changes the top block of open ground with nothing on it, and fizzles if it sees anything built or farmed within 13 blocks (planks, glass, bricks, farmland, paths, torches, fences, chests and the like). When time is up, every block it changed that is still mycelium or its mushroom goes back to what was there (and mycelium that spread around the field turns back to grass); anything a player built meanwhile stays. Bedrock scripts can't change biomes, so the grass color and mob spawning stay as they were.
+  - **The Eclipse:** the time jumps to midnight for everyone.
+  - **The Archmage**, **The Knight**, **Second Chance** and **The Gamble:** see the card table.
+- **The Wish (legendary):** fireworks, a totem burst and a dragon's growl for everyone, then a choice of three boons drawn from eight: an enchanted netherite pickaxe (`Worldbreaker`) or sword (`Kingslayer`), an elytra with 64 rockets, 30 levels, 500 Crowns, an enchanted trident (`The Tide`) with a Heart of the Sea, a beacon with 9 iron blocks, or full diamond armor with Protection IV. Nothing is destroyed and nobody is hurt.
+- **Safe zones:** block-changing cards (The Arena and The Spore) never work inside a safe zone from the `realm:zones` protocol (Safe Zones, towns, land claims that share theirs); they fizzle there and the deck draws again. Operators can also disable block-changing cards altogether (`blockCards`).
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:domt` | Everyone | Opens the deck: **Draw a card** (once every 20 minutes, `cooldownMinutes`), **My draws**, **The odds**, and **Make your wish** when one is waiting; operators also get **Draw for a player**, **Cards on/off** and **Reset a cooldown** |
+| `/realm:domt_draw <player>` | Operators | Draws a random card for the players picked (`@a` works), with no cooldown |
+| `/realm:domt_effects` | Operators | Switches each of the 100 cards on or off, a page per rarity (saved in the world) |
+
+With **Who draws** set to **Operators only** (`mode` `operators`), only operators can draw, with no cooldown; everyone else can still see their draws and the odds.
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `mode` | `"cooldown"` | `"cooldown"`: everyone draws, once every `cooldownMinutes`. `"operators"`: only operators draw (no cooldown), for themselves or for any player |
+| `cooldownMinutes` | `20` | Real minutes between a player's draws in `"cooldown"` mode. `0` = no cooldown |
+| `weights.common` | `70` | How likely a common card is, relative to the other weights |
+| `weights.uncommon` | `20` | How likely an uncommon card is |
+| `weights.rare` | `9` | How likely a rare card is |
+| `weights.legendary` | `1` | How likely the legendary card is |
+| `announceRare` | `true` | Rare and legendary draws are told to everyone in chat |
+| `blockCards` | `true` | The Arena and The Spore, which place blocks for a while, can be drawn |
+| `sporeMinutes` | `60` | Minutes before The Spore's field turns back to grass |
+| `disabled` | `[]` | Card ids (from the table below) that start disabled; the operators' choices in `/realm:domt_effects` win over this list |
+| `historySize` | `20` | How many past draws each player's history keeps |
+
+A rarity whose cards are all disabled is skipped, and its weight shared out among the others. Operators can change `mode`, `cooldownMinutes`, the four weights, `announceRare`, `blockCards` and `sporeMinutes` in game with `/realm:config` (**Deck of Many Things**), and switch cards in `/realm:domt_effects`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `domt:off` | World | JSON `{ card id: true (disabled) or false (enabled) }`: the operators' choices that differ from `disabled` in `config.js` |
+| `domt:draws` | World | JSON `{ card id: times drawn }` |
+| `domt:tasks`, `domt:task:<id>` | World | Block changes waiting to be undone (an arena, a spore field): where, when, and what to put back |
+| `domt:cfg` | World | Settings changed in `/realm:config` |
+| `domt:next` | Player | When the player may draw again (milliseconds since 1970) |
+| `domt:history` | Player | JSON list of the last draws: `[time, card id, operator who drew it]` |
+| `domt:wish` | Player | The three boons The Wish offered, until one is chosen |
+| `domt:arena` | Player | Where to send the player back if the server restarts mid-arena |
+| `domt:name` | Player | The name to put back after The Rainbow, if the server restarts first |
+
+### How it works
+
+- A draw picks a rarity by the weights (only rarities with a card enabled), then a card of that rarity at random. A card whose handler can't work where you are says so, and the deck draws again without that card.
+- Block changes (The Arena, The Spore) are saved with the time to undo them and checked every 10 seconds, so a restart doesn't leave them behind. A block is only put back where the block the deck placed is still there.
+- Safe zones arrive as `realm:zones` `{ src, part, parts, zones }` script events; the pack keeps the latest list from each provider and asks for them with `realm:zones_ping` after loading. Every zone counts as the full square around its center, to be safe.
+- Other packs: The Champion sends `realm:champion_spawn` (with a tag starting `realm:domt_champ_`, and spawns its own if no champion appears), The Mentor and The Archmage send `realm:skill_xp` `{ player, skill, amount }`, and the Crowns cards use the `crowns` scoreboard.
+- **Testing:** an operator (or the server console) can run `/scriptevent realm:domt_test {"effect":"<card id>"}` to run one card's handler on themselves (several ids separated by commas work too), or `{"effect":"all","player":"<name>"}` for all 100 in a row on that player. Each card is checked for its main effect (an effect, an item, a mob, a move...) and the result goes to the content log as `[domt] TEST PASS ...` or `TEST FAIL ...`, ending with `TEST SUMMARY 100/100 passed`. After each card the test puts the player back, clears their effects and removes the mobs it made, so it isn't meant for a busy realm.
+
+### The cards
+
+| # | Card | Id | Rarity | Kind | What happens |
+|---|---|---|---|---|---|
+| 1 | Swift Feet | `swift_feet` | Common | good | Speed II for 3 minutes. |
+| 2 | The Frog | `the_frog` | Common | good | Jump Boost II for 3 minutes. |
+| 3 | Owl's Eyes | `owl_eyes` | Common | good | Night Vision for 10 minutes. |
+| 4 | Iron Skin | `iron_skin` | Common | good | Resistance for 3 minutes. |
+| 5 | The Miner | `the_miner` | Common | good | Haste II for 5 minutes. |
+| 6 | The Fish | `the_fish` | Common | good | Water Breathing for 10 minutes. |
+| 7 | The Feather | `the_feather` | Common | good | Slow Falling for 3 minutes. |
+| 8 | Ember Ward | `ember_ward` | Common | good | Fire Resistance for 5 minutes. |
+| 9 | The Healer | `the_healer` | Common | good | Instant healing and Regeneration II for 30 seconds. |
+| 10 | The Ox | `the_ox` | Common | good | Strength for 3 minutes. |
+| 11 | Golden Heart | `golden_heart` | Common | good | Absorption II for 3 minutes. |
+| 12 | Village Hero | `village_hero` | Common | good | Hero of the Village for 10 minutes: villagers give discounts. |
+| 13 | Full Belly | `full_belly` | Common | good | Your hunger is filled. |
+| 14 | The Shadow | `the_shadow` | Common | mixed | Invisibility for 3 minutes. |
+| 15 | The Vigor | `the_vigor` | Common | good | Health Boost II for 5 minutes: four extra hearts. |
+| 16 | Heavy Boots | `heavy_boots` | Common | bad | Slowness for 1 minute. |
+| 17 | Sore Arms | `sore_arms` | Common | bad | Mining Fatigue for 1 minute. |
+| 18 | Weak Arms | `weak_arms` | Common | bad | Weakness for 1 minute. |
+| 19 | Famine | `famine` | Common | bad | Hunger for 30 seconds. |
+| 20 | Dizzy Spell | `dizzy_spell` | Common | bad | Nausea for 15 seconds. |
+| 21 | The Blindfold | `the_blindfold` | Common | bad | Blindness for 10 seconds. |
+| 22 | The Dark | `the_dark` | Common | bad | Darkness for 15 seconds. |
+| 23 | Up, Up | `up_up` | Common | mixed | Levitation for 4 seconds, then a gentle Slow Falling down. |
+| 24 | Sour Berry | `sour_berry` | Common | bad | Poison for 5 seconds (it never kills). |
+| 25 | Hot Foot | `hot_foot` | Common | bad | Your boots catch fire for a moment. |
+| 26 | Butterfingers | `butterfingers` | Common | bad | You drop what you are holding. |
+| 27 | The Juggler | `the_juggler` | Common | bad | Your hotbar is shuffled. |
+| 28 | Baker's Gift | `bakers_gift` | Common | good | 8 bread. |
+| 29 | The Feast | `the_feast` | Common | good | 6 steaks. |
+| 30 | Golden Carrots | `golden_carrots` | Common | good | 4 golden carrots. |
+| 31 | The Apple | `the_apple` | Common | good | A golden apple. |
+| 32 | The Cake | `the_cake` | Common | good | A cake! Happy un-birthday. |
+| 33 | The Torch | `the_torch` | Common | good | 32 torches. |
+| 34 | The Quiver | `the_quiver` | Common | good | 24 arrows. |
+| 35 | Lump of Coal | `lump_of_coal` | Common | mixed | 8 coal. Were you naughty? |
+| 36 | Iron Ration | `iron_ration` | Common | good | 6 iron ingots. |
+| 37 | Fool's Gold | `fools_gold` | Common | good | 4 gold ingots. |
+| 38 | Merchant's Purse | `merchants_purse` | Common | good | 3 emeralds. |
+| 39 | The Woodsman | `the_woodsman` | Common | good | 16 oak logs. |
+| 40 | Green Thumb | `green_thumb` | Common | good | 16 bone meal. |
+| 41 | The Gardener | `the_gardener` | Common | good | Seeds, a sapling and a few carrots and potatoes. |
+| 42 | The Pearl | `the_pearl` | Common | good | 2 ender pearls. |
+| 43 | Honey Pot | `honey_pot` | Common | good | 3 bottles of honey. |
+| 44 | The Bouquet | `the_bouquet` | Common | good | A bunch of flowers. |
+| 45 | Rotten Luck | `rotten_luck` | Common | bad | 8 rotten flesh. Yum. |
+| 46 | Pocket Dirt | `pocket_dirt` | Common | bad | 16 dirt. Your pockets are full of it. |
+| 47 | Snow Day | `snow_day` | Common | good | 16 snowballs. |
+| 48 | The Name | `the_name` | Common | good | A name tag. |
+| 49 | The Flock | `the_flock` | Common | good | Three chickens come running. |
+| 50 | Stray Cat | `stray_cat` | Common | good | A stray cat finds you. Fish might win it over. |
+| 51 | Bunny Hop | `bunny_hop` | Common | good | Four rabbits hop out of the deck. |
+| 52 | The Grave | `the_grave` | Common | bad | Two zombies climb out of the ground. |
+| 53 | Creepy Crawlies | `creepy_crawlies` | Common | bad | Two spiders drop in. |
+| 54 | The Slime | `the_slime` | Common | bad | A slime oozes out of the deck. |
+| 55 | The Hive | `the_hive` | Common | mixed | Three bees buzz around. Be nice to them. |
+| 56 | Bone Rattle | `bone_rattle` | Common | bad | Two skeletons rattle up. |
+| 57 | Frog Chorus | `frog_chorus` | Common | good | Three frogs, ready to sing. |
+| 58 | The Hop | `the_hop` | Common | mixed | You blink 8 to 16 blocks away. |
+| 59 | The Wanderer | `the_wanderer` | Common | mixed | You are whisked up to 64 blocks in a random direction. |
+| 60 | The Sky | `the_sky` | Common | mixed | You are thrown 20 blocks into the sky, with Slow Falling. |
+| 61 | The Spin | `the_spin` | Common | mixed | You spin around. Which way were you going? |
+| 62 | The Spark | `the_spark` | Common | good | 50 experience points. |
+| 63 | Copper Purse | `copper_purse` | Common | good | 5 Crowns. |
+| 64 | The Taxman | `the_taxman` | Common | bad | The taxman takes 5 Crowns. |
+| 65 | The Leech | `the_leech` | Common | bad | You lose one experience level. |
+| 66 | The Bandage | `the_bandage` | Common | good | Your health is fully restored. |
+| 67 | Clean Slate | `clean_slate` | Common | mixed | Every effect on you is washed away, good and bad. |
+| 68 | The Fireworks | `the_fireworks` | Common | good | Fireworks! And three rockets to keep. |
+| 69 | Confetti | `confetti` | Common | good | A burst of confetti. Congratulations, on something! |
+| 70 | The Rainbow | `the_rainbow` | Common | good | Your name shines in rainbow colors for 5 minutes. |
+| 71 | The Merchant | `the_merchant` | Uncommon | good | A wandering trader appears with wares to sell. |
+| 72 | The Void | `the_void` | Uncommon | mixed | You swap places with a nearby creature. |
+| 73 | The Scholar | `the_scholar` | Uncommon | good | A random enchanted book. |
+| 74 | The Smith | `the_smith` | Uncommon | good | An enchanted iron tool or weapon. |
+| 75 | The Sage | `the_sage` | Uncommon | good | 5 experience levels. |
+| 76 | The Mentor | `the_mentor` | Uncommon | good | 250 XP in a random skill (with the Skills pack). |
+| 77 | Silver Purse | `silver_purse` | Uncommon | good | 25 Crowns. |
+| 78 | The Gem | `the_gem` | Uncommon | good | 2 diamonds. |
+| 79 | The Pack | `the_pack` | Uncommon | good | Two wolves, already loyal to you. |
+| 80 | The Steed | `the_steed` | Uncommon | good | A tamed horse, and a saddle for it. |
+| 81 | Ambush | `ambush` | Uncommon | bad | Monsters surround you! More of them when friends are near. |
+| 82 | The Witch | `the_witch` | Uncommon | bad | A witch arrives, cackling. |
+| 83 | Night Terror | `night_terror` | Uncommon | bad | Two phantoms swoop down from the sky. |
+| 84 | The Beacon | `the_beacon` | Uncommon | good | Haste II, Speed, Strength and Resistance for 5 minutes. |
+| 85 | The Curse | `the_curse` | Uncommon | bad | Slowness II, Weakness, Mining Fatigue and Hunger for 2 minutes. |
+| 86 | The Comet | `the_comet` | Uncommon | mixed | You streak across the sky and land 150 to 300 blocks away. |
+| 87 | Treasure | `treasure` | Uncommon | good | A handful of riches: iron, gold, lapis, redstone, emeralds or a diamond. |
+| 88 | The Shepherd | `the_shepherd` | Uncommon | good | Three sheep and a pair of shears. |
+| 89 | The Guardian | `the_guardian` | Uncommon | good | An iron golem comes to protect you. |
+| 90 | The Patrol | `the_patrol` | Uncommon | bad | A pillager patrol finds you. |
+| 91 | The Gate | `the_gate` | Rare | mixed | You are pulled into the Nether (or out of it), with obsidian and flint and steel to build a portal home. |
+| 92 | The Arena | `the_arena` | Rare | mixed | You are pulled into a sky arena. Win for an enchanted book and 15 Crowns. (block-changing) |
+| 93 | The Champion | `the_champion` | Rare | bad | A champion monster comes for you. |
+| 94 | The Spore | `the_spore` | Rare | mixed | The wild ground around you turns to mushroom fields for an hour, with two mooshrooms. (block-changing) |
+| 95 | The Eclipse | `the_eclipse` | Rare | mixed | Night falls at once, for everyone. |
+| 96 | The Archmage | `the_archmage` | Rare | good | 15 experience levels and 750 XP in a random skill. |
+| 97 | The Knight | `the_knight` | Rare | good | Full iron armor, enchanted. |
+| 98 | Second Chance | `second_chance` | Rare | good | A Totem of Undying and an enchanted golden apple. |
+| 99 | The Gamble | `the_gamble` | Rare | mixed | A coin flip: double your Crowns (up to 100 more), or lose half (up to 100). |
+| 100 | The Wish | `the_wish` | Legendary | good | The deck grants one wish: choose one of three powerful boons. |
+
+---
+
+---
+
+## Slot Machine — `slots_bp`
+
+A slot machine with three reels, played for [Crowns](#crowns--crowns_bp) or emeralds. Play it anywhere from the **Slot Machine** item, or at a fixed machine an operator made from a block (a note block or a jukebox at the tavern, say). The reels are honest: each one is drawn at random on its own and stops on exactly what was drawn, and the pay table, with each line's odds and the exact return, is one tap away. Every player has a daily loss limit, a short pause between spins and can block themselves from the slots for a while.
+
+### How to use
+
+1. Run `/realm:slots` and pick **Spin**, use a **Slot Machine** item, or tap a slot machine block.
+2. Pick what to play for (**Crowns** or **Emeralds**), then a stake: 1, 5, 10 or 25 Crowns, or 1, 2, 4 or 8 emeralds. The stake is taken at once.
+3. The reels spin above your hotbar for 2 seconds and stop one by one. Chat says what you won, like `2x Cherry! +30 Crowns (stake 10. Balance: 510)` or `No win. -10 Crowns (Balance: 490)`.
+4. Pick **Spin again** for the same stake, **Change stake**, or **Close**.
+5. `/realm:slots` also has **My stats**, the **Pay table** and **Limits and breaks**, where you can block yourself from playing for 1, 7 or 30 days, or until an operator lifts it.
+6. **Operators:** `/realm:slots` → **Operator tools** makes the block you look at a machine (or removes it), gives Slot Machine items (also `/realm:slots_give`), lifts a player's self-block and shows the realm's totals. `/realm:config` → **Slot Machine** sets the currencies, the daily loss limits, the pause between spins and jackpot announcements.
+
+### What players see
+
+- **The reels** spin in the bar above the hotbar (`[ Cherry | Lemon | Bell ]`) with ticking sounds; the first stops after 1 second, the second after 1.5 and the third after 2, each with a click. Spinning reels flash random symbols, and a stopped reel shows the real result.
+- **Wins** pay a multiple of the stake, which includes the stake (a 3x win on 10 Crowns gives 30, so you're up 20). Only the best matching line counts. A win of 10x or more plays a level-up sound.
+- **The jackpot** (three Crowns, 300x) shows `JACKPOT!` on screen, sets off four fireworks around you and, with `announceJackpots`, tells everyone: `[Slots] Steve hit the JACKPOT for 7,500 Crowns!`
+- **Emeralds** are counted and taken from your inventory (plain emeralds only, not renamed ones); emerald wins go into your inventory, and what doesn't fit drops at your feet.
+- **Refusals** say why and take nothing: not enough money, `Wait 2s before the next spin.`, `That stake is over what's left of today's loss limit (9 Crowns).`, `You reached today's loss limit for Crowns (200 Crowns). Come back tomorrow (UTC).`, or `You blocked yourself from the slots for 6 more days.`
+- **Fixed machines:** tapping a machine block opens the machine instead of the block (sneak-tap in creative mode to use the block normally). Breaking the block removes the machine.
+
+**The pay table** (default `symbols` and `payouts`). Each reel has 32 stops: Cherry 7, Lemon 8, Bell 6, BAR 5, Gem 3, 7 2, Crown 1.
+
+| Result | Pays | Chance per spin |
+|---|---|---|
+| Crown Crown Crown (jackpot) | 300x | 1 in 32,768 |
+| 7 7 7 | 100x | 1 in 4,096 |
+| Gem Gem Gem | 40x | 1 in 1,214 |
+| BAR BAR BAR | 30x | 1 in 262 |
+| Bell Bell Bell | 18x | 1 in 152 |
+| Cherry Cherry Cherry | 10x | 1 in 96 |
+| Lemon Lemon Lemon | 10x | 1 in 64 |
+| Any two Cherries | 3x | 1 in 9 |
+| Any two Crowns | 8x | 1 in 352 |
+
+**Return to player: 91.97%** exactly (30,137 of every 32,768 staked comes back on average; the machine keeps about 8%), and 15.26% of spins win something. The menu computes these from `config.js`, so they stay right if you change the table: the return is the sum over every line of its chance times its pay, over all 32,768 equally likely reel stops. A 100,000-spin simulation with the machine's own code came out at 92.79% at stake 1 and 90.73% at stake 10 (the jackpot makes short runs swing).
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:slots` | Everyone | The menu: **Spin**, **My stats**, **Pay table**, **Limits and breaks** (and **Operator tools** for operators) |
+| `/realm:slots_spin` | Everyone | Opens the machine straight away: pick a currency and a stake (Crowns and emeralds both allowed by default, `currencies`) |
+| `/realm:slots_give [player]` | Operators | Gives the Slot Machine item to the players picked, or to you |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | The slots can be played. When `false`, machines and the item say they're closed |
+| `currencies.crowns` | `true` | Players may stake Crowns (the `crowns` scoreboard of the Crowns pack) |
+| `currencies.emeralds` | `true` | Players may stake emeralds from their inventory |
+| `stakes.crowns` | `[1, 5, 10, 25]` | The Crowns stakes to choose from |
+| `stakes.emeralds` | `[1, 2, 4, 8]` | The emerald stakes to choose from |
+| `dailyLossLimit.crowns` | `200` | Most Crowns a player may lose per UTC day (stakes minus winnings). `0` = no limit |
+| `dailyLossLimit.emeralds` | `32` | The same for emeralds |
+| `cooldownSeconds` | `2` | Seconds between the end of one spin and the start of the next |
+| `announceJackpots` | `true` | A jackpot is announced to everyone in chat |
+| `symbols` | 7 symbols (above) | The reel symbols, `{ id, name, color, weight }`; `weight` is how many of a reel's stops show it |
+| `payouts` | 9 lines (above) | The pay table, `{ symbol, count, pay, jackpot? }`: `count` reels showing `symbol` (anywhere) pay `pay` times the stake. The first matching line wins, so put bigger wins first |
+
+Operators can change `enabled`, `currencies.crowns`, `currencies.emeralds`, `dailyLossLimit.crowns`, `dailyLossLimit.emeralds`, `cooldownSeconds` and `announceJackpots` in game with `/realm:config` (**Slot Machine**). Stakes and the pay table stay in `config.js`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `slots:stats` | Player | JSON: spins, Crowns and emeralds staked and won, the biggest win and jackpots |
+| `slots:day` | Player | JSON `{ day, crowns, emeralds }`: the UTC day and that day's net loss per currency, for the daily limit |
+| `slots:block` | Player | When the player's self-block ends (milliseconds since 1970), or `-1` until an operator lifts it |
+| `slots:machines` | World | JSON list of machine blocks, `[{ d, x, y, z }]` |
+| `slots:totals` | World | JSON: all spins, Crowns and emeralds staked and paid out, jackpots |
+| `slots:machine` | Item | `true` on a Slot Machine item (a carrot on a stick named `Slot Machine`) |
+| `crowns` | Scoreboard | Balances, shared with the Crowns pack: stakes are taken from it and wins paid into it |
+
+## Silly Enchants — `silly_bp`
+
+Fourteen silly "enchantments" for your gear. They only add particles, sounds and a harmless bounce: none of them changes damage, armor, speed, drops or durability. Each one is a lore line on the item, like `Silly: Grunt Birthday`, and an item holds at most two. They come on **Silly Books** (enchanted books named `Silly Book`), which you apply from `/realm:silly` to the item in your hand.
+
+### How to use
+
+1. Get a **Silly Book**: operators hand them out, and the realm may sell them (at the caravan or market, if an operator adds them). A book says what it holds (`Silly Book: Hyper Jump`), or `Silly Book: Random` for a surprise.
+2. Hold the item to enchant (boots for Hyper Jump, a sword for Grunt Birthday...) and run `/realm:silly`.
+3. Pick **Apply a Silly Book**, then the book. The book is used up and the item gets a line like `Silly: Hyper Jump`. Each item takes up to 2.
+4. Wear or hold the item to see it work. Don't like it? `/realm:silly` → **Remove a silly enchant** takes it off for free (the book doesn't come back).
+5. Don't want to see your own silly effects for a while? Disable **My silly effects** in `/realm:prefs`; the lore stays.
+6. **Operators:** `/realm:silly` → **Give Silly Books**, or `/realm:silly_give <player> <book> [amount]`. `/realm:config` → **Silly Enchants** switches the effects, sets the enchants per item and the Hyper Jump cooldown.
+
+### What players see
+
+| Enchant | Goes on | What it does |
+|---|---|---|
+| Grunt Birthday (`grunt_birthday`) | Held item | Mobs you defeat pop like a party: confetti, a firework pop and a cheer |
+| Hyper Jump (`hyper_jump`) | Boots | Sneak and jump for a huge bounce (about 6 blocks, `hyperJumpStrength`), with slow falling so you land softly. Every 4 seconds (`hyperJumpCooldownSeconds`) |
+| Squeak (`squeak`) | Boots | Your footsteps squeak |
+| Bubbles (`bubbles`) | Any armor | You leave a trail of bubbles |
+| Rainbow Trail (`rainbow_trail`) | Boots | Rainbow-colored puffs follow your steps |
+| Hat Trick (`hat_trick`) | Held item | A critical hit (hitting while falling) pulls a baby rabbit out of thin air; it vanishes in a puff after 10 seconds (`hatTrickRabbitSeconds`). At most one every 10 seconds (`hatTrickCooldownSeconds`). Baby rabbits drop nothing |
+| Disco (`disco`) | Any armor | Colored lights flash around you, with music notes |
+| Moo (`moo`) | Helmet | You moo when you get hurt |
+| Confetti Swing (`confetti_swing`) | Held item | Every hit throws confetti |
+| Tiny Thunder (`tiny_thunder`) | Held item | A tiny thunderclap and a spark when you defeat a mob |
+| Fish Slap (`fish_slap`) | Held item | Your hits make a wet fish slap. Best on a fish |
+| Glow (`glow`) | Helmet | You sparkle softly at night |
+| Duck (`duck`) | Any armor | You quack when you sneak |
+| Hiccups (`hiccups`) | Helmet | You hiccup now and then |
+
+- **Held item** means anything you hold that isn't armor or a book: swords, tools, a bow, even a raw cod. **Helmet** includes the turtle shell; **any armor** includes the elytra.
+- **Applying** says `Silly: Hyper Jump! Sneak and jump for a huge bounce, with slow falling to land softly.` with a puff of confetti. A book that doesn't fit says so (`Hyper Jump goes on boots.`), and an item with 2 already says `An item holds at most 2 silly enchants. Remove one first.` A Random book picks one that fits the item.
+- The effects follow your worn armor and the item in your main hand, checked twice a second. Other players see and hear them too.
+
+**Selling Silly Books** (for operators). This pack doesn't change other packs, but a book is recognized by its lore line, so a shop can sell one. In the [Merchant Caravan](#merchant-caravan--caravan_bp)'s `goods` in `caravan_bp/scripts/config.js`, add for example:
+
+```js
+{ id: "silly_book", item: "minecraft:enchanted_book", amount: 1, price: 30, stock: 3, name: "Silly Book (random)", nameTag: "§r§dSilly Book", lore: ["§dSilly Book: Random", "§7A surprise silly enchant"] },
+```
+
+Use `Silly Book: Hyper Jump` (any enchant's name) instead of `Random` for a particular one. The [Crowns](#crowns--crowns_bp) market's `buy` list only sells plain items, so the caravan is the place for books.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:silly` | Everyone | The menu: apply a Silly Book to the item in your hand (up to 2 per item, `maxPerItem`), remove one for free, see every enchant (and give books, for operators) |
+| `/realm:silly_give <player> <book> [amount]` | Operators | Gives Silly Books: `book` is `random` or an enchant id (`hyper_jump`, `grunt_birthday`...), `amount` 1 to 64 (default 1) |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Silly effects play. When `false`, the lore stays on the gear but does nothing |
+| `maxPerItem` | `2` | Most silly enchants one item can hold |
+| `disabled` | `[]` | Enchant ids that never play and can't be applied, e.g. `["moo"]` |
+| `hyperJumpStrength` | `1.0` | How high Hyper Jump bounces (vertical knockback; 1.0 is about 6 blocks, at most 2.5) |
+| `hyperJumpCooldownSeconds` | `4` | Seconds between Hyper Jumps |
+| `hatTrickCooldownSeconds` | `10` | Seconds between Hat Trick rabbits for one player |
+| `hatTrickRabbitSeconds` | `10` | Seconds before a Hat Trick rabbit vanishes |
+
+Operators can change `enabled`, `maxPerItem` and `hyperJumpCooldownSeconds` in game with `/realm:config` (**Silly Enchants**). Each player can switch their own effects with **My silly effects** in `/realm:prefs`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| Item lore `Silly: <name>` | Item | The enchants on a piece of gear (plain lore, so it survives anvils and trading) |
+| Item lore `Silly Book: <name>` | Item | What a Silly Book holds (`Random` for a surprise) |
+| `silly:applied` | Player | How many silly enchants the player has applied |
+| `silly:pref` | Player | JSON of the player's preferences (**My silly effects**) |
+| `silly:until` | Entity | When a Hat Trick rabbit (tagged `silly_rabbit`) vanishes |
+
+## Dolphin Friends — `dolphin_bp`
+
+Tame a dolphin with raw fish, then ride it through the sea: it swims where you look. Tamed dolphins stay (they never despawn), follow you in the water, can be named and called to you.
+
+### How to use
+
+1. Find a dolphin (oceans) and feed it **raw cod** or **raw salmon**: tap it with the fish. Each fish has a 25% chance (`tameChancePercent`) to tame it: hearts mean it worked, smoke means try again. Chat says `The dolphin trusts you!`. It takes 4 fish on average.
+2. **Ride:** tap your tamed dolphin with an empty hand. It swims where you look: push forward to go, back to slow down. Look up or down to rise or dive.
+3. **Leap:** press jump while swimming at the surface and the dolphin jumps out of the water.
+4. **Get off:** sneak.
+5. Run `/realm:dolphin` for **My dolphins**: call one to you (it swims over when you're in the water, up to 128 blocks), name it or release it. **Call the nearest** calls the closest one; `/realm:dolphin_call` does the same.
+6. **Operators:** `/realm:dolphin` → **Operator tools** lists every tamed dolphin with its owner and releases the one you look at. `/realm:config` → **Dolphin Friends** sets the taming chance, how many dolphins each player may have, whether others can ride yours and the top speed.
+
+### What players see
+
+- **Feeding** works as in vanilla too: a fed dolphin may still lead you to treasure. One fish is used per tap, whether or not the dolphin takes it as a vanilla treat. A player can have up to 3 tamed dolphins (`maxPerPlayer`); a fourth says `You already have 3 dolphins. Release one first (/realm:dolphin).`
+- **Riding:** the dolphin turns to face where you look and speeds up to 12 blocks per second (`maxSpeed`, gaining `acceleration` 1.6 blocks per second each tick). Without input it glides to a stop. Out of the water it doesn't steer. Leaps need 1.5 seconds between them. Others can ride your dolphins too unless an operator disables `othersCanRide`.
+- **Following:** an unridden tamed dolphin swims toward its owner when you're both in the water and more than 8 blocks apart (`followDistance`), up to 64 blocks away.
+- **Calling:** the dolphin must be loaded (near a player) and in your dimension, and you must be in the water. It appears next to you with hearts.
+- A tamed dolphin that dies tells its owner: `Splash died.`
+- The game itself only accepts a fish from a dolphin every few seconds (its treat cooldown); a tap during that time does nothing and uses no fish, so taming takes a little patience.
+- **For operators and tests:** with cheats on, `/scriptevent realm:dolphin_feed` (run by an operator holding raw cod or salmon) feeds the nearest dolphin within 5 blocks exactly as a tap would.
+
+**Compatibility note:** this pack carries a copy of the vanilla dolphin's behavior file (`entities/dolphin.json`, from Minecraft 1.26.50) with one addition: a `realm:dolphin_tamed` group (a seat for one player, `minecraft:rideable`; `minecraft:is_tamed`; `minecraft:persistent`), added by the event `realm:dolphin_tame` and removed by `realm:dolphin_release`. Wild dolphins behave exactly as in vanilla: treasure leading, playing with items, swimming with players for Dolphin's Grace, breathing air, drying out on land. All components are stable ones, so no experiments are needed on the Realm. Two things to know: another behavior pack that also changes the dolphin wins or loses depending on pack order (only the top one's file is used), and if a future Minecraft update changes the vanilla dolphin, this copy keeps the old behavior until it is refreshed from the newest vanilla file.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:dolphin` | Everyone | Your tamed dolphins (up to 3, `maxPerPlayer`): call, name, release; **Call the nearest** (and **Operator tools** for operators) |
+| `/realm:dolphin_call` | Everyone | Calls your nearest tamed dolphin to you (you must be in the water) |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Dolphins can be tamed, ridden and called. When `false`, tamed dolphins stay tamed (and can still be sat on) but don't steer, follow or come when called |
+| `tameChancePercent` | `25` | Chance in percent that one raw cod or salmon tames a dolphin |
+| `maxPerPlayer` | `3` | Most tamed dolphins one player can have |
+| `othersCanRide` | `true` | Other players may ride and steer your tamed dolphins |
+| `maxSpeed` | `12` | Top speed while ridden, in blocks per second |
+| `acceleration` | `1.6` | Blocks per second a ridden dolphin gains each tick |
+| `leapStrength` | `0.9` | Upward push of a leap out of the water |
+| `followDistance` | `8` | A tamed dolphin swims after its owner (in water) when farther than this many blocks |
+
+Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanRide` and `maxSpeed` in game with `/realm:config` (**Dolphin Friends**).
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `dolphin:owner` | Entity | The owner's player id on a tamed dolphin |
+| `dolphin:ownerName` | Entity | The owner's name when it was tamed |
+| `dolphin:index` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: every tamed dolphin's owner, name and last known spot, for the lists while it's far away |
+| `dolphin:tamedCount` | Player | How many dolphins the player has tamed |
 
 ## Treasure Maps & Riddles — `maps_bp`
 
@@ -2944,8 +3709,8 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 3. Hold the map in your hand: every 2 seconds the line above the hotbar says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
 4. Get within 30 blocks of where the clue points and the next clue appears in chat and on the map. As you get close, the map also names what the spot looks like (`The spot lies among the trees.`).
 5. On the last clue, once you're close, the map grows hot: the chest is buried nearby, 1 to 3 blocks down. Follow `Hot` to `Burning hot! Dig here.`; standing over it pays the Crowns. Then dig up the chest for the rest.
-6. Lost the map, or the clue? Run `/realm:maps` for your hunt's clue, a new copy of the map, or to give the hunt up.
-7. **Operators:** `/realm:maps_give <player>` gives a free map. `/realm:config` → **Treasure Maps & Riddles** sets the price, how far maps lead, how many hunts a player can have, the Crowns found, the distance from world spawn and the hints.
+6. Lost the map, or the clue? Run `/realm:maps` (or `/realm:maps_hunts`) for your hunt's clue, a new copy of the map, or to give the hunt up.
+7. **Operators:** `/realm:maps` opens the **Treasure Maps** menu instead: `Your treasure hunts`, `Give a treasure map` (pick a player online) and `Settings` (which points to `/realm:config` → Treasure Maps & Riddles). `/realm:maps_give <player>` gives a free map from chat. `/realm:config` → **Treasure Maps & Riddles** sets the price, how far maps lead, how many hunts a player can have, the Crowns found, the distance from world spawn and the hints.
 
 ### What players see
 
@@ -2964,7 +3729,8 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:maps` | Everyone | Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up |
+| `/realm:maps` | Everyone | Your treasure hunt, like `/realm:maps_hunts`. Operators get the **Treasure Maps** menu instead: their hunts, `Give a treasure map` and `Settings` |
+| `/realm:maps_hunts` | Everyone | Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up |
 | `/realm:maps_give <player>` | Operators | Gives the players picked (`@a` works) a free treasure map, starting where each one stands. Skips players outside the Overworld or already on as many hunts as allowed (default 1, `maxHunts`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3027,9 +3793,9 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 2. Discover waystones by tapping them or walking within 4 blocks of one: `Waystone discovered: River Gate.`
 3. To travel, tap any waystone with an empty hand. Pick a waystone you've discovered; each button shows how far it is and what it costs (`240m NE, 3 Crowns`).
 4. Stand still for 10 seconds while the countdown runs above the hotbar (`Traveling to River Gate in 7...`). Moving more than a block or getting hurt cancels the trip. The screen fades and you arrive next to the other waystone; the trip is paid then.
-5. Run `/realm:waystones` to list the waystones you've discovered and how far they are.
+5. Run `/realm:waystones` for the waystone menu: **My waystones** (also `/realm:waystones_list`) lists the waystones you've discovered and how far they are.
 6. At an inn, tap the innkeeper: **Rent a bed** (10 Crowns) makes the inn your respawn point and gives you Well Rested; **Hear the news** tells what's happened lately (tornadoes, meteors, caravans...).
-7. **Operators:** look at a waystone's lodestone or sign and run `/realm:waystones_remove` to remove it. `/realm:config` → **Waystones & Inns** sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, and the inn's price and Well Rested time.
+7. **Operators:** **Remove a waystone** in `/realm:waystones` lists every waystone, nearest first, to pick from; or look at a waystone's lodestone or sign and run `/realm:waystones_remove`. `/realm:config` → **Waystones & Inns** sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, and the inn's price and Well Rested time.
 
 ### What players see
 
@@ -3040,7 +3806,8 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 - **The wait:** 10 seconds (`channelSeconds`, 0 = at once): `Traveling to River Gate in 10 seconds. Stand still.` in chat and a countdown above the hotbar. Moving more than 1 block, changing dimension or taking any damage cancels it: `You moved: the trip to River Gate is canceled.` Half a second before the jump the screen fades to dark blue and back.
 - **Arriving:** you land beside the other waystone's lodestone, facing it, on a free spot with solid floor (or, for a waystone in a cellar, the first open space straight above it); if its surroundings aren't loaded yet you land on top of the lodestone and are moved beside it once they load. If you'd land inside a block, in lava, or over a drop where the lodestone used to be, you're moved to a free spot, and when there's none you're sent back to where you started with the trip paid back (`There's no safe place to stand at River Gate, so the waystone sent you back.`). A waystone that's loaded and walled in on every side isn't traveled to at all, and nothing is paid.
 - **A broken waystone:** breaking or blowing up its lodestone removes the waystone (`The waystone River Gate is gone.`). A lodestone that vanished another way (pistons, commands) is noticed when someone is within 96 blocks, or when someone arrives there. Trips on the way to it are canceled.
-- **`/realm:waystones`:** lists your discovered waystones with distance and direction. You can't travel from the command unless `travelAnywhere` is enabled; then it opens the travel menu, priced from where you stand (or from the waystone you're standing at).
+- **`/realm:waystones`:** a menu saying how many waystones you've discovered, with **My waystones** (**Travel** with `travelAnywhere` enabled) and, for operators, **Remove a waystone** (asks first; the lodestone and sign stay).
+- **`/realm:waystones_list`** (the menu's first button): lists your discovered waystones with distance and direction. You can't travel from it unless `travelAnywhere` is enabled; then it opens the travel menu, priced from where you stand (or from the waystone you're standing at).
 - **Inns** (tap an NPC with the `innkeeper` role, `npcRole`):
   - **Rent a bed** (10 [Crowns](#crowns--crowns_bp), `bedPrice`): your respawn point becomes the innkeeper's spot, until you sleep in a bed of your own, and you're Well Rested: Health Boost I (2 extra hearts) for 60 minutes (`wellRestedMinutes`), plus a moment of Saturation and Regeneration to fill them, all without particles. Chat says `-10 Crowns (A bed at the inn)` and `You rest at the inn. Well Rested: 2 extra hearts for 60 minutes.` Beds can only be rented in the Overworld. Dying ends Well Rested, like any effect.
   - **Hear the news:** the latest 6 (`newsKept`) sky events other packs announced, newest first, like `3h ago: A tornado tore across the land (240m NE of here)` or the event's own text: tornadoes, rainbows, meteors, blood and harvest moons, auroras, storms, caravans and fishing tournaments. Nothing yet: `Nothing new lately. Quiet times, and I'm not complaining.`
@@ -3049,7 +3816,8 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:waystones` | Everyone | Lists the waystones you've discovered, with distance and direction. With travel from anywhere enabled (default off, `travelAnywhere`), opens the travel menu instead |
+| `/realm:waystones` | Everyone | The waystone menu: your waystones, and for operators, remove a waystone from a list |
+| `/realm:waystones_list` | Everyone | Lists the waystones you've discovered, with distance and direction. With travel from anywhere enabled (default off, `travelAnywhere`), opens the travel menu instead |
 | `/realm:waystones_remove` | Operators | Removes the waystone whose lodestone or sign you're looking at (within 8 blocks). The lodestone and sign stay |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3097,96 +3865,198 @@ Operators can change `whoCanCreate`, `currency`, `costPer100`, `minCost`, `cross
 
 ## Expeditions — `expedition_bp`
 
-Dungeon runs for you and your [party](#parties--party_bp). Pick a dungeon (the Crypt, the Drowned Vault or Frost Hollow), and a fresh dungeon is built for you deep underground: 6 to 8 rooms joined by corridors, with waves of mobs, a lever puzzle, a boss and a treasure chest. The clock runs from the moment you arrive; the fastest clears of each dungeon go on a leaderboard. Finishing pays [Crowns](#crowns--crowns_bp), Warden reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp), a page in the [Field Journal](#field-journal--journal_bp) and sometimes a [relic](#relics--relics_bp). No structure files: every dungeon is generated from a random seed, and the ground is filled back in after each run, so the next one is new.
+Dungeon runs for you and your [party](#parties--party_bp), in the spirit of Diablo's Nightmare Dungeons. Pick one of eight dungeons (the Crypt, the Drowned Vault, Frost Hollow, the Nether Forge, the Sculk Depths, the Pillager Keep, the Spider Nest or the Ender Spire) and a difficulty: **Easy**, **Normal**, **Hard**, or **Nightmare tiers 1 to 20**, which you unlock one by one by clearing the tier below. A fresh dungeon is built for you deep underground: 6 to 18 rooms joined by corridors, with waves of mobs, elite halls, trap halls, shrines, puzzles (nine kinds), vertical shafts, hidden side caches, a boss and treasure. Higher tiers have more rooms and waves, tougher and armored mobs, champions, tall rooms you climb, build or fly up, and **affixes** that change the run (Frenzied, Volcanic, Lightning Storm...). The clock runs from the moment you arrive; the fastest clears of each dungeon and difficulty go on a leaderboard. Finishing pays [Crowns](#crowns--crowns_bp), Warden reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp), a page in the [Field Journal](#field-journal--journal_bp), sometimes a [relic](#relics--relics_bp), and bosses and champions may drop a **Nightmare Sigil** that opens one exact run. No structure files: every dungeon is generated from a random seed, and the ground is filled back in after each run, so the next one is new.
 
 ### How to use
 
-1. Run `/realm:expedition` and pick a dungeon: **Crypt (Easy)**, **Drowned Vault (Normal)** or **Frost Hollow (Hard)**. Tap **Start**. If you're in a party, your party members within 32 blocks are asked `Ann is starting an expedition: Crypt (Easy). ... Join?` and have 20 seconds to tap **Join**. Without a party you go alone.
-2. The screen fades and you arrive in the entry room, with the title `Crypt` and the clock running. The bar above the hotbar shows the dungeon, the time and what to do next, like `Crypt 2:41 | Room 3/7: defeat the wave (2 left)`.
-3. Walk into each room. **Combat rooms** send 2 to 4 waves of the dungeon's mobs (`Wave 1 of 2!`); when the last one falls, the iron bars on the way out rise (`The bars rise. Onward!`). The **puzzle room** has four levers on red, blue, yellow and green wool, and signs with clues like `2 levers are on` and `RED and GREEN differ`; set the levers to fit every clue to open the bars (chat repeats the clues, and pulling a lever shows all four above the hotbar). In the **boss room** a named boss appears, like `The Crypt Lord`.
-4. Defeat the boss: `Expedition complete` and your time fill the screen, everyone still in the dungeon is paid, and the treasure room opens. You have 30 seconds to empty the chest, then you're taken back to where you started.
-5. To give up, run `/realm:expedition_leave` (or **Leave the expedition** in `/realm:expedition`): you go back to where you started. If you die in the dungeon you're out of the run, you respawn as usual and are then sent back to where you started, and the items you dropped are given back to you.
-6. `/realm:expedition` → **Fastest clears** shows the top 10 times for each dungeon. Only one expedition runs at a time; while one is going, the menu says `An expedition is in progress (Ann's party, Crypt, 6:12)`.
-7. **Operators:** stand somewhere far from spawn and from anyone's builds and mines, and run `/realm:expedition_site` once (or `/realm:expedition_site <x> <z>`). The dungeon is built deep underground at y -41 to -33 around that spot, and the site is refused if it's within 88 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. `/realm:expedition_reset` ends a run in progress and fills the dungeon back in. `/realm:config` → **Expeditions** sets the party size, the time limit, the time to collect the treasure and more.
+1. Run `/realm:expedition` and tap **Start an expedition**. Pick a dungeon, then a difficulty: Easy, Normal and Hard are open to everyone; **Nightmare 1** unlocks when you clear Hard, and each Nightmare tier unlocks the next.
+2. The last screen shows what the run is like: rooms, time limit, waves, how strong the mobs are, the **affixes** (Nightmare only) and the rewards. Tap **Start**, or **Reroll affixes** (costs 25 Crowns, `rerollCost`) for a different set. If you're in a party, your party members within 32 blocks are asked `Ann is starting an expedition: Crypt (Nightmare 5). ... Join?` and have 20 seconds to tap **Join**.
+3. The screen fades and you arrive in the entry room, with the clock running. The bar above the hotbar shows the dungeon, the time, what to do next and the affixes, like `Crypt N5 2:41/24:00 | Room 3/10: defeat the wave (2 left)`.
+4. Walk into each room. The bars on the way out rise once the room is done (`The bars rise. Onward!`):
+   - **Combat** and **elite** rooms send waves (`Wave 1 of 4!`): kill every mob. Elite halls bring a champion every wave.
+   - **Puzzle** rooms explain themselves on signs and in chat: levers, a memory sequence, a safe path of pressure plates, target practice, lights out, a color riddle, a climb, a button rush or a riddle (see below).
+   - **Trap halls**: the door out is already open. Run for it while flames flicker on the floor (they burst a moment later) and arrows fly from the walls.
+   - **Shrines**: press one of three buttons: a **Blessing** for the rest of the run, a **curse** (one more affix, but more treasure and Crowns), or pass by.
+   - **Shafts** (Nightmare 3 and up): the way on is high up the wall. Climb the ladder (below tier 10) or the ledges, pillar up with your own blocks, or fly with an elytra. At the top, drop down the chute into the pool.
+   - **Side rooms** (Nightmare): an open doorway off a room leads to a puzzle; solve it for a hidden cache chest.
+5. In the boss room the boss appears with its name as a title; on high tiers it calls adds onto the balconies. Defeat it: `Expedition complete` and your time fill the screen, everyone still in the dungeon is paid, and the treasure room opens. You have 30 seconds to empty the chests, then you're taken back to where you started.
+6. **Nightmare Sigils** dropped by bosses and champions open one exact run: use the sigil (right-click) or pick it under **Use a Nightmare Sigil** in `/realm:expedition`. It works even before you've unlocked its tier, and it's used up when the run starts.
+7. To give up, run `/realm:expedition_leave` (or **Leave the expedition** in `/realm:expedition`). If you die you're out of the run, you respawn as usual and are sent back to where you started, and the items you dropped are given back.
+8. `/realm:expedition` → **Leaderboards** shows the fastest clears of each dungeon at each difficulty, the **Highest tiers** players have cleared and the **Recent runs**; **My progress** shows what you've unlocked, your best and your own recent runs.
+9. **Operators:** stand somewhere far from spawn and from anyone's builds and mines, and run `/realm:expedition_site` once (or `/realm:expedition_site <x> <z>`, or **Operator tools** → **Set the site where I stand**). Dungeons are built deep underground around that spot (up to 100 by 100 blocks, y -41 to -8), and the site is refused if it's within 114 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. `/realm:expedition_reset` ends a run in progress and fills the dungeon back in. **Operator tools** also has **Create a Nightmare Sigil** (any dungeon, tier and affixes) and **Unlock every tier for me**. `/realm:config` → **Expeditions** sets the party size, the time limit, the highest tier, building, the reroll cost and more.
 
 ### What players see
 
-- **Dungeons** (from `dungeons`):
+- **Difficulties and tiers.** Every dungeon can be played at every difficulty you've unlocked. Clearing Hard unlocks Nightmare 1; clearing Nightmare N unlocks N + 1, up to Nightmare 20 (`maxTier`). Progress is per player; the leader's unlocks decide what can be started (party members can join any run). How each level scales (time with the default 20 minutes per 7 rooms; mobs per wave get one more for every two players after the first):
 
-  | Dungeon | Difficulty | Mobs | Boss | Built of | Crowns |
+  | Level | Rooms | Time (min) | Waves | Mobs per wave | Monster buffs | Elites / champion chance per wave | Affixes | Boss | Crowns / treasure | Room mix (as room allows) |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Easy | 6-8 | 17-23 | 2 | 2-3 | none | 0 / 0% | 0 | x1.0 health | x1.00 / x1.0 | 1 puzzle |
+  | Normal | 6-8 | 17-23 | 3 | 2-3 | none | 0 / 0% | 0 | x1.2 health | x1.25 / x1.1 | 1 puzzle, 1 trap |
+  | Hard | 7-9 | 20-26 | 4 | 2-3 | Strength 1 | 1 / 0% | 0 | x1.4 health | x1.50 / x1.2 | 1 puzzle, 1 trap, shrine (75%), 1 elite |
+  | Nightmare 1 | 7-9 | 20-25 | 4 | 3-4 | +4 health, Strength 1 | 1 / 14% | 1 | x1.6 health | x1.75 / x1.3 | as Hard, 1 side cache |
+  | Nightmare 3 | 8-10 | 22-28 | 4 | 3-4 | +8 health, Strength 1, chainmail armor (31%) | 1 / 21% | 1 | x2.0 health | x2.25 / x1.5 | as above, 1 shaft, tall rooms 41% up to 16 high |
+  | Nightmare 5 | 9-11 | 24-30 | 4 | 4-5 | +12 health, Strength 1, Speed 1, chainmail (38%) | 1 / 28% | 2 | x2.4 health, 2 adds every 20 s | x2.75 / x1.7 | tall rooms 45% up to 20 high |
+  | Nightmare 6 | 9-12 | 24-32 | 5 | 4-5 | +12 health, Resistance 1, Strength 1, Speed 1, chainmail (41%) | 2 / 31% | 2 | x2.6, 2 adds | x3.00 / x1.8 | 2 puzzles, up to 22 high |
+  | Nightmare 8 | 10-13 | 26-34 | 5 | 5-6 | +16 health, Resistance 1, Strength 2, Speed 1, iron (48%) | 2 / 38% | 2 | x3.0, 2 adds | x3.50 / x2.0 | 2 elite halls, up to 26 high |
+  | Nightmare 10 | 10-13 | 26-33 | 5 | 6-7 | +20 health, Resistance 1, Strength 2, Speed 1, iron (55%) | 2 / 45% | 3 | x3.4, 3 adds | x4.00 / x2.2 | 2 traps, 2 side caches, up to 30 high, shafts without ladders |
+  | Nightmare 12 | 11-14 | 28-35 | 6 | 6-7 | +24 health, Resistance 1, Strength 2, Speed 1, diamond (62%) | 3 / 52% | 3 | x3.8, 3 adds | x4.50 / x2.4 | up to 32 high |
+  | Nightmare 15 | 12-16 | 29-39 | 6 | 7-8 | +32 health, Resistance 1, Strength 3, Speed 2, diamond (73%) | 3 / 63% | 4 | x4.4, 4 adds | x5.25 / x2.7 | 3 puzzles, 2 shafts |
+  | Nightmare 17 | 13-17 | 31-40 | 7 | 8-9 | +36 health, Resistance 2, Strength 3, Speed 2, netherite (80%) | 3 / 70% | 4 | x4.8, 4 adds | x5.75 / x2.9 | 3 elite halls |
+  | Nightmare 20 | 14-18 | 32-41 | 7 | 9-10 | +40 health, Resistance 2, Strength 3, Speed 2, netherite (90%) | 4 / 80% | 4 | x5.4, 5 adds | x6.50 / x3.2 | 3 puzzles, 2 traps, shrine, 3 elite, 2 shafts, 2 side caches, tall rooms 75% |
+
+  Tiers in between follow the same steps. The grid grows from 3 by 3 to 5 by 5 cells for the bigger runs. Elite mobs (`Elite Zombie`) have extra health and Strength; champions (`Champion Skeleton`, or a named champion from the [Champions](#champions--elite_bp) pack) much more. Every dungeon mob has Fire Resistance. At most 18 dungeon mobs (`mobCap`) are alive at once.
+- **Affixes** (Nightmare runs: 1 at tiers 1-4, 2 at 5-9, 3 at 10-14, 4 at 15-20, rolled by weight, never twice; plus a 15% chance of the Blessing). They're shown before you start, on a sign in the entry room, in chat and on the bar above the hotbar:
+
+  | Affix | From tier | What it does |
+  |---|---|---|
+  | `Frenzied` | 1 | Mobs (and the boss) get Speed, one level more |
+  | `Bulwark` | 1 | Mobs and the boss get one more level of Resistance |
+  | `Swarming` | 1 | Half again as many mobs in every wave |
+  | `Shrouded` | 1 | Darkness pulses over everyone in the dungeon every 20 seconds or so |
+  | `Frozen` | 1 | Snowflake patches appear at your feet, then slow anyone standing in them for about 6 seconds |
+  | `Hunger` | 1 | Hunger while fighting (stronger from tier 12) |
+  | `Volcanic` | 3 | Flames flicker on the floor around you for 2 seconds, then fire bursts there (real fire on stone floors, put out after 4 seconds; on wooden floors only the burn) |
+  | `Explosive Death` | 3 | A mob hisses when it dies and bursts a second later: damage within 3 blocks, no block damage |
+  | `Backup` | 3 | A mob brought below half health calls one more mob, once |
+  | `Vampiric` | 5 | Mobs heal half the damage they deal you |
+  | `Thorned` | 5 | Hitting a mob in melee hurts you a little (1, 2 from tier 10) |
+  | `Champion Packs` | 5 | Every wave brings a champion |
+  | `Venomous` | 5 | Mob hits poison you (Wither from tier 15) |
+  | `Arcane Beams` | 7 | A line of blue sparks crosses the room through you; 2 seconds later it burns anyone still on it |
+  | `Lightning Storm` | 7 | Sparks circle your spot; 2 seconds later lightning strikes there (damage, no fire) |
+  | `Blinding` | 10 | Bursts of blindness during fights |
+  | `Juggernaut` | 10 | Mobs have far more health, the boss a third more |
+  | `Blessing` | 1 (15% chance, extra) | Half again as much treasure and a quarter more Crowns |
+
+- **Dungeons** (from `dungeons`; mobs join the pool from the level shown):
+
+  | Dungeon | Mobs | Flyers in tall rooms | Boss (extra health) | Built of | Crowns |
   |---|---|---|---|---|---|
-  | Crypt | Easy | zombies, skeletons | `The Crypt Lord` (wither skeleton, +40 health) | deepslate bricks, polished deepslate, soul lanterns | 40 |
-  | Drowned Vault | Normal | drowned | `The Tide Keeper` (drowned, +60 health) | prismarine bricks, dark prismarine, lanterns | 60 |
-  | Frost Hollow | Hard | strays | `The Frost Archer` (stray, +80 health) | packed ice, snow, blue ice, lanterns | 90 |
+  | Crypt | zombies, skeletons; husks (Hard), zombie villagers (N1), wither skeletons (N5), witches (N8) | phantoms, vexes | `The Crypt Lord` (wither skeleton, +40) | deepslate bricks, soul lanterns, cobwebs | 40 |
+  | Drowned Vault | drowned; zombies (Normal), bogged (N2), witches (N7) | phantoms | `The Tide Keeper` (drowned, +60) | prismarine, sea lanterns in the floor | 60 |
+  | Frost Hollow | strays, skeletons; zombies (Normal), breezes (N6) | phantoms, breezes | `The Frost Archer` (stray, +80) | packed ice, snow, blue ice | 90 |
+  | Nether Forge | magma cubes, blazes; wither skeletons (Hard), zoglins (N4) | blazes | `The Forge Heart` (blaze, +80) | polished blackstone, basalt, gilded blackstone, magma in the floor | 90 |
+  | Sculk Depths | zombies, silverfish; endermites (Normal), husks (N1), bogged (N4) | phantoms, vexes | `The Listener` (bogged, +90) | deepslate tiles, sculk floor, soul lanterns | 100 |
+  | Pillager Keep | pillagers, vindicators; witches (N1), evokers (N3), ravagers (N10) | vexes, phantoms | `The Warlord's Ravager` (ravager, +60) | stone bricks, spruce planks, dark oak | 70 |
+  | Spider Nest | spiders, cave spiders; skeletons (Hard), bogged (N6), witches (N10) | phantoms | `The Brood Mother` (spider, +60) | mossy stone bricks, lots of cobwebs | 50 |
+  | Ender Spire | endermen, endermites; skeletons (Hard), shulkers (N2) | phantoms, vexes | `The Starless Walker` (enderman, +100) | purpur, end stone bricks, end rods | 110 |
 
-- **The layout** is new every run: 6 to 8 rooms (11 by 11 blocks, 5 high) along a winding path through a 3 by 3 grid, joined by short corridors 3 wide. The entry room comes first, then 2 to 4 combat rooms and the puzzle room in a random order, then the boss room and the treasure room. Each room is lit by four hanging lanterns. A sign in the entry room reads `Crypt / Clear each room / to open the bars`.
-- **Waves:** a combat room starts when someone in the run walks in (`Something stirs in the dark...`). It sends difficulty + 1 waves (2 on Easy, 3 on Normal, 4 on Hard), each of 2 or 3 mobs plus 1 for every two players after the first. On Hard, mobs have Strength. The bars open when every mob of the last wave is dead.
-- **The puzzle:** clue signs face the way you come in, the levers are behind them. The clues always have exactly one answer: the first gives how many levers are on, the rest say a lever is `on` or `off`, or that two levers `match` or `differ`. At least one lever is on in every answer. Getting it right says `Click. Something heavy moves behind the wall: the puzzle is solved!`
-- **The boss** appears 2 seconds after someone enters its room, with its name as a title. Its extra health grows by half for each player after the first. On Normal it has Strength I, on Hard Strength II and Resistance I; it never burns. It carries the tag `realm:bounty:exp_<run>`.
-- **Finishing:** the title `Expedition complete` with `Crypt cleared in 6:12`, chat to everyone `Ann, Bob cleared the Crypt (Easy) in 6:12.`, and `A new record!` or your place when you made the leaderboard. Each player still in the dungeon gets the dungeon's Crowns (`+40 Crowns (Expedition: Crypt)`), 15 Warden reputation (`rep`), the Journal page `expedition_crypt` under Places, a 10% chance at a relic (`relicChance`, one of `relics`), and counts as a finished quest of kind `expedition` for other packs. The treasure chest holds the dungeon's `loot`, a quarter more per extra player.
-- **The time limit:** a run not finished within 20 minutes (`timeLimitMinutes`) fails: `Time's up! The Crypt wasn't cleared within 20 minutes.` Everyone is sent back.
+  Each dungeon has a line of lore on a sign in its entry room (`Where the town buried what it chose to forget.`). No wardens ever spawn. Cobwebs can be cut.
+- **Rooms.** Every run starts with the entry room and ends with the boss room and the treasure room; in between come at least two combat rooms and the rest of the level's room mix, shuffled. Rooms are 15 by 15 blocks inside, 5 high (some 8 high from Hard), joined by corridors 3 wide.
+
+  | Room | What happens | Done when |
+  |---|---|---|
+  | Entry | Signs: the dungeon and level, its lore, the affixes | (its door is open) |
+  | Combat | Waves of the dungeon's mobs, with elites and maybe a champion; some rooms have cover pillars or a low ring wall; tall rooms have balconies with ladders where mobs spawn too, and flyers | Every mob of the last wave is dead |
+  | Elite hall | One wave fewer, fewer mobs, one more elite each, and a champion every wave (`Elite guards wake in this hall...`) | Last wave dead |
+  | Puzzle | One of nine puzzles (below) | Solved |
+  | Trap hall | The exit is open at once; flame patches telegraphed by flickering flames, arrow volleys from the side walls telegraphed by sparks | Someone reaches the far door |
+  | Shrine | Three buttons: the Blessing (Vigor: extra hearts, Swiftness, Ward: Resistance, Haste: Haste and Strength, or Fortune: a quarter more treasure), a curse (one more affix for the rest of the run; treasure x1.4 and Crowns x1.25), or pass by. The effects last until the run ends or you leave it | Someone presses a button |
+  | Shaft (N3+) | 18 to 32 blocks high; the exit is in the wall near the top, over a landing. Ledges climb the walls to it (1 block apart, 2 from tier 8), a ladder too below tier 10; flyers harass you. Over the exit, a chute drops into a pool, so the fall never hurts | Someone stands on the landing |
+  | Side cache (N1+) | An open doorway off a room leads to a puzzle; solving it puts a chest with extra loot in the side room | Optional |
+  | Boss | The boss, with its name as a title. From Normal it calls its guards once at half health; from N5 it calls adds every 20 seconds. Tall arenas (N3+) have balconies on several levels | The boss dies |
+  | Treasure | The treasure chest (two from N6) | (open after the boss) |
+
+- **Puzzles** (each run picks different kinds where it can; signs and chat explain each one, and none can get stuck):
+
+  | Puzzle | From | How it works |
+  |---|---|---|
+  | Lever logic | Easy | Four levers on red, blue, yellow and green wool; clue signs like `2 levers are on` and `RED and GREEN differ` always fit exactly one setting (at least one lever on). Pulling a lever shows all four above the hotbar |
+  | Memory | Easy | The game flashes the four colored pillars in a sequence (3 long on Easy up to 8 at Nightmare 20, never one color twice in a row) with notes; press the buttons on top in the same order. A wrong press replays it; the gold button shows it again |
+  | Color riddle | Easy | Four pillars of wool with a button each; each press changes the color (red, blue, yellow, green, white, black). The sign in front of each says `is the color of lapis lazuli`: match them all |
+  | Riddle | Easy | A riddle on the signs and in chat, and 3 answer buttons (4 from N4) labeled by signs. A wrong answer locks the buttons for 6 seconds and spawns mobs |
+  | Lights out | Easy | A 3 by 3 panel of lamps with a button on each; a button flips its lamp and the ones next to it. Light all nine (every start can be solved) |
+  | Safe path | Normal | A 4 by 4 grid of pressure plates (5 by 5 from N6). The safe path flashes plate by plate; step on its plates in order from the near row to the far row. A wrong plate starts you over (and stings a little in Nightmare runs); the gold button shows the path again |
+  | Target practice | Normal | 3 to 7 target blocks set in the walls, some high up. Hit each with an arrow, snowball or trident; everyone is given 16 snowballs |
+  | Button rush | Normal | 4 to 8 buttons around the walls: press them all within a time limit from the first press (about 3 seconds per button, a little less at high tiers), or they reset |
+  | Climb | Normal | A tall room: jump up ledges along the walls to a button at the top (8 to 24 blocks up). Fall and you start again; or pillar up with your own blocks where building is allowed |
+
+- **Building** (from Nightmare 1, `buildFromTier`, while `allowBuilding` is on): blocks you place in the dungeon stay, so you can pillar up a shaft, bridge between balconies or wall yourself in, and you can break your own blocks again. They're removed when the dungeon is filled in (they're used up). Containers, TNT, beds and respawn anchors still pop straight back out, so nothing is lost or blown up. On Easy, Normal and Hard every block you place pops back out (`Blocks placed in the dungeon pop back out.`). The dungeon's own blocks can never be broken (`The dungeon's blocks can't be broken.`), except cobwebs; explosions never break them either. Operators in creative mode can do both.
+- **Finishing:** the title `Expedition complete` with `Crypt Nightmare 5 cleared in 6:12`, chat to everyone `Ann, Bob cleared the Crypt (Nightmare 5) in 6:12.`, and `A new record!` or your place when you made that difficulty's leaderboard. Each player still in the dungeon gets the dungeon's Crowns times the level (x1 on Easy up to x6.5 on Nightmare 20; x1.25 more with the Blessing, x1.25 with a shrine curse), Warden reputation (`rep`, plus 10% per tier), the Journal page `expedition_<dungeon>` under Places, a relic by chance (`relicChance` plus 1% per tier, at most 50%), counts as a finished quest of kind `expedition` for other packs, and unlocks the next tier (`Nightmare 6 is unlocked!`). The treasure chests hold the dungeon's `loot` plus `tierLoot` from the tier on, scaled by the level (x1 to x3.2), a quarter more per extra player, half again with the Blessing.
+- **Nightmare Sigils:** a boss in a Hard or Nightmare run drops one 35% of the time plus 1% per tier (`sigilChanceBoss`), a champion in a Nightmare run 8% of the time (`sigilChanceChampion`). It's an echo shard (`sigilItem`) named `Nightmare Sigil` whose lore lists the dungeon, the tier (the run's tier or one above) and the affixes. Using it (or **Use a Nightmare Sigil**) shows the run's preview with **Start (uses the sigil)**.
+- **The time limit:** a run not finished in time fails: `Time's up! The Crypt wasn't cleared within 24 minutes.` Everyone is sent back, and the run is listed as failed in the history.
 - **Leaving:** `/realm:expedition_leave`, dying, leaving the game, or getting out of the dungeon any other way (a teleport, for example; you're out after 5 seconds outside it) all take you out of the run. Nobody can join a run after it starts. When the last player is out, the run fails and the dungeon is filled in. Anyone who leaves the game during a run is sent back to where they started when they next join.
-- **The dungeon's blocks can't be broken** during a run (`The dungeon's blocks can't be broken.`), and blocks placed in it pop straight back out as items (`Blocks placed in the dungeon pop back out.`), so nobody digs around the doors and nothing is lost when it's filled in. Operators in creative mode can do both.
 - **Death:** your items drop in the dungeon as usual, are collected right away and given back after you respawn (`returnItemsOnDeath`). Experience is lost as usual.
-- **Above the hotbar** every second during a run: the dungeon, the clock and the current step. With the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD steps aside (the pack sends `realm:actionbar`).
+- **Above the hotbar** every second during a run: the dungeon and level, the clock and limit, the current step, and the affixes on a second line. With the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD steps aside (the pack sends `realm:actionbar`).
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:expedition` | Everyone | Start an expedition with your party members nearby (up to 4 players, default `maxParty`), see how your run is going and leave it, or see the fastest clears of each dungeon |
+| `/realm:expedition` | Everyone | The Expeditions menu: start an expedition (dungeon, difficulty or Nightmare tier, affix preview and reroll), use a Nightmare Sigil, leaderboards (fastest clears per dungeon and difficulty, highest tiers, recent runs), your progress, go back to where you started. During a run: how it's going, the affixes, and leave it. Operators also get **Operator tools** (set the site, reset, create a sigil, unlock every tier) |
 | `/realm:expedition_leave` | Everyone | Leave your expedition and go back to where you started it |
-| `/realm:expedition_site [x] [z]` | Operators | Sets where dungeons are built: where you stand, or at x z. Refused within 88 blocks of world spawn (default 64, `avoidSpawn`, plus half the dungeon) or where anything but natural underground blocks is in the way, with what and where |
-| `/realm:expedition_reset` | Operators | Ends every expedition in progress (players are sent back) and fills the dungeon back in |
+| `/realm:expedition_site [x] [z]` | Operators | Sets where dungeons are built: where you stand, or at x z. Refused within 114 blocks of world spawn (default 64, `avoidSpawn`, plus half the biggest dungeon) or where anything but natural underground blocks is in the way of the biggest dungeon, with what and where |
+| `/realm:expedition_reset` | Operators | Ends every expedition in progress (players are sent back) and fills the dungeons back in |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
 | Option | Default | Description |
 |---|---|---|
-| `enabled` | `true` | New expeditions can start. Disabled: the menu only shows the fastest clears; a run in progress still finishes |
-| `depth` | `-40` | Floor height of the dungeon; it fills from 1 block below to 7 above (y -41 to -33). Kept between -58 and -20 |
+| `enabled` | `true` | New expeditions can start. Disabled: the menu only shows the leaderboards; a run in progress still finishes |
+| `depth` | `-40` | Floor height of the dungeon; it fills from 1 block below to 2 above its tallest room (y -41 to -33 for a run without tall rooms, up to y -8). Kept between -58 and -20 |
 | `avoidSpawn` | `64` | The site's nearest dungeon edge must be at least this far from world spawn (flat distance), so a dungeon is never dug under the spawn town |
 | `slots` | `1` | Expeditions that can run at the same time (1 to 3), each in its own dungeon: the first at the site, each next one `slotSpacing` blocks east |
-| `slotSpacing` | `128` | Blocks between those dungeons (at least 64) |
+| `slotSpacing` | `128` | Blocks between those dungeons (at least 112) |
 | `maxParty` | `4` | Most players in one expedition, the leader included (1 to 4) |
 | `partyRadius` | `32` | Party members within this many blocks of the leader are asked along |
 | `confirmSeconds` | `20` | Seconds party members have to answer; no answer is a no |
-| `timeLimitMinutes` | `20` | A run not finished in this many minutes fails |
+| `timeLimitMinutes` | `20` | Minutes for a 7-room run: each run gets this much per 7 rooms, 1% less per Nightmare tier, at least 5 minutes |
 | `exitSeconds` | `30` | Seconds after the boss falls before everyone is sent back, to collect the treasure |
 | `returnItemsOnDeath` | `true` | Items dropped dying in a dungeon are given back after respawning (otherwise they'd be lost when the dungeon is filled in) |
-| `leaderboardSize` | `10` | Fastest clears kept for each dungeon |
-| `rep` | `15` | Warden reputation (Guilds) for each player who finishes |
-| `relicChance` | `0.1` | Chance (0 to 1) that each player who finishes also gets a relic (Relics pack) |
+| `leaderboardSize` | `10` | Fastest clears kept on each leaderboard (one per dungeon and difficulty or tier) |
+| `tierBoardSize` | `20` | Players kept on the Highest tiers board |
+| `historySize` | `20` | Runs kept in the world's run history and in each player's |
+| `maxTier` | `20` | Highest Nightmare tier (1 to 20) |
+| `tallFromTier` | `3` | From this Nightmare tier, rooms can be tall (16 to 32 blocks) with balconies, and shafts appear |
+| `buildFromTier` | `1` | Players may place blocks in a dungeon from this Nightmare tier |
+| `allowBuilding` | `true` | Players may place blocks at all (see `buildFromTier`). Disabled: blocks placed in a dungeon always pop back out |
+| `useChampionsPack` | `true` | Champions in waves come from the Champions pack when it's installed and knows the mob (zombie, husk, drowned, zombie villager, skeleton, stray, spider, witch); otherwise, or when disabled, the pack makes its own |
+| `mobCap` | `18` | Most dungeon mobs alive in one run at a time: waves, adds and reinforcements stop there |
+| `rerollCost` | `25` | Crowns to reroll the affixes shown before a Nightmare run (0: free) |
+| `sigilItem` | `"minecraft:echo_shard"` | The item a Nightmare Sigil is |
+| `sigilChanceBoss` | `0.35` | Chance a boss of a Hard or Nightmare run drops a sigil, plus 1% per tier |
+| `sigilChanceChampion` | `0.08` | Chance a champion in a Nightmare run drops a sigil |
+| `rep` | `15` | Warden reputation (Guilds) for each player who finishes, plus 10% per Nightmare tier |
+| `relicChance` | `0.1` | Chance (0 to 1) that each player who finishes also gets a relic (Relics pack), plus 1% per tier, at most 50% |
 | `relics` | `lantern_deep`, `miners_lamp`, `compass_echoes`, `frost_band`, `tide_boots` | The relics a finished run can give, one at random |
-| `dungeons` | Crypt, Drowned Vault, Frost Hollow (above) | The dungeons: `{ id, name, difficulty, mobs, boss: { mob, name, health }, wall, floor, accent, light, door, crowns, loot: [{ item, min, max, chance }] }`. `difficulty` 1 to 3 sets the waves, the mobs' Strength and the boss's buffs; `health` is extra boss health in points; `accent` is the corner pillars, `light` the hanging lanterns, `door` the bars. Keep each `id`: the leaderboard and the Journal entry use it |
+| `tierLoot` | diamonds (N1), emeralds (N3), golden apples (N5), netherite scrap (N8), a totem (N10, 20%), an enchanted golden apple (N12, 15%), a netherite ingot (N15, 25%), an elytra (N18, 5%) | Extra treasure from a Nightmare tier on: `{ from, item, min, max, chance }`, added to the dungeon's `loot` (half chance in side caches) |
+| `dungeons` | the eight above | The dungeons: `{ id, name, lore, difficulty, mobs, flyers, boss: { mob, name, health, adds }, wall, floor, accent, trim, light, door, decor: { block, count, floor, breakable }, crowns, loot: [{ item, min, max, chance }] }`. `mobs` entries are an id or `{ id, from, weight }` (`from` is the first level: 0 Easy, 1 Normal, 2 Hard, 3 to 22 Nightmare 1 to 20). `difficulty` (1 to 3) is the difficulty the dungeon had before tiers: its old fastest clears were moved there. `health` is extra boss health in points (times the level and party); `adds` are what the boss calls. `accent` is the corner pillars, `trim` the balconies and ledges, `light` the lanterns, `door` the bars, `decor` a block scattered in combat rooms. Keep each `id`: the leaderboards and Journal entries use it |
 
-Default treasure (`loot`, each with its chance): **Crypt** 4–10 iron ingots, 2–6 gold ingots (80%), 4–12 bones, 1–2 diamonds (40%), a golden apple (40%), 4–10 bottles o' enchanting (80%), a name tag (25%). **Drowned Vault** 8–16 prismarine shards, 4–10 prismarine crystals (80%), 4–10 gold ingots, 1–3 diamonds (60%), 1–2 nautilus shells (50%), a heart of the sea (10%), 6–12 bottles o' enchanting (80%). **Frost Hollow** 2–5 diamonds, 4–12 emeralds, 1–3 golden apples (70%), an enchanted golden apple (5%), 8–16 blue ice (60%), 8–16 bottles o' enchanting.
+Default treasure (`loot`, each with its chance): **Crypt** 4–10 iron ingots, 2–6 gold ingots (80%), 4–12 bones, 1–2 diamonds (40%), a golden apple (40%), 4–10 bottles o' enchanting (80%), a name tag (25%). **Drowned Vault** 8–16 prismarine shards, 4–10 prismarine crystals (80%), 4–10 gold ingots, 1–3 diamonds (60%), 1–2 nautilus shells (50%), a heart of the sea (10%), 6–12 bottles o' enchanting (80%). **Frost Hollow** 2–5 diamonds, 4–12 emeralds, 1–3 golden apples (70%), an enchanted golden apple (5%), 8–16 blue ice (60%), 8–16 bottles o' enchanting. **Nether Forge** 6–14 gold ingots, 2–6 blaze rods (90%), 8–16 quartz (80%), 1–3 diamonds (60%), netherite scrap (15%), 8–14 bottles o' enchanting. **Sculk Depths** 1–3 echo shards (60%), 6–14 amethyst shards, 2–4 diamonds (80%), 1–3 disc fragments (30%), 10–18 bottles o' enchanting. **Pillager Keep** 6–16 emeralds, 6–12 iron ingots, a crossbow (50%), a totem of undying (15%), 1–3 diamonds (50%), 6–12 bottles o' enchanting (80%). **Spider Nest** 8–20 string, 2–6 spider eyes (80%), 4–10 iron ingots, 1–2 diamonds (40%), 1–2 golden apples (40%), 4–10 bottles o' enchanting (80%). **Ender Spire** 4–10 ender pearls, 1–2 shulker shells (40%), 2–4 diamonds (80%), 6–14 chorus fruit (80%), 10–18 bottles o' enchanting.
 
-Operators can change `enabled`, `slots`, `maxParty`, `timeLimitMinutes`, `exitSeconds`, `returnItemsOnDeath` and `relicChance` in game with `/realm:config`. The rest stay in `config.js`.
+Operators can change `enabled`, `slots`, `maxParty`, `timeLimitMinutes`, `exitSeconds`, `returnItemsOnDeath`, `relicChance`, `maxTier`, `allowBuilding`, `useChampionsPack`, `mobCap`, `rerollCost`, `sigilChanceBoss` and `sigilChanceChampion` in game with `/realm:config`. The rest stay in `config.js`.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `expedition:site` | World | JSON `{ x, z, by, at }`: the site an operator set |
-| `expedition:run:<slot>` | World | JSON `{ id, slot, dungeon, seed, x, y, z, leader, phase }` while a dungeon exists in that slot, so one cut short by a restart is filled in when the world starts again |
+| `expedition:run:<slot>` | World | JSON `{ id, slot, dungeon, seed, x, y, z, leader, phase, l, g, c, h, pt }` while a dungeon exists in that slot (`l` level, `g`/`c`/`h` the box's grid, cell size and height, `pt` block types players placed), so one cut short by a restart is filled in when the world starts again. Records from before tiers (without `g`, `c`, `h`) are read as the old 48 by 48 by 9 box |
 | `expedition:next` | World | The next run's number |
-| `expedition:best` | World | JSON `{ <dungeon id>: [{ t, n, at }] }`: the fastest clears (milliseconds, the players' names, when) |
+| `expedition:best:<dungeon id>` | World | JSON `{ <level>: [{ t, n, at, a }] }`: the fastest clears per level (`e`, `n`, `h`, `t1` to `t20`): milliseconds, the players' names, when, the affixes |
+| `expedition:best` | World | The fastest clears from before tiers (`{ <dungeon id>: [{ t, n, at }] }`). Copied once into `expedition:best:<id>` at the dungeon's old difficulty, then only kept |
+| `expedition:best_v2` | World | `1` once that copy was made |
+| `expedition:tiers` | World | JSON `[{ id, n, l, d, at }]`: the highest level each player cleared (the Highest tiers board) |
+| `expedition:history` | World | JSON `[{ d, l, ok, t, n, at, a }]`: the latest runs, cleared or failed, newest first |
 | `expedition:return` | Player | JSON `{ d, x, y, z, run }`: where to send the player back to, while they're on a run (or until they rejoin after one) |
+| `expedition:prog` | Player | JSON `{ u, b, c, r }`: the highest Nightmare tier unlocked, the highest level cleared, clears, the player's recent runs |
+| `expedition:rolls` | Player | JSON `{ <level>: [affix ids] }`: the affixes shown for each Nightmare level, kept until that run starts or they're rerolled (so reopening the menu doesn't reroll) |
 | `expedition:cfg` | World | Settings changed in `/realm:config` |
-| `realm:exp_mob`, `realm:exp_run:<id>`, `realm:bounty:exp_<id>` | Entity tags | On the dungeon's mobs (the last one on the boss only). Leftovers are removed when the world starts |
+| `realm:exp_mob`, `realm:exp_run:<id>`, `realm:exp_champ`, `realm:exp_called`, `realm:exp_ch_<id>`, `realm:bounty:exp_<id>` | Entity tags | On the dungeon's mobs (champions, mobs that called for help, champions asked of the Champions pack; the last one on the boss only). Leftovers are removed when the world starts |
 | `realm_exp_<slot>` | Ticking area | Keeps the dungeon loaded while it's built, played and filled in; removed afterward |
 
-Runs themselves are kept in memory: a restart ends a run in progress (its players are sent back when they join, and the dungeon is filled in); after a script reload, players still online are sent back at once. A player is only taken off their return spot once the teleport back worked, so one who can't be moved right then (dead, say) is sent back when they next spawn.
+Runs themselves are kept in memory: a restart ends a run in progress (its players are sent back when they join, and the dungeon is filled in); after a script reload, players still online are sent back at once. A player is only taken off their return spot once the teleport back worked, so one who can't be moved right then (dead, say) is sent back when they next spawn. Shrine effects are taken away when a player leaves the run.
 
 ### How it works
 
-- **Never near builds:** the dungeon is a sealed box 48 by 48 blocks and 9 high, deep underground. Before every run the box is checked with `Dimension.containsBlock` for any block that isn't natural (stone, deepslate, tuff, granite, diorite, andesite, ores, raw ore blocks, dirt, gravel, clay, water, lava, obsidian, magma, amethyst geodes, dripstone, lush cave plants, sculk), and the run is called off if there is one (operators are told what and where). `/realm:expedition_site` runs the same check where it can, halving the box until it finds the block. Every fill only replaces natural blocks and the dungeon's own, so even then nothing else is touched. The site must also be far from world spawn (`avoidSpawn`).
-- **Building:** a ticking area (`tickingarea add`) keeps the box loaded. Once its chunks can be read and the box is found clean, anyone in it (a player mining a cave there), dropped items and named or tamed animals are moved to the surface, then `Dimension.fillBlocks` (with a block filter) fills the whole box with deepslate, sealing any caves, then carves the rooms, floors, corner pillars, corridors and closed bars, then places lanterns, signs, wool, levers and the chest. The work runs as a `system.runJob` job, a 16 by 16 column or one room per step, so the server never stalls. The same seed always gives the same layout.
-- **Filling in:** after the run (or when it fails or an operator resets it) the chest is emptied, the dungeon's mobs and dropped items are removed, anything else in the box (a pet) is moved to the surface, any player is sent back to where they started their expedition (or to the surface), and the box is filled with deepslate again, replacing only natural blocks and the dungeon's own. The ticking area is removed. If the box can't be loaded, it's tried again after a restart or with `/realm:expedition_reset`, and no new run starts there until then; its blocks still can't be broken meanwhile. A box is only ever filled in after the check before its run found it clean: a run called off or reset while it was still getting ready leaves the ground alone.
-- **The run** is checked twice a second: who is in which room, wave mobs left (mobs that leave the dungeon are removed), the boss (a `entityDie` for it finishes the run), the time limit, and players who left the dungeon. Lever pulls are read from `afterEvents.leverAction` and the levers' `open_bit` state, and the puzzle room also checks the four levers once a second.
+- **Never near builds:** the dungeon is a sealed box of 3 by 3 to 5 by 5 cells of 20 blocks (60 to 100 blocks wide) and 9 to 34 high, deep underground. Before every run the box is checked with `Dimension.containsBlock`, a column at a time, for any block that isn't natural (stone, deepslate, tuff, granite, diorite, andesite, ores, raw ore blocks, dirt, gravel, clay, water, lava, obsidian, magma, amethyst geodes, dripstone, lush cave plants, sculk), and the run is called off if there is one (operators are told what and where). `/realm:expedition_site` runs the same check over the biggest possible dungeon where it can. Every fill only touches a volume that holds nothing but natural blocks, air and the dungeon's own (a block filter never matches air, so such a volume is filled whole; any other is filled through a filter that replaces only natural and dungeon blocks). The site must also be far from world spawn (`avoidSpawn`).
+- **Building:** a ticking area keeps the box loaded. Once its chunks can be read and the box is found clean, anyone in it, dropped items and named or tamed animals are moved to the surface, then the whole box is filled with deepslate (sealing any caves), and the rooms, floors, corner pillars, ceiling lanterns, corridors (with a chute and pool under a shaft's high exit), closed bars, balconies, ladders, ledges, puzzles, signs and decor are placed. The work runs as a `system.runJob` job, one column or room per step, so the server never stalls (a Nightmare 20 dungeon builds in about a second). The layout follows from the seed and level alone (`scripts/layout.js`, which has no game code, so it's checked in Node across thousands of seeds and every level: rooms fit the box, paths connect, every door stays clear, ledges can be climbed, every puzzle has an answer).
+- **Filling in:** after the run (or when it fails or an operator resets it) the chests in the box are emptied, the dungeon's mobs and dropped items are removed, anything else in the box (a pet) is moved to the surface, any player is sent back to where they started their expedition (or to the surface), and the box is filled with deepslate again, including the blocks players placed. The ticking area is removed. If the box can't be loaded, it's tried again after a restart or with `/realm:expedition_reset`, and no new run starts there until then; its blocks still can't be broken meanwhile. A box is only ever filled in after the check before its run found it clean.
+- **The run** is checked twice a second: who is in which room, wave mobs left (mobs that leave the dungeon are removed), the boss (an `entityDie` for it finishes the run), goal spots of trap halls and shafts, side rooms, the button rush clock, affix hazards (warned with particles for 1.5 to 2 seconds before they hit), the time limit, and players who left. Buttons, pressure plates, target blocks, projectiles and levers are read from `afterEvents.buttonPush`, `pressurePlatePush`, `targetBlockHit`, `projectileHitBlock` and `leverAction`; puzzle buttons pop back up at once so the same one can be pressed again. Vampiric, Venomous, Thorned and Backup work through `entityHurt`. Explosions inside a dungeon are kept from breaking blocks (`beforeEvents.explosion`).
 - **Party members** are players with the same `realm_party:<code>` tag as the leader ([Parties](#parties--party_bp)), online, in the same dimension and within `partyRadius`.
-- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens" }`, `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Crowns go straight into the `crowns` scoreboard.
+- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens" }`, `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Champions are asked of the Champions pack with `realm:champion_spawn` `{ dim, x, y, z, mob, tag: "realm:exp_ch_<run>" }`; if none with that tag appears within 3 ticks (the pack isn't installed), the pack makes its own. Crowns go straight into the `crowns` scoreboard.
+- **For tests:** the script event `realm:expedition_debug` (`{ room? }`) is answered with `realm:expedition_state` (`{ part, parts, data }`): the first run's state and one room's layout and puzzle, used by the BDS scenario that plays whole runs.
 
 ---
 
@@ -3200,8 +4070,9 @@ Grow the realm's towns together. Operators add a town; its mayor (Mayor Bram fro
 2. Pick a project to see what it needs (`Oak Planks: 32 / 64 (you carry 20)`) and who has helped, then tap **Deliver what I have**. It takes what you carry of the needed items, up to what's still needed: partial deliveries count. Chat says `You delivered 20 Oak Planks, 4 Iron Ingot for Riverside's Dock. Now 52 percent.`
 3. When the last item is in, everyone hears `Riverside finished its Dock! Top contributors: Ann 64, Bob 32. Thank you, everyone!`, the dock is built where the operators chose and fireworks rise over it. The top three contributors get 60, 35 and 20 Crowns, and everyone who helped gets reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp) (if you're offline, it's waiting when you join).
 4. When every project of a level is finished, the town levels up: `Riverside is now a Town (level 3)` on everyone's screen, with the new projects.
-5. Run `/realm:town` anywhere to see the nearest town's level, projects, progress and contributors (**Other towns** lists the rest).
-6. **Operators:** stand in the middle of a town and run `/realm:town_add Riverside` (quotes for a name with spaces). Then, for each project, stand where it should be built, facing the way it should face, and run `/realm:town_spot <project>` (`well`, `notice_board`, `lamps`, `garden`, `stall`, `dock`, `bell_tower`). A project finished before it has a spot waits, and operators are reminded when they join. `/realm:town_remove` removes the town you're in. `/realm:config` → **Town Projects** sets the town radius, announcements and more.
+5. Run `/realm:town` anywhere for the town menu: **Town info** (the nearest town's level, projects, progress and contributors; also `/realm:town_stats`), **Projects** (what each still needs) and **Other towns**.
+6. **Operators:** stand in the middle of a town, open `/realm:town` and pick **Add a town here** (or run `/realm:town_add Riverside`, quotes for a name with spaces). Then, for each project, stand where it should be built, facing the way it should face, and pick **Set a project spot** and the project (or run `/realm:town_spot <project>`: `well`, `notice_board`, `lamps`, `garden`, `stall`, `dock`, `bell_tower`). Its outline appears in green particles, with a blue arrow for its front: pick **Set spot here**, **Rotate 90**, **Look around** (10 seconds to walk around it) or **Cancel**. A project finished before it has a spot waits, and operators are reminded when they join.
+7. **Operators:** **Manage spots** in `/realm:town` removes a spot (a built project is taken away and the ground put back), rebuilds a damaged build, or relocates it (preview at the new place, then it's taken away from the old one and built at the new one). **Protect from world events** (Enabled for new towns) keeps meteors, tornadoes and storms from breaking blocks in the town. **Remove town** (or `/realm:town_remove`) removes the town you're in. `/realm:config` → **Town Projects** sets the town radius, announcements and more.
 
 ### What players see
 
@@ -3224,14 +4095,19 @@ Grow the realm's towns together. Operators add a town; its mayor (Mayor Bram fro
 - **Structures instead:** a project with a `structure` id places that structure (saved by an operator with a structure block or `/structure save`) with its corner at the spot, turned to the way the operator faced (saved facing south), instead of the built-in design. It's placed as saved, replacing what's there. Without such a structure in the world, the built-in design is used.
 - **Rewards** for each finished project: Crowns for the top contributors (`topCrowns`: 60, 35, 20), shown as `+60 Crowns (Dock, Riverside)`; for every contributor, `repPerProject` (10) reputation to the Growers when the project is mostly wood, crops and wool, or the Miners when it's mostly stone and metal, plus a finished quest of kind `town` for other packs. Contributors who are offline get theirs when they next join (`Town projects you helped with were finished while you were away. Thank you!`).
 - **Announcements** (`announce`): finished projects, builds and level-ups go to everyone in chat, with fireworks (`fireworks`) and a title for level-ups. Disabled: only the contributors and the operators hear about it, and only players in the town see the level-up title.
+- **The menu:** `/realm:town` says which town you're in (or the nearest one and how far), then has a button for everything you may do: **Town info**, **Projects** (each open project with its percent; pick one for what it needs, and **Deliver what I have** where `deliverWithCommand` allows it) and **Other towns**. Operators also see, inside a town, **Set a project spot**, **Manage spots** (when the town has spots), **Protect from world events** with its state, and **Remove town**; outside one, **Add a town here** (a name field).
+- **Spot preview** (operators): the project's outline, the exact blocks it covers when built at the spot, is drawn in green particles (only you see them) at where you stood, facing the way you faced to the nearest quarter turn, with a blue arrow on the ground from the spot pointing at the build's front. It's redrawn twice a second for 30 seconds after each answer; with no answer by then it closes and nothing changes (`The spot preview timed out. Nothing was changed.`). The form says the size (`5 by 5 blocks, 6 high`) and how many blocks would be left out because something is in the way. **Rotate 90** turns it a quarter to the right; **Look around** closes the form for 10 seconds so you can walk around the outline, then asks again. The outline comes from the build's own blocks (a saved `structure`'s size for a project with one), so it's always the real size: a well 5 by 5 and 6 high, the lamps 1 by 13, a dock 3 by 10 and 11 deep.
+- **Removing, rebuilding and moving** (operators, **Manage spots**): just before a project is first built at a spot, the blocks its outline covers are saved in the world as a structure. **Remove spot** forgets an unbuilt project's spot, or takes a built one away and puts the saved ground back (anything built inside its outline since is replaced too); the project stays finished and waits for a new spot. **Rebuild** puts the saved ground back and builds it again, fresh. **Relocate** previews a new spot where you stand; on **Set spot here** the build is taken away from the old spot and built at the new one. Setting a spot for a built project (from the menu or `/realm:town_spot`) moves it the same way. Each asks first. Projects built before this version have no saved ground: the form warns about it, removing or moving clears only the build's own blocks that are still there (ground blocks become grass, a dock's posts water, the rest air), and **Rebuild** puts back the missing blocks.
+- **Protect from world events** (operators, per town, default Enabled): world events (meteors, tornadoes, storms and the like) still happen within the town radius (96 blocks, `townRadius`), but packs that support safe zones don't break or place blocks there. Disabled, they can.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:town` | Everyone | The nearest town's level, its projects with progress bars, what each still needs and who has helped. Delivering is at the town's mayor (or here, inside a town, with `deliverWithCommand`, default off) |
+| `/realm:town` | Everyone | The town menu: town info, projects, other towns, and for operators, add a town, set a project spot with a preview, manage spots (remove, rebuild, relocate), protect from world events (default Enabled) and remove the town |
+| `/realm:town_stats` | Everyone | The nearest town's level, its projects with progress bars, what each still needs and who has helped. Delivering is at the town's mayor (or here, inside a town, with `deliverWithCommand`, default off) |
 | `/realm:town_add <name>` | Operators | Adds a town centered where you stand. Towns must be at least 48 blocks apart (half of default 96, `townRadius`) |
-| `/realm:town_spot <project>` | Operators | Sets where a project of the town you're in (within 96 blocks of its center, default, `townRadius`) is built: where you stand, facing the way you face. Builds it right away if it's already finished |
+| `/realm:town_spot <project>` | Operators | Shows the project's outline where you stand, facing the way you face, in the town you're in (within 96 blocks of its center, default, `townRadius`), and asks to set the spot there, rotate it or cancel. Builds it right away if it's already finished; a built project is moved there (the ground at the old spot is put back) |
 | `/realm:town_remove` | Operators | Removes the town you're in and its project progress, after asking. What's built stays standing |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3255,7 +4131,8 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 
 | Key | Scope | Contents |
 |---|---|---|
-| `town:t:<town>` | World | JSON `{ id, n, dim, x, y, z, lvl, spots, by, at }`: the town's name, center, level, and each project's build spot `{ x, y, z, f }` (`f`: 0 south, 1 west, 2 north, 3 east) |
+| `town:t:<town>` | World | JSON `{ id, n, dim, x, y, z, lvl, spots, by, at, prot? }`: the town's name, center, level, `prot: 0` when **Protect from world events** is Disabled, and each project's build spot `{ x, y, z, f, snap?, b?, old? }` (`f`: 0 south, 1 west, 2 north, 3 east; `snap: 1` once the ground was saved, `b` the box it covers `[x1, y1, z1, x2, y2, z2]`; `old: 1` for a project built before snapshots, rebuilt in place) |
+| Structure `town:<town>__<project>` | World | The blocks a project's outline covered just before it was built (no entities), put back when it's removed, rebuilt or moved, and deleted after a removal or move or with the town |
 | `town:p:<town>:<project>` | World | JSON `{ got, c, done, built }`: items delivered, contributors `{ <player id>: [name, amount] }`, finished and built. Past about 30,000 characters the smallest contributors are dropped |
 | `town:owed` | World | JSON `{ <player id>: { cr, q } }`: Crowns and finished projects (the latest 10 each) waiting for contributors who were offline |
 | `town:cfg` | World | Settings changed in `/realm:config` |
@@ -3265,7 +4142,71 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 - **The mayor** is an offer in the [Townsfolk](#townsfolk--npc_bp) offer round: the pack answers `realm:npc_talk` for NPCs with the `npcRole` role with `realm:npc_offer` (key `town:<town id>`, order 30) and opens the town's menu on `realm:npc_choose`.
 - **Builds** are placed block by block in code (no structure files needed), each block only after checking what's there. Spots that aren't loaded are checked every 5 seconds against where players are, and built when one is within 64 blocks. Fireworks are `minecraft:fireworks_rocket` entities.
 - **Messages sent** to each contributor of a finished project: `realm:quest_done` `{ player, pack: "town_bp", id: "town_<town>_<project>", label, kind: "town", guild }` and `realm:rep_add` `{ player, guild, amount: repPerProject }`, with `guild` `growers` or `miners`. Crowns go straight into the `crowns` scoreboard.
+- **Snapshots** use `world.structureManager.createFromWorld` (saved to the world) right before the first build at a spot, and `place` to put the ground back. The outline is the min and max of the design's block offsets, turned to the spot's facing (or a saved structure's size, with x and z swapped for a quarter turn).
+- **Safe zones:** every town with **Protect from world events** Enabled is sent as `realm:zones` `{ src: "town", part, parts, zones: [{ id, name, dim, x, z, r, shape: "circle" }] }` (`r` = `townRadius`, `part` from 1, split under 2,048 characters; an empty list has `parts: 0`) when a town is added, removed or toggled, when `townRadius` changes, 5 seconds after the world loads, and in reply to `realm:zones_ping`.
+- **Scenario tests:** `/scriptevent realm:town_test {"action": ...}` runs the operator actions without forms (`add`, `spot` with an optional `spot: { x, y, z, f }`, `finish`, `remove`, `rebuild`, `protect`, `zones`, `dump`), for the test harness. It's only honored from the server console or an operator.
 - **Not Community Goals:** [Community Goals](#community-goals--goals_bp) is a realm-wide donation chest for one item; Town Projects belong to a town, need several items, go through the mayor and build something. They don't share data.
+
+---
+
+## Safe Zones — `zones_bp`
+
+Mark your base, a town square or a farm as a **safe zone**, and world events leave it alone: meteors don't make craters there, storm lightning doesn't strike (so it can't start fires), tornadoes can be set to calm down or steer around it, and Blood Moon creepers don't spawn in it. The events still happen, and you still see the meteor streak across the sky; they just break no blocks inside. Towns ([Town Projects](#town-projects--town_bp)) and land claims ([Land Claims](#land-claims--claims_bp)) can be safe zones too, and the world-event packs treat them all the same.
+
+### How to use
+
+1. Run `/realm:zones`. The top of the menu says whether the spot you're standing on is protected, and by what (`Where you stand: protected by Home (Safe zone).`).
+2. **Safe zones** lists every zone made with this pack, nearest first, with its center, radius and how far it is from you. Pick one and **Show outline**: green sparkles trace its edge around you for 20 seconds (`previewSeconds`), and the bar above the hotbar says whether you're inside and how far the edge is.
+3. **Towns and claims** lists the protected areas other packs share (towns with **Protect from world events**, claims while **Protect claims from world events** is on), read only, with their source; **Show outline** works for them too. **Show nearby outlines** traces every zone whose edge is within 64 blocks of you.
+4. **Operators:** stand in the middle of the place and pick **Add a safe zone here**. Type a name (up to 24 characters) and set the radius with the slider: 8 to 512 blocks in steps of 8 (starting at 64, `defaultRadius`; at most `maxRadius`). Pick **Preview**: white sparkles outline the circle around you, and after a few seconds a menu asks **Create it**, **Look again**, **Change name or size** or **Cancel** (closed it? `/realm:zones` shows **Create Home** at the top until you decide). A zone reaches from the bottom of the world to the top.
+5. **Operators:** pick a zone in **Safe zones** to **Edit name or size**, **Move here** (centers it where you stand, with the same preview), **Teleport** to its center, or **Remove** it. Meteor Strikes' **Protect this area from meteors** button opens the same **Add a safe zone here**.
+6. **Operators:** to let everyone protect their own base, enable **Players can add safe zones** in `/realm:config` → **Safe Zones** (`playersCreate`). Each player can then add up to 1 zone (`playerMaxZones`) of up to 64 blocks radius (`playerMaxRadius`), and change, move or remove their own.
+
+### What players see
+
+- **Inside a safe zone** (any zone from any provider, in the zone's dimension, top to bottom):
+  - [Meteor Strikes](#meteor-strikes--meteor_bp): no meteor is aimed into one, and no crater block is ever placed or removed in one. A meteor that still comes down over a zone lands just outside it, or bursts in the sky above it (the meteor pack's **A meteor over a safe zone** setting).
+  - [Storm Chasing](#storm-chasing--storm_bp): no storm cell lightning strikes in or right next to a zone, so it can't start fires there. Lightning rods inside still get struck and charged.
+  - [Tornadoes](#tornadoes--tornado_bp): a tornado never breaks blocks anywhere; its **Tornadoes and safe zones** setting picks whether it passes through as usual, moves nothing inside a zone, or steers around zones.
+  - [Blood Moon](#blood-moon--harvest-moon--moon_bp): no Blood Moon creeper spawns in a zone (another monster comes instead).
+  - [Creeper Guard](#creeper-guard--guard_bp): in its protected zones mode, creeper blasts break nothing in a safe zone either.
+- **What it doesn't stop:** vanilla lightning from an ordinary thunderstorm, fire spread, creepers and other mobs that spawn on their own (use Creeper Guard for creeper blasts), and players. A safe zone isn't a land claim.
+- **Overlaps** are fine: zones may overlap each other, towns and claims.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:zones` | Everyone | Opens the Safe Zones menu: whether you're in a safe zone, the list of safe zones (nearest first) and of protected towns and claims, with **Show outline** for each and **Show nearby outlines**. Operators also add a zone where they stand (radius 8 to 512, default 64, `defaultRadius`) with a preview, edit, move, teleport to and remove zones. With `playersCreate` enabled (default disabled), players can add their own too (1 each, `playerMaxZones`, radius up to 64, `playerMaxRadius`) |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `defaultRadius` | `64` | Where the radius slider of **Add a safe zone here** starts, in blocks |
+| `maxRadius` | `512` | Largest radius a zone can have, in blocks (8 to 512, in steps of 8) |
+| `previewSeconds` | `20` | Seconds an outline shows: the preview of a new zone, **Show outline** and **Show nearby outlines** |
+| `playersCreate` | `false` | Players who aren't operators can add safe zones, within the two limits below. Operators always can |
+| `playerMaxZones` | `1` | Most safe zones one player (not an operator) can have |
+| `playerMaxRadius` | `64` | Largest radius a player (not an operator) can give a zone, in blocks |
+
+Operators can change every option but `previewSeconds` in game with `/realm:config` when Realm Settings is installed. The realm has room for 100 zones made with this pack.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `zones:list` | World | JSON list of the zones: `{ id, name, dim, x, y, z, r, o?, on? }`, its id (`z1`, `z2`...), name, dimension, center (and the height it was made at, for **Teleport**), radius, and the id and name of the player who added it when that wasn't an operator |
+| `zones:next` | World | The next zone id number |
+| `zones:cfg` | World | Settings changed in `/realm:config` |
+
+Towns and claims aren't saved here: their packs send them again whenever the world starts.
+
+### How it works
+
+- This pack is the `zones` provider of the safe zones protocol (see [How the packs work together](#how-the-packs-work-together)): it sends its whole list as `realm:zones` whenever a zone changes, 5 seconds after the world loads, and when any pack sends `realm:zones_ping`. It also listens to the other providers, so its lists are complete.
+- `realm:zones_open` `{ player, action: "add" }` opens **Add a safe zone here** for that player (Meteor Strikes' **Protect this area from meteors**); any other action opens the menu (Creeper Guard's **Safe zones** button).
+- Outlines are `Player.spawnParticle` (`minecraft:villager_happy`, `minecraft:endrod` for a preview) every half second, only along the part of the edge within 40 blocks of you and at your height, so a 512-block zone costs no more than a small one.
 
 ---
 
@@ -3276,10 +4217,10 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 ### How to use
 
 1. About 10 seconds after you first join each day (UTC), chat gives the day's forecast in one line, for example `Forecast: clear now, rain in about 25 minutes. More with /realm:weather`. Don't want it? Disable **Daily forecast in chat** in `/realm:prefs`.
-2. Run `/realm:weather` to see the forecast for the next 3 hours: what the weather is now and how long it lasts, then every spell coming up with its start time (in UTC) and length, and a summary such as `Rain in 25 min, for about 12 min. Thunderstorm likely around 14:40 UTC.`
+2. Run `/realm:weather` (or `/realm:weather_forecast`) to see the forecast for the next 3 hours: what the weather is now and how long it lasts, then every spell coming up with its start time (in UTC) and length, and a summary such as `Rain in 25 min, for about 12 min. Thunderstorm likely around 14:40 UTC.`
 3. With the [Townsfolk](#townsfolk--npc_bp) pack, tap Sol the Sky-reader (or any townsfolk with the `skymage` role) and pick **Forecast** for the same.
 4. Sleeping through rain or a thunderstorm ends it, as in vanilla: the sky clears and the plan carries on from there (the forecast updates).
-5. **Operators:** `/realm:weather_set <clear|rain|thunder> <minutes>` starts that weather now for that many real minutes, and the plan carries on after it. Vanilla `/weather` doesn't stick while the almanac runs: it's put back within a second. `/realm:config` → **Weather Almanac** sets how long each kind of weather lasts and how likely thunder is, or disables the almanac to give the weather back to the game.
+5. **Operators:** `/realm:weather` opens a menu with **Forecast** and **Set the weather** (pick clear, rain or a thunderstorm and 5 to 240 real minutes). `/realm:weather_set <clear|rain|thunder> <minutes>` does the same from chat: it starts that weather now for that many real minutes, and the plan carries on after it. Vanilla `/weather` doesn't stick while the almanac runs: it's put back within a second. `/realm:config` → **Weather Almanac** sets how long each kind of weather lasts and how likely thunder is, or disables the almanac to give the weather back to the game.
 
 ### What players see
 
@@ -3297,7 +4238,8 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:weather` | Everyone | The forecast for the next 3 hours (`horizonHours`): the weather now and when it changes, every spell coming up, in real time (UTC) |
+| `/realm:weather` | Everyone | The forecast (below). Operators get a menu instead: **Forecast** and **Set the weather** (clear, rain or thunder for 5 to 240 real minutes) |
+| `/realm:weather_forecast` | Everyone | The forecast for the next 3 hours (`horizonHours`): the weather now and when it changes, every spell coming up, in real time (UTC) |
 | `/realm:weather_set <clear\|rain\|thunder> <minutes>` | Operators | Starts that weather now for 1 to 1440 real minutes; the plan carries on after it. With the almanac disabled it just sets the weather, and the game's weather cycle takes over after |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3433,11 +4375,12 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 ### How to use
 
 1. In a thunderstorm, chat soon says `A storm cell is forming to the NE.` The cell forms 200 to 500 blocks from one of the players online, drifts 1 to 3 blocks a second and lasts 4 to 8 minutes.
-2. Hold a clock and run `/realm:storm` for a reading: `Cell: 340m NE, strength 7/10`. Holding the Storm Meter relic ([Relics](#relics--relics_bp)) shows the reading all the time.
+2. Hold a clock and run `/realm:storm` → **Read the storm** (or `/realm:storm_read`) for a reading: `Cell: 340m NE, strength 7/10`. Holding the Storm Meter relic ([Relics](#relics--relics_bp)) shows the reading all the time.
 3. Near the cell, lightning lands every 3 to 8 seconds, more often as it grows. Watch out: it hurts. Getting within 64 blocks of the cell adds **Storm cell** to the Weather page of your [Field Journal](#field-journal--journal_bp).
 4. Place lightning rods where the storm goes. When lightning strikes one you placed (the cell's, or ordinary storm lightning), it sparks blue and is charged. Tap a charged rod to collect 1 or 2 **Storm Glass**, and it can be charged again.
 5. Don't want the chat line when a cell forms? Disable **Storm cell notes** in `/realm:prefs`.
-6. **Operators:** `/realm:storm_cell` starts a cell 48 to 96 blocks from you during a thunderstorm; `/realm:storm_cell true` starts one even without a storm. `/realm:config` → **Storm Chasing** enables or disables the cells, their lightning and the chat line, and sets the wait between cells.
+6. Storm cell lightning never strikes in or right next to a safe zone ([Safe Zones](#safe-zones--zones_bp), protected towns and claims), so it can't set your base on fire. Lightning rods there still get struck.
+7. **Operators:** `/realm:storm` also has **Start a storm cell**, **Start a storm cell anyway** (without a thunderstorm) and **End the storm cell**. `/realm:storm_cell` starts a cell 48 to 96 blocks from you during a thunderstorm; `/realm:storm_cell true` starts one even without a storm. `/realm:config` → **Storm Chasing** enables or disables the cells, their lightning and the chat line, and sets the wait between cells.
 
 ### What players see
 
@@ -3447,13 +4390,14 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 - **Lightning** lands at a random spot within 30 blocks of the cell (`strikeRadius`), only where the world is loaded (around players). To keep builds from catching fire, a strike is skipped within 64 blocks of world spawn (`avoidSpawn`) and anywhere a check of the 9 x 9 columns around the spot (the surface and 4 blocks under it) finds a player-made block: planks, glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpet, concrete, glazed terracotta, polished, cut and chiseled stone, copper blocks, paths, farmland, crafting tables, furnaces, bricks, slabs, stairs, rails, redstone parts and the like.
 - **Lightning rods:** the pack remembers rods players place (up to 200, `maxRods`). Half the time (`rodChance`) a strike goes to an uncharged rod within the cell's reach instead, even near spawn (a struck rod doesn't start fires). Any lightning within 3 blocks of a remembered rod charges it: a blue spark and a beacon hum, then a spark every 2 seconds while someone is within 48 blocks. Tapping a charged rod (with anything in hand) collects `You collect 2 Storm Glass from the lightning rod.` Tapping an uncharged one with an empty hand says `This lightning rod isn't charged. A lightning strike charges it.` The sparks come from [Realm Skies](#realm-skies--sky_rp); without it, the rods still charge.
 - **Storm Glass** is prismarine crystals named `Storm Glass` with the lore `Charged by a lightning strike`. Other packs may buy or use it.
-- **`/realm:storm`** without a clock in your hand says `Hold a clock to read the storm.`; with no cell (or outside the overworld), `No storm cell.`
+- **Read the storm** without a clock in your hand says `Hold a clock to read the storm.`; with no cell (or outside the overworld), `No storm cell.`
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:storm` | Everyone | With a clock in your hand: the storm cell's distance, direction and strength (`Cell: 340m NE, strength 7/10`) |
+| `/realm:storm` | Everyone | Opens the Storm Chasing menu: **Read the storm**; operators also start a storm cell (with or without a thunderstorm) or end it |
+| `/realm:storm_read` | Everyone | With a clock in your hand: the storm cell's distance, direction and strength (`Cell: 340m NE, strength 7/10`) |
 | `/realm:storm_cell [force]` | Operators | Starts a storm cell 48 to 96 blocks from you now (default, `commandMinDistance` to `commandMaxDistance`), replacing any other. Needs a thunderstorm unless `force` is `true`; a forced cell lasts its full time even if the weather clears |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3462,6 +4406,7 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 |---|---|---|
 | `enabled` | `true` | Thunderstorms in the overworld get a storm cell |
 | `lightning` | `true` | The storm cell throws lightning. Disabled, it still drifts and can be read |
+| `avoidZones` | `true` | No lightning in or within 4 blocks of a safe zone (Safe Zones, protected towns and claims). Lightning rods there still get struck and charged |
 | `formNotes` | `true` | A chat line when a storm cell forms. Each player can choose in `/realm:prefs` |
 | `gapSeconds` | `60` | Seconds after a cell passes before the next can form (0–3600 in game) |
 | `minDistance` | `200` | A new cell forms at least this far from a random online player (blocks) |
@@ -3483,7 +4428,7 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 | `commandMinDistance` | `48` | `/realm:storm_cell` puts the cell at least this far from the operator |
 | `commandMaxDistance` | `96` | ...and at most this far |
 
-Operators can change `enabled`, `lightning`, `gapSeconds` and `formNotes` in game with `/realm:config`. Each player can switch the chat line for themselves with **Storm cell notes** in `/realm:prefs`, which follows `formNotes` until they choose. The rest stays in `config.js`.
+Operators can change `enabled`, `lightning`, `avoidZones`, `gapSeconds` and `formNotes` in game with `/realm:config`. Each player can switch the chat line for themselves with **Storm cell notes** in `/realm:prefs`, which follows `formNotes` until they choose. The rest stays in `config.js`.
 
 ### Saved data
 
@@ -3512,15 +4457,16 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 
 1. When a thunderstorm starts, there's a chance (`chance`, 0.2) that a tornado touches down during it, 1 to 4 minutes in, somewhere 80 to 160 blocks from one of the players in the Overworld, on open grass, dirt or sand.
 2. Anyone within 150 blocks gets a warning in chat, such as `§cTornado! 140m to the SW, moving NE.`, and hears a warning horn every 20 seconds while it lasts. Closer in you hear the wind roar and the storm rumble from its direction.
-3. Run `/realm:tornado` any time to see where it is and which way it's heading, or `No tornado right now.`
+3. Run `/realm:tornado` → **Where is the tornado?** (or `/realm:tornado_info`) any time to see where it is and which way it's heading, or `No tornado right now.`
 4. Want a closer look? Mobs and items near the funnel circle it and get lifted; get within about 6 blocks and you're thrown a few blocks up and out, then float down with Slow Falling, so it's a ride, not a death trap. Creative and spectator players are left alone.
 5. When it dies down (after 1.5 to 3 minutes), chat says `§7The tornado has died down.` and 2 to 5 **Storm Glass** lie on the ground at the end of its path. Go pick them up.
-6. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the funnel. `/realm:tornado_spawn` makes a tornado 40 blocks in front of you right away, in any weather. `/realm:config` → **Tornadoes** enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, the funnel's density and view distance, the pull radius and whether players are thrown.
+6. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the funnel. `/realm:tornado` → **Spawn one** (or `/realm:tornado_spawn`) makes a tornado 40 blocks in front of you right away, in any weather; **End the tornado** stops it. `/realm:config` → **Tornadoes** enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are thrown.
 
 ### What players see
 
 - **The funnel:** rings of spinning dust stacked 40 blocks (`height`) up from the ground, narrow at the bottom and about 11 blocks wide at the top, bending and swaying, with dirt and leaf bits flung out at its base. Each player within `viewDistance` (128) blocks gets their own copy (`rings`, 16 rings, half as many beyond 64 blocks; `density` scales both), so players far away cost nothing.
 - **Where it goes:** it drifts 2 to 4 blocks a second (`speed`) on a slowly wandering heading, follows the ground over hills, and turns away rather than come within `avoidSpawn` (64) blocks of the world spawn. It may pass by builds: it never changes a block.
+- **Safe zones** ([Safe Zones](#safe-zones--zones_bp), protected towns and claims), by **Tornadoes and safe zones** (`zoneMode`): `pass` (default) goes through them like anywhere else, since it breaks nothing; `calm` pulls, lifts and throws nothing that is inside a zone (pens, farms and item sorters stay as they are); `avoid` never forms within `pullRadius` + 16 blocks of a zone and turns away before its pull reaches one (and is calm inside one, if an operator spawns it there).
 - **Pull:** mobs and dropped items within `pullRadius` (12) blocks of the funnel circle it, drift inward and rise up to `liftHeight` (8) blocks. Mobs get Slow Falling while they're in it, so pets, villagers and farm animals land safely. Townsfolk (`minecraft:npc`), armor stands, paintings, minecarts, boats, falling sand and gravel, primed TNT, ender pearls and other projectiles, and other packs' helper entities are never moved.
 - **Players:** at the edge of the pull radius you feel a tug toward the funnel; within half of it you're thrown a few blocks up and sideways (at most once every 4 seconds), and get Slow Falling for `slowFallingSeconds` (6) seconds near the top of the throw. `throwPlayers` disabled leaves players alone.
 - **Warnings and sounds:** within `warnDistance` (150) blocks, a chat warning once per tornado with its distance, direction and heading (`§cTornado! 140m to the SW, moving NE.`), and the raid horn every `hornEvery` (20) seconds. Within 100 blocks a deep thunder rumble every 6 s; within 48 blocks the roar of wind every 5 s. Sounds come from the tornado's direction.
@@ -3531,7 +4477,8 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:tornado` | Everyone | Where the tornado is and where it's heading (`§cTornado! 140m to the SW, moving NE.`), or `No tornado right now.` |
+| `/realm:tornado` | Everyone | Opens the Tornadoes menu: **Where is the tornado?**; operators also **Spawn one** (40 blocks in front of you) and **End the tornado** (no Storm Glass) |
+| `/realm:tornado_info` | Everyone | Where the tornado is and where it's heading (`§cTornado! 140m to the SW, moving NE.`), or `No tornado right now.` |
 | `/realm:tornado_spawn` | Operators | A tornado forms 40 blocks in front of you now, in any weather (one at a time). It lasts and drifts like a natural one, but doesn't end with the storm |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3549,6 +4496,7 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 | `formDistance.min` | `80` | Closest it forms to the chosen player, in blocks |
 | `formDistance.max` | `160` | Farthest it forms from the chosen player, in blocks |
 | `avoidSpawn` | `64` | It never forms or travels closer than this many blocks to the world spawn |
+| `zoneMode` | `"pass"` | Safe zones: `pass` goes through them as usual (it never breaks blocks anyway), `calm` moves nothing inside them, `avoid` never forms near one and turns away from them |
 | `viewDistance` | `128` | Players within this many blocks see the funnel (and get the journal page) |
 | `height` | `40` | Height of the funnel, in blocks |
 | `rings` | `16` | Rings of dust stacked up the funnel for each player near it (half as many beyond 64 blocks); each is redrawn every half second |
@@ -3565,7 +4513,7 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 | `sounds.rumble` | `"ambient.weather.thunder"` | The rumble within 100 blocks, played low |
 | `sounds.horn` | `"raid.horn"` | The warning horn |
 
-Operators can change `enabled`, `chance`, `avoidSpawn`, `density`, `pullRadius`, `throwPlayers`, `viewDistance` and `rings` in game with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
+Operators can change `enabled`, `chance`, `avoidSpawn`, `zoneMode`, `density`, `pullRadius`, `throwPlayers`, `viewDistance` and `rings` in game with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
 
 ### Saved data
 
@@ -3580,7 +4528,7 @@ A tornado itself isn't saved: if the realm restarts during one, it's gone, and n
 
 - `weatherChange` in the overworld: a change to `Thunder` rolls `chance` once and schedules the tornado `formAfter` seconds later. A check every 5 s forms it: it picks a random Overworld player and tries 16 spots `formDistance` away (the last 8 at half the distance, in case the far chunks aren't loaded), keeping spots at least `avoidSpawn` from spawn whose ground (`getTopmostBlock`, looking under low plants) is grass, dirt, coarse dirt, podzol, sand or red sand, so not water, leaves, stone or a build. A failed attempt is retried every 10 s, up to 12 times, while the thunderstorm lasts.
 - While a tornado exists one loop runs every 2 ticks: it moves the funnel, draws a slice of the rings for each nearby player with `Player.spawnParticle` (`realm:sky_tornado` with `variable.radius` and `variable.spin`, `realm:sky_debris` with `variable.radius`), and every 4 ticks pushes entities with `applyImpulse` (speeds capped at 0.6 blocks per tick sideways and 0.35 up, at most 40 entities per run) and players with `applyKnockback`. Once a second it wanders, finds the ground under it, warns and plays sounds (`Player.playSound`, from the tornado's direction). The loop stops when the tornado ends.
-- Blocks are only ever read, never changed.
+- Blocks are only ever read, never changed. Safe zones come from the safe zones protocol (`realm:zones`), kept in memory.
 - Script events: `realm:sky_event` `{ kind: "tornado", dim, x, z, text }` when it forms, `realm:journal` `{ player, page: "weather", entry: "tornado", label: "Tornado" }` once per player who sees it.
 
 ---
@@ -3592,7 +4540,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 ### How to use
 
 1. When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (`chance`, 0.7) of a rainbow. Chat says where its end is, for example `§eA rainbow! Its end is somewhere to the NE.`
-2. Look that way: the rainbow stands over the horizon, one end coming down right in the direction of the pot. It stays up for 2.5 minutes (`durationSeconds`). Run `/realm:rainbow` any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).
+2. Look that way, with the sun at your back: the rainbow stands over the horizon, one end coming down right in the direction of the pot. It stays up for 2.5 minutes (`durationSeconds`). Run `/realm:rainbow` any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).
 3. Head that way. As you get close, the rainbow comes down at its real spot, and a **chest** appears where it touches the ground.
 4. The first player to get within 3 blocks of it wins: `§6+50 Crowns §7(Pot of gold)` and everyone reads `§6Ann found the pot of gold at the rainbow's end!` The chest is yours to empty: gold ingots and nuggets, rare dyes, maybe a golden apple or emeralds. Sometimes (`relicChance`, 0.1) a relic comes with it.
 5. Missed the rainbow? The pot stays findable for 15 minutes (`potMinutes`) after it appeared: `/realm:rainbow` says `The rainbow has faded, but its pot of gold is still out there, somewhere to the NE.`
@@ -3600,8 +4548,8 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 
 ### What players see
 
-- **The rainbow:** every player in the Overworld sees it, redrawn every 2 seconds (each lasts 3 s and fades in and out over 1 s, so they blend). It's drawn about 100 blocks away along the line toward its end, `size` (120) blocks wide, with one foot (the middle of the colored band) on that line and just under the horizon; within 100 blocks it stands at its real spot, getting smaller as you get close. It's the same rainbow for everyone, pointing to the same spot. Players deeper than 24 blocks under the surface, or in the Nether or the End, don't see it.
-- **The pot of gold:** its spot is picked 150 to 300 blocks (`distance`) from a random player in the Overworld, at least `avoidSpawn` (64) blocks from the world spawn. The chest is only placed when someone gets within 40 blocks (the ground there has to be loaded to check it): on natural ground (grass, dirt, sand, stone, snow and the like, not water or leaves), at the rainbow's end or up to 12 blocks from it, and never where a scan of the 9 x 9 columns around it (4 blocks above and below the ground) finds a player-made block (planks, glass, chests, beds, torches, doors, fences, wool, concrete, glazed terracotta, crafting tables, furnaces and the like). If there's no such spot, there's no chest, and the first player to reach the end on the ground gets the loot straight into their inventory instead.
+- **The rainbow:** every player in the Overworld sees it, redrawn every second (each drawing lasts 1.6 s and fades in over 0.2 s and out over 0.4 s, so they blend). Like a real one, it's opposite the sun: in the west in the morning, in the east in the afternoon and evening (at night, opposite the moon). It's drawn 32 blocks away along the line toward its end, scaled to look as big as `size` (120) blocks wide seen from 100 blocks (about 48 degrees across and 22 degrees high), with one foot (the middle of the colored band) on that line and just under the horizon; within 32 blocks it stands at its real spot, getting smaller as you get close. It's drawn that close because far particles are fogged like everything else: rain fog ends at about half your render distance, so a rainbow farther out vanishes during and right after rain, or on a short render distance. It's the same rainbow for everyone, pointing to the same spot. Players deeper than 24 blocks under the surface, or in the Nether or the End, don't see it, and nobody sees it without [Realm Skies](#realm-skies--sky_rp).
+- **The pot of gold:** its spot is picked 150 to 300 blocks (`distance`) from a random player in the Overworld, within 45 degrees of straight opposite the sun (any direction if 6 tries there fail), at least `avoidSpawn` (64) blocks from the world spawn and outside every safe zone (Safe Zones, towns protected from world events, land claims), and its chest is never placed inside one. The chest is only placed when someone gets within 40 blocks (the ground there has to be loaded to check it): on natural ground (grass, dirt, sand, stone, snow and the like, not water or leaves), at the rainbow's end or up to 12 blocks from it, and never where a scan of the 9 x 9 columns around it (4 blocks above and below the ground) finds a player-made block (planks, glass, chests, beds, torches, doors, fences, wool, concrete, glazed terracotta, crafting tables, furnaces and the like). If there's no such spot, there's no chest, and the first player to reach the end on the ground gets the loot straight into their inventory instead.
 - **The finder:** the first player (not in spectator mode) within 3 blocks of the chest gets `crowns` (50) Crowns on the shared `crowns` scoreboard (`§6+50 Crowns §7(Pot of gold)`; the Crowns pack shows balances, and the Crowns are paid without it too), a level-up sound, and with `relicChance` a relic picked from `relics` (the Relics pack hands it out; without that pack nothing happens). Everyone reads `§6Ann found the pot of gold at the rainbow's end!` Later players find the chest, but no Crowns.
 - **The chest's loot** (`loot`): 3-8 gold ingots and 8-24 gold nuggets always; each of magenta, cyan, pink, light blue and lime dye (1-4) at 40%; a golden apple at 30%; 1-3 emeralds at 25%. Put in random slots.
 - **Afterwards:** when the pot expires (`potMinutes` after the rainbow appeared), an empty pot chest is removed if that spot is loaded; a chest that still holds anything is never removed.
@@ -3624,7 +4572,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 | `distance.min` | `150` | Closest its end is to the chosen player, in blocks |
 | `distance.max` | `300` | Farthest its end is from the chosen player, in blocks |
 | `avoidSpawn` | `64` | The pot of gold is never placed closer than this many blocks to the world spawn |
-| `size` | `120` | Width of the rainbow in blocks as players see it |
+| `size` | `120` | How big the rainbow looks: its width in blocks as if seen from 100 blocks away (it's drawn 32 blocks away, scaled to match) |
 | `potMinutes` | `15` | Minutes the pot of gold can be found after the rainbow appears; then an empty pot chest is removed |
 | `crowns` | `50` | Crowns for the first player to reach the pot of gold |
 | `relicChance` | `0.1` | Chance (0-1) the finder also gets a relic (needs the Relics pack) |
@@ -3644,7 +4592,10 @@ Operators can change `enabled`, `chance`, `durationSeconds`, `potMinutes`, `crow
 ### How it works
 
 - `weatherChange` in the overworld from `Rain` or `Thunder` to `Clear`, at time 0-3000 or 9000-12000, rolls `chance` (skipped while an earlier pot is still unfound). The end's spot is tried up to 12 times at a random angle and distance from a random Overworld player, skipping spots near spawn and, when that chunk happens to be loaded, water.
-- Every 2 s, each Overworld player not deep underground gets `realm:sky_rainbow` (`variable.size`, `variable.life` 3) with `Player.spawnParticle`. The particle faces the player (rotating around the vertical) and its position is the middle of the arc's base, so it's placed to the side of the line toward the end by the distance from the middle to a foot of the colored band (0.835 of half the width). If that spot isn't loaded for a player, it's drawn closer (70, then 45 blocks) and smaller, so it looks the same.
+- The end's direction: `antisolarAngle` in `scripts/sky.js` gives west (light from the east: time 22000-6000, or the moon at 12000-18000) or east (otherwise), and the end is tried within 45 degrees of it.
+- Every second, each Overworld player not deep underground gets `realm:sky_rainbow` (`variable.size`, `variable.life` 1.6) with `Player.spawnParticle`. `placement` in `scripts/sky.js` (plain math, no game imports) puts it 32 blocks out (eye level minus 0.05 per block), `size` x 32 / 100 wide. The particle faces the player (rotating around the vertical) and its position is the middle of the arc's base, so it's placed to the side of the line toward the end by the distance from the middle to a foot of the colored band (0.835 of half the width). If that spot isn't loaded for a player, it's drawn at 20 blocks and smaller, so it looks the same.
+- `weatherChange`'s dimension is matched with or without `minecraft:` (the game sends `overworld`; before 1.1.0 the pack only took `minecraft:overworld`, so no rainbow ever followed rain). In an unloaded chunk `getTopmostBlock` can return a block whose properties throw; before 1.1.0 that stopped `/realm:rainbow_now` before the rainbow was made whenever its end was out of loaded range. Both are read inside a `try` now.
+- Safe zones: the pack keeps the latest `realm:zones` `{ src, part, parts, zones: [{ dim, x, z, r }] }` list of each provider (parts numbered from 1 or 0 and joined; `parts` 0 clears that provider), asks with `realm:zones_ping` 2 seconds after the world loads, and skips rainbow ends and chest spots inside any Overworld zone.
 - Every second: a player within 40 blocks of the end starts a `system.runJob` that looks for the chest's spot (the build scan reads at most 810 blocks per spot, a column at a time, over several ticks), places a `minecraft:chest` and fills it. A player within 3 blocks of it is the finder. A pot past `potMinutes` is cleared.
 - Script events: `realm:sky_event` `{ kind: "rainbow", dim, x, z, text }` when it appears, `realm:journal` `{ player, page: "weather", entry: "rainbow", label: "Rainbow" }` once per player who sees it, `realm:relic_give` `{ player, relic }` on a relic roll.
 
@@ -3718,15 +4669,15 @@ Operators can change `enabled`, `stars.enabled`, `wish.enabled`, `aurora.enabled
 
 ## Meteor Strikes — `meteor_bp`
 
-Some nights a meteor falls. Chat gives a minute's warning and the coordinates, then a fiery streak crosses the sky for everyone in the Overworld and comes down with a boom you feel. Where it lands it leaves a small smoking crater with a meteorite core of ancient debris in magma, for whoever gets there first. Meteors land far from spawn and never in builds: a crater only replaces natural ground. The streak and the smoke come from [Realm Skies](#realm-skies--sky_rp): without that resource pack you still get the warning, the boom and the crater, but no streak or smoke.
+Some nights a meteor falls. Chat gives a minute's warning and the coordinates, then a fiery streak crosses the sky for everyone in the Overworld and comes down with a boom you feel. Where it lands it leaves a small smoking crater with a meteorite core of ancient debris in magma, for whoever gets there first. Meteors land far from spawn, never in builds (a crater only replaces natural ground) and never in a safe zone, protected town or claim. The streak and the smoke come from [Realm Skies](#realm-skies--sky_rp): without that resource pack you still get the warning, the boom and the crater, but no streak or smoke.
 
 ### How to use
 
 1. Some nights (`chance`, 0.33), at a random time, chat warns everyone: `§6A meteor is falling! It will land near 1240, -380 in 60 seconds.`
 2. Look up: a few seconds before it lands, a glowing meteor with a fiery trail streaks down from the sky toward the spot. Near it you hear the explosion and the thunder and the screen shakes; far away you hear a distant rumble.
 3. Go find it: at the spot (or a few blocks from it) there's a crater about 7 to 9 blocks across, lined with blackstone, magma and obsidian, still smoking, with 1 to 3 **ancient debris** in its middle. Bring a diamond pickaxe or better. The first player to reach it is announced: `§6Ann found the meteor crater!`
-4. Run `/realm:meteor` to see where the last meteor fell and whether its crater has been found.
-5. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the streak and smoke. `/realm:meteor_now` drops a meteor 100 blocks in front of you, after the usual warning. `/realm:config` → **Meteor Strikes** enables or disables meteors at night and sets the chance, the warning time, the distance kept from spawn, and whether meteors make craters.
+4. Run `/realm:meteor` for the menu: it says whether a meteor is falling or where the last one fell, and **Last meteors** lists the last 5, how far each is from you and who found its crater. `/realm:meteor_info` says the same as the menu's top line, in chat.
+5. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the streak and smoke. In `/realm:meteor`: **Drop one now** (or `/realm:meteor_now`) drops a meteor 100 blocks in front of you, after the usual warning; **Meteor settings** enables or disables meteors at night and craters, and sets the chance, the warning time, the distance kept from spawn, **Avoid safe zones and towns** and what a meteor does over a safe zone (the same settings as `/realm:config` → **Meteor Strikes**); **Protect this area from meteors** opens [Safe Zones](#safe-zones--zones_bp)' **Add a safe zone here** where you stand.
 
 ### What players see
 
@@ -3737,13 +4688,18 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 - **Where a crater can go:** the game can only change loaded ground, so if no one is near when it lands, the crater is made when a player first comes within `craterDistance` (64) blocks, and smokes from then on. Before making it, the pack checks the spot: natural ground (not water or lava), at least `avoidSpawn` from spawn, and no player-made block (planks, glass, chests, beds, torches, doors, fences, wool, concrete, bricks, glazed terracotta, crafting tables, furnaces, farmland and the like) in a scan of the 9 x 9 columns around it, 4 blocks above and below the ground (leaves a player placed count as player-made). If part of that area isn't loaded yet, the crater waits until a player comes closer. If the spot fails, up to 8 other spots within 24 blocks are tried; if they all fail, nearby players read `§7The meteor burned up before it reached the ground.` and there's no crater.
 - **Found:** the first player within `foundDistance` (12) blocks of a crater is announced to everyone (`§6Ann found the meteor crater!`), and every player who reaches it gets the **Meteor crater** page in their journal (Journal pack).
 - With `craters` disabled, a meteor is only the show: the warning, the streak, the boom and the smoke.
+- **Safe zones** ([Safe Zones](#safe-zones--zones_bp), towns with **Protect from world events**, claims with **Protect claims from world events**), with **Avoid safe zones and towns** (`avoidZones`, default enabled): a night's meteor is never aimed where its crater could reach into a zone (within 5 blocks of one), the crater spot check rejects such spots, and the carving skips any block inside a zone. A meteor that still comes down over a zone (an operator's **Drop one now** aimed at one, or a zone added while it falls) does what **A meteor over a safe zone** (`inZone`) says:
+  - `move` (default): it lands just outside the zone instead, crater, ancient debris and all; the warning gives the new spot. A zone added after it landed moves its waiting crater out of the zone the same way.
+  - `burst`: the warning says `A meteor is falling toward Home, near 1240, -380! The safe zone will stop it in the sky in 60 seconds.`, the streak ends 40 blocks above the ground in a flash and smoke with a loud blast, and chat says `The meteor burst in the sky over Home. The safe zone kept the ground safe.` No crater, no ancient debris.
+  With `avoidZones` disabled, meteors ignore safe zones.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:meteor` | Everyone | While one is falling, where it will land and in how many seconds; otherwise where the last meteor fell (with its height once its crater is made) and who found its crater, or `No meteor has fallen yet.` |
-| `/realm:meteor_now` | Operators | A meteor falls `nowDistance` (100) blocks in front of you after the usual `warningSeconds` warning, in any weather or time (pushed out past `avoidSpawn` if that's near spawn). One at a time |
+| `/realm:meteor` | Everyone | Opens the Meteor Strikes menu: what's falling or where the last meteor fell, and **Last meteors**; operators also get **Drop one now**, **Meteor settings** (meteors at night, chance, warning time, craters, distance kept from spawn, avoid safe zones, what a meteor does over one) and **Protect this area from meteors** (needs Safe Zones) |
+| `/realm:meteor_info` | Everyone | While one is falling, where it will land and in how many seconds; otherwise where the last meteor fell (with its height once its crater is made) and who found its crater, or `No meteor has fallen yet.` |
+| `/realm:meteor_now` | Operators | A meteor falls `nowDistance` (100) blocks in front of you after the usual `warningSeconds` warning, in any weather or time (pushed out past `avoidSpawn` if that's near spawn, and out of safe zones or set to burst by `inZone`). One at a time |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -3756,6 +4712,8 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | `nowDistance` | `100` | How far in front of the operator `/realm:meteor_now` aims, in blocks |
 | `avoidSpawn` | `64` | It never lands closer than this many blocks to the world spawn |
 | `warningSeconds` | `60` | Seconds between the chat warning and the impact |
+| `avoidZones` | `true` | Meteors keep out of safe zones (Safe Zones, protected towns and claims): none is aimed into one and no crater block is changed in one. Disabled, they ignore safe zones |
+| `inZone` | `"move"` | A meteor that still comes down over a safe zone: `move` lands it just outside the zone, `burst` blows it apart in the sky (no crater) |
 | `craters` | `true` | Make a crater with a meteorite core; disabled, a meteor is only the show |
 | `craterRadius.min` | `3` | Smallest crater radius, in blocks |
 | `craterRadius.max` | `4` | Largest crater radius, in blocks |
@@ -3766,14 +4724,14 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | `smokeSeconds` | `120` | Seconds the crater smokes after it's made |
 | `foundDistance` | `12` | Players this close to the crater have found it |
 
-Operators can change `enabled`, `chance`, `warningSeconds`, `craters` and `avoidSpawn` in game with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
+Operators can change `enabled`, `chance`, `warningSeconds`, `craters`, `avoidSpawn`, `avoidZones` and `inZone` in game with **Meteor settings** in `/realm:meteor`, or with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `meteor:night` | World | JSON `{ n, at }`: the night (day number) the meteor was last rolled for, and the time of day of tonight's warning (`-1` for none) |
-| `meteor:impacts` | World | JSON list of the last 5 meteors: where each landed, whether its crater is made, still waiting for a player to come near, or couldn't be made, and who found it |
+| `meteor:impacts` | World | JSON list of the last 5 meteors: where each landed, whether its crater is made, still waiting for a player to come near, or couldn't be made, or whether it burst over a safe zone (and which), and who found it |
 | `meteor:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
@@ -3794,8 +4752,9 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 1. At dusk on a full moon, watch the screen: `Blood Moon` (`Survive until dawn`) or `Harvest Moon` (`Crops grow faster tonight`) appears with a sound, and chat says what it means. Most full moons are still ordinary.
 2. **Blood Moon:** outdoors the sky turns dark red and red motes drift up around you. Every 20 seconds a zombie, skeleton, spider or creeper or two appears 16 to 32 blocks away, never inside or next to anything built. Stay online from dusk to dawn without dying, and at dawn you get 3 levels and 25 Crowns (`You survived the Blood Moon!`), plus the **Blood Moon Survivor** title the first time (with the Titles pack). Blood Moon monsters drop extra experience orbs, and the ones still around at dawn vanish.
 3. **Harvest Moon:** the sky turns soft gold, golden motes drift around you, and crops, saplings and grass grow three times as fast until dawn. A good night to stand by the farm.
-4. Run `/realm:moon` to see tonight's moon, the moon phase and how many days until the next full moon.
-5. **Operators:** `/realm:moon_set <blood|harvest|normal>` makes tonight a Blood Moon, a Harvest Moon or an ordinary night: at once if it's night, else at dusk. `/realm:config` → **Blood Moon & Harvest Moon** sets the chances, the monster waves, the survivor reward and the Harvest Moon's growth speed. Add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** for the red and gold skies and the motes.
+4. Run `/realm:moon` to see tonight's moon, the moon phase and how many days until the next full moon (`/realm:moon_info` says the same in chat).
+5. In a safe zone ([Safe Zones](#safe-zones--zones_bp), protected towns and claims) the Blood Moon sends no creepers, so it can't blow holes in a protected base; other monsters still come.
+6. **Operators:** `/realm:moon` has **Make tonight a Blood Moon**, **a Harvest Moon** and **an ordinary moon**; `/realm:moon_set <blood|harvest|normal>` does the same from chat. Either makes tonight a Blood Moon, a Harvest Moon or an ordinary night: at once if it's night, else at dusk. `/realm:config` → **Blood Moon & Harvest Moon** sets the chances, the monster waves, the survivor reward and the Harvest Moon's growth speed. Add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** for the red and gold skies and the motes.
 
 ### What players see
 
@@ -3805,16 +4764,18 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 - **Blood Moon monsters:** every 20 seconds (`blood.spawnSeconds`) 1 or 2 (`blood.spawnMin`, `blood.spawnMax`) monsters per player, picked from `blood.mobs` (zombies most often, then skeletons, spiders and creepers), 16 to 32 blocks away (`blood.minDistance`, `blood.maxDistance`), on the open surface. No new ones while 8 (`blood.maxExtraPerPlayer`) are already alive within 48 blocks of you. None for players in creative or spectator mode, on Peaceful, or with the `doMobSpawning` gamerule off.
 - **Never in a base:** monsters only appear on the topmost block of a column (outdoors), at most 16 blocks above or below you, not on leaves, glass, slabs, stairs, fences, walls, carpets, ice, cactus, magma or campfires, not within 12 blocks of any player, not within 64 blocks of world spawn (`avoidSpawn`), and not where the 9 x 9 columns around the spot, 4 blocks up and down, hold anything player-made: planks, any glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpets, concrete, glazed terracotta, bricks, crafting tables, furnaces, rails, redstone parts and the like. The Script API can't read Land Claims or light levels, so this is how claims and lit bases are kept out.
 - **Bonus experience:** each Blood Moon monster a player kills drops 3 extra experience orbs (`blood.bonusXpOrbs`).
+- **Safe zones:** a Blood Moon monster that would spawn inside a safe zone is never a creeper (another monster from `blood.mobs` instead), unless `blood.creepersInZones` is enabled.
 - **Surviving:** players online at dusk are in the running; dying or leaving takes you out (`You died during the Blood Moon: no survivor reward this time.`). At a natural dawn everyone still in gets 3 levels (`blood.rewardLevels`), 25 Crowns (`blood.rewardCrowns`, on the `crowns` scoreboard of the [Crowns](#crowns--crowns_bp) pack, shown in chat as `+25 Crowns (Blood Moon survived)`) and, the first time, the `Blood Moon Survivor` title (`blood.title`) from the [Titles](#titles--trails--titles_bp) pack. Skipping the night by sleeping (or `/time`) skips the reward too.
 - **Harvest Moon:** the `randomTickSpeed` gamerule goes up to 3 (`harvest.tickSpeed`; vanilla is 1) until dawn, then back to what it was. If the realm closes during a Harvest Moon, it's put back when the realm starts. The `realm:sky_harvest_moon` fog outdoors (not while it rains) and `realm:sky_harvest` motes around you.
 - **The Journal** records the first Blood Moon and Harvest Moon each player sees in the overworld on its weather page (`blood_moon`, `harvest_moon`).
-- **`/realm:moon`** says, for example, `Tonight is a full moon: it may rise as a Blood Moon or a Harvest Moon.` and `Moon phase: Full Moon. Next full moon: tonight.`, or during one `Tonight is a Blood Moon: more monsters roam. Survive until dawn without dying for a reward.`
+- **`/realm:moon`** (the menu's text, and `/realm:moon_info`) says, for example, `Tonight is a full moon: it may rise as a Blood Moon or a Harvest Moon.` and `Moon phase: Full Moon. Next full moon: tonight.`, or during one `Tonight is a Blood Moon: more monsters roam. Survive until dawn without dying for a reward.`
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:moon` | Everyone | Tonight's moon (Blood Moon, Harvest Moon or ordinary), the moon phase and the days until the next full moon |
+| `/realm:moon` | Everyone | Opens the moon menu: tonight's moon, the moon phase and the days until the next full moon; operators also make tonight a Blood Moon, a Harvest Moon or an ordinary moon |
+| `/realm:moon_info` | Everyone | Tonight's moon (Blood Moon, Harvest Moon or ordinary), the moon phase and the days until the next full moon, in chat |
 | `/realm:moon_set <blood\|harvest\|normal>` | Operators | Makes tonight a Blood Moon, a Harvest Moon or an ordinary night: right away if it's night (dusk 12000 to dawn 23000, `duskTime`, `dawnTime`), else from the next dusk, full moon or not |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3834,13 +4795,14 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 | `blood.maxDistance` | `32` | Farthest a monster appears from the player, in blocks |
 | `blood.maxExtraPerPlayer` | `8` | No new waves around a player while this many Blood Moon monsters are alive within 48 blocks |
 | `blood.mobs` | zombie 4, skeleton 3, spider 2, creeper 2 | The monsters and their weights: `{ id, weight }`, a higher weight is picked more often |
+| `blood.creepersInZones` | `false` | Blood Moon creepers can spawn inside safe zones (Safe Zones, protected towns and claims). Disabled, another monster comes instead |
 | `blood.bonusXpOrbs` | `3` | Extra experience orbs from each Blood Moon monster a player kills |
 | `blood.rewardLevels` | `3` | XP levels for each survivor |
 | `blood.rewardCrowns` | `25` | Crowns for each survivor. `0` = none |
 | `blood.title` | `Blood Moon Survivor` | The title unlocked the first time a player survives one. Empty = none |
 | `harvest.tickSpeed` | `3` | The `randomTickSpeed` gamerule during a Harvest Moon. If it's already that high or higher, it isn't changed |
 
-Operators can change `enabled`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
+Operators can change `enabled`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.creepersInZones`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
 
 ### Saved data
 
@@ -4065,7 +5027,7 @@ The pictures for the realm's sky events: rainbows, aurora curtains, shooting sta
 
 ### What players see
 
-- **Rainbows** ([Rainbows & the Pot of Gold](#rainbows--the-pot-of-gold--rainbow_bp)): one big arc that stands upright and turns to face you, red outside, violet inside, with soft edges, a faint brighter sky inside the bow and feet that fade into the ground haze. It fades in over 1 s and out over 1 s and is never more than 55% opaque, so the sky shows through.
+- **Rainbows** ([Rainbows & the Pot of Gold](#rainbows--the-pot-of-gold--rainbow_bp)): one big arc that stands upright and turns to face you, red outside, violet inside, with soft edges, a faint brighter sky inside the bow and feet that fade into the ground haze. It fades in over 0.2 s and out over the last 0.4 s (Rainbows redraws it every second, so the drawings blend) and is never more than 70% opaque, so the sky shows through.
 - **Auroras** ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)): tall curtains of soft light with rays reaching up from a bright, wavy lower edge, rippling slowly (an 8-frame loop), green to purple. They glow: additive light, not affected by the darkness.
 - **Shooting stars** ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)): a bright point streaking across the sky, leaving a short blue-white tail.
 - **Meteors** ([Meteor Strikes](#meteor-strikes--meteor_bp)): a big fireball with a long trail of embers that cool from white through orange to dark red, then dark smoke rising from the crater.
@@ -4120,7 +5082,7 @@ None. It's a resource pack: no scripts, no commands, nothing to configure in gam
 
 - **Vibrant Visuals ignores fog colors**, so there the sandstorm, blizzard and fog bank keep their distances but not their color, and the blood and harvest moon tints don't show. The particles look the same on Fancy and Vibrant Visuals.
 - A resource pack higher in the list can't hide these particles or fogs (nothing else uses their names), but another pack's `/fog` push on the same player stacks with them: the last one pushed wins.
-- Particles show only where the chunk is loaded, so a rainbow or aurora far beyond your render distance isn't drawn.
+- Particles show only where the chunk is loaded, so a rainbow or aurora far beyond your render distance isn't drawn. Particles are also fogged like blocks: during and right after rain the fog ends at about half the render distance, so the behavior packs draw big sky pictures close to the player and scale them (the rainbow at 32 blocks).
 - How the snow streaks line up with their motion is up to the game's `lookat_direction` billboards.
 
 ### How it's made
@@ -4133,7 +5095,7 @@ Everything in `packs/sky_rp/` is generated by `npm run gen:sky` (`tools/gen-sky/
 | `fogs/*.json` | The 5 fogs above (`distance.air` and `distance.weather`) |
 | `textures/particle/realm_sky_*.png` | Rainbow arc (256x128), aurora flipbook (8 frames of 32x128), glow, meteor fireball, smoke, fog puff, 4 dust puffs, sand grain, snow streak, leaf and clod, 2 sparks, sparkle, cloud and raindrop |
 | `pack_icon.png` | A night sky with stars, an aurora, a shooting star and dark hills (128x128) |
-| `manifest.json` | Fixed uuids, version 1.0.0 |
+| `manifest.json` | Fixed uuids, version 1.0.2 |
 
 `npm run check` runs `node tools/gen-sky/gen.mjs --check`, which fails if any file in the pack differs from what the generator makes, is missing, or is left over in its folders. It also fails if a particle names a texture the generator doesn't make.
 
@@ -4141,7 +5103,7 @@ Everything in `packs/sky_rp/` is generated by `npm run gen:sky` (`tools/gen-sky/
 
 ## Translucent Tools — `translucent_rp`
 
-Tools, weapons and the shield are half see-through in your hand, so they block less of the screen. Swords, pickaxes, axes, shovels and hoes of every material, the mace, bow, crossbow, trident and shield are drawn at 50% opacity, in their usual shape and place. A **resource pack**, part of **Realm Resources** (or on its own).
+Tools, weapons and the shield are half see-through in your hand, so they block less of the screen. Swords, pickaxes, axes, shovels and hoes of every material, the mace, bow, crossbow, trident and shield are drawn at 50% opacity, in their usual shape and place. Each player can switch it off for themselves with [Translucent Tools Switch](#translucent-tools-switch--translucent_bp). A **resource pack**, part of **Realm Resources** (or on its own).
 
 ### See and hear it
 
@@ -4153,18 +5115,20 @@ A picture of the textures, not an in-game screenshot: where a tool sits and how 
 
 1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
 2. Hold any tool, weapon or a shield: you can see through it. It works in first person and in third person, for every player and mob holding one.
-3. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**, near the top of the list (above Firewolf and any pack that changes how held items look). To use it alone instead, download Translucent Tools from its card and activate it the same way (not together with Realm Resources).
+3. Prefer solid tools? Run `/realm:prefs`, pick **Translucent Tools** and disable **Translucent tools**: your tools look like vanilla again, for you and for everyone who sees you (this needs Translucent Tools Switch, which is in the Realm Bundle).
+4. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**, near the top of the list (above Firewolf and any pack that changes how held items look). To use it alone instead, download Translucent Tools from its card and activate it the same way (not together with Realm Resources).
 
 ### What players see
 
 - **40 items at 50% opacity:** swords, pickaxes, axes, shovels and hoes in wood, stone, copper, iron, gold, diamond and netherite (35), plus the mace, bow (and each frame as you draw it), crossbow (loaded or not), trident and shield.
-- **Same shape and place:** each item keeps vanilla's pixels, thickness and animations; only the opacity changes. Tools sit the way vanilla holds a bow, which is how Bedrock holds a sprite item, and the bow, crossbow, trident and shield keep their own vanilla poses (blocking, drawing, throwing).
+- **Same shape and place:** each item keeps vanilla's pixels, thickness and animations; only the opacity changes. Tools and the mace are held like any hand-held tool, gripped at the handle and tilted forward, in first and third person, so swinging, mining and using them moves them around the handle as vanilla does. The bow, crossbow, trident and shield keep their own vanilla poses (blocking, drawing, throwing).
+- **Solid for players who choose it:** a player with **Translucent tools** disabled (`/realm:prefs`, from [Translucent Tools Switch](#translucent-tools-switch--translucent_bp)) holds them opaque, with vanilla's materials and the normal enchantment glint. Everyone sees that player's tools that way. A switch takes effect at once.
 - **Enchanted items:** Bedrock has no material that is both see-through and glinting, so in your hand an enchanted item shows a soft purple shimmer instead of the glint. Its inventory icon keeps the glint.
 - **Unchanged:** inventory and hotbar icons, dropped items, item frames, armor, and items this pack doesn't list (fishing rod, shears, flint and steel, brush, spears).
 
 ### Saved data
 
-None. It's a resource pack: no scripts, no commands, nothing to configure in game.
+None. It's a resource pack: no scripts and no commands. It reads one player property, `realm:solid_tools`, which [Translucent Tools Switch](#translucent-tools-switch--translucent_bp) sets from each player's preference; without that pack every tool is see-through.
 
 ### Known limits
 
@@ -4172,6 +5136,7 @@ None. It's a resource pack: no scripts, no commands, nothing to configure in gam
 - **Shields with a banner pattern** haven't been tried: the pattern may show solid, or not at all.
 - **Other resource packs:** a pack higher in the list with its own models for these items (3D swords, custom shields) wins. Packs that only retexture items, like Firewolf, still show their art in the inventory, but in your hand the tools use vanilla's textures, since this pack carries its own see-through copies.
 - **Mobs** holding these items (zombies, vindicators, piglins, skeletons) show them see-through too, like players.
+- **The pose** is the hand-held tool pose built from Minecraft's own numbers (below), checked by reading, not in a game client: if a tool still sits or swings differently from vanilla on some device, the numbers to adjust are `HANDHELD` and `BASE` in the generator.
 
 ### How it's made
 
@@ -4181,12 +5146,55 @@ Everything in `packs/translucent_rp/` except `manifest.json` is generated by `np
 |---|---|
 | `textures/translucent_tools/<item>.png` | The vanilla texture with every pixel at 50% opacity (`OPACITY` in the generator) |
 | `textures/translucent_tools/shape/<item>.png` | The vanilla texture, opaque. The game builds the held item's 3D outline from it (`texture_meshes`), so the outline is exactly vanilla's whatever the opacity |
-| `attachables/<item>.json` | One per tool and the mace (vanilla draws those without an attachable), with the `entity_alphablend` material. The bow, crossbow, shield and trident files are vanilla's with only the material, textures and render controller swapped |
-| `models/entity/translucent_tools.geo.json`, `animations/translucent_tools.animation.json` | The tool mesh and pose, copied from vanilla's bow (`geometry.bow_standby`, `animation.bow.wield`), and the bow and crossbow frames |
-| `render_controllers/translucent_tools.render_controllers.json` | The see-through material for every item, and the purple shimmer when enchanted |
+| `attachables/<item>.json` | One per tool and the mace (vanilla draws those without an attachable), with the `entity_alphablend` material, plus vanilla's `entity_alphatest` and `entity_alphatest_glint` for the solid look. The bow, crossbow, shield and trident files are vanilla's with only the materials, textures and render controller swapped, and one `pre_animation` line that reads `realm:solid_tools` (attachable queries run on the entity holding the item; mobs don't have it, so they read 0, see-through) |
+| `models/entity/translucent_tools.geo.json`, `animations/translucent_tools.animation.json` | The tool mesh, bound to the hand (`q.item_slot_to_bone_name(c.item_slot)`), and its pose: Minecraft's hand-held item display (`item/handheld`: third person rotated 0, -90, 55, raised 4 and scaled 0.85; first person rotated 0, -90, 25, moved 1.13, 3.2, 1.13 and scaled 0.68) applied with the bone layout and base offsets Geyser's java2bedrock converter uses for 2D items on Bedrock, for each hand and view. Until version 1.1.0 the tools borrowed vanilla's bow pose, which grips the sprite at its middle: every swing turned a sword around the middle of its blade, and in third person it stood upright like a bow. Also the bow and crossbow frames |
+| `render_controllers/translucent_tools.render_controllers.json` | See-through or solid (by `realm:solid_tools`) for every item, and the purple shimmer when enchanted and see-through |
 | `pack_icon.png`, `docs/media/translucent/textures.png` | The pack icon and the picture above |
 
 `npm run check` fails if any of these differ from what the generator makes.
+
+---
+
+## Translucent Tools Switch — `translucent_bp`
+
+Lets each player choose whether their held tools are see-through ([Translucent Tools](#translucent-tools--translucent_rp), in Realm Resources) or solid like vanilla. A setting in `/realm:prefs`, with a realm default for operators.
+
+### How to use
+
+1. Run `/realm:prefs` and pick **Translucent Tools**.
+2. **Translucent tools** Enabled (the default): tools, weapons and the shield in your hand are see-through. Disabled: they look solid, like vanilla, with the normal enchantment glint. It changes at once, and everyone who sees you sees your choice.
+3. **Operators:** `/realm:config` → **Translucent Tools** → **Translucent tools (realm default)** sets what every player has until they choose (`translucentTools`).
+
+### What players see
+
+- Nothing new on screen: only how their held tools look, through the Translucent Tools resource pack. Without that resource pack the setting does nothing.
+- A player who never chose follows the realm default, so changing it switches them at once; a player whose choice differs from the default keeps it.
+
+### Commands
+
+None. The setting is in `/realm:prefs`, the realm default in `/realm:config`.
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `translucentTools` | `true` | What a player has until they choose: `true` see-through tools, `false` solid (vanilla) tools. Operators can change it in game in `/realm:config` |
+
+Player preference, in `/realm:prefs` (**Translucent Tools**): **Translucent tools**, defaulting to the realm's `translucentTools`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `translucent:cfg` | World | Settings changed in `/realm:config` |
+| `translucent:pref` | Player | JSON `{ translucent }`: the player's own choice, only when it differs from the realm default |
+| `realm:solid_tools` | Player entity property | `true` when the player's tools should look solid. Saved with the player and synced to every client, which is how the resource pack knows |
+
+### How it works
+
+- A resource pack can't read scripts, but it can read an entity property the server syncs to clients. This pack adds one to the player: its `entities/player.json` is a copy of vanilla's player behavior file (`minecraft:player`, format 1.26.30, the newest one Bedrock Dedicated Server 1.26.52 ships, identical to Mojang's bedrock-samples 1.26.50.4 file) with only `"properties": { "realm:solid_tools": { "type": "bool", "default": false, "client_sync": true } }` added. It is the only pack here that defines `minecraft:player`.
+- The script sets the property with `player.setProperty("realm:solid_tools", !translucent)` when a player spawns, when the world loads, when the player changes the preference and when an operator changes the default. Translucent Tools' attachables read `query.property('realm:solid_tools')` on the entity holding the item and switch texture and material.
+- **When Mojang updates the player:** a behavior pack's `minecraft:player` replaces vanilla's, so after a Minecraft update that changes the player file, copy the new one (from the newest `behavior_packs/vanilla_*` of Bedrock Dedicated Server, or bedrock-samples `behavior_pack/entities/player.json`) into `entities/player.json`, put the `properties` block back and bump the version. Until then players keep the older behavior (exhaustion, raid omen and so on).
 
 ---
 
@@ -4226,6 +5234,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 
 | Pair | Interaction |
 |---|---|
+| Realm Configuration → every pack | Runs the other packs' commands as the operator (`player.runCommand`), so each command keeps its own checks and menus. Finds the installed packs with `realm:help_ping`, and counts safe zones and protected towns for the setup checklist from `realm:zones`. Its first button opens Realm Settings (`/realm:config`) |
 | AFK → Stats | Stats pauses playtime for players with the `afk` tag. Keep AFK `tag` and Stats `afkTag` the same |
 | Welcome → News | Both popups show on join, welcome first (`delayTicks` 40 vs 100). News waits until the welcome popup is closed |
 | News tips → others | The default tips mention `/realm:stats`, `/realm:afk`, `/realm:help`, the stash sneak-tap and `/realm:find`. Edit them with `/realm:news_tips` if you don't use those packs |
@@ -4242,12 +5251,16 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Hotbar Refill ↔ Low Durability Warning | Separate: the warning still comes before a tool breaks, and Hotbar Refill moves a spare in once it has. The spare starts with no warning until it runs low |
 | Coordinates HUD ↔ packs with action bar messages | Low Durability Warning, Quick Stack & Sort, Land Claims, Chairs, AFK and others show short messages on the same bar. For a player with the HUD on, the HUD replaces them once its text changes (within half a second while walking). Mob Health, Elytra HUD, Daily Quests, AFK's sleep status, Low Durability Warning, Quick Stack & Sort, Land Claims, Right-click Harvest and the adventure packs send `realm:actionbar`, so the HUD waits for them; Story Questlines' tracker also waits while another pack's note is showing |
 | Mob Health → Coordinates HUD | Each hit shows the mob's health and asks the HUD to hold off for `holdTicks` (2 seconds); then the coordinates come back |
+| Stats → Coordinates HUD | A player with both the stats ticker and the HUD on sees the ticker as a second line under the coordinates (`realm:hud_line`); the HUD says who sees it (`realm:hud_state`). Without the HUD the ticker draws on its own and waits for `realm:actionbar` notes, as the HUD does |
 | Elytra HUD → Coordinates HUD | While a player glides, the Elytra HUD sends `realm:actionbar`, so the Coordinates HUD pauses for that player and comes back a second or two after landing |
 | Elytra HUD ↔ Low Durability Warning, Land Claims, AFK smart sleep | All write the bar above the hotbar. While gliding, their messages can show for a moment before the HUD's next update replaces them |
 | Realm Mail ↔ Welcome, News | The unread letters line comes 8 seconds after joining (`notifyDelaySeconds`), after the welcome and news popups |
 | AFK ↔ Nicknames | Both write the name above a player's head. The AFK pack only adds or removes its own `[AFK]` prefix in front of whatever the tag shows, so a nickname and title stay put. Keep Nicknames `afkTag` and `afkPrefix` the same as AFK `tag` and `nameTagPrefix` |
 | Right-click Harvest → Daily Quests | A crop harvested by tapping counts for harvest quests, the same as breaking it |
 | Daily Quests ↔ Stats, Milestones | Separate counts: the same mining, kills and travel add to all of them |
+| Slot Machine ↔ Crowns | Crowns stakes are taken from and wins paid into the shared `crowns` scoreboard, so they show in `/realm:crowns` at once. Without the Crowns pack, Crowns stakes still work but nobody earns Crowns to play with |
+| Silly Enchants → Merchant Caravan | The caravan can sell Silly Books if an operator adds one to its `goods` (see [Silly Enchants](#silly-enchants--silly_bp)); the book is recognized by its lore |
+| Dolphin Friends ↔ other dolphin packs | Dolphin Friends replaces the vanilla dolphin's behavior file with a copy plus a seat. Another behavior pack that also changes the dolphin conflicts with it: only the higher pack's file is used |
 | Stats → Milestones | Milestones reads the `stats_<stat>` scoreboards when they exist and uses the larger of their number and its own, so history from Stats counts. Works without Stats |
 | AFK → Milestones | Playtime and distance pause for players with the `afk` tag. Keep AFK `tag` and Milestones `afkTag` the same |
 | Community Goals ↔ Quick Stack & Sort | Lock a goal's chest so nobody takes from it: donations still go in, because the pack moves them itself. `/realm:stash` can also fill a goal's chest that already holds the item, but that doesn't count toward the goal |
@@ -4267,16 +5280,30 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Daily Quests, Story Questlines, Bounty Board, Treasure Maps, Fishing 2.0, Expeditions, Town Projects → Guilds | Each finished quest-like thing sends `realm:quest_done`; Guilds turns it into reputation (`questRep`, `kindGuild`). Bounty Board gives reputation only that way (plus `realm:rep_add` for bounty helpers, who finish nothing themselves); Story Questlines adds `realm:rep_add` for its choices |
 | AFK → Guilds | Players with the `afk` tag earn no travel reputation (`afkTag`), so idle minecart or boat loops don't farm Wayfarers |
 | Champions ↔ Bounty Board, Story Questlines, Guilds, Blood Moon | Bounty Board and Story Questlines ask Champions for named targets (`realm:champion_spawn`) and hear about kills (`realm:champion_slain`); Guilds gives Wardens reputation for them; a Blood Moon triples the champion chance (`realm:moon`). Story Questlines spawns its own boss if Champions isn't installed. A `realm:champion_spawn` tag must start with `realm:`. Natural champions never appear in or next to player builds (`avoidBuilds`), so mob farms don't make them |
+| Deck of Many Things → Champions, Skills, Crowns | The Champion card asks Champions for a named champion (`realm:champion_spawn`; without it the deck spawns its own boss), The Mentor and The Archmage send skill XP with `realm:skill_xp`, and the Crowns cards add to or take from the `crowns` scoreboard |
+| Safe zones → Deck of Many Things | The Arena and The Spore never change blocks inside a zone sent with `realm:zones`; they fizzle there and the deck draws another card |
 | Skills, Bounty Board, Story Questlines, Expeditions ← Parties | Party mates carry the tag `realm_party:<code>`. Skills gives 10% more XP near a mate; bounties and story objectives count for mates within 64 blocks; Expeditions takes the party in together |
 | Titles & Trails → Nicknames | The title a player wears is the tag `realm_title:<text>`; Nicknames shows it in gray under the name. Guilds, Skills, Field Journal, Blood Moon and Story Questlines unlock titles with `realm:title_unlock` |
-| Relics ← Champions, Story Questlines, Treasure Maps, Rainbows, Expeditions | Champions drop Relic Shards; the others may give a relic with `realm:relic_give`. Relics' Storm Meter reads Storm Chasing's cell (`realm:storm_cell`) |
+| Relics ← Champions, Story Questlines, Treasure Maps, Rainbows, Expeditions | Champions drop Relic Shards; the others may give a relic with `realm:relic_give` (the seven story relics come only from Story Questlines). Relics' Storm Meter reads Storm Chasing's cell (`realm:storm_cell`), and the Storm Staff answers near one too. The Lantern Shard points at the seals Story Questlines reports with `realm:seals`; the Gray Choir Mask reads its `saga:choir` tag. **Place a relicsmith here** asks Townsfolk with `realm:npc_summon` |
 | Field Journal ← many packs | Weather, sky, fishing, relic, story and place discoveries arrive as `realm:journal` and `realm:sky_event`, so the Journal fills in as you meet them |
 | Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it, so operators should use `/realm:weather_set` rather than `/weather`; sleeping through rain (or Smart Sleep) ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
 | Sky packs → Realm Skies (Realm Resources) | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |
 | Storm Chasing, Tornadoes, Rainbows, Meteor Strikes, Merchant Caravan, Fishing 2.0 → Waystones & Inns | Innkeepers remember the last few `realm:sky_event` announcements for **Hear the news** |
+| Town Projects → world event packs | Each town with **Protect from world events** Enabled (the default) is a safe zone: Town Projects sends it as `realm:zones` (`src: "town"`, radius `townRadius`) and answers `realm:zones_ping`. Packs whose world events break or place blocks (meteor craters, tornadoes, storms) skip block changes inside it; the event itself still happens |
+| Translucent Tools Switch → Translucent Tools (Realm Resources) | The Switch sets each player's `realm:solid_tools` property from **Translucent tools** in `/realm:prefs`; Translucent Tools draws that player's held tools solid when it's on. Either pack works alone: without the Switch every tool is see-through, without Translucent Tools the setting changes nothing |
+| Kitchen ↔ Townsfolk, Story Questlines | Bea the Cook (role `chef`) offers the **Kitchen** through `realm:npc_talk`. Story Questlines teaches recipes with `realm:recipe_learn`, gives dishes and rare ingredients with `realm:dish_give` and `realm:ingredient_give`, and delivers dishes by their item and exact name (`minecraft:rabbit_stew` named `Harbor Chowder`) |
+| Champions, Fishing 2.0, Blood Moon, Aurora, Meteor Strikes → Kitchen | Champions drop rare ingredients and recipe cards (`realm:champion_slain`); Fishing 2.0's Storm Eel is the Storm Eel ingredient; a Blood or Harvest Moon (`realm:moon`) and an aurora or meteor (`realm:sky_event`) make Moon Salt, Harvest Saffron and Starwright Flour possible. Each pack works without the others |
 | Weather Almanac ↔ Rain Extras | Rain Extras' fog, mist, drips and sounds follow the Almanac's planned rain and thunder like any other weather |
+| Safe Zones, Town Projects, Land Claims → world-event packs | The safe zones protocol (below): Meteor Strikes, Storm Chasing, Tornadoes, Blood Moon and Creeper Guard's `zones` mode leave the blocks in every safe zone alone, whichever pack it comes from. Regional Weather, Rain Extras, Aurora & Shooting Stars, Rainbows and the Weather Almanac change no blocks, so zones don't affect them |
+| Meteor Strikes, Creeper Guard → Safe Zones | **Protect this area from meteors** (Meteor Strikes) and **Safe zones** (Creeper Guard) open the Safe Zones menu with `realm:zones_open` |
 
-Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn, so it has nothing to coordinate with the other packs.
+**The safe zones protocol** (script events with JSON messages; the shared code is `tools/zones-shared.js`, copied into each pack that takes part as `scripts/zones.js` by `node tools/sync-zones.mjs`):
+
+- **Providers** send `realm:zones` `{ src, part, parts, zones: [{ id, name, dim, x, z, r, shape? }] }` with their full list whenever it changes, about 5 seconds after the world loads, and in reply to `realm:zones_ping` `{}`. `src` names the provider: `zones` (Safe Zones), `town` (Town Projects, towns with **Protect from world events**), `claims` (Land Claims, with `protectWorldEvents`). A list longer than one message (2048 characters) is split into parts numbered from 1 (parts numbered from 0 are accepted too); `parts` 0 or an empty list clears that provider's zones. `shape` is `circle` (default: within `r` blocks of `x`, `z`) or `square` (`x - r` to `x + r`, `z - r` to `z + r`); zones reach from the bottom of the world to the top of `dim`.
+- **Consumers** (every pack that breaks or places blocks in a world event) keep the latest list from each provider, ping on world load, and skip block changes inside any zone: the event still happens, it just changes no blocks there.
+- **`realm:zones_open`** `{ player, action }` asks Safe Zones to open **Add a safe zone here** (`action: "add"`) or its menu for that player.
+
+Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn; its one link is Translucent Tools Switch, which tells it per player whether to draw tools solid.
 
 ---
 

@@ -50,7 +50,7 @@
           1,
           1,
           1,
-          "Math.clamp(Math.min(variable.particle_age / 1, (variable.particle_lifetime - variable.particle_age) / 1), 0, 1) * 0.55"
+          "Math.clamp(Math.min(variable.particle_age / 0.2, (variable.particle_lifetime - variable.particle_age) / 0.4), 0, 1) * 0.7"
         ]
       }
     }

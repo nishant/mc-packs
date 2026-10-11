@@ -7,7 +7,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 
@@ -705,6 +705,75 @@ async function showBoard(player, board) {
 }
 
 // ---------------------------------------------------------------------------
+// Menu
+// ---------------------------------------------------------------------------
+
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @template {ActionFormData | MessageFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = /** @type {any} */ (await form.show(player));
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** /realm:bounty: what the player may do. Operators' board actions use the lectern they look at when they open it. @param {Player} player */
+async function mainMenu(player) {
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [{ text: "Today's bounties\n§8Targets, where they were seen, rewards", run: () => showBoard(player) }];
+  /** @type {string[]} */
+  const lines = ["Hunt the day's champions and thin out the mobs together, for Crowns."];
+  if (isOp(player)) {
+    let lectern;
+    try {
+      lectern = lecternInView(player);
+    } catch {
+      lectern = undefined;
+    }
+    if (lectern && boardAt(lectern.dimension.id, lectern.location)) actions.push({ text: "Make this board a lectern again\n§8Operators: the board you're looking at", run: () => unregister(player) });
+    else if (lectern) actions.push({ text: "Make this lectern a bounty board\n§8Operators: the lectern you're looking at", run: () => register(player) });
+    else lines.push("§7Operators: look at a lectern when you open this menu to make it a bounty board.");
+    if (boards().length) actions.push({ text: "Remove a bounty board\n§8Operators", run: () => removeBoardMenu(player) });
+  }
+  const form = new ActionFormData().title("§lBounty Board").body(lines.join("\n\n"));
+  for (const a of actions) form.button(a.text);
+  form.button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await actions[res.selection]?.run();
+}
+
+/** Operators: every bounty board; pick one to make it an ordinary lectern again. @param {Player} player */
+async function removeBoardMenu(player) {
+  const list = [...boards()];
+  if (!isOp(player) || !list.length) return;
+  const form = new ActionFormData().title("§lRemove a bounty board").body("Pick a board. Its lectern stays, as an ordinary lectern.");
+  for (const b of list) {
+    const d = b.d === player.dimension.id ? `${Math.round(Math.hypot(b.x - player.location.x, b.z - player.location.z))}m away` : b.d.replace(/^minecraft:/, "");
+    form.button(`${b.x}, ${b.y}, ${b.z}\n§8${b === mainBoard() ? "the main board, " : ""}${d}`);
+  }
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const pick = list[res.selection];
+  if (!pick) return mainMenu(player);
+  const sure = await show(player, new MessageFormData().title("§lRemove bounty board?").body(`Make the bounty board at ${pick.x}, ${pick.y}, ${pick.z} an ordinary lectern again?`).button1("§cRemove it").button2("Keep it"));
+  if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
+  saveBoards(boards().filter((b) => !(b.d === pick.d && b.x === pick.x && b.y === pick.y && b.z === pick.z)));
+  player.sendMessage("§aBounty board removed. §7The lectern is an ordinary lectern again.");
+}
+
+// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
@@ -730,6 +799,15 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:bounty",
+      description: "Bounty Board: a menu of what you can do (today's bounties; operators: boards)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    forPlayer((p) => mainMenu(p)),
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:bounty_list",
       description: "Bounty Board: today's bounties, where the targets were last seen, and where the board is",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,

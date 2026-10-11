@@ -36,6 +36,12 @@ export const CONFIG = {
   /** No lightning within this many blocks of world spawn (lightning rods still get struck there). */
   avoidSpawn: 64,
 
+  /**
+   * No lightning in or right next to a safe zone (Safe Zones, protected towns and claims), so the storm never
+   * starts a fire there. Lightning rods players placed there still get struck and charged.
+   */
+  avoidZones: true,
+
   /** Chance (0-1) that a strike goes to an uncharged lightning rod a player placed within strikeRadius of the cell, when there is one. */
   rodChance: 0.5,
 

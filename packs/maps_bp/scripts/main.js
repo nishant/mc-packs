@@ -1,5 +1,5 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, system, world } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 
@@ -98,12 +98,14 @@ function takeCrowns(p, n) {
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
- * @param {Player} player @param {ActionFormData} form
+ * @template {ActionFormData | ModalFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    const res = /** @type {any} */ (await form.show(player));
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }
@@ -767,18 +769,88 @@ system.afterEvents.scriptEventReceive.subscribe(
 // Commands
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// /realm:maps: the pack's menu
+// ---------------------------------------------------------------------------
+
+const isOp = (/** @type {Player} */ player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/**
+ * /realm:maps_give: a free map for each player that can take one, with a note for the caller.
+ * @param {Player | undefined} caller @param {Player[]} targets
+ */
+function giveMaps(caller, targets) {
+  /** @type {string[]} */
+  const notes = [];
+  for (const p of targets) {
+    try {
+      if (!p.isValid) continue;
+      if (p.dimension.id !== OVERWORLD) notes.push(`${p.name} isn't in the Overworld`);
+      else if (huntsOf(p).length >= Math.max(1, get("maxHunts"))) notes.push(`${p.name} already has ${huntsOf(p).length} hunt(s)`);
+      else {
+        startHunt(p, "You received a treasure map!");
+        notes.push(`gave ${p.name} a map`);
+      }
+    } catch (e) {
+      console.warn(`[maps] give: ${e}`);
+    }
+  }
+  if (caller?.isValid) caller.sendMessage(`§7Treasure maps: ${notes.join("; ") || "nothing to do"}.`);
+}
+
+/** The menu's "Give a treasure map": pick an online player, like /realm:maps_give. @param {Player} player */
+async function giveMapForm(player) {
+  const players = world.getAllPlayers().sort((a, b) => a.name.localeCompare(b.name));
+  const res = await show(player, new ModalFormData().title("§lGive a treasure map").dropdown("Player", players.map((p) => p.name)).submitButton("Give"));
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const target = players[Number(res.formValues[0])];
+  if (target) giveMaps(player, [target]);
+}
+
+/** @param {Player} player */
+async function settingsInfo(player) {
+  const res = await show(
+    player,
+    new ActionFormData()
+      .title("§lSettings")
+      .body("Operators change this pack's settings in §e/realm:config§r: pick §eTreasure Maps & Riddles§r there. The map price, hunts at once, hunt distances and hints are all there.")
+      .button("Back"),
+  );
+  if (res && !res.canceled && player.isValid) await packMenu(player);
+}
+
+/**
+ * /realm:maps: every action this player may use. A player with only one (not an operator) goes
+ * straight to it, so the common case is no slower than before.
+ * @param {Player} player
+ */
+async function packMenu(player) {
+  /** @type {{ text: string, run: () => Promise<void> }[]} */
+  const entries = [{ text: `Your treasure hunts\n§8${huntsOf(player).length} going`, run: () => showHunts(player) }];
+  if (isOp(player)) {
+    entries.push({ text: "Give a treasure map\n§8Operators", run: () => giveMapForm(player) });
+    entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
+  }
+  if (entries.length === 1) return entries[0].run();
+  const form = new ActionFormData().title("§lTreasure Maps").body("Buy treasure maps from a cartographer, then follow the clues to the buried chest.");
+  for (const e of entries) form.button(e.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await entries[res.selection]?.run();
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:maps",
-      description: "Treasure Maps: your treasure hunt's clue, a new copy of the map, or give it up",
+      description: "Treasure Maps: the menu (your treasure hunts; operators can also give maps)",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
     (origin) => {
       const player = origin.initiator ?? origin.sourceEntity;
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      system.run(() => showHunts(player).catch((e) => console.warn(`[maps] ${e}`)));
+      system.run(() => packMenu(player).catch((e) => console.warn(`[maps] ${e}`)));
       return { status: CustomCommandStatus.Success };
     },
   );
@@ -793,24 +865,21 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (origin, /** @type {Player[] | undefined} */ targets) => {
       if (!targets?.length) return { status: CustomCommandStatus.Failure, message: "No player matched." };
       const caller = origin.initiator ?? origin.sourceEntity;
-      system.run(() => {
-        /** @type {string[]} */
-        const notes = [];
-        for (const p of targets) {
-          try {
-            if (!p.isValid) continue;
-            if (p.dimension.id !== OVERWORLD) notes.push(`${p.name} isn't in the Overworld`);
-            else if (huntsOf(p).length >= Math.max(1, get("maxHunts"))) notes.push(`${p.name} already has ${huntsOf(p).length} hunt(s)`);
-            else {
-              startHunt(p, "You received a treasure map!");
-              notes.push(`gave ${p.name} a map`);
-            }
-          } catch (e) {
-            console.warn(`[maps] give: ${e}`);
-          }
-        }
-        if (caller instanceof Player && caller.isValid) caller.sendMessage(`§7Treasure maps: ${notes.join("; ") || "nothing to do"}.`);
-      });
+      system.run(() => giveMaps(caller instanceof Player ? caller : undefined, targets));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:maps_hunts",
+      description: "Treasure Maps: your treasure hunt's clue, a new copy of the map, or give it up",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => showHunts(player).catch((e) => console.warn(`[maps] ${e}`)));
       return { status: CustomCommandStatus.Success };
     },
   );

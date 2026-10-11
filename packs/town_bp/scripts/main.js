@@ -7,13 +7,15 @@ import {
   ItemLockMode,
   LiquidType,
   Player,
+  ScriptEventSource,
   StructureRotation,
+  StructureSaveMode,
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, onChange } from "./settings.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
@@ -32,8 +34,15 @@ const BUILDS = ["well", "lamps", "stall", "bell_tower", "dock", "garden", "notic
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {typeof CONFIG.projects[number]} Project */
-/** @typedef {{ x: number, y: number, z: number, f: number }} Spot f: 0 south, 1 west, 2 north, 3 east (the way the build faces) */
-/** @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number }} Town */
+/**
+ * f: 0 south, 1 west, 2 north, 3 east (the way the build faces). Once built: snap 1 when the ground under it was saved as
+ * the structure snapId(town, project) before building, and b the box it covers [x1, y1, z1, x2, y2, z2]; old 1 when it was
+ * built before snapshots existed (so what's there is never saved as the ground).
+ * @typedef {{ x: number, y: number, z: number, f: number, snap?: number, b?: number[], old?: number }} Spot
+ */
+/** prot: 0 when "Protect from world events" is Disabled (missing means Enabled). */
+/** @typedef {{ id: string, n: string, dim: string, x: number, y: number, z: number, lvl: number, spots: Record<string, Spot>, by: string, at: number, prot?: number }} Town */
+/** @typedef {{ min: Vector3, max: Vector3 }} Box inclusive block corners */
 /** @typedef {{ got: Record<string, number>, c: Record<string, [string, number]>, done: number, built: number }} Progress */
 /** @typedef {{ cr: number, q: [string, string, string][] }} Owed crowns, and [quest id, label, guild] per finished project */
 
@@ -494,6 +503,9 @@ function design(kind) {
   return out;
 }
 
+/** A block of a design that's only needed where it's open (a dock's posts, the floor under a well's or a garden's water). @param {Project} p @param {Place} pl */
+const isOptional = (p, pl) => pl.mode === "wet" || ((p.build === "well" || p.build === "garden") && pl.y === -2);
+
 const FORWARD = [
   { x: 0, z: 1 },
   { x: -1, z: 0 },
@@ -522,7 +534,9 @@ function perm(id, states) {
 
 /**
  * Builds a finished project at its spot. Waits (returns false) without a spot or while the spot isn't
- * loaded; `fresh` tells operators what's missing.
+ * loaded; `fresh` tells operators what's missing. Before the first build at a spot, the ground it covers
+ * is saved as a structure (snapId), so removing or moving the build can put it back (not for a spot marked
+ * `old`: a project built before snapshots existed, rebuilt over what's left of it).
  * @param {Town} t @param {Project} p @param {boolean} fresh
  */
 function build(t, p, fresh) {
@@ -533,15 +547,21 @@ function build(t, p, fresh) {
     if (fresh) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} is finished. Stand where it should go, facing the way it should face, and run /realm:town_spot ${p.id}`);
     return false;
   }
+  const waiting = () => {
+    if (fresh) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} will be built when someone is near its spot (${s.x}, ${s.y}, ${s.z}).`);
+    return false;
+  };
   /** @type {Dimension} */
   let dim;
   try {
     dim = world.getDimension(t.dim);
     if (!dim.getBlock(s)) throw new Error("unloaded");
   } catch {
-    if (fresh) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} will be built when someone is near its spot (${s.x}, ${s.y}, ${s.z}).`);
-    return false;
+    return waiting();
   }
+  const box = clampBox(footprint(p, s), dim);
+  if (!boxLoaded(dim, box)) return waiting();
+  if (!s.snap && !s.old) snapshot(t, p, s, dim, box);
   let skipped = 0;
   let placed = 0;
   try {
@@ -553,11 +573,8 @@ function build(t, p, fresh) {
     } else {
       if (p.structure) console.warn(`[town] structure "${p.structure}" for ${p.id} isn't saved in this world; building the ${p.build} instead`);
       const result = placeDesign(dim, s, p);
-      if (!result) {
-        // Part of it is in a chunk that isn't loaded: build all of it later rather than half of it now.
-        if (fresh) tellOps(`§e[Town Projects] ${t.n}'s ${p.name} will be built when someone is near its spot (${s.x}, ${s.y}, ${s.z}).`);
-        return false;
-      }
+      // Part of it is in a chunk that isn't loaded: build all of it later rather than half of it now.
+      if (!result) return waiting();
       ({ placed, skipped } = result);
     }
   } catch (e) {
@@ -575,6 +592,198 @@ function build(t, p, fresh) {
   if (placed && get("fireworks") === true) fireworks(dim, toWorld(s, 0, 1, 2));
   if (p.build === "notice_board") system.runTimeout(() => refreshBoard(t), 2);
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Footprints and snapshots
+// ---------------------------------------------------------------------------
+
+/** @type {Map<string, Box>} */
+const localBoxes = new Map();
+
+/** The box a built-in design covers, in (right, up, forward) from the spot, read from design(). @param {Project["build"]} kind */
+function localBox(kind) {
+  let box = localBoxes.get(kind);
+  if (box) return box;
+  const places = design(kind);
+  const min = { x: Infinity, y: Infinity, z: Infinity };
+  const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  for (const pl of places) {
+    for (const k of /** @type {const} */ (["x", "y", "z"])) {
+      min[k] = Math.min(min[k], pl[k]);
+      max[k] = Math.max(max[k], pl[k]);
+    }
+  }
+  box = places.length ? { min, max } : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
+  localBoxes.set(kind, box);
+  return box;
+}
+
+/** @param {string} id */
+function savedStructure(id) {
+  try {
+    return world.structureManager.get(id);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The blocks a project covers when built at a spot: a saved structure's size (turned the way the spot faces,
+ * corner at the spot), else its built-in design's extent turned to world directions.
+ * @param {Project} p @param {Spot} s @returns {Box}
+ */
+function footprint(p, s) {
+  const st = p.structure ? savedStructure(p.structure) : undefined;
+  if (st) {
+    const size = st.size;
+    const turned = s.f % 2 === 1;
+    const sx = turned ? size.z : size.x;
+    const sz = turned ? size.x : size.z;
+    return { min: { x: s.x, y: s.y, z: s.z }, max: { x: s.x + sx - 1, y: s.y + size.y - 1, z: s.z + sz - 1 } };
+  }
+  const lb = localBox(p.build);
+  const a = toWorld(s, lb.min.x, lb.min.y, lb.min.z);
+  const b = toWorld(s, lb.max.x, lb.max.y, lb.max.z);
+  return {
+    min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) },
+    max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) },
+  };
+}
+
+/** The part of a box inside the world's height. @param {Box} box @param {Dimension} dim @returns {Box} */
+function clampBox(box, dim) {
+  const { min, max } = dim.heightRange;
+  return { min: { ...box.min, y: Math.max(min, box.min.y) }, max: { ...box.max, y: Math.min(max - 1, box.max.y) } };
+}
+
+/** @param {Box} box */
+const boxArray = (box) => [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+/** @param {number[] | undefined} b @returns {Box | undefined} */
+const arrayBox = (b) => (Array.isArray(b) && b.length === 6 && b.every((n) => typeof n === "number") ? { min: { x: b[0], y: b[1], z: b[2] }, max: { x: b[3], y: b[4], z: b[5] } } : undefined);
+
+/** Is every chunk the box touches loaded? @param {Dimension} dim @param {Box} box */
+function boxLoaded(dim, box) {
+  const xs = [];
+  for (let x = box.min.x; x < box.max.x; x += 16) xs.push(x);
+  xs.push(box.max.x);
+  const zs = [];
+  for (let z = box.min.z; z < box.max.z; z += 16) zs.push(z);
+  zs.push(box.max.z);
+  try {
+    for (const x of xs) for (const z of zs) if (!dim.getBlock({ x, y: box.min.y, z })) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The structure that holds the ground under a town's project from before it was built. @param {Town} t @param {Project} p */
+const snapId = (t, p) => `town:${t.id}__${p.id}`;
+
+/** @param {string} id */
+function deleteStructure(id) {
+  try {
+    world.structureManager.delete(id);
+  } catch {
+    // not there
+  }
+}
+
+/**
+ * Saves the ground a build will cover, before it's built.
+ * @param {Town} t @param {Project} p @param {Spot} s @param {Dimension} dim @param {Box} box
+ */
+function snapshot(t, p, s, dim, box) {
+  const id = snapId(t, p);
+  try {
+    deleteStructure(id);
+    world.structureManager.createFromWorld(id, dim, box.min, box.max, { includeBlocks: true, includeEntities: false, saveMode: StructureSaveMode.World });
+    s.snap = 1;
+    s.b = boxArray(box);
+    saveTown(t);
+  } catch (e) {
+    console.warn(`[town] snapshot ${id}: ${e}`);
+  }
+}
+
+/**
+ * Takes a build away: puts the saved ground back, or, for a build made before snapshots (or whose snapshot
+ * is gone), clears the build's own blocks (ground blocks become grass, a dock's posts water, the rest air).
+ * Returns why it couldn't, or undefined when done. `keep` keeps the snapshot (for a rebuild).
+ * @param {Town} t @param {Project} p @param {Spot} s @param {boolean} [keep]
+ * @returns {string | undefined}
+ */
+function unbuild(t, p, s, keep = false) {
+  /** @type {Dimension} */
+  let dim;
+  try {
+    dim = world.getDimension(t.dim);
+  } catch {
+    return "its dimension isn't available";
+  }
+  const box = arrayBox(s.b) ?? clampBox(footprint(p, s), dim);
+  if (!boxLoaded(dim, box)) return `its spot (${s.x}, ${s.y}, ${s.z}) isn't loaded: go closer and try again`;
+  const id = snapId(t, p);
+  const st = s.snap ? savedStructure(id) : undefined;
+  try {
+    if (st) {
+      world.structureManager.place(st, dim, box.min, { includeEntities: false });
+      if (!keep) deleteStructure(id);
+    } else clearBuild(dim, p, s, box);
+  } catch (e) {
+    return String(e);
+  }
+  if (!keep) {
+    delete s.snap;
+    delete s.b;
+  }
+  return undefined;
+}
+
+/**
+ * Clears a build that has no snapshot: only blocks that are still what the build put there.
+ * @param {Dimension} dim @param {Project} p @param {Spot} s @param {Box} box
+ */
+function clearBuild(dim, p, s, box) {
+  const air = perm("minecraft:air");
+  const st = p.structure ? savedStructure(p.structure) : undefined;
+  if (st) {
+    // A saved structure: clear the blocks in its box that are of a kind the structure has.
+    /** @type {Set<string>} */
+    const kinds = new Set();
+    const { x: sx, y: sy, z: sz } = st.size;
+    if (sx * sy * sz > 200000) throw new Error("the structure is too big to clear");
+    for (let x = 0; x < sx; x++)
+      for (let y = 0; y < sy; y++)
+        for (let z = 0; z < sz; z++) {
+          const type = st.getBlockPermutation({ x, y, z })?.type.id;
+          if (type && type !== "minecraft:air" && type !== "minecraft:structure_void") kinds.add(type);
+        }
+    for (let x = box.min.x; x <= box.max.x; x++)
+      for (let y = box.min.y; y <= box.max.y; y++)
+        for (let z = box.min.z; z <= box.max.z; z++) {
+          const b = dim.getBlock({ x, y, z });
+          if (b && kinds.has(b.typeId)) b.setPermutation(air);
+        }
+    return;
+  }
+  const grass = perm("minecraft:grass_block");
+  const water = perm("minecraft:water");
+  // Top down, so nothing above is left hanging while it's cleared.
+  const places = design(p.build).sort((a, b) => b.y - a.y);
+  for (const pl of places) {
+    let b;
+    try {
+      b = dim.getBlock(toWorld(s, pl.x, pl.y, pl.z));
+    } catch {
+      continue; // outside the world's height
+    }
+    if (!b) continue;
+    const same = b.typeId === pl.block || (pl.block === "minecraft:farmland" && b.typeId === "minecraft:dirt");
+    if (!same) continue;
+    b.setPermutation(pl.mode === "ground" ? grass : pl.mode === "wet" ? water : air);
+  }
 }
 
 const SIDES = [
@@ -617,7 +826,7 @@ function placeDesign(dim, s, p) {
     items.push({ pl, loc, block });
   }
   /** @param {Place} pl */
-  const optional = (pl) => pl.mode === "wet" || ((p.build === "well" || p.build === "garden") && pl.y === -2);
+  const optional = (pl) => isOptional(p, pl);
   /** @param {Place} pl */
   const later = (pl) => pl.block === "minecraft:water" || pl.block === "minecraft:waterlily";
   let placed = 0;
@@ -627,9 +836,9 @@ function placeDesign(dim, s, p) {
     it.block.setPermutation(perm(it.pl.block, states));
     placed++;
   };
-  // 1. Everything but water and lily pads, supports first.
+  // 1. Everything but water and lily pads, supports first. A block that's already there (a rebuild) stays.
   for (const it of items) {
-    if (later(it.pl)) continue;
+    if (later(it.pl) || it.block.typeId === it.pl.block) continue;
     if (!canReplace(it.block.typeId, it.pl.mode)) {
       // A cobblestone floor under a well, or posts under a dock, are only needed where it's open.
       if (!optional(it.pl)) skipped++;
@@ -638,7 +847,8 @@ function placeDesign(dim, s, p) {
     put(it);
   }
   // 2. Water, only where it can't spill.
-  const water = items.filter((it) => it.pl.block === "minecraft:water");
+  const water = items.filter((it) => it.pl.block === "minecraft:water" && it.block.typeId !== "minecraft:water");
+  const wetAlready = new Set(items.filter((it) => it.pl.block === "minecraft:water" && it.block.typeId === "minecraft:water").map((it) => keyOf(it.loc)));
   const want = new Map(water.filter((it) => canReplace(it.block.typeId, it.pl.mode)).map((it) => [keyOf(it.loc), it]));
   /** @param {Vector3} at */
   const holds = (at) => {
@@ -664,8 +874,9 @@ function placeDesign(dim, s, p) {
   for (const it of want.values()) put(it);
   // 3. Lily pads on the water just placed.
   for (const it of items) {
-    if (it.pl.block !== "minecraft:waterlily") continue;
-    if (want.has(keyOf({ x: it.loc.x, y: it.loc.y - 1, z: it.loc.z })) && canReplace(it.block.typeId, it.pl.mode)) put(it);
+    if (it.pl.block !== "minecraft:waterlily" || it.block.typeId === it.pl.block) continue;
+    const below = keyOf({ x: it.loc.x, y: it.loc.y - 1, z: it.loc.z });
+    if ((want.has(below) || wetAlready.has(below)) && canReplace(it.block.typeId, it.pl.mode)) put(it);
     else skipped++;
   }
   return { placed, skipped };
@@ -749,7 +960,7 @@ system.runInterval(() => {
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
- * @template {ActionFormData | MessageFormData} F
+ * @template {ActionFormData | MessageFormData | ModalFormData} F
  * @param {Player} player @param {F} form
  * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
@@ -888,35 +1099,96 @@ async function townList(player) {
   );
 }
 
-/** /realm:town @param {Player} player */
-async function mainMenu(player) {
+/** The old /realm:town page, now /realm:town_stats: the nearest town's level, projects and contributors. @param {Player} player */
+async function townStats(player) {
   const t = nearestTown(player);
   if (!t) {
-    const any = allTowns().size;
-    if (any) return townList(player);
     player.sendMessage(`§7No towns yet.${isOp(player) ? " Stand in the middle of one and run /realm:town_add <name>." : ""}`);
     return;
   }
-  const inTown = Math.hypot(player.location.x - t.x, player.location.z - t.z) <= get("townRadius");
-  await townMenu(player, t.id, inTown && get("deliverWithCommand") === true);
+  await townMenu(player, t.id, canDeliverIn(player, t));
+}
+
+/** Can /realm:town deliver to this town from where the player stands? @param {Player} player @param {Town} t */
+const canDeliverIn = (player, t) =>
+  get("deliverWithCommand") === true && player.dimension.id === t.dim && Math.hypot(player.location.x - t.x, player.location.z - t.z) <= get("townRadius");
+
+/** @param {Town} t */
+const isProtected = (t) => t.prot !== 0;
+
+/** /realm:town: everything the player may do, operators' actions included. @param {Player} player */
+async function mainMenu(player) {
+  const here = nearestTown(player, get("townRadius"));
+  const near = here ?? nearestTown(player);
+  const op = isOp(player);
+  /** @type {string[]} */
+  const lines = [];
+  if (here) lines.push(`You're in §l${here.n}§r: ${levelName(here.lvl)}, level ${here.lvl} of ${MAX_LEVEL}.`);
+  else if (near) lines.push(`The nearest town is §l${near.n}§r, ${Math.round(Math.hypot(player.location.x - near.x, player.location.z - near.z))} blocks away.`);
+  else lines.push(`There are no towns yet.${op ? " Stand in the middle of one and add it." : ""}`);
+  if (op && here) lines.push(`§7Protect from world events: ${isProtected(here) ? "§aEnabled" : "§cDisabled"}`);
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [];
+  if (near) {
+    const deliver = canDeliverIn(player, near);
+    actions.push({ text: "Town info\n§8Level, projects, contributors", run: () => townStats(player) });
+    actions.push({ text: `Projects\n§8What each needs${deliver ? ", deliver" : ""}`, run: () => projectsMenu(player, near.id, deliver) });
+  }
+  if (allTowns().size > (near ? 1 : 0)) actions.push({ text: "Other towns\n§8Every town on the realm", run: () => townList(player) });
+  if (op) {
+    if (!here) actions.push({ text: "Add a town here\n§8Operators", run: () => addTownForm(player) });
+    else {
+      actions.push({ text: "Set a project spot\n§8Operators: with a preview", run: () => pickProject(player, here.id, "spot") });
+      if (Object.keys(here.spots).length) actions.push({ text: "Manage spots\n§8Operators: remove, rebuild, relocate", run: () => pickProject(player, here.id, "manage") });
+      actions.push({ text: `Protect from world events\n§8Operators: ${isProtected(here) ? "Enabled" : "Disabled"}`, run: () => protectForm(player, here.id) });
+      actions.push({ text: "Remove town\n§8Operators", run: () => removeTown(player) });
+    }
+  }
+  actions.push({ text: "Close", run: () => undefined });
+  await menu(player, "§lTown Projects", lines.join("\n\n"), actions);
+}
+
+/** The projects open in a town right now. @param {Player} player @param {string} townId @param {boolean} canDeliver */
+async function projectsMenu(player, townId, canDeliver) {
+  const t = allTowns().get(townId);
+  if (!t) return player.sendMessage("§cThat town was removed.");
+  const open = projectsAt(t.lvl);
+  const body = open.length
+    ? `${t.n}'s projects for level ${t.lvl}. ${canDeliver ? "Pick one to see what it needs and deliver." : "Pick one to see what it needs: deliver at the town's mayor."}`
+    : "Every project is done. Thank you, everyone!";
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = open.map((p) => {
+    const pr = progressOf(t, p);
+    return { text: pr.done ? `§2${p.name}: done` : `${p.name}: ${pct(p, pr)} percent`, run: () => projectMenu(player, t.id, p.id, canDeliver) };
+  });
+  actions.push({ text: "Back", run: () => mainMenu(player) });
+  await menu(player, `§l${t.n}: projects`, body, actions);
 }
 
 // ---------------------------------------------------------------------------
 // Operators
 // ---------------------------------------------------------------------------
 
-/** @param {Player} player @param {string} rawName */
-function addTown(player, rawName) {
+/** @param {Player} player */
+async function addTownForm(player) {
+  const res = await show(player, new ModalFormData().title("§lAdd a town here").textField("Town name", "Riverside").submitButton("Add town"));
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const name = res.formValues.find((v) => typeof v === "string");
+  addTown(player, typeof name === "string" ? name : "");
+}
+
+/** @param {Player} player @param {string} rawName @param {(msg: string) => void} [tell] */
+function addTown(player, rawName, tell = (msg) => player.sendMessage(msg)) {
   const name = rawName
     .replace(/§./g, "")
     .replace(/[^\x20-\x7e]/g, "")
     .trim()
     .slice(0, NAME_LENGTH);
-  if (!name) return player.sendMessage("§cGive the town a name, for example /realm:town_add Riverside (quotes for spaces: \"Oak Hollow\").");
+  if (!name) return tell("§cGive the town a name, for example /realm:town_add Riverside (quotes for spaces: \"Oak Hollow\").");
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "town";
-  if ([...allTowns().values()].some((t) => t.n.toLowerCase() === name.toLowerCase())) return player.sendMessage(`§cThere is already a town called ${name}.`);
+  if ([...allTowns().values()].some((t) => t.n.toLowerCase() === name.toLowerCase())) return tell(`§cThere is already a town called ${name}.`);
   const close = nearestTown(player, get("townRadius") / 2);
-  if (close) return player.sendMessage(`§c${close.n} is too close (its center is at ${close.x}, ${close.z}). Towns must be at least ${Math.round(get("townRadius") / 2)} blocks apart.`);
+  if (close) return tell(`§c${close.n} is too close (its center is at ${close.x}, ${close.z}). Towns must be at least ${Math.round(get("townRadius") / 2)} blocks apart.`);
   let id = base;
   for (let k = 2; allTowns().has(id); k++) id = `${base}_${k}`;
   /** @type {Town} */
@@ -933,31 +1205,339 @@ function addTown(player, rawName) {
     at: Date.now(),
   };
   saveTown(t);
+  zonesChanged();
   levelUp(t); // only if the config has no projects for level 1
   const first = projectsAt(t.lvl);
-  player.sendMessage(
-    `§aTown ${name} added here (${t.x}, ${t.z}), a ${levelName(t.lvl)}. ${first.length ? `Its first projects: ${first.map((p) => p.name).join(", ")}.` : ""} §7Mayors (NPCs with the role ${CONFIG.npcRole}) within ${get("townRadius")} blocks take deliveries. Set where each project is built with /realm:town_spot <project>.`,
+  tell(
+    `§aTown ${name} added here (${t.x}, ${t.z}), a ${levelName(t.lvl)}. ${first.length ? `Its first projects: ${first.map((p) => p.name).join(", ")}.` : ""} §7Mayors (NPCs with the role ${CONFIG.npcRole}) within ${get("townRadius")} blocks take deliveries. Set where each project is built from /realm:town or with /realm:town_spot <project>. World events don't break blocks here (Protect from world events is Enabled).`,
   );
   if (get("announce") === true) world.sendMessage(`§6A new town: §e${name}§6! Bring materials to its mayor to build it up. /realm:town`);
 }
 
-/** @param {Player} player @param {string} projectId */
+/** Where the player stands, facing the way they face (to the nearest quarter turn). @param {Player} player @returns {Spot} */
+function spotOf(player) {
+  const yaw = player.getRotation().y;
+  const f = ((Math.round(yaw / 90) % 4) + 4) % 4;
+  return { x: Math.floor(player.location.x), y: Math.floor(player.location.y), z: Math.floor(player.location.z), f };
+}
+
+const FACINGS = ["south", "west", "north", "east"];
+/** @param {Spot} s */
+const spotText = (s) => `${s.x}, ${s.y}, ${s.z}, facing ${FACINGS[s.f] ?? "south"}`;
+
+/** Was this project built before snapshots, so taking it away can only clear its own blocks? @param {Town} t @param {Project} p */
+function legacyBuild(t, p) {
+  const s = t.spots[p.id];
+  return !!s && progressOf(t, p).built === 1 && !(s.snap && savedStructure(snapId(t, p)));
+}
+
+/** /realm:town_spot <project>, without a town or project check yet. @param {Player} player @param {string} projectId */
 function setSpot(player, projectId) {
   const p = byId.get(projectId);
   if (!p) return player.sendMessage(`§cNo project "${projectId}". Projects: ${PROJECTS.map((x) => x.id).join(", ")}.`);
   const t = nearestTown(player, get("townRadius"));
   if (!t) return player.sendMessage(`§cYou're not in a town (within ${get("townRadius")} blocks of its center). /realm:town_add makes one.`);
-  const pr = progressOf(t, p);
-  if (pr.built) return player.sendMessage(`§e${t.n}'s ${p.name} is already built at ${t.spots[p.id] ? `${t.spots[p.id].x}, ${t.spots[p.id].y}, ${t.spots[p.id].z}` : "its spot"}.`);
-  const yaw = player.getRotation().y;
-  const f = ((Math.round(yaw / 90) % 4) + 4) % 4;
-  const s = { x: Math.floor(player.location.x), y: Math.floor(player.location.y), z: Math.floor(player.location.z), f };
-  t.spots[p.id] = s;
-  saveTown(t);
-  const facing = ["south", "west", "north", "east"][f];
-  player.sendMessage(`§a${t.n}'s ${p.name} will be built here (${s.x}, ${s.y}, ${s.z}), facing ${facing}, in front of you. §7${spotHint(p)}`);
-  if (pr.done) build(t, p, true);
+  return previewSpot(player, t.id, p.id);
 }
+
+/**
+ * Pick a project: to set its spot ("spot") or to manage the spot it has ("manage").
+ * @param {Player} player @param {string} townId @param {"spot" | "manage"} mode
+ */
+async function pickProject(player, townId, mode) {
+  const t = allTowns().get(townId);
+  if (!t) return;
+  const list = mode === "manage" ? PROJECTS.filter((p) => t.spots[p.id]) : PROJECTS;
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = list.map((p) => {
+    const s = t.spots[p.id];
+    const pr = progressOf(t, p);
+    const state = pr.built && s ? `built at ${s.x}, ${s.y}, ${s.z}` : s ? `spot at ${s.x}, ${s.y}, ${s.z}` : pr.done ? "finished, no spot yet" : "no spot yet";
+    return { text: `${p.name}\n§8${state}`, run: () => (mode === "manage" ? manageSpot(player, t.id, p.id) : previewSpot(player, t.id, p.id)) };
+  });
+  actions.push({ text: "Back", run: () => mainMenu(player) });
+  const body =
+    mode === "manage"
+      ? `Projects of ${t.n} with a spot. Pick one to remove its spot, rebuild it or move it.`
+      : `Stand where a project should be built, facing the way it should face, then pick it. You see its outline before anything is saved.`;
+  await menu(player, mode === "manage" ? "§lManage spots" : "§lSet a project spot", body, actions);
+}
+
+/** @param {Player} player @param {string} townId @param {string} projectId */
+async function manageSpot(player, townId, projectId) {
+  const t = allTowns().get(townId);
+  const p = byId.get(projectId);
+  if (!t || !p) return;
+  const s = t.spots[p.id];
+  if (!s) return player.sendMessage(`§e${t.n}'s ${p.name} has no spot.`);
+  const pr = progressOf(t, p);
+  const legacy = legacyBuild(t, p);
+  const body = [
+    `§l${p.name}§r in ${t.n}`,
+    `Spot: ${spotText(s)}`,
+    pr.built ? "Built." : pr.done ? "Finished, waiting to be built." : `Not finished yet (${pct(p, pr)} percent): it's built here when it is.`,
+    legacy ? "§eBuilt before the ground was saved: removing or moving it clears its own blocks instead of restoring the ground." : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [{ text: "Relocate\n§8Preview a new spot where you stand", run: () => previewSpot(player, t.id, p.id) }];
+  if (pr.built) actions.push({ text: "Rebuild\n§8Reset a damaged build", run: () => confirmRebuild(player, t.id, p.id) });
+  actions.push({ text: pr.built ? "Remove spot\n§8Take the build away" : "Remove spot\n§8Forget it", run: () => confirmRemoveSpot(player, t.id, p.id) });
+  actions.push({ text: "Back", run: () => pickProject(player, t.id, "manage") });
+  await menu(player, `§l${p.name}`, body, actions);
+}
+
+/** @param {Player} player @param {string} title @param {string} body @param {string} yes */
+async function confirm(player, title, body, yes) {
+  const res = await show(player, new MessageFormData().title(title).body(body).button1(yes).button2("Cancel"));
+  return !!res && !res.canceled && res.selection === 0 && player.isValid;
+}
+
+/** @param {Player} player @param {string} townId @param {string} projectId */
+async function confirmRemoveSpot(player, townId, projectId) {
+  const t = allTowns().get(townId);
+  const p = byId.get(projectId);
+  if (!t || !p || !t.spots[p.id]) return;
+  const pr = progressOf(t, p);
+  const body = !pr.built
+    ? `Forget where ${t.n}'s ${p.name} goes? Nothing is built yet, so nothing in the world changes.`
+    : legacyBuild(t, p)
+      ? `Take ${t.n}'s ${p.name} away?\n\n§eIt was built before the ground under builds was saved, so its own blocks are cleared: ground blocks become grass, a dock's posts water, the rest air. Anything else (paths, decorations you added) stays.§r\n\nIt stays finished: set a new spot to build it again.`
+      : `Take ${t.n}'s ${p.name} away and put the ground back the way it was before it was built? Anything built inside its outline since then is replaced too.\n\nIt stays finished: set a new spot to build it again.`;
+  if (await confirm(player, "§lRemove spot?", body, pr.built ? "§cRemove the build" : "Forget the spot")) removeSpot(t, p, (m) => player.sendMessage(m));
+}
+
+/** @param {Player} player @param {string} townId @param {string} projectId */
+async function confirmRebuild(player, townId, projectId) {
+  const t = allTowns().get(townId);
+  const p = byId.get(projectId);
+  if (!t || !p || !t.spots[p.id]) return;
+  const body = legacyBuild(t, p)
+    ? `Rebuild ${t.n}'s ${p.name}? It was built before the ground was saved, so missing blocks are put back; changed blocks stay as they are.`
+    : `Rebuild ${t.n}'s ${p.name}? Its outline goes back to the ground saved before it was built, and it's built again, fresh. Anything built inside its outline since then is replaced.`;
+  if (await confirm(player, "§lRebuild?", body, "Rebuild")) rebuildSpot(t, p, (m) => player.sendMessage(m));
+}
+
+/**
+ * Sets a project's spot, or moves it: a built project is taken away from its old spot first (the saved ground
+ * goes back) and built at the new one.
+ * @param {Town} t @param {Project} p @param {Spot} s @param {(msg: string) => void} tell @returns {boolean}
+ */
+function applySpot(t, p, s, tell) {
+  const pr = progressOf(t, p);
+  const old = t.spots[p.id];
+  const moving = pr.built === 1;
+  if (moving && old) {
+    const why = unbuild(t, p, old);
+    if (why) {
+      tell(`§cThe ${p.name} couldn't be moved: ${why}.`);
+      return false;
+    }
+  } else if (old?.snap) deleteStructure(snapId(t, p));
+  if (moving) {
+    pr.built = 0;
+    saveProgress(t, p, pr);
+  }
+  t.spots[p.id] = { x: s.x, y: s.y, z: s.z, f: s.f };
+  saveTown(t);
+  tell(`§a${t.n}'s ${p.name} ${moving ? "was taken away from its old spot and goes" : "will be built"} at ${spotText(s)}. §7${spotHint(p)}`);
+  if (pr.done) build(t, p, true);
+  return true;
+}
+
+/** Forgets a project's spot; a built project is taken away. @param {Town} t @param {Project} p @param {(msg: string) => void} tell */
+function removeSpot(t, p, tell) {
+  const s = t.spots[p.id];
+  if (!s) return tell(`§e${t.n}'s ${p.name} has no spot.`);
+  const pr = progressOf(t, p);
+  const wasBuilt = pr.built === 1;
+  if (wasBuilt) {
+    const why = unbuild(t, p, s);
+    if (why) return tell(`§cThe ${p.name} couldn't be removed: ${why}.`);
+    pr.built = 0;
+    saveProgress(t, p, pr);
+  } else if (s.snap) deleteStructure(snapId(t, p));
+  delete t.spots[p.id];
+  saveTown(t);
+  tell(`§a${wasBuilt ? `${t.n}'s ${p.name} was taken away` : `${t.n}'s ${p.name} has no spot now`}.${pr.done ? " §7It's finished: set a new spot to build it." : ""}`);
+}
+
+/** Puts a built project back as new. @param {Town} t @param {Project} p @param {(msg: string) => void} tell */
+function rebuildSpot(t, p, tell) {
+  const s = t.spots[p.id];
+  const pr = progressOf(t, p);
+  if (!s || !pr.built) return tell(`§e${t.n}'s ${p.name} isn't built.`);
+  const legacy = legacyBuild(t, p);
+  if (legacy) {
+    delete s.snap;
+    s.old = 1; // never save what's there now as "the ground"
+  } else {
+    const why = unbuild(t, p, s, true);
+    if (why) return tell(`§cThe ${p.name} couldn't be rebuilt: ${why}.`);
+  }
+  pr.built = 0;
+  saveProgress(t, p, pr);
+  saveTown(t);
+  if (!build(t, p, true)) tell(`§eThe ${p.name} is built again as soon as its spot is loaded.`);
+}
+
+/**
+ * Shows where a project would go (its outline and an arrow for its front, as particles only this operator
+ * sees) and asks to set the spot there, turn it, or cancel.
+ * @param {Player} player @param {string} townId @param {string} projectId
+ */
+async function previewSpot(player, townId, projectId) {
+  const t = allTowns().get(townId);
+  const p = byId.get(projectId);
+  if (!t || !p) return;
+  if (player.dimension.id !== t.dim) return player.sendMessage(`§c${t.n} is in another dimension.`);
+  let s = spotOf(player);
+  const moving = progressOf(t, p).built === 1 && !!t.spots[p.id];
+  const legacy = moving && legacyBuild(t, p);
+  for (;;) {
+    const pv = { dim: t.dim, p, s, until: system.currentTick + PREVIEW_TICKS, open: true };
+    previews.set(player.id, pv);
+    const box = footprint(p, s);
+    const size = `${box.max.x - box.min.x + 1} by ${box.max.z - box.min.z + 1} blocks, ${box.max.y - box.min.y + 1} high`;
+    const blocked = inTheWay(t, p, s);
+    const body = [
+      `§l${p.name}§r for ${t.n}`,
+      `At ${spotText(s)}: ${size}. The green outline shows the blocks it covers, the blue arrow the way its front faces.`,
+      blocked ? `§e${blocked} block${blocked === 1 ? "" : "s"} of it would be left out: something is in the way.§r` : "",
+      p.structure && savedStructure(p.structure) ? `The structure "${p.structure}" replaces whatever is inside the outline.` : "",
+      moving ? `It's built now: setting the spot here takes it away from ${spotText(/** @type {Spot} */ (t.spots[p.id]))}${legacy ? " (clearing its own blocks: it was built before the ground was saved)" : " and puts the ground back"}, then builds it here.` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    const form = new ActionFormData().title("§lSet the spot?").body(body).button("Set spot here").button("Rotate 90\n§8Turn it a quarter to the right").button("Look around\n§8Walk around it for 10 seconds").button("Cancel");
+    const res = await show(player, form);
+    pv.open = false;
+    if (system.currentTick > pv.until) {
+      if (previews.get(player.id) === pv) previews.delete(player.id);
+      if (player.isValid) player.sendMessage("§7The spot preview timed out. Nothing was changed.");
+      return;
+    }
+    if (previews.get(player.id) !== pv) return; // replaced by another preview
+    if (!res || res.canceled || res.selection === undefined || res.selection === 3 || !player.isValid) {
+      previews.delete(player.id);
+      return;
+    }
+    if (res.selection === 1) {
+      s = { ...s, f: (s.f + 1) % 4 };
+      continue;
+    }
+    if (res.selection === 2) {
+      pv.until = system.currentTick + LOOK_TICKS + 20;
+      player.sendMessage("§7Walk around the outline. The question comes back in 10 seconds.");
+      await new Promise((r) => system.runTimeout(() => r(undefined), LOOK_TICKS));
+      if (previews.get(player.id) !== pv || !player.isValid) return;
+      continue;
+    }
+    previews.delete(player.id);
+    const now = allTowns().get(townId);
+    if (now) applySpot(now, p, s, (m) => player.sendMessage(m));
+    return;
+  }
+}
+
+/**
+ * How many of a built-in design's blocks would be left out at a spot because something is in the way (0 for a
+ * saved structure, or where it isn't loaded).
+ * @param {Town} t @param {Project} p @param {Spot} s
+ */
+function inTheWay(t, p, s) {
+  if (p.structure && savedStructure(p.structure)) return 0;
+  const own = progressOf(t, p).built && t.spots[p.id] ? footprint(p, t.spots[p.id]) : undefined;
+  let n = 0;
+  try {
+    const dim = world.getDimension(t.dim);
+    for (const pl of design(p.build)) {
+      if (pl.block === "minecraft:waterlily" || isOptional(p, pl)) continue;
+      const loc = toWorld(s, pl.x, pl.y, pl.z);
+      // Its own build, when moving it a little, is taken away first.
+      if (own && loc.x >= own.min.x && loc.x <= own.max.x && loc.y >= own.min.y && loc.y <= own.max.y && loc.z >= own.min.z && loc.z <= own.max.z) continue;
+      let b;
+      try {
+        b = dim.getBlock(loc);
+      } catch {
+        b = undefined;
+      }
+      if (b && !canReplace(b.typeId, pl.mode)) n++;
+    }
+  } catch {
+    return 0;
+  }
+  return n;
+}
+
+const PREVIEW_TICKS = 600; // 30 seconds without an answer
+const LOOK_TICKS = 200;
+const OUTLINE = "minecraft:villager_happy";
+const ARROW = "minecraft:blue_flame_particle";
+
+/** Spot previews being shown, by player id. @type {Map<string, { dim: string, p: Project, s: Spot, until: number, open: boolean }>} */
+const previews = new Map();
+
+/** @param {Player} player @param {{ p: Project, s: Spot }} pv */
+function drawPreview(player, pv) {
+  const box = footprint(pv.p, pv.s);
+  const lo = box.min;
+  const hi = { x: box.max.x + 1, y: box.max.y + 1, z: box.max.z + 1 };
+  /** @type {[Vector3, Vector3][]} */
+  const edges = [];
+  for (const y of [lo.y, hi.y]) {
+    edges.push([{ x: lo.x, y, z: lo.z }, { x: hi.x, y, z: lo.z }]);
+    edges.push([{ x: lo.x, y, z: hi.z }, { x: hi.x, y, z: hi.z }]);
+    edges.push([{ x: lo.x, y, z: lo.z }, { x: lo.x, y, z: hi.z }]);
+    edges.push([{ x: hi.x, y, z: lo.z }, { x: hi.x, y, z: hi.z }]);
+  }
+  for (const x of [lo.x, hi.x]) for (const z of [lo.z, hi.z]) edges.push([{ x, y: lo.y, z }, { x, y: hi.y, z }]);
+  const total = edges.reduce((sum, [a, b]) => sum + Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z), 0);
+  const step = Math.max(0.5, total / 400);
+  /** @param {string} id @param {Vector3} at */
+  const dot = (id, at) => {
+    try {
+      player.spawnParticle(id, at);
+    } catch {
+      // unloaded
+    }
+  };
+  for (const [a, b] of edges) {
+    const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    const n = Math.max(1, Math.round(len / step));
+    for (let i = 0; i <= n; i++) dot(OUTLINE, { x: a.x + ((b.x - a.x) * i) / n, y: a.y + ((b.y - a.y) * i) / n, z: a.z + ((b.z - a.z) * i) / n });
+  }
+  // The front: an arrow on the ground from the spot, pointing the way the build faces.
+  const f = FORWARD[pv.s.f] ?? FORWARD[0];
+  const r = { x: -f.z, z: f.x };
+  const c = { x: pv.s.x + 0.5, y: pv.s.y + 0.2, z: pv.s.z + 0.5 };
+  for (let k = 0; k <= 2.5; k += 0.25) dot(ARROW, { x: c.x + f.x * k, y: c.y, z: c.z + f.z * k });
+  for (let k = 0.25; k <= 1; k += 0.25)
+    for (const side of [-1, 1]) dot(ARROW, { x: c.x + f.x * (2.5 - k) + r.x * k * side, y: c.y, z: c.z + f.z * (2.5 - k) + r.z * k * side });
+}
+
+system.runInterval(() => {
+  for (const [id, pv] of previews) {
+    const player = online(id);
+    if (!player) {
+      previews.delete(id);
+      continue;
+    }
+    if (system.currentTick > pv.until) {
+      previews.delete(id);
+      if (pv.open) {
+        try {
+          uiManager.closeAllForms(player);
+        } catch {
+          // already closed
+        }
+      }
+      continue;
+    }
+    if (player.dimension.id === pv.dim) drawPreview(player, pv);
+  }
+}, 10);
 
 /** @param {Project} p */
 function spotHint(p) {
@@ -975,6 +1555,36 @@ function spotHint(p) {
   }
 }
 
+/** @param {Player} player @param {string} townId */
+async function protectForm(player, townId) {
+  const t = allTowns().get(townId);
+  if (!t) return;
+  const res = await show(
+    player,
+    new ModalFormData()
+      .title(`§l${t.n}`)
+      .toggle("Protect from world events", {
+        defaultValue: isProtected(t),
+        tooltip: `Meteors, tornadoes, storms and other world events still happen within ${get("townRadius")} blocks of ${t.n}, but don't break or place blocks there (in packs that support safe zones).`,
+      })
+      .submitButton("Save"),
+  );
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const on = res.formValues.find((v) => typeof v === "boolean");
+  if (typeof on === "boolean") setProtected(t, on, (m) => player.sendMessage(m));
+}
+
+/** @param {Town} t @param {boolean} on @param {(msg: string) => void} tell */
+function setProtected(t, on, tell) {
+  const now = allTowns().get(t.id);
+  if (!now) return tell("§cThat town was removed.");
+  if (on) delete now.prot;
+  else now.prot = 0;
+  saveTown(now);
+  zonesChanged();
+  tell(on ? `§aProtect from world events: Enabled for ${now.n}. §7World events still happen there but don't break blocks.` : `§eProtect from world events: Disabled for ${now.n}. §7World events can break blocks there now.`);
+}
+
 /** @param {Player} player */
 async function removeTown(player) {
   const t = nearestTown(player, get("townRadius"));
@@ -988,10 +1598,17 @@ async function removeTown(player) {
       .button2("Keep it"),
   );
   if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+  deleteTown(t);
+  player.sendMessage(`§aTown ${t.n} removed.`);
+}
+
+/** @param {Town} t */
+function deleteTown(t) {
   for (const p of PROJECTS) {
     const key = `${PROG_PREFIX}${t.id}:${p.id}`;
     progCache.delete(key);
     world.setDynamicProperty(key, undefined);
+    if (t.spots[p.id]?.snap) deleteStructure(snapId(t, p));
   }
   try {
     for (const key of world.getDynamicPropertyIds()) if (key.startsWith(`${PROG_PREFIX}${t.id}:`)) world.setDynamicProperty(key, undefined); // projects removed from config.js
@@ -1000,8 +1617,110 @@ async function removeTown(player) {
   }
   allTowns().delete(t.id);
   world.setDynamicProperty(TOWN_PREFIX + t.id, undefined);
-  player.sendMessage(`§aTown ${t.n} removed.`);
+  zonesChanged();
 }
+
+// ---------------------------------------------------------------------------
+// Safe zones: towns with "Protect from world events" Enabled, for packs whose world events break blocks
+// ---------------------------------------------------------------------------
+
+const ZONE_LIMIT = 2000; // script event messages may be at most 2048 characters (town names are plain ASCII)
+
+function broadcastZones() {
+  const r = get("townRadius");
+  const zones = [...allTowns().values()].filter(isProtected).map((t) => ({ id: t.id, name: t.n, dim: t.dim, x: t.x, z: t.z, r, shape: "circle" }));
+  if (!zones.length) return send("realm:zones", { src: "town", part: 1, parts: 0, zones: [] });
+  /** @type {object[][]} */
+  const parts = [[]];
+  for (const z of zones) {
+    const last = /** @type {object[]} */ (parts.at(-1));
+    if (last.length && JSON.stringify({ src: "town", part: 99, parts: 99, zones: [...last, z] }).length > ZONE_LIMIT) parts.push([z]);
+    else last.push(z);
+  }
+  parts.forEach((list, i) => send("realm:zones", { src: "town", part: i + 1, parts: parts.length, zones: list }));
+}
+
+let zonesQueued = false;
+/** Sends the town zones again, once, a moment after a change. */
+function zonesChanged() {
+  if (zonesQueued) return;
+  zonesQueued = true;
+  system.runTimeout(() => {
+    zonesQueued = false;
+    try {
+      broadcastZones();
+    } catch (e) {
+      console.warn(`[town] zones: ${e}`);
+    }
+  }, 5);
+}
+
+onChange((key) => {
+  if (key === "townRadius" || key === "*") zonesChanged();
+});
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(zonesChanged, 100));
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:zones_ping") zonesChanged();
+  },
+  { namespaces: ["realm"] },
+);
+
+// ---------------------------------------------------------------------------
+// Scenario tests (BDS harness): the operator actions without forms. Only from the server console or an operator.
+//   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
+// ---------------------------------------------------------------------------
+
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:town_test") return;
+    const src = ev.sourceEntity;
+    if (ev.sourceType !== ScriptEventSource.Server && !(src instanceof Player && isOp(src))) return;
+    let m;
+    try {
+      m = JSON.parse(ev.message);
+    } catch {
+      return;
+    }
+    if (!m || typeof m !== "object") return;
+    const player = typeof m.player === "string" ? world.getAllPlayers().find((x) => x.name === m.player) : src instanceof Player ? src : undefined;
+    /** @param {string} msg */
+    const tell = (msg) => {
+      console.warn(`[town_test] ${msg.replace(/§./g, "")}`);
+      player?.sendMessage(msg);
+    };
+    try {
+      const t = typeof m.town === "string" ? allTowns().get(m.town) : player ? nearestTown(player, get("townRadius")) : undefined;
+      const p = typeof m.project === "string" ? byId.get(m.project) : undefined;
+      if (m.action === "add") {
+        if (player) addTown(player, String(m.name ?? ""), tell);
+        return;
+      }
+      if (m.action === "zones") return broadcastZones();
+      if (!t) return tell("no town");
+      if (m.action === "dump") return tell(JSON.stringify({ town: t, progress: PROJECTS.map((x) => [x.id, progressOf(t, x)]) }));
+      if (m.action === "protect") return setProtected(t, m.on !== false, tell);
+      if (!p) return tell("no project");
+      if (m.action === "spot") {
+        const s = m.spot && typeof m.spot === "object" ? { x: Math.floor(m.spot.x), y: Math.floor(m.spot.y), z: Math.floor(m.spot.z), f: ((Math.floor(m.spot.f ?? 0) % 4) + 4) % 4 } : player ? spotOf(player) : undefined;
+        if (!s || [s.x, s.y, s.z].some((n) => !Number.isFinite(n))) return tell("no spot");
+        tell(`footprint ${JSON.stringify(footprint(p, s))}, in the way ${inTheWay(t, p, s)}`);
+        applySpot(t, p, s, tell);
+      } else if (m.action === "finish") {
+        const pr = progressOf(t, p);
+        if (pr.done) return tell("already finished");
+        pr.got = { ...p.needs };
+        pr.done = 1;
+        saveProgress(t, p, pr);
+        finishProject(t, p, pr);
+      } else if (m.action === "remove") removeSpot(t, p, tell);
+      else if (m.action === "rebuild") rebuildSpot(t, p, tell);
+    } catch (e) {
+      tell(`error: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // ---------------------------------------------------------------------------
 // Townsfolk (npc_bp): mayors offer the nearest town's projects
@@ -1082,7 +1801,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:town",
-      description: "Town Projects: the nearest town's level, projects, progress and contributors",
+      description: "Town Projects: a menu of everything you can do (town info, projects, other towns; operators: spots, towns)",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
@@ -1090,6 +1809,21 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       const player = originPlayer(origin);
       if (!player) return notPlayer;
       later(() => mainMenu(player));
+      return ok;
+    },
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:town_stats",
+      description: "Town Projects: the nearest town's level, projects, progress and contributors",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = originPlayer(origin);
+      if (!player) return notPlayer;
+      later(() => townStats(player));
       return ok;
     },
   );
@@ -1113,7 +1847,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:town_spot",
-      description: "Set where a project of this town is built: where you stand, facing the way you face",
+      description: "Set (or move) where a project of this town is built, with a preview: where you stand, facing the way you face",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
       mandatoryParameters: [{ name: "realm:town_project", type: CustomCommandParamType.Enum }],

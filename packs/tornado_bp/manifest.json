@@ -4,7 +4,7 @@
     "name": "Tornadoes",
     "description": "Thunderstorms can spin up a tornado that wanders the plains, flinging mobs, items and players and leaving Storm Glass behind; it never breaks blocks. /realm:tornado",
     "uuid": "c74975c0-c973-49bb-a127-4a0747a88beb",
-    "version": [1, 0, 1],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
@@ -17,6 +17,7 @@
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" }
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
   ]
 }

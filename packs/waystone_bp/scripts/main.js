@@ -1,5 +1,5 @@
 import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Player, SignSide, system, world } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 
@@ -123,12 +123,14 @@ function charge(player, n) {
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
- * @param {Player} player @param {ActionFormData} form
+ * @template {ActionFormData | MessageFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    const res = /** @type {any} */ (await form.show(player));
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }
@@ -662,6 +664,47 @@ async function listMenu(player) {
   await show(player, new ActionFormData().title("§lWaystones").body(body).button("Close"));
 }
 
+/** /realm:waystones: what the player may do. @param {Player} player */
+async function mainMenu(player) {
+  const anywhere = get("travelAnywhere") === true;
+  const known = destinations(player, undefined).length;
+  const body = [
+    `You've discovered ${known} waystone${known === 1 ? "" : "s"}.`,
+    anywhere ? "You can travel to them from anywhere." : "Tap a waystone (a lodestone with a Waystone sign) with an empty hand to travel.",
+  ].join(" ");
+  /** @type {{ text: string, run: () => Promise<void> | void }[]} */
+  const actions = [{ text: anywhere ? "Travel\n§8To a waystone you've discovered" : "My waystones\n§8Where they are", run: () => listMenu(player) }];
+  if (isOp(player)) actions.push({ text: "Remove a waystone\n§8Operators", run: () => removeMenu(player) });
+  const form = new ActionFormData().title("§lWaystones").body(body);
+  for (const a of actions) form.button(a.text);
+  form.button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await actions[res.selection]?.run();
+}
+
+/** Operators: every waystone, nearest first; pick one to remove it. @param {Player} player */
+async function removeMenu(player) {
+  if (!isOp(player)) return;
+  const here = player.dimension.id;
+  const all = waystones()
+    .map((w) => ({ w, d: w.d === here ? Math.hypot(w.x - player.location.x, w.z - player.location.z) : Infinity }))
+    .sort((a, b) => a.d - b.d || a.w.n.localeCompare(b.w.n));
+  if (!all.length) return player.sendMessage("§7There are no waystones.");
+  const form = new ActionFormData().title("§lRemove a waystone").body("Pick a waystone to remove. Its lodestone and sign stay: break them if you want them gone.");
+  for (const { w } of all) form.button(`${w.n}\n§8${w.d === here ? `${w.x}, ${w.y}, ${w.z} (${where(player.location, center(w))})` : dimName(w.d)}`);
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const pick = all[res.selection]?.w;
+  if (!pick) return mainMenu(player);
+  const sure = await show(player, new MessageFormData().title("§lRemove waystone?").body(`Remove the waystone ${pick.n} (${pick.x}, ${pick.y}, ${pick.z})? Everyone who discovered it loses it.`).button1("§cRemove it").button2("Keep it"));
+  if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
+  if (!byId(pick.i)) return player.sendMessage("§7That waystone is already gone.");
+  removeWaystone(pick, `removed by ${player.name}`);
+  player.sendMessage(`§7Removed the waystone ${pick.n}. The lodestone and sign stay: break them if you want them gone.`);
+}
+
 // ---------------------------------------------------------------------------
 // Inns: NPCs with the innkeeper role rent beds and tell the news
 // ---------------------------------------------------------------------------
@@ -816,6 +859,20 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:waystones",
+      description: "Waystones: a menu of what you can do (your waystones; operators: remove one)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => mainMenu(player).catch((e) => console.warn(`[waystone] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:waystones_list",
       description: "Waystones: the waystones you've discovered (travel from one by tapping it)",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,

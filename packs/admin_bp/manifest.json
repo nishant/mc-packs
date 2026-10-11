@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Realm Configuration",
+    "description": "An admin menu item every operator gets: run any realm command from one place, with preset choices for every option. /realm:admin",
+    "uuid": "09348c78-4c02-45fe-916d-5f752c29a8ca",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "3f7ec446-6100-4dd1-a518-4f10d0208df5",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

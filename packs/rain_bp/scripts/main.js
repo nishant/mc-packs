@@ -76,7 +76,7 @@ function stateOf(player) {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
   if (newWeather === WeatherType.Clear && weather !== WeatherType.Clear) dripSeconds = CONFIG.drips.afterRainSeconds;
   weather = newWeather;
   try {

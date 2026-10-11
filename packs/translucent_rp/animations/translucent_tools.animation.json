@@ -1,19 +1,180 @@
 {
   "format_version": "1.10.0",
   "animations": {
-    "animation.realm_translucent.tool.wield": {
+    "animation.realm_translucent.tool.first_person": {
       "loop": true,
       "bones": {
-        "rightitem": {
-          "position": [
-            "c.is_first_person ? -5.5 : 0.5",
-            "c.is_first_person ? -3.0 : -2.5",
-            "c.is_first_person ? -3.0 : 1.0"
-          ],
+        "realm_translucent_tool": {
           "rotation": [
-            "c.is_first_person ? 38.0 : 0.0",
-            "c.is_first_person ? -120.0 : 0.0",
-            "c.is_first_person ? -63.0 : 0.0"
+            90,
+            60,
+            -40
+          ],
+          "position": [
+            4,
+            10,
+            4
+          ],
+          "scale": 1.5
+        },
+        "realm_translucent_tool_x": {
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "position": [
+            -1.13,
+            3.2,
+            -1.13
+          ],
+          "scale": 0.68
+        },
+        "realm_translucent_tool_y": {
+          "rotation": [
+            0,
+            90,
+            0
+          ]
+        },
+        "realm_translucent_tool_z": {
+          "rotation": [
+            0,
+            0,
+            25
+          ]
+        }
+      }
+    },
+    "animation.realm_translucent.tool.third_person": {
+      "loop": true,
+      "bones": {
+        "realm_translucent_tool": {
+          "rotation": [
+            90,
+            0,
+            0
+          ],
+          "position": [
+            0,
+            13,
+            -3
+          ]
+        },
+        "realm_translucent_tool_x": {
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "position": [
+            0,
+            4,
+            0.5
+          ],
+          "scale": 0.85
+        },
+        "realm_translucent_tool_y": {
+          "rotation": [
+            0,
+            90,
+            0
+          ]
+        },
+        "realm_translucent_tool_z": {
+          "rotation": [
+            0,
+            0,
+            55
+          ]
+        }
+      }
+    },
+    "animation.realm_translucent.tool.first_person_off_hand": {
+      "loop": true,
+      "bones": {
+        "realm_translucent_tool": {
+          "rotation": [
+            90,
+            60,
+            -40
+          ],
+          "position": [
+            4,
+            10,
+            4
+          ],
+          "scale": 1.5
+        },
+        "realm_translucent_tool_x": {
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "position": [
+            1.13,
+            3.2,
+            -1.13
+          ],
+          "scale": 0.68
+        },
+        "realm_translucent_tool_y": {
+          "rotation": [
+            0,
+            -90,
+            0
+          ]
+        },
+        "realm_translucent_tool_z": {
+          "rotation": [
+            0,
+            0,
+            -25
+          ]
+        }
+      }
+    },
+    "animation.realm_translucent.tool.third_person_off_hand": {
+      "loop": true,
+      "bones": {
+        "realm_translucent_tool": {
+          "rotation": [
+            90,
+            0,
+            0
+          ],
+          "position": [
+            0,
+            13,
+            -3
+          ]
+        },
+        "realm_translucent_tool_x": {
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "position": [
+            0,
+            4,
+            0.5
+          ],
+          "scale": 0.85
+        },
+        "realm_translucent_tool_y": {
+          "rotation": [
+            0,
+            -90,
+            0
+          ]
+        },
+        "realm_translucent_tool_z": {
+          "rotation": [
+            0,
+            0,
+            -55
           ]
         }
       }

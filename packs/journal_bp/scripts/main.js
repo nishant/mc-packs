@@ -226,7 +226,8 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 let weather = WeatherType.Clear;
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  // BDS 1.26 sends "overworld" here, without the "minecraft:" other events use: accept both.
+  if (dimension !== OVERWORLD && dimension !== "overworld") return;
   weather = newWeather;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);

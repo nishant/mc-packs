@@ -17,6 +17,10 @@ const OPTIONS = [
   { key: "nightOnly", type: "bool", scope: "world", label: "Only at night" },
   { key: "surfaceOnly", type: "bool", scope: "world", label: "Only under the open sky", help: "Keeps caves and mob farms from making champions" },
   { key: "announceRadius", type: "int", scope: "world", label: "Alert radius (blocks)", help: "Players this close get a chat line when a champion appears. 0 = no alerts", min: 0, max: 128, step: 8 },
+  { key: "looks.aura", type: "bool", scope: "world", label: "Champion auras", help: "A small particle aura in each champion's trait color" },
+  { key: "looks.auraTicks", type: "int", scope: "world", label: "Aura puff interval (ticks)", help: "20 ticks = 1 second. Lower is busier", min: 2, max: 40, step: 2 },
+  { key: "looks.gear", type: "bool", scope: "world", label: "Champion helmets", help: "Champions that can wear armor get a helmet that shows their trait. It never drops" },
+  { key: "looks.spawnEffect", type: "bool", scope: "world", label: "Champion arrival effect", help: "A spell sound and a burst of the aura when a champion appears" },
   { key: "alerts", type: "bool", scope: "player", default: true, label: "Champion alerts in chat", help: "A chat line when a champion appears near you" },
 ];
 

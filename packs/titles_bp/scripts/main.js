@@ -1,5 +1,5 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, GameMode, Player, WeatherType, system, world } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 
@@ -326,12 +326,14 @@ system.runInterval(() => {
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
- * @param {Player} player @param {ActionFormData} form
+ * @template {ActionFormData | ModalFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    const res = /** @type {any} */ (await form.show(player));
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }
@@ -359,12 +361,43 @@ async function mainMenu(player) {
     .title("§lTitles & Trails")
     .body(lines.join("\n"))
     .button(`Choose a title\n§8${d.t.length} unlocked`)
-    .button(`Choose a trail\n§8${d.r.length} unlocked`)
-    .button("Close");
+    .button(`Choose a trail\n§8${d.r.length} unlocked`);
+  const op = player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+  if (op) form.button("Give a title or trail\n§8Operators").button("Settings\n§8Operators");
+  form.button("Close");
   const res = await show(player, form);
   if (!res || res.canceled || !player.isValid) return;
   if (res.selection === 0) await titleMenu(player);
   else if (res.selection === 1) await trailMenu(player);
+  else if (op && res.selection === 2) await giveForm(player);
+  else if (op && res.selection === 3) {
+    const back = await show(
+      player,
+      new ActionFormData()
+        .title("§lSettings")
+        .body("Operators change this pack's settings in §e/realm:config§r: pick §eTitles & Trails§r there. Built-in titles, trails and how often a trail puffs are there.")
+        .button("Back")
+    );
+    if (back && !back.canceled && player.isValid) await mainMenu(player);
+  }
+}
+
+/** The menu's "Give a title or trail": the same as /realm:titles_give, asked in a form. @param {Player} op */
+async function giveForm(op) {
+  const online = world.getAllPlayers().map((p) => p.name).sort((a, b) => a.localeCompare(b));
+  const res = await show(
+    op,
+    new ModalFormData()
+      .title("§lGive a title or trail")
+      .dropdown("Player online", online)
+      .textField("Or another player's name (offline players this pack has seen)", "")
+      .textField(`Title, or a trail: ${Object.keys(TRAILS).map((k) => `trail:${k}`).join(", ")}`, "Dragon Slayer")
+      .submitButton("Give")
+  );
+  if (!res || res.canceled || !res.formValues || !op.isValid) return;
+  const [pick, typed, what] = res.formValues;
+  const who = String(typed ?? "").trim() || online[Number(pick)] || "";
+  give(op, who, String(what ?? ""));
 }
 
 /** @param {Player} player */

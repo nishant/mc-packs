@@ -1,4 +1,5 @@
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, Player, system, world } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { get, getFor } from "./settings.js";
 
 // Player property "death:last": JSON { d, x, y, z, told, used } of the player's last death: the
@@ -355,10 +356,117 @@ const playerOf = (origin) => {
   return p instanceof Player ? p : undefined;
 };
 
+/** /realm:death_info's text: where the player last died, how far and which way. @param {Player} player */
+function infoText(player) {
+  const point = lastDeath(player);
+  return point ? describe(player, point) : "§7No death point saved yet. Stay safe!";
+}
+
+/**
+ * /realm:death_back: checks, then starts looking for a safe spot. Only reads the world itself, so a
+ * command callback can call it.
+ * @param {Player} player
+ * @returns {{ ok: boolean, message: string }}
+ */
+function goBack(player) {
+  if (get("backEnabled") !== true) {
+    return {
+      ok: false,
+      message: "Teleporting back is disabled on this realm. An operator can enable it in /realm:config (Death Point). /realm:death still shows the way.",
+    };
+  }
+  const point = lastDeath(player);
+  if (!point) return { ok: false, message: "No death point saved yet." };
+  if (point.used) return { ok: false, message: "You already went back to this death point. /realm:death_back works once per death." };
+  if (busy.has(player.id)) return { ok: false, message: "Still looking for a safe spot near your death point..." };
+  busy.add(player.id);
+  system.run(() => {
+    try {
+      startBack(player, point);
+    } catch (e) {
+      busy.delete(player.id);
+      console.warn(`[death] ${e}`);
+      if (player.isValid) player.sendMessage("§cSomething went wrong, so you weren't teleported.");
+    }
+  });
+  return { ok: true, message: `§7Looking for a safe place near ${coords(point)} in ${dimensionName(point.d)}...` };
+}
+
+// ---------------------------------------------------------------------------
+// /realm:death: the pack's menu
+// ---------------------------------------------------------------------------
+
+const isOp = (/** @type {Player} */ player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @param {Player} player @param {ActionFormData} form
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** @param {Player} player */
+async function settingsInfo(player) {
+  const res = await show(
+    player,
+    new ActionFormData()
+      .title("Settings")
+      .body("Operators change this pack's settings in §e/realm:config§r: pick §eDeath Point§r there. Teleporting back, the respawn message and the safe spot search are there.")
+      .button("Back")
+  );
+  if (res && !res.canceled && player.isValid) await packMenu(player);
+}
+
+/**
+ * /realm:death: every action this player may use, with the death point in the text. With only one
+ * (teleporting back disabled, not an operator) it answers in chat right away, as before.
+ * @param {Player} player
+ */
+async function packMenu(player) {
+  /** @type {{ text: string, run: () => void | Promise<void> }[]} */
+  const entries = [{ text: "Where I died\n§8In chat", run: () => player.sendMessage(infoText(player)) }];
+  if (get("backEnabled") === true) {
+    const point = lastDeath(player);
+    entries.push({
+      text: `Teleport back\n§8${!point ? "No death point yet" : point.used ? "Already used for this death" : "Once per death"}`,
+      run: () => player.sendMessage(goBack(player).message.replace(/^(?!§)/, "§c")),
+    });
+  }
+  if (isOp(player)) entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
+  if (entries.length === 1) return entries[0].run();
+  const form = new ActionFormData().title("§lDeath Point").body(infoText(player));
+  for (const e of entries) form.button(e.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await entries[res.selection]?.run();
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:death",
+      description: "Death Point: where you last died, and teleporting back when it's enabled",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => Promise.resolve(packMenu(player)).catch((e) => console.warn(`[death] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:death_info",
       description: "Show where you last died, how far away it is and in which direction",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -366,9 +474,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (origin) => {
       const player = playerOf(origin);
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      const point = lastDeath(player);
-      if (!point) return { status: CustomCommandStatus.Success, message: "§7No death point saved yet. Stay safe!" };
-      return { status: CustomCommandStatus.Success, message: describe(player, point) };
+      return { status: CustomCommandStatus.Success, message: infoText(player) };
     }
   );
 
@@ -382,27 +488,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (origin) => {
       const player = playerOf(origin);
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      if (get("backEnabled") !== true) {
-        return {
-          status: CustomCommandStatus.Failure,
-          message: "Teleporting back is disabled on this realm. An operator can enable it in /realm:config (Death Point). /realm:death still shows the way.",
-        };
-      }
-      const point = lastDeath(player);
-      if (!point) return { status: CustomCommandStatus.Failure, message: "No death point saved yet." };
-      if (point.used) return { status: CustomCommandStatus.Failure, message: "You already went back to this death point. /realm:death_back works once per death." };
-      if (busy.has(player.id)) return { status: CustomCommandStatus.Failure, message: "Still looking for a safe spot near your death point..." };
-      busy.add(player.id);
-      system.run(() => {
-        try {
-          startBack(player, point);
-        } catch (e) {
-          busy.delete(player.id);
-          console.warn(`[death] ${e}`);
-          if (player.isValid) player.sendMessage("§cSomething went wrong, so you weren't teleported.");
-        }
-      });
-      return { status: CustomCommandStatus.Success, message: `§7Looking for a safe place near ${coords(point)} in ${dimensionName(point.d)}...` };
+      const { ok, message } = goBack(player);
+      return { status: ok ? CustomCommandStatus.Success : CustomCommandStatus.Failure, message };
     }
   );
 });

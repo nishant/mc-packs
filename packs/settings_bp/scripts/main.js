@@ -231,41 +231,68 @@ function valueOf(o, raw) {
 /**
  * Pairs a modal form's answers with its inputs. Labels and headers may or may not take a place in
  * formValues, so both layouts are accepted.
- * @param {import("@minecraft/server-ui").ModalFormResponse} res @param {(Slot | null)[]} slots null = a label or header
- * @returns {{ slot: Slot, value: unknown }[] | undefined}
+ * @param {import("@minecraft/server-ui").ModalFormResponse} res
+ * @param {(Slot | "nav" | null)[]} slots null = a label or header; "nav" = the All settings page list
+ * @returns {{ answers: { slot: Slot, value: unknown }[], nav?: unknown } | undefined}
  */
 function answersOf(res, slots) {
   const values = res.formValues ?? [];
-  const inputs = /** @type {Slot[]} */ (slots.filter(Boolean));
-  if (values.length === slots.length) {
-    return slots.flatMap((slot, i) => (slot ? [{ slot, value: valueOf(slot.option, values[i]) }] : []));
-  }
-  if (values.length === inputs.length) return inputs.map((slot, i) => ({ slot, value: valueOf(slot.option, values[i]) }));
-  return undefined;
+  const inputs = /** @type {[Slot | "nav", number][]} */ (slots.map((s, i) => [s, i]).filter(([s]) => s !== null));
+  /** @type {unknown[]} */
+  let raw;
+  if (values.length === slots.length) raw = inputs.map(([, i]) => values[i]);
+  else if (values.length === inputs.length) raw = inputs.map((_, k) => values[k]);
+  else return undefined;
+  /** @type {{ slot: Slot, value: unknown }[]} */
+  const answers = [];
+  /** @type {unknown} */
+  let nav;
+  inputs.forEach(([slot], k) => {
+    if (slot === "nav") nav = raw[k];
+    else answers.push({ slot, value: valueOf(slot.option, raw[k]) });
+  });
+  return { answers, nav };
 }
 
 /**
- * Saves what changed. The result says how many changes were saved and lists each as old -> new.
- * @param {Player} player @param {{ slot: Slot, value: unknown }[]} answers @param {string} [forPlayer] player id, for preferences
- * @returns {Promise<{ title: string, lines: string[] }>}
+ * @typedef {{ changed: number, saved: number, packs: Set<string>, lines: string[] }} Saved what a save did: one line per change
  */
-async function save(player, answers, forPlayer) {
+
+/**
+ * Saves what changed, and lists each change as old -> new.
+ * @param {{ slot: Slot, value: unknown }[]} answers @param {string} [forPlayer] player id, for preferences
+ * @param {boolean} [named] always name the pack in each line (the All settings pages)
+ * @returns {Promise<Saved>}
+ */
+async function save(answers, forPlayer, named = false) {
   const changed = answers.filter(({ slot, value }) => value !== slot.option.value);
-  if (!changed.length) return { title: "No changes", lines: ["§7Nothing was different, so nothing was saved."] };
-  const acks = await send(changed.map(({ slot, value }) => ({ pack: slot.pack.pack, key: slot.option.key, value, player: forPlayer })));
   const packs = new Set(changed.map(({ slot }) => slot.pack.title));
+  if (!changed.length) return { changed: 0, saved: 0, packs, lines: [] };
+  const acks = await send(changed.map(({ slot, value }) => ({ pack: slot.pack.pack, key: slot.option.key, value, player: forPlayer })));
   let saved = 0;
   const lines = changed.map(({ slot }, i) => {
     const ack = acks.get(i), o = slot.option;
-    const name = packs.size > 1 ? `${slot.pack.title} > ${o.label}` : o.label;
+    const name = named || packs.size > 1 ? `${slot.pack.title} > ${o.label}` : o.label;
     if (!ack?.ok) return `§c- ${name}:§r not saved, ${ack ? `${ack.error ?? "refused"}` : "the pack didn't answer. Try again"}`;
     saved++;
     return `§a- ${name}:§r ${fmt(o, o.value)} -> §e${fmt(o, ack.value)}`;
   });
-  const failed = changed.length - saved;
+  return { changed: changed.length, saved, packs, lines };
+}
+
+/**
+ * The summary of one or more saves: how many changes were saved, then each one.
+ * @param {Saved[]} results @returns {{ title: string, lines: string[] }}
+ */
+function summary(results) {
+  const changed = results.reduce((n, r) => n + r.changed, 0);
+  if (!changed) return { title: "No changes", lines: ["§7Nothing was different, so nothing was saved."] };
+  const saved = results.reduce((n, r) => n + r.saved, 0);
+  const packs = new Set(results.flatMap((r) => [...r.packs]));
+  const failed = changed - saved;
   const where = packs.size === 1 ? ` in ${[...packs][0]}` : "";
   const title = `${saved} change${saved === 1 ? "" : "s"} saved${failed ? `, ${failed} not saved` : ""}`;
-  return { title, lines: [`§l${title}${where}§r`, ...lines] };
+  return { title, lines: [`§l${title}${where}§r`, ...results.flatMap((r) => r.lines)] };
 }
 
 /**
@@ -301,7 +328,10 @@ async function configMenu(player) {
     }
     const form = new ActionFormData()
       .title("§lRealm Settings")
-      .body("Pick a pack to change its settings for everyone. Changes apply right away.\n§7Hold or hover over §f!§7 for what a setting does. Players set their own preferences with /realm:prefs.");
+      .body("Pick All settings for every pack's settings on one form, or a single pack. They apply to everyone, right away.\n§7Hold or hover over §f!§7 for what a setting does. Players set their own preferences with /realm:prefs.");
+    const pages = paginate(packs).length;
+    const total = packs.reduce((n, p) => n + worldOptions(p).filter((o) => !o.restart).length, 0);
+    form.button(`All settings\n§8${total} settings, ${pages === 1 ? "one page" : `${pages} pages`}`);
     for (const p of packs) {
       const n = worldOptions(p).filter((o) => !o.restart).length;
       form.button(`${p.title}\n§8${n} setting${n === 1 ? "" : "s"}`);
@@ -310,8 +340,10 @@ async function configMenu(player) {
 
     const res = await show(player, form);
     if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-    if (res.selection === packs.length) await resetMenu(player, packs);
-    else if (!(await editPack(player, packs[res.selection]))) return;
+    if (res.selection === 0) {
+      if (!(await allSettings(player))) return;
+    } else if (res.selection === packs.length + 1) await resetMenu(player, packs);
+    else if (!(await editPack(player, packs[res.selection - 1]))) return;
   }
 }
 
@@ -320,6 +352,24 @@ async function editPack(player, pack) {
   const form = new ModalFormData().title(pack.title).submitButton("Save");
   /** @type {(Slot | null)[]} */
   const slots = [];
+  addWorldOptions(form, slots, pack);
+  const res = await show(player, form);
+  if (!res || !player.isValid || !isOp(player)) return false;
+  if (res.canceled) return true;
+  const read = answersOf(res, slots);
+  if (!read) {
+    player.sendMessage("§cCouldn't read the form, so nothing was saved.");
+    return true;
+  }
+  return report(player, summary([await save(read.answers)]), "Back to Realm Settings");
+}
+
+/**
+ * A pack's world options on a form: a control for each, or a line of text for one read only when the world starts.
+ * The same for a pack's own page and the All settings pages, so both look and save the same.
+ * @param {ModalFormData} form @param {(Slot | "nav" | null)[]} slots @param {Pack} pack
+ */
+function addWorldOptions(form, slots, pack) {
   for (const option of worldOptions(pack)) {
     if (option.restart) {
       form.label(`§7${option.label}: §f${fmt(option, option.value)}§7 (change in config.js, then restart the world)`);
@@ -329,15 +379,80 @@ async function editPack(player, pack) {
       slots.push({ pack, option });
     }
   }
-  const res = await show(player, form);
-  if (!res || !player.isValid || !isOp(player)) return false;
-  if (res.canceled) return true;
-  const answers = answersOf(res, slots);
-  if (!answers) {
-    player.sendMessage("§cCouldn't read the form, so nothing was saved.");
-    return true;
+}
+
+/**
+ * Splits the packs into All settings pages of at most CONFIG.allPageSize lines each (a heading per pack, plus a
+ * line per setting). A pack is never split: one bigger than a page gets a page of its own.
+ * @param {Pack[]} packs @returns {Pack[][]}
+ */
+function paginate(packs) {
+  const size = CONFIG.allPageSize > 0 ? CONFIG.allPageSize : Infinity;
+  /** @type {Pack[][]} */
+  const pages = [];
+  let lines = 0;
+  for (const p of packs) {
+    const n = 1 + worldOptions(p).length;
+    const last = pages.at(-1);
+    if (last && lines + n <= size) {
+      last.push(p);
+      lines += n;
+    } else {
+      pages.push([p]);
+      lines = n;
+    }
   }
-  return report(player, await save(player, answers), "Back to Realm Settings");
+  return pages;
+}
+
+/**
+ * All settings: every pack's settings with a heading per pack, on one form or a few pages. Each page saves when it
+ * is submitted, through realm:cfg_set exactly like a pack's own page, and every page asks the packs for their values
+ * again before it opens, so this and the pack pages always show the same saved values.
+ * @param {Player} player @returns {Promise<boolean>} true = back to the list of packs
+ */
+async function allSettings(player) {
+  /** @type {Saved[]} */
+  const results = [];
+  let page = 0;
+  while (player.isValid && isOp(player)) {
+    const pages = paginate((await collect(player)).filter((p) => worldOptions(p).length));
+    if (!player.isValid || !pages.length) return false;
+    page = Math.min(page, pages.length - 1);
+    const many = pages.length > 1;
+    const form = new ModalFormData()
+      .title(many ? `§lAll settings (page ${page + 1} of ${pages.length})` : "§lAll settings")
+      .submitButton(many ? "Save and go" : "Save");
+    /** @type {(Slot | "nav" | null)[]} */
+    const slots = [];
+    if (many) {
+      const targets = pages.map((pg, i) => `Page ${i + 1}: ${pg[0].title}${pg.length > 1 ? ` to ${pg[pg.length - 1].title}` : ""}`);
+      form.dropdown("After saving, go to", [...targets, "Done (show what was saved)"], {
+        defaultValueIndex: page + 1,
+        tooltip: "Saving keeps this page's changes, whichever page you go to next. Closing the form saves nothing on this page.",
+      });
+      slots.push("nav");
+    }
+    for (const pack of pages[page]) {
+      form.header(pack.title);
+      slots.push(null);
+      addWorldOptions(form, slots, pack);
+    }
+    const res = await show(player, form);
+    if (!res || !player.isValid || !isOp(player)) return false;
+    if (res.canceled) break;
+    const read = answersOf(res, slots);
+    if (!read) {
+      player.sendMessage("§cCouldn't read the form, so nothing on that page was saved.");
+      break;
+    }
+    results.push(await save(read.answers, undefined, true));
+    const next = typeof read.nav === "number" ? read.nav : pages.length;
+    if (next >= pages.length) break;
+    page = next;
+  }
+  if (!results.length) return true; // closed before saving anything
+  return report(player, summary(results), "Back to Realm Settings");
 }
 
 /** @param {Player} player @param {Pack[]} packs */
@@ -407,12 +522,12 @@ async function prefsForm(player) {
   }
   const res = await show(player, form);
   if (!res || res.canceled || !player.isValid) return false;
-  const answers = answersOf(res, slots);
-  if (!answers) {
+  const read = answersOf(res, slots);
+  if (!read) {
     player.sendMessage("§cCouldn't read the form, so nothing was saved.");
     return false;
   }
-  return report(player, await save(player, answers, player.id), "Back to my preferences");
+  return report(player, summary([await save(read.answers, player.id)]), "Back to my preferences");
 }
 
 // ---------------------------------------------------------------------------

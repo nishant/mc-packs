@@ -14,6 +14,7 @@ const OPTIONS = [
   { key: "radius", type: "int", scope: "world", label: "New claim radius (blocks)", help: "16 = 33 x 33 blocks. Existing claims keep their size", min: 4, max: 64, step: 4 },
   { key: "maxClaims", type: "int", scope: "world", label: "Claims per player", min: 1, max: 10, step: 1 },
   { key: "protectExplosions", type: "bool", scope: "world", label: "Explosions break nothing in claims" },
+  { key: "protectWorldEvents", type: "bool", scope: "world", label: "Protect claims from world events", help: "Meteors, tornadoes, storm lightning and other world events break no blocks in claims" },
   { key: "operatorsBypass", type: "bool", scope: "world", label: "Operators can build in any claim" },
 ];
 

@@ -11,6 +11,7 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "mode", type: "enum", scope: "world", choices: ["everywhere", "zones"], names: ["Everywhere", "Only in protected zones"], label: "Creeper blast protection", help: "Where creeper blasts break no blocks. Zones come from /realm:guard_add" },
+  { key: "safeZones", type: "bool", scope: "world", label: "Safe zones are protected too", help: "Only protected zones mode: safe zones (/realm:zones), and towns and claims protected from world events, count as zones" },
   { key: "defaultRadius", type: "int", scope: "world", label: "Default zone radius (blocks)", min: 8, max: 256, step: 8 },
 ];
 

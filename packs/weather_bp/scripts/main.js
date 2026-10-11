@@ -1,5 +1,5 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, WeatherType, system, world } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange } from "./settings.js";
 
@@ -242,7 +242,7 @@ world.afterEvents.worldLoad.subscribe(() => {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
   const w = /** @type {Kind} */ (String(newWeather));
   if (!isKind(w)) return;
   tracked = w;
@@ -512,6 +512,21 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:weather",
+      description: "Weather Almanac: the forecast (operators get a menu with the forecast and setting the weather)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => (isOp(player) ? mainMenu(player) : showForecast(player)).catch((e) => console.warn(`[weather] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:weather_forecast",
       description: "Weather Almanac: the forecast for the next few hours, in real time",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -541,24 +556,80 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
         return { status: CustomCommandStatus.Failure, message: "Minutes must be 1 to 1440." };
       }
-      const ms = minutes * MIN;
       const wasActive = active;
       system.run(() => {
         try {
-          if (active) startSpell(kind, ms);
-          else world.getDimension(OVERWORLD).setWeather(/** @type {WeatherType} */ (kind), minutes * 1200);
+          setWeatherNow(kind, minutes);
         } catch (e) {
           console.warn(`[weather] ${e}`);
         }
       });
-      const what = `${NAME[kind]} for ${minutes} minute${minutes === 1 ? "" : "s"}`;
-      return {
-        status: CustomCommandStatus.Success,
-        message: wasActive ? `${what} starting now; the plan carries on after it.` : `${what} (the Weather Almanac is disabled, so the game's weather cycle takes over after).`,
-      };
+      return { status: CustomCommandStatus.Success, message: setMessage(kind, minutes, wasActive) };
     }
   );
 });
+
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** Starts `kind` now for `minutes` real minutes; the plan carries on after it. @param {Kind} kind @param {number} minutes */
+function setWeatherNow(kind, minutes) {
+  if (active) startSpell(kind, minutes * MIN);
+  else world.getDimension(OVERWORLD).setWeather(/** @type {WeatherType} */ (kind), minutes * 1200);
+}
+
+/** @param {Kind} kind @param {number} minutes @param {boolean} wasActive */
+function setMessage(kind, minutes, wasActive) {
+  const what = `${NAME[kind]} for ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  return wasActive ? `${what} starting now; the plan carries on after it.` : `${what} (the Weather Almanac is disabled, so the game's weather cycle takes over after).`;
+}
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @template {ActionFormData | ModalFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
+ */
+async function showForm(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = /** @type {any} */ (await form.show(player));
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** Operators: what weather, for how long. @param {Player} player */
+async function setForm(player) {
+  const form = new ModalFormData()
+    .title("§lSet the weather")
+    .dropdown("Weather", KINDS.map((k) => NAME[k]), { defaultValueIndex: 1 })
+    .slider("For how many real minutes", 5, 240, { valueStep: 5, defaultValue: 30 })
+    .submitButton("Start it now");
+  const res = await showForm(player, form);
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const v = res.formValues.filter((x) => x !== undefined);
+  const kind = KINDS[Number(v[0])] ?? "Rain";
+  const minutes = Math.max(1, Math.min(1440, Math.round(Number(v[1])) || 30));
+  const wasActive = active;
+  setWeatherNow(kind, minutes);
+  player.sendMessage(`§7${setMessage(kind, minutes, wasActive)}`);
+}
+
+/** /realm:weather for operators. @param {Player} player */
+async function mainMenu(player) {
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [
+    { text: "Forecast\n§8The next few hours", run: () => showForecast(player) },
+    { text: "Set the weather (operator)\n§8Clear, rain or thunder, for a while", run: () => setForm(player) },
+  ];
+  const form = new ActionFormData().title("§lWeather Almanac").body(active ? summary() : "The Weather Almanac is disabled: the game runs the weather.");
+  for (const a of actions) form.button(a.text);
+  const res = await showForm(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await actions[res.selection]?.run();
+}
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

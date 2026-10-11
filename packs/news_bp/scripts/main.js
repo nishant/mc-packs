@@ -1,11 +1,13 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG, DEFAULTS } from "./config.js";
+import { RELEASE } from "./release.js";
 import { get, set } from "./settings.js";
 
 const PROP_NEWS = "news:news"; // world: JSON { title, body }
 const PROP_REVISION = "news:revision"; // world: bumped when news should be re-shown
 const PROP_TIPS = "news:tips"; // world: JSON string[]
+const PROP_RELEASE = "news:release"; // world: id of the generated release news (release.js) last posted
 // world "news:tipSettings": JSON { enabled, intervalMinutes }, read and written through settings.js (shared with /realm:config)
 /** Minecraft's text boxes keep at most this many characters: the most a tip typed in the editor can have. */
 const TIP_MAX = 100;
@@ -124,6 +126,24 @@ async function showNews(player, header = "") {
 }
 
 // ---------------------------------------------------------------------------
+// Release news: release.js is generated from docs/NEWS.md for every bundle
+// ---------------------------------------------------------------------------
+
+/** Posts the bundle's release news once: it becomes the news and pops up for everyone. */
+function applyRelease() {
+  if (!CONFIG.releaseNews || !RELEASE.id || !RELEASE.body.trim()) return;
+  try {
+    if (world.getDynamicProperty(PROP_RELEASE) === RELEASE.id) return;
+    writeJson(PROP_NEWS, { title: RELEASE.title ? `§l§b${RELEASE.title}` : DEFAULTS.news.title, body: RELEASE.body });
+    world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
+    world.setDynamicProperty(PROP_RELEASE, RELEASE.id);
+  } catch (e) {
+    console.warn(`[news] release: ${e}`);
+  }
+}
+world.afterEvents.worldLoad.subscribe(() => applyRelease());
+
+// ---------------------------------------------------------------------------
 // Join: news popup + "you were away"
 // ---------------------------------------------------------------------------
 
@@ -144,6 +164,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 /** @param {Player} player @param {number | undefined} lastSeen */
 async function onJoin(player, lastSeen) {
   if (!player.isValid) return; // left during the join delay
+  applyRelease();
   const awayMs = lastSeen ? Date.now() - lastSeen : 0;
   const awayHours = get("awayNoticeHours");
   const away =
@@ -393,18 +414,79 @@ function draftCommand(append) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// /realm:news: the pack's menu
+// ---------------------------------------------------------------------------
+
+const isOp = (/** @type {Player} */ player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** /realm:news_read: show the news. Read here, it won't pop up again on the next join. @param {Player} player */
+async function readNews(player) {
+  if ((await showNews(player)) && player.isValid && getNews().body.trim()) player.setDynamicProperty(PROP_SEEN, getRevision());
+}
+
+/** @param {Player} player @param {string} title @param {string} body */
+async function infoPage(player, title, body) {
+  const res = await show(player, new ActionFormData().title(title).body(body).button("Back"));
+  if (res && !res.canceled && player.isValid) await packMenu(player);
+}
+
+/**
+ * /realm:news: every action this player may use. Players who aren't operators can only read the
+ * news, so they go straight to it, as before.
+ * @param {Player} player
+ */
+async function packMenu(player) {
+  /** @type {{ text: string, run: () => Promise<void> }[]} */
+  const entries = [{ text: "Read the news", run: () => readNews(player) }];
+  if (isOp(player)) {
+    entries.push({ text: "Edit the news\n§8Operators", run: () => editNews(player) });
+    entries.push({
+      text: "Paste a long news body\n§8Operators",
+      run: () =>
+        infoPage(
+          player,
+          "Paste a long news body",
+          `Chat takes longer text than the editor's ${BODY_PART}-character boxes. Copy the text, then in chat:\n\n§e/realm:news_body "first part"§r starts a draft and opens the editor.\n§e/realm:news_add "next part"§r adds more to the draft.\n§e/realm:news_edit§r checks and saves it.\n\nWrite | for a new line.`
+        ),
+    });
+    entries.push({ text: `Chat tips\n§8Operators, ${getTips().length} tips`, run: () => tipsMenu(player) });
+    entries.push({
+      text: "Settings\n§8Operators",
+      run: () =>
+        infoPage(
+          player,
+          "Settings",
+          "Operators change this pack's settings in §e/realm:config§r: pick §eRealm News & Tips§r there. Chat tips on or off, minutes between tips and the welcome back notice are all there."
+        ),
+    });
+  }
+  if (entries.length === 1) return entries[0].run();
+  const form = new ActionFormData().title("§lRealm News & Tips").body(getNews().body.trim() ? `Latest: §e${getNews().title}` : "No news right now.");
+  for (const e of entries) form.button(e.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await entries[res.selection]?.run();
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:news",
+      description: "Realm News: read the news (operators: a menu to edit the news and chat tips too)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    playerCommand(packMenu)
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:news_read",
       description: "Show the latest Realm news",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    playerCommand(async (player) => {
-      // Read it here, and it won't pop up again on the next join.
-      if ((await showNews(player)) && player.isValid && getNews().body.trim()) player.setDynamicProperty(PROP_SEEN, getRevision());
-    })
+    playerCommand(readNews)
   );
   customCommandRegistry.registerCommand(
     {

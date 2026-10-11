@@ -2,6 +2,9 @@ export const CONFIG = {
   /** "everywhere": creeper blasts never break blocks. "zones": only inside the zones operators add with /realm:guard_add. */
   mode: "everywhere",
 
+  /** In "zones" mode, safe zones count too: Safe Zones (/realm:zones), and towns and claims protected from world events. */
+  safeZones: true,
+
   /** Exploding entity types whose blasts break no blocks. Add "minecraft:fireball" (ghasts) or "minecraft:wither_skull" if wanted. */
   sources: ["minecraft:creeper"],
 
