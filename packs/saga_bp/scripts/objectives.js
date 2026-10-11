@@ -1,0 +1,1918 @@
+// Objectives: what counts for each objective type, the per-second and fast loops, and the scenes
+// (story characters, guards, escorts, wisps, defenses, visions, riddles).
+import { EquipmentSlot, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
+import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
+import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, spawnActor } from "./actors.js";
+import {
+  applyChoice,
+  chapterDone,
+  entries,
+  giveRep,
+  invalidate,
+  markDirty,
+  matches,
+  objApplies,
+  objDone,
+  objKey,
+  pagesFor,
+  progressOf,
+  requires,
+  sagaOf,
+  target,
+} from "./data.js";
+import { featureSpot, locate, placeSpot, placesOf } from "./places.js";
+import { get } from "./settings.js";
+import { STORIES } from "./stories.js";
+import { FAVORS } from "./stories/index.js";
+import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, plain, send, show, wait } from "./util.js";
+
+/** @typedef {import("./data.js").Entry} Entry */
+/** @typedef {import("./data.js").Saga} Saga */
+/** @typedef {import("./types.js").Objective} Objective */
+/** @typedef {import("./types.js").Scene} VisionScene */
+/** @typedef {import("./places.js").Loc} Loc */
+/** @typedef {import("@minecraft/server").Entity} Entity */
+/** @typedef {import("@minecraft/server").Dimension} Dimension */
+/** @typedef {import("@minecraft/server").Vector3} Vector3 */
+
+const LONG = 20000000;
+export const CHAMPION_TAG = "saga:champion"; // champions this pack spawned itself (no Champions pack)
+const PLACED_MEMORY = 2000;
+const FAST_TICKS = 5;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Progress counts for this player now. @param {Player} player */
+export function counting(player) {
+  if (!player.isValid || get("enabled") !== true) return false;
+  try {
+    if (get("skipCreative") === true && player.getGameMode() === GameMode.Creative) return false;
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/** Default radius per objective type. @param {Objective} obj */
+export function radiusOf(obj) {
+  if (obj.radius !== undefined) return obj.radius;
+  switch (obj.type) {
+    case "interact":
+    case "vision":
+      return 8;
+    case "defeat":
+      return 32;
+    case "survive":
+      return 48;
+    case "inspect":
+      return 24;
+    case "answer":
+      return 6;
+    case "meet":
+      return 4;
+    default:
+      return 16;
+  }
+}
+
+export const isNight = () => {
+  const t = world.getTimeOfDay();
+  return t >= 13000 && t < 23000;
+};
+
+/** A location with a height: the saved y, or the ground there (undefined when not loaded). @param {Loc} loc */
+function withY(loc) {
+  if (loc.y !== undefined) return { x: loc.x, y: loc.y, z: loc.z };
+  try {
+    const y = groundAt(world.getDimension(loc.dim), loc.x, loc.z);
+    return y === undefined ? undefined : { x: loc.x, y, z: loc.z };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Is a point inside an objective's area? No location = anywhere. @param {Objective} obj @param {Vector3} at @param {string} dim */
+function inArea(obj, at, dim) {
+  const loc = locate(obj);
+  if (loc === undefined) return true;
+  if (typeof loc === "string" || loc.pending) return false;
+  return loc.dim === dim && across(at, loc) <= radiusOf(obj);
+}
+
+/** Is the player standing in an objective's area? @param {Player} player @param {Objective} obj */
+const playerIn = (player, obj) => inArea(obj, player.location, player.dimension.id);
+
+// ---------------------------------------------------------------------------
+// Progress
+// ---------------------------------------------------------------------------
+
+/** Tick until which another note owns a player's actionbar: the tracker waits. @type {Map<string, number>} */
+export const holdUntil = new Map();
+
+/** @param {Player} player @param {string} text @param {number} ticks */
+export function note(player, text, ticks = 40) {
+  send("realm:actionbar", { player: player.id, ticks, from: PACK });
+  holdUntil.set(player.id, system.currentTick + ticks);
+  player.onScreenDisplay.setActionBar(text);
+}
+
+/** Who hears the report for an entry. @param {Entry} e */
+export const reportTo = (e) => e.chapter.end ?? e.chapter.npc ?? e.story.giver;
+
+/**
+ * Sets or adds progress on one objective; tells the player when it's done, and when the chapter is.
+ * @param {Player} player @param {Entry} e @param {number} i @param {number} n @param {boolean} [absolute] set to n instead of adding
+ */
+export function bump(player, e, i, n, absolute = false) {
+  const obj = e.chapter.objectives[i];
+  if (!obj) return false;
+  const need = target(obj);
+  e.st.o ??= [];
+  const before = e.st.o[i] ?? 0;
+  if (before >= need) return false;
+  const after = Math.max(0, Math.min(need, absolute ? Math.floor(n) : before + n));
+  if (after === before) return false;
+  e.st.o[i] = after;
+  const x = (e.st.x ??= {});
+  if (obj.within && before === 0 && after > 0 && after < need) x[`t${i}`] = Date.now();
+  if (after === 0 || after >= need) delete x[`t${i}`];
+  markDirty(player);
+  if (after >= need) {
+    player.sendMessage(`§a[Story] ${obj.label}: done.`);
+    player.playSound("random.orb", { pitch: 1.2, volume: 0.6 });
+    const saga = sagaOf(player);
+    if (chapterDone(e, saga)) {
+      const to = npcName(reportTo(e));
+      if (e.fav) player.sendMessage(`§6[Story] Favor done: go back to ${to} for your reward.`);
+      else player.sendMessage(`§6[Story] ${e.story.title}: "${e.chapter.title}" is done. Go back to ${to} to hear what happens.`);
+      player.playSound("random.levelup", { pitch: 1.3, volume: 0.6 });
+    } else {
+      const next = e.chapter.objectives.findIndex((_, k) => !objDone(e, k, saga));
+      if (next >= 0) player.sendMessage(`§e[Story] Next: ${e.chapter.objectives[next].label}`);
+    }
+  } else if (need >= 4 && obj.type !== "collect" && obj.type !== "deliver") {
+    // A note above the hotbar at each quarter.
+    const step = need / 4;
+    if (Math.floor(before / step) !== Math.floor(after / step)) note(player, `§b${e.story.short}: §f${obj.label} ${after}/${need}${obj.type === "survive" || obj.type === "vigil" ? " s" : obj.type === "ride" ? " blocks" : ""}`);
+  }
+  return true;
+}
+
+/** Unfinished objectives of the player, by type (rebuilt when their chapters change). @type {WeakMap<Entry[], Map<string, { e: Entry, i: number, obj: Objective }[]>>} */
+const indexes = new WeakMap();
+
+/** @param {Player} player */
+function byType(player) {
+  const list = entries(player);
+  let idx = indexes.get(list);
+  if (!idx) {
+    idx = new Map();
+    for (const e of list)
+      e.chapter.objectives.forEach((obj, i) => {
+        const arr = idx?.get(obj.type) ?? [];
+        arr.push({ e, i, obj });
+        idx?.set(obj.type, arr);
+      });
+    indexes.set(list, idx);
+  }
+  return idx;
+}
+
+/** The player's unfinished objectives of a type that exist for them now. @param {Player} player @param {Objective["type"]} type */
+export function open(player, type) {
+  const items = byType(player).get(type);
+  if (!items) return [];
+  const saga = sagaOf(player);
+  return items.filter(({ e, i }) => !objDone(e, i, saga));
+}
+
+/**
+ * Adds progress to every unfinished objective of a type that `amountFor` gives an amount for.
+ * Returns the keys of the objectives that matched, so party mates can share exactly those.
+ * @param {Player} player @param {Objective["type"]} type
+ * @param {(obj: Objective, e: Entry, i: number) => number} amountFor @param {Set<string>} [only]
+ */
+export function advance(player, type, amountFor, only) {
+  /** @type {Set<string>} */
+  const keys = new Set();
+  if (!counting(player)) return keys;
+  for (const { e, i, obj } of open(player, type)) {
+    const key = objKey(e, i);
+    if (only && !only.has(key)) continue;
+    const n = amountFor(obj, e, i);
+    if (n <= 0) continue;
+    keys.add(key);
+    bump(player, e, i, n);
+  }
+  return keys;
+}
+
+/** Party mates (Parties pack) close enough to share progress. @param {Player} player */
+function mates(player) {
+  if (get("partyShare") !== true) return [];
+  const tag = player.getTags().find((t) => t.startsWith("realm_party:"));
+  if (!tag) return [];
+  const range = Number(get("partyRange")) || 64;
+  const dim = player.dimension.id;
+  const at = player.location;
+  return world.getAllPlayers().filter((p) => p.id !== player.id && p.dimension.id === dim && p.hasTag(tag) && dist3(p.location, at) <= range);
+}
+
+/**
+ * Gives the same progress to party mates on the same objectives (each mate once: `credited`).
+ * @param {Player} player @param {Set<string>} keys @param {Objective["type"]} type @param {(obj: Objective, e: Entry, i: number) => number} amountFor @param {Set<string>} credited
+ */
+function share(player, keys, type, amountFor, credited) {
+  if (!keys.size) return;
+  for (const mate of mates(player)) {
+    if (credited.has(mate.id)) continue;
+    credited.add(mate.id);
+    advance(mate, type, amountFor, keys);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Inventory
+// ---------------------------------------------------------------------------
+
+/** Does a stack match an item and (optionally) a custom name? @param {ItemStack | undefined} stack @param {string} item @param {string} [name] */
+function same(stack, item, name) {
+  if (!stack || stack.typeId !== item) return false;
+  if (name === undefined) return true;
+  return plain(stack.nameTag ?? "").trim().toLowerCase() === plain(name).trim().toLowerCase();
+}
+
+/** @param {Player} player @param {string} item @param {string} [name] */
+export function countItem(player, item, name) {
+  let n = 0;
+  try {
+    const inv = player.getComponent("minecraft:inventory")?.container;
+    if (!inv) return 0;
+    for (let i = 0; i < inv.size; i++) {
+      const stack = inv.getItem(i);
+      if (same(stack, item, name)) n += /** @type {ItemStack} */ (stack).amount;
+    }
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+  return n;
+}
+
+/**
+ * Takes up to `max` of an item. Without `name`, renamed items are never taken; with it, only items
+ * with that name are. Returns how many were taken.
+ * @param {Player} player @param {string} item @param {number} max @param {string} [name]
+ */
+function takeItem(player, item, max, name) {
+  let taken = 0;
+  try {
+    const inv = player.getComponent("minecraft:inventory")?.container;
+    if (!inv) return 0;
+    for (let i = 0; i < inv.size && taken < max; i++) {
+      const stack = inv.getItem(i);
+      if (!stack || !same(stack, item, name) || (name === undefined && stack.nameTag)) continue;
+      const k = Math.min(stack.amount, max - taken);
+      if (k >= stack.amount) inv.setItem(i, undefined);
+      else {
+        stack.amount -= k;
+        inv.setItem(i, stack);
+      }
+      taken += k;
+    }
+  } catch (e) {
+    console.warn(`[saga] take ${item}: ${e}`);
+  }
+  return taken;
+}
+
+/**
+ * Gives an item; what doesn't fit drops at the player's feet. Returns true if some dropped.
+ * @param {Player} player @param {string} item @param {number} amount @param {string} [name] @param {string[]} [lore]
+ */
+export function giveItem(player, item, amount, name, lore) {
+  let dropped = false;
+  let left = Math.max(1, Math.floor(amount));
+  const inv = player.getComponent("minecraft:inventory")?.container;
+  const max = new ItemStack(item, 1).maxAmount;
+  while (left > 0) {
+    const stack = new ItemStack(item, Math.min(max, left));
+    if (name) stack.nameTag = name;
+    if (lore?.length) {
+      try {
+        stack.setLore(lore.slice(0, 20).map((l) => String(l).slice(0, 50)));
+      } catch {
+        // lore isn't allowed on this item
+      }
+    }
+    left -= stack.amount;
+    const rest = inv ? inv.addItem(stack) : stack;
+    if (rest) {
+      player.dimension.spawnItem(rest, player.location);
+      dropped = true;
+    }
+  }
+  return dropped;
+}
+
+// ---------------------------------------------------------------------------
+// Weather (overworld): the stable API can't read it, so remember the last change
+// ---------------------------------------------------------------------------
+
+const PROP_WEATHER = "saga:weather";
+export let weather = "Clear";
+world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
+  if (dimension !== OVERWORLD) return;
+  weather = newWeather;
+  try {
+    world.setDynamicProperty(PROP_WEATHER, newWeather);
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+export function loadWeather() {
+  try {
+    const saved = world.getDynamicProperty(PROP_WEATHER);
+    if (saved === "Rain" || saved === "Thunder") weather = saved;
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+}
+
+/** Does the weather suit a survive/vigil objective? @param {Objective} obj @param {string} dim */
+export function weatherOk(obj, dim) {
+  const want = obj.weather ?? (obj.type === "survive" ? "thunder" : undefined);
+  if (!want || want === "any") return true;
+  if (dim !== OVERWORLD) return false;
+  if (want === "thunder") return weather === "Thunder";
+  return weather === "Rain" || weather === "Thunder";
+}
+
+/** Nothing over the player's head (the sky can see them). @param {Player} player */
+export function outdoors(player) {
+  try {
+    const at = player.location;
+    const top = player.dimension.getTopmostBlock({ x: Math.floor(at.x), z: Math.floor(at.z) });
+    // Tall grass or a flower at your feet is fine; a block 2 over your feet is a roof.
+    return !top || top.location.y <= Math.floor(at.y) + 1;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Champions (Champions pack, or our own fallback)
+// ---------------------------------------------------------------------------
+
+/** Champion tag -> time (ms) it may be asked for again. @type {Map<string, number>} */
+const championNext = new Map();
+/** Champion tags the stories use. */
+export const championTags = new Set(
+  [...STORIES.flatMap((s) => s.chapters.flatMap((c) => c.objectives.map((o) => o.champion?.tag ?? ""))), ...FAVORS.map((f) => f.objective?.champion?.tag ?? "")].filter(Boolean),
+);
+/** Champion objectives by tag (for adds). @type {Map<string, Objective>} */
+const championObj = new Map();
+for (const s of STORIES) for (const c of s.chapters) for (const o of c.objectives) if (o.champion) championObj.set(o.champion.tag, o);
+
+/** Is a champion with this tag loaded anywhere in the dimension? @param {string} tag @param {Dimension} dim */
+function championAlive(tag, dim) {
+  try {
+    return dim.getEntities({ tags: [tag] }).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Asks for the story champion when the player comes close to its place. @param {Player} player @param {Objective} obj */
+function championNear(player, obj) {
+  const champ = obj.champion;
+  if (!champ) return;
+  const loc = locate(obj);
+  if (!loc || typeof loc === "string" || loc.pending || player.dimension.id !== loc.dim) return;
+  if (across(player.location, loc) > radiusOf(obj)) return;
+  const now = Date.now();
+  const dim = player.dimension;
+  watchAdds(champ.tag, dim, player);
+  if ((championNext.get(champ.tag) ?? 0) > now) return;
+  const at = { x: loc.x + 0.5, y: loc.y ?? player.location.y, z: loc.z + 0.5 };
+  if (championAlive(champ.tag, dim)) {
+    championNext.set(champ.tag, now + 10000);
+    return;
+  }
+  championNext.set(champ.tag, now + Number(get("championRetrySeconds")) * 1000);
+  send("realm:champion_spawn", { dim: loc.dim, x: at.x, y: at.y, z: at.z, mob: champ.mob, trait: champ.trait, name: champ.name, tag: champ.tag, health: champ.health });
+  if (champ.warn) player.sendMessage(`§c[Story] ${champ.warn}`);
+  // No Champions pack? Spawn a tougher named mob ourselves, so the story can still be finished.
+  system.runTimeout(() => {
+    try {
+      if (get("championFallback") !== true || championAlive(champ.tag, dim)) return;
+      const mob = dim.spawnEntity(/** @type {any} */ (champ.mob), at);
+      mob.nameTag = `§c${champ.name}`;
+      mob.addTag(CHAMPION_TAG);
+      mob.addTag(champ.tag);
+      const boost = champ.health ? Math.max(0, Math.min(30, Math.ceil(champ.health / 4) - 1)) : 4;
+      mob.addEffect("health_boost", LONG, { amplifier: boost, showParticles: false });
+      mob.addEffect("resistance", LONG, { amplifier: 1, showParticles: false });
+      mob.addEffect("strength", LONG, { amplifier: 1, showParticles: false });
+      mob.addEffect("fire_resistance", LONG, { amplifier: 0, showParticles: false });
+      mob.addEffect("instant_health", 1, { amplifier: 20, showParticles: false });
+      mob.addEffect("regeneration", 200, { amplifier: 4, showParticles: false }); // fill up the boosted health
+    } catch (e) {
+      console.warn(`[saga] champion fallback: ${e}`);
+    }
+  }, 60);
+}
+
+/** At half health a champion calls its adds (once). @param {string} tag @param {Dimension} dim @param {Player} player */
+function watchAdds(tag, dim, player) {
+  const obj = championObj.get(tag);
+  const adds = obj?.champion?.adds;
+  if (!adds?.mobs?.length) return;
+  try {
+    for (const champ of dim.getEntities({ tags: [tag] })) {
+      if (champ.hasTag("saga:adds")) continue;
+      const hp = champ.getComponent("minecraft:health");
+      if (!hp || hp.currentValue > hp.effectiveMax / 2) continue;
+      champ.addTag("saga:adds");
+      player.sendMessage(`§c[Story] ${obj?.champion?.name ?? "The champion"} calls for help!`);
+      spawnGroup(player, dim, champ.location, adds, tag, 3, 6);
+    }
+  } catch {
+    // unloaded
+  }
+}
+
+/**
+ * A story champion died: credit the killer, the helpers and their party mates on that objective.
+ * @param {string} tag @param {string[]} ids @param {Vector3 | undefined} at @param {string | undefined} dim
+ */
+export function championSlain(tag, ids, at, dim) {
+  /** @param {Objective} obj */
+  const amountFor = (obj) => (obj.champion?.tag === tag ? 1 : 0);
+  /** @type {Set<string>} */
+  const credited = new Set();
+  /** @type {Player[]} */
+  const players = [];
+  for (const id of ids) {
+    const p = online(id);
+    if (p && !credited.has(p.id)) {
+      credited.add(p.id);
+      players.push(p);
+    }
+  }
+  // Everyone close by working on it counts as a helper, so a shared fight is never lost.
+  if (at && dim) {
+    for (const p of world.getAllPlayers()) {
+      if (credited.has(p.id) || p.dimension.id !== dim || dist3(p.location, at) > 32) continue;
+      credited.add(p.id);
+      players.push(p);
+    }
+  }
+  for (const p of players) share(p, advance(p, "defeat", amountFor), "defeat", amountFor, credited);
+}
+
+/**
+ * Spawns story mobs (an ambush, adds, a wrong answer) around a point: real fights, removed later.
+ * @param {Player} player @param {Dimension} dim @param {Vector3} at @param {{ mobs: string[], count: number }} group @param {string} key @param {number} [min] @param {number} [max]
+ */
+export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
+  /** @type {Entity[]} */
+  const out = [];
+  const n = Math.max(0, Math.min(24, Math.floor(group.count ?? 1)));
+  for (let k = 0; k < n; k++) {
+    const type = group.mobs[k % group.mobs.length];
+    const a = Math.random() * Math.PI * 2;
+    const d = min + Math.random() * (max - min);
+    const x = at.x + Math.cos(a) * d;
+    const z = at.z + Math.sin(a) * d;
+    const y = groundAt(dim, x, z, at.y) ?? at.y;
+    const ent = spawnActor(dim, type, { x, y, z }, { owner: player.id, key, role: "add" });
+    if (ent) out.push(ent);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Events that count
+// ---------------------------------------------------------------------------
+
+world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
+  try {
+    if (deadEntity instanceof Player) {
+      for (const s of scenes.values()) if (s.pid === deadEntity.id && s.kind === "defend" && s.state === "run") defendFail(s, "You fell.");
+      return;
+    }
+    const actor = actors.get(deadEntity.id);
+    if (actor) {
+      actors.delete(deadEntity.id);
+      const s = scenes.get(sk(actor.owner, actor.key));
+      if (s && actor.role === "escort") escortFail(s);
+      else if (s && actor.role === "ward") defendFail(s, `${s.e.chapter.objectives[s.i].ward?.name ?? "The one you were guarding"} fell.`);
+      if (actor.role !== "add") return;
+    }
+    let tags = /** @type {string[]} */ ([]);
+    let at;
+    let dim;
+    try {
+      tags = deadEntity.getTags();
+      at = deadEntity.location;
+      dim = deadEntity.dimension.id;
+    } catch {
+      // gone already
+    }
+    const killer = damageSource.damagingEntity;
+    if (tags.includes(CHAMPION_TAG)) {
+      const tag = tags.find((t) => championTags.has(t));
+      if (tag) championSlain(tag, killer instanceof Player ? [killer.id] : [], at, dim);
+      return;
+    }
+    if (!(killer instanceof Player) || !at || !dim) return;
+    const type = deadEntity.typeId;
+    const night = isNight();
+    const where = at;
+    const d = dim;
+    /** @param {Objective} obj */
+    const amountFor = (obj) => (!obj.champion && (!obj.mobs?.length || obj.mobs.includes(type)) && (!obj.night || night) && inArea(obj, where, d) ? 1 : 0);
+    share(killer, advance(killer, "defeat", amountFor), "defeat", amountFor, new Set([killer.id]));
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+/** Blocks players placed lately, "dim:x,y,z": breaking one again isn't mining. @type {Set<string>} */
+const placed = new Set();
+/** Placed blocks that counted for a place objective: position -> "player|objective key". @type {Map<string, string>} */
+const counted = new Map();
+/** @param {string} dim @param {Vector3} p */
+const spot = (dim, p) => `${dim}:${p.x},${p.y},${p.z}`;
+
+world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
+  try {
+    const key = spot(block.dimension.id, block.location);
+    placed.delete(key);
+    placed.add(key);
+    if (placed.size > PLACED_MEMORY) placed.delete(/** @type {string} */ (placed.values().next().value));
+    const type = block.typeId;
+    const b = block.location;
+    const dim = block.dimension.id;
+    for (const { e, i, obj } of open(player, "place")) {
+      if (!counting(player)) break;
+      if (obj.blocks?.length && !obj.blocks.includes(type)) continue;
+      if (!inArea(obj, b, dim)) continue;
+      if (bump(player, e, i, 1)) {
+        counted.set(key, `${player.id}|${objKey(e, i)}`);
+        if (counted.size > PLACED_MEMORY) counted.delete(/** @type {string} */ (counted.keys().next().value));
+      }
+      break;
+    }
+  } catch {
+    // ignore
+  }
+});
+
+world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermutation }) => {
+  try {
+    const key = spot(block.dimension.id, block.location);
+    const was = counted.get(key);
+    if (was) {
+      counted.delete(key);
+      const [pid, okey] = was.split("|");
+      if (pid === player.id) {
+        const hit = open(player, "place").find(({ e, i }) => objKey(e, i) === okey);
+        if (hit) bump(player, hit.e, hit.i, -1);
+      }
+    }
+    if (placed.delete(key)) return;
+    const id = brokenBlockPermutation.type.id;
+    advance(player, "mine", (obj) => (!obj.blocks?.length || obj.blocks.includes(id) ? 1 : 0));
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+/** A tap or a hit on a block counts for interact objectives and finds inspect clues. @param {Player} player @param {import("@minecraft/server").Block} block */
+function touched(player, block) {
+  const type = block.typeId;
+  const dim = block.dimension.id;
+  const b = block.location;
+  advance(player, "interact", (obj) => {
+    if (!obj.blocks?.includes(type)) return 0;
+    const loc = locate(obj);
+    if (!loc || typeof loc === "string") return obj.place ? 0 : 1; // no place given: anywhere counts
+    if (loc.dim !== dim || loc.pending) return 0;
+    const d = loc.y === undefined ? across(b, loc) : Math.hypot(b.x - loc.x, b.y - loc.y, b.z - loc.z);
+    return d <= radiusOf(obj) ? 1 : 0;
+  });
+  if (counting(player)) for (const { e, i, obj } of open(player, "inspect")) inspectTouch(player, e, i, obj, { x: b.x + 0.5, y: b.y + 0.5, z: b.z + 0.5 }, dim);
+}
+
+/** Last "use" per player (tick): a use and a tap on a block are one use. @type {Map<string, number>} */
+const lastUse = new Map();
+
+/** @param {Player} player @param {string} item */
+function used(player, item) {
+  const now = system.currentTick;
+  if (now - (lastUse.get(player.id) ?? -100) < 10) return;
+  lastUse.set(player.id, now);
+  advance(player, "use", (obj) => (obj.item === item && playerIn(player, obj) ? 1 : 0));
+}
+
+world.afterEvents.playerInteractWithBlock.subscribe(({ player, block, isFirstEvent, beforeItemStack }) => {
+  if (!isFirstEvent) return;
+  try {
+    touched(player, block);
+    if (beforeItemStack) used(player, beforeItemStack.typeId);
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
+  try {
+    if (source instanceof Player && itemStack) used(source, itemStack.typeId);
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+/** Tick of each player's last counted hit: holding the button down is one strike, not many. @type {Map<string, number>} */
+const lastHit = new Map();
+
+// "Strike the bell": most players hit it rather than use it, so a hit counts like a tap.
+world.afterEvents.entityHitBlock.subscribe(({ damagingEntity, hitBlock }) => {
+  if (!(damagingEntity instanceof Player)) return;
+  try {
+    const now = system.currentTick;
+    if (now - (lastHit.get(damagingEntity.id) ?? -100) < 6) return;
+    lastHit.set(damagingEntity.id, now);
+    touched(damagingEntity, hitBlock);
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+// Fishing, as Daily Quests does it: a hook belongs to the player nearest to where it appears, and an
+// item that appears where a hook just was is that player's catch.
+/** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number }>} */
+const hooks = new Map();
+
+world.afterEvents.entitySpawn.subscribe(({ entity }) => {
+  try {
+    if (entity.typeId === "minecraft:fishing_hook") {
+      const [owner] = entity.dimension.getPlayers({ location: entity.location, maxDistance: 4, closest: 1 });
+      if (owner && open(owner, "fish").length) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick });
+      return;
+    }
+    if (entity.typeId !== "minecraft:item" || !hooks.size) return;
+    const stack = entity.getComponent("minecraft:item")?.itemStack;
+    if (!stack) return;
+    const at = entity.location;
+    for (const [id, h] of hooks) {
+      if (h.dim !== entity.dimension.id) continue;
+      if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
+      hooks.delete(id);
+      const type = stack.typeId;
+      const amount = stack.amount;
+      if (h.owner.isValid) advance(h.owner, "fish", (obj) => (!obj.items?.length || obj.items.includes(type) ? amount : 0));
+      break;
+    }
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+system.runInterval(() => {
+  if (!hooks.size) return;
+  for (const [id, h] of hooks) {
+    if (h.hook.isValid) {
+      try {
+        h.at = h.hook.location;
+        h.seen = system.currentTick;
+      } catch {
+        // unloaded
+      }
+    } else if (system.currentTick - h.seen > 20) hooks.delete(id);
+  }
+}, 2);
+
+/** Animals each player fed or tamed for an objective (each animal counts once). @type {Map<string, Set<string>>} */
+const tended = new Map();
+/** Was the animal tamed before the interaction? (entity id -> true/false) @type {Map<string, boolean>} */
+const tamedBefore = new Map();
+
+/** @param {Entity} ent */
+function isTamed(ent) {
+  try {
+    if (ent.getComponent("minecraft:is_tamed")) return true;
+    const t = ent.getComponent("minecraft:tameable");
+    const m = ent.getComponent("minecraft:tamemount");
+    return !!(t?.isTamed || m?.isTamed);
+  } catch {
+    return false;
+  }
+}
+
+world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  const { player, target } = ev;
+  try {
+    const a = actors.get(target.id);
+    if (a && a.role !== "lead") {
+      ev.cancel = true; // no trading with a story villager, no handing items to a ghost
+      if (a.owner === player.id && a.role === "meet") system.run(() => meetTap(player, a.key));
+      return;
+    }
+    if (!tamedBefore.has(target.id)) {
+      const before = isTamed(target);
+      tamedBefore.set(target.id, before);
+      system.runTimeout(() => tamedBefore.delete(target.id), 220);
+    }
+  } catch {
+    // ignore
+  }
+});
+
+world.afterEvents.playerInteractWithEntity.subscribe(({ player, target, beforeItemStack }) => {
+  try {
+    if (!counting(player)) return;
+    const type = target.typeId;
+    const id = target.id;
+    for (const { e, i, obj } of open(player, "tend")) {
+      if (obj.mobs?.length && !obj.mobs.includes(type)) continue;
+      if (obj.item && beforeItemStack?.typeId !== obj.item) continue;
+      if (!playerIn(player, obj)) continue;
+      const k = `${player.id}|${objKey(e, i)}`;
+      const set = tended.get(k) ?? new Set();
+      if (set.has(id)) continue;
+      set.add(id);
+      tended.set(k, set);
+      bump(player, e, i, 1);
+    }
+    const tames = open(player, "tame").filter(({ obj }) => !obj.mobs?.length || obj.mobs.includes(type));
+    if (!tames.length || tamedBefore.get(id) === true) return;
+    // Taming takes effect a moment later (a horse bucks for a while): look again a few times.
+    for (const delay of [10, 40, 100, 200]) {
+      system.runTimeout(() => {
+        try {
+          if (!target.isValid || !player.isValid || !isTamed(target)) return;
+          for (const { e, i } of open(player, "tame")) {
+            const k = `tame|${player.id}|${objKey(e, i)}`;
+            const set = tended.get(k) ?? new Set();
+            if (set.has(id)) continue;
+            set.add(id);
+            tended.set(k, set);
+            bump(player, e, i, 1);
+          }
+        } catch {
+          // ignore
+        }
+      }, delay);
+    }
+  } catch (e) {
+    console.warn(`[saga] ${e}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Talk and deliver (from the Townsfolk pack's realm:npc_talk)
+// ---------------------------------------------------------------------------
+
+/** Counts talk objectives and takes deliveries for an NPC. @param {Player} player @param {string} npc */
+export function talked(player, npc) {
+  if (!counting(player)) return;
+  for (const { e, i, obj } of open(player, "talk")) if (obj.npc === npc) bump(player, e, i, 1);
+  for (const { e, i, obj } of open(player, "deliver")) {
+    if (obj.npc !== npc || !obj.item) continue;
+    const need = target(obj) - progressOf(e, i);
+    if (need <= 0) continue;
+    const got = takeItem(player, obj.item, need, obj.name);
+    const name = obj.name ? `"${plain(obj.name)}"` : itemName(obj.item);
+    if (got > 0) {
+      player.sendMessage(`§e[Story] You give ${npcName(npc)} ${got} ${name} (${progressOf(e, i) + got}/${target(obj)}).`);
+      bump(player, e, i, got);
+    } else player.sendMessage(`§7[Story] ${npcName(npc)} still needs ${need} ${name}.${obj.name ? "" : " Renamed items are never taken."}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scenes: one per player and objective that needs runtime state
+// ---------------------------------------------------------------------------
+
+/**
+ * @typedef {object} SceneState
+ * @property {string} kind
+ * @property {string} pid
+ * @property {string} key
+ * @property {Entry} e
+ * @property {number} i
+ * @property {number} seen loop run it was last visited
+ * @property {number} [farSince] tick the player went far away
+ * @property {any} [state]
+ * @property {any} [data]
+ */
+
+/** @type {Map<string, SceneState>} */
+export const scenes = new Map();
+/** @param {string} pid @param {string} key */
+const sk = (pid, key) => `${pid}|${key}`;
+let run = 0;
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {string} kind @returns {SceneState} */
+function sceneFor(player, e, i, kind) {
+  const key = objKey(e, i);
+  let s = scenes.get(sk(player.id, key));
+  if (!s || s.kind !== kind) {
+    s = { kind, pid: player.id, key, e, i, seen: run, data: {} };
+    scenes.set(sk(player.id, key), s);
+  }
+  s.e = e;
+  s.seen = run;
+  return s;
+}
+
+/** Ends a scene: its characters and story mobs go. @param {string} pid @param {string} key @param {boolean} [effect] */
+export function endScene(pid, key, effect = false) {
+  scenes.delete(sk(pid, key));
+  removeActors({ owner: pid, key }, effect);
+}
+
+/** Ends every scene of a player (they left, or their stories were reset). @param {string} pid */
+export function endScenesOf(pid) {
+  for (const s of [...scenes.values()]) if (s.pid === pid) scenes.delete(sk(s.pid, s.key));
+  removeActors({ owner: pid });
+}
+
+/** The far-away timer: true once the player has been away long enough for the scene to end. @param {SceneState} s @param {boolean} near */
+function tooFar(s, near) {
+  if (near) {
+    delete s.farSince;
+    return false;
+  }
+  s.farSince ??= system.currentTick;
+  return system.currentTick - s.farSince > (Number(get("actorTimeoutSeconds")) || 300) * 20;
+}
+
+/** Where a story character stands at a place: a prefab feature named for it, else beside the spot. @param {Objective} obj @param {Loc} loc @param {string} [id] */
+function standSpot(obj, loc, id) {
+  if (obj.place) {
+    const f = (id && featureSpot(obj.place, id)) || featureSpot(obj.place, "actor");
+    if (f) return f;
+  }
+  const dim = world.getDimension(loc.dim);
+  const x = loc.x + 2.5;
+  const z = loc.z + 0.5;
+  const y = groundAt(dim, x, z, loc.y);
+  return y === undefined ? undefined : { x, y, z };
+}
+
+// ---- meet --------------------------------------------------------------
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function meetTick(player, e, i, obj) {
+  const s = sceneFor(player, e, i, "meet");
+  const loc = locate(obj);
+  if (!loc || typeof loc === "string" || loc.pending || !obj.who) return;
+  const near = player.dimension.id === loc.dim && across(player.location, loc) <= 48;
+  if (tooFar(s, near)) {
+    removeActors({ owner: player.id, key: s.key });
+    return;
+  }
+  if (!near) return;
+  let [a] = actorsOf(player.id, s.key, "meet");
+  if (!a || !a.ent.isValid) {
+    const at = standSpot(obj, loc, obj.who.id);
+    if (!at) return;
+    const ent = spawnActor(world.getDimension(loc.dim), obj.who.entity, at, { owner: player.id, key: s.key, role: "meet", name: `§e${obj.who.name}`, invul: true, anchor: true });
+    if (!ent) return;
+    [a] = actorsOf(player.id, s.key, "meet");
+    player.sendMessage(`§e[Story] ${obj.who.name} is here. Walk up to them to talk.`);
+  }
+  if (!a) return;
+  if (busy.has(player.id) || system.currentTick < (s.data.cool ?? 0)) return;
+  if (dist3(player.location, a.ent.location) <= radiusOf(obj)) runMeet(player, s).catch((err) => console.warn(`[saga] meet: ${err}`));
+}
+
+/** A tap on a meet character. @param {Player} player @param {string} key */
+function meetTap(player, key) {
+  const s = scenes.get(sk(player.id, key));
+  if (s && s.kind === "meet") runMeet(player, s).catch((err) => console.warn(`[saga] meet: ${err}`));
+}
+
+/** The conversation with a story character, and its choice. @param {Player} player @param {SceneState} s */
+async function runMeet(player, s) {
+  const { e, i } = s;
+  const obj = e.chapter.objectives[i];
+  if (!obj.who || !counting(player)) return;
+  await exclusive(player, async () => {
+    const saga = sagaOf(player);
+    if (objDone(e, i, saga)) return;
+    const choices = (obj.choices ?? []).filter((c) => requires(c.requires, saga, e.story.id, player).ok);
+    const pages = pagesFor(obj.pages, saga, e.story.id, player.name);
+    const pick = await dialog(player, obj.who?.name ?? "", "", pages, choices.length ? choices.map((c) => c.label) : ["Goodbye"]);
+    if (pick < 0 || !player.isValid) {
+      s.data.cool = system.currentTick + 300; // walked away: ask again in 15 s (a tap works any time)
+      return;
+    }
+    if (objDone(e, i, sagaOf(player))) return;
+    const choice = choices[pick];
+    if (choice && !e.fav) {
+      applyChoice(saga, e.story, `${e.chapter.id}#${i}`, choice);
+      giveRep(player, choice.rep, saga, e.story);
+      invalidate(player.id);
+      markDirty(player, true);
+    }
+    bump(player, e, i, 1);
+    const key = s.key;
+    const pid = player.id;
+    system.runTimeout(() => removeActors({ owner: pid, key }, true), 160);
+    if (choice?.reply?.length) await dialog(player, obj.who?.name ?? "", "", pagesFor(choice.reply, saga, e.story.id, player.name), ["OK"]);
+  });
+}
+
+// ---- inspect -----------------------------------------------------------
+
+/** Where clue k is (cached per scene once the ground is loaded). @param {SceneState} s @param {Objective} obj @param {number} k */
+function clueSpot(s, obj, k) {
+  s.data.spots ??= [];
+  const hit = s.data.spots[k];
+  if (hit) return hit;
+  const c = obj.clues?.[k];
+  if (!c) return undefined;
+  /** @type {{ dim: string, x: number, y?: number, z: number } | undefined} */
+  let p;
+  if (obj.place) p = placeSpot(obj.place, { x: c.dx, y: c.dy, z: c.dz });
+  else {
+    const loc = locate(obj);
+    if (loc && typeof loc !== "string") p = { dim: loc.dim, x: loc.x + c.dx, y: loc.y !== undefined && c.dy !== undefined ? loc.y + c.dy : undefined, z: loc.z + c.dz };
+  }
+  if (!p) return undefined;
+  let y = p.y;
+  if (y === undefined) {
+    const base = obj.place ? placesOf()[obj.place]?.y : undefined;
+    y = groundAt(world.getDimension(p.dim), p.x, p.z, base);
+    if (y === undefined) return undefined;
+  }
+  const out = { dim: p.dim, x: Math.floor(p.x) + 0.5, y: y + 0.5, z: Math.floor(p.z) + 0.5 };
+  s.data.spots[k] = out;
+  return out;
+}
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function inspectTick(player, e, i, obj) {
+  const s = sceneFor(player, e, i, "inspect");
+  const loc = locate(obj);
+  if (!loc || typeof loc === "string" || loc.pending || player.dimension.id !== loc.dim || across(player.location, loc) > 48) return;
+  const bits = e.st.x?.[String(i)] ?? 0;
+  const p = player.location;
+  (obj.clues ?? []).forEach((_, k) => {
+    if (bits & (1 << k)) return;
+    const c = clueSpot(s, obj, k);
+    if (!c) return;
+    try {
+      player.spawnParticle("minecraft:villager_happy", { x: c.x, y: c.y + 0.3, z: c.z });
+      player.spawnParticle("minecraft:villager_happy", { x: c.x + 0.3, y: c.y + 0.6, z: c.z - 0.2 });
+    } catch {
+      // unloaded
+    }
+    if (across(p, c) <= 1.6 && Math.abs(p.y - c.y) <= 2.5) clueFound(player, e, i, obj, k);
+  });
+}
+
+/** A tap or hit near a clue. @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {Vector3} at @param {string} dim */
+function inspectTouch(player, e, i, obj, at, dim) {
+  const s = scenes.get(sk(player.id, objKey(e, i)));
+  if (!s) return;
+  const bits = e.st.x?.[String(i)] ?? 0;
+  (obj.clues ?? []).forEach((_, k) => {
+    if (bits & (1 << k)) return;
+    const c = clueSpot(s, obj, k);
+    if (c && c.dim === dim && dist3(c, at) <= 2.2) clueFound(player, e, i, obj, k);
+  });
+}
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {number} k */
+function clueFound(player, e, i, obj, k) {
+  const x = (e.st.x ??= {});
+  const bits = x[String(i)] ?? 0;
+  if (bits & (1 << k)) return;
+  x[String(i)] = bits | (1 << k);
+  const saga = sagaOf(player);
+  const clue = obj.clues?.[k];
+  const text = clue ? pagesFor([clue.text], saga, e.story.id, player.name)[0] ?? "" : "";
+  const n = Object.keys(obj.clues ?? []).filter((kk) => x[String(i)] & (1 << Number(kk))).length;
+  const total = obj.clues?.length ?? 1;
+  player.playSound("random.orb", { pitch: 1.6, volume: 0.5 });
+  player.sendMessage(`§e[Clue ${n}/${total}]§r ${text}`);
+  bump(player, e, i, 1);
+  if (!busy.has(player.id)) exclusive(player, async () => void (await show(player, new ActionFormData().title(`Clue ${n} of ${total}`).body(text).button("OK")))).catch(() => {});
+}
+
+// ---- stealth -----------------------------------------------------------
+
+/** @param {Player} player */
+function sneaking(player) {
+  try {
+    return player.isSneaking;
+  } catch {
+    return false;
+  }
+}
+
+/** @param {Player} player @param {{ slot: string, item: string } | undefined} d */
+function disguised(player, d) {
+  if (!d) return false;
+  try {
+    const slot = { head: EquipmentSlot.Head, chest: EquipmentSlot.Chest, legs: EquipmentSlot.Legs, feet: EquipmentSlot.Feet }[d.slot];
+    return slot !== undefined && player.getComponent("minecraft:equippable")?.getEquipment(slot)?.typeId === d.item;
+  } catch {
+    return false;
+  }
+}
+
+/** The stealth area's center and goal. @param {Objective} obj */
+function stealthSpots(obj) {
+  const loc = locate(obj);
+  if (!loc || typeof loc === "string" || loc.pending) return undefined;
+  const center = withY(loc);
+  if (!center) return undefined;
+  /** @type {{ x: number, y?: number, z: number }} */
+  let goal = center;
+  if (obj.goal) {
+    const g = obj.place ? placeSpot(obj.place, { x: obj.goal.dx, z: obj.goal.dz }) : { x: loc.x + obj.goal.dx, z: loc.z + obj.goal.dz };
+    if (g) goal = { x: g.x, y: center.y, z: g.z };
+  }
+  return { loc, center, goal };
+}
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function stealthTick(player, e, i, obj) {
+  const s = sceneFor(player, e, i, "stealth");
+  const sp = stealthSpots(obj);
+  if (!sp) return;
+  const r = radiusOf(obj);
+  const near = player.dimension.id === sp.loc.dim && across(player.location, sp.center) <= r + 32;
+  if (!near) {
+    if (s.data.guards) {
+      removeActors({ owner: player.id, key: s.key });
+      delete s.data.guards;
+    }
+    return;
+  }
+  if (s.data.guards && s.data.guards.some((/** @type {any} */ g) => g.ent.isValid)) return;
+  // Post the guards.
+  const g = obj.guards ?? { mob: "minecraft:pillager", count: 2 };
+  const n = Math.max(1, Math.min(8, g.count ?? 2));
+  const dim = player.dimension;
+  removeActors({ owner: player.id, key: s.key });
+  s.data.guards = [];
+  for (let k = 0; k < n; k++) {
+    const gr = Math.max(3, r * (0.35 + (0.55 * (k + 0.5)) / n));
+    const ang = (2 * Math.PI * k) / n + Math.random() * 0.5;
+    const x = sp.center.x + Math.cos(ang) * gr;
+    const z = sp.center.z + Math.sin(ang) * gr;
+    const y = groundAt(dim, x, z, sp.center.y) ?? sp.center.y;
+    const ent = spawnActor(dim, g.mob, { x, y, z }, { owner: player.id, key: s.key, role: "guard", name: g.name ? `§c${g.name}` : undefined, invul: true });
+    if (ent) s.data.guards.push({ ent, r: gr, ang, dir: k % 2 ? 1 : -1, yaw: 0, y, pause: 0, flipAt: system.currentTick + 200 + Math.floor(Math.random() * 300) });
+  }
+  s.data.grace = system.currentTick + 40;
+  if (!s.data.told) {
+    s.data.told = true;
+    const goal = obj.goal ? "reach the spot the tracker shows" : "reach the middle";
+    player.sendMessage(`§e[Story] Guards! Sneak (hold sneak) and stay out of their sight to ${goal}. They see you up to ${obj.detect ?? 10} blocks away, ${obj.detectSneak ?? 4} when you sneak${obj.disguise ? ` or wear a ${itemName(obj.disguise.item)}` : ""}, and only in front of them.`);
+  }
+}
+
+/** Guards walk their rounds and look for the player; reaching the goal finishes it. @param {SceneState} s @param {Player} player */
+function stealthFast(s, player) {
+  const obj = s.e.chapter.objectives[s.i];
+  const guards = s.data.guards;
+  if (!guards?.length) return;
+  const sp = stealthSpots(obj);
+  if (!sp || player.dimension.id !== sp.loc.dim) return;
+  const dim = player.dimension;
+  const now = system.currentTick;
+  for (const gd of guards) {
+    if (!gd.ent.isValid) continue;
+    let yaw = gd.yaw;
+    if (gd.pause > 0) {
+      gd.pause--;
+      if (gd.pause === 0) gd.dir = -gd.dir;
+    } else {
+      gd.ang += (0.35 / gd.r) * gd.dir;
+      const tx = -Math.sin(gd.ang) * gd.dir;
+      const tz = Math.cos(gd.ang) * gd.dir;
+      yaw = (Math.atan2(-tx, tz) * 180) / Math.PI;
+      if (now >= gd.flipAt) {
+        // Stop and look out over the area for two seconds, then walk back the other way.
+        gd.pause = 8;
+        gd.flipAt = now + 200 + Math.floor(Math.random() * 300);
+        yaw = (Math.atan2(-Math.cos(gd.ang), Math.sin(gd.ang)) * 180) / Math.PI;
+      }
+    }
+    const x = sp.center.x + Math.cos(gd.ang) * gd.r;
+    const z = sp.center.z + Math.sin(gd.ang) * gd.r;
+    const y = groundAt(dim, x, z, gd.y) ?? gd.y;
+    gd.y = y;
+    gd.yaw = yaw;
+    try {
+      gd.ent.teleport({ x, y, z }, { rotation: { x: 0, y: yaw } });
+    } catch {
+      // unloaded
+    }
+  }
+  const p = player.location;
+  // The goal.
+  if (across(p, sp.goal) <= 2.5 && (sp.goal.y === undefined || Math.abs(p.y - sp.goal.y) < 4)) {
+    if (counting(player)) {
+      bump(player, s.e, s.i, 1);
+      system.runTimeout(() => endScene(s.pid, s.key, true), 40);
+    }
+    return;
+  }
+  if (now < (s.data.grace ?? 0) || !counting(player)) return;
+  const hidden = sneaking(player) || disguised(player, obj.disguise);
+  const limit = hidden ? obj.detectSneak ?? 4 : obj.detect ?? 10;
+  for (const gd of guards) {
+    if (!gd.ent.isValid) continue;
+    const g = gd.ent.location;
+    const eye = { x: g.x, y: g.y + 1.6, z: g.z };
+    const target = { x: p.x, y: p.y + 1.2, z: p.z };
+    const d = dist3(eye, target);
+    if (d > limit) continue;
+    if (d > 1.8) {
+      const rad = (gd.yaw * Math.PI) / 180;
+      const fx = -Math.sin(rad);
+      const fz = Math.cos(rad);
+      const dx = p.x - g.x;
+      const dz = p.z - g.z;
+      const len = Math.hypot(dx, dz) || 1;
+      if ((fx * dx + fz * dz) / len < 0.5) continue; // outside the 120-degree cone
+      try {
+        const dir = { x: (target.x - eye.x) / d, y: (target.y - eye.y) / d, z: (target.z - eye.z) / d };
+        const hit = dim.getBlockFromRay(eye, dir, { maxDistance: d, includeLiquidBlocks: false, includePassableBlocks: false });
+        if (hit) {
+          const bl = hit.block.location;
+          if (dist3(eye, { x: bl.x + 0.5, y: bl.y + 0.5, z: bl.z + 0.5 }) < d - 1) continue; // behind a wall
+        }
+      } catch {
+        // can't tell: they see you
+      }
+    }
+    spotted(s, player, gd, sp, obj);
+    return;
+  }
+}
+
+/** @param {SceneState} s @param {Player} player @param {any} gd @param {{ center: Vector3 }} sp @param {Objective} obj */
+function spotted(s, player, gd, sp, obj) {
+  const now = system.currentTick;
+  s.data.grace = now + 60;
+  const name = obj.guards?.name ?? "A guard";
+  player.playSound("raid.horn", { volume: 0.4, pitch: 1.4 });
+  if (obj.onSpotted === "ambush" && now >= (s.data.ambushAt ?? 0)) {
+    s.data.ambushAt = now + 600;
+    player.sendMessage(`§c[Story] ${name} spotted you! The guards attack. Fight them off, or slip away and try again.`);
+    spawnGroup(player, player.dimension, gd.ent.location, { mobs: [obj.guards?.mob ?? "minecraft:pillager"], count: Math.max(1, obj.guards?.count ?? 2) }, s.key, 2, 4);
+    return;
+  }
+  // Back to the edge of the area.
+  const p = player.location;
+  const r = radiusOf(obj) + 4;
+  const dx = p.x - sp.center.x;
+  const dz = p.z - sp.center.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const x = sp.center.x + (dx / len) * r;
+  const z = sp.center.z + (dz / len) * r;
+  const y = groundAt(player.dimension, x, z, sp.center.y) ?? p.y;
+  player.sendMessage(`§c[Story] ${name} spotted you! You slip back to the edge before they raise the alarm. Sneak, stay behind them, and try again.`);
+  try {
+    player.teleport({ x, y, z });
+  } catch {
+    // unloaded
+  }
+}
+
+// ---- escort ------------------------------------------------------------
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function escortTick(player, e, i, obj) {
+  const s = sceneFor(player, e, i, "escort");
+  if (!obj.who) return;
+  const now = system.currentTick;
+  const to = locate(obj.to, "the destination");
+  const [a] = actorsOf(player.id, s.key, "escort");
+  if (a?.ent.isValid) {
+    const near = a.ent.dimension.id === player.dimension.id && dist3(a.ent.location, player.location) <= 96;
+    if (tooFar(s, near)) {
+      player.sendMessage(`§e[Story] ${obj.who.name} got tired of waiting and went back. Pick them up again.`);
+      endScene(player.id, s.key);
+      return;
+    }
+    // Arrived?
+    if (to && typeof to !== "string" && !to.pending && a.ent.dimension.id === to.dim && across(a.ent.location, to) <= (obj.to?.radius ?? obj.radius ?? 6)) {
+      if (counting(player)) {
+        player.sendMessage(`§a[Story] ${obj.who.name} is safe.`);
+        bump(player, e, i, 1);
+        const pid = player.id;
+        const key = s.key;
+        system.runTimeout(() => endScene(pid, key, true), 100);
+      }
+      return;
+    }
+    if (s.state === "wait" && dist3(a.ent.location, player.location) <= 4) {
+      s.state = "go";
+      s.data.crumbs = [];
+      s.data.ptr = 0;
+      s.data.lastAmbush = now;
+      player.sendMessage(`§e[Story] ${obj.who.name} follows you. Lead them to ${to && typeof to !== "string" ? to.label : "safety"}, and keep them alive.`);
+    }
+    // Ambushes on the way.
+    if (s.state === "go" && obj.ambush?.mobs?.length && now - (s.data.lastAmbush ?? now) >= (obj.ambush.every ?? 30) * 20) {
+      s.data.lastAmbush = now;
+      const alive = actorsOf(player.id, s.key, "add").filter((x) => x.ent.isValid).length;
+      if (alive < (obj.ambush.count ?? 2) * 2) {
+        player.sendMessage(`§c[Story] An ambush! Protect ${obj.who.name}!`);
+        spawnGroup(player, player.dimension, player.location, { mobs: obj.ambush.mobs, count: obj.ambush.count ?? 2 }, s.key, 10, 14);
+      }
+    }
+    return;
+  }
+  // Not spawned (or gone): they wait where the escort starts, or beside the player.
+  if (now < (s.data.cool ?? 0)) return;
+  const from = locate(obj.from, "the start");
+  /** @type {Vector3 | undefined} */
+  let at;
+  let dim = player.dimension;
+  if (from && typeof from !== "string") {
+    if (from.pending || from.dim !== player.dimension.id || across(player.location, from) > 32) return;
+    at = (obj.from?.place && featureSpot(obj.from.place, obj.who.id)) || withY(from);
+  } else {
+    const p = player.location;
+    const y = groundAt(dim, p.x + 2, p.z, p.y);
+    at = y === undefined ? undefined : { x: p.x + 2, y, z: p.z };
+  }
+  if (!at) return;
+  const ent = spawnActor(dim, obj.who.entity, at, { owner: player.id, key: s.key, role: "escort", name: `§e${obj.who.name}`, frozen: true });
+  if (!ent) return;
+  s.state = "wait";
+  player.sendMessage(`§e[Story] ${obj.who.name} is waiting for you. Walk up to them and they will follow.`);
+}
+
+/** The escorted character follows the player's own path (always somewhere a body fits). @param {SceneState} s @param {Player} player */
+function escortFast(s, player) {
+  if (s.state !== "go") return;
+  const [a] = actorsOf(s.pid, s.key, "escort");
+  if (!a || !a.ent.isValid || a.ent.dimension.id !== player.dimension.id) return;
+  const crumbs = s.data.crumbs;
+  const p = player.location;
+  const last = crumbs[crumbs.length - 1];
+  if (!last || dist3(last, p) >= 1) {
+    crumbs.push({ x: p.x, y: p.y, z: p.z });
+    if (crumbs.length > 80) {
+      crumbs.shift();
+      s.data.ptr = Math.max(0, s.data.ptr - 1);
+    }
+  }
+  const al = a.ent.location;
+  const dp = dist3(al, p);
+  if (dp > 32 || dp <= 2.5 || !crumbs.length) return; // left behind (they wait), or close enough
+  let j = crumbs.length - 1;
+  while (j > 0 && dist3(crumbs[j], p) < 2.5) j--;
+  let ptr = Math.min(s.data.ptr, j);
+  ptr = Math.min(j, Math.max(ptr + 2, j - 8));
+  s.data.ptr = ptr;
+  const c = crumbs[ptr];
+  const yaw = (Math.atan2(-(c.x - al.x), c.z - al.z) * 180) / Math.PI;
+  try {
+    a.ent.teleport(c, { rotation: { x: 0, y: yaw } });
+  } catch {
+    // unloaded
+  }
+}
+
+/** The escorted character died: start over. @param {SceneState} s */
+function escortFail(s) {
+  const obj = s.e.chapter.objectives[s.i];
+  const player = online(s.pid);
+  removeActors({ owner: s.pid, key: s.key });
+  s.state = undefined;
+  s.data = { cool: system.currentTick + 100 };
+  if (player) {
+    player.sendMessage(`§c[Story] ${obj.who?.name ?? "The one you were escorting"} was hurt and ran back${obj.from ? " to where you found them" : ""}. Try again, and keep the monsters off them.`);
+    player.playSound("note.bass", { pitch: 0.6 });
+  }
+}
+
+// ---- lead --------------------------------------------------------------
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function leadTick(player, e, i, obj) {
+  if (!obj.mob) return;
+  const s = sceneFor(player, e, i, "lead");
+  const to = locate(obj.to, "the pen");
+  const dim = player.dimension;
+  // Animals to bring, waiting where they're lost.
+  if (obj.spawnAt) {
+    const at = locate(obj.spawnAt, "the lost animal");
+    if (at && typeof at !== "string" && !at.pending && at.dim === dim.id) {
+      const near = across(player.location, at) <= 40;
+      if (tooFar(s, near)) removeActors({ owner: player.id, key: s.key, role: "lead" });
+      else if (near) {
+        const want = target(obj) - progressOf(e, i);
+        const have = actorsOf(player.id, s.key, "lead").filter((a) => a.ent.isValid).length;
+        const base = withY(at);
+        for (let k = have; k < want && base; k++) {
+          const x = base.x + (Math.random() * 4 - 2);
+          const z = base.z + (Math.random() * 4 - 2);
+          const y = groundAt(dim, x, z, base.y) ?? base.y;
+          spawnActor(dim, obj.mob, { x, y, z }, { owner: player.id, key: s.key, role: "lead", name: obj.name ? `§e${obj.name}` : undefined, fireproof: false });
+          if (k === have) player.sendMessage(`§e[Story] There it is. Put a lead on it (use a lead on the animal) and bring it to ${to && typeof to !== "string" ? to.label : "the pen"}.`);
+        }
+      }
+    }
+  }
+  if (!to || typeof to === "string" || to.pending || to.dim !== dim.id) return;
+  const r = obj.to?.radius ?? 8;
+  if (across(player.location, to) > r + 24) return;
+  try {
+    const center = { x: to.x, y: to.y ?? player.location.y, z: to.z };
+    for (const ent of dim.getEntities({ type: obj.mob, location: center, maxDistance: r + 12 })) {
+      if (across(ent.location, to) > r || ent.hasTag("saga:led")) continue;
+      const holder = ent.getComponent("minecraft:leashable")?.leashHolder;
+      if (!(holder instanceof Player)) continue;
+      if (!counting(player)) return;
+      ent.addTag("saga:led");
+      // It stays: a normal animal from now on.
+      if (actors.has(ent.id)) {
+        actors.delete(ent.id);
+        ent.removeTag(ACTOR);
+      }
+      bump(player, e, i, 1);
+      player.sendMessage(`§a[Story] ${obj.name ? plain(obj.name) : itemName(obj.mob)} is home (${progressOf(e, i)}/${target(obj)}).`);
+    }
+  } catch {
+    // unloaded
+  }
+}
+
+// ---- defend ------------------------------------------------------------
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function defendTick(player, e, i, obj) {
+  const s = sceneFor(player, e, i, "defend");
+  const loc = locate(obj);
+  if (!loc || typeof loc === "string" || loc.pending) return;
+  const center = withY(loc);
+  if (!center) return;
+  const r = radiusOf(obj);
+  const dim = world.getDimension(loc.dim);
+  const here = player.dimension.id === loc.dim && across(player.location, loc) <= r;
+  const now = system.currentTick;
+  const waves = obj.waves ?? [];
+  if (s.state !== "run") {
+    if (!here || now < (s.data.cool ?? 0) || !counting(player)) return;
+    s.state = "run";
+    s.data = { mobs: [], next: now + 40, wave: progressOf(e, i) };
+    if (obj.ward) {
+      const at = (obj.place && featureSpot(obj.place, obj.ward.id)) || center;
+      spawnActor(dim, obj.ward.entity, at, { owner: player.id, key: s.key, role: "ward", name: `§e${obj.ward.name}`, frozen: true, anchor: true });
+    }
+    player.sendMessage(`§c[Story] Hold ${loc.label}!${obj.ward ? ` Keep ${obj.ward.name} alive.` : ""} ${waves.length} wave${waves.length === 1 ? "" : "s"} are coming.`);
+    return;
+  }
+  // Running.
+  const away = !here && !(player.dimension.id === loc.dim && across(player.location, loc) <= r * 2 + 16);
+  if (away) {
+    s.data.awaySince ??= now;
+    if (now - s.data.awaySince > 600) return defendFail(s, "You left.");
+  } else delete s.data.awaySince;
+  s.data.mobs = s.data.mobs.filter((/** @type {Entity} */ m) => {
+    try {
+      if (!m.isValid) return false;
+      if (across(m.location, loc) > r * 4) {
+        removeActor(m.id);
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (s.data.mobs.length) return;
+  if (s.data.spawned) {
+    // A wave is cleared.
+    s.data.spawned = false;
+    s.data.wave++;
+    bump(player, e, i, 1);
+    if (s.data.wave >= waves.length) {
+      player.sendMessage(`§a[Story] ${loc.label} holds!`);
+      const pid = player.id;
+      const key = s.key;
+      system.runTimeout(() => endScene(pid, key, true), 100);
+      return;
+    }
+    player.sendMessage(`§e[Story] Wave ${s.data.wave} beaten. Get ready...`);
+    s.data.next = now + 100;
+    return;
+  }
+  if (now < s.data.next) return;
+  const w = waves[s.data.wave];
+  if (!w) return;
+  s.data.spawned = true;
+  note(player, `§c${e.story.short}: wave ${s.data.wave + 1} of ${waves.length}`, 60);
+  s.data.mobs = spawnGroup(player, dim, center, w, s.key, Math.max(6, r * 0.7), Math.max(8, r));
+}
+
+/** A defense failed: everything resets, and it starts again when the player comes back. @param {SceneState} s @param {string} why */
+function defendFail(s, why) {
+  const player = online(s.pid);
+  removeActors({ owner: s.pid, key: s.key });
+  s.state = undefined;
+  s.data = { cool: system.currentTick + 200 };
+  if (!player) return;
+  bump(player, s.e, s.i, 0, true);
+  player.sendMessage(`§c[Story] ${why} The defense failed: rest, then go back and try again from the first wave.`);
+  player.playSound("note.bass", { pitch: 0.5 });
+}
+
+// ---- follow ------------------------------------------------------------
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function followTick(player, e, i, obj) {
+  const s = sceneFor(player, e, i, "follow");
+  if (s.data.pos) return;
+  const to = locate(obj.to);
+  if (!to || typeof to === "string" || to.pending || to.dim !== player.dimension.id) return;
+  const from = locate(obj.from, "where the trail starts");
+  const p = player.location;
+  if (from && typeof from !== "string") {
+    if (from.pending || from.dim !== player.dimension.id || across(p, from) > 10) return;
+    const at = withY(from);
+    if (!at) return;
+    s.data.pos = at;
+  } else {
+    const dx = to.x - p.x;
+    const dz = to.z - p.z;
+    const len = Math.hypot(dx, dz) || 1;
+    s.data.pos = { x: p.x + (dx / len) * 3, y: p.y, z: p.z + (dz / len) * 3 };
+  }
+  s.data.start = { ...s.data.pos };
+  player.sendMessage(`§e[Story] A ${obj.wisp ?? "faint light"} drifts ahead. Follow it; it waits if you fall behind.`);
+}
+
+/** The wisp drifts toward the destination along the ground, waiting for the player. @param {SceneState} s @param {Player} player */
+function followFast(s, player) {
+  const pos = s.data.pos;
+  if (!pos) return;
+  const obj = s.e.chapter.objectives[s.i];
+  const to = locate(obj.to);
+  if (!to || typeof to === "string" || to.pending || to.dim !== player.dimension.id) return;
+  const dim = player.dimension;
+  try {
+    dim.spawnParticle("minecraft:endrod", { x: pos.x, y: pos.y + 0.8, z: pos.z });
+    dim.spawnParticle("minecraft:endrod", { x: pos.x + 0.2, y: pos.y + 1.1, z: pos.z - 0.2 });
+  } catch {
+    // unloaded
+  }
+  const p = player.location;
+  const dp = dist3(p, pos);
+  const stray = obj.stray ?? 12;
+  const now = system.currentTick;
+  if (dp > Math.max(48, stray * 4)) {
+    s.data.lost ??= now;
+    if (now - s.data.lost > 300) {
+      delete s.data.lost;
+      if (s.data.start) s.data.pos = { ...s.data.start };
+      else delete s.data.pos;
+      player.sendMessage(`§c[Story] You lost the ${obj.wisp ?? "light"}. It waits where the trail began.`);
+    }
+    return;
+  }
+  delete s.data.lost;
+  const left = across(pos, to);
+  if (left <= 2) {
+    if (across(p, to) <= (obj.to?.radius ?? 8) && counting(player)) {
+      bump(player, s.e, s.i, 1);
+      scenes.delete(sk(s.pid, s.key));
+    }
+    return;
+  }
+  if (dp > stray) return; // waits for the player
+  const step = Math.min(1, left);
+  const nx = pos.x + ((to.x - pos.x) / left) * step;
+  const nz = pos.z + ((to.z - pos.z) / left) * step;
+  const ny = groundAt(dim, nx, nz, pos.y);
+  s.data.pos = { x: nx, y: ny ?? pos.y, z: nz };
+}
+
+// ---- vision ------------------------------------------------------------
+
+/** Players watching a vision. @type {Set<string>} */
+const watching = new Set();
+/** Dreams waiting for the sleeper to wake. @type {Map<string, VisionScene[]>} */
+const dreams = new Map();
+
+/**
+ * Plays a short cutscene: a fade, a title and subtitle per scene (also in chat), sounds, darkness.
+ * Sneaking skips it. Resolves when it ends.
+ * @param {Player} player @param {VisionScene[]} list @param {boolean} [dark]
+ */
+export async function playVision(player, list, dark = false) {
+  if (watching.has(player.id) || busy.has(player.id)) return false;
+  watching.add(player.id);
+  busy.add(player.id);
+  let skipped = false;
+  try {
+    const total = list.reduce((n, sc) => n + (sc.seconds ?? 5), 0);
+    try {
+      player.camera.fade({ fadeColor: { red: 0, green: 0, blue: 0 }, fadeTime: { fadeInTime: 0.6, holdTime: 0.6, fadeOutTime: 1.2 } });
+    } catch {
+      // no camera control
+    }
+    if (dark) player.addEffect("darkness", (total + 4) * 20, { showParticles: false });
+    await wait(24);
+    let released = !sneaking(player);
+    for (const sc of list) {
+      if (!player.isValid || skipped) break;
+      const secs = Math.max(1, sc.seconds ?? 5);
+      player.onScreenDisplay.setTitle(sc.title ? `§l${sc.title}` : " ", { subtitle: sc.text, fadeInDuration: 10, stayDuration: secs * 20, fadeOutDuration: 10 });
+      player.sendMessage(`§7§o${sc.title ? `${sc.title}: ` : ""}${sc.text}`);
+      if (sc.sound) player.playSound(sc.sound, { volume: 0.8 });
+      for (let t = 0; t < secs * 4; t++) {
+        await wait(5);
+        if (!player.isValid) return true;
+        if (t % 8 === 0) player.onScreenDisplay.setActionBar("§8Sneak to skip");
+        const sn = sneaking(player);
+        if (!sn) released = true;
+        else if (released) {
+          skipped = true;
+          break;
+        }
+      }
+    }
+  } finally {
+    watching.delete(player.id);
+    busy.delete(player.id);
+    try {
+      if (player.isValid) {
+        player.onScreenDisplay.setTitle(" ", { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 5 });
+        if (skipped && dark) player.removeEffect("darkness");
+      }
+    } catch {
+      // gone
+    }
+  }
+  return true;
+}
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function visionTick(player, e, i, obj) {
+  if (watching.has(player.id) || busy.has(player.id)) return;
+  if (obj.place || obj.at || obj.offset) {
+    const loc = locate(obj);
+    if (!loc || typeof loc === "string" || loc.pending || loc.dim !== player.dimension.id || across(player.location, loc) > radiusOf(obj)) return;
+  }
+  playVision(player, obj.scenes ?? [], !!obj.dark)
+    .then((played) => {
+      if (played && player.isValid && counting(player)) bump(player, e, i, 1);
+    })
+    .catch((err) => console.warn(`[saga] vision: ${err}`));
+}
+
+// ---- answer ------------------------------------------------------------
+
+/** "The Stars!" -> "stars": lower case, letters and digits, single spaces, no leading article. @param {string} s */
+export function normalizeAnswer(s) {
+  return String(s)
+    .replace(/§./g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/^(the|a|an) /, "");
+}
+
+/** Is `input` one of the accepted answers? @param {string} input @param {string[]} answers */
+export const answerOk = (input, answers) => {
+  const got = normalizeAnswer(input);
+  return got.length > 0 && answers.some((a) => normalizeAnswer(a) === got);
+};
+
+/** When each player may be asked again (tick). @type {Map<string, number>} */
+const askCool = new Map();
+
+/**
+ * Asks a riddle in a text field; a wrong answer may call monsters (`failSpawn`).
+ * @param {Player} player @param {Entry} e @param {number} i
+ */
+export async function askAnswer(player, e, i) {
+  const obj = e.chapter.objectives[i];
+  await exclusive(player, async () => {
+    const saga = sagaOf(player);
+    if (objDone(e, i, saga)) return;
+    const q = obj.question ? pagesFor([obj.question], saga, e.story.id, player.name)[0] ?? obj.label : obj.label;
+    const form = new ModalFormData().title(e.story.title).textField(`${q}\n\n§7Type your answer (capitals and spaces don't matter):`, "Your answer").submitButton("Answer");
+    const res = await show(player, form);
+    askCool.set(player.id, system.currentTick + 400);
+    if (!res || res.canceled || !player.isValid) return;
+    const input = String(res.formValues?.[0] ?? "");
+    if (!input.trim()) return;
+    resolveAnswer(player, e, i, input);
+  });
+}
+
+/** Checks an answer and acts on it (also used by the test hook). @param {Player} player @param {Entry} e @param {number} i @param {string} input */
+export function resolveAnswer(player, e, i, input) {
+  const obj = e.chapter.objectives[i];
+  if (answerOk(input, obj.answers ?? [])) {
+    player.sendMessage(`§a[Story] "${input.trim()}" - that's it!`);
+    if (counting(player)) bump(player, e, i, 1);
+    return true;
+  }
+  player.sendMessage(`§c[Story] "${input.trim()}" isn't it.${obj.failSpawn ? " Something stirs..." : " Think it over and try again."}`);
+  player.playSound("note.bass", { pitch: 0.7 });
+  askCool.set(player.id, system.currentTick + 200);
+  if (obj.failSpawn?.mobs?.length) spawnGroup(player, player.dimension, player.location, obj.failSpawn, objKey(e, i), 4, 7);
+  return false;
+}
+
+/** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function answerTick(player, e, i, obj) {
+  if (obj.npc || !(obj.place || obj.at || obj.offset)) return; // asked by the NPC, or from the story log
+  if (busy.has(player.id) || system.currentTick < (askCool.get(player.id) ?? 0)) return;
+  if (!playerIn(player, obj)) return;
+  askAnswer(player, e, i).catch((err) => console.warn(`[saga] answer: ${err}`));
+}
+
+// ---------------------------------------------------------------------------
+// The per-second loop
+// ---------------------------------------------------------------------------
+
+/** Last riding position per player, for ride distance. @type {Map<string, { x: number, z: number, d: number }>} */
+const rides = new Map();
+
+/** Survive objectives credited this second (each player once, mates included). @type {Set<string>} */
+let survived = new Set();
+
+/**
+ * One second of a player's objectives: everything that is checked rather than counted by an event.
+ * @param {Player} player @param {Entry[]} list
+ */
+export function tickPlayer(player, list) {
+  const saga = sagaOf(player);
+  const counts = counting(player);
+  const dim = player.dimension.id;
+  const p = player.location;
+  for (const e of list) {
+    e.chapter.objectives.forEach((obj, i) => {
+      if (!objApplies(e, obj, saga) || progressOf(e, i) >= target(obj)) return;
+      try {
+        // Timed objectives: progress resets when the time runs out.
+        if (obj.within && e.st.x?.[`t${i}`] && Date.now() - e.st.x[`t${i}`] > obj.within * 1000) {
+          bump(player, e, i, 0, true);
+          player.sendMessage(`§c[Story] Too slow! "${obj.label}" starts over.`);
+          player.playSound("note.bass", { pitch: 0.6 });
+        }
+        switch (obj.type) {
+          case "reach": {
+            if (!counts) break;
+            if (obj.dim && dim !== obj.dim) break;
+            if (obj.belowY !== undefined && p.y >= obj.belowY) break;
+            if (obj.aboveY !== undefined && p.y <= obj.aboveY) break;
+            const loc = locate(obj);
+            if (typeof loc === "string" || loc?.pending) break;
+            if (loc && (loc.dim !== dim || across(p, loc) > radiusOf(obj))) break;
+            const key = objKey(e, i);
+            bump(player, e, i, 1);
+            share(player, new Set([key]), "reach", () => 1, new Set([player.id]));
+            break;
+          }
+          case "collect":
+            if (counts && obj.item) bump(player, e, i, countItem(player, obj.item, obj.name), true);
+            break;
+          case "survive": {
+            if (!counts || survived.has(player.id) || !weatherOk(obj, dim) || !outdoors(player) || !playerIn(player, obj)) break;
+            const key = objKey(e, i);
+            survived.add(player.id);
+            bump(player, e, i, 1);
+            share(player, new Set([key]), "survive", () => 1, survived);
+            break;
+          }
+          case "vigil": {
+            if (!counts || !playerIn(player, obj) || !weatherOk(obj, dim)) break;
+            if (obj.timeOfDay) {
+              const t = world.getTimeOfDay();
+              const [a, b] = obj.timeOfDay;
+              if (!(a <= b ? t >= a && t < b : t >= a || t < b)) break;
+            }
+            if (obj.outdoors && !outdoors(player)) break;
+            if (obj.sneaking && !sneaking(player)) break;
+            bump(player, e, i, 1);
+            break;
+          }
+          case "wear": {
+            if (!counts || !obj.items?.length) break;
+            const slot = { head: EquipmentSlot.Head, chest: EquipmentSlot.Chest, legs: EquipmentSlot.Legs, feet: EquipmentSlot.Feet }[obj.slot ?? "head"];
+            const worn = player.getComponent("minecraft:equippable")?.getEquipment(slot)?.typeId;
+            if (worn && obj.items.includes(worn)) bump(player, e, i, 1);
+            break;
+          }
+          case "ride": {
+            const mount = player.getComponent("minecraft:riding")?.entityRidingOn;
+            const last = rides.get(player.id);
+            if (!mount || (obj.mobs?.length && !obj.mobs.includes(mount.typeId))) {
+              rides.delete(player.id);
+              break;
+            }
+            if (!last) {
+              rides.set(player.id, { x: p.x, z: p.z, d: 0 });
+              break;
+            }
+            const step = Math.min(30, across(p, last));
+            last.x = p.x;
+            last.z = p.z;
+            last.d += step;
+            if (counts && last.d >= 1) {
+              const whole = Math.floor(last.d);
+              last.d -= whole;
+              bump(player, e, i, whole);
+            }
+            break;
+          }
+          case "wait": {
+            const x = (e.st.x ??= {});
+            const k = String(i);
+            if (obj.days) {
+              const now = world.getAbsoluteTime();
+              if (x[k] === undefined) {
+                x[k] = now;
+                markDirty(player);
+              } else if (now - x[k] >= obj.days * 24000) bump(player, e, i, 1);
+            } else {
+              const now = Date.now();
+              if (x[k] === undefined) {
+                x[k] = now;
+                markDirty(player);
+              } else if (now - x[k] >= (obj.minutes ?? 1) * 60000) bump(player, e, i, 1);
+            }
+            break;
+          }
+          case "sleep":
+            if (counts && player.isSleeping) {
+              bump(player, e, i, 1);
+              if (obj.vision?.length) dreams.set(player.id, obj.vision);
+            }
+            break;
+          case "defeat":
+            if (obj.champion && counts) championNear(player, obj);
+            break;
+          case "meet":
+            meetTick(player, e, i, obj);
+            break;
+          case "inspect":
+            if (counts) inspectTick(player, e, i, obj);
+            break;
+          case "stealth":
+            if (counts) stealthTick(player, e, i, obj);
+            break;
+          case "escort":
+            if (counts) escortTick(player, e, i, obj);
+            break;
+          case "lead":
+            leadTick(player, e, i, obj);
+            break;
+          case "defend":
+            defendTick(player, e, i, obj);
+            break;
+          case "follow":
+            if (counts) followTick(player, e, i, obj);
+            break;
+          case "vision":
+            if (counts) visionTick(player, e, i, obj);
+            break;
+          case "answer":
+            if (counts) answerTick(player, e, i, obj);
+            break;
+        }
+      } catch (err) {
+        console.warn(`[saga] ${obj.type}: ${err}`);
+      }
+    });
+  }
+  // A dream after sleeping, once awake.
+  const dream = dreams.get(player.id);
+  if (dream && !player.isSleeping && !busy.has(player.id)) {
+    dreams.delete(player.id);
+    playVision(player, dream, true).catch(() => {});
+  }
+}
+
+/** Starts a loop run: scenes not visited in the previous run are ended. */
+export function beginRun() {
+  for (const s of [...scenes.values()]) if (s.seen < run) endScene(s.pid, s.key);
+  run++;
+  survived = new Set();
+}
+
+/** The fast loop (every 5 ticks): guards on patrol, escorts following, wisps drifting. */
+function fast() {
+  if (!scenes.size) return;
+  for (const s of scenes.values()) {
+    if (s.kind !== "stealth" && s.kind !== "escort" && s.kind !== "follow") continue;
+    const player = online(s.pid);
+    if (!player) continue;
+    try {
+      if (s.kind === "stealth") stealthFast(s, player);
+      else if (s.kind === "escort") escortFast(s, player);
+      else followFast(s, player);
+    } catch (err) {
+      console.warn(`[saga] ${s.kind}: ${err}`);
+    }
+  }
+}
+system.runInterval(fast, FAST_TICKS);
+
+/**
+ * Where the tracker should point for a scene (an escort's character, a wisp, a stealth goal), or
+ * undefined to use the objective's own location.
+ * @param {string} pid @param {Entry} e @param {number} i @returns {{ dim: string, x: number, y?: number, z: number, label: string } | undefined}
+ */
+export function sceneFocus(pid, e, i) {
+  const s = scenes.get(sk(pid, objKey(e, i)));
+  if (!s) return undefined;
+  const obj = e.chapter.objectives[i];
+  if (s.kind === "follow" && s.data.pos) return { dim: online(pid)?.dimension.id ?? OVERWORLD, ...s.data.pos, label: `the ${obj.wisp ?? "light"}` };
+  if (s.kind === "escort") {
+    const [a] = actorsOf(pid, s.key, "escort");
+    if (!a?.ent.isValid) return undefined;
+    const player = online(pid);
+    if (s.state === "wait" || (player && dist3(player.location, a.ent.location) > 24)) return { dim: a.dim, ...a.ent.location, label: obj.who?.name ?? "them" };
+    const to = locate(obj.to, "the destination");
+    return to && typeof to !== "string" ? to : undefined;
+  }
+  if (s.kind === "stealth") {
+    const sp = stealthSpots(obj);
+    return sp ? { dim: sp.loc.dim, ...sp.goal, label: obj.goal ? "the goal" : sp.loc.label } : undefined;
+  }
+  return undefined;
+}
+
+/** Seconds left on a timed objective (or a wait), or undefined. @param {Entry} e @param {number} i */
+export function timeLeft(e, i) {
+  const obj = e.chapter.objectives[i];
+  const x = e.st.x;
+  if (obj.within && x?.[`t${i}`]) return obj.within - (Date.now() - x[`t${i}`]) / 1000;
+  if (obj.type === "wait" && x?.[String(i)] !== undefined) {
+    if (obj.days) return ((obj.days * 24000 - (world.getAbsoluteTime() - x[String(i)])) / 20) * 1;
+    return ((obj.minutes ?? 1) * 60000 - (Date.now() - x[String(i)])) / 1000;
+  }
+  return undefined;
+}
+
+/** "3:20 left" or "2 days left" for the log and tracker. @param {Entry} e @param {number} i */
+export function timeText(e, i) {
+  const left = timeLeft(e, i);
+  if (left === undefined) return "";
+  const obj = e.chapter.objectives[i];
+  if (obj.type === "wait" && obj.days) {
+    const days = Math.max(0, left / 1200);
+    return days >= 1 ? `${Math.ceil(days)} day${Math.ceil(days) === 1 ? "" : "s"} left` : `${clock(left)} left`;
+  }
+  return `${clock(left)} left`;
+}
+
+/** Cleanup for a player who left. @param {string} pid */
+export function playerGone(pid) {
+  endScenesOf(pid);
+  rides.delete(pid);
+  lastHit.delete(pid);
+  lastUse.delete(pid);
+  askCool.delete(pid);
+  dreams.delete(pid);
+  holdUntil.delete(pid);
+  for (const k of [...tended.keys()]) if (k.includes(pid)) tended.delete(k);
+}
+
+/** Every dimension's story champions this pack spawned are removed at world load. */
+export function sweepChampions() {
+  for (const id of DIMENSIONS) {
+    try {
+      for (const ent of world.getDimension(id).getEntities({ tags: [CHAMPION_TAG] })) ent.remove();
+    } catch (e) {
+      console.warn(`[saga] cleanup: ${e}`);
+    }
+  }
+}
+
+/** For the operators' "complete the current step" tool. @param {Player} player @param {Entry} e */
+export function completeStep(player, e) {
+  const saga = sagaOf(player);
+  const i = e.chapter.objectives.findIndex((_, k) => !objDone(e, k, saga));
+  if (i < 0) return false;
+  const obj = e.chapter.objectives[i];
+  bump(player, e, i, target(obj), true);
+  endScene(player.id, objKey(e, i));
+  return true;
+}
+
+export { matches };

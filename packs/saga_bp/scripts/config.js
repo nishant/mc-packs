@@ -29,4 +29,26 @@ export const CONFIG = {
 
   /** Where story offers sit among an NPC's buttons (lower is higher up; offers default to 50). */
   offerOrder: 20,
+
+  /**
+   * "Ask for a hint" takes this share of the chapter's levels and Crowns (once per chapter). 0 = hints
+   * are free; 1 = a hinted chapter pays no levels or Crowns (items, relics and titles are kept).
+   */
+  hintPenalty: 0.25,
+
+  /**
+   * A chapter that needs a place nobody has set gets one picked by the pack (by the place's site
+   * rules: distance from world spawn, coast, water, high ground...), and its building is built when a
+   * player comes close. Disabled, operators set every place by hand.
+   */
+  autoPlaces: true,
+
+  /** How close (blocks) a player must come to a picked place before its building is built there. */
+  buildRange: 64,
+
+  /** Seconds a story character (a ghost, a guard, an escort) waits for its player to come back before it is removed. It comes back when needed. */
+  actorTimeoutSeconds: 300,
+
+  /** Questgivers offer a daily favor: a short job, a new one each real day (UTC). */
+  favors: true,
 };
