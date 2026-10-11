@@ -61,6 +61,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Waystones & Inns — `waystone_bp`](#waystones--inns--waystone_bp)
 - [Expeditions — `expedition_bp`](#expeditions--expedition_bp)
 - [Town Projects — `town_bp`](#town-projects--town_bp)
+- [Safe Zones — `zones_bp`](#safe-zones--zones_bp)
 - [Weather Almanac — `weather_bp`](#weather-almanac--weather_bp)
 - [Regional Weather — `climate_bp`](#regional-weather--climate_bp)
 - [Storm Chasing — `storm_bp`](#storm-chasing--storm_bp)
@@ -642,13 +643,13 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 ### How to use
 
 1. Nothing to set up: a creeper that explodes still damages and knocks back players and mobs, but the ground and your builds stay intact.
-2. Run `/realm:guard` to see the mode, which blasts are covered and any protected zones.
-3. **Operators:** to keep creeper craters in the wild and protect only bases, set the mode to `zones` in `/realm:config` (or `mode` in `config.js`), then stand in a base and run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). `/realm:guard_remove <name>` removes a zone.
+2. Run `/realm:guard` for the menu: **Status** shows the mode, which blasts are covered and any protected zones (`/realm:guard_status` shows the same in chat). With [Safe Zones](#safe-zones--zones_bp) installed, **Safe zones** opens its menu.
+3. **Operators:** to keep creeper craters in the wild and protect only bases, set the mode to `zones` in `/realm:config` (or `mode` in `config.js`), then stand in a base and pick **Protect this spot** in `/realm:guard` (a name and a radius), or run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). **Remove a zone** or `/realm:guard_remove <name>` removes one. In `zones` mode, safe zones from [Safe Zones](#safe-zones--zones_bp), and towns and claims protected from world events, are protected too (`safeZones`).
 
 ### What players see
 
 - **`everywhere` mode (default):** every blast from a listed source (`sources`, creepers by default) hurts and knocks back as usual but breaks no blocks.
-- **`zones` mode:** blocks inside a zone are kept; the rest of the blast breaks blocks as in vanilla. A creeper at the edge of a zone breaks only the part of its crater that lies outside.
+- **`zones` mode:** blocks inside a zone are kept; the rest of the blast breaks blocks as in vanilla. A creeper at the edge of a zone breaks only the part of its crater that lies outside. With `safeZones` (default enabled), every safe zone counts as a zone too: [Safe Zones](#safe-zones--zones_bp), and towns and claims protected from world events, top to bottom. **Status** then says `Where you stand: protected (safe zone Home)`.
 - Charged creepers are covered too. TNT, beds in the Nether or End, respawn anchors and end crystals are never touched, because they aren't listed (beds and anchors have no source entity at all).
 - Unlike the `mobGriefing` gamerule, this changes nothing else: villagers still farm, sheep still eat grass (the Wool Farm guide needs that) and endermen still pick up blocks.
 
@@ -656,7 +657,8 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:guard` | Everyone | Shows whether the spot you're standing on is protected (and by which zone), then the mode, the covered blast sources and the zones |
+| `/realm:guard` | Everyone | Opens the Creeper Guard menu: **Status**, and for operators **Protect this spot** (a zone around you: a name and a radius, 8–256, default 64, `defaultRadius`) and **Remove a zone**; **Safe zones** when Safe Zones is installed |
+| `/realm:guard_status` | Everyone | Shows whether the spot you're standing on is protected (and by which zone or safe zone), then the mode, the covered blast sources and the zones |
 | `/realm:guard_add <name> [radius]` | Ops | Protects a sphere around you, `radius` 8–256 blocks (default 64, `defaultRadius`). Names use letters, digits, `_` and `-`, up to 24, and must be unique whatever their case (`home` and `Home` are the same zone). Only matters in `zones` mode |
 | `/realm:guard_remove <name>` | Ops | Removes a zone (any case) |
 
@@ -664,11 +666,12 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 
 | Option | Default | Description |
 |---|---|---|
-| `mode` | `everywhere` | `everywhere`: listed blasts never break blocks. `zones`: only inside the zones from `/realm:guard_add` |
+| `mode` | `everywhere` | `everywhere`: listed blasts never break blocks. `zones`: only inside the zones from `/realm:guard_add` (and safe zones, with `safeZones`) |
+| `safeZones` | `true` | In `zones` mode, safe zones count as zones too: Safe Zones, and towns and claims protected from world events |
 | `sources` | `["minecraft:creeper"]` | Exploding entity types to neutralize. Add `minecraft:fireball` (ghast fireballs) or `minecraft:wither_skull` if wanted |
 | `defaultRadius` | `64` | Zone radius in blocks when `/realm:guard_add` is given none |
 
-Operators can change `mode` and `defaultRadius` in game with `/realm:config`; a new mode applies to the next explosion. `sources` stays in `config.js`.
+Operators can change `mode`, `safeZones` and `defaultRadius` in game with `/realm:config`; a new mode applies to the next explosion. `sources` stays in `config.js`.
 
 ### Saved data
 
@@ -679,7 +682,7 @@ Operators can change `mode` and `defaultRadius` in game with `/realm:config`; a 
 
 ### How it works
 
-The pack listens to `world.beforeEvents.explosion`. When the exploding entity's type is in `sources`, it empties the list of blocks the blast will break (`everywhere`), or drops the blocks inside a zone from it (`zones`). It never cancels the explosion, which would also remove the damage and drops.
+The pack listens to `world.beforeEvents.explosion`. When the exploding entity's type is in `sources`, it empties the list of blocks the blast will break (`everywhere`), or drops the blocks inside a zone from it (`zones`). It never cancels the explosion, which would also remove the damage and drops. Safe zones come from the safe zones protocol (`realm:zones`, see [How the packs work together](#how-the-packs-work-together)), kept in memory.
 
 ---
 
@@ -978,7 +981,8 @@ Claim the land around your base so other players can't break, place or open anyt
 2. Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees `This land is claimed by Sam`.
 3. **Share it:** `/realm:claim` → **My claim: 120, -340** → **Share with Alex** (players online now). The same menu stops sharing, shows its borders or removes the claim.
 4. **Where are the borders?** `/realm:claim` → **Show claim borders** sparkles the edges of every claim near you for 10 seconds (asking again starts over). Walking in or out of one says `Entering Sam's claim` / `Leaving Sam's claim` above the hotbar.
-5. **Operators:** enable it in `/realm:config` → **Land Claims** → **Land claims**, and set the claim size and how many each player gets there. `/realm:claim` → **All claims (operator)** lists every claim to remove any of them.
+5. Claims are safe zones for world events too: meteors, storm lightning and the other world-event packs break no blocks in them (see [Safe Zones](#safe-zones--zones_bp)).
+6. **Operators:** enable it in `/realm:config` → **Land Claims** → **Land claims**, and set the claim size and how many each player gets there. `/realm:claim` → **All claims (operator)** lists every claim to remove any of them. **Protect claims from world events** (`protectWorldEvents`) turns the safe zone part off.
 
 ### What players see
 
@@ -987,6 +991,7 @@ Claim the land around your base so other players can't break, place or open anyt
 - **Claiming** is refused with a reason when you already have 2 (`maxClaims`), or when the new square would overlap another claim (`That would overlap Sam's claim (-16, 48 to 16, 80). Move further away.`). A claim keeps the size it was made with when operators change `radius` later.
 - **What's protected** from everyone who isn't the owner or shared: breaking and placing blocks, tapping any block (chests, doors, trapdoors, buttons, levers, beds, crafting tables, buckets), and using the entities in `protectedEntities`. A block placed from outside onto the edge of a claim is refused too; with an empty hand you can still open a door or chest just outside the border.
 - **Explosions** break no blocks inside a claim (`protectExplosions`), whatever caused them; the damage is unchanged, and the part of the blast outside the claim breaks blocks as usual.
+- **World events** (`protectWorldEvents`, default enabled): every claim is a safe zone, so no meteor crater, storm cell lightning or other world event changes blocks in it, and [Safe Zones](#safe-zones--zones_bp) lists it under **Towns and claims** as `Sam's claim`.
 - **Operators** can't build in other players' claims unless **Operators can build in any claim** is enabled (`operatorsBypass`), so a realm where everyone is an operator still gets protection. They can always remove a claim.
 - **What a claim doesn't stop:** mobs, hurting animals or pets, fire spreading, lava or water flowing in, pistons pushing blocks in from outside, hoppers or minecarts pulling items across the border, and hits: punching an armor stand to break it, or punching the item out of an item frame, isn't stopped (only tapping them is).
 
@@ -1005,11 +1010,12 @@ Claim the land around your base so other players can't break, place or open anyt
 | `maxClaims` | `2` | Most claims one player can have (1–10 in game) |
 | `maxShared` | `10` | Most players one claim can be shared with |
 | `protectExplosions` | `true` | Explosions break no blocks inside a claim |
+| `protectWorldEvents` | `true` | Claims are safe zones: meteors, tornadoes, storm lightning and other world events break no blocks in them |
 | `operatorsBypass` | `false` | Operators can build, break and open things in anyone's claim |
 | `protectedEntities` | `armor_stand`, `chest_minecart`, `hopper_minecart`, `chest_boat` | Entities only a claim's players can use inside it |
 | `borderSeconds` | `10` | How long **Show claim borders** draws them |
 
-Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions` and `operatorsBypass` in game with `/realm:config`. The rest stays in `config.js`. The realm has room for 500 claims in all.
+Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `protectWorldEvents` and `operatorsBypass` in game with `/realm:config`. The rest stays in `config.js`. The realm has room for 500 claims in all.
 
 ### Saved data
 
@@ -1024,6 +1030,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions` and `
 - Claims are read into memory once and kept in step as they change, so the checks below never read saved data.
 - `beforeEvents.playerBreakBlock` and `beforeEvents.playerInteractWithBlock` are canceled inside someone else's claim. The tap is checked at the block and at the spot a block would be placed, since the stable API has no "before place" event and placing starts with that tap. `afterEvents.playerPlaceBlock` removes anything that still got placed. `beforeEvents.playerInteractWithEntity` is canceled for `protectedEntities`.
 - `beforeEvents.explosion` takes the blocks inside claims out of the blast without canceling it.
+- The pack is the `claims` provider of the safe zones protocol: while claims are enabled and `protectWorldEvents` is on, it sends every claim as a square zone (`realm:zones`) whenever claims change, when the world starts and when asked (`realm:zones_ping`); otherwise it sends an empty list.
 - Once a second, each player's claim is looked up to say when they walk in or out of one. Messages above the hotbar send `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) leaves them on screen.
 
 ---
@@ -3525,6 +3532,67 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 
 ---
 
+## Safe Zones — `zones_bp`
+
+Mark your base, a town square or a farm as a **safe zone**, and world events leave it alone: meteors don't make craters there, storm lightning doesn't strike (so it can't start fires), tornadoes can be set to calm down or steer around it, and Blood Moon creepers don't spawn in it. The events still happen, and you still see the meteor streak across the sky; they just break no blocks inside. Towns ([Town Projects](#town-projects--town_bp)) and land claims ([Land Claims](#land-claims--claims_bp)) can be safe zones too, and the world-event packs treat them all the same.
+
+### How to use
+
+1. Run `/realm:zones`. The top of the menu says whether the spot you're standing on is protected, and by what (`Where you stand: protected by Home (Safe zone).`).
+2. **Safe zones** lists every zone made with this pack, nearest first, with its center, radius and how far it is from you. Pick one and **Show outline**: green sparkles trace its edge around you for 20 seconds (`previewSeconds`), and the bar above the hotbar says whether you're inside and how far the edge is.
+3. **Towns and claims** lists the protected areas other packs share (towns with **Protect from world events**, claims while **Protect claims from world events** is on), read only, with their source; **Show outline** works for them too. **Show nearby outlines** traces every zone whose edge is within 64 blocks of you.
+4. **Operators:** stand in the middle of the place and pick **Add a safe zone here**. Type a name (up to 24 characters) and set the radius with the slider: 8 to 512 blocks in steps of 8 (starting at 64, `defaultRadius`; at most `maxRadius`). Pick **Preview**: white sparkles outline the circle around you, and after a few seconds a menu asks **Create it**, **Look again**, **Change name or size** or **Cancel** (closed it? `/realm:zones` shows **Create Home** at the top until you decide). A zone reaches from the bottom of the world to the top.
+5. **Operators:** pick a zone in **Safe zones** to **Edit name or size**, **Move here** (centers it where you stand, with the same preview), **Teleport** to its center, or **Remove** it. Meteor Strikes' **Protect this area from meteors** button opens the same **Add a safe zone here**.
+6. **Operators:** to let everyone protect their own base, enable **Players can add safe zones** in `/realm:config` → **Safe Zones** (`playersCreate`). Each player can then add up to 1 zone (`playerMaxZones`) of up to 64 blocks radius (`playerMaxRadius`), and change, move or remove their own.
+
+### What players see
+
+- **Inside a safe zone** (any zone from any provider, in the zone's dimension, top to bottom):
+  - [Meteor Strikes](#meteor-strikes--meteor_bp): no meteor is aimed into one, and no crater block is ever placed or removed in one. A meteor that still comes down over a zone lands just outside it, or bursts in the sky above it (the meteor pack's **A meteor over a safe zone** setting).
+  - [Storm Chasing](#storm-chasing--storm_bp): no storm cell lightning strikes in or right next to a zone, so it can't start fires there. Lightning rods inside still get struck and charged.
+  - [Tornadoes](#tornadoes--tornado_bp): a tornado never breaks blocks anywhere; its **Tornadoes and safe zones** setting picks whether it passes through as usual, moves nothing inside a zone, or steers around zones.
+  - [Blood Moon](#blood-moon--harvest-moon--moon_bp): no Blood Moon creeper spawns in a zone (another monster comes instead).
+  - [Creeper Guard](#creeper-guard--guard_bp): in its protected zones mode, creeper blasts break nothing in a safe zone either.
+- **What it doesn't stop:** vanilla lightning from an ordinary thunderstorm, fire spread, creepers and other mobs that spawn on their own (use Creeper Guard for creeper blasts), and players. A safe zone isn't a land claim.
+- **Overlaps** are fine: zones may overlap each other, towns and claims.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:zones` | Everyone | Opens the Safe Zones menu: whether you're in a safe zone, the list of safe zones (nearest first) and of protected towns and claims, with **Show outline** for each and **Show nearby outlines**. Operators also add a zone where they stand (radius 8 to 512, default 64, `defaultRadius`) with a preview, edit, move, teleport to and remove zones. With `playersCreate` enabled (default disabled), players can add their own too (1 each, `playerMaxZones`, radius up to 64, `playerMaxRadius`) |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `defaultRadius` | `64` | Where the radius slider of **Add a safe zone here** starts, in blocks |
+| `maxRadius` | `512` | Largest radius a zone can have, in blocks (8 to 512, in steps of 8) |
+| `previewSeconds` | `20` | Seconds an outline shows: the preview of a new zone, **Show outline** and **Show nearby outlines** |
+| `playersCreate` | `false` | Players who aren't operators can add safe zones, within the two limits below. Operators always can |
+| `playerMaxZones` | `1` | Most safe zones one player (not an operator) can have |
+| `playerMaxRadius` | `64` | Largest radius a player (not an operator) can give a zone, in blocks |
+
+Operators can change every option but `previewSeconds` in game with `/realm:config` when Realm Settings is installed. The realm has room for 100 zones made with this pack.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `zones:list` | World | JSON list of the zones: `{ id, name, dim, x, y, z, r, o?, on? }`, its id (`z1`, `z2`...), name, dimension, center (and the height it was made at, for **Teleport**), radius, and the id and name of the player who added it when that wasn't an operator |
+| `zones:next` | World | The next zone id number |
+| `zones:cfg` | World | Settings changed in `/realm:config` |
+
+Towns and claims aren't saved here: their packs send them again whenever the world starts.
+
+### How it works
+
+- This pack is the `zones` provider of the safe zones protocol (see [How the packs work together](#how-the-packs-work-together)): it sends its whole list as `realm:zones` whenever a zone changes, 5 seconds after the world loads, and when any pack sends `realm:zones_ping`. It also listens to the other providers, so its lists are complete.
+- `realm:zones_open` `{ player, action: "add" }` opens **Add a safe zone here** for that player (Meteor Strikes' **Protect this area from meteors**); any other action opens the menu (Creeper Guard's **Safe zones** button).
+- Outlines are `Player.spawnParticle` (`minecraft:villager_happy`, `minecraft:endrod` for a preview) every half second, only along the part of the edge within 40 blocks of you and at your height, so a 512-block zone costs no more than a small one.
+
+---
+
 ## Weather Almanac — `weather_bp`
 
 Plans the overworld weather hours ahead, so the realm has a forecast: clear spells, rain and thunderstorms come and go on a schedule in real time, and anyone can look up what's coming with `/realm:weather` (or ask Sol the Sky-reader). Rain and storms last a realistic while, a clear spell always ends in rain or a storm, and rain can build into a thunderstorm.
@@ -3532,10 +3600,10 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 ### How to use
 
 1. About 10 seconds after you first join each day (UTC), chat gives the day's forecast in one line, for example `Forecast: clear now, rain in about 25 minutes. More with /realm:weather`. Don't want it? Disable **Daily forecast in chat** in `/realm:prefs`.
-2. Run `/realm:weather` to see the forecast for the next 3 hours: what the weather is now and how long it lasts, then every spell coming up with its start time (in UTC) and length, and a summary such as `Rain in 25 min, for about 12 min. Thunderstorm likely around 14:40 UTC.`
+2. Run `/realm:weather` (or `/realm:weather_forecast`) to see the forecast for the next 3 hours: what the weather is now and how long it lasts, then every spell coming up with its start time (in UTC) and length, and a summary such as `Rain in 25 min, for about 12 min. Thunderstorm likely around 14:40 UTC.`
 3. With the [Townsfolk](#townsfolk--npc_bp) pack, tap Sol the Sky-reader (or any townsfolk with the `skymage` role) and pick **Forecast** for the same.
 4. Sleeping through rain or a thunderstorm ends it, as in vanilla: the sky clears and the plan carries on from there (the forecast updates).
-5. **Operators:** `/realm:weather_set <clear|rain|thunder> <minutes>` starts that weather now for that many real minutes, and the plan carries on after it. Vanilla `/weather` doesn't stick while the almanac runs: it's put back within a second. `/realm:config` → **Weather Almanac** sets how long each kind of weather lasts and how likely thunder is, or disables the almanac to give the weather back to the game.
+5. **Operators:** `/realm:weather` opens a menu with **Forecast** and **Set the weather** (pick clear, rain or a thunderstorm and 5 to 240 real minutes). `/realm:weather_set <clear|rain|thunder> <minutes>` does the same from chat: it starts that weather now for that many real minutes, and the plan carries on after it. Vanilla `/weather` doesn't stick while the almanac runs: it's put back within a second. `/realm:config` → **Weather Almanac** sets how long each kind of weather lasts and how likely thunder is, or disables the almanac to give the weather back to the game.
 
 ### What players see
 
@@ -3553,7 +3621,8 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:weather` | Everyone | The forecast for the next 3 hours (`horizonHours`): the weather now and when it changes, every spell coming up, in real time (UTC) |
+| `/realm:weather` | Everyone | The forecast (below). Operators get a menu instead: **Forecast** and **Set the weather** (clear, rain or thunder for 5 to 240 real minutes) |
+| `/realm:weather_forecast` | Everyone | The forecast for the next 3 hours (`horizonHours`): the weather now and when it changes, every spell coming up, in real time (UTC) |
 | `/realm:weather_set <clear\|rain\|thunder> <minutes>` | Operators | Starts that weather now for 1 to 1440 real minutes; the plan carries on after it. With the almanac disabled it just sets the weather, and the game's weather cycle takes over after |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3689,11 +3758,12 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 ### How to use
 
 1. In a thunderstorm, chat soon says `A storm cell is forming to the NE.` The cell forms 200 to 500 blocks from one of the players online, drifts 1 to 3 blocks a second and lasts 4 to 8 minutes.
-2. Hold a clock and run `/realm:storm` for a reading: `Cell: 340m NE, strength 7/10`. Holding the Storm Meter relic ([Relics](#relics--relics_bp)) shows the reading all the time.
+2. Hold a clock and run `/realm:storm` → **Read the storm** (or `/realm:storm_read`) for a reading: `Cell: 340m NE, strength 7/10`. Holding the Storm Meter relic ([Relics](#relics--relics_bp)) shows the reading all the time.
 3. Near the cell, lightning lands every 3 to 8 seconds, more often as it grows. Watch out: it hurts. Getting within 64 blocks of the cell adds **Storm cell** to the Weather page of your [Field Journal](#field-journal--journal_bp).
 4. Place lightning rods where the storm goes. When lightning strikes one you placed (the cell's, or ordinary storm lightning), it sparks blue and is charged. Tap a charged rod to collect 1 or 2 **Storm Glass**, and it can be charged again.
 5. Don't want the chat line when a cell forms? Disable **Storm cell notes** in `/realm:prefs`.
-6. **Operators:** `/realm:storm_cell` starts a cell 48 to 96 blocks from you during a thunderstorm; `/realm:storm_cell true` starts one even without a storm. `/realm:config` → **Storm Chasing** enables or disables the cells, their lightning and the chat line, and sets the wait between cells.
+6. Storm cell lightning never strikes in or right next to a safe zone ([Safe Zones](#safe-zones--zones_bp), protected towns and claims), so it can't set your base on fire. Lightning rods there still get struck.
+7. **Operators:** `/realm:storm` also has **Start a storm cell**, **Start a storm cell anyway** (without a thunderstorm) and **End the storm cell**. `/realm:storm_cell` starts a cell 48 to 96 blocks from you during a thunderstorm; `/realm:storm_cell true` starts one even without a storm. `/realm:config` → **Storm Chasing** enables or disables the cells, their lightning and the chat line, and sets the wait between cells.
 
 ### What players see
 
@@ -3703,13 +3773,14 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 - **Lightning** lands at a random spot within 30 blocks of the cell (`strikeRadius`), only where the world is loaded (around players). To keep builds from catching fire, a strike is skipped within 64 blocks of world spawn (`avoidSpawn`) and anywhere a check of the 9 x 9 columns around the spot (the surface and 4 blocks under it) finds a player-made block: planks, glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpet, concrete, glazed terracotta, polished, cut and chiseled stone, copper blocks, paths, farmland, crafting tables, furnaces, bricks, slabs, stairs, rails, redstone parts and the like.
 - **Lightning rods:** the pack remembers rods players place (up to 200, `maxRods`). Half the time (`rodChance`) a strike goes to an uncharged rod within the cell's reach instead, even near spawn (a struck rod doesn't start fires). Any lightning within 3 blocks of a remembered rod charges it: a blue spark and a beacon hum, then a spark every 2 seconds while someone is within 48 blocks. Tapping a charged rod (with anything in hand) collects `You collect 2 Storm Glass from the lightning rod.` Tapping an uncharged one with an empty hand says `This lightning rod isn't charged. A lightning strike charges it.` The sparks come from [Realm Skies](#realm-skies--sky_rp); without it, the rods still charge.
 - **Storm Glass** is prismarine crystals named `Storm Glass` with the lore `Charged by a lightning strike`. Other packs may buy or use it.
-- **`/realm:storm`** without a clock in your hand says `Hold a clock to read the storm.`; with no cell (or outside the overworld), `No storm cell.`
+- **Read the storm** without a clock in your hand says `Hold a clock to read the storm.`; with no cell (or outside the overworld), `No storm cell.`
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:storm` | Everyone | With a clock in your hand: the storm cell's distance, direction and strength (`Cell: 340m NE, strength 7/10`) |
+| `/realm:storm` | Everyone | Opens the Storm Chasing menu: **Read the storm**; operators also start a storm cell (with or without a thunderstorm) or end it |
+| `/realm:storm_read` | Everyone | With a clock in your hand: the storm cell's distance, direction and strength (`Cell: 340m NE, strength 7/10`) |
 | `/realm:storm_cell [force]` | Operators | Starts a storm cell 48 to 96 blocks from you now (default, `commandMinDistance` to `commandMaxDistance`), replacing any other. Needs a thunderstorm unless `force` is `true`; a forced cell lasts its full time even if the weather clears |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3718,6 +3789,7 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 |---|---|---|
 | `enabled` | `true` | Thunderstorms in the overworld get a storm cell |
 | `lightning` | `true` | The storm cell throws lightning. Disabled, it still drifts and can be read |
+| `avoidZones` | `true` | No lightning in or within 4 blocks of a safe zone (Safe Zones, protected towns and claims). Lightning rods there still get struck and charged |
 | `formNotes` | `true` | A chat line when a storm cell forms. Each player can choose in `/realm:prefs` |
 | `gapSeconds` | `60` | Seconds after a cell passes before the next can form (0–3600 in game) |
 | `minDistance` | `200` | A new cell forms at least this far from a random online player (blocks) |
@@ -3739,7 +3811,7 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 | `commandMinDistance` | `48` | `/realm:storm_cell` puts the cell at least this far from the operator |
 | `commandMaxDistance` | `96` | ...and at most this far |
 
-Operators can change `enabled`, `lightning`, `gapSeconds` and `formNotes` in game with `/realm:config`. Each player can switch the chat line for themselves with **Storm cell notes** in `/realm:prefs`, which follows `formNotes` until they choose. The rest stays in `config.js`.
+Operators can change `enabled`, `lightning`, `avoidZones`, `gapSeconds` and `formNotes` in game with `/realm:config`. Each player can switch the chat line for themselves with **Storm cell notes** in `/realm:prefs`, which follows `formNotes` until they choose. The rest stays in `config.js`.
 
 ### Saved data
 
@@ -3768,15 +3840,16 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 
 1. When a thunderstorm starts, there's a chance (`chance`, 0.2) that a tornado touches down during it, 1 to 4 minutes in, somewhere 80 to 160 blocks from one of the players in the Overworld, on open grass, dirt or sand.
 2. Anyone within 150 blocks gets a warning in chat, such as `§cTornado! 140m to the SW, moving NE.`, and hears a warning horn every 20 seconds while it lasts. Closer in you hear the wind roar and the storm rumble from its direction.
-3. Run `/realm:tornado` any time to see where it is and which way it's heading, or `No tornado right now.`
+3. Run `/realm:tornado` → **Where is the tornado?** (or `/realm:tornado_info`) any time to see where it is and which way it's heading, or `No tornado right now.`
 4. Want a closer look? Mobs and items near the funnel circle it and get lifted; get within about 6 blocks and you're thrown a few blocks up and out, then float down with Slow Falling, so it's a ride, not a death trap. Creative and spectator players are left alone.
 5. When it dies down (after 1.5 to 3 minutes), chat says `§7The tornado has died down.` and 2 to 5 **Storm Glass** lie on the ground at the end of its path. Go pick them up.
-6. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the funnel. `/realm:tornado_spawn` makes a tornado 40 blocks in front of you right away, in any weather. `/realm:config` → **Tornadoes** enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, the funnel's density and view distance, the pull radius and whether players are thrown.
+6. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the funnel. `/realm:tornado` → **Spawn one** (or `/realm:tornado_spawn`) makes a tornado 40 blocks in front of you right away, in any weather; **End the tornado** stops it. `/realm:config` → **Tornadoes** enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are thrown.
 
 ### What players see
 
 - **The funnel:** rings of spinning dust stacked 40 blocks (`height`) up from the ground, narrow at the bottom and about 11 blocks wide at the top, bending and swaying, with dirt and leaf bits flung out at its base. Each player within `viewDistance` (128) blocks gets their own copy (`rings`, 16 rings, half as many beyond 64 blocks; `density` scales both), so players far away cost nothing.
 - **Where it goes:** it drifts 2 to 4 blocks a second (`speed`) on a slowly wandering heading, follows the ground over hills, and turns away rather than come within `avoidSpawn` (64) blocks of the world spawn. It may pass by builds: it never changes a block.
+- **Safe zones** ([Safe Zones](#safe-zones--zones_bp), protected towns and claims), by **Tornadoes and safe zones** (`zoneMode`): `pass` (default) goes through them like anywhere else, since it breaks nothing; `calm` pulls, lifts and throws nothing that is inside a zone (pens, farms and item sorters stay as they are); `avoid` never forms within `pullRadius` + 16 blocks of a zone and turns away before its pull reaches one (and is calm inside one, if an operator spawns it there).
 - **Pull:** mobs and dropped items within `pullRadius` (12) blocks of the funnel circle it, drift inward and rise up to `liftHeight` (8) blocks. Mobs get Slow Falling while they're in it, so pets, villagers and farm animals land safely. Townsfolk (`minecraft:npc`), armor stands, paintings, minecarts, boats, falling sand and gravel, primed TNT, ender pearls and other projectiles, and other packs' helper entities are never moved.
 - **Players:** at the edge of the pull radius you feel a tug toward the funnel; within half of it you're thrown a few blocks up and sideways (at most once every 4 seconds), and get Slow Falling for `slowFallingSeconds` (6) seconds near the top of the throw. `throwPlayers` disabled leaves players alone.
 - **Warnings and sounds:** within `warnDistance` (150) blocks, a chat warning once per tornado with its distance, direction and heading (`§cTornado! 140m to the SW, moving NE.`), and the raid horn every `hornEvery` (20) seconds. Within 100 blocks a deep thunder rumble every 6 s; within 48 blocks the roar of wind every 5 s. Sounds come from the tornado's direction.
@@ -3787,7 +3860,8 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:tornado` | Everyone | Where the tornado is and where it's heading (`§cTornado! 140m to the SW, moving NE.`), or `No tornado right now.` |
+| `/realm:tornado` | Everyone | Opens the Tornadoes menu: **Where is the tornado?**; operators also **Spawn one** (40 blocks in front of you) and **End the tornado** (no Storm Glass) |
+| `/realm:tornado_info` | Everyone | Where the tornado is and where it's heading (`§cTornado! 140m to the SW, moving NE.`), or `No tornado right now.` |
 | `/realm:tornado_spawn` | Operators | A tornado forms 40 blocks in front of you now, in any weather (one at a time). It lasts and drifts like a natural one, but doesn't end with the storm |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3805,6 +3879,7 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 | `formDistance.min` | `80` | Closest it forms to the chosen player, in blocks |
 | `formDistance.max` | `160` | Farthest it forms from the chosen player, in blocks |
 | `avoidSpawn` | `64` | It never forms or travels closer than this many blocks to the world spawn |
+| `zoneMode` | `"pass"` | Safe zones: `pass` goes through them as usual (it never breaks blocks anyway), `calm` moves nothing inside them, `avoid` never forms near one and turns away from them |
 | `viewDistance` | `128` | Players within this many blocks see the funnel (and get the journal page) |
 | `height` | `40` | Height of the funnel, in blocks |
 | `rings` | `16` | Rings of dust stacked up the funnel for each player near it (half as many beyond 64 blocks); each is redrawn every half second |
@@ -3821,7 +3896,7 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 | `sounds.rumble` | `"ambient.weather.thunder"` | The rumble within 100 blocks, played low |
 | `sounds.horn` | `"raid.horn"` | The warning horn |
 
-Operators can change `enabled`, `chance`, `avoidSpawn`, `density`, `pullRadius`, `throwPlayers`, `viewDistance` and `rings` in game with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
+Operators can change `enabled`, `chance`, `avoidSpawn`, `zoneMode`, `density`, `pullRadius`, `throwPlayers`, `viewDistance` and `rings` in game with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
 
 ### Saved data
 
@@ -3836,7 +3911,7 @@ A tornado itself isn't saved: if the realm restarts during one, it's gone, and n
 
 - `weatherChange` in the overworld: a change to `Thunder` rolls `chance` once and schedules the tornado `formAfter` seconds later. A check every 5 s forms it: it picks a random Overworld player and tries 16 spots `formDistance` away (the last 8 at half the distance, in case the far chunks aren't loaded), keeping spots at least `avoidSpawn` from spawn whose ground (`getTopmostBlock`, looking under low plants) is grass, dirt, coarse dirt, podzol, sand or red sand, so not water, leaves, stone or a build. A failed attempt is retried every 10 s, up to 12 times, while the thunderstorm lasts.
 - While a tornado exists one loop runs every 2 ticks: it moves the funnel, draws a slice of the rings for each nearby player with `Player.spawnParticle` (`realm:sky_tornado` with `variable.radius` and `variable.spin`, `realm:sky_debris` with `variable.radius`), and every 4 ticks pushes entities with `applyImpulse` (speeds capped at 0.6 blocks per tick sideways and 0.35 up, at most 40 entities per run) and players with `applyKnockback`. Once a second it wanders, finds the ground under it, warns and plays sounds (`Player.playSound`, from the tornado's direction). The loop stops when the tornado ends.
-- Blocks are only ever read, never changed.
+- Blocks are only ever read, never changed. Safe zones come from the safe zones protocol (`realm:zones`), kept in memory.
 - Script events: `realm:sky_event` `{ kind: "tornado", dim, x, z, text }` when it forms, `realm:journal` `{ player, page: "weather", entry: "tornado", label: "Tornado" }` once per player who sees it.
 
 ---
@@ -3977,15 +4052,15 @@ Operators can change `enabled`, `stars.enabled`, `wish.enabled`, `aurora.enabled
 
 ## Meteor Strikes — `meteor_bp`
 
-Some nights a meteor falls. Chat gives a minute's warning and the coordinates, then a fiery streak crosses the sky for everyone in the Overworld and comes down with a boom you feel. Where it lands it leaves a small smoking crater with a meteorite core of ancient debris in magma, for whoever gets there first. Meteors land far from spawn and never in builds: a crater only replaces natural ground. The streak and the smoke come from [Realm Skies](#realm-skies--sky_rp): without that resource pack you still get the warning, the boom and the crater, but no streak or smoke.
+Some nights a meteor falls. Chat gives a minute's warning and the coordinates, then a fiery streak crosses the sky for everyone in the Overworld and comes down with a boom you feel. Where it lands it leaves a small smoking crater with a meteorite core of ancient debris in magma, for whoever gets there first. Meteors land far from spawn, never in builds (a crater only replaces natural ground) and never in a safe zone, protected town or claim. The streak and the smoke come from [Realm Skies](#realm-skies--sky_rp): without that resource pack you still get the warning, the boom and the crater, but no streak or smoke.
 
 ### How to use
 
 1. Some nights (`chance`, 0.33), at a random time, chat warns everyone: `§6A meteor is falling! It will land near 1240, -380 in 60 seconds.`
 2. Look up: a few seconds before it lands, a glowing meteor with a fiery trail streaks down from the sky toward the spot. Near it you hear the explosion and the thunder and the screen shakes; far away you hear a distant rumble.
 3. Go find it: at the spot (or a few blocks from it) there's a crater about 7 to 9 blocks across, lined with blackstone, magma and obsidian, still smoking, with 1 to 3 **ancient debris** in its middle. Bring a diamond pickaxe or better. The first player to reach it is announced: `§6Ann found the meteor crater!`
-4. Run `/realm:meteor` to see where the last meteor fell and whether its crater has been found.
-5. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the streak and smoke. `/realm:meteor_now` drops a meteor 100 blocks in front of you, after the usual warning. `/realm:config` → **Meteor Strikes** enables or disables meteors at night and sets the chance, the warning time, the distance kept from spawn, and whether meteors make craters.
+4. Run `/realm:meteor` for the menu: it says whether a meteor is falling or where the last one fell, and **Last meteors** lists the last 5, how far each is from you and who found its crater. `/realm:meteor_info` says the same as the menu's top line, in chat.
+5. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the streak and smoke. In `/realm:meteor`: **Drop one now** (or `/realm:meteor_now`) drops a meteor 100 blocks in front of you, after the usual warning; **Meteor settings** enables or disables meteors at night and craters, and sets the chance, the warning time, the distance kept from spawn, **Avoid safe zones and towns** and what a meteor does over a safe zone (the same settings as `/realm:config` → **Meteor Strikes**); **Protect this area from meteors** opens [Safe Zones](#safe-zones--zones_bp)' **Add a safe zone here** where you stand.
 
 ### What players see
 
@@ -3996,13 +4071,18 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 - **Where a crater can go:** the game can only change loaded ground, so if no one is near when it lands, the crater is made when a player first comes within `craterDistance` (64) blocks, and smokes from then on. Before making it, the pack checks the spot: natural ground (not water or lava), at least `avoidSpawn` from spawn, and no player-made block (planks, glass, chests, beds, torches, doors, fences, wool, concrete, bricks, glazed terracotta, crafting tables, furnaces, farmland and the like) in a scan of the 9 x 9 columns around it, 4 blocks above and below the ground (leaves a player placed count as player-made). If part of that area isn't loaded yet, the crater waits until a player comes closer. If the spot fails, up to 8 other spots within 24 blocks are tried; if they all fail, nearby players read `§7The meteor burned up before it reached the ground.` and there's no crater.
 - **Found:** the first player within `foundDistance` (12) blocks of a crater is announced to everyone (`§6Ann found the meteor crater!`), and every player who reaches it gets the **Meteor crater** page in their journal (Journal pack).
 - With `craters` disabled, a meteor is only the show: the warning, the streak, the boom and the smoke.
+- **Safe zones** ([Safe Zones](#safe-zones--zones_bp), towns with **Protect from world events**, claims with **Protect claims from world events**), with **Avoid safe zones and towns** (`avoidZones`, default enabled): a night's meteor is never aimed where its crater could reach into a zone (within 5 blocks of one), the crater spot check rejects such spots, and the carving skips any block inside a zone. A meteor that still comes down over a zone (an operator's **Drop one now** aimed at one, or a zone added while it falls) does what **A meteor over a safe zone** (`inZone`) says:
+  - `move` (default): it lands just outside the zone instead, crater, ancient debris and all; the warning gives the new spot. A zone added after it landed moves its waiting crater out of the zone the same way.
+  - `burst`: the warning says `A meteor is falling toward Home, near 1240, -380! The safe zone will stop it in the sky in 60 seconds.`, the streak ends 40 blocks above the ground in a flash and smoke with a loud blast, and chat says `The meteor burst in the sky over Home. The safe zone kept the ground safe.` No crater, no ancient debris.
+  With `avoidZones` disabled, meteors ignore safe zones.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:meteor` | Everyone | While one is falling, where it will land and in how many seconds; otherwise where the last meteor fell (with its height once its crater is made) and who found its crater, or `No meteor has fallen yet.` |
-| `/realm:meteor_now` | Operators | A meteor falls `nowDistance` (100) blocks in front of you after the usual `warningSeconds` warning, in any weather or time (pushed out past `avoidSpawn` if that's near spawn). One at a time |
+| `/realm:meteor` | Everyone | Opens the Meteor Strikes menu: what's falling or where the last meteor fell, and **Last meteors**; operators also get **Drop one now**, **Meteor settings** (meteors at night, chance, warning time, craters, distance kept from spawn, avoid safe zones, what a meteor does over one) and **Protect this area from meteors** (needs Safe Zones) |
+| `/realm:meteor_info` | Everyone | While one is falling, where it will land and in how many seconds; otherwise where the last meteor fell (with its height once its crater is made) and who found its crater, or `No meteor has fallen yet.` |
+| `/realm:meteor_now` | Operators | A meteor falls `nowDistance` (100) blocks in front of you after the usual `warningSeconds` warning, in any weather or time (pushed out past `avoidSpawn` if that's near spawn, and out of safe zones or set to burst by `inZone`). One at a time |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -4015,6 +4095,8 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | `nowDistance` | `100` | How far in front of the operator `/realm:meteor_now` aims, in blocks |
 | `avoidSpawn` | `64` | It never lands closer than this many blocks to the world spawn |
 | `warningSeconds` | `60` | Seconds between the chat warning and the impact |
+| `avoidZones` | `true` | Meteors keep out of safe zones (Safe Zones, protected towns and claims): none is aimed into one and no crater block is changed in one. Disabled, they ignore safe zones |
+| `inZone` | `"move"` | A meteor that still comes down over a safe zone: `move` lands it just outside the zone, `burst` blows it apart in the sky (no crater) |
 | `craters` | `true` | Make a crater with a meteorite core; disabled, a meteor is only the show |
 | `craterRadius.min` | `3` | Smallest crater radius, in blocks |
 | `craterRadius.max` | `4` | Largest crater radius, in blocks |
@@ -4025,14 +4107,14 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | `smokeSeconds` | `120` | Seconds the crater smokes after it's made |
 | `foundDistance` | `12` | Players this close to the crater have found it |
 
-Operators can change `enabled`, `chance`, `warningSeconds`, `craters` and `avoidSpawn` in game with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
+Operators can change `enabled`, `chance`, `warningSeconds`, `craters`, `avoidSpawn`, `avoidZones` and `inZone` in game with **Meteor settings** in `/realm:meteor`, or with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `meteor:night` | World | JSON `{ n, at }`: the night (day number) the meteor was last rolled for, and the time of day of tonight's warning (`-1` for none) |
-| `meteor:impacts` | World | JSON list of the last 5 meteors: where each landed, whether its crater is made, still waiting for a player to come near, or couldn't be made, and who found it |
+| `meteor:impacts` | World | JSON list of the last 5 meteors: where each landed, whether its crater is made, still waiting for a player to come near, or couldn't be made, or whether it burst over a safe zone (and which), and who found it |
 | `meteor:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
@@ -4053,8 +4135,9 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 1. At dusk on a full moon, watch the screen: `Blood Moon` (`Survive until dawn`) or `Harvest Moon` (`Crops grow faster tonight`) appears with a sound, and chat says what it means. Most full moons are still ordinary.
 2. **Blood Moon:** outdoors the sky turns dark red and red motes drift up around you. Every 20 seconds a zombie, skeleton, spider or creeper or two appears 16 to 32 blocks away, never inside or next to anything built. Stay online from dusk to dawn without dying, and at dawn you get 3 levels and 25 Crowns (`You survived the Blood Moon!`), plus the **Blood Moon Survivor** title the first time (with the Titles pack). Blood Moon monsters drop extra experience orbs, and the ones still around at dawn vanish.
 3. **Harvest Moon:** the sky turns soft gold, golden motes drift around you, and crops, saplings and grass grow three times as fast until dawn. A good night to stand by the farm.
-4. Run `/realm:moon` to see tonight's moon, the moon phase and how many days until the next full moon.
-5. **Operators:** `/realm:moon_set <blood|harvest|normal>` makes tonight a Blood Moon, a Harvest Moon or an ordinary night: at once if it's night, else at dusk. `/realm:config` → **Blood Moon & Harvest Moon** sets the chances, the monster waves, the survivor reward and the Harvest Moon's growth speed. Add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** for the red and gold skies and the motes.
+4. Run `/realm:moon` to see tonight's moon, the moon phase and how many days until the next full moon (`/realm:moon_info` says the same in chat).
+5. In a safe zone ([Safe Zones](#safe-zones--zones_bp), protected towns and claims) the Blood Moon sends no creepers, so it can't blow holes in a protected base; other monsters still come.
+6. **Operators:** `/realm:moon` has **Make tonight a Blood Moon**, **a Harvest Moon** and **an ordinary moon**; `/realm:moon_set <blood|harvest|normal>` does the same from chat. Either makes tonight a Blood Moon, a Harvest Moon or an ordinary night: at once if it's night, else at dusk. `/realm:config` → **Blood Moon & Harvest Moon** sets the chances, the monster waves, the survivor reward and the Harvest Moon's growth speed. Add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** for the red and gold skies and the motes.
 
 ### What players see
 
@@ -4064,16 +4147,18 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 - **Blood Moon monsters:** every 20 seconds (`blood.spawnSeconds`) 1 or 2 (`blood.spawnMin`, `blood.spawnMax`) monsters per player, picked from `blood.mobs` (zombies most often, then skeletons, spiders and creepers), 16 to 32 blocks away (`blood.minDistance`, `blood.maxDistance`), on the open surface. No new ones while 8 (`blood.maxExtraPerPlayer`) are already alive within 48 blocks of you. None for players in creative or spectator mode, on Peaceful, or with the `doMobSpawning` gamerule off.
 - **Never in a base:** monsters only appear on the topmost block of a column (outdoors), at most 16 blocks above or below you, not on leaves, glass, slabs, stairs, fences, walls, carpets, ice, cactus, magma or campfires, not within 12 blocks of any player, not within 64 blocks of world spawn (`avoidSpawn`), and not where the 9 x 9 columns around the spot, 4 blocks up and down, hold anything player-made: planks, any glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpets, concrete, glazed terracotta, bricks, crafting tables, furnaces, rails, redstone parts and the like. The Script API can't read Land Claims or light levels, so this is how claims and lit bases are kept out.
 - **Bonus experience:** each Blood Moon monster a player kills drops 3 extra experience orbs (`blood.bonusXpOrbs`).
+- **Safe zones:** a Blood Moon monster that would spawn inside a safe zone is never a creeper (another monster from `blood.mobs` instead), unless `blood.creepersInZones` is enabled.
 - **Surviving:** players online at dusk are in the running; dying or leaving takes you out (`You died during the Blood Moon: no survivor reward this time.`). At a natural dawn everyone still in gets 3 levels (`blood.rewardLevels`), 25 Crowns (`blood.rewardCrowns`, on the `crowns` scoreboard of the [Crowns](#crowns--crowns_bp) pack, shown in chat as `+25 Crowns (Blood Moon survived)`) and, the first time, the `Blood Moon Survivor` title (`blood.title`) from the [Titles](#titles--trails--titles_bp) pack. Skipping the night by sleeping (or `/time`) skips the reward too.
 - **Harvest Moon:** the `randomTickSpeed` gamerule goes up to 3 (`harvest.tickSpeed`; vanilla is 1) until dawn, then back to what it was. If the realm closes during a Harvest Moon, it's put back when the realm starts. The `realm:sky_harvest_moon` fog outdoors (not while it rains) and `realm:sky_harvest` motes around you.
 - **The Journal** records the first Blood Moon and Harvest Moon each player sees in the overworld on its weather page (`blood_moon`, `harvest_moon`).
-- **`/realm:moon`** says, for example, `Tonight is a full moon: it may rise as a Blood Moon or a Harvest Moon.` and `Moon phase: Full Moon. Next full moon: tonight.`, or during one `Tonight is a Blood Moon: more monsters roam. Survive until dawn without dying for a reward.`
+- **`/realm:moon`** (the menu's text, and `/realm:moon_info`) says, for example, `Tonight is a full moon: it may rise as a Blood Moon or a Harvest Moon.` and `Moon phase: Full Moon. Next full moon: tonight.`, or during one `Tonight is a Blood Moon: more monsters roam. Survive until dawn without dying for a reward.`
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:moon` | Everyone | Tonight's moon (Blood Moon, Harvest Moon or ordinary), the moon phase and the days until the next full moon |
+| `/realm:moon` | Everyone | Opens the moon menu: tonight's moon, the moon phase and the days until the next full moon; operators also make tonight a Blood Moon, a Harvest Moon or an ordinary moon |
+| `/realm:moon_info` | Everyone | Tonight's moon (Blood Moon, Harvest Moon or ordinary), the moon phase and the days until the next full moon, in chat |
 | `/realm:moon_set <blood\|harvest\|normal>` | Operators | Makes tonight a Blood Moon, a Harvest Moon or an ordinary night: right away if it's night (dusk 12000 to dawn 23000, `duskTime`, `dawnTime`), else from the next dusk, full moon or not |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -4093,13 +4178,14 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 | `blood.maxDistance` | `32` | Farthest a monster appears from the player, in blocks |
 | `blood.maxExtraPerPlayer` | `8` | No new waves around a player while this many Blood Moon monsters are alive within 48 blocks |
 | `blood.mobs` | zombie 4, skeleton 3, spider 2, creeper 2 | The monsters and their weights: `{ id, weight }`, a higher weight is picked more often |
+| `blood.creepersInZones` | `false` | Blood Moon creepers can spawn inside safe zones (Safe Zones, protected towns and claims). Disabled, another monster comes instead |
 | `blood.bonusXpOrbs` | `3` | Extra experience orbs from each Blood Moon monster a player kills |
 | `blood.rewardLevels` | `3` | XP levels for each survivor |
 | `blood.rewardCrowns` | `25` | Crowns for each survivor. `0` = none |
 | `blood.title` | `Blood Moon Survivor` | The title unlocked the first time a player survives one. Empty = none |
 | `harvest.tickSpeed` | `3` | The `randomTickSpeed` gamerule during a Harvest Moon. If it's already that high or higher, it isn't changed |
 
-Operators can change `enabled`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
+Operators can change `enabled`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.creepersInZones`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
 
 ### Saved data
 
@@ -4585,6 +4671,14 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Kitchen ↔ Townsfolk, Story Questlines | Bea the Cook (role `chef`) offers the **Kitchen** through `realm:npc_talk`. Story Questlines teaches recipes with `realm:recipe_learn`, gives dishes and rare ingredients with `realm:dish_give` and `realm:ingredient_give`, and delivers dishes by their item and exact name (`minecraft:rabbit_stew` named `Harbor Chowder`) |
 | Champions, Fishing 2.0, Blood Moon, Aurora, Meteor Strikes → Kitchen | Champions drop rare ingredients and recipe cards (`realm:champion_slain`); Fishing 2.0's Storm Eel is the Storm Eel ingredient; a Blood or Harvest Moon (`realm:moon`) and an aurora or meteor (`realm:sky_event`) make Moon Salt, Harvest Saffron and Starwright Flour possible. Each pack works without the others |
 | Weather Almanac ↔ Rain Extras | Rain Extras' fog, mist, drips and sounds follow the Almanac's planned rain and thunder like any other weather |
+| Safe Zones, Town Projects, Land Claims → world-event packs | The safe zones protocol (below): Meteor Strikes, Storm Chasing, Tornadoes, Blood Moon and Creeper Guard's `zones` mode leave the blocks in every safe zone alone, whichever pack it comes from. Regional Weather, Rain Extras, Aurora & Shooting Stars, Rainbows and the Weather Almanac change no blocks, so zones don't affect them |
+| Meteor Strikes, Creeper Guard → Safe Zones | **Protect this area from meteors** (Meteor Strikes) and **Safe zones** (Creeper Guard) open the Safe Zones menu with `realm:zones_open` |
+
+**The safe zones protocol** (script events with JSON messages; the shared code is `tools/zones-shared.js`, copied into each pack that takes part as `scripts/zones.js` by `node tools/sync-zones.mjs`):
+
+- **Providers** send `realm:zones` `{ src, part, parts, zones: [{ id, name, dim, x, z, r, shape? }] }` with their full list whenever it changes, about 5 seconds after the world loads, and in reply to `realm:zones_ping` `{}`. `src` names the provider: `zones` (Safe Zones), `town` (Town Projects, towns with **Protect from world events**), `claims` (Land Claims, with `protectWorldEvents`). A list longer than one message (2048 characters) is split into parts numbered from 1 (parts numbered from 0 are accepted too); `parts` 0 or an empty list clears that provider's zones. `shape` is `circle` (default: within `r` blocks of `x`, `z`) or `square` (`x - r` to `x + r`, `z - r` to `z + r`); zones reach from the bottom of the world to the top of `dim`.
+- **Consumers** (every pack that breaks or places blocks in a world event) keep the latest list from each provider, ping on world load, and skip block changes inside any zone: the event still happens, it just changes no blocks there.
+- **`realm:zones_open`** `{ player, action }` asks Safe Zones to open **Add a safe zone here** (`action: "add"`) or its menu for that player.
 
 Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn; its one link is Translucent Tools Switch, which tells it per player whether to draw tools solid.
 

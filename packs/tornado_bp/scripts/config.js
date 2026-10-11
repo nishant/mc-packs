@@ -20,6 +20,14 @@ export const CONFIG = {
   /** It never forms or travels closer than this many blocks to the world spawn. */
   avoidSpawn: 64,
 
+  /**
+   * Safe zones (Safe Zones, protected towns and claims). A tornado never breaks blocks anywhere; this is about
+   * what it moves. "pass": it goes through safe zones like anywhere else; "calm": inside a safe zone it pulls,
+   * lifts and throws nothing (mobs, items and players there are left alone); "avoid": it never forms near
+   * one and turns away from them (and is calm inside one, if an operator spawns it there).
+   */
+  zoneMode: "pass",
+
   /** Players within this many blocks see the funnel. */
   viewDistance: 128,
 

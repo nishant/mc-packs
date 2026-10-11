@@ -6,8 +6,10 @@ import {
   system,
   world,
 } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { isProtected, zoneProviders, zonesAt } from "./zones.js";
 
 const PROP_ZONES = "guard:zones"; // world: JSON Zone[]
 
@@ -60,8 +62,11 @@ function saveZones(list) {
  * @param {import("@minecraft/server").Vector3} p
  */
 function inAnyZone(dim, p) {
-  return !!zoneAt(dim, p);
+  return !!zoneAt(dim, p) || (useSafeZones() && isProtected(dim, p.x + 0.5, p.z + 0.5));
 }
+
+/** Safe zones from other packs (Safe Zones, protected towns and claims: scripts/zones.js) count in zones mode. */
+const useSafeZones = () => get("safeZones") === true;
 
 /**
  * The first zone holding block `p`.
@@ -123,12 +128,21 @@ function statusText(player) {
     const { x, y, z } = player.location;
     const inZonesMode = zonesMode();
     const zone = inZonesMode ? zoneAt(player.dimension.id, { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) }) : undefined;
-    here = [inZonesMode ? (zone ? `§aWhere you stand: protected (zone §e${zone.name}§a)` : "§cWhere you stand: not protected") : "§aWhere you stand: protected"];
+    const safe = inZonesMode && !zone && useSafeZones() ? zonesAt(player.dimension.id, x, z)[0] : undefined;
+    here = [
+      inZonesMode
+        ? zone
+          ? `§aWhere you stand: protected (zone §e${zone.name}§a)`
+          : safe
+            ? `§aWhere you stand: protected (safe zone §e${safe.name}§a)`
+            : "§cWhere you stand: not protected"
+        : "§aWhere you stand: protected",
+    ];
   }
   const lines = [
     ...here,
     `§6Creeper Guard§r: ${
-      zonesMode() ? "only inside the zones below" : "everywhere (zones are only used in zones mode)"
+      zonesMode() ? `only inside the zones below${useSafeZones() ? " and in safe zones (/realm:zones)" : ""}` : "everywhere (zones are only used in zones mode)"
     }`,
     `Blasts that break no blocks: ${[...sources].map(shortId).join(", ") || "none"}`,
     list.length ? `Zones (${list.length}):` : "No zones.",
@@ -147,6 +161,21 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:guard",
+      description: "Creeper Guard: the menu (status; for operators: add or remove protected zones)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Success, message: statusText(undefined) };
+      system.run(() => mainMenu(player).catch((e) => console.warn(`[guard] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:guard_status",
       description: "Show the Creeper Guard mode, blast sources and protected zones",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -166,35 +195,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (origin, /** @type {string} */ name, /** @type {number | undefined} */ radius) => {
       const player = originPlayer(origin);
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      if (!NAME_RE.test(name)) {
-        return { status: CustomCommandStatus.Failure, message: "Zone names use letters, digits, _ and - (up to 24)." };
-      }
-      const r = radius ?? get("defaultRadius");
-      if (r < MIN_RADIUS || r > MAX_RADIUS) {
-        return { status: CustomCommandStatus.Failure, message: `Radius must be ${MIN_RADIUS} to ${MAX_RADIUS} blocks.` };
-      }
-      const list = getZones();
-      const taken = list.find((z) => named(z, name));
-      if (taken) {
-        return {
-          status: CustomCommandStatus.Failure,
-          message: `There is already a zone "${taken.name}". Remove it first with /realm:guard_remove ${taken.name}.`,
-        };
-      }
-      if (list.length >= MAX_ZONES) {
-        return { status: CustomCommandStatus.Failure, message: `At most ${MAX_ZONES} zones.` };
-      }
-      const { x, y, z } = player.location;
-      /** @type {Zone} */
-      const zone = { name, dim: player.dimension.id, x: Math.round(x), y: Math.round(y), z: Math.round(z), radius: r };
-      system.run(() => {
-        const now = getZones();
-        if (!now.some((z) => named(z, name)) && now.length < MAX_ZONES) saveZones([...now, zone]); // same name added meanwhile: keep the first
-      });
-      return {
-        status: CustomCommandStatus.Success,
-        message: `Zone added: ${describeZone(zone)}${zonesMode() ? "" : "\n§7Mode is everywhere, so zones have no effect until an operator sets the mode to zones in /realm:config."}`,
-      };
+      const res = addZone(player, name, radius, true);
+      return { status: res.ok ? CustomCommandStatus.Success : CustomCommandStatus.Failure, message: res.message };
     }
   );
 
@@ -209,13 +211,115 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (_origin, /** @type {string} */ name) => {
       const zone = getZones().find((z) => named(z, name));
       if (!zone) {
-        return { status: CustomCommandStatus.Failure, message: `No zone "${name}". /realm:guard lists them.` };
+        return { status: CustomCommandStatus.Failure, message: `No zone "${name}". /realm:guard_status lists them.` };
       }
       system.run(() => saveZones(getZones().filter((z) => z.name !== zone.name)));
       return { status: CustomCommandStatus.Success, message: `Zone "${zone.name}" removed.` };
     }
   );
 });
+
+/**
+ * Adds a zone around the player. From a command (`later`), the save waits for the next tick: commands
+ * may not write world properties.
+ * @param {Player} player @param {string} name @param {number | undefined} radius @param {boolean} later
+ * @returns {{ ok: boolean, message: string }}
+ */
+function addZone(player, name, radius, later) {
+  if (!NAME_RE.test(name)) return { ok: false, message: "Zone names use letters, digits, _ and - (up to 24)." };
+  const r = radius ?? get("defaultRadius");
+  if (r < MIN_RADIUS || r > MAX_RADIUS) return { ok: false, message: `Radius must be ${MIN_RADIUS} to ${MAX_RADIUS} blocks.` };
+  const list = getZones();
+  const taken = list.find((z) => named(z, name));
+  if (taken) return { ok: false, message: `There is already a zone "${taken.name}". Remove it first with /realm:guard_remove ${taken.name}.` };
+  if (list.length >= MAX_ZONES) return { ok: false, message: `At most ${MAX_ZONES} zones.` };
+  const { x, y, z } = player.location;
+  /** @type {Zone} */
+  const zone = { name, dim: player.dimension.id, x: Math.round(x), y: Math.round(y), z: Math.round(z), radius: r };
+  const save = () => {
+    const now = getZones();
+    if (!now.some((z) => named(z, name)) && now.length < MAX_ZONES) saveZones([...now, zone]); // same name added meanwhile: keep the first
+  };
+  if (later) system.run(save);
+  else save();
+  return {
+    ok: true,
+    message: `Zone added: ${describeZone(zone)}${zonesMode() ? "" : "\n§7Mode is everywhere, so zones have no effect until an operator sets the mode to zones in /realm:config."}`,
+  };
+}
+
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @template {ActionFormData | ModalFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = /** @type {any} */ (await form.show(player));
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** @param {Player} player @param {string} title @param {string} body @param {{ text: string, run: () => unknown }[]} actions */
+async function menu(player, title, body, actions) {
+  const form = new ActionFormData().title(title).body(body);
+  for (const a of actions) form.button(a.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await actions[res.selection]?.run();
+}
+
+/** Operators: name and radius of a new zone around them. @param {Player} player */
+async function addForm(player) {
+  const form = new ModalFormData()
+    .title("§lProtect this spot")
+    .textField("Zone name (letters, digits, _ and -)", "home", { defaultValue: "" })
+    .slider("Radius (blocks)", MIN_RADIUS, MAX_RADIUS, { valueStep: 8, defaultValue: Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, Math.round(Number(get("defaultRadius")) / 8) * 8)) })
+    .submitButton("Add zone");
+  const res = await show(player, form);
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const v = res.formValues.filter((x) => x !== undefined);
+  const out = addZone(player, String(v[0] ?? "").trim(), Math.round(Number(v[1])), false);
+  player.sendMessage(out.ok ? out.message : `§c${out.message}`);
+}
+
+/** Operators: pick a zone to remove. @param {Player} player */
+async function removeMenu(player) {
+  const list = getZones();
+  await menu(
+    player,
+    "§lRemove a zone",
+    list.length ? "Pick a zone to remove." : "No zones.",
+    list.map((z) => ({
+      text: `${z.name}\n§8${shortId(z.dim)} ${Math.floor(z.x)}, ${Math.floor(z.z)}, radius ${z.radius}`,
+      run: () => {
+        saveZones(getZones().filter((x) => x.name !== z.name));
+        player.sendMessage(`Zone "${z.name}" removed.`);
+      },
+    }))
+  );
+}
+
+/** /realm:guard @param {Player} player */
+async function mainMenu(player) {
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [{ text: "Status\n§8Mode, blast sources and zones", run: () => player.sendMessage(statusText(player)) }];
+  if (isOp(player)) {
+    actions.push({ text: "Protect this spot (operator)\n§8A zone around you", run: () => addForm(player) });
+    if (getZones().length) actions.push({ text: "Remove a zone (operator)", run: () => removeMenu(player) });
+  }
+  if (zoneProviders().has("zones")) {
+    actions.push({ text: "Safe zones\n§8Protect places from every world event", run: () => system.sendScriptEvent("realm:zones_open", JSON.stringify({ player: player.id, action: "menu" })) });
+  }
+  await menu(player, "§lCreeper Guard", statusText(player), actions);
+}
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

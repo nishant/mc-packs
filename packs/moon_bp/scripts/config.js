@@ -40,6 +40,11 @@ export const CONFIG = {
       { id: "minecraft:spider", weight: 2 },
       { id: "minecraft:creeper", weight: 2 },
     ],
+    /**
+     * Blood Moon creepers can appear inside safe zones (Safe Zones, protected towns and claims). Disabled, a
+     * Blood Moon monster spawning in a safe zone is never a creeper (another monster from the list instead).
+     */
+    creepersInZones: false,
     /** Extra experience orbs dropped by each Blood Moon monster a player kills. */
     bonusXpOrbs: 3,
     /** XP levels for each player who was online from dusk to dawn without dying. */

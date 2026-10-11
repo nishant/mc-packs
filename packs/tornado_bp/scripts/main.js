@@ -1,6 +1,8 @@
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { allZones, isProtected, protectedBox, zonesAt } from "./zones.js";
 
 const PROP_WEATHER = "tornado:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 
@@ -76,6 +78,14 @@ function fromSpawn(x, z) {
 /** @returns {Dimension} */
 const overworld = () => world.getDimension(OVERWORLD);
 
+// Safe zones (scripts/zones.js): "pass" goes through them as anywhere else (a tornado never breaks blocks),
+// "calm" moves nothing inside them, "avoid" never forms in one and turns away from them.
+const zoneMode = () => String(get("zoneMode"));
+/** Is x, z in a safe zone where the tornado leaves things alone? @param {number} x @param {number} z */
+const calmAt = (x, z) => zoneMode() !== "pass" && isProtected(OVERWORLD, x, z);
+/** Does a safe zone reach within `margin` blocks of x, z? @param {number} x @param {number} z @param {number} margin */
+const zoneNear = (x, z, margin) => protectedBox(OVERWORLD, { x: x - margin, z: z - margin }, { x: x + margin, z: z + margin });
+
 /**
  * The ground in a column: the topmost block, or the block under a low plant on it.
  * @param {Dimension} dim @param {number} x @param {number} z
@@ -100,7 +110,7 @@ function sendJournal(player) {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather, previousWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
   weather = newWeather;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
@@ -157,6 +167,7 @@ function formNatural() {
     const d = rand(CONFIG.formDistance.min, CONFIG.formDistance.max) * scale;
     const x = p.location.x + Math.cos(angle) * d, z = p.location.z + Math.sin(angle) * d;
     if (fromSpawn(x, z) < get("avoidSpawn")) continue;
+    if (zoneMode() === "avoid" && zoneNear(x, z, get("pullRadius") + 16)) continue;
     const ground = groundAt(dim, x, z);
     if (!ground || !OPEN_GROUND.has(ground.typeId)) continue; // water, leaves, stone, builds, unloaded
     start({ x: Math.floor(x) + 0.5, y: ground.location.y + 1, z: Math.floor(z) + 0.5 }, true);
@@ -246,9 +257,28 @@ function move(t) {
     t.heading = Math.atan2(t.z - s.z, t.x - s.x) + rand(-0.4, 0.4);
     return;
   }
+  if (zoneMode() === "avoid" && zoneNear(nx, nz, get("pullRadius"))) {
+    // Heading into a safe zone: turn away from the nearest one (unless it's already inside and leaving).
+    const zone = zonesAt(OVERWORLD, nx, nz)[0] ?? nearestZone(nx, nz);
+    if (zone && Math.hypot(nx - zone.x, nz - zone.z) < Math.hypot(t.x - zone.x, t.z - zone.z)) {
+      t.heading = Math.atan2(t.z - zone.z, t.x - zone.x) + rand(-0.4, 0.4);
+      return;
+    }
+  }
   t.x = nx;
   t.z = nz;
   t.y += (t.groundY - t.y) * 0.2; // follow the ground smoothly over hills
+}
+
+/** The safe zone whose center is nearest x, z, in the Overworld. @param {number} x @param {number} z */
+function nearestZone(x, z) {
+  let best, bestD = Infinity;
+  for (const zone of allZones()) {
+    if (zone.dim !== OVERWORLD) continue;
+    const d = Math.hypot(x - zone.x, z - zone.z) - zone.r;
+    if (d < bestD) [best, bestD] = [zone, d];
+  }
+  return best;
 }
 
 /** Once a second: wander, find the ground, see who's near, warn, sounds. @param {Tornado} t @param {Dimension} dim */
@@ -372,6 +402,7 @@ function pull(t, dim) {
     const d = Math.hypot(dx, dz);
     const above = l.y - t.y;
     if (d > radius || above < -3 || above > lift + 4) continue;
+    if (calmAt(l.x, l.z)) continue; // in a safe zone: left alone
     moved++;
     try {
       spin(e, dx, dz, d, radius, above < lift);
@@ -389,6 +420,7 @@ function pull(t, dim) {
       const dx = l.x - t.x, dz = l.z - t.z;
       const d = Math.max(0.1, Math.hypot(dx, dz));
       if (d > radius || l.y < t.y - 3 || l.y > t.y + CONFIG.height) continue;
+      if (calmAt(l.x, l.z)) continue;
       const last = t.thrown.get(p.id) ?? -Infinity;
       if (now - last < THROW_COOLDOWN) continue;
       if (d <= radius / 2) throwPlayer(p, dx / d, dz / d, t);
@@ -489,10 +521,85 @@ function describe(player) {
   return `§cTornado! ${m}m to the ${compass(t.x - l.x, t.z - l.z)}, moving ${compass(Math.cos(t.heading), Math.sin(t.heading))}.`;
 }
 
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** A tornado 40 blocks in front of the player. @param {Player} player @returns {string | undefined} why it can't */
+function spawnInFront(player) {
+  if (player.dimension.id !== OVERWORLD) return "Tornadoes only form in the Overworld.";
+  if (tornado) return `There's already a tornado: ${describe(player)}`;
+  const view = player.getViewDirection();
+  const n = Math.hypot(view.x, view.z) || 1;
+  const x = player.location.x + (view.x / n) * 40, z = player.location.z + (view.z / n) * 40;
+  const ground = groundAt(player.dimension, x, z);
+  start({ x, y: ground ? ground.location.y + 1 : player.location.y, z }, false);
+  return undefined;
+}
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @param {Player} player @param {ActionFormData} form
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** /realm:tornado @param {Player} player */
+async function mainMenu(player) {
+  const mode = zoneMode();
+  const zones = mode === "avoid" ? "Tornadoes steer around safe zones." : mode === "calm" ? "In a safe zone a tornado moves nothing." : "A tornado never breaks blocks, safe zone or not.";
+  const body = `${describe(player)}\n\n${get("enabled") === true ? "Thunderstorms can bring a tornado." : "Tornadoes don't form on their own on this realm."} ${zones}`;
+  /** @type {{ text: string, run: () => void }[]} */
+  const actions = [{ text: "Where is the tornado?\n§8Distance and heading", run: () => player.sendMessage(describe(player)) }];
+  if (isOp(player)) {
+    actions.push({
+      text: "Spawn one (operator)\n§840 blocks in front of you",
+      run: () => {
+        const why = spawnInFront(player);
+        player.sendMessage(why ? `§c${why}` : "A tornado forms 40 blocks in front of you.");
+      },
+    });
+    if (tornado) {
+      actions.push({
+        text: "End the tornado (operator)\n§8It dies down now, no Storm Glass",
+        run: () => {
+          if (tornado) end(tornado, true);
+          player.sendMessage("§7The tornado is gone.");
+        },
+      });
+    }
+  }
+  const form = new ActionFormData().title("§lTornadoes").body(body);
+  for (const a of actions) form.button(a.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  actions[res.selection]?.run();
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:tornado",
+      description: "Tornadoes: the menu (where the tornado is; for operators: spawn or end one)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Success, message: tornado ? `A tornado is at ${Math.round(tornado.x)}, ${Math.round(tornado.z)}.` : "No tornado right now." };
+      system.run(() => mainMenu(player).catch((e) => console.warn(`[tornado] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:tornado_info",
       description: "Tornadoes: where the tornado is and where it's heading",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -517,12 +624,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (tornado) return { status: CustomCommandStatus.Failure, message: `There's already a tornado: ${describe(player)}` };
       system.run(() => {
         try {
-          if (tornado || !player.isValid) return;
-          const view = player.getViewDirection();
-          const n = Math.hypot(view.x, view.z) || 1;
-          const x = player.location.x + (view.x / n) * 40, z = player.location.z + (view.z / n) * 40;
-          const ground = groundAt(player.dimension, x, z);
-          start({ x, y: ground ? ground.location.y + 1 : player.location.y, z }, false);
+          if (!tornado && player.isValid) spawnInFront(player);
         } catch (e) {
           console.warn(`[tornado] ${e}`);
         }

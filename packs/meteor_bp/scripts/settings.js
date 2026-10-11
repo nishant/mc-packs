@@ -15,6 +15,8 @@ const OPTIONS = [
   { key: "warningSeconds", type: "int", scope: "world", label: "Warning before impact (seconds)", min: 10, max: 300, step: 10 },
   { key: "craters", type: "bool", scope: "world", label: "Craters", help: "A small crater in natural ground with a meteorite core (ancient debris). Disabled, a meteor is only the show" },
   { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 1024, step: 16 },
+  { key: "avoidZones", type: "bool", scope: "world", label: "Avoid safe zones and towns", help: "No meteor is aimed into a safe zone, protected town or claim, and no crater is made in one" },
+  { key: "inZone", type: "enum", scope: "world", choices: ["move", "burst"], names: ["Land just outside it", "Burst in the sky"], label: "A meteor over a safe zone", help: "When one still comes down over a safe zone (aimed there by an operator, or a zone added while it falls)" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
