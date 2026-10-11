@@ -56,6 +56,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Relics — `relics_bp`](#relics--relics_bp)
 - [Field Journal — `journal_bp`](#field-journal--journal_bp)
 - [Fishing 2.0 — `fishing_bp`](#fishing-20--fishing_bp)
+- [Kitchen — `cooking_bp`](#kitchen--cooking_bp)
 - [Treasure Maps & Riddles — `maps_bp`](#treasure-maps--riddles--maps_bp)
 - [Waystones & Inns — `waystone_bp`](#waystones--inns--waystone_bp)
 - [Expeditions — `expedition_bp`](#expeditions--expedition_bp)
@@ -2933,6 +2934,145 @@ Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tourn
 
 ---
 
+## Kitchen — `cooking_bp`
+
+Cook real dishes at a cooking pot (a cauldron over a lit campfire). Each dish is a food with a gentle, long-lasting buff when you eat it, like Haste I for 5 minutes or Night Vision for 10, and a few rolling dishes roll for a surprise instead: mostly a good buff, sometimes something silly. Everyone knows 6 basic recipes; Bea the Cook (from [Townsfolk](#townsfolk--npc_bp)) teaches more in her **Kitchen** for Crowns or ingredients, and the best dishes need rare ingredients like the Champion's Heart, dropped by [Champions](#champions--elite_bp), or the Storm Eel of [Fishing 2.0](#fishing-20--fishing_bp). There are 28 recipes and 8 rare ingredients.
+
+### How to use
+
+1. Build a cooking pot: put a cauldron on top of a lit campfire (or soul campfire). Water in the cauldron is optional.
+2. Tap the cauldron with an empty hand, or sneak and tap it with anything. The `Cooking Pot` menu lists the recipes you know, the ones you have everything for first (`Ready: 2 servings`), the others with what's missing (`Missing: 1 Kelp`).
+3. Pick a recipe to see its ingredients and effects, then **Cook 1 batch** or **Cook 3 batches**. The ingredients are taken, the pot bubbles for 3 seconds, and the dishes land in your inventory: `You cooked 2 Miner's Pasty.`
+4. Eat a dish like any food (when you're hungry). Chat says what you got: `Miner's Pasty: Haste I for 5m`. A rolling dish says what it rolled: `Mystery Stew: A rush of speed! (Speed II for 2m)`.
+5. Learn more recipes: tap Bea the Cook (or any NPC with the `chef` role) and pick **Kitchen**. She teaches each recipe for Crowns or for ingredients (`Learn: Warden's Ration` for `30 Crowns or 8 Cooked Beef`), and the rare ones for one of their rare ingredient plus Crowns. Story Questlines also teaches recipes, and recipe cards (paper named `Recipe Card: Lantern Cake`) dropped by champions teach theirs as soon as you open a pot, the Kitchen or `/realm:cooking`.
+6. Collect rare ingredients: defeat champions, catch a Storm Eel in a thunderstorm, harvest full beehives at night, and harvest crops during a Harvest Moon or after an aurora (see the table below). `/realm:cooking` → **Rare ingredients** lists them, what they're for and how many you carry.
+7. Run `/realm:cooking` for your recipes (**What can I cook?**, **My recipes**), the **Cookbook** of every recipe and how to learn it, and the rare ingredients. Disable the bubbling sounds in `/realm:prefs` → **Kitchen** → **Cooking sounds**.
+8. **Operators:** `/realm:cooking` also has **Teach or forget recipes** (one or all, for any online player) and **Give dishes and ingredients** (any dish, rare ingredient or recipe card). `/realm:config` → **Kitchen** sets the effect length multiplier, rolling dishes, the champion ingredient and recipe card chances, foraging and cooking anywhere.
+
+### What players see
+
+- **The cooking pot:** any cauldron with a lit `campfire` or `soul_campfire` right under it (`potFires`). An empty-hand tap or a sneak-tap opens the menu; a tap with a bucket or bottle without sneaking fills or empties the cauldron as usual (to use a bucket on a pot, don't sneak). With `cookAnywhere` on, the recipe pages of `/realm:cooking` have the cook buttons too.
+- **Cooking** takes `cookSeconds` (3) for any number of batches, up to `maxBatch` (16) at once: smoke rises from the pot, it bubbles (`bubble.pop`, if **Cooking sounds** is on) and ends with happy-villager sparkles and a ding. One cooking at a time per player. If you walk away the dish still goes to your inventory (or drops at your feet when it's full); if you leave the game, it drops at the pot.
+- **Ingredients:** a plain ingredient (`Wheat`, `Cooked Beef`) only counts items without a custom name, so cooking never uses up a named dish or fish. A rare ingredient counts only the real thing (its name and its `Rare ingredient` lore). Honey-Glazed Ham gives back the glass bottle.
+- **A dish** is the vanilla food item named after the dish, in plain text without color codes (`Harbor Chowder` is a `minecraft:rabbit_stew` named exactly `Harbor Chowder`), with lore: a gray line about it (`Warm and salty, like the docks at dawn`), its effects in blue with their base length (`Water Breathing I (8:00)`) or `Rolls for a surprise`, and `Kitchen dish` (gray) or `Rare dish` (gold). Servings of the same dish always have the same lore, so they stack like the food they are (stews and soups don't stack, as in vanilla, and give back their bowl when eaten). An anvil-renamed food is not a dish: anvils can't add lore.
+- **Eating:** the effects are added without particles. Lengths are multiplied by **Effect durations** (`durationMultiplier`, 1x) except Saturation, Levitation and Nausea. An effect never makes one you already have weaker or shorter, so eating the same dish twice doesn't stack the time; eating it when the effect is running low tops it up. The lore always shows the base length; chat shows the real one. Like any food, a dish can only be eaten when you're hungry (in survival).
+- **Rolling dishes** (Mystery Stew, Hiccup Cookies, Gambler's Goulash) roll one result: Speed II 2 min (weight 12), Strength I 3 min (10), Haste II 2 min (10), Regeneration I 40s (10), Absorption II 4 min (8), Jump Boost II and Slow Falling 2 min (8), Night Vision 10 min (8), Hero of the Village 10 min (4), the jackpot `JACKPOT! Everything at once!` (Strength, Speed and Absorption 4 min and Regeneration 30s, weight 3), or something silly: floating up for 3 seconds with Slow Falling to land softly (5), Nausea for 8 seconds (4), sparkles all over for 15 seconds (5), six hiccup hops (5), or a burp everyone within 16 blocks hears about (`Alex burps loudly.`, 4). Hiccup Cookies double the silly weights; Gambler's Goulash has 0.3x the silly weights and triple the jackpot. With **Rolling dishes** disabled (`rollingDishes`) they give their plain effect instead (table below).
+- **Bea's Kitchen** (tap an NPC with the `chef` role, `chefRole`, and pick **Kitchen**): Bea says a line (`Bea: "Hungry? Of course you are. Sit, sit!"`), how many recipes you know and your Crowns, then a **Learn: <dish>** button for each recipe she teaches that you don't know yet with its prices, **What can I cook?** and **Rare ingredients**. Picking a recipe shows each way to pay (`Pay 30 Crowns`, `Pay 8 Cooked Beef`); one you can't afford is gray. Paying teaches it: `New recipe: Warden's Ration! (taught by Bea)`.
+- **Recipe cards** drop from champions (`recipeCardChance`, 10%, killer only), one of the recipes marked "recipe card" below, at random. Opening a pot, the Kitchen or `/realm:cooking` with a card for a recipe you don't know teaches it and uses up the card; a card for a recipe you know stays, to give to someone else.
+- **Champions** (`realm:champion_slain`): the killer has a 60% chance (`championDropChance`) of a Champion's Heart, the same chance of its trait's ingredient (Stormcaller: Storm Eel, Frostbound: Frost Pepper, Vampiric: Moon Salt) and of an Ember Truffle when it died in the Nether; each helper has half the chance of a Champion's Heart. They go straight into your inventory: `Rare ingredient: Champion's Heart (Gerald the Stormcaller)`.
+- **Other packs:** each serving cooked gives 3 Farming XP in [Skills](#skills--skills_bp) (`skillXp`).
+
+The recipes (dish names are exact, for stories that deliver or reward them):
+
+| Dish | Item | Makes | Ingredients | When eaten | Learned from |
+|---|---|---|---|---|---|
+| `Harbor Chowder` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Cooked Cod, 1 Baked Potato, 1 Kelp | Water Breathing I 8 min | Everyone (basic) |
+| `Fisherman's Breakfast` | `minecraft:cooked_salmon` | 1 | 1 Cooked Salmon, 1 Bread, 1 Egg | Conduit Power I 3 min | Everyone (basic) |
+| `Miner's Pasty` | `minecraft:baked_potato` | 2 | 1 Cooked Beef, 2 Potato, 1 Wheat | Haste I 5 min | Everyone (basic) |
+| `Garden Salad` | `minecraft:beetroot_soup` | 1 | 1 Bowl, 2 Beetroot, 1 Carrot | Speed I 5 min | Everyone (basic) |
+| `Hearty Porridge` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 3 Wheat, 1 Sugar | Saturation (fills you up), Regeneration I 15s | Everyone (basic) |
+| `Campfire Kebab` | `minecraft:cooked_mutton` | 2 | 2 Cooked Mutton, 1 Carrot, 1 Stick | Jump Boost I 5 min | Everyone (basic) |
+| `Warden's Ration` | `minecraft:bread` | 3 | 2 Bread, 1 Cooked Beef, 2 Dried Kelp | Resistance I 4 min | Bea: 30 Crowns, or 8 Cooked Beef |
+| `Glow Berry Tart` | `minecraft:cookie` | 3 | 3 Glow Berries, 2 Wheat, 1 Sugar | Night Vision I 10 min | Bea: 25 Crowns, or 16 Glow Berries |
+| `Honey-Glazed Ham` | `minecraft:cooked_porkchop` | 2 | 2 Cooked Porkchop, 1 Honey Bottle, 1 Sugar (gives back 1 Glass Bottle) | Absorption I 6 min, Regeneration I 15s | Bea: 35 Crowns, or 4 Honey Bottle |
+| `Spiced Pumpkin Soup` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Pumpkin, 1 Sugar, 1 Cocoa Beans | Fire Resistance I 8 min | Bea: 40 Crowns, or 8 Pumpkin |
+| `Climber's Trail Mix` | `minecraft:cookie` | 4 | 1 Cocoa Beans, 2 Wheat, 2 Sweet Berries | Jump Boost II 3 min, Slow Falling I 3 min | Bea: 30 Crowns, or 16 Sweet Berries |
+| `Rabbit Ragout` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Cooked Rabbit, 1 Carrot, 1 Potato, 1 Brown Mushroom | Speed I 8 min, Jump Boost I 8 min | Bea: 40 Crowns, or 6 Rabbit Hide |
+| `Pathfinder's Carrots` | `minecraft:golden_carrot` | 2 | 2 Golden Carrot, 1 Sugar | Night Vision I 8 min, Speed I 4 min | Bea: 45 Crowns, or 16 Gold Nugget |
+| `Smith's Hotpot` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Cooked Beef, 1 Baked Potato, 1 Coal | Haste II 4 min | Bea: 50 Crowns, or 6 Iron Ingot |
+| `Sweet Berry Roll` | `minecraft:bread` | 2 | 1 Bread, 3 Sweet Berries, 1 Sugar | Regeneration I 45s | Bea: 25 Crowns, or 32 Wheat |
+| `Mystery Stew` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Red Mushroom, 1 Brown Mushroom, 1 Beetroot | **Rolls** (usual odds); with rolling off: Saturation (fills you up) | Bea: 20 Crowns, or 8 Red Mushroom |
+| `Hiccup Cookies` | `minecraft:cookie` | 4 | 2 Wheat, 1 Cocoa Beans, 1 Sugar | **Rolls** (twice the silly odds); with rolling off: Jump Boost I 1 min | Bea: 15 Crowns, or 8 Cocoa Beans |
+| `Gambler's Goulash` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Cooked Beef, 1 Carrot, 3 Gold Nugget | **Rolls** (few silly results, triple jackpot odds); with rolling off: Strength I 1 min | Bea: 60 Crowns, or 4 Gold Ingot; recipe card |
+| `Storm Eel Pie` | `minecraft:pumpkin_pie` | 2 | 1 Storm Eel, 3 Wheat, 1 Egg | Speed II 5 min, Haste II 5 min | Bea: 1 Storm Eel + 60 Crowns; recipe card |
+| `Frost Pepper Soup` | `minecraft:beetroot_soup` | 1 | 1 Bowl, 1 Frost Pepper, 2 Beetroot | Fire Resistance I 15 min, Resistance I 3 min | Bea: 1 Frost Pepper + 60 Crowns; recipe card |
+| `Ember Truffle Risotto` | `minecraft:mushroom_stew` | 1 | 1 Bowl, 1 Ember Truffle, 2 Wheat, 1 Brown Mushroom | Strength I 6 min, Fire Resistance I 6 min | Bea: 1 Ember Truffle + 60 Crowns; recipe card |
+| `Moon Salt Roast` | `minecraft:cooked_beef` | 2 | 2 Cooked Beef, 1 Moon Salt | Night Vision I 15 min, Strength I 5 min | Bea: 1 Moon Salt + 60 Crowns; recipe card |
+| `Golden Harvest Loaf` | `minecraft:bread` | 3 | 1 Harvest Saffron, 3 Wheat | Health Boost II 10 min, Saturation (fills you up) | Bea: 1 Harvest Saffron + 60 Crowns; recipe card |
+| `Champion's Heart Stew` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Champion's Heart, 1 Cooked Beef, 1 Carrot, 1 Baked Potato | Strength I 8 min, Health Boost II 8 min, Regeneration I 20s | Bea: 1 Champion's Heart + 80 Crowns; recipe card |
+| `Starwright Bread` | `minecraft:bread` | 2 | 1 Starwright Flour, 2 Wheat, 1 Glowstone Dust | Night Vision I 15 min, Slow Falling I 5 min, Jump Boost I 5 min | recipe card |
+| `Lantern Cake` | `minecraft:pumpkin_pie` | 2 | 1 Glow Honey, 3 Wheat, 2 Sugar, 1 Egg, 1 Glowstone Dust | Night Vision I 20 min, Regeneration I 1 min, Hero of the Village I 20 min | recipe card |
+| `Hearthkeeper's Feast` | `minecraft:rabbit_stew` | 1 | 1 Bowl, 1 Champion's Heart, 1 Glow Honey, 1 Harvest Saffron, 1 Cooked Beef | Health Boost II 15 min, Resistance I 15 min, Strength I 10 min, Regeneration I 1 min, Saturation (fills you up) | recipe card |
+
+The rare ingredients (each is a vanilla item with a custom name and `Rare ingredient` lore; eating or using one does nothing special):
+
+| Ingredient | Item | Where it comes from | Used in |
+|---|---|---|---|
+| `Champion's Heart` | `minecraft:beetroot` | Every champion: the killer 60%, helpers 30% (`championDropChance`) | Champion's Heart Stew, Hearthkeeper's Feast |
+| `Storm Eel` | `minecraft:cod` | The Storm Eel of [Fishing 2.0](#fishing-20--fishing_bp) (thunderstorms; any cod named `Storm Eel` with lore counts), and Stormcaller champions | Storm Eel Pie |
+| `Frost Pepper` | `minecraft:light_blue_dye` | Frostbound champions; 4% from each stray you kill (`forage.frostPepper`) | Frost Pepper Soup |
+| `Glow Honey` | `minecraft:honeycomb` | 30% when you harvest a full beehive or bee nest with a bottle or shears at night (time 13000 to 23000, `forage.glowHoney`) | Lantern Cake, Hearthkeeper's Feast |
+| `Starwright Flour` | `minecraft:sugar` | 10% from each ripe wheat you break within 10 minutes (`starMinutes`) of an aurora or a meteor (`forage.starwrightFlour`) | Starwright Bread |
+| `Ember Truffle` | `minecraft:magma_cream` | 3% from each ripe nether wart you break (`forage.emberTruffle`); champions that die in the Nether | Ember Truffle Risotto |
+| `Moon Salt` | `minecraft:quartz` | 5% from each hostile mob you kill during a Blood Moon (`forage.moonSalt`); Vampiric champions | Moon Salt Roast |
+| `Harvest Saffron` | `minecraft:orange_dye` | 8% from each ripe crop (wheat, carrots, potatoes, beetroot) you break during a Harvest Moon (`forage.harvestSaffron`) | Golden Harvest Loaf, Hearthkeeper's Feast |
+
+Foraging (everything but champions) can be disabled with **Foraging** (`foragingEnabled`). Crops harvested by tapping with [Right-click Harvest](#right-click-harvest--harvest_bp) break no block, so they don't forage; break them to try your luck.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:cooking` | Everyone | The Kitchen menu: what you can cook now, your recipes, the cookbook (every recipe, its ingredients, effects and how to learn it) and the rare ingredients you carry. Operators also teach or forget recipes and give dishes, ingredients and recipe cards |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Dishes give their effects when eaten. When `false` they are plain food |
+| `durationMultiplier` | `1` | Every dish effect's length is multiplied by this (0.25 to 4 in game), except Saturation, Levitation and Nausea |
+| `rollingDishes` | `true` | Rolling dishes roll on the surprise table; when `false` they give their plain effect |
+| `championDropChance` | `60` | Percent chance that a champion's killer gets a Champion's Heart, and the same for its trait's ingredient; helpers get half this chance of a heart |
+| `recipeCardChance` | `10` | Percent chance that a champion's killer also gets a recipe card |
+| `foragingEnabled` | `true` | Rare ingredients from harvesting, beehives and hunting (the chances below). Champions drop them either way |
+| `forage.glowHoney` | `30` | Percent: Glow Honey from a full beehive or bee nest harvested at night |
+| `forage.starwrightFlour` | `10` | Percent: Starwright Flour from ripe wheat soon after an aurora or a meteor |
+| `forage.harvestSaffron` | `8` | Percent: Harvest Saffron from a ripe crop during a Harvest Moon |
+| `forage.moonSalt` | `5` | Percent: Moon Salt from a hostile mob killed during a Blood Moon |
+| `forage.emberTruffle` | `3` | Percent: Ember Truffle from ripe nether wart |
+| `forage.frostPepper` | `4` | Percent: Frost Pepper from a stray |
+| `starMinutes` | `10` | After an aurora or a meteor, ripe wheat can give Starwright Flour for this many minutes |
+| `potFires` | `["minecraft:campfire", "minecraft:soul_campfire"]` | Blocks that make a cauldron on top of them a cooking pot (lit ones only) |
+| `cookAnywhere` | `false` | Players can cook from `/realm:cooking` anywhere, without a pot |
+| `cookSeconds` | `3` | How long one cooking takes, in seconds, for any number of batches |
+| `maxBatch` | `16` | Most batches cooked at once |
+| `chefRole` | `"chef"` | The NPC role whose townsfolk open the Kitchen (Bea the Cook has it) |
+| `chefName` | `"Bea the Cook"` | Who teaches recipes, in menus |
+| `skillXp` | `3` | Farming XP (Skills pack) per serving cooked; `0` = none |
+
+The dishes, rare ingredients, champion trait ingredients and the rolling table are in `scripts/recipes.js` (`DISHES`, `INGREDIENTS`, `TRAIT_INGREDIENT`, `ROLLS`): `{ id, name, base, tier, yield, needs, effects, blurb, learn?, card?, returns?, roll? }` per dish, where `needs` are `[item id, count]` (`"ing:<id>"` for a rare ingredient), `effects` are `[effect id, amplifier, seconds]` and `learn` the ways Bea teaches it (`{ crowns?, items? }`, any one). Keep the ids and names of existing dishes: players' recipes are saved by id, and stories use the names.
+
+Operators can change `enabled`, `durationMultiplier`, `rollingDishes`, `championDropChance`, `recipeCardChance`, `foragingEnabled` and `cookAnywhere` in game with `/realm:config` (**Kitchen**). Each player can disable **Cooking sounds** in `/realm:prefs` (**Kitchen**). The rest stays in `config.js`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `cooking:known` | Player | JSON `[recipe id]`: the recipes the player learned (the 6 basics aren't saved; everyone knows them) |
+| `cooking:stats` | Player | JSON `{ c, e }`: servings cooked and dishes eaten, shown in `/realm:cooking` |
+| `cooking:pending` | World | JSON `{ player id: [recipe id] }`: recipes a story taught a player who was offline, learned when they join |
+| `cooking:moon` | World | JSON `{ s, t }`: the Blood or Harvest Moon announced by `realm:moon` and when (forgotten after 20 minutes or when it sets) |
+| `cooking:star` | World | When the last aurora or meteor was announced (ms), for Starwright Flour |
+| `cooking:cfg` | World | Settings changed in `/realm:config` |
+| `cooking:pref` | Player | The player's **Cooking sounds** choice |
+| `crowns` | Scoreboard | Bea's lessons are paid from the shared Crowns balance |
+
+### How it works
+
+- **Pots:** `beforeEvents.playerInteractWithBlock` on a `minecraft:cauldron` whose block below is a lit `potFires` block (its `extinguished` state isn't set), with an empty hand or while sneaking, is canceled and opens the menu on the next tick (once per tap, `isFirstEvent`).
+- **Eating:** `afterEvents.itemCompleteUse` from a player with an item that is a dish (its type is the dish's `base`, its name without § codes is the dish's name, and it has lore). The vanilla food points are the base item's.
+- **Foraging:** `afterEvents.playerBreakBlock` on ripe crops (`growth` 7) and nether wart (`age` 3); `afterEvents.entityDie` with a player as the damaging entity; full hives (`honey_level` 5) tapped with a glass bottle or shears. Scripts can't read the moon or the sky, so the pack remembers the last `realm:moon` (`{ state: "blood" | "harvest" | "normal" }` from [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp)) and `realm:sky_event` with `kind` `aurora` ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)) or `meteor` ([Meteor Strikes](#meteor-strikes--meteor_bp)).
+- **Townsfolk:** on `realm:npc_talk` with the `chef` role the pack answers `realm:npc_offer` with **Kitchen** (`order` 15), and opens it on `realm:npc_choose`.
+- **Script events it listens to** (JSON; other packs and `/scriptevent` can send them):
+  - `realm:champion_slain` `{ player?, helpers, name, trait, dim, ... }` from Champions: rare ingredients and recipe cards.
+  - `realm:recipe_learn` `{ player, recipe }`: teaches a recipe, by id (`starwright_bread`) or name (`Starwright Bread`; case, spaces and punctuation ignored). A player who is offline learns it when they next join. Story Questlines uses it for rewards.
+  - `realm:dish_give` `{ player, dish, amount? }` and `realm:ingredient_give` `{ player, ingredient, amount? }`: give real dishes or rare ingredients (by id or name), with the right lore. Stories that reward a dish should use these (or give the item with the dish's `base`, exact name and any lore).
+  - `realm:cooking_cook` `{ player, recipe, times? }`: cooks a known recipe at the player's position from what they carry, like the pot (for tests and automation).
+  - `realm:cooking_eat` `{ player, dish }`: gives a dish's effects as if eaten, without an item (for tests).
+- Events sent: `realm:npc_offer` (above) and `realm:skill_xp` `{ skill: "farming" }` for each cooking.
+
+---
+
 ## Treasure Maps & Riddles — `maps_bp`
 
 Buy a treasure map from Mara the Cartographer and follow its riddles across the land: each clue tells you which way to walk and roughly how far, and where it ends the next clue appears. After two or three clues, 800 to 2,000 blocks from where you bought the map, a chest lies buried. Hold the map and it tells you whether you're getting warmer. Finding the treasure pays Crowns, and the chest holds gold, iron, emeralds and sometimes a diamond or even a relic.
@@ -4274,6 +4414,8 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it, so operators should use `/realm:weather_set` rather than `/weather`; sleeping through rain (or Smart Sleep) ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
 | Sky packs → Realm Skies (Realm Resources) | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |
 | Storm Chasing, Tornadoes, Rainbows, Meteor Strikes, Merchant Caravan, Fishing 2.0 → Waystones & Inns | Innkeepers remember the last few `realm:sky_event` announcements for **Hear the news** |
+| Kitchen ↔ Townsfolk, Story Questlines | Bea the Cook (role `chef`) offers the **Kitchen** through `realm:npc_talk`. Story Questlines teaches recipes with `realm:recipe_learn`, gives dishes and rare ingredients with `realm:dish_give` and `realm:ingredient_give`, and delivers dishes by their item and exact name (`minecraft:rabbit_stew` named `Harbor Chowder`) |
+| Champions, Fishing 2.0, Blood Moon, Aurora, Meteor Strikes → Kitchen | Champions drop rare ingredients and recipe cards (`realm:champion_slain`); Fishing 2.0's Storm Eel is the Storm Eel ingredient; a Blood or Harvest Moon (`realm:moon`) and an aurora or meteor (`realm:sky_event`) make Moon Salt, Harvest Saffron and Starwright Flour possible. Each pack works without the others |
 | Weather Almanac ↔ Rain Extras | Rain Extras' fog, mist, drips and sounds follow the Almanac's planned rain and thunder like any other weather |
 
 Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn, so it has nothing to coordinate with the other packs.
