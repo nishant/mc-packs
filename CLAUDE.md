@@ -20,15 +20,23 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 - **Pictures and sound clips** go in `docs/media/` and in a pack's `### See and hear it` subsection (`![caption](media/…)`, `[label](media/….mp3)`, and `![Before](media/…) ![After](media/…) caption` on one line for a before/after pair of the same spot); the realm page shows them as a gallery, with each pair as a comparison you drag across. The rain packs' are generated (`node tools/gen-rain/renders.mjs`, `node tools/gen-rain/sounds.mjs --audition docs/media/rain`): rerun them when the rain texture, fogs or sounds change. Label renders as renders, never as screenshots.
 - **Realm News writes itself:** every shipped change that players notice adds a short entry at the top of `docs/NEWS.md` (for players, plain ASCII). `npm run bundle` runs `node tools/gen-news.mjs`, which puts the newest entry in `news_bp` so it pops up once after the update; `npm run check` fails until it's current. Never ask the owner to type news in game.
 - **Test on a real server:** `tools/test-bds/` runs the packs on a Bedrock Dedicated Server with simulated players (see its README). Use it for anything that touches game behavior.
+- **Vanilla entity overrides:** `translucent_bp/entities/player.json` and `dolphin_bp/entities/dolphin.json` are copies of the vanilla behavior files plus our additions. Only one pack may define each entity (the bundle can't merge them). After a Minecraft update, re-copy them from the newest vanilla files (BDS ships them) and re-apply the additions.
 - **Version bumps:** increase `header.version` in a pack's `manifest.json` whenever its contents change.
 
 ## Commands
 
 ```bash
-npm run check     # tsc, ASCII game text, docs, commands, help catalog, rain_rp textures/fogs, sky_rp, translucent_rp. Run before every commit
+npm run check     # tsc, ASCII game text, docs, commands, stories, settings and zones copies, help catalog, news, rain_rp, sky_rp, translucent_rp. Run before every commit
 npm run build     # dist/<folder>.mcpack
-npm run bundle    # merge packs: -- --all (behavior), -- --resources (resource); see the bundle-packs skill
+npm run bundle    # merge packs: -- --all (behavior), -- --resources (resource); see the bundle-packs skill. Refreshes the Realm News release first
 npm run gen:rain  # regenerate rain_rp (sounds need ffmpeg with libvorbis)
 npm run gen:sky   # regenerate sky_rp
 npm run gen:translucent  # regenerate translucent_rp
+node tools/help-catalog.mjs   # rebuild /realm:help after docs change (bumps help_bp)
+node tools/gen-news.mjs       # copy the newest docs/NEWS.md entry into news_bp (bumps news_bp)
+node tools/sync-settings.mjs  # copy tools/settings-shared.js into every pack's settings.js
+node tools/sync-zones.mjs     # copy tools/zones-shared.js into every safe-zone consumer
+node tools/test-bds/run.mjs --scenario <file>   # run the packs on a real Bedrock server with simulated players
 ```
+
+Story content lives in `packs/saga_bp/scripts/stories/` and follows `docs/STORY_BIBLE.md` (world, cast, places, data format); `node tools/check-stories.mjs` validates it.

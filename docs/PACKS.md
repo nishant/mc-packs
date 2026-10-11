@@ -2056,7 +2056,7 @@ Operators can change `enabled`, `everyDays`, `offsetDays`, `hourUtc`, `stayMinut
 
 ## Story Questlines — `saga_bp`
 
-An RPG quest engine told by the realm's townsfolk: a five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker above the hotbar points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
+An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (about 40 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker above the hotbar points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
 
 ### How to use
 
@@ -2109,6 +2109,36 @@ An RPG quest engine told by the realm's townsfolk: a five-act main story, **The 
 - **Daily favors:** each questgiver offers one favor per player per real day (UTC), picked from that NPC's list (the same pick all day). Accept it at the NPC, do it like any objective, report back for a small reward. You can give one up from its page (no new one until tomorrow).
 - **Places:** a place an operator hasn't set is picked by the pack when a chapter first needs it, by the place's rules (coast, under water, deep underground, high ground, the sky; a distance band from world spawn), and built when a player comes within 64 blocks (`buildRange`), never over anything player-made (planks, glass, doors and the like): if the land doesn't suit, the spot moves and chat says so. The terrain is saved first, so an operator's **Remove** restores it exactly.
 - **Creative mode** makes no progress (`skipCreative`).
+
+### The stories
+
+21 stories and 151 chapters: about 40 hours if you play everything. Each story opens when the one before it is finished, so the side stories appear as the main story goes on. Chapters with branches are counted once each; a player plays most, but not all, of them.
+
+| Story | Kind | Told by | Opens after | Chapters | Feel |
+|---|---|---|---|---|---|
+| **The Drowned Bell** | Main, prologue | Old Tobin | - | 6 | mystery, eerie, heroic |
+| **The Cartographer's Last Map** | Main, prologue | Mara the Cartographer | - | 4 | exploration, mystery, happy |
+| **Signs in the Sky** | Main, act 1 | Sol the Sky-reader | The Drowned Bell, The Cartographer's Last Map | 10 | mystery, eerie, cozy, creepy |
+| **The Gray Choir** | Main, act 2 | Warden Reyes | Signs in the Sky | 12 | stealth, violent, mystery, tragic, dangerous |
+| **Into the Deep** | Main, act 3 | Ida the Relicsmith | The Gray Choir | 10 | scary, exploration, eerie, dangerous, mystery, sad |
+| **The Three Seals** | Main, act 4 | Elsie the Innkeeper | Into the Deep | 12 | epic, heroic, dangerous, exploration, sad |
+| **Lantern Night** | Main, act 5 | Mayor Bram | The Three Seals | 13 | epic, heroic, violent, sad, scary |
+| **A Room at the Inn** | Side | Elsie the Innkeeper | Signs in the Sky | 7 | creepy, sad, eerie |
+| **Graveyard Shift** | Side | Moss the Gravedigger | - | 6 | scary, funny, creepy |
+| **The Witch's Bargain** | Side | Moss the Gravedigger | The Gray Choir | 7 | creepy, mystery, dangerous |
+| **Lamp in the Window** | Side | Brother Hollis | The Gray Choir, saving Brother Hollis | 5 | sad, happy, cozy |
+| **Wren's Lost Lambs** | Side | Wren | - | 7 | adorable, happy, funny |
+| **The Star Kittens** | Side | Wren | Signs in the Sky | 6 | adorable, sad, cozy |
+| **Little Turtles** | Side | Old Tobin | The Drowned Bell | 5 | adorable, heroic, cozy |
+| **The One That Got Away** | Side | Old Tobin | - | 5 | happy, funny, heroic |
+| **Hearth and Table** | Side | Bea the Cook | - | 7 | cozy, happy, funny, sad |
+| **The Wardens' Oath** | Side | Warden Reyes | - | 7 | violent, heroic, dangerous, sad |
+| **Smuggler's Run** | Side | Quill the Trader | The Gray Choir | 5 | stealth, funny, dangerous |
+| **The Mayor's Burden** | Side | Mayor Bram | The Gray Choir | 5 | sad, funny, mystery |
+| **Edges of the Map** | Side | Mara the Cartographer | The Cartographer's Last Map | 7 | exploration, happy, dangerous |
+| **The Forge That Sings** | Side | Ida the Relicsmith | Signs in the Sky | 5 | dangerous, epic, mystery |
+
+The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, one a day each.
 
 ### Commands
 
