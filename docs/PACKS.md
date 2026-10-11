@@ -1753,15 +1753,15 @@ Seats are entities and are cleaned up; any left over from before a restart are r
 
 ## Townsfolk — `npc_bp`
 
-Eight named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith and Sol the Sky-reader. They turn to face you as you walk up, mutter to themselves now and then, go home at night and come back at dawn, and greet you depending on the time of day and the weather. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from [Crowns](#crowns--crowns_bp), the stories of [Story Questlines](#story-questlines--saga_bp) or Sol's forecast from the [Weather Almanac](#weather-almanac--weather_bp). The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.
+Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. They turn to face you as you walk up, mutter to themselves now and then, go home at night and come back at dawn, and greet you depending on the time of day and the weather. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from [Crowns](#crowns--crowns_bp), the stories of [Story Questlines](#story-questlines--saga_bp) or Sol's forecast from the [Weather Almanac](#weather-almanac--weather_bp). The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.
 
 ### How to use
 
-1. Run `/realm:npc` to see who lives on the realm and where: each townsfolk with the distance and direction from you, like `Mara the Cartographer - 240m NE (cartographer)`.
+1. Run `/realm:npc` and pick **Who lives here?** (or run `/realm:npc_who` for the list in chat) to see who lives on the realm and where: each townsfolk with the distance and direction from you, like `Mara the Cartographer - 240m NE (cartographer)`.
 2. Walk up to one. They turn to face you, and now and then say something above their head (`Where did I leave my compass?`).
 3. Tap them to talk. The menu greets you (`Mara: "Morning, Steve! The light's perfect for surveying."`) and lists what they can do for you, then **Who lives here?** (where everyone is) and **Goodbye**. What's on the list depends on which packs the realm has: Quill opens the **Market**, for example.
 4. At night, townsfolk with a home go there; they're back at their post at dawn.
-5. **Operators:** stand where an NPC should live, face the way it should look back, and run `/realm:npc_add <id>` (`mara`, `tobin`, `reyes`, `elsie`, `bram`, `quill`, `ida`, `sol`). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from `config.js`). Set where it sleeps with `/realm:npc_home <id>` (run it at its post to clear the home), list everyone with `/realm:npc_list`, and remove the nearest NPC with `/realm:npc_remove`. `/realm:config` → **Townsfolk** switches the turning, idle lines and night routine.
+5. **Operators:** `/realm:npc` has every tool as a button: **Add or move a townsfolk here**, **Set a home here**, **Remove the nearest townsfolk** and **List with coordinates**. Or stand where an NPC should live, face the way it should look back, and run `/realm:npc_add <id>` (`mara`, `tobin`, `reyes`, `elsie`, `bram`, `quill`, `ida`, `sol`, `hollis`, `moss`, `wren`, `bea`). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from `config.js`). Set where it sleeps with `/realm:npc_home <id>` (run it at its post to clear the home), list everyone with `/realm:npc_list`, and remove the nearest NPC with `/realm:npc_remove`. `/realm:config` → **Townsfolk** switches the turning, idle lines and night routine.
 
 ### What players see
 
@@ -1775,23 +1775,28 @@ Eight named townsfolk that operators place around town: Mara the Cartographer, O
 
   | id | Name | Roles |
   |---|---|---|
-  | `mara` | Mara the Cartographer | `cartographer` |
+  | `mara` | Mara the Cartographer | `cartographer`, `questgiver` |
   | `tobin` | Old Tobin the Fisherman | `fisher`, `questgiver` |
   | `reyes` | Warden Reyes | `warden`, `guildmaster`, `questgiver` |
-  | `elsie` | Elsie the Innkeeper | `innkeeper` |
+  | `elsie` | Elsie the Innkeeper | `innkeeper`, `questgiver` |
   | `bram` | Mayor Bram | `mayor`, `questgiver` |
-  | `quill` | Quill the Trader | `merchant` |
+  | `quill` | Quill the Trader | `merchant`, `questgiver` |
   | `ida` | Ida the Relicsmith | `relicsmith`, `questgiver` |
-  | `sol` | Sol the Sky-reader | `skymage` |
+  | `sol` | Sol the Sky-reader | `skymage`, `questgiver` |
+  | `hollis` | Brother Hollis the Chapel Keeper | `priest`, `questgiver` |
+  | `moss` | Moss the Gravedigger | `gravedigger`, `questgiver` |
+  | `wren` | Wren the Stable Girl | `stablehand`, `questgiver` |
+  | `bea` | Bea the Cook | `chef`, `questgiver` |
 
-  Roles decide what other packs offer: `merchant` (the market of [Crowns](#crowns--crowns_bp)), `questgiver` (stories, [Story Questlines](#story-questlines--saga_bp) picks by NPC id), `skymage` (the forecast, [Weather Almanac](#weather-almanac--weather_bp)), and `guildmaster` (`guilds_bp`), `cartographer` (`maps_bp`), `fisher` (`fishing_bp`), `innkeeper` (`waystone_bp`), `mayor` (`town_bp`), `warden` (`bounty_bp`), `relicsmith` (`relics_bp`).
+  Roles decide what other packs offer: `merchant` (the market of [Crowns](#crowns--crowns_bp)), `questgiver` (stories and daily favors; [Story Questlines](#story-questlines--saga_bp) picks by NPC id, so the role is a label), `priest`, `gravedigger`, `stablehand` and `chef` (labels for the story cast and the cooking pack), `skymage` (the forecast, [Weather Almanac](#weather-almanac--weather_bp)), and `guildmaster` (`guilds_bp`), `cartographer` (`maps_bp`), `fisher` (`fishing_bp`), `innkeeper` (`waystone_bp`), `mayor` (`town_bp`), `warden` (`bounty_bp`), `relicsmith` (`relics_bp`).
 - **A missing NPC comes back:** if a townsfolk isn't where it belongs while a player has been within 24 blocks of that spot for about 6 seconds (`respawnRange`), it's found again by its tags or spawned again there. A spawned-again NPC has the default skin until an operator picks one again. Each townsfolk exists once: any second copy is removed when its chunk loads.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:npc` | Everyone | Lists the townsfolk on the realm with their distance and direction from you, and their roles |
+| `/realm:npc` | Everyone | The townsfolk menu: **Who lives here?**, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Remove the nearest townsfolk, List with coordinates |
+| `/realm:npc_who` | Everyone | Lists the townsfolk on the realm in chat with their distance and direction from you, and their roles |
 | `/realm:npc_add <id>` | Operators | Places that townsfolk where you stand, facing you (moves it there if it's already placed) |
 | `/realm:npc_remove` | Operators | Removes the nearest townsfolk within 5 blocks (`removeRange`) and forgets its spot |
 | `/realm:npc_home <id>` | Operators | Where that townsfolk goes at night (time 13000 to 23000, `nightStart`/`nightEnd`); in the same dimension as its post. Run it within 2 blocks of the post to clear the home |
@@ -1812,7 +1817,7 @@ Eight named townsfolk that operators place around town: Mara the Cartographer, O
 | `nightEnd` | `23000` | Night ends at this time of day (23000 = just before sunrise) |
 | `removeRange` | `5` | How far `/realm:npc_remove` looks, in blocks |
 | `respawnRange` | `24` | A missing NPC is spawned again once a player has been this close to its spot for a few seconds |
-| `townsfolk` | the 8 above | `{ id, name, title, roles, greetings: { morning, day, evening, night, rain, thunder }, idle }`: the name (yellow) and title (gray) above the NPC, its roles, and its lines. `{player}` in a line is the player's name. Keep the ids: saved spots, tags and other packs use them. An id removed here removes that NPC when its chunk loads |
+| `townsfolk` | the 12 above | `{ id, name, title, roles, greetings: { morning, day, evening, night, rain, thunder }, idle }`: the name (yellow) and title (gray) above the NPC, its roles, and its lines. `{player}` in a line is the player's name. Keep the ids: saved spots, tags and other packs use them. An id removed here removes that NPC when its chunk loads |
 
 Operators can change `enabled`, `faceRange`, `idleMinSeconds`, `idleMaxSeconds` and `nightRoutine` in game with `/realm:config` (**Townsfolk**). The rest stays in `config.js`.
 
@@ -1830,7 +1835,8 @@ Operators can change `enabled`, `faceRange`, `idleMinSeconds`, `idleMaxSeconds` 
 - **One of each:** the saved entity id is the real one (entity ids stay the same across loads). An NPC entity of this pack that loads (`afterEvents.entityLoad`, and a check of loaded NPCs every 10 seconds) is removed if its townsfolk isn't placed any more, or if the saved one is loaded too; if the saved one isn't loaded, the newcomer takes over. A townsfolk whose entity isn't loaded, while its spot is loaded and a player has been near it for 3 checks 2 seconds apart, is looked for by its tags and otherwise spawned again.
 - **Every 10 ticks** each loaded townsfolk is teleported back if it's more than 1.5 blocks from where it belongs (post, or home at night; with `enabled` off, always its post), and otherwise, with `enabled` on, turned up to 45 degrees toward the nearest player (not spectators) with a teleport in place (`rotation`). A tap turns it toward the player at once, in place.
 - **Taps** (`beforeEvents.playerInteractWithEntity`) on an NPC with `realm:npc_owner:npc_bp` are canceled, except an operator sneaking in creative mode, who gets the game's NPC editor. Then the offer round: `realm:npc_talk` `{ req, player, npc, roles, name }` goes out, `realm:npc_offer` `{ req, pack, key, label, order? }` answers are collected for 4 ticks, the menu lists them by `order` (default 50) then label (offers with an empty label, or claiming to be from `npc_bp`, are ignored), and a pick sends `realm:npc_choose` `{ player, npc, pack, key }` to the pack that offered it. `realm:npc_talk` also tells quest packs the player talked to that NPC. NPCs of other packs (the [Merchant Caravan](#merchant-caravan--caravan_bp)'s traders) carry their own owner tag and are left to them.
-- **Weather** can't be read by scripts, so the pack remembers the last `afterEvents.weatherChange` in the Overworld.
+- **Weather** can't be read by scripts, so the pack remembers the last `afterEvents.weatherChange` in the Overworld (the event names it `overworld` on current servers; both spellings are accepted).
+- **Summon for other packs:** `realm:npc_summon` `{ id, player }` places (or moves) townsfolk `id` at that player, exactly like `/realm:npc_add <id>` run by them, and answers `realm:npc_summoned` `{ id, player, ok, error? }`. Only honored when the player is an operator (`GameDirectors`); the Relics pack uses it to bring the relicsmith.
 
 ---
 
@@ -1991,58 +1997,69 @@ Operators can change `enabled`, `everyDays`, `offsetDays`, `hourUtc`, `stayMinut
 
 ## Story Questlines — `saga_bp`
 
-Multi-chapter stories told by the realm's townsfolk. Each chapter starts with a conversation, gives you a few things to do (go somewhere, defeat something, bring something, keep watch in a storm), and ends when you report back, sometimes with a choice that changes how the story ends and which guild thanks you. Two stories come with it: **The Drowned Bell** (6 chapters, about 3 hours) and **The Cartographer's Last Map** (4 chapters). A tracker above the hotbar points the way, and `/realm:saga` is your story log. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
+An RPG quest engine told by the realm's townsfolk: a five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker above the hotbar points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
 
 ### How to use
 
-1. Tap **Old Tobin** (the fisherman) or **Mara the Cartographer** and pick `Story: The Drowned Bell` or `Story: The Cartographer's Last Map`. Read the pages with **Next**, then pick **Accept** (or **Not now**: you can come back any time).
-2. Chat lists the chapter's objectives. Do them in any order; `/realm:saga` shows them with your progress, and the tracker above the hotbar points to the next place to go (`Drowned Bell: Lighthouse NE 240m`).
-3. When everything is done, chat says `[Story] The Drowned Bell: chapter 1 is done. Go back to Old Tobin.` Tap that NPC and pick `Story: The Drowned Bell` (`Chapter 1 done: report back`) to hear how it ends and get the reward. Some chapters end with a choice: pick carefully, it changes the story's ending.
-4. The next chapter is told by the NPC chat names (`Next: talk to Warden Reyes for chapter 2, The Drowned Choir.`). Tapping the NPC mid-chapter shows your objectives and lets you hear the chapter again.
-5. In a party (the [Parties](#parties--party_bp) pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.
-6. Don't want the tracker? Disable **Story tracker** in `/realm:prefs`.
-7. **Operators:** the stories need three places: stand on each one and run `/realm:saga_place lighthouse`, `/realm:saga_place sunken_bell` and `/realm:saga_place old_chapel` (`/realm:saga_place` alone lists them). Pick a lighthouse on the coast, a spot in the sea with a **bell** block placed underwater within 8 blocks of it (players strike it in chapter 5, and the Bell Warden comes there in chapter 6; setting the place reminds you), and an old chapel or ruin. Until a place is set, its chapter says `ask an operator to set place lighthouse` and operators online get a hint. `/realm:saga_reset <player>` starts a player's stories over; `/realm:config` → **Story Questlines** has the switches.
+1. Tap a townsfolk with a story button: `Main story: The Drowned Bell` (Old Tobin) or `Main story: The Cartographer's Last Map` (Mara) to begin. Read the pages with **Next**, then pick **Accept** (or **Not now**: you can come back any time). Some intros end with a choice instead of Accept.
+2. Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker above the hotbar always shows where to go next (`Drowned Bell: Lighthouse NE 240m`), or who to report to.
+3. Stuck? Open `/realm:saga`, pick **Current quests** and the story, then **Ask for a hint**: it says what to do and gives the exact coordinates of every place in the chapter, for a quarter of the chapter's levels and Crowns (once per chapter).
+4. When everything is done, chat says `"Salt and Silence" is done. Go back to Old Tobin to hear what happens.` Tap that NPC and pick the story (`Done: report back`). If the chapter ends with a choice, nothing is final until you pick one: close the form and the report waits.
+5. Finished stories open new ones: chat names them, and **Available** in `/realm:saga` lists what you can start and what's still locked.
+6. Each questgiver also has a **Daily favor** button: a short job, a new one each day (UTC), for a few levels and Crowns.
+7. In a party (the [Parties](#parties--party_bp) pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.
+8. Don't want the tracker? Disable **Story tracker** in `/realm:prefs`.
+9. **Operators:** stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. `/realm:saga_places` (also in `/realm:saga`) lists every place with its status and lets you **Teleport**, **Set here**, **Build here** (a green outline preview with Build here, Rotate and Cancel), **Rebuild**, **Remove** (puts the terrain back exactly) and **Relocate**. `/realm:saga_place <name>` sets a spot where you stand without building. **Operator tools** in `/realm:saga` finish a stuck player's current step or reset their stories. `/realm:config` → **Story Questlines** has the switches.
 
 ### What players see
 
-- **Offers at the townsfolk:** an NPC with something for you shows `Story: The Drowned Bell` among its buttons (later chapters add a second line, `Chapter 2: The Drowned Choir`). There are three kinds: the intro of the next chapter (from the chapter's NPC), `Chapter 3 done: report back` (from the NPC you report to), and a reminder while you're working on it.
-- **Dialogues** are a few short pages from the NPC (`Chapter 2 of 6: The Drowned Choir` on top). Closing one is the same as **Not now**; nothing is lost.
-- **Objectives**, and what counts:
-  - **Talk:** tap the NPC (`Ask Warden Reyes what the night watch heard`).
-  - **Reach:** stand within the radius of a place (across, height doesn't matter): an operator's place, or a spot a set distance from world spawn.
-  - **Deliver:** tap the NPC with the items in your inventory: they take what you have (up to what's still needed) and keep count, so you can bring them in several trips. `You give Ida the Relicsmith 12 Iron Ingot (12/24).` Renamed items are never taken.
-  - **Collect:** have the items in your inventory (`Have 8 paper`); they aren't taken.
-  - **Defeat:** kill the mobs (`Defeat 12 drowned`). Story champions (the **Bell Warden**) come when you're within 32 blocks of their place.
-  - **Interact:** tap (use) or hit a block near a place, such as the sunken bell, 3 times.
-  - **Keep watch (survive):** stand outdoors, with nothing over your head, during a thunderstorm, near the place, for the number of seconds (`Keep watch outdoors at the lighthouse in a thunderstorm 40/120 s`). Only overworld thunderstorms count; the log says `Wait for a thunderstorm.` until one comes.
-  - **Mine** and **fish** count blocks broken and things caught with a rod (not used by the two stories, but available for new ones).
-- **Progress notes:** chat says `[Story] Defeat 12 drowned: done.` for each objective; for counts of 4 or more, a note above the hotbar shows each quarter (`Drowned Bell: Defeat 12 drowned 6/12`).
-- **The tracker** (every 2 seconds, while the chapter has somewhere to be): `Drowned Bell: Lighthouse NE 240m`, `here` once you're in range, `in the Nether` from another dimension, or `ask an operator to set place sunken_bell`. With several stories going, it follows the chapter you accepted last. It waits while another pack's note is showing there (a quest's progress, a mob's health), and with the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD steps aside for it (the pack sends `realm:actionbar`).
-- **Rewards** at the end of each chapter: XP levels and items (`[Story] Chapter complete: The Storm Vigil! Reward: 5 levels`), Crowns (`+150 Crowns (Story: The Drowned Bell)`, on the [Crowns](#crowns--crowns_bp) scoreboard), and, through other packs when they're installed, a relic ([Relics](#relics--relics_bp)), a title ([Titles & Trails](#titles--trails--titles_bp)), a `story` page in the [Field Journal](#field-journal--journal_bp) and guild reputation ([Guilds & Reputation](#guilds--reputation--guilds_bp)). Those packs announce their own rewards; without them, those parts are skipped.
+- **Offers at the townsfolk:** an NPC with something for you shows a button: `Main story: <title>` or `Story: <title>` with `New story`, `Chapter 3: <title>` (the next chapter), `Done: report back`, or a reminder while you're working on it; `Answer: <riddle>` when the chapter needs an answer from them; and `Daily favor: <job>`.
+- **Dialogues** are short pages from the NPC (`Chapter 2 of 6: The Drowned Choir` on top, and the story's tones as tags such as `[mystery] [eerie]`). Closing one is the same as **Not now**; nothing is lost. When the same NPC tells the next chapter, its intro opens right after the report.
+- **Branches:** choices set flags that decide which chapters you get, what people say, and which endings are offered later; some choices only appear if you made other choices before (or have enough guild reputation). Chapter numbers count the chapters you actually get.
+- **Objectives**, and what counts (the tracker shows the nearest unfinished one; `secret` steps show no arrow until you ask for a hint):
+  - **Talk:** tap the NPC.
+  - **Reach:** stand within the radius of a place or a spot a set distance from world spawn (across, height doesn't matter), or be in a dimension (`in the Nether`), below or above a height.
+  - **Deliver:** tap the NPC with the items: they take what you have (up to what's still needed) and keep count over several trips (`You give Ida the Relicsmith 12 Iron Ingot (12/24).`). Renamed items are never taken, unless the story asks for an item by name (a dish, a key): then only items with that name count, of any kind. Rename things at an anvil if a story asks you to.
+  - **Collect:** have the items (or an item with that name) in your inventory; they aren't taken.
+  - **Defeat:** kill the mobs, sometimes only at night, near a place, or within a time limit (`1:20 left` in the tracker; too slow and it starts over). **Champions** (named, tougher bosses) come when you're within 32 blocks of their place, or near you when they have no place; sea champions swim in the nearest water. Some call for help at half health.
+  - **Interact:** tap or hit a block near a place (strike a bell, light candles: lighting with flint and steel counts).
+  - **Keep watch (survive):** stand outdoors, with open sky above you, in a thunderstorm (or rain, or any weather, as the step says) near the place, for some seconds. The log says `Wait for a thunderstorm.` until one comes.
+  - **Vigil:** stay at a place for some seconds, sometimes at a time of night, outdoors, or sneaking.
+  - **Mine**, **fish:** blocks broken (not ones you placed yourself) and things caught with a rod.
+  - **Meet:** a story character (a ghost girl, a witch, an echo) appears at the place: walk up to them (or tap them) to talk. They can't be hurt and can't hurt you. Their conversation may end with a choice.
+  - **Inspect:** find clues around a place: faint green sparkles mark them. Walk onto one, or tap a block next to it, to read it (`[Clue 2/4] ...`).
+  - **Stealth:** guards walk their rounds around a place. Reach the spot the tracker shows without being seen: guards see about 120 degrees in front of them, up to 10 blocks away (4 while you sneak, or while you wear the disguise the story names), never through walls. Spotted, you're put back at the edge of the area (or the guards attack, in some chapters).
+  - **Escort:** someone waits at the start; walk up and they follow your exact path. Keep them alive (monsters may ambush you on the way) and bring them to the destination. If they're hurt, they run back and you try again.
+  - **Lead:** put a lead on the animal (some wait where they were lost, named) and bring it to the pen. It stays there as your animal.
+  - **Defend:** stand at the place to start; waves of monsters come one after another (the tracker shows `wave 2 of 3`). If the one you're guarding falls, you die, or you leave for 30 seconds, the defense resets to the first wave.
+  - **Follow:** go to where the trail starts; a glowing wisp drifts along the ground toward somewhere and waits whenever you fall behind. Lose it for 15 seconds and it goes back to the start.
+  - **Answer:** a riddle in a text box, from the NPC (`Answer:` button), at a place (it opens when you get there), or from the story log. Capitals, spaces and punctuation don't matter. A wrong answer may call monsters.
+  - **Place:** build with the blocks named (breaking them again takes the count back).
+  - **Tend**, **tame:** use an item on animals (feed, brush, name tag; each animal counts once) or tame them.
+  - **Ride:** ride something (a horse, a boat) a number of blocks.
+  - **Sleep:** sleep in a bed; some chapters show a dream when you wake.
+  - **Vision:** a short cutscene: the screen fades, titles show each scene (also written in chat), sometimes with darkness and sounds. Sneak to skip it.
+  - **Wear:** wear the named item (a helmet, a mask).
+  - **Use:** use an item (eat, drink, right-click), sometimes at a place.
+  - **Wait:** some real minutes or in-game days pass (`2 days left`); it counts while you're away too (in-game days only while the realm runs).
+- **Progress notes:** chat says `[Story] Defeat 12 drowned: done.` and the next step for each objective; for counts of 4 or more, a note above the hotbar shows each quarter.
+- **The tracker** (every 2 seconds): `Drowned Bell: Lighthouse NE 240m`, `here` once you're in range, `in the Nether`, a countdown for timed steps, `report to Old Tobin NE 40m` when the chapter is done, the wisp or the person you're escorting, or `Lighthouse isn't set yet`. With several stories going, it follows the chapter you accepted last. It waits while another pack's note is showing there.
+- **Hints:** **Ask for a hint** on a chapter's page shows the chapter's hint, each step's hint, and the exact coordinates of every place in the unfinished steps (and where the NPC you need stands, when loaded), and shows the tracker arrow for secret steps. It costs 25% of the chapter's levels and Crowns (`hintPenalty`, asked for once per chapter; items, relics and titles are kept).
+- **Rewards** at the end of each chapter: XP levels and items (some named, with a description), Crowns (on the [Crowns](#crowns--crowns_bp) scoreboard), a **Codex** entry (`[Codex] New entry: ...`), and, through other packs when they're installed, a relic ([Relics](#relics--relics_bp)), a title ([Titles & Trails](#titles--trails--titles_bp)), a `story` page in the [Field Journal](#field-journal--journal_bp) and guild reputation ([Guilds & Reputation](#guilds--reputation--guilds_bp)). Without those packs, those parts are skipped.
+- **The story log** (`/realm:saga`): the story you're on and its **Current step**, then **Current quests** (main story first, then side stories and favors; each opens the chapter's page with its objectives, distance and direction, who to report to, **Ask for a hint** and **Hear the intro again**), **Available** (stories to start and who starts them, and the next locked ones with what they need), **Finished** (each story's chapters, your choices and the ending), **Codex** (every lore entry you've found, to reread), **Daily favors** (each questgiver's favor today), and for operators **Story places** and **Operator tools**.
+- **Daily favors:** each questgiver offers one favor per player per real day (UTC), picked from that NPC's list (the same pick all day). Accept it at the NPC, do it like any objective, report back for a small reward. You can give one up from its page (no new one until tomorrow).
+- **Places:** a place an operator hasn't set is picked by the pack when a chapter first needs it, by the place's rules (coast, under water, deep underground, high ground, the sky; a distance band from world spawn), and built when a player comes within 64 blocks (`buildRange`), never over anything player-made (planks, glass, doors and the like): if the land doesn't suit, the spot moves and chat says so. The terrain is saved first, so an operator's **Remove** restores it exactly.
 - **Creative mode** makes no progress (`skipCreative`).
-
-The stories:
-
-| Story | Chapter | Told by → report to | Objectives | Reward |
-|---|---|---|---|---|
-| The Drowned Bell | 1. Salt and Silence | Old Tobin | Climb to the `lighthouse`; ask Warden Reyes | 3 levels, 8 cooked cod |
-| | 2. The Drowned Choir | Warden Reyes | Defeat 12 drowned; catch 5 things with a rod | 4 levels, 40 Crowns, 16 arrows, Wardens reputation |
-| | 3. The Storm Vigil | Old Tobin | Keep watch outdoors within 48 blocks of the `lighthouse` in a thunderstorm for 120 s | 5 levels, title `Stormwatcher`, journal |
-| | 4. Iron and Sea-Glass | Ida the Relicsmith | Bring Ida 24 iron ingots and 12 prismarine shards. **Choice:** `Silence the bell` (Wardens) or `Recast the bell` (Wayfarers) | 5 levels, 60 Crowns |
-| | 5. The Sunken Bell | Ida the Relicsmith | Dive to the `sunken_bell`; strike (tap or hit) a bell within 8 blocks of it 3 times | 5 levels, 2 golden apples |
-| | 6. The Bell Warden | Mayor Bram → Old Tobin | Defeat the champion **The Bell Warden** (a drowned) at the `sunken_bell`. The ending depends on the chapter 4 choice | 10 levels, 150 Crowns, relic `tide_boots`, title `Bellkeeper`, journal, 40 reputation with the guild of your choice |
-| The Cartographer's Last Map | 1. Pins in an Old Map | Mara the Cartographer | Have a compass and 8 paper | 2 levels, an empty map, 8 bread |
-| | 2. Three Pins | Mara | Reach 3 spots 24 blocks wide: 900 east and 700 north of world spawn, 1,100 west and 200 north, 150 east and 1,200 south | 6 levels, 60 Crowns, journal |
-| | 3. The Old Chapel | Mara | Find the `old_chapel`; ask Sol the Sky-reader | 5 levels, journal |
-| | 4. The Last Map | Mara | Bring Mara a filled map. **Choice:** `Share it with the realm` (Wayfarers) or `Keep the wild places wild` (Growers) | 8 levels, 100 Crowns, relic `compass_echoes`, title `Cartographer`, journal |
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:saga` | Everyone | Your story log: stories in progress with the current chapter and each objective's progress and direction, stories you can start (and who starts them), finished stories, and the choices you made. **Read** buttons replay a chapter's intro |
-| `/realm:saga_place [name]` | Operators | Sets a story place (`lighthouse`, `sunken_bell`, `old_chapel`) where you stand, and says what players need to find there (a bell for `sunken_bell`). Without a name, lists the places, where they are, who set them and which stories use them |
-| `/realm:saga_reset <player>` | Operators | Starts the player's stories over: progress, finished chapters and choices. Rewards already given are kept |
+| `/realm:saga` | Everyone | The story log menu: current quests, available and finished stories, the codex, daily favors; for operators also story places and operator tools |
+| `/realm:saga_log` | Everyone | Straight to **Current quests**: each story you're on with its current step |
+| `/realm:saga_places` | Operators | Every story place with its status (set, picked, built, missing), coordinates and the stories that use it: Teleport, Set here, Build here (outline preview with Build here, Rotate, Cancel), Rebuild, Remove (terrain restored), Relocate |
+| `/realm:saga_place [name]` | Operators | Sets a story place where you stand, without a building (an earlier building of it is removed first). Without a name, lists the places in chat |
+| `/realm:saga_reset <player>` | Operators | Starts the player's stories over: progress, finished chapters, choices, codex and favors. Rewards already given are kept |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -2053,41 +2070,45 @@ The stories:
 | `partyShare` | `true` | Party mates on the same chapter share progress for defeat, survive and reach objectives |
 | `partyRange` | `64` | How close (blocks) a party mate must be to share progress |
 | `skipCreative` | `true` | Players in creative mode make no story progress |
-| `opHints` | `true` | Tell operators online when a player's chapter needs a place nobody has set (at most every 10 minutes per place) |
-| `championFallback` | `true` | When no [Champions](#champions--elite_bp) pack answers a story champion request within 3 seconds, spawn the story's mob itself: named, with health boost, resistance and strength |
-| `championRetrySeconds` | `120` | Seconds before a story champion is asked for again at the same place, once the last one is gone |
+| `opHints` | `true` | Tell operators online when a player's chapter needs a place nobody has set and the pack can't pick it (at most every 10 minutes per place) |
+| `championFallback` | `true` | When no [Champions](#champions--elite_bp) pack answers a story champion request within 3 seconds, spawn the story's mob itself: named, with extra health (the champion's `health`), resistance and strength |
+| `championRetrySeconds` | `120` | Seconds before a story champion is asked for again, once the last one is gone |
 | `offerOrder` | `20` | Where story offers sit among an NPC's buttons (lower is higher up; other offers default to 50) |
+| `hintPenalty` | `0.25` | Share of a chapter's levels and Crowns a hint costs (once per chapter). `0` = free hints |
+| `autoPlaces` | `true` | Places nobody set are picked by the pack and built when a player comes close. Disabled, operators set every place |
+| `buildRange` | `64` | How close (blocks) a player must come to a picked place before its building is built |
+| `actorTimeoutSeconds` | `300` | How long a story character (a ghost, guards, someone to escort) waits for its player to come back before it's removed; it comes back when needed |
+| `favors` | `true` | Questgivers offer a daily favor |
 
-Operators can change `enabled`, `tracker`, `partyShare`, `partyRange`, `skipCreative`, `opHints`, `championFallback` and `championRetrySeconds` in game with `/realm:config`. Each player can switch the tracker for themselves with **Story tracker** in `/realm:prefs`, which follows `tracker` until they choose. `offerOrder` stays in `config.js`.
+Operators can change every option but `offerOrder` in game with `/realm:config`. Each player can switch the tracker for themselves with **Story tracker** in `/realm:prefs`, which follows `tracker` until they choose.
 
-**The stories** are data in `scripts/stories.js`:
-
-- `STORIES`: each story is `{ id, title, short, giver, chapters }` (`short` is the tracker's name, `giver` the NPC id that starts it). Each chapter is `{ id, title, npc?, end?, intro, objectives, outro, choices?, reward?, rep? }`: `npc` tells the intro (default: the giver), `end` hears the report (default: `npc`). `intro` and `outro` are lists of pages; a page is text, or `{ text, when: { flag: value } }` to show it only after a choice set that flag.
-- Objectives: `{ type, label, ... }` with `talk` (`npc`), `reach` (`place`, `at: { dim?, x, z }` or `offset: { x, z }` from world spawn, `radius` 16, `mark` for the tracker), `deliver` (`npc`, `item`, `count`), `collect` (`item`, `count`), `defeat` (`mobs`, `count`; or `champion: { tag, mob, name, trait?, warn? }` with a `place`, `radius` 32; the `tag` must start with `realm:`, such as `realm:saga:bell_warden`, or the Champions pack ignores it), `interact` (`blocks`, `count`, `place`, `radius` 8; a tap or a hit counts), `survive` (`seconds`, optional `place` and `radius` 48), `mine` (`blocks`, `count`), `fish` (`items`, `count`).
-- `choices`: `[{ id, label, set: { flag: value }, rep: [{ guild, amount }], reply: [pages] }]`, shown as buttons on the outro's last page. `reward`: `{ levels, items: [{ item, amount }], crowns, relic, title, journal: { entry, label } }`. `rep` on a chapter: `[{ guild, amount, when? }]`, given when it's finished.
-- `PLACES`: the place names operators can set, and what the tracker calls them. `NPC_NAMES`: how the text names each NPC id.
-- Keep every `id` when editing: progress is saved by story, chapter and choice id. A chapter removed from under a player is offered again from the next chapter they haven't finished.
+**The stories** are data: the prologue in `scripts/stories.js` (with `NPC_NAMES` and `PLACES`), the acts, side questlines and favors in `scripts/stories/*.js`, typed by `scripts/types.js`. A story is `{ id, title, short, giver, kind, act?, tones, summary, requires?, chapters }`; a chapter `{ id, title, npc?, end?, when?, sequential?, intro, introChoices?, objectives, outro, choices?, reward, rep?, hint }`; flags are a story's own, `g:<name>` (player-wide, also counters with `inc`) or `<story>.<flag>`, matched exactly, with `!x` (not x, also unset) or `>=n`. `requires` checks finished stories and chapters, flags, counters (`minCount`) and guild reputation. Each objective type and its fields are listed in `types.js`; the place prefabs are in `scripts/prefabs.js`. `npm run check` runs `tools/check-stories.mjs`, which fails on unknown objective types, missing fields, unknown places or NPCs, duplicate ids and bad champion tags, and warns about flags that are read but never set. Keep every `id`: progress is saved by story, chapter and choice id.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `saga:p` | Player | JSON `{ s: { <story id>: { dn, a, cur, o, t, f, ch, fin? } } }`: finished chapter ids, whether the current chapter is accepted, its id and objective progress, when it was accepted, the story's flags, the choice id picked per chapter, and when the story was finished |
-| `saga:places` | World | JSON `{ <name>: { dim, x, y, z, by } }`: the places operators set, and who set them |
+| `saga:p` | Player | JSON `{ s: { <story id>: { dn, a?, cur?, o?, t?, f, ch, fin?, h?, x? } }, g?, cx?, fv? }`: per story the finished chapter ids, whether the current chapter is accepted, its id, objective progress, when it was accepted, the story's flags, the choices made (by chapter, `<chapter>#<step>` for a meet, `<chapter>@` for an intro choice), when it was finished, whether a hint was bought, and step extras (clues found, timer and wait starts). `g` is the player-wide flags and counters, `cx` the codex entries found, `fv` the daily favors by NPC `{ id, d, a?, o?, x?, c? }`. A finished story keeps only its chapters, flags and choices; saved a few seconds after a change and when the player leaves |
+| `saga:places` | World | JSON `{ <name>: { dim, x, y?, z, by?, f?, b?, a?, p?, mv?, s? } }`: each place's spot, who set it, the building's facing, whether it's built, picked by the pack, still waiting to be built, how often it moved, and its terrain snapshot (structure ids and corners) |
+| `saga:place_<name>_<n>` | World structures | The terrain under a built place, saved before building (`structureManager`), put back by Remove |
 | `saga:weather` | World | The overworld weather at the last change: `Clear`, `Rain` or `Thunder`. The stable Script API can't read the current weather |
 | `saga:pref` | Player | JSON of the player's own `tracker` choice from `/realm:prefs` |
 | `saga:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
-- **Townsfolk:** the pack answers the Townsfolk pack's `realm:npc_talk` with `realm:npc_offer` (`Story: <title>`, keys `start:`, `end:` and `info:` plus the story id) for the NPC ids its chapters use, and opens its dialogues on `realm:npc_choose`. The same `realm:npc_talk` counts talk objectives and takes deliveries, before the offers are worked out, so delivering the last item lets you report back in the same tap.
-- **Counting:** `entityDie` (killer from the damage source) for defeat, `playerBreakBlock` for mine (blocks placed lately don't count), `playerInteractWithBlock` (first tap only) and `entityHitBlock` (one hit per 6 ticks) for interact, a fishing hook followed as in Daily Quests for fish. Once a second a loop checks reach (distance across), collect (inventory count), and survive: overworld weather is `Thunder` (from `weatherChange`, saved as `saga:weather`) and `getTopmostBlock` over the player is no higher than 1 block above their feet.
-- **Champions:** within 32 blocks of a champion objective's place the pack sends `realm:champion_spawn` `{ dim, x, y, z, mob, name, tag }` (tag `realm:saga:bell_warden`; once per `championRetrySeconds`, and not while one with that tag is loaded anywhere in that dimension). If none appears within 3 seconds and `championFallback` is on, it spawns the mob itself, tagged `saga:champion`, and removes leftovers when the world loads. A `realm:champion_slain` with the story's tag (or the fallback's death) credits the killer, the helpers, everyone within 32 blocks on that objective, and their party mates.
-- **Party sharing** reads the `realm_party:<code>` tag: mates with the same tag, in the same dimension, within `partyRange`, whose current chapter is the same, get the same objective's progress (each player once per event).
-- **Finishing a chapter** gives the reward and sends `realm:quest_done` `{ player, pack: "saga_bp", id: "<story>:<chapter>", label, kind: "story" }`, `realm:rep_add` for the choice's and chapter's reputation, `realm:relic_give`, `realm:title_unlock` and `realm:journal` (page `story`). Crowns go straight onto the `crowns` scoreboard.
-- **Operator hints:** once a second the loop looks for chapters waiting on an unset place and tells operators online, at most every 10 minutes per place.
-- **The tracker** listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds). Its own `realm:actionbar` messages carry `from: "saga_bp"` so it can tell them apart.
-- Progress is saved on the player whenever it changes.
+- **Modules:** `data.js` (saved progress, flags, requirements, which chapter is current), `objectives.js` (what counts for each objective type, scenes), `actors.js` (story characters and mobs), `places.js` (places, building, snapshots, the places menu), `ui.js` (offers, dialogues, hints, rewards, tracker, story log), `main.js` (commands, script events, loops).
+- **Townsfolk:** the pack answers `realm:npc_talk` with `realm:npc_offer` (keys `start:`, `end:`, `info:` plus the story id, `ans:` for riddles, `fvstart:`/`fvinfo:`/`fvend:` plus the NPC for favors) and opens its dialogues on `realm:npc_choose`. The same `realm:npc_talk` counts talk objectives and takes deliveries first, so delivering the last item lets you report back in the same tap.
+- **The current chapter** is the accepted one, else the first unfinished chapter whose `when` matches; a story is finished when none is left. Objectives with a `when` that doesn't match don't exist for that player. In a `sequential` chapter only the first unfinished step counts, spawns and shows on the tracker.
+- **Counting:** events count defeat (`entityDie`, killer from the damage source), mine, place, interact, inspect taps, tend, tame (checked a few times after the interaction), use (`itemUse` and item taps on blocks) and fish (a hook followed as in Daily Quests). A loop once a second checks only the steps the player is working on (indexed by type): reach, collect, survive (overworld weather from `weatherChange`, accepting `overworld` and `minecraft:overworld`; nothing over the player's head), vigil, wear, ride (distance while the riding component's entity matches), wait, sleep, timers, champions, and starts or ends scenes. A fast loop every 5 ticks moves guards, escorts and wisps.
+- **Story characters** are spawned per player with the tags `saga:actor`, `saga:o:<player>` and `saga:k:<step>` and a name (so they never despawn). Characters you talk to and guards get resistance 5, weakness and slowness and are healed back each second; what they throw or summon near them (potions, arrows, tridents, fireballs, fangs, vexes) is removed. Escorts and wards can be hurt. Monsters of ambushes, waves, champion adds and wrong answers are tagged `saga:add` (and `saga:choir` for the Gray Choir, which the Relics pack's Gray Choir Mask reads). All of them go when the step is done, the chapter ends, the player leaves, after `actorTimeoutSeconds` away, after 10 minutes (story monsters), or at a restart; leftovers are removed when their chunk loads.
+- **Stealth detection** every 5 ticks: distance to each guard's eyes against `detect` or `detectSneak` (sneaking or wearing the `disguise`), within 60 degrees of the guard's facing, and a block ray (`getBlockFromRay`) for walls.
+- **Champions:** the pack sends `realm:champion_spawn` `{ dim, x, y, z, mob, name, tag, health }` (at most once per `championRetrySeconds`, and not while one with that tag is loaded in that dimension), spawns its own after 3 seconds with `championFallback`, and spawns the `adds` when a champion with that tag drops below half health. A `realm:champion_slain` with the story's tag (or the fallback's death) credits the killer, helpers, everyone within 32 blocks on that step, and their party mates.
+- **Places:** a picked place is built by a job that tries the picked spot and 32 spots around it within 48 blocks, asks the prefab's `siteOk` whether the column suits the place, checks that the building's box holds nothing player-made, saves the box with `structureManager.createFromWorld` (tiles of up to 64 by 64, saved in the world), then runs the prefab's build steps. After 3 moves any open land will do; after 6 it gives up and tells operators. Remove places the snapshot back and deletes it.
+- **Seals:** for the Relics pack's Lantern Shard, the pack sends `realm:seals` `{ player, seals: [{ name, dim, x, z }] }` with the seal places that are set and whose Act IV relight chapter that player hasn't finished, when it changes (checked every 5 seconds), at load and in reply to `realm:seals_ping`.
+- **Finishing a chapter** gives the reward (levels and Crowns cut by `hintPenalty` after a hint) and sends `realm:quest_done` `{ player, pack: "saga_bp", id: "<story>:<chapter>", label, kind: "story" }` (`kind: "favor"` for favors), `realm:rep_add` for the choice's and chapter's reputation, `realm:relic_give`, `realm:title_unlock` and `realm:journal` (page `story`). Crowns go straight onto the `crowns` scoreboard.
+- **The tracker** listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds); its own messages carry `from: "saga_bp"`.
+- **Testing hook:** `/scriptevent realm:saga_debug {"player":"<name>","action":"state"}` prints a player's saved progress to the content log; `"action":"jump","story":"<id>","chapter":"<id>"` marks every chapter before that one finished; `"action":"answer","text":"..."` answers the player's open riddle. Script events need operator rights.
 
 ---
 
