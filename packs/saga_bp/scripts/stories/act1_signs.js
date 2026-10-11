@@ -5,7 +5,7 @@
 // Chapters: smudge, fallen, rhyme, keeper, graves, echo, inn, song, choice, count.
 //
 // Flags this act sets:
-//   path    ("report" | "alone")    chapter "choice" (read elsewhere as act1_signs.path)
+//   act1:path ("report" | "alone")  chapter "choice" (read elsewhere as "act1_signs.act1:path")
 //   hollis  ("secret" | "urged")    chapter "keeper": did you keep Hollis's dream to yourself
 //   elsie   ("rest" | "pressed")    chapter "inn": did you let Elsie's past rest or press her
 //   g:mercy / g:iron (+1 each)      chapters "inn" and "choice"
@@ -30,8 +30,8 @@ const SILENCE = { "drowned_bell.bell": "silence" };
 const RING = { "drowned_bell.bell": "ring" };
 const SHARE = { "last_map.map": "share" };
 const KEEP = { "last_map.map": "keep" };
-const REPORT = { path: "report" };
-const ALONE = { path: "alone" };
+const REPORT = { "act1:path": "report" };
+const ALONE = { "act1:path": "alone" };
 
 const CANDLES = [
   "minecraft:candle",

@@ -10,7 +10,8 @@ const problems = [];
 for (const folder of readdirSync(join(root, "packs")).sort()) {
   const dir = join(root, "packs", folder, "scripts");
   if (!existsSync(dir)) continue;
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".js"))) {
+  const files = readdirSync(dir, { recursive: true }).map(String).filter((f) => f.endsWith(".js")).sort();
+  for (const file of files) {
     const lines = readFileSync(join(dir, file), "utf8").split("\n");
     let inBlock = false;
     lines.forEach((line, i) => {
