@@ -188,7 +188,7 @@ system.afterEvents.scriptEventReceive.subscribe(
 let weather = WeatherType.Clear;
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
   weather = newWeather;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);

@@ -261,19 +261,40 @@ function dress(e, trait) {
   }
 }
 
+/** The helmets champions wear. */
+const HELMETS = new Set(Object.values(LOOKS).map((l) => l.helmet));
+/** Helmet items that just appeared: item entity id -> tick. Only these can be a champion's drop. @type {Map<string, number>} */
+const newHelmets = new Map();
+/** How long (ticks) a helmet item counts as just dropped. */
+const FRESH_TICKS = 10;
+
+/** Remembers a helmet item that just appeared (a champion's drop shows up the tick it dies). @param {Entity} item */
+function noteItem(item) {
+  const stack = item.getComponent("minecraft:item")?.itemStack;
+  if (!stack || !HELMETS.has(stack.typeId)) return;
+  const now = system.currentTick;
+  for (const [id, tick] of newHelmets) if (now - tick > FRESH_TICKS) newHelmets.delete(id);
+  newHelmets.set(item.id, now);
+}
+
 /**
  * Removes the helmet a champion dropped when it died, so champion gear can't be farmed: one item of
- * that type, without a custom name, within `radius` blocks, now and over the next ticks.
+ * that type, without a custom name, within `radius` blocks, that appeared as it died (never a
+ * helmet a player dropped there earlier), now and over the next ticks.
  * @param {string} dimId @param {Vector3} at @param {string} helmet @param {number} radius
  */
 function purgeGear(dimId, at, helmet, radius) {
   let done = false;
+  const died = system.currentTick;
   const sweep = () => {
     if (done) return;
     try {
       for (const item of world.getDimension(dimId).getEntities({ type: "minecraft:item", location: at, maxDistance: radius })) {
+        const appeared = newHelmets.get(item.id);
+        if (appeared === undefined || appeared < died - 2) continue;
         const stack = item.getComponent("minecraft:item")?.itemStack;
         if (stack?.typeId !== helmet || stack.nameTag) continue;
+        newHelmets.delete(item.id);
         item.remove();
         done = true;
         return;
@@ -392,7 +413,12 @@ function night() {
 
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   try {
-    if (cause !== EntityInitializationCause.Spawned || !mobSet.has(entity.typeId)) return;
+    if (cause !== EntityInitializationCause.Spawned) return;
+    if (entity.typeId === "minecraft:item") {
+      noteItem(entity);
+      return;
+    }
+    if (!mobSet.has(entity.typeId)) return;
     if (entity.dimension.id !== "minecraft:overworld" || get("enabled") !== true) return;
     const chance = get("chance") * (bloodMoon ? get("bloodMoonMultiplier") : 1);
     if (Math.random() >= chance) return;

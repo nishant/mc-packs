@@ -707,13 +707,24 @@ async function lastMeteors(player) {
 
 /** Operators: the in-game settings, the same ones /realm:config has. @param {Player} player */
 async function settingsForm(player) {
+  const shown = { chance: Math.round(Number(get("chance")) * 100), warningSeconds: Number(get("warningSeconds")), avoidSpawn: Number(get("avoidSpawn")) };
+  /**
+   * A slider's answer, or the saved value when it was left alone: a value off the slider's steps (the default
+   * chance of 33%, in steps of 5) is shown at the nearest step, and saving another setting must not change it.
+   * @param {unknown} raw @param {"chance" | "warningSeconds" | "avoidSpawn"} key @param {number} min @param {number} step @param {number} [scale]
+   */
+  const slid = (raw, key, min, step, scale = 1) => {
+    const n = Math.round(Number(raw));
+    const snapped = min + Math.round((shown[key] - min) / step) * step;
+    return n === shown[key] || n === snapped ? get(key) : n / scale;
+  };
   const form = new ModalFormData()
     .title("§lMeteor settings")
     .toggle("Meteors at night", { defaultValue: get("enabled") === true, tooltip: "Drop one now works either way" })
-    .slider("Chance of a meteor each night (%)", 0, 100, { valueStep: 5, defaultValue: Math.round(Number(get("chance")) * 100) })
-    .slider("Warning before impact (seconds)", 10, 300, { valueStep: 10, defaultValue: Number(get("warningSeconds")) })
+    .slider("Chance of a meteor each night (%)", 0, 100, { valueStep: 5, defaultValue: shown.chance })
+    .slider("Warning before impact (seconds)", 10, 300, { valueStep: 10, defaultValue: shown.warningSeconds })
     .toggle("Craters", { defaultValue: get("craters") === true, tooltip: "Disabled, a meteor is only the show" })
-    .slider("Distance kept from world spawn (blocks)", 0, 1024, { valueStep: 16, defaultValue: Number(get("avoidSpawn")) })
+    .slider("Distance kept from world spawn (blocks)", 0, 1024, { valueStep: 16, defaultValue: shown.avoidSpawn })
     .toggle("Avoid safe zones and towns", { defaultValue: avoidZones(), tooltip: "No meteor is aimed into a safe zone, protected town or claim, and no crater is made in one" })
     .dropdown("A meteor that still comes down over a safe zone", ["Lands just outside it", "Bursts in the sky"], { defaultValueIndex: get("inZone") === "burst" ? 1 : 0 })
     .submitButton("Save");
@@ -722,10 +733,10 @@ async function settingsForm(player) {
   const v = res.formValues.filter((x) => x !== undefined);
   const changes = /** @type {[string, unknown][]} */ ([
     ["enabled", v[0] === true],
-    ["chance", Math.round(Number(v[1])) / 100],
-    ["warningSeconds", Math.round(Number(v[2]))],
+    ["chance", slid(v[1], "chance", 0, 5, 100)],
+    ["warningSeconds", slid(v[2], "warningSeconds", 10, 10)],
     ["craters", v[3] === true],
-    ["avoidSpawn", Math.round(Number(v[4]))],
+    ["avoidSpawn", slid(v[4], "avoidSpawn", 0, 16)],
     ["avoidZones", v[5] === true],
     ["inZone", v[6] === 1 ? "burst" : "move"],
   ]);
