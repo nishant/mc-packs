@@ -497,10 +497,15 @@ async function dolphinMenu(p, id, k) {
   if (res.selection === 3) return listMine(p);
   const e = loadedById(id);
   if (!e) return p.sendMessage("§7That dolphin is too far away (its area isn't loaded). Go closer, then try again.");
+  // The list may be old: an operator may have released it, and someone else tamed it since.
+  if (ownerOf(e) !== p.id) {
+    if (index()[id]?.o === p.id) forget(id);
+    return p.sendMessage("§7That dolphin isn't yours any more.");
+  }
   if (res.selection === 0) return call(p, e);
   if (res.selection === 1) return rename(p, e);
   const ok = await show(p, new ActionFormData().title("§lRelease?").body(`${nameOf(e)} goes back to the wild and can't be ridden until tamed again.`).button("Release").button("Keep"));
-  if (!ok || ok.canceled || ok.selection !== 0 || !e.isValid) return;
+  if (!ok || ok.canceled || ok.selection !== 0 || !e.isValid || ownerOf(e) !== p.id) return;
   release(e);
   p.sendMessage(`§7You released ${nameOf(e)}. Bye!`);
 }
@@ -529,8 +534,8 @@ function callNearest(p) {
 /** @param {Player} p @param {Entity} e */
 async function rename(p, e) {
   const res = await show(p, new ModalFormData().title("§lName your dolphin").textField("Name", "Splash", { defaultValue: e.nameTag || "" }).submitButton("Save"));
-  if (!res || res.canceled || !res.formValues || !e.isValid) return;
-  const name = String(res.formValues[0] ?? "").replace(/[^\x20-\x7e]/g, "").trim().slice(0, 24);
+  if (!res || res.canceled || !res.formValues || !e.isValid || ownerOf(e) !== p.id) return;
+  const name =String(res.formValues[0] ?? "").replace(/[^\x20-\x7e]/g, "").trim().slice(0, 24);
   if (!name) return p.sendMessage("§7No name saved.");
   e.nameTag = name;
   remember(e, p.id, p.name);

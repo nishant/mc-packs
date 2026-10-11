@@ -90,8 +90,8 @@ const ELITE_MOBS = new Set(["minecraft:zombie", "minecraft:husk", "minecraft:dro
 /** Mobs that can wear armor. */
 const ARMORED = new Set(["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:skeleton", "minecraft:stray", "minecraft:wither_skeleton", "minecraft:zombie_villager_v2", "minecraft:bogged"]);
 const ARMOR = ["", "chainmail", "iron", "diamond", "netherite"];
-/** Blocks players may never place in a dungeon (they'd be lost or blow up): pop back out like before. */
-const NO_PLACE = new Set(["minecraft:tnt", "minecraft:respawn_anchor", "minecraft:bed", "minecraft:end_crystal", "minecraft:lava"]);
+/** Blocks players may never place in a dungeon (they'd be lost, blow up, or push the bars and puzzles aside): pop back out like before. */
+const NO_PLACE = new Set(["minecraft:tnt", "minecraft:respawn_anchor", "minecraft:bed", "minecraft:end_crystal", "minecraft:lava", "minecraft:piston", "minecraft:sticky_piston"]);
 /** Shrine blessings: id, name, what it does. */
 const BLESSINGS = [
   { id: "vigor", name: "Vigor", desc: "Extra hearts for the rest of the run", effect: "health_boost", amp: 1 },
@@ -125,10 +125,12 @@ const BLESSINGS = [
  *   phase: "gathering" | "building" | "active" | "finishing" | "resetting", started: number, deadline: number, limitMin: number,
  *   room: number, roomActive: boolean, wave: number, waves: number, mobs: Entity[], extra: Entity[], nextWaveAt: number, awaitUntil: number,
  *   bossId?: string, bossGone: number, bossHalf: boolean, nextAddsAt: number, finishAt: number, clearMs: number, checked: boolean,
- *   puz: Map<number, PuzState>, elems: Map<string, Elem>, placed: Set<string>, placedTypes: Set<string>, breakable: Set<string>,
- *   shrine: { bless: typeof BLESSINGS[number], curse: string | undefined }, cursed: boolean, fortune: boolean, sigil: boolean,
- *   hazards: Hazard[], fires: { x: number, y: number, z: number, until: number }[], timers: Record<string, number>, trapNext: number }} Run
+ *   puz: Map<number, PuzState>, elems: Map<string, Elem>, placed: Set<string>, placedTypes: Set<string>, placedAny: Set<string>, breakable: Set<string>,
+ *   shrine: { bless: typeof BLESSINGS[number], curse: string | undefined }, cursed: boolean, fortune: boolean, sigil: boolean, sigilItem?: ItemStack,
+ *   hazards: Hazard[], fires: { x: number, y: number, z: number, until: number }[], timers: Record<string, number>, trapNext: number,
+ *   strays: Map<string, number> }} Run
  * checked: the box was found to hold only natural blocks, so the dungeon may be built and later filled in
+ * strays: ticks each wave mob (or the boss) has been out of its room with nobody near it
  */
 /** @typedef {{ t: number, n: string, at: number, a?: string[] }} Best */
 /** @typedef {{ id: string, n: string, l: number, d: string, at: number }} TierEntry */
@@ -181,6 +183,8 @@ const OURS_IDS = [
   "minecraft:web",
   ...["infested_stone_bricks", "infested_mossy_stone_bricks", "infested_cracked_stone_bricks", "infested_chiseled_stone_bricks", "infested_cobblestone"].map((b) => `minecraft:${b}`),
 ];
+
+const OURS = new Set(OURS_IDS);
 
 /** @type {{ natural: string[], replaceable: string[] } | undefined} */
 let lists;
@@ -313,9 +317,35 @@ function tryCommand(dim, command) {
   }
 }
 
-/** Actionbar text, after asking the Coordinates HUD to step aside. @param {Player} player @param {string} text */
-function actionbar(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 30 }));
+/** player id -> tick until which a note holds the bar (another pack's `realm:actionbar`, or one of ours). */
+const barHeld = new Map();
+
+// Other packs' notes (durability, skill XP, mob health...) hold the bar for a moment: the run line waits.
+// Steady background lines (`background: true`, like the Party HUD) don't stop it.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:actionbar") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string" || m.from === "expedition_bp" || m.background === true) return;
+      barHeld.set(m.player, system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0)));
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+/**
+ * Actionbar text, after asking the Coordinates HUD (and other bar writers) to step aside. The run line
+ * (`steady`) is skipped while a note holds the bar; a note of ours holds the run line off too.
+ * @param {Player} player @param {string} text @param {boolean} [steady]
+ */
+function actionbar(player, text, steady = false) {
+  const now = system.currentTick;
+  if (steady && (barHeld.get(player.id) ?? 0) > now) return;
+  if (!steady) barHeld.set(player.id, now + 30);
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 30, from: "expedition_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 
@@ -434,11 +464,18 @@ function sidePoint(side, a) {
 // Building and resetting
 // ---------------------------------------------------------------------------
 
-/** @param {Dimension} dim @param {Vector3} from @param {Vector3} to @param {string | BlockPermutation} block */
-function fill(dim, from, to, block) {
+/**
+ * @param {Dimension} dim @param {Vector3} from @param {Vector3} to @param {string | BlockPermutation} block
+ * @param {boolean} [whole] fill everything (the reset: whatever is in a checked box at the end came from the run)
+ */
+function fill(dim, from, to, block, whole = false) {
   const a = { x: Math.min(from.x, to.x), y: Math.min(from.y, to.y), z: Math.min(from.z, to.z) };
   const b = { x: Math.max(from.x, to.x), y: Math.max(from.y, to.y), z: Math.max(from.z, to.z) };
   const vol = new BlockVolume(a, b);
+  if (whole) {
+    dim.fillBlocks(vol, block);
+    return;
+  }
   const replaceable = blockLists().replaceable;
   // A block filter never matches air (BDS 1.26), so a filtered fill leaves caves open. When nothing but
   // natural blocks, air and the dungeon's own is in the volume, fill it whole; otherwise only what's ours to replace.
@@ -488,8 +525,12 @@ function runSteps(steps, live = () => true) {
   });
 }
 
-/** Fills the box in columns of 16 x 16 (or one cell). @param {Dimension} dim @param {Vector3} o @param {number} size @param {number} top @param {string} block @returns {(() => void)[]} */
-function fillBoxSteps(dim, o, size, top, block) {
+/**
+ * Fills the box in columns of 16 x 16 (or one cell).
+ * @param {Dimension} dim @param {Vector3} o @param {number} size @param {number} top @param {string} block @param {boolean} [whole] see fill
+ * @returns {(() => void)[]}
+ */
+function fillBoxSteps(dim, o, size, top, block, whole = false) {
   /** @type {(() => void)[]} */
   const steps = [];
   const step = 16;
@@ -500,7 +541,7 @@ function fillBoxSteps(dim, o, size, top, block) {
       // Tall boxes in two layers, so no single fill is over 32768 blocks.
       for (let y = -1; y <= top; y += 20) {
         const y2 = Math.min(top, y + 19);
-        steps.push(() => fill(dim, { x: o.x + x, y: o.y + y, z: o.z + z }, { x: o.x + x2, y: o.y + y2, z: o.z + z2 }, block));
+        steps.push(() => fill(dim, { x: o.x + x, y: o.y + y, z: o.z + z }, { x: o.x + x2, y: o.y + y2, z: o.z + z2 }, block, whole));
       }
     }
   return steps;
@@ -828,16 +869,10 @@ async function resetBox(rec) {
   } catch (e) {
     console.warn(`[expedition] reset entities: ${e}`);
   }
-  // Blocks players placed (Nightmare runs) are filled in too: the box held only natural blocks before the run.
-  const extra = (Array.isArray(rec.pt) ? rec.pt : []).filter((t) => typeof t === "string" && known(t));
-  const saved = lists;
-  if (extra.length && saved) lists = { natural: saved.natural, replaceable: [...new Set([...saved.replaceable, ...extra])] };
-  let failed = 0;
-  try {
-    failed = await runSteps(fillBoxSteps(dim, o, size, top, "minecraft:deepslate"));
-  } finally {
-    lists = saved;
-  }
+  // The box held only natural blocks before the run and it's sealed, so everything in it now came from the run:
+  // the dungeon, blocks players placed, and whatever those turned into (cobblestone from water and lava, concrete,
+  // frosted ice, copper that aged...). All of it is filled in, or a leftover would call off every later run here.
+  const failed = await runSteps(fillBoxSteps(dim, o, size, top, "minecraft:deepslate", true));
   if (failed) return false;
   removeArea(rec.slot);
   return true;
@@ -961,20 +996,37 @@ function sigilsOf(p) {
   return out;
 }
 
-/** Takes one sigil with this data line from the player. @param {Player} p @param {string} line */
+/** Takes one sigil with this data line from the player; returns it (one), or undefined. @param {Player} p @param {string} line */
 function useSigil(p, line) {
   const inv = p.getComponent("minecraft:inventory")?.container;
-  if (!inv) return false;
+  if (!inv) return undefined;
   for (let slot = 0; slot < inv.size; slot++) {
     const it = inv.getItem(slot);
     if (readSigil(it)?.line !== line || !it) continue;
+    const one = it.clone();
+    one.amount = 1;
     if (it.amount > 1) {
       it.amount -= 1;
       inv.setItem(slot, it);
     } else inv.setItem(slot, undefined);
-    return true;
+    return one;
   }
-  return false;
+  return undefined;
+}
+
+/** A run called off before anyone went in gives its sigil back to the leader. @param {Run} run */
+function refundSigil(run) {
+  const it = run.sigilItem;
+  run.sigilItem = undefined;
+  const p = it && online(run.leaderId);
+  if (!it || !p) return;
+  try {
+    const rest = p.getComponent("minecraft:inventory")?.container?.addItem(it);
+    if (rest) p.dimension.spawnItem(rest, p.location);
+    p.sendMessage("§7Your Nightmare Sigil was given back.");
+  } catch (e) {
+    console.warn(`[expedition] sigil back: ${e}`);
+  }
 }
 
 /** A random sigil a bit above (or at) a run's level. @param {Run} run @param {Vector3} at @param {string} why */
@@ -1144,11 +1196,12 @@ function cantStart(leader) {
 async function start(leader, d, L, affixes, sigilLine) {
   const why = cantStart(leader);
   if (why) return leader.sendMessage(why);
-  if (sigilLine && !useSigil(leader, sigilLine)) return leader.sendMessage("§cThat sigil isn't in your inventory any more.");
   if (!sigilLine && L > unlockedLevel(leader)) return leader.sendMessage(`§c${levelName(L)} isn't unlocked for you yet.`);
+  const sigilItem = sigilLine ? useSigil(leader, sigilLine) : undefined;
+  if (sigilLine && !sigilItem) return leader.sendMessage("§cThat sigil isn't in your inventory any more.");
   const slot = freeSlot();
   const now = site();
-  if (slot === undefined || !now) return;
+  if (slot === undefined || !now) return; // can't happen: cantStart checked both
   const idRaw = world.getDynamicProperty(PROP_NEXT);
   const id = typeof idRaw === "number" ? idRaw : 1;
   world.setDynamicProperty(PROP_NEXT, id + 1);
@@ -1196,15 +1249,18 @@ async function start(leader, d, L, affixes, sigilLine) {
     elems: new Map(),
     placed: new Set(),
     placedTypes: new Set(),
+    placedAny: new Set(),
     breakable: new Set(d.decor?.breakable ? [d.decor.block] : []),
     shrine: { bless: BLESSINGS[Math.floor(r() * BLESSINGS.length)], curse: curseAffix(affixes, r) },
     cursed: false,
     fortune: false,
     sigil: !!sigilLine,
+    sigilItem,
     hazards: [],
     fires: [],
     timers: {},
     trapNext: 0,
+    strays: new Map(),
   };
   runs.set(slot, run);
   if (!sigilLine) {
@@ -1225,12 +1281,14 @@ async function start(leader, d, L, affixes, sigilLine) {
     if (!leader.isValid) run.members.delete(leader.id);
     if (!run.members.size) {
       runs.delete(slot);
+      refundSigil(run);
       return;
     }
     await prepare(run);
   } catch (e) {
     console.warn(`[expedition] start: ${e}`);
     tell(run, "§cSomething went wrong preparing the expedition. Try again in a moment.");
+    refundSigil(run);
     if (run.phase === "gathering") runs.delete(slot);
     else await endRun(run, "");
   }
@@ -1272,6 +1330,7 @@ async function prepare(run) {
     tell(run, "§cThe dungeon area couldn't be loaded (the world may already have 10 ticking areas). Ask an operator to check /tickingarea list.");
     removeArea(run.slot);
     runs.delete(run.slot);
+    refundSigil(run);
     return;
   }
   let foreign;
@@ -1287,6 +1346,7 @@ async function prepare(run) {
     console.warn(`[expedition] slot ${run.slot}: ${foreign.type} at ${where}`);
     removeArea(run.slot);
     runs.delete(run.slot);
+    refundSigil(run);
     return;
   }
   run.checked = true;
@@ -1298,6 +1358,7 @@ async function prepare(run) {
   console.info(`[expedition] built ${run.dungeon.id} ${levelKey(run.level)} (${run.lay.n} rooms, ${run.lay.grid}x${run.lay.grid}, ${run.top} high) in ${Date.now() - t0} ms`);
   if (failed) {
     tell(run, "§cThe dungeon couldn't be built. Try again in a moment.");
+    refundSigil(run);
     await endRun(run, "");
     return;
   }
@@ -1331,6 +1392,7 @@ async function prepare(run) {
     return;
   }
   run.phase = "active";
+  run.sigilItem = undefined; // used up for good
   run.started = Date.now() + 500;
   run.deadline = run.started + run.limitMin * 60000;
   saveRun(run);
@@ -1895,14 +1957,24 @@ function giveSnowballs(run, i) {
   const st = puzState(run, i);
   if (st.gave) return;
   st.gave = true;
-  for (const p of present(run)) {
-    try {
-      p.getComponent("minecraft:inventory")?.container?.addItem(new ItemStack("minecraft:snowball", 16));
-    } catch {
-      // full
-    }
+  for (const p of present(run)) giveItem(p, "minecraft:snowball", 16);
+  tell(run, "§7You were each given 16 snowballs (more when you run out).");
+}
+
+/** @param {Player} p @param {string} id */
+function hasItem(p, id) {
+  const inv = p.getComponent("minecraft:inventory")?.container;
+  if (!inv) return true;
+  for (let k = 0; k < inv.size; k++) if (inv.getItem(k)?.typeId === id) return true;
+  return false;
+}
+/** @param {Player} p @param {string} id @param {number} n */
+function giveItem(p, id, n) {
+  try {
+    p.getComponent("minecraft:inventory")?.container?.addItem(new ItemStack(id, n));
+  } catch {
+    // full
   }
-  tell(run, "§7You were each given 16 snowballs.");
 }
 
 /** Flashes the memory sequence. @param {Run} run @param {number} i @param {number} delay */
@@ -2381,6 +2453,32 @@ function inZone(run, rm, p) {
   return Math.hypot(p.location.x - z.x, p.location.z - z.z) <= rm.zone.r && p.location.y >= z.y - 0.6 && p.location.y < z.y + 3;
 }
 
+/**
+ * Mobs the room needs dead that ended up somewhere else in the dungeon (an enderman's or a shulker's teleport,
+ * a vex through a wall) are brought back once they've been away from the room, and from everyone, for 3 seconds:
+ * otherwise one in a room behind closed bars would hold the door shut for good.
+ * @param {Run} run @param {Room} rm @param {Entity[]} list @param {Player[]} all @param {{ u: number, v: number, y: number }} [to]
+ */
+function bringBack(run, rm, list, all, to) {
+  for (const m of list) {
+    if (!alive(m)) continue;
+    const loc = m.location;
+    if (inRoom(run, rm, loc) || all.some((p) => Math.hypot(p.location.x - loc.x, p.location.y - loc.y, p.location.z - loc.z) < 8)) {
+      run.strays.delete(m.id);
+      continue;
+    }
+    const t = (run.strays.get(m.id) ?? 0) + LOOP_TICKS;
+    run.strays.set(m.id, t);
+    if (t < 60 && inBox(run.o, run.size, run.top, loc, 1)) continue;
+    run.strays.delete(m.id);
+    try {
+      m.teleport(to ? wmid(run, rm, to) : spawnSpot(run, run.room));
+    } catch {
+      // gone
+    }
+  }
+}
+
 /** @param {Run} run @param {Map<string, Player>} players */
 function tickRun(run, players) {
   const now = system.currentTick;
@@ -2406,7 +2504,7 @@ function tickRun(run, players) {
     else if (beat % 2 === 0) {
       for (const id of run.members.keys()) {
         const p = players.get(id);
-        if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`);
+        if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`, true);
       }
     }
     return;
@@ -2427,8 +2525,12 @@ function tickRun(run, players) {
       run.nextWaveAt = now + 30;
       tell(run, rm.kind === "elite" ? "§5Elite guards wake in this hall..." : rm.h >= 14 ? "§7Something stirs above you..." : "§7Something stirs in the dark...");
     } else if (rm.kind === "puzzle") {
-      puzState(run, run.room).active = true;
-      puzzleIntro(run, run.room);
+      const st = puzState(run, run.room);
+      if (!st.active) {
+        // (a button pressed a moment before the room woke has already started it: a second intro would replay a memory sequence over the first)
+        st.active = true;
+        puzzleIntro(run, run.room);
+      }
     } else if (rm.kind === "boss") {
       run.nextWaveAt = now + 40;
       tell(run, "§cYou feel watched...");
@@ -2451,8 +2553,10 @@ function tickRun(run, players) {
         run.nextWaveAt = 0;
         spawnWave(run);
       } else if (!run.nextWaveAt && now >= run.awaitUntil) {
-        // Mobs that wandered out of the dungeon (or got stuck in a wall outside it) don't hold the door shut.
+        // Mobs that wandered out of the dungeon (or got stuck in a wall outside it) don't hold the door shut;
+        // ones elsewhere in it are brought back.
         for (const m of run.mobs) if (alive(m) && !inBox(run.o, run.size, run.top, m.location, 1)) m.remove();
+        bringBack(run, rm, run.mobs, /** @type {Player[]} */ (all));
         if (!run.mobs.some(alive)) {
           run.wave++;
           if (run.wave < run.waves) run.nextWaveAt = now + 40;
@@ -2492,7 +2596,7 @@ function tickRun(run, players) {
         run.bossGone = boss && alive(boss) ? 0 : run.bossGone + LOOP_TICKS;
         if (run.bossGone >= 60) finish(run); // gone without a death event (removed by a command): still a win
         else if (boss && alive(boss)) {
-          if (!inBox(run.o, run.size, run.top, boss.location, 1)) boss.teleport(wmid(run, rm, { u: 0, v: 2, y: 1 }));
+          bringBack(run, rm, [boss], /** @type {Player[]} */ (all), { u: 0, v: 2, y: 1 });
           const hp = boss.getComponent("minecraft:health");
           if (hp && !run.bossHalf && run.level >= 1 && hp.currentValue < hp.effectiveMax / 2) {
             run.bossHalf = true;
@@ -2520,6 +2624,14 @@ function tickRun(run, players) {
     }
     if (st.active && side.puzzle?.type === "levers" && beat % 2 === 0 && leversSolved(run, j)) solved(run, j);
   });
+  // Target practice: anyone in a target room with no snowballs left (or who came in late) gets more, so nobody is stuck without a bow.
+  if (beat % 20 === 0) {
+    for (const [j, st] of run.puz) {
+      const tr = run.lay.rooms[j];
+      if (tr.puzzle?.type !== "targets" || !st.active || st.solved) continue;
+      for (const p of all) if (p && inRoom(run, tr, p.location) && !hasItem(p, "minecraft:snowball")) giveItem(p, "minecraft:snowball", 16);
+    }
+  }
   // Button rush timers (path or side room).
   for (const [j, st] of run.puz) {
     const pz = run.lay.rooms[j].puzzle;
@@ -2536,7 +2648,7 @@ function tickRun(run, players) {
     const t = clock(Date.now() - run.started);
     for (const id of run.members.keys()) {
       const p = players.get(id);
-      if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${t}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`);
+      if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${t}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`, true);
     }
   }
 }
@@ -2831,6 +2943,8 @@ world.beforeEvents.playerBreakBlock.subscribe((ev) => {
       return;
     }
     if (run.breakable.has(ev.block.typeId)) return;
+    // A kind of block a player placed this run that isn't one of the dungeon's own: sand or gravel that fell, a block an enderman moved.
+    if (canBuild(run) && run.placedAny.has(ev.block.typeId) && !OURS.has(ev.block.typeId)) return;
   }
   ev.cancel = true;
   const p = ev.player;
@@ -2851,6 +2965,7 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
     const container = !!block.getComponent("minecraft:inventory");
     if (run && canBuild(run) && run.members.has(player.id) && !container && !NO_PLACE.has(type) && !type.endsWith("_bed")) {
       run.placed.add(key3(block.location));
+      run.placedAny.add(type);
       if (!run.placedTypes.has(type) && !blockLists().replaceable.includes(type)) {
         run.placedTypes.add(type);
         saveRun(run);
@@ -2862,6 +2977,21 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
   } catch (e) {
     console.warn(`[expedition] place: ${e}`);
   }
+});
+
+// Pouring a bucket isn't a placed block, so NO_PLACE never saw lava: lava and powder snow buckets are refused here,
+// and so is an empty bucket (it could scoop the pool under a shaft's chute, and the next player down would fall the whole way).
+// Water buckets are fine (they break nothing in a dungeon).
+const NO_BUCKET = new Set(["minecraft:bucket", "minecraft:lava_bucket", "minecraft:powder_snow_bucket"]);
+world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  const id = ev.itemStack?.typeId;
+  if (!id || !NO_BUCKET.has(id)) return;
+  if ((!runs.size && !pending.size) || ev.block.dimension.id !== OVERWORLD || !dungeonAt(ev.block.location) || builder(ev.player)) return;
+  ev.cancel = true;
+  const p = ev.player;
+  system.run(() => {
+    if (p.isValid) actionbar(p, "§7That bucket can't be used in the dungeon.");
+  });
 });
 
 // Explosions never break the dungeon (a creeper that wandered in, a blaze's fireball).
@@ -3434,8 +3564,9 @@ function debugState(message) {
     });
   }
   const text = JSON.stringify(out);
-  const parts = Math.max(1, Math.ceil(text.length / 1800));
-  for (let k = 0; k < parts; k++) system.sendScriptEvent("realm:expedition_state", JSON.stringify({ part: k, parts, data: text.slice(k * 1800, (k + 1) * 1800) }));
+  // 900 characters a part: quoted again inside `data`, every " grows to \", and a message may be at most 2048.
+  const parts = Math.max(1, Math.ceil(text.length / 900));
+  for (let k = 0; k < parts; k++) system.sendScriptEvent("realm:expedition_state", JSON.stringify({ part: k, parts, data: text.slice(k * 900, (k + 1) * 900) }));
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.

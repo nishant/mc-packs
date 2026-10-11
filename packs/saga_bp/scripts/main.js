@@ -8,8 +8,8 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { expireAdds, sweep, tendActors } from "./actors.js";
 import { entries, flush, flushAll, forget, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
-import { beginRun, championSlain, championTags, endScenesOf, holdUntil, loadWeather, open, playerGone, resolveAnswer, sweepChampions, talked, tickPlayer } from "./objectives.js";
-import { autoTick, listPlaces, placesMenu, placesOf, setHere } from "./places.js";
+import { beginRun, championSlain, championTags, endScenesOf, holdUntil, loadWeather, open, playerGone, resolveAnswer, sideHold, sideWriter, sweepChampions, talked, tickPlayer } from "./objectives.js";
+import { autoTick, listPlaces, placeLabel, placesMenu, placesOf, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
 import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, track } from "./ui.js";
@@ -71,7 +71,7 @@ function sendSeals(player, force = false) {
   const all = placesOf();
   const seals = SEALS.filter(([place, chapter]) => all[place] && !st?.fin && !st?.dn.includes(chapter)).map(([place]) => {
     const p = all[place];
-    return { name: place, dim: p.dim, x: p.x, z: p.z };
+    return { name: placeLabel(place), dim: p.dim, x: p.x, z: p.z }; // the Lantern Shard shows the name
   });
   const json = JSON.stringify(seals);
   if (!force && sealsSent.get(player.id) === json) return;
@@ -128,7 +128,7 @@ function onDebug(msg) {
     delete st.o;
     delete st.x;
     delete st.fin;
-    Object.assign(st.f, typeof msg.flags === "object" && msg.flags ? msg.flags : {});
+    debugFlags(player, st, msg.flags);
     invalidate(player.id);
     markDirty(player, true);
   } else if (msg.action === "finish" && typeof msg.story === "string") {
@@ -143,7 +143,7 @@ function onDebug(msg) {
     delete st.o;
     delete st.x;
     st.fin = Date.now();
-    Object.assign(st.f, typeof msg.flags === "object" && msg.flags ? msg.flags : {});
+    debugFlags(player, st, msg.flags);
     invalidate(player.id);
     markDirty(player, true);
   } else if (msg.action === "places") {
@@ -154,13 +154,23 @@ function onDebug(msg) {
   }
 }
 
+/** A debug action's flags: `g:<name>` player-wide, the rest the story's own. @param {Player} player @param {import("./data.js").StoryState} st @param {unknown} flags */
+function debugFlags(player, st, flags) {
+  if (!flags || typeof flags !== "object") return;
+  const saga = sagaOf(player);
+  for (const [k, v] of Object.entries(flags)) {
+    if (k.startsWith("g:")) (saga.g ??= {})[k.slice(2)] = String(v);
+    else st.f[k] = String(v);
+  }
+}
+
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message, sourceEntity }) => {
     if (id === "realm:seals_ping") {
       for (const p of world.getAllPlayers()) sendSeals(p, true);
       return;
     }
-    if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain" && id !== "realm:actionbar" && id !== "realm:saga_debug") return;
+    if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain" && id !== "realm:actionbar" && id !== "realm:saga_debug" && id !== "realm:side") return;
     /** @type {any} */
     let msg;
     try {
@@ -170,7 +180,13 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (!msg || typeof msg !== "object") return;
     try {
-      if (id === "realm:actionbar") {
+      if (id === "realm:side") {
+        // The last pack to write the right-side panel (hud_rp): ours is cleared only while it's still ours.
+        if (typeof msg.player === "string" && typeof msg.from === "string") {
+          sideWriter.set(msg.player, msg.from);
+          if (msg.from !== "saga" && typeof msg.ticks === "number" && msg.ticks > 0) sideHold.set(msg.player, system.currentTick + Math.min(200, msg.ticks));
+        }
+      } else if (id === "realm:actionbar") {
         if (msg.from !== PACK && typeof msg.player === "string" && typeof msg.ticks === "number" && msg.ticks > 0) holdUntil.set(msg.player, system.currentTick + Math.min(200, msg.ticks));
       } else if (id === "realm:npc_talk") onTalk(msg);
       else if (id === "realm:npc_choose") onChoose(msg);

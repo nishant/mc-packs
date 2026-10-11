@@ -45,6 +45,12 @@ const seatsNear = (dim, at, radius = 0.75) => dim.getEntities({ type: SEAT, loca
 /** @param {Entity} seat */
 const riders = (seat) => seat.getComponent("minecraft:rideable")?.getRiders() ?? [];
 
+/** A note above the hotbar; `realm:actionbar` first, so the Coordinates HUD and other bar writers wait. @param {Player} player @param {string} text */
+function note(player, text) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+  player.onScreenDisplay.setActionBar(text);
+}
+
 /**
  * Spawns a seat and puts the player on it.
  * @param {Player} player @param {Dimension} dim @param {import("@minecraft/server").Vector3} at seat location
@@ -54,7 +60,7 @@ function sit(player, dim, at, yaw, onBlock) {
   for (const old of seatsNear(dim, at)) {
     // A seat spawned this moment may not list its rider yet: it's taken too.
     if (riders(old).length || system.currentTick - (born.get(old.id) ?? -Infinity) < GRACE_TICKS) {
-      player.onScreenDisplay.setActionBar("§7Someone is already sitting there");
+      note(player, "§7Someone is already sitting there");
       return;
     }
     born.delete(old.id);
@@ -67,7 +73,7 @@ function sit(player, dim, at, yaw, onBlock) {
     seat.setRotation({ x: 0, y: yaw });
     player.teleport(player.location, { rotation: { x: player.getRotation().x, y: yaw } });
   }
-  if (seat.getComponent("minecraft:rideable")?.addRider(player)) player.onScreenDisplay.setActionBar("§7Sneak to stand up");
+  if (seat.getComponent("minecraft:rideable")?.addRider(player)) note(player, "§7Sneak to stand up");
   else {
     born.delete(seat.id);
     seat.remove();

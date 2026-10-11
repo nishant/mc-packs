@@ -34,7 +34,7 @@ import {
   target,
   today,
 } from "./data.js";
-import { askAnswer, completeStep, counting, endScene, endScenesOf, giveItem, holdUntil, radiusOf, reportTo, sceneFocus, timeText, weather } from "./objectives.js";
+import { askAnswer, completeStep, counting, endScene, endScenesOf, giveItem, holdUntil, ownUntil, sideHold, radiusOf, reportTo, sceneFocus, showLine, timeText, weather } from "./objectives.js";
 import { ensurePlace, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PACK, across, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
@@ -384,6 +384,8 @@ export async function startChapter(player, story) {
     markDirty(player, true);
     const e = entries(player).find((x) => x.story.id === story.id);
     player.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
+    // Recipes the chapter asks you to cook; the Kitchen pack tells the player (nothing happens without it).
+    for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: player.id, recipe });
     if (e) {
       const missing = missingPlaces(e, saga); // picks unset places first, so the lines below can point at them
       for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));
@@ -702,15 +704,18 @@ function trackLine(player, e, saga) {
 
 /** The tracker: where to go for the latest chapter with something to show. @param {Player} player @param {Entry[]} list */
 export function track(player, list) {
-  // Another pack's note (a quest, a bounty, mob health) is showing: don't write over it.
-  if (system.currentTick < (holdUntil.get(player.id) ?? 0)) return;
+  // Our own note is showing, or (above the hotbar) another pack's (a quest, a bounty, mob health): don't write over it.
+  if (system.currentTick < (ownUntil.get(player.id) ?? 0)) return;
+  // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or the right-side box (realm:side).
+  const where = getFor(player, "trackerAt");
+  const hold = where === "hotbar" ? holdUntil : where === "middle" ? undefined : sideHold;
+  if (hold && system.currentTick < (hold.get(player.id) ?? 0)) return;
   const saga = sagaOf(player);
   const sorted = [...list].sort((a, b) => (b.st.t ?? 0) - (a.st.t ?? 0));
   for (const e of sorted) {
     const text = trackLine(player, e, saga);
     if (!text) continue;
-    send("realm:actionbar", { player: player.id, ticks: 50, from: PACK });
-    player.onScreenDisplay.setActionBar(`§b${e.story.short}: ${text}`);
+    showLine(player, `§b${e.story.short}: ${text}`, 50);
     return;
   }
 }

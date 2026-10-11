@@ -774,7 +774,7 @@ const VESNA_BARGAIN = {
           text: "On the night of the Long Storm, nineteen-year-old Vesna waded into the Fen and begged the spirit in its water to teach her the old song that could stop the storm. The Fen Mother taught her, for a price: forty winters of the song, then Vesna would be hers. Vesna sang it into the storm, but the bell rang its wrong note a breath before she finished, and the tower fell.",
         },
       },
-      hint: "Hollow Fen's cauldrons are in and around the hut. Tap one within a dozen blocks of the hut, and the vision follows.",
+      hint: "Hollow Fen's cauldrons are in and around the hut. Hit one (or use a bucket on it) within a dozen blocks of the hut, and the vision follows.",
     },
     {
       id: "reeds",
@@ -879,7 +879,7 @@ const VESNA_BARGAIN = {
       ],
       reward: { levels: 5, crowns: 60, relic: "vesna_charm" },
       rep: [{ guild: "growers", amount: 10 }],
-      hint: "At Hollow Fen, tap a cauldron, then stay close to Vesna and fight off the waves. The Fen Mother rises when they're done. Milk cures her poison; bring a few buckets.",
+      hint: "At Hollow Fen, hit a cauldron, then stay close to Vesna and fight off the waves. The Fen Mother rises when they're done. Milk cures her poison; bring a few buckets.",
     },
     {
       id: "bind_heart",

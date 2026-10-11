@@ -1,0 +1,269 @@
+{
+  "namespace": "hud",
+  "hud_title_text": {
+    "modifications": [
+      {
+        "array_name": "controls",
+        "operation": "replace",
+        "control_name": "title_frame",
+        "value": {
+          "title_frame": {
+            "type": "panel",
+            "size": [
+              "100%",
+              "100%cm"
+            ],
+            "controls": [
+              {
+                "title_background": {
+                  "type": "image",
+                  "size": [
+                    "100%sm + 30px",
+                    "100%sm + 6px"
+                  ],
+                  "texture": "textures/ui/hud_tip_text_background",
+                  "alpha": "@hud.anim_title_background_alpha_in"
+                }
+              },
+              {
+                "title": {
+                  "type": "label",
+                  "anchor_from": "top_middle",
+                  "anchor_to": "top_middle",
+                  "color": "$title_command_text_color",
+                  "enable_profanity_filter": true,
+                  "text": "#text",
+                  "layer": 31,
+                  "localize": false,
+                  "font_size": "extra_large",
+                  "variables": [
+                    {
+                      "requires": "(not $title_shadow)",
+                      "$show_shadow": false
+                    },
+                    {
+                      "requires": "$title_shadow",
+                      "$show_shadow": true
+                    }
+                  ],
+                  "shadow": "$show_shadow",
+                  "text_alignment": "center",
+                  "offset": [
+                    0,
+                    6
+                  ],
+                  "bindings": [
+                    {
+                      "binding_name": "#hud_title_text_string",
+                      "binding_name_override": "#text",
+                      "binding_type": "global"
+                    }
+                  ]
+                }
+              }
+            ],
+            "bindings": [
+              {
+                "binding_name": "#hud_title_text_string",
+                "binding_type": "global"
+              },
+              {
+                "binding_type": "view",
+                "source_property_name": "(not ((#hud_title_text_string = '§s§1§r') or (#hud_title_text_string = '§s§0§r')))",
+                "target_property_name": "#visible"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "array_name": "controls",
+        "operation": "replace",
+        "control_name": "subtitle_frame",
+        "value": {
+          "subtitle_frame": {
+            "type": "panel",
+            "size": [
+              "100%",
+              "100%cm"
+            ],
+            "controls": [
+              {
+                "subtitle_background": {
+                  "type": "image",
+                  "size": [
+                    "100%sm + 20px",
+                    "100%sm + 5px"
+                  ],
+                  "offset": [
+                    0,
+                    16
+                  ],
+                  "texture": "textures/ui/hud_tip_text_background",
+                  "variables": [
+                    {
+                      "requires": "$subtitle_initially_visible",
+                      "$subtitle_bg": "@hud.anim_title_background_alpha_in"
+                    },
+                    {
+                      "requires": "(not $subtitle_initially_visible)",
+                      "$subtitle_bg": "@hud.anim_subtitle_background_alpha_in"
+                    }
+                  ],
+                  "alpha": "$subtitle_bg"
+                }
+              },
+              {
+                "subtitle": {
+                  "type": "label",
+                  "anchor_from": "top_middle",
+                  "anchor_to": "top_middle",
+                  "color": "$title_command_text_color",
+                  "enable_profanity_filter": true,
+                  "text": "#text",
+                  "layer": 31,
+                  "localize": false,
+                  "font_size": "large",
+                  "variables": [
+                    {
+                      "requires": "$subtitle_initially_visible",
+                      "$anim_type": 1.0
+                    },
+                    {
+                      "requires": "(not $subtitle_initially_visible)",
+                      "$anim_type": "@hud.anim_subtitle_text_alpha_in"
+                    },
+                    {
+                      "requires": "(not $title_shadow)",
+                      "$show_shadow": false
+                    },
+                    {
+                      "requires": "$title_shadow",
+                      "$show_shadow": true
+                    }
+                  ],
+                  "shadow": "$show_shadow",
+                  "alpha": "$anim_type",
+                  "text_alignment": "center",
+                  "offset": [
+                    1,
+                    19
+                  ],
+                  "bindings": [
+                    {
+                      "binding_name": "#hud_subtitle_text_string",
+                      "binding_name_override": "#text",
+                      "binding_type": "global"
+                    }
+                  ]
+                }
+              }
+            ],
+            "bindings": [
+              {
+                "binding_name": "#hud_title_text_string",
+                "binding_type": "global"
+              },
+              {
+                "binding_type": "view",
+                "source_property_name": "(not ((#hud_title_text_string = '§s§1§r') or (#hud_title_text_string = '§s§0§r')))",
+                "target_property_name": "#visible"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "root_panel": {
+    "modifications": [
+      {
+        "array_name": "controls",
+        "operation": "insert_after",
+        "control_name": "hud_title_text_area",
+        "value": [
+          {
+            "realm_side_area@hud.realm_side_area": {}
+          }
+        ]
+      }
+    ]
+  },
+  "realm_side_area": {
+    "type": "panel",
+    "size": [
+      "100%",
+      "100%"
+    ],
+    "layer": 2,
+    "controls": [
+      {
+        "realm_side_box": {
+          "type": "image",
+          "texture": "textures/ui/Black",
+          "alpha": 0.55,
+          "anchor_from": "right_middle",
+          "anchor_to": "bottom_right",
+          "offset": [
+            -1,
+            -60
+          ],
+          "size": [
+            "100%c + 6px",
+            "100%c + 4px"
+          ],
+          "bindings": [
+            {
+              "binding_name": "#hud_title_text_string",
+              "binding_type": "global"
+            },
+            {
+              "binding_name": "#hud_subtitle_text_string",
+              "binding_type": "global"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "((#hud_title_text_string = '§s§1§r') and (not (#hud_subtitle_text_string = '')))",
+              "target_property_name": "#visible"
+            }
+          ],
+          "controls": [
+            {
+              "realm_side_text": {
+                "type": "label",
+                "text": "#text",
+                "size": [
+                  "default",
+                  "default"
+                ],
+                "max_size": [
+                  200,
+                  60
+                ],
+                "anchor_from": "center",
+                "anchor_to": "center",
+                "text_alignment": "right",
+                "color": [
+                  1,
+                  1,
+                  1
+                ],
+                "locked_alpha": 1.0,
+                "shadow": true,
+                "localize": false,
+                "layer": 1,
+                "bindings": [
+                  {
+                    "binding_name": "#hud_subtitle_text_string",
+                    "binding_name_override": "#text",
+                    "binding_type": "global"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

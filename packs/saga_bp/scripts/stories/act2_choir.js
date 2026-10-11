@@ -717,7 +717,7 @@ export const STORIES = [
             label: "Face the Cantor at the Gray Ring",
             place: "choir_ring",
             radius: 24,
-            who: { id: "cantor", name: "The Cantor", entity: "minecraft:evoker" },
+            who: { id: "cantor", name: "The Cantor", entity: "minecraft:evocation_illager" },
             pages: [
               `A figure in a gray hood stands by the cracked bell, alone, hands folded. Around the ring, in the dark between the stones, a hundred voices hum one low note and hold it.\n\n${C}The bell-ringer's friend. I hoped you'd come. I wanted to see your face before the end.`,
               `${C}Do you know what I lost? A husband. Two sons, one winter. I walked into the sea once, the year after. The water sent me back. Then I heard him singing under it, and he told me: soon, nothing will ever be lost again.`,
@@ -764,7 +764,7 @@ export const STORIES = [
             count: 1,
             champion: {
               tag: "realm:saga:cantor",
-              mob: "minecraft:evoker",
+              mob: "minecraft:evocation_illager",
               name: "The Cantor",
               warn: "The singing stops. In the silence a voice says, almost kindly: You came all this way to stop a song?",
               health: 60,

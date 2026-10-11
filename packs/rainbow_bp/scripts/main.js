@@ -106,7 +106,7 @@ world.afterEvents.worldLoad.subscribe(load);
 // Safe zones (realm:zones from Safe Zones, Town Projects, Land Claims): no pot chest inside one
 // ---------------------------------------------------------------------------
 
-/** @typedef {{ dim: string, x: number, z: number, r: number }} Zone */
+/** @typedef {{ dim: string, x: number, z: number, r: number, square: boolean }} Zone square: a land claim (x - r to x + r, z - r to z + r), else a circle */
 /** src -> its zones, gathered from the parts of its latest broadcast. @type {Map<string, Zone[]>} */
 const zones = new Map();
 /** src -> parts received so far of a broadcast in progress. @type {Map<string, { parts: number, got: Map<number, Zone[]> }>} */
@@ -114,7 +114,11 @@ const zoneParts = new Map();
 
 /** Is this spot inside any safe zone (Overworld)? @param {number} x @param {number} z */
 function inZone(x, z) {
-  for (const list of zones.values()) for (const zn of list) if (zn.dim === OVERWORLD && Math.hypot(x - zn.x, z - zn.z) <= zn.r) return true;
+  for (const list of zones.values())
+    for (const zn of list) {
+      if (zn.dim !== OVERWORLD) continue;
+      if (zn.square ? Math.abs(x - zn.x) <= zn.r && Math.abs(z - zn.z) <= zn.r : Math.hypot(x - zn.x, z - zn.z) <= zn.r) return true;
+    }
   return false;
 }
 
@@ -133,7 +137,7 @@ function onZones(msg) {
   for (const zn of Array.isArray(msg.zones) ? msg.zones : []) {
     if (!zn || !Number.isFinite(zn.x) || !Number.isFinite(zn.z) || !Number.isFinite(zn.r)) continue;
     const dim = typeof zn.dim === "string" ? (zn.dim.includes(":") ? zn.dim : `minecraft:${zn.dim}`) : OVERWORLD;
-    list.push({ dim, x: zn.x, z: zn.z, r: Math.max(0, zn.r) });
+    list.push({ dim, x: zn.x, z: zn.z, r: Math.max(0, zn.r), square: zn.shape === "square" });
   }
   // Parts may be numbered from 1 (or from 0): a part at or below the first one starts a new broadcast.
   const part = Math.floor(Number(msg.part)) || 0;

@@ -711,10 +711,10 @@ export const PACKS = [
     "folder": "mobhp_bp",
     "topic": "mobhp",
     "name": "Mob Health",
-    "summary": "Hit a mob and its name and health show above your hotbar, so you know how close it is to going down.",
+    "summary": "Hit a mob and its name and health show in the middle of your screen (or above your hotbar, if you prefer), so you know how close it is to going down.",
     "steps": [
       {
-        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the bar above your hotbar shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
+        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the subtitle line in the middle of your screen shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
         "ops": false
       },
       {
@@ -739,10 +739,10 @@ export const PACKS = [
     "folder": "elytra_bp",
     "topic": "elytra",
     "name": "Elytra HUD",
-    "summary": "While you glide, the bar above the hotbar shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
+    "summary": "While you glide, the middle of your screen (or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
     "steps": [
       {
-        "text": "Put on an elytra and glide. Above the hotbar you see something like §e31.4 blocks/s  Y 142  Elytra 87%  Rockets 12§r, updated 4 times a second.",
+        "text": "Put on an elytra and glide. On the right side of the screen, above the scoreboard, you see something like §e31.4 blocks/s  Y 142  Elytra 87%  Rockets 12§r, updated 4 times a second.",
         "ops": false
       },
       {
@@ -1235,7 +1235,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker above the hotbar always shows where to go next (§eDrowned Bell: Lighthouse NE 240m§r), or who to report to.",
+        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker on the right side of the screen (above the scoreboard) always shows where to go next (§eDrowned Bell: Lighthouse NE 240m§r), or who to report to.",
         "ops": false
       },
       {
@@ -1259,7 +1259,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Don't want the tracker? Disable §lStory tracker§r in §e/realm:prefs§r.",
+        "text": "Don't want the tracker? Disable §lStory tracker§r in §e/realm:prefs§r. §lWhere my story tracker shows§r there moves it to the middle of the screen or above the hotbar (the right side and the middle can't be covered by other add-ons, such as waypoint add-ons, that redraw the line above the hotbar all the time).",
         "ops": false
       },
       {
@@ -2033,7 +2033,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Hold the map in your hand: every 2 seconds the line above the hotbar says §eWarmer§r, §eColder§r or §eVery warm§r, with which clue you're on.",
+        "text": "Hold the map in your hand: every 2 seconds the box on the right side of the screen, above the scoreboard (or the middle of the screen or the line above the hotbar, if you choose it in §e/realm:prefs§r), says §eWarmer§r, §eColder§r or §eVery warm§r, with which clue you're on.",
         "ops": false
       },
       {
@@ -2157,7 +2157,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lNightmare Sigils§r dropped by bosses and champions open one exact run: use the sigil (right-click) or pick it under §lUse a Nightmare Sigil§r in §e/realm:expedition§r. It works even before you've unlocked its tier, and it's used up when the run starts.",
+        "text": "§lNightmare Sigils§r dropped by bosses and champions open one exact run: use the sigil (right-click) or pick it under §lUse a Nightmare Sigil§r in §e/realm:expedition§r. It works even before you've unlocked its tier, and it's used up when the run starts (a run called off before anyone goes in, say because the site isn't safe, gives it back).",
         "ops": false
       },
       {

@@ -140,6 +140,15 @@ function fits(item, slot) {
 export function applyTo(item, e) {
   if (isDisabled(e)) return `${e.name} is disabled on this realm.`;
   if (!fits(item, e.slot)) return `${e.name} goes on ${SLOT_NAMES[e.slot]}.`;
+  // Relics rewrite their lore to their ability text, which would wipe the silly line (and the book with it).
+  // Their first lore line is "<rarity> relic"; the id property is only visible in the bundle (one pack).
+  let relic = /^(Common|Rare|Epic|Legendary) relic$/.test(plain(loreOf(item)[0] ?? ""));
+  try {
+    relic ||= item.getDynamicProperty("relic:id") !== undefined;
+  } catch {
+    // stackable items have no dynamic properties
+  }
+  if (relic) return "Relics can't take silly enchants.";
   const has = enchantsOn(item);
   if (has.includes(e)) return `That item already has ${e.name}.`;
   const max = Math.max(1, Math.floor(Number(get("maxPerItem")) || 2));
@@ -366,7 +375,10 @@ system.runInterval(() => {
 export function hyperJump(p, quiet) {
   const cd = Math.max(1, Math.floor(Number(get("hyperJumpCooldownSeconds")) || 4)) * 20;
   if (!ready(p, "hyper_jump", cd)) {
-    if (!quiet && (cooldowns.get(p.id)?.get("hyper_jump") ?? 0) - system.currentTick < cd - 5) p.onScreenDisplay.setActionBar("§7Hyper Jump is recharging");
+    if (!quiet && (cooldowns.get(p.id)?.get("hyper_jump") ?? 0) - system.currentTick < cd - 5) {
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 30 })); // other bar writers wait
+      p.onScreenDisplay.setActionBar("§7Hyper Jump is recharging");
+    }
     return false;
   }
   const strength = Math.min(2.5, Math.max(0.2, Number(CONFIG.hyperJumpStrength) || 1));
