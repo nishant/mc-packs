@@ -1,88 +1,16 @@
+import { MORE_STORIES } from "./stories/index.js";
+
 // The stories Story Questlines tells. Pure data: main.js reads it, so a new story is a new entry here.
-// Keep every `id` (story, chapter, choice) when editing: players' progress is saved by them. Text is
+// Types are in types.js; more stories are in stories/*.js. Keep every `id` (story, chapter, choice) when editing: players' progress is saved by them. Text is
 // shown in Bedrock forms, so keep pages short (a few sentences) and plain ASCII (plus § color codes).
 
-/**
- * A page of a dialogue. A string always shows; `{ text, when }` shows only when every flag in `when`
- * has that value for the player (flags are set by choices, below).
- * @typedef {string | { text: string, when: Record<string, string> }} Page
- */
-
-/**
- * Reputation sent to the Guilds pack (`realm:rep_add`). `when` works like a page's.
- * @typedef {{ guild: "miners" | "growers" | "wardens" | "wayfarers", amount: number, when?: Record<string, string> }} Rep
- */
-
-/**
- * One thing to do in a chapter. Every type needs a `label` (what the story log shows).
- * - `talk`: talk to NPC `npc`.
- * - `reach`: stand within `radius` blocks (across, default 16) of a place: `place` (a named place an
- *   operator sets, see PLACES), `at` ({ dim?, x, z }) or `offset` ({ x, z } from world spawn, in the
- *   overworld). `mark` names an `at`/`offset` spot on the tracker.
- * - `deliver`: bring `count` of `item` to NPC `npc` (taken from your inventory when you talk to them).
- * - `collect`: have `count` of `item` in your inventory.
- * - `defeat`: defeat `count` mobs from `mobs` (any mob when left out), or with `champion` a champion
- *   spawned at the place when you come within `radius` (default 32). The champion's `tag` must start
- *   with `realm:` (`realm:saga:bell_warden`): the Champions pack ignores any other tag.
- * - `interact`: tap (use) or hit one of `blocks` `count` times within `radius` (default 8) of a place.
- * - `survive`: be outdoors (nothing over your head) in a thunderstorm for `seconds`, within `radius`
- *   of the place when one is given.
- * - `mine`: break `count` of `blocks` (any when left out). `fish`: catch `count` of `items` (any).
- * @typedef {object} Objective
- * @property {"talk" | "reach" | "deliver" | "collect" | "defeat" | "interact" | "survive" | "mine" | "fish"} type
- * @property {string} label
- * @property {string} [npc]
- * @property {string} [item]
- * @property {number} [count]
- * @property {number} [seconds]
- * @property {string} [place]
- * @property {{ dim?: string, x: number, z: number }} [at]
- * @property {{ x: number, z: number }} [offset]
- * @property {string} [mark]
- * @property {number} [radius]
- * @property {string[]} [mobs]
- * @property {{ tag: string, mob: string, name: string, trait?: string, warn?: string }} [champion]
- * @property {string[]} [blocks]
- * @property {string[]} [items]
- */
-
-/**
- * @typedef {object} Reward
- * @property {number} [levels] XP levels
- * @property {{ item: string, amount: number }[]} [items]
- * @property {number} [crowns] paid on the `crowns` scoreboard
- * @property {string} [relic] a relic id for the Relics pack (`realm:relic_give`)
- * @property {string} [title] a title for the Titles pack (`realm:title_unlock`)
- * @property {{ entry: string, label: string }} [journal] a `story` page entry for the Journal pack
- */
-
-/**
- * A choice button on the last page of a chapter's outro.
- * @typedef {{ id: string, label: string, set?: Record<string, string>, rep?: Rep[], reply?: Page[] }} Choice
- */
-
-/**
- * @typedef {object} Chapter
- * @property {string} id
- * @property {string} title
- * @property {string} [npc] who tells the intro (default: the story's giver)
- * @property {string} [end] who you report back to for the outro (default: `npc`)
- * @property {Page[]} intro
- * @property {Objective[]} objectives
- * @property {Page[]} outro
- * @property {Choice[]} [choices]
- * @property {Reward} [reward]
- * @property {Rep[]} [rep] reputation given when the chapter is finished
- */
-
-/**
- * @typedef {object} Story
- * @property {string} id
- * @property {string} title
- * @property {string} short the tracker's name for it
- * @property {string} giver the NPC id who starts it
- * @property {Chapter[]} chapters
- */
+/** @typedef {import("./types.js").Story} Story */
+/** @typedef {import("./types.js").Chapter} Chapter */
+/** @typedef {import("./types.js").Objective} Objective */
+/** @typedef {import("./types.js").Page} Page */
+/** @typedef {import("./types.js").Rep} Rep */
+/** @typedef {import("./types.js").Reward} Reward */
+/** @typedef {import("./types.js").Choice} Choice */
 
 /** NPC ids (the Townsfolk pack's default townsfolk) and how the story text names them. */
 export const NPC_NAMES = /** @type {Record<string, string>} */ ({
@@ -94,6 +22,10 @@ export const NPC_NAMES = /** @type {Record<string, string>} */ ({
   quill: "Quill the Trader",
   ida: "Ida the Relicsmith",
   sol: "Sol the Sky-reader",
+  hollis: "Brother Hollis",
+  moss: "Moss the Gravedigger",
+  wren: "Wren",
+  bea: "Bea the Cook",
 });
 
 /**
@@ -104,6 +36,19 @@ export const PLACES = /** @type {Record<string, string>} */ ({
   lighthouse: "Lighthouse",
   sunken_bell: "Sunken Bell",
   old_chapel: "Old Chapel",
+  graveyard: "Old Graveyard",
+  observatory: "Stargazer's Ruin",
+  sea_cave: "Smugglers' Cove",
+  choir_ring: "The Gray Ring",
+  witch_hut: "Hollow Fen",
+  old_mine: "Abandoned Mine",
+  watchtower: "Ruined Watchtower",
+  meadow: "Wren's Meadow",
+  starfall: "Starfall Crater",
+  seal_tide: "The Tide Seal",
+  seal_stone: "The Stone Seal",
+  seal_sky: "The Sky Seal",
+  hollow_gate: "The Hollow Gate",
 });
 
 const T = "§eTobin:§r ";
@@ -114,8 +59,8 @@ const M = "§eMara:§r ";
 const SILENCE = { bell: "silence" };
 const RING = { bell: "ring" };
 
-/** @type {Story[]} */
-export const STORIES = [
+/** The prologue: the two first stories. @type {Story[]} */
+const PROLOGUE = [
   {
     id: "drowned_bell",
     title: "The Drowned Bell",
@@ -365,3 +310,6 @@ export const STORIES = [
     ],
   },
 ];
+
+/** Every story: the prologue, then the story files. @type {Story[]} */
+export const STORIES = [...PROLOGUE, ...MORE_STORIES];
