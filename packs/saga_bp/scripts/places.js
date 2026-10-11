@@ -74,6 +74,16 @@ export function setPlace(name, rec) {
 /** @param {string} name */
 export const placeLabel = (name) => PLACES[name] ?? PREFABS[name]?.label ?? name;
 
+/**
+ * A place's name in a sentence: "the Lighthouse", but "The Gray Ring" and "Wren's Meadow" as they are.
+ * @param {string} name @param {boolean} [start] at the start of a sentence
+ */
+export function named(name, start = false) {
+  const label = placeLabel(name);
+  if (/^the /i.test(label) || /'s /.test(label)) return label;
+  return `${start ? "The" : "the"} ${label}`;
+}
+
 /** The prefab's site rules, or plain land a few hundred blocks out when there is no prefab. @param {string} name @returns {PrefabInfo} */
 export const infoOf = (name) => PREFABS[name] ?? { label: placeLabel(name), size: { x: 5, y: 5, z: 5 }, site: "land", minDist: 100, maxDist: 400, features: {} };
 
@@ -470,7 +480,7 @@ async function autoBuild(name, near) {
     if (err) {
       retryAt.set(name, Date.now() + 20000);
       console.warn(`[saga] auto place ${name}: ${err}`);
-    } else tellOps(`§7[Story] Built the ${placeLabel(name)} at ${f.x} ${f.y} ${f.z} (picked by the pack; /realm:saga_places to change it).`);
+    } else tellOps(`§7[Story] Built ${named(name)} at ${f.x} ${f.y} ${f.z} (picked by the pack; /realm:saga_places to change it).`);
     return;
   }
   if (res.unloaded > 0) {
@@ -481,12 +491,12 @@ async function autoBuild(name, near) {
   const mv = (rec.mv ?? 0) + 1;
   if (mv > MAX_MOVES) {
     retryAt.set(name, Date.now() + 600000);
-    tellOps(`§e[Story] No good spot found for the ${placeLabel(name)} near ${rec.x} ${rec.z}. Set it by hand: /realm:saga_places.`);
+    tellOps(`§e[Story] No good spot found for ${named(name)} near ${rec.x} ${rec.z}. Set it by hand: /realm:saga_places.`);
     return;
   }
   const spot = pickSpot(name, { x: rec.x, z: rec.z });
   setPlace(name, { ...rec, x: spot.x, z: spot.z, mv });
-  if (near.isValid) near.sendMessage(`§e[Story] The ${placeLabel(name)} isn't here after all: the land didn't suit it. The tracker now points to where it really is.`);
+  if (near.isValid) near.sendMessage(`§e[Story] ${named(name, true)} isn't here after all: the land didn't suit it. The tracker now points to where it really is.`);
 }
 
 /** Every 2 seconds: picked places with a player close enough get built. */
@@ -593,10 +603,10 @@ export async function previewBuild(player, name, at) {
         await wait(200);
         continue;
       }
-      player.sendMessage(`§7[Story] Building the ${placeLabel(name)}...`);
+      player.sendMessage(`§7[Story] Building ${named(name)}...`);
       const err = await buildAt(name, dim, origin, facing, { by: player.name });
-      if (err) player.sendMessage(`§c[Story] Couldn't build the ${placeLabel(name)}: ${err}.`);
-      else player.sendMessage(`§a[Story] Built the ${placeLabel(name)} at ${coords(origin)}. It is now the story place "${name}".`);
+      if (err) player.sendMessage(`§c[Story] Couldn't build ${named(name)}: ${err}.`);
+      else player.sendMessage(`§a[Story] Built ${named(name)} at ${coords(origin)}. It is now the story place "${name}".`);
       return;
     }
   } finally {
@@ -692,25 +702,25 @@ async function placePage(player, name) {
         "Rebuild (repair)",
         async () => {
           const err = await rebuild(name);
-          player.sendMessage(err ? `§c[Story] Couldn't rebuild: ${err}.` : `§a[Story] Rebuilt the ${placeLabel(name)}.`);
+          player.sendMessage(err ? `§c[Story] Couldn't rebuild: ${err}.` : `§a[Story] Rebuilt ${named(name)}.`);
         },
       ]);
     if (rec)
       actions.push([
         "Remove",
         async () => {
-          if (!(await confirm(player, `Remove the ${placeLabel(name)}?${rec.b ? " Its building is taken down and the terrain put back as it was." : ""} Stories that need it will pick a new spot${get("autoPlaces") === true ? "" : " once an operator sets one"}.`))) return;
+          if (!(await confirm(player, `Remove ${named(name)}?${rec.b ? " Its building is taken down and the terrain put back as it was." : ""} Stories that need it will pick a new spot${get("autoPlaces") === true ? "" : " once an operator sets one"}.`))) return;
           removePlace(name);
-          player.sendMessage(`§a[Story] Removed the ${placeLabel(name)}.`);
+          player.sendMessage(`§a[Story] Removed ${named(name)}.`);
         },
       ]);
     if (rec)
       actions.push([
         "Relocate",
         async () => {
-          if (!(await confirm(player, `Move the ${placeLabel(name)} somewhere else? It is removed here${rec.b ? " (terrain put back)" : ""} and a new spot is picked nearby, built when a player comes close.`))) return;
+          if (!(await confirm(player, `Move ${named(name)} somewhere else? It is removed here${rec.b ? " (terrain put back)" : ""} and a new spot is picked nearby, built when a player comes close.`))) return;
           const spot = relocate(name);
-          player.sendMessage(`§a[Story] The ${placeLabel(name)} moves to about ${spot.x} ${spot.z}; it is built when a player comes within ${get("buildRange")} blocks.`);
+          player.sendMessage(`§a[Story] ${named(name, true)} moves to about ${spot.x} ${spot.z}; it is built when a player comes within ${get("buildRange")} blocks.`);
         },
       ]);
     const form = new ActionFormData().title("Story place").body(lines.join("\n"));

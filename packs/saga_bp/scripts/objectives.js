@@ -375,6 +375,22 @@ export const championTags = new Set(
 );
 /** Champion objectives by tag (for adds). @type {Map<string, Objective>} */
 const championObj = new Map();
+/**
+ * Objectives (by key) and champion tags whose mobs are the Gray Choir: they get the tag
+ * `saga:choir` (the Relics pack's Gray Choir Mask halves their damage).
+ */
+const CHOIR = new Set();
+{
+  const choirish = /choir|cantor|gray ring|grey ring|enforcer|cultist|hooded/i;
+  for (const s of STORIES)
+    for (const c of s.chapters)
+      c.objectives.forEach((o, i) => {
+        const text = [o.label, o.guards?.name, o.champion?.name, o.place === "choir_ring" ? "choir" : ""].join(" ");
+        if (!choirish.test(text)) return;
+        CHOIR.add(`${s.id}:${c.id}:${i}`);
+        if (o.champion) CHOIR.add(o.champion.tag);
+      });
+}
 for (const s of STORIES) for (const c of s.chapters) for (const o of c.objectives) if (o.champion) championObj.set(o.champion.tag, o);
 
 /** Is a champion with this tag loaded anywhere in the dimension? @param {string} tag @param {Dimension} dim */
@@ -455,6 +471,7 @@ function championNear(player, obj) {
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
       mob.addTag(champ.tag);
+      if (CHOIR.has(champ.tag)) mob.addTag("saga:choir");
       const boost = champ.health ? Math.max(0, Math.min(30, Math.ceil(champ.health / 4) - 1)) : 4;
       mob.addEffect("health_boost", LONG, { amplifier: boost, showParticles: false });
       mob.addEffect("resistance", LONG, { amplifier: 1, showParticles: false });
@@ -538,6 +555,7 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
     const z = at.z + Math.sin(a) * d;
     const y = groundAt(dim, x, z, at.y) ?? at.y;
     const ent = spawnActor(dim, type, { x, y, z }, { owner: player.id, key, role: "add" });
+    if (ent && CHOIR.has(key)) ent.addTag("saga:choir");
     if (ent) out.push(ent);
   }
   return out;
@@ -1123,6 +1141,7 @@ function stealthTick(player, e, i, obj) {
     const z = sp.center.z + Math.sin(ang) * gr;
     const y = groundAt(dim, x, z, sp.center.y) ?? sp.center.y;
     const ent = spawnActor(dim, g.mob, { x, y, z }, { owner: player.id, key: s.key, role: "guard", name: g.name ? `§c${g.name}` : undefined, invul: true });
+    if (ent && CHOIR.has(s.key)) ent.addTag("saga:choir");
     if (ent) s.data.guards.push({ ent, r: gr, ang, dir: k % 2 ? 1 : -1, yaw: 0, y, pause: 0, flipAt: system.currentTick + 200 + Math.floor(Math.random() * 300) });
   }
   s.data.grace = system.currentTick + 40;

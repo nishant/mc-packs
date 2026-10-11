@@ -7,9 +7,9 @@
 //   ui.js          offers, dialogues, hints, rewards, tracker, the story log menu
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { expireAdds, sweep, tendActors } from "./actors.js";
-import { entries, flush, flushAll, forget, objKey, sagaOf, storyById } from "./data.js";
-import { beginRun, championSlain, championTags, holdUntil, loadWeather, playerGone, resolveAnswer, sweepChampions, talked, tickPlayer, open } from "./objectives.js";
-import { autoTick, listPlaces, placesMenu, setHere } from "./places.js";
+import { entries, flush, flushAll, forget, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
+import { beginRun, championSlain, championTags, endScenesOf, holdUntil, loadWeather, open, playerGone, resolveAnswer, sweepChampions, talked, tickPlayer } from "./objectives.js";
+import { autoTick, listPlaces, placesMenu, placesOf, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
 import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, track } from "./ui.js";
@@ -31,6 +31,7 @@ system.runInterval(() => {
     tendActors();
     if (runs % 2 === 0) autoTick();
     if (runs % 60 === 0) expireAdds();
+    if (runs % 5 === 0) for (const p of world.getAllPlayers()) sendSeals(p);
   } catch (e) {
     console.warn(`[saga] ${e}`);
   }
@@ -50,6 +51,33 @@ system.runInterval(() => {
     }
   }
 }, LOOP_TICKS);
+
+// ---------------------------------------------------------------------------
+// Seals for the Relics pack's Lantern Shard: the seal places each player still has to relight
+// ---------------------------------------------------------------------------
+
+/** Seal place -> the Act IV chapter that relights it. */
+const SEALS = [
+  ["seal_tide", "tide_echo"],
+  ["seal_stone", "stone_light"],
+  ["seal_sky", "sky_vision"],
+];
+/** What each player was last sent. @type {Map<string, string>} */
+const sealsSent = new Map();
+
+/** Sends `realm:seals` for a player when it changed (or always with `force`). @param {Player} player @param {boolean} [force] */
+function sendSeals(player, force = false) {
+  const st = sagaOf(player).s.act4_seals;
+  const all = placesOf();
+  const seals = SEALS.filter(([place, chapter]) => all[place] && !st?.fin && !st?.dn.includes(chapter)).map(([place]) => {
+    const p = all[place];
+    return { name: place, dim: p.dim, x: p.x, z: p.z };
+  });
+  const json = JSON.stringify(seals);
+  if (!force && sealsSent.get(player.id) === json) return;
+  sealsSent.set(player.id, json);
+  send("realm:seals", { player: player.id, seals });
+}
 
 // ---------------------------------------------------------------------------
 // Townsfolk: offers, talk and deliver objectives
@@ -86,6 +114,22 @@ function onDebug(msg) {
   if (msg.action === "answer" && typeof msg.text === "string") {
     const [hit] = open(player, "answer");
     if (hit) resolveAnswer(player, hit.e, hit.i, msg.text);
+  } else if (msg.action === "jump" && typeof msg.story === "string" && typeof msg.chapter === "string") {
+    // Every chapter before `chapter` counts as finished; that chapter is offered next.
+    const story = storyById.get(msg.story);
+    const k = story ? story.chapters.findIndex((c) => c.id === msg.chapter) : -1;
+    if (!story || k < 0) return;
+    endScenesOf(player.id);
+    const st = stateOf(sagaOf(player), story);
+    st.dn = story.chapters.slice(0, k).map((c) => c.id);
+    st.a = 0;
+    delete st.cur;
+    delete st.o;
+    delete st.x;
+    delete st.fin;
+    Object.assign(st.f, typeof msg.flags === "object" && msg.flags ? msg.flags : {});
+    invalidate(player.id);
+    markDirty(player, true);
   } else if (msg.action === "state") {
     console.warn(`[saga] state of ${player.name}: ${JSON.stringify(sagaOf(player))}`);
     for (const e of entries(player)) console.warn(`[saga] entry ${e.story.id}/${e.chapter.id} o=${JSON.stringify(e.st.o)} keys=${e.chapter.objectives.map((_, i) => objKey(e, i)).join(",")}`);
@@ -94,6 +138,10 @@ function onDebug(msg) {
 
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message, sourceEntity }) => {
+    if (id === "realm:seals_ping") {
+      for (const p of world.getAllPlayers()) sendSeals(p, true);
+      return;
+    }
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain" && id !== "realm:actionbar" && id !== "realm:saga_debug") return;
     /** @type {any} */
     let msg;
@@ -216,6 +264,9 @@ world.afterEvents.worldLoad.subscribe(() => {
   sweep();
   sweepChampions();
   checkStories();
+  system.runTimeout(() => {
+    for (const p of world.getAllPlayers()) sendSeals(p, true);
+  }, 100);
 });
 
 world.beforeEvents.playerLeave.subscribe(({ player }) => {
@@ -228,6 +279,7 @@ world.beforeEvents.playerLeave.subscribe(({ player }) => {
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   playerGone(playerId);
+  sealsSent.delete(playerId);
   forget(playerId);
   busy.delete(playerId);
 });

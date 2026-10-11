@@ -120,7 +120,7 @@ function objectiveLines(player, e, saga) {
     if (t) line += ` §c${t}`;
     if (obj.npc && (obj.type === "talk" || obj.type === "deliver" || obj.type === "answer")) line += ` §7(${npcName(obj.npc)}${towardNpc(player, obj.npc)})`;
     const loc = locate(obj);
-    if (typeof loc === "string") line += `\n  §7(the ${placeLabel(loc)} is being picked: ask an operator if it doesn't appear)`;
+    if (typeof loc === "string") line += `\n  §7(${placeLabel(loc)} isn't set yet: an operator sets it in /realm:saga_places)`;
     else if (loc && hidden(e, obj)) line += " §7(find it yourself, or ask for a hint)";
     else if (loc) line += ` §7(${loc.label} ${bearing(player, loc, radiusOf(obj))})`;
     if ((obj.type === "survive" || obj.type === "vigil") && obj.weather !== "any" && (obj.weather || obj.type === "survive")) {
@@ -385,8 +385,9 @@ export async function startChapter(player, story) {
     const e = entries(player).find((x) => x.story.id === story.id);
     player.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
     if (e) {
+      const missing = missingPlaces(e, saga); // picks unset places first, so the lines below can point at them
       for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));
-      for (const name of missingPlaces(e, saga)) {
+      for (const name of missing) {
         player.sendMessage(`§c[Story] This chapter needs the place "${placeLabel(name)}", which isn't set yet: an operator sets it in /realm:saga_places.`);
         hintOps(player, name, story);
       }
@@ -438,7 +439,7 @@ async function showHint(player, e) {
     ])) {
       const loc = locate(w, obj.label);
       if (loc === undefined) continue;
-      if (typeof loc === "string") lines.push(`§7${obj.label}: ${what}the ${placeLabel(loc)} isn't picked yet.`);
+      if (typeof loc === "string") lines.push(`§7${obj.label}: ${what}${placeLabel(loc)} isn't set yet.`);
       else lines.push(`§7${obj.label}: ${what}${loc.label} at §f${coords(loc)}§7 in the ${dimName(loc.dim)}${loc.pending ? " (built when you get close)" : ""}`);
     }
     if (obj.type === "reach" && (obj.belowY !== undefined || obj.aboveY !== undefined || obj.dim))
@@ -683,7 +684,7 @@ function trackLine(player, e, saga) {
       return;
     }
     if (typeof loc === "string") {
-      if (bestD === Infinity) best = `§7the ${placeLabel(loc)} isn't set yet`;
+      if (bestD === Infinity) best = `§7${placeLabel(loc)} isn't set yet`;
       return;
     }
     if (hidden(e, obj) && !focus) {
