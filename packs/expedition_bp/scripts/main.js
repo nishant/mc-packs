@@ -317,9 +317,35 @@ function tryCommand(dim, command) {
   }
 }
 
-/** Actionbar text, after asking the Coordinates HUD to step aside. @param {Player} player @param {string} text */
-function actionbar(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 30 }));
+/** player id -> tick until which a note holds the bar (another pack's `realm:actionbar`, or one of ours). */
+const barHeld = new Map();
+
+// Other packs' notes (durability, skill XP, mob health...) hold the bar for a moment: the run line waits.
+// Steady background lines (`background: true`, like the Party HUD) don't stop it.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:actionbar") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string" || m.from === "expedition_bp" || m.background === true) return;
+      barHeld.set(m.player, system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0)));
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+/**
+ * Actionbar text, after asking the Coordinates HUD (and other bar writers) to step aside. The run line
+ * (`steady`) is skipped while a note holds the bar; a note of ours holds the run line off too.
+ * @param {Player} player @param {string} text @param {boolean} [steady]
+ */
+function actionbar(player, text, steady = false) {
+  const now = system.currentTick;
+  if (steady && (barHeld.get(player.id) ?? 0) > now) return;
+  if (!steady) barHeld.set(player.id, now + 30);
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 30, from: "expedition_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 
@@ -2478,7 +2504,7 @@ function tickRun(run, players) {
     else if (beat % 2 === 0) {
       for (const id of run.members.keys()) {
         const p = players.get(id);
-        if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`);
+        if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`, true);
       }
     }
     return;
@@ -2622,7 +2648,7 @@ function tickRun(run, players) {
     const t = clock(Date.now() - run.started);
     for (const id of run.members.keys()) {
       const p = players.get(id);
-      if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${t}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`);
+      if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${t}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`, true);
     }
   }
 }
@@ -3538,8 +3564,9 @@ function debugState(message) {
     });
   }
   const text = JSON.stringify(out);
-  const parts = Math.max(1, Math.ceil(text.length / 1800));
-  for (let k = 0; k < parts; k++) system.sendScriptEvent("realm:expedition_state", JSON.stringify({ part: k, parts, data: text.slice(k * 1800, (k + 1) * 1800) }));
+  // 900 characters a part: quoted again inside `data`, every " grows to \", and a message may be at most 2048.
+  const parts = Math.max(1, Math.ceil(text.length / 900));
+  for (let k = 0; k < parts; k++) system.sendScriptEvent("realm:expedition_state", JSON.stringify({ part: k, parts, data: text.slice(k * 900, (k + 1) * 900) }));
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.

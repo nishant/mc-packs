@@ -551,6 +551,7 @@ function openMenu(player, menu) {
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   if (!CONFIG.itemName || itemStack.nameTag !== CONFIG.itemName) return;
   if (!isOp(source)) {
+    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: source.id, ticks: 60 })); // other bar writers wait
     source.onScreenDisplay.setActionBar("§7Only operators can change the realm's settings. Your own: /realm:prefs");
     return;
   }

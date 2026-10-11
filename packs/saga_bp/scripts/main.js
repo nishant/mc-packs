@@ -9,7 +9,7 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Pl
 import { expireAdds, sweep, tendActors } from "./actors.js";
 import { entries, flush, flushAll, forget, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
 import { beginRun, championSlain, championTags, endScenesOf, holdUntil, loadWeather, open, playerGone, resolveAnswer, sweepChampions, talked, tickPlayer } from "./objectives.js";
-import { autoTick, listPlaces, placesMenu, placesOf, setHere } from "./places.js";
+import { autoTick, listPlaces, placeLabel, placesMenu, placesOf, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
 import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, track } from "./ui.js";
@@ -71,7 +71,7 @@ function sendSeals(player, force = false) {
   const all = placesOf();
   const seals = SEALS.filter(([place, chapter]) => all[place] && !st?.fin && !st?.dn.includes(chapter)).map(([place]) => {
     const p = all[place];
-    return { name: place, dim: p.dim, x: p.x, z: p.z };
+    return { name: placeLabel(place), dim: p.dim, x: p.x, z: p.z }; // the Lantern Shard shows the name
   });
   const json = JSON.stringify(seals);
   if (!force && sealsSent.get(player.id) === json) return;

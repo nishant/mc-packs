@@ -596,6 +596,7 @@ system.runInterval(() => {
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   if (!isConfigItem(itemStack)) return;
   if (!isOp(source)) {
+    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: source.id, ticks: 60 })); // other bar writers wait
     source.onScreenDisplay.setActionBar(`§7${TITLE} is for operators. Your own options: /realm:prefs`);
     if (get("removeFromOthers") === true) system.run(() => takeItem(source));
     return;

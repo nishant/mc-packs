@@ -256,6 +256,25 @@ function status(viewer, id) {
   return `§c${health(p)}hp §f${where(viewer, p).text}`;
 }
 
+/** player id -> tick until which another pack's note (`realm:actionbar`) holds the bar. */
+const barHeld = new Map();
+
+// Other packs' notes and steady lines (an expedition's run line, the Elytra HUD) hold the bar: the
+// party line waits, so the two don't take turns.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:actionbar") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string" || m.from === "party_bp") return;
+      barHeld.set(m.player, system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0)));
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
 // The HUD, every 2 seconds: mates within hudRange, nearest first. Nothing is written when nobody is
 // near, so the HUD doesn't cover other notes for nothing. Tags are put right at the same time.
 system.runInterval(() => {
@@ -276,14 +295,15 @@ system.runInterval(() => {
         const w = where(player, mate);
         if (w.dist <= get("hudRange")) near.push({ mate, w });
       }
-      if (!near.length) continue;
+      if (!near.length || (barHeld.get(player.id) ?? 0) > system.currentTick) continue;
       near.sort((a, b) => a.w.dist - b.w.dist);
       const text = near
         .slice(0, Math.max(1, get("hudMates")))
         .map(({ mate, w }) => `§d${mate.name} §c${health(mate)}hp §f${w.text}`)
         .join(" §7| ");
-      // Ask the Coordinates HUD, if installed, to step aside until the next update.
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HUD_TICKS + 10 }));
+      // Ask the Coordinates HUD, if installed, to step aside until the next update. `background`: a steady
+      // line, so other packs' steady lines (an expedition's) needn't wait for it.
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HUD_TICKS + 10, from: "party_bp", background: true }));
       player.onScreenDisplay.setActionBar(text);
     } catch (e) {
       console.warn(`[party] hud: ${e}`);

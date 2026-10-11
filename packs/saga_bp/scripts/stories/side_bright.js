@@ -882,6 +882,8 @@ const HEARTH_AND_TABLE = {
       id: "marta",
       title: "A Feast for Marta",
       end: "moss",
+      // Lantern Cake is a story recipe in the Kitchen (no one sells it): Bea teaches it here.
+      teach: ["lantern_cake"],
       intro: [
         `The kitchen is quiet when you come in. That's the first wrong thing. Bea is sitting on an upturned bucket with her apron in her hands, and she isn't shouting.\n\n${BE}Marta Penhallow died last night. In her sleep. Ninety-one.`,
         `${BE}She ran the bakery for sixty years. Taught me to knead when I was so small I had to stand on a flour sack. When I ran off to sea at sixteen, she packed me a loaf so big it lasted to the first port. Never asked why I was going.`,
@@ -941,6 +943,8 @@ const HEARTH_AND_TABLE = {
       id: "starwright",
       title: "Elsie's Old Recipe",
       end: "elsie",
+      // Starwright Bread is a story recipe in the Kitchen: Elsie hands it over here.
+      teach: ["starwright_bread"],
       intro: [
         `${BE}Elsie has a bread. Once a year, on the longest night, she bakes it in the inn's old oven with the shutters down, and the whole street smells of honey and woodsmoke and something I can't name. Twenty years I've begged for that recipe.`,
         `${BE}She won't give it to me. She says it's "family." Well, I'm family! I've burned my arm on her oven a hundred times! Go and ask her. She likes you. Everybody likes you. It's infuriating.`,
