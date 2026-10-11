@@ -134,7 +134,7 @@ export const CONFIG = {
       { mob: "minecraft:warden", xp: 300 },
       { mob: "minecraft:elder_guardian", xp: 150 },
       { mob: "minecraft:ravager", xp: 60 },
-      { mob: "minecraft:evoker", xp: 40 },
+      { mob: "minecraft:evocation_illager", xp: 40 },
     ],
 
     /** A champion (tag `realm:champion`, from the Champions pack) gives this many times the XP. */

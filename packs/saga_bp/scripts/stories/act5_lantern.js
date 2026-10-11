@@ -329,7 +329,7 @@ export const STORIES = [
               { mobs: ["minecraft:drowned", "minecraft:zombie"], count: 10 },
               { mobs: ["minecraft:drowned", "minecraft:skeleton", "minecraft:pillager"], count: 12 },
               { mobs: ["minecraft:vindicator", "minecraft:pillager", "minecraft:witch"], count: 10 },
-              { mobs: ["minecraft:drowned", "minecraft:vindicator", "minecraft:evoker"], count: 12 },
+              { mobs: ["minecraft:drowned", "minecraft:vindicator", "minecraft:evocation_illager"], count: 12 },
             ],
           },
           {
@@ -343,7 +343,7 @@ export const STORIES = [
               { mobs: ["minecraft:drowned", "minecraft:zombie", "minecraft:husk"], count: 14 },
               { mobs: ["minecraft:drowned", "minecraft:skeleton", "minecraft:stray", "minecraft:pillager"], count: 16 },
               { mobs: ["minecraft:vindicator", "minecraft:pillager", "minecraft:witch"], count: 14 },
-              { mobs: ["minecraft:vindicator", "minecraft:evoker", "minecraft:drowned", "minecraft:ravager"], count: 12 },
+              { mobs: ["minecraft:vindicator", "minecraft:evocation_illager", "minecraft:drowned", "minecraft:ravager"], count: 12 },
             ],
           },
           {
@@ -453,7 +453,7 @@ export const STORIES = [
             waves: [
               { mobs: ["minecraft:pillager", "minecraft:vindicator"], count: 10 },
               { mobs: ["minecraft:vindicator", "minecraft:witch", "minecraft:pillager"], count: 10 },
-              { mobs: ["minecraft:vindicator", "minecraft:evoker", "minecraft:pillager"], count: 10 },
+              { mobs: ["minecraft:vindicator", "minecraft:evocation_illager", "minecraft:pillager"], count: 10 },
             ],
           },
           {
@@ -613,7 +613,7 @@ export const STORIES = [
         ],
         objectives: [
           { type: "reach", label: "Climb to the Sky Seal", place: "seal_sky", radius: 16 },
-          { type: "interact", label: "Set the three keys in the Sky Seal's crown (tap 3 end rods)", place: "seal_sky", blocks: ["minecraft:end_rod"], count: 3, radius: 16 },
+          { type: "interact", label: "Set the three keys in the Sky Seal's crown (hit 3 end rods)", place: "seal_sky", blocks: ["minecraft:end_rod"], count: 3, radius: 16 },
           { type: "vigil", label: "Wait in the open at the Sky Seal until the Lantern stands at midnight", place: "seal_sky", radius: 16, seconds: 60, timeOfDay: [17000, 19500], outdoors: true },
           {
             type: "vision",
@@ -684,7 +684,7 @@ export const STORIES = [
             text: "Once every forty winters the comet the Starwrights called the Lantern crosses the sky, and its light relights the three Seals that bind the Hollow. At the Sky Seal, at the top of the night, the light waited for one person to decide where it would go.",
           },
         },
-        hint: "The Sky Seal floats high above the clouds (about y 220): pillar up, use elytra or build a stair. Tap the end rods on its crown, then stay there in the open around midnight. Which endings you can choose depends on what you've done: A Room at the Inn, your promise to Elsie, and how hard your heart has been.",
+        hint: "The Sky Seal floats high above the clouds (about y 220): pillar up, use elytra or build a stair. Hit the end rods on its crown, then stay there in the open around midnight. Which endings you can choose depends on what you've done: A Room at the Inn, your promise to Elsie, and how hard your heart has been.",
       },
 
       // 10a. Dawn: Relight the Lantern -------------------------------------------------------
