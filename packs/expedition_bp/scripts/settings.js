@@ -13,10 +13,17 @@ const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "New expeditions can start", help: "A run in progress still finishes" },
   { key: "slots", type: "int", scope: "world", label: "Expeditions at the same time", help: "Each in its own dungeon, east of the site", min: 1, max: 3, step: 1 },
   { key: "maxParty", type: "int", scope: "world", label: "Most players in one expedition", min: 1, max: 4, step: 1 },
-  { key: "timeLimitMinutes", type: "int", scope: "world", label: "Time limit (minutes)", help: "Applies from the next run", min: 5, max: 60, step: 1 },
+  { key: "timeLimitMinutes", type: "int", scope: "world", label: "Time limit for 7 rooms (minutes)", help: "Scaled by each run's room count; applies from the next run", min: 5, max: 60, step: 1 },
   { key: "exitSeconds", type: "int", scope: "world", label: "Seconds to collect the treasure", min: 10, max: 120, step: 5 },
   { key: "returnItemsOnDeath", type: "bool", scope: "world", label: "Give back items dropped on death in a dungeon" },
   { key: "relicChance", type: "float", scope: "world", label: "Relic chance for finishing", help: "0 to 1, per player (Relics pack)", min: 0, max: 1, step: 0.05 },
+  { key: "maxTier", type: "int", scope: "world", label: "Highest Nightmare tier", min: 1, max: 20, step: 1 },
+  { key: "allowBuilding", type: "bool", scope: "world", label: "Players can build in Nightmare dungeons", help: "From buildFromTier; blocks are removed after the run" },
+  { key: "useChampionsPack", type: "bool", scope: "world", label: "Champions in waves come from the Champions pack", help: "When it's installed" },
+  { key: "mobCap", type: "int", scope: "world", label: "Most dungeon mobs alive at once", min: 6, max: 40, step: 1 },
+  { key: "rerollCost", type: "int", scope: "world", label: "Crowns to reroll affixes", min: 0, max: 500, step: 5 },
+  { key: "sigilChanceBoss", type: "float", scope: "world", label: "Sigil chance from a boss", help: "0 to 1, plus 1% per tier", min: 0, max: 1, step: 0.05 },
+  { key: "sigilChanceChampion", type: "float", scope: "world", label: "Sigil chance from a champion", help: "0 to 1, Nightmare runs", min: 0, max: 1, step: 0.01 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
