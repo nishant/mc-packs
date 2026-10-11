@@ -18,6 +18,7 @@ What each pack in this repo does, how to use it, and how to configure it.
   - [Formatting codes](#formatting-codes)
 - [Realm Help — `help_bp`](#realm-help--help_bp)
 - [Realm Settings — `settings_bp`](#realm-settings--settings_bp)
+- [Realm Configuration — `admin_bp`](#realm-configuration--admin_bp)
 - [Welcome Message — `welcome_bp`](#welcome-message--welcome_bp)
 - [Low Durability Warning — `durability_bp`](#low-durability-warning--durability_bp)
 - [AFK + Smart Sleep — `afk_bp`](#afk--smart-sleep--afk_bp)
@@ -269,6 +270,63 @@ None in this pack. Each pack saves its own settings, so they stay with that pack
 - In-game text is plain ASCII: Bedrock draws a whole line in a smaller fallback font when it holds a character like `…`, `–`, `•` or an emoji, which is why `/realm:help` once looked different in `/help`. `npm run check` (`tools/check-ascii.mjs`) fails on any other character in pack code, and `tools/help-catalog.mjs` converts the docs' typography when it builds the help.
 - The part of `settings.js` that does this is the same in every pack: it's copied from `tools/settings-shared.js` by `node tools/sync-settings.mjs`, and `npm run check` fails if a copy is missing or out of date.
 - Operators with cheats on could send the same script events with `/scriptevent`; that does nothing an operator can't do in the menu.
+
+---
+
+## Realm Configuration — `admin_bp`
+
+Every operator carries a **Realm Configuration** item (a nether star with a gold name). Using it opens an admin menu that runs **every realm command** from one place: pick a category, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. The commands still work as typed; this is for when you'd rather not type them while playing. It isn't settings: settings are one button away, at the top.
+
+### How to use
+
+1. **Operators:** you get the `Realm Configuration` item when you join or respawn without one (and within 30 seconds of becoming an operator). It stays through death and can't be dropped or put in a chest. Lost it anyway? Run `/realm:admin_item`. `/realm:admin` opens the same menu.
+2. **Operators:** use the item (right-click or long press, like eating). The menu starts with **Realm Settings** (opens `/realm:config`), **Search commands**, **Recent**, **Server setup checklist** and **Quick actions**, then the categories: **World & weather**, **Story & townsfolk**, **Towns & places**, **Economy**, **Events & news**, **Players**, **Dungeons & loot**, **Fun**, **Utilities** (and **Other** for a pack the menu doesn't know yet). Each lists its commands with what they do; `(ops)` marks operator commands.
+3. **Operators:** pick a command. Without options it runs right away (a menu command such as `/realm:meteor` opens its own menu). With options, a form asks for them: lists for choices (`mara`, `thunder`, `storm_staff`...), a list of online players (with **Everyone online (@a)** where a command can take several, and a box for an offline name where it makes sense), sliders for amounts and radii, a switch for true or false, and your current position already filled in for coordinates. Leave an optional choice on `(leave out)` or its box empty to skip it. Press **Run**.
+4. **Operators:** chat says `[Realm Configuration] Ran /realm:...` with the exact command, or that it didn't run. Commands that remove or reset something, and a few with big effects (`/realm:meteor_now`, `/realm:tornado_spawn`, `/realm:caravan_call`, `/realm:crowns_give`, `/realm:domt_draw`), ask **Are you sure?** first.
+5. **Operators:** **Recent** keeps your last 8 commands with their options (`recentSize`): tap one to run it again. **Search commands** finds commands and quick actions by any word of their name or description.
+6. **Operators:** **Quick actions** are the vanilla things you'd otherwise type: set the weather (with the [Weather Almanac](#weather-almanac--weather_bp) installed this runs `/realm:weather_set`, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats.
+7. **Operators:** **Server setup checklist** lists the one-time jobs across the installed packs (place the townsfolk, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. Safe zones and towns show `[x]` with how many exist; the others can't be checked from here.
+
+### What players see
+
+- **Operators:** the item in their inventory, a chat line the first time (`You have the Realm Configuration item: use it to run any realm command from one menu.`), and the menu. The menu shows only the commands of installed packs that the operator's permission level allows.
+- **Everyone else:** nothing. A player who isn't an operator and uses an item with that name sees `Realm Configuration is for operators. Your own options: /realm:prefs` above the hotbar, and the real item is taken from them (`removeFromOthers`): `The Realm Configuration item is for operators, so it was put away.` An item renamed on an anvil is never taken (it has no Realm Configuration lore), it just doesn't open anything.
+- An item renamed `Realm Settings` on an anvil still opens [Realm Settings](#realm-settings--settings_bp) as before; the Realm Configuration menu's first button opens it too.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:admin` | Ops | Opens the Realm Configuration menu (the same as using the item) |
+| `/realm:admin_item [player]` | Ops | Gives you the Realm Configuration item if you don't carry one, or checks the named operators and gives them one. Players who aren't operators are refused |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `giveToOperators` | `true` | Operators without the item get one when they join or respawn, and within `checkSeconds` of becoming an operator |
+| `removeFromOthers` | `true` | Take the real item from players who aren't operators (an anvil-renamed item is left alone) |
+| `checkSeconds` | `30` | How often to check who carries the item, in seconds (5 to 300) |
+| `itemType` | `"minecraft:nether_star"` | The vanilla item it's made from. It gets the name, lore, keep on death and an inventory lock |
+| `recentSize` | `8` | How many of your last commands **Recent** keeps (1 to 20) |
+| `answerTicks` | `10` | Ticks to wait for the installed packs (and the safe zone lists, for the checklist) to answer (20 = 1 second) |
+
+Operators can change `giveToOperators`, `removeFromOthers`, `checkSeconds` and `recentSize` in game with `/realm:config` when Realm Settings is installed.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `admin:recent` | Player | JSON list of that operator's last commands, newest first: `{ t, l }` (a title and the command line) or `{ t, a, v }` (a quick action's id and its values, with player names rather than list positions) |
+| `admin:cfg` | World | Settings changed in `/realm:config` |
+
+### How it works
+
+- `scripts/catalog.js` lists every `realm:` command of every pack: name, description, permission level, parameters (type, optional, enum values) and the pack. `node tools/admin-catalog.mjs` writes it by loading each pack's `scripts/main.js` in Node with a stand-in for the Minecraft modules and recording what its startup handler registers, so enum values computed from `config.js` (townsfolk ids, relics, story places...) are exact. `npm run check` runs it with `--check` and fails when a command was added or changed and the catalog wasn't rewritten. `scripts/presets.js` (hand-written) adds categories, friendlier labels, slider ranges and defaults, the commands that ask first and the setup checklist; a command it doesn't mention still shows, with plain inputs.
+- Which packs are installed: the menu sends `realm:help_ping` like `/realm:help` and keeps the folders that answer (for a minute). If nobody answers, it shows everything.
+- Commands run with `player.runCommand`, so a command does exactly what it does when typed by that operator. When a command refuses (a bad name, too far from a town...), the game doesn't hand its reason to the script, so chat says `didn't run: the command refused` (some packs also explain in chat); a command that doesn't parse shows the game's own error.
+- The setup checklist pings the safe zones protocol (`realm:zones_ping`) and counts the `zones` and `town` lists it hears back.
+- The menu checks the operator level itself (`commandPermissionLevel` of `GameDirectors` or higher) before opening, and hides commands above the player's level.
 
 ---
 
@@ -5040,6 +5098,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 
 | Pair | Interaction |
 |---|---|
+| Realm Configuration → every pack | Runs the other packs' commands as the operator (`player.runCommand`), so each command keeps its own checks and menus. Finds the installed packs with `realm:help_ping`, and counts safe zones and protected towns for the setup checklist from `realm:zones`. Its first button opens Realm Settings (`/realm:config`) |
 | AFK → Stats | Stats pauses playtime for players with the `afk` tag. Keep AFK `tag` and Stats `afkTag` the same |
 | Welcome → News | Both popups show on join, welcome first (`delayTicks` 40 vs 100). News waits until the welcome popup is closed |
 | News tips → others | The default tips mention `/realm:stats`, `/realm:afk`, `/realm:help`, the stash sneak-tap and `/realm:find`. Edit them with `/realm:news_tips` if you don't use those packs |
