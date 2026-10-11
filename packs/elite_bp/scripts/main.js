@@ -156,7 +156,7 @@ function targetable(p) {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== "minecraft:overworld") return;
+  if (dimension !== "minecraft:overworld" && dimension !== "overworld") return; // weatherChange names it "overworld"
   thunder = newWeather === WeatherType.Thunder;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
