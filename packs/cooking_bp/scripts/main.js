@@ -274,7 +274,8 @@ function giveItems(player, stack, total, at = /** @type {Pot | undefined} */ (un
     s.amount = n;
     try {
       if (player.isValid) {
-        const rest = containerOf(player)?.addItem(s) ?? s;
+        const c = containerOf(player);
+        const rest = c ? c.addItem(s) : s;
         if (rest) player.dimension.spawnItem(rest, player.location);
       } else if (at) world.getDimension(at.dim).spawnItem(s, at.loc);
     } catch (e) {
@@ -683,7 +684,8 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   }
 });
 
-// Cooking pots (tap a cauldron over a lit campfire) and beehives (Glow Honey at night).
+// Cooking pots (tap a cauldron over a lit campfire) and beehives (Glow Honey at night). A hive needs
+// no isFirstEvent check: harvesting empties it, so a repeat sees honey_level 0.
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
   const { block, player, itemStack, isFirstEvent } = ev;
   let type;
@@ -707,7 +709,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
     system.run(() => potMenu(player, at).catch((e) => console.warn(`[cooking] pot: ${e}`)));
     return;
   }
-  if (HIVES.has(type) && isFirstEvent && itemStack && (itemStack.typeId === "minecraft:glass_bottle" || itemStack.typeId === "minecraft:shears")) {
+  if (HIVES.has(type) && itemStack && (itemStack.typeId === "minecraft:glass_bottle" || itemStack.typeId === "minecraft:shears")) {
     let full = false;
     try {
       full = block.permutation.getState("honey_level") === 5;

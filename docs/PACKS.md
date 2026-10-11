@@ -2936,7 +2936,7 @@ Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tourn
 
 ## Kitchen — `cooking_bp`
 
-Cook real dishes at a cooking pot (a cauldron over a lit campfire). Each dish is a food with a gentle, long-lasting buff when you eat it, like Haste I for 5 minutes or Night Vision for 10, and a few rolling dishes roll for a surprise instead: mostly a good buff, sometimes something silly. Everyone knows 6 basic recipes; Bea the Cook (from [Townsfolk](#townsfolk--npc_bp)) teaches more in her **Kitchen** for Crowns or ingredients, and the best dishes need rare ingredients like the Champion's Heart, dropped by [Champions](#champions--elite_bp), or the Storm Eel of [Fishing 2.0](#fishing-20--fishing_bp). There are 28 recipes and 8 rare ingredients.
+Cook real dishes at a cooking pot (a cauldron over a lit campfire). Each dish is a food with a gentle, long-lasting buff when you eat it, like Haste I for 5 minutes or Night Vision for 10, and a few rolling dishes roll for a surprise instead: mostly a good buff, sometimes something silly. Everyone knows 6 basic recipes; Bea the Cook (from [Townsfolk](#townsfolk--npc_bp)) teaches more in her **Kitchen** for Crowns or ingredients, and the best dishes need rare ingredients like the Champion's Heart, dropped by [Champions](#champions--elite_bp), or the Storm Eel of [Fishing 2.0](#fishing-20--fishing_bp). There are 27 recipes and 8 rare ingredients.
 
 ### How to use
 
