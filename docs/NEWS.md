@@ -6,6 +6,13 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Small fixes
+
+- Champions: a helmet you dropped near a champion no longer vanishes when the champion dies.
+- Town Projects: removing, rebuilding or moving a town build keeps what you placed around it, and chests inside its outline keep their items.
+- Titles: time outdoors in a thunderstorm now counts toward Stormchaser.
+- Rainbows never put their pot of gold inside a land claim.
+
 ## The Lantern and the Hollow
 
 The biggest update yet. Talk to the townsfolk: something is wrong with the sky.
