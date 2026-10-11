@@ -112,4 +112,19 @@ export const CONFIG = {
 
   /** Stormcaller lightning never lands within this many blocks of the world spawn (it just crackles there), so the spawn area doesn't burn. */
   avoidSpawn: 64,
+
+  /** How champions stand out from ordinary mobs. Each trait has its own color, helmet and aura (see the docs). */
+  looks: {
+    /** A small particle aura in the trait's color around every champion that has a player within 64 blocks. */
+    aura: true,
+    /** Ticks between aura puffs (20 ticks = 1 second; each puff is 2 particles per champion). Lower is busier. */
+    auraTicks: 10,
+    /**
+     * Champions that can wear armor (zombies, husks, drowned, zombie villagers, skeletons, strays and
+     * the like) wear a helmet that shows their trait. It never drops: the pack removes it when the champion dies.
+     */
+    gear: true,
+    /** A spell sound and a burst of the aura when a champion appears. */
+    spawnEffect: true,
+  },
 };

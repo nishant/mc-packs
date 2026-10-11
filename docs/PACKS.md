@@ -2291,22 +2291,36 @@ Operators can change `enabled`, `resetHourUtc`, `count`, `champions`, `minDistan
 
 ## Champions — `elite_bp`
 
-About one in 40 monsters that spawn in the overworld at night becomes a champion: a named, tougher monster with a trait, such as `Gerald the Stormcaller`, who calls lightning in thunderstorms. Champions stay until someone deals with them, and defeating one drops Relic Shards and a burst of XP. A Blood Moon makes them three times as common, and the [Bounty Board](#bounty-board--bounty_bp) sends players after named ones.
+About one in 40 monsters that spawn in the overworld at night becomes a champion: a named, tougher monster with a trait, such as `Gerald the Stormcaller`, who calls lightning in thunderstorms. A badge before the name, a helmet and a small aura in the trait's color tell them apart from ordinary mobs. Champions stay until someone deals with them, and defeating one drops Relic Shards and a burst of XP. A Blood Moon makes them three times as common, and the [Bounty Board](#bounty-board--bounty_bp) sends players after named ones.
 
 ### How to use
 
-1. Play at night: when a champion appears within 48 blocks of you, chat says `A champion stirs nearby: Gerald the Stormcaller`. Champions have a red name over their head.
-2. Fight it like any monster, but expect more: it takes less damage, has more health and has a trait (below). Friends can help: everyone who hit it in its last 30 seconds is a helper.
-3. Defeat it for 1 to 3 Relic Shards and about 20 XP orbs. Chat says `You defeated Gerald the Stormcaller! (Champions defeated: 3)`; helpers get `Gerald the Stormcaller is defeated. You helped.`
-4. Run `/realm:champions` to see the champions within 64 blocks of you, which way they are and how far (`Gerald the Stormcaller NE, 23m`), and how many you have defeated.
-5. Don't want the chat line when one appears? Disable **Champion alerts in chat** in `/realm:prefs`.
-6. **Operators:** `/realm:champions_spawn` spawns a champion 3 blocks in front of you (add a trait, such as `/realm:champions_spawn stormcaller`, or leave it out for a random one). `/realm:config` → **Champions** sets the chance, the Blood Moon multiplier, the most at once, night-only and open-sky-only, and the alert radius.
+1. Play at night: when a champion appears within 48 blocks of you, chat says `A champion stirs nearby: Gerald the Stormcaller`, and you may hear a spell being cast. Champions are easy to spot: a red name with a colored badge in front (`[/] Gerald the Stormcaller`), a helmet in the trait's color on zombies and skeletons, and a small sparkling aura.
+2. Read the badge to know what you're fighting: yellow `[/]` Stormcaller, aqua `[*]` Frostbound, dark red `[v]` Vampiric, green `[%]` Splitting, blue `[#]` Shielded (it turns gray `[x]` once the shield breaks). `/realm:champions` → **What champions look like** shows the whole list.
+3. Fight it like any monster, but expect more: it takes less damage, has more health and has a trait (below). Friends can help: everyone who hit it in its last 30 seconds is a helper.
+4. Defeat it for 1 to 3 Relic Shards and about 20 XP orbs. Chat says `You defeated Gerald the Stormcaller! (Champions defeated: 3)`; helpers get `Gerald the Stormcaller is defeated. You helped.`
+5. Run `/realm:champions` for the menu: **Champions near you** lists the champions within 64 blocks of you, which way they are and how far (`Gerald the Stormcaller NE, 23m`), and how many you have defeated (`/realm:champions_near` puts the same list in chat).
+6. Don't want the chat line when one appears? Disable **Champion alerts in chat** in `/realm:prefs`.
+7. **Operators:** the menu also has **Spawn a champion** (pick a trait and a mob, or leave them random), **Remove champions near you** and **Aura cost** (how much time the aura takes). `/realm:champions_spawn` spawns one 3 blocks in front of you without the menu (add a trait, such as `/realm:champions_spawn stormcaller`, or leave it out for a random one). `/realm:config` → **Champions** sets the chance, the Blood Moon multiplier, the most at once, night-only and open-sky-only, the alert radius, and the looks: **Champion auras**, **Aura puff interval (ticks)**, **Champion helmets** and **Champion arrival effect**.
 
 ### What players see
 
 - **Who becomes a champion:** a zombie, husk, drowned, zombie villager, skeleton, stray, spider, creeper or witch (`mobs`) that spawns on its own in the overworld, with a 2.5% chance (`chance`), at night (`nightOnly`), under the open sky (`surfaceOnly`, so caves and dark-room mob farms don't make them), while fewer than 8 champions are loaded (`maxAlive`), and never next to anything player-made (`avoidBuilds`: a scan of the 5 x 5 blocks around the spawn, from under its feet to its head, for planks, glass, slabs, stairs, trapdoors, torches and the like), so bases, villages and open-sky mob farms don't make them. No other natural champion appears within 48 blocks of one for 10 minutes (`areaSpacing`, `areaCooldownMinutes`).
 - **Blood Moon:** while the [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) pack says a Blood Moon is up, the chance is three times higher (`bloodMoonMultiplier`).
-- **The name** is a first name and the trait, in red: `§cGerald the Stormcaller`. A champion the Bounty Board asks for has the bounty's name instead (`Gerald the Unexploded`).
+- **The name** is a first name and the trait, in red, after a badge in the trait's color: `§e[/] §cGerald the Stormcaller`. A champion the Bounty Board asks for has the bounty's name instead (`Gerald the Unexploded`), with the same badge. The name tag is put back every 5 seconds, so a name tag item can't hide a champion.
+- **The looks:** every champion carries its trait's colors, so it stands out from ordinary mobs at a glance. All of it is vanilla items and particles, so no resource pack is needed:
+
+  | Trait | Badge | Helmet | Aura |
+  |---|---|---|---|
+  | Stormcaller | yellow `[/]` | gold helmet | electric sparks |
+  | Frostbound | aqua `[*]` | diamond helmet | snowflakes |
+  | Vampiric | dark red `[v]` | netherite helmet | red dust |
+  | Splitting | green `[%]` | turtle shell | green sparkles |
+  | Shielded | blue `[#]`, gray `[x]` once the shield breaks | iron helmet | white glints, crit sparks once the shield breaks |
+
+  - **Helmets** (`looks.gear`) go on the mobs that show armor: zombies, husks, drowned, zombie villagers, skeletons and strays (and bogged, wither skeletons, zombified piglins, piglins and piglin brutes if they're added to `mobs`). Spiders, creepers and witches can't show one: they have the badge and the aura. The helmet adds its usual armor (2 or 3 points; diamond and netherite also some toughness). It never drops: when a champion dies, the pack removes the helmet it dropped (one helmet of that kind, without a custom name, within 2.5 blocks), so champion gear can't be farmed. The helmet goes on once; a champion that loses it (it can swap it for a better one it picks up) carries on without it. Disabling **Champion helmets** takes the pack's helmets off loaded champions within 5 seconds.
+  - **The aura** (`looks.aura`) is 2 particles around the champion's body every 10 ticks, half a second (`looks.auraTicks`), only while a player is within 64 blocks. With 20 champions near a player it took 1.1 to 1.8 ms per puff on a test server, 0.1 to 0.2 ms a tick on average; operators can see the live numbers under **Aura cost** in the menu.
+  - **Arrival** (`looks.spawnEffect`): a spell sound (the evoker's summoning sound, a little lower) and a burst of the aura where the champion appears.
 - **Every champion** has Resistance I (`resistanceLevel`), 8 extra health from Health Boost II (`healthBoostLevel`; Absorption instead on a mob that ignores Health Boost) and Fire Resistance, so daylight doesn't burn it (`fireResistance`). Named mobs don't despawn, so a champion stays until it's defeated.
 - **The traits:**
 
@@ -2327,7 +2341,8 @@ About one in 40 monsters that spawn in the overworld at night becomes a champion
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:champions` | Everyone | Lists the champions within 64 blocks of you, with direction and distance, and how many you have defeated |
+| `/realm:champions` | Everyone | Opens the Champions menu: the champions near you, what each trait looks like and does, and for operators spawning a champion, removing the ones near you and the aura's cost |
+| `/realm:champions_near` | Everyone | Lists the champions within 64 blocks of you in chat, with their badge, direction and distance, and how many you have defeated |
 | `/realm:champions_spawn [trait]` | Operators | Spawns a champion 3 blocks in front of you (where you stand if that's blocked), with the trait you name (`stormcaller`, `frostbound`, `vampiric`, `splitting`, `shielded`) or a random one, even when `maxAlive` champions are already loaded |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -2362,8 +2377,12 @@ About one in 40 monsters that spawn in the overworld at night becomes a champion
 | `helperSeconds` | `30` | Players who hit a champion this many seconds or less before it died are helpers |
 | `announceRadius` | `48` | Players within this many blocks get a chat line when a champion appears (0 = none) |
 | `avoidSpawn` | `64` | Stormcaller lightning never lands within this many blocks of the world spawn |
+| `looks.aura` | `true` | A small particle aura in the trait's color around every champion that has a player within 64 blocks |
+| `looks.auraTicks` | `10` | Ticks between aura puffs (20 ticks = 1 second; 2 particles per champion each time). Lower is busier |
+| `looks.gear` | `true` | Champions that can wear armor wear their trait's helmet. It never drops |
+| `looks.spawnEffect` | `true` | A spell sound and a burst of the aura when a champion appears |
 
-Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `nightOnly`, `surfaceOnly` and `announceRadius` in game with `/realm:config`. Each player can switch the chat alerts off for themselves with **Champion alerts in chat** in `/realm:prefs`. The rest stays in `config.js`.
+Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `nightOnly`, `surfaceOnly`, `announceRadius`, `looks.aura`, `looks.auraTicks`, `looks.gear` and `looks.spawnEffect` in game with `/realm:config`. Each player can switch the chat alerts off for themselves with **Champion alerts in chat** in `/realm:prefs`. The rest stays in `config.js`.
 
 ### Saved data
 
@@ -2371,6 +2390,7 @@ Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `ni
 |---|---|---|
 | `elite:name` | Entity (each champion) | Its plain name, `Gerald the Stormcaller` |
 | `elite:hits` | Entity (each champion) | Hits taken, for the Shielded trait |
+| `elite:gear` | Entity (each champion) | The helmet the pack put on it (`minecraft:golden_helmet`), so it is put on once and removed again when it dies or `looks.gear` is disabled |
 | `elite:kills` | Player | Champions this player has defeated |
 | `elite:weather` | World | The overworld weather from the last change (scripts can't read the weather) |
 | `elite:moon` | World | The last state the Blood Moon pack sent (`blood`, `harvest` or `normal`) |
@@ -2381,6 +2401,7 @@ Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `ni
 
 - A champion is a vanilla mob with the tags `realm:champion` and `realm:champion_trait:<trait>` (plus any tag a pack asked for, such as `realm:bounty:<id>`), a name tag, and effects that last as long as the game allows (about 11 days), saved with the mob. Every 5 seconds, and when one loads, missing effects and names are put back.
 - **New champions:** `afterEvents.entitySpawn` with the cause `Spawned` rolls the chance; a tick later the other rules are checked (our own spawns have their tags by then, so Splitting copies and requested champions are never converted again).
+- **Looks:** the helmet goes on with `/replaceitem entity @s slot.armor.head` (scripts can't reach a mob's equipment in `@minecraft/server` 2.1.0, and a mob's own drop chances can't be changed without overriding its behavior file), and on death the dropped helmet item is removed in the same tick and again over the next 5 ticks. The aura is `Dimension.spawnParticle` with vanilla particles (`minecraft:electric_spark_particle`, `minecraft:snowflake_particle`, `minecraft:redstone_ore_dust_particle`, `minecraft:villager_happy`, `minecraft:endrod`, `minecraft:basic_crit_particle`), from one loop over the loaded champions the pack already tracks, so it doesn't search the world. Changing how the mobs themselves render (a tint or overlay) would mean overriding the vanilla client entity files of every champion mob in a resource pack, which breaks whenever Mojang updates those mobs, so the pack doesn't.
 - **Traits:** `afterEvents.entityHurt` counts hits on champions (and remembers which players hit them, and when), and applies Frostbound and Vampiric when a champion is the attacker, ranged attacks included. Stormcallers are checked once a second while the last overworld weather change was to thunder (`afterEvents.weatherChange`, saved in `elite:weather`); lightning is a `minecraft:lightning_bolt` entity.
 - **Death:** `afterEvents.entityDie` drops the shards and XP, spawns Splitting copies, and sends `realm:champion_slain` `{ player?, helpers, name, trait, mob, tag?, dim, x, y, z }` (`player` is left out when no player had a hand in it). The killer also gets a [Field Journal](#field-journal--journal_bp) entry (`realm:journal`, page `mobs`, entry `champion_<trait>`).
 - **Other packs** ask for a champion with `realm:champion_spawn` `{ dim, x, y, z, mob?, trait?, name?, tag? }`: it spawns there (the chunk must be loaded) whether `enabled` is on or not, with the given name and tag. The Blood Moon pack's `realm:moon` `{ state }` switches the multiplier.

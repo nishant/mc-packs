@@ -10,6 +10,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 
@@ -29,6 +30,7 @@ const PROP_HITS = "elite:hits";
 const PROP_KILLS = "elite:kills"; // player: champions this player has defeated
 const PROP_WEATHER = "elite:weather"; // world: overworld weather from the last change; scripts can't read it
 const PROP_MOON = "elite:moon"; // world: the last realm:moon state ("blood", "harvest" or "normal")
+const PROP_GEAR = "elite:gear"; // entity: the helmet this pack put on the champion (removed again when it dies)
 const FOREVER = 20000000; // the longest effect the API allows (ticks, about 11 days): champions keep their buffs
 const DIMS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
 
@@ -36,6 +38,26 @@ const DIMS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
 const TRAITS = ["stormcaller", "frostbound", "vampiric", "splitting", "shielded"];
 /** @type {Record<Trait, string>} */
 const TRAIT_NAMES = { stormcaller: "Stormcaller", frostbound: "Frostbound", vampiric: "Vampiric", splitting: "Splitting", shielded: "Shielded" };
+/**
+ * How each trait looks: the name tag's badge and color, the helmet (on mobs that show armor) and the
+ * aura particle. Plain vanilla particles and items, so nothing needs a resource pack.
+ * @type {Record<Trait, { color: string, badge: string, helmet: string, particle: string, helmetName: string, auraName: string }>}
+ */
+const LOOKS = {
+  stormcaller: { color: "§e", badge: "[/]", helmet: "minecraft:golden_helmet", particle: "minecraft:electric_spark_particle", helmetName: "gold helmet", auraName: "electric sparks" },
+  frostbound: { color: "§b", badge: "[*]", helmet: "minecraft:diamond_helmet", particle: "minecraft:snowflake_particle", helmetName: "diamond helmet", auraName: "snowflakes" },
+  vampiric: { color: "§4", badge: "[v]", helmet: "minecraft:netherite_helmet", particle: "minecraft:redstone_ore_dust_particle", helmetName: "netherite helmet", auraName: "red dust" },
+  splitting: { color: "§a", badge: "[%]", helmet: "minecraft:turtle_helmet", particle: "minecraft:villager_happy", helmetName: "turtle shell", auraName: "green sparkles" },
+  shielded: { color: "§9", badge: "[#]", helmet: "minecraft:iron_helmet", particle: "minecraft:endrod", helmetName: "iron helmet", auraName: "white glints" },
+};
+/** A Shielded champion whose shield broke: gray badge, crit sparks. */
+const BROKEN = { color: "§8", badge: "[x]", particle: "minecraft:basic_crit_particle" };
+/** Mobs that draw a helmet on their head. Others (spiders, creepers, witches) get the badge and aura only. */
+const GEAR_MOBS = new Set([
+  "minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:zombie_villager", "minecraft:zombie_villager_v2",
+  "minecraft:skeleton", "minecraft:stray", "minecraft:bogged", "minecraft:wither_skeleton",
+  "minecraft:zombie_pigman", "minecraft:piglin", "minecraft:piglin_brute",
+]);
 /** Mobs that don't hit (they explode), so traits that work through hits make no sense on them. */
 const NO_HIT = new Set(["minecraft:creeper"]);
 /** Mobs whose copies are babies (a spawn event the zombie family has). */
@@ -51,8 +73,11 @@ let recent = [];
 const hitters = new Map();
 /** Tick of each Stormcaller's next strike. @type {Map<string, number>} */
 const nextStrike = new Map();
-/** What we know of each loaded champion, for a death we can no longer read. @type {Map<string, { name: string, trait: Trait, mob: string, tag?: string, dim: string, at: Vector3 }>} */
+/** @typedef {{ name: string, trait: Trait, mob: string, tag?: string, dim: string, at: Vector3, gear?: string }} Info */
+/** What we know of each loaded champion, for a death we can no longer read. @type {Map<string, Info>} */
 const known = new Map();
+/** Every loaded champion, for the aura (rebuilt every 5 seconds). @type {Map<string, Entity>} */
+const live = new Map();
 
 const rand = (/** @type {number} */ a, /** @type {number} */ b) => a + Math.random() * (b - a);
 const randInt = (/** @type {number} */ a, /** @type {number} */ b) => Math.floor(rand(a, b + 1));
@@ -88,7 +113,7 @@ function traitOf(e) {
 function nameOf(e) {
   const saved = e.getDynamicProperty(PROP_NAME);
   if (typeof saved === "string" && saved) return saved;
-  return e.nameTag.replace(/§./g, "") || "A champion";
+  return e.nameTag.replace(/§./g, "").replace(/^\[.\] /, "") || "A champion";
 }
 
 /** The extra tag another pack gave it (realm:bounty:<id>), if any. @param {Entity} e */
@@ -205,6 +230,130 @@ function announce(e, name) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Looks: badge, helmet, aura
+// ---------------------------------------------------------------------------
+
+/** Is a Shielded champion's shield still up? @param {Entity} e */
+const shieldUp = (e) => Number(e.getDynamicProperty(PROP_HITS) ?? 0) < CONFIG.traits.shielded.hits;
+
+/** The name tag: the trait's badge in its color, then the name in red. @param {Entity} e @param {Trait} trait @param {string} name */
+function tagFor(e, trait, name) {
+  const look = trait === "shielded" && !shieldUp(e) ? BROKEN : LOOKS[trait];
+  return `${look.color}${look.badge} §c${name}`;
+}
+
+/**
+ * Puts the trait's helmet on (or takes ours off when `looks.gear` is off). Only once: a champion
+ * that loses the helmet later keeps going without it. `/replaceitem` because scripts can't reach a
+ * mob's equipment in this API version.
+ * @param {Entity} e @param {Trait} trait
+ */
+function dress(e, trait) {
+  const want = get("looks.gear") === true && GEAR_MOBS.has(e.typeId);
+  const have = e.getDynamicProperty(PROP_GEAR);
+  if (want && typeof have !== "string") {
+    const helmet = LOOKS[trait].helmet;
+    if (e.runCommand(`replaceitem entity @s slot.armor.head 0 ${helmet}`).successCount) e.setDynamicProperty(PROP_GEAR, helmet);
+  } else if (!want && typeof have === "string") {
+    if (e.runCommand(`testfor @s[hasitem={item=${have},location=slot.armor.head}]`).successCount) e.runCommand("replaceitem entity @s slot.armor.head 0 air");
+    e.setDynamicProperty(PROP_GEAR, undefined);
+  }
+}
+
+/**
+ * Removes the helmet a champion dropped when it died, so champion gear can't be farmed: one item of
+ * that type, without a custom name, within `radius` blocks, now and over the next ticks.
+ * @param {string} dimId @param {Vector3} at @param {string} helmet @param {number} radius
+ */
+function purgeGear(dimId, at, helmet, radius) {
+  let done = false;
+  const sweep = () => {
+    if (done) return;
+    try {
+      for (const item of world.getDimension(dimId).getEntities({ type: "minecraft:item", location: at, maxDistance: radius })) {
+        const stack = item.getComponent("minecraft:item")?.itemStack;
+        if (stack?.typeId !== helmet || stack.nameTag) continue;
+        item.remove();
+        done = true;
+        return;
+      }
+    } catch {
+      // unloaded: nothing to pick up there
+    }
+  };
+  sweep();
+  system.run(sweep);
+  system.runTimeout(sweep, 2);
+  system.runTimeout(sweep, 5);
+}
+
+/** A few particles around a mob's body. @param {Entity} e @param {string} particle @param {number} n */
+function puff(e, particle, n) {
+  const at = e.location;
+  const height = Math.max(0.5, e.getHeadLocation().y - at.y);
+  for (let i = 0; i < n; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = rand(0.35, 0.7);
+    e.dimension.spawnParticle(particle, { x: at.x + Math.cos(angle) * r, y: at.y + rand(0.2, height + 0.2), z: at.z + Math.sin(angle) * r });
+  }
+}
+
+const AURA_RANGE_SQ = 64 * 64;
+/** Time spent in the aura, shown to operators in the menu: [total ms, runs, champion puffs]. */
+const auraCost = [0, 0, 0];
+
+/** One aura puff for every loaded champion with a player within 64 blocks. */
+function aura() {
+  const started = Date.now();
+  const players = world.getAllPlayers().map((p) => ({ dim: p.dimension.id, at: p.location }));
+  if (!players.length) return;
+  let n = 0;
+  for (const [id, e] of live) {
+    try {
+      if (!e.isValid) {
+        live.delete(id);
+        continue;
+      }
+      const at = e.location;
+      const dim = e.dimension.id;
+      if (!players.some((p) => p.dim === dim && (p.at.x - at.x) ** 2 + (p.at.y - at.y) ** 2 + (p.at.z - at.z) ** 2 < AURA_RANGE_SQ)) continue;
+      const trait = known.get(id)?.trait ?? traitOf(e);
+      if (!trait) continue;
+      puff(e, trait === "shielded" && !shieldUp(e) ? BROKEN.particle : LOOKS[trait].particle, 2);
+      n++;
+    } catch {
+      // unloaded this tick: skip it
+    }
+  }
+  auraCost[0] += Date.now() - started;
+  auraCost[1]++;
+  auraCost[2] += n;
+}
+
+function auraLoop() {
+  let wait = CONFIG.looks.auraTicks;
+  try {
+    wait = Math.max(2, Math.round(Number(get("looks.auraTicks")) || CONFIG.looks.auraTicks));
+    if (get("looks.aura") === true && live.size) aura();
+  } catch (e) {
+    console.warn(`[elite] aura: ${e}`);
+  }
+  system.runTimeout(auraLoop, wait);
+}
+system.runTimeout(auraLoop, 40);
+
+/** The arrival: a spell sound and a burst of the aura. @param {Entity} e @param {Trait} trait */
+function arrival(e, trait) {
+  if (get("looks.spawnEffect") !== true) return;
+  try {
+    e.dimension.playSound("mob.evocation_illager.prepare_summon", e.location, { volume: 1, pitch: 0.8 });
+    puff(e, LOOKS[trait].particle, 14);
+  } catch {
+    // a sound or particle that doesn't play is fine
+  }
+}
+
 /**
  * Turns a mob into a champion.
  * @param {Entity} e @param {{ trait?: Trait, name?: string, tag?: string }} [opts]
@@ -219,10 +368,18 @@ function makeChampion(e, opts = {}) {
   e.setDynamicProperty(PROP_NAME, name);
   e.setDynamicProperty(PROP_HITS, 0);
   // A named mob doesn't despawn, so champions stay until someone deals with them.
-  e.nameTag = `§c${name}`;
+  e.nameTag = tagFor(e, trait, name);
   applyEffects(e, trait, true);
-  known.set(e.id, { name, trait, mob: e.typeId, tag: opts.tag, dim: e.dimension.id, at: e.location });
+  try {
+    dress(e, trait);
+  } catch (err) {
+    console.warn(`[elite] gear: ${err}`);
+  }
+  const gear = e.getDynamicProperty(PROP_GEAR);
+  known.set(e.id, { name, trait, mob: e.typeId, tag: opts.tag, dim: e.dimension.id, at: e.location, gear: typeof gear === "string" ? gear : undefined });
+  live.set(e.id, e);
   loaded++;
+  arrival(e, trait);
   announce(e, name);
   return name;
 }
@@ -309,6 +466,7 @@ function championHurt(champ, attacker) {
     // a sound that doesn't play is fine
   }
   const name = nameOf(champ);
+  champ.nameTag = tagFor(champ, "shielded", name); // the badge turns gray
   for (const p of champ.dimension.getPlayers({ location: champ.location, maxDistance: 24 })) p.sendMessage(`§bThe shield of ${name} breaks!`);
 }
 
@@ -482,12 +640,16 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   } catch {
     return;
   }
-  /** @type {{ name: string, trait: Trait, mob: string, tag?: string, dim: string, at: Vector3 } | undefined} */
+  /** @type {Info | undefined} */
   let info;
+  let fresh = false; // read from the entity now (its spot is exact), not from the last upkeep
   try {
     if (!deadEntity.isValid) info = known.get(id);
     else if (deadEntity.hasTag(CHAMP)) {
+      const gear = deadEntity.getDynamicProperty(PROP_GEAR);
+      fresh = true;
       info = {
+        gear: typeof gear === "string" ? gear : undefined,
         name: nameOf(deadEntity),
         trait: traitOf(deadEntity) ?? "shielded",
         mob: deadEntity.typeId,
@@ -500,6 +662,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     info = known.get(id);
   }
   if (!info) return;
+  if (info.gear) purgeGear(info.dim, info.at, info.gear, fresh ? 2.5 : 6);
   try {
     slain(info, damageSource.damagingEntity, hitters.get(id));
   } catch (e) {
@@ -508,11 +671,12 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   hitters.delete(id);
   nextStrike.delete(id);
   known.delete(id);
+  live.delete(id);
   loaded = Math.max(0, loaded - 1);
 });
 
 /**
- * @param {{ name: string, trait: Trait, mob: string, tag?: string, dim: string, at: Vector3 }} info
+ * @param {Info} info
  * @param {Entity | undefined} killerEntity @param {Map<string, number> | undefined} hits
  */
 function slain(info, killerEntity, hits) {
@@ -571,14 +735,26 @@ function slain(info, killerEntity, hits) {
 // Upkeep: count, re-buff after a load, forget old data
 // ---------------------------------------------------------------------------
 
-/** Checks one loaded champion: name and buffs back if a reload lost them. @param {Entity} e */
+/**
+ * Checks one loaded champion: name tag, buffs and helmet back if a reload (or a name tag item, or an
+ * older version of this pack) changed them.
+ * @param {Entity} e
+ */
 function upkeep(e) {
   const trait = traitOf(e);
   if (!trait) return;
   const name = nameOf(e);
-  if (!e.nameTag) e.nameTag = `§c${name}`;
+  const tag = tagFor(e, trait, name);
+  if (e.nameTag !== tag) e.nameTag = tag;
   applyEffects(e, trait, false);
-  known.set(e.id, { name, trait, mob: e.typeId, tag: extraTagOf(e), dim: e.dimension.id, at: e.location });
+  try {
+    dress(e, trait);
+  } catch (err) {
+    console.warn(`[elite] gear: ${err}`);
+  }
+  const gear = e.getDynamicProperty(PROP_GEAR);
+  known.set(e.id, { name, trait, mob: e.typeId, tag: extraTagOf(e), dim: e.dimension.id, at: e.location, gear: typeof gear === "string" ? gear : undefined });
+  live.set(e.id, e);
 }
 
 function refresh() {
@@ -602,6 +778,7 @@ function refresh() {
   loaded = n;
   // Forget champions that unloaded (they come back through entityLoad / the next refresh).
   for (const id of known.keys()) if (!seen.has(id)) known.delete(id);
+  for (const id of live.keys()) if (!seen.has(id)) live.delete(id);
   for (const id of nextStrike.keys()) if (!seen.has(id)) nextStrike.delete(id);
   const now = Date.now();
   for (const [id, m] of hitters) {
@@ -675,26 +852,178 @@ system.afterEvents.scriptEventReceive.subscribe(
 // Commands
 // ---------------------------------------------------------------------------
 
-/** @param {Player} player */
-function listNear(player) {
+/** The champions within 64 blocks of a player, nearest first, as text lines. @param {Player} player */
+function nearLines(player) {
   const at = player.location;
   const near = player.dimension
     .getEntities({ tags: [CHAMP], location: at, maxDistance: 64 })
-    .map((e) => ({ name: nameOf(e), dist: Math.round(Math.hypot(e.location.x - at.x, e.location.z - at.z)), dir: direction(at, e.location) }))
+    .map((e) => {
+      const trait = traitOf(e);
+      const badge = trait ? `${trait === "shielded" && !shieldUp(e) ? BROKEN.color + BROKEN.badge : LOOKS[trait].color + LOOKS[trait].badge} ` : "";
+      return { name: nameOf(e), badge, dist: Math.round(Math.hypot(e.location.x - at.x, e.location.z - at.z)), dir: direction(at, e.location) };
+    })
     .sort((a, b) => a.dist - b.dist);
   const kills = Number(player.getDynamicProperty(PROP_KILLS) ?? 0);
   const lines = [near.length ? `§c${near.length} champion${near.length === 1 ? "" : "s"} within 64 blocks:` : "§7No champions within 64 blocks."];
-  for (const c of near.slice(0, 8)) lines.push(`§f- ${c.name} §7${c.dir}, ${c.dist}m`);
+  for (const c of near.slice(0, 8)) lines.push(`§f- ${c.badge}§f${c.name} §7${c.dir}, ${c.dist}m`);
   if (near.length > 8) lines.push(`§7...and ${near.length - 8} more.`);
   lines.push(`§7Champions you have defeated: §f${kills}`);
   if (bloodMoon && get("enabled") === true) lines.push("§4Blood Moon: champions are more common tonight.");
-  player.sendMessage(lines.join("\n"));
+  return lines;
 }
 
-/** @param {Player} player @param {string | undefined} trait */
-function spawnAt(player, trait) {
+/** @param {Player} player */
+const listNear = (player) => player.sendMessage(nearLines(player).join("\n"));
+
+/** What each trait looks like and does, for the menu. */
+function guideText() {
+  const what = {
+    stormcaller: "Calls lightning near players in thunderstorms.",
+    frostbound: "Its hits slow you down.",
+    vampiric: "Heals from the damage it deals. Fast.",
+    splitting: "Leaves copies behind when it dies. Fast.",
+    shielded: `Shrugs off most damage until it has been hit ${CONFIG.traits.shielded.hits} times. Then its badge turns ${BROKEN.color}${BROKEN.badge}§r and it gives off crit sparks.`,
+  };
+  const lines = [
+    "Champions are ordinary monsters made tougher, with a red name. The badge before the name, the helmet and the aura show the trait:",
+    "",
+  ];
+  for (const t of TRAITS) {
+    const look = LOOKS[t];
+    lines.push(`${look.color}${look.badge} ${TRAIT_NAMES[t]}§r: ${look.helmetName}, ${look.auraName}. §7${what[t]}§r`);
+  }
+  lines.push("", "§7Spiders, creepers and witches can't show a helmet: look for the badge and the aura. Champion helmets never drop.");
+  return lines.join("\n");
+}
+
+/**
+ * Shows a form, waiting while the player still has chat open.
+ * @template {{ canceled: boolean, cancelationReason?: string }} R
+ * @param {Player} player @param {{ show(p: Player): Promise<R> }} form @returns {Promise<R | undefined>}
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
+      await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+      continue;
+    }
+    return res;
+  }
+  return undefined;
+}
+
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** `/realm:champions`: the menu. @param {Player} player */
+async function menu(player) {
+  const op = isOp(player);
+  const kills = Number(player.getDynamicProperty(PROP_KILLS) ?? 0);
+  const form = new ActionFormData()
+    .title("Champions")
+    .body(`Champions you have defeated: ${kills}${bloodMoon && get("enabled") === true ? "\n§4Blood Moon: champions are more common tonight." : ""}`)
+    .button("Champions near you")
+    .button("What champions look like");
+  /** @type {(() => Promise<void>)[]} */
+  const actions = [() => near(player), () => guide(player)];
+  if (op) {
+    form.button("Spawn a champion");
+    actions.push(() => spawnForm(player));
+    form.button("Remove champions near you");
+    actions.push(() => removeForm(player));
+    form.button("Aura cost");
+    actions.push(() => costForm(player));
+  }
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined) return;
+  await actions[res.selection]?.();
+}
+
+/** A page with a Back button to the menu. @param {Player} player @param {string} title @param {string} body */
+async function page(player, title, body) {
+  const res = await show(player, new ActionFormData().title(title).body(body).button("Back"));
+  if (res && !res.canceled && res.selection === 0) await menu(player);
+}
+
+/** @param {Player} player */
+const near = (player) => page(player, "Champions near you", nearLines(player).join("\n"));
+/** @param {Player} player */
+const guide = (player) => page(player, "What champions look like", guideText());
+
+/** @param {Player} player */
+function costForm(player) {
+  const [ms, runs, puffs] = auraCost;
+  const body = [
+    `Champions loaded: ${loaded} (${live.size} tracked for the aura)`,
+    `Aura: ${get("looks.aura") === true ? "Enabled" : "Disabled"}, a puff every ${get("looks.auraTicks")} ticks`,
+    runs ? `Since the world started: ${runs} aura runs, ${puffs} champion puffs, ${ms} ms in all (${(ms / runs).toFixed(3)} ms a run)` : "No aura runs yet (they only run while a champion has a player within 64 blocks).",
+  ].join("\n");
+  return page(player, "Aura cost", body);
+}
+
+/** @param {Player} player */
+async function spawnForm(player) {
+  const mobs = CONFIG.mobs.filter((m) => m !== "minecraft:drowned");
+  const res = await show(
+    player,
+    new ModalFormData()
+      .title("Spawn a champion")
+      .dropdown("Trait", ["Random", ...TRAITS.map((t) => TRAIT_NAMES[t])], { defaultValueIndex: 0 })
+      .dropdown("Mob", ["Random (one that suits the trait)", ...mobs.map((m) => m.replace(/^minecraft:/, "").replace(/_v2$/, "").replace(/_/g, " "))], { defaultValueIndex: 0 }),
+  );
+  if (!res || res.canceled || !res.formValues) return;
+  const [ti, mi] = /** @type {number[]} */ (res.formValues);
+  const trait = ti > 0 ? TRAITS[ti - 1] : undefined;
+  let mob = mi > 0 ? mobs[mi - 1] : undefined;
+  if (mob && trait && !traitsFor(mob).includes(trait)) {
+    player.sendMessage(`§7A ${mob.replace(/^minecraft:/, "")} can't be ${TRAIT_NAMES[trait]}: picked a mob that can.`);
+    mob = undefined;
+  }
+  try {
+    spawnAt(player, trait, mob);
+  } catch (e) {
+    player.sendMessage(`§cCouldn't spawn a champion here: ${e}`);
+  }
+}
+
+/** @param {Player} player */
+async function removeForm(player) {
+  const list = player.dimension.getEntities({ tags: [CHAMP], location: player.location, maxDistance: 64 });
+  if (!list.length) return page(player, "Remove champions", "No champions within 64 blocks.");
+  const res = await show(
+    player,
+    new MessageFormData()
+      .title("Remove champions")
+      .body(`Remove the ${list.length} champion${list.length === 1 ? "" : "s"} within 64 blocks? They vanish without drops, and bounties for them stay open.`)
+      .button1("Remove")
+      .button2("Cancel"),
+  );
+  if (!res || res.canceled || res.selection !== 0) return;
+  let n = 0;
+  for (const e of list) {
+    try {
+      if (!e.isValid) continue;
+      const id = e.id;
+      e.remove();
+      known.delete(id);
+      live.delete(id);
+      hitters.delete(id);
+      nextStrike.delete(id);
+      n++;
+    } catch {
+      // already gone
+    }
+  }
+  loaded = Math.max(0, loaded - n);
+  player.sendMessage(`§7Removed ${n} champion${n === 1 ? "" : "s"}.`);
+}
+
+/** @param {Player} player @param {string | undefined} trait @param {string} [mobId] */
+function spawnAt(player, trait, mobId) {
   const t = trait && isTrait(trait) ? trait : undefined;
-  const mob = mobFor(t);
+  const mob = mobId ?? mobFor(t);
   const view = player.getViewDirection();
   const len = Math.hypot(view.x, view.z) || 1;
   const at = { x: player.location.x + (view.x / len) * 3, y: player.location.y, z: player.location.z + (view.z / len) * 3 };
@@ -712,28 +1041,45 @@ function spawnAt(player, trait) {
   player.sendMessage(`§7Spawned §c${name}§7.`);
 }
 
+/**
+ * Runs `fn` for the player who ran a command, after the command (forms and world changes can't run inside it).
+ * @param {import("@minecraft/server").CustomCommandOrigin} origin @param {(p: Player) => unknown} fn
+ * @returns {import("@minecraft/server").CustomCommandResult}
+ */
+function forPlayer(origin, fn) {
+  const player = origin.initiator ?? origin.sourceEntity;
+  if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+  system.run(async () => {
+    try {
+      await fn(player);
+    } catch (e) {
+      console.warn(`[elite] ${e}`);
+    }
+  });
+  return { status: CustomCommandStatus.Success };
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerEnum("realm:champion_trait", [...TRAITS]);
 
   customCommandRegistry.registerCommand(
     {
       name: "realm:champions",
-      description: "Champions: the champions within 64 blocks of you, which way they are, and how many you have defeated",
+      description: "Champions: a menu with the champions near you, what each trait looks like, and (operators) spawning and removing them",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    (origin) => {
-      const player = origin.initiator ?? origin.sourceEntity;
-      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      system.run(() => {
-        try {
-          listNear(player);
-        } catch (e) {
-          console.warn(`[elite] ${e}`);
-        }
-      });
-      return { status: CustomCommandStatus.Success };
+    (origin) => forPlayer(origin, menu),
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:champions_near",
+      description: "Champions: the champions within 64 blocks of you, which way they are, and how many you have defeated, in chat",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
     },
+    (origin) => forPlayer(origin, listNear),
   );
 
   customCommandRegistry.registerCommand(
@@ -744,18 +1090,14 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       cheatsRequired: false,
       optionalParameters: [{ name: "realm:champion_trait", type: CustomCommandParamType.Enum }],
     },
-    (origin, /** @type {string | undefined} */ trait) => {
-      const player = origin.initiator ?? origin.sourceEntity;
-      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      system.run(() => {
+    (origin, /** @type {string | undefined} */ trait) =>
+      forPlayer(origin, (player) => {
         try {
           spawnAt(player, trait);
         } catch (e) {
           player.sendMessage(`§cCouldn't spawn a champion here: ${e}`);
         }
-      });
-      return { status: CustomCommandStatus.Success };
-    },
+      }),
   );
 });
 
