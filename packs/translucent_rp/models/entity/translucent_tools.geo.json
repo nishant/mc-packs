@@ -5,29 +5,69 @@
       "description": {
         "identifier": "geometry.realm_translucent.tool",
         "texture_width": 16,
-        "texture_height": 16
+        "texture_height": 16,
+        "visible_bounds_width": 4,
+        "visible_bounds_height": 4.5,
+        "visible_bounds_offset": [
+          0,
+          0.75,
+          0
+        ]
       },
       "bones": [
         {
-          "name": "rightitem",
+          "name": "realm_translucent_tool",
+          "binding": "q.item_slot_to_bone_name(c.item_slot)",
+          "pivot": [
+            0,
+            8,
+            0
+          ]
+        },
+        {
+          "name": "realm_translucent_tool_x",
+          "parent": "realm_translucent_tool",
+          "pivot": [
+            0,
+            8,
+            0
+          ]
+        },
+        {
+          "name": "realm_translucent_tool_y",
+          "parent": "realm_translucent_tool_x",
+          "pivot": [
+            0,
+            8,
+            0
+          ]
+        },
+        {
+          "name": "realm_translucent_tool_z",
+          "parent": "realm_translucent_tool_y",
+          "pivot": [
+            0,
+            8,
+            0
+          ],
           "texture_meshes": [
             {
-              "local_pivot": [
-                6,
-                0,
-                6
-              ],
+              "texture": "shape",
               "position": [
-                2,
-                1,
-                -2
+                0,
+                8,
+                0
               ],
               "rotation": [
+                90,
                 0,
-                -135,
-                90
+                -180
               ],
-              "texture": "shape"
+              "local_pivot": [
+                8,
+                0.5,
+                8
+              ]
             }
           ]
         }

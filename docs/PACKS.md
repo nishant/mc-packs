@@ -2814,22 +2814,27 @@ Every fish you catch with a rod becomes one of 40 species, from the common Atlan
 
 1. Fish with a rod as usual. When a cod, salmon, tropical fish or pufferfish comes up, it's a species: chat says `You caught a Storm Eel (82 cm)!`, with `New realm record!`, `Personal best!` or `New species for your log (12/40).` when it is one.
 2. Fish in different places and weathers to find more: some only bite in thunderstorms, at night, at dawn, in caves, in frozen water, in swamps or in the jungle.
-3. Run `/realm:fishing` to see your fish log: how many species you've caught out of 40, how many of each and your biggest. Species you haven't caught yet show as `???` with a hint, like `??? (Rare: thunderstorms)`.
-4. Run `/realm:fishing_top` to see the realm's biggest fish of each species and who caught them.
-5. Join the weekly tournament (Sundays at 18:00 UTC, for an hour): the biggest fish for its kind wins. Chat tells everyone 10 minutes before and when it starts.
-6. Sell your fish: tap Old Tobin (or any NPC with the `fisher` role) and pick **Sell fish**. **Fish records** there shows the realm's records.
-7. **Operators:** `/realm:fishing_tournament` starts a tournament now. `/realm:config` → **Fishing 2.0** switches the species and the tournament, sets the tournament's day, hour and length, and whether legendary catches are announced. The species themselves are the `species` list in `config.js`.
+3. Run `/realm:fishing` for the fishing menu: **Fish log**, **Realm records**, **Make my fish stackable** and **Fishing settings** (operators also get **Start a tournament now**).
+4. **Fish log** (or `/realm:fishing_log`) shows how many species you've caught out of 40, how many of each and your biggest. Species you haven't caught yet show as `???` with a hint, like `??? (Rare: thunderstorms)`. **Realm records** (or `/realm:fishing_top`) shows the realm's biggest fish of each species and who caught them.
+5. Measured fish don't stack. To stack them, pick **Make my fish stackable** (or run `/realm:fishing_stack`): after you confirm, every measured raw fish in your inventory becomes a plain cod, salmon, tropical fish or pufferfish. Your log and the records keep them.
+6. In **Fishing settings** (or `/realm:prefs` → **Fishing 2.0**), disable **Measure my catches** to always get plain fish that stack, or enable **Only measure notable catches** to get a measured fish only for a new species, a personal best or a realm record. Either way, every catch still counts in your log, the records and the tournament.
+7. Join the weekly tournament (Sundays at 18:00 UTC, for an hour): the biggest fish for its kind wins. Chat tells everyone 10 minutes before and when it starts.
+8. Sell your fish: tap Old Tobin (or any NPC with the `fisher` role) and pick **Sell fish**. **Fish records** there shows the realm's records. Fishers only buy measured fish.
+9. **Operators:** **Start a tournament now** in the menu, or `/realm:fishing_tournament`, starts one. `/realm:config` → **Fishing 2.0** switches the species and the tournament, sets the tournament's day, hour and length, and whether legendary catches are announced. The species themselves are the `species` list in `config.js`.
 
 ### What players see
 
 - **A catch:** the fish that flies out of the water is named after its species in its rarity's color (white Common, green Uncommon, blue Rare, purple Epic, gold Legendary), with three lore lines: its size (`82 cm`), `Caught by Alex` and the date (`Oct 10, 2026`, UTC). Only cod, salmon, tropical fish and pufferfish change; junk and treasure stay as they are. A cod becomes one of the cod species, a salmon one of the salmon species, and so on. Fish with different sizes or catchers don't stack.
+- **Plain fish instead:** with **Measure my catches** disabled, the fish you reel in stays a plain vanilla fish that stacks; with **Only measure notable catches** enabled, only a new species, a personal best or a realm record comes measured. Chat still says what you caught (`You caught an Atlantic Cod (54 cm)!`), and the catch still goes in your log, the records, the tournament, the Field Journal and Skills.
+- **Make my fish stackable** (menu, or `/realm:fishing_stack`): asks `Turn your 5 measured raw fish into plain cod, salmon, tropical fish and pufferfish that stack?`, then replaces every measured raw cod, salmon, tropical fish and pufferfish in your inventory with plain vanilla ones, merged with the plain ones you already carry into as few stacks as possible, and says `5 fish are plain now and stack.` Cooked fish, renamed fish and anything this pack didn't measure are left alone. The plain fish are exactly vanilla (no name, no lore), so they stack with any other and the [Crowns](#crowns--crowns_bp) market buys them; a fisher doesn't.
 - **Which species:** among the species of that fish that can bite right there and then, rarer ones bite less often: Common 60, Uncommon 25, Rare 10, Epic 4 and Legendary 1 (`rarities`). Sizes lean small, so fish near the top of their range are rare.
 - **Conditions** (a species with several must have all of them):
   - **Weather:** clear, rain or thunderstorms, in the Overworld (elsewhere counts as clear). The Rainbow Trout only bites in the first 10 minutes after rain stops.
   - **Time:** dawn (game time 23000 to 1000), day, dusk (11500 to 13500) and night.
   - **Place**, guessed from the blocks around the bobber, since the game doesn't tell packs the biome: **ocean** when at least 70% of the water level around it, up to 16 blocks away, is water (`oceanShare`), otherwise **rivers and lakes**; **frozen water** with ice or snow nearby; **swamps** with lily pads, mangrove roots or mud; **jungle** with jungle trees or bamboo nearby; **caves** when the water is below height 50 (`caveBelowY`) with blocks over it.
 - **Chat:** `You caught a Storm Eel (82 cm)!`, plus `New realm record!` (the biggest of that species yet), `Personal best!` or `New species for your log (12/40).`, and `(Tournament: 2nd)` during a tournament. A level-up sound plays for a record or a new species. When someone catches a legendary fish, everyone else sees `Alex caught a legendary Old Whiskers (164 cm)!` (`announceLegendary`).
-- **The fish log** (`/realm:fishing`): `Species caught: 12/40   Fish caught: 57`, the tournament line, then every species by rarity: caught ones as `Storm Eel x3, best 82 cm`, the others as `???` with their rarity and conditions. A button opens the realm records.
+- **The menu** (`/realm:fishing`): the tournament line, then **Fish log**, **Realm records**, **Make my fish stackable** (with how many measured raw fish you carry), **Fishing settings** (with your **Measure my catches** setting) and, for operators, **Start a tournament now**.
+- **The fish log** (**Fish log**, or `/realm:fishing_log`): `Species caught: 12/40   Fish caught: 57`, the tournament line, then every species by rarity: caught ones as `Storm Eel x3, best 82 cm`, the others as `???` with their rarity and conditions. A button opens the realm records.
 - **Realm records** (`/realm:fishing_top`, or **Fish records** at a fisher): each species' biggest fish, `Storm Eel: 160 cm by Alex, Oct 10, 2026`, and the tournament line: `Tournament on! Ends in 23m. Leader: ...` or `Next tournament: Sunday at 18:00 UTC (in 2d 5h).`
 - **The tournament:** every week on `tournamentDay` (0 = Sunday) at `tournamentHourUtc` (18) UTC for `tournamentMinutes` (60). Chat says `A fishing tournament starts in 10m! Grab a rod.` 10 minutes before (`tournamentWarnMinutes`) and `The fishing tournament has begun! ... Prizes: 50, 30, 15 Crowns.` at the start. Each player's best fish counts, measured against its species' biggest size (an 82 cm Storm Eel is 46% of 180 cm), so a big Clownfish can beat a small Storm Eel. At the end chat lists the top three with their fish, and they get 50, 30 and 15 [Crowns](#crowns--crowns_bp) (`tournamentPrizes`): `+50 Crowns (Fishing tournament: 1st place)`. A winner who left before the end is paid the next time they join. If the realm was down when a tournament was due, it starts when the realm comes back, as long as it's still within the tournament's hour.
 - **Selling** (tap an NPC with the `fisher` role, `npcRole`, and pick **Sell fish**): the menu lists the fish you carry with what each pays, and **Sell all**. A fish pays its rarity's price (Common 2, Uncommon 5, Rare 12, Epic 30, Legendary 80 Crowns) x (0.5 + its size / the species' biggest size), so a record-sized fish pays one and a half times the price. Chat says `+25 Crowns (Sold 3 fish)`. Only fish this pack named are bought: a renamed vanilla fish has no size lore. The [Crowns](#crowns--crowns_bp) market doesn't buy named fish.
@@ -2884,7 +2889,9 @@ The species:
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:fishing` | Everyone | Your fish log: species caught out of 40, how many of each and your biggest, hints for the rest, and the tournament |
+| `/realm:fishing` | Everyone | The fishing menu: fish log, realm records, make your fish stackable, your fishing settings, and (operators) start a tournament |
+| `/realm:fishing_log` | Everyone | Your fish log: species caught out of 40, how many of each and your biggest, hints for the rest, and the tournament |
+| `/realm:fishing_stack` | Everyone | Turns every measured raw fish in your inventory into plain fish that stack (asks first) |
 | `/realm:fishing_top` | Everyone | The realm's biggest fish of each species, who caught it and when, and the tournament |
 | `/realm:fishing_tournament` | Operators | Starts a tournament now, for the usual length (default 60 minutes, `tournamentMinutes`) |
 
@@ -2906,7 +2913,14 @@ The species:
 | `tournamentPrizes` | `[50, 30, 15]` | Crowns for 1st, 2nd and 3rd place; add or remove numbers for more or fewer places |
 | `species` | 40 species (above) | `{ id, name, item, rarity, min, max, weather?, time?, places?, afterRain? }`: the fish `item` it replaces, its size range in cm and its conditions: `weather` (`Clear`, `Rain`, `Thunder`), `time` (`day`, `night`, `dawn`, `dusk`), `places` (`ocean`, `river`, `frozen`, `swamp`, `jungle`, `cave`) and `afterRain` (only this many minutes after rain stops). Keep each `id` when editing: logs and records are saved by it. Keep one species without conditions for each fish item, or some catches stay vanilla |
 
-Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tournamentDay`, `tournamentHourUtc` and `tournamentMinutes` in game with `/realm:config` (**Fishing 2.0**). The rest stays in `config.js`. There are no player preferences.
+Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tournamentDay`, `tournamentHourUtc` and `tournamentMinutes` in game with `/realm:config` (**Fishing 2.0**). The rest stays in `config.js`.
+
+Player preferences, in `/realm:prefs` (**Fishing 2.0**) or the menu's **Fishing settings**:
+
+| Preference | Default | |
+|---|---|---|
+| **Measure my catches** | Enabled | Your fish carry their species, size and your name. Disabled: plain fish that stack (the catch still counts) |
+| **Only measure notable catches** | Disabled | A catch that isn't a new species, a personal best or a realm record comes as a plain fish that stacks |
 
 ### Saved data
 
@@ -2920,12 +2934,14 @@ Operators can change `enabled`, `announceLegendary`, `tournamentEnabled`, `tourn
 | `fishing:weather` | World | The Overworld weather at the last change (`Clear`, `Rain` or `Thunder`): the stable Script API can't read the current weather |
 | `fishing:rainEnd` | World | When rain last stopped (ms), for the Rainbow Trout |
 | `fishing:cfg` | World | Settings changed in `/realm:config` |
+| `fishing:pref` | Player | JSON `{ measure?, notableOnly? }`: the player's own choices, only where they differ from the default |
 | `crowns` | Scoreboard | Prizes and fish sales are added to the shared Crowns balance |
 
 ### How it works
 
-- **Catches:** there is no "caught a fish" event in the stable API, so the pack recognizes one much as [Daily Quests](#daily-quests--quests_bp) does: a fishing hook belongs to the player who cast it (its projectile owner, else the player nearest to it when it appears), and its place is followed every tick. A single unnamed cod, salmon, tropical fish or pufferfish that appears within 2 blocks of a hook, as that hook is reeled in (the hook is gone then or within 3 ticks), is that player's catch, once per hook. A fish dropped from an inventory (it appears within 1 block of a player's head), a stack of several, or a fish that turns up next to a hook still in the water is never a catch, so dropping fish next to your bobber doesn't turn them into species. Then (a tick later, so other packs like Daily Quests see the vanilla fish first) the pack spawns the named fish at the same spot with the same velocity, so it still flies to the player, and removes the vanilla one. If the player picks the vanilla fish up first, it simply stays vanilla.
-- **Place:** one scan per catch, about 100 block reads: the water surface at the bobber, 48 samples at the water level 4 to 16 blocks around it (and the blocks above the nearer ones, for lily pads and snow), and the highest block of 12 columns 6 and 12 blocks away for trees and snow. Weather comes from `afterEvents.weatherChange`, saved so it survives a restart. Time of day is `world.getTimeOfDay()`.
+- **Catches:** there is no "caught a fish" event in the stable API, so the pack recognizes one much as [Daily Quests](#daily-quests--quests_bp) does: a fishing hook belongs to the player who cast it (its projectile owner, else the player nearest to it when it appears), and its place is followed every tick. A single unnamed cod, salmon, tropical fish or pufferfish that appears within 2 blocks of a hook, as that hook is reeled in (the hook is gone then or within 3 ticks), is that player's catch, once per hook. A fish dropped from an inventory (it appears within 1 block of a player's head), a stack of several, or a fish that turns up next to a hook still in the water is never a catch, so dropping fish next to your bobber doesn't turn them into species. Then (a tick later, so other packs like Daily Quests see the vanilla fish first) the pack spawns the named fish at the same spot with the same velocity, so it still flies to the player, and removes the vanilla one. If the player picks the vanilla fish up first, it simply stays vanilla. When the player's settings ask for a plain fish, the vanilla fish is left where it is and only the catch is recorded.
+- **Making fish stackable:** the pack finds measured fish the way the sell menu does (name and lore), empties those slots and the slots of plain fish of the same kinds, and adds back fresh vanilla `ItemStack`s of the total, up to 64 a stack; anything that wouldn't fit (it always should) drops at the player's feet. Nothing is written to the log or the records: they were written when the fish was caught.
+- **Place:** one scan per catch, about 100 block reads: the water surface at the bobber, 48 samples at the water level 4 to 16 blocks around it (and the blocks above the nearer ones, for lily pads and snow), and the highest block of 12 columns 6 and 12 blocks away for trees and snow. Weather comes from `afterEvents.weatherChange` (whose `dimension` is `overworld` on current servers, `minecraft:overworld` on older ones; both count), saved so it survives a restart. Time of day is `world.getTimeOfDay()`.
 - **Fish are recognized** for selling by their name (a known species in a rarity color) and their lore (`<size> cm`, `Caught by ...`), which an anvil can't add. The sell menu checks each slot again before taking the fish.
 - **The tournament clock** checks every 5 seconds; the running tournament is saved, so it survives a restart and is finished on schedule. Prizes go into the `crowns` scoreboard; winners get `realm:quest_done` with `kind: "tournament"`.
 - **Fishers:** on `realm:npc_talk` with the `fisher` role the pack answers `realm:npc_offer` with **Sell fish** (`order` 20) and **Fish records** (21).
@@ -4141,7 +4157,7 @@ Everything in `packs/sky_rp/` is generated by `npm run gen:sky` (`tools/gen-sky/
 
 ## Translucent Tools — `translucent_rp`
 
-Tools, weapons and the shield are half see-through in your hand, so they block less of the screen. Swords, pickaxes, axes, shovels and hoes of every material, the mace, bow, crossbow, trident and shield are drawn at 50% opacity, in their usual shape and place. A **resource pack**, part of **Realm Resources** (or on its own).
+Tools, weapons and the shield are half see-through in your hand, so they block less of the screen. Swords, pickaxes, axes, shovels and hoes of every material, the mace, bow, crossbow, trident and shield are drawn at 50% opacity, in their usual shape and place. Each player can switch it off for themselves with [Translucent Tools Switch](#translucent-tools-switch--translucent_bp). A **resource pack**, part of **Realm Resources** (or on its own).
 
 ### See and hear it
 
@@ -4153,18 +4169,20 @@ A picture of the textures, not an in-game screenshot: where a tool sits and how 
 
 1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
 2. Hold any tool, weapon or a shield: you can see through it. It works in first person and in third person, for every player and mob holding one.
-3. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**, near the top of the list (above Firewolf and any pack that changes how held items look). To use it alone instead, download Translucent Tools from its card and activate it the same way (not together with Realm Resources).
+3. Prefer solid tools? Run `/realm:prefs`, pick **Translucent Tools** and disable **Translucent tools**: your tools look like vanilla again, for you and for everyone who sees you (this needs Translucent Tools Switch, which is in the Realm Bundle).
+4. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**, near the top of the list (above Firewolf and any pack that changes how held items look). To use it alone instead, download Translucent Tools from its card and activate it the same way (not together with Realm Resources).
 
 ### What players see
 
 - **40 items at 50% opacity:** swords, pickaxes, axes, shovels and hoes in wood, stone, copper, iron, gold, diamond and netherite (35), plus the mace, bow (and each frame as you draw it), crossbow (loaded or not), trident and shield.
-- **Same shape and place:** each item keeps vanilla's pixels, thickness and animations; only the opacity changes. Tools sit the way vanilla holds a bow, which is how Bedrock holds a sprite item, and the bow, crossbow, trident and shield keep their own vanilla poses (blocking, drawing, throwing).
+- **Same shape and place:** each item keeps vanilla's pixels, thickness and animations; only the opacity changes. Tools and the mace are held like any hand-held tool, gripped at the handle and tilted forward, in first and third person, so swinging, mining and using them moves them around the handle as vanilla does. The bow, crossbow, trident and shield keep their own vanilla poses (blocking, drawing, throwing).
+- **Solid for players who choose it:** a player with **Translucent tools** disabled (`/realm:prefs`, from [Translucent Tools Switch](#translucent-tools-switch--translucent_bp)) holds them opaque, with vanilla's materials and the normal enchantment glint. Everyone sees that player's tools that way. A switch takes effect at once.
 - **Enchanted items:** Bedrock has no material that is both see-through and glinting, so in your hand an enchanted item shows a soft purple shimmer instead of the glint. Its inventory icon keeps the glint.
 - **Unchanged:** inventory and hotbar icons, dropped items, item frames, armor, and items this pack doesn't list (fishing rod, shears, flint and steel, brush, spears).
 
 ### Saved data
 
-None. It's a resource pack: no scripts, no commands, nothing to configure in game.
+None. It's a resource pack: no scripts and no commands. It reads one player property, `realm:solid_tools`, which [Translucent Tools Switch](#translucent-tools-switch--translucent_bp) sets from each player's preference; without that pack every tool is see-through.
 
 ### Known limits
 
@@ -4172,6 +4190,7 @@ None. It's a resource pack: no scripts, no commands, nothing to configure in gam
 - **Shields with a banner pattern** haven't been tried: the pattern may show solid, or not at all.
 - **Other resource packs:** a pack higher in the list with its own models for these items (3D swords, custom shields) wins. Packs that only retexture items, like Firewolf, still show their art in the inventory, but in your hand the tools use vanilla's textures, since this pack carries its own see-through copies.
 - **Mobs** holding these items (zombies, vindicators, piglins, skeletons) show them see-through too, like players.
+- **The pose** is the hand-held tool pose built from Minecraft's own numbers (below), checked by reading, not in a game client: if a tool still sits or swings differently from vanilla on some device, the numbers to adjust are `HANDHELD` and `BASE` in the generator.
 
 ### How it's made
 
@@ -4181,12 +4200,55 @@ Everything in `packs/translucent_rp/` except `manifest.json` is generated by `np
 |---|---|
 | `textures/translucent_tools/<item>.png` | The vanilla texture with every pixel at 50% opacity (`OPACITY` in the generator) |
 | `textures/translucent_tools/shape/<item>.png` | The vanilla texture, opaque. The game builds the held item's 3D outline from it (`texture_meshes`), so the outline is exactly vanilla's whatever the opacity |
-| `attachables/<item>.json` | One per tool and the mace (vanilla draws those without an attachable), with the `entity_alphablend` material. The bow, crossbow, shield and trident files are vanilla's with only the material, textures and render controller swapped |
-| `models/entity/translucent_tools.geo.json`, `animations/translucent_tools.animation.json` | The tool mesh and pose, copied from vanilla's bow (`geometry.bow_standby`, `animation.bow.wield`), and the bow and crossbow frames |
-| `render_controllers/translucent_tools.render_controllers.json` | The see-through material for every item, and the purple shimmer when enchanted |
+| `attachables/<item>.json` | One per tool and the mace (vanilla draws those without an attachable), with the `entity_alphablend` material, plus vanilla's `entity_alphatest` and `entity_alphatest_glint` for the solid look. The bow, crossbow, shield and trident files are vanilla's with only the materials, textures and render controller swapped, and one `pre_animation` line that reads `realm:solid_tools` (attachable queries run on the entity holding the item; mobs don't have it, so they read 0, see-through) |
+| `models/entity/translucent_tools.geo.json`, `animations/translucent_tools.animation.json` | The tool mesh, bound to the hand (`q.item_slot_to_bone_name(c.item_slot)`), and its pose: Minecraft's hand-held item display (`item/handheld`: third person rotated 0, -90, 55, raised 4 and scaled 0.85; first person rotated 0, -90, 25, moved 1.13, 3.2, 1.13 and scaled 0.68) applied with the bone layout and base offsets Geyser's java2bedrock converter uses for 2D items on Bedrock, for each hand and view. Until version 1.1.0 the tools borrowed vanilla's bow pose, which grips the sprite at its middle: every swing turned a sword around the middle of its blade, and in third person it stood upright like a bow. Also the bow and crossbow frames |
+| `render_controllers/translucent_tools.render_controllers.json` | See-through or solid (by `realm:solid_tools`) for every item, and the purple shimmer when enchanted and see-through |
 | `pack_icon.png`, `docs/media/translucent/textures.png` | The pack icon and the picture above |
 
 `npm run check` fails if any of these differ from what the generator makes.
+
+---
+
+## Translucent Tools Switch — `translucent_bp`
+
+Lets each player choose whether their held tools are see-through ([Translucent Tools](#translucent-tools--translucent_rp), in Realm Resources) or solid like vanilla. A setting in `/realm:prefs`, with a realm default for operators.
+
+### How to use
+
+1. Run `/realm:prefs` and pick **Translucent Tools**.
+2. **Translucent tools** Enabled (the default): tools, weapons and the shield in your hand are see-through. Disabled: they look solid, like vanilla, with the normal enchantment glint. It changes at once, and everyone who sees you sees your choice.
+3. **Operators:** `/realm:config` → **Translucent Tools** → **Translucent tools (realm default)** sets what every player has until they choose (`translucentTools`).
+
+### What players see
+
+- Nothing new on screen: only how their held tools look, through the Translucent Tools resource pack. Without that resource pack the setting does nothing.
+- A player who never chose follows the realm default, so changing it switches them at once; a player whose choice differs from the default keeps it.
+
+### Commands
+
+None. The setting is in `/realm:prefs`, the realm default in `/realm:config`.
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `translucentTools` | `true` | What a player has until they choose: `true` see-through tools, `false` solid (vanilla) tools. Operators can change it in game in `/realm:config` |
+
+Player preference, in `/realm:prefs` (**Translucent Tools**): **Translucent tools**, defaulting to the realm's `translucentTools`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `translucent:cfg` | World | Settings changed in `/realm:config` |
+| `translucent:pref` | Player | JSON `{ translucent }`: the player's own choice, only when it differs from the realm default |
+| `realm:solid_tools` | Player entity property | `true` when the player's tools should look solid. Saved with the player and synced to every client, which is how the resource pack knows |
+
+### How it works
+
+- A resource pack can't read scripts, but it can read an entity property the server syncs to clients. This pack adds one to the player: its `entities/player.json` is a copy of vanilla's player behavior file (`minecraft:player`, format 1.26.30, the newest one Bedrock Dedicated Server 1.26.52 ships, identical to Mojang's bedrock-samples 1.26.50.4 file) with only `"properties": { "realm:solid_tools": { "type": "bool", "default": false, "client_sync": true } }` added. It is the only pack here that defines `minecraft:player`.
+- The script sets the property with `player.setProperty("realm:solid_tools", !translucent)` when a player spawns, when the world loads, when the player changes the preference and when an operator changes the default. Translucent Tools' attachables read `query.property('realm:solid_tools')` on the entity holding the item and switch texture and material.
+- **When Mojang updates the player:** a behavior pack's `minecraft:player` replaces vanilla's, so after a Minecraft update that changes the player file, copy the new one (from the newest `behavior_packs/vanilla_*` of Bedrock Dedicated Server, or bedrock-samples `behavior_pack/entities/player.json`) into `entities/player.json`, put the `properties` block back and bump the version. Until then players keep the older behavior (exhaustion, raid omen and so on).
 
 ---
 
@@ -4274,9 +4336,10 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it, so operators should use `/realm:weather_set` rather than `/weather`; sleeping through rain (or Smart Sleep) ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
 | Sky packs → Realm Skies (Realm Resources) | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |
 | Storm Chasing, Tornadoes, Rainbows, Meteor Strikes, Merchant Caravan, Fishing 2.0 → Waystones & Inns | Innkeepers remember the last few `realm:sky_event` announcements for **Hear the news** |
+| Translucent Tools Switch → Translucent Tools (Realm Resources) | The Switch sets each player's `realm:solid_tools` property from **Translucent tools** in `/realm:prefs`; Translucent Tools draws that player's held tools solid when it's on. Either pack works alone: without the Switch every tool is see-through, without Translucent Tools the setting changes nothing |
 | Weather Almanac ↔ Rain Extras | Rain Extras' fog, mist, drips and sounds follow the Almanac's planned rain and thunder like any other weather |
 
-Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn, so it has nothing to coordinate with the other packs.
+Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn; its one link is Translucent Tools Switch, which tells it per player whether to draw tools solid.
 
 ---
 

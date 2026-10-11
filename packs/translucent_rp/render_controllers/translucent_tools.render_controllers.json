@@ -2,20 +2,29 @@
   "format_version": "1.10.0",
   "render_controllers": {
     "controller.render.realm_translucent.item": {
+      "arrays": {
+        "textures": {
+          "array.realm_translucent_look": [
+            "texture.default",
+            "texture.solid"
+          ]
+        }
+      },
       "geometry": "geometry.default",
       "materials": [
         {
-          "*": "material.default"
+          "*": "variable.realm_solid ? (variable.is_enchanted ? material.solid_enchanted : material.solid) : material.default"
         }
       ],
       "textures": [
-        "texture.default"
+        "array.realm_translucent_look[variable.realm_solid]",
+        "texture.enchanted"
       ],
       "overlay_color": {
         "r": 0.6,
         "g": 0.35,
         "b": 1,
-        "a": "variable.is_enchanted ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
+        "a": "(variable.is_enchanted && !variable.realm_solid) ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
       }
     },
     "controller.render.realm_translucent.bow": {
@@ -25,7 +34,11 @@
             "texture.default",
             "texture.bow_pulling_0",
             "texture.bow_pulling_1",
-            "texture.bow_pulling_2"
+            "texture.bow_pulling_2",
+            "texture.shape_default",
+            "texture.shape_bow_pulling_0",
+            "texture.shape_bow_pulling_1",
+            "texture.shape_bow_pulling_2"
           ]
         },
         "geometries": {
@@ -40,17 +53,18 @@
       "geometry": "array.bow_geo_frames[query.get_animation_frame]",
       "materials": [
         {
-          "*": "material.default"
+          "*": "variable.realm_solid ? (variable.is_enchanted ? material.solid_enchanted : material.solid) : material.default"
         }
       ],
       "textures": [
-        "array.bow_texture_frames[query.get_animation_frame]"
+        "array.bow_texture_frames[query.get_animation_frame + variable.realm_solid * 4]",
+        "texture.enchanted"
       ],
       "overlay_color": {
         "r": 0.6,
         "g": 0.35,
         "b": 1,
-        "a": "variable.is_enchanted ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
+        "a": "(variable.is_enchanted && !variable.realm_solid) ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
       }
     },
     "controller.render.realm_translucent.crossbow": {
@@ -62,7 +76,13 @@
             "texture.crossbow_pulling_1",
             "texture.crossbow_pulling_2",
             "texture.crossbow_arrow",
-            "texture.crossbow_rocket"
+            "texture.crossbow_rocket",
+            "texture.shape_default",
+            "texture.shape_crossbow_pulling_0",
+            "texture.shape_crossbow_pulling_1",
+            "texture.shape_crossbow_pulling_2",
+            "texture.shape_crossbow_arrow",
+            "texture.shape_crossbow_rocket"
           ]
         },
         "geometries": {
@@ -79,17 +99,18 @@
       "geometry": "array.crossbow_geo_frames[query.get_animation_frame]",
       "materials": [
         {
-          "*": "material.default"
+          "*": "variable.realm_solid ? (variable.is_enchanted ? material.solid_enchanted : material.solid) : material.default"
         }
       ],
       "textures": [
-        "array.crossbow_texture_frames[query.get_animation_frame]"
+        "array.crossbow_texture_frames[query.get_animation_frame + variable.realm_solid * 6]",
+        "texture.enchanted"
       ],
       "overlay_color": {
         "r": 0.6,
         "g": 0.35,
         "b": 1,
-        "a": "variable.is_enchanted ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
+        "a": "(variable.is_enchanted && !variable.realm_solid) ? 0.22 + 0.08 * math.sin(query.life_time * 120) : 0.0"
       }
     }
   }
