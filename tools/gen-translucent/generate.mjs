@@ -2,11 +2,14 @@
 // From Mojang's own files in tools/gen-translucent/vanilla/ (see its README), so the pack only changes how they're drawn:
 //   textures/translucent_tools/<item>.png        the vanilla texture with every pixel at OPACITY (what you see)
 //   textures/translucent_tools/shape/<item>.png  the vanilla texture, opaque (only its outline is used, to build the mesh)
-//   attachables/*.json                           one per item: the translucent texture with the entity_alphablend material
+//   attachables/*.json                           one per item: the translucent texture with the entity_alphablend material,
+//                                                or the opaque one with vanilla's materials for a player who chose solid
+//                                                tools (the `realm:solid_tools` player property, set by translucent_bp)
 //   models/entity/translucent_tools.geo.json     the held-item mesh (bow and crossbow frames too), built by the game from
-//                                                the shape texture (texture_meshes), placed like vanilla's bow
-//   animations/translucent_tools.animation.json  how a tool sits in the hand: vanilla's bow pose, first and third person
-//   render_controllers/translucent_tools.render_controllers.json  translucent material, a soft purple shimmer when enchanted
+//                                                the shape texture (texture_meshes)
+//   animations/translucent_tools.animation.json  how a tool sits in the hand: the handheld-tool pose, first and third
+//                                                person, main hand and off hand (see HANDHELD)
+//   render_controllers/translucent_tools.render_controllers.json  translucent or solid, a soft purple shimmer when enchanted
 //   pack_icon.png                                128x128
 // Deterministic: the same vanilla files always give the same output.
 //
@@ -41,32 +44,90 @@ const vanillaJson = (/** @type {string} */ name) => JSON.parse(readFileSync(join
 const vanillaPng = (/** @type {string} */ name) => decode(readFileSync(join(vanillaDir, `${name}.png`)));
 const put = (/** @type {string} */ path, /** @type {unknown} */ value) => json.set(path, JSON.stringify(value, null, 2) + "\n");
 
-/** The vanilla texture at OPACITY (fully transparent pixels stay transparent), plus an opaque copy for the mesh outline. */
-function textures(/** @type {string} */ name) {
+/** The vanilla texture at OPACITY (fully transparent pixels stay transparent), plus an opaque copy for a mesh outline. */
+function textures(/** @type {string} */ name, withShape = true) {
   const img = vanillaPng(name), out = blank(img.width, img.height);
   out.data.set(img.data);
   for (let i = 3; i < out.data.length; i += 4) out.data[i] = Math.round(out.data[i] * OPACITY);
   images.set(`${TEX}/${name}.png`, out);
-  images.set(`${TEX}/shape/${name}.png`, img);
+  if (withShape) images.set(`${TEX}/shape/${name}.png`, img);
   return { see: `${TEX}/${name}`, shape: `${TEX}/shape/${name}` };
 }
 
+/**
+ * The player property (from translucent_bp's minecraft:player) that asks for solid tools. Attachable queries run on the
+ * entity holding the item. Mobs and players without it read 0: translucent, so the pack works the same without
+ * translucent_bp, and a failed read falls back to the translucent look rather than hiding it.
+ */
+const SOLID_PROP = "realm:solid_tools";
+const SOLID_VAR = `variable.realm_solid = query.has_property('${SOLID_PROP}') ? query.property('${SOLID_PROP}') : 0.0;`;
+/** Translucent: our material. Solid: vanilla's own materials for held items (entity_alphatest, with the glint when enchanted). */
+const MATERIALS = { default: "entity_alphablend", solid: "entity_alphatest", solid_enchanted: "entity_alphatest_glint" };
+const GLINT = "textures/misc/enchanted_item_glint";
+const material = { "*": "variable.realm_solid ? (variable.is_enchanted ? material.solid_enchanted : material.solid) : material.default" };
+
 const enchantedShimmer = {
   r: ENCHANTED.r, g: ENCHANTED.g, b: ENCHANTED.b,
-  a: `variable.is_enchanted ? ${ENCHANTED.base} + ${ENCHANTED.pulse} * math.sin(query.life_time * ${ENCHANTED.speed}) : 0.0`,
+  a: `(variable.is_enchanted && !variable.realm_solid) ? ${ENCHANTED.base} + ${ENCHANTED.pulse} * math.sin(query.life_time * ${ENCHANTED.speed}) : 0.0`,
 };
 
 // ---------------------------------------------------------------------------
-// Tools and the mace: vanilla draws them as flat sprites with no attachable. Each gets one, using the game's own sprite
-// extrusion (texture_meshes, as vanilla's bow does) and vanilla's bow pose, which is how a held sprite sits in the hand.
+// Tools and the mace: vanilla draws them as flat sprites with no attachable, in the game's built-in "hand equipped"
+// pose: gripped at the handle (the sprite's bottom-left corner), tilted forward. Each gets an attachable that builds the
+// same extruded sprite (texture_meshes) and holds it that way.
+//
+// The pose is Minecraft's handheld-item display transform (models/item/handheld.json, the parent of every tool's model
+// in Java Edition, which Bedrock's hand-equipped items match), turned into bone transforms the way Geyser's
+// java2bedrock converter does for 2D items on Bedrock (github.com/Kas-tle/java2bedrock.sh, converter.sh): a bone bound
+// to the hand with a fixed base offset per view, then the display's X, Y and Z rotations on three nested bones, then the
+// sprite. Until 2026-10 the tools borrowed vanilla's bow pose instead; a bow is gripped at its middle, so every swing
+// turned the tool around the middle of its blade instead of its handle, and in third person it stood upright like a bow.
 // ---------------------------------------------------------------------------
-const bowGeo = vanillaJson("bow.geo.json");
-const standby = bowGeo["minecraft:geometry"].find((/** @type {any} */ g) => g.description.identifier === "geometry.bow_standby");
-const toolGeo = {
-  description: { identifier: `geometry.${NS}.tool`, texture_width: 16, texture_height: 16 },
-  bones: standby.bones.map((/** @type {any} */ b) => ({ ...b, texture_meshes: b.texture_meshes.map((/** @type {any} */ m) => ({ ...m, texture: "shape" })) })),
+/** Java's item/handheld display (righthand; the left hand mirrors Y and Z): rotation, translation, scale. */
+const HANDHELD = {
+  thirdperson: { rotation: [0, -90, 55], translation: [0, 4, 0.5], scale: 0.85 },
+  firstperson: { rotation: [0, -90, 25], translation: [1.13, 3.2, 1.13], scale: 0.68 },
 };
-const bowWield = vanillaJson("bow.animation.json").animations["animation.bow.wield"];
+/** java2bedrock's base offsets for a bone bound to the hand, so a Java display transform lands where it does in Java. */
+const BASE = {
+  thirdperson: { rotation: [90, 0, 0], position: [0, 13, -3] },
+  firstperson: { rotation: [90, 60, -40], position: [4, 10, 4], scale: 1.5 },
+};
+const B = `${NS}_tool`;
+const toolGeo = {
+  description: {
+    identifier: `geometry.${NS}.tool`, texture_width: 16, texture_height: 16,
+    visible_bounds_width: 4, visible_bounds_height: 4.5, visible_bounds_offset: [0, 0.75, 0],
+  },
+  bones: [
+    { name: B, binding: "q.item_slot_to_bone_name(c.item_slot)", pivot: [0, 8, 0] },
+    { name: `${B}_x`, parent: B, pivot: [0, 8, 0] },
+    { name: `${B}_y`, parent: `${B}_x`, pivot: [0, 8, 0] },
+    { name: `${B}_z`, parent: `${B}_y`, pivot: [0, 8, 0], texture_meshes: [{ texture: "shape", position: [0, 8, 0], rotation: [90, 0, -180], local_pivot: [8, 0.5, 8] }] },
+  ],
+};
+/** One view and hand: the base offset, then the handheld display (left hand mirrored, as java2bedrock maps it). */
+function toolPose(/** @type {"firstperson" | "thirdperson"} */ view, /** @type {boolean} */ left) {
+  const d = HANDHELD[view], base = BASE[view];
+  const [rx, ry0, rz0] = d.rotation, ry = left ? -ry0 : ry0, rz = left ? -rz0 : rz0;
+  const [tx, ty, tz] = d.translation;
+  const px = left ? tx : -tx, pz = view === "firstperson" ? -tz : tz;
+  return {
+    loop: true,
+    bones: {
+      [B]: base,
+      [`${B}_x`]: { rotation: [-rx, 0, 0], position: [px, ty, pz], scale: d.scale },
+      [`${B}_y`]: { rotation: [0, -ry, 0] },
+      [`${B}_z`]: { rotation: [0, 0, rz] },
+    },
+  };
+}
+const toolAnimations = {
+  [`animation.${NS}.tool.first_person`]: toolPose("firstperson", false),
+  [`animation.${NS}.tool.third_person`]: toolPose("thirdperson", false),
+  [`animation.${NS}.tool.first_person_off_hand`]: toolPose("firstperson", true),
+  [`animation.${NS}.tool.third_person_off_hand`]: toolPose("thirdperson", true),
+};
 
 for (const t of TOOLS) {
   const { see, shape } = textures(t.tex);
@@ -75,11 +136,24 @@ for (const t of TOOLS) {
     "minecraft:attachable": {
       description: {
         identifier: `minecraft:${t.id}`,
-        materials: { default: "entity_alphablend" },
-        textures: { default: see, shape },
+        materials: MATERIALS,
+        textures: { default: see, solid: shape, shape, enchanted: GLINT },
         geometry: { default: `geometry.${NS}.tool` },
-        animations: { wield: `animation.${NS}.tool.wield` },
-        scripts: { animate: ["wield"] },
+        animations: {
+          first_person: `animation.${NS}.tool.first_person`,
+          third_person: `animation.${NS}.tool.third_person`,
+          first_person_off_hand: `animation.${NS}.tool.first_person_off_hand`,
+          third_person_off_hand: `animation.${NS}.tool.third_person_off_hand`,
+        },
+        scripts: {
+          pre_animation: [SOLID_VAR, "variable.main_hand = c.item_slot == 'main_hand';", "variable.off_hand = c.item_slot == 'off_hand';"],
+          animate: [
+            { first_person: "variable.main_hand && c.is_first_person" },
+            { third_person: "variable.main_hand && !c.is_first_person" },
+            { first_person_off_hand: "variable.off_hand && c.is_first_person" },
+            { third_person_off_hand: "variable.off_hand && !c.is_first_person" },
+          ],
+        },
         render_controllers: [`controller.render.${NS}.item`],
       },
     },
@@ -87,20 +161,26 @@ for (const t of TOOLS) {
 }
 
 // ---------------------------------------------------------------------------
-// Bow, crossbow, shield, trident: vanilla already has attachables for them. Each is vanilla's file with only the
-// materials, textures and render controller swapped (bow and crossbow frames get a mesh-outline texture each).
+// Bow, crossbow, shield, trident: vanilla already has attachables for them. Each is vanilla's file (so their poses and
+// animations stay exactly vanilla's) with only the materials, textures and render controller swapped, plus one line
+// that reads the solid-tools property. Bow and crossbow frames get a mesh-outline texture each, which is also their
+// solid look; the shield and trident's solid look is vanilla's own texture path, as vanilla draws them.
 // ---------------------------------------------------------------------------
 /** @param {string} file @param {Record<string, string>} vanillaTextures alias → vanilla texture name in vanilla/ */
 function override(file, vanillaTextures, /** @type {string} */ controller, /** @type {Record<string, string> | null} */ geometry) {
   const a = vanillaJson(file), d = a["minecraft:attachable"].description;
-  d.materials = { default: "entity_alphablend" };
+  const vanillaPaths = d.textures;
+  d.materials = MATERIALS;
   d.textures = {};
   for (const [alias, name] of Object.entries(vanillaTextures)) {
-    const { see, shape } = textures(name);
+    const { see, shape } = textures(name, !!geometry);
     d.textures[alias] = see;
     if (geometry) d.textures[`shape_${alias}`] = shape;
+    else d.textures.solid = vanillaPaths[alias];
   }
+  d.textures.enchanted = GLINT;
   if (geometry) d.geometry = geometry;
+  d.scripts.pre_animation = [SOLID_VAR, ...(d.scripts.pre_animation ?? [])];
   d.render_controllers = [controller];
   put(`attachables/${file}`, a);
 }
@@ -117,7 +197,7 @@ function frames(/** @type {string} */ file, /** @type {string} */ prefix) {
       bones: g.bones.map((/** @type {any} */ b) => ({ ...b, texture_meshes: b.texture_meshes.map((/** @type {any} */ m) => ({ ...m, texture: `shape_${m.texture}` })) })),
     };
   });
-  return { geos, map };
+  return { geos, map, format: vanillaJson(file).format_version };
 }
 const bow = frames("bow.geo.json", "bow"), crossbow = frames("crossbow.geo.json", "crossbow");
 override("bow.json", { default: "bow_standby", bow_pulling_0: "bow_pulling_0", bow_pulling_1: "bow_pulling_1", bow_pulling_2: "bow_pulling_2" }, `controller.render.${NS}.bow`, bow.map);
@@ -128,21 +208,33 @@ override("crossbow.entity.json", {
 override("shield.entity.json", { default: "shield" }, `controller.render.${NS}.item`, null);
 override("trident.entity.json", { default: "trident" }, `controller.render.${NS}.item`, null);
 
-put("models/entity/translucent_tools.geo.json", { format_version: bowGeo.format_version, "minecraft:geometry": [toolGeo, ...bow.geos, ...crossbow.geos] });
-put("animations/translucent_tools.animation.json", { format_version: "1.10.0", animations: { [`animation.${NS}.tool.wield`]: bowWield } });
+put("models/entity/translucent_tools.geo.json", { format_version: bow.format, "minecraft:geometry": [toolGeo, ...bow.geos, ...crossbow.geos] });
+put("animations/translucent_tools.animation.json", { format_version: "1.10.0", animations: toolAnimations });
 
-/** One frame controller from vanilla's bow/crossbow one: the frame arrays kept, the material always translucent. */
+/**
+ * One frame controller from vanilla's bow/crossbow one: the frame arrays kept, each frame's translucent texture first
+ * and its opaque outline (the solid look) after them, picked by the frame plus the frame count when solid.
+ */
 function framed(/** @type {string} */ file, /** @type {string} */ id) {
   const c = structuredClone(vanillaJson(file).render_controllers[id]);
-  c.materials = [{ "*": "material.default" }];
-  c.textures = c.textures.filter((/** @type {string} */ t) => t !== "texture.enchanted");
+  const [name, list] = /** @type {[string, string[]]} */ (Object.entries(c.arrays.textures)[0]);
+  c.arrays.textures[name] = [...list, ...list.map((t) => t.replace("texture.", "texture.shape_"))];
+  c.materials = [material];
+  c.textures = c.textures.map((/** @type {string} */ t) => t.replace(`${name}[query.get_animation_frame]`, `${name}[query.get_animation_frame + variable.realm_solid * ${list.length}]`));
+  if (!c.textures[0].includes("variable.realm_solid")) throw new Error(`${file}: unexpected texture expression ${c.textures[0]}`);
   c.overlay_color = enchantedShimmer;
   return c;
 }
 put("render_controllers/translucent_tools.render_controllers.json", {
   format_version: "1.10.0",
   render_controllers: {
-    [`controller.render.${NS}.item`]: { geometry: "geometry.default", materials: [{ "*": "material.default" }], textures: ["texture.default"], overlay_color: enchantedShimmer },
+    [`controller.render.${NS}.item`]: {
+      arrays: { textures: { [`array.${NS}_look`]: ["texture.default", "texture.solid"] } },
+      geometry: "geometry.default",
+      materials: [material],
+      textures: [`array.${NS}_look[variable.realm_solid]`, "texture.enchanted"],
+      overlay_color: enchantedShimmer,
+    },
     [`controller.render.${NS}.bow`]: framed("bow.render_controllers.json", "controller.render.bow"),
     [`controller.render.${NS}.crossbow`]: framed("crossbow.render_controllers.json", "controller.render.crossbow"),
   },

@@ -1,7 +1,7 @@
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, getFor, setFor } from "./settings.js";
 
 const PACK = "fishing_bp";
 const PROP_WEATHER = "fishing:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -113,12 +113,14 @@ function addCrowns(p, n) {
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
- * @param {Player} player @param {ActionFormData} form
+ * @template {ActionFormData | ModalFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
 async function show(player, form) {
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return undefined;
-    const res = await form.show(player);
+    const res = /** @type {any} */ (await form.show(player));
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }
@@ -134,7 +136,7 @@ let weather = WeatherType.Clear;
 let rainEnd = 0;
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // BDS 1.26 sends "overworld"
   if (newWeather === WeatherType.Clear && weather !== WeatherType.Clear) {
     rainEnd = Date.now();
     try {
@@ -350,6 +352,16 @@ function recordsOf() {
   return /** @type {Records} */ (records);
 }
 
+/**
+ * Whether a catch would be a new species, a personal best or a realm record for this player.
+ * @param {Player} player @param {Species} sp @param {number} size
+ */
+function notable(player, sp, size) {
+  const before = logOf(player)[sp.id];
+  const rec = recordsOf()[sp.id];
+  return !before || size > before[1] || !rec || size > rec[0];
+}
+
 /** Records the catch and tells the player. @param {Player} player @param {Species} sp @param {number} size */
 function caught(player, sp, size) {
   const log = logOf(player);
@@ -482,6 +494,12 @@ function replace(entity, owner, hookAt) {
   if (!list.length) return; // no species for this item here: the vanilla fish stays
   const sp = pick(list);
   const size = rollSize(sp);
+  // A player who doesn't want measured fish (or only notable ones) keeps the vanilla fish: it stacks. The catch still counts.
+  const plain = getFor(owner, "measure") !== true || (getFor(owner, "notableOnly") === true && !notable(owner, sp, size));
+  if (plain) {
+    caught(owner, sp, size);
+    return;
+  }
   const fish = fishStack(sp, size, owner, 1);
   const loc = entity.location;
   let vel = { x: 0, y: 0, z: 0 };
@@ -710,7 +728,7 @@ function hint(sp) {
 
 const sorted = () => [...species].sort((a, b) => rarityOrder(a.rarity) - rarityOrder(b.rarity) || a.name.localeCompare(b.name));
 
-/** /realm:fishing: the player's fish log. @param {Player} player */
+/** /realm:fishing_log (and the first button of /realm:fishing): the player's fish log. @param {Player} player */
 async function showLog(player) {
   const log = logOf(player);
   const known = species.filter((sp) => log[sp.id]);
@@ -812,6 +830,123 @@ async function sellMenu(player) {
 }
 
 // ---------------------------------------------------------------------------
+// Stackable fish: measured fish (each with its own name and lore) don't stack. A player may turn them back into plain
+// vanilla fish, which do. Logs and records were written when the fish was caught, so they stay.
+// ---------------------------------------------------------------------------
+
+/** The player's measured raw fish, slot by slot. @param {Player} player */
+function measuredFish(player) {
+  /** @type {{ slot: number, stack: ItemStack }[]} */
+  const out = [];
+  const inv = inventoryOf(player);
+  if (!inv) return out;
+  for (let slot = 0; slot < inv.size; slot++) {
+    const stack = inv.getItem(slot);
+    if (stack && readFish(stack)) out.push({ slot, stack });
+  }
+  return out;
+}
+
+/**
+ * Turns every measured raw fish in the inventory into plain vanilla fish, merged into full stacks. Returns how many.
+ * @param {Player} player
+ */
+function makeStackable(player) {
+  const inv = inventoryOf(player);
+  if (!inv) return 0;
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const { slot, stack } of measuredFish(player)) {
+    counts.set(stack.typeId, (counts.get(stack.typeId) ?? 0) + stack.amount);
+    inv.setItem(slot, undefined);
+  }
+  const converted = [...counts.values()].reduce((a, b) => a + b, 0);
+  // Plain stacks of the same fish join in, so everything ends up in as few full stacks as possible.
+  for (let slot = 0; slot < inv.size; slot++) {
+    const stack = inv.getItem(slot);
+    if (!stack || !counts.has(stack.typeId) || !stack.isStackableWith(new ItemStack(stack.typeId, 1))) continue;
+    counts.set(stack.typeId, (counts.get(stack.typeId) ?? 0) + stack.amount);
+    inv.setItem(slot, undefined);
+  }
+  for (const [typeId, count] of counts) {
+    for (let left = count; left > 0; ) {
+      const stack = new ItemStack(typeId, 1);
+      stack.amount = Math.min(left, stack.maxAmount);
+      left -= stack.amount;
+      const rest = inv.addItem(stack); // the freed slots always fit them; anything over drops at the player's feet
+      if (rest) player.dimension.spawnItem(rest, player.location);
+    }
+  }
+  return converted;
+}
+
+/** "Make my fish stackable": asks first, then converts. @param {Player} player */
+async function stackMenu(player) {
+  const fish = measuredFish(player);
+  const count = fish.reduce((n, f) => n + f.stack.amount, 0);
+  if (!count) {
+    await show(player, new ActionFormData().title("§lStackable Fish").body("You have no measured raw fish. Fish you catch with a name and a size can be turned into plain fish that stack.").button("Close"));
+    return;
+  }
+  const body = [
+    `Turn your ${count} measured raw fish into plain cod, salmon, tropical fish and pufferfish that stack?`,
+    "",
+    "§7They lose their names, sizes and catcher. Your fish log, personal bests and realm records keep them. A fisher only buys measured fish.",
+  ].join("\n");
+  const res = await show(player, new ActionFormData().title("§lStackable Fish").body(body).button(`Make ${count} fish stackable`).button("Cancel"));
+  if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+  const n = makeStackable(player);
+  if (n) {
+    player.sendMessage(`§b${n} fish are plain now and stack.`);
+    player.playSound("random.pop", { pitch: 1.2, volume: 0.6 });
+  }
+}
+
+/** The player's fishing preferences (the same switches as /realm:prefs). @param {Player} player */
+async function settingsMenu(player) {
+  const measure = getFor(player, "measure") === true;
+  const notableOnly = getFor(player, "notableOnly") === true;
+  const form = new ModalFormData()
+    .title("§lFishing Settings")
+    .toggle("Measure my catches", { defaultValue: measure, tooltip: "Your fish carry their species, size and your name. Disabled: plain fish that stack (the catch still counts in your log)" })
+    .toggle("Only measure notable catches", { defaultValue: notableOnly, tooltip: "A catch that isn't a new species, a personal best or a realm record comes as a plain fish that stacks" })
+    .submitButton("Save");
+  const res = await show(player, form);
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const [m, n] = res.formValues;
+  if (typeof m === "boolean" && m !== measure) setFor(player, "measure", m);
+  if (typeof n === "boolean" && n !== notableOnly) setFor(player, "notableOnly", n);
+  const state = (/** @type {string} */ key) => (getFor(player, key) === true ? "§aEnabled§7" : "§cDisabled§7");
+  player.sendMessage(`§7Measure my catches: ${state("measure")}. Only measure notable catches: ${state("notableOnly")}.`);
+}
+
+/** /realm:fishing: every action of the pack. @param {Player} player */
+async function mainMenu(player) {
+  const measured = measuredFish(player).reduce((n, f) => n + f.stack.amount, 0);
+  /** @type {[string, () => Promise<void> | void][]} */
+  const actions = [
+    ["Fish log\n§8Species caught and personal bests", () => showLog(player)],
+    ["Realm records\n§8The biggest fish of each species", () => showRecords(player)],
+    [`Make my fish stackable\n§8${measured ? `${measured} measured raw fish` : "No measured raw fish"}`, () => stackMenu(player)],
+    [`Fishing settings\n§8Measure my catches: ${getFor(player, "measure") === true ? "Enabled" : "Disabled"}`, () => settingsMenu(player)],
+  ];
+  if (isOp(player)) actions.push([`Start a tournament now\n§8Operators, ${get("tournamentMinutes")} minutes`, () => opStartTournament(player)]);
+  const form = new ActionFormData().title("§lFishing 2.0").body(tournamentStatus());
+  for (const [label] of actions) form.button(label);
+  form.button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined) return;
+  await actions[res.selection]?.[1]();
+}
+
+/** The menu's "Start a tournament now" (operators). @param {Player} player */
+function opStartTournament(player) {
+  if (!isOp(player)) return;
+  if (tourney) player.sendMessage(`§cA tournament is already running (ends in ${until(tourney.e - Date.now())}).`);
+  else startTournament(Date.now() + lengthMs());
+}
+
+// ---------------------------------------------------------------------------
 // Townsfolk: NPCs with the fisher role offer "Sell fish" and "Fish records"
 // ---------------------------------------------------------------------------
 
@@ -857,6 +992,20 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:fishing",
+      description: "Fishing 2.0: a menu with your fish log, the records, stackable fish and your settings",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => mainMenu(player).catch((e) => console.warn(`[fishing] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:fishing_log",
       description: "Fishing 2.0: your fish log, species caught and personal bests",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -865,6 +1014,20 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       const player = origin.initiator ?? origin.sourceEntity;
       if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       system.run(() => showLog(player).catch((e) => console.warn(`[fishing] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:fishing_stack",
+      description: "Fishing 2.0: turn your measured raw fish into plain fish that stack (asks first)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => stackMenu(player).catch((e) => console.warn(`[fishing] ${e}`)));
       return { status: CustomCommandStatus.Success };
     },
   );

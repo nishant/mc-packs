@@ -4,21 +4,44 @@
     "description": {
       "identifier": "minecraft:iron_hoe",
       "materials": {
-        "default": "entity_alphablend"
+        "default": "entity_alphablend",
+        "solid": "entity_alphatest",
+        "solid_enchanted": "entity_alphatest_glint"
       },
       "textures": {
         "default": "textures/translucent_tools/iron_hoe",
-        "shape": "textures/translucent_tools/shape/iron_hoe"
+        "solid": "textures/translucent_tools/shape/iron_hoe",
+        "shape": "textures/translucent_tools/shape/iron_hoe",
+        "enchanted": "textures/misc/enchanted_item_glint"
       },
       "geometry": {
         "default": "geometry.realm_translucent.tool"
       },
       "animations": {
-        "wield": "animation.realm_translucent.tool.wield"
+        "first_person": "animation.realm_translucent.tool.first_person",
+        "third_person": "animation.realm_translucent.tool.third_person",
+        "first_person_off_hand": "animation.realm_translucent.tool.first_person_off_hand",
+        "third_person_off_hand": "animation.realm_translucent.tool.third_person_off_hand"
       },
       "scripts": {
+        "pre_animation": [
+          "variable.realm_solid = query.has_property('realm:solid_tools') ? query.property('realm:solid_tools') : 0.0;",
+          "variable.main_hand = c.item_slot == 'main_hand';",
+          "variable.off_hand = c.item_slot == 'off_hand';"
+        ],
         "animate": [
-          "wield"
+          {
+            "first_person": "variable.main_hand && c.is_first_person"
+          },
+          {
+            "third_person": "variable.main_hand && !c.is_first_person"
+          },
+          {
+            "first_person_off_hand": "variable.off_hand && c.is_first_person"
+          },
+          {
+            "third_person_off_hand": "variable.off_hand && !c.is_first_person"
+          }
         ]
       },
       "render_controllers": [
