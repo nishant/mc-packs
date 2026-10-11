@@ -8,6 +8,7 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 |---|---|---|---|
 | [Realm Help](docs/PACKS.md#realm-help--help_bp) | `help_bp` | One help page for every installed feature and command, with usage | `/realm:help` |
 | [Realm Settings](docs/PACKS.md#realm-settings--settings_bp) | `settings_bp` | Change every pack's settings in game: operators for everyone, each player their own preferences | `/realm:config` · `/realm:prefs` |
+| [Realm Configuration](docs/PACKS.md#realm-configuration--admin_bp) | `admin_bp` | An item every operator gets: an admin menu that runs any realm command with preset choices (townsfolk, weather, players, amounts), plus quick vanilla actions, recent commands, search and a setup checklist | `/realm:admin` · `/realm:admin_item` |
 | [Welcome Message](docs/PACKS.md#welcome-message--welcome_bp) | `welcome_bp` | Popup when players join | `/realm:welcome` · `/realm:welcome_show` · `/realm:welcome_edit` · `/realm:welcome_reset` |
 | [Low Durability Warning](docs/PACKS.md#low-durability-warning--durability_bp) | `durability_bp` | Warns at 10% and 3% durability left, for tools, weapons and armor | `/realm:durability` |
 | [AFK + Smart Sleep](docs/PACKS.md#afk--smart-sleep--afk_bp) | `afk_bp` | `[AFK]` tag after 5 min idle; the night can be skipped without waiting for AFK players | `/realm:afk` |
@@ -108,6 +109,7 @@ npm run bundle    # merge packs into one (--list, --all, --resources, --packs a,
 | `tools/check-commands.mjs` | Fails if a command or enum isn't in the `realm:` namespace, or two share a name |
 | `tools/settings-shared.js`, `tools/sync-settings.mjs` | The Realm Settings helper every behavior pack copies into its `scripts/settings.js` (packs never import each other); `sync-settings.mjs` copies it, `--check` (part of `npm run check`) fails on a missing or stale copy |
 | `tools/zones-shared.js`, `tools/sync-zones.mjs` | The safe zones protocol (providers and consumers of `realm:zones`) that each taking-part pack copies into its `scripts/zones.js`; `sync-zones.mjs` refreshes the copies (`node tools/sync-zones.mjs <folder>` adds a pack), `--check` (part of `npm run check`) fails on a stale copy |
+| `tools/admin-catalog.mjs` | Writes `packs/admin_bp/scripts/catalog.js` (every registered `realm:` command, for the Realm Configuration menu) by loading each pack with a stand-in for the Minecraft modules; `--check` (part of `npm run check`) fails when a command changed and it wasn't rerun |
 | `tools/help-catalog.mjs` | Writes the in-game `/realm:help` text from `docs/PACKS.md`; `--check` (part of `npm run check`) fails if it's stale or a pack doesn't answer `/realm:help` |
 | `docs/NEWS.md`, `tools/gen-news.mjs` | Player-facing release notes, newest first. `gen-news.mjs` (run by `npm run bundle`) copies the newest entry into `news_bp`, which pops it up once after an update; `--check` (part of `npm run check`) fails if it's stale |
 | `docs/STORY_BIBLE.md`, `tools/check-stories.mjs` | The story bible for Story Questlines (world, cast, places, the data format) and the validator for every story, chapter, objective and favor (part of `npm run check`) |

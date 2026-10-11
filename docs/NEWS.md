@@ -20,3 +20,4 @@ The biggest update yet. Talk to the townsfolk: something is wrong with the sky.
 - Safe zones: towns and claims can be protected from meteors, storms and other world events.
 - /realm:prefs: a stats ticker you can tune, a Translucent tools switch, and Measure my catches. /realm:fishing can make your fish stackable.
 - Most commands now open a menu: try /realm:town, /realm:relics, /realm:meteor or /realm:champions.
+- Operators: you now carry a Realm Configuration star. Use it for every realm command with preset choices, a setup checklist and quick actions (weather, time, teleport, give).
