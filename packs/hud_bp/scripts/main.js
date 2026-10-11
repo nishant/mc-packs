@@ -32,21 +32,55 @@ function clock() {
   return `${hours % 12 === 0 ? 12 : hours % 12}:${String(minutes).padStart(2, "0")} ${hours < 12 ? "AM" : "PM"}`;
 }
 
-/** @param {Player} player */
-function hudText(player) {
+/**
+ * Lines other packs show under the HUD while it's on (realm:hud_line), such as the Stats pack's ticker, which
+ * would otherwise fight the HUD for the same bar. player id -> key -> { text, until (tick) }
+ * @type {Map<string, Map<string, { text: string, until: number }>>}
+ */
+const extra = new Map();
+
+/** @param {string} playerId @param {number} now @returns {string[]} the lines still showing, in key order */
+function extraLines(playerId, now) {
+  const lines = extra.get(playerId);
+  if (!lines) return [];
+  for (const [key, line] of lines) if (line.until <= now) lines.delete(key);
+  if (!lines.size) extra.delete(playerId);
+  return [...lines].sort((a, b) => a[0].localeCompare(b[0])).map(([, line]) => line.text);
+}
+
+/** @param {Player} player @param {number} now */
+function hudText(player, now) {
   const at = player.location;
   let text = `§7XYZ §f${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)}  §7Facing §f${facing(player)}`;
   if (getFor(player, "showTime") === true) text += `  §7Day §f${world.getDay() + 1} §7at §f${clock()}`;
+  for (const line of extraLines(player.id, now)) text += `§r\n${line}`;
   return text;
+}
+
+// Who sees the HUD, for packs that add a line under it: sent when it changes, every 5 seconds, and on realm:hud_ping.
+//   realm:hud_state {"players":["<player id>", ...]}
+const STATE_EVERY = 100;
+let stateKey = "";
+let stateAt = -Infinity;
+/** @param {string[]} players @param {boolean} [now] send even if nothing changed */
+function sendState(players, now = false) {
+  const key = players.join(",");
+  if (!now && key === stateKey && system.currentTick - stateAt < STATE_EVERY) return;
+  stateKey = key;
+  stateAt = system.currentTick;
+  system.sendScriptEvent("realm:hud_state", JSON.stringify({ players: players.slice(0, 100) }));
 }
 
 system.runInterval(() => {
   const now = system.currentTick;
+  /** @type {string[]} */
+  const seeing = [];
   for (const player of world.getAllPlayers()) {
     try {
       if (!hudFor(player)) continue;
+      seeing.push(player.id);
       if ((pausedUntil.get(player.id) ?? 0) > now) continue;
-      const text = hudText(player);
+      const text = hudText(player, now);
       const last = shown.get(player.id);
       if (last && last.text === text && now - last.at < CONFIG.refreshTicks) continue;
       player.onScreenDisplay.setActionBar(text);
@@ -55,12 +89,16 @@ system.runInterval(() => {
       console.warn(`[hud] ${e}`);
     }
   }
+  sendState(seeing);
 }, Math.max(MIN_INTERVAL, CONFIG.intervalTicks));
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   shown.delete(playerId);
   pausedUntil.delete(playerId);
+  extra.delete(playerId);
 });
+
+const seeingNow = () => world.getAllPlayers().filter(hudFor).map((p) => p.id);
 
 // Turning the HUD off (here, in /realm:prefs, or for the whole realm) clears it right away.
 onChange((key, player) => {
@@ -69,16 +107,34 @@ onChange((key, player) => {
     const had = shown.delete(p.id);
     if (had && !hudFor(p)) p.onScreenDisplay.setActionBar("");
   }
+  sendState(seeingNow());
 });
 
-// Packs that show a short message on the action bar can ask the HUD to leave it alone for a moment:
-//   /scriptevent realm:actionbar {"player":"<player id>","ticks":40}
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
-    if (id !== "realm:actionbar") return;
+    if (id !== "realm:actionbar" && id !== "realm:hud_line" && id !== "realm:hud_ping") return;
     try {
+      if (id === "realm:hud_ping") {
+        sendState(seeingNow(), true);
+        return;
+      }
       const req = JSON.parse(message);
       if (!req || typeof req.player !== "string") return;
+      if (id === "realm:hud_line") {
+        // A line under the HUD for one player, until `ticks` pass (resend to keep it) or text "" removes it:
+        //   /scriptevent realm:hud_line {"player":"<player id>","key":"stats","text":"Deaths 3","ticks":80}
+        if (typeof req.key !== "string") return;
+        let lines = extra.get(req.player);
+        const text = typeof req.text === "string" ? req.text.slice(0, 200) : "";
+        if (!text) lines?.delete(req.key);
+        else {
+          if (!lines) extra.set(req.player, (lines = new Map()));
+          lines.set(req.key, { text, until: system.currentTick + Math.min(Math.max(Number(req.ticks) || 80, 1), 400) });
+        }
+        return;
+      }
+      // Packs that show a short message on the action bar can ask the HUD to leave it alone for a moment:
+      //   /scriptevent realm:actionbar {"player":"<player id>","ticks":40}
       const ticks = Math.min(Math.max(Number(req.ticks) || 40, 0), 200);
       pausedUntil.set(req.player, system.currentTick + ticks);
       shown.delete(req.player); // redraw as soon as the pause ends

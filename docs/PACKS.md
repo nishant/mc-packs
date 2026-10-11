@@ -207,8 +207,9 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 
 1. Run `/realm:prefs` to open **My preferences**: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means **Enabled**. Change what you like and tap **Save**. A summary pops up with how many changes were saved and each one as before -> after, for example `1 change saved` and `Phantom Opt-out > Phantoms near me: Enabled -> Disabled` (chat gets the same). Tap **Back to my preferences** to change more, or **Done**.
 2. Your choices are remembered. `/realm:durability`, `/realm:phantoms` and `/realm:rain` flip the same switches as the form.
-3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). Pick a pack, change its settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone. A summary pops up with how many changes were saved and each one as before -> after, such as `Storm wind volume: 70% -> 50%`; tap **Back to Realm Settings** for another pack, or **Done**. A setting shown as text with `(change in config.js, then restart the world)` can only be changed there.
-4. **Operators:** **Reset a pack to defaults**, at the bottom of the menu, puts one pack's settings back to its `config.js` values after asking. Players' own preferences are kept.
+3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). The first button, **All settings**, holds every pack's settings with a heading per pack (see below); the buttons under it open one pack each. Change settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone. A summary pops up with how many changes were saved and each one as before -> after, such as `Storm wind volume: 70% -> 50%`; tap **Back to Realm Settings** for another pack, or **Done**. A setting shown as text with `(change in config.js, then restart the world)` can only be changed there.
+4. **Operators: All settings.** With the whole Realm Bundle that is about 300 settings, so they come on a few pages, `All settings (page 1 of 4)`, of about 100 lines each (`allPageSize`); a pack is never split across pages. The list at the top, **After saving, go to**, picks where **Save and go** takes you next: the next page (already chosen), any other page (each named by its first and last pack, such as `Page 2: Field Journal to Rain Extras`) or **Done (show what was saved)**. Each page saves its changes when you tap **Save and go**; closing a page saves nothing on it. At the end one summary lists every change from every page, each as `Pack > Setting: before -> after`. All settings and a pack's own page show the same saved values: change Leaderboard size on one and the other shows the new number the next time it opens.
+5. **Operators:** **Reset a pack to defaults**, at the bottom of the menu, puts one pack's settings back to its `config.js` values after asking. Players' own preferences are kept.
 
 ### What players see
 
@@ -226,11 +227,11 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:prefs` | Everyone | Opens **My preferences**: your own choices from every installed pack, in one form |
-| `/realm:config` | Ops | Opens **Realm Settings**: every installed pack's settings for everyone, then **Reset a pack to defaults**. Using an item named `Realm Settings` opens it too (`itemName`) |
+| `/realm:config` | Ops | Opens **Realm Settings**: **All settings** first (every pack's settings with a heading per pack, about 100 lines per page, `allPageSize`), then each installed pack's own page, then **Reset a pack to defaults**. Using an item named `Realm Settings` opens it too (`itemName`) |
 
 ### What each pack offers
 
-Each pack's own section says which of its options are in `/realm:config` and which are preferences in `/realm:prefs` (under its Configuration). With the whole Realm Bundle, `/realm:config` lists every pack that has settings (about 50) and `/realm:prefs` holds about 25 preferences in one form, such as **Welcome popup when I join**, **Low-durability warnings** (`/realm:durability`), **Phantoms near me** (`/realm:phantoms`), **Announce when I go AFK**, Quick Stack & Sort's sneak-tap and hotbar choices, **Unread letters notice on join** and **Rain extras** (`/realm:rain`).
+Each pack's own section says which of its options are in `/realm:config` and which are preferences in `/realm:prefs` (under its Configuration). With the whole Realm Bundle, `/realm:config` lists every pack that has settings (about 50) and `/realm:prefs` holds about 40 preferences in one form, with a heading per pack, such as **Stats ticker above my hotbar** and its stats, speed, style and colors (`/realm:stats_ticker`), **Welcome popup when I join**, **Low-durability warnings** (`/realm:durability`), **Phantoms near me** (`/realm:phantoms`), **Announce when I go AFK**, Quick Stack & Sort's sneak-tap and hotbar choices, **Unread letters notice on join** and **Rain extras** (`/realm:rain`).
 
 Everything else (lists such as crops, `keepItems` and container types, texts such as name tag prefixes, tick intervals, and command permissions) stays in `config.js`.
 
@@ -240,6 +241,7 @@ Everything else (lists such as crops, `keepItems` and container types, texts suc
 |---|---|---|
 | `answerTicks` | `10` | Ticks to wait for the installed packs to answer, and for each change to be confirmed (20 = 1 s) |
 | `itemName` | `Realm Settings` | Operators who use an item with exactly this name (renamed on an anvil) open `/realm:config`. `""` turns it off |
+| `allPageSize` | `100` | **All settings** puts at most this many lines on a page (a heading per pack plus a line per setting); a pack bigger than that gets a page of its own. `0` puts everything on one page (with the whole bundle about 300 controls and 47 KB of form, slow to open and to scroll on phones) |
 
 ### Saved data
 
@@ -254,6 +256,7 @@ None in this pack. Each pack saves its own settings, so they stay with that pack
 
 ### How it works
 
+- **All settings** and a pack's own page are two views of the same thing: both ask the packs for their current values (`realm:cfg_ping`) each time they open, draw each setting with the same control, and save through the same `realm:cfg_set`, so neither keeps a copy that could go stale. **My preferences** is one form with a heading per pack.
 - Every other behavior pack has a `scripts/settings.js` that lists what can change in game. The pack reads those options through it (`get(key)`: the world's saved value over `config.js`; `getFor(player, key)`: the player's own value over the world's), so a change applies on the next use, with no restart.
 - The packs never import each other. This pack sends the script event `realm:cfg_ping` (`{id, player}`), and each pack answers `realm:cfg_schema` with its options and their current values (`{id, pack, title, part, parts, options}`), split into parts under the 2048-character limit of a script event message. Saving sends `realm:cfg_set` (`{id, pack, key, value, player?}`) and resetting `realm:cfg_reset` (`{id, pack}`). The pack checks the value (type, range, choices), ignores keys it doesn't have, saves it and answers `realm:cfg_ack` (`{id, pack, key, ok, value, error?}`), which is what the save summary reports.
 - An option can carry `invert` (a switch stored as `off` but shown as **Enabled**, so no label is a double negative) and `names` (readable words for a list's choices). Labels name what the setting does, never "Turn off ...".
@@ -460,13 +463,16 @@ AFK state itself isn't saved: it's kept in memory and resets on rejoin. While a 
 
 ## Stats & Leaderboards — `stats_bp`
 
-Tracks player stats as scoreboards, with leaderboard menus and an optional sidebar.
+Tracks player stats as scoreboards, with leaderboard menus, a stats ticker above each player's hotbar that each player sets up for themselves, and an optional sidebar for everyone.
 
 ### How to use
 
 1. Play: stats count on their own (playtime and distance, except while AFK; deaths; mob and player kills; blocks mined and placed; elytra distance; joins).
-2. Run `/realm:stats` and pick **My stats** to see every stat, with your rank (`#2 of 7`) in each one you've scored in, and the date you first joined (UTC), or **Leaderboards** and a stat to see the top 10.
-3. **Operators:** `/realm:stats_sidebar <stat>` shows one stat on everyone's sidebar. Use a stat ID (`playtime`, `deaths`, `mobkills`, `pvpkills`, `mined`, `placed`, `travelled`, `flown`, `joins`), for example `/realm:stats_sidebar travelled`, `cycle` to rotate through all of them every 30 seconds, or `off`.
+2. Run `/realm:stats` to open **Realm Stats**. **My stats** shows every stat, with your rank (`#2 of 7`) in each one you've scored in, and the date you first joined (UTC); **Leaderboards** and a stat shows the top 10.
+3. Want your own stats on screen? Tap **Stats ticker** in the same menu (or run `/realm:stats_ticker`). Above your hotbar you now see one stat at a time, such as `Mob kills 120 #2 of 7`, changing every 5 seconds. Only you see yours.
+4. Tap **My ticker settings** (or open `/realm:prefs`, the same settings) to choose which stats it shows (one switch each), how many seconds each stays, **One stat at a time** or **Every chosen stat on one line**, the full style or a compact one (`Kills 120`), and the colors of the names and the numbers. Your choices are remembered.
+5. **Operators:** **Sidebar (everyone)** in `/realm:stats` (or `/realm:stats_sidebar <stat>`) picks what the sidebar shows: **Hidden**, one stat, or **Rotate through the stats**, how many seconds each stat stays and which stats the rotation includes. Bedrock shows the same sidebar to everyone, so players can't hide it for themselves; leave it **Hidden** and let players use the ticker if some don't want it. The stat IDs for the command are `playtime`, `deaths`, `mobkills`, `pvpkills`, `mined`, `placed`, `travelled`, `flown` and `joins`, plus `cycle` (rotate) and `off`, for example `/realm:stats_sidebar travelled`.
+6. **Operators:** `/realm:config` → **Stats & Leaderboards** has all of that, plus the leaderboard size, the ticker for the whole realm (**Stats ticker**), whether new players see it from the start, and what every ticker setting starts as for players who haven't chosen.
 
 ### Stats
 
@@ -489,12 +495,24 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 - Scores from the first Stats pack (v1.0.0, before the Realm Bundle), which stored them on the player entity, move to the name automatically the next time that player joins. Until then they're hidden from the menus, and the vanilla sidebar may still show them as "Player Offline".
 - First-joined date is saved per player, from the first join after the pack was added.
 
+### The stats ticker
+
+- **Off until a player enables it** (`tickerDefaultOn`), with **Stats ticker** in `/realm:stats`, `/realm:stats_ticker` or **Stats ticker above my hotbar** in `/realm:prefs` (all the same switch). While an operator has disabled it for the realm (`tickerEnabled`), nobody sees it, and the menu and `/realm:stats_ticker` say `The stats ticker is disabled on this realm.`
+- **Which stats:** one switch per stat, **Ticker shows Playtime** and so on. Players start with Playtime, Deaths, Mob kills, Blocks mined and Distance travelled (`tickerStats`). With none chosen, the ticker shows nothing.
+- **Speed:** **Ticker seconds per stat**, 2 to 60 (default 5, `tickerSeconds`), when it shows **One stat at a time** (`tickerMode`). **Every chosen stat on one line** shows them all at once, which gets long with many stats in the full style.
+- **Style:** **Name, value and rank** (`Mob kills 120 #2 of 7`) or **Compact: short name and value** (`Kills 120`, with the short names `Time`, `Deaths`, `Kills`, `PvP`, `Mined`, `Placed`, `Walked`, `Flown` and `Joins`) (`tickerStyle`).
+- **Colors:** **Ticker name color** (default gray) and **Ticker number color** (default white): White, Gray, Dark gray (dim), Gold, Yellow, Green, Aqua, Blue, Light purple or Red (`tickerLabelColor`, `tickerValueColor`). Dark gray for both is the closest to a faint, see-through ticker.
+- **Transparency:** scripts can't change how see-through the bar's dark background is. Each player sets that in Bedrock's own **Settings > Accessibility > Text Background Opacity**, which also changes chat and other text backgrounds.
+- **Sharing the bar:** the ticker uses the bar above the hotbar, like other packs' short notes. It waits while one is showing (packs that send `realm:actionbar`, such as Mob Health and the Elytra HUD while you glide) and redraws right after. With the [Coordinates HUD](#coordinates-hud--hud_bp) on, the ticker is a second line under your coordinates instead, so the two don't take turns.
+- It updates once a second and resends an unchanged line every 2 seconds, so it doesn't fade.
+
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:stats` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date) or **Leaderboards** (pick a stat to see the top 10, `leaderboardSize`, with your own position underneath if you're outside it) |
-| `/realm:stats_sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through every stat every 30 seconds, `sidebarCycleSeconds`) or **`off`** |
+| `/realm:stats` | Everyone | Opens **Realm Stats**: **My stats** (every stat with your rank `#2 of 7`, plus first-joined date), **Leaderboards** (pick a stat to see the top 10, `leaderboardSize`, with your own position underneath if you're outside it), **Stats ticker** (shows or hides yours), **My ticker settings** (which stats, seconds per stat, style and colors). Operators also get **Sidebar (everyone)** |
+| `/realm:stats_ticker` | Everyone | Shows or hides your own stats above the hotbar (default hidden, `tickerDefaultOn`). Remembered between sessions. Says so when an operator has disabled the ticker for the realm (`tickerEnabled`) |
+| `/realm:stats_sidebar <stat>` | Ops | Shows a stat on everyone's sidebar. `<stat>` is a stat ID, **`cycle`** (rotates through the chosen stats every 30 seconds, `sidebarCycleSeconds`, `sidebarStats`) or **`off`** (hides it). The same setting as **Sidebar (everyone)** |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -502,19 +520,35 @@ Tracks player stats as scoreboards, with leaderboard menus and an optional sideb
 |---|---|---|
 | `afkTag` | `afk` | Playtime isn't counted while a player has this tag. Must match the AFK pack's `tag`. `""` = always count |
 | `leaderboardSize` | `10` | Number of players on a leaderboard |
+| `sidebar` | `off` | What everyone's sidebar shows until an operator chooses: `off`, `cycle` or a stat ID |
 | `sidebarCycleSeconds` | `30` | Seconds per stat in `cycle` mode |
+| `sidebarStats` | every stat | The stats the sidebar rotates through in `cycle` mode |
+| `tickerEnabled` | `true` | The stats ticker for the whole realm. Disabled: nobody sees it, whatever they chose |
+| `tickerDefaultOn` | `false` | Show the ticker to players who never chose |
+| `tickerMode` | `cycle` | What players start with: `cycle` (one stat at a time) or `all` (every chosen stat on one line) |
+| `tickerSeconds` | `5` | What players start with: seconds per stat in `cycle` mode (2 to 60 in game) |
+| `tickerStyle` | `full` | What players start with: `full` (name, value and rank) or `compact` (short name and value) |
+| `tickerLabelColor` | `gray` | What players start with: the color of the stat names. One of `white`, `gray`, `dark_gray`, `gold`, `yellow`, `green`, `aqua`, `blue`, `light_purple`, `red` |
+| `tickerValueColor` | `white` | What players start with: the color of the numbers (same colors) |
+| `tickerStats` | `playtime`, `deaths`, `mobkills`, `mined`, `travelled` | What players start with: the stats the ticker shows |
 | `maxSpeed` | `100` | Faster movement (blocks/s) counts as a teleport and isn't added to distance |
 
-Operators can change `leaderboardSize` and `sidebarCycleSeconds` in game with `/realm:config`. A new cycle length applies from the next second.
+Operators can change every option except `afkTag` and `maxSpeed` in game with `/realm:config` (27 settings; `sidebarStats` and `tickerStats` as one switch per stat, such as **Sidebar rotation includes Deaths** and **Ticker shows Deaths (players start with)**). A new cycle length applies from the next second. Each player chooses their own ticker (on or off, mode, seconds, style, both colors and a switch per stat: 15 preferences) in `/realm:prefs` or **My ticker settings**; a player who never chose follows the realm's value, including later changes to it.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `stats_playtime`, `stats_deaths`, `stats_mobkills`, `stats_pvpkills`, `stats_mined`, `stats_placed`, `stats_travelled`, `stats_flown`, `stats_joins` | World scoreboard | The stats, one participant per player name. **Kept** when switching between the individual pack and a bundle |
-| `stats:sidebar` | World | Current sidebar mode (`<stat>` / `cycle`) |
+| `stats:sidebar` | World | Current sidebar choice (`<stat>`, `cycle` or `off`) when it differs from `sidebar`. Set by `/realm:stats_sidebar`, **Sidebar (everyone)** and `/realm:config` |
 | `stats:firstJoin` | Player | First join time (ms since epoch) |
+| `stats:pref` | Player | JSON of the player's ticker choices that differ from the realm's |
 | `stats:cfg` | World | Settings changed in `/realm:config` |
+
+### How it works
+
+- The sidebar is a scoreboard display slot, which Bedrock has one of per world: everyone sees the same sidebar, and scripts can't hide it for one player. That's why the per-player display is the ticker on the bar above the hotbar (`onScreenDisplay.setActionBar`), which is each player's own.
+- Once a second the pack builds each ticker from the player's scores (and ranks, in the full style). While the [Coordinates HUD](#coordinates-hud--hud_bp) is on for that player, it sends the line to the HUD with the script event `realm:hud_line` (`{"player":"<id>","key":"stats","text":"...","ticks":80}`) instead of drawing it; the HUD says who sees it with `realm:hud_state`. The packs don't import each other: without the HUD, the ticker draws on its own.
 
 ### Resetting stats
 
@@ -1118,6 +1152,7 @@ Your own coordinates, the direction you're facing and the day and time, on the b
 - **Day and time** (`showTime`): the in-game day, counted from 1, and the time on a 12-hour clock in 10-minute steps, with sunrise at 6:00 AM and noon at 12:00 PM (an in-game day lasts 20 minutes, so 10 in-game minutes pass in about 8 seconds).
 - Off for every player until they enable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it and `/realm:hud` says `The coordinates HUD is disabled on this realm.`
 - It updates at most twice a second (`intervalTicks`), and only when the text changes, or every 2 seconds (`refreshTicks`) so it doesn't fade while you stand still.
+- **The stats ticker:** a player who also has the [Stats pack](#stats--leaderboards--stats_bp)'s ticker on sees it as a second line under the coordinates, such as `Mob kills 120 #2 of 7`, instead of the two taking turns on the bar.
 - **Sharing the bar with other packs:** the same bar also shows other packs' short messages: low-durability warnings, `Sorted 31 stacks` and other Quick Stack & Sort results, entering or leaving a claim, the Chairs reminder, AFK and others. The HUD can't see them, so a message is replaced by the HUD as soon as the HUD's text changes (within half a second while you walk) or after 2 seconds when you stand still. The low-durability warning's red line also goes to chat, so it isn't lost. [Mob Health](#mob-health--mobhp_bp) asks the HUD to wait 2 seconds after each hit, so the health stays readable, and so do [Daily Quests](#daily-quests--quests_bp) progress notes. While you glide, the [Elytra HUD](#elytra-hud--elytra_bp) keeps the bar to itself; the coordinates come back a second or two after you land. Other packs can do the same (see How it works).
 
 ### Commands
@@ -1151,6 +1186,8 @@ Operators can change `enabled`, `defaultOn`, `showTime` and `eightWay` in game w
 - Every `intervalTicks`, for each player with the HUD on, the pack builds the text from the player's location, `getRotation()` (the yaw), `world.getDay()` and `world.getTimeOfDay()`, and calls `onScreenDisplay.setActionBar` only if it changed or `refreshTicks` have passed.
 - Another pack that puts a message on the bar can send the script event `realm:actionbar` with `{"player":"<player id>","ticks":40}`; the HUD then leaves that player's bar alone for that many ticks (up to 200) and redraws right after. Mob Health, Elytra HUD and Daily Quests do this; the packs never import each other.
 - Turning the HUD off clears the bar right away.
+- Another pack can add a line under the HUD for one player with the script event `realm:hud_line` (`{"player":"<player id>","key":"stats","text":"...","ticks":80}`): it shows while the HUD is on, until `ticks` pass (up to 400; resend to keep it) or a message with `"text":""` removes it. Lines show in `key` order. The Stats pack's ticker uses it.
+- So those packs know whether to draw on their own, the HUD sends `realm:hud_state` (`{"players":["<player id>", ...]}`, the players who see it) when that changes, every 5 seconds, and in reply to `realm:hud_ping`.
 
 ---
 
@@ -4279,6 +4316,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Hotbar Refill ↔ Low Durability Warning | Separate: the warning still comes before a tool breaks, and Hotbar Refill moves a spare in once it has. The spare starts with no warning until it runs low |
 | Coordinates HUD ↔ packs with action bar messages | Low Durability Warning, Quick Stack & Sort, Land Claims, Chairs, AFK and others show short messages on the same bar. For a player with the HUD on, the HUD replaces them once its text changes (within half a second while walking). Mob Health, Elytra HUD, Daily Quests, AFK's sleep status, Low Durability Warning, Quick Stack & Sort, Land Claims, Right-click Harvest and the adventure packs send `realm:actionbar`, so the HUD waits for them; Story Questlines' tracker also waits while another pack's note is showing |
 | Mob Health → Coordinates HUD | Each hit shows the mob's health and asks the HUD to hold off for `holdTicks` (2 seconds); then the coordinates come back |
+| Stats → Coordinates HUD | A player with both the stats ticker and the HUD on sees the ticker as a second line under the coordinates (`realm:hud_line`); the HUD says who sees it (`realm:hud_state`). Without the HUD the ticker draws on its own and waits for `realm:actionbar` notes, as the HUD does |
 | Elytra HUD → Coordinates HUD | While a player glides, the Elytra HUD sends `realm:actionbar`, so the Coordinates HUD pauses for that player and comes back a second or two after landing |
 | Elytra HUD ↔ Low Durability Warning, Land Claims, AFK smart sleep | All write the bar above the hotbar. While gliding, their messages can show for a moment before the HUD's next update replaces them |
 | Realm Mail ↔ Welcome, News | The unread letters line comes 8 seconds after joining (`notifyDelaySeconds`), after the welcome and news popups |
