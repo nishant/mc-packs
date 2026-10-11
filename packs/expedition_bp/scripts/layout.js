@@ -752,7 +752,15 @@ function puzzleParts(rm, r, s, L) {
     }
     case "simon": {
       const len = clamp(3 + Math.floor(L / 4), 3, 8);
-      pz.seq = Array.from({ length: len }, () => Math.floor(r() * 4));
+      // Never the same color twice in a row: a pressed button stays down for a second.
+      pz.seq = [];
+      for (let k = 0; k < len; k++) {
+        const prev = pz.seq[k - 1] ?? -1;
+        let c = Math.floor(r() * 3);
+        if (c >= prev && prev >= 0) c++;
+        else if (prev < 0) c = Math.floor(r() * 4);
+        pz.seq.push(c);
+      }
       [-3, -1, 1, 3].forEach((u, k) => P.push({ k: "wool", u, v: 2, y: 1, i: k }, { k: "button", u, v: 2, y: 2, f: "up", i: k }));
       P.push({ k: "gold", u: 0, v: -1, y: 1 }, { k: "button", u: 0, v: -1, y: 2, f: "up", i: 9 });
       P.push({ k: "sign", u: -2, v: signRow, y: 1, f: "back", t: `§lMemory§r\nWatch the ${len}\nflashes, then\npress in order` }, { k: "sign", u: 2, v: signRow, y: 1, f: "back", t: "§lGold button§r\nshows the\nsequence again" });

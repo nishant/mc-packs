@@ -2,9 +2,9 @@
   "format_version": 2,
   "header": {
     "name": "Expeditions",
-    "description": "Dungeon runs for you and your party: fight through generated rooms, solve the lever puzzle, beat the boss and race the clock for treasure. /realm:expedition",
+    "description": "Dungeon runs for you and your party: 8 dungeons from Easy to Nightmare tier 20, with affixes, waves, puzzles, traps, shafts, a boss, treasure and sigils. /realm:expedition",
     "uuid": "6b3b08c0-7abc-41b2-91e1-6c6ea26d158a",
-    "version": [1, 0, 1],
+    "version": [2, 0, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

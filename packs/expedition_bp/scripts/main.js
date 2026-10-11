@@ -438,7 +438,12 @@ function sidePoint(side, a) {
 function fill(dim, from, to, block) {
   const a = { x: Math.min(from.x, to.x), y: Math.min(from.y, to.y), z: Math.min(from.z, to.z) };
   const b = { x: Math.max(from.x, to.x), y: Math.max(from.y, to.y), z: Math.max(from.z, to.z) };
-  dim.fillBlocks(new BlockVolume(a, b), block, { blockFilter: { includeTypes: blockLists().replaceable } });
+  const vol = new BlockVolume(a, b);
+  const replaceable = blockLists().replaceable;
+  // A block filter never matches air (BDS 1.26), so a filtered fill leaves caves open. When nothing but
+  // natural blocks, air and the dungeon's own is in the volume, fill it whole; otherwise only what's ours to replace.
+  if (!dim.containsBlock(vol, { excludeTypes: replaceable }, false)) dim.fillBlocks(vol, block);
+  else dim.fillBlocks(vol, block, { blockFilter: { includeTypes: replaceable } });
 }
 
 /** @param {Dimension} dim @param {Vector3} at @param {BlockPermutation} p */
@@ -1991,6 +1996,13 @@ function onButton(run, e, who) {
   const pz = rm.puzzle;
   const st = puzState(run, i);
   if (!pz || st.solved) return;
+  if (!st.active) {
+    // Pressed before the room woke up (a side room entered from its doorway): wake it first, so the press doesn't count half a solution.
+    st.active = true;
+    if (rm.kind === "cache") tell(run, "§dA side room with a puzzle: solve it to open a hidden cache.");
+    puzzleIntro(run, i);
+    return;
+  }
   const now = system.currentTick;
   switch (pz.type) {
     case "simon": {
@@ -2577,6 +2589,16 @@ world.afterEvents.buttonPush.subscribe(({ block, source }) => {
     const hit = elemAt(block);
     if (!hit || hit.e.k !== "button") return;
     onButton(hit.run, hit.e, source instanceof Player ? source : undefined);
+    // Puzzle buttons pop back up at once, so the same one can be pressed again right away (a sequence may repeat a color).
+    const at = hit.e.at;
+    system.runTimeout(() => {
+      try {
+        const b = overworld().getBlock(at);
+        if (b?.typeId === B.button && b.permutation.getState("button_pressed_bit") === true) b.setPermutation(b.permutation.withState("button_pressed_bit", false));
+      } catch {
+        // gone
+      }
+    }, 2);
   } catch (e) {
     console.warn(`[expedition] button: ${e}`);
   }
