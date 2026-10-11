@@ -686,7 +686,7 @@ async function placePage(player, name) {
     actions.push(["Set here (no building)", () => setHere(player, name)]);
     if (PREFABS[name]) actions.push(["Build here (preview)", () => previewBuild(player, name)]);
     if (rec && !rec.b && !rec.p && PREFABS[name] && rec.y !== undefined)
-      actions.push(["Build at the saved spot (preview)", () => (player.dimension.id === rec.dim ? previewBuild(player, name, rec) : player.sendMessage("§c[Story] Go to that dimension first."))]);
+      actions.push(["Build at the saved spot (preview)", () => (player.dimension.id === rec.dim ? previewBuild(player, name, { x: rec.x, y: rec.y ?? 0, z: rec.z }) : player.sendMessage("§c[Story] Go to that dimension first."))]);
     if (rec?.b)
       actions.push([
         "Rebuild (repair)",
@@ -757,6 +757,3 @@ export function listPlaces(player) {
   });
   player.sendMessage(`§6Story places:§r\n${lines.join("\n")}\n§7Set one where you stand: /realm:saga_place <name>. Build and manage them: /realm:saga_places`);
 }
-
-/** @param {Player} player */
-export const placesFor = (player) => (player instanceof Player ? placesMenu(player) : undefined);

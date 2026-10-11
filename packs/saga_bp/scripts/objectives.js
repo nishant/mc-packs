@@ -4,6 +4,7 @@ import { EquipmentSlot, GameMode, ItemStack, Player, system, world } from "@mine
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, spawnActor } from "./actors.js";
 import {
+  active,
   applyChoice,
   chapterDone,
   entries,
@@ -185,7 +186,7 @@ export function open(player, type) {
   const items = byType(player).get(type);
   if (!items) return [];
   const saga = sagaOf(player);
-  return items.filter(({ e, i }) => !objDone(e, i, saga));
+  return items.filter(({ e, i }) => active(e, i, saga));
 }
 
 /**
@@ -237,14 +238,14 @@ function share(player, keys, type, amountFor, credited) {
 // Inventory
 // ---------------------------------------------------------------------------
 
-/** Does a stack match an item and (optionally) a custom name? @param {ItemStack | undefined} stack @param {string} item @param {string} [name] */
+/** Does a stack match an item and/or a custom name (either may be left out)? @param {ItemStack | undefined} stack @param {string | undefined} item @param {string} [name] */
 function same(stack, item, name) {
-  if (!stack || stack.typeId !== item) return false;
+  if (!stack || (item !== undefined && stack.typeId !== item)) return false;
   if (name === undefined) return true;
   return plain(stack.nameTag ?? "").trim().toLowerCase() === plain(name).trim().toLowerCase();
 }
 
-/** @param {Player} player @param {string} item @param {string} [name] */
+/** @param {Player} player @param {string | undefined} item @param {string} [name] */
 export function countItem(player, item, name) {
   let n = 0;
   try {
@@ -263,7 +264,7 @@ export function countItem(player, item, name) {
 /**
  * Takes up to `max` of an item. Without `name`, renamed items are never taken; with it, only items
  * with that name are. Returns how many were taken.
- * @param {Player} player @param {string} item @param {number} max @param {string} [name]
+ * @param {Player} player @param {string | undefined} item @param {number} max @param {string} [name]
  */
 function takeItem(player, item, max, name) {
   let taken = 0;
@@ -323,7 +324,7 @@ export function giveItem(player, item, amount, name, lore) {
 const PROP_WEATHER = "saga:weather";
 export let weather = "Clear";
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return;
   weather = newWeather;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
@@ -385,30 +386,72 @@ function championAlive(tag, dim) {
   }
 }
 
-/** Asks for the story champion when the player comes close to its place. @param {Player} player @param {Objective} obj */
+const WATER_MOBS = new Set(["minecraft:guardian", "minecraft:elder_guardian", "minecraft:drowned", "minecraft:squid", "minecraft:glow_squid", "minecraft:dolphin"]);
+
+/** The nearest water within 24 blocks of a spot (a sea mob's champion swims there), or undefined. @param {Dimension} dim @param {Vector3} at */
+function waterNear(dim, at) {
+  for (let r = 0; r <= 24; r += 3) {
+    const steps = r === 0 ? 1 : Math.max(8, Math.round((r * 2 * Math.PI) / 3));
+    for (let k = 0; k < steps; k++) {
+      const x = Math.floor(at.x + Math.cos((k / steps) * Math.PI * 2) * r);
+      const z = Math.floor(at.z + Math.sin((k / steps) * Math.PI * 2) * r);
+      try {
+        const top = dim.getTopmostBlock({ x, z });
+        if (!top) continue;
+        // The topmost block may be the water itself, or the sea floor under it.
+        for (const y of [top.location.y, top.location.y + 1]) {
+          const b = dim.getBlock({ x, y, z });
+          if (b?.isLiquid && b.typeId.includes("water")) return { x: x + 0.5, y, z: z + 0.5 };
+        }
+      } catch {
+        // unloaded
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Asks for the story champion when the player comes close to its place (or, for a champion with no
+ * place, near the player; at night only when the objective says `night`).
+ * @param {Player} player @param {Objective} obj
+ */
 function championNear(player, obj) {
   const champ = obj.champion;
   if (!champ) return;
-  const loc = locate(obj);
-  if (!loc || typeof loc === "string" || loc.pending || player.dimension.id !== loc.dim) return;
-  if (across(player.location, loc) > radiusOf(obj)) return;
-  const now = Date.now();
   const dim = player.dimension;
+  /** @type {Vector3} */
+  let at;
+  const loc = locate(obj);
+  if (loc === undefined) {
+    if (obj.night && !isNight()) return;
+    const p = player.location;
+    const a = Math.random() * Math.PI * 2;
+    const x = p.x + Math.cos(a) * 10;
+    const z = p.z + Math.sin(a) * 10;
+    at = { x, y: groundAt(dim, x, z, p.y) ?? p.y, z };
+  } else {
+    if (typeof loc === "string" || loc.pending || player.dimension.id !== loc.dim) return;
+    if (across(player.location, loc) > radiusOf(obj)) return;
+    at = { x: loc.x + 0.5, y: loc.y ?? player.location.y, z: loc.z + 0.5 };
+  }
+  const now = Date.now();
   watchAdds(champ.tag, dim, player);
   if ((championNext.get(champ.tag) ?? 0) > now) return;
-  const at = { x: loc.x + 0.5, y: loc.y ?? player.location.y, z: loc.z + 0.5 };
   if (championAlive(champ.tag, dim)) {
     championNext.set(champ.tag, now + 10000);
     return;
   }
+  if (WATER_MOBS.has(champ.mob)) at = waterNear(dim, at) ?? at;
   championNext.set(champ.tag, now + Number(get("championRetrySeconds")) * 1000);
-  send("realm:champion_spawn", { dim: loc.dim, x: at.x, y: at.y, z: at.z, mob: champ.mob, trait: champ.trait, name: champ.name, tag: champ.tag, health: champ.health });
+  send("realm:champion_spawn", { dim: dim.id, x: at.x, y: at.y, z: at.z, mob: champ.mob, trait: champ.trait, name: champ.name, tag: champ.tag, health: champ.health });
   if (champ.warn) player.sendMessage(`§c[Story] ${champ.warn}`);
+  const spawnAt = at;
   // No Champions pack? Spawn a tougher named mob ourselves, so the story can still be finished.
   system.runTimeout(() => {
     try {
       if (get("championFallback") !== true || championAlive(champ.tag, dim)) return;
-      const mob = dim.spawnEntity(/** @type {any} */ (champ.mob), at);
+      const mob = dim.spawnEntity(/** @type {any} */ (champ.mob), spawnAt);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
       mob.addTag(champ.tag);
@@ -417,8 +460,14 @@ function championNear(player, obj) {
       mob.addEffect("resistance", LONG, { amplifier: 1, showParticles: false });
       mob.addEffect("strength", LONG, { amplifier: 1, showParticles: false });
       mob.addEffect("fire_resistance", LONG, { amplifier: 0, showParticles: false });
-      mob.addEffect("instant_health", 1, { amplifier: 20, showParticles: false });
-      mob.addEffect("regeneration", 200, { amplifier: 4, showParticles: false }); // fill up the boosted health
+      // Fill up the boosted health a moment later (healing effects would hurt undead mobs).
+      system.runTimeout(() => {
+        try {
+          if (mob.isValid) mob.getComponent("minecraft:health")?.resetToMaxValue();
+        } catch {
+          // gone
+        }
+      }, 2);
     } catch (e) {
       console.warn(`[saga] champion fallback: ${e}`);
     }
@@ -783,11 +832,11 @@ export function talked(player, npc) {
   if (!counting(player)) return;
   for (const { e, i, obj } of open(player, "talk")) if (obj.npc === npc) bump(player, e, i, 1);
   for (const { e, i, obj } of open(player, "deliver")) {
-    if (obj.npc !== npc || !obj.item) continue;
+    if (obj.npc !== npc || (!obj.item && !obj.name)) continue;
     const need = target(obj) - progressOf(e, i);
     if (need <= 0) continue;
     const got = takeItem(player, obj.item, need, obj.name);
-    const name = obj.name ? `"${plain(obj.name)}"` : itemName(obj.item);
+    const name = obj.name ? `"${plain(obj.name)}"` : itemName(obj.item ?? "");
     if (got > 0) {
       player.sendMessage(`§e[Story] You give ${npcName(npc)} ${got} ${name} (${progressOf(e, i) + got}/${target(obj)}).`);
       bump(player, e, i, got);
@@ -925,6 +974,7 @@ async function runMeet(player, s) {
     bump(player, e, i, 1);
     const key = s.key;
     const pid = player.id;
+    s.data.keepUntil = system.currentTick + 170;
     system.runTimeout(() => removeActors({ owner: pid, key }, true), 160);
     if (choice?.reply?.length) await dialog(player, obj.who?.name ?? "", "", pagesFor(choice.reply, saga, e.story.id, player.name), ["OK"]);
   });
@@ -1125,6 +1175,7 @@ function stealthFast(s, player) {
   // The goal.
   if (across(p, sp.goal) <= 2.5 && (sp.goal.y === undefined || Math.abs(p.y - sp.goal.y) < 4)) {
     if (counting(player)) {
+      s.data.keepUntil = system.currentTick + 50;
       bump(player, s.e, s.i, 1);
       system.runTimeout(() => endScene(s.pid, s.key, true), 40);
     }
@@ -1216,6 +1267,7 @@ function escortTick(player, e, i, obj) {
         bump(player, e, i, 1);
         const pid = player.id;
         const key = s.key;
+        s.data.keepUntil = system.currentTick + 110;
         system.runTimeout(() => endScene(pid, key, true), 100);
       }
       return;
@@ -1409,6 +1461,7 @@ function defendTick(player, e, i, obj) {
       player.sendMessage(`§a[Story] ${loc.label} holds!`);
       const pid = player.id;
       const key = s.key;
+      s.data.keepUntil = system.currentTick + 110;
       system.runTimeout(() => endScene(pid, key, true), 100);
       return;
     }
@@ -1665,7 +1718,7 @@ export function tickPlayer(player, list) {
   const p = player.location;
   for (const e of list) {
     e.chapter.objectives.forEach((obj, i) => {
-      if (!objApplies(e, obj, saga) || progressOf(e, i) >= target(obj)) return;
+      if (!active(e, i, saga)) return;
       try {
         // Timed objectives: progress resets when the time runs out.
         if (obj.within && e.st.x?.[`t${i}`] && Date.now() - e.st.x[`t${i}`] > obj.within * 1000) {
@@ -1688,7 +1741,7 @@ export function tickPlayer(player, list) {
             break;
           }
           case "collect":
-            if (counts && obj.item) bump(player, e, i, countItem(player, obj.item, obj.name), true);
+            if (counts && (obj.item || obj.name)) bump(player, e, i, countItem(player, obj.item, obj.name), true);
             break;
           case "survive": {
             if (!counts || survived.has(player.id) || !weatherOk(obj, dim) || !outdoors(player) || !playerIn(player, obj)) break;
@@ -1809,7 +1862,8 @@ export function tickPlayer(player, list) {
 
 /** Starts a loop run: scenes not visited in the previous run are ended. */
 export function beginRun() {
-  for (const s of [...scenes.values()]) if (s.seen < run) endScene(s.pid, s.key);
+  const now = system.currentTick;
+  for (const s of [...scenes.values()]) if (s.seen < run && !(s.data?.keepUntil > now)) endScene(s.pid, s.key);
   run++;
   survived = new Set();
 }

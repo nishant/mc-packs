@@ -33,7 +33,7 @@ import { npcName, send } from "./util.js";
  */
 /**
  * A daily favor's saved state, per NPC.
- * @typedef {{ id: string, d: number, a?: number, o?: number[], x?: Record<string, number>, c?: number, t?: number }} FavorState
+ * @typedef {{ id: string, d: number, a?: number, o?: number[], x?: Record<string, number>, c?: number, t?: number, h?: number }} FavorState
  */
 /**
  * @typedef {object} Saga
@@ -353,15 +353,12 @@ export function currentChapter(saga, story) {
 /** "Chapter 3 of 9": the place among the chapters this player gets. @param {Saga} saga @param {Story} story @param {number} index */
 export function chapterNumber(saga, story, index) {
   const st = saga.s[story.id];
-  let pos = 0;
-  let total = 0;
-  story.chapters.forEach((c, i) => {
-    const counts = st?.dn.includes(c.id) || i === index || chapterApplies(c, saga, story);
-    if (!counts) return;
-    total++;
-    if (i <= index) pos++;
-  });
-  return { pos, total };
+  // In the order the player plays them: the chapters done so far, then this one, then the rest that apply now.
+  const done = story.chapters.filter((c) => st?.dn.includes(c.id)).length;
+  const here = story.chapters[index];
+  const isDone = !!here && !!st?.dn.includes(here.id);
+  const rest = story.chapters.filter((c, i) => i !== index && !st?.dn.includes(c.id) && chapterApplies(c, saga, story)).length;
+  return { pos: isDone ? done : done + 1, total: done + rest + (isDone ? 0 : 1) };
 }
 
 /** What an objective counts up to. @param {Objective} obj */
@@ -411,6 +408,16 @@ export const chapterDone = (e, saga) => e.chapter.objectives.every((_, i) => obj
 
 /** The first unfinished objective (the "current step"), or -1. @param {Entry} e @param {Saga} saga */
 export const currentStep = (e, saga) => e.chapter.objectives.findIndex((_, i) => !objDone(e, i, saga));
+
+/**
+ * Does objective i count now? Unfinished and there for the player, and in a `sequential` chapter
+ * only the first unfinished one.
+ * @param {Entry} e @param {number} i @param {Saga} saga
+ */
+export function active(e, i, saga) {
+  if (objDone(e, i, saga)) return false;
+  return !e.chapter.sequential || currentStep(e, saga) === i;
+}
 
 /** @type {Map<string, { v: number, list: Entry[] }>} */
 const entryCache = new Map();
