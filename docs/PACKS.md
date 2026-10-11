@@ -2716,40 +2716,53 @@ Operators can change `enabled`, `trails`, `trailTicks`, `trailBudget` and `annou
 
 ## Relics — `relics_bp`
 
-Ten rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Relics come from adventures in other packs (champions, bounties, treasure maps, story chapters, caravans) or are forged from 8 Relic Shards at a relicsmith. Relics never break and stay with you when you die.
+Seventeen rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Ten come from adventures in other packs (champions, bounties, treasure maps, caravans) or are forged from 8 Relic Shards at a relicsmith; seven more are story relics, earned only in the [Story Questlines](#story-questlines--saga_bp). Relics never break and stay with you when you die.
 
 ### How to use
 
 1. Find relics: other packs hand them out as rewards, and champions drop **Relic Shards** (purple amethyst shards named `Relic Shard`). Getting one says `You received a relic: Storm Staff (Legendary). Use in a thunderstorm: lightning strikes what you look at.` in chat.
-2. Keep a relic where it works: some in your main hand, some anywhere in your hotbar, boots and the lamp worn. Its lore says what it does; `/realm:relics` says where it works.
-3. Bring 8 Relic Shards to a relicsmith (Ida the Relicsmith, from the [Townsfolk](#townsfolk--npc_bp) pack): tap her and pick **Relic forge**, then **Forge a relic**. You get a random relic you haven't had yet; rarer ones are less likely.
-4. Run `/realm:relics` to see the relics you've found, what each does and how many are left to find.
+2. Keep a relic where it works: some in your main hand, some anywhere in your hotbar or off hand, helmets and boots worn. Its lore says what it does; **Your relics** in `/realm:relics` says where it works.
+3. Bring 8 Relic Shards to a relicsmith (Ida the Relicsmith, from the [Townsfolk](#townsfolk--npc_bp) pack): tap her and pick **Relic forge**, then **Forge a relic**. You get a random relic you haven't had yet; rarer ones are less likely. Story relics are never forged.
+4. Run `/realm:relics` for the menu: **Your relics** (also `/realm:relics_list`) lists the relics you've found, what each does and how many are left to find.
 5. Holding the Storm Meter shows the nearest storm cell above the hotbar. Don't want that? Disable **Storm Meter readout** in `/realm:prefs`.
-6. **Operators:** `/realm:relics_give <player> <relic>` gives a relic. `/realm:config` → **Relics** enables or disables the abilities, sets the shards a forge takes, lets players forge anywhere, and sets whether relics wear out and whether the Storm Staff can strike players.
+6. **Operators:** the `/realm:relics` menu also has **Give a relic** (pick a player and a relic; or `/realm:relics_give <player> <relic>`) and **Place a relicsmith here** (or `/realm:relics_smith`), which asks the Townsfolk pack to place Ida where you stand. `/realm:config` → **Relics** enables or disables the abilities, sets the shards a forge takes, lets players forge anywhere, and sets whether relics wear out, whether the Storm Staff can strike players and how close to spawn it may strike.
 
 ### What players see
 
-- **The relics** (`relics`):
+- **The relics** (`relics`). The first ten are found or forged:
+
+  | Relic | Item | Rarity | Where it works | What it does | How to get it (other packs' defaults) |
+  |---|---|---|---|---|---|
+  | Storm Staff (`storm_staff`) | Trident | Legendary | Main hand | Use it in a thunderstorm in the Overworld: lightning strikes the mob or block you look at, up to 48 blocks away (`staffRange`). Cooldown 30 s | Forge |
+  | Rain Charm (`rain_charm`) | Goat horn | Common | Hotbar or off hand | Regeneration I while you stand in the rain | Forge, pot of gold, treasure maps |
+  | Tide Boots (`tide_boots`) | Blue leather boots | Rare | Worn | Speed I and Jump Boost I while you're in the rain (Bedrock has no Dolphin's Grace effect; before 1.1.0 the boots asked for it, failed, and gave nothing) | Forge, expeditions, the story (The Drowned Bell) |
+  | Lantern of the Deep (`lantern_deep`) | Warped fungus on a stick | Common | Hotbar or off hand | Night Vision below y 0 | Forge, expeditions |
+  | Storm Meter (`storm_meter`) | Spyglass | Rare | Main hand | Shows `Storm Meter: Cell: 340m NE, strength 7/10` above the hotbar, or `No storm cell` | Forge |
+  | Compass of Echoes (`compass_echoes`) | Music disc (5); older ones are a brush | Rare | Main hand | Use it: chat says where the nearest champion is within 128 blocks (`compassRange`), e.g. `Compass of Echoes: a champion (Gerald the Unexploded) is 84m NE.` Cooldown 10 s | Forge, expeditions, treasure maps, the story (The Last Map) |
+  | Frost Band (`frost_band`) | Music disc (wait) | Rare | Hotbar or off hand | Your melee hits give Slowness I for 3 s | Forge, expeditions |
+  | Sun Pendant (`sun_pendant`) | Music disc (blocks) | Epic | Hotbar or off hand | When you catch fire: Fire Resistance for 10 s. Cooldown 120 s | Forge, pot of gold, treasure maps |
+  | Miner's Lamp (`miners_lamp`) | Golden helmet | Common | Worn | Haste I below y 30 | Forge, expeditions |
+  | Wayfarer Boots (`wayfarer_boots`) | Chainmail boots | Common | Worn | Speed I while you sprint outdoors in the Overworld | Forge, treasure maps |
+
+  The seven **story relics** are rewards from the [Story Questlines](#story-questlines--saga_bp) only (never forged, never in random drops):
 
   | Relic | Item | Rarity | Where it works | What it does |
   |---|---|---|---|---|
-  | Storm Staff (`storm_staff`) | Trident | Legendary | Main hand | Use it during a thunderstorm in the overworld: lightning strikes the mob or block you look at, up to 32 blocks away (`staffRange`). Cooldown 30 s |
-  | Rain Charm (`rain_charm`) | Goat horn | Common | Hotbar or off hand | Regeneration I while you stand in the rain |
-  | Tide Boots (`tide_boots`) | Blue leather boots | Rare | Worn | Dolphin's Grace and Speed I while you're in the rain |
-  | Lantern of the Deep (`lantern_deep`) | Warped fungus on a stick | Common | Hotbar or off hand | Night Vision below y 0 |
-  | Storm Meter (`storm_meter`) | Spyglass | Rare | Main hand | Shows `Storm Meter: Cell: 340m NE, strength 7/10` above the hotbar, or `No storm cell` |
-  | Compass of Echoes (`compass_echoes`) | Lodestone compass | Rare | Main hand | Use it: chat says where the nearest champion is within 128 blocks (`compassRange`), e.g. `Compass of Echoes: a champion (Gerald the Unexploded) is 84m NE.` Cooldown 10 s |
-  | Frost Band (`frost_band`) | Music disc (wait) | Rare | Hotbar or off hand | Your melee hits give Slowness I for 3 s |
-  | Sun Pendant (`sun_pendant`) | Music disc (blocks) | Epic | Hotbar or off hand | When you catch fire: Fire Resistance for 10 s. Cooldown 120 s |
-  | Miner's Lamp (`miners_lamp`) | Golden helmet | Common | Worn | Haste I below y 30 |
-  | Wayfarer Boots (`wayfarer_boots`) | Chainmail boots | Common | Worn | Speed I while you sprint outdoors in the overworld |
+  | Lantern Shard (`lantern_shard`) | Music disc (otherside) | Epic | Hotbar or off hand | Night Vision in the dark (at night, under cover below y 50, or in the Nether and the End). Held in your main hand, every few seconds it says where the nearest unlit seal is: `Lantern Shard: The Tide Seal pulls 340m NE` (when the story reports its seals) |
+  | Gray Choir Mask (`choir_mask`) | Gray leather helmet | Epic | Worn | Choir enemies (the story's mobs tagged `saga:choir`) only do half damage to you, unless you've hit one in the last 10 s; Darkness (wardens, sculk shriekers) is removed. Sneaking is already silent to sculk in the game |
+  | Hal's Compass (`hal_compass`) | Music disc (13) | Rare | Main hand | Use it: `Hal's Compass: Your last death: 340m NE (y 12). Home: 120m S (y 70).` (home is your bed or respawn point, else `World spawn`). Cooldown 5 s |
+  | Fen Charm (`vesna_charm`) | Music disc (chirp) | Rare | Hotbar or off hand | Poison never takes hold, and witches (their potions too) can't hurt you, unless you've hit a witch in the last 10 s |
+  | The Singing Blade (`singing_blade`) | Iron sword | Epic | Main hand | Each melee hit rings a bell note: monsters within 6 blocks of what you hit (`auraRange`) get Slowness II for 2 s; at most once every 2 s |
+  | The Hollow Crown (`hollow_crown`) | Chainmail helmet | Legendary | Worn | At night in the Overworld: Night Vision and Strength I. Villagers and wandering traders shun you: tapping one says `The villager shrinks away from the Hollow Crown` (no trading while you wear it) |
+  | Keeper's Lamp (`keeper_lamp`) | Music disc (strad) | Rare | Hotbar or off hand | In the dark: a ring of end rod light around you (everyone sees it), and monsters within 6 blocks (`auraRange`) slow down (Slowness I) |
 
-- **A relic** has a colored name (green common, blue rare, purple epic, gold legendary) and lore: its rarity, what it does and its cooldown. Relics are kept when you die (`keepOnDeath`) and their durability is restored while you hold or wear them (`autoRepair`), so they never break. The Storm Staff is a trident that can't be thrown (using it calls lightning instead), so it can't be lost in lava or the void; it still hits like a trident. Relics can't go in a jukebox. Don't put a relic in a crafting grid (to dye the Tide Boots, say): what comes out is a plain item.
-- **"In the rain"** means in the overworld while it rains or thunders, with nothing 2 or more blocks over your head (leaves count as cover), and not on sand, terracotta, snow or ice, where it doesn't rain.
+- **A relic** has a colored name (green common, blue rare, purple epic, gold legendary) and lore: its rarity, what it does and its cooldown. Relics are kept when you die (`keepOnDeath`) and their durability is restored while you hold or wear them (`autoRepair`), so they never break. The Storm Staff is a trident that can't be thrown or charged (using it calls lightning instead), so it can't be lost in lava or the void; it still hits like a trident. Relics can't go in a jukebox. Don't put a relic in a crafting grid (to dye the Tide Boots, say): what comes out is a plain item.
+- **"In the rain"** means in the Overworld while it rains or thunders, with nothing 2 or more blocks over your head (leaves count as cover), and not on sand, terracotta, snow or ice, where it doesn't rain.
 - **Effects** last about 10 seconds, are topped up while the condition holds and are removed within a second of it ending. A stronger or longer effect, such as a potion, is never shortened.
-- **Too soon:** using a relic on cooldown says `Storm Staff: ready in 12s` above the hotbar. The Storm Staff out of a thunderstorm says `Storm Staff: it only answers in a thunderstorm`; within 64 blocks of world spawn (`avoidSpawn`) it says `Storm Staff: the sky won't strike this close to spawn`, so the town can't be set on fire. It doesn't strike players (`staffHitsPlayers`) or townsfolk; it hits what's behind them. It won't strike within 5 blocks of you, another player (unless `staffHitsPlayers`), a villager or wandering trader, a tamed pet, a townsfolk NPC, an armor stand, an item frame or a painting (`Storm Staff: too close to you`), and any fire the bolt starts is put out right away, so it can't burn a build.
-- **The forge** takes 8 shards (`shardsPerForge`) from anywhere in your inventory and gives a random relic you haven't had yet, picked by rarity: common 50, rare 30, epic 15, legendary 5 (`rarityWeights`). Once you've had all ten, any relic. Without shards it says `You need 8 Relic Shards to forge a relic. You have 3.`
-- **`/realm:relics`** shows `Relics found: 3 of 10`, each relic you've had with its rarity, ability, cooldown and where it works (`- not with you` when it isn't in your inventory), then how many of each rarity are still to find. Opened from a relicsmith (or anywhere with `forgeAnywhere`), it has a **Forge a relic** button.
+- **The Storm Staff** answers when the pack knows it's thundering: the weather changed to a thunderstorm while the pack was running, a lightning bolt it didn't make struck in the Overworld in the last minute (so it also works in a storm that started before the pack was installed, once the first bolt falls), or you're within 160 blocks of a storm cell from [Storm Chasing](#storm-chasing--storm_bp). A strike says `Storm Staff: lightning! Ready again in 30s`. Otherwise it says why, above the hotbar: `Storm Staff: it only answers in a thunderstorm`, `Storm Staff: ready in 12s`, `Storm Staff: nothing to strike within 48 blocks`, `Storm Staff: the sky won't strike within 24 blocks of spawn` (`avoidSpawn`, 0 = anywhere), or `Storm Staff: too close to you`. It doesn't strike players (`staffHitsPlayers`) or townsfolk; it hits what's behind them. It won't strike within 5 blocks of you, another player (unless `staffHitsPlayers`), a villager or wandering trader, a tamed pet, a townsfolk NPC, an armor stand, an item frame or a painting, and any fire the bolt starts is put out (checked for 4 seconds), so it can't burn a build.
+- **The forge** takes 8 shards (`shardsPerForge`) from anywhere in your inventory and gives a random relic you haven't had yet from the first ten, picked by rarity: common 50, rare 30, epic 15, legendary 5 (`rarityWeights`). Once you've had all ten, any of them. Without shards it says `You need 8 Relic Shards to forge a relic. You have 3.`
+- **`/realm:relics`** opens a menu: **Your relics**, **Forge a relic** (only when operators let players forge anywhere, `forgeAnywhere`), and for operators **Give a relic** and **Place a relicsmith here**. **Your relics** shows `Relics found: 3 of 10`, each relic you've had with its rarity, ability, cooldown and where it works (`- not with you` when it isn't in your inventory), how many of each rarity are still to find, then `Story relics: 1 of 7` and the story relics you've had. Opened from a relicsmith, it's the **Relic forge** with a **Forge a relic** button.
+- **Place a relicsmith here** (operators) asks the [Townsfolk](#townsfolk--npc_bp) pack to place Ida the Relicsmith (`relicsmithId`) at your spot, facing your way, like `/realm:npc_add ida`: `The relicsmith is here.` Without the Townsfolk pack it says `No answer from the Townsfolk pack, so no relicsmith was placed.` and that the pack is needed. A relicsmith is any townsfolk with the `relicsmith` role (`npcRole`).
 - **Gifts for players who are offline** (from another pack) wait and are handed over 5 seconds after they next join.
 - The first time you get each relic, the [Field Journal](#field-journal--journal_bp) records it on its Relics page.
 
@@ -2757,8 +2770,10 @@ Ten rare relics, each a named item with a power of its own: a staff that calls l
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:relics` | Everyone | Lists the relics you've found and what they do. Forging needs a relicsmith unless operators allow it anywhere (default disabled, `forgeAnywhere`) |
-| `/realm:relics_give <player> <relic>` | Operators | Gives the player a new relic: `storm_staff`, `rain_charm`, `tide_boots`, `lantern_deep`, `storm_meter`, `compass_echoes`, `frost_band`, `sun_pendant`, `miners_lamp` or `wayfarer_boots` |
+| `/realm:relics` | Everyone | Opens the relics menu: your relics, the forge when players may forge anywhere (default disabled, `forgeAnywhere`), and for operators giving a relic and placing a relicsmith |
+| `/realm:relics_list` | Everyone | Lists the relics you've found and what they do |
+| `/realm:relics_give <player> <relic>` | Operators | Gives the player a new relic: `storm_staff`, `rain_charm`, `tide_boots`, `lantern_deep`, `storm_meter`, `compass_echoes`, `frost_band`, `sun_pendant`, `miners_lamp`, `wayfarer_boots`, or a story relic: `lantern_shard`, `choir_mask`, `hal_compass`, `vesna_charm`, `singing_blade`, `hollow_crown`, `keeper_lamp` |
+| `/realm:relics_smith` | Operators | Places the relicsmith (Ida, `relicsmithId`) where you stand; needs the Townsfolk pack |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -2768,19 +2783,21 @@ Ten rare relics, each a named item with a power of its own: a staff that calls l
 | `shardsPerForge` | `8` | Relic Shards it takes to forge one relic (1–64 in game) |
 | `forgeAnywhere` | `false` | Players can forge from `/realm:relics` anywhere, not only at a relicsmith |
 | `npcRole` | `"relicsmith"` | The townsfolk role that offers **Relic forge** |
+| `relicsmithId` | `"ida"` | The townsfolk **Place a relicsmith here** places (a Townsfolk pack id with the `npcRole` role) |
 | `keepOnDeath` | `true` | New relics stay with their owner on death (set when a relic is made) |
 | `autoRepair` | `true` | A relic's durability is restored while it's held or worn, so it never breaks |
 | `rarityWeights.common` | `50` | How likely the forge picks a common relic (relative to the others) |
 | `rarityWeights.rare` | `30` | The same for rare relics |
 | `rarityWeights.epic` | `15` | The same for epic relics |
 | `rarityWeights.legendary` | `5` | The same for legendary relics |
-| `staffRange` | `32` | How far the Storm Staff reaches (blocks) |
+| `staffRange` | `48` | How far the Storm Staff reaches (blocks) |
 | `staffHitsPlayers` | `false` | The Storm Staff can strike players |
-| `avoidSpawn` | `64` | No Storm Staff lightning within this many blocks of world spawn |
+| `avoidSpawn` | `24` | No Storm Staff lightning within this many blocks of world spawn (0 = anywhere; 0-256 in game). Fires a bolt starts are put out either way |
 | `compassRange` | `128` | How far the Compass of Echoes looks for a champion (blocks) |
-| `relics` | the 10 above | `{ id, name, item, rarity, where, cooldown, ability }` per relic. `id` is saved on items, so keep it. `item` must be an item that doesn't stack (relics carry data, which only those can); a stacking one is replaced with a brush. `where` is `hand`, `carry` (hotbar or off hand), `head` or `feet`. `cooldown` in seconds. `ability` is the lore text. The powers belong to the ids, so a new id would only be a keepsake |
+| `auraRange` | `6` | How far the Singing Blade's note and the Keeper's Lamp's slowing reach (blocks); the lamp's ring of light is drawn at up to 4 |
+| `relics` | the 17 above | `{ id, name, item, rarity, where, cooldown, ability, story? }` per relic. `id` is saved on items, so keep it. `item` must be an item that doesn't stack (relics carry data, which only those can); a stacking one is replaced with a brush. `where` is `hand`, `carry` (hotbar or off hand), `head` or `feet`. `cooldown` in seconds. `ability` is the lore text. `story: true` relics are never forged. The powers belong to the ids, so a new id would only be a keepsake |
 
-Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair` and `staffHitsPlayers` in game with `/realm:config`. Each player can switch the Storm Meter's readout with **Storm Meter readout** in `/realm:prefs`. The rest stays in `config.js`.
+Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair`, `staffHitsPlayers` and `avoidSpawn` in game with `/realm:config`. Each player can switch the Storm Meter's readout with **Storm Meter readout** in `/realm:prefs`. The rest stays in `config.js`.
 
 ### Saved data
 
@@ -2789,22 +2806,27 @@ Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair` 
 | `relic:id` | Item | The relic's id, on the relic item itself |
 | `relic:serial` | Item | A number unique to each relic made on this realm |
 | `relics:found` | Player | JSON array of the relic ids the player has had |
+| `relics:death` | Player | JSON `{ dim, x, y, z }`: where the player last died, for Hal's Compass |
 | `relics:pref` | Player | The player's own **Storm Meter readout** choice |
 | `relics:serial` | World | The last serial number handed out |
 | `relics:pending` | World | JSON `{ playerId: { r, s } }`: relics and shards waiting for players who were offline |
-| `relics:weather` | World | The overworld weather at the last change (`Clear`, `Rain` or `Thunder`); the stable Script API can't read it |
+| `relics:weather` | World | The Overworld weather at the last change (`Clear`, `Rain` or `Thunder`); the stable Script API can't read it |
 | `relics:cfg` | World | Settings changed in `/realm:config` |
 
 Cooldowns are kept in memory, so a restart makes every relic ready again.
 
 ### How it works
 
-- A relic is a vanilla item with a name, lore and the item dynamic property `relic:id`. Only items that don't stack can carry dynamic properties, which is why the relics are tools, armor, horns and discs. An anvil can rename any item but can't add the property, so a fake relic does nothing.
-- Once a second each player's hotbar, off hand, head and feet are read (12 slots). Wanted effects are added for 210 ticks (Night Vision 400, so it doesn't flicker) when they're missing or run low, and removed when no longer wanted if they're still level I and no longer than that. A durability-damaged relic in hand or worn is mended (`autoRepair`). "In the rain" and "outdoors" use one `getTopmostBlock` over the player, only when a relic needs it.
-- The Storm Staff uses `beforeEvents.itemUse`, which it cancels so the trident isn't thrown, and the Compass of Echoes `afterEvents.itemUse`. `beforeEvents.playerInteractWithBlock` keeps relics out of jukeboxes. The staff aims with `getEntitiesFromViewDirection` (players, items, projectiles and townsfolk skipped) and falls back to `getBlockFromViewDirection`, then spawns `minecraft:lightning_bolt` and removes `minecraft:fire` (nothing else) in the 5 x 5 x 5 blocks around the strike 1, 5 and 15 ticks later. The compass finds the closest entity tagged `realm:champion` ([Champions](#champions--elite_bp)).
-- The Frost Band and Sun Pendant use `afterEvents.entityHurt` (a melee hit by the player; fire, burning, lava or a campfire hurting the player). The pendant is also checked every second while the player is on fire.
-- The Storm Meter shows the last `realm:storm_cell` report from [Storm Chasing](#storm-chasing--storm_bp) (sent every 2 s); without one in the last 5 seconds it says `No storm cell`. Weather comes from `weatherChange` and is saved as `relics:weather`.
-- Other packs give relics and shards with the script events `realm:relic_give` `{ player, relic }` and `realm:shard_give` `{ player, amount }` (at most 640). A Relic Shard is `minecraft:amethyst_shard` named `Relic Shard` whose first lore line is `Bring 8 to a relicsmith`; that lore line is how the forge counts them. Townsfolk with the `relicsmith` role get the **Relic forge** offer in answer to `realm:npc_talk`, and `realm:npc_choose` opens the forge.
+- A relic is a vanilla item with a name, lore and the item dynamic property `relic:id`. Only items that don't stack can carry dynamic properties, which is why the relics are tools, armor, horns and discs. Compasses stack in Bedrock (64, lodestone compasses too), so the compass relics are discs; Compasses of Echoes made before 1.1.0 are brushes and still work. An anvil can rename any item but can't add the property, so a fake relic does nothing.
+- Once a second each player's hotbar, off hand, head and feet are read (12 slots). Wanted effects are added for 210 ticks (Night Vision 400, so it doesn't flicker) when they're missing or run low, and removed when no longer wanted if they're still level I and no longer than that. A durability-damaged relic in hand or worn is mended (`autoRepair`), and a relic whose lore is out of date (an ability that changed in an update) gets the current lore. "In the rain", "outdoors" and "under cover" use one `getTopmostBlock` over the player, only when a relic needs it. The stable API can't read light levels, so "in the dark" is night (time 13000-23000), under cover below y 50, or the Nether and the End.
+- **Used relics** (Storm Staff, Compass of Echoes, Hal's Compass) run from `beforeEvents.itemUse`; the staff's use is canceled so the trident never charges or flies. A tap that arrives as `beforeEvents.playerInteractWithBlock` (aiming at the ground) does the same, and `afterEvents.itemStartUse` is a safety net for the staff; one tap does one thing (4 ticks apart). `playerInteractWithBlock` also keeps relics out of jukeboxes.
+- **Weather:** the stable API can't read it, so it comes from `weatherChange` (saved as `relics:weather`, so it survives a restart; the event's dimension is matched with or without `minecraft:`), from `entitySpawn` of a `minecraft:lightning_bolt` the staff didn't make (a thunderstorm for the next minute), and from Storm Chasing's `realm:storm_cell` reports.
+- **The Storm Staff** aims with `getEntitiesFromViewDirection` (players, items, projectiles and townsfolk skipped) and falls back to `getBlockFromViewDirection` (water counts as a target), then spawns `minecraft:lightning_bolt` and removes `minecraft:fire` (nothing else) in the 7 x 7 x 7 blocks around the strike 1, 5, 15, 40 and 80 ticks later. The compass finds the closest entity tagged `realm:champion` ([Champions](#champions--elite_bp)).
+- **Hits** use `afterEvents.entityHurt`: the Frost Band and Singing Blade on a melee hit by the player (the blade's monsters are `families: ["monster"]`, its note is `note.bell`); the Sun Pendant when fire, burning, lava, magma or a campfire hurts the player (also checked every second while on fire). The stable API can't cancel damage or clear a mob's target, so the Gray Choir Mask and the Fen Charm give back the damage right after the hit (half for the mask, all for the charm), unless the player hit a mob tagged `saga:choir` (or a witch) in the last 10 s. `beforeEvents.effectAdd` cancels Poison for the Fen Charm; `beforeEvents.playerInteractWithEntity` turns villagers away from the Hollow Crown; `afterEvents.entityDie` saves the death point.
+- The Storm Meter shows the last `realm:storm_cell` report from [Storm Chasing](#storm-chasing--storm_bp) (sent every 2 s); without one in the last 5 seconds it says `No storm cell`.
+- **Seals** (Lantern Shard): the pack listens for `realm:seals` `{ player?, seals: [{ name, dim, x, z }] }`, the seals still unlit (for that player when `player` is given, else for everyone; an empty list clears it), and asks with `realm:seals_ping` `{}` 5 seconds after the world loads. The [Story Questlines](#story-questlines--saga_bp) is the pack meant to send it; without it the shard only gives Night Vision.
+- **The relicsmith:** **Place a relicsmith here** sends `realm:npc_summon` `{ id: "ida", player }` to the [Townsfolk](#townsfolk--npc_bp) pack and waits 1 second for `realm:npc_summoned` `{ id, player, ok, error? }`.
+- Other packs give relics and shards with the script events `realm:relic_give` `{ player, relic }` (story relics included: Story Questlines rewards them by id) and `realm:shard_give` `{ player, amount }` (at most 640). A Relic Shard is `minecraft:amethyst_shard` named `Relic Shard` whose first lore line is `Bring 8 to a relicsmith`; that lore line is how the forge counts them. Townsfolk with the `relicsmith` role get the **Relic forge** offer in answer to `realm:npc_talk`, and `realm:npc_choose` opens the forge.
 - The first time a player has a relic (given, forged, or seen in their hotbar or armor, for one traded to them), the pack sends `realm:journal` `{ page: "relics" }`.
 
 ---
@@ -3826,7 +3848,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 ### How to use
 
 1. When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (`chance`, 0.7) of a rainbow. Chat says where its end is, for example `§eA rainbow! Its end is somewhere to the NE.`
-2. Look that way: the rainbow stands over the horizon, one end coming down right in the direction of the pot. It stays up for 2.5 minutes (`durationSeconds`). Run `/realm:rainbow` any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).
+2. Look that way, with the sun at your back: the rainbow stands over the horizon, one end coming down right in the direction of the pot. It stays up for 2.5 minutes (`durationSeconds`). Run `/realm:rainbow` any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).
 3. Head that way. As you get close, the rainbow comes down at its real spot, and a **chest** appears where it touches the ground.
 4. The first player to get within 3 blocks of it wins: `§6+50 Crowns §7(Pot of gold)` and everyone reads `§6Ann found the pot of gold at the rainbow's end!` The chest is yours to empty: gold ingots and nuggets, rare dyes, maybe a golden apple or emeralds. Sometimes (`relicChance`, 0.1) a relic comes with it.
 5. Missed the rainbow? The pot stays findable for 15 minutes (`potMinutes`) after it appeared: `/realm:rainbow` says `The rainbow has faded, but its pot of gold is still out there, somewhere to the NE.`
@@ -3834,8 +3856,8 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 
 ### What players see
 
-- **The rainbow:** every player in the Overworld sees it, redrawn every 2 seconds (each lasts 3 s and fades in and out over 1 s, so they blend). It's drawn about 100 blocks away along the line toward its end, `size` (120) blocks wide, with one foot (the middle of the colored band) on that line and just under the horizon; within 100 blocks it stands at its real spot, getting smaller as you get close. It's the same rainbow for everyone, pointing to the same spot. Players deeper than 24 blocks under the surface, or in the Nether or the End, don't see it.
-- **The pot of gold:** its spot is picked 150 to 300 blocks (`distance`) from a random player in the Overworld, at least `avoidSpawn` (64) blocks from the world spawn. The chest is only placed when someone gets within 40 blocks (the ground there has to be loaded to check it): on natural ground (grass, dirt, sand, stone, snow and the like, not water or leaves), at the rainbow's end or up to 12 blocks from it, and never where a scan of the 9 x 9 columns around it (4 blocks above and below the ground) finds a player-made block (planks, glass, chests, beds, torches, doors, fences, wool, concrete, glazed terracotta, crafting tables, furnaces and the like). If there's no such spot, there's no chest, and the first player to reach the end on the ground gets the loot straight into their inventory instead.
+- **The rainbow:** every player in the Overworld sees it, redrawn every second (each drawing lasts 1.6 s and fades in over 0.2 s and out over 0.4 s, so they blend). Like a real one, it's opposite the sun: in the west in the morning, in the east in the afternoon and evening (at night, opposite the moon). It's drawn 32 blocks away along the line toward its end, scaled to look as big as `size` (120) blocks wide seen from 100 blocks (about 48 degrees across and 22 degrees high), with one foot (the middle of the colored band) on that line and just under the horizon; within 32 blocks it stands at its real spot, getting smaller as you get close. It's drawn that close because far particles are fogged like everything else: rain fog ends at about half your render distance, so a rainbow farther out vanishes during and right after rain, or on a short render distance. It's the same rainbow for everyone, pointing to the same spot. Players deeper than 24 blocks under the surface, or in the Nether or the End, don't see it, and nobody sees it without [Realm Skies](#realm-skies--sky_rp).
+- **The pot of gold:** its spot is picked 150 to 300 blocks (`distance`) from a random player in the Overworld, within 45 degrees of straight opposite the sun (any direction if 6 tries there fail), at least `avoidSpawn` (64) blocks from the world spawn and outside every safe zone (Safe Zones, towns protected from world events, land claims), and its chest is never placed inside one. The chest is only placed when someone gets within 40 blocks (the ground there has to be loaded to check it): on natural ground (grass, dirt, sand, stone, snow and the like, not water or leaves), at the rainbow's end or up to 12 blocks from it, and never where a scan of the 9 x 9 columns around it (4 blocks above and below the ground) finds a player-made block (planks, glass, chests, beds, torches, doors, fences, wool, concrete, glazed terracotta, crafting tables, furnaces and the like). If there's no such spot, there's no chest, and the first player to reach the end on the ground gets the loot straight into their inventory instead.
 - **The finder:** the first player (not in spectator mode) within 3 blocks of the chest gets `crowns` (50) Crowns on the shared `crowns` scoreboard (`§6+50 Crowns §7(Pot of gold)`; the Crowns pack shows balances, and the Crowns are paid without it too), a level-up sound, and with `relicChance` a relic picked from `relics` (the Relics pack hands it out; without that pack nothing happens). Everyone reads `§6Ann found the pot of gold at the rainbow's end!` Later players find the chest, but no Crowns.
 - **The chest's loot** (`loot`): 3-8 gold ingots and 8-24 gold nuggets always; each of magenta, cyan, pink, light blue and lime dye (1-4) at 40%; a golden apple at 30%; 1-3 emeralds at 25%. Put in random slots.
 - **Afterwards:** when the pot expires (`potMinutes` after the rainbow appeared), an empty pot chest is removed if that spot is loaded; a chest that still holds anything is never removed.
@@ -3858,7 +3880,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 | `distance.min` | `150` | Closest its end is to the chosen player, in blocks |
 | `distance.max` | `300` | Farthest its end is from the chosen player, in blocks |
 | `avoidSpawn` | `64` | The pot of gold is never placed closer than this many blocks to the world spawn |
-| `size` | `120` | Width of the rainbow in blocks as players see it |
+| `size` | `120` | How big the rainbow looks: its width in blocks as if seen from 100 blocks away (it's drawn 32 blocks away, scaled to match) |
 | `potMinutes` | `15` | Minutes the pot of gold can be found after the rainbow appears; then an empty pot chest is removed |
 | `crowns` | `50` | Crowns for the first player to reach the pot of gold |
 | `relicChance` | `0.1` | Chance (0-1) the finder also gets a relic (needs the Relics pack) |
@@ -3878,7 +3900,10 @@ Operators can change `enabled`, `chance`, `durationSeconds`, `potMinutes`, `crow
 ### How it works
 
 - `weatherChange` in the overworld from `Rain` or `Thunder` to `Clear`, at time 0-3000 or 9000-12000, rolls `chance` (skipped while an earlier pot is still unfound). The end's spot is tried up to 12 times at a random angle and distance from a random Overworld player, skipping spots near spawn and, when that chunk happens to be loaded, water.
-- Every 2 s, each Overworld player not deep underground gets `realm:sky_rainbow` (`variable.size`, `variable.life` 3) with `Player.spawnParticle`. The particle faces the player (rotating around the vertical) and its position is the middle of the arc's base, so it's placed to the side of the line toward the end by the distance from the middle to a foot of the colored band (0.835 of half the width). If that spot isn't loaded for a player, it's drawn closer (70, then 45 blocks) and smaller, so it looks the same.
+- The end's direction: `antisolarAngle` in `scripts/sky.js` gives west (light from the east: time 22000-6000, or the moon at 12000-18000) or east (otherwise), and the end is tried within 45 degrees of it.
+- Every second, each Overworld player not deep underground gets `realm:sky_rainbow` (`variable.size`, `variable.life` 1.6) with `Player.spawnParticle`. `placement` in `scripts/sky.js` (plain math, no game imports) puts it 32 blocks out (eye level minus 0.05 per block), `size` x 32 / 100 wide. The particle faces the player (rotating around the vertical) and its position is the middle of the arc's base, so it's placed to the side of the line toward the end by the distance from the middle to a foot of the colored band (0.835 of half the width). If that spot isn't loaded for a player, it's drawn at 20 blocks and smaller, so it looks the same.
+- `weatherChange`'s dimension is matched with or without `minecraft:` (the game sends `overworld`; before 1.1.0 the pack only took `minecraft:overworld`, so no rainbow ever followed rain). In an unloaded chunk `getTopmostBlock` can return a block whose properties throw; before 1.1.0 that stopped `/realm:rainbow_now` before the rainbow was made whenever its end was out of loaded range. Both are read inside a `try` now.
+- Safe zones: the pack keeps the latest `realm:zones` `{ src, part, parts, zones: [{ dim, x, z, r }] }` list of each provider (parts numbered from 1 or 0 and joined; `parts` 0 clears that provider), asks with `realm:zones_ping` 2 seconds after the world loads, and skips rainbow ends and chest spots inside any Overworld zone.
 - Every second: a player within 40 blocks of the end starts a `system.runJob` that looks for the chest's spot (the build scan reads at most 810 blocks per spot, a column at a time, over several ticks), places a `minecraft:chest` and fills it. A player within 3 blocks of it is the finder. A pot past `potMinutes` is cleared.
 - Script events: `realm:sky_event` `{ kind: "rainbow", dim, x, z, text }` when it appears, `realm:journal` `{ player, page: "weather", entry: "rainbow", label: "Rainbow" }` once per player who sees it, `realm:relic_give` `{ player, relic }` on a relic roll.
 
@@ -4299,7 +4324,7 @@ The pictures for the realm's sky events: rainbows, aurora curtains, shooting sta
 
 ### What players see
 
-- **Rainbows** ([Rainbows & the Pot of Gold](#rainbows--the-pot-of-gold--rainbow_bp)): one big arc that stands upright and turns to face you, red outside, violet inside, with soft edges, a faint brighter sky inside the bow and feet that fade into the ground haze. It fades in over 1 s and out over 1 s and is never more than 55% opaque, so the sky shows through.
+- **Rainbows** ([Rainbows & the Pot of Gold](#rainbows--the-pot-of-gold--rainbow_bp)): one big arc that stands upright and turns to face you, red outside, violet inside, with soft edges, a faint brighter sky inside the bow and feet that fade into the ground haze. It fades in over 0.2 s and out over the last 0.4 s (Rainbows redraws it every second, so the drawings blend) and is never more than 70% opaque, so the sky shows through.
 - **Auroras** ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)): tall curtains of soft light with rays reaching up from a bright, wavy lower edge, rippling slowly (an 8-frame loop), green to purple. They glow: additive light, not affected by the darkness.
 - **Shooting stars** ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)): a bright point streaking across the sky, leaving a short blue-white tail.
 - **Meteors** ([Meteor Strikes](#meteor-strikes--meteor_bp)): a big fireball with a long trail of embers that cool from white through orange to dark red, then dark smoke rising from the crater.
@@ -4354,7 +4379,7 @@ None. It's a resource pack: no scripts, no commands, nothing to configure in gam
 
 - **Vibrant Visuals ignores fog colors**, so there the sandstorm, blizzard and fog bank keep their distances but not their color, and the blood and harvest moon tints don't show. The particles look the same on Fancy and Vibrant Visuals.
 - A resource pack higher in the list can't hide these particles or fogs (nothing else uses their names), but another pack's `/fog` push on the same player stacks with them: the last one pushed wins.
-- Particles show only where the chunk is loaded, so a rainbow or aurora far beyond your render distance isn't drawn.
+- Particles show only where the chunk is loaded, so a rainbow or aurora far beyond your render distance isn't drawn. Particles are also fogged like blocks: during and right after rain the fog ends at about half the render distance, so the behavior packs draw big sky pictures close to the player and scale them (the rainbow at 32 blocks).
 - How the snow streaks line up with their motion is up to the game's `lookat_direction` billboards.
 
 ### How it's made
@@ -4367,7 +4392,7 @@ Everything in `packs/sky_rp/` is generated by `npm run gen:sky` (`tools/gen-sky/
 | `fogs/*.json` | The 5 fogs above (`distance.air` and `distance.weather`) |
 | `textures/particle/realm_sky_*.png` | Rainbow arc (256x128), aurora flipbook (8 frames of 32x128), glow, meteor fireball, smoke, fog puff, 4 dust puffs, sand grain, snow streak, leaf and clod, 2 sparks, sparkle, cloud and raindrop |
 | `pack_icon.png` | A night sky with stars, an aurora, a shooting star and dark hills (128x128) |
-| `manifest.json` | Fixed uuids, version 1.0.0 |
+| `manifest.json` | Fixed uuids, version 1.0.2 |
 
 `npm run check` runs `node tools/gen-sky/gen.mjs --check`, which fails if any file in the pack differs from what the generator makes, is missing, or is left over in its folders. It also fails if a particle names a texture the generator doesn't make.
 
@@ -4550,7 +4575,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Champions ↔ Bounty Board, Story Questlines, Guilds, Blood Moon | Bounty Board and Story Questlines ask Champions for named targets (`realm:champion_spawn`) and hear about kills (`realm:champion_slain`); Guilds gives Wardens reputation for them; a Blood Moon triples the champion chance (`realm:moon`). Story Questlines spawns its own boss if Champions isn't installed. A `realm:champion_spawn` tag must start with `realm:`. Natural champions never appear in or next to player builds (`avoidBuilds`), so mob farms don't make them |
 | Skills, Bounty Board, Story Questlines, Expeditions ← Parties | Party mates carry the tag `realm_party:<code>`. Skills gives 10% more XP near a mate; bounties and story objectives count for mates within 64 blocks; Expeditions takes the party in together |
 | Titles & Trails → Nicknames | The title a player wears is the tag `realm_title:<text>`; Nicknames shows it in gray under the name. Guilds, Skills, Field Journal, Blood Moon and Story Questlines unlock titles with `realm:title_unlock` |
-| Relics ← Champions, Story Questlines, Treasure Maps, Rainbows, Expeditions | Champions drop Relic Shards; the others may give a relic with `realm:relic_give`. Relics' Storm Meter reads Storm Chasing's cell (`realm:storm_cell`) |
+| Relics ← Champions, Story Questlines, Treasure Maps, Rainbows, Expeditions | Champions drop Relic Shards; the others may give a relic with `realm:relic_give` (the seven story relics come only from Story Questlines). Relics' Storm Meter reads Storm Chasing's cell (`realm:storm_cell`), and the Storm Staff answers near one too. The Lantern Shard points at the seals Story Questlines reports with `realm:seals`; the Gray Choir Mask reads its `saga:choir` tag. **Place a relicsmith here** asks Townsfolk with `realm:npc_summon` |
 | Field Journal ← many packs | Weather, sky, fishing, relic, story and place discoveries arrive as `realm:journal` and `realm:sky_event`, so the Journal fills in as you meet them |
 | Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it, so operators should use `/realm:weather_set` rather than `/weather`; sleeping through rain (or Smart Sleep) ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
 | Sky packs → Realm Skies (Realm Resources) | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |

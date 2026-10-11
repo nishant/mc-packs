@@ -1,5 +1,6 @@
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { DRAW_DISTANCE, FALLBACK_DISTANCE, SPREAD, antisolarAngle, placement } from "./sky.js";
 import { get } from "./settings.js";
 
 // World property "rainbow:pot": JSON { id, x, z, y?, until, expires, placed, missed?, found? } for the
@@ -9,12 +10,8 @@ import { get } from "./settings.js";
 const PROP_POT = "rainbow:pot";
 const OVERWORLD = "minecraft:overworld";
 const RAINBOW = "realm:sky_rainbow"; // particle from the Realm Skies resource pack
-const DRAW_TICKS = 40; // the rainbow is redrawn for each player every 2 s...
-const LIFE = 3; // ...and each lasts 3 s (1 s fades), so they overlap with no gap
-const DRAW_DISTANCE = 100; // drawn this far away, toward its end (or at its real spot when closer)
-// Where the band's feet are, as a fraction of the half width: the Realm Skies texture's bands run from 0.7 to 0.97
-// of the half width from the middle, so the middle of a foot is 0.835 of it.
-const FOOT = 0.835;
+const DRAW_TICKS = 20; // the rainbow is redrawn for each player every second (it's close by, so it follows you)...
+const LIFE = 1.6; // ...and each lasts 1.6 s (fading in over 0.2 s and out over the last 0.4 s), so they overlap with no gap
 const PLACE_DISTANCE = 40; // the pot's chest is placed when a player comes this close (its chunk is loaded then)
 const FIND_DISTANCE = 3;
 const MAX_HEADROOM = 24; // deeper underground than this, no rainbow
@@ -67,7 +64,11 @@ const isBuilt = (id) => !NATURAL_EXCEPTIONS.test(id) && !PLANT.test(id) && BUILT
 /** @param {Dimension} dim @param {number} x @param {number} z */
 function topAt(dim, x, z) {
   try {
-    return dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    // In an unloaded chunk this can return a block whose every property throws LocationInUnloadedChunkError
+    // (that broke /realm:rainbow_now for any end far enough away): read it here, inside the try.
+    const block = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    if (block) void block.typeId, block.isLiquid;
+    return block;
   } catch {
     return undefined;
   }
@@ -102,6 +103,52 @@ function load() {
 world.afterEvents.worldLoad.subscribe(load);
 
 // ---------------------------------------------------------------------------
+// Safe zones (realm:zones from Safe Zones, Town Projects, Land Claims): no pot chest inside one
+// ---------------------------------------------------------------------------
+
+/** @typedef {{ dim: string, x: number, z: number, r: number }} Zone */
+/** src -> its zones, gathered from the parts of its latest broadcast. @type {Map<string, Zone[]>} */
+const zones = new Map();
+/** src -> parts received so far of a broadcast in progress. @type {Map<string, { parts: number, got: Map<number, Zone[]> }>} */
+const zoneParts = new Map();
+
+/** Is this spot inside any safe zone (Overworld)? @param {number} x @param {number} z */
+function inZone(x, z) {
+  for (const list of zones.values()) for (const zn of list) if (zn.dim === OVERWORLD && Math.hypot(x - zn.x, z - zn.z) <= zn.r) return true;
+  return false;
+}
+
+/** @param {any} msg */
+function onZones(msg) {
+  if (!msg || typeof msg.src !== "string") return;
+  const src = msg.src.slice(0, 32);
+  const parts = Math.floor(Number(msg.parts));
+  if (!Number.isFinite(parts) || parts <= 0) {
+    zones.delete(src); // parts 0: the provider has no zones
+    zoneParts.delete(src);
+    return;
+  }
+  /** @type {Zone[]} */
+  const list = [];
+  for (const zn of Array.isArray(msg.zones) ? msg.zones : []) {
+    if (!zn || !Number.isFinite(zn.x) || !Number.isFinite(zn.z) || !Number.isFinite(zn.r)) continue;
+    const dim = typeof zn.dim === "string" ? (zn.dim.includes(":") ? zn.dim : `minecraft:${zn.dim}`) : OVERWORLD;
+    list.push({ dim, x: zn.x, z: zn.z, r: Math.max(0, zn.r) });
+  }
+  // Parts may be numbered from 1 (or from 0): a part at or below the first one starts a new broadcast.
+  const part = Math.floor(Number(msg.part)) || 0;
+  let entry = zoneParts.get(src);
+  if (!entry || part <= Math.min(...entry.got.keys()) || entry.parts !== parts) zoneParts.set(src, (entry = { parts, got: new Map() }));
+  entry.got.set(part, list);
+  if (entry.got.size >= parts) {
+    zones.set(src, [...entry.got.values()].flat());
+    zoneParts.delete(src);
+  }
+}
+
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:zones_ping", "{}"), 40));
+
+// ---------------------------------------------------------------------------
 // Crowns (the shared "crowns" scoreboard; works without the Crowns pack)
 // ---------------------------------------------------------------------------
 
@@ -129,7 +176,7 @@ function addCrowns(p, n) {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather, previousWeather }) => {
-  if (dimension !== OVERWORLD || newWeather !== WeatherType.Clear || previousWeather === WeatherType.Clear) return;
+  if ((dimension !== OVERWORLD && dimension !== "overworld") || newWeather !== WeatherType.Clear || previousWeather === WeatherType.Clear) return;
   try {
     load();
     if (!get("enabled") || (pot && !pot.found && Date.now() < pot.expires)) return; // one pot of gold at a time
@@ -148,10 +195,11 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather, previousWeat
 function appear(player) {
   const dim = overworld();
   for (let i = 0; i < TARGET_TRIES; i++) {
-    const angle = Math.random() * Math.PI * 2;
+    // Opposite the sun (or the moon), as real rainbows are; if those spots keep failing, any direction.
+    const angle = i < TARGET_TRIES / 2 ? antisolarAngle(world.getTimeOfDay()) + (Math.random() * 2 - 1) * SPREAD : Math.random() * Math.PI * 2;
     const d = rand(CONFIG.distance.min, CONFIG.distance.max);
     const x = Math.floor(player.location.x + Math.cos(angle) * d), z = Math.floor(player.location.z + Math.sin(angle) * d);
-    if (fromSpawn(x, z) < get("avoidSpawn")) continue;
+    if (fromSpawn(x, z) < get("avoidSpawn") || inZone(x, z)) continue;
     const top = topAt(dim, x, z); // usually not loaded this far out; when it is, skip water now
     if (top && top.isLiquid) continue;
     const now = Date.now();
@@ -190,20 +238,12 @@ function draw() {
       const l = player.location;
       const top = topAt(dim, l.x, l.z);
       if (top && top.location.y - l.y > MAX_HEADROOM) continue; // far underground
-      const fx = p0.x + 0.5 - l.x, fz = p0.z + 0.5 - l.z;
-      const dist = Math.max(1, Math.hypot(fx, fz));
-      const ux = fx / dist, uz = fz / dist;
-      const tries = dist <= DRAW_DISTANCE ? [dist] : [DRAW_DISTANCE, 70, 45];
-      for (const d of tries) {
-        const real = d === dist;
-        const size = (real ? Math.max(40, Math.min(1, dist / DRAW_DISTANCE) * get("size")) : (get("size") * d) / DRAW_DISTANCE);
-        const footY = real && typeof p0.y === "number" ? p0.y : l.y - 6 * (d / DRAW_DISTANCE); // just under the horizon
-        const foot = { x: l.x + ux * d, z: l.z + uz * d };
-        molang().setFloat("variable.size", size);
+      for (const d of [DRAW_DISTANCE, FALLBACK_DISTANCE]) {
+        const at = placement(l, p0, get("size"), d);
+        molang().setFloat("variable.size", at.size);
         molang().setFloat("variable.life", LIFE);
         try {
-          const side = (size / 2) * FOOT;
-          player.spawnParticle(RAINBOW, { x: foot.x - uz * side, y: footY, z: foot.z + ux * side }, molang());
+          player.spawnParticle(RAINBOW, { x: at.x, y: at.y, z: at.z }, molang());
           break;
         } catch {
           // not loaded there: try closer
@@ -264,7 +304,7 @@ function* placePot(p0) {
       const angle = Math.random() * Math.PI * 2;
       const r = i === 0 ? 0 : rand(2, SPOT_RADIUS);
       const x = Math.floor(p0.x + Math.cos(angle) * r), z = Math.floor(p0.z + Math.sin(angle) * r);
-      if (fromSpawn(x, z) < get("avoidSpawn")) continue;
+      if (fromSpawn(x, z) < get("avoidSpawn") || inZone(x, z)) continue; // never near spawn or in a safe zone
       let ground = topAt(dim, x, z);
       if (ground && PLANT.test(ground.typeId)) ground = ground.below();
       if (!ground || !GROUND.test(ground.typeId)) continue; // water, leaves, builds, unloaded
@@ -418,7 +458,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         try {
           if (!player.isValid) return;
           // Any unfound pot is replaced (its chest, if placed, stays with its loot).
-          if (!appear(player)) player.sendMessage("§cNo spot for the rainbow's end was found (too close to spawn?). Try again elsewhere.");
+          if (!appear(player)) player.sendMessage("§cNo spot for the rainbow's end was found (too close to spawn, or in a safe zone?). Try again elsewhere.");
         } catch (e) {
           console.warn(`[rainbow] ${e}`);
         }
@@ -430,8 +470,15 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "rainbow_bp");
+    else if (id === "realm:zones") {
+      try {
+        onZones(JSON.parse(message));
+      } catch {
+        // not a zone list
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

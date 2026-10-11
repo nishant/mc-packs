@@ -10,7 +10,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 
@@ -33,6 +33,13 @@ const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no ra
 const LORE_WIDTH = 40; // lore lines are kept short: the game limits their length
 const PENDING_PLAYERS = 100;
 const STORM_FRESH_TICKS = 100; // a storm cell report older than this (storm_bp sends one every 2 s) is gone
+const STORM_CELL_REACH = 160; // the Storm Staff also answers this close to a storm cell (Storm Chasing)
+const BOLT_EVIDENCE_TICKS = 1200; // a lightning bolt not made by this pack means a thunderstorm for the next minute
+const SMITH_WAIT_TICKS = 20; // how long Place a relicsmith here waits for the Townsfolk pack's answer
+const ATTACK_MEMORY_MS = 10000; // the Choir Mask and Fen Charm stop protecting you from a kind you hit this recently
+const PROP_DEATH = "relics:death"; // player: JSON { dim, x, y, z } where the player last died (Hal's Compass)
+const NIGHT = { from: 13000, to: 23000 }; // time of day
+const HOSTILE_FAMILY = "monster"; // what the Singing Blade and Keeper's Lamp slow
 
 /** @typedef {typeof CONFIG.relics[number]} Relic */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -51,8 +58,17 @@ const WHERE = {
   feet: "Works worn on your feet",
 };
 
+/** Leather relics' colors. @type {Record<string, { red: number, green: number, blue: number }>} */
+const DYES = {
+  tide_boots: { red: 0.15, green: 0.45, blue: 0.8 },
+  choir_mask: { red: 0.62, green: 0.62, blue: 0.66 },
+};
+
 /** @type {Map<string, Relic>} */
 const relics = new Map(CONFIG.relics.map((r) => [r.id, r]));
+/** Relics the forge (and "still to find") count: not the story rewards. */
+const forgeable = CONFIG.relics.filter((r) => !r.story);
+const storyRelics = CONFIG.relics.filter((r) => r.story);
 /** Item types a relic can be: only these are checked for the property. */
 const relicItems = new Set([...CONFIG.relics.map((r) => r.item), FALLBACK_ITEM]);
 
@@ -103,10 +119,19 @@ function wrap(text) {
 
 /** @type {WeatherType} */
 let weather = WeatherType.Clear;
+let weatherSeen = false; // a weatherChange arrived since the scripts started: newer than the saved value
+/** Tick of the last lightning bolt in the Overworld that this pack didn't make (natural storms, Storm Chasing). */
+let lastBolt = -Infinity;
+/** Where and when the Storm Staff struck lately, so its own bolts aren't taken for a storm. @type {{ x: number, z: number, tick: number }[]} */
+let ownStrikes = [];
+
+/** The event's dimension may come with or without the namespace. @param {string} id */
+const isOverworld = (id) => id === OVERWORLD || id === "overworld";
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (!isOverworld(dimension)) return;
   weather = newWeather;
+  weatherSeen = true;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
   } catch (e) {
@@ -115,13 +140,47 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
 });
 
 world.afterEvents.worldLoad.subscribe(() => {
+  // The saved weather, unless a weatherChange already came in (it's newer).
+  if (!weatherSeen) {
+    try {
+      const saved = world.getDynamicProperty(PROP_WEATHER);
+      if (saved === WeatherType.Rain || saved === WeatherType.Thunder || saved === WeatherType.Clear) weather = saved;
+    } catch (e) {
+      console.warn(`[relics] ${e}`);
+    }
+  }
+  system.runTimeout(() => system.sendScriptEvent("realm:seals_ping", "{}"), 100);
+});
+
+// The weather may have changed while the pack wasn't running (installed mid-storm, say), and scripts can't read
+// it. Lightning that isn't ours shows a storm anyway: only thunderstorms (and Storm Chasing's cells) make it.
+world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
-    const saved = world.getDynamicProperty(PROP_WEATHER);
-    if (saved === WeatherType.Rain || saved === WeatherType.Thunder) weather = saved;
-  } catch (e) {
-    console.warn(`[relics] ${e}`);
+    if (entity.typeId !== "minecraft:lightning_bolt" || !entity.isValid || entity.dimension.id !== OVERWORLD) return;
+    const now = system.currentTick;
+    ownStrikes = ownStrikes.filter((s) => now - s.tick <= 10);
+    const l = entity.location;
+    if (ownStrikes.some((s) => Math.abs(s.x - l.x) < 2 && Math.abs(s.z - l.z) < 2)) return;
+    lastBolt = now;
+  } catch {
+    // gone already
   }
 });
+
+/** Is there a thunderstorm where the player is, as far as the pack can tell? @param {Player} player */
+function stormy(player) {
+  if (player.dimension.id !== OVERWORLD) return false;
+  if (weather === WeatherType.Thunder || system.currentTick - lastBolt < BOLT_EVIDENCE_TICKS) return true;
+  const c = cell;
+  return !!c && system.currentTick - c.tick <= STORM_FRESH_TICKS && c.dim === OVERWORLD && Math.hypot(c.x - player.location.x, c.z - player.location.z) <= STORM_CELL_REACH;
+}
+
+/** @param {Player} player */
+function isNight(player) {
+  if (player.dimension.id !== OVERWORLD) return false;
+  const t = world.getTimeOfDay();
+  return t >= NIGHT.from && t < NIGHT.to;
+}
 
 // ---------------------------------------------------------------------------
 // Making and giving relics
@@ -132,6 +191,26 @@ function nextSerial() {
   const n = (typeof last === "number" ? last : 0) + 1;
   world.setDynamicProperty(PROP_SERIAL, n);
   return n;
+}
+
+/** A relic's lore lines: rarity, ability, cooldown. @param {Relic} def */
+function loreFor(def) {
+  const rarity = RARITY[def.rarity] ?? RARITY.common;
+  const lore = [`${rarity.color}${rarity.label} relic`, ...wrap(def.ability).map((l) => `§7${l}`)];
+  if (def.cooldown > 0) lore.push(`§8Cooldown: ${def.cooldown}s`);
+  return lore;
+}
+
+/** Brings an older relic's lore up to date (an ability that changed). Returns true if it changed. @param {ItemStack} stack @param {Relic} def */
+function freshen(stack, def) {
+  try {
+    const want = loreFor(def);
+    if (stack.getLore().join("\n") === want.join("\n")) return false;
+    stack.setLore(want);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** A new relic item. @param {Relic} def */
@@ -150,18 +229,17 @@ function makeRelic(def) {
   }
   const rarity = RARITY[def.rarity] ?? RARITY.common;
   stack.nameTag = `§r${rarity.color}${def.name}`;
-  const lore = [`${rarity.color}${rarity.label} relic`, ...wrap(def.ability).map((l) => `§7${l}`)];
-  if (def.cooldown > 0) lore.push(`§8Cooldown: ${def.cooldown}s`);
-  stack.setLore(lore);
+  stack.setLore(loreFor(def));
   stack.setDynamicProperty(ITEM_ID, def.id);
   stack.setDynamicProperty(ITEM_SERIAL, nextSerial());
   stack.keepOnDeath = CONFIG.keepOnDeath;
-  if (def.id === "tide_boots") {
+  const color = DYES[def.id];
+  if (color) {
     try {
       const dye = stack.getComponent("minecraft:dyeable");
-      if (dye) dye.color = { red: 0.15, green: 0.45, blue: 0.8 };
+      if (dye) dye.color = color;
     } catch {
-      // undyed boots work the same
+      // undyed leather works the same
     }
   }
   return stack;
@@ -295,7 +373,10 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   foundCache.delete(playerId);
   carried.delete(playerId);
   kept.delete(playerId);
-  for (const key of [...cooldowns.keys()]) if (key.startsWith(`${playerId}:`)) cooldowns.delete(key);
+  passiveNote.delete(playerId);
+  lastUse.delete(playerId);
+  smithWaits.delete(playerId);
+  for (const map of [cooldowns, lastAttack]) for (const key of [...map.keys()]) if (key.startsWith(`${playerId}:`)) map.delete(key);
 });
 
 // ---------------------------------------------------------------------------
@@ -407,10 +488,12 @@ function scanCarried(player) {
       if (!def || !stack) continue;
       markFound(player, def);
       c.carry.add(def.id);
+      let changed = freshen(stack, def);
       if (slot === selected) {
         c.hand = def.id;
-        if (repair && mend(stack)) container.setItem(slot, stack);
+        if (repair && mend(stack)) changed = true;
       }
+      if (changed) container.setItem(slot, stack);
     }
   }
   if (equip) {
@@ -421,7 +504,8 @@ function scanCarried(player) {
       markFound(player, def);
       if (key === "offhand") c.carry.add(def.id);
       else c[key] = def.id;
-      if (repair && key !== "offhand" && mend(stack)) equip.setEquipment(slot, stack);
+      const fresh = freshen(stack, def);
+      if ((repair && key !== "offhand" && mend(stack)) || fresh) equip.setEquipment(slot, stack);
     }
   }
   carried.set(player.id, c);
@@ -453,17 +537,82 @@ function passives(player) {
     };
     if (has("rain_charm") && inRain()) wanted.add("regeneration");
     if (has("tide_boots") && inRain()) {
-      wanted.add("dolphins_grace");
+      wanted.add("jump_boost"); // Bedrock has no Dolphin's Grace effect
       wanted.add("speed");
     }
     if (has("lantern_deep") && y < 0) wanted.add("night_vision");
     if (has("miners_lamp") && y < 30) wanted.add("haste");
     if (has("wayfarer_boots") && overworld && player.isSprinting && look()?.open) wanted.add("speed");
-    for (const type of wanted) keep(player, type);
+    // "In the dark": at night in the Overworld, under cover deep down, or anywhere in the Nether or the End.
+    // (The stable API can't read light levels.)
+    const dark = () => isNight(player) || !overworld || (y < 50 && look()?.open === false);
+    if (has("lantern_shard") && dark()) wanted.add("night_vision");
+    if (has("hollow_crown") && isNight(player)) {
+      wanted.add("night_vision");
+      wanted.add("strength");
+    }
+    for (const type of wanted) {
+      try {
+        keep(player, type);
+      } catch (e) {
+        console.warn(`[relics] ${type}: ${e}`); // one bad effect id must not stop the others
+      }
+    }
     if (has("sun_pendant") && player.getComponent("minecraft:onfire")) sunPendant(player);
+    if (has("vesna_charm") && player.getEffect("poison")) player.removeEffect("poison");
+    if (has("choir_mask") && player.getEffect("darkness")) player.removeEffect("darkness");
+    if (has("keeper_lamp") && dark()) keeperLamp(player);
     if (has("storm_meter") && getFor(player, "meterReadout") === true) actionbar(player, `§bStorm Meter: ${stormReading(player)}`, 30);
+    else if (c.hand === "lantern_shard" && system.currentTick % 60 < 20) {
+      const pull = sealReading(player);
+      if (pull) actionbar(player, `§bLantern Shard: ${pull}`, 50);
+    }
   }
   release(player, wanted);
+}
+
+/** Keeper's Lamp: a ring of light at your feet, and monsters inside it slow down. @param {Player} player */
+function keeperLamp(player) {
+  const dim = player.dimension;
+  const l = player.location;
+  const r = Math.min(4, CONFIG.auraRange);
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + (system.currentTick / 20) * 0.3;
+    try {
+      dim.spawnParticle("minecraft:endrod", { x: l.x + Math.cos(a) * r, y: l.y + 0.3, z: l.z + Math.sin(a) * r });
+    } catch {
+      // unloaded
+    }
+  }
+  for (const mob of dim.getEntities({ location: l, maxDistance: CONFIG.auraRange, families: [HOSTILE_FAMILY] })) {
+    try {
+      if (!mob.getEffect("slowness")) mob.addEffect("slowness", 30, { amplifier: 0 });
+    } catch {
+      // not a mob that takes effects
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Seals (Lantern Shard): the Story Questlines report the seals that are still unlit
+// ---------------------------------------------------------------------------
+
+/** @typedef {{ name: string, dim: string, x: number, z: number }} Seal */
+/** Seals for everyone (key "") and for single players (their id). @type {Map<string, Seal[]>} */
+const seals = new Map();
+
+/** "the Tide Seal pulls 340m NE", or undefined when no seal is known in this dimension. @param {Player} player */
+function sealReading(player) {
+  const list = seals.get(player.id) ?? seals.get("") ?? [];
+  let best;
+  let bestD = Infinity;
+  for (const s of list) {
+    if (s.dim !== player.dimension.id) continue;
+    const d = Math.hypot(s.x - player.location.x, s.z - player.location.z);
+    if (d < bestD) [best, bestD] = [s, d];
+  }
+  if (!best) return list.length ? "§7no seal in this dimension" : undefined;
+  return `§f${best.name} pulls ${Math.round(bestD)}m ${direction(best.x - player.location.x, best.z - player.location.z)}`;
 }
 
 system.runInterval(() => {
@@ -496,24 +645,111 @@ function sunPendant(player) {
   player.playSound("random.fizz", { volume: 0.6 });
 }
 
-const FIRE = new Set([EntityDamageCause.fire, EntityDamageCause.fireTick, EntityDamageCause.lava, EntityDamageCause.campfire]);
+const FIRE = new Set([EntityDamageCause.fire, EntityDamageCause.fireTick, EntityDamageCause.lava, EntityDamageCause.campfire, EntityDamageCause.soulCampfire, EntityDamageCause.magma]);
+const CHOIR_TAG = "saga:choir"; // Story Questlines tags the Choir enemies it spawns with this
+const WITCH = "minecraft:witch";
 
-world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
+/** "playerId:kind" -> Date.now() of the player's last hit on a Choir enemy ("choir") or a witch ("witch"). @type {Map<string, number>} */
+const lastAttack = new Map();
+/** @param {Player} player @param {string} kind */
+const attackedLately = (player, kind) => Date.now() - (lastAttack.get(`${player.id}:${kind}`) ?? 0) < ATTACK_MEMORY_MS;
+
+/** Gives back `amount` health right after a hit (the stable API can't cancel damage). @param {Player} player @param {number} amount */
+function refund(player, amount) {
+  const health = player.getComponent("minecraft:health");
+  if (!health || health.currentValue <= 0 || amount <= 0) return;
+  health.setCurrentValue(Math.min(health.effectiveMax, health.currentValue + amount));
+}
+
+world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource, damage }) => {
   try {
+    if (get("enabled") !== true || !hurtEntity.isValid) return;
     const cause = damageSource.cause;
-    if (cause !== EntityDamageCause.entityAttack && !FIRE.has(cause)) return;
-    if (get("enabled") !== true) return;
-    if (FIRE.has(cause)) {
-      if (hurtEntity instanceof Player && hurtEntity.isValid && carried.get(hurtEntity.id)?.carry.has("sun_pendant")) sunPendant(hurtEntity);
+    const attacker = damageSource.damagingEntity;
+    if (hurtEntity instanceof Player) {
+      const c = carried.get(hurtEntity.id);
+      if (!c) return;
+      if (FIRE.has(cause)) {
+        if (c.carry.has("sun_pendant")) sunPendant(hurtEntity);
+        return;
+      }
+      if (!attacker?.isValid) return;
+      // Gray Choir Mask: Choir enemies only do half damage, unless you've been fighting them.
+      if (c.head === "choir_mask" && attacker.hasTag(CHOIR_TAG) && !attackedLately(hurtEntity, "choir")) refund(hurtEntity, damage / 2);
+      // Fen Charm: witches (their potions too) can't hurt you, unless you've been fighting one.
+      else if (c.carry.has("vesna_charm") && attacker.typeId === WITCH && !attackedLately(hurtEntity, "witch")) refund(hurtEntity, damage);
       return;
     }
+    if (!(attacker instanceof Player)) return;
+    if (hurtEntity.hasTag(CHOIR_TAG)) lastAttack.set(`${attacker.id}:choir`, Date.now());
+    if (hurtEntity.typeId === WITCH) lastAttack.set(`${attacker.id}:witch`, Date.now());
+    if (cause !== EntityDamageCause.entityAttack) return;
+    const c = carried.get(attacker.id);
+    if (!c) return;
     // Frost Band: melee hits slow what they hit.
-    const attacker = damageSource.damagingEntity;
-    if (!(attacker instanceof Player) || !hurtEntity.isValid) return;
-    if (!carried.get(attacker.id)?.carry.has("frost_band")) return;
-    hurtEntity.addEffect("slowness", 60, { amplifier: 0 });
+    if (c.carry.has("frost_band")) hurtEntity.addEffect("slowness", 60, { amplifier: 0 });
+    if (c.hand === "singing_blade") singingBlade(attacker, hurtEntity);
   } catch (e) {
     console.warn(`[relics] ${e}`);
+  }
+});
+
+/** The Singing Blade's note: monsters near what you hit (and it) slow down for 2 s. @param {Player} player @param {import("@minecraft/server").Entity} target */
+function singingBlade(player, target) {
+  const def = relics.get("singing_blade");
+  if (!def || waitFor(player, def) > 0) return; // a short silent cooldown between notes
+  startCooldown(player, def);
+  const at = target.location;
+  player.dimension.playSound("note.bell", at, { pitch: 0.8 + Math.random() * 0.8, volume: 1 });
+  const mobs = player.dimension.getEntities({ location: at, maxDistance: CONFIG.auraRange, families: [HOSTILE_FAMILY] });
+  if (!mobs.some((m) => m.id === target.id) && target.matches({ families: [HOSTILE_FAMILY] })) mobs.push(target);
+  for (const mob of mobs) {
+    try {
+      mob.addEffect("slowness", 40, { amplifier: 1 });
+    } catch {
+      // not a mob that takes effects
+    }
+  }
+  try {
+    player.dimension.spawnParticle("minecraft:note_particle", { x: at.x, y: at.y + 2, z: at.z });
+  } catch {
+    // unloaded
+  }
+}
+
+// Fen Charm: poison never takes hold.
+world.beforeEvents.effectAdd.subscribe((ev) => {
+  try {
+    if (ev.effectType !== "poison" && ev.effectType !== "minecraft:poison") return;
+    const id = ev.entity.id;
+    if (carried.get(id)?.carry.has("vesna_charm") && get("enabled") === true) ev.cancel = true;
+  } catch {
+    // not a player we know
+  }
+});
+
+// Hal's Compass: where each player last died.
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+  try {
+    if (!(deadEntity instanceof Player)) return;
+    const l = deadEntity.location;
+    deadEntity.setDynamicProperty(PROP_DEATH, JSON.stringify({ dim: deadEntity.dimension.id, x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z) }));
+  } catch (e) {
+    console.warn(`[relics] ${e}`);
+  }
+});
+
+// The Hollow Crown: villagers won't deal with you.
+world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  try {
+    const t = ev.target.typeId;
+    if (t !== "minecraft:villager_v2" && t !== "minecraft:villager" && t !== "minecraft:wandering_trader") return;
+    if (carried.get(ev.player.id)?.head !== "hollow_crown" || get("enabled") !== true) return;
+    ev.cancel = true;
+    const player = ev.player;
+    system.run(() => player.isValid && actionbar(player, "§8The villager shrinks away from the Hollow Crown"));
+  } catch {
+    // not ours
   }
 });
 
@@ -534,53 +770,70 @@ function stormReading(player) {
 }
 
 // ---------------------------------------------------------------------------
-// Used abilities: Storm Staff and Compass of Echoes
+// Used abilities: Storm Staff, Compass of Echoes, Hal's Compass
 // ---------------------------------------------------------------------------
 
 const NOT_TARGETS = ["minecraft:item", "minecraft:xp_orb", "minecraft:arrow", "minecraft:thrown_trident", "minecraft:fishing_hook", "minecraft:lightning_bolt"];
+const STRIKE_CLEAR = 5; // blocks around a strike that must be free of players, villagers, pets and townsfolk
+const PROTECTED_TYPES = new Set(["minecraft:villager", "minecraft:villager_v2", "minecraft:wandering_trader", "minecraft:npc", "minecraft:armor_stand", "minecraft:item_frame", "minecraft:glow_item_frame", "minecraft:painting"]);
+const FIRE_CHECKS = [1, 5, 15, 40, 80]; // ticks after a strike when its fire is put out
+const USE_DEBOUNCE = 4; // ticks: one tap can arrive as several events (use, interact with a block, start using)
 
-/** @param {Player} player @param {Relic} def */
-function stormStaff(player, def) {
-  if (player.dimension.id !== OVERWORLD || weather !== WeatherType.Thunder) {
-    actionbar(player, `§7${def.name}: it only answers in a thunderstorm`);
-    return;
-  }
-  if (!ready(player, def)) return;
+/** Tick of each player's last relic use, so one tap does one thing. @type {Map<string, number>} */
+const lastUse = new Map();
+
+/** Where the Storm Staff would strike, or why it can't. @param {Player} player @returns {{ at: Vector3 } | { why: string }} */
+function staffTarget(player) {
   const range = CONFIG.staffRange;
-  const excludeTypes = get("staffHitsPlayers") === true ? NOT_TARGETS : [...NOT_TARGETS, "minecraft:player"];
+  const hitsPlayers = get("staffHitsPlayers") === true;
+  const excludeTypes = hitsPlayers ? NOT_TARGETS : [...NOT_TARGETS, "minecraft:player"];
   const hit = player
     .getEntitiesFromViewDirection({ maxDistance: range, excludeTypes, excludeTags: ["realm:npc"] })
     .find((h) => h.entity.isValid && h.entity.id !== player.id);
   /** @type {Vector3 | undefined} */
   let at = hit?.entity.location;
   if (!at) {
-    const block = player.getBlockFromViewDirection({ maxDistance: range })?.block;
+    const block = player.getBlockFromViewDirection({ maxDistance: range, includeLiquidBlocks: true })?.block;
     if (block) at = { x: block.location.x + 0.5, y: block.location.y + 1, z: block.location.z + 0.5 };
   }
-  if (!at) {
-    actionbar(player, `§7${def.name}: nothing within ${range} blocks`);
-    return;
-  }
+  if (!at) return { why: `nothing to strike within ${range} blocks` };
   const spawn = world.getDefaultSpawnLocation();
-  if (Math.hypot(at.x - spawn.x, at.z - spawn.z) < CONFIG.avoidSpawn) {
-    actionbar(player, `§7${def.name}: the sky won't strike this close to spawn`);
-    return;
-  }
+  const avoid = get("avoidSpawn");
+  if (avoid > 0 && Math.hypot(at.x - spawn.x, at.z - spawn.z) < avoid) return { why: `the sky won't strike within ${avoid} blocks of spawn` };
   // Lightning turns villagers into witches, hurts pets and anyone standing near: never there.
   const bystander = player.dimension.getEntities({ location: at, maxDistance: STRIKE_CLEAR }).find((e) => protectedFromStaff(e, player));
-  if (bystander) {
-    actionbar(player, `§7${def.name}: too close to ${bystander instanceof Player ? (bystander.id === player.id ? "you" : bystander.name) : "someone who'd get hurt"}`);
-    return;
-  }
-  const dimension = player.dimension;
-  dimension.spawnEntity("minecraft:lightning_bolt", at);
-  startCooldown(player, def);
-  // Lightning sets fire where it lands; put it out so the staff can't burn anyone's build.
-  for (const delay of [1, 5, 15]) system.runTimeout(() => putOutFire(dimension, at), delay);
+  if (bystander) return { why: `too close to ${bystander instanceof Player ? (bystander.id === player.id ? "you" : bystander.name) : "someone who'd get hurt"}` };
+  return { at };
 }
 
-const STRIKE_CLEAR = 5; // blocks around a strike that must be free of players, villagers, pets and townsfolk
-const PROTECTED_TYPES = new Set(["minecraft:villager", "minecraft:villager_v2", "minecraft:wandering_trader", "minecraft:npc", "minecraft:armor_stand", "minecraft:item_frame", "minecraft:glow_item_frame", "minecraft:painting"]);
+/** @param {Player} player @param {Relic} def */
+function stormStaff(player, def) {
+  if (!stormy(player)) {
+    actionbar(player, `§7${def.name}: it only answers in a thunderstorm`);
+    player.playSound("random.click", { pitch: 0.6, volume: 0.5 });
+    return;
+  }
+  if (!ready(player, def)) return;
+  const target = staffTarget(player);
+  if ("why" in target) {
+    actionbar(player, `§7${def.name}: ${target.why}`);
+    return;
+  }
+  const { at } = target;
+  const dimension = player.dimension;
+  try {
+    ownStrikes.push({ x: at.x, z: at.z, tick: system.currentTick }); // before the spawn: its event may come at once
+    dimension.spawnEntity("minecraft:lightning_bolt", at);
+  } catch (e) {
+    actionbar(player, `§7${def.name}: the bolt couldn't reach there`);
+    console.warn(`[relics] storm staff: ${e}`);
+    return;
+  }
+  startCooldown(player, def);
+  actionbar(player, `§b${def.name}: lightning! §7Ready again in ${def.cooldown}s`);
+  // Lightning sets fire where it lands; put it out so the staff can't burn anyone's build.
+  for (const delay of FIRE_CHECKS) system.runTimeout(() => putOutFire(dimension, at), delay);
+}
 
 /** Would a strike near this entity hurt something it shouldn't? @param {import("@minecraft/server").Entity} e @param {Player} caster */
 function protectedFromStaff(e, caster) {
@@ -598,9 +851,9 @@ function putOutFire(dimension, at) {
   const cx = Math.floor(at.x);
   const cy = Math.floor(at.y);
   const cz = Math.floor(at.z);
-  for (let x = cx - 2; x <= cx + 2; x++) {
-    for (let y = cy - 2; y <= cy + 2; y++) {
-      for (let z = cz - 2; z <= cz + 2; z++) {
+  for (let x = cx - 3; x <= cx + 3; x++) {
+    for (let y = cy - 3; y <= cy + 3; y++) {
+      for (let z = cz - 3; z <= cz + 3; z++) {
         try {
           const b = dimension.getBlock({ x, y, z });
           if (b?.typeId === "minecraft:fire") b.setType("minecraft:air");
@@ -628,20 +881,66 @@ function compass(player, def) {
   player.playSound("block.bell.hit", { pitch: 1.6, volume: 0.6 });
 }
 
-// The Storm Staff is a trident: using it would throw it (and it could be lost in lava or the void).
-// Its use is the staff's power instead, so the throw is canceled.
+const DIM_NAMES = /** @type {Record<string, string>} */ ({ "minecraft:overworld": "the Overworld", "minecraft:nether": "the Nether", "minecraft:the_end": "the End" });
+
+/** "340m NE (y 12)" from the player to a spot, or the dimension it's in. @param {Player} player @param {{ dim: string, x: number, y: number, z: number }} spot */
+function way(player, spot) {
+  if (spot.dim !== player.dimension.id) return `in ${DIM_NAMES[spot.dim] ?? spot.dim}`;
+  const dx = spot.x + 0.5 - player.location.x;
+  const dz = spot.z + 0.5 - player.location.z;
+  const d = Math.round(Math.hypot(dx, dz));
+  return d < 4 ? `right here (y ${spot.y})` : `${d}m ${direction(dx, dz)} (y ${spot.y})`;
+}
+
+/** Hal's Compass: the way to your last death point and your home (bed or respawn point, else world spawn). @param {Player} player @param {Relic} def */
+function halCompass(player, def) {
+  if (!ready(player, def)) return;
+  startCooldown(player, def);
+  /** @type {{ dim: string, x: number, y: number, z: number } | undefined} */
+  let death;
+  try {
+    const raw = player.getDynamicProperty(PROP_DEATH);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : undefined;
+    if (parsed && typeof parsed.dim === "string" && [parsed.x, parsed.y, parsed.z].every(Number.isFinite)) death = parsed;
+  } catch {
+    // corrupt: as if none
+  }
+  const bed = player.getSpawnPoint();
+  const s = world.getDefaultSpawnLocation();
+  const home = bed ? { dim: bed.dimension.id, x: Math.floor(bed.x), y: Math.floor(bed.y), z: Math.floor(bed.z) } : { dim: OVERWORLD, x: s.x, y: s.y > 320 ? 64 : s.y, z: s.z };
+  player.sendMessage(
+    `§d${def.name}: §fYour last death: ${death ? way(player, death) : "§7none yet§f"}. ${bed ? "Home" : "World spawn"}: ${way(player, home)}.`,
+  );
+  player.playSound("block.bell.hit", { pitch: 1.2, volume: 0.5 });
+}
+
+/** Runs a used relic's power once per tap. @param {Player} player @param {Relic} def */
+function useRelic(player, def) {
+  const now = system.currentTick;
+  if (now - (lastUse.get(player.id) ?? -100) < USE_DEBOUNCE) return;
+  lastUse.set(player.id, now);
+  markFound(player, def);
+  if (get("enabled") !== true) return;
+  if (def.id === "storm_staff") stormStaff(player, def);
+  else if (def.id === "compass_echoes") compass(player, def);
+  else if (def.id === "hal_compass") halCompass(player, def);
+}
+
+/** Relics whose use is their power. */
+const USED = new Set(["storm_staff", "compass_echoes", "hal_compass"]);
+
+// The Storm Staff is a trident: using it would charge and throw it (and it could be lost in lava or the void).
+// Its use is the staff's power instead, so the use is canceled before the trident starts charging. A canceled
+// use has no afterEvents.itemUse, so every used relic runs from here.
 world.beforeEvents.itemUse.subscribe((ev) => {
   try {
-    if (ev.itemStack.typeId !== "minecraft:trident") return;
     const def = relicOf(ev.itemStack);
-    if (def?.id !== "storm_staff") return;
-    ev.cancel = true; // a canceled use has no afterEvents.itemUse: the power runs from here
+    if (!def || !USED.has(def.id)) return;
+    if (def.id === "storm_staff") ev.cancel = true;
     const player = ev.source;
     system.run(() => {
       try {
-        if (!player.isValid) return;
-        markFound(player, def);
-        if (get("enabled") === true) stormStaff(player, def);
+        if (player.isValid) useRelic(player, def);
       } catch (e) {
         console.warn(`[relics] ${e}`);
       }
@@ -651,26 +950,38 @@ world.beforeEvents.itemUse.subscribe((ev) => {
   }
 });
 
-// A relic disc put in a jukebox might lose its data: keep relics out of jukeboxes.
+// Tapping a block with a relic: keep relics out of jukeboxes, and a used relic still works (a tap on the ground
+// in front of you may arrive as a block interaction instead of a use).
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
   try {
-    if (ev.block.typeId !== "minecraft:jukebox" || !relicOf(ev.itemStack)) return;
-    ev.cancel = true;
+    const def = relicOf(ev.itemStack);
+    if (!def) return;
     const player = ev.player;
-    if (ev.isFirstEvent) system.run(() => player.isValid && actionbar(player, "§7Relics don't go in a jukebox"));
+    if (ev.block.typeId === "minecraft:jukebox") {
+      ev.cancel = true;
+      if (ev.isFirstEvent) system.run(() => player.isValid && actionbar(player, "§7Relics don't go in a jukebox"));
+      return;
+    }
+    if (!USED.has(def.id)) return;
+    if (def.id === "storm_staff") ev.cancel = true;
+    if (!ev.isFirstEvent) return;
+    system.run(() => {
+      try {
+        if (player.isValid) useRelic(player, def);
+      } catch (e) {
+        console.warn(`[relics] ${e}`);
+      }
+    });
   } catch {
     // not a relic
   }
 });
 
-world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
+// Safety net: if a client starts charging the staff anyway, its power still runs (and the debounce keeps it to once).
+world.afterEvents.itemStartUse.subscribe(({ source, itemStack }) => {
   try {
-    if (!(source instanceof Player) || get("enabled") !== true) return;
     const def = relicOf(itemStack);
-    if (!def) return;
-    markFound(source, def);
-    if (def.id === "storm_staff" && itemStack.typeId !== "minecraft:trident") stormStaff(source, def); // a staff made as another item (the fallback)
-    else if (def.id === "compass_echoes") compass(source, def);
+    if (def?.id === "storm_staff" && source.isValid) useRelic(source, def);
   } catch (e) {
     console.warn(`[relics] ${e}`);
   }
@@ -718,11 +1029,12 @@ function takeShards(container, n) {
   }
 }
 
-/** A random relic the player hasn't found yet (any, once they found them all), weighted by rarity. @param {Player} player */
+/** A random forgeable relic the player hasn't found yet (any, once they found them all), weighted by rarity. Story relics are never forged. @param {Player} player */
 function pickRelic(player) {
   const found = foundOf(player);
-  const fresh = CONFIG.relics.filter((r) => !found.has(r.id));
-  const pool = fresh.length ? fresh : CONFIG.relics;
+  const fresh = forgeable.filter((r) => !found.has(r.id));
+  const pool = fresh.length ? fresh : forgeable;
+  if (!pool.length) return undefined;
   /** @param {Relic} r */
   const weight = (r) => Math.max(0, CONFIG.rarityWeights[r.rarity] ?? 0);
   const total = pool.reduce((sum, r) => sum + weight(r), 0);
@@ -768,7 +1080,30 @@ function relicsOn(player) {
   return ids;
 }
 
-/** @param {Player} player @param {boolean} atSmith opened from a relicsmith */
+/** Shows a form, waiting while the player has another screen open (chat, say). @template {{ show(p: Player): Promise<any> }} F @param {Player} player @param {F} form @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>} */
+async function showForm(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
+      await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+      continue;
+    }
+    return res;
+  }
+  return undefined;
+}
+
+/** @param {Player} player */
+const isOperator = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** One relic's lines in the list. @param {Relic} def @param {Set<string>} on */
+function relicLines(def, on) {
+  const rarity = RARITY[def.rarity] ?? RARITY.common;
+  return `${rarity.color}${def.name} §7(${rarity.label})${on.has(def.id) ? "" : " §8- not with you"}§r\n§f${def.ability}${def.cooldown > 0 && def.id !== "singing_blade" ? ` §7(cooldown ${def.cooldown}s)` : ""}\n§8${WHERE[def.where] ?? ""}`;
+}
+
+/** The relics you've found (with the forge when opened at a relicsmith). @param {Player} player @param {boolean} atSmith opened from a relicsmith */
 async function showRelics(player, atSmith) {
   if (!player.isValid) return;
   const on = relicsOn(player);
@@ -780,47 +1115,121 @@ async function showRelics(player, atSmith) {
   const cost = get("shardsPerForge");
   const shards = countShards(player.getComponent("minecraft:inventory")?.container);
   const canForge = atSmith || get("forgeAnywhere") === true;
+  const foundForgeable = forgeable.filter((r) => found.has(r.id));
+  const foundStory = storyRelics.filter((r) => found.has(r.id));
   /** @type {string[]} */
-  const lines = [`Relics found: ${found.size} of ${relics.size}`];
-  for (const def of CONFIG.relics) {
-    if (!found.has(def.id)) continue;
-    const rarity = RARITY[def.rarity] ?? RARITY.common;
-    lines.push(
-      `${rarity.color}${def.name} §7(${rarity.label})${on.has(def.id) ? "" : " §8- not with you"}§r\n§f${def.ability}${def.cooldown > 0 ? ` §7(cooldown ${def.cooldown}s)` : ""}\n§8${WHERE[def.where] ?? ""}`,
-    );
-  }
+  const lines = [`Relics found: ${foundForgeable.length} of ${forgeable.length}`];
+  for (const def of foundForgeable) lines.push(relicLines(def, on));
   /** @type {Record<string, number>} */
   const missing = {};
-  for (const def of CONFIG.relics) if (!found.has(def.id)) missing[def.rarity] = (missing[def.rarity] ?? 0) + 1;
+  for (const def of forgeable) if (!found.has(def.id)) missing[def.rarity] = (missing[def.rarity] ?? 0) + 1;
   const rest = Object.entries(missing).map(([r, n]) => `${n} ${RARITY[/** @type {keyof RARITY} */ (r)]?.label.toLowerCase() ?? r}`);
   if (rest.length) lines.push(`§7Still to find: ${rest.join(", ")}`);
+  lines.push(`§fStory relics: ${foundStory.length} of ${storyRelics.length}§7 (rewards from the story, never forged)`);
+  for (const def of foundStory) lines.push(relicLines(def, on));
   lines.push(
     canForge
       ? `§fYou have ${shards} Relic Shard${shards === 1 ? "" : "s"}. Forging a relic takes ${cost}.`
       : `§7Bring ${cost} Relic Shards to a relicsmith to forge a relic. You have ${shards}.`,
   );
-  const form = new ActionFormData().title(atSmith ? "§lRelic forge" : "§lRelics").body(lines.join("\n\n"));
+  const form = new ActionFormData().title(atSmith ? "§lRelic forge" : "§lYour relics").body(lines.join("\n\n"));
   if (canForge) form.button(`Forge a relic\n§8${cost} Relic Shards`);
   form.button("Close");
-  for (let attempt = 0; attempt < 20; attempt++) {
-    if (!player.isValid) return;
-    const res = await form.show(player);
-    if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
-      await new Promise((r) => system.runTimeout(() => r(undefined), 20));
-      continue;
-    }
-    if (!res.canceled && canForge && res.selection === 0) forge(player);
-    return;
+  const res = await showForm(player, form);
+  if (res && !res.canceled && canForge && res.selection === 0) forge(player);
+}
+
+/** The /realm:relics menu: every action the player may use. @param {Player} player */
+async function showMenu(player) {
+  if (!player.isValid) return;
+  const op = isOperator(player);
+  const canForge = get("forgeAnywhere") === true;
+  /** @type {{ label: string, run: () => unknown }[]} */
+  const actions = [{ label: "Your relics\n§8What you've found and what each does", run: () => showRelics(player, false) }];
+  if (canForge) actions.push({ label: `Forge a relic\n§8${get("shardsPerForge")} Relic Shards`, run: () => forge(player) });
+  if (op) {
+    actions.push({ label: "Give a relic\n§8Operators", run: () => showGive(player) });
+    actions.push({ label: "Place a relicsmith here\n§8Operators: needs the Townsfolk pack", run: () => placeSmith(player) });
   }
+  const form = new ActionFormData()
+    .title("§lRelics")
+    .body(canForge ? "Relics are rare items with powers of their own." : "Relics are rare items with powers of their own. Forge new ones from Relic Shards at a relicsmith.");
+  for (const a of actions) form.button(a.label);
+  const res = await showForm(player, form);
+  if (!res || res.canceled || res.selection === undefined) return;
+  await actions[res.selection]?.run();
+}
+
+/** Operators: pick a player and a relic. @param {Player} player */
+async function showGive(player) {
+  const players = world.getAllPlayers();
+  const form = new ModalFormData()
+    .title("§lGive a relic")
+    .dropdown("Player", players.map((p) => p.name), { defaultValueIndex: Math.max(0, players.findIndex((p) => p.id === player.id)) })
+    .dropdown("Relic", CONFIG.relics.map((r) => `${r.name}${r.story ? " (story)" : ""}`));
+  const res = await showForm(player, form);
+  if (!res || res.canceled || !res.formValues) return;
+  const target = players[Number(res.formValues[0])];
+  const def = CONFIG.relics[Number(res.formValues[1])];
+  if (!target?.isValid || !def) return;
+  giveRelic(target, def, "You received");
+  if (target.id !== player.id) player.sendMessage(`§7Gave ${def.name} to ${target.name}.`);
+}
+
+/** Answers from the Townsfolk pack to realm:npc_summon, by player id. @type {Map<string, (msg: any) => void>} */
+const smithWaits = new Map();
+
+/** Operators: asks the Townsfolk pack to place the relicsmith at the player's spot. @param {Player} player */
+function placeSmith(player) {
+  if (!isOperator(player)) return Promise.resolve();
+  const id = CONFIG.relicsmithId;
+  return new Promise((resolve) => {
+    const timeout = system.runTimeout(() => {
+      smithWaits.delete(player.id);
+      if (player.isValid) {
+        player.sendMessage(
+          `§cNo answer from the Townsfolk pack, so no relicsmith was placed. §7A relicsmith is a townsfolk with the ${CONFIG.npcRole} role (Ida, id ${id}), from the Townsfolk pack (npc_bp): add it to the realm, then try again.`,
+        );
+      }
+      resolve(undefined);
+    }, SMITH_WAIT_TICKS);
+    smithWaits.set(player.id, (msg) => {
+      system.clearRun(timeout);
+      smithWaits.delete(player.id);
+      if (player.isValid) {
+        if (msg.ok) {
+          player.sendMessage(`§aThe relicsmith is here. §7Players tap her and pick Relic forge.`);
+          player.playSound("random.anvil_use", { volume: 0.5 });
+        } else player.sendMessage(`§cThe relicsmith couldn't be placed: ${typeof msg.error === "string" ? msg.error.slice(0, 200) : "the Townsfolk pack said no"}.`);
+      }
+      resolve(undefined);
+    });
+    system.sendScriptEvent("realm:npc_summon", JSON.stringify({ id, player: player.id }));
+  });
 }
 
 // ---------------------------------------------------------------------------
-// Script events: gifts from other packs, the storm cell, townsfolk
+// Script events: gifts from other packs, the storm cell, townsfolk, seals
 // ---------------------------------------------------------------------------
+
+const HANDLED = new Set(["realm:relic_give", "realm:shard_give", "realm:storm_cell", "realm:npc_talk", "realm:npc_choose", "realm:npc_summoned", "realm:seals"]);
+
+/** A seal list from a message, or undefined if it isn't one. @param {unknown} list @returns {Seal[] | undefined} */
+function parseSeals(list) {
+  if (!Array.isArray(list)) return undefined;
+  /** @type {Seal[]} */
+  const out = [];
+  for (const s of list.slice(0, 16)) {
+    if (!s || typeof s !== "object" || !Number.isFinite(s.x) || !Number.isFinite(s.z)) continue;
+    const dim = typeof s.dim === "string" ? (s.dim.includes(":") ? s.dim : `minecraft:${s.dim}`) : OVERWORLD;
+    out.push({ name: typeof s.name === "string" ? s.name.slice(0, 40) : "a seal", dim, x: s.x, z: s.z });
+  }
+  return out;
+}
 
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
-    if (id !== "realm:relic_give" && id !== "realm:shard_give" && id !== "realm:storm_cell" && id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
+    if (!HANDLED.has(id)) return;
     /** @type {any} */
     let msg;
     try {
@@ -837,6 +1246,15 @@ system.afterEvents.scriptEventReceive.subscribe(
         } else cell = undefined;
         return;
       }
+      if (id === "realm:seals") {
+        const list = parseSeals(msg.seals);
+        if (!list) return;
+        const key = typeof msg.player === "string" ? msg.player.slice(0, 64) : "";
+        if (list.length) seals.set(key, list);
+        else seals.delete(key);
+        if (seals.size > 200) seals.delete(/** @type {string} */ (seals.keys().next().value));
+        return;
+      }
       if (id === "realm:npc_talk") {
         if (Array.isArray(msg.roles) && msg.roles.includes(CONFIG.npcRole) && typeof msg.req === "string") {
           system.sendScriptEvent("realm:npc_offer", JSON.stringify({ req: msg.req, pack: "relics_bp", key: "forge", label: "Relic forge", order: 40 }));
@@ -844,6 +1262,10 @@ system.afterEvents.scriptEventReceive.subscribe(
         return;
       }
       if (typeof msg.player !== "string" || msg.player.length > 64) return;
+      if (id === "realm:npc_summoned") {
+        if (msg.id === CONFIG.relicsmithId) smithWaits.get(msg.player)?.(msg);
+        return;
+      }
       const player = online(msg.player);
       if (id === "realm:npc_choose") {
         if (player && msg.pack === "relics_bp" && msg.key === "forge") showRelics(player, true).catch((e) => console.warn(`[relics] ${e}`));
@@ -873,21 +1295,42 @@ system.afterEvents.scriptEventReceive.subscribe(
 // Commands
 // ---------------------------------------------------------------------------
 
+/** @param {import("@minecraft/server").CustomCommandOrigin} origin @param {(p: Player) => Promise<unknown>} open */
+function openFor(origin, open) {
+  const player = origin.initiator ?? origin.sourceEntity;
+  if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+  system.run(() => open(player).catch((e) => console.warn(`[relics] ${e}`)));
+  return { status: CustomCommandStatus.Success };
+}
+
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerEnum("realm:relic_id", CONFIG.relics.map((r) => r.id));
   customCommandRegistry.registerCommand(
     {
       name: "realm:relics",
-      description: "Relics: the relics you've found, what they do, and the forge",
+      description: "Relics: a menu of your relics, the forge and (operators) giving relics and placing a relicsmith",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    (origin) => {
-      const player = origin.initiator ?? origin.sourceEntity;
-      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      system.run(() => showRelics(player, false).catch((e) => console.warn(`[relics] ${e}`)));
-      return { status: CustomCommandStatus.Success };
+    (origin) => openFor(origin, showMenu),
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:relics_list",
+      description: "Relics: the relics you've found and what they do",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
     },
+    (origin) => openFor(origin, (p) => showRelics(p, false)),
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:relics_smith",
+      description: "Relics (operators): place the relicsmith where you stand (needs the Townsfolk pack)",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+    },
+    (origin) => openFor(origin, placeSmith),
   );
   customCommandRegistry.registerCommand(
     {
