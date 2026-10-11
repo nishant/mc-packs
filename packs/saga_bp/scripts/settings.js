@@ -12,6 +12,7 @@ const BASE = CONFIG;
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Story questlines", help: "Disabled, no story offers and no progress; the story log still opens" },
   { key: "tracker", type: "bool", scope: "world", label: "Story tracker", help: "Default for players: where to go next, above the hotbar" },
+  { key: "trackerAt", type: "enum", scope: "world", choices: ["side", "middle", "hotbar"], names: ["Right side", "Middle of the screen", "Above the hotbar"], label: "Where the story tracker shows (realm default)", help: "Right side and middle of the screen: other add-ons that use the line above the hotbar (waypoint and compass add-ons) cannot cover them" },
   { key: "partyShare", type: "bool", scope: "world", label: "Party mates share story progress", help: "Defeat, survive and reach objectives, on the same chapter" },
   { key: "partyRange", type: "int", scope: "world", label: "Party sharing range (blocks)", min: 8, max: 256, step: 8 },
   { key: "skipCreative", type: "bool", scope: "world", label: "Creative mode makes no story progress" },
@@ -23,7 +24,8 @@ const OPTIONS = [
   { key: "buildRange", type: "int", scope: "world", label: "Build a picked place within (blocks)", min: 32, max: 128, step: 8 },
   { key: "actorTimeoutSeconds", type: "int", scope: "world", label: "Story characters wait for their player (seconds)", min: 60, max: 1800, step: 30 },
   { key: "favors", type: "bool", scope: "world", label: "Daily favors", help: "Questgivers offer a short job each real day" },
-  { key: "tracker", type: "bool", scope: "player", base: "tracker", label: "Story tracker", help: "Where to go next for your story, above the hotbar" },
+  { key: "tracker", type: "bool", scope: "player", base: "tracker", label: "Story tracker", help: "Where to go next for your story" },
+  { key: "trackerAt", type: "enum", scope: "player", base: "trackerAt", choices: ["side", "middle", "hotbar"], names: ["Right side", "Middle of the screen", "Above the hotbar"], label: "Where my story tracker shows", help: "Right side and middle of the screen can't be covered by other add-ons" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

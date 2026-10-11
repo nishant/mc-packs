@@ -6,6 +6,14 @@ export const CONFIG = {
   /** The story tracker above the hotbar (`Drowned Bell: Lighthouse NE 240m`), for players who haven't chosen in /realm:prefs. */
   tracker: true,
 
+  /**
+   * Where the tracker and progress notes show for players who haven't chosen in /realm:prefs: "side" (a
+   * panel on the right, above the scoreboard sidebar; needs the HUD resource pack hud_rp), "middle" (the
+   * subtitle line in the middle of the screen) or "hotbar" (the action bar above the hotbar). Other add-ons
+   * that redraw the action bar all the time, like waypoint and compass add-ons, can't cover the first two.
+   */
+  trackerAt: "side",
+
   /** Party mates (Parties pack) on the same chapter share progress for defeat, survive and reach objectives. */
   partyShare: true,
 

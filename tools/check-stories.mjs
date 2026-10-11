@@ -174,6 +174,279 @@ for (const [key, at] of readKeys) {
   warnings.push(`${at}: flag "${key}" is read but never set by any choice`);
 }
 
+// ---------------------------------------------------------------------------
+// Game ids: items, blocks and mobs must exist in this Minecraft version (a wrong id spawns nothing, so a
+// champion, a wave or a story character never comes and the chapter can't be finished).
+// ---------------------------------------------------------------------------
+
+/** @type {any} */
+let vanilla;
+try {
+  vanilla = await import("@minecraft/vanilla-data");
+} catch {
+  console.warn("check-stories: @minecraft/vanilla-data isn't installed: game ids not checked");
+}
+if (vanilla) {
+  const known = {
+    item: new Set(Object.values(vanilla.MinecraftItemTypes)),
+    block: new Set(Object.values(vanilla.MinecraftBlockTypes)),
+    entity: new Set(Object.values(vanilla.MinecraftEntityTypes)),
+  };
+  /** @param {"item" | "block" | "entity"} kind @param {unknown} id @param {string} at */
+  const idOk = (kind, id, at) => {
+    if (typeof id !== "string") return;
+    if (!known[kind].has(id.includes(":") ? id : `minecraft:${id}`)) errors.push(`${at}: unknown ${kind} "${id}"`);
+  };
+  /** @param {any} o @param {string} at */
+  const ids = (o, at) => {
+    idOk("item", o.item, at);
+    for (const x of o.items ?? []) idOk("item", x, at);
+    idOk("item", o.disguise?.item, at);
+    for (const x of o.blocks ?? []) idOk("block", x, at);
+    for (const x of [...(o.mobs ?? []), o.mob, o.champion?.mob, o.who?.entity, o.ward?.entity, o.guards?.mob]) idOk("entity", x, at);
+    for (const g of [o.champion?.adds, o.ambush, o.failSpawn, ...(o.waves ?? [])]) for (const x of g?.mobs ?? []) idOk("entity", x, at);
+  };
+  /** @param {any} r @param {string} at */
+  const rewardIds = (r, at) => {
+    for (const it of r?.items ?? []) idOk("item", it.item, `${at} reward`);
+  };
+  for (const s of STORIES)
+    for (const c of s.chapters) {
+      c.objectives.forEach((/** @type {any} */ o, /** @type {number} */ i) => ids(o, `${s.id}/${c.id} objective ${i + 1}`));
+      rewardIds(c.reward, `${s.id}/${c.id}`);
+    }
+  for (const f of FAVORS) {
+    if (f.objective) ids(f.objective, `favor ${f.id}`);
+    rewardIds(f.reward, `favor ${f.id}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prefabs: an interact objective at a place needs one of its blocks in the place's building, within reach
+// ---------------------------------------------------------------------------
+
+{
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(join(scripts, "prefabs.js"), "utf8").replace(/^import \{[^}]*\} from "@minecraft\/server";/m, "const BlockPermutation = {}; const LiquidType = {};");
+  const { PREFABS, blueprint } = await import(`data:text/javascript,${encodeURIComponent(src)}`);
+  /** @type {Record<string, any[]>} */
+  const built = {};
+  for (const name of Object.keys(PREFABS)) {
+    built[name] = blueprint(name, { x: 0, y: 64, z: 0 }).entries.filter((/** @type {any} */ e) => e.k !== 2 && e.k !== 3); // not AIR or WATER
+    if (vanilla) {
+      const blocks = new Set(Object.values(vanilla.MinecraftBlockTypes));
+      for (const id of new Set(built[name].map((/** @type {any} */ e) => e.b.id))) if (!blocks.has(id)) errors.push(`prefab ${name}: unknown block "${id}"`);
+    }
+  }
+  /** @param {any} o @param {string} at */
+  const reach = (o, at) => {
+    if (o.type !== "interact" || !o.place || !built[o.place]) return;
+    const r = o.radius ?? 8;
+    if (!built[o.place].some((e) => o.blocks.includes(e.b.id) && Math.hypot(e.x, e.y, e.z) <= r)) errors.push(`${at}: no ${o.blocks.join("/")} within ${r} blocks of ${o.place}'s origin in its building`);
+  };
+  for (const s of STORIES) for (const c of s.chapters) c.objectives.forEach((/** @type {any} */ o, /** @type {number} */ i) => reach(o, `${s.id}/${c.id} objective ${i + 1}`));
+  for (const f of FAVORS) if (f.objective) reach(f.objective, `favor ${f.id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Every path: walk each story through every combination of choices (and of the flags other stories set)
+// and check that each chapter a player can reach has something to do, text to read and a way on.
+// ---------------------------------------------------------------------------
+
+{
+  /** Canonical keys each story reads in a chapter or objective `when` or a requirement, and who sets what. */
+  /** @type {Map<string, Set<string>>} */
+  const reads = new Map();
+  /** @type {Map<string, Set<string>>} key -> values set */
+  const values = new Map();
+  /** @type {Map<string, Set<string>>} key -> stories that set (or count) it */
+  const setBy = new Map();
+  /** @type {Set<string>} */
+  const counters = new Set();
+  /** @param {Map<string, Set<string>>} m @param {string} k @param {string} v */
+  const put = (m, k, v) => (m.get(k) ?? m.set(k, new Set()).get(k))?.add(v);
+  /** @param {string} sid @param {any} w */
+  const read = (sid, w) => {
+    for (const k of Object.keys(w ?? {})) put(reads, sid, canon(sid, k));
+  };
+  /** @param {string} sid @param {any[] | undefined} list */
+  const scan = (sid, list) => {
+    for (const c of list ?? []) {
+      for (const [k, v] of Object.entries(c.set ?? {})) {
+        put(values, canon(sid, k), String(v));
+        put(setBy, canon(sid, k), sid);
+      }
+      for (const k of Object.keys(c.inc ?? {})) {
+        counters.add(canon(sid, k));
+        put(setBy, canon(sid, k), sid);
+      }
+      read(sid, c.requires?.flags);
+      read(sid, c.requires?.minCount);
+    }
+  };
+  for (const s of STORIES) {
+    read(s.id, s.requires?.flags);
+    for (const c of s.chapters) {
+      read(s.id, c.when);
+      scan(s.id, c.introChoices);
+      scan(s.id, c.choices);
+      for (const o of c.objectives) {
+        read(s.id, o.when);
+        scan(s.id, o.choices);
+      }
+    }
+  }
+  const relevant = new Set([...reads.values()].flatMap((x) => [...x]));
+  /** @param {string | undefined} actual @param {string} want */
+  const test = (actual, want) => {
+    const w = String(want);
+    if (w.startsWith(">=")) return Number(actual ?? 0) >= Number(w.slice(2));
+    if (w.startsWith("<=")) return Number(actual ?? 0) <= Number(w.slice(2));
+    if (w.startsWith("!")) return actual !== w.slice(1);
+    return actual === w;
+  };
+  /** @param {any} when @param {Record<string, string>} F @param {string} sid */
+  const holds = (when, F, sid) => !when || Object.entries(when).every(([k, v]) => test(F[canon(sid, k)], /** @type {string} */ (v)));
+  /** Requirements on a choice: flags, counters, this story's chapters (other stories are assumed done). @param {any} req @param {Record<string, string>} F @param {string} sid @param {string[]} dn */
+  const allowed = (req, F, sid, dn) =>
+    !req ||
+    (holds(req.flags, F, sid) &&
+      Object.entries(req.minCount ?? {}).every(([k, n]) => Number(F[canon(sid, k)] ?? 0) >= Number(n)) &&
+      (req.chapters ?? []).every((/** @type {string} */ ref) => !ref.startsWith(`${sid}/`) || dn.includes(ref.slice(sid.length + 1))));
+  /** @param {Record<string, string>} F @param {string} sid @param {any} c */
+  const pick = (F, sid, c) => {
+    const G = { ...F };
+    for (const [k, v] of Object.entries(c.set ?? {})) G[canon(sid, k)] = String(v);
+    for (const [k, n] of Object.entries(c.inc ?? {})) G[canon(sid, k)] = String(Number(G[canon(sid, k)] ?? 0) + Number(n));
+    return G;
+  };
+  /** @param {any[]} pages @param {Record<string, string>} F @param {string} sid */
+  const shows = (pages, F, sid) => pages.some((p) => typeof p === "string" || holds(p.when, F, sid));
+  /** @type {Map<string, Set<string>>} story -> chapters on every ending */
+  const onEvery = new Map();
+  /** @type {Set<string>} */
+  const found = new Set();
+  let paths = 0;
+  for (const story of STORIES) {
+    const sid = story.id;
+    // Flags other stories set: every value (or none); counters 0 to the number of stories that add to them.
+    const ext = [...(reads.get(sid) ?? [])].filter((k) => !k.startsWith(`${sid}.`) && [...(setBy.get(k) ?? [])].some((x) => x !== sid));
+    /** @type {Record<string, string>[]} */
+    let combos = [{}];
+    for (const k of ext) {
+      const vals = counters.has(k) ? Array.from({ length: Math.min(6, [...(setBy.get(k) ?? [])].filter((x) => x !== sid).length) + 1 }, (_, i) => (i ? String(i) : undefined)) : [undefined, ...(values.get(k) ?? [])];
+      combos = combos.flatMap((c) => vals.map((v) => (v === undefined ? c : { ...c, [k]: v })));
+    }
+    /** @type {Set<string> | undefined} */
+    let every;
+    for (const start of combos) {
+      const seen = new Set();
+      /** @type {{ dn: string[], F: Record<string, string> }[]} */
+      const stack = [{ dn: [], F: start }];
+      while (stack.length) {
+        const { dn, F } = /** @type {{ dn: string[], F: Record<string, string> }} */ (stack.pop());
+        const key = `${dn.join(",")}|${JSON.stringify(Object.entries(F).filter(([k]) => relevant.has(k)).sort())}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const ch = story.chapters.find((/** @type {any} */ c) => !dn.includes(c.id) && holds(c.when, F, sid));
+        if (!ch) {
+          paths++;
+          every = every ? new Set([...every].filter((x) => dn.includes(x))) : new Set(dn);
+          continue;
+        }
+        const at = `${sid}/${ch.id}`;
+        const intro = (ch.introChoices ?? []).filter((/** @type {any} */ c) => allowed(c.requires, F, sid, dn));
+        if (ch.introChoices?.length && !intro.length) found.add(`${at}: every intro choice is locked for some players`);
+        for (const ic of intro.length ? intro : [undefined]) {
+          const F1 = ic ? pick(F, sid, ic) : F;
+          if (!shows(ch.intro, F1, sid)) found.add(`${at}: no intro page shows for some players`);
+          let states = [F1];
+          ch.objectives.forEach((/** @type {any} */ o, /** @type {number} */ i) => {
+            states = states.flatMap((S) => {
+              if (!holds(o.when, S, sid)) return [S];
+              if (o.pages && !shows(o.pages, S, sid)) found.add(`${at} objective ${i + 1}: no page shows for some players`);
+              const cs = (o.choices ?? []).filter((/** @type {any} */ c) => allowed(c.requires, S, sid, dn));
+              if (o.choices?.length && !cs.length) found.add(`${at} objective ${i + 1}: every choice is locked for some players`);
+              return cs.length ? cs.map((/** @type {any} */ c) => pick(S, sid, c)) : [S];
+            });
+          });
+          for (const S of states) {
+            if (!ch.objectives.some((/** @type {any} */ o) => holds(o.when, S, sid))) found.add(`${at}: no objective applies for some players (flags ${JSON.stringify(S)})`);
+            if (!shows(ch.outro, S, sid)) found.add(`${at}: no outro page shows for some players`);
+            const outs = (ch.choices ?? []).filter((/** @type {any} */ c) => allowed(c.requires, S, sid, dn));
+            if (ch.choices?.length && !outs.length) found.add(`${at}: every ending choice is locked for some players`);
+            for (const oc of outs.length ? outs : [undefined]) stack.push({ dn: [...dn, ch.id], F: oc ? pick(S, sid, oc) : S });
+          }
+        }
+        if (seen.size > 200000) {
+          found.add(`${sid}: too many paths to walk`);
+          stack.length = 0;
+        }
+      }
+    }
+    onEvery.set(sid, every ?? new Set());
+  }
+  for (const s of STORIES)
+    for (const ref of s.requires?.chapters ?? []) {
+      const [o, c] = String(ref).split("/");
+      if (onEvery.has(o) && !onEvery.get(o)?.has(c)) found.add(`story ${s.id}: requires ${ref}, which some endings of ${o} skip (those players never get ${s.id})`);
+    }
+  // Stories that require each other (directly or around a loop) can never start.
+  /** @param {string} id @param {string[]} trail */
+  const loop = (id, trail) => {
+    if (trail.includes(id)) return found.add(`stories require each other: ${[...trail, id].join(" -> ")}`);
+    const s = STORIES.find((/** @type {any} */ x) => x.id === id);
+    const next = [...(s?.requires?.stories ?? []), ...(s?.requires?.chapters ?? []).map((/** @type {string} */ r) => r.split("/")[0])];
+    for (const n of new Set(next)) if (n !== id) loop(n, [...trail, id]);
+  };
+  for (const s of STORIES) loop(s.id, []);
+  for (const f of found) errors.push(f);
+  console.log(`check-stories: walked ${paths} endings through every choice`);
+}
+
+// The Kitchen's dishes and ingredients as objectives.js knows them (KITCHEN) must match the Cooking pack.
+{
+  const { readFileSync, existsSync } = await import("node:fs");
+  const recipes = join(root, "packs", "cooking_bp", "scripts", "recipes.js");
+  if (existsSync(recipes)) {
+    const { DISHES, INGREDIENTS } = await import(pathToFileURL(recipes).href);
+    const src = readFileSync(join(scripts, "objectives.js"), "utf8");
+    /** @type {Map<string, string>} */
+    const kitchen = new Map();
+    for (const m of src.matchAll(/^\s+"([^"]+)": \{ item: "([^"]+)"(, rare: true)?(, ingredient: true)?/gm)) kitchen.set(m[1], `${m[2]}${m[3] ? " rare" : ""}${m[4] ? " ingredient" : ""}`);
+    /** @param {string} name @param {string} want */
+    const same = (name, want) => {
+      const got = kitchen.get(name.toLowerCase());
+      if (got !== want) errors.push(`objectives.js KITCHEN: "${name}" should be ${want} (has ${got ?? "nothing"}), as in cooking_bp/scripts/recipes.js`);
+    };
+    for (const d of DISHES) same(d.name, `${d.base}${d.tier === "rare" ? " rare" : ""}`);
+    for (const i of INGREDIENTS) same(i.name, `${i.item} ingredient`);
+  }
+}
+
+// Long pages are cut off or need scrolling in a Bedrock form.
+{
+  /** @param {string} at @param {any[] | undefined} list */
+  const long = (at, list) => {
+    for (const p of list ?? []) {
+      const text = typeof p === "string" ? p : p?.text;
+      if (typeof text === "string" && text.replace(/§./g, "").length > 450) warnings.push(`${at}: a page is ${text.replace(/§./g, "").length} characters (keep pages under 450)`);
+    }
+  };
+  for (const s of STORIES)
+    for (const c of s.chapters) {
+      const at = `${s.id}/${c.id}`;
+      long(`${at} intro`, c.intro);
+      long(`${at} outro`, c.outro);
+      for (const ch of [...(c.introChoices ?? []), ...(c.choices ?? [])]) long(`${at} reply`, ch.reply);
+      for (const o of c.objectives) {
+        long(`${at} pages`, o.pages);
+        for (const ch of o.choices ?? []) long(`${at} reply`, ch.reply);
+        long(`${at} clue`, (o.clues ?? []).map((/** @type {any} */ x) => x.text));
+      }
+    }
+}
+
 const seen = new Set();
 for (const w of warnings) if (!seen.has(w)) seen.add(w);
 for (const w of seen) console.warn(`check-stories: warning: ${w}`);

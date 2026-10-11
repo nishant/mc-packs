@@ -414,7 +414,7 @@ function search(name, rec, relaxed) {
           else if (site.reason === "not loaded") {
             unloaded++;
             continue;
-          } else if (relaxed) y = groundAt(dim, x, z);
+          } else if (relaxed) y = PREFABS[name]?.y ?? groundAt(dim, x, z); // underground and sky places keep their height
         } catch {
           unloaded++;
           continue;

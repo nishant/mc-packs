@@ -112,7 +112,7 @@ npm run bundle    # merge packs into one (--list, --all, --resources, --packs a,
 | `tools/admin-catalog.mjs` | Writes `packs/admin_bp/scripts/catalog.js` (every registered `realm:` command, for the Realm Configuration menu) by loading each pack with a stand-in for the Minecraft modules; `--check` (part of `npm run check`) fails when a command changed and it wasn't rerun |
 | `tools/help-catalog.mjs` | Writes the in-game `/realm:help` text from `docs/PACKS.md`; `--check` (part of `npm run check`) fails if it's stale or a pack doesn't answer `/realm:help` |
 | `docs/NEWS.md`, `tools/gen-news.mjs` | Player-facing release notes, newest first. `gen-news.mjs` (run by `npm run bundle`) copies the newest entry into `news_bp`, which pops it up once after an update; `--check` (part of `npm run check`) fails if it's stale |
-| `docs/STORY_BIBLE.md`, `tools/check-stories.mjs` | The story bible for Story Questlines (world, cast, places, the data format) and the validator for every story, chapter, objective and favor (part of `npm run check`) |
+| `docs/STORY_BIBLE.md`, `tools/check-stories.mjs` | The story bible for Story Questlines (world, cast, places, the data format) and the validator for every story, chapter, objective and favor, which also walks every path through the choices (part of `npm run check`) |
 | `tools/test-bds/` | Runs the packs on a real Bedrock Dedicated Server with simulated players and scripted scenarios (`node tools/test-bds/run.mjs --scenario <file>`; downloads BDS on first use). See its README |
 | `.claude/skills/bundle-packs/` | The `/bundle-packs` skill |
 

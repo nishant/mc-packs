@@ -24,7 +24,7 @@ const FLOWERS = [
 const GATES = [
   "minecraft:iron_door",
   "minecraft:iron_bars",
-  "minecraft:oak_fence_gate",
+  "minecraft:fence_gate",
   "minecraft:spruce_fence_gate",
   "minecraft:dark_oak_fence_gate",
   "minecraft:birch_fence_gate",

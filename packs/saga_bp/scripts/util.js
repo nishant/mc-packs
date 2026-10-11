@@ -98,10 +98,11 @@ export const coords = (p) => (p.y === undefined ? `${Math.floor(p.x)} ~ ${Math.f
 
 /**
  * The first open spot to stand at x/z: near `yHint` (scanning a few blocks up and down) or on the
- * surface. Undefined when the column isn't loaded.
- * @param {Dimension} dim @param {number} x @param {number} z @param {number} [yHint]
+ * surface. Undefined when the column isn't loaded (and, with `strict`, when there is no open spot near
+ * `yHint`: otherwise `yHint` itself).
+ * @param {Dimension} dim @param {number} x @param {number} z @param {number} [yHint] @param {boolean} [strict]
  */
-export function groundAt(dim, x, z, yHint) {
+export function groundAt(dim, x, z, yHint, strict = false) {
   const bx = Math.floor(x);
   const bz = Math.floor(z);
   try {
@@ -116,7 +117,7 @@ export function groundAt(dim, x, z, yHint) {
           if (open(feet) && open(head) && !open(below)) return y;
         }
       }
-      return y0;
+      return strict ? undefined : y0;
     }
     const top = dim.getTopmostBlock({ x: bx, z: bz });
     return top ? top.location.y + 1 : undefined;

@@ -22,10 +22,10 @@ import {
   target,
 } from "./data.js";
 import { featureSpot, locate, placeSpot, placesOf } from "./places.js";
-import { get } from "./settings.js";
+import { get, getFor } from "./settings.js";
 import { STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
-import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, plain, send, show, wait } from "./util.js";
+import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -112,11 +112,58 @@ const playerIn = (player, obj) => inArea(obj, player.location, player.dimension.
 /** Tick until which another note owns a player's actionbar: the tracker waits. @type {Map<string, number>} */
 export const holdUntil = new Map();
 
-/** @param {Player} player @param {string} text @param {number} ticks */
-export function note(player, text, ticks = 40) {
+/** Tick until which our own note owns the line the tracker uses. @type {Map<string, number>} */
+export const ownUntil = new Map();
+
+/** Does this player see the tracker off the action bar (right side or middle, not above the hotbar)? @param {Player} player */
+export const inMiddle = (player) => getFor(player, "trackerAt") !== "hotbar";
+
+/** The title text the HUD resource pack (hud_rp) shows as a panel on the right; SIDE_OFF clears it. */
+const SIDE = "§s§1§r";
+const SIDE_OFF = "§s§0§r";
+/** Who last wrote the side panel, per player (realm:side `from`). @type {Map<string, string>} */
+export const sideWriter = new Map();
+/** Tick our side text should go, per player. @type {Map<string, number>} */
+const sideUntil = new Map();
+
+/**
+ * Shows a line for a while: in the panel on the right (hud_rp) or as the subtitle in the middle of the
+ * screen (other add-ons that redraw the action bar every tick can't cover either), or above the hotbar
+ * for players who chose that.
+ * @param {Player} player @param {string} text @param {number} ticks
+ */
+export function showLine(player, text, ticks) {
+  const where = getFor(player, "trackerAt");
+  if (where === "middle") {
+    player.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 4 });
+    return;
+  }
+  if (where !== "hotbar") {
+    player.onScreenDisplay.setTitle(SIDE, { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 0 });
+    sideWriter.set(player.id, "saga");
+    send("realm:side", { player: player.id, from: "saga" });
+    const until = system.currentTick + ticks;
+    sideUntil.set(player.id, until);
+    system.runTimeout(() => {
+      try {
+        // Gone when nothing newer was written, by us or another pack.
+        if (sideUntil.get(player.id) !== until || sideWriter.get(player.id) !== "saga" || !player.isValid) return;
+        sideUntil.delete(player.id);
+        player.onScreenDisplay.setTitle(SIDE_OFF, { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
+      } catch {
+        // left
+      }
+    }, ticks);
+    return;
+  }
   send("realm:actionbar", { player: player.id, ticks, from: PACK });
-  holdUntil.set(player.id, system.currentTick + ticks);
   player.onScreenDisplay.setActionBar(text);
+}
+
+/** A progress note; the tracker waits while it shows. @param {Player} player @param {string} text @param {number} ticks */
+export function note(player, text, ticks = 40) {
+  ownUntil.set(player.id, system.currentTick + ticks);
+  showLine(player, text, ticks);
 }
 
 /** Who hears the report for an entry. @param {Entry} e */
@@ -238,11 +285,75 @@ function share(player, keys, type, amountFor, credited) {
 // Inventory
 // ---------------------------------------------------------------------------
 
+/**
+ * The Kitchen pack's dishes and rare ingredients (name -> the food item, and for dishes "rare" when it is
+ * a rare dish). Kept in step with packs/cooking_bp/scripts/recipes.js by hand (packs can't import each
+ * other). A delivery of one of these must be the real thing: the right item with the Kitchen's lore, not
+ * a cheaper food renamed on an anvil (an anvil can't add lore).
+ * @type {Record<string, { item: string, rare?: boolean, ingredient?: boolean, alsoAny?: string }>}
+ */
+const KITCHEN = {
+  "harbor chowder": { item: "minecraft:rabbit_stew" },
+  "fisherman's breakfast": { item: "minecraft:cooked_salmon" },
+  "miner's pasty": { item: "minecraft:baked_potato" },
+  "garden salad": { item: "minecraft:beetroot_soup" },
+  "hearty porridge": { item: "minecraft:mushroom_stew" },
+  "campfire kebab": { item: "minecraft:cooked_mutton" },
+  "warden's ration": { item: "minecraft:bread" },
+  "glow berry tart": { item: "minecraft:cookie" },
+  "honey-glazed ham": { item: "minecraft:cooked_porkchop" },
+  "spiced pumpkin soup": { item: "minecraft:mushroom_stew" },
+  "climber's trail mix": { item: "minecraft:cookie" },
+  "rabbit ragout": { item: "minecraft:rabbit_stew" },
+  "pathfinder's carrots": { item: "minecraft:golden_carrot" },
+  "smith's hotpot": { item: "minecraft:mushroom_stew" },
+  "sweet berry roll": { item: "minecraft:bread" },
+  "mystery stew": { item: "minecraft:mushroom_stew" },
+  "hiccup cookies": { item: "minecraft:cookie" },
+  "gambler's goulash": { item: "minecraft:rabbit_stew" },
+  "storm eel pie": { item: "minecraft:pumpkin_pie", rare: true },
+  "frost pepper soup": { item: "minecraft:beetroot_soup", rare: true },
+  "ember truffle risotto": { item: "minecraft:mushroom_stew", rare: true },
+  "moon salt roast": { item: "minecraft:cooked_beef", rare: true },
+  "golden harvest loaf": { item: "minecraft:bread", rare: true },
+  "champion's heart stew": { item: "minecraft:rabbit_stew", rare: true },
+  "starwright bread": { item: "minecraft:bread", rare: true },
+  "lantern cake": { item: "minecraft:pumpkin_pie", rare: true },
+  "hearthkeeper's feast": { item: "minecraft:rabbit_stew", rare: true },
+  "champion's heart": { item: "minecraft:beetroot", ingredient: true },
+  "storm eel": { item: "minecraft:cod", ingredient: true, alsoAny: "minecraft:cod" },
+  "frost pepper": { item: "minecraft:light_blue_dye", ingredient: true },
+  "glow honey": { item: "minecraft:honeycomb", ingredient: true },
+  "starwright flour": { item: "minecraft:sugar", ingredient: true },
+  "ember truffle": { item: "minecraft:magma_cream", ingredient: true },
+  "moon salt": { item: "minecraft:quartz", ingredient: true },
+  "harvest saffron": { item: "minecraft:orange_dye", ingredient: true },
+};
+
+/** Is a stack named as a Kitchen dish or ingredient the real thing (its item and the Kitchen's lore)? @param {ItemStack} stack @param {string} key */
+function kitchenOk(stack, key) {
+  const k = KITCHEN[key];
+  if (!k) return true;
+  /** @type {string[]} */
+  let lore = [];
+  try {
+    lore = stack.getLore();
+  } catch {
+    return false;
+  }
+  if (k.ingredient) {
+    if (stack.typeId === k.item && lore[0] === "§7Rare ingredient") return true;
+    return !!k.alsoAny && stack.typeId === k.alsoAny && /^§7\d+ cm$/.test(lore[0] ?? ""); // a Storm Eel from Fishing
+  }
+  return stack.typeId === k.item && lore.includes(k.rare ? "§6Rare dish" : "§8Kitchen dish");
+}
+
 /** Does a stack match an item and/or a custom name (either may be left out)? @param {ItemStack | undefined} stack @param {string | undefined} item @param {string} [name] */
 function same(stack, item, name) {
   if (!stack || (item !== undefined && stack.typeId !== item)) return false;
   if (name === undefined) return true;
-  return plain(stack.nameTag ?? "").trim().toLowerCase() === plain(name).trim().toLowerCase();
+  const key = plain(name).trim().toLowerCase();
+  return plain(stack.nameTag ?? "").trim().toLowerCase() === key && kitchenOk(stack, key);
 }
 
 /** @param {Player} player @param {string | undefined} item @param {string} [name] */
@@ -539,6 +650,21 @@ export function championSlain(tag, ids, at, dim) {
   for (const p of players) share(p, advance(p, "defeat", amountFor), "defeat", amountFor, credited);
 }
 
+/** Can `b` be seen from `a`: nothing but air, water or plants between (checked every half block)? @param {Dimension} dim @param {Vector3} a @param {Vector3} b */
+function inSight(dim, a, b) {
+  const d = dist3(a, b);
+  try {
+    for (let k = 0.5; k < d - 0.3; k += 0.5) {
+      const f = k / d;
+      const blk = dim.getBlock({ x: Math.floor(a.x + (b.x - a.x) * f), y: Math.floor(a.y + (b.y - a.y) * f), z: Math.floor(a.z + (b.z - a.z) * f) });
+      if (!blk || !openBlock(blk)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Spawns story mobs (an ambush, adds, a wrong answer) around a point: real fights, removed later.
  * @param {Player} player @param {Dimension} dim @param {Vector3} at @param {{ mobs: string[], count: number }} group @param {string} key @param {number} [min] @param {number} [max]
@@ -549,12 +675,21 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
   const n = Math.max(0, Math.min(24, Math.floor(group.count ?? 1)));
   for (let k = 0; k < n; k++) {
     const type = group.mobs[k % group.mobs.length];
-    const a = Math.random() * Math.PI * 2;
-    const d = min + Math.random() * (max - min);
-    const x = at.x + Math.cos(a) * d;
-    const z = at.z + Math.sin(a) * d;
-    const y = groundAt(dim, x, z, at.y) ?? at.y;
-    const ent = spawnActor(dim, type, { x, y, z }, { owner: player.id, key, role: "add" });
+    // Somewhere a mob can stand and that can be seen from the middle (not inside the rock around a room
+    // underground, or in a cave next to it): closer in each try, else the middle.
+    /** @type {Vector3 | undefined} */
+    let spot;
+    const y0 = groundAt(dim, at.x, at.z, at.y) ?? at.y;
+    for (let tries = 0; tries < 8 && !spot; tries++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = (min + Math.random() * (max - min)) * (1 - tries / 8);
+      const x = at.x + Math.cos(a) * d;
+      const z = at.z + Math.sin(a) * d;
+      const y = groundAt(dim, x, z, y0, true);
+      if (y !== undefined && inSight(dim, { x: at.x, y: y0 + 1.5, z: at.z }, { x, y: y + 1.5, z })) spot = { x, y, z };
+    }
+    spot ??= { x: at.x, y: y0, z: at.z };
+    const ent = spawnActor(dim, type, spot, { owner: player.id, key, role: "add" });
     if (ent && CHOIR.has(key)) ent.addTag("saga:choir");
     if (ent) out.push(ent);
   }
@@ -652,19 +787,33 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
         if (hit) bump(player, hit.e, hit.i, -1);
       }
     }
-    if (placed.delete(key)) return;
     const id = brokenBlockPermutation.type.id;
+    // Broken by a hit the hit event missed (it sees air when the block breaks at once): still a touch.
+    // Mining the block it just hit is the same touch.
+    const last = lastTouch.get(player.id);
+    if (!last || last.at !== key || system.currentTick - last.tick > 200) touchedAt(player, id, block.dimension.id, block.location);
+    if (placed.delete(key)) return;
     advance(player, "mine", (obj) => (!obj.blocks?.length || obj.blocks.includes(id) ? 1 : 0));
   } catch (e) {
     console.warn(`[saga] ${e}`);
   }
 });
 
+/** The block each player last touched, and when ("dim:x,y,z", tick): a hit that breaks it is one touch. @type {Map<string, { at: string, tick: number }>} */
+const lastTouch = new Map();
+
 /** A tap or a hit on a block counts for interact objectives and finds inspect clues. @param {Player} player @param {import("@minecraft/server").Block} block */
 function touched(player, block) {
-  const type = block.typeId;
-  const dim = block.dimension.id;
-  const b = block.location;
+  touchedAt(player, block.typeId, block.dimension.id, block.location);
+}
+
+/**
+ * A touch of a block of `type` at `b` (also a block broken by a hit: an end rod or a candle breaks at
+ * the first hit, before the hit event can see it).
+ * @param {Player} player @param {string} type @param {string} dim @param {Vector3} b
+ */
+function touchedAt(player, type, dim, b) {
+  lastTouch.set(player.id, { at: spot(dim, b), tick: system.currentTick });
   advance(player, "interact", (obj) => {
     if (!obj.blocks?.includes(type)) return 0;
     const loc = locate(obj);
@@ -824,7 +973,8 @@ world.afterEvents.playerInteractWithEntity.subscribe(({ player, target, beforeIt
       system.runTimeout(() => {
         try {
           if (!target.isValid || !player.isValid || !isTamed(target)) return;
-          for (const { e, i } of open(player, "tame")) {
+          for (const { e, i, obj } of open(player, "tame")) {
+            if (obj.mobs?.length && !obj.mobs.includes(type)) continue;
             const k = `tame|${player.id}|${objKey(e, i)}`;
             const set = tended.get(k) ?? new Set();
             if (set.has(id)) continue;
@@ -859,7 +1009,10 @@ export function talked(player, npc) {
     if (got > 0) {
       player.sendMessage(`§e[Story] You give ${npcName(npc)} ${got} ${name} (${progressOf(e, i) + got}/${target(obj)}).`);
       bump(player, e, i, got);
-    } else player.sendMessage(`§7[Story] ${npcName(npc)} still needs ${need} ${name}.${obj.name ? "" : " Renamed items are never taken."}`);
+    } else {
+      const kitchen = obj.name && KITCHEN[plain(obj.name).trim().toLowerCase()] ? " It must be the real thing, from the Kitchen (a renamed item won't do)." : "";
+      player.sendMessage(`§7[Story] ${npcName(npc)} still needs ${need} ${name}.${obj.name ? kitchen : " Renamed items are never taken."}`);
+    }
   }
 }
 
@@ -1136,11 +1289,17 @@ function stealthTick(player, e, i, obj) {
   removeActors({ owner: player.id, key: s.key });
   s.data.guards = [];
   for (let k = 0; k < n; k++) {
-    const gr = Math.max(3, r * (0.35 + (0.55 * (k + 0.5)) / n));
+    let gr = Math.max(3, r * (0.35 + (0.55 * (k + 0.5)) / n));
     const ang = (2 * Math.PI * k) / n + Math.random() * 0.5;
+    // Rounds where a guard can stand: smaller ones when the place is a room in the rock.
+    let y = groundAt(dim, sp.center.x + Math.cos(ang) * gr, sp.center.z + Math.sin(ang) * gr, sp.center.y, true);
+    while (y === undefined && gr > 3) {
+      gr = Math.max(3, gr * 0.75);
+      y = groundAt(dim, sp.center.x + Math.cos(ang) * gr, sp.center.z + Math.sin(ang) * gr, sp.center.y, true);
+    }
     const x = sp.center.x + Math.cos(ang) * gr;
     const z = sp.center.z + Math.sin(ang) * gr;
-    const y = groundAt(dim, x, z, sp.center.y) ?? sp.center.y;
+    y ??= groundAt(dim, x, z, sp.center.y) ?? sp.center.y;
     const ent = spawnActor(dim, g.mob, { x, y, z }, { owner: player.id, key: s.key, role: "guard", name: g.name ? `§c${g.name}` : undefined, invul: true });
     if (ent && CHOIR.has(s.key)) ent.addTag("saga:choir");
     if (ent) s.data.guards.push({ ent, r: gr, ang, dir: k % 2 ? 1 : -1, yaw: 0, y, pause: 0, flipAt: system.currentTick + 200 + Math.floor(Math.random() * 300) });
@@ -1388,8 +1547,10 @@ function leadTick(player, e, i, obj) {
   if (obj.spawnAt) {
     const at = locate(obj.spawnAt, "the lost animal");
     if (at && typeof at !== "string" && !at.pending && at.dim === dim.id) {
+      // Leading one home far from where it was lost is not "away": only a player far from both waits it out.
+      const leading = actorsOf(player.id, s.key, "lead").some((a) => a.ent.isValid && a.ent.dimension.id === dim.id && dist3(a.ent.location, player.location) <= 48);
       const near = across(player.location, at) <= 40;
-      if (tooFar(s, near)) removeActors({ owner: player.id, key: s.key, role: "lead" });
+      if (tooFar(s, near || leading)) removeActors({ owner: player.id, key: s.key, role: "lead" });
       else if (near) {
         const want = target(obj) - progressOf(e, i);
         const have = actorsOf(player.id, s.key, "lead").filter((a) => a.ent.isValid).length;
@@ -1430,6 +1591,9 @@ function leadTick(player, e, i, obj) {
 
 // ---- defend ------------------------------------------------------------
 
+/** Wards that would fight the player they need protecting by. */
+const HOSTILE_WARDS = new Set(["minecraft:witch", "minecraft:evocation_illager", "minecraft:vindicator", "minecraft:pillager", "minecraft:zombie", "minecraft:skeleton", "minecraft:drowned", "minecraft:bogged"]);
+
 /** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
 function defendTick(player, e, i, obj) {
   const s = sceneFor(player, e, i, "defend");
@@ -1448,7 +1612,10 @@ function defendTick(player, e, i, obj) {
     s.data = { mobs: [], next: now + 40, wave: progressOf(e, i) };
     if (obj.ward) {
       const at = (obj.place && featureSpot(obj.place, obj.ward.id)) || center;
-      spawnActor(dim, obj.ward.entity, at, { owner: player.id, key: s.key, role: "ward", name: `§e${obj.ward.name}`, frozen: true, anchor: true });
+      // A ward that is a hostile mob (Vesna is a witch) would attack the player it needs, and no wave
+      // mob goes for it anyway: it can't be hurt, and what it throws is removed.
+      const hostile = HOSTILE_WARDS.has(obj.ward.entity);
+      spawnActor(dim, obj.ward.entity, at, { owner: player.id, key: s.key, role: "ward", name: `§e${obj.ward.name}`, frozen: true, anchor: true, invul: hostile });
     }
     player.sendMessage(`§c[Story] Hold ${loc.label}!${obj.ward ? ` Keep ${obj.ward.name} alive.` : ""} ${waves.length} wave${waves.length === 1 ? "" : "s"} are coming.`);
     return;
@@ -1615,7 +1782,10 @@ export async function playVision(player, list, dark = false) {
       for (let t = 0; t < secs * 4; t++) {
         await wait(5);
         if (!player.isValid) return true;
-        if (t % 8 === 0) player.onScreenDisplay.setActionBar("§8Sneak to skip");
+        if (t % 8 === 0) {
+          send("realm:actionbar", { player: player.id, ticks: 45, from: PACK });
+          player.onScreenDisplay.setActionBar("§8Sneak to skip");
+        }
         const sn = sneaking(player);
         if (!sn) released = true;
         else if (released) {
@@ -1960,10 +2130,14 @@ export function playerGone(pid) {
   endScenesOf(pid);
   rides.delete(pid);
   lastHit.delete(pid);
+  lastTouch.delete(pid);
   lastUse.delete(pid);
   askCool.delete(pid);
   dreams.delete(pid);
   holdUntil.delete(pid);
+  ownUntil.delete(pid);
+  sideWriter.delete(pid);
+  sideUntil.delete(pid);
   for (const k of [...tended.keys()]) if (k.includes(pid)) tended.delete(k);
 }
 

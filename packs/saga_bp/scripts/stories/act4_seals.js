@@ -330,7 +330,7 @@ export const STORIES = [
               },
             ],
           },
-          { type: "interact", label: "Relight the Tide Seal: tap 4 of its sea lanterns", place: "seal_tide", blocks: ["minecraft:sea_lantern", "minecraft:conduit"], count: 4, radius: 10 },
+          { type: "interact", label: "Relight the Tide Seal: hit 4 of its sea lanterns", place: "seal_tide", blocks: ["minecraft:sea_lantern", "minecraft:conduit"], count: 4, radius: 10 },
         ],
         outro: [
           "The shard flares. Light races around the sea-lantern ring and down into the frame, and the whole shrine sings one long note you feel in your teeth. Hal's echo turns toward the sound, smiles, and goes out like a candle somebody finally let rest.",
@@ -356,7 +356,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "growers", amount: 25 }],
-        hint: "Hal's echo appears at the Tide Seal: swim close to the shrine and talk to the glowing figure. Then tap 4 of the sea lanterns around the shrine's frame. This whole chapter is underwater, so bring water breathing.",
+        hint: "Hal's echo appears at the Tide Seal: swim close to the shrine and talk to the glowing figure. Then hit 4 of the sea lanterns around the shrine's frame. This whole chapter is underwater, so bring water breathing.",
       },
 
       // 5-7. The Stone Seal (Ida and the Miners).
@@ -502,7 +502,7 @@ export const STORIES = [
             answers: ["silence", "quiet", "stillness", "the silence"],
             failSpawn: { mobs: ["minecraft:zombie"], count: 3 },
           },
-          { type: "interact", label: "Relight the Stone Seal: tap its reinforced deepslate 4 times", place: "seal_stone", blocks: ["minecraft:reinforced_deepslate"], count: 4, radius: 10 },
+          { type: "interact", label: "Relight the Stone Seal: hit its reinforced deepslate 4 times", place: "seal_stone", blocks: ["minecraft:reinforced_deepslate"], count: 4, radius: 10 },
         ],
         outro: [
           "Light runs out of the shard and into the new frame like water finding a channel. Every chiseled line glows blue-white. The sculk on the walls curls back from it, hissing softly, and the seal stone hums one deep note you feel in your back teeth.",
@@ -527,7 +527,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "miners", amount: 25 }],
-        hint: "The answer is one word: the thing the Warden cannot find you in. Type it when the stone asks. Then tap the reinforced deepslate blocks of the shrine 4 times.",
+        hint: "The answer is one word: the thing the Warden cannot find you in. Type it when the stone asks. Then hit the reinforced deepslate blocks of the shrine 4 times.",
       },
 
       // 8-10. The Sky Seal (Sol and the Wayfarers).
@@ -704,7 +704,7 @@ export const STORIES = [
               { title: "Now", text: "The Lantern comes again, cracked and smaller, but coming. Three seals wait for it. And at the bottom of the world, something is waiting too.", sound: "mob.warden.heartbeat", seconds: 7 },
             ],
           },
-          { type: "interact", label: "Light the crown: tap the Sky Seal's 4 end rods", place: "seal_sky", blocks: ["minecraft:end_rod"], count: 4, radius: 10 },
+          { type: "interact", label: "Light the crown: hit the Sky Seal's 4 end rods", place: "seal_sky", blocks: ["minecraft:end_rod"], count: 4, radius: 10 },
         ],
         outro: [
           "The end rods blaze. A thin white line of light shoots up from the crown of the ring, straight toward the Lantern, and for one heartbeat the comet seems to lean down to meet it.",
@@ -729,7 +729,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "wayfarers", amount: 25 }],
-        hint: "Stand within 8 blocks of the middle of the Sky Seal ring and the vision starts. Afterward, tap the 4 end rods at the ring's crown.",
+        hint: "Stand within 8 blocks of the middle of the Sky Seal ring and the vision starts. Afterward, hit the 4 end rods at the ring's crown (they pop off; put them back if you like).",
       },
 
       // 11. Elsie's choice.

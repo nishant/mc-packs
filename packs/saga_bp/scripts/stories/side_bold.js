@@ -512,7 +512,7 @@ const SMUGGLERS_RUN = {
           waves: [
             { mobs: ["minecraft:pillager"], count: 4 },
             { mobs: ["minecraft:vindicator", "minecraft:pillager"], count: 5 },
-            { mobs: ["minecraft:vindicator", "minecraft:evoker"], count: 4 },
+            { mobs: ["minecraft:vindicator", "minecraft:evocation_illager"], count: 4 },
           ],
         },
         { type: "talk", label: "Tell Warden Reyes the Choir hit the cove", npc: "reyes" },
