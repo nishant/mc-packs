@@ -1,0 +1,406 @@
+// BDS harness test pack: runs the scenario (scripts/scenario.js) when the harness sends
+// `scriptevent harness:start`, and reports to run.mjs through "HARNESS {json}" console lines.
+// This pack may use beta modules (@minecraft/server-gametest); the packs under test may not.
+import * as mc from "@minecraft/server";
+import * as gt from "@minecraft/server-gametest";
+import scenario from "./scenario.js";
+
+const { world, system, GameMode, CommandPermissionLevel } = mc;
+
+function out(obj) {
+  let s;
+  try {
+    s = JSON.stringify(obj, (k, v) => (typeof v === "bigint" ? String(v) : v));
+  } catch (e) {
+    s = JSON.stringify({ type: obj.type, msg: String(obj.msg ?? obj) });
+  }
+  console.warn("HARNESS " + s);
+}
+
+const strip = (s) => String(s ?? "").replace(/\u00a7./g, "");
+const fmt = (a) => (typeof a === "string" ? a : (() => { try { return JSON.stringify(a); } catch (e) { return String(a); } })());
+
+// ---------------------------------------------------------------------------
+// Relayed messages and forms from the shims in the packs under test
+// ---------------------------------------------------------------------------
+
+const parts = new Map();
+/** @type {{tick:number, pack:string, kind:string, to:string, text:string, plain:string, raw?:unknown}[]} */
+const messages = [];
+/** @type {any[]} */
+const forms = [];
+const answers = new Map(); // player name -> queued answers
+const msgWaiters = new Set();
+const formWaiters = new Set();
+let formTimeout = 100;
+let echoActionBar = false;
+
+function reassemble(raw) {
+  let p;
+  try { p = JSON.parse(raw); } catch (e) { return undefined; }
+  if (p.n === 1) return JSON.parse(p.d);
+  let entry = parts.get(p.k);
+  if (!entry) parts.set(p.k, (entry = []));
+  entry[p.i] = p.d;
+  if (entry.filter((x) => x !== undefined).length < p.n) return undefined;
+  parts.delete(p.k);
+  return JSON.parse(entry.join(""));
+}
+
+const argText = (a) => {
+  if (a === undefined || a === null) return "";
+  if (typeof a === "string") return a;
+  if (typeof a === "object") {
+    let s = "";
+    if (typeof a.text === "string") s += a.text;
+    if (typeof a.translate === "string") s += "%" + a.translate;
+    if (Array.isArray(a.rawtext)) s += a.rawtext.map(argText).join("");
+    return s;
+  }
+  return String(a);
+};
+
+/** Turns the recorded builder calls into a readable form description. */
+function describe(f) {
+  const form = { id: f.id, pack: f.pack, player: f.player, type: f.form, title: "", body: "", buttons: [], elements: [], tick: system.currentTick, answered: false, response: undefined };
+  for (const { m, args } of f.calls) {
+    switch (m) {
+      case "title": form.title = strip(argText(args[0])); break;
+      case "body": form.body = strip(argText(args[0])); break;
+      case "button": form.buttons.push(strip(argText(args[0]))); form.elements.push({ kind: "button", text: strip(argText(args[0])) }); break;
+      case "button1": form.buttons[0] = strip(argText(args[0])); break;
+      case "button2": form.buttons[1] = strip(argText(args[0])); break;
+      case "label": case "header": form.elements.push({ kind: m, text: strip(argText(args[0])) }); break;
+      case "divider": form.elements.push({ kind: "divider", text: "" }); break;
+      case "textField": {
+        const o = args[2];
+        form.elements.push({ kind: "textField", label: strip(argText(args[0])), placeholder: strip(argText(args[1])), default: typeof o === "object" && o ? o.defaultValue ?? "" : o ?? "" });
+        break;
+      }
+      case "dropdown": {
+        const o = args[2];
+        form.elements.push({ kind: "dropdown", label: strip(argText(args[0])), options: (args[1] || []).map((x) => strip(argText(x))), default: typeof o === "object" && o ? o.defaultValueIndex ?? 0 : o ?? 0 });
+        break;
+      }
+      case "slider": {
+        const o = args[3];
+        const def = typeof o === "object" && o ? o.defaultValue : args[4];
+        form.elements.push({ kind: "slider", label: strip(argText(args[0])), min: args[1], max: args[2], default: def ?? args[1] });
+        break;
+      }
+      case "toggle": {
+        const o = args[1];
+        form.elements.push({ kind: "toggle", label: strip(argText(args[0])), default: typeof o === "object" && o ? !!o.defaultValue : !!o });
+        break;
+      }
+      case "submitButton": form.submit = strip(argText(args[0])); break;
+      default: break;
+    }
+  }
+  return form;
+}
+
+const CANCEL = { canceled: true, cancelationReason: "UserClosed" };
+
+/** Turns a scenario answer into a form response. */
+function toResponse(form, answer) {
+  if (typeof answer === "function") answer = answer(form);
+  if (answer === null || answer === undefined || answer === "cancel") return CANCEL;
+  if (answer === "busy") return { canceled: true, cancelationReason: "UserBusy" };
+  if (form.type === "action" || form.type === "message") {
+    let sel = answer;
+    if (typeof answer === "string") {
+      const want = strip(answer).toLowerCase();
+      sel = form.buttons.findIndex((b) => b !== undefined && strip(b).toLowerCase() === want);
+      if (sel < 0) sel = form.buttons.findIndex((b) => b !== undefined && strip(b).toLowerCase().includes(want));
+      if (sel < 0) throw new Error(`form "${form.title}" has no button matching "${answer}" (buttons: ${form.buttons.join(" | ")})`);
+    }
+    if (typeof sel !== "number") throw new Error(`answer for ${form.type} form "${form.title}" must be a button index or label`);
+    return { canceled: false, selection: sel };
+  }
+  // modal
+  if (Array.isArray(answer)) return { canceled: false, formValues: answer };
+  if (typeof answer === "object") {
+    const used = new Set();
+    const values = form.elements.map((el) => {
+      if (!("default" in el)) return undefined;
+      const key = Object.keys(answer).find((k) => !used.has(k) && strip(el.label).toLowerCase().includes(strip(k).toLowerCase()));
+      if (key === undefined) return el.default;
+      used.add(key);
+      let v = answer[key];
+      if (el.kind === "dropdown" && typeof v === "string") {
+        const i = el.options.findIndex((o) => o.toLowerCase().includes(v.toLowerCase()));
+        if (i < 0) throw new Error(`dropdown "${el.label}" has no option "${v}" (options: ${el.options.join(" | ")})`);
+        v = i;
+      }
+      return v;
+    });
+    const unused = Object.keys(answer).filter((k) => !used.has(k));
+    if (unused.length) throw new Error(`modal form "${form.title}" has no input matching: ${unused.join(", ")}`);
+    return { canceled: false, formValues: values };
+  }
+  if (answer === true || answer === "submit") return { canceled: false, formValues: form.elements.map((el) => el.default) };
+  throw new Error(`cannot use ${fmt(answer)} as a modal form answer`);
+}
+
+function reply(form, response) {
+  if (form.answered) return false;
+  form.answered = true;
+  form.response = response;
+  system.sendScriptEvent("harness:form_reply", JSON.stringify({ pack: form.pack, id: form.id, response }));
+  out({ type: "form_answer", player: form.player, pack: form.pack, title: form.title, response });
+  return true;
+}
+
+function onForm(raw) {
+  const form = describe(raw);
+  form.answer = (a) => reply(form, toResponse(form, a));
+  forms.push(form);
+  out({ type: "form", player: form.player, pack: form.pack, form: form.type, title: form.title, body: form.body.slice(0, 300), buttons: form.buttons, elements: form.type === "modal" ? form.elements : undefined });
+  const queue = answers.get(form.player);
+  if (queue && queue.length) {
+    const a = queue.shift();
+    try { form.answer(a); } catch (e) { out({ type: "error", msg: String(e) }); reply(form, CANCEL); }
+  } else {
+    system.runTimeout(() => reply(form, CANCEL), formTimeout);
+  }
+  for (const w of [...formWaiters]) w(form);
+}
+
+function onMsg(m) {
+  const msg = { tick: system.currentTick, pack: m.pack, kind: m.kind, to: m.to, text: m.text, plain: strip(m.text), raw: m.raw };
+  messages.push(msg);
+  if (messages.length > 5000) messages.splice(0, 1000);
+  if (m.kind !== "actionbar" || echoActionBar) out({ type: "msg", kind: m.kind, pack: m.pack, to: m.to, text: msg.plain.slice(0, 500) });
+  for (const w of [...msgWaiters]) w(msg);
+}
+
+system.afterEvents.scriptEventReceive.subscribe((ev) => {
+  if (ev.id === "harness:relay") {
+    let p;
+    try { p = reassemble(ev.message); } catch (e) { out({ type: "error", msg: "bad relay: " + e }); return; }
+    if (!p) return;
+    if (p.type === "msg") onMsg(p);
+    else if (p.type === "form") onForm(p);
+  } else if (ev.id === "harness:start") {
+    let cfg = {};
+    try { cfg = JSON.parse(ev.message || "{}"); } catch (e) { /* ignore */ }
+    system.run(() => run(cfg));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Scenario API
+// ---------------------------------------------------------------------------
+
+class Stop extends Error {
+  constructor(ok, msg, restart = false) { super(msg); this.ok = ok; this.restart = restart; }
+}
+
+const PERM = { any: 0, member: 0, gamedirectors: 1, op: 1, operator: 1, admin: 2, host: 3, owner: 4 };
+const MODES = { survival: GameMode.Survival, creative: GameMode.Creative, adventure: GameMode.Adventure, spectator: GameMode.Spectator };
+
+function runCmd(target, cmd) {
+  const c = String(cmd).replace(/^\s*\//, "");
+  try {
+    const r = target.runCommand(c);
+    return { ok: (r?.successCount ?? 0) > 0, successCount: r?.successCount ?? 0 };
+  } catch (e) {
+    return { ok: false, successCount: 0, error: String(e?.message ?? e) };
+  }
+}
+
+function matches(text, pattern) {
+  if (pattern === undefined) return true;
+  if (pattern instanceof RegExp) return pattern.test(text);
+  if (typeof pattern === "function") return !!pattern(text);
+  return text.toLowerCase().includes(String(pattern).toLowerCase());
+}
+
+const toName = (p) => (p === undefined ? undefined : typeof p === "string" ? p : p.name);
+
+const SEE_THROUGH = /air|barrier|structure_void|light_block|vine|snow_layer|tallgrass|short_grass|tall_grass|fern|flower|torch|sapling|bush/;
+/** The highest block a player can stand on, skipping invisible marker blocks some packs place high up. */
+function findGround(dimension, top) {
+  let b = top;
+  for (let i = 0; i < 400 && b; i++) {
+    if (!SEE_THROUGH.test(b.typeId) && b.isSolid !== false) return b;
+    b = b.below(); // throws while the chunk is not ticking: loadArea retries
+  }
+  return false;
+}
+
+function makeT(cfg) {
+  const failures = [];
+  let spawnArea = 0;
+  const t = {
+    mc, gt, world, system,
+    config: cfg,
+    packs: cfg.packs || [],
+    get tick() { return system.currentTick; },
+    get dimension() { return world.getDimension("overworld"); },
+    get messagesAll() { return messages; },
+    failures,
+
+    log: (...a) => out({ type: "log", msg: a.map(fmt).join(" ") }),
+    wait: (ticks = 1) => system.waitTicks(Math.max(1, Math.floor(ticks))),
+    seconds: (s) => system.waitTicks(Math.max(1, Math.round(s * 20))),
+
+    async waitUntil(fn, { timeout = 200, interval = 1, message } = {}) {
+      const end = system.currentTick + timeout;
+      for (;;) {
+        let v;
+        try { v = await fn(); } catch (e) { v = undefined; }
+        if (v) return v;
+        if (system.currentTick >= end) throw new Stop(false, message || `waitUntil timed out after ${timeout} ticks`);
+        await system.waitTicks(interval);
+      }
+    },
+
+    assert(cond, msg = "assertion failed") {
+      if (!cond) throw new Stop(false, msg);
+      out({ type: "check", ok: true, msg });
+    },
+    check(cond, msg = "check failed") {
+      out({ type: "check", ok: !!cond, msg });
+      if (!cond) failures.push(msg);
+      return !!cond;
+    },
+    fail(msg = "failed") { throw new Stop(false, msg); },
+    /** Ends this phase; run.mjs stops the server, starts it again on the same world and runs the scenario again with t.phase + 1. */
+    restart(msg = "restart requested") { throw new Stop(true, msg, true); },
+    phase: cfg.phase || 1,
+    pass(msg = "passed") { throw new Stop(true, msg); },
+    allowError(pattern) {
+      out({ type: "allow_error", pattern: pattern instanceof RegExp ? pattern.source : String(pattern), flags: pattern instanceof RegExp ? pattern.flags : "" });
+    },
+    set formTimeout(n) { formTimeout = n; },
+    get formTimeout() { return formTimeout; },
+    set echoActionBar(v) { echoActionBar = !!v; },
+
+    /** Waits until the chunk column at x,z can be read, loading it with a ticking area. */
+    async loadArea(x, z, { dimension = world.getDimension("overworld"), radius = 2, timeout = 400 } = {}) {
+      const name = `harness_${++spawnArea}`;
+      runCmd(dimension, `tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} ${radius} ${name} true`);
+      // getTopmostBlock can answer before the chunk ticks (with y 319): also require that the
+      // block can be read and that a standing spot below it can be found.
+      const ground = await t.waitUntil(() => {
+        const top = dimension.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+        if (!top || !dimension.getBlock(top.location)) return false;
+        return findGround(dimension, top);
+      }, { timeout, message: `chunk at ${x},${z} did not load in ${timeout} ticks` });
+      return { top: ground, name };
+    },
+
+    /**
+     * Spawns a simulated player. opts: {x, y, z} (y defaults to the top block + 1; x, z default to
+     * the world spawn), dimension ("overworld"), gameMode ("survival"), op (false; true = GameDirectors,
+     * or a level name such as "admin").
+     */
+    async player(name = "Tester", opts = {}) {
+      const dimension = typeof opts.dimension === "string" ? world.getDimension(opts.dimension) : opts.dimension || world.getDimension("overworld");
+      const sp = world.getDefaultSpawnLocation();
+      const x = opts.x ?? sp.x, z = opts.z ?? sp.z;
+      let y = opts.y, groundId;
+      if (y === undefined) {
+        const { top: ground } = await t.loadArea(x, z, { dimension });
+        groundId = ground.typeId;
+        y = ground.location.y + 1;
+      } else {
+        await t.loadArea(x, z, { dimension }).catch(() => undefined);
+      }
+      const mode = MODES[String(opts.gameMode || "survival").toLowerCase()] ?? GameMode.Survival;
+      const p = gt.spawnSimulatedPlayer({ dimension, x: Math.floor(x) + 0.5, y, z: Math.floor(z) + 0.5 }, name, mode);
+      out({ type: "player", name, location: { x: Math.floor(x), y, z: Math.floor(z) }, standingOn: groundId });
+      if (opts.op) t.op(p, opts.op === true ? "gamedirectors" : opts.op);
+      await system.waitTicks(opts.settle ?? 10);
+      return p;
+    },
+
+    /** Sets a player's command permission level ("gamedirectors" by default, i.e. operator). */
+    op(p, level = "gamedirectors") {
+      const v = typeof level === "number" ? level : PERM[String(level).toLowerCase()];
+      p.commandPermissionLevel = v ?? CommandPermissionLevel.GameDirectors;
+      out({ type: "log", msg: `${p.name} commandPermissionLevel = ${p.commandPermissionLevel}` });
+    },
+    deop(p) { p.commandPermissionLevel = CommandPermissionLevel.Any; },
+
+    /** Runs a command as the player (custom realm: commands work). Returns {ok, successCount, error}. */
+    cmd(p, cmd) {
+      const r = runCmd(p, cmd);
+      out({ type: "cmd", as: p.name, cmd: String(cmd), ...r });
+      return r;
+    },
+    /** Runs a command as the server, from the overworld (no player: commands needing one fail). */
+    server(cmd) {
+      const r = runCmd(world.getDimension("overworld"), cmd);
+      out({ type: "cmd", as: "server", cmd: String(cmd), ...r });
+      return r;
+    },
+    /** Types a command into the BDS console (output appears in the log only). */
+    async console(cmd) {
+      out({ type: "console", cmd: String(cmd).replace(/^\s*\//, "") });
+      await system.waitTicks(2);
+    },
+    /** Makes the simulated player chat (packs cannot see chat with stable APIs). */
+    chat(p, text) { p.chat(text); },
+
+    /** Messages sent to a player (sendMessage, titles, action bar) and broadcasts. */
+    messages(p, { kind, pack, since = 0 } = {}) {
+      const n = toName(p);
+      return messages.filter((m) => (n === undefined || m.to === n || m.to === "*") && (!kind || m.kind === kind) && (!pack || m.pack === pack) && m.tick >= since);
+    },
+    clearMessages() { messages.length = 0; },
+    /** Waits for a message to the player whose plain text matches (string = contains, RegExp, fn). */
+    waitMessage(p, pattern, { timeout = 200, kind, pack, since } = {}) {
+      const n = toName(p);
+      const ok = (m) => (n === undefined || m.to === n || m.to === "*") && (!kind || m.kind === kind) && (!pack || m.pack === pack) && matches(m.plain, pattern);
+      if (since !== undefined) {
+        const hit = messages.find((m) => m.tick >= since && ok(m));
+        if (hit) return Promise.resolve(hit);
+      }
+      return new Promise((resolve, reject) => {
+        const w = (m) => { if (ok(m)) { msgWaiters.delete(w); system.clearRun(timer); resolve(m); } };
+        msgWaiters.add(w);
+        const timer = system.runTimeout(() => { msgWaiters.delete(w); reject(new Stop(false, `no message matching ${pattern} for ${n ?? "anyone"} within ${timeout} ticks`)); }, timeout);
+      });
+    },
+
+    /** Queues answers for the next forms shown to the player (index, button label, values, null = close). */
+    answerForm(p, ...ans) {
+      const n = toName(p);
+      if (!answers.has(n)) answers.set(n, []);
+      answers.get(n).push(...ans);
+    },
+    forms(p) { const n = toName(p); return forms.filter((f) => n === undefined || f.player === n); },
+    /** Waits for the next form shown to the player (from now on); returns it, still open unless an answer was queued. */
+    waitForm(p, { timeout = 200, title } = {}) {
+      const n = toName(p);
+      return new Promise((resolve, reject) => {
+        const w = (f) => { if ((n === undefined || f.player === n) && matches(f.title, title)) { formWaiters.delete(w); system.clearRun(timer); resolve(f); } };
+        formWaiters.add(w);
+        const timer = system.runTimeout(() => { formWaiters.delete(w); reject(new Stop(false, `no form${title ? ` titled ${title}` : ""} for ${n ?? "anyone"} within ${timeout} ticks`)); }, timeout);
+      });
+    },
+  };
+  return t;
+}
+
+let started = false;
+async function run(cfg) {
+  if (started) return;
+  started = true;
+  const t = makeT(cfg);
+  out({ type: "start", tick: system.currentTick });
+  let ok = true, msg = "scenario finished", restart = false;
+  try {
+    await scenario(t);
+  } catch (e) {
+    if (e instanceof Stop) { ok = e.ok; msg = e.message; restart = e.restart && !t.failures.length; }
+    else { ok = false; msg = `scenario threw: ${e}${e && e.stack ? "\n" + e.stack : ""}`; }
+  }
+  if (ok && t.failures.length) { ok = false; msg = `${t.failures.length} check(s) failed: ${t.failures.join("; ")}`; }
+  out({ type: "done", ok, msg, restart, phase: t.phase, forms: forms.length, messages: messages.length });
+}
+
+system.runTimeout(() => out({ type: "ready" }), 1);
