@@ -17,6 +17,12 @@ export const CONFIG = {
   /** Explosions (creepers, TNT, ghasts...) break no blocks inside a claim. They still hurt. */
   protectExplosions: true,
 
+  /**
+   * Claims are safe zones for world events: meteors, tornadoes, storm lightning and the other world-event packs
+   * break no blocks inside a claim (they still happen). Shared with those packs over the safe zones protocol.
+   */
+  protectWorldEvents: true,
+
   /** Operators can build and open things in anyone's claim. Off: operators can only remove claims. */
   operatorsBypass: false,
 

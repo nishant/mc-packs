@@ -12,6 +12,7 @@ const BASE = CONFIG;
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Storm cells", help: "A drifting storm cell during thunderstorms" },
   { key: "lightning", type: "bool", scope: "world", label: "Storm cell lightning" },
+  { key: "avoidZones", type: "bool", scope: "world", label: "No lightning in safe zones", help: "Safe zones, protected towns and claims. Lightning rods there still get struck" },
   { key: "gapSeconds", type: "int", scope: "world", label: "Seconds between storm cells", min: 0, max: 3600, step: 30 },
   { key: "formNotes", type: "bool", scope: "world", label: "Storm cell notes", help: "A chat line when a storm cell forms" },
   { key: "formNotes", type: "bool", scope: "player", base: "formNotes", label: "Storm cell notes", help: "A chat line when a storm cell forms" },

@@ -16,6 +16,7 @@ const OPTIONS = [
   { key: "avoidSpawn", type: "int", scope: "world", label: "No extra monsters this close to world spawn (blocks)", min: 0, max: 512, step: 8 },
   { key: "blood.spawnSeconds", type: "int", scope: "world", label: "Seconds between Blood Moon monster waves", min: 5, max: 120, step: 5 },
   { key: "blood.maxExtraPerPlayer", type: "int", scope: "world", label: "Most Blood Moon monsters around a player", min: 0, max: 24, step: 1 },
+  { key: "blood.creepersInZones", type: "bool", scope: "world", label: "Blood Moon creepers in safe zones", help: "Disabled, no Blood Moon creeper spawns in a safe zone, protected town or claim" },
   { key: "blood.rewardLevels", type: "int", scope: "world", label: "Blood Moon survivor reward (levels)", min: 0, max: 30, step: 1 },
   { key: "blood.rewardCrowns", type: "int", scope: "world", label: "Blood Moon survivor reward (Crowns)", min: 0, max: 1000, step: 5 },
   { key: "harvest.tickSpeed", type: "int", scope: "world", label: "Harvest Moon growth speed (randomTickSpeed)", help: "Vanilla is 1. Put back at dawn", min: 1, max: 10, step: 1 },

@@ -1,12 +1,15 @@
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, MolangVariableMap, Player, system, world } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, set } from "./settings.js";
+import { escapeZones, protectedBox, zoneProviders, zonesAt } from "./zones.js";
 
 // World properties:
 //   "meteor:night"   JSON { n: day number, at: time of day of tonight's warning, or -1 for none }
 //   "meteor:impacts" JSON [{ id, x, z, y?, state, found?, lands? }], the last 5 meteors, newest last.
 //                    state: "falling" (warned, not landed), "pending" (landed, crater not made yet: no one
-//                    was near), "made" (crater made), "none" (no safe spot for a crater near it)
+//                    was near), "made" (crater made), "none" (no safe spot for a crater near it), "burst" (blew
+//                    apart in the sky over a safe zone). burst: the safe zone's name while it falls toward one
 const PROP_NIGHT = "meteor:night";
 const PROP_IMPACTS = "meteor:impacts";
 const OVERWORLD = "minecraft:overworld";
@@ -23,6 +26,7 @@ const ALTERNATES = 8; // other spots tried, within ALTERNATE_RADIUS, when the im
 const ALTERNATE_RADIUS = 24;
 const SCAN = 4; // the build scan covers 9 x 9 columns (4 each way), from the surface - 4 to + 4
 const MAX_Y = 316;
+const BURST_HEIGHT = 40; // a meteor over a safe zone (inZone "burst") blows apart this high above the ground
 
 // Blocks a crater may remove or replace: natural ground, stone, ores, leaves and plants.
 const NATURAL = new Set(
@@ -41,7 +45,7 @@ const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|copper|waxed_|quartz|purpur|terracotta|_block$|bars|tinted|lamp|cauldron|crafter|target|bee_nest|beehive|_head$|_skull$|pot$/;
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
-/** @typedef {{ id: number, x: number, z: number, y?: number, state: "falling" | "pending" | "made" | "none", found?: string, lands?: number }} Impact */
+/** @typedef {{ id: number, x: number, z: number, y?: number, state: "falling" | "pending" | "made" | "none" | "burst", found?: string, lands?: number, burst?: string, moved?: boolean }} Impact */
 /** @typedef {{ impact: Impact, landsAt: number, streaked: boolean, vel: Vector3, y: number }} Fall */
 
 /** @type {Fall | undefined} the meteor on its way down */
@@ -79,6 +83,40 @@ function placedLeaves(b) {
 
 /** A block the crater must never touch and that rules a spot out. @param {import("@minecraft/server").Block} b */
 const isBuiltBlock = (b) => isBuilt(b.typeId) || placedLeaves(b);
+
+// ---------------------------------------------------------------------------
+// Safe zones (scripts/zones.js: Safe Zones, protected towns and claims)
+// ---------------------------------------------------------------------------
+
+/** Blocks around an impact a crater may touch: its largest radius, plus the build scan. */
+const craterReach = () => Math.max(CONFIG.craterRadius.max + 1, SCAN);
+const avoidZones = () => get("avoidZones") === true;
+
+/** Would a crater at x, z reach into a safe zone? Always false with avoidZones disabled. @param {number} x @param {number} z */
+function craterInZone(x, z) {
+  if (!avoidZones()) return false;
+  const r = craterReach();
+  return protectedBox(OVERWORLD, { x: x - r, z: z - r }, { x: x + r + 1, z: z + r + 1 });
+}
+
+/** The name of the safe zone at or nearest x, z, for the messages. @param {number} x @param {number} z */
+function zoneName(x, z) {
+  const here = zonesAt(OVERWORLD, x + 0.5, z + 0.5)[0];
+  return here ? here.name : "a safe zone";
+}
+
+/**
+ * Where a meteor aimed at x, z comes down: inZone "move" shifts it just outside every safe zone,
+ * "burst" keeps it and marks it to blow apart in the sky.
+ * @param {number} x @param {number} z @returns {{ x: number, z: number, burst?: string }}
+ */
+function steer(x, z) {
+  if (!craterInZone(x, z)) return { x, z };
+  const name = zoneName(x, z);
+  if (get("inZone") === "burst") return { x, z, burst: name };
+  const out = escapeZones(OVERWORLD, x + 0.5, z + 0.5, craterReach() + 2);
+  return out ? { x: Math.floor(out.x), z: Math.floor(out.z) } : { x, z, burst: name };
+}
 
 // ---------------------------------------------------------------------------
 // Saved impacts
@@ -175,6 +213,7 @@ function pickTarget(player) {
     const d = rand(CONFIG.distance.min, CONFIG.distance.max);
     const x = Math.floor(player.location.x + Math.cos(angle) * d), z = Math.floor(player.location.z + Math.sin(angle) * d);
     if (fromSpawn(x, z) < get("avoidSpawn")) continue;
+    if (craterInZone(x, z)) continue;
     // Usually too far to be loaded; when it is, skip water right away. The full check comes with the crater.
     const top = topAt(dim, x, z);
     if (top && top.isLiquid) continue;
@@ -196,11 +235,17 @@ function topAt(dim, x, z) {
 // The fall
 // ---------------------------------------------------------------------------
 
-/** Warns everyone, then brings the meteor down at `target` after warningSeconds. @param {{ x: number, z: number }} target */
-function launch(target) {
+/**
+ * Warns everyone, then brings the meteor down at `aim` after warningSeconds (steered away from safe zones,
+ * or set to burst over one).
+ * @param {{ x: number, z: number }} aim
+ */
+function launch(aim) {
   const seconds = get("warningSeconds");
+  const target = steer(aim.x, aim.z);
   /** @type {Impact} */
   const impact = { id: Date.now(), x: target.x, z: target.z, state: "falling", lands: Date.now() + seconds * 1000 };
+  if (target.burst) impact.burst = target.burst;
   impacts().push(impact);
   saveImpacts();
   const angle = Math.random() * Math.PI * 2;
@@ -210,9 +255,10 @@ function launch(target) {
     landsAt: system.currentTick + seconds * 20,
     streaked: false,
     vel: { x: Math.cos(angle) * FALL_SPEED.side, y: -FALL_SPEED.down, z: Math.sin(angle) * FALL_SPEED.side },
-    y: top ? top.location.y + 1 : 64, // refined at impact when the chunk is loaded
+    y: (top ? top.location.y + 1 : 64) + (impact.burst ? BURST_HEIGHT : 0), // refined at impact when the chunk is loaded
   };
-  world.sendMessage(`§6A meteor is falling! It will land near ${target.x}, ${target.z} in ${seconds} seconds.`);
+  if (impact.burst) world.sendMessage(`§6A meteor is falling toward ${impact.burst}, near ${target.x}, ${target.z}! The safe zone will stop it in the sky in ${seconds} seconds.`);
+  else world.sendMessage(`§6A meteor is falling! It will land near ${target.x}, ${target.z} in ${seconds} seconds.`);
   system.sendScriptEvent("realm:sky_event", JSON.stringify({ kind: "meteor", dim: OVERWORLD, x: target.x, z: target.z, text: "A meteor is falling" }));
 }
 
@@ -240,7 +286,8 @@ system.runInterval(() => {
 function streak(f) {
   const vars = new MolangVariableMap();
   const top = topAt(overworld(), f.impact.x, f.impact.z);
-  if (top) f.y = top.location.y + 1;
+  if (!f.impact.burst && craterInZone(f.impact.x, f.impact.z) && get("inZone") === "burst") f.impact.burst = zoneName(f.impact.x, f.impact.z); // a zone added while it fell
+  if (top) f.y = top.location.y + 1 + (f.impact.burst ? BURST_HEIGHT : 0);
   for (const player of overworld().getPlayers()) {
     const l = player.location;
     const dx = f.impact.x + 0.5 - l.x, dz = f.impact.z + 0.5 - l.z;
@@ -282,9 +329,11 @@ function streak(f) {
 /** The boom: sound and camera shake by distance, then the crater if anyone is near. @param {Fall} f */
 function land(f) {
   const { impact } = f;
-  impact.state = "pending";
+  if (!impact.burst && craterInZone(impact.x, impact.z) && get("inZone") === "burst") impact.burst = zoneName(impact.x, impact.z);
+  impact.state = impact.burst ? "burst" : "pending";
   delete impact.lands;
   saveImpacts();
+  if (impact.burst) burst(f);
   const shake = CONFIG.shakeDistance;
   for (const player of overworld().getPlayers()) {
     try {
@@ -295,7 +344,7 @@ function land(f) {
       const location = { x: l.x + dx * k, y: l.y + 1, z: l.z + dz * k }; // from the impact's direction
       if (dist <= shake) {
         const near = 1 - dist / shake;
-        player.playSound("random.explode", { location, volume: 0.4 + near * 0.6, pitch: 0.6 });
+        player.playSound("random.explode", { location, volume: 0.4 + near * 0.6, pitch: impact.burst ? 0.9 : 0.6 });
         player.playSound("ambient.weather.thunder", { location, volume: 0.5 + near * 0.5, pitch: 0.7 });
         player.runCommand(`camerashake add @s ${(0.1 + near * 0.4).toFixed(2)} 2 positional`);
       } else if (dist <= shake * 5) {
@@ -306,6 +355,27 @@ function land(f) {
     }
   }
   checkPending();
+}
+
+/** Blows the meteor apart high over a safe zone: a flash and sparks in the sky, and a chat line. Nothing lands. @param {Fall} f */
+function burst(f) {
+  const { impact } = f;
+  const at = { x: impact.x + 0.5, y: f.y, z: impact.z + 0.5 };
+  for (const player of overworld().getPlayers()) {
+    if (Math.hypot(player.location.x - at.x, player.location.z - at.z) > CONFIG.shakeDistance * 2) continue;
+    try {
+      player.spawnParticle("minecraft:huge_explosion_emitter", at);
+      for (let i = 0; i < 6; i++) player.spawnParticle(SMOKE, { x: at.x + rand(-4, 4), y: at.y + rand(-2, 2), z: at.z + rand(-4, 4) });
+    } catch {
+      // not loaded there
+    }
+    try {
+      player.playSound("firework.large_blast", { location: player.location, volume: 1, pitch: 0.6 });
+    } catch {
+      // a player mid-respawn
+    }
+  }
+  world.sendMessage(`§6The meteor burst in the sky over ${impact.burst}. The safe zone kept the ground safe.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +449,7 @@ function groundAt(dim, x, z) {
 function* checkSpot(dim, x, z, out) {
   out.ok = false;
   if (fromSpawn(x, z) < get("avoidSpawn")) return;
+  if (craterInZone(x, z)) return;
   if (!topAt(dim, x, z)) {
     out.unloaded = true;
     return;
@@ -439,6 +510,16 @@ function* makeCrater(impact) {
       yield* checkSpot(dim, x, z, out);
     }
     if (!out.ok && out.unloaded) return; // part of it isn't loaded yet: stays "pending", tried again when someone is near
+    if (!out.ok && !impact.moved && craterInZone(impact.x, impact.z)) {
+      // A safe zone was added where it fell: the crater goes just outside it (once), when a player comes near there.
+      const there = steer(impact.x, impact.z);
+      impact.moved = true;
+      if (!there.burst) {
+        impact.x = there.x;
+        impact.z = there.z;
+        return; // stays "pending"
+      }
+    }
     if (!out.ok) {
       impact.state = "none";
       for (const p of dim.getPlayers()) {
@@ -476,6 +557,7 @@ function* carve(dim, cx, sy, cz) {
   /** @param {number} x @param {number} y @param {number} z @param {string} type @param {boolean} [airToo] */
   const replace = (x, y, z, type, airToo = false) => {
     try {
+      if (avoidZones() && protectedBox(OVERWORLD, { x, z }, { x: x + 1, z: z + 1 })) return; // never a block in a safe zone
       const b = dim.getBlock({ x, y, z });
       if (!b || b.isLiquid) return;
       if (b.isAir ? !airToo || type === "minecraft:air" : (!isNatural(b.typeId) && !isOurs(b.typeId)) || placedLeaves(b)) return;
@@ -535,20 +617,180 @@ function describe() {
   const f = falling;
   if (f) {
     const s = Math.max(1, Math.ceil((f.landsAt - system.currentTick) / 20));
+    if (f.impact.burst) return `§6A meteor is falling toward ${f.impact.burst}, near ${f.impact.x}, ${f.impact.z}. The safe zone will stop it in the sky in ${s} seconds.`;
     return `§6A meteor is falling! It will land near ${f.impact.x}, ${f.impact.z} in ${s} seconds.`;
   }
   const last = impacts().at(-1);
-  if (!last) return "No meteor has fallen yet.";
-  const where = `${last.x}, ${last.z}`;
-  if (last.state === "none") return `The last meteor came down near ${where}, but burned up before it reached the ground.`;
-  if (last.state !== "made") return `The last meteor fell near ${where}. No one has been close enough to see its crater yet.`;
-  return last.found ? `The last meteor fell at ${where}, y ${last.y}. Its crater was found by ${last.found}.` : `The last meteor fell at ${where}, y ${last.y}. No one has found its crater yet.`;
+  return last ? describeImpact(last, true) : "No meteor has fallen yet.";
 }
+
+/** @param {Impact} i @param {boolean} [latest] */
+function describeImpact(i, latest = false) {
+  const what = latest ? "The last meteor" : "A meteor";
+  const where = `${i.x}, ${i.z}`;
+  if (i.state === "burst") return `${what} burst in the sky over ${i.burst ?? "a safe zone"}, near ${where}.`;
+  if (i.state === "none") return `${what} came down near ${where}, but burned up before it reached the ground.`;
+  if (i.state === "falling") return `${what} is falling toward ${where}.`;
+  if (i.state !== "made") return `${what} fell near ${where}. No one has been close enough to see its crater yet.`;
+  return i.found ? `${what} fell at ${where}, y ${i.y}. Its crater was found by ${i.found}.` : `${what} fell at ${where}, y ${i.y}. No one has found its crater yet.`;
+}
+
+/** 8-way compass direction (north is -z). @param {number} dx @param {number} dz */
+function compass(dx, dz) {
+  const deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360;
+  return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
+}
+
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** Drops a meteor in front of the player, after the usual warning. @param {Player} player @returns {string | undefined} why it can't */
+function dropNow(player) {
+  if (player.dimension.id !== OVERWORLD) return "Meteors only fall in the Overworld.";
+  if (falling) return "A meteor is already falling.";
+  const view = player.getViewDirection();
+  const n = Math.hypot(view.x, view.z) || 1;
+  let x = player.location.x + (view.x / n) * CONFIG.nowDistance, z = player.location.z + (view.z / n) * CONFIG.nowDistance;
+  const avoid = get("avoidSpawn");
+  if (fromSpawn(x, z) < avoid) {
+    // Push it out past the spawn area, in the same direction from spawn.
+    const s = world.getDefaultSpawnLocation();
+    const ax = x - s.x, az = z - s.z;
+    const m = Math.hypot(ax, az);
+    const ux = m > 0.1 ? ax / m : view.x / n, uz = m > 0.1 ? az / m : view.z / n;
+    x = s.x + ux * (avoid + 16);
+    z = s.z + uz * (avoid + 16);
+  }
+  launch({ x: Math.floor(x), z: Math.floor(z) });
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Menu
+// ---------------------------------------------------------------------------
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @template {ActionFormData | ModalFormData} F
+ * @param {Player} player @param {F} form
+ * @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = /** @type {any} */ (await form.show(player));
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** @param {Player} player @param {string} title @param {string} body @param {{ text: string, run: () => unknown }[]} actions */
+async function menu(player, title, body, actions) {
+  const form = new ActionFormData().title(title).body(body);
+  for (const a of actions) form.button(a.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await actions[res.selection]?.run();
+}
+
+/** The last few meteors, newest first, with how far each is from the player. @param {Player} player */
+async function lastMeteors(player) {
+  const list = [...impacts()].reverse();
+  const lines = list.map((i) => {
+    const far = player.dimension.id === OVERWORLD ? ` §7(${Math.round(Math.hypot(i.x - player.location.x, i.z - player.location.z))} blocks ${compass(i.x - player.location.x, i.z - player.location.z)} of you)§r` : "";
+    return `- ${describeImpact(i)}${far}`;
+  });
+  const body = [falling ? describe() : "", lines.length ? lines.join("\n") : "No meteor has fallen yet."].filter(Boolean).join("\n\n");
+  await menu(player, "§lLast meteors", body, [{ text: "Back", run: () => mainMenu(player) }]);
+}
+
+/** Operators: the in-game settings, the same ones /realm:config has. @param {Player} player */
+async function settingsForm(player) {
+  const form = new ModalFormData()
+    .title("§lMeteor settings")
+    .toggle("Meteors at night", { defaultValue: get("enabled") === true, tooltip: "Drop one now works either way" })
+    .slider("Chance of a meteor each night (%)", 0, 100, { valueStep: 5, defaultValue: Math.round(Number(get("chance")) * 100) })
+    .slider("Warning before impact (seconds)", 10, 300, { valueStep: 10, defaultValue: Number(get("warningSeconds")) })
+    .toggle("Craters", { defaultValue: get("craters") === true, tooltip: "Disabled, a meteor is only the show" })
+    .slider("Distance kept from world spawn (blocks)", 0, 1024, { valueStep: 16, defaultValue: Number(get("avoidSpawn")) })
+    .toggle("Avoid safe zones and towns", { defaultValue: avoidZones(), tooltip: "No meteor is aimed into a safe zone, protected town or claim, and no crater is made in one" })
+    .dropdown("A meteor that still comes down over a safe zone", ["Lands just outside it", "Bursts in the sky"], { defaultValueIndex: get("inZone") === "burst" ? 1 : 0 })
+    .submitButton("Save");
+  const res = await show(player, form);
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const v = res.formValues.filter((x) => x !== undefined);
+  const changes = /** @type {[string, unknown][]} */ ([
+    ["enabled", v[0] === true],
+    ["chance", Math.round(Number(v[1])) / 100],
+    ["warningSeconds", Math.round(Number(v[2]))],
+    ["craters", v[3] === true],
+    ["avoidSpawn", Math.round(Number(v[4]))],
+    ["avoidZones", v[5] === true],
+    ["inZone", v[6] === 1 ? "burst" : "move"],
+  ]);
+  const problems = [];
+  for (const [key, value] of changes) {
+    if (get(key) === value) continue;
+    const why = set(key, value);
+    if (why) problems.push(`${key} ${why}`);
+  }
+  player.sendMessage(problems.length ? `§cNot saved: ${problems.join("; ")}` : "§aMeteor settings saved.");
+}
+
+/** "Protect this area from meteors": the Safe Zones pack's "Add a safe zone here". @param {Player} player */
+function protectHere(player) {
+  if (!zoneProviders().has("zones")) {
+    player.sendMessage("§cThe Safe Zones pack isn't installed: add it to the realm to protect places from meteors (and every other world event).");
+    return;
+  }
+  if (!avoidZones()) player.sendMessage("§eNote: Avoid safe zones and towns is disabled in the meteor settings, so meteors ignore safe zones until you enable it.");
+  system.sendScriptEvent("realm:zones_open", JSON.stringify({ player: player.id, action: "add" }));
+}
+
+/** /realm:meteor @param {Player} player */
+async function mainMenu(player) {
+  const status = get("enabled") === true ? `Meteors fall on some nights (a ${Math.round(Number(get("chance")) * 100)}% chance each night).` : "Meteors don't fall on their own on this realm.";
+  const zones = avoidZones() ? (get("craters") === true ? "They never land in a safe zone, protected town or claim." : "") : "§7They ignore safe zones.§r";
+  const body = [describe(), [status, zones].filter(Boolean).join(" ")].join("\n\n");
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [{ text: "Last meteors\n§8Where they fell, who found them", run: () => lastMeteors(player) }];
+  if (isOp(player)) {
+    actions.push({
+      text: "Drop one now (operator)\n§8In front of you, after the warning",
+      run: () => {
+        const why = dropNow(player);
+        if (why) player.sendMessage(`§c${why}`);
+      },
+    });
+    actions.push({ text: "Meteor settings (operator)\n§8Chance, craters, spawn, safe zones", run: () => settingsForm(player) });
+    actions.push({ text: "Protect this area from meteors\n§8Add a safe zone here (operator)", run: () => protectHere(player) });
+  }
+  await menu(player, "§lMeteor Strikes", body, actions);
+}
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:meteor",
+      description: "Meteor Strikes: the menu (the last meteors; for operators: drop one, settings, protect an area)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Success, message: describe() };
+      system.run(() => mainMenu(player).catch((e) => console.warn(`[meteor] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:meteor_info",
       description: "Meteor Strikes: where the last meteor fell and whether its crater has been found",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -569,21 +811,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (falling) return { status: CustomCommandStatus.Failure, message: "A meteor is already falling." };
       system.run(() => {
         try {
-          if (falling || !player.isValid) return;
-          const view = player.getViewDirection();
-          const n = Math.hypot(view.x, view.z) || 1;
-          let x = player.location.x + (view.x / n) * CONFIG.nowDistance, z = player.location.z + (view.z / n) * CONFIG.nowDistance;
-          const avoid = get("avoidSpawn");
-          if (fromSpawn(x, z) < avoid) {
-            // Push it out past the spawn area, in the same direction from spawn.
-            const s = world.getDefaultSpawnLocation();
-            const ax = x - s.x, az = z - s.z;
-            const m = Math.hypot(ax, az);
-            const ux = m > 0.1 ? ax / m : view.x / n, uz = m > 0.1 ? az / m : view.z / n;
-            x = s.x + ux * (avoid + 16);
-            z = s.z + uz * (avoid + 16);
-          }
-          launch({ x: Math.floor(x), z: Math.floor(z) });
+          if (!falling && player.isValid) dropNow(player);
         } catch (e) {
           console.warn(`[meteor] ${e}`);
         }

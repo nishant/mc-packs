@@ -13,8 +13,10 @@ import {
   system,
   world,
 } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { isProtected } from "./zones.js";
 
 // Tonight is one world property, "moon:night" -> JSON { d: day number, s: state, a: 1 while the night is on,
 // alive: [player ids still in the running for the Blood Moon reward] }.
@@ -503,9 +505,12 @@ function spot(p) {
   return undefined;
 }
 
-/** @returns {string | undefined} a monster id by weight */
-function pickMob() {
-  const list = CONFIG.blood.mobs.filter((m) => typeof m.id === "string" && m.weight > 0);
+/** Monsters that blow up blocks: none of them is spawned in a safe zone unless blood.creepersInZones is enabled. */
+const EXPLODES = new Set(["minecraft:creeper"]);
+
+/** @param {boolean} [safe] in a safe zone: no exploding monsters @returns {string | undefined} a monster id by weight */
+function pickMob(safe = false) {
+  const list = CONFIG.blood.mobs.filter((m) => typeof m.id === "string" && m.weight > 0 && !(safe && EXPLODES.has(m.id)));
   const total = list.reduce((s, m) => s + m.weight, 0);
   let r = Math.random() * total;
   for (const m of list) if ((r -= m.weight) < 0) return m.id;
@@ -523,8 +528,11 @@ function spawnWave(p) {
   const n = Math.min(max - near, lo + Math.floor(Math.random() * (hi - lo + 1)));
   for (let i = 0; i < n; i++) {
     const at = spot(p);
-    const id = pickMob();
-    if (!at || !id) continue;
+    if (!at) continue;
+    // Safe zones (scripts/zones.js): no creeper there, so a Blood Moon can't blow holes in a protected base.
+    const safe = get("blood.creepersInZones") !== true && isProtected(p.dimension.id, at.x + 0.5, at.z + 0.5);
+    const id = pickMob(safe);
+    if (!id) continue;
     try {
       const mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
       mob.addTag(MOB_TAG);
@@ -644,6 +652,21 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:moon",
+      description: "Blood Moon & Harvest Moon: the menu (tonight's moon; for operators: set tonight's moon)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => mainMenu(player).catch((e) => console.warn(`[moon] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:moon_info",
       description: "Blood Moon & Harvest Moon: tonight's moon, the moon phase and the next full moon",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
@@ -687,6 +710,36 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     }
   );
 });
+
+/**
+ * Shows a form, retrying while the player still has chat or another screen open.
+ * @param {Player} player @param {ActionFormData} form
+ */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** /realm:moon @param {Player} player */
+async function mainMenu(player) {
+  /** @type {{ text: string, run: () => void }[]} */
+  const actions = [{ text: "Tonight's moon\n§8Phase and the next full moon", run: () => player.sendMessage(report()) }];
+  if (player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors) {
+    for (const state of /** @type {State[]} */ (["blood", "harvest", "normal"])) {
+      actions.push({ text: `Make tonight ${{ blood: "a Blood Moon", harvest: "a Harvest Moon", normal: "an ordinary moon" }[state]} (operator)\n§8Now, if it's night`, run: () => player.sendMessage(`§7${setMoon(state)}`) });
+    }
+  }
+  const form = new ActionFormData().title("§lBlood Moon & Harvest Moon").body(report());
+  for (const a of actions) form.button(a.text);
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  actions[res.selection]?.run();
+}
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

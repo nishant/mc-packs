@@ -13,7 +13,7 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 | [AFK + Smart Sleep](docs/PACKS.md#afk--smart-sleep--afk_bp) | `afk_bp` | `[AFK]` tag after 5 min idle; the night can be skipped without waiting for AFK players | `/realm:afk` |
 | [Stats & Leaderboards](docs/PACKS.md#stats--leaderboards--stats_bp) | `stats_bp` | Playtime, deaths, kills, blocks, distance; leaderboards; sidebar | `/realm:stats` · `/realm:stats_sidebar` |
 | [Realm News & Tips](docs/PACKS.md#realm-news--tips--news_bp) | `news_bp` | News popup when something's new, "you were away 3d", rotating chat tips | `/realm:news` · `/realm:news_edit` · `/realm:news_body` · `/realm:news_add` · `/realm:news_tips` |
-| [Creeper Guard](docs/PACKS.md#creeper-guard--guard_bp) | `guard_bp` | Creeper explosions still hurt but break no blocks; TNT untouched. Optional zones mode | `/realm:guard` · `/realm:guard_add` · `/realm:guard_remove` |
+| [Creeper Guard](docs/PACKS.md#creeper-guard--guard_bp) | `guard_bp` | Creeper explosions still hurt but break no blocks; TNT untouched. Optional zones mode (safe zones count too) | `/realm:guard` · `/realm:guard_status` · `/realm:guard_add` · `/realm:guard_remove` |
 | [Phantom Opt-out](docs/PACKS.md#phantom-opt-out--phantom_bp) | `phantom_bp` | Each player can disable phantoms for themselves | `/realm:phantoms` |
 | [Right-click Harvest](docs/PACKS.md#right-click-harvest--harvest_bp) | `harvest_bp` | Tap a ripe crop to harvest and replant it | none |
 | [Farm Loader](docs/PACKS.md#farm-loader--farm_bp) | `farm_bp` | Keeps named farms loaded with ticking areas (ops add them) | `/realm:farm` · `/realm:farm_add` · `/realm:farm_remove` |
@@ -50,14 +50,15 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 | [Waystones & Inns](docs/PACKS.md#waystones--inns--waystone_bp) | `waystone_bp` | Lodestones with a `Waystone:` sign become fast-travel points players discover and travel between for Crowns; innkeepers rent beds (respawn point and Well Rested) and tell the news | `/realm:waystones` · `/realm:waystones_remove` |
 | [Expeditions](docs/PACKS.md#expeditions--expedition_bp) | `expedition_bp` | Dungeon runs for your party: generated rooms with mob waves, a lever puzzle, a boss, treasure and a leaderboard | `/realm:expedition` · `/realm:expedition_leave` · `/realm:expedition_site` · `/realm:expedition_reset` |
 | [Town Projects](docs/PACKS.md#town-projects--town_bp) | `town_bp` | Deliver materials to the mayor so your town builds a well, lamp posts, a market stall, a dock and more, and levels up | `/realm:town` · `/realm:town_add` · `/realm:town_spot` · `/realm:town_remove` |
-| [Weather Almanac](docs/PACKS.md#weather-almanac--weather_bp) | `weather_bp` | Plans the weather hours ahead in real time (clear spells, rain, thunderstorms) with a forecast, a daily chat line and a Forecast from Sol the Sky-reader | `/realm:weather` · `/realm:weather_set` |
+| [Safe Zones](docs/PACKS.md#safe-zones--zones_bp) | `zones_bp` | Mark a base as a safe zone (name, radius 8-512, outline preview): meteors, storm lightning, tornadoes and Blood Moon creepers break no blocks there. Lists protected towns and claims too | `/realm:zones` |
+| [Weather Almanac](docs/PACKS.md#weather-almanac--weather_bp) | `weather_bp` | Plans the weather hours ahead in real time (clear spells, rain, thunderstorms) with a forecast, a daily chat line and a Forecast from Sol the Sky-reader | `/realm:weather` · `/realm:weather_forecast` · `/realm:weather_set` |
 | [Regional Weather](docs/PACKS.md#regional-weather--climate_bp) | `climate_bp` | Sandstorms in deserts, blizzards in snowy places (Slowness, campfires shelter you) and dawn fog banks by the water after rain, per player (visuals need Realm Skies) | `/realm:climate` |
-| [Storm Chasing](docs/PACKS.md#storm-chasing--storm_bp) | `storm_bp` | Thunderstorms get a drifting storm cell full of lightning to chase; struck lightning rods give Storm Glass | `/realm:storm` · `/realm:storm_cell` |
-| [Tornadoes](docs/PACKS.md#tornadoes--tornado_bp) | `tornado_bp` | Thunderstorms can spin up a tornado that flings mobs, items and players (never blocks) and leaves Storm Glass; needs Realm Skies to see it | `/realm:tornado` · `/realm:tornado_spawn` |
+| [Storm Chasing](docs/PACKS.md#storm-chasing--storm_bp) | `storm_bp` | Thunderstorms get a drifting storm cell full of lightning to chase; struck lightning rods give Storm Glass; no lightning in safe zones | `/realm:storm` · `/realm:storm_read` · `/realm:storm_cell` |
+| [Tornadoes](docs/PACKS.md#tornadoes--tornado_bp) | `tornado_bp` | Thunderstorms can spin up a tornado that flings mobs, items and players (never blocks) and leaves Storm Glass; can calm down in or steer around safe zones; needs Realm Skies to see it | `/realm:tornado` · `/realm:tornado_info` · `/realm:tornado_spawn` |
 | [Rainbows & the Pot of Gold](docs/PACKS.md#rainbows--the-pot-of-gold--rainbow_bp) | `rainbow_bp` | Rainbows after morning and evening rain, with a pot of gold to race to at their end; needs Realm Skies to see them | `/realm:rainbow` · `/realm:rainbow_now` |
 | [Aurora & Shooting Stars](docs/PACKS.md#aurora--shooting-stars--night_bp) | `night_bp` | Shooting stars to wish on, and northern lights over snowy lands, on clear nights; needs Realm Skies | `/realm:night` |
-| [Meteor Strikes](docs/PACKS.md#meteor-strikes--meteor_bp) | `meteor_bp` | Some nights a meteor falls far from spawn, announced a minute ahead, leaving a smoking crater with ancient debris; needs Realm Skies for the streak | `/realm:meteor` · `/realm:meteor_now` |
-| [Blood Moon & Harvest Moon](docs/PACKS.md#blood-moon--harvest-moon--moon_bp) | `moon_bp` | Some full moons rise as a Blood Moon (red sky, more monsters, a reward for surviving until dawn) or a Harvest Moon (gold sky, crops grow 3x faster) | `/realm:moon` · `/realm:moon_set` |
+| [Meteor Strikes](docs/PACKS.md#meteor-strikes--meteor_bp) | `meteor_bp` | Some nights a meteor falls far from spawn, announced a minute ahead, leaving a smoking crater with ancient debris, never in a safe zone; needs Realm Skies for the streak | `/realm:meteor` · `/realm:meteor_info` · `/realm:meteor_now` |
+| [Blood Moon & Harvest Moon](docs/PACKS.md#blood-moon--harvest-moon--moon_bp) | `moon_bp` | Some full moons rise as a Blood Moon (red sky, more monsters, a reward for surviving until dawn) or a Harvest Moon (gold sky, crops grow 3x faster) | `/realm:moon` · `/realm:moon_info` · `/realm:moon_set` |
 | [Realistic Rain](docs/PACKS.md#realistic-rain--rain_rp) | `rain_rp` | **Resource pack**, in Realm Resources. Thicker, heavier blue rain, the realm's own rain and thunderstorm recordings, gloomier rain fog, softer splashes, and heavier snowflakes with a whiter snow fog | none |
 | [Rain Extras](docs/PACKS.md#rain-extras--rain_bp) | `rain_bp` | Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips, the thunderstorm recording, storm wind, rain on the roof and the rain muffled indoors (needs Realistic Rain) | `/realm:rain` |
 | [Realm Skies](docs/PACKS.md#realm-skies--sky_rp) | `sky_rp` | **Resource pack**, in Realm Resources. Rainbows, auroras, shooting stars, meteors, tornado dust, sandstorms, blizzards, fog banks, blood and harvest moon glows and player trails for the sky packs (they work without it, just without the visuals) | none |
@@ -81,7 +82,7 @@ With Claude, `/bundle-packs` asks which packs to include (**All packs** is the f
 ## Development
 
 ```bash
-npm run check     # type-check against @minecraft/server 2.1.0 / server-ui 2.0.0, check docs/PACKS.md is complete and every settings.js is current
+npm run check     # type-check against @minecraft/server 2.1.0 / server-ui 2.0.0, check docs/PACKS.md is complete and every settings.js and zones.js is current
 npm run gen:rain  # regenerate Realistic Rain's textures, fogs and sounds (sounds need ffmpeg)
 npm run build     # one .mcpack per pack
 npm run bundle    # merge packs into one (--list, --all, --resources, --packs a,b, --name, --title, --icon)
@@ -100,6 +101,7 @@ npm run bundle    # merge packs into one (--list, --all, --resources, --packs a,
 | `tools/check-docs.mjs` | Fails if a pack, its `### How to use`, a command or a config option is missing from the docs |
 | `tools/check-commands.mjs` | Fails if a command or enum isn't in the `realm:` namespace, or two share a name |
 | `tools/settings-shared.js`, `tools/sync-settings.mjs` | The Realm Settings helper every behavior pack copies into its `scripts/settings.js` (packs never import each other); `sync-settings.mjs` copies it, `--check` (part of `npm run check`) fails on a missing or stale copy |
+| `tools/zones-shared.js`, `tools/sync-zones.mjs` | The safe zones protocol (providers and consumers of `realm:zones`) that each taking-part pack copies into its `scripts/zones.js`; `sync-zones.mjs` refreshes the copies (`node tools/sync-zones.mjs <folder>` adds a pack), `--check` (part of `npm run check`) fails on a stale copy |
 | `tools/help-catalog.mjs` | Writes the in-game `/realm:help` text from `docs/PACKS.md`; `--check` (part of `npm run check`) fails if it's stale or a pack doesn't answer `/realm:help` |
 | `.claude/skills/bundle-packs/` | The `/bundle-packs` skill |
 

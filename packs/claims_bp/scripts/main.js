@@ -9,7 +9,8 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { get } from "./settings.js";
+import { get, onChange } from "./settings.js";
+import { provideZones } from "./zones.js";
 
 // One world property per claim: "claims:c:<id>" → JSON Claim. A claim is a square, top to bottom of
 // its dimension, centered on x, z and reaching r blocks each way.
@@ -71,13 +72,27 @@ function claims() {
 function saveClaim(c) {
   claims().set(c.id, c);
   world.setDynamicProperty(CLAIM_PREFIX + c.id, JSON.stringify(c));
+  publishZones();
 }
 
 /** @param {number} id */
 function removeClaim(id) {
   claims().delete(id);
   world.setDynamicProperty(CLAIM_PREFIX + id, undefined);
+  publishZones();
 }
+
+// Claims are safe zones for world events (meteors, tornadoes, storm lightning...) while claims are enabled and
+// protectWorldEvents is on: this pack is the "claims" provider of the realm:zones protocol (scripts/zones.js).
+// A claim covers whole blocks from x - r to x + r, so its square reaches half a block past those centers.
+const publishZones = provideZones("claims", () =>
+  enabled() && get("protectWorldEvents") === true
+    ? [...claims().values()].map((c) => ({ id: `c${c.id}`, name: `${c.n}'s claim`, dim: c.dim, x: c.x + 0.5, z: c.z + 0.5, r: c.r + 0.5, shape: /** @type {"square"} */ ("square") }))
+    : []
+);
+onChange((key) => {
+  if (key === "enabled" || key === "protectWorldEvents" || key === "*") publishZones();
+});
 
 /**
  * The claim holding this spot.

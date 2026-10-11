@@ -17,6 +17,19 @@ export const CONFIG = {
   /** Seconds between the chat warning and the impact. */
   warningSeconds: 60,
 
+  /**
+   * Meteors keep out of safe zones (Safe Zones, towns and claims that are protected from world events):
+   * none is aimed into one, and no crater is ever made in one. Disabled, meteors ignore safe zones.
+   */
+  avoidZones: true,
+
+  /**
+   * When a meteor still comes down over a safe zone (`/realm:meteor_now` aimed at one, or a zone added
+   * while it falls): "move" lands it just outside the zone, crater and all; "burst" blows it apart high in
+   * the sky over the zone (no crater, no ancient debris).
+   */
+  inZone: "move",
+
   /** Make a crater with a meteorite core (ancient debris and magma). Disabled, it's only the show. */
   craters: true,
 
