@@ -14,6 +14,7 @@ The biggest update yet. Talk to the townsfolk: something is wrong with the sky.
 - Four new townsfolk: Brother Hollis, Moss the gravedigger, Wren and Bea the cook. Each questgiver also has a daily favor.
 - Stuck? Open /realm:saga and Ask for a hint (it costs a little of the reward and shows coordinates). The Codex keeps every secret you uncover.
 - New: Kitchen (cook buff foods at a cauldron over a campfire), Deck of Many Things (/realm:domt), Slot Machine (/realm:slots), Silly Enchants (/realm:silly) and Dolphin Friends (feed a dolphin raw fish to tame and ride it).
+- Expeditions 2.0: 8 dungeons, Nightmare tiers 1 to 20 with random affixes, 9 kinds of puzzles, tall rooms for elytras and builders, Nightmare Sigils and leaderboards per tier. /realm:expedition
 - Champions now wear a colored badge, a helmet and an aura.
 - Relics fixed: the Storm Staff calls lightning in storms again, Tide Boots work, and there are 7 new story relics. Rainbows show up again.
 - Safe zones: towns and claims can be protected from meteors, storms and other world events.

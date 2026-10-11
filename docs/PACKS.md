@@ -3807,96 +3807,198 @@ Operators can change `whoCanCreate`, `currency`, `costPer100`, `minCost`, `cross
 
 ## Expeditions — `expedition_bp`
 
-Dungeon runs for you and your [party](#parties--party_bp). Pick a dungeon (the Crypt, the Drowned Vault or Frost Hollow), and a fresh dungeon is built for you deep underground: 6 to 8 rooms joined by corridors, with waves of mobs, a lever puzzle, a boss and a treasure chest. The clock runs from the moment you arrive; the fastest clears of each dungeon go on a leaderboard. Finishing pays [Crowns](#crowns--crowns_bp), Warden reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp), a page in the [Field Journal](#field-journal--journal_bp) and sometimes a [relic](#relics--relics_bp). No structure files: every dungeon is generated from a random seed, and the ground is filled back in after each run, so the next one is new.
+Dungeon runs for you and your [party](#parties--party_bp), in the spirit of Diablo's Nightmare Dungeons. Pick one of eight dungeons (the Crypt, the Drowned Vault, Frost Hollow, the Nether Forge, the Sculk Depths, the Pillager Keep, the Spider Nest or the Ender Spire) and a difficulty: **Easy**, **Normal**, **Hard**, or **Nightmare tiers 1 to 20**, which you unlock one by one by clearing the tier below. A fresh dungeon is built for you deep underground: 6 to 18 rooms joined by corridors, with waves of mobs, elite halls, trap halls, shrines, puzzles (nine kinds), vertical shafts, hidden side caches, a boss and treasure. Higher tiers have more rooms and waves, tougher and armored mobs, champions, tall rooms you climb, build or fly up, and **affixes** that change the run (Frenzied, Volcanic, Lightning Storm...). The clock runs from the moment you arrive; the fastest clears of each dungeon and difficulty go on a leaderboard. Finishing pays [Crowns](#crowns--crowns_bp), Warden reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp), a page in the [Field Journal](#field-journal--journal_bp), sometimes a [relic](#relics--relics_bp), and bosses and champions may drop a **Nightmare Sigil** that opens one exact run. No structure files: every dungeon is generated from a random seed, and the ground is filled back in after each run, so the next one is new.
 
 ### How to use
 
-1. Run `/realm:expedition` and pick a dungeon: **Crypt (Easy)**, **Drowned Vault (Normal)** or **Frost Hollow (Hard)**. Tap **Start**. If you're in a party, your party members within 32 blocks are asked `Ann is starting an expedition: Crypt (Easy). ... Join?` and have 20 seconds to tap **Join**. Without a party you go alone.
-2. The screen fades and you arrive in the entry room, with the title `Crypt` and the clock running. The bar above the hotbar shows the dungeon, the time and what to do next, like `Crypt 2:41 | Room 3/7: defeat the wave (2 left)`.
-3. Walk into each room. **Combat rooms** send 2 to 4 waves of the dungeon's mobs (`Wave 1 of 2!`); when the last one falls, the iron bars on the way out rise (`The bars rise. Onward!`). The **puzzle room** has four levers on red, blue, yellow and green wool, and signs with clues like `2 levers are on` and `RED and GREEN differ`; set the levers to fit every clue to open the bars (chat repeats the clues, and pulling a lever shows all four above the hotbar). In the **boss room** a named boss appears, like `The Crypt Lord`.
-4. Defeat the boss: `Expedition complete` and your time fill the screen, everyone still in the dungeon is paid, and the treasure room opens. You have 30 seconds to empty the chest, then you're taken back to where you started.
-5. To give up, run `/realm:expedition_leave` (or **Leave the expedition** in `/realm:expedition`): you go back to where you started. If you die in the dungeon you're out of the run, you respawn as usual and are then sent back to where you started, and the items you dropped are given back to you.
-6. `/realm:expedition` → **Fastest clears** shows the top 10 times for each dungeon. Only one expedition runs at a time; while one is going, the menu says `An expedition is in progress (Ann's party, Crypt, 6:12)`.
-7. **Operators:** stand somewhere far from spawn and from anyone's builds and mines, and run `/realm:expedition_site` once (or `/realm:expedition_site <x> <z>`). The dungeon is built deep underground at y -41 to -33 around that spot, and the site is refused if it's within 88 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. `/realm:expedition_reset` ends a run in progress and fills the dungeon back in. `/realm:config` → **Expeditions** sets the party size, the time limit, the time to collect the treasure and more.
+1. Run `/realm:expedition` and tap **Start an expedition**. Pick a dungeon, then a difficulty: Easy, Normal and Hard are open to everyone; **Nightmare 1** unlocks when you clear Hard, and each Nightmare tier unlocks the next.
+2. The last screen shows what the run is like: rooms, time limit, waves, how strong the mobs are, the **affixes** (Nightmare only) and the rewards. Tap **Start**, or **Reroll affixes** (costs 25 Crowns, `rerollCost`) for a different set. If you're in a party, your party members within 32 blocks are asked `Ann is starting an expedition: Crypt (Nightmare 5). ... Join?` and have 20 seconds to tap **Join**.
+3. The screen fades and you arrive in the entry room, with the clock running. The bar above the hotbar shows the dungeon, the time, what to do next and the affixes, like `Crypt N5 2:41/24:00 | Room 3/10: defeat the wave (2 left)`.
+4. Walk into each room. The bars on the way out rise once the room is done (`The bars rise. Onward!`):
+   - **Combat** and **elite** rooms send waves (`Wave 1 of 4!`): kill every mob. Elite halls bring a champion every wave.
+   - **Puzzle** rooms explain themselves on signs and in chat: levers, a memory sequence, a safe path of pressure plates, target practice, lights out, a color riddle, a climb, a button rush or a riddle (see below).
+   - **Trap halls**: the door out is already open. Run for it while flames flicker on the floor (they burst a moment later) and arrows fly from the walls.
+   - **Shrines**: press one of three buttons: a **Blessing** for the rest of the run, a **curse** (one more affix, but more treasure and Crowns), or pass by.
+   - **Shafts** (Nightmare 3 and up): the way on is high up the wall. Climb the ladder (below tier 10) or the ledges, pillar up with your own blocks, or fly with an elytra. At the top, drop down the chute into the pool.
+   - **Side rooms** (Nightmare): an open doorway off a room leads to a puzzle; solve it for a hidden cache chest.
+5. In the boss room the boss appears with its name as a title; on high tiers it calls adds onto the balconies. Defeat it: `Expedition complete` and your time fill the screen, everyone still in the dungeon is paid, and the treasure room opens. You have 30 seconds to empty the chests, then you're taken back to where you started.
+6. **Nightmare Sigils** dropped by bosses and champions open one exact run: use the sigil (right-click) or pick it under **Use a Nightmare Sigil** in `/realm:expedition`. It works even before you've unlocked its tier, and it's used up when the run starts.
+7. To give up, run `/realm:expedition_leave` (or **Leave the expedition** in `/realm:expedition`). If you die you're out of the run, you respawn as usual and are sent back to where you started, and the items you dropped are given back.
+8. `/realm:expedition` → **Leaderboards** shows the fastest clears of each dungeon at each difficulty, the **Highest tiers** players have cleared and the **Recent runs**; **My progress** shows what you've unlocked, your best and your own recent runs.
+9. **Operators:** stand somewhere far from spawn and from anyone's builds and mines, and run `/realm:expedition_site` once (or `/realm:expedition_site <x> <z>`, or **Operator tools** → **Set the site where I stand**). Dungeons are built deep underground around that spot (up to 100 by 100 blocks, y -41 to -8), and the site is refused if it's within 114 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. `/realm:expedition_reset` ends a run in progress and fills the dungeon back in. **Operator tools** also has **Create a Nightmare Sigil** (any dungeon, tier and affixes) and **Unlock every tier for me**. `/realm:config` → **Expeditions** sets the party size, the time limit, the highest tier, building, the reroll cost and more.
 
 ### What players see
 
-- **Dungeons** (from `dungeons`):
+- **Difficulties and tiers.** Every dungeon can be played at every difficulty you've unlocked. Clearing Hard unlocks Nightmare 1; clearing Nightmare N unlocks N + 1, up to Nightmare 20 (`maxTier`). Progress is per player; the leader's unlocks decide what can be started (party members can join any run). How each level scales (time with the default 20 minutes per 7 rooms; mobs per wave get one more for every two players after the first):
 
-  | Dungeon | Difficulty | Mobs | Boss | Built of | Crowns |
+  | Level | Rooms | Time (min) | Waves | Mobs per wave | Monster buffs | Elites / champion chance per wave | Affixes | Boss | Crowns / treasure | Room mix (as room allows) |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Easy | 6-8 | 17-23 | 2 | 2-3 | none | 0 / 0% | 0 | x1.0 health | x1.00 / x1.0 | 1 puzzle |
+  | Normal | 6-8 | 17-23 | 3 | 2-3 | none | 0 / 0% | 0 | x1.2 health | x1.25 / x1.1 | 1 puzzle, 1 trap |
+  | Hard | 7-9 | 20-26 | 4 | 2-3 | Strength 1 | 1 / 0% | 0 | x1.4 health | x1.50 / x1.2 | 1 puzzle, 1 trap, shrine (75%), 1 elite |
+  | Nightmare 1 | 7-9 | 20-25 | 4 | 3-4 | +4 health, Strength 1 | 1 / 14% | 1 | x1.6 health | x1.75 / x1.3 | as Hard, 1 side cache |
+  | Nightmare 3 | 8-10 | 22-28 | 4 | 3-4 | +8 health, Strength 1, chainmail armor (31%) | 1 / 21% | 1 | x2.0 health | x2.25 / x1.5 | as above, 1 shaft, tall rooms 41% up to 16 high |
+  | Nightmare 5 | 9-11 | 24-30 | 4 | 4-5 | +12 health, Strength 1, Speed 1, chainmail (38%) | 1 / 28% | 2 | x2.4 health, 2 adds every 20 s | x2.75 / x1.7 | tall rooms 45% up to 20 high |
+  | Nightmare 6 | 9-12 | 24-32 | 5 | 4-5 | +12 health, Resistance 1, Strength 1, Speed 1, chainmail (41%) | 2 / 31% | 2 | x2.6, 2 adds | x3.00 / x1.8 | 2 puzzles, up to 22 high |
+  | Nightmare 8 | 10-13 | 26-34 | 5 | 5-6 | +16 health, Resistance 1, Strength 2, Speed 1, iron (48%) | 2 / 38% | 2 | x3.0, 2 adds | x3.50 / x2.0 | 2 elite halls, up to 26 high |
+  | Nightmare 10 | 10-13 | 26-33 | 5 | 6-7 | +20 health, Resistance 1, Strength 2, Speed 1, iron (55%) | 2 / 45% | 3 | x3.4, 3 adds | x4.00 / x2.2 | 2 traps, 2 side caches, up to 30 high, shafts without ladders |
+  | Nightmare 12 | 11-14 | 28-35 | 6 | 6-7 | +24 health, Resistance 1, Strength 2, Speed 1, diamond (62%) | 3 / 52% | 3 | x3.8, 3 adds | x4.50 / x2.4 | up to 32 high |
+  | Nightmare 15 | 12-16 | 29-39 | 6 | 7-8 | +32 health, Resistance 1, Strength 3, Speed 2, diamond (73%) | 3 / 63% | 4 | x4.4, 4 adds | x5.25 / x2.7 | 3 puzzles, 2 shafts |
+  | Nightmare 17 | 13-17 | 31-40 | 7 | 8-9 | +36 health, Resistance 2, Strength 3, Speed 2, netherite (80%) | 3 / 70% | 4 | x4.8, 4 adds | x5.75 / x2.9 | 3 elite halls |
+  | Nightmare 20 | 14-18 | 32-41 | 7 | 9-10 | +40 health, Resistance 2, Strength 3, Speed 2, netherite (90%) | 4 / 80% | 4 | x5.4, 5 adds | x6.50 / x3.2 | 3 puzzles, 2 traps, shrine, 3 elite, 2 shafts, 2 side caches, tall rooms 75% |
+
+  Tiers in between follow the same steps. The grid grows from 3 by 3 to 5 by 5 cells for the bigger runs. Elite mobs (`Elite Zombie`) have extra health and Strength; champions (`Champion Skeleton`, or a named champion from the [Champions](#champions--elite_bp) pack) much more. Every dungeon mob has Fire Resistance. At most 18 dungeon mobs (`mobCap`) are alive at once.
+- **Affixes** (Nightmare runs: 1 at tiers 1-4, 2 at 5-9, 3 at 10-14, 4 at 15-20, rolled by weight, never twice; plus a 15% chance of the Blessing). They're shown before you start, on a sign in the entry room, in chat and on the bar above the hotbar:
+
+  | Affix | From tier | What it does |
+  |---|---|---|
+  | `Frenzied` | 1 | Mobs (and the boss) get Speed, one level more |
+  | `Bulwark` | 1 | Mobs and the boss get one more level of Resistance |
+  | `Swarming` | 1 | Half again as many mobs in every wave |
+  | `Shrouded` | 1 | Darkness pulses over everyone in the dungeon every 20 seconds or so |
+  | `Frozen` | 1 | Snowflake patches appear at your feet, then slow anyone standing in them for about 6 seconds |
+  | `Hunger` | 1 | Hunger while fighting (stronger from tier 12) |
+  | `Volcanic` | 3 | Flames flicker on the floor around you for 2 seconds, then fire bursts there (real fire on stone floors, put out after 4 seconds; on wooden floors only the burn) |
+  | `Explosive Death` | 3 | A mob hisses when it dies and bursts a second later: damage within 3 blocks, no block damage |
+  | `Backup` | 3 | A mob brought below half health calls one more mob, once |
+  | `Vampiric` | 5 | Mobs heal half the damage they deal you |
+  | `Thorned` | 5 | Hitting a mob in melee hurts you a little (1, 2 from tier 10) |
+  | `Champion Packs` | 5 | Every wave brings a champion |
+  | `Venomous` | 5 | Mob hits poison you (Wither from tier 15) |
+  | `Arcane Beams` | 7 | A line of blue sparks crosses the room through you; 2 seconds later it burns anyone still on it |
+  | `Lightning Storm` | 7 | Sparks circle your spot; 2 seconds later lightning strikes there (damage, no fire) |
+  | `Blinding` | 10 | Bursts of blindness during fights |
+  | `Juggernaut` | 10 | Mobs have far more health, the boss a third more |
+  | `Blessing` | 1 (15% chance, extra) | Half again as much treasure and a quarter more Crowns |
+
+- **Dungeons** (from `dungeons`; mobs join the pool from the level shown):
+
+  | Dungeon | Mobs | Flyers in tall rooms | Boss (extra health) | Built of | Crowns |
   |---|---|---|---|---|---|
-  | Crypt | Easy | zombies, skeletons | `The Crypt Lord` (wither skeleton, +40 health) | deepslate bricks, polished deepslate, soul lanterns | 40 |
-  | Drowned Vault | Normal | drowned | `The Tide Keeper` (drowned, +60 health) | prismarine bricks, dark prismarine, lanterns | 60 |
-  | Frost Hollow | Hard | strays | `The Frost Archer` (stray, +80 health) | packed ice, snow, blue ice, lanterns | 90 |
+  | Crypt | zombies, skeletons; husks (Hard), zombie villagers (N1), wither skeletons (N5), witches (N8) | phantoms, vexes | `The Crypt Lord` (wither skeleton, +40) | deepslate bricks, soul lanterns, cobwebs | 40 |
+  | Drowned Vault | drowned; zombies (Normal), bogged (N2), witches (N7) | phantoms | `The Tide Keeper` (drowned, +60) | prismarine, sea lanterns in the floor | 60 |
+  | Frost Hollow | strays, skeletons; zombies (Normal), breezes (N6) | phantoms, breezes | `The Frost Archer` (stray, +80) | packed ice, snow, blue ice | 90 |
+  | Nether Forge | magma cubes, blazes; wither skeletons (Hard), zoglins (N4) | blazes | `The Forge Heart` (blaze, +80) | polished blackstone, basalt, gilded blackstone, magma in the floor | 90 |
+  | Sculk Depths | zombies, silverfish; endermites (Normal), husks (N1), bogged (N4) | phantoms, vexes | `The Listener` (bogged, +90) | deepslate tiles, sculk floor, soul lanterns | 100 |
+  | Pillager Keep | pillagers, vindicators; witches (N1), evokers (N3), ravagers (N10) | vexes, phantoms | `The Warlord's Ravager` (ravager, +60) | stone bricks, spruce planks, dark oak | 70 |
+  | Spider Nest | spiders, cave spiders; skeletons (Hard), bogged (N6), witches (N10) | phantoms | `The Brood Mother` (spider, +60) | mossy stone bricks, lots of cobwebs | 50 |
+  | Ender Spire | endermen, endermites; skeletons (Hard), shulkers (N2) | phantoms, vexes | `The Starless Walker` (enderman, +100) | purpur, end stone bricks, end rods | 110 |
 
-- **The layout** is new every run: 6 to 8 rooms (11 by 11 blocks, 5 high) along a winding path through a 3 by 3 grid, joined by short corridors 3 wide. The entry room comes first, then 2 to 4 combat rooms and the puzzle room in a random order, then the boss room and the treasure room. Each room is lit by four hanging lanterns. A sign in the entry room reads `Crypt / Clear each room / to open the bars`.
-- **Waves:** a combat room starts when someone in the run walks in (`Something stirs in the dark...`). It sends difficulty + 1 waves (2 on Easy, 3 on Normal, 4 on Hard), each of 2 or 3 mobs plus 1 for every two players after the first. On Hard, mobs have Strength. The bars open when every mob of the last wave is dead.
-- **The puzzle:** clue signs face the way you come in, the levers are behind them. The clues always have exactly one answer: the first gives how many levers are on, the rest say a lever is `on` or `off`, or that two levers `match` or `differ`. At least one lever is on in every answer. Getting it right says `Click. Something heavy moves behind the wall: the puzzle is solved!`
-- **The boss** appears 2 seconds after someone enters its room, with its name as a title. Its extra health grows by half for each player after the first. On Normal it has Strength I, on Hard Strength II and Resistance I; it never burns. It carries the tag `realm:bounty:exp_<run>`.
-- **Finishing:** the title `Expedition complete` with `Crypt cleared in 6:12`, chat to everyone `Ann, Bob cleared the Crypt (Easy) in 6:12.`, and `A new record!` or your place when you made the leaderboard. Each player still in the dungeon gets the dungeon's Crowns (`+40 Crowns (Expedition: Crypt)`), 15 Warden reputation (`rep`), the Journal page `expedition_crypt` under Places, a 10% chance at a relic (`relicChance`, one of `relics`), and counts as a finished quest of kind `expedition` for other packs. The treasure chest holds the dungeon's `loot`, a quarter more per extra player.
-- **The time limit:** a run not finished within 20 minutes (`timeLimitMinutes`) fails: `Time's up! The Crypt wasn't cleared within 20 minutes.` Everyone is sent back.
+  Each dungeon has a line of lore on a sign in its entry room (`Where the town buried what it chose to forget.`). No wardens ever spawn. Cobwebs can be cut.
+- **Rooms.** Every run starts with the entry room and ends with the boss room and the treasure room; in between come at least two combat rooms and the rest of the level's room mix, shuffled. Rooms are 15 by 15 blocks inside, 5 high (some 8 high from Hard), joined by corridors 3 wide.
+
+  | Room | What happens | Done when |
+  |---|---|---|
+  | Entry | Signs: the dungeon and level, its lore, the affixes | (its door is open) |
+  | Combat | Waves of the dungeon's mobs, with elites and maybe a champion; some rooms have cover pillars or a low ring wall; tall rooms have balconies with ladders where mobs spawn too, and flyers | Every mob of the last wave is dead |
+  | Elite hall | One wave fewer, fewer mobs, one more elite each, and a champion every wave (`Elite guards wake in this hall...`) | Last wave dead |
+  | Puzzle | One of nine puzzles (below) | Solved |
+  | Trap hall | The exit is open at once; flame patches telegraphed by flickering flames, arrow volleys from the side walls telegraphed by sparks | Someone reaches the far door |
+  | Shrine | Three buttons: the Blessing (Vigor: extra hearts, Swiftness, Ward: Resistance, Haste: Haste and Strength, or Fortune: a quarter more treasure), a curse (one more affix for the rest of the run; treasure x1.4 and Crowns x1.25), or pass by. The effects last until the run ends or you leave it | Someone presses a button |
+  | Shaft (N3+) | 18 to 32 blocks high; the exit is in the wall near the top, over a landing. Ledges climb the walls to it (1 block apart, 2 from tier 8), a ladder too below tier 10; flyers harass you. Over the exit, a chute drops into a pool, so the fall never hurts | Someone stands on the landing |
+  | Side cache (N1+) | An open doorway off a room leads to a puzzle; solving it puts a chest with extra loot in the side room | Optional |
+  | Boss | The boss, with its name as a title. From Normal it calls its guards once at half health; from N5 it calls adds every 20 seconds. Tall arenas (N3+) have balconies on several levels | The boss dies |
+  | Treasure | The treasure chest (two from N6) | (open after the boss) |
+
+- **Puzzles** (each run picks different kinds where it can; signs and chat explain each one, and none can get stuck):
+
+  | Puzzle | From | How it works |
+  |---|---|---|
+  | Lever logic | Easy | Four levers on red, blue, yellow and green wool; clue signs like `2 levers are on` and `RED and GREEN differ` always fit exactly one setting (at least one lever on). Pulling a lever shows all four above the hotbar |
+  | Memory | Easy | The game flashes the four colored pillars in a sequence (3 long on Easy up to 8 at Nightmare 20, never one color twice in a row) with notes; press the buttons on top in the same order. A wrong press replays it; the gold button shows it again |
+  | Color riddle | Easy | Four pillars of wool with a button each; each press changes the color (red, blue, yellow, green, white, black). The sign in front of each says `is the color of lapis lazuli`: match them all |
+  | Riddle | Easy | A riddle on the signs and in chat, and 3 answer buttons (4 from N4) labeled by signs. A wrong answer locks the buttons for 6 seconds and spawns mobs |
+  | Lights out | Easy | A 3 by 3 panel of lamps with a button on each; a button flips its lamp and the ones next to it. Light all nine (every start can be solved) |
+  | Safe path | Normal | A 4 by 4 grid of pressure plates (5 by 5 from N6). The safe path flashes plate by plate; step on its plates in order from the near row to the far row. A wrong plate starts you over (and stings a little in Nightmare runs); the gold button shows the path again |
+  | Target practice | Normal | 3 to 7 target blocks set in the walls, some high up. Hit each with an arrow, snowball or trident; everyone is given 16 snowballs |
+  | Button rush | Normal | 4 to 8 buttons around the walls: press them all within a time limit from the first press (about 3 seconds per button, a little less at high tiers), or they reset |
+  | Climb | Normal | A tall room: jump up ledges along the walls to a button at the top (8 to 24 blocks up). Fall and you start again; or pillar up with your own blocks where building is allowed |
+
+- **Building** (from Nightmare 1, `buildFromTier`, while `allowBuilding` is on): blocks you place in the dungeon stay, so you can pillar up a shaft, bridge between balconies or wall yourself in, and you can break your own blocks again. They're removed when the dungeon is filled in (they're used up). Containers, TNT, beds and respawn anchors still pop straight back out, so nothing is lost or blown up. On Easy, Normal and Hard every block you place pops back out (`Blocks placed in the dungeon pop back out.`). The dungeon's own blocks can never be broken (`The dungeon's blocks can't be broken.`), except cobwebs; explosions never break them either. Operators in creative mode can do both.
+- **Finishing:** the title `Expedition complete` with `Crypt Nightmare 5 cleared in 6:12`, chat to everyone `Ann, Bob cleared the Crypt (Nightmare 5) in 6:12.`, and `A new record!` or your place when you made that difficulty's leaderboard. Each player still in the dungeon gets the dungeon's Crowns times the level (x1 on Easy up to x6.5 on Nightmare 20; x1.25 more with the Blessing, x1.25 with a shrine curse), Warden reputation (`rep`, plus 10% per tier), the Journal page `expedition_<dungeon>` under Places, a relic by chance (`relicChance` plus 1% per tier, at most 50%), counts as a finished quest of kind `expedition` for other packs, and unlocks the next tier (`Nightmare 6 is unlocked!`). The treasure chests hold the dungeon's `loot` plus `tierLoot` from the tier on, scaled by the level (x1 to x3.2), a quarter more per extra player, half again with the Blessing.
+- **Nightmare Sigils:** a boss in a Hard or Nightmare run drops one 35% of the time plus 1% per tier (`sigilChanceBoss`), a champion in a Nightmare run 8% of the time (`sigilChanceChampion`). It's an echo shard (`sigilItem`) named `Nightmare Sigil` whose lore lists the dungeon, the tier (the run's tier or one above) and the affixes. Using it (or **Use a Nightmare Sigil**) shows the run's preview with **Start (uses the sigil)**.
+- **The time limit:** a run not finished in time fails: `Time's up! The Crypt wasn't cleared within 24 minutes.` Everyone is sent back, and the run is listed as failed in the history.
 - **Leaving:** `/realm:expedition_leave`, dying, leaving the game, or getting out of the dungeon any other way (a teleport, for example; you're out after 5 seconds outside it) all take you out of the run. Nobody can join a run after it starts. When the last player is out, the run fails and the dungeon is filled in. Anyone who leaves the game during a run is sent back to where they started when they next join.
-- **The dungeon's blocks can't be broken** during a run (`The dungeon's blocks can't be broken.`), and blocks placed in it pop straight back out as items (`Blocks placed in the dungeon pop back out.`), so nobody digs around the doors and nothing is lost when it's filled in. Operators in creative mode can do both.
 - **Death:** your items drop in the dungeon as usual, are collected right away and given back after you respawn (`returnItemsOnDeath`). Experience is lost as usual.
-- **Above the hotbar** every second during a run: the dungeon, the clock and the current step. With the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD steps aside (the pack sends `realm:actionbar`).
+- **Above the hotbar** every second during a run: the dungeon and level, the clock and limit, the current step, and the affixes on a second line. With the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD steps aside (the pack sends `realm:actionbar`).
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:expedition` | Everyone | Start an expedition with your party members nearby (up to 4 players, default `maxParty`), see how your run is going and leave it, or see the fastest clears of each dungeon |
+| `/realm:expedition` | Everyone | The Expeditions menu: start an expedition (dungeon, difficulty or Nightmare tier, affix preview and reroll), use a Nightmare Sigil, leaderboards (fastest clears per dungeon and difficulty, highest tiers, recent runs), your progress, go back to where you started. During a run: how it's going, the affixes, and leave it. Operators also get **Operator tools** (set the site, reset, create a sigil, unlock every tier) |
 | `/realm:expedition_leave` | Everyone | Leave your expedition and go back to where you started it |
-| `/realm:expedition_site [x] [z]` | Operators | Sets where dungeons are built: where you stand, or at x z. Refused within 88 blocks of world spawn (default 64, `avoidSpawn`, plus half the dungeon) or where anything but natural underground blocks is in the way, with what and where |
-| `/realm:expedition_reset` | Operators | Ends every expedition in progress (players are sent back) and fills the dungeon back in |
+| `/realm:expedition_site [x] [z]` | Operators | Sets where dungeons are built: where you stand, or at x z. Refused within 114 blocks of world spawn (default 64, `avoidSpawn`, plus half the biggest dungeon) or where anything but natural underground blocks is in the way of the biggest dungeon, with what and where |
+| `/realm:expedition_reset` | Operators | Ends every expedition in progress (players are sent back) and fills the dungeons back in |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
 | Option | Default | Description |
 |---|---|---|
-| `enabled` | `true` | New expeditions can start. Disabled: the menu only shows the fastest clears; a run in progress still finishes |
-| `depth` | `-40` | Floor height of the dungeon; it fills from 1 block below to 7 above (y -41 to -33). Kept between -58 and -20 |
+| `enabled` | `true` | New expeditions can start. Disabled: the menu only shows the leaderboards; a run in progress still finishes |
+| `depth` | `-40` | Floor height of the dungeon; it fills from 1 block below to 2 above its tallest room (y -41 to -33 for a run without tall rooms, up to y -8). Kept between -58 and -20 |
 | `avoidSpawn` | `64` | The site's nearest dungeon edge must be at least this far from world spawn (flat distance), so a dungeon is never dug under the spawn town |
 | `slots` | `1` | Expeditions that can run at the same time (1 to 3), each in its own dungeon: the first at the site, each next one `slotSpacing` blocks east |
-| `slotSpacing` | `128` | Blocks between those dungeons (at least 64) |
+| `slotSpacing` | `128` | Blocks between those dungeons (at least 112) |
 | `maxParty` | `4` | Most players in one expedition, the leader included (1 to 4) |
 | `partyRadius` | `32` | Party members within this many blocks of the leader are asked along |
 | `confirmSeconds` | `20` | Seconds party members have to answer; no answer is a no |
-| `timeLimitMinutes` | `20` | A run not finished in this many minutes fails |
+| `timeLimitMinutes` | `20` | Minutes for a 7-room run: each run gets this much per 7 rooms, 1% less per Nightmare tier, at least 5 minutes |
 | `exitSeconds` | `30` | Seconds after the boss falls before everyone is sent back, to collect the treasure |
 | `returnItemsOnDeath` | `true` | Items dropped dying in a dungeon are given back after respawning (otherwise they'd be lost when the dungeon is filled in) |
-| `leaderboardSize` | `10` | Fastest clears kept for each dungeon |
-| `rep` | `15` | Warden reputation (Guilds) for each player who finishes |
-| `relicChance` | `0.1` | Chance (0 to 1) that each player who finishes also gets a relic (Relics pack) |
+| `leaderboardSize` | `10` | Fastest clears kept on each leaderboard (one per dungeon and difficulty or tier) |
+| `tierBoardSize` | `20` | Players kept on the Highest tiers board |
+| `historySize` | `20` | Runs kept in the world's run history and in each player's |
+| `maxTier` | `20` | Highest Nightmare tier (1 to 20) |
+| `tallFromTier` | `3` | From this Nightmare tier, rooms can be tall (16 to 32 blocks) with balconies, and shafts appear |
+| `buildFromTier` | `1` | Players may place blocks in a dungeon from this Nightmare tier |
+| `allowBuilding` | `true` | Players may place blocks at all (see `buildFromTier`). Disabled: blocks placed in a dungeon always pop back out |
+| `useChampionsPack` | `true` | Champions in waves come from the Champions pack when it's installed and knows the mob (zombie, husk, drowned, zombie villager, skeleton, stray, spider, witch); otherwise, or when disabled, the pack makes its own |
+| `mobCap` | `18` | Most dungeon mobs alive in one run at a time: waves, adds and reinforcements stop there |
+| `rerollCost` | `25` | Crowns to reroll the affixes shown before a Nightmare run (0: free) |
+| `sigilItem` | `"minecraft:echo_shard"` | The item a Nightmare Sigil is |
+| `sigilChanceBoss` | `0.35` | Chance a boss of a Hard or Nightmare run drops a sigil, plus 1% per tier |
+| `sigilChanceChampion` | `0.08` | Chance a champion in a Nightmare run drops a sigil |
+| `rep` | `15` | Warden reputation (Guilds) for each player who finishes, plus 10% per Nightmare tier |
+| `relicChance` | `0.1` | Chance (0 to 1) that each player who finishes also gets a relic (Relics pack), plus 1% per tier, at most 50% |
 | `relics` | `lantern_deep`, `miners_lamp`, `compass_echoes`, `frost_band`, `tide_boots` | The relics a finished run can give, one at random |
-| `dungeons` | Crypt, Drowned Vault, Frost Hollow (above) | The dungeons: `{ id, name, difficulty, mobs, boss: { mob, name, health }, wall, floor, accent, light, door, crowns, loot: [{ item, min, max, chance }] }`. `difficulty` 1 to 3 sets the waves, the mobs' Strength and the boss's buffs; `health` is extra boss health in points; `accent` is the corner pillars, `light` the hanging lanterns, `door` the bars. Keep each `id`: the leaderboard and the Journal entry use it |
+| `tierLoot` | diamonds (N1), emeralds (N3), golden apples (N5), netherite scrap (N8), a totem (N10, 20%), an enchanted golden apple (N12, 15%), a netherite ingot (N15, 25%), an elytra (N18, 5%) | Extra treasure from a Nightmare tier on: `{ from, item, min, max, chance }`, added to the dungeon's `loot` (half chance in side caches) |
+| `dungeons` | the eight above | The dungeons: `{ id, name, lore, difficulty, mobs, flyers, boss: { mob, name, health, adds }, wall, floor, accent, trim, light, door, decor: { block, count, floor, breakable }, crowns, loot: [{ item, min, max, chance }] }`. `mobs` entries are an id or `{ id, from, weight }` (`from` is the first level: 0 Easy, 1 Normal, 2 Hard, 3 to 22 Nightmare 1 to 20). `difficulty` (1 to 3) is the difficulty the dungeon had before tiers: its old fastest clears were moved there. `health` is extra boss health in points (times the level and party); `adds` are what the boss calls. `accent` is the corner pillars, `trim` the balconies and ledges, `light` the lanterns, `door` the bars, `decor` a block scattered in combat rooms. Keep each `id`: the leaderboards and Journal entries use it |
 
-Default treasure (`loot`, each with its chance): **Crypt** 4–10 iron ingots, 2–6 gold ingots (80%), 4–12 bones, 1–2 diamonds (40%), a golden apple (40%), 4–10 bottles o' enchanting (80%), a name tag (25%). **Drowned Vault** 8–16 prismarine shards, 4–10 prismarine crystals (80%), 4–10 gold ingots, 1–3 diamonds (60%), 1–2 nautilus shells (50%), a heart of the sea (10%), 6–12 bottles o' enchanting (80%). **Frost Hollow** 2–5 diamonds, 4–12 emeralds, 1–3 golden apples (70%), an enchanted golden apple (5%), 8–16 blue ice (60%), 8–16 bottles o' enchanting.
+Default treasure (`loot`, each with its chance): **Crypt** 4–10 iron ingots, 2–6 gold ingots (80%), 4–12 bones, 1–2 diamonds (40%), a golden apple (40%), 4–10 bottles o' enchanting (80%), a name tag (25%). **Drowned Vault** 8–16 prismarine shards, 4–10 prismarine crystals (80%), 4–10 gold ingots, 1–3 diamonds (60%), 1–2 nautilus shells (50%), a heart of the sea (10%), 6–12 bottles o' enchanting (80%). **Frost Hollow** 2–5 diamonds, 4–12 emeralds, 1–3 golden apples (70%), an enchanted golden apple (5%), 8–16 blue ice (60%), 8–16 bottles o' enchanting. **Nether Forge** 6–14 gold ingots, 2–6 blaze rods (90%), 8–16 quartz (80%), 1–3 diamonds (60%), netherite scrap (15%), 8–14 bottles o' enchanting. **Sculk Depths** 1–3 echo shards (60%), 6–14 amethyst shards, 2–4 diamonds (80%), 1–3 disc fragments (30%), 10–18 bottles o' enchanting. **Pillager Keep** 6–16 emeralds, 6–12 iron ingots, a crossbow (50%), a totem of undying (15%), 1–3 diamonds (50%), 6–12 bottles o' enchanting (80%). **Spider Nest** 8–20 string, 2–6 spider eyes (80%), 4–10 iron ingots, 1–2 diamonds (40%), 1–2 golden apples (40%), 4–10 bottles o' enchanting (80%). **Ender Spire** 4–10 ender pearls, 1–2 shulker shells (40%), 2–4 diamonds (80%), 6–14 chorus fruit (80%), 10–18 bottles o' enchanting.
 
-Operators can change `enabled`, `slots`, `maxParty`, `timeLimitMinutes`, `exitSeconds`, `returnItemsOnDeath` and `relicChance` in game with `/realm:config`. The rest stay in `config.js`.
+Operators can change `enabled`, `slots`, `maxParty`, `timeLimitMinutes`, `exitSeconds`, `returnItemsOnDeath`, `relicChance`, `maxTier`, `allowBuilding`, `useChampionsPack`, `mobCap`, `rerollCost`, `sigilChanceBoss` and `sigilChanceChampion` in game with `/realm:config`. The rest stay in `config.js`.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `expedition:site` | World | JSON `{ x, z, by, at }`: the site an operator set |
-| `expedition:run:<slot>` | World | JSON `{ id, slot, dungeon, seed, x, y, z, leader, phase }` while a dungeon exists in that slot, so one cut short by a restart is filled in when the world starts again |
+| `expedition:run:<slot>` | World | JSON `{ id, slot, dungeon, seed, x, y, z, leader, phase, l, g, c, h, pt }` while a dungeon exists in that slot (`l` level, `g`/`c`/`h` the box's grid, cell size and height, `pt` block types players placed), so one cut short by a restart is filled in when the world starts again. Records from before tiers (without `g`, `c`, `h`) are read as the old 48 by 48 by 9 box |
 | `expedition:next` | World | The next run's number |
-| `expedition:best` | World | JSON `{ <dungeon id>: [{ t, n, at }] }`: the fastest clears (milliseconds, the players' names, when) |
+| `expedition:best:<dungeon id>` | World | JSON `{ <level>: [{ t, n, at, a }] }`: the fastest clears per level (`e`, `n`, `h`, `t1` to `t20`): milliseconds, the players' names, when, the affixes |
+| `expedition:best` | World | The fastest clears from before tiers (`{ <dungeon id>: [{ t, n, at }] }`). Copied once into `expedition:best:<id>` at the dungeon's old difficulty, then only kept |
+| `expedition:best_v2` | World | `1` once that copy was made |
+| `expedition:tiers` | World | JSON `[{ id, n, l, d, at }]`: the highest level each player cleared (the Highest tiers board) |
+| `expedition:history` | World | JSON `[{ d, l, ok, t, n, at, a }]`: the latest runs, cleared or failed, newest first |
 | `expedition:return` | Player | JSON `{ d, x, y, z, run }`: where to send the player back to, while they're on a run (or until they rejoin after one) |
+| `expedition:prog` | Player | JSON `{ u, b, c, r }`: the highest Nightmare tier unlocked, the highest level cleared, clears, the player's recent runs |
+| `expedition:rolls` | Player | JSON `{ <level>: [affix ids] }`: the affixes shown for each Nightmare level, kept until that run starts or they're rerolled (so reopening the menu doesn't reroll) |
 | `expedition:cfg` | World | Settings changed in `/realm:config` |
-| `realm:exp_mob`, `realm:exp_run:<id>`, `realm:bounty:exp_<id>` | Entity tags | On the dungeon's mobs (the last one on the boss only). Leftovers are removed when the world starts |
+| `realm:exp_mob`, `realm:exp_run:<id>`, `realm:exp_champ`, `realm:exp_called`, `realm:exp_ch_<id>`, `realm:bounty:exp_<id>` | Entity tags | On the dungeon's mobs (champions, mobs that called for help, champions asked of the Champions pack; the last one on the boss only). Leftovers are removed when the world starts |
 | `realm_exp_<slot>` | Ticking area | Keeps the dungeon loaded while it's built, played and filled in; removed afterward |
 
-Runs themselves are kept in memory: a restart ends a run in progress (its players are sent back when they join, and the dungeon is filled in); after a script reload, players still online are sent back at once. A player is only taken off their return spot once the teleport back worked, so one who can't be moved right then (dead, say) is sent back when they next spawn.
+Runs themselves are kept in memory: a restart ends a run in progress (its players are sent back when they join, and the dungeon is filled in); after a script reload, players still online are sent back at once. A player is only taken off their return spot once the teleport back worked, so one who can't be moved right then (dead, say) is sent back when they next spawn. Shrine effects are taken away when a player leaves the run.
 
 ### How it works
 
-- **Never near builds:** the dungeon is a sealed box 48 by 48 blocks and 9 high, deep underground. Before every run the box is checked with `Dimension.containsBlock` for any block that isn't natural (stone, deepslate, tuff, granite, diorite, andesite, ores, raw ore blocks, dirt, gravel, clay, water, lava, obsidian, magma, amethyst geodes, dripstone, lush cave plants, sculk), and the run is called off if there is one (operators are told what and where). `/realm:expedition_site` runs the same check where it can, halving the box until it finds the block. Every fill only replaces natural blocks and the dungeon's own, so even then nothing else is touched. The site must also be far from world spawn (`avoidSpawn`).
-- **Building:** a ticking area (`tickingarea add`) keeps the box loaded. Once its chunks can be read and the box is found clean, anyone in it (a player mining a cave there), dropped items and named or tamed animals are moved to the surface, then `Dimension.fillBlocks` (with a block filter) fills the whole box with deepslate, sealing any caves, then carves the rooms, floors, corner pillars, corridors and closed bars, then places lanterns, signs, wool, levers and the chest. The work runs as a `system.runJob` job, a 16 by 16 column or one room per step, so the server never stalls. The same seed always gives the same layout.
-- **Filling in:** after the run (or when it fails or an operator resets it) the chest is emptied, the dungeon's mobs and dropped items are removed, anything else in the box (a pet) is moved to the surface, any player is sent back to where they started their expedition (or to the surface), and the box is filled with deepslate again, replacing only natural blocks and the dungeon's own. The ticking area is removed. If the box can't be loaded, it's tried again after a restart or with `/realm:expedition_reset`, and no new run starts there until then; its blocks still can't be broken meanwhile. A box is only ever filled in after the check before its run found it clean: a run called off or reset while it was still getting ready leaves the ground alone.
-- **The run** is checked twice a second: who is in which room, wave mobs left (mobs that leave the dungeon are removed), the boss (a `entityDie` for it finishes the run), the time limit, and players who left the dungeon. Lever pulls are read from `afterEvents.leverAction` and the levers' `open_bit` state, and the puzzle room also checks the four levers once a second.
+- **Never near builds:** the dungeon is a sealed box of 3 by 3 to 5 by 5 cells of 20 blocks (60 to 100 blocks wide) and 9 to 34 high, deep underground. Before every run the box is checked with `Dimension.containsBlock`, a column at a time, for any block that isn't natural (stone, deepslate, tuff, granite, diorite, andesite, ores, raw ore blocks, dirt, gravel, clay, water, lava, obsidian, magma, amethyst geodes, dripstone, lush cave plants, sculk), and the run is called off if there is one (operators are told what and where). `/realm:expedition_site` runs the same check over the biggest possible dungeon where it can. Every fill only touches a volume that holds nothing but natural blocks, air and the dungeon's own (a block filter never matches air, so such a volume is filled whole; any other is filled through a filter that replaces only natural and dungeon blocks). The site must also be far from world spawn (`avoidSpawn`).
+- **Building:** a ticking area keeps the box loaded. Once its chunks can be read and the box is found clean, anyone in it, dropped items and named or tamed animals are moved to the surface, then the whole box is filled with deepslate (sealing any caves), and the rooms, floors, corner pillars, ceiling lanterns, corridors (with a chute and pool under a shaft's high exit), closed bars, balconies, ladders, ledges, puzzles, signs and decor are placed. The work runs as a `system.runJob` job, one column or room per step, so the server never stalls (a Nightmare 20 dungeon builds in about a second). The layout follows from the seed and level alone (`scripts/layout.js`, which has no game code, so it's checked in Node across thousands of seeds and every level: rooms fit the box, paths connect, every door stays clear, ledges can be climbed, every puzzle has an answer).
+- **Filling in:** after the run (or when it fails or an operator resets it) the chests in the box are emptied, the dungeon's mobs and dropped items are removed, anything else in the box (a pet) is moved to the surface, any player is sent back to where they started their expedition (or to the surface), and the box is filled with deepslate again, including the blocks players placed. The ticking area is removed. If the box can't be loaded, it's tried again after a restart or with `/realm:expedition_reset`, and no new run starts there until then; its blocks still can't be broken meanwhile. A box is only ever filled in after the check before its run found it clean.
+- **The run** is checked twice a second: who is in which room, wave mobs left (mobs that leave the dungeon are removed), the boss (an `entityDie` for it finishes the run), goal spots of trap halls and shafts, side rooms, the button rush clock, affix hazards (warned with particles for 1.5 to 2 seconds before they hit), the time limit, and players who left. Buttons, pressure plates, target blocks, projectiles and levers are read from `afterEvents.buttonPush`, `pressurePlatePush`, `targetBlockHit`, `projectileHitBlock` and `leverAction`; puzzle buttons pop back up at once so the same one can be pressed again. Vampiric, Venomous, Thorned and Backup work through `entityHurt`. Explosions inside a dungeon are kept from breaking blocks (`beforeEvents.explosion`).
 - **Party members** are players with the same `realm_party:<code>` tag as the leader ([Parties](#parties--party_bp)), online, in the same dimension and within `partyRadius`.
-- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens" }`, `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Crowns go straight into the `crowns` scoreboard.
+- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens" }`, `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Champions are asked of the Champions pack with `realm:champion_spawn` `{ dim, x, y, z, mob, tag: "realm:exp_ch_<run>" }`; if none with that tag appears within 3 ticks (the pack isn't installed), the pack makes its own. Crowns go straight into the `crowns` scoreboard.
+- **For tests:** the script event `realm:expedition_debug` (`{ room? }`) is answered with `realm:expedition_state` (`{ part, parts, data }`): the first run's state and one room's layout and puzzle, used by the BDS scenario that plays whole runs.
 
 ---
 
