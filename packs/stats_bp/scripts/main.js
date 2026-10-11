@@ -44,6 +44,7 @@ function add(player, id, n = 1) {
 
 /** Moves scores stored on the player entity (pack v1.0.0) to their name. @param {Player} player */
 function migrateEntityScores(player) {
+  if (!player.scoreboardIdentity) return; // a new player has no entity scores to move
   for (const stat of STATS) {
     const obj = objective(stat.id);
     const old = obj.getScore(player);
