@@ -1,0 +1,28 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Dolphin Friends",
+    "description": "Tame dolphins with raw fish, ride and steer them through the sea, and call them to you. /realm:dolphin",
+    "uuid": "097153bf-801b-4b19-a9c2-19485591bb41",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "a06c4aca-17d6-47e9-a131-92922ab6fac3",
+      "version": [1, 0, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "51f8ed01-ee90-47f8-94ce-990450840d34",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}
