@@ -1163,9 +1163,9 @@ const HOLLIS_FAITH = {
       ],
       reward: {
         levels: 5,
-        crowns: 60,
+        crowns: 100,
         title: "Lamplighter",
-        relic: "keeper_lamp",
+        items: [{ item: "minecraft:lantern", amount: 1, name: "Hollis's Window Lamp", lore: ["It burned every night", "until the boats came home."] }],
         journal: { entry: "hollis_faith", label: "Lamp in the Window" },
         codex: {
           id: "hollis_book",
