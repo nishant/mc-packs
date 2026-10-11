@@ -270,7 +270,7 @@ async function showBalance(player) {
     `§lTop ${Math.max(1, Math.min(CONFIG.topCount, scores.length))}§r`,
     ...(top.length ? top : ["§7Nobody has any Crowns yet."]),
     "",
-    "§7Earn Crowns from quests, bounties and selling at the market. Pay a friend with /realm:crowns_pay.",
+    "§7Earn Crowns from quests, bounties and selling at the market. Pay a friend from /realm:crowns or with /realm:crowns_pay.",
   ].join("\n");
   const marketHere = get("marketEnabled") === true && get("marketAnywhere") === true;
   const form = new ActionFormData().title("§lCrowns").body(body);
@@ -278,6 +278,71 @@ async function showBalance(player) {
   form.button("OK");
   const res = await show(player, form);
   if (marketHere && res && !res.canceled && res.selection === 0) await market(player);
+}
+
+// ---------------------------------------------------------------------------
+// Menu
+// ---------------------------------------------------------------------------
+
+/** @param {Player} player */
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+
+/** /realm:crowns: what the player may do. @param {Player} player */
+async function mainMenu(player) {
+  /** @type {{ text: string, run: () => unknown }[]} */
+  const actions = [
+    { text: "Balance and top list\n§8The richest players", run: () => showBalance(player) },
+    { text: "Pay a player\n§8From your balance", run: () => payForm(player) },
+  ];
+  if (get("marketEnabled") === true && get("marketAnywhere") === true) actions.push({ text: "Market\n§8Buy and sell", run: () => market(player) });
+  if (isOp(player)) actions.push({ text: "Give Crowns\n§8Operators: or take them", run: () => giveForm(player) });
+  const form = new ActionFormData().title("§lCrowns").body(`Your balance: §6${crowns(crownsOf(player))}`);
+  for (const a of actions) form.button(a.text);
+  form.button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  await actions[res.selection]?.run();
+}
+
+/** @param {unknown} v whole number typed in a text field, or NaN */
+const parseAmount = (v) => (typeof v === "string" && /^\s*-?\d+\s*$/.test(v) ? parseInt(v, 10) : NaN);
+
+/** @param {Player} player */
+async function payForm(player) {
+  const others = world.getAllPlayers().filter((p) => p.id !== player.id);
+  if (!others.length) return player.sendMessage("§7Nobody else is online to pay.");
+  const form = new ModalFormData()
+    .title("§lPay a player")
+    .dropdown("Player", others.map((p) => p.name), { defaultValueIndex: 0 })
+    .textField(`Amount (you have ${fmt(crownsOf(player))})`, "100")
+    .submitButton("Pay");
+  const res = await show(player, form);
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const [index, amount] = res.formValues;
+  const target = others[typeof index === "number" ? index : -1];
+  if (!target?.isValid) return player.sendMessage("§cThat player left.");
+  const n = parseAmount(amount);
+  if (!Number.isInteger(n)) return player.sendMessage("§cType the amount as a whole number.");
+  pay(player, [target], n);
+}
+
+/** Operators: give (or, with a negative amount, take) Crowns. @param {Player} player */
+async function giveForm(player) {
+  if (!isOp(player)) return;
+  const all = world.getAllPlayers();
+  const form = new ModalFormData()
+    .title("§lGive Crowns")
+    .dropdown("Player", ["Everyone online", ...all.map((p) => p.name)], { defaultValueIndex: 0 })
+    .textField("Amount (negative takes Crowns)", "100")
+    .submitButton("Give");
+  const res = await show(player, form);
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  const [index, amount] = res.formValues;
+  const i = typeof index === "number" ? index : -1;
+  const targets = i === 0 ? world.getAllPlayers() : all[i - 1] ? [all[i - 1]] : [];
+  const n = parseAmount(amount);
+  if (!Number.isInteger(n)) return player.sendMessage("§cType the amount as a whole number.");
+  give(player, targets, n);
 }
 
 // ---------------------------------------------------------------------------
@@ -552,7 +617,17 @@ function later(fn) {
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
-    { name: "realm:crowns", description: "Crowns: your balance and the richest players", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    { name: "realm:crowns", description: "Crowns: a menu of what you can do (balance, pay, market; operators: give)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    (origin) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      later(() => mainMenu(player).catch((e) => console.warn(`[crowns] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
+
+  customCommandRegistry.registerCommand(
+    { name: "realm:crowns_balance", description: "Crowns: your balance and the richest players", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
     (origin) => {
       const player = playerOf(origin);
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };

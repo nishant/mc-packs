@@ -1840,17 +1840,18 @@ The realm's currency. Crowns are paid by other packs (quests, bounties, stories 
 
 ### How to use
 
-1. Run `/realm:crowns` to see your balance, your rank and the top 10.
+1. Run `/realm:crowns` for the Crowns menu: **Balance and top list** (your balance, your rank and the top 10; also `/realm:crowns_balance`), **Pay a player**, and **Market** where the realm opens it anywhere.
 2. Log in each day for the daily bonus: `+5 Crowns (Daily login bonus. Balance: 25)` in chat, once per UTC day.
 3. To sell or buy, find Quill the Trader (`/realm:npc` says where), tap them and pick **Market**. **Sell** lists what you carry that the market buys; pick one and slide how many. **Buy** lists the supplies for sale.
-4. Pay a friend with `/realm:crowns_pay <player> <amount>`, for example `/realm:crowns_pay Steve 25`.
-5. **Operators:** `/realm:crowns_give <player> <amount>` gives Crowns (a negative amount takes them). `/realm:config` → **Crowns** sets the daily bonus, the starting balance, whether the market is open and whether `/realm:crowns_market` opens it anywhere. Prices are the `sell` and `buy` lists in `config.js`.
+4. Pay a friend from the menu (**Pay a player**: pick who and type the amount) or with `/realm:crowns_pay <player> <amount>`, for example `/realm:crowns_pay Steve 25`.
+5. **Operators:** the menu's **Give Crowns** (one player or everyone online), or `/realm:crowns_give <player> <amount>`, gives Crowns (a negative amount takes them). `/realm:config` → **Crowns** sets the daily bonus, the starting balance, whether the market is open and whether `/realm:crowns_market` opens it anywhere. Prices are the `sell` and `buy` lists in `config.js`.
 
 ### What players see
 
-- **Balance:** `/realm:crowns` opens a menu with `Your balance: 120 Crowns`, `Rank: #3 of 12` and the top 10 (`topCount`), you in green. With the market open anywhere, it has a **Market** button.
+- **The menu:** `/realm:crowns` shows `Your balance: 120 Crowns` and a button for each thing you can do: **Balance and top list**, **Pay a player**, **Market** (only with the market open anywhere) and, for operators, **Give Crowns**.
+- **Balance:** **Balance and top list** (or `/realm:crowns_balance`) shows `Your balance: 120 Crowns`, `Rank: #3 of 12` and the top 10 (`topCount`), you in green. With the market open anywhere, it has a **Market** button.
 - **Getting Crowns:** any pack can pay into the `crowns` scoreboard; packs say so in chat, like `+25 Crowns (Bounty: Gerald the Unexploded)`. New players start with `startBalance` (default 0). The daily bonus (default 5, `dailyBonus`) comes about 10 seconds after your first join of each UTC day, or when a new UTC day starts while you play.
-- **Paying:** `/realm:crowns_pay` takes one online player and a whole amount from 1 to 100,000 (`maxPay`). You can't pay yourself or send more than you have. You see `You paid 25 Crowns to Steve. Balance: 75`; they see `+25 Crowns (from Alex. Balance: 125)`.
+- **Paying:** **Pay a player** picks an online player from a list and takes the amount as a typed whole number; `/realm:crowns_pay` takes one online player and a whole amount from 1 to 100,000 (`maxPay`). You can't pay yourself or send more than you have. You see `You paid 25 Crowns to Steve. Balance: 75`; they see `+25 Crowns (from Alex. Balance: 125)`.
 - **The market** (tap a townsfolk with the `merchant` role, `merchantRole`, and pick **Market**):
   - **Sell** shows only what you have enough of, like `Wheat: 64` / `8 for 1 Crown`. A slider picks how many, in whole lots; chat says `+8 Crowns (Sold 64 Wheat. Balance: 108)`. It counts your main inventory and hotbar (not armor or the offhand), and counts again when you confirm, so nothing sells twice. Storm Glass and Relic Shards are recognized by their lore; plain prismarine crystals and amethyst shards aren't bought, and relics never are.
   - **Buy** lists supplies with their price; a slider picks how many lots (up to 16, and what you can afford). Chat says `-6 Crowns (Bought 8 Bread. Balance: 102)`; what doesn't fit in your inventory drops at your feet.
@@ -1875,7 +1876,8 @@ The realm's currency. Crowns are paid by other packs (quests, bounties, stories 
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:crowns` | Everyone | Your balance, rank and the top 10 (`topCount`) |
+| `/realm:crowns` | Everyone | The Crowns menu: balance and top list, pay a player, the market (where it's open anywhere, default off, `marketAnywhere`), and for operators, give Crowns |
+| `/realm:crowns_balance` | Everyone | Your balance, rank and the top 10 (`topCount`) |
 | `/realm:crowns_pay <player> <amount>` | Everyone | Pays one online player from your balance (1 to 100,000, `maxPay`) |
 | `/realm:crowns_market` | Everyone | Opens the market if it's open anywhere (disabled by default, `marketAnywhere`); otherwise tells you to visit Quill the Trader (`merchantName`) |
 | `/realm:crowns_give <player> <amount>` | Operators | Gives Crowns to the players picked (`@a` works); a negative amount takes them, down to 0 |
@@ -1922,12 +1924,12 @@ Once a week a merchant caravan comes to town: three traders and their pack llama
 
 ### How to use
 
-1. Run `/realm:caravan` to see when the next caravan comes (`The next merchant caravan comes in 3d 5h (Saturday 18:00 UTC), and stays 40m.`) or, while it's here, where it is (`at Market Square (120, -45), 240m NE of you. It leaves in 23m.`).
+1. Run `/realm:caravan` for the caravan menu; it and its **Caravan info** button (also `/realm:caravan_info`, in chat) say when the next caravan comes (`The next merchant caravan comes in 3d 5h (Saturday 18:00 UTC), and stays 40m.`) or, while it's here, where it is (`at Market Square (120, -45), 240m NE of you. It leaves in 23m.`).
 2. When it arrives, chat says `A merchant caravan has arrived at Market Square (120, -45)! It stays 40m. Tap a trader to buy rare goods for Crowns.` Go there.
 3. Tap any trader. The shop lists this visit's goods with their price and how many are left; pick one and choose how many. Chat confirms: `-60 Crowns (Caravan: bought 1 Enchanted Book (Mending))`.
 4. Have Storm Glass or Relic Shards? Pick **Sell to the caravan** in the shop.
 5. Five minutes before it leaves, chat warns you; then it packs up and is gone until next time.
-6. **Operators:** stand where the caravan should set up and run `/realm:caravan_spot [name]` (for example `/realm:caravan_spot "Market Square"`); add a few and each visit picks one at random. `/realm:caravan_spot_remove` removes the nearest one. `/realm:caravan_call` brings the caravan now. `/realm:config` → **Merchant Caravan** sets how often it comes, which day, the hour, how long it stays and how many goods it brings. The goods are `goods` in `config.js`.
+6. **Operators:** stand where the caravan should set up and pick **Add an arrival spot here** in `/realm:caravan` (or run `/realm:caravan_spot [name]`, for example `/realm:caravan_spot "Market Square"`); add a few and each visit picks one at random. **Remove an arrival spot** lists them to pick from (`/realm:caravan_spot_remove` removes the nearest one). **Bring the caravan now** (or `/realm:caravan_call`) brings it now. `/realm:config` → **Merchant Caravan** sets how often it comes, which day, the hour, how long it stays and how many goods it brings. The goods are `goods` in `config.js`.
 
 ### What players see
 
@@ -1943,7 +1945,8 @@ Once a week a merchant caravan comes to town: three traders and their pack llama
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:caravan` | Everyone | When the next caravan comes (every 7 days at 18:00 UTC, `everyDays`, `hourUtc`), or where it is and when it leaves. Operators also see the arrival spots |
+| `/realm:caravan` | Everyone | The caravan menu: caravan info, and for operators, add or remove an arrival spot and bring the caravan now |
+| `/realm:caravan_info` | Everyone | In chat: when the next caravan comes (every 7 days at 18:00 UTC, `everyDays`, `hourUtc`), or where it is and when it leaves. Operators also see the arrival spots |
 | `/realm:caravan_spot [name]` | Operators | Adds an arrival spot where you stand (up to 20); without a name it's `Spot 1`, `Spot 2`... |
 | `/realm:caravan_spot_remove` | Operators | Removes the nearest arrival spot within 32 blocks (`removeRange`) |
 | `/realm:caravan_call` | Operators | Brings the caravan now, for the usual stay (40 minutes, `stayMinutes`). It counts as the visit due most recently |
@@ -2215,12 +2218,12 @@ A lectern at spawn with realm-wide bounties that change every day: named [champi
 
 ### How to use
 
-1. Tap the bounty board (a lectern near spawn) to see today's bounties, or run `/realm:bounty` anywhere (it also says where the board is). You don't need to accept anything: every bounty is open to everyone.
+1. Tap the bounty board (a lectern near spawn) to see today's bounties, or run `/realm:bounty` anywhere and pick **Today's bounties** (or run `/realm:bounty_list`; from anywhere it also says where the board is). You don't need to accept anything: every bounty is open to everyone.
 2. **Champion targets:** head the way the board says. When you come within 64 blocks of the spot, the target appears, and chat says `A champion stirs nearby: Gerald the Unexploded`. Whoever defeats it gets 100 Crowns; everyone who hit it in its last 30 seconds, and the killer's [party](#parties--party_bp) mates within 64 blocks, get 30 Crowns each. Chat tells everyone: `[Bounty] Steve claimed the bounty on Gerald the Unexploded! (with 2 helpers)`.
 3. **Cull bounties:** every mob of the right kind that anyone defeats counts (`Bounty: Defeat 30 drowned 12/30` above your hotbar). When the count is reached, everyone who defeated at least one gets 40 Crowns.
 4. Talk to a warden (the [Townsfolk](#townsfolk--npc_bp) pack's Warden Reyes) and pick **Bounties** for the same list.
 5. Don't want the cull progress notes? Disable **Bounty progress notes** in `/realm:prefs`.
-6. **Operators:** look at a lectern within 6 blocks and run `/realm:bounty_board` to make it a board (`/realm:bounty_board_remove` makes it an ordinary lectern again; breaking it does too). To put a book on a board, sneak and tap it in creative mode. `/realm:config` → **Bounty Board** sets the hour new bounties come, how many, the target distances and the rewards. Champion targets need the [Champions](#champions--elite_bp) pack.
+6. **Operators:** look at a lectern within 6 blocks and open `/realm:bounty`: **Make this lectern a bounty board** (or run `/realm:bounty_board`). Looking at a board, the menu offers **Make this board a lectern again** (or `/realm:bounty_board_remove`); **Remove a bounty board** lists every board to pick from, and breaking the lectern works too. To put a book on a board, sneak and tap it in creative mode. `/realm:config` → **Bounty Board** sets the hour new bounties come, how many, the target distances and the rewards. Champion targets need the [Champions](#champions--elite_bp) pack.
 
 ### What players see
 
@@ -2236,7 +2239,8 @@ A lectern at spawn with realm-wide bounties that change every day: named [champi
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:bounty` | Everyone | Shows today's bounties (default 4, `count`) with directions from you, where the board is, and the time until new ones (default midnight UTC, `resetHourUtc`) |
+| `/realm:bounty` | Everyone | The bounty menu: today's bounties, and for operators, make the lectern you look at a board (or a board a lectern again) and remove a board from a list |
+| `/realm:bounty_list` | Everyone | Shows today's bounties (default 4, `count`) with directions from you, where the board is, and the time until new ones (default midnight UTC, `resetHourUtc`) |
 | `/realm:bounty_board` | Operators | Makes the lectern you are looking at (within 6 blocks) a bounty board |
 | `/realm:bounty_board_remove` | Operators | Makes the bounty board you are looking at an ordinary lectern again |
 
@@ -3027,9 +3031,9 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 2. Discover waystones by tapping them or walking within 4 blocks of one: `Waystone discovered: River Gate.`
 3. To travel, tap any waystone with an empty hand. Pick a waystone you've discovered; each button shows how far it is and what it costs (`240m NE, 3 Crowns`).
 4. Stand still for 10 seconds while the countdown runs above the hotbar (`Traveling to River Gate in 7...`). Moving more than a block or getting hurt cancels the trip. The screen fades and you arrive next to the other waystone; the trip is paid then.
-5. Run `/realm:waystones` to list the waystones you've discovered and how far they are.
+5. Run `/realm:waystones` for the waystone menu: **My waystones** (also `/realm:waystones_list`) lists the waystones you've discovered and how far they are.
 6. At an inn, tap the innkeeper: **Rent a bed** (10 Crowns) makes the inn your respawn point and gives you Well Rested; **Hear the news** tells what's happened lately (tornadoes, meteors, caravans...).
-7. **Operators:** look at a waystone's lodestone or sign and run `/realm:waystones_remove` to remove it. `/realm:config` → **Waystones & Inns** sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, and the inn's price and Well Rested time.
+7. **Operators:** **Remove a waystone** in `/realm:waystones` lists every waystone, nearest first, to pick from; or look at a waystone's lodestone or sign and run `/realm:waystones_remove`. `/realm:config` → **Waystones & Inns** sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, and the inn's price and Well Rested time.
 
 ### What players see
 
@@ -3040,7 +3044,8 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 - **The wait:** 10 seconds (`channelSeconds`, 0 = at once): `Traveling to River Gate in 10 seconds. Stand still.` in chat and a countdown above the hotbar. Moving more than 1 block, changing dimension or taking any damage cancels it: `You moved: the trip to River Gate is canceled.` Half a second before the jump the screen fades to dark blue and back.
 - **Arriving:** you land beside the other waystone's lodestone, facing it, on a free spot with solid floor (or, for a waystone in a cellar, the first open space straight above it); if its surroundings aren't loaded yet you land on top of the lodestone and are moved beside it once they load. If you'd land inside a block, in lava, or over a drop where the lodestone used to be, you're moved to a free spot, and when there's none you're sent back to where you started with the trip paid back (`There's no safe place to stand at River Gate, so the waystone sent you back.`). A waystone that's loaded and walled in on every side isn't traveled to at all, and nothing is paid.
 - **A broken waystone:** breaking or blowing up its lodestone removes the waystone (`The waystone River Gate is gone.`). A lodestone that vanished another way (pistons, commands) is noticed when someone is within 96 blocks, or when someone arrives there. Trips on the way to it are canceled.
-- **`/realm:waystones`:** lists your discovered waystones with distance and direction. You can't travel from the command unless `travelAnywhere` is enabled; then it opens the travel menu, priced from where you stand (or from the waystone you're standing at).
+- **`/realm:waystones`:** a menu saying how many waystones you've discovered, with **My waystones** (**Travel** with `travelAnywhere` enabled) and, for operators, **Remove a waystone** (asks first; the lodestone and sign stay).
+- **`/realm:waystones_list`** (the menu's first button): lists your discovered waystones with distance and direction. You can't travel from it unless `travelAnywhere` is enabled; then it opens the travel menu, priced from where you stand (or from the waystone you're standing at).
 - **Inns** (tap an NPC with the `innkeeper` role, `npcRole`):
   - **Rent a bed** (10 [Crowns](#crowns--crowns_bp), `bedPrice`): your respawn point becomes the innkeeper's spot, until you sleep in a bed of your own, and you're Well Rested: Health Boost I (2 extra hearts) for 60 minutes (`wellRestedMinutes`), plus a moment of Saturation and Regeneration to fill them, all without particles. Chat says `-10 Crowns (A bed at the inn)` and `You rest at the inn. Well Rested: 2 extra hearts for 60 minutes.` Beds can only be rented in the Overworld. Dying ends Well Rested, like any effect.
   - **Hear the news:** the latest 6 (`newsKept`) sky events other packs announced, newest first, like `3h ago: A tornado tore across the land (240m NE of here)` or the event's own text: tornadoes, rainbows, meteors, blood and harvest moons, auroras, storms, caravans and fishing tournaments. Nothing yet: `Nothing new lately. Quiet times, and I'm not complaining.`
@@ -3049,7 +3054,8 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:waystones` | Everyone | Lists the waystones you've discovered, with distance and direction. With travel from anywhere enabled (default off, `travelAnywhere`), opens the travel menu instead |
+| `/realm:waystones` | Everyone | The waystone menu: your waystones, and for operators, remove a waystone from a list |
+| `/realm:waystones_list` | Everyone | Lists the waystones you've discovered, with distance and direction. With travel from anywhere enabled (default off, `travelAnywhere`), opens the travel menu instead |
 | `/realm:waystones_remove` | Operators | Removes the waystone whose lodestone or sign you're looking at (within 8 blocks). The lodestone and sign stay |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3200,8 +3206,9 @@ Grow the realm's towns together. Operators add a town; its mayor (Mayor Bram fro
 2. Pick a project to see what it needs (`Oak Planks: 32 / 64 (you carry 20)`) and who has helped, then tap **Deliver what I have**. It takes what you carry of the needed items, up to what's still needed: partial deliveries count. Chat says `You delivered 20 Oak Planks, 4 Iron Ingot for Riverside's Dock. Now 52 percent.`
 3. When the last item is in, everyone hears `Riverside finished its Dock! Top contributors: Ann 64, Bob 32. Thank you, everyone!`, the dock is built where the operators chose and fireworks rise over it. The top three contributors get 60, 35 and 20 Crowns, and everyone who helped gets reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp) (if you're offline, it's waiting when you join).
 4. When every project of a level is finished, the town levels up: `Riverside is now a Town (level 3)` on everyone's screen, with the new projects.
-5. Run `/realm:town` anywhere to see the nearest town's level, projects, progress and contributors (**Other towns** lists the rest).
-6. **Operators:** stand in the middle of a town and run `/realm:town_add Riverside` (quotes for a name with spaces). Then, for each project, stand where it should be built, facing the way it should face, and run `/realm:town_spot <project>` (`well`, `notice_board`, `lamps`, `garden`, `stall`, `dock`, `bell_tower`). A project finished before it has a spot waits, and operators are reminded when they join. `/realm:town_remove` removes the town you're in. `/realm:config` → **Town Projects** sets the town radius, announcements and more.
+5. Run `/realm:town` anywhere for the town menu: **Town info** (the nearest town's level, projects, progress and contributors; also `/realm:town_stats`), **Projects** (what each still needs) and **Other towns**.
+6. **Operators:** stand in the middle of a town, open `/realm:town` and pick **Add a town here** (or run `/realm:town_add Riverside`, quotes for a name with spaces). Then, for each project, stand where it should be built, facing the way it should face, and pick **Set a project spot** and the project (or run `/realm:town_spot <project>`: `well`, `notice_board`, `lamps`, `garden`, `stall`, `dock`, `bell_tower`). Its outline appears in green particles, with a blue arrow for its front: pick **Set spot here**, **Rotate 90**, **Look around** (10 seconds to walk around it) or **Cancel**. A project finished before it has a spot waits, and operators are reminded when they join.
+7. **Operators:** **Manage spots** in `/realm:town` removes a spot (a built project is taken away and the ground put back), rebuilds a damaged build, or relocates it (preview at the new place, then it's taken away from the old one and built at the new one). **Protect from world events** (Enabled for new towns) keeps meteors, tornadoes and storms from breaking blocks in the town. **Remove town** (or `/realm:town_remove`) removes the town you're in. `/realm:config` → **Town Projects** sets the town radius, announcements and more.
 
 ### What players see
 
@@ -3224,14 +3231,19 @@ Grow the realm's towns together. Operators add a town; its mayor (Mayor Bram fro
 - **Structures instead:** a project with a `structure` id places that structure (saved by an operator with a structure block or `/structure save`) with its corner at the spot, turned to the way the operator faced (saved facing south), instead of the built-in design. It's placed as saved, replacing what's there. Without such a structure in the world, the built-in design is used.
 - **Rewards** for each finished project: Crowns for the top contributors (`topCrowns`: 60, 35, 20), shown as `+60 Crowns (Dock, Riverside)`; for every contributor, `repPerProject` (10) reputation to the Growers when the project is mostly wood, crops and wool, or the Miners when it's mostly stone and metal, plus a finished quest of kind `town` for other packs. Contributors who are offline get theirs when they next join (`Town projects you helped with were finished while you were away. Thank you!`).
 - **Announcements** (`announce`): finished projects, builds and level-ups go to everyone in chat, with fireworks (`fireworks`) and a title for level-ups. Disabled: only the contributors and the operators hear about it, and only players in the town see the level-up title.
+- **The menu:** `/realm:town` says which town you're in (or the nearest one and how far), then has a button for everything you may do: **Town info**, **Projects** (each open project with its percent; pick one for what it needs, and **Deliver what I have** where `deliverWithCommand` allows it) and **Other towns**. Operators also see, inside a town, **Set a project spot**, **Manage spots** (when the town has spots), **Protect from world events** with its state, and **Remove town**; outside one, **Add a town here** (a name field).
+- **Spot preview** (operators): the project's outline, the exact blocks it covers when built at the spot, is drawn in green particles (only you see them) at where you stood, facing the way you faced to the nearest quarter turn, with a blue arrow on the ground from the spot pointing at the build's front. It's redrawn twice a second for 30 seconds after each answer; with no answer by then it closes and nothing changes (`The spot preview timed out. Nothing was changed.`). The form says the size (`5 by 5 blocks, 6 high`) and how many blocks would be left out because something is in the way. **Rotate 90** turns it a quarter to the right; **Look around** closes the form for 10 seconds so you can walk around the outline, then asks again. The outline comes from the build's own blocks (a saved `structure`'s size for a project with one), so it's always the real size: a well 5 by 5 and 6 high, the lamps 1 by 13, a dock 3 by 10 and 11 deep.
+- **Removing, rebuilding and moving** (operators, **Manage spots**): just before a project is first built at a spot, the blocks its outline covers are saved in the world as a structure. **Remove spot** forgets an unbuilt project's spot, or takes a built one away and puts the saved ground back (anything built inside its outline since is replaced too); the project stays finished and waits for a new spot. **Rebuild** puts the saved ground back and builds it again, fresh. **Relocate** previews a new spot where you stand; on **Set spot here** the build is taken away from the old spot and built at the new one. Setting a spot for a built project (from the menu or `/realm:town_spot`) moves it the same way. Each asks first. Projects built before this version have no saved ground: the form warns about it, removing or moving clears only the build's own blocks that are still there (ground blocks become grass, a dock's posts water, the rest air), and **Rebuild** puts back the missing blocks.
+- **Protect from world events** (operators, per town, default Enabled): world events (meteors, tornadoes, storms and the like) still happen within the town radius (96 blocks, `townRadius`), but packs that support safe zones don't break or place blocks there. Disabled, they can.
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:town` | Everyone | The nearest town's level, its projects with progress bars, what each still needs and who has helped. Delivering is at the town's mayor (or here, inside a town, with `deliverWithCommand`, default off) |
+| `/realm:town` | Everyone | The town menu: town info, projects, other towns, and for operators, add a town, set a project spot with a preview, manage spots (remove, rebuild, relocate), protect from world events (default Enabled) and remove the town |
+| `/realm:town_stats` | Everyone | The nearest town's level, its projects with progress bars, what each still needs and who has helped. Delivering is at the town's mayor (or here, inside a town, with `deliverWithCommand`, default off) |
 | `/realm:town_add <name>` | Operators | Adds a town centered where you stand. Towns must be at least 48 blocks apart (half of default 96, `townRadius`) |
-| `/realm:town_spot <project>` | Operators | Sets where a project of the town you're in (within 96 blocks of its center, default, `townRadius`) is built: where you stand, facing the way you face. Builds it right away if it's already finished |
+| `/realm:town_spot <project>` | Operators | Shows the project's outline where you stand, facing the way you face, in the town you're in (within 96 blocks of its center, default, `townRadius`), and asks to set the spot there, rotate it or cancel. Builds it right away if it's already finished; a built project is moved there (the ground at the old spot is put back) |
 | `/realm:town_remove` | Operators | Removes the town you're in and its project progress, after asking. What's built stays standing |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
@@ -3255,7 +3267,8 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 
 | Key | Scope | Contents |
 |---|---|---|
-| `town:t:<town>` | World | JSON `{ id, n, dim, x, y, z, lvl, spots, by, at }`: the town's name, center, level, and each project's build spot `{ x, y, z, f }` (`f`: 0 south, 1 west, 2 north, 3 east) |
+| `town:t:<town>` | World | JSON `{ id, n, dim, x, y, z, lvl, spots, by, at, prot? }`: the town's name, center, level, `prot: 0` when **Protect from world events** is Disabled, and each project's build spot `{ x, y, z, f, snap?, b?, old? }` (`f`: 0 south, 1 west, 2 north, 3 east; `snap: 1` once the ground was saved, `b` the box it covers `[x1, y1, z1, x2, y2, z2]`; `old: 1` for a project built before snapshots, rebuilt in place) |
+| Structure `town:<town>__<project>` | World | The blocks a project's outline covered just before it was built (no entities), put back when it's removed, rebuilt or moved, and deleted after a removal or move or with the town |
 | `town:p:<town>:<project>` | World | JSON `{ got, c, done, built }`: items delivered, contributors `{ <player id>: [name, amount] }`, finished and built. Past about 30,000 characters the smallest contributors are dropped |
 | `town:owed` | World | JSON `{ <player id>: { cr, q } }`: Crowns and finished projects (the latest 10 each) waiting for contributors who were offline |
 | `town:cfg` | World | Settings changed in `/realm:config` |
@@ -3265,6 +3278,9 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 - **The mayor** is an offer in the [Townsfolk](#townsfolk--npc_bp) offer round: the pack answers `realm:npc_talk` for NPCs with the `npcRole` role with `realm:npc_offer` (key `town:<town id>`, order 30) and opens the town's menu on `realm:npc_choose`.
 - **Builds** are placed block by block in code (no structure files needed), each block only after checking what's there. Spots that aren't loaded are checked every 5 seconds against where players are, and built when one is within 64 blocks. Fireworks are `minecraft:fireworks_rocket` entities.
 - **Messages sent** to each contributor of a finished project: `realm:quest_done` `{ player, pack: "town_bp", id: "town_<town>_<project>", label, kind: "town", guild }` and `realm:rep_add` `{ player, guild, amount: repPerProject }`, with `guild` `growers` or `miners`. Crowns go straight into the `crowns` scoreboard.
+- **Snapshots** use `world.structureManager.createFromWorld` (saved to the world) right before the first build at a spot, and `place` to put the ground back. The outline is the min and max of the design's block offsets, turned to the spot's facing (or a saved structure's size, with x and z swapped for a quarter turn).
+- **Safe zones:** every town with **Protect from world events** Enabled is sent as `realm:zones` `{ src: "town", part, parts, zones: [{ id, name, dim, x, z, r, shape: "circle" }] }` (`r` = `townRadius`, `part` from 1, split under 2,048 characters; an empty list has `parts: 0`) when a town is added, removed or toggled, when `townRadius` changes, 5 seconds after the world loads, and in reply to `realm:zones_ping`.
+- **Scenario tests:** `/scriptevent realm:town_test {"action": ...}` runs the operator actions without forms (`add`, `spot` with an optional `spot: { x, y, z, f }`, `finish`, `remove`, `rebuild`, `protect`, `zones`, `dump`), for the test harness. It's only honored from the server console or an operator.
 - **Not Community Goals:** [Community Goals](#community-goals--goals_bp) is a realm-wide donation chest for one item; Town Projects belong to a town, need several items, go through the mayor and build something. They don't share data.
 
 ---
@@ -4274,6 +4290,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it, so operators should use `/realm:weather_set` rather than `/weather`; sleeping through rain (or Smart Sleep) ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
 | Sky packs → Realm Skies (Realm Resources) | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |
 | Storm Chasing, Tornadoes, Rainbows, Meteor Strikes, Merchant Caravan, Fishing 2.0 → Waystones & Inns | Innkeepers remember the last few `realm:sky_event` announcements for **Hear the news** |
+| Town Projects → world event packs | Each town with **Protect from world events** Enabled (the default) is a safe zone: Town Projects sends it as `realm:zones` (`src: "town"`, radius `townRadius`) and answers `realm:zones_ping`. Packs whose world events break or place blocks (meteor craters, tornadoes, storms) skip block changes inside it; the event itself still happens |
 | Weather Almanac ↔ Rain Extras | Rain Extras' fog, mist, drips and sounds follow the Almanac's planned rain and thunder like any other weather |
 
 Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn, so it has nothing to coordinate with the other packs.
