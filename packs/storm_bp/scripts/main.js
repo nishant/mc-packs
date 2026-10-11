@@ -65,7 +65,7 @@ function reading(player) {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
   // A storm that just started gets its first cell 10 to 40 seconds in, not at once.
   if (newWeather === WeatherType.Thunder && weather !== WeatherType.Thunder) nextFormTick = Math.max(nextFormTick, system.currentTick + Math.floor(between(200, 800)));
   weather = newWeather;
@@ -224,13 +224,13 @@ function nearBuild(dim, x, z) {
       const top = topAt(dim, cx + dx, cz + dz);
       if (!top) return true;
       for (let i = 0; i <= SCAN_DEPTH; i++) {
-        let b;
         try {
-          b = i === 0 ? top : dim.getBlock({ x: cx + dx, y: top.location.y - i, z: cz + dz });
-        } catch {
-          b = undefined;
+          const b = i === 0 ? top : dim.getBlock({ x: cx + dx, y: top.location.y - i, z: cz + dz });
+          if (b && BUILT.test(b.typeId)) return true;
+        } catch (e) {
+          // A chunk that's loaded but not ticking throws on reading the block: count it as built, to be safe.
+          if (String(e).includes("Unloaded")) return true;
         }
-        if (b && BUILT.test(b.typeId)) return true;
       }
     }
   }

@@ -467,7 +467,7 @@ function* checkSpot(dim, x, z, out) {
       }
       if (isBuiltBlock(top)) return;
       if (top.isLiquid && ++wet > 12) return; // a lake or the sea
-      for (let y = sy - SCAN; y <= sy + SCAN; y++) {
+      for (let y = Math.max(sy - SCAN, dim.heightRange.min); y <= Math.min(sy + SCAN, dim.heightRange.max - 1); y++) {
         let b;
         try {
           b = dim.getBlock({ x: x + dx, y, z: z + dz });

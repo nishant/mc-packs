@@ -242,7 +242,7 @@ world.afterEvents.worldLoad.subscribe(() => {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension !== OVERWORLD) return;
+  if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
   const w = /** @type {Kind} */ (String(newWeather));
   if (!isKind(w)) return;
   tracked = w;
