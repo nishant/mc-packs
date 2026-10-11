@@ -4,7 +4,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 
 > **Keep this file up to date.** Any change to a pack's behavior, commands or `config.js` must update this file in the same commit. `npm run check` fails if a pack, command, config option or `### How to use` section is missing from this file (see [Keeping this file current](#keeping-this-file-current)).
 >
-> **This file is also the players' documentation.** The [Our realm](https://mc.nish.software/realm/) page on mc.nish.software is generated from it (in the `nishant/hosting` repo: `cd minecraft && node tools/pack-docs.mjs`). Every pack section is published, plus the sections marked `<!-- on the site -->`. Write in plain American English, and quote in-game text and ids exactly as the code has them (in backticks), even where the game text is British (`Distance travelled`). See [Publishing to mc.nish.software](#publishing-to-mcnishsoftware).
+> **This file is also the players' documentation.** The [Our realm](https://mc.nish.software/realm/) page on mc.nish.software is generated from it (in the `nishant/hosting` repo: `cd minecraft && node tools/pack-docs.mjs`). Every pack section is published, plus the sections marked `<!-- on the site -->`. Write in plain American English, and quote in-game text and ids exactly as the code has them (in backticks). See [Publishing to mc.nish.software](#publishing-to-mcnishsoftware).
 
 ## Contents
 
@@ -484,7 +484,7 @@ Tracks player stats as scoreboards, with leaderboard menus, a stats ticker above
 | `pvpkills` | Player kills | Other players killed |
 | `mined` | Blocks mined | Blocks broken by the player. Essentials+ tree felling and vein mining only count the first block |
 | `placed` | Blocks placed | Blocks placed by the player |
-| `travelled` | `Distance travelled` | Blocks moved, not gliding, measured every second. Includes walking, swimming, boats and minecarts. Not counted while AFK, so a water stream or minecart loop doesn't climb the board |
+| `travelled` | `Distance traveled` | Blocks moved, not gliding, measured every second. Includes walking, swimming, boats and minecarts. Not counted while AFK, so a water stream or minecart loop doesn't climb the board |
 | `flown` | Elytra distance | Blocks moved while gliding |
 | `joins` | Times joined | Each join |
 
@@ -498,7 +498,7 @@ Tracks player stats as scoreboards, with leaderboard menus, a stats ticker above
 ### The stats ticker
 
 - **Off until a player enables it** (`tickerDefaultOn`), with **Stats ticker** in `/realm:stats`, `/realm:stats_ticker` or **Stats ticker above my hotbar** in `/realm:prefs` (all the same switch). While an operator has disabled it for the realm (`tickerEnabled`), nobody sees it, and the menu and `/realm:stats_ticker` say `The stats ticker is disabled on this realm.`
-- **Which stats:** one switch per stat, **Ticker shows Playtime** and so on. Players start with Playtime, Deaths, Mob kills, Blocks mined and Distance travelled (`tickerStats`). With none chosen, the ticker shows nothing.
+- **Which stats:** one switch per stat, **Ticker shows Playtime** and so on. Players start with Playtime, Deaths, Mob kills, Blocks mined and Distance traveled (`tickerStats`). With none chosen, the ticker shows nothing.
 - **Speed:** **Ticker seconds per stat**, 2 to 60 (default 5, `tickerSeconds`), when it shows **One stat at a time** (`tickerMode`). **Every chosen stat on one line** shows them all at once, which gets long with many stats in the full style.
 - **Style:** **Name, value and rank** (`Mob kills 120 #2 of 7`) or **Compact: short name and value** (`Kills 120`, with the short names `Time`, `Deaths`, `Kills`, `PvP`, `Mined`, `Placed`, `Walked`, `Flown` and `Joins`) (`tickerStyle`).
 - **Colors:** **Ticker name color** (default gray) and **Ticker number color** (default white): White, Gray, Dark gray (dim), Gold, Yellow, Green, Aqua, Blue, Light purple or Red (`tickerLabelColor`, `tickerValueColor`). Dark gray for both is the closest to a faint, see-through ticker.

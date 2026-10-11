@@ -13,7 +13,7 @@ export const STATS = [
   { id: "pvpkills", label: "Player kills", short: "PvP", sidebar: "Player kills" },
   { id: "mined", label: "Blocks mined", short: "Mined", sidebar: "Blocks mined" },
   { id: "placed", label: "Blocks placed", short: "Placed", sidebar: "Blocks placed" },
-  { id: "travelled", label: "Distance travelled", short: "Walked", sidebar: "Travelled (blocks)", format: formatDistance },
+  { id: "travelled", label: "Distance traveled", short: "Walked", sidebar: "Traveled (blocks)", format: formatDistance },
   { id: "flown", label: "Elytra distance", short: "Flown", sidebar: "Elytra (blocks)", format: formatDistance },
   { id: "joins", label: "Times joined", short: "Joins", sidebar: "Joins" },
 ];
