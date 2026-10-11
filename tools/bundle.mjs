@@ -29,7 +29,7 @@ import { namespaceOf, registeredNames } from "./lib/commands.mjs";
 const root = join(import.meta.dirname, "..");
 
 // Realm News shows the newest docs/NEWS.md entry: refresh it before bundling.
-execFileSync(process.execPath, [join(root, "tools", "gen-news.mjs")], { stdio: "inherit" });
+execFileSync(process.execPath, [join(root, "tools", "gen-news.mjs")], { stdio: ["ignore", 2, 2] }); // stderr: stdout may be JSON
 const packsDir = join(root, "packs");
 const distDir = join(root, "dist");
 /** Behavior packs that stay their own add-on: --all leaves them out. */
