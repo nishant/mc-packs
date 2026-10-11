@@ -58,6 +58,9 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Fishing 2.0 — `fishing_bp`](#fishing-20--fishing_bp)
 - [Kitchen — `cooking_bp`](#kitchen--cooking_bp)
 - [Deck of Many Things — `domt_bp`](#deck-of-many-things--domt_bp)
+- [Slot Machine — `slots_bp`](#slot-machine--slots_bp)
+- [Silly Enchants — `silly_bp`](#silly-enchants--silly_bp)
+- [Dolphin Friends — `dolphin_bp`](#dolphin-friends--dolphin_bp)
 - [Treasure Maps & Riddles — `maps_bp`](#treasure-maps--riddles--maps_bp)
 - [Waystones & Inns — `waystone_bp`](#waystones--inns--waystone_bp)
 - [Expeditions — `expedition_bp`](#expeditions--expedition_bp)
@@ -3375,6 +3378,213 @@ A rarity whose cards are all disabled is skipped, and its weight shared out amon
 
 ---
 
+## Slot Machine — `slots_bp`
+
+A slot machine with three reels, played for [Crowns](#crowns--crowns_bp) or emeralds. Play it anywhere from the **Slot Machine** item, or at a fixed machine an operator made from a block (a note block or a jukebox at the tavern, say). The reels are honest: each one is drawn at random on its own and stops on exactly what was drawn, and the pay table, with each line's odds and the exact return, is one tap away. Every player has a daily loss limit, a short pause between spins and can block themselves from the slots for a while.
+
+### How to use
+
+1. Run `/realm:slots` and pick **Spin**, use a **Slot Machine** item, or tap a slot machine block.
+2. Pick what to play for (**Crowns** or **Emeralds**), then a stake: 1, 5, 10 or 25 Crowns, or 1, 2, 4 or 8 emeralds. The stake is taken at once.
+3. The reels spin above your hotbar for 2 seconds and stop one by one. Chat says what you won, like `2x Cherry! +30 Crowns (stake 10. Balance: 510)` or `No win. -10 Crowns (Balance: 490)`.
+4. Pick **Spin again** for the same stake, **Change stake**, or **Close**.
+5. `/realm:slots` also has **My stats**, the **Pay table** and **Limits and breaks**, where you can block yourself from playing for 1, 7 or 30 days, or until an operator lifts it.
+6. **Operators:** `/realm:slots` → **Operator tools** makes the block you look at a machine (or removes it), gives Slot Machine items (also `/realm:slots_give`), lifts a player's self-block and shows the realm's totals. `/realm:config` → **Slot Machine** sets the currencies, the daily loss limits, the pause between spins and jackpot announcements.
+
+### What players see
+
+- **The reels** spin in the bar above the hotbar (`[ Cherry | Lemon | Bell ]`) with ticking sounds; the first stops after 1 second, the second after 1.5 and the third after 2, each with a click. Spinning reels flash random symbols, and a stopped reel shows the real result.
+- **Wins** pay a multiple of the stake, which includes the stake (a 3x win on 10 Crowns gives 30, so you're up 20). Only the best matching line counts. A win of 10x or more plays a level-up sound.
+- **The jackpot** (three Crowns, 300x) shows `JACKPOT!` on screen, sets off four fireworks around you and, with `announceJackpots`, tells everyone: `[Slots] Steve hit the JACKPOT for 7,500 Crowns!`
+- **Emeralds** are counted and taken from your inventory (plain emeralds only, not renamed ones); emerald wins go into your inventory, and what doesn't fit drops at your feet.
+- **Refusals** say why and take nothing: not enough money, `Wait 2s before the next spin.`, `That stake is over what's left of today's loss limit (9 Crowns).`, `You reached today's loss limit for Crowns (200 Crowns). Come back tomorrow (UTC).`, or `You blocked yourself from the slots for 6 more days.`
+- **Fixed machines:** tapping a machine block opens the machine instead of the block (sneak-tap in creative mode to use the block normally). Breaking the block removes the machine.
+
+**The pay table** (default `symbols` and `payouts`). Each reel has 32 stops: Cherry 7, Lemon 8, Bell 6, BAR 5, Gem 3, 7 2, Crown 1.
+
+| Result | Pays | Chance per spin |
+|---|---|---|
+| Crown Crown Crown (jackpot) | 300x | 1 in 32,768 |
+| 7 7 7 | 100x | 1 in 4,096 |
+| Gem Gem Gem | 40x | 1 in 1,214 |
+| BAR BAR BAR | 30x | 1 in 262 |
+| Bell Bell Bell | 18x | 1 in 152 |
+| Cherry Cherry Cherry | 10x | 1 in 96 |
+| Lemon Lemon Lemon | 10x | 1 in 64 |
+| Any two Cherries | 3x | 1 in 9 |
+| Any two Crowns | 8x | 1 in 352 |
+
+**Return to player: 91.97%** exactly (30,137 of every 32,768 staked comes back on average; the machine keeps about 8%), and 15.26% of spins win something. The menu computes these from `config.js`, so they stay right if you change the table: the return is the sum over every line of its chance times its pay, over all 32,768 equally likely reel stops. A 100,000-spin simulation with the machine's own code came out at 92.79% at stake 1 and 90.73% at stake 10 (the jackpot makes short runs swing).
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:slots` | Everyone | The menu: **Spin**, **My stats**, **Pay table**, **Limits and breaks** (and **Operator tools** for operators) |
+| `/realm:slots_spin` | Everyone | Opens the machine straight away: pick a currency and a stake (Crowns and emeralds both allowed by default, `currencies`) |
+| `/realm:slots_give [player]` | Operators | Gives the Slot Machine item to the players picked, or to you |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | The slots can be played. When `false`, machines and the item say they're closed |
+| `currencies.crowns` | `true` | Players may stake Crowns (the `crowns` scoreboard of the Crowns pack) |
+| `currencies.emeralds` | `true` | Players may stake emeralds from their inventory |
+| `stakes.crowns` | `[1, 5, 10, 25]` | The Crowns stakes to choose from |
+| `stakes.emeralds` | `[1, 2, 4, 8]` | The emerald stakes to choose from |
+| `dailyLossLimit.crowns` | `200` | Most Crowns a player may lose per UTC day (stakes minus winnings). `0` = no limit |
+| `dailyLossLimit.emeralds` | `32` | The same for emeralds |
+| `cooldownSeconds` | `2` | Seconds between the end of one spin and the start of the next |
+| `announceJackpots` | `true` | A jackpot is announced to everyone in chat |
+| `symbols` | 7 symbols (above) | The reel symbols, `{ id, name, color, weight }`; `weight` is how many of a reel's stops show it |
+| `payouts` | 9 lines (above) | The pay table, `{ symbol, count, pay, jackpot? }`: `count` reels showing `symbol` (anywhere) pay `pay` times the stake. The first matching line wins, so put bigger wins first |
+
+Operators can change `enabled`, `currencies.crowns`, `currencies.emeralds`, `dailyLossLimit.crowns`, `dailyLossLimit.emeralds`, `cooldownSeconds` and `announceJackpots` in game with `/realm:config` (**Slot Machine**). Stakes and the pay table stay in `config.js`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `slots:stats` | Player | JSON: spins, Crowns and emeralds staked and won, the biggest win and jackpots |
+| `slots:day` | Player | JSON `{ day, crowns, emeralds }`: the UTC day and that day's net loss per currency, for the daily limit |
+| `slots:block` | Player | When the player's self-block ends (milliseconds since 1970), or `-1` until an operator lifts it |
+| `slots:machines` | World | JSON list of machine blocks, `[{ d, x, y, z }]` |
+| `slots:totals` | World | JSON: all spins, Crowns and emeralds staked and paid out, jackpots |
+| `slots:machine` | Item | `true` on a Slot Machine item (a carrot on a stick named `Slot Machine`) |
+| `crowns` | Scoreboard | Balances, shared with the Crowns pack: stakes are taken from it and wins paid into it |
+
+## Silly Enchants — `silly_bp`
+
+Fourteen silly "enchantments" for your gear. They only add particles, sounds and a harmless bounce: none of them changes damage, armor, speed, drops or durability. Each one is a lore line on the item, like `Silly: Grunt Birthday`, and an item holds at most two. They come on **Silly Books** (enchanted books named `Silly Book`), which you apply from `/realm:silly` to the item in your hand.
+
+### How to use
+
+1. Get a **Silly Book**: operators hand them out, and the realm may sell them (at the caravan or market, if an operator adds them). A book says what it holds (`Silly Book: Hyper Jump`), or `Silly Book: Random` for a surprise.
+2. Hold the item to enchant (boots for Hyper Jump, a sword for Grunt Birthday...) and run `/realm:silly`.
+3. Pick **Apply a Silly Book**, then the book. The book is used up and the item gets a line like `Silly: Hyper Jump`. Each item takes up to 2.
+4. Wear or hold the item to see it work. Don't like it? `/realm:silly` → **Remove a silly enchant** takes it off for free (the book doesn't come back).
+5. Don't want to see your own silly effects for a while? Disable **My silly effects** in `/realm:prefs`; the lore stays.
+6. **Operators:** `/realm:silly` → **Give Silly Books**, or `/realm:silly_give <player> <book> [amount]`. `/realm:config` → **Silly Enchants** switches the effects, sets the enchants per item and the Hyper Jump cooldown.
+
+### What players see
+
+| Enchant | Goes on | What it does |
+|---|---|---|
+| Grunt Birthday (`grunt_birthday`) | Held item | Mobs you defeat pop like a party: confetti, a firework pop and a cheer |
+| Hyper Jump (`hyper_jump`) | Boots | Sneak and jump for a huge bounce (about 6 blocks, `hyperJumpStrength`), with slow falling so you land softly. Every 4 seconds (`hyperJumpCooldownSeconds`) |
+| Squeak (`squeak`) | Boots | Your footsteps squeak |
+| Bubbles (`bubbles`) | Any armor | You leave a trail of bubbles |
+| Rainbow Trail (`rainbow_trail`) | Boots | Rainbow-colored puffs follow your steps |
+| Hat Trick (`hat_trick`) | Held item | A critical hit (hitting while falling) pulls a baby rabbit out of thin air; it vanishes in a puff after 10 seconds (`hatTrickRabbitSeconds`). At most one every 10 seconds (`hatTrickCooldownSeconds`). Baby rabbits drop nothing |
+| Disco (`disco`) | Any armor | Colored lights flash around you, with music notes |
+| Moo (`moo`) | Helmet | You moo when you get hurt |
+| Confetti Swing (`confetti_swing`) | Held item | Every hit throws confetti |
+| Tiny Thunder (`tiny_thunder`) | Held item | A tiny thunderclap and a spark when you defeat a mob |
+| Fish Slap (`fish_slap`) | Held item | Your hits make a wet fish slap. Best on a fish |
+| Glow (`glow`) | Helmet | You sparkle softly at night |
+| Duck (`duck`) | Any armor | You quack when you sneak |
+| Hiccups (`hiccups`) | Helmet | You hiccup now and then |
+
+- **Held item** means anything you hold that isn't armor or a book: swords, tools, a bow, even a raw cod. **Helmet** includes the turtle shell; **any armor** includes the elytra.
+- **Applying** says `Silly: Hyper Jump! Sneak and jump for a huge bounce, with slow falling to land softly.` with a puff of confetti. A book that doesn't fit says so (`Hyper Jump goes on boots.`), and an item with 2 already says `An item holds at most 2 silly enchants. Remove one first.` A Random book picks one that fits the item.
+- The effects follow your worn armor and the item in your main hand, checked twice a second. Other players see and hear them too.
+
+**Selling Silly Books** (for operators). This pack doesn't change other packs, but a book is recognized by its lore line, so a shop can sell one. In the [Merchant Caravan](#merchant-caravan--caravan_bp)'s `goods` in `caravan_bp/scripts/config.js`, add for example:
+
+```js
+{ id: "silly_book", item: "minecraft:enchanted_book", amount: 1, price: 30, stock: 3, name: "Silly Book (random)", nameTag: "§r§dSilly Book", lore: ["§dSilly Book: Random", "§7A surprise silly enchant"] },
+```
+
+Use `Silly Book: Hyper Jump` (any enchant's name) instead of `Random` for a particular one. The [Crowns](#crowns--crowns_bp) market's `buy` list only sells plain items, so the caravan is the place for books.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:silly` | Everyone | The menu: apply a Silly Book to the item in your hand (up to 2 per item, `maxPerItem`), remove one for free, see every enchant (and give books, for operators) |
+| `/realm:silly_give <player> <book> [amount]` | Operators | Gives Silly Books: `book` is `random` or an enchant id (`hyper_jump`, `grunt_birthday`...), `amount` 1 to 64 (default 1) |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Silly effects play. When `false`, the lore stays on the gear but does nothing |
+| `maxPerItem` | `2` | Most silly enchants one item can hold |
+| `disabled` | `[]` | Enchant ids that never play and can't be applied, e.g. `["moo"]` |
+| `hyperJumpStrength` | `1.0` | How high Hyper Jump bounces (vertical knockback; 1.0 is about 6 blocks, at most 2.5) |
+| `hyperJumpCooldownSeconds` | `4` | Seconds between Hyper Jumps |
+| `hatTrickCooldownSeconds` | `10` | Seconds between Hat Trick rabbits for one player |
+| `hatTrickRabbitSeconds` | `10` | Seconds before a Hat Trick rabbit vanishes |
+
+Operators can change `enabled`, `maxPerItem` and `hyperJumpCooldownSeconds` in game with `/realm:config` (**Silly Enchants**). Each player can switch their own effects with **My silly effects** in `/realm:prefs`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| Item lore `Silly: <name>` | Item | The enchants on a piece of gear (plain lore, so it survives anvils and trading) |
+| Item lore `Silly Book: <name>` | Item | What a Silly Book holds (`Random` for a surprise) |
+| `silly:applied` | Player | How many silly enchants the player has applied |
+| `silly:pref` | Player | JSON of the player's preferences (**My silly effects**) |
+| `silly:until` | Entity | When a Hat Trick rabbit (tagged `silly_rabbit`) vanishes |
+
+## Dolphin Friends — `dolphin_bp`
+
+Tame a dolphin with raw fish, then ride it through the sea: it swims where you look. Tamed dolphins stay (they never despawn), follow you in the water, can be named and called to you.
+
+### How to use
+
+1. Find a dolphin (oceans) and feed it **raw cod** or **raw salmon**: tap it with the fish. Each fish has a 25% chance (`tameChancePercent`) to tame it: hearts mean it worked, smoke means try again. Chat says `The dolphin trusts you!`. It takes 4 fish on average.
+2. **Ride:** tap your tamed dolphin with an empty hand. It swims where you look: push forward to go, back to slow down. Look up or down to rise or dive.
+3. **Leap:** press jump while swimming at the surface and the dolphin jumps out of the water.
+4. **Get off:** sneak.
+5. Run `/realm:dolphin` for **My dolphins**: call one to you (it swims over when you're in the water, up to 128 blocks), name it or release it. **Call the nearest** calls the closest one; `/realm:dolphin_call` does the same.
+6. **Operators:** `/realm:dolphin` → **Operator tools** lists every tamed dolphin with its owner and releases the one you look at. `/realm:config` → **Dolphin Friends** sets the taming chance, how many dolphins each player may have, whether others can ride yours and the top speed.
+
+### What players see
+
+- **Feeding** works as in vanilla too: a fed dolphin may still lead you to treasure. One fish is used per tap, whether or not the dolphin takes it as a vanilla treat. A player can have up to 3 tamed dolphins (`maxPerPlayer`); a fourth says `You already have 3 dolphins. Release one first (/realm:dolphin).`
+- **Riding:** the dolphin turns to face where you look and speeds up to 12 blocks per second (`maxSpeed`, gaining `acceleration` 1.6 blocks per second each tick). Without input it glides to a stop. Out of the water it doesn't steer. Leaps need 1.5 seconds between them. Others can ride your dolphins too unless an operator disables `othersCanRide`.
+- **Following:** an unridden tamed dolphin swims toward its owner when you're both in the water and more than 8 blocks apart (`followDistance`), up to 64 blocks away.
+- **Calling:** the dolphin must be loaded (near a player) and in your dimension, and you must be in the water. It appears next to you with hearts.
+- A tamed dolphin that dies tells its owner: `Splash died.`
+- The game itself only accepts a fish from a dolphin every few seconds (its treat cooldown); a tap during that time does nothing and uses no fish, so taming takes a little patience.
+- **For operators and tests:** with cheats on, `/scriptevent realm:dolphin_feed` (run by an operator holding raw cod or salmon) feeds the nearest dolphin within 5 blocks exactly as a tap would.
+
+**Compatibility note:** this pack carries a copy of the vanilla dolphin's behavior file (`entities/dolphin.json`, from Minecraft 1.26.50) with one addition: a `realm:dolphin_tamed` group (a seat for one player, `minecraft:rideable`; `minecraft:is_tamed`; `minecraft:persistent`), added by the event `realm:dolphin_tame` and removed by `realm:dolphin_release`. Wild dolphins behave exactly as in vanilla: treasure leading, playing with items, swimming with players for Dolphin's Grace, breathing air, drying out on land. All components are stable ones, so no experiments are needed on the Realm. Two things to know: another behavior pack that also changes the dolphin wins or loses depending on pack order (only the top one's file is used), and if a future Minecraft update changes the vanilla dolphin, this copy keeps the old behavior until it is refreshed from the newest vanilla file.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:dolphin` | Everyone | Your tamed dolphins (up to 3, `maxPerPlayer`): call, name, release; **Call the nearest** (and **Operator tools** for operators) |
+| `/realm:dolphin_call` | Everyone | Calls your nearest tamed dolphin to you (you must be in the water) |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Dolphins can be tamed, ridden and called. When `false`, tamed dolphins stay tamed (and can still be sat on) but don't steer, follow or come when called |
+| `tameChancePercent` | `25` | Chance in percent that one raw cod or salmon tames a dolphin |
+| `maxPerPlayer` | `3` | Most tamed dolphins one player can have |
+| `othersCanRide` | `true` | Other players may ride and steer your tamed dolphins |
+| `maxSpeed` | `12` | Top speed while ridden, in blocks per second |
+| `acceleration` | `1.6` | Blocks per second a ridden dolphin gains each tick |
+| `leapStrength` | `0.9` | Upward push of a leap out of the water |
+| `followDistance` | `8` | A tamed dolphin swims after its owner (in water) when farther than this many blocks |
+
+Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanRide` and `maxSpeed` in game with `/realm:config` (**Dolphin Friends**).
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `dolphin:owner` | Entity | The owner's player id on a tamed dolphin |
+| `dolphin:ownerName` | Entity | The owner's name when it was tamed |
+| `dolphin:index` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: every tamed dolphin's owner, name and last known spot, for the lists while it's far away |
+| `dolphin:tamedCount` | Player | How many dolphins the player has tamed |
+
 ## Treasure Maps & Riddles — `maps_bp`
 
 Buy a treasure map from Mara the Cartographer and follow its riddles across the land: each clue tells you which way to walk and roughly how far, and where it ends the next clue appears. After two or three clues, 800 to 2,000 blocks from where you bought the map, a chest lies buried. Hold the map and it tells you whether you're getting warmer. Finding the treasure pays Crowns, and the chest holds gold, iron, emeralds and sometimes a diamond or even a relic.
@@ -4832,6 +5042,9 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | AFK ↔ Nicknames | Both write the name above a player's head. The AFK pack only adds or removes its own `[AFK]` prefix in front of whatever the tag shows, so a nickname and title stay put. Keep Nicknames `afkTag` and `afkPrefix` the same as AFK `tag` and `nameTagPrefix` |
 | Right-click Harvest → Daily Quests | A crop harvested by tapping counts for harvest quests, the same as breaking it |
 | Daily Quests ↔ Stats, Milestones | Separate counts: the same mining, kills and travel add to all of them |
+| Slot Machine ↔ Crowns | Crowns stakes are taken from and wins paid into the shared `crowns` scoreboard, so they show in `/realm:crowns` at once. Without the Crowns pack, Crowns stakes still work but nobody earns Crowns to play with |
+| Silly Enchants → Merchant Caravan | The caravan can sell Silly Books if an operator adds one to its `goods` (see [Silly Enchants](#silly-enchants--silly_bp)); the book is recognized by its lore |
+| Dolphin Friends ↔ other dolphin packs | Dolphin Friends replaces the vanilla dolphin's behavior file with a copy plus a seat. Another behavior pack that also changes the dolphin conflicts with it: only the higher pack's file is used |
 | Stats → Milestones | Milestones reads the `stats_<stat>` scoreboards when they exist and uses the larger of their number and its own, so history from Stats counts. Works without Stats |
 | AFK → Milestones | Playtime and distance pause for players with the `afk` tag. Keep AFK `tag` and Milestones `afkTag` the same |
 | Community Goals ↔ Quick Stack & Sort | Lock a goal's chest so nobody takes from it: donations still go in, because the pack moves them itself. `/realm:stash` can also fill a goal's chest that already holds the item, but that doesn't count toward the goal |
