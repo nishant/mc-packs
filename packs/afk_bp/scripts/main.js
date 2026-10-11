@@ -179,7 +179,8 @@ function setThundering(value) {
 }
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
-  if (dimension === "minecraft:overworld") setThundering(newWeather === WeatherType.Thunder);
+  // BDS 1.26 sends "overworld" here, without the "minecraft:" other events use: accept both.
+  if (dimension === "minecraft:overworld" || dimension === "overworld") setThundering(newWeather === WeatherType.Thunder);
 });
 
 function checkSleep() {
