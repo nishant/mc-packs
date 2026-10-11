@@ -171,6 +171,11 @@ function remember(player, entry) {
 function exec(player, line, title) {
   let ok = false;
   let why = "";
+  // The menu can stay open a while: someone who stopped being an operator meanwhile runs nothing.
+  if (!isOp(player)) {
+    player.sendMessage(`§c[${TITLE}] /${line} didn't run: you aren't an operator any more.`);
+    return false;
+  }
   try {
     const res = player.runCommand(line);
     ok = res.successCount > 0;
@@ -352,6 +357,7 @@ async function openAction(player, action) {
 async function runAction(player, action, values) {
   const ask = action.confirm?.(player, values);
   if (ask && !(await confirm(player, ask))) return;
+  if (!isOp(player)) return void player.sendMessage(`§c[${TITLE}] ${action.title} didn't run: you aren't an operator any more.`);
   try {
     const said = action.run(player, values);
     player.sendMessage(`§7[${TITLE}] ${said}`);

@@ -4,7 +4,7 @@
     "name": "Dolphin Friends",
     "description": "Tame dolphins with raw fish, ride and steer them through the sea, and call them to you. /realm:dolphin",
     "uuid": "097153bf-801b-4b19-a9c2-19485591bb41",
-    "version": [1, 0, 0],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

@@ -183,6 +183,36 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
   }
 });
 
+/** Is this block part of a running arena (floor, lights or walls)? @param {string} dimId @param {import("@minecraft/server").Vector3} l */
+function inArena(dimId, l) {
+  if (dimId !== "minecraft:overworld") return false;
+  for (const { center } of arenas.values()) {
+    if (Math.abs(l.x + 0.5 - center.x) <= HALF + 0.5 && Math.abs(l.z + 0.5 - center.z) <= HALF + 0.5 && l.y >= center.y - 1 && l.y <= center.y + 3) return true;
+  }
+  return false;
+}
+
+// The arena's blocks are borrowed: mining the floor or the sea lanterns would keep free blocks after it's gone.
+world.beforeEvents.playerBreakBlock.subscribe((ev) => {
+  try {
+    if (arenas.size && inArena(ev.block.dimension.id, ev.block.location)) ev.cancel = true;
+  } catch {
+    // not loaded
+  }
+});
+
+// Arena mobs left over from a fight that a restart interrupted (or a chunk that unloaded): remove them.
+system.runInterval(() => {
+  try {
+    const live = new Set([...arenas.values()].map((a) => `${ARENA_TAG}:${a.task}`));
+    for (const e of world.getDimension("minecraft:overworld").getEntities({ tags: [ARENA_TAG] })) {
+      if (!e.getTags().some((t) => live.has(t))) attempt(() => e.remove());
+    }
+  } catch {
+    // ignore
+  }
+}, 200);
+
 // After a restart mid-fight: send the player back down when they join.
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
   system.runTimeout(() => {

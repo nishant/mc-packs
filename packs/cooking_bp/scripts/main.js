@@ -233,34 +233,49 @@ function ingStack(ing, n) {
   s.setLore(["§7Rare ingredient", `§8${ing.source}`]);
   return s;
 }
+const CARD_LORE = "§7A recipe for the Kitchen.";
+const CARD_DISH = "§8Recipe: ";
+
 /** @param {Dish} d @param {number} n */
 function cardStack(d, n) {
   const s = new ItemStack("minecraft:paper", n);
   s.nameTag = `${CARD_PREFIX}${d.name}`;
-  s.setLore(["§7A recipe for the Kitchen.", "§7Open a cooking pot or /realm:cooking", "§7to learn it."]);
+  s.setLore([CARD_LORE, "§7Open a cooking pot or /realm:cooking", "§7to learn it.", `${CARD_DISH}${d.name}`]);
   return s;
 }
 
-/** A dish: the right food item, its name, and lore (an anvil can rename but can't add lore). @param {ItemStack | undefined} s */
+// Items are recognized by their name AND the lore this pack wrote (an anvil can rename an item but
+// can't add or change lore, and Silly Enchants only appends its own lines). "Any lore" isn't enough:
+// a cheap dish renamed on an anvil would pass as a rare one of the same food, and a renamed plain
+// item with a silly enchant would pass as an ingredient.
+
+/** A dish: the right food item, its name, and the dish's own first lore line. @param {ItemStack | undefined} s */
 function dishOf(s) {
   if (!s?.nameTag) return undefined;
   const d = dishByName.get(plain(s.nameTag));
-  if (!d || d.base !== s.typeId || !s.getLore().length) return undefined;
+  if (!d || d.base !== s.typeId || s.getLore()[0] !== `§7${d.blurb}`) return undefined;
   return d;
 }
-/** @param {ItemStack | undefined} s */
+/** A rare ingredient this pack made, or the Storm Eel of Fishing 2.0 (its size line). @param {ItemStack | undefined} s */
 function ingOf(s) {
   if (!s?.nameTag) return undefined;
   const ing = ingByName.get(plain(s.nameTag));
-  if (!ing || (s.typeId !== ing.item && s.typeId !== ing.alsoAny) || !s.getLore().length) return undefined;
-  return ing;
+  if (!ing) return undefined;
+  const lore = s.getLore();
+  if (s.typeId === ing.item && lore[0] === "§7Rare ingredient" && lore[1] === `§8${ing.source}`) return ing;
+  if (ing.alsoAny && s.typeId === ing.alsoAny && /^§7\d+ cm$/.test(lore[0] ?? "")) return ing;
+  return undefined;
 }
-/** @param {ItemStack | undefined} s */
+/** A recipe card. Cards from before 1.0.1 have no recipe line; newer ones must name the same dish. @param {ItemStack | undefined} s */
 function cardOf(s) {
   if (!s?.nameTag || s.typeId !== "minecraft:paper") return undefined;
   const name = plain(s.nameTag);
-  if (!name.startsWith(CARD_PREFIX) || !s.getLore().length) return undefined;
-  return dishByName.get(name.slice(CARD_PREFIX.length));
+  const lore = s.getLore();
+  if (!name.startsWith(CARD_PREFIX) || lore[0] !== CARD_LORE) return undefined;
+  const d = dishByName.get(name.slice(CARD_PREFIX.length));
+  const line = lore.find((l) => l.startsWith(CARD_DISH));
+  if (!d || (line !== undefined && line !== `${CARD_DISH}${d.name}`)) return undefined;
+  return d;
 }
 
 /** Gives items, dropping what doesn't fit at the player's feet (or at `at` if the player is gone). @param {Player} player @param {ItemStack} stack @param {number} total */
@@ -717,8 +732,13 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
       return;
     }
     if (!full) return;
+    const dim = block.dimension;
+    const at = { ...block.location };
     system.run(() => {
       try {
+        // Only a real harvest counts: if the tap was canceled (a land claim, adventure mode...) the hive is still full.
+        const level = dim.getBlock(at)?.permutation.getState("honey_level");
+        if (level === undefined || level === 5) return;
         if (foraging() && isNight() && player.isValid && chance(CONFIG.forage.glowHoney)) giveIngredient(player, "glow_honey", "a hive at night");
       } catch (e) {
         console.warn(`[cooking] hive: ${e}`);
