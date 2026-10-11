@@ -624,6 +624,7 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
     const type = block.typeId;
     const b = block.location;
     const dim = block.dimension.id;
+    if (counted.has(key)) return; // the same block reported twice
     for (const { e, i, obj } of open(player, "place")) {
       if (!counting(player)) break;
       if (obj.blocks?.length && !obj.blocks.includes(type)) continue;
