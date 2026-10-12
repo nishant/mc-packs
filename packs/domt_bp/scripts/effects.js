@@ -4,7 +4,7 @@
 // returns false when it can't happen here (no safe spot, no mob near...), and the deck draws again;
 // a string is shown under the card's text.
 import { EquipmentSlot, ItemStack, Player, system, WeatherType, world } from "@minecraft/server";
-import { arena, rainbowName, spore, wish } from "./events.js";
+import { arena, inDeckArena, rainbowName, spore, wish } from "./events.js";
 import {
   addCrowns,
   attempt,
@@ -333,6 +333,22 @@ system.runInterval(() => {
       for (const e of world.getDimension(id).getEntities({ tags: [TEMP_TAG] })) attempt(() => expire(e));
     });
 }, 400);
+
+/**
+ * Is the player somewhere a swap must not reach: a running Deck arena, or an Expedition run (the
+ * Expeditions pack tags its dungeon mobs and pets `realm:exp_mob` / `realm:exp_pet`; any within 64
+ * blocks means the player is in or by a dungeon)?
+ * @param {Player} p
+ */
+function busyElsewhere(p) {
+  if (inDeckArena(p)) return true;
+  try {
+    for (const tag of ["realm:exp_mob", "realm:exp_pet"]) if (p.dimension.getEntities({ tags: [tag], location: p.location, maxDistance: 64 }).length) return true;
+  } catch {
+    return true;
+  }
+  return false;
+}
 
 /** Names Cursed Name picks from. */
 const SILLY_NAMES = ["Sir Bonks-a-Lot", "Captain Soggy", "Lord Snackington", "Dirt Muncher", "The Wobbler", "Princess Pebble", "Baron von Oops", "Mister Noodles", "Duke of Mud", "Lil Creeper Hugger"];
@@ -1544,10 +1560,12 @@ export const CARDS = [
     rarity: "uncommon",
     kind: "mixed",
     wild: true,
-    text: "You swap places with a random player, wherever they are.",
+    text: "You swap places with a random player in your dimension, wherever they are.",
     expect: "move",
     run: ({ player }) => {
-      const others = world.getAllPlayers().filter((q) => q.id !== player.id && q.isValid);
+      // Never into or out of a Deck arena or an Expedition dungeon, and only within the same dimension.
+      if (busyElsewhere(player)) return false;
+      const others = world.getAllPlayers().filter((q) => q.id !== player.id && q.isValid && q.dimension.id === player.dimension.id && !busyElsewhere(q));
       if (!others.length) return false;
       const other = pick(others);
       const mine = { dim: player.dimension, at: { ...player.location } };

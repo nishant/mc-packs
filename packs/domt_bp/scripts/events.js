@@ -199,6 +199,13 @@ function inArena(dimId, l) {
   return false;
 }
 
+/** Is this player standing in a running Deck arena (theirs or someone else's)? @param {Player} p */
+export function inDeckArena(p) {
+  if (arenas.has(p.id)) return true;
+  const l = p.location;
+  return inArena(p.dimension.id, { x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z) });
+}
+
 // The arena's blocks are borrowed: mining the floor or the sea lanterns would keep free blocks after it's gone.
 world.beforeEvents.playerBreakBlock.subscribe((ev) => {
   try {
