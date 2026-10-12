@@ -1,5 +1,5 @@
 // Easy Building (build_bp): every shape at its smallest and largest settings, the block limits, a huge modifier
-// combination refused quickly, and how long the build mode guide takes with modifiers on a big shape.
+// combination refused without stalling a tick, and the build mode guide's cost with modifiers on a big shape.
 // Run with: node tools/test-bds/run.mjs --quiet --flat --timeout 600 --only build_bp --scenario tools/test-bds/examples/build-limits.js
 export default async function (t) {
   const { ItemStack } = t.mc;
@@ -34,6 +34,13 @@ export default async function (t) {
   };
   const result = /Built \d+ blocks?|That's|Nothing|Out of|Not enough|Point \d+|Start set/;
 
+  // The longest server tick since `worst` was last reset (a stall on a Realm shows here).
+  let last = Date.now(), worst = 0;
+  t.system.runInterval(() => {
+    const n = Date.now();
+    worst = Math.max(worst, n - last);
+    last = n;
+  }, 1);
   await t.loadArea(0, 0, { radius: 4 });
   const cre = await t.player("Cre", { x: 0, z: 0, gameMode: "creative", op: true });
   hold(cre, "minecraft:oak_stairs", 64);
@@ -70,21 +77,25 @@ export default async function (t) {
   await pickShape(cre, 14, { Radius: 32, Hollow: false, Size: 0 });
   await aim(cre, 0, 0);
   let t0 = t.tick;
-  const w0 = Date.now();
+  await t.wait(5);
+  worst = 0;
   t.cmd(cre, "/realm:build_here");
   let m = await t.waitMessage(cre, result, { pack: "build_bp" });
-  t.log("huge combo:", m.plain, `${t.tick - t0} ticks, ${Date.now() - w0} ms`);
-  t.check(/That's more than/.test(m.plain) && t.tick - t0 <= 4, "a huge modifier combination is refused at once");
+  t.log("huge combo:", m.plain, `${t.tick - t0} ticks, longest tick ${worst} ms`);
+  t.check(/That's more than/.test(m.plain) && worst < 200, `a huge modifier combination is refused without a stall (${worst} ms)`);
 
   // ---- The guide with modifiers on a big shape: wall time of 40 ticks while looking around ----
   const lookAround = async (label) => {
+    await t.wait(40); // the new layout's job
+    worst = 0;
     const start = Date.now();
     for (let k = 0; k < 20; k++) {
       cre.teleport({ x: 0.5 + (k % 5), y: Y, z: 0.5 }, { rotation: { x: 10, y: 0 } });
       await t.wait(2);
     }
     const ms = Date.now() - start;
-    t.log(`guide ${label}: 40 ticks took ${ms} ms`);
+    t.log(`guide ${label}: 40 ticks took ${ms} ms, longest tick ${worst} ms`);
+    t.check(worst < 200, `guide ${label}: no tick over 200 ms (${worst})`);
     return ms;
   };
   await pickShape(cre, 14, { Radius: 20, Hollow: true, Size: 0 });
@@ -96,7 +107,7 @@ export default async function (t) {
   t.cmd(cre, "/realm:build");
   await t.waitMessage(cre, /Modifiers:/, { pack: "build_bp" });
   const mirrored = await lookAround("sphere r20, mirror X");
-  t.check(mirrored < plain + 1500, `the guide with a mirror stays cheap (${mirrored} ms vs ${plain} ms)`);
+  t.check(mirrored < plain + 400, `the guide with a mirror costs about the same as without (${mirrored} ms vs ${plain} ms)`);
   t.answerForm(cre, "Modifiers", { "Mirror X": false });
   t.cmd(cre, "/realm:build");
   await t.waitMessage(cre, /Modifiers:/, { pack: "build_bp" });
