@@ -5,6 +5,7 @@ import { get, getFor } from "./settings.js";
 import { FAR, FAR_KINDS, MARKERS, WOOLS, coarse, markerLooks, nearRiddle, treeOf } from "./clues.js";
 import { isProtected, protectedBox } from "./zones.js";
 import { isSlot, sideBoxes } from "./side.js";
+import { ANY_WOOL, kindOf, record, release, startSweep } from "./cleanup.js";
 
 const PACK = "maps_bp";
 const PROP_HUNTS = "maps:hunts"; // player: JSON Hunt[]
@@ -38,13 +39,15 @@ const TREE_TOP = /leaves|_log$|_wood$|mushroom_block|vine/;
 /** @typedef {{ x: number, z: number }} XZ */
 /**
  * @typedef {{ id: string, dim: string, pts: XZ[], leg: number, clue: string, place?: string, chest?: Vector3, tries: number, t: number,
- *   v?: number, from?: XZ, fromName?: string, used?: string[], feats?: string[], near?: string, mark?: Vector3, style?: string, nomark?: boolean, regen?: boolean }} Hunt
+ *   v?: number, from?: XZ, fromName?: string, used?: string[], feats?: string[], near?: string, mark?: Vector3, style?: string, nomark?: boolean, regen?: boolean,
+ *   markUndo?: string, chestUndo?: string }} Hunt
  * pts: the planned end of each leg (the last is the treasure), leg: the leg being followed (0-based), clue: its riddle,
  * chest: where the chest was buried, tries: chest spots that failed. Version 2 (v: 2): from/fromName: where the leg
  * starts and what the clue calls it, used: far clue kinds this hunt has used, feats: landmark kinds used, near: the
  * riddle for what the spot looks like (once its land loaded), mark: the marker built at the end of the leg (its
  * ground block), style: that marker's kind, nomark: no marker could stand there (the clue is found by coming close),
  * regen: an older map whose clue is rewritten the next time its holder is online. place: older maps only.
+ * markUndo / chestUndo: the cleanup records (scripts/cleanup.js) of the blocks the marker and the chest placed.
  */
 
 // Warmer / Colder in a Side HUD box (scripts/side.js, the side boxes protocol).
@@ -405,6 +408,7 @@ function step(player, hunt) {
     if (!reached) return;
     const hadMark = !!hunt.mark;
     const name = hunt.mark ? (MARKERS.find((m) => m.id === hunt.style)?.name ?? "the marker") : "the bottle";
+    letGo(player, hunt, false);
     hunt.from = hunt.mark ? { x: hunt.mark.x, z: hunt.mark.z } : { x: Math.round(at.x), z: Math.round(at.z) };
     hunt.fromName = hunt.mark ? name : "where you found the bottle";
     hunt.leg++;
@@ -776,16 +780,22 @@ function settled(player, hunt, final, r) {
     const style = any(fits.filter((m) => m.id !== hunt.style)) ?? fits[0] ?? MARKERS[0];
     const wool = any(WOOLS);
     let ok = true;
+    /** @type {Parameters<typeof record>[1]} */
+    const placed = [];
     for (const b of style.blocks(wool)) {
       const block = blockAt(dim, r.spot.x + b.dx, r.spot.y + b.dy, r.spot.z + b.dz);
       if (!block || !(block.isAir || SOFT.test(block.typeId))) continue; // something moved in meanwhile
       try {
+        const orig = kindOf(block);
         block.setType(b.type);
+        placed.push({ x: block.location.x, y: block.location.y, z: block.location.z, placed: b.type, orig });
       } catch (e) {
         ok = false;
         console.warn(`[maps] marker: ${e}`);
       }
     }
+    if (placed.length) hunt.markUndo = record({ dim: dim.id, owner: player.id, hunt: hunt.id, what: "mark" }, placed);
+    if (!ok) release(hunt.markUndo);
     if (ok) {
       hunt.mark = { x: r.spot.x, y: r.spot.y + 1, z: r.spot.z };
       hunt.style = style.id;
@@ -846,7 +856,9 @@ function buried(player, hunt, spot, near, kind) {
   if (spot) {
     const b = blockAt(dim, spot.x, spot.y, spot.z);
     if (b && GROUND.test(b.typeId)) {
+      const orig = kindOf(b);
       b.setType("minecraft:chest");
+      hunt.chestUndo = record({ dim: dim.id, owner: player.id, hunt: hunt.id, what: "chest" }, [{ x: spot.x, y: spot.y, z: spot.z, placed: "minecraft:chest", orig }]);
       const inv = b.getComponent("minecraft:inventory")?.container;
       for (const stack of rollLoot()) inv?.addItem(stack);
       hunt.chest = spot;
@@ -878,11 +890,45 @@ function buried(player, hunt, spot, near, kind) {
 }
 
 /**
+ * The hunt is done with its marker (and, with `chest`, its chest): their blocks are put back soon (scripts/cleanup.js).
+ * A marker or chest from before 1.3.0 has no record: one is made from what the hunt remembers (the marker's style, any
+ * wool color; it stood on air, the chest on dirt).
+ * @param {Player} player @param {Hunt} hunt @param {boolean} chest
+ */
+function letGo(player, hunt, chest) {
+  try {
+    const at = { dim: hunt.dim, owner: player.id, hunt: hunt.id };
+    if (hunt.markUndo) release(hunt.markUndo);
+    else if (hunt.mark) {
+      const style = MARKERS.find((m) => m.id === hunt.style);
+      const g = hunt.mark;
+      const list = (style?.blocks(ANY_WOOL) ?? []).map((b) => ({ x: g.x + b.dx, y: g.y - 1 + b.dy, z: g.z + b.dz, placed: b.type, orig: { t: "minecraft:air" } }));
+      if (list.length) release(record({ ...at, what: "mark" }, list));
+    }
+    hunt.markUndo = undefined;
+    if (!chest) return;
+    if (hunt.chestUndo) release(hunt.chestUndo);
+    else if (hunt.chest) release(record({ ...at, what: "chest" }, [{ ...hunt.chest, placed: "minecraft:chest", orig: { t: "minecraft:dirt" } }]));
+    hunt.chestUndo = undefined;
+  } catch (e) {
+    console.warn(`[maps] cleanup: ${e}`);
+  }
+}
+
+// Records whose hunt is gone (an older save, a hunt lost some other way) are let go once their owner is online.
+startSweep((owner) => {
+  const p = online(owner);
+  if (!p) return undefined;
+  return huntsOf(p).flatMap((h) => [h.markUndo ?? "", h.chestUndo ?? ""]).filter(Boolean);
+});
+
+/**
  * The treasure is found: pay, tell the other packs, and close the hunt. `inChest` false hands the loot over directly
  * (when no spot for a chest was found).
  * @param {Player} player @param {Hunt} hunt @param {boolean} inChest
  */
 function found(player, hunt, inChest) {
+  letGo(player, hunt, true);
   saveHunts(
     player,
     huntsOf(player).filter((h) => h !== hunt),
@@ -994,6 +1040,8 @@ async function showHunts(player) {
   } else if (res.selection === 1) {
     const sure = await show(player, new ActionFormData().title("§lGive up?").body("Give up this treasure hunt? The map's Crowns aren't paid back.").button("Give it up").button("Keep hunting"));
     if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
+    const gone = huntsOf(player).find((h) => h.id === hunt.id);
+    if (gone) letGo(player, gone, true);
     saveHunts(
       player,
       huntsOf(player).filter((h) => h.id !== hunt.id),

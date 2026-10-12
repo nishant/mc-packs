@@ -337,3 +337,181 @@ export async function restoreStash(p) {
   p.sendMessage(`§aYour own items are back with you.${spilled ? " Some are at your feet: those slots were taken." : ""}`);
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Parcels: items owed to a player (treasure left in the chests, what they dropped dying), kept in a structure of
+// chest minecarts like the stash, so a restart before the hand-off loses nothing
+// ---------------------------------------------------------------------------
+
+const PARCELS = "expedition:parcels:"; // + player id. world: JSON Parcel[]
+const PARCEL_NEXT = "expedition:parcel_next"; // world: the next parcel number
+const PARCEL_TAG = "realm:exp_parcel";
+
+/** @typedef {{ id: string, tag: string, k: string, placed?: boolean, at?: { x: number, y: number, z: number, d: string } }} Parcel k: what it holds ("spoils", "dropped") */
+
+/** @param {string} owner @returns {Parcel[]} */
+function parcelsOf(owner) {
+  try {
+    const raw = world.getDynamicProperty(PARCELS + owner);
+    const v = typeof raw === "string" ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? v.filter((x) => x && typeof x.id === "string" && typeof x.tag === "string") : [];
+  } catch {
+    return [];
+  }
+}
+/** @param {string} owner @param {Parcel[]} list */
+function setParcels(owner, list) {
+  world.setDynamicProperty(PARCELS + owner, list.length ? JSON.stringify(list) : undefined);
+}
+
+/** Does this player have items waiting in a parcel? @param {string} owner */
+export const hasParcels = (owner) => parcelsOf(owner).length > 0;
+
+/**
+ * Stores items for a player in a structure (chest minecarts made at `at`, an air pocket nobody can reach). Run
+ * gear is left out. Returns false (and keeps nothing) when anything goes wrong: the caller then keeps the items.
+ * @param {string} owner @param {string} kind @param {ItemStack[]} items @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at
+ */
+export function saveParcel(owner, kind, items, dim, at) {
+  const keep = items.filter((it) => !isRunGear(it));
+  if (!keep.length) return true;
+  const nRaw = world.getDynamicProperty(PARCEL_NEXT);
+  const n = typeof nRaw === "number" ? nRaw : 1;
+  world.setDynamicProperty(PARCEL_NEXT, n + 1);
+  const id = `expedition:parcel_${n}`;
+  const tag = `${PARCEL_TAG}_${n}`;
+  /** @type {import("@minecraft/server").Entity[]} */
+  const carts = [];
+  try {
+    for (let c = 0; c * CART < keep.length; c++) {
+      const cart = dim.spawnEntity("minecraft:chest_minecart", { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
+      cart.addTag(PARCEL_TAG);
+      cart.addTag(tag);
+      carts.push(cart);
+      const box = cart.getComponent("minecraft:inventory")?.container;
+      if (!box) throw new Error("no cart inventory");
+      for (let k = 0; k < CART && c * CART + k < keep.length; k++) box.setItem(k, keep[c * CART + k]);
+    }
+    world.structureManager.delete(id);
+    world.structureManager.createFromWorld(id, dim, { x: at.x, y: at.y, z: at.z }, { x: at.x, y: at.y + 1, z: at.z }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
+    if (!world.structureManager.get(id)) throw new Error("structure not saved");
+    setParcels(owner, [...parcelsOf(owner), { id, tag, k: kind }]);
+    return true;
+  } catch (e) {
+    console.warn(`[expedition] parcel: ${e}`);
+    try {
+      world.structureManager.delete(id);
+    } catch {
+      // never made
+    }
+    return false;
+  } finally {
+    for (const cart of carts) {
+      try {
+        cart.getComponent("minecraft:inventory")?.container?.clearAll();
+        cart.remove();
+      } catch {
+        // gone
+      }
+    }
+  }
+}
+
+/**
+ * Gives a player every parcel waiting for them: into the inventory, or at their feet. Each parcel is marked as
+ * placed before its carts appear, so it is never placed twice; a placed parcel whose carts are gone (taken apart
+ * by someone) is forgotten once the player stands where it was placed. Returns the kinds handed over, with
+ * whether anything spilled; resolves false when something must be tried again (when they next spawn).
+ * @param {Player} p @returns {Promise<{ kinds: Set<string>, spilled: boolean } | false>}
+ */
+export async function openParcels(p) {
+  if (opening.has(p.id)) return false; // already handing them over
+  opening.add(p.id);
+  try {
+    return await handOver(p);
+  } finally {
+    opening.delete(p.id);
+  }
+}
+
+/** Players whose parcels are being handed over right now. @type {Set<string>} */
+const opening = new Set();
+
+/** @param {Player} p @returns {Promise<{ kinds: Set<string>, spilled: boolean } | false>} */
+async function handOver(p) {
+  const kinds = new Set();
+  let spilled = false;
+  const sm = world.structureManager;
+  for (const pc of parcelsOf(p.id)) {
+    if (!p.isValid) return false;
+    const dim = p.dimension;
+    let rec = pc;
+    if (!rec.placed) {
+      if (!sm.get(rec.id)) {
+        console.warn(`[expedition] parcel ${rec.id} for ${p.name} is missing`);
+        setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== rec.id));
+        continue;
+      }
+      const at = { x: Math.floor(p.location.x), y: Math.floor(p.location.y), z: Math.floor(p.location.z) };
+      rec = { ...rec, placed: true, at: { ...at, d: dim.id } };
+      setParcels(p.id, parcelsOf(p.id).map((x) => (x.id === rec.id ? rec : x)));
+      sm.place(rec.id, dim, at, { includeBlocks: false, includeEntities: true });
+    }
+    /** @type {import("@minecraft/server").Entity[]} */
+    let carts = [];
+    for (let t = 0; t < 10 && !carts.length; t++) {
+      await new Promise((res) => system.runTimeout(() => res(undefined), 2));
+      if (!p.isValid) return false;
+      try {
+        carts = world.getDimension(rec.at?.d ?? dim.id).getEntities({ tags: [rec.tag] });
+      } catch {
+        carts = [];
+      }
+    }
+    if (!carts.length) {
+      const a = rec.at;
+      const here = a && a.d === p.dimension.id && Math.hypot(p.location.x - a.x, p.location.z - a.z) < 16;
+      if (!here) return false; // tried again when they next spawn
+      setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== rec.id));
+      continue;
+    }
+    // A cart can take a tick or two longer than another to appear.
+    await new Promise((res) => system.runTimeout(() => res(undefined), 2));
+    if (!p.isValid) return false;
+    try {
+      carts = world.getDimension(rec.at?.d ?? dim.id).getEntities({ tags: [rec.tag] });
+    } catch {
+      // keep the ones found
+    }
+    const inv = p.getComponent("minecraft:inventory")?.container;
+    for (const cart of carts) {
+      const box = cart.getComponent("minecraft:inventory")?.container;
+      if (box)
+        for (let k = 0; k < box.size; k++) {
+          const it = box.getItem(k);
+          if (!it) continue;
+          box.setItem(k);
+          try {
+            const rest = inv ? inv.addItem(it) : it;
+            if (rest) {
+              p.dimension.spawnItem(rest, p.location);
+              spilled = true;
+            }
+          } catch (e) {
+            console.warn(`[expedition] parcel item: ${e}`);
+            p.dimension.spawnItem(it, p.location);
+            spilled = true;
+          }
+        }
+      cart.remove();
+    }
+    setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== rec.id));
+    try {
+      sm.delete(rec.id);
+    } catch {
+      // already gone
+    }
+    kinds.add(rec.k);
+  }
+  return { kinds, spilled };
+}
