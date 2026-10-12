@@ -44,25 +44,29 @@ export default async function (t) {
   const afterStart = items(sur, "minecraft:cobblestone");
   t.log("cobblestone after placing the start:", afterStart);
 
-  // The end: the floor 8 blocks ahead, with /realm:build_here (over the start block, so the look target is the floor).
-  sur.lookAtBlock({ x: 0, y: Y - 1, z: 8 });
+  // The end: a marker block on the floor 8 blocks ahead; the player looks at its near face, so /realm:build_here
+  // builds to the spot in front of it (z 7).
+  dim.setBlockType({ x: 0, y: Y, z: 8 }, "minecraft:bedrock");
+  await t.wait(2);
+  sur.lookAtBlock({ x: 0, y: Y, z: 8 });
   await t.wait(4);
   const hit = sur.getBlockFromViewDirection({ maxDistance: 16 });
-  t.assert(hit && hit.block.location.z === 8 && hit.face === "Up", `the player looks at the floor at z 8 (${hit?.block.location.z}, ${hit?.face})`);
+  t.assert(hit && hit.block.location.z === 8 && hit.face === "North", `the player looks at the marker's near face (${hit?.block.location.z}, ${hit?.face})`);
   t.clearMessages();
   t.cmd(sur, "/realm:build_here");
   const built = await t.waitMessage(sur, /Built \d+ blocks/, { kind: "actionbar" });
   t.log("two-block wall:", built.plain, "cobblestone left", items(sur, "minecraft:cobblestone"));
-  // 9 columns of 3: the start block's own spot is built (and paid) like the others, since the start went back to the hand.
-  t.check(/Built 27 blocks/.test(built.plain), `the wall covers the start block's spot too (${built.plain})`);
-  t.check(count("minecraft:cobblestone", 0, Y, 0, 0, Y + 2, 8) === 27, "27 cobblestone stand from the start to the end");
+  // 8 columns of 3 (z 0 to 7): the start block's own spot is built (and paid) like the others, since the start went
+  // back to the hand.
+  t.check(/Built 24 blocks/.test(built.plain), `the wall covers the start block's spot too (${built.plain})`);
+  t.check(count("minecraft:cobblestone", 0, Y, 0, 0, Y + 2, 7) === 24, "24 cobblestone stand from the start to the end");
 
   // Undo takes the whole wall back, the start block included: nothing is left standing, every block is given back.
   t.clearMessages();
   t.cmd(sur, "/realm:build_undo");
   await t.waitMessage(sur, /Undone/, { kind: "actionbar" });
   await t.wait(10);
-  const left = count("minecraft:cobblestone", 0, Y, 0, 0, Y + 2, 8);
+  const left = count("minecraft:cobblestone", 0, Y, 0, 0, Y + 2, 7);
   t.check(left === 0, `nothing of the wall is left after undo, the start block included (${left} left)`);
   const back = items(sur, "minecraft:cobblestone");
   // 40, or 41 when the simulated player's placement didn't use up the start block it placed.
