@@ -1,0 +1,24 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "realm:platypus",
+      "materials": { "default": "entity_alphatest" },
+      "textures": {
+        "default": "textures/entity/platypus/platypus",
+        "perry": "textures/entity/platypus/perry"
+      },
+      "geometry": { "default": "geometry.realm_platypus" },
+      "animations": {
+        "walk": "animation.realm_platypus.walk",
+        "idle": "animation.realm_platypus.idle",
+        "swim": "animation.realm_platypus.swim",
+        "look_at_target": "animation.common.look_at_target",
+        "move": "controller.animation.realm_platypus.move"
+      },
+      "scripts": { "animate": ["move", "look_at_target"] },
+      "render_controllers": ["controller.render.realm_platypus"],
+      "spawn_egg": { "base_color": "#7a5233", "overlay_color": "#2aa59a" }
+    }
+  }
+}

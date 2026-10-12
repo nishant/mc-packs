@@ -62,6 +62,8 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Slot Machine — `slots_bp`](#slot-machine--slots_bp)
 - [Silly Enchants — `silly_bp`](#silly-enchants--silly_bp)
 - [Dolphin Friends — `dolphin_bp`](#dolphin-friends--dolphin_bp)
+- [Platypus — `platypus_bp`](#platypus--platypus_bp)
+- [Platypus Models — `platypus_rp`](#platypus-models--platypus_rp)
 - [Treasure Maps & Riddles — `maps_bp`](#treasure-maps--riddles--maps_bp)
 - [Waystones & Inns — `waystone_bp`](#waystones--inns--waystone_bp)
 - [Expeditions — `expedition_bp`](#expeditions--expedition_bp)
@@ -3708,6 +3710,102 @@ Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanR
 | `dolphin:index` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: every tamed dolphin's owner, name and last known spot, for the lists while it's far away |
 | `dolphin:tamedCount` | Player | How many dolphins the player has tamed |
 | `dolphin:cfg` | World | Settings changed in `/realm:config` |
+
+---
+
+## Platypus — `platypus_bp`
+
+An uncommon new animal, the platypus (`realm:platypus`), lives along rivers and in swamps and mangrove swamps, always close to the water. It is passive until you hit it: then it fights back, and its bite poisons you and makes your screen wobble (nausea). About 1 in 200 is a teal platypus in a brown fedora: Perry the Platypus. There is a spawn egg too. Needs [Platypus Models](#platypus-models--platypus_rp) (in Realm Resources) to look like a platypus.
+
+### See and hear it
+
+![A render of the platypus (left) and Perry (right)](media/platypus/platypus.png)
+
+A render of the model and its two skins, not an in-game screenshot.
+
+### How to use
+
+1. Look along rivers and in swamps and mangrove swamps: platypuses spawn on the banks (grass, dirt, sand, gravel, clay, mud, mangrove roots), alone or in pairs, in daylight-bright spots. They are uncommon: you may walk a long river before you meet one.
+2. Run `/realm:platypus` to see how many platypuses are within 64 blocks (`findRadius`) and how far, and in which direction, the nearest one is. If one of them is a Perry, it tells you where that one is too.
+3. Leave it be and it wanders, swims and waddles back to the water. Hold **raw cod** or **raw salmon** and it follows you. You can put it on a lead and name it with a name tag.
+4. Hit it and it bites back for 15 seconds: each bite does 1 heart of damage, 5 seconds of **Poison** and 8 seconds of **Nausea** (`nauseaSeconds`). Then it calms down.
+5. **Creative:** the **Platypus Spawn Egg** (brown with teal spots) is in the creative inventory with the other spawn eggs, and every egg has the same 1 in 200 chance of hatching a Perry.
+6. **Operators:** `/summon realm:platypus ~ ~ ~ 0 0 realm:platypus_make_perry` summons a Perry (`realm:platypus_make_brown` a brown one). `/realm:config` → **Platypus** sets the nausea length, the Perry message and the `/realm:platypus` search radius.
+
+### What players see
+
+- **The platypus:** a small, flat brown animal (10 health, 5 hearts) with a dark duck bill, a broad flat tail and four short legs with webbed feet. It walks, swims and paddles, wags its tail and looks at players nearby. It breathes air and water, so it never drowns.
+- **Perry:** 1 in 200 platypuses (from natural spawns, spawn eggs and `/summon`) is teal with an orange bill and feet, wearing a brown fedora with a dark band. Players within 64 blocks get `A teal platypus in a brown fedora is nearby. Perry the Platypus?!` when one appears (`perryMessage`). It acts like any other platypus.
+- **When hit:** the platypus (and only that one) chases whoever hit it, player or mob, for 15 seconds and bites: 2 damage, Poison for 5 seconds, and for players Nausea for 8 seconds (`nauseaSeconds`, 0 = none). Hitting it again restarts the 15 seconds. Players in Creative are left alone.
+- **Drops:** no items; 1 to 3 experience when a player kills it.
+- **Spawning:** surface spawns in river biomes (not frozen rivers), swamps and mangrove swamps, on grass, dirt, coarse dirt, podzol, sand, gravel, clay, mud or mangrove roots, at light level 7 or more. Weight 2, groups of 1 or 2, and no more than 3 per area, counted with the other animals' cap. Like other animals, they don't despawn.
+- `/realm:platypus` answers in chat, for example `3 platypuses within 64 blocks. Nearest: 12 blocks northeast.`, or `No platypuses within 64 blocks. They live along rivers and in swamps and mangrove swamps, near the water.` when there are none.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:platypus` | Everyone | How many platypuses are near you (default 64 blocks, `findRadius`), how far and which way the nearest is, and where a Perry among them is |
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `nauseaSeconds` | `8` | Seconds of Nausea a platypus bite gives a player (on top of the bite's 5 seconds of Poison, which is set in the entity file). `0` = no nausea |
+| `perryMessage` | `true` | Players within 64 blocks get a chat line when a Perry spawns |
+| `findRadius` | `64` | How far `/realm:platypus` looks, in blocks |
+
+Operators can change all three in game with `/realm:config` (**Platypus**). The spawn chances, the 1 in 200 for Perry, the 15 seconds of anger, damage and Poison are in `entities/platypus.json` and `spawn_rules/platypus.json`, not in `config.js`.
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `platypus:cfg` | World | Settings changed in `/realm:config` |
+
+The platypus's color is its `minecraft:variant` (0 brown, 1 Perry), saved with the entity by the game.
+
+### How it works
+
+- **The mob** (`entities/platypus.json`) uses only stable components, so no experiments are needed: amphibious movement and navigation like the turtle's (`minecraft:movement.amphibious`, `minecraft:navigation.generic` with `can_swim` and `can_walk`), random strolling and swimming, `minecraft:behavior.move_to_water` so it returns to the water, and `minecraft:behavior.tempt` with raw cod and salmon.
+- **Fighting back:** `minecraft:behavior.hurt_by_target` picks whoever hurt it, and a `minecraft:damage_sensor` trigger fires `realm:platypus_anger` when a player or mob hurts it. That adds the group `realm:platypus_angry`: `minecraft:angry` (15 seconds, then `realm:platypus_calm` removes the group) and `minecraft:behavior.melee_attack`. Its `minecraft:attack` does 2 damage with `effect_name` `poison` for 5 seconds. The script adds the Nausea: `world.afterEvents.entityHurt` for players, when the damaging entity is a `realm:platypus`.
+- **Perry:** `minecraft:entity_spawned` (natural spawns, eggs, `/summon` without an event) picks `realm:platypus_brown` (weight 199, variant 0) or `realm:platypus_perry` (weight 1, variant 1). The events `realm:platypus_make_brown` and `realm:platypus_make_perry` switch it. The resource pack chooses the skin by `query.variant` and shows the fedora bone only for variant 1. The script reads the variant on `world.afterEvents.entitySpawn` (causes `Spawned` and `Event`, not chunk loads) for the Perry message.
+
+---
+
+## Platypus Models — `platypus_rp`
+
+What the platypus from [Platypus](#platypus--platypus_bp) looks like: its model, the brown and Perry skins, the walk, swim and tail-wag animations, the spawn egg colors and the names `Platypus` and `Platypus Spawn Egg`. A **resource pack**, part of **Realm Resources** (or on its own, together with Platypus).
+
+### How to use
+
+1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
+2. Without it, platypuses still spawn and fight, but you can't see them properly and their name shows as `entity.realm:platypus.name`.
+3. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**. To use it alone instead, download Platypus Models from its card and activate it the same way, with Platypus under **Behavior Packs**.
+
+### What players see
+
+- A blocky platypus about 3/4 of a block long and half a block high: a flat body, a head with a wide flat bill (dark gray, with nostrils), a broad beaver tail with a crosshatched top, and four short legs with webbed feet. It looks at nearby players, swings its legs and tail as it walks and paddles in the water.
+- **Perry** uses a teal skin with an orange bill and feet, and wears a brown fedora with a dark band (a separate bone, hidden on brown platypuses).
+- The **Platypus Spawn Egg** is brown with teal spots.
+
+### Saved data
+
+None. It's a resource pack: no scripts and no commands.
+
+### How it's made
+
+`npm run gen:platypus` (`tools/gen-platypus/gen.mjs`) writes the model and the pictures from one list of cubes, so the texture layout always matches the geometry; `npm run check` fails if they differ from what it makes. The rest is hand-written.
+
+| Files | |
+|---|---|
+| `models/entity/platypus.geo.json` | Generated. `geometry.realm_platypus`: bones `body`, `head`, `bill`, `tail`, `leg_front_left`, `leg_front_right`, `leg_back_left`, `leg_back_right` and `fedora`, on a 64 x 32 texture |
+| `textures/entity/platypus/platypus.png`, `perry.png` | Generated. The brown and the Perry skins, shaded with a little noise. The brown skin leaves the fedora area empty |
+| `pack_icon.png` (both packs), `docs/media/platypus/platypus.png` | Generated renders of the model |
+| `entity/platypus.entity.json` | The client entity: material `entity_alphatest`, the two textures, the animations and `spawn_egg` colors `#7a5233` and `#2aa59a` |
+| `render_controllers/platypus.render_controllers.json` | Picks the skin by `query.variant` and shows `fedora` only when it is 1 |
+| `animations/platypus.animation.json`, `platypus.animation_controllers.json` | Walk (legs and tail, by distance moved, blended by speed), idle tail wag, and a paddle while in water; vanilla's `animation.common.look_at_target` turns the head |
+| `texts/en_US.lang`, `texts/languages.json` | The names. Realm Resources joins every pack's `.lang` lines into one file |
 
 ---
 
