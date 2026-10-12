@@ -99,10 +99,12 @@ async function available(player) {
  * @returns {Promise<any>} undefined if it was closed or never shown
  */
 async function show(player, form) {
+  const once = resumed.delete(player.id);
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return undefined;
     const res = /** @type {any} */ (await form.show(player));
     if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
+      if (once) return undefined; // the command they just ran opened its own menu: that one stays
       await system.waitTicks(20);
       continue;
     }
@@ -110,6 +112,23 @@ async function show(player, form) {
   }
   if (player.isValid) player.sendMessage("§eCouldn't open the menu. Close chat or your inventory and try again.");
   return undefined;
+}
+
+/** @type {Set<string>} players whose next form comes back after a command they ran: if another screen is open by then, it's the command's own menu */
+const resumed = new Set();
+
+/**
+ * Brings back the page a command was picked from, so the next one is two taps away instead of a new
+ * trip from the item. It waits long enough for a command's own menu to open first (even one that
+ * pings the other packs before it opens); if one did, that menu stays and this does nothing.
+ * @param {Player} player @param {(() => Promise<unknown>) | undefined} back
+ */
+async function resume(player, back) {
+  if (!back) return;
+  await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10) * 2 + 2);
+  if (!player.isValid || !isOp(player)) return;
+  resumed.add(player.id);
+  return back();
 }
 
 /** A list of buttons; picking one opens it. @param {Player} player @param {string} title @param {string} body @param {Entry[]} entries @param {(() => Promise<unknown>) | undefined} back */
@@ -190,11 +209,14 @@ function exec(player, line, title) {
   return ok;
 }
 
-/** What an input is called. @param {import("./catalog.js").Param} p */
-const paramLabel = (p) => {
-  const base = p.name.replace(/^realm:/, "").replace(/_/g, " ");
+/** An id as words: "notice_board" reads "Notice board" (the command still gets the id). @param {string} id */
+const readable = (id) => {
+  const base = id.replace(/_/g, " ");
   return base.charAt(0).toUpperCase() + base.slice(1);
 };
+
+/** What an input is called. @param {import("./catalog.js").Param} p */
+const paramLabel = (p) => readable(p.name.replace(/^realm:/, ""));
 
 /** @param {Player} p */
 const heldItemId = (p) => p.getComponent(EntityComponentTypes.Inventory)?.container?.getItem(p.selectedSlotIndex)?.typeId;
@@ -230,7 +252,7 @@ function paramForm(player, cmd, note) {
     const enumValues = p.type === "Enum" ? (ENUMS[p.enum ?? p.name] ?? []) : [];
     if (p.type === "Enum" && enumValues.length) {
       const values = enumValues;
-      const shown = values.map((v) => pre.names?.[v] ?? v);
+      const shown = values.map((v) => pre.names?.[v] ?? readable(v));
       const items = opt ? ["(leave out)", ...shown] : shown;
       const def = typeof pre.default === "string" ? Math.max(0, values.indexOf(pre.default)) + (opt ? 1 : 0) : 0;
       form.dropdown(label, items, { defaultValueIndex: def });
@@ -292,19 +314,20 @@ function paramForm(player, cmd, note) {
 }
 
 /**
- * Opens a command: asks for its options (if it has any), asks first if it's destructive, runs it.
- * @param {Player} player @param {Cmd} cmd @param {string} [note]
+ * Opens a command: asks for its options (if it has any), asks first if it's destructive or for everyone,
+ * runs it, then goes back to the page it was picked from (`back`; so does cancelling or closing the options).
+ * @param {Player} player @param {Cmd} cmd @param {string} [note] @param {() => Promise<unknown>} [back]
  */
-async function openCommand(player, cmd, note) {
+async function openCommand(player, cmd, note, back) {
   if (!cmd.params.length) {
-    if (needsConfirm(cmd.name) && !(await confirm(player, `Run /${cmd.name}?\n\n${cmd.description}`))) return;
+    if (needsConfirm(cmd.name) && !(await confirm(player, `Run /${cmd.name}?\n\n${cmd.description}`))) return back?.();
     exec(player, cmd.name, `/${cmd.name}`);
-    return;
+    return resume(player, back);
   }
   for (let attempt = 0; attempt < 5; attempt++) {
     const { form, isInput, readers } = paramForm(player, cmd, note);
     const res = await show(player, form);
-    if (!res) return;
+    if (!res) return back?.();
     const values = inputsOf(res.formValues ?? [], isInput);
     /** @type {string[]} */
     const args = [];
@@ -321,42 +344,48 @@ async function openCommand(player, cmd, note) {
     if (!error && gap >= 0) error = `${paramLabel(cmd.params[gap])}: fill it in too, or clear the options after it.`;
     if (error) {
       const again = await show(player, new MessageFormData().title(`/${cmd.name}`).body(`§c${error}`).button1("Try again").button2("Cancel"));
-      if (again?.selection !== 0) return;
+      if (again?.selection !== 0) return back?.();
       continue;
     }
     const line = [cmd.name, ...args].join(" ");
-    if (needsConfirm(cmd.name) && !(await confirm(player, `Run /${line}?\n\n${cmd.description}`))) return;
+    const everyone = args.includes("@a");
+    if ((needsConfirm(cmd.name) || everyone) && !(await confirm(player, `Run /${line}?${everyone ? "\n\nThis is for everyone online." : ""}\n\n${cmd.description}`))) return back?.();
     exec(player, line, `/${line}`);
-    return;
+    return resume(player, back);
   }
+  return back?.();
 }
 
 /**
- * A quick action: its own form (or the realm command that should do it instead), then run it.
- * @param {Player} player @param {Action} action
+ * A quick action: its own form (or the realm command that should do it instead), then run it and
+ * go back to the page it was picked from.
+ * @param {Player} player @param {Action} action @param {() => Promise<unknown>} [back]
  */
-async function openAction(player, action) {
+async function openAction(player, action, back) {
   if (action.use) {
     const cmd = (await available(player)).find((c) => c.name === action.use);
-    if (cmd) return openCommand(player, cmd, `${action.title}: the ${cmd.pack} pack owns this, so its command does it.`);
+    if (cmd) return openCommand(player, cmd, `${action.title}: the ${cmd.pack} pack owns this, so its command does it.`, back);
   }
   /** @type {import("./actions.js").Values} */
   let values = {};
   const form = action.form?.(player);
   if (form) {
     const res = await show(player, form.submitButton("Do it"));
-    if (!res) return;
+    if (!res) return back?.();
     const read = action.read ? action.read(player, res.formValues ?? []) : {};
-    if (typeof read === "string") return void player.sendMessage(`§c[${TITLE}] ${read}`);
+    if (typeof read === "string") {
+      player.sendMessage(`§c[${TITLE}] ${read}`);
+      return back?.();
+    }
     values = read;
   }
-  return runAction(player, action, values);
+  return runAction(player, action, values, back);
 }
 
-/** @param {Player} player @param {Action} action @param {import("./actions.js").Values} values */
-async function runAction(player, action, values) {
+/** @param {Player} player @param {Action} action @param {import("./actions.js").Values} values @param {() => Promise<unknown>} [back] */
+async function runAction(player, action, values, back) {
   const ask = action.confirm?.(player, values);
-  if (ask && !(await confirm(player, ask))) return;
+  if (ask && !(await confirm(player, ask))) return back?.();
   if (!isOp(player)) return void player.sendMessage(`§c[${TITLE}] ${action.title} didn't run: you aren't an operator any more.`);
   try {
     const said = action.run(player, values);
@@ -365,17 +394,31 @@ async function runAction(player, action, values) {
   } catch (e) {
     player.sendMessage(`§c[${TITLE}] ${action.title} didn't work: ${errText(e)}`);
   }
+  return back?.(); // a quick action never opens a menu of its own, so the page can come straight back
 }
 
 // ---------------------------------------------------------------------------
 // Pages
 // ---------------------------------------------------------------------------
 
-/** @param {Cmd} c */
-const cmdLabel = (c) => `/${c.name.replace(/^realm:/, "realm:")}${c.permission === "any" ? "" : " §8(ops)"}\n§8${clip(c.description, 52)}`;
+/**
+ * What a command does, without its pack's name in front ("Merchant Caravan: bring the caravan now"):
+ * a category page names the packs already, and a button line holds about 52 characters.
+ * @param {Cmd} c
+ */
+function whatItDoes(c) {
+  const m = c.description.match(/^([^:]+): (.+)$/s);
+  if (!m) return c.description;
+  const head = m[1].replace(/\s*\((operators|ops)\)$/i, "").trim().toLowerCase();
+  if (!head || !c.pack.toLowerCase().startsWith(head)) return c.description;
+  return m[2].charAt(0).toUpperCase() + m[2].slice(1);
+}
 
-/** @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
-const cmdEntries = (player, cmds, back) => cmds.map((c) => /** @type {Entry} */ ({ label: cmdLabel(c), open: () => openCommand(player, c) }));
+/** @param {Cmd} c */
+const cmdLabel = (c) => `/${c.name}${c.permission === "any" ? "" : " §8(ops)"}\n§8${clip(whatItDoes(c), 52)}`;
+
+/** The buttons of a list of commands; each comes back to `back` (the list) once it has run. @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
+const cmdEntries = (player, cmds, back) => cmds.map((c) => /** @type {Entry} */ ({ label: cmdLabel(c), open: () => openCommand(player, c, undefined, back) }));
 
 /** @param {Player} player */
 async function mainMenu(player) {
@@ -417,38 +460,51 @@ async function searchPage(player, cmds, back) {
   const res = await show(player, new ModalFormData().title("Search commands").textField("Search for", "weather, npc, give...", { defaultValue: "" }).submitButton("Search"));
   if (!res) return back();
   const q = String(inputsOf(res.formValues ?? [], [true])[0] ?? "").trim().toLowerCase();
+  return resultsPage(player, cmds, q, back);
+}
+
+/** The matches of a search; a command run from here comes back here. @param {Player} player @param {Cmd[]} cmds @param {string} q @param {() => Promise<unknown>} back */
+async function resultsPage(player, cmds, q, back) {
   const words = q.split(/\s+/).filter(Boolean);
   const hit = (/** @type {string} */ s) => words.every((w) => s.toLowerCase().includes(w));
   const found = cmds.filter((c) => hit(`${c.name} ${c.description} ${c.pack}`));
   const actions = ACTIONS.filter((a) => hit(`${a.title} ${a.help}`));
+  const again = () => resultsPage(player, cmds, q, back);
+  const search = () => searchPage(player, cmds, back);
   /** @type {Entry[]} */
   const entries = [
-    ...actions.map((a) => ({ label: `${a.title}\n§8Quick action`, open: () => openAction(player, a) })),
-    ...cmdEntries(player, found, back),
+    ...actions.map((a) => ({ label: `${a.title}\n§8Quick action`, open: () => openAction(player, a, again) })),
+    ...cmdEntries(player, found, again),
   ];
-  const again = () => searchPage(player, cmds, back);
-  if (!entries.length) return list(player, "Search commands", `Nothing matches "${q}".`, [{ label: "Search again", open: again }], back);
-  await list(player, "Search commands", `${entries.length} match${entries.length === 1 ? "" : "es"} for "${q}".`, entries, back);
+  if (!entries.length) return list(player, "Search commands", `Nothing matches "${q}".`, [{ label: "Search again", open: search }], back);
+  entries.push({ label: "Search again\n§8Another word", open: search });
+  await list(player, "Search commands", `${entries.length - 1} match${entries.length === 2 ? "" : "es"} for "${q}".`, entries, back);
 }
 
 /** @param {Player} player @param {() => Promise<unknown>} back */
 async function recentPage(player, back) {
   const rec = recents(player);
   const cmds = await available(player);
+  const again = () => recentPage(player, back);
   /** @type {Entry[]} */
   const entries = rec.map((e) => ({
     label: `${clip(e.t, 40)}\n§8${e.a ? "Quick action" : "Tap to run it again"}`,
     open: async () => {
       if (e.a) {
         const action = ACTIONS.find((a) => a.id === e.a);
-        if (action) return runAction(player, action, e.v ?? {});
-        return;
+        if (action) return runAction(player, action, e.v ?? {}, again);
+        return again();
       }
       const name = String(e.l ?? "").split(" ")[0];
       const cmd = cmds.find((c) => c.name === name);
-      if (!cmd) return void player.sendMessage(`§c[${TITLE}] /${name} isn't available any more.`);
-      if (needsConfirm(name) && !(await confirm(player, `Run /${e.l} again?`))) return;
+      if (!cmd) {
+        player.sendMessage(`§c[${TITLE}] /${name} isn't available any more.`);
+        return again();
+      }
+      const everyone = String(e.l).split(" ").includes("@a");
+      if ((needsConfirm(name) || everyone) && !(await confirm(player, `Run /${e.l} again?${everyone ? "\n\nThis is for everyone online." : ""}`))) return again();
       exec(player, String(e.l), e.t);
+      return resume(player, again);
     },
   }));
   await list(player, "Recent", rec.length ? "Your last commands, newest first. Tap one to run it again with the same options." : "Nothing yet: commands you run from this menu show up here.", entries, back);
@@ -460,6 +516,7 @@ async function setupPage(player, cmds, back) {
   await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10));
   const zones = allZones();
   const count = { zones: zones.filter((z) => z.src === "zones").length, towns: zones.filter((z) => z.src === "town").length };
+  const again = () => setupPage(player, cmds, back);
   /** @type {Entry[]} */
   const entries = [];
   for (const item of SETUP) {
@@ -468,7 +525,7 @@ async function setupPage(player, cmds, back) {
     const n = item.done ? count[item.done] : undefined;
     const mark = n === undefined ? "§8[ ]§r" : n > 0 ? "§2[x]§r" : "§c[ ]§r";
     const extra = n === undefined ? "" : item.done === "towns" ? ` §8(${n} protected)` : ` §8(${n} set)`;
-    entries.push({ label: `${mark} ${item.title}${extra}\n§8${clip(item.help, 52)}`, open: () => openCommand(player, cmd, item.help) });
+    entries.push({ label: `${mark} ${item.title}${extra}\n§8${clip(item.help, 52)}`, open: () => openCommand(player, cmd, item.help, again) });
   }
   await list(
     player,
@@ -481,12 +538,19 @@ async function setupPage(player, cmds, back) {
 
 /** @param {Player} player @param {() => Promise<unknown>} back */
 async function actionsPage(player, back) {
-  const entries = ACTIONS.map((a) => /** @type {Entry} */ ({ label: `${a.title}\n§8${clip(a.help, 52)}`, open: () => openAction(player, a) }));
+  const again = () => actionsPage(player, back);
+  const entries = ACTIONS.map((a) => /** @type {Entry} */ ({ label: `${a.title}\n§8${clip(a.help, 52)}`, open: () => openAction(player, a, again) }));
   await list(player, "Quick actions", "Vanilla things you would otherwise type as commands. They work without cheats.", entries, back);
 }
 
 /** @type {Set<string>} players with the menu open */
 const open = new Set();
+// A player who leaves with the menu open (or while it waits for the packs to answer) keeps the same id
+// when they come back: without this they couldn't open it again until the world restarts.
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  open.delete(playerId);
+  resumed.delete(playerId);
+});
 
 /** @param {Player} player */
 function openMenu(player) {
