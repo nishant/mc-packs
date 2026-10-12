@@ -390,6 +390,7 @@ function levelUp(t) {
   for (const pl of world.getAllPlayers()) {
     const near = pl.dimension.id === t.dim && Math.hypot(pl.location.x - t.x, pl.location.z - t.z) <= get("townRadius");
     if (!everyone && !near) continue;
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: pl.id, ticks: 110, from: "town_bp" }));
     pl.onScreenDisplay.setTitle(`§6${title}`, { subtitle: `§7${sub}`, fadeInDuration: 10, stayDuration: 80, fadeOutDuration: 20 });
     pl.playSound("random.totem", { volume: 0.5 });
   }

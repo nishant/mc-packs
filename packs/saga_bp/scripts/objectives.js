@@ -23,7 +23,7 @@ import {
 } from "./data.js";
 import { featureSpot, locate, placeSpot, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
-import { isSlot, sideBoxes } from "./side.js";
+import { holdTitle, isSlot, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
 import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait } from "./util.js";
@@ -1760,6 +1760,7 @@ export async function playVision(player, list, dark = false) {
     for (const sc of list) {
       if (!player.isValid || skipped) break;
       const secs = Math.max(1, sc.seconds ?? 5);
+      holdTitle(player, secs * 20 + 20);
       player.onScreenDisplay.setTitle(sc.title ? `§l${sc.title}` : " ", { subtitle: sc.text, fadeInDuration: 10, stayDuration: secs * 20, fadeOutDuration: 10 });
       player.sendMessage(`§7§o${sc.title ? `${sc.title}: ` : ""}${sc.text}`);
       if (sc.sound) player.playSound(sc.sound, { volume: 0.8 });
@@ -1783,7 +1784,8 @@ export async function playVision(player, list, dark = false) {
     busy.delete(player.id);
     try {
       if (player.isValid) {
-        player.onScreenDisplay.setTitle(" ", { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 5 });
+        holdTitle(player, 6);
+        player.onScreenDisplay.setTitle(" ", { subtitle: "", fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 5 });
         if (skipped && dark) player.removeEffect("darkness");
       }
     } catch {
