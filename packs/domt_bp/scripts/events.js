@@ -100,7 +100,7 @@ async function runArena(p, seconds) {
   for (const n of ["3", "2", "1"]) {
     if (!online(p)) break;
     system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 20, from: "domt_bp" }));
-    attempt(() => p.onScreenDisplay.setTitle(`§c${n}`, { subtitle: "", fadeInDuration: 0, stayDuration: 15, fadeOutDuration: 5 }));
+    attempt(() => p.onScreenDisplay.setTitle(`§c${n}`, { subtitle: " ", fadeInDuration: 0, stayDuration: 15, fadeOutDuration: 5 }));
     sound(p, "random.click");
     await wait(20);
   }

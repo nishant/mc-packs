@@ -176,7 +176,7 @@ function draw(player) {
   drewAt.set(player.id, now);
   try {
     if (!slots) {
-      if (drewSome.get(player.id)) player.onScreenDisplay.setTitle(CLEAR, { subtitle: "", fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
+      if (drewSome.get(player.id)) player.onScreenDisplay.setTitle(CLEAR, { subtitle: " ", fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
       drewSome.set(player.id, false);
       return;
     }
