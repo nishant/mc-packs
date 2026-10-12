@@ -144,7 +144,7 @@ export function drawGuide(player, cells, kind = "build", opts = {}) {
   vars.setColorRGBA("variable.color", { red: rgb[0], green: rgb[1], blue: rgb[2], alpha: kind === "paste" ? 0.75 : 1 });
   vars.setFloat("variable.life", rate / 20 + 0.05);
   vars.setFloat("variable.style", style === "corners" ? 1 : 0);
-  if (style === "dots" || kind === "mark") {
+  if (style === "dots") {
     for (const c of thin(o.surface, budget)) {
       try {
         player.spawnParticle(DOT_ID, { x: c.x + dx + 0.5, y: c.y + dy + 0.5, z: c.z + dz + 0.5 }, vars);

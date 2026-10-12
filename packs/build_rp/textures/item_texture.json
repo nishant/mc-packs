@@ -1,0 +1,7 @@
+{
+  "resource_pack_name": "build_rp",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "realm_building_book": { "textures": "textures/items/realm_building_book" }
+  }
+}
