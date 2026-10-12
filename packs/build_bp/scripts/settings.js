@@ -62,6 +62,13 @@ const OPTIONS = [
   { key: "airDistance", type: "int", scope: "player", default: 4, label: "Air Build distance (blocks)", min: 1, max: 64, step: 1 },
   { key: "modsByHand", type: "bool", scope: "player", default: false, label: "Modifiers copy blocks I place and break by hand", help: "Mirror, radial and array also work on single blocks" },
   { key: "hint", type: "bool", scope: "player", default: true, label: "Build mode line above the hotbar", help: "Which shape is set and what placing a block will build" },
+  { key: "undoSaveSteps", type: "int", scope: "world", label: "Undo steps kept over a restart", help: "The newest steps of each player, saved on the player", min: 0, max: 10, step: 1 },
+  { key: "undoSaveBlocks", type: "int", scope: "world", label: "Most blocks in an undo step kept over a restart", help: "Bigger steps are kept in memory only", min: 250, max: 4000, step: 250 },
+  { key: "clipboardSlots", type: "int", scope: "world", label: "Saved copies per player", help: "Besides Last copy. Each one is a structure saved in the world", min: 0, max: 19, step: 1 },
+  { key: "copyMaxBlocks", type: "int", scope: "world", label: "Largest region to copy or cut (blocks)", help: "Air included; each side at most 64 across", min: 1024, max: 65536, step: 1024 },
+  { key: "destroyMode", type: "bool", scope: "world", label: "Destroy mode", help: "Breaking a block with a pickaxe, axe or shovel breaks the whole shape" },
+  { key: "destroyPreview", type: "bool", scope: "player", default: true, label: "Outline in destroy mode", help: "Shows what breaking the block you look at would break" },
+  { key: "pastePreview", type: "bool", scope: "player", default: true, label: "Paste preview in paste mode", help: "Shows where your copy would go at the block you look at" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

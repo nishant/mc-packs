@@ -129,8 +129,11 @@ export function drawGuide(player, cells, kind = "build", opts = {}) {
   const rate = guideRate(player);
   const now = system.currentTick;
   const slot = `${player.id}|${kind}`;
-  if (!opts.force && now - (lastDrawn.get(slot) ?? -999) < rate) return false;
+  const gap = now - (lastDrawn.get(slot) ?? -999);
+  if (!opts.force && gap < rate) return false;
   lastDrawn.set(slot, now);
+  // Each draw lasts until the next: the refresh, or how long callers that draw less often waited last time.
+  const life = Math.max(rate, gap <= 20 ? gap : rate) / 20 + 0.05;
   const o = outlineOf(cells);
   const dx = opts.offset?.x ?? 0, dy = opts.offset?.y ?? 0, dz = opts.offset?.z ?? 0;
   const budget = Math.max(20, Math.round(Number(get("guideMax")) || 400));
@@ -142,7 +145,7 @@ export function drawGuide(player, cells, kind = "build", opts = {}) {
   const rgb = kind === "build" ? GUIDE_COLORS[/** @type {keyof GUIDE_COLORS} */ (String(getFor(player, "guideColor")))] ?? GUIDE_COLORS.white : KIND_COLORS[kind];
   const vars = new MolangVariableMap();
   vars.setColorRGBA("variable.color", { red: rgb[0], green: rgb[1], blue: rgb[2], alpha: kind === "paste" ? 0.75 : 1 });
-  vars.setFloat("variable.life", rate / 20 + 0.05);
+  vars.setFloat("variable.life", life);
   vars.setFloat("variable.style", style === "corners" ? 1 : 0);
   if (style === "dots") {
     for (const c of thin(o.surface, budget)) {
