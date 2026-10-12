@@ -13,10 +13,10 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
-import { PARAMS, SHAPES, TooBig, boxOf, cellsOf, curveCells, shapeOf, valueOf } from "./shapes.js";
+import { PARAMS, SHAPES, TooBig, boxOf, cellsJob, curveCells, shapeOf, valueOf } from "./shapes.js";
 import { allZones } from "./zones.js";
-import { drawBox, drawGuide, forgetGuides, guideRate } from "./guides.js";
-import { DEFAULT_MODS, applyMods, modsLabel, modsOn, needsCenter, normalizeMods } from "./modifiers.js";
+import { drawBox, drawGuide, forgetGuides, guideRate, outlineJob } from "./guides.js";
+import { DEFAULT_MODS, applyMods, applyModsJob, modsLabel, modsOn, needsCenter, normalizeMods } from "./modifiers.js";
 import { DEFAULT_PALETTE, DIRS, DIR_NAMES, FROM, FROM_NAMES, PATTERNS, PATTERN_NAMES, normalizePalette, paletteLabel, picker } from "./palette.js";
 import { lastLabel, remember, setupUndo, undo } from "./undo.js";
 import { clipboardMenu, copyCommand, cutCommand, isPasting, isSelecting, pasteCommand, setupClipboard } from "./clipboard.js";
@@ -345,7 +345,16 @@ function countItems(player) {
   return have;
 }
 
-/** Takes up to n of an item from the inventory (hotbar last). @param {Player} player @param {string} id @param {number} n */
+/** Has the player named this stack or given it lore? Those are used last. @param {ItemStack} it */
+const special = (it) => {
+  try {
+    return it.nameTag !== undefined || it.getLore().length > 0;
+  } catch {
+    return false;
+  }
+};
+
+/** Takes up to n of an item from the inventory (hotbar last, named stacks after plain ones). @param {Player} player @param {string} id @param {number} n */
 function takeItems(player, id, n) {
   const c = containerOf(player);
   if (!c || n <= 0) return 0;
@@ -353,7 +362,13 @@ function takeItems(player, id, n) {
   const order = [];
   for (let i = 9; i < c.size; i++) order.push(i);
   for (let i = 0; i < 9; i++) order.push(i);
+  /** @type {number[]} */
+  const last = [];
   for (const i of order) {
+    const it = c.getItem(i);
+    if (it?.typeId === id && special(it)) last.push(i);
+  }
+  for (const i of [...order.filter((i) => !last.includes(i)), ...last]) {
     if (taken >= n) break;
     const it = c.getItem(i);
     if (!it || it.typeId !== id) continue;
@@ -480,6 +495,8 @@ function materialsOf(player, plan, placed) {
     if (!second) return `There is no block called "${plan.secondBlock}". Change it in /realm:build -> Blocks and placing.`;
   } else if (plan.second === "next" && player.selectedSlotIndex < 8) {
     second = blockOfItem(c?.getItem(player.selectedSlotIndex + 1));
+    // A block the tools never place (TNT, a door...) next to your hand just isn't a second block.
+    if (second && isForbidden(second.type.id)) second = undefined;
   }
   if (second && isForbidden(second.type.id)) return `${nice(second.type.id)} can't be built with the tools.`;
   const fixed = base;
@@ -511,6 +528,10 @@ const limitOf = (player) => (isCreative(player) ? get("maxBlocksCreative") : get
 
 /** @type {Map<string, { key: string, guide: { cells: Pos[], offset?: Pos } | undefined }>} guide cells per player */
 const layoutCache = new Map();
+/** @type {Map<string, { key: string, rel: Rel[] | undefined, turned: Map<string, Pos[]>, busy: boolean, job: number | undefined }>} each player's shape relative to its start block (undefined: too big), turned to each facing; busy: still being laid out */
+const relCache = new Map();
+/** Thrown while the guide's layout is still being worked out. */
+class Pending extends Error {}
 
 /**
  * The shape's cells relative to the block it is built at (du right, dv up, dw away), copies included.
@@ -520,25 +541,42 @@ const layoutCache = new Map();
  * @returns {Rel[]}
  */
 function relCells(plan, stairs, pts, cap = Infinity) {
+  const job = relCellsJob(plan, stairs, pts, cap);
+  let r = job.next();
+  while (!r.done) r = job.next();
+  return r.value;
+}
+
+/**
+ * relCells as a generator for system.runJob (the guide lays big shapes out over several ticks).
+ * @param {Plan} plan @param {boolean} stairs @param {{ W: number, H: number, D: number, a: number[], b: number[] }} [pts]
+ * @param {number} [cap]
+ * @returns {Generator<void, Rel[], void>}
+ */
+function* relCellsJob(plan, stairs, pts, cap = Infinity) {
   const v = (/** @type {string} */ k) => val(plan, k);
   let W, H, D, au, av, aw;
-  /** @type {Map<string, import("./shapes.js").Cell>} */
+  /** @type {Map<number, import("./shapes.js").Cell>} */
   let cells;
   if (pts) {
     ({ W, H, D } = pts);
     // Two blocks at the same height: the shape keeps the height from its settings.
-    if (H === 1 && shapeOf(plan.shape).params.includes("height")) H = v("height");
+    if (H === 1 && shapeOf(plan.shape).params.includes("height")) H = boxOf(plan.shape, v).H;
     [au, av, aw] = pts.a;
-    cells = cellsOf(plan.shape, v, W, H, D, { a: pts.a, b: pts.b }, stairs, slack(cap));
+    cells = yield* cellsJob(plan.shape, v, W, H, D, { a: pts.a, b: pts.b }, stairs, slack(cap));
   } else {
     ({ W, H, D } = boxOf(plan.shape, v));
     au = plan.anchor === "corner" ? 0 : Math.floor((W - 1) / 2);
     aw = plan.anchor === "center" ? Math.floor((D - 1) / 2) : 0;
     av = -Math.max(-32, Math.min(32, plan.up));
-    cells = cellsOf(plan.shape, v, W, H, D, undefined, stairs, slack(cap));
+    cells = yield* cellsJob(plan.shape, v, W, H, D, undefined, stairs, slack(cap));
   }
   /** @type {Rel[]} */
-  let rel = [...cells.values()].map((c) => ({ du: c.u - au, dv: c.v - av, dw: c.w - aw, c }));
+  let rel = [];
+  for (const c of cells.values()) {
+    rel.push({ du: c.u - au, dv: c.v - av, dw: c.w - aw, c });
+    if (rel.length % 4096 === 0) yield;
+  }
   const n = Math.max(1, Math.min(16, Math.round(plan.repeat)));
   if (cells.size * n > cap) throw new TooBig(cells.size * n);
   if (n > 1) {
@@ -606,19 +644,37 @@ function pointsBox(A, B, fr) {
  * @param {{ R: number[], F: number[] }} fr @param {{ x: number, y: number, z: number }} [B] two-point mode: the end
  * @param {number} [cap] see relCells
  * @param {string} [dimId] the dimension it is built in (a modifier center elsewhere doesn't count)
- * @returns {WorldCell[]}
+ * @returns {Promise<WorldCell[]>}
  */
 function worldCells(plan, mats, T, fr, B, cap, dimId) {
+  // Laid out by a job: a big shape takes a few ticks instead of stalling one.
+  return jobResult(worldCellsJob(plan, mats, T, fr, B, cap, dimId));
+}
+
+/**
+ * worldCells as a generator for system.runJob.
+ * @param {Plan} plan @param {Materials} mats @param {Pos} T @param {{ R: number[], F: number[] }} fr @param {Pos} [B]
+ * @param {number} [cap] @param {string} [dimId] @returns {Generator<void, WorldCell[], void>}
+ */
+function* worldCellsJob(plan, mats, T, fr, B, cap, dimId) {
   const stairs = isStair(mats.base);
-  const rel = relCells(plan, stairs, B ? pointsBox(T, B, fr) : undefined, cap);
+  const rel = yield* relCellsJob(plan, stairs, B ? pointsBox(T, B, fr) : undefined, cap);
   const { R, F } = fr;
   /** @param {number[]} d */
   const wd = (d) => [d[0] * R[0] + d[1] * F[0], d[0] * R[1] + d[1] * F[1]];
-  const pos = rel.map(({ du, dv, dw }) => ({ x: T.x + du * R[0] + dw * F[0], y: T.y + dv, z: T.z + du * R[1] + dw * F[1] }));
+  /** @type {Pos[]} */
+  const pos = [];
+  for (const { du, dv, dw } of rel) {
+    pos.push({ x: T.x + du * R[0] + dw * F[0], y: T.y + dv, z: T.z + du * R[1] + dw * F[1] });
+    if (pos.length % 2048 === 0) yield;
+  }
   const main = mats.chooser(boundsOf(pos.length ? pos : [T]));
+  yield;
   /** @type {WorldCell[]} */
   const out = [];
-  rel.forEach(({ c }, i) => {
+  for (let i = 0; i < rel.length; i++) {
+    if (i && i % 2048 === 0) yield;
+    const { c } = rel[i];
     const { x, y, z } = pos[i];
     /** @type {BlockPermutation | undefined} */
     let perm;
@@ -650,11 +706,30 @@ function worldCells(plan, mats, T, fr, B, cap, dimId) {
         break;
       }
     }
-    if (!perm) return;
+    if (!perm) continue;
     if (c.full && NOT_FULL.test(perm.type.id)) perm = permOf("minecraft:oak_planks") ?? perm;
     out.push({ x, y, z, perm, late });
+  }
+  yield;
+  return yield* finishCellsJob(plan, out, T, cap, dimId);
+}
+
+/**
+ * Runs a generator as a job (system.runJob) and gives its result.
+ * @template R @param {Generator<void, R, void>} gen @returns {Promise<R>}
+ */
+function jobResult(gen) {
+  return new Promise((resolve, reject) => {
+    system.runJob(
+      (function* () {
+        try {
+          resolve(yield* gen);
+        } catch (e) {
+          reject(e);
+        }
+      })()
+    );
   });
-  return finishCells(plan, out, T, cap, dimId);
 }
 
 /** Where mirrors and radial copies turn: the set center (in this dimension), else the block the build starts at. @param {Plan} plan @param {Pos} T @param {string} [dimId] */
@@ -666,17 +741,38 @@ const centerOf = (plan, T, dimId) => (plan.mods.center && (!dimId || plan.mods.c
  * @param {Plan} plan @param {C[]} cells @param {Pos} T @param {number} [cap] @param {string} [dimId] @returns {C[]}
  */
 function finishCells(plan, cells, T, cap = Infinity, dimId) {
+  const job = finishCellsJob(plan, cells, T, cap, dimId);
+  let r = job.next();
+  while (!r.done) r = job.next();
+  return r.value;
+}
+
+/**
+ * finishCells as a generator for system.runJob.
+ * @template {{ x: number, y: number, z: number, late?: boolean }} C
+ * @param {Plan} plan @param {C[]} cells @param {Pos} T @param {number} [cap] @param {string} [dimId] @returns {Generator<void, C[], void>}
+ */
+function* finishCellsJob(plan, cells, T, cap = Infinity, dimId) {
   let out = cells;
   if (modsOn(plan.mods)) {
     try {
-      out = applyMods(cells, plan.mods, centerOf(plan, T, dimId), cap);
+      out = yield* applyModsJob(cells, plan.mods, centerOf(plan, T, dimId), cap);
     } catch (e) {
       if (e instanceof RangeError) throw new TooBig(Math.max(cap + 1, Number(e.message) || 0));
       throw e;
     }
   }
-  out.sort((a, b) => (!!a.late === !!b.late ? a.y - b.y : a.late ? 1 : -1));
-  return out;
+  // Bottom up, things that hang on others last: by layer (linear, unlike a sort of thousands of blocks).
+  let lo = Infinity, hi = -Infinity;
+  for (const c of out) {
+    if (c.y < lo) lo = c.y;
+    if (c.y > hi) hi = c.y;
+  }
+  if (out.length < 2) return out;
+  /** @type {C[][]} */
+  const layers = Array.from({ length: 2 * (hi - lo + 1) }, () => []);
+  for (const c of out) layers[(c.late ? hi - lo + 1 : 0) + c.y - lo].push(c);
+  return layers.flat();
 }
 
 /**
@@ -833,16 +929,16 @@ async function build(player, dim, cells, label, opts) {
     // 1. What can go where (reading only).
     /** @type {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string, cost?: string }[]} */
     const todo = [];
-    let blocked = 0, unloaded = 0, unpayable = 0;
+    let blocked = 0, unloaded = 0, unpayable = 0, outside = 0;
     const pay = !creative && get("requireItems") === true && !opts.free;
     for (let i = 0; i < cells.length; i++) {
-      if (i && i % (perTick * 4) === 0) {
+      if (i && i % perTick === 0) {
         await tick();
         if (!player.isValid) return false;
       }
       const c = cells[i];
       if (c.y < range.min || c.y >= range.max) {
-        blocked++;
+        outside++;
         continue;
       }
       let block;
@@ -973,6 +1069,7 @@ async function build(player, dim, cells, label, opts) {
     const notes = [];
     if (skipped) notes.push(`${plural(skipped, "spot")} already taken`);
     if (unloaded) notes.push(`${plural(unloaded, "block")} too far away`);
+    if (outside) notes.push(`${plural(outside, "block")} above or below the world`);
     if (unpayable) notes.push(`${plural(unpayable, "block")} that can't be built in survival`);
     if (!placed.length) {
       player.sendMessage(short.length ? `§eNot enough blocks: you need ${short.join(", ")}.` : `§eNothing was built${notes.length ? `: ${notes.join(", ")}` : ""}.`);
@@ -980,7 +1077,7 @@ async function build(player, dim, cells, label, opts) {
     }
     note(player, `§aBuilt ${plural(placed.length, "block")}§7 - /realm:build_undo takes it back`);
     if (short.length) player.sendMessage(`§eOut of blocks: built ${placed.length} of ${todo.length}. Still needed: ${short.join(", ")}.`);
-    if (notes.length && skipped + unloaded + unpayable >= Math.max(4, cells.length / 10)) player.sendMessage(`§7Skipped ${notes.join(", ")}.`);
+    if (notes.length && skipped + unloaded + unpayable + outside >= Math.max(4, cells.length / 10)) player.sendMessage(`§7Skipped ${notes.join(", ")}.`);
     return true;
   } finally {
     s.busy = false;
@@ -1065,13 +1162,17 @@ async function buildAt(player, T, placed) {
     }
   }
   let cells;
+  s.busy = true; // while it is laid out
   try {
-    cells = worldCells(plan, mats, start, fr, end, limitOf(player), player.dimension.id);
+    cells = await worldCells(plan, mats, start, fr, end, limitOf(player), player.dimension.id);
   } catch (e) {
     if (!(e instanceof TooBig)) throw e;
-    player.sendMessage(tooBig(player, e));
+    if (player.isValid) player.sendMessage(tooBig(player, e));
     return false;
+  } finally {
+    s.busy = false;
   }
+  if (!player.isValid) return false;
   const label = twoPoint ? shapeOf(plan.shape).name : planLabel(plan);
   return build(player, player.dimension, cells, label, { mode: replaceMode(player, plan) });
 }
@@ -1329,8 +1430,9 @@ async function airUse(player, perm) {
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
-  if (ev.itemStack?.typeId !== BOOK || !ev.isFirstEvent || isSelecting(ev.player)) return;
-  ev.cancel = true;
+  if (ev.itemStack?.typeId !== BOOK || isSelecting(ev.player)) return;
+  ev.cancel = true; // every repeat while the button is held too, so the block is never used
+  if (!ev.isFirstEvent) return;
   const player = ev.player;
   system.run(() => {
     if (player.isValid) useBook(player);
@@ -1346,7 +1448,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
  * (when the result depends on it) T changes. Without modifiers, two blocks or points it is cached relative to T
  * and drawn with T as the offset.
  * @param {Player} player @param {Plan} plan @param {Pos} T
- * @returns {{ cells: Pos[], offset?: Pos } | undefined}
+ * @returns {{ cells: Pos[], offset?: Pos, mods?: { m: import("./modifiers.js").Mods, center: Pos } } | undefined}
  */
 function guideFor(player, plan, T) {
   const fr = frameOf(facingOf(player), plan.turn);
@@ -1357,11 +1459,52 @@ function guideFor(player, plan, T) {
   const twoPoint = plan.size === "points" && shape.points;
   const start = twoPoint && s.start && s.start.dim === dim ? s.start : undefined;
   const pts = shape.way && s.way && s.way.dim === dim ? s.way.pts : [];
-  const moving = modsOn(plan.mods) || shape.way || twoPoint; // the cells depend on T itself
-  const key = JSON.stringify(plan) + fr.R.join() + fr.F.join() + get("maxSize") + cap + dim +
-    (moving ? `|${T.x},${T.y},${T.z}|${start ? `${start.x},${start.y},${start.z}` : ""}|${pts.length}` : "");
+  // Curves and two-block shapes depend on where you look; other shapes are laid out once and moved (their modifier
+  // copies are worked out face by face when drawn).
+  const moving = shape.way || twoPoint;
+  const planKey = JSON.stringify(plan) + get("maxSize") + cap;
+  const baseKey = planKey + fr.R.join() + fr.F.join() + dim;
+  const key = baseKey + (moving ? `|${T.x},${T.y},${T.z}|${start ? `${start.x},${start.y},${start.z}` : ""}|${pts.length}` : "");
   const cached = layoutCache.get(player.id);
   if (cached && cached.key === key) return cached.guide;
+  /** The shape's blocks relative to the block it starts at: laid out once per plan (and turned once per facing), not per look. */
+  const fk = fr.R.join() + fr.F.join();
+  const relPos = () => {
+    let hit = relCache.get(player.id);
+    if (!hit || hit.key !== planKey) {
+      if (hit?.job !== undefined) system.clearJob(hit.job); // a layout for settings since changed
+      hit = { key: planKey, rel: undefined, turned: new Map(), busy: true, job: undefined };
+      relCache.set(player.id, hit);
+    }
+    const pos = hit.turned.get(fk);
+    if (pos) return pos;
+    if (!hit.busy && !hit.rel) throw new TooBig(cap + 1);
+    if (hit.job === undefined) {
+      // Laid out (and outlined) over the next ticks, so a big shape doesn't stall one; no guide until then.
+      const entry = hit;
+      entry.job = system.runJob(
+        (function* () {
+          try {
+            if (entry.busy) entry.rel = yield* relCellsJob(plan, false, undefined, cap);
+            const list = [];
+            for (const r of entry.rel ?? []) {
+              list.push({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] });
+              if (list.length % 4096 === 0) yield;
+            }
+            if (entry.rel) {
+              yield* outlineJob(list);
+              entry.turned.set(fk, list);
+            }
+          } catch (e) {
+            if (!(e instanceof TooBig)) console.warn(`[build] guide: ${e}`);
+          }
+          entry.busy = false;
+          entry.job = undefined;
+        })()
+      );
+    }
+    throw new Pending();
+  };
   /** @type {{ cells: Pos[], offset?: Pos } | undefined} */
   let guide;
   try {
@@ -1369,20 +1512,31 @@ function guideFor(player, plan, T) {
       const pos = curveCells(/** @type {"curve" | "curvewall"} */ (plan.shape), (k) => val(plan, k), [...pts, T], slack(cap));
       guide = { cells: finishCells(plan, pos, pts[0] ?? T, cap, dim) };
     } else {
-      const rel = start ? relCells(plan, false, pointsBox(start, T, fr), cap) : twoPoint ? [{ du: 0, dv: 0, dw: 0 }] : relCells(plan, false, undefined, cap);
       const O = start ?? T;
-      const pos = rel.map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }));
-      guide = moving
-        ? { cells: finishCells(plan, pos.map((p) => ({ x: p.x + O.x, y: p.y + O.y, z: p.z + O.z })), O, cap, dim) }
-        : { cells: pos, offset: T };
+      const pos = moving
+        ? (start ? relCells(plan, false, pointsBox(start, T, fr), cap) : [{ du: 0, dv: 0, dw: 0 }]).map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }))
+        : relPos();
+      guide = moving ? { cells: withModsGuide(plan, pos.map((p) => ({ x: p.x + O.x, y: p.y + O.y, z: p.z + O.z })), O, cap, dim) } : { cells: pos };
     }
   } catch (e) {
+    if (e instanceof Pending) return undefined; // not laid out yet: asked again at the next refresh
     if (!(e instanceof TooBig)) throw e;
     guide = undefined; // too big to build: no guide (building says why)
   }
   layoutCache.set(player.id, { key, guide });
-  if (guide && !moving) return { cells: guide.cells, offset: T };
+  if (guide && !moving) return { cells: guide.cells, offset: T, mods: modsOn(plan.mods) ? { m: plan.mods, center: centerOf(plan, T, dim) } : undefined };
   return guide;
+}
+
+/** The guide's modifier copies (like finishCells, without sorting). @param {Plan} plan @param {Pos[]} cells @param {Pos} T @param {number} cap @param {string} dim */
+function withModsGuide(plan, cells, T, cap, dim) {
+  if (!modsOn(plan.mods)) return cells;
+  try {
+    return applyMods(cells, plan.mods, centerOf(plan, T, dim), cap);
+  } catch (e) {
+    if (e instanceof RangeError) throw new TooBig(cap + 1);
+    throw e;
+  }
 }
 
 /** Gold marks: the modifier center, a two-block start and a curve's points. @param {Player} player @param {State} s @param {Plan} plan */
@@ -1417,7 +1571,7 @@ system.runInterval(() => {
       if (guideDue) {
         const T = lookTarget(player);
         const g = T && guideFor(player, plan, T);
-        if (g) drawGuide(player, g.cells, "build", { offset: g.offset, force: true });
+        if (g) drawGuide(player, g.cells, "build", { offset: g.offset, mods: g.mods, force: true });
         const marks = marksOf(player, s, plan);
         if (marks.length) drawGuide(player, marks, "mark", { force: true });
       }
@@ -1450,6 +1604,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
     s.way = undefined;
   }
   layoutCache.delete(playerId);
+  const job = relCache.get(playerId);
+  if (job?.job !== undefined) system.clearJob(job.job);
+  relCache.delete(playerId);
   forgetGuides(playerId);
 });
 
@@ -1807,7 +1964,7 @@ async function buildHereMenu(player) {
   if (typeof mats === "string") return player.sendMessage(`§e${mats}`);
   let cells;
   try {
-    cells = worldCells(plan, mats, T, frameOf(facingOf(player), plan.turn), undefined, limitOf(player), player.dimension.id);
+    cells = await worldCells(plan, mats, T, frameOf(facingOf(player), plan.turn), undefined, limitOf(player), player.dimension.id);
   } catch (e) {
     if (!(e instanceof TooBig)) throw e;
     return player.sendMessage(tooBig(player, e));

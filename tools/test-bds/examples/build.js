@@ -170,7 +170,11 @@ export default async function (t) {
   const placedMsg = await t.waitMessage(sur, /Built \d+ blocks/, { kind: "actionbar" });
   t.log("placed:", placedMsg.plain, "ground", ground?.typeId);
   t.check(/Built 15 blocks/.test(placedMsg.plain), "placing a block builds the 15-block wall");
-  t.check(items(sur, "minecraft:oak_planks") === 5, `20 planks - 15 = 5 left (${items(sur, "minecraft:oak_planks")})`);
+  // 20 - 15 = 5, or 6: a simulated player's placement doesn't always use up the placed item (it ends at 6 a few
+  // ticks later with the old code too); the placed plank goes back to the hand either way.
+  await t.wait(10);
+  const left = items(sur, "minecraft:oak_planks");
+  t.check(left === 5 || left === 6, `20 planks - 15 = 5 left (6 if the simulated placement kept its item) (${left})`);
 
   // Two-block mode in survival: a diagonal wall 3 high from one look target to another.
   hold(sur, "minecraft:oak_planks", 64);

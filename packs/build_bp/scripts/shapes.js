@@ -186,6 +186,57 @@ export function boxOf(shape, val) {
   return { W: 1, H: 1, D: 1 };
 }
 
+/**
+ * At least how many blocks a shape has (a low estimate, from its size alone), so one far over the limit is refused
+ * without laying it out. 0 when there is no quick formula.
+ * @param {string} shape @param {(key: string) => any} val @param {number} W @param {number} H @param {number} D
+ */
+export function leastCells(shape, val, W, H, D) {
+  const t = Math.max(1, val("thick") ?? 1);
+  const hollowBox = (/** @type {number} */ w, /** @type {number} */ h, /** @type {number} */ d) => w * h * d - Math.max(0, w - 2) * Math.max(0, h - 2) * Math.max(0, d - 2);
+  const PI = Math.PI;
+  const LOW = 0.8; // round shapes: a little under the smooth formula
+  switch (shape) {
+    case "line":
+      return val("dir") === "diagonal" ? D * t * t : W * H * D;
+    case "wall":
+    case "floor":
+      return W * H * D;
+    case "box": {
+      const f = val("fill");
+      if (f === "filled") return W * H * D;
+      if (f === "walls") return W * H * D - Math.max(0, W - 2) * H * Math.max(0, D - 2);
+      if (f === "frame") return 0;
+      return hollowBox(W, H, D);
+    }
+    case "stairs":
+    case "ramp":
+      return W * D;
+    case "circle":
+    case "ellipse":
+    case "cylinder": {
+      const rx = W / 2, rz = D / 2;
+      const area = PI * rx * rz;
+      const inner = PI * Math.max(0, rx - t) * Math.max(0, rz - t);
+      const layers = shape === "cylinder" ? H - (val("battlements") ? 1 : 0) : 1;
+      return LOW * layers * (val("filled") ? area : area - inner);
+    }
+    case "sphere":
+    case "dome": {
+      const r = (W - 1) / 2;
+      const part = shape === "dome" ? 0.5 : 1;
+      return LOW * part * (val("hollow") ? 4 * PI * r * r : (4 / 3) * PI * r * r * r);
+    }
+    case "cone": {
+      const r = (W - 1) / 2, h = val("lean") === "flat" ? D : H;
+      return val("hollow") ? 0 : LOW * (PI * r * r * h) / 3;
+    }
+    case "pyramid":
+      return val("hollow") ? 0 : LOW * (W * D * H) / 3;
+  }
+  return 0;
+}
+
 /** Small deterministic hash for speckled patterns. @param {number} u @param {number} v @param {number} w */
 const hash = (u, v, w) => {
   let h = (u * 73856093) ^ (v * 19349663) ^ (w * 83492791);
@@ -211,19 +262,38 @@ export class TooBig extends Error {
  * @param {boolean} [stairs] the main block is a stair: slopes use stair cells
  * @param {number} [cap] stop (throw TooBig) once the shape has more cells than this, so a huge filled shape
  *   isn't laid out cell by cell only to be refused
- * @returns {Map<string, Cell>}
+ * @returns {Map<number, Cell>}
  */
 export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infinity) {
-  /** @type {Map<string, Cell>} */
+  const job = cellsJob(shape, val, W, H, D, points, stairs, cap);
+  let r = job.next();
+  while (!r.done) r = job.next();
+  return r.value;
+}
+
+/**
+ * cellsOf as a generator that pauses every few thousand cells, for system.runJob: big shapes are laid out over
+ * several ticks instead of stalling one. Its return value is the cells.
+ * @param {string} shape @param {(key: string) => any} val @param {number} W @param {number} H @param {number} D
+ * @param {{ a: number[], b: number[] }} [points] @param {boolean} [stairs] @param {number} [cap]
+ * @returns {Generator<void, Map<number, Cell>, void>}
+ */
+export function* cellsJob(shape, val, W, H, D, points, stairs = false, cap = Infinity) {
+  // A shape that can't fit is refused before it is laid out cell by cell.
+  if (!points) {
+    const least = leastCells(shape, val, W, H, D);
+    if (least > cap) throw new TooBig(Math.ceil(least));
+  }
+  /** @type {Map<number, Cell>} keyed by (u * H + v) * D + w */
   const out = new Map();
   /** @param {number} u @param {number} v @param {number} w @param {Omit<Cell, "u" | "v" | "w">} c */
   const put = (u, v, w, c) => {
     if (u < 0 || v < 0 || w < 0 || u >= W || v >= H || w >= D) return;
-    out.set(`${u},${v},${w}`, { u, v, w, ...c });
+    out.set((u * H + v) * D + w, { u, v, w, ...c });
     if (out.size > cap) throw new TooBig(out.size);
   };
   /** @param {number} u @param {number} v @param {number} w */
-  const del = (u, v, w) => out.delete(`${u},${v},${w}`);
+  const del = (u, v, w) => out.delete((u * H + v) * D + w);
   const M = { k: /** @type {"m"} */ ("m") };
   const A = { k: /** @type {"a"} */ ("a") };
   /** @param {[number, number]} d */
@@ -234,10 +304,13 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
   const cx = (W - 1) / 2, cz = (D - 1) / 2;
 
   /** Fills a whole box with a cell maker. @param {(u: number, v: number, w: number) => Omit<Cell, "u" | "v" | "w"> | undefined} fn */
-  const each = (fn) => {
-    for (let v = 0; v < H; v++) for (let w = 0; w < D; w++) for (let u = 0; u < W; u++) {
-      const c = fn(u, v, w);
-      if (c) put(u, v, w, c);
+  const each = function* (fn) {
+    for (let v = 0; v < H; v++) {
+      for (let w = 0; w < D; w++) for (let u = 0; u < W; u++) {
+        const c = fn(u, v, w);
+        if (c) put(u, v, w, c);
+      }
+      yield;
     }
   };
 
@@ -247,14 +320,25 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
    * @param {{ x?: boolean, up?: boolean, down?: boolean }} axes which ways count as "outside" (x: u and w)
    * @param {number} thickness
    */
-  const shell = (solid, axes, thickness) => (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
-    if (!solid(u, v, w)) return false;
-    for (let k = 1; k <= thickness; k++) {
-      if (axes.x && (!solid(u + k, v, w) || !solid(u - k, v, w) || !solid(u, v, w + k) || !solid(u, v, w - k))) return true;
-      if (axes.up && !solid(u, v + k, w)) return true;
-      if (axes.down && !solid(u, v - k, w)) return true;
-    }
-    return false;
+  const shell = (solid, axes, thickness) => {
+    // Each spot's answer is worked out once (a surface asks about every neighbor): 0 unknown, 1 outside, 2 inside.
+    const m = thickness, sw = W + 2 * m, sh = H + 2 * m, sd = D + 2 * m;
+    const memo = new Uint8Array(sw * sh * sd);
+    const inside = (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
+      if (u < -m || v < -m || w < -m || u >= W + m || v >= H + m || w >= D + m) return solid(u, v, w);
+      const i = ((u + m) * sh + (v + m)) * sd + (w + m);
+      if (!memo[i]) memo[i] = solid(u, v, w) ? 2 : 1;
+      return memo[i] === 2;
+    };
+    return (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
+      if (!inside(u, v, w)) return false;
+      for (let k = 1; k <= thickness; k++) {
+        if (axes.x && (!inside(u + k, v, w) || !inside(u - k, v, w) || !inside(u, v, w + k) || !inside(u, v, w - k))) return true;
+        if (axes.up && !inside(u, v + k, w)) return true;
+        if (axes.down && !inside(u, v - k, w)) return true;
+      }
+      return false;
+    };
   };
   /** @param {number} u @param {number} v @param {number} w */
   const inBox = (u, v, w) => u >= 0 && v >= 0 && w >= 0 && u < W && v < H && w < D;
@@ -310,24 +394,24 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
       if (points) for (const [u, v, w] of line3(points.a, points.b)) put(u, v, w, M);
       else if (val("dir") === "diagonal") {
         for (let i = 0; i < D; i++) for (let a = 0; a < t; a++) for (let b = 0; b < t; b++) put(a, i + b, i, M);
-      } else each(() => M);
+      } else yield* each(() => M);
       break;
     }
     case "wall": {
       if (points) {
         const a = points.a, b = points.b;
         for (const [u, , w] of line3([a[0], 0, a[2]], [b[0], 0, b[2]])) for (let v = 0; v < H; v++) put(u, v, w, M);
-      } else each(() => M);
+      } else yield* each(() => M);
       pattern();
       break;
     }
     case "floor":
-      each(() => M);
+      yield* each(() => M);
       pattern();
       break;
     case "box": {
       const f = val("fill");
-      each((u, v, w) => {
+      yield* each((u, v, w) => {
         const eu = u === 0 || u === W - 1, ev = v === 0 || v === H - 1, ew = w === 0 || w === D - 1;
         if (f === "filled") return M;
         if (f === "walls") return eu || ew ? M : undefined;
@@ -341,7 +425,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
       const base = val("base"), round = val("round");
       const inner = base ? 1 : 0;
       const r = (W - 2 * inner) / 2, rb = W / 2;
-      each((u, v, w) => {
+      yield* each((u, v, w) => {
         const capital = base && (v === 0 || v === H - 1);
         const rad = capital ? rb : r;
         const du = u - cx, dw = w - cz;
@@ -402,7 +486,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
     }
     case "arch": {
       const a = W / 2, b = H, ai = Math.max(0, a - t), bi = Math.max(0, b - t);
-      each((u, v) => {
+      yield* each((u, v) => {
         const x = u - cx, y = v + 0.5;
         const outer = (x * x) / (a * a) + (y * y) / (b * b) <= 1;
         const inner = ai > 0 && bi > 0 && (x * x) / (ai * ai) + (y * y) / (bi * bi) <= 1;
@@ -422,7 +506,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
       const walls = shape === "cylinder" && val("battlements") ? H - 1 : H;
       const solid = (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => inBox(u, v, w) && v < walls && disk(u, w);
       const ring = shell(solid, { x: true }, t);
-      each((u, v, w) => (v < walls && (val("filled") ? solid(u, v, w) : ring(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => (v < walls && (val("filled") ? solid(u, v, w) : ring(u, v, w)) ? M : undefined));
       if (walls < H) {
         // Battlements: every other cell of the outer ring, one block up.
         const outerRing = shell(solid, { x: true }, 1);
@@ -444,7 +528,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
         return x * x + y * y + z * z <= 1;
       };
       const surface = shell(solid, { x: true, up: true, down: true }, 1);
-      each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
       break;
     }
     case "pyramid": {
@@ -456,7 +540,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
         return u >= i && u <= W - 1 - i && w >= i && w <= D - 1 - i;
       };
       const surface = shell(solid, { x: true, up: true }, 1);
-      each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
       // With stairs, each layer's outer ring becomes steps facing out (the top stays full blocks).
       if (stairs) for (let v = 0; v < H - 1; v++) if (inset(v + 1) > inset(v)) ringLayer(v, inset(v), true);
       break;
@@ -470,7 +554,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
         return w < D && x * x + z * z <= 1;
       };
       const ring = shell(half, { x: true }, t);
-      each((u, v, w) => (half(u, v, w) && (val("filled") || ring(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => (half(u, v, w) && (val("filled") || ring(u, v, w)) ? M : undefined));
       break;
     }
     case "cone": {
@@ -491,7 +575,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
             ? (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => upright(u, v, w - v)
             : upright;
       const surface = shell(solid, lean === "up" ? { x: true, up: true } : { x: true, up: true, down: true }, 1);
-      each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
       break;
     }
     case "roof": {
