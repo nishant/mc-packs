@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, giveKit, restoreStash, rollBoons, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, giveKit, isRunGear, restoreStash, rollBoons, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -1502,6 +1502,7 @@ function giveBack(p) {
   const inv = p.getComponent("minecraft:inventory")?.container;
   let spilled = false;
   for (const it of items) {
+    if (isRunGear(it)) continue; // kit and boon gear stays in the dungeon
     try {
       const rest = inv ? inv.addItem(it) : it;
       if (rest) {
@@ -1523,6 +1524,7 @@ function giveSpoils(p) {
   const inv = p.getComponent("minecraft:inventory")?.container;
   let spilled = false;
   for (const it of items) {
+    if (isRunGear(it)) continue; // kit and boon gear stays in the dungeon
     try {
       const rest = inv ? inv.addItem(it) : it;
       if (rest) {

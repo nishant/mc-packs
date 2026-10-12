@@ -66,7 +66,7 @@ export const CONFIG = {
   /**
    * The Fixed loadout starter kit: an item, how many, the levels it's given at (`from` and `to`: 0 Easy, 1 Normal,
    * 2 Hard, 3 to 22 Nightmare 1 to 20), an armor or offhand `slot`, and enchantments (`ench`, id: level).
-   * Tools, weapons and armor from the kit stay in the dungeon; food, arrows and blocks are yours.
+   * Everything from the kit (food, arrows and blocks too) stays in the dungeon: it is taken back when the run ends.
    * @type {{ item: string, count?: number, from?: number, to?: number, slot?: "head" | "chest" | "legs" | "feet" | "offhand", ench?: Record<string, number> }[]}
    */
   gauntletKit: [
