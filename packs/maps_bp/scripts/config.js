@@ -25,26 +25,36 @@ export const CONFIG = {
   /** ...and at most this many. */
   maxDistance: 2000,
 
-  /** Fewest legs (clues) a hunt has; each leg ends at a spot where the next clue appears. */
+  /** Fewest legs (clues) a hunt has; each leg but the last ends at a marker (a cairn, a flag or a standing stone) that holds the next clue. */
   legsMin: 2,
 
-  /** Most legs a hunt has. */
-  legsMax: 3,
+  /** Most legs a hunt has. Each leg uses a different kind of clue (a heading, compass steps, coordinates, or both), so at most 4. */
+  legsMax: 4,
 
-  /** Coming this close (blocks, ignoring height) to the end of a leg reveals the next clue. */
+  /** Where no marker can stand (water, builds), coming this close (blocks, ignoring height) to the end of a leg finds the next clue in a bottle. */
   legRadius: 30,
 
-  /** The chest is buried once the player is this close to the treasure (blocks) and its chunk is loaded. */
-  buryDistance: 48,
+  /**
+   * Coming this close (blocks) to the planned end of a leg, once its land is loaded, settles it: the pack picks a landmark there
+   * (water, the edge of a wood, a hilltop, a hollow, sand, snow, flowers or level ground), builds the marker at it (or buries the
+   * chest) and the map names the landmark.
+   */
+  revealDistance: 96,
 
-  /** How far from the planned spot (blocks) the chest may be buried, to find dry land away from builds. */
+  /** On the last leg, how far from the planned spot (blocks) the chest may be buried when no landmark spot works. */
   searchRadius: 32,
 
-  /** Never bury a chest closer than this to the world spawn (blocks). */
+  /** Never bury a chest or build a marker closer than this to the world spawn (blocks). */
   avoidSpawn: 64,
 
-  /** While holding a Treasure Map, the actionbar says Warmer, Colder or Very warm every 2 seconds. */
+  /** Build a marker at the end of each leg but the last. Disabled: the next clue waits in a bottle, found by coming within `legRadius`. */
+  markers: true,
+
+  /** While holding a Treasure Map, the side box says Warmer, Colder or Very warm every 2 seconds (within `warmthRadius`). */
   warmth: true,
+
+  /** Warmer / Colder only works this close (blocks) to the marker or the chest; farther away the map only says cold, cool or faintly warm. */
+  warmthRadius: 64,
 
   /** "Very warm" within this many blocks of the next clue or the chest. */
   veryWarm: 40,
@@ -86,34 +96,5 @@ export const CONFIG = {
     { item: "minecraft:name_tag", min: 1, max: 1, chance: 0.15 },
     { item: "minecraft:saddle", min: 1, max: 1, chance: 0.1 },
     { item: "minecraft:heart_of_the_sea", min: 1, max: 1, chance: 0.03 },
-  ],
-
-  /**
-   * How each direction reads in a clue, starting north and going clockwise (N, NE, E, SE, S, SW, W, NW).
-   */
-  directions: [
-    "toward the North Star",
-    "between the North Star and the rising sun",
-    "toward the rising sun",
-    "between the rising sun and the warm south wind",
-    "with the North Star at your back",
-    "between the warm south wind and the setting sun",
-    "toward the setting sun",
-    "between the setting sun and the North Star",
-  ],
-
-  /** Clues for a leg that ends at another clue: `{dir}` is a direction from `directions`, `{dist}` a distance such as "about twelve hundred". */
-  clues: [
-    "Walk {dir} for {dist} paces, and there the next riddle waits.",
-    "Follow the path {dir}. After {dist} paces, look about you for the next sign.",
-    "{dist} paces {dir}, where an old traveler left another mark.",
-    "Turn {dir} and count {dist} paces. The next clue lies there.",
-  ],
-
-  /** Clues for the last leg, to the treasure. */
-  finalClues: [
-    "Walk {dir} for {dist} paces, to where the treasure lies buried.",
-    "The last stretch: {dist} paces {dir}. Dig where the map grows warm.",
-    "{dist} paces {dir}, and the X is beneath your feet.",
   ],
 };

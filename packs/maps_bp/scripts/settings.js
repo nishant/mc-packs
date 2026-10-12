@@ -15,6 +15,8 @@ const OPTIONS = [
   { key: "minDistance", type: "int", scope: "world", label: "Shortest hunt (blocks)", help: "Applies to maps bought from now on", min: 200, max: 5000, step: 100 },
   { key: "maxDistance", type: "int", scope: "world", label: "Longest hunt (blocks)", help: "Applies to maps bought from now on. At least the shortest hunt", min: 200, max: 10000, step: 100 },
   { key: "warmth", type: "bool", scope: "world", label: "Warmer / Colder hints", help: "While holding a Treasure Map, in the middle of the screen or above the hotbar (see below)" },
+  { key: "warmthRadius", type: "int", scope: "world", label: "Warmer / Colder range (blocks)", help: "Farther from the marker or chest, the map only says cold, cool or faintly warm", min: 16, max: 512, step: 8 },
+  { key: "markers", type: "bool", scope: "world", label: "Build clue markers", help: "A cairn, flag or standing stone at the end of each leg. Disabled: the next clue waits in a bottle" },
   { key: "plainHints", type: "bool", scope: "world", label: "Plain directions in /realm:maps", help: "Shows the compass direction and distance under the riddle" },
   { key: "crownsMin", type: "int", scope: "world", label: "Treasure Crowns (least)", min: 0, max: 1000, step: 5 },
   { key: "crownsMax", type: "int", scope: "world", label: "Treasure Crowns (most)", min: 0, max: 1000, step: 5 },
