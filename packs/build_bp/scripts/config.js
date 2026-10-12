@@ -35,8 +35,20 @@ export const CONFIG = {
   /** Builds each player can undo (and redo). Kept in memory: a server restart forgets them. */
   undoSteps: 5,
 
-  /** How far away the block you look at may be for /realm:build_here and the outline preview, in blocks. */
+  /** The longest reach players may pick: how far away the block you look at may be for build mode guides, /realm:build_here and Air Build, in blocks. */
   reach: 16,
+
+  /** Players may use Air Build: building in midair at a distance in front of them. */
+  airBuild: true,
+
+  /** Players may let their modifiers (mirror, radial, array) also copy blocks they place and break by hand. */
+  handModifiers: true,
+
+  /** Most guide particles drawn for one player at each refresh; bigger shapes are thinned evenly. */
+  guideMax: 400,
+
+  /** The fastest guide refresh players may pick, in ticks (1 = every tick). */
+  guideFastest: 2,
 
   /** Seconds the outline shows before "Build here now" asks to confirm. */
   previewSeconds: 3,
