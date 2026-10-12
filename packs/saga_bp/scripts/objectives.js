@@ -1785,7 +1785,7 @@ export async function playVision(player, list, dark = false) {
     try {
       if (player.isValid) {
         holdTitle(player, 6);
-        player.onScreenDisplay.setTitle(" ", { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 5 });
+        player.onScreenDisplay.setTitle(" ", { subtitle: "", fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 5 });
         if (skipped && dark) player.removeEffect("darkness");
       }
     } catch {
