@@ -2713,7 +2713,7 @@ Team up with up to five friends. Party mates see each other's health, distance a
 ### How to use
 
 1. Run `/realm:party` and tap **Start a party**, then pick a player from the list (nearest first) and tap **Invite**. Or type `/realm:party_invite Steve` (put a name with spaces in quotes: `/realm:party_invite "Some Name"`); that starts a party for you if you have none.
-2. The invited player sees `[Party] Ann invited you to their party.` and joins with `/realm:party_accept`, or with the **Accept** button in `/realm:party`. An invite lasts 2 minutes.
+2. The invited player sees `[Party] Ann invited you to their party.` and joins with `/realm:party_accept`, or with the **Accept Ann's invite** button in `/realm:party`. An invite lasts 2 minutes.
 3. While a mate is within 128 blocks in the same dimension, the bar above your hotbar shows them every 2 seconds: `Ann 18hp 40m NE | Bob 9hp 120m S` (health, distance in blocks, and which way to look). Don't want it? Disable **Party HUD** in `/realm:prefs`.
 4. Talk to the party only: `/realm:party_chat "meet at the portal"` (in quotes for more than one word), or **Send a message** in `/realm:party`. Everyone in the party who is online sees `[Party] Ann: meet at the portal`.
 5. Run `/realm:party` to see every member with their health and where they are (or `offline`), and to invite more players. The leader can also **Remove a member**. Leave with `/realm:party_leave` or **Leave the party**.
@@ -2767,7 +2767,7 @@ Pending invites are kept in memory only: they end when the realm restarts.
 
 ### How it works
 
-- Every member carries the tag `realm_party:<code>`. Other packs share credit by looking for players with the same tag in the same dimension within 64 blocks (the [Skills](#skills--skills_bp) party bonus does). The pack puts every online player's tag right when they join and every 2 seconds, so a tag left from a party they were removed from goes away.
+- Every member carries the tag `realm_party:<code>`. Other packs read it: [Skills](#skills--skills_bp) (the party bonus), the [Bounty Board](#bounty-board--bounty_bp) and [Story Questlines](#story-questlines--saga_bp) share credit with mates in the same dimension within 64 blocks, and [Expeditions](#expeditions--expedition_bp) takes nearby mates along. The pack puts every online player's tag right when they join and every 2 seconds, so a tag left from a party they were removed from goes away.
 - After any change (start, join, leave, remove) the pack sends the script event `realm:party_changed` `{ code }`.
 - Parties are read into memory once and saved whenever they change. The HUD runs every 40 ticks; it's a few distance sums per member.
 - `/realm:party_chat` takes one command argument, so a message of several words needs double quotes; the menu's **Send a message** box doesn't.
@@ -2794,9 +2794,9 @@ Collect titles and wear one on a line under your name, like `Stormchaser` or `Ma
   |---|---|---|
   | `Wanderer` | Travel 10,000 blocks, any way but teleporting (faster than `maxSpeed`), in any dimension | Falling leaves |
   | `Night Owl` | Play for 2 hours while it's night in the Overworld (from dusk to dawn, wherever you are) | Sparkles |
-  | `Stormchaser` | Spend 10 minutes outdoors in the Overworld during a thunderstorm, with open sky above you (deserts and badlands don't count: no storm reaches the ground there) | Rain cloud |
+  | `Stormchaser` | Spend 10 minutes outdoors in the Overworld during a thunderstorm, with open sky above you (standing on sand or terracotta, as in deserts and badlands, doesn't count: no storm reaches the ground there) | Rain cloud |
 
-- **Titles from other packs** arrive the same way, with the same chat line: [Skills](#skills--skills_bp) gives `Master Miner`, `Master Woodcutter`, `Master Farmer`, `Master Angler`, `Master Warrior` and `Master Explorer` at level 50. A title you already have is never announced twice.
+- **Titles from other packs** arrive the same way, with the same chat line: [Skills](#skills--skills_bp) gives `Master Miner`, `Master Woodcutter`, `Master Farmer`, `Master Angler`, `Master Warrior` and `Master Explorer` at level 50; [Guilds & Reputation](#guilds--reputation--guilds_bp) gives `Expert Miner` and `Master Miner` (and so on) at its top two ranks; [Blood Moon](#blood-moon--harvest-moon--moon_bp) gives `Blood Moon Survivor`; [Field Journal](#field-journal--journal_bp) pages and [Story Questlines](#story-questlines--saga_bp) chapters give some too. A title you already have is never announced twice.
 - **Wearing a title:** you wear one at a time, or none. It shows under your name (and under the gamertag line, if you have a nickname) through the Nicknames pack. Titles are plain text up to 32 characters (`maxTitleLength`).
 - **Trails:** `Rain cloud` (a small gray cloud with a drip, over your head), `Falling leaves`, `Embers` and `Sparkles` (behind you). Everyone sees them. A puff every 4 ticks (`trailTicks`) while you move, none while you stand still, are invisible (the Invisibility effect) or in spectator mode. At most 12 puffs at a time are shared by everyone (`trailBudget`), so a busy realm stays smooth.
 - **The menu** (`/realm:titles`) shows `Title: Stormchaser`, `Trail: Rain cloud`, and each built-in title as `[x] Wanderer` when you have it or `[ ] Night Owl: 45/120 minutes played at night` while you're earning it. The title and trail lists mark the one you use with `(now)`.
@@ -2864,7 +2864,7 @@ Seventeen rare relics, each a named item with a power of its own: a staff that c
   |---|---|---|---|---|---|
   | Storm Staff (`storm_staff`) | Trident | Legendary | Main hand | Use it in a thunderstorm in the Overworld: lightning strikes the mob or block you look at, up to 48 blocks away (`staffRange`). Cooldown 30 s | Forge |
   | Rain Charm (`rain_charm`) | Goat horn | Common | Hotbar or off hand | Regeneration I while you stand in the rain | Forge, pot of gold, treasure maps |
-  | Tide Boots (`tide_boots`) | Blue leather boots | Rare | Worn | Speed I and Jump Boost I while you're in the rain (Bedrock has no Dolphin's Grace effect; before 1.1.0 the boots asked for it, failed, and gave nothing) | Forge, expeditions, the story (The Drowned Bell) |
+  | Tide Boots (`tide_boots`) | Blue leather boots | Rare | Worn | Speed I and Jump Boost I while you're in the rain | Forge, expeditions, the story (The Drowned Bell) |
   | Lantern of the Deep (`lantern_deep`) | Warped fungus on a stick | Common | Hotbar or off hand | Night Vision below y 0 | Forge, expeditions |
   | Storm Meter (`storm_meter`) | Spyglass | Rare | Main hand | Shows `Storm Meter: Cell: 340m NE, strength 7/10` above the hotbar, or `No storm cell` | Forge |
   | Compass of Echoes (`compass_echoes`) | Music disc (5); older ones are a brush | Rare | Main hand | Use it: chat says where the nearest champion is within 128 blocks (`compassRange`), e.g. `Compass of Echoes: a champion (Gerald the Unexploded) is 84m NE.` Cooldown 10 s | Forge, expeditions, treasure maps, the story (The Last Map) |
@@ -3008,7 +3008,7 @@ Operators can change `enabled`, `rewards` and `notes` in game with `/realm:confi
 
 | Key | Scope | Contents |
 |---|---|---|
-| `journal:data` | Player | JSON `{ e, l, r, lo, hi, far }`: entry ids found per page, labels of entries that aren't in `config.js` (up to 40 such entries per page; a label is only saved when it differs from the name made from the id), pages already rewarded, deepest and highest y, farthest from spawn. Kept under 30,000 characters: past that, no more entries from other packs are added |
+| `journal:data` | Player | JSON `{ e, l, r, lo, hi, far }`: entry ids found per page, labels of entries that aren't in `config.js` (up to 40 such entries per page; a label is only saved when it differs from the name made from the id), pages already rewarded, deepest and highest y, farthest from spawn. Kept under 30,000 characters: past that, entries that aren't in `config.js` are refused, and saved labels are dropped to make room for ones that are |
 | `journal:pref` | Player | The player's own **New journal entry notes** choice |
 | `journal:weather` | World | The overworld weather at the last change; the stable Script API can't read it |
 | `journal:cfg` | World | Settings changed in `/realm:config` |
@@ -3329,9 +3329,9 @@ Draw a card from the Deck of Many Things for a random effect: 100 cards, from a 
 - **The Rainbow** cycles your name above your head through rainbow colors for 5 minutes, then puts it back. If Nicknames or AFK change your name meanwhile, the rainbow stops and leaves theirs.
 - **The rare cards:**
   - **The Gate:** to the Nether (near your Overworld position divided by 8), or out of it to the Overworld, on a safe spot, with 2 minutes of Fire Resistance, 10 obsidian and a flint and steel to build a portal home. Not in the End.
-  - **The Arena:** a 15 by 15 platform appears about 24 blocks above you (only where that space is completely empty), walled with invisible barriers, and you fight three husks, a vindicator and a pillager for up to 2 minutes. Win for an enchanted book and 15 Crowns. Win, lose or run out of time, you're sent back where you were and every arena block is removed. The arena's blocks can't be mined while it stands. If the server restarts mid-fight, the arena is removed within 10 minutes, its leftover mobs vanish within 10 seconds, and you're sent back when you join.
+  - **The Arena:** in the Overworld, a 15 by 15 platform appears about 24 blocks above you, or above the ground over your head (only where that space is completely empty), walled with invisible barriers, and you fight three husks, a vindicator and a pillager for up to 2 minutes. Win for an enchanted book and 15 Crowns. Win, lose or run out of time, you're sent back where you were and every arena block is removed. The arena's blocks can't be mined while it stands. If the server restarts mid-fight, the arena is removed within 10 minutes, its leftover mobs vanish within 10 seconds, and you're sent back when you join.
   - **The Champion:** a champion monster appears 8 to 12 blocks away, from the [Champions](#champions--elite_bp) pack (`realm:champion_spawn`, named `the Deck's Champion`); without it, the deck sends its own: `The Deck's Champion`, a vindicator with extra health, Strength and Resistance.
-  - **The Spore:** wild grass and dirt within 9 blocks turns to mycelium, with a few red and brown mushrooms and two mooshrooms, for 60 minutes (`sporeMinutes`). It only changes the top block of open ground with nothing on it, and fizzles if it sees anything built or farmed within 13 blocks (planks, glass, bricks, farmland, paths, torches, fences, chests and the like). When time is up, every block it changed that is still mycelium or its mushroom goes back to what was there (and mycelium that spread around the field turns back to grass); anything a player built meanwhile stays. Bedrock scripts can't change biomes, so the grass color and mob spawning stay as they were.
+  - **The Spore:** in the Overworld, wild grass and dirt within 9 blocks turns to mycelium, with a few red and brown mushrooms and two mooshrooms, for 60 minutes (`sporeMinutes`). It only changes the top block of open ground with nothing on it, and fizzles if it sees anything built or farmed within 13 blocks (planks, glass, bricks, farmland, paths, torches, fences, chests and the like). When time is up, every block it changed that is still mycelium or its mushroom goes back to what was there (and mycelium that spread around the field turns back to grass); anything a player built meanwhile stays. Bedrock scripts can't change biomes, so the grass color and mob spawning stay as they were.
   - **The Eclipse:** the time jumps to midnight for everyone.
   - **The Archmage**, **The Knight**, **Second Chance** and **The Gamble:** see the card table.
 - **The Wish (legendary):** fireworks, a totem burst and a dragon's growl for everyone, then a choice of three boons drawn from eight: an enchanted netherite pickaxe (`Worldbreaker`) or sword (`Kingslayer`), an elytra with 64 rockets, 30 levels, 500 Crowns, an enchanted trident (`The Tide`) with a Heart of the Sea, a beacon with 9 iron blocks, or full diamond armor with Protection IV. Nothing is destroyed and nobody is hurt.
@@ -3567,10 +3567,13 @@ Operators can change `enabled`, `currencies.crowns`, `currencies.emeralds`, `dai
 | `slots:stats` | Player | JSON: spins, Crowns and emeralds staked and won, the biggest win and jackpots |
 | `slots:day` | Player | JSON `{ day, crowns, emeralds }`: the UTC day and that day's net loss per currency, for the daily limit |
 | `slots:block` | Player | When the player's self-block ends (milliseconds since 1970), or `-1` until an operator lifts it |
-| `slots:machines` | World | JSON list of machine blocks, `[{ d, x, y, z }]` |
+| `slots:machines` | World | JSON list of machine blocks, `[{ d, x, y, z }]` (at most 100) |
 | `slots:totals` | World | JSON: all spins, Crowns and emeralds staked and paid out, jackpots |
 | `slots:machine` | Item | `true` on a Slot Machine item (a carrot on a stick named `Slot Machine`) |
+| `slots:cfg` | World | Settings changed in `/realm:config` |
 | `crowns` | Scoreboard | Balances, shared with the Crowns pack: stakes are taken from it and wins paid into it |
+
+---
 
 ## Silly Enchants — `silly_bp`
 
@@ -3646,6 +3649,9 @@ Operators can change `enabled`, `maxPerItem` and `hyperJumpCooldownSeconds` in g
 | `silly:applied` | Player | How many silly enchants the player has applied |
 | `silly:pref` | Player | JSON of the player's preferences (**My silly effects**) |
 | `silly:until` | Entity | When a Hat Trick rabbit (tagged `silly_rabbit`) vanishes |
+| `silly:cfg` | World | Settings changed in `/realm:config` |
+
+---
 
 ## Dolphin Friends — `dolphin_bp`
 
@@ -3654,7 +3660,7 @@ Tame a dolphin with raw fish, then ride it through the sea: it swims where you l
 ### How to use
 
 1. Find a dolphin (oceans) and feed it **raw cod** or **raw salmon**: tap it with the fish. Each fish has a 25% chance (`tameChancePercent`) to tame it: hearts mean it worked, smoke means try again. Chat says `The dolphin trusts you!`. It takes 4 fish on average.
-2. **Ride:** tap your tamed dolphin with an empty hand. It swims where you look: push forward to go, back to slow down. Look up or down to rise or dive.
+2. **Ride:** tap your tamed dolphin with an empty hand. It swims where you look: push forward to go, back to back up, left or right to drift sideways. Look up or down to rise or dive.
 3. **Leap:** press jump while swimming at the surface and the dolphin jumps out of the water.
 4. **Get off:** sneak.
 5. Run `/realm:dolphin` for **My dolphins**: call one to you (it swims over when you're in the water, up to 128 blocks), name it or release it. **Call the nearest** calls the closest one; `/realm:dolphin_call` does the same.
@@ -3667,7 +3673,6 @@ Tame a dolphin with raw fish, then ride it through the sea: it swims where you l
 - **Following:** an unridden tamed dolphin swims toward its owner when you're both in the water and more than 8 blocks apart (`followDistance`), up to 64 blocks away.
 - **Calling:** the dolphin must be loaded (near a player) and in your dimension, and you must be in the water. It appears next to you with hearts. Calling, naming and releasing only work on a dolphin that is still yours (one an operator released and someone else tamed says `That dolphin isn't yours any more.`).
 - A tamed dolphin that dies tells its owner: `Splash died.`
-- The game itself only accepts a fish from a dolphin every few seconds (its treat cooldown); a tap during that time does nothing and uses no fish, so taming takes a little patience.
 - **For operators and tests:** with cheats on, `/scriptevent realm:dolphin_feed` (run by an operator holding raw cod or salmon) feeds the nearest dolphin within 5 blocks exactly as a tap would.
 
 **Compatibility note:** this pack carries a copy of the vanilla dolphin's behavior file (`entities/dolphin.json`, from Minecraft 1.26.50) with one addition: a `realm:dolphin_tamed` group (a seat for one player, `minecraft:rideable`; `minecraft:is_tamed`; `minecraft:persistent`), added by the event `realm:dolphin_tame` and removed by `realm:dolphin_release`. Wild dolphins behave exactly as in vanilla: treasure leading, playing with items, swimming with players for Dolphin's Grace, breathing air, drying out on land. All components are stable ones, so no experiments are needed on the Realm. Two things to know: another behavior pack that also changes the dolphin wins or loses depending on pack order (only the top one's file is used), and if a future Minecraft update changes the vanilla dolphin, this copy keeps the old behavior until it is refreshed from the newest vanilla file.
@@ -3702,6 +3707,9 @@ Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanR
 | `dolphin:ownerName` | Entity | The owner's name when it was tamed |
 | `dolphin:index` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: every tamed dolphin's owner, name and last known spot, for the lists while it's far away |
 | `dolphin:tamedCount` | Player | How many dolphins the player has tamed |
+| `dolphin:cfg` | World | Settings changed in `/realm:config` |
+
+---
 
 ## Treasure Maps & Riddles — `maps_bp`
 
@@ -3719,13 +3727,13 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 
 ### What players see
 
-- **Buying:** the cartographer's menu explains the hunt and the price (default 50 Crowns, `price`) and shows your balance. Chat says `-50 Crowns (Treasure map)` and `You bought a treasure map! The first clue: "..."`. You can follow one hunt at a time (`maxHunts`); with one going, the cartographer offers **Your treasure hunt** instead. Maps only show the Overworld.
+- **Buying:** the cartographer's menu explains the hunt and the price (default 50 Crowns, `price`) and shows your balance. Chat says `-50 Crowns (Treasure map)` and `You bought a treasure map! The first clue: "..."`. You can follow one hunt at a time (`maxHunts`); with one going, the cartographer also offers **Your treasure hunt**, and buying another says `You're already following one of my maps. Find that treasure first, or give it up.` Maps only show the Overworld.
 - **The hunt:** the treasure is 800 to 2,000 blocks (`minDistance`, `maxDistance`) in a straight line from where you bought the map, in a random direction away from world spawn, reached in 2 or 3 legs (`legsMin`, `legsMax`) that wander a little sideways. Each clue is told from where you found the last one, so it points the right way from there.
 - **Clues** come from `clues` and, for the last leg, `finalClues`, with `{dir}` from `directions` (8 compass points as riddles) and `{dist}` in words rounded to 100 blocks (`about twelve hundred`). Coming within 30 blocks (`legRadius`) of the end of a leg says `You found the next clue! (2 of 3) "..."` and rewrites the map. Within 96 blocks, once the place is loaded, chat says `The map's ink darkens: the spot lies ...`: on the warm sand, in the snow, among the trees, among the red rocks, on bare stone, high on the bare mountain, in the muddy marsh, where the land meets the water, out on the open water, high up in the hills or in the open fields.
 - **The map** is paper named `Treasure Map` with the clue as lore, then `Clue 2 of 3` and `Map 4QZ` (its hunt). While you hold it (`warmth`): `Warmer` or `Colder` (compared with 2 seconds ago), `The map is quiet` when you haven't moved, `Very warm` within 40 blocks (`veryWarm`) of the next clue or the chest, and, near the chest, `Hot` (12 blocks) and `Burning hot! Dig here.` Holding a map from a finished or abandoned hunt says so.
 - **The chest:** once you're within 48 blocks (`buryDistance`) of the treasure, the pack looks for a spot within 32 blocks (`searchRadius`) of it and buries a chest there, 1 to 3 blocks under natural ground: `The map grows hot in your hands. The treasure is buried close by: follow the warmth, then dig.` If there's no good spot there (water, a build, a cave), the treasure moves 60 to 120 blocks further and the map says `The map's ink shifts: the treasure isn't here after all.` with a new clue. After 4 tries the treasure is handed over directly (`You found the treasure, washed up and half buried!`).
 - **Finding it:** standing within 3 blocks of the chest says `You found the treasure! The chest is buried right here, 1 to 3 blocks down: dig it up.` and pays 30 to 90 [Crowns](#crowns--crowns_bp) (`crownsMin`, `crownsMax`): `+40 Crowns (Treasure map)`. The map disappears. The chest holds what `loot` rolls: by default often gold and iron ingots, often emeralds or bottles o' enchanting, sometimes ender pearls, a diamond or two, a golden apple, a name tag or a saddle, and rarely a heart of the sea.
-- **Other packs:** finding a treasure finishes a `treasure` quest (`realm:quest_done`), gives 10 Wayfarers reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp) (`reputation`), 50 Exploration XP in [Skills](#skills--skills_bp) (`skillXp`) and the `treasure` page entry in the [Field Journal](#field-journal--journal_bp). One treasure in 10 (`relicChance`) also holds a relic from [Relics](#relics--relics_bp) (`relics`): `Something old and strange glints among the coins...`
+- **Other packs:** finding a treasure finishes a `treasure` quest (`realm:quest_done`), gives 10 Wayfarers reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp) (`reputation`), 50 Exploration XP in [Skills](#skills--skills_bp) (`skillXp`) and a `Buried treasure` entry on the Places page of the [Field Journal](#field-journal--journal_bp) (listed under "Also found"). One treasure in 10 (`relicChance`) also holds a relic from [Relics](#relics--relics_bp) (`relics`): `Something old and strange glints among the coins...`
 - **Giving up** (`/realm:maps` → **Give up this hunt**) removes the hunt and its map; the Crowns aren't paid back. A chest that was already buried stays where it is.
 
 **Treasure chests never touch builds.** A chest only replaces natural ground (grass, dirt, sand, gravel, clay, stone, snow, natural terracotta and the like), with natural ground above it. Before burying one, the pack checks the 9 x 9 columns around the spot, from 4 blocks over the ground to 4 below, and skips the spot if it finds anything a player likely made: planks, glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpet, concrete, glazed terracotta, terracotta in colors the badlands don't have, bricks, tiles, slabs, stairs, crafted wood, metal and other crafted blocks, heads, crafting tables, furnaces, rails, farmland, paths, cobblestone and more. It never buries one within 64 blocks of world spawn (`avoidSpawn`), and skips columns it can't read. Packs can't read [Land Claims](#land-claims--claims_bp), so this check is what keeps chests out of claimed builds.
@@ -3754,7 +3762,7 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 | `searchRadius` | `32` | How far from the planned spot the chest may be buried |
 | `avoidSpawn` | `64` | Never bury a chest closer than this to world spawn |
 | `warmth` | `true` | Show Warmer / Colder / Very warm while holding a Treasure Map |
-| `showAt` | `"side"` | Where Warmer / Colder shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar`. Other add-ons that redraw the line above the hotbar can cover only `hotbar`; that's why it never showed on realms with a waypoint add-on. Players pick their own with **Where Warmer / Colder shows for me** in `/realm:prefs` |
+| `showAt` | `"side"` | Where Warmer / Colder shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar`. Other add-ons that redraw the line above the hotbar (waypoint and compass add-ons) can cover only `hotbar`. Players pick their own with **Where Warmer / Colder shows for me** in `/realm:prefs` |
 | `veryWarm` | `40` | `Very warm` within this many blocks of the next clue or the chest |
 | `plainHints` | `false` | `/realm:maps` also shows the plain direction and distance from where you stand, like `(W, about 1,000 blocks)` |
 | `crownsMin` | `30` | Least Crowns found with a treasure |
@@ -3782,7 +3790,7 @@ Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`
 ### How it works
 
 - **The route** is planned when the map is bought: a random direction (retried up to 16 times to keep the treasure away from world spawn), a distance, and evenly spaced leg ends with a sideways wander of up to a quarter of a leg. Nothing is placed then: the far land isn't loaded yet.
-- **Following:** once a second the pack checks each player with a hunt (Overworld only) against the end of their leg; the Warmer / Colder line runs every 2 seconds for players holding a map and sends `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside. The place description reads the highest block at the leg's end (and 4 around it, for water).
+- **Following:** once a second the pack checks each player with a hunt (Overworld only) against the end of their leg; the Warmer / Colder line runs every 2 seconds for players holding a map. On the right side it follows the side box protocol (`realm:side`, see [How the packs work together](#how-the-packs-work-together)); above the hotbar it sends `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside. The place description reads the highest block at the leg's end (and 4 around it, for water).
 - **Burying** is a search spread over time: at most 150 block reads every 10 ticks for all players together. It tries the planned spot, then rings 6, 12, 18, 24 and 30 blocks out, and for each candidate reads the ground, the blocks down to the chest, and the 9 x 9 columns around it (surface +4 to -4). The chest is placed with `Block.setType` and filled through its inventory component.
 - **The map** is plain paper (no map mechanics) identified by its name and its last lore line, `Map <id>`; its lore is rewritten in the inventory when the clue changes, and it's taken away when the hunt ends.
 - **Cartographers:** on `realm:npc_talk` with the `cartographer` role the pack answers `realm:npc_offer` with **Buy a treasure map** (`order` 20) and, during a hunt, **Your treasure hunt** (21).
