@@ -29,7 +29,7 @@
 // Tide finale) and `act4:promise` ("allow" / "refuse"; later stories read
 // `act4_seals.act4:promise`). Counters: `g:iron` +1 (allow) or `g:mercy` +1 (refuse).
 // Flags read: drowned_bell.bell, last_map.map, act1_signs.act1:path, act2_choir.mayor,
-// act3_deep.elsie, g:quill, g:hollis, g:mercy / g:iron (">=4").
+// act3_deep.elsie, act3_deep.keys (the council: who stands with you), g:quill, g:hollis, g:mercy / g:iron (">=4").
 // Seal keys given as items (for Act V): "Tide Key" (heart of the sea), "Stone Key" (echo shard),
 // "Sky Key" (amethyst shard).
 
@@ -138,6 +138,8 @@ export const STORIES = [
           { text: `${M}I never hung it in the square, so this is the only copy in the world that shows the seals. Nobody spill anything. I mean it, Tobin.`, when: { "last_map.map": "keep" } },
           { text: `${R}And this time you take somebody with you. You went after the Choir alone once and came back. Don't make a habit of being lucky. That's an order. Mostly.`, when: { "act1_signs.act1:path": "alone" } },
           { text: `${R}You came to me first, back when this was just singing in the woods. I haven't forgotten. My wardens are yours for this, every one who can hold a sword. That's an order. Mostly to me.`, when: { "act1_signs.act1:path": "report" } },
+          { text: `${I}The miners are camped at the mine mouth with picks and lamps, waiting on your word. You asked for us at the end of all that, and we don't forget being asked.`, when: { "act3_deep.keys": "miners" } },
+          { text: `${S}The wayfarers have horses saddled in the square and a boat at the dock. You asked for us at the end of all that, and a wayfarer never forgets a road someone asked him to ride.`, when: { "act3_deep.keys": "wayfarers" } },
           `${E}Tide, Stone, Sky. Tobin knows the water over the Tide Seal, Ida has stood at the Stone Seal, and only Sol can find the Sky Seal by the stars. The shard has light enough for all three keys. So. Which seal first, starling? The other two follow, in whatever order you choose.`,
         ],
         choices: [

@@ -463,6 +463,7 @@ export const STORIES = [
           `${E}I built this inn to watch the chapel. Every keeper, for longer than this town has had a name. I saw Ashgrave failing. I told myself he was only grieving. The night of the storm I ran for the tower and the tower was already falling.`,
           { text: `${E}You've been gentle with people, all this way. I've watched. I don't deserve gentle. Say what you came to say.`, when: { "g:mercy": ">=3" } },
           { text: `${E}You've been hard when it was needed. I've watched. Don't soften it for me now. Say what you came to say.`, when: { "g:iron": ">=3" } },
+          { text: `${E}You've been neither soft nor hard with people, all this way. Just there, when it counted. I've watched. Say what you came to say.`, when: { "g:mercy": "<=2", "g:iron": "<=2" } },
         ],
         choices: [
           {
