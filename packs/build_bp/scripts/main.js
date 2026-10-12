@@ -851,6 +851,23 @@ const tick = () => new Promise((r) => system.run(() => r(undefined)));
 const AIR = () => /** @type {BlockPermutation} */ (permOf("minecraft:air"));
 
 /**
+ * Takes a block placed only to mark a spot out of the world again, if it is still there.
+ * @param {Dimension} dim @param {Pos} p @param {string} id
+ */
+function liftBlock(dim, p, id) {
+  try {
+    const b = dim.getBlock(p);
+    if (b && b.typeId === id) {
+      b.setPermutation(AIR());
+      return true;
+    }
+  } catch {
+    // unloaded
+  }
+  return false;
+}
+
+/**
  * Why a player may not change blocks in this box (safe zones, other players' claims), or undefined.
  * @param {Player} player @param {Dimension} dim
  * @param {{ x: number, y: number, z: number }} min @param {{ x: number, y: number, z: number }} max
@@ -1028,7 +1045,8 @@ async function build(player, dim, cells, label, opts) {
       }
       if (!block || bad) {
         if (c.cost) paid.set(c.cost, (paid.get(c.cost) ?? 0) + 1);
-        changed++;
+        if (block) changed++;
+        else unloaded++;
         continue;
       }
       const before = block.permutation;
@@ -1153,7 +1171,11 @@ async function buildAt(player, T, placed) {
     }
     start = { x: s.start.x, y: s.start.y, z: s.start.z };
     end = T;
+    const marker = s.start;
     s.start = undefined;
+    // A start block that was placed only marked the spot: it goes back into your hand now, whether the end
+    // was placed too or came from /realm:build_here.
+    if (marker.id && liftBlock(player.dimension, marker, marker.id) && marker.paid) giveItems(player, new Map([[marker.paid, 1]]));
     const size = get("maxSize");
     const span = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y), Math.abs(end.z - start.z)) + 1;
     if (span > size) {
@@ -1264,24 +1286,10 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
     note(player, "§bStart set§7 - now place the end block (sneak to place normally)", 80);
     return;
   }
-  // The placed blocks only mark the spot: they go back into your hand and the build starts there.
-  /** @type {Map<string, number>} */
-  const back = new Map();
-  /** @param {{ x: number, y: number, z: number }} p @param {string} id @param {string | undefined} paid */
-  const lift = (p, id, paid) => {
-    try {
-      const b = dim.getBlock(p);
-      if (b && b.typeId === id) {
-        b.setPermutation(AIR());
-        if (paid) back.set(paid, (back.get(paid) ?? 0) + 1);
-      }
-    } catch {
-      // unloaded
-    }
-  };
-  lift(T, perm.type.id, survival ? costOf(perm) ?? undefined : undefined);
-  if (twoPoint && s.start) lift(s.start, s.start.id, s.start.paid);
-  if (back.size) giveItems(player, back);
+  // The placed block only marks the spot: it goes back into your hand and the build starts there (a two-block
+  // shape's start block is taken back by buildAt, which also handles an end set with /realm:build_here).
+  const paid = survival ? costOf(perm) ?? undefined : undefined;
+  if (liftBlock(dim, T, perm.type.id) && paid) giveItems(player, new Map([[paid, 1]]));
   buildAt(player, T, perm).catch((e) => console.warn(`[build] ${e}`));
 });
 
