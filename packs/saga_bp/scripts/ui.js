@@ -37,6 +37,7 @@ import {
 import { askAnswer, completeStep, counting, endScene, endScenesOf, giveItem, holdUntil, ownUntil, radiusOf, reportTo, sceneFocus, showLine, side, timeText, weather } from "./objectives.js";
 import { ensurePlace, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
+import { SLOTS, SLOT_NAMES, isSlot } from "./side.js";
 import { PACK, across, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
@@ -395,7 +396,10 @@ export async function startChapter(player, story) {
       }
       travelTips(player, e);
     }
-    player.sendMessage("§7The tracker above your hotbar points the way. /realm:saga shows your progress, and a hint if you're stuck.");
+    // Where the tracker shows for this player: a Side HUD box (the default, bottom right) or above the hotbar.
+    const where = getFor(player, "trackerAt");
+    const spot = isSlot(where) ? `in the ${SLOT_NAMES[SLOTS.indexOf(where)].replace(/ \(.*\)$/, "")} box at the ${where.startsWith("left") ? "left" : where.startsWith("right") ? "right" : "middle"} of your screen` : "above your hotbar";
+    player.sendMessage(`§7The tracker ${spot} points the way. /realm:saga shows your progress, and a hint if you're stuck.`);
     player.playSound("random.orb", { pitch: 0.8, volume: 0.7 });
     if (choice?.reply?.length) await dialog(player, story.title, "", pagesFor(choice.reply, saga, story.id, player.name), ["OK"]);
   });
