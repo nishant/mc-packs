@@ -3621,7 +3621,20 @@ async function runMenu(player, run) {
   if (!res || res.canceled || res.selection === undefined) return;
   const sel = res.selection - (pick ? 1 : 0);
   if (sel === -1) return offerBoon(run, player);
-  if (sel === 0) leave(player);
+  if (sel !== 0) return;
+  // Mid-run, leaving can't be undone (and alone, it fails the run): the button sits next to Close, so ask first.
+  if (run.phase === "active" && runOf(player.id) === run) {
+    const sure = await show(
+      player,
+      new MessageFormData()
+        .title("§lLeave the expedition?")
+        .body(run.members.size > 1 ? "You'll be sent back to where you started and can't rejoin this run. The others go on without you." : "You'll be sent back to where you started, and the run counts as failed.")
+        .button1("Leave")
+        .button2("Stay"),
+    );
+    if (!sure || sure.canceled || sure.selection !== 0 || runOf(player.id) !== run) return;
+  }
+  leave(player);
 }
 
 /** @param {Player} player */
@@ -3911,7 +3924,21 @@ async function opMenu(player) {
   const res = await show(player, form);
   if (!res || res.canceled) return;
   if (res.selection === 0) setSite(player, undefined, undefined);
-  else if (res.selection === 1) await opReset(player);
+  else if (res.selection === 1) {
+    // Ending someone's run can't be undone: say whose it is and ask first (nothing to ask when only a box waits for its reset).
+    if (runs.size) {
+      const sure = await show(
+        player,
+        new MessageFormData()
+          .title("§lEnd every expedition?")
+          .body(`In progress: ${[...runs.values()].map(statusLine).join("; ")}.\n\nEveryone is sent back to where they started and the run counts as failed. The dungeon is filled in.`)
+          .button1("End and reset")
+          .button2("Back"),
+      );
+      if (!sure || sure.canceled || sure.selection !== 0) return;
+    }
+    await opReset(player);
+  }
   else if (res.selection === 2) await opSigil(player);
   else if (res.selection === 3) {
     const prog = progressOf(player);
