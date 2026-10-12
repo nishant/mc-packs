@@ -3577,7 +3577,7 @@ Operators can change `enabled`, `currencies.crowns`, `currencies.emeralds`, `dai
 
 ## Silly Enchants — `silly_bp`
 
-Fourteen silly "enchantments" for your gear. They only add particles, sounds and a harmless bounce: none of them changes damage, armor, speed, drops or durability. Each one is a lore line on the item, like `Silly: Grunt Birthday`, and an item holds at most two. They come on **Silly Books** (enchanted books named `Silly Book`), which you apply from `/realm:silly` to the item in your hand.
+Fourteen silly "enchantments" for your gear. They only add particles, sounds and some very big bounces: none of them changes damage, armor, speed, drops or durability. Most effects come in a few random variants, so they rarely sound the same twice. Each one is a lore line on the item, like `Silly: Grunt Birthday`, and an item holds at most two. They come on **Silly Books** (enchanted books named `Silly Book`), which you apply from `/realm:silly` to the item in your hand.
 
 ### How to use
 
@@ -3586,29 +3586,29 @@ Fourteen silly "enchantments" for your gear. They only add particles, sounds and
 3. Pick **Apply a Silly Book**, then the book. The book is used up and the item gets a line like `Silly: Hyper Jump`. Each item takes up to 2.
 4. Wear or hold the item to see it work. Don't like it? `/realm:silly` → **Remove a silly enchant** takes it off for free (the book doesn't come back).
 5. Don't want to see your own silly effects for a while? Disable **My silly effects** in `/realm:prefs`; the lore stays.
-6. **Operators:** `/realm:silly` → **Give Silly Books**, or `/realm:silly_give <player> <book> [amount]`. `/realm:config` → **Silly Enchants** switches the effects, sets the enchants per item and the Hyper Jump cooldown.
+6. **Operators:** `/realm:silly` → **Give Silly Books**, or `/realm:silly_give <player> <book> [amount]`. `/realm:config` → **Silly Enchants** switches the effects, sets the enchants per item, the Hyper Jump cooldown and **Hyper Jump soft landing**.
 
 ### What players see
 
 | Enchant | Goes on | What it does |
 |---|---|---|
-| Grunt Birthday (`grunt_birthday`) | Held item | Mobs you defeat pop like a party: confetti, a firework pop and a cheer |
-| Hyper Jump (`hyper_jump`) | Boots | Sneak and jump for a huge bounce (about 6 blocks, `hyperJumpStrength`), with slow falling so you land softly. Every 4 seconds (`hyperJumpCooldownSeconds`) |
-| Squeak (`squeak`) | Boots | Your footsteps squeak |
+| Grunt Birthday (`grunt_birthday`) | Held item | Mobs you defeat pop like a party: a big burst of confetti, then one of five parties at random (fireworks, a little fanfare, a party horn, hearts, or a zap) |
+| Hyper Jump (`hyper_jump`) | Boots | Sneak and jump to launch. Each launch is a surprise (`hyperJumpOdds`): 60% a big jump (about 30 blocks up), 30% a huge one (about 50), and 10% the **Realm Space Program**: a `3`, `2`, `1`, `LIFTOFF!` countdown on screen, a harmless explosion, then a rocket burn with flames and smoke to about 150 blocks up, while players within 96 blocks read `[Space Program] <name> has left the atmosphere.` (or another line). You fall at full speed; just above the ground a puff of slow falling catches you with a little boing, so you don't get hurt (`hyperJumpSoftLanding`; without it a big jump is a deadly fall). Every 4 seconds (`hyperJumpCooldownSeconds`) |
+| Squeak (`squeak`) | Boots | Your footsteps squeak (now and then a different squeak) |
 | Bubbles (`bubbles`) | Any armor | You leave a trail of bubbles |
 | Rainbow Trail (`rainbow_trail`) | Boots | Rainbow-colored puffs follow your steps |
-| Hat Trick (`hat_trick`) | Held item | A critical hit (hitting while falling) pulls a baby rabbit out of thin air; it vanishes in a puff after 10 seconds (`hatTrickRabbitSeconds`). At most one every 10 seconds (`hatTrickCooldownSeconds`). Baby rabbits drop nothing |
+| Hat Trick (`hat_trick`) | Held item | A critical hit (hitting while falling) pulls a baby rabbit out of thin air (sometimes with a ta-da); it vanishes in a puff after 10 seconds (`hatTrickRabbitSeconds`). At most one every 10 seconds (`hatTrickCooldownSeconds`). Baby rabbits drop nothing |
 | Disco (`disco`) | Any armor | Colored lights flash around you, with music notes |
-| Moo (`moo`) | Helmet | You moo when you get hurt |
-| Confetti Swing (`confetti_swing`) | Held item | Every hit throws confetti |
-| Tiny Thunder (`tiny_thunder`) | Held item | A tiny thunderclap and a spark when you defeat a mob |
-| Fish Slap (`fish_slap`) | Held item | Your hits make a wet fish slap. Best on a fish |
+| Moo (`moo`) | Helmet | You moo when you get hurt. Sometimes the wrong animal answers: an oink, a baa, a cluck or a meow |
+| Confetti Swing (`confetti_swing`) | Held item | Every hit throws confetti, with a pop, a bubble, a pling or a bell |
+| Tiny Thunder (`tiny_thunder`) | Held item | A thunderclap and a shower of sparks when you defeat a mob, sometimes with a lightning crack |
+| Fish Slap (`fish_slap`) | Held item | Your hits make a loud wet fish slap and a splash (or a dolphin's giggle). Best on a fish |
 | Glow (`glow`) | Helmet | You sparkle softly at night |
-| Duck (`duck`) | Any armor | You quack when you sneak |
-| Hiccups (`hiccups`) | Helmet | You hiccup now and then |
+| Duck (`duck`) | Any armor | You quack when you sneak; sometimes twice |
+| Hiccups (`hiccups`) | Helmet | You hiccup now and then, with bubbles; some hiccups hop you off the ground a little |
 
 - **Held item** means anything you hold that isn't armor or a book: swords, tools, a bow, even a raw cod. **Helmet** includes the turtle shell; **any armor** includes the elytra.
-- **Applying** says `Silly: Hyper Jump! Sneak and jump for a huge bounce, with slow falling to land softly.` with a puff of confetti. A book that doesn't fit says so (`Hyper Jump goes on boots.`), and an item with 2 already says `An item holds at most 2 silly enchants. Remove one first.` A relic says `Relics can't take silly enchants.` and keeps the book (relics rewrite their lore, which would wipe the line). A Random book picks one that fits the item.
+- **Applying** says `Silly: Hyper Jump! Sneak and jump: a big bounce, a huge one, or now and then a trip with the Realm Space Program.` with a puff of confetti. A book that doesn't fit says so (`Hyper Jump goes on boots.`), and an item with 2 already says `An item holds at most 2 silly enchants. Remove one first.` A relic says `Relics can't take silly enchants.` and keeps the book (relics rewrite their lore, which would wipe the line). A Random book picks one that fits the item.
 - The effects follow your worn armor and the item in your main hand, checked twice a second. Other players see and hear them too.
 
 **Selling Silly Books** (for operators). This pack doesn't change other packs, but a book is recognized by its lore line, so a shop can sell one. In the [Merchant Caravan](#merchant-caravan--caravan_bp)'s `goods` in `caravan_bp/scripts/config.js`, add for example:
@@ -3633,12 +3633,16 @@ Use `Silly Book: Hyper Jump` (any enchant's name) instead of `Random` for a part
 | `enabled` | `true` | Silly effects play. When `false`, the lore stays on the gear but does nothing |
 | `maxPerItem` | `2` | Most silly enchants one item can hold |
 | `disabled` | `[]` | Enchant ids that never play and can't be applied, e.g. `["moo"]` |
-| `hyperJumpStrength` | `1.0` | How high Hyper Jump bounces (vertical knockback; 1.0 is about 6 blocks, at most 2.5) |
+| `hyperJumpStrength` | `1.0` | Scales every Hyper Jump launch (0.2 to 2). At 1 a big jump goes about 30 blocks up, a huge one about 50 and the Space Program about 150 |
+| `hyperJumpOdds.big` | `60` | Weight of a big Hyper Jump (about 30 blocks up) |
+| `hyperJumpOdds.huge` | `30` | Weight of a huge Hyper Jump (about 50 blocks up) |
+| `hyperJumpOdds.space` | `10` | Weight of a Realm Space Program launch (about 150 blocks up). The three are weights: they needn't add up to 100 |
+| `hyperJumpSoftLanding` | `true` | A puff of slow falling just above the ground stops a Hyper Jump fall, so landings don't hurt. When `false`, you fall for real (Feather Falling helps; a big jump without it is deadly) |
 | `hyperJumpCooldownSeconds` | `4` | Seconds between Hyper Jumps |
 | `hatTrickCooldownSeconds` | `10` | Seconds between Hat Trick rabbits for one player |
 | `hatTrickRabbitSeconds` | `10` | Seconds before a Hat Trick rabbit vanishes |
 
-Operators can change `enabled`, `maxPerItem` and `hyperJumpCooldownSeconds` in game with `/realm:config` (**Silly Enchants**). Each player can switch their own effects with **My silly effects** in `/realm:prefs`.
+Operators can change `enabled`, `maxPerItem`, `hyperJumpCooldownSeconds` and `hyperJumpSoftLanding` (**Hyper Jump soft landing**) in game with `/realm:config` (**Silly Enchants**). Each player can switch their own effects with **My silly effects** in `/realm:prefs`.
 
 ### Saved data
 

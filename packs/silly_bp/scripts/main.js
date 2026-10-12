@@ -26,7 +26,7 @@ import { get, getFor } from "./settings.js";
 /** @type {Enchant[]} */
 const ENCHANTS = [
   { id: "grunt_birthday", name: "Grunt Birthday", slot: "hand", what: "Mobs you defeat pop like a party: confetti and a cheer" },
-  { id: "hyper_jump", name: "Hyper Jump", slot: "feet", what: "Sneak and jump for a huge bounce, with slow falling to land softly" },
+  { id: "hyper_jump", name: "Hyper Jump", slot: "feet", what: "Sneak and jump: a big bounce, a huge one, or now and then a trip with the Realm Space Program" },
   { id: "squeak", name: "Squeak", slot: "feet", what: "Your footsteps squeak" },
   { id: "bubbles", name: "Bubbles", slot: "armor", what: "You leave a trail of bubbles" },
   { id: "rainbow_trail", name: "Rainbow Trail", slot: "feet", what: "A rainbow follows your steps" },
@@ -224,6 +224,7 @@ system.runInterval(() => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   gear.delete(playerId);
   lastSneak.delete(playerId);
+  flights.delete(playerId);
   wasJumping.delete(playerId);
   cooldowns.delete(playerId);
 });
@@ -261,6 +262,11 @@ function sound(dim, id, at, volume = 1, pitch = 1) {
   }
 }
 
+/** @template T @param {T[]} list @returns {T} */
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+/** @param {number} min @param {number} max */
+const between = (min, max) => min + Math.random() * (max - min);
+
 const RAINBOW = [
   { red: 1, green: 0.1, blue: 0.1 },
   { red: 1, green: 0.55, blue: 0 },
@@ -280,12 +286,34 @@ function colorPuff(dim, at, c) {
 /** Confetti and a party pop at a spot. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at @param {boolean} loud */
 function confetti(dim, at, loud) {
   particle(dim, "minecraft:totem_particle", at);
-  for (let i = 0; i < 3; i++) colorPuff(dim, { x: at.x + (Math.random() - 0.5), y: at.y + Math.random() * 0.6, z: at.z + (Math.random() - 0.5) }, RAINBOW[Math.floor(Math.random() * RAINBOW.length)]);
-  if (loud) {
-    sound(dim, "firework.blast", at, 0.7, 1.4);
-    sound(dim, "firework.twinkle", at, 0.6, 1.2);
-    sound(dim, "random.levelup", at, 0.3, 1.8);
-  } else sound(dim, "random.pop", at, 0.4, 1.5);
+  const puffs = loud ? 8 : 4;
+  for (let i = 0; i < puffs; i++) colorPuff(dim, { x: at.x + between(-1, 1), y: at.y + Math.random(), z: at.z + between(-1, 1) }, pick(RAINBOW));
+  if (!loud) {
+    sound(dim, pick(["random.pop", "bubble.pop", "note.pling", "note.bell"]), at, 1, between(1.2, 2));
+    return;
+  }
+  // A party, never quite the same twice.
+  const party = pick(["fireworks", "fanfare", "horn", "hearts", "zap"]);
+  if (party === "fireworks") {
+    particle(dim, "minecraft:totem_particle", { x: at.x, y: at.y + 1, z: at.z });
+    sound(dim, "firework.large_blast", at, 2, between(0.9, 1.3));
+    sound(dim, "firework.twinkle", at, 2, between(1, 1.4));
+  } else if (party === "fanfare") {
+    sound(dim, "random.levelup", at, 1.5, 1.6);
+    [0.8, 1, 1.2, 1.6].forEach((pitch, i) => system.runTimeout(() => sound(dim, "note.pling", at, 1.5, pitch), i * 3));
+    particle(dim, "minecraft:note_particle", { x: at.x, y: at.y + 1, z: at.z });
+  } else if (party === "horn") {
+    sound(dim, "raid.horn", at, 0.8, 2);
+    sound(dim, "firework.blast", at, 2, 1.4);
+  } else if (party === "hearts") {
+    for (let i = 0; i < 3; i++) particle(dim, "minecraft:heart_particle", { x: at.x + between(-0.6, 0.6), y: at.y + between(0.3, 1.2), z: at.z + between(-0.6, 0.6) });
+    sound(dim, "random.totem", at, 0.6, 1.8);
+  } else {
+    particle(dim, "minecraft:critical_hit_emitter", at);
+    particle(dim, "minecraft:electric_spark_particle", at);
+    sound(dim, "firework.blast", at, 2, 0.8);
+    sound(dim, "random.levelup", at, 1, 2);
+  }
 }
 
 // Trails and ambient effects, five times a second. Only players with the matching gear do any work.
@@ -316,7 +344,7 @@ function ambient(p) {
   const moving = Math.hypot(v.x, v.z) > 0.06;
   if (moving && has(p, "rainbow_trail")) colorPuff(dim, { x: loc.x, y: loc.y + 0.1, z: loc.z }, RAINBOW[beat % RAINBOW.length]);
   if (moving && has(p, "bubbles")) particle(dim, p.isInWater ? "minecraft:bubble_column_up_particle" : "minecraft:basic_bubble_particle_manual", { x: loc.x, y: loc.y + 0.6, z: loc.z });
-  if (moving && p.isOnGround && beat % 2 === 0 && has(p, "squeak")) sound(dim, "mob.bat.idle", loc, 0.25, 1.9);
+  if (moving && p.isOnGround && beat % 2 === 0 && has(p, "squeak")) sound(dim, Math.random() < 0.85 ? "mob.bat.idle" : "mob.rabbit.idle", loc, 0.6, between(1.6, 2));
   if (beat % 3 === 0 && has(p, "disco")) {
     colorPuff(dim, { x: loc.x, y: loc.y + 1.1, z: loc.z }, RAINBOW[Math.floor(beat / 3) % RAINBOW.length]);
     if (beat % 15 === 0) particle(dim, "minecraft:note_particle", { x: loc.x, y: loc.y + 2.2, z: loc.z });
@@ -326,12 +354,18 @@ function ambient(p) {
     if (t >= 12500 && t <= 23500) particle(dim, "minecraft:endrod", { x: loc.x + (Math.random() - 0.5), y: loc.y + 1 + Math.random(), z: loc.z + (Math.random() - 0.5) });
   }
   if (beat % 5 === 0 && has(p, "hiccups") && Math.random() < 1 / 30) {
-    sound(dim, "random.burp", loc, 0.5, 1.9);
-    particle(dim, "minecraft:basic_bubble_particle_manual", { x: loc.x, y: loc.y + 1.7, z: loc.z });
+    sound(dim, "random.burp", loc, 1, between(1.6, 2));
+    for (let i = 0; i < 3; i++) particle(dim, "minecraft:basic_bubble_particle_manual", { x: loc.x + between(-0.3, 0.3), y: loc.y + 1.6 + i * 0.2, z: loc.z + between(-0.3, 0.3) });
+    // Now and then a hiccup that hops you a little.
+    if (p.isOnGround && Math.random() < 0.3) p.applyKnockback({ x: 0, z: 0 }, 0.35);
   }
   if (has(p, "duck")) {
     const was = lastSneak.get(p.id) ?? false;
-    if (p.isSneaking && !was) sound(dim, "mob.chicken.say", loc, 0.7, 0.55);
+    if (p.isSneaking && !was) {
+      const pitch = between(0.45, 0.7);
+      sound(dim, "mob.chicken.say", loc, 1.2, pitch);
+      if (Math.random() < 0.25) system.runTimeout(() => sound(dim, "mob.chicken.say", loc, 1.2, pitch + 0.1), 5); // a double quack
+    }
     lastSneak.set(p.id, p.isSneaking);
   }
 }
@@ -371,26 +405,160 @@ system.runInterval(() => {
   }
 }, 1);
 
+/**
+ * Players in a Hyper Jump flight: the tick it ends at the latest, and whether to cushion the landing.
+ * @type {Map<string, { until: number, cushion: boolean, rose: boolean }>}
+ */
+const flights = new Map();
+
 /** @param {Player} p @param {boolean} quiet no "recharging" note @returns {boolean} true if it bounced */
 export function hyperJump(p, quiet) {
   const cd = Math.max(1, Math.floor(Number(get("hyperJumpCooldownSeconds")) || 4)) * 20;
   if (!ready(p, "hyper_jump", cd)) {
     if (!quiet && (cooldowns.get(p.id)?.get("hyper_jump") ?? 0) - system.currentTick < cd - 5) {
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 30 })); // other bar writers wait
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 30, from: "silly_bp" })); // other bar writers wait
       p.onScreenDisplay.setActionBar("§7Hyper Jump is recharging");
     }
     return false;
   }
-  const strength = Math.min(2.5, Math.max(0.2, Number(CONFIG.hyperJumpStrength) || 1));
-  p.applyKnockback({ x: 0, z: 0 }, strength);
-  // Slow falling for the whole flight, so the landing never hurts: harmless, never a boost.
-  p.addEffect("slow_falling", 20 * (3 + Math.ceil(strength * 2)), { amplifier: 0, showParticles: false });
-  const loc = p.location;
-  sound(p.dimension, "mob.slime.big", loc, 0.8, 1.3);
-  sound(p.dimension, "random.pop", loc, 0.6, 0.6);
-  particle(p.dimension, "minecraft:villager_happy", loc);
+  const odds = CONFIG.hyperJumpOdds;
+  const huge = Math.max(0, Number(odds.huge) || 0), space = Math.max(0, Number(odds.space) || 0), big = Math.max(0, Number(odds.big) || 0);
+  const roll = Math.random() * (big + huge + space || 1);
+  if (roll < space) spaceProgram(p);
+  else if (roll < space + huge) bounce(p, between(3.4, 3.9), true);
+  else bounce(p, between(2.4, 2.7), false);
   return true;
 }
+
+/** The launch multiplier from config (1 = as designed). */
+const power = () => Math.min(2, Math.max(0.2, Number(CONFIG.hyperJumpStrength) || 1));
+
+/** @param {Player} p @param {number} up vertical strength before the multiplier @param {boolean} huge */
+function bounce(p, up, huge) {
+  p.applyKnockback({ x: 0, z: 0 }, up * power());
+  track(p, 20 * 12);
+  const dim = p.dimension;
+  const loc = p.location;
+  sound(dim, "mob.slime.big", loc, 2, pick([0.6, 0.9, 1.3]));
+  sound(dim, pick(["random.pop", "firework.launch", "mob.blaze.shoot"]), loc, 1.5, between(0.6, 1.2));
+  particle(dim, "minecraft:knockback_roar_particle", loc);
+  particle(dim, "minecraft:villager_happy", loc);
+  if (huge) {
+    sound(dim, "firework.large_blast", loc, 2, between(0.8, 1.2));
+    sound(dim, pick(["mob.enderdragon.flap", "mob.phantom.swoop", "random.levelup"]), loc, 1.5, between(1, 1.6));
+    for (let i = 0; i < 4; i++) colorPuff(dim, { x: loc.x + between(-1, 1), y: loc.y + between(0, 1), z: loc.z + between(-1, 1) }, pick(RAINBOW));
+    particle(dim, "minecraft:totem_particle", loc);
+  }
+}
+
+const SPACE_LINES = [
+  "has left the atmosphere.",
+  "is going where no crafter has gone before.",
+  "is now a satellite. Briefly.",
+  "has been launched by the Realm Space Program.",
+  "forgot to ask where the brakes are.",
+];
+
+/** The Realm Space Program: a countdown, then a long burn. @param {Player} p */
+function spaceProgram(p) {
+  const id = p.id;
+  const steps = ["§e3", "§62", "§c1"];
+  steps.forEach((t, i) =>
+    system.runTimeout(() => {
+      try {
+        if (!p.isValid) return;
+        p.onScreenDisplay.setTitle(t, { subtitle: "§7Realm Space Program", fadeInDuration: 0, stayDuration: 14, fadeOutDuration: 4 });
+        sound(p.dimension, "note.pling", p.location, 2, 0.8 + i * 0.25);
+        particle(p.dimension, "minecraft:basic_smoke_particle", p.location);
+        particle(p.dimension, "minecraft:white_smoke_particle", p.location);
+      } catch {
+        // gone
+      }
+    }, i * 15),
+  );
+  system.runTimeout(() => {
+    try {
+      if (!p.isValid) return;
+      const dim = p.dimension;
+      const pad = p.location;
+      p.onScreenDisplay.setTitle("§cLIFTOFF!", { subtitle: "§7Realm Space Program", fadeInDuration: 0, stayDuration: 30, fadeOutDuration: 10 });
+      sound(dim, "random.explode", pad, 3, 0.7);
+      sound(dim, "firework.launch", pad, 3, 0.5);
+      sound(dim, "mob.enderdragon.growl", pad, 1.5, 1.8);
+      particle(dim, "minecraft:huge_explosion_emitter", pad); // only looks: nothing breaks, nobody is hurt
+      const line = `§6[Space Program] §f${p.name} §7${pick(SPACE_LINES)}`;
+      for (const o of dim.getPlayers({ location: pad, maxDistance: 96 })) o.sendMessage(line);
+      track(p, 20 * 30);
+      const burn = 50;
+      for (let t = 0; t < burn; t++) {
+        system.runTimeout(() => {
+          try {
+            if (!p.isValid || !flights.has(id)) return;
+            p.applyKnockback({ x: 0, z: 0 }, 2.4 * power());
+            const l = p.location;
+            const exhaust = { x: l.x, y: l.y - 0.5, z: l.z };
+            particle(dim, "minecraft:basic_flame_particle", exhaust);
+            particle(dim, "minecraft:lava_particle", exhaust);
+            particle(dim, t % 2 ? "minecraft:basic_smoke_particle" : "minecraft:white_smoke_particle", exhaust);
+            if (t % 10 === 0) sound(dim, pick(["firework.blast", "mob.ghast.fireball", "mob.blaze.shoot"]), l, 2, between(0.5, 0.9));
+          } catch {
+            // gone
+          }
+        }, t);
+      }
+      system.runTimeout(() => {
+        try {
+          if (!p.isValid) return;
+          const l = p.location;
+          particle(dim, "minecraft:totem_particle", l);
+          sound(dim, "firework.twinkle", l, 3, 1);
+          sound(dim, "firework.large_blast", l, 3, 1.2);
+        } catch {
+          // gone
+        }
+      }, burn);
+    } catch (e) {
+      console.warn(`[silly] space: ${e}`);
+    }
+  }, steps.length * 15);
+}
+
+/** Watches a flight until the landing. @param {Player} p @param {number} ticks */
+function track(p, ticks) {
+  flights.set(p.id, { until: system.currentTick + ticks, cushion: get("hyperJumpSoftLanding") === true, rose: false });
+}
+
+// Flights: a soft landing (a moment of slow falling just above the ground) when enabled, else a real fall.
+system.runInterval(() => {
+  if (!flights.size) return;
+  for (const [id, f] of flights) {
+    const p = world.getEntity(id);
+    if (!(p instanceof Player) || system.currentTick > f.until) {
+      flights.delete(id);
+      continue;
+    }
+    try {
+      const vy = p.getVelocity().y;
+      if (vy > 0.1) f.rose = true;
+      if (!f.rose) continue;
+      if (p.isOnGround || p.isInWater || p.isFlying || p.isGliding) {
+        flights.delete(id);
+        continue;
+      }
+      if (vy >= -0.3) continue;
+      const hit = p.dimension.getBlockFromRay(p.location, { x: 0, y: -1, z: 0 }, { maxDistance: Math.max(3, 2 - vy * 3), includeLiquidBlocks: true, includePassableBlocks: false });
+      if (!hit) continue;
+      flights.delete(id);
+      if (!f.cushion) continue;
+      p.applyKnockback({ x: 0, z: 0 }, 0.15); // stop the fall: a little boing
+      p.addEffect("slow_falling", 40, { amplifier: 0, showParticles: false });
+      sound(p.dimension, pick(["mob.slime.big", "random.pop", "bubble.pop"]), p.location, 1.5, between(0.8, 1.4));
+      particle(p.dimension, "minecraft:white_smoke_particle", p.location);
+    } catch {
+      flights.delete(id);
+    }
+  }
+}, 1);
 
 // Hits: Confetti Swing, Fish Slap, Hat Trick.
 world.afterEvents.entityHitEntity.subscribe(({ damagingEntity, hitEntity }) => {
@@ -402,9 +570,9 @@ world.afterEvents.entityHitEntity.subscribe(({ damagingEntity, hitEntity }) => {
     const at = { x: hitEntity.location.x, y: hitEntity.location.y + 1, z: hitEntity.location.z };
     if (has(p, "confetti_swing")) confetti(p.dimension, at, false);
     if (has(p, "fish_slap")) {
-      sound(p.dimension, "mob.fish.flop", at, 1, 0.8);
-      sound(p.dimension, "random.splash", at, 0.3, 1.8);
-      particle(p.dimension, "minecraft:water_splash_particle_manual", at);
+      sound(p.dimension, "mob.fish.flop", at, 2, between(0.6, 1));
+      sound(p.dimension, pick(["random.splash", "mob.dolphin.play", "bubble.pop"]), at, 1, between(1.2, 1.8));
+      for (let i = 0; i < 3; i++) particle(p.dimension, "minecraft:water_splash_particle_manual", { x: at.x + between(-0.4, 0.4), y: at.y + between(0, 0.5), z: at.z + between(-0.4, 0.4) });
     }
     if (has(p, "hat_trick") && p.isFalling && !p.isOnGround && !p.isInWater) hatTrick(p, at);
   } catch (e) {
@@ -420,8 +588,10 @@ function hatTrick(p, at) {
   rabbit.setDynamicProperty(PROP_RABBIT_UNTIL, Date.now() + Math.max(2, Number(CONFIG.hatTrickRabbitSeconds) || 10) * 1000);
   particle(p.dimension, "minecraft:villager_happy", at);
   particle(p.dimension, "minecraft:white_smoke_particle", at);
-  sound(p.dimension, "random.pop", at, 1, 1.2);
-  sound(p.dimension, "mob.rabbit.idle", at, 1, 1.4);
+  particle(p.dimension, "minecraft:totem_particle", at);
+  sound(p.dimension, "random.pop", at, 1.5, 1.2);
+  sound(p.dimension, "mob.rabbit.idle", at, 1.5, 1.4);
+  if (Math.random() < 0.5) sound(p.dimension, "random.levelup", at, 0.8, 2); // ta-da
 }
 
 // Hat Trick rabbits vanish on time, even after a chunk reload.
@@ -459,8 +629,11 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     const at = { x: loc.x, y: loc.y + 0.8, z: loc.z };
     if (has(p, "grunt_birthday")) confetti(deadEntity.dimension, at, true);
     if (has(p, "tiny_thunder")) {
-      sound(deadEntity.dimension, "ambient.weather.thunder", at, 0.35, 1.9);
-      particle(deadEntity.dimension, "minecraft:electric_spark_particle", at);
+      const dim = deadEntity.dimension;
+      sound(dim, "ambient.weather.thunder", at, 1, between(1.5, 2));
+      if (Math.random() < 0.4) sound(dim, "ambient.weather.lightning.impact", at, 0.8, 1.8);
+      for (let i = 0; i < 4; i++) particle(dim, "minecraft:electric_spark_particle", { x: at.x + between(-0.5, 0.5), y: at.y + between(0, 1), z: at.z + between(-0.5, 0.5) });
+      particle(dim, "minecraft:critical_hit_emitter", at);
     }
   } catch {
     // the mob's gone
@@ -472,7 +645,9 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity }) => {
   if (!(hurtEntity instanceof Player) || get("enabled") !== true) return;
   try {
     if (!has(hurtEntity, "moo") || !playing(hurtEntity) || !ready(hurtEntity, "moo", 20)) return;
-    sound(hurtEntity.dimension, "mob.cow.say", hurtEntity.location, 0.8, 1 + Math.random() * 0.3);
+    // Mostly a moo. Sometimes the wrong animal answers.
+    const voice = Math.random() < 0.75 ? "mob.cow.say" : pick(["mob.pig.say", "mob.sheep.say", "mob.chicken.say", "mob.cat.meow"]);
+    sound(hurtEntity.dimension, voice, hurtEntity.location, 1.5, between(0.9, 1.3));
   } catch {
     // gone
   }
