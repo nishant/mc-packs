@@ -345,7 +345,16 @@ function countItems(player) {
   return have;
 }
 
-/** Takes up to n of an item from the inventory (hotbar last). @param {Player} player @param {string} id @param {number} n */
+/** Has the player named this stack or given it lore? Those are used last. @param {ItemStack} it */
+const special = (it) => {
+  try {
+    return it.nameTag !== undefined || it.getLore().length > 0;
+  } catch {
+    return false;
+  }
+};
+
+/** Takes up to n of an item from the inventory (hotbar last, named stacks after plain ones). @param {Player} player @param {string} id @param {number} n */
 function takeItems(player, id, n) {
   const c = containerOf(player);
   if (!c || n <= 0) return 0;
@@ -353,7 +362,13 @@ function takeItems(player, id, n) {
   const order = [];
   for (let i = 9; i < c.size; i++) order.push(i);
   for (let i = 0; i < 9; i++) order.push(i);
+  /** @type {number[]} */
+  const last = [];
   for (const i of order) {
+    const it = c.getItem(i);
+    if (it?.typeId === id && special(it)) last.push(i);
+  }
+  for (const i of [...order.filter((i) => !last.includes(i)), ...last]) {
     if (taken >= n) break;
     const it = c.getItem(i);
     if (!it || it.typeId !== id) continue;
@@ -479,6 +494,8 @@ function materialsOf(player, plan, placed) {
     if (!second) return `There is no block called "${plan.secondBlock}". Change it in /realm:build -> Blocks and placing.`;
   } else if (plan.second === "next" && player.selectedSlotIndex < 8) {
     second = blockOfItem(c?.getItem(player.selectedSlotIndex + 1));
+    // A block the tools never place (TNT, a door...) next to your hand just isn't a second block.
+    if (second && isForbidden(second.type.id)) second = undefined;
   }
   if (second && isForbidden(second.type.id)) return `${nice(second.type.id)} can't be built with the tools.`;
   const fixed = base;
@@ -510,6 +527,8 @@ const limitOf = (player) => (isCreative(player) ? get("maxBlocksCreative") : get
 
 /** @type {Map<string, { key: string, guide: { cells: Pos[], offset?: Pos } | undefined }>} guide cells per player */
 const layoutCache = new Map();
+/** @type {Map<string, { key: string, pos: Pos[] | undefined }>} each player's shape relative to its start block (undefined: too big) */
+const relCache = new Map();
 
 /**
  * The shape's cells relative to the block it is built at (du right, dv up, dw away), copies included.
@@ -526,7 +545,7 @@ function relCells(plan, stairs, pts, cap = Infinity) {
   if (pts) {
     ({ W, H, D } = pts);
     // Two blocks at the same height: the shape keeps the height from its settings.
-    if (H === 1 && shapeOf(plan.shape).params.includes("height")) H = v("height");
+    if (H === 1 && shapeOf(plan.shape).params.includes("height")) H = boxOf(plan.shape, v).H;
     [au, av, aw] = pts.a;
     cells = cellsOf(plan.shape, v, W, H, D, { a: pts.a, b: pts.b }, stairs, slack(cap));
   } else {
@@ -832,7 +851,7 @@ async function build(player, dim, cells, label, opts) {
     // 1. What can go where (reading only).
     /** @type {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string, cost?: string }[]} */
     const todo = [];
-    let blocked = 0, unloaded = 0, unpayable = 0;
+    let blocked = 0, unloaded = 0, unpayable = 0, outside = 0;
     const pay = !creative && get("requireItems") === true && !opts.free;
     for (let i = 0; i < cells.length; i++) {
       if (i && i % (perTick * 4) === 0) {
@@ -841,7 +860,7 @@ async function build(player, dim, cells, label, opts) {
       }
       const c = cells[i];
       if (c.y < range.min || c.y >= range.max) {
-        blocked++;
+        outside++;
         continue;
       }
       let block;
@@ -939,6 +958,7 @@ async function build(player, dim, cells, label, opts) {
     const notes = [];
     if (skipped) notes.push(`${plural(skipped, "spot")} already taken`);
     if (unloaded) notes.push(`${plural(unloaded, "block")} too far away`);
+    if (outside) notes.push(`${plural(outside, "block")} above or below the world`);
     if (unpayable) notes.push(`${plural(unpayable, "block")} that can't be built in survival`);
     if (!placed.length) {
       player.sendMessage(short.length ? `§eNot enough blocks: you need ${short.join(", ")}.` : `§eNothing was built${notes.length ? `: ${notes.join(", ")}` : ""}.`);
@@ -946,7 +966,7 @@ async function build(player, dim, cells, label, opts) {
     }
     note(player, `§aBuilt ${plural(placed.length, "block")}§7 - /realm:build_undo takes it back`);
     if (short.length) player.sendMessage(`§eOut of blocks: built ${placed.length} of ${todo.length}. Still needed: ${short.join(", ")}.`);
-    if (notes.length && skipped + unloaded + unpayable >= Math.max(4, cells.length / 10)) player.sendMessage(`§7Skipped ${notes.join(", ")}.`);
+    if (notes.length && skipped + unloaded + unpayable + outside >= Math.max(4, cells.length / 10)) player.sendMessage(`§7Skipped ${notes.join(", ")}.`);
     return true;
   } finally {
     s.busy = false;
@@ -1295,8 +1315,9 @@ async function airUse(player, perm) {
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
-  if (ev.itemStack?.typeId !== BOOK || !ev.isFirstEvent || isSelecting(ev.player)) return;
-  ev.cancel = true;
+  if (ev.itemStack?.typeId !== BOOK || isSelecting(ev.player)) return;
+  ev.cancel = true; // every repeat while the button is held too, so the block is never used
+  if (!ev.isFirstEvent) return;
   const player = ev.player;
   system.run(() => {
     if (player.isValid) useBook(player);
@@ -1324,10 +1345,27 @@ function guideFor(player, plan, T) {
   const start = twoPoint && s.start && s.start.dim === dim ? s.start : undefined;
   const pts = shape.way && s.way && s.way.dim === dim ? s.way.pts : [];
   const moving = modsOn(plan.mods) || shape.way || twoPoint; // the cells depend on T itself
-  const key = JSON.stringify(plan) + fr.R.join() + fr.F.join() + get("maxSize") + cap + dim +
-    (moving ? `|${T.x},${T.y},${T.z}|${start ? `${start.x},${start.y},${start.z}` : ""}|${pts.length}` : "");
+  const baseKey = JSON.stringify(plan) + fr.R.join() + fr.F.join() + get("maxSize") + cap + dim;
+  const key = baseKey + (moving ? `|${T.x},${T.y},${T.z}|${start ? `${start.x},${start.y},${start.z}` : ""}|${pts.length}` : "");
   const cached = layoutCache.get(player.id);
   if (cached && cached.key === key) return cached.guide;
+  /** The shape's blocks relative to the block it starts at: laid out once per plan and facing, not per look. */
+  const relPos = () => {
+    const hit = relCache.get(player.id);
+    if (hit && hit.key === baseKey) {
+      if (!hit.pos) throw new TooBig(cap + 1);
+      return hit.pos;
+    }
+    let pos;
+    try {
+      pos = relCells(plan, false, undefined, cap).map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }));
+    } catch (e) {
+      if (e instanceof TooBig) relCache.set(player.id, { key: baseKey, pos: undefined });
+      throw e;
+    }
+    relCache.set(player.id, { key: baseKey, pos });
+    return pos;
+  };
   /** @type {{ cells: Pos[], offset?: Pos } | undefined} */
   let guide;
   try {
@@ -1335,11 +1373,12 @@ function guideFor(player, plan, T) {
       const pos = curveCells(/** @type {"curve" | "curvewall"} */ (plan.shape), (k) => val(plan, k), [...pts, T], slack(cap));
       guide = { cells: finishCells(plan, pos, pts[0] ?? T, cap, dim) };
     } else {
-      const rel = start ? relCells(plan, false, pointsBox(start, T, fr), cap) : twoPoint ? [{ du: 0, dv: 0, dw: 0 }] : relCells(plan, false, undefined, cap);
       const O = start ?? T;
-      const pos = rel.map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }));
+      const pos = start || twoPoint
+        ? (start ? relCells(plan, false, pointsBox(start, T, fr), cap) : [{ du: 0, dv: 0, dw: 0 }]).map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }))
+        : relPos();
       guide = moving
-        ? { cells: finishCells(plan, pos.map((p) => ({ x: p.x + O.x, y: p.y + O.y, z: p.z + O.z })), O, cap, dim) }
+        ? { cells: withModsGuide(plan, pos.map((p) => ({ x: p.x + O.x, y: p.y + O.y, z: p.z + O.z })), O, cap, dim) }
         : { cells: pos, offset: T };
     }
   } catch (e) {
@@ -1349,6 +1388,17 @@ function guideFor(player, plan, T) {
   layoutCache.set(player.id, { key, guide });
   if (guide && !moving) return { cells: guide.cells, offset: T };
   return guide;
+}
+
+/** The guide's modifier copies (like finishCells, without sorting). @param {Plan} plan @param {Pos[]} cells @param {Pos} T @param {number} cap @param {string} dim */
+function withModsGuide(plan, cells, T, cap, dim) {
+  if (!modsOn(plan.mods)) return cells;
+  try {
+    return applyMods(cells, plan.mods, centerOf(plan, T, dim), cap);
+  } catch (e) {
+    if (e instanceof RangeError) throw new TooBig(cap + 1);
+    throw e;
+  }
 }
 
 /** Gold marks: the modifier center, a two-block start and a curve's points. @param {Player} player @param {State} s @param {Plan} plan */
@@ -1416,6 +1466,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
     s.way = undefined;
   }
   layoutCache.delete(playerId);
+  relCache.delete(playerId);
   forgetGuides(playerId);
 });
 

@@ -93,6 +93,12 @@ const nameOf = (v) => (v[0] > 0 ? "east" : v[0] < 0 ? "west" : v[1] > 0 ? "south
 const WEIRDO = ["east", "west", "south", "north"]; // stairs weirdo_direction, trapdoor direction
 const DIRECTION = ["south", "west", "north", "east"]; // direction 0..3 (beds, repeaters, gates of old...)
 const FACING6 = ["down", "up", "north", "south", "west", "east"]; // facing_direction 0..5
+const CORAL4 = ["west", "east", "north", "south"]; // coral_direction (wall fans)
+const BITS4 = ["south", "west", "north", "east"]; // vine_direction_bits, and multi_face_direction_bits from bit 2
+/** rail_direction: straight and curved rails by the two sides they join, sloped ones by the side they rise to. */
+const RAILS = [["north", "south"], ["east", "west"], ["east"], ["west"], ["north"], ["south"], ["south", "east"], ["south", "west"], ["north", "west"], ["north", "east"]];
+/** Wall and connection sides: the state's name says the side. */
+const SIDE_KEY = /^(wall_connection_type_|minecraft:connection_|pale_moss_carpet_side_)(north|south|east|west)$/;
 
 /**
  * How a copy is changed: mirrored on x, z and/or y, then turned `turns` quarter turns
@@ -108,6 +114,17 @@ function changeVec(v, t) {
 }
 /** @param {string} name @param {Change} t */
 const changeName = (name, t) => (VEC[name] ? nameOf(changeVec(VEC[name], t)) : name);
+/** A direction that may also be up or down. @param {string} name @param {Change} t */
+const changeName6 = (name, t) => (t.my && (name === "up" || name === "down") ? (name === "up" ? "down" : "up") : changeName(name, t));
+/** Direction bits (4 from `shift`, in BITS4 order; below them down and up when shift is 2). @param {number} v @param {Change} t @param {number} shift */
+function changeBits(v, t, shift) {
+  let out = v & ~(((1 << 4) - 1) << shift);
+  if (shift === 2 && t.my) out = (out & ~3) | ((v & 1) << 1) | ((v >> 1) & 1);
+  BITS4.forEach((d, i) => {
+    if (v & (1 << (shift + i))) out |= 1 << (shift + BITS4.indexOf(changeName(d, t)));
+  });
+  return out;
+}
 
 /** @type {Map<string, BlockPermutation>} */
 const changed = new Map();
@@ -127,7 +144,27 @@ export function changePerm(perm, t) {
   const next = { ...states };
   const id = perm.type.id;
   for (const [k, v] of Object.entries(states)) {
-    if (k === "weirdo_direction" && typeof v === "number") next[k] = WEIRDO.indexOf(changeName(WEIRDO[v] ?? "east", t));
+    const side = SIDE_KEY.exec(k);
+    if (side) next[side[1] + changeName(side[2], t)] = v;
+    else if (k === "weirdo_direction" && typeof v === "number") next[k] = WEIRDO.indexOf(changeName(WEIRDO[v] ?? "east", t));
+    else if (k === "torch_facing_direction" && typeof v === "string") next[k] = changeName(v, t);
+    else if (k === "coral_direction" && typeof v === "number") next[k] = CORAL4.indexOf(changeName(CORAL4[v] ?? "west", t));
+    else if (k === "rail_direction" && typeof v === "number" && RAILS[v]) {
+      const turned = RAILS[v].map((d) => changeName(d, t));
+      const i = RAILS.findIndex((r) => r.length === turned.length && turned.every((d) => r.includes(d)));
+      if (i >= 0) next[k] = i;
+    } else if (k === "door_hinge_bit" && typeof v === "boolean" && !!t.mx !== !!t.mz) next[k] = !v; // one mirror swaps the hinge side
+    else if (k === "vine_direction_bits" && typeof v === "number") next[k] = changeBits(v, t, 0);
+    else if (k === "multi_face_direction_bits" && typeof v === "number") next[k] = changeBits(v, t, 2);
+    else if (k === "lever_direction" && typeof v === "string") {
+      // "north", "up_east_west", "down_north_south"...: each word changed, pairs in their usual order
+      next[k] = v
+        .split("_")
+        .map((w) => changeName6(w, t))
+        .join("_")
+        .replace("south_north", "north_south")
+        .replace("west_east", "east_west");
+    }
     else if (k === "direction" && typeof v === "number") {
       const table = id.includes("trapdoor") ? WEIRDO : DIRECTION;
       next[k] = table.indexOf(changeName(table[v] ?? table[0], t));
@@ -137,7 +174,7 @@ export function changePerm(perm, t) {
       const name = FACING6[v] ?? "north";
       next[k] = FACING6.indexOf(t.my && (name === "up" || name === "down") ? (name === "up" ? "down" : "up") : changeName(name, t));
     } else if (k === "pillar_axis" && typeof v === "string" && (t.turns ?? 0) % 2 !== 0 && v !== "y") next[k] = v === "x" ? "z" : "x";
-    else if (k === "ground_sign_direction" && typeof v === "number") {
+    else if ((k === "ground_sign_direction" || k === "minecraft:sixteen_way_rotation") && typeof v === "number") {
       // 0..15, 0 = south, counting clockwise seen from above (west is 4)
       let a = v;
       if (t.mx) a = (16 - a) % 16;

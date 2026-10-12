@@ -54,11 +54,8 @@ const outlines = new WeakMap();
 function outlineOf(cells) {
   let o = outlines.get(cells);
   if (o) return o;
-  const key = (/** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ z) => `${x},${y},${z}`;
-  const set = new Set();
   const min = { x: Infinity, y: Infinity, z: Infinity }, max = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (const c of cells) {
-    set.add(key(c.x, c.y, c.z));
     if (c.x < min.x) min.x = c.x;
     if (c.y < min.y) min.y = c.y;
     if (c.z < min.z) min.z = c.z;
@@ -66,6 +63,12 @@ function outlineOf(cells) {
     if (c.y > max.y) max.y = c.y;
     if (c.z > max.z) max.z = c.z;
   }
+  // Number keys within the box grown by one on each side (much cheaper than strings for thousands of cells).
+  const sy = max.y - min.y + 3, sz = max.z - min.z + 3;
+  const key = (/** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ z) => ((x - min.x + 1) * sy + (y - min.y + 1)) * sz + (z - min.z + 1);
+  const set = new Set();
+  for (const c of cells) set.add(key(c.x, c.y, c.z));
+  const step = [sy * sz, sz, 1]; // a key's change for one block along x, y and z
   /** @type {number[][]} */
   const faces = [];
   /** @type {Pos[]} */
@@ -77,9 +80,7 @@ function outlineOf(cells) {
     seen.add(k);
     let open = false;
     for (const [axis, side] of SIDES) {
-      const n = [c.x, c.y, c.z];
-      n[axis] += side;
-      if (set.has(key(n[0], n[1], n[2]))) continue;
+      if (set.has(k + side * step[axis])) continue;
       faces.push([c.x, c.y, c.z, axis, side]);
       open = true;
     }
