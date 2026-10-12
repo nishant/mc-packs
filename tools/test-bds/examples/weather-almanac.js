@@ -59,12 +59,14 @@ export default async function (t) {
   const set = await t.waitForm(p, { timeout: 100 });
   t.log(`set form "${set.title}" elements: ${JSON.stringify(set.elements).slice(0, 300)}`);
   const other = await t.player("Farmer", { x: p.location.x + 10, z: p.location.z });
+  const since = t.tick;
   set.answer({ Weather: "Rain", "real minutes": 10 });
-  await t.waitMessage(p, /Rain for 10 minutes starting now/, { timeout: 60 });
+  await t.waitMessage(p, /Rain for 10 minutes starting now/, { timeout: 60, since });
   await t.waitUntil(() => plans.at(-1).now === "Rain", { timeout: 40, message: "the plan now says Rain" });
   // Everyone else hears that an operator set the weather (the operator only gets their own answer).
-  await t.waitMessage(other, /An operator set the weather: Rain for 10 minutes/, { timeout: 60 });
+  await t.waitMessage(other, /An operator set the weather: Rain for 10 minutes/, { timeout: 60, since });
   t.check(!t.messages(p).some((m) => /An operator set the weather/.test(m.plain)), "the operator isn't told twice");
+  const since2 = t.tick;
   t.assert(t.cmd(p, "/realm:weather_set clear 5").ok, "/realm:weather_set clear 5 ran");
-  await t.waitMessage(other, /An operator set the weather: Clear skies for 5 minutes/, { timeout: 60 });
+  await t.waitMessage(other, /An operator set the weather: Clear skies for 5 minutes/, { timeout: 60, since: since2 });
 }

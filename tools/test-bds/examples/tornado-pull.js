@@ -42,9 +42,10 @@ export default async function (t) {
   const menu2P = t.waitForm(p, { timeout: 100 });
   t.assert(t.cmd(p, "/realm:tornado").ok, "/realm:tornado ran again");
   const menu2 = await menu2P;
+  const since = t.tick;
   menu2.answer("End the tornado");
-  await t.waitMessage(p, /tornado is gone/i, { timeout: 60 });
-  await t.waitMessage(w, /tornado has died down/i, { timeout: 60 });
+  await t.waitMessage(p, /tornado is gone/i, { timeout: 60, since });
+  await t.waitMessage(w, /tornado has died down/i, { timeout: 60, since });
   t.check(t.messages(w).filter((m) => /died down/.test(m.plain)).length === 1, "the all-clear comes once");
   await t.wait(20);
   const infoP2 = t.waitForm(p, { timeout: 100 });
