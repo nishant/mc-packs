@@ -407,7 +407,7 @@ system.runInterval(() => {
 
 /**
  * Players in a Hyper Jump flight: the tick it ends at the latest, and whether to cushion the landing.
- * @type {Map<string, { until: number, cushion: boolean, rose: boolean }>}
+ * @type {Map<string, { start: number, until: number, cushion: boolean, rose: boolean }>}
  */
 const flights = new Map();
 
@@ -525,7 +525,7 @@ function spaceProgram(p) {
 
 /** Watches a flight until the landing. @param {Player} p @param {number} ticks */
 function track(p, ticks) {
-  flights.set(p.id, { until: system.currentTick + ticks, cushion: get("hyperJumpSoftLanding") === true, rose: false });
+  flights.set(p.id, { start: system.currentTick, until: system.currentTick + ticks, cushion: get("hyperJumpSoftLanding") === true, rose: false });
 }
 
 // Flights: a soft landing (a moment of slow falling just above the ground) when enabled, else a real fall.
@@ -540,7 +540,8 @@ system.runInterval(() => {
     try {
       const vy = p.getVelocity().y;
       if (vy > 0.1) f.rose = true;
-      if (!f.rose) continue;
+      // The first ticks of a launch can still read "on the ground": that isn't a landing (and would end the Space Program's burn).
+      if (!f.rose || system.currentTick - f.start < 6) continue;
       if (p.isOnGround || p.isInWater || p.isFlying || p.isGliding) {
         flights.delete(id);
         continue;

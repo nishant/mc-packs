@@ -61,24 +61,44 @@ export function bar(p, text, ticks = 30) {
   });
 }
 
-/** Puts out fire blocks within `r` blocks of a point. @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] */
-export function clearFire(dim, at, r = 4) {
+/**
+ * Fire blocks within `r` blocks of a point, as "x,y,z" keys.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] @returns {Set<string>}
+ */
+function firesAround(dim, at, r = 4) {
   const cx = Math.floor(at.x);
   const cy = Math.floor(at.y);
   const cz = Math.floor(at.z);
+  const out = new Set();
   for (let x = cx - r; x <= cx + r; x++)
     for (let y = cy - 2; y <= cy + r; y++)
       for (let z = cz - r; z <= cz + r; z++) {
         const b = blockAt(dim, { x, y, z });
-        if (b && b.typeId === "minecraft:fire") attempt(() => b.setType("minecraft:air"));
+        if (b && b.typeId === "minecraft:fire") out.add(`${x},${y},${z}`);
       }
+  return out;
 }
 
-/** A lightning bolt at a point. Any fire it starts there is put out, so it never burns a build. @param {Dimension} dim @param {import("@minecraft/server").Vector3} at */
+/**
+ * Puts out fire blocks within `r` blocks of a point, except the ones in `keep` (fires that were
+ * burning before, like a fireplace). Only fire is touched.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] @param {Set<string>} [keep]
+ */
+export function clearFire(dim, at, r = 4, keep = new Set()) {
+  for (const key of firesAround(dim, at, r)) {
+    if (keep.has(key)) continue;
+    const [x, y, z] = key.split(",").map(Number);
+    const b = blockAt(dim, { x, y, z });
+    if (b && b.typeId === "minecraft:fire") attempt(() => b.setType("minecraft:air"));
+  }
+}
+
+/** A lightning bolt at a point. Any fire it starts there is put out, so it never burns a build (fires that were already burning stay). @param {Dimension} dim @param {import("@minecraft/server").Vector3} at */
 export function strike(dim, at) {
   const spot = { x: at.x, y: at.y, z: at.z };
+  const before = firesAround(dim, spot);
   dim.spawnEntity("minecraft:lightning_bolt", spot);
-  for (const t of [2, 10, 30, 60, 100]) system.runTimeout(() => attempt(() => clearFire(dim, spot)), t);
+  for (const t of [2, 10, 30, 60, 100]) system.runTimeout(() => attempt(() => clearFire(dim, spot, 4, before)), t);
 }
 
 /** Compass direction from one point to another ("north-east"). @param {import("@minecraft/server").Vector3} from @param {import("@minecraft/server").Vector3} to */

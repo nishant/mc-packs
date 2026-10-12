@@ -141,13 +141,23 @@ function deckChampion(dim, at) {
 
 /**
  * Three seconds after a champion appears, checks it is still there. If something removed it before
- * anyone could fight it, the deck sends its own near the player.
- * @param {Player} p @param {import("@minecraft/server").Entity} champ
+ * anyone could fight it (not a kill), the deck sends its own near the player. If the deck already
+ * sent its own and the Champions pack's champion turns up late after all, the late one goes, so
+ * only one champion comes.
+ * @param {Player} p @param {import("@minecraft/server").Entity} champ @param {string} tag the tag asked of the Champions pack
  */
-function watchChampion(p, champ) {
+function watchChampion(p, champ, tag) {
+  const dim = champ.dimension;
+  const champId = champ.id;
+  let died = false;
+  const onDie = world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+    if (deadEntity.id === champId) died = true;
+  });
   system.runTimeout(() => {
+    attempt(() => world.afterEvents.entityDie.unsubscribe(onDie));
     try {
-      if (!p.isValid || champ.isValid) return;
+      if (champ.isValid && champ.hasTag("domt:boss")) for (const late of dim.getEntities({ tags: [tag] })) attempt(() => late.remove());
+      if (died || !p.isValid || champ.isValid) return;
       const spot = sightSpot(p, 6, 10) ?? randomSpot(p, 6, 10);
       if (!spot) return;
       deckChampion(p.dimension, spot);
@@ -239,6 +249,32 @@ function spawnAbove(p, type, n, up, r) {
   }
   return out;
 }
+
+const TEMP_TAG = "domt:temp"; // mobs that leave after a while
+const PROP_GONE = "domt:gone"; // entity: when it leaves (ms since 1970)
+
+/** The mob leaves after `seconds`, even across a restart or a chunk reload. @param {import("@minecraft/server").Entity} e @param {number} seconds */
+function tempMob(e, seconds) {
+  attempt(() => {
+    e.setDynamicProperty(PROP_GONE, Date.now() + seconds * 1000);
+    e.addTag(TEMP_TAG);
+  });
+  system.runTimeout(() => attempt(() => e.isValid && e.remove()), seconds * 20);
+}
+
+/** Removes a temporary mob whose time is up. @param {import("@minecraft/server").Entity} e */
+function expire(e) {
+  const gone = e.getDynamicProperty(PROP_GONE);
+  if (typeof gone !== "number" || Date.now() >= gone) e.remove();
+}
+
+world.afterEvents.entityLoad.subscribe(({ entity }) => attempt(() => entity.isValid && entity.hasTag(TEMP_TAG) && expire(entity)));
+system.runInterval(() => {
+  for (const id of ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"])
+    attempt(() => {
+      for (const e of world.getDimension(id).getEntities({ tags: [TEMP_TAG] })) attempt(() => expire(e));
+    });
+}, 400);
 
 /** Names Cursed Name picks from. */
 const SILLY_NAMES = ["Sir Bonks-a-Lot", "Captain Soggy", "Lord Snackington", "Dirt Muncher", "The Wobbler", "Princess Pebble", "Baron von Oops", "Mister Noodles", "Duke of Mud", "Lil Creeper Hugger"];
@@ -1017,6 +1053,8 @@ export const CARDS = [
     expect: "hurt",
     prep: toughen,
     run: ({ player, test }) => {
+      // An explosion knocks down armor stands and paintings even when it breaks no blocks: not in a safe zone.
+      if (zoned(player, 8)) return false;
       const dim = player.dimension;
       const at = { ...player.location };
       everySecond(
@@ -1192,7 +1230,7 @@ export const CARDS = [
       burst(dim, "minecraft:knockback_roar_particle", spot, 6);
       sound(player, "mob.evocation_illager.prepare_summon");
       announce(`${player.name} drew The Champion! A champion hunts them.`);
-      watchChampion(player, champ);
+      watchChampion(player, champ, tag);
       return `It is a ${prettyId(champ.typeId).toLowerCase()}, ${Math.round(Math.hypot(spot.x - player.location.x, spot.z - player.location.z))} blocks to the ${compass(player.location, spot)}.`;
     },
   },
@@ -1532,11 +1570,8 @@ export const CARDS = [
     run: ({ player, test }) => {
       const birds = spawnAbove(player, "minecraft:chicken", 16, 18, 8);
       if (!birds.length) return false;
-      for (const b of birds) attempt(() => b.addTag("domt:temp"));
+      for (const b of birds) tempMob(b, test ? 10 : 180);
       sound(player, "mob.chicken.say", 1.2);
-      system.runTimeout(() => {
-        for (const b of birds) attempt(() => b.isValid && b.remove());
-      }, test ? 200 : 3600);
     },
   },
   {
@@ -1699,6 +1734,13 @@ export const CARDS = [
     run: ({ player, test }) => {
       const mark = `§8Deck of Many Things ${Date.now().toString(36)}`;
       const power = test ? 0.5 : 1.3;
+      /** The bang: an explosion that breaks no blocks, or in a safe zone (armor stands, paintings) just a pop. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at */
+      const bang = (dim, at) => {
+        if (inZone(dim.id, at.x, at.z, 6)) {
+          burst(dim, "minecraft:basic_smoke_particle", at, 12, 0.6);
+          attempt(() => dim.playSound("random.explode", at, { volume: 0.8, pitch: 1.4 }));
+        } else dim.createExplosion(at, power, { breaksBlocks: false, causesFire: false });
+      };
       give(player, "minecraft:potato", 1, { name: "§c§lHot Potato", lore: ["§7Explodes in 30 seconds.", "§7Drop it near a friend!", mark] });
       sound(player, "random.fuse");
       const isIt = (/** @type {ItemStack | undefined} */ it) => !!it && it.typeId === "minecraft:potato" && it.getLore().includes(mark);
@@ -1720,7 +1762,7 @@ export const CARDS = [
             for (let i = 0; i < inv.size; i++)
               if (isIt(inv.getItem(i))) {
                 inv.setItem(i, undefined);
-                q.dimension.createExplosion(q.location, power, { breaksBlocks: false, causesFire: false });
+                bang(q.dimension, q.location);
                 world.sendMessage(`§6[Deck] §c${q.name} was holding the Hot Potato!`);
                 return;
               }
@@ -1730,7 +1772,7 @@ export const CARDS = [
               if (!isIt(e.getComponent("minecraft:item")?.itemStack)) continue;
               const at = e.location;
               e.remove();
-              dim.createExplosion(at, power, { breaksBlocks: false, causesFire: false });
+              bang(dim, at);
               return;
             }
         },
