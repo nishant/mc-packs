@@ -3,7 +3,8 @@
 // not be scooped into an expedition parcel. (B) An operator resets while a Nightmare Sigil run is still asking the
 // party: the sigil comes back to the leader. (C) The last member dies with a wave alive and stays on the death screen
 // while the dungeon is filled in: the reset still removes the mobs, keeps her return spot, and she is sent back to
-// where she started when she respawns.
+// where she started when she respawns. (D) Leaving from the run menu and (E) an operator's reset from the menu ask
+// first: Stay and Back change nothing, Leave and End and reset do it.
 // node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-edge.js --timeout 900
 import { ItemStack } from "@minecraft/server";
 const sigils = (p) => {
@@ -134,6 +135,37 @@ export default async function (t) {
   t.check(Math.abs(ann.location.x - hx) < 3 && Math.abs(ann.location.z - hz) < 3, `Ann was sent back to where she started (${Math.round(ann.location.x)}, ${Math.round(ann.location.z)} vs ${hx}, ${hz})`);
   t.check(!ann.hasTag("realm_expedition"), "Ann's tag is gone");
   t.check(typeof ann.getDynamicProperty("expedition:return") !== "string", "her return spot is forgotten once she is back");
+
+  // (D) Leaving from the run menu asks first.
+  t.answerForm(ann, "Start an expedition", "Crypt", (f) => f.buttons.findIndex((b) => b.startsWith("Easy")), "Start");
+  t.cmd(ann, "/realm:expedition");
+  await active(t);
+  await t.wait(30);
+  t.answerForm(ann, "Leave the expedition", "Stay");
+  t.cmd(ann, "/realm:expedition");
+  await t.wait(30);
+  t.check((await state(t))?.phase === "active" && ann.hasTag("realm_expedition"), "Stay keeps Ann in the run");
+  t.answerForm(ann, "Leave the expedition", "Leave");
+  t.cmd(ann, "/realm:expedition");
+  await t.waitMessage(ann, /left the expedition/i, { timeout: 100 });
+  await over(t);
+  t.check(!ann.hasTag("realm_expedition") && Math.abs(ann.location.x - hx) < 3, "Leave takes her out and home");
+
+  // (E) An operator's reset from the menu asks first (Bea, made an operator, uses the tools while Ann is in the run).
+  t.answerForm(ann, "Start an expedition", "Crypt", (f) => f.buttons.findIndex((b) => b.startsWith("Easy")), "Start");
+  t.cmd(ann, "/realm:expedition");
+  await active(t);
+  await t.wait(30);
+  t.op(bea);
+  t.answerForm(bea, "Operator tools", "End every expedition", "Back");
+  t.cmd(bea, "/realm:expedition");
+  await t.wait(40);
+  t.check((await state(t))?.phase === "active", "Back leaves the run alone");
+  t.answerForm(bea, "Operator tools", "End every expedition", "End and reset");
+  t.cmd(bea, "/realm:expedition");
+  await t.waitMessage(ann, /operator \(Bea\) ended/i, { timeout: 100 });
+  await over(t);
+  t.check(!ann.hasTag("realm_expedition") && Math.abs(ann.location.x - hx) < 3, "End and reset sent Ann back");
 }
 // shared helpers (pasted into each scenario: scenarios can't import)
 async function state(t, room) {
