@@ -1,0 +1,20 @@
+{
+  "format_version": "1.10.0",
+  "animation_controllers": {
+    "controller.animation.realm_platypus.move": {
+      "initial_state": "land",
+      "states": {
+        "land": {
+          "animations": ["idle", { "walk": "query.modified_move_speed" }],
+          "transitions": [{ "water": "query.is_in_water" }],
+          "blend_transition": 0.2
+        },
+        "water": {
+          "animations": ["swim"],
+          "transitions": [{ "land": "!query.is_in_water" }],
+          "blend_transition": 0.2
+        }
+      }
+    }
+  }
+}
