@@ -18,6 +18,7 @@ import { get } from "./settings.js";
  * @property {string} [free] a paste that used the free paste of this cut
  * @property {number} [slot] clipboard slot of a paste or cut
  * @property {number} [sid] where it is saved (0 or missing: memory only)
+ * @property {number} [len] how many characters its saved copy takes
  * @typedef {{ undo: BuildRecord[], redo: BuildRecord[], loaded: boolean }} History
  */
 
@@ -107,6 +108,7 @@ export async function undo(player, redo) {
   if (why) return player.sendMessage(`§e${why}`);
   list.pop();
   delete rec.sid; // its saved copy is removed now; saved again wherever it goes next
+  delete rec.len;
   save(player, h);
   let dim;
   try {
@@ -114,7 +116,8 @@ export async function undo(player, redo) {
   } catch {
     return player.sendMessage("§eThat step was in a dimension that isn't there any more.");
   }
-  const charge = redo !== !!rec.inv;
+  // A cut takes blocks away without drops and puts them back for free: neither way costs or gives items.
+  const charge = rec.kind !== "cut" && redo !== !!rec.inv;
   if (charge) {
     /** @type {Placed[]} */
     let placed = [];
@@ -141,10 +144,13 @@ export async function undo(player, redo) {
     const perTick = Math.max(10, get("blocksPerTick"));
     /** @type {Map<string, number>} */
     const owed = new Map();
-    let back = 0, gone = 0;
-    for (let i = rec.cells.length - 1, n = 0; i >= 0; i--, n++) {
+    let back = 0, gone = 0, far = 0;
+    // Undo goes backwards (what hangs on a block comes back after it); redo goes in the step's own order
+    // (a cut takes torches and ladders before what they hang on, so nothing pops off as an item).
+    const len = rec.cells.length;
+    for (let n = 0; n < len; n++) {
       if (n && n % perTick === 0) await ctx.tick();
-      const c = rec.cells[i];
+      const c = rec.cells[redo ? n : len - 1 - n];
       const from = redo ? c.before : c.after, to = redo ? c.after : c.before;
       let block;
       try {
@@ -152,7 +158,11 @@ export async function undo(player, redo) {
       } catch {
         block = undefined;
       }
-      if (!block || block.typeId !== from.type.id) {
+      if (!block) {
+        far++;
+        continue;
+      }
+      if (block.typeId !== from.type.id || holdsItems(block)) {
         gone++;
         continue;
       }
@@ -166,6 +176,13 @@ export async function undo(player, redo) {
       if (c.cost) owed.set(c.cost, (owed.get(c.cost) ?? 0) + 1);
     }
     ctx.refund(player, pid, owed);
+    if (!back && far) {
+      // Nothing there is loaded (another dimension, too far away): keep the step for later.
+      list.push(rec);
+      save(player, h);
+      if (player.isValid) player.sendMessage(`§eThose blocks are too far away to ${redo ? "redo" : "undo"} from here. Go back closer and try again.`);
+      return;
+    }
     if (back) {
       if (redo) remember(player, rec, true);
       else pushRedo(player, h, rec);
@@ -175,8 +192,19 @@ export async function undo(player, redo) {
     const given = [...owed.values()].reduce((a, b) => a + b, 0);
     ctx.note(player, `§a${redo ? "Redone" : "Undone"}: ${rec.label}§7 (${ctx.plural(back, "block")}${given ? `, ${given} given back` : ""})`);
     if (gone) player.sendMessage(`§7${ctx.plural(gone, "block")} had changed since and stayed as they are.`);
+    if (far) player.sendMessage(`§7${ctx.plural(far, "block")} too far away stayed as they are.`);
   } finally {
     s.busy = false;
+  }
+}
+
+/** Does this block hold items (a chest or barrel someone filled since)? Undo never takes it away. @param {import("@minecraft/server").Block} block */
+function holdsItems(block) {
+  try {
+    const c = block.getComponent("minecraft:inventory")?.container;
+    return !!c && c.emptySlotsCount < c.size;
+  } catch {
+    return false;
   }
 }
 
@@ -335,7 +363,7 @@ function load(player, h) {
       try {
         const text = readText(player, Number(sid));
         const rec = text ? decode(text) : undefined;
-        if (rec) out.push({ ...rec, sid: Number(sid) });
+        if (rec) out.push({ ...rec, sid: Number(sid), len: text?.length ?? 0 });
       } catch (e) {
         console.warn(`[build] undo step ${sid}: ${e}`);
       }
@@ -364,10 +392,16 @@ function save(player, h) {
     const keep = (list) =>
       list.map((rec, i) => {
         if (i >= maxSteps || rec.cells.length > maxCells || !rec.cells.length) return 0;
-        if (rec.sid) return rec.sid;
+        // Steps saved earlier count toward the budget too, so all saved steps together stay under it.
+        if (rec.sid && rec.len !== undefined) {
+          if (chars + rec.len > MAX_SAVED_CHARS) return 0;
+          chars += rec.len;
+          return rec.sid;
+        }
         const text = encode(rec);
         if (chars + text.length > MAX_SAVED_CHARS) return 0;
         chars += text.length;
+        rec.len = text.length;
         const sid = next++;
         let p = 0;
         for (; p * PART < text.length; p++) player.setDynamicProperty(`build:h${sid}_${p}`, text.slice(p * PART, (p + 1) * PART));
@@ -378,8 +412,8 @@ function save(player, h) {
     // Newest first, so the size budget goes to the steps undo reaches first.
     const u = keep([...h.undo].reverse()).reverse();
     const r = keep([...h.redo].reverse()).reverse();
-    h.undo.forEach((rec, i) => !u[i] && delete rec.sid);
-    h.redo.forEach((rec, i) => !r[i] && delete rec.sid);
+    h.undo.forEach((rec, i) => !u[i] && (delete rec.sid, delete rec.len));
+    h.redo.forEach((rec, i) => !r[i] && (delete rec.sid, delete rec.len));
     const live = new Set([...u, ...r].filter(Boolean).map(String));
     for (const id of player.getDynamicPropertyIds()) {
       const m = /^build:h(\d+)_\d+$/.exec(id);

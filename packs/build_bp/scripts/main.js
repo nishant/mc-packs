@@ -382,7 +382,8 @@ function giveItems(player, items) {
       }
       stack.amount = Math.min(left, stack.maxAmount);
       left -= stack.amount;
-      const rest = c?.addItem(stack) ?? stack;
+      // addItem returns what didn't fit, or undefined when all of it did (`?? stack` here would drop a copy).
+      const rest = c ? c.addItem(stack) : stack;
       if (rest) {
         try {
           player.dimension.spawnItem(rest, player.location);
@@ -890,7 +891,12 @@ async function build(player, dim, cells, label, opts) {
       for (const [id, n] of need) paid.set(id, takeItems(player, id, n));
     }
 
-    // 3. Place, a few hundred blocks a tick.
+    // 3. Place, a few hundred blocks a tick. The top half of a door or tall flower (pastes, undo of destroy mode)
+    // goes last and only onto its own bottom half; a bottom half whose top can't go is taken away again.
+    const upper = (/** @type {{ perm: BlockPermutation }} */ c) => c.perm.getState("upper_block_bit") === true;
+    if (todo.some(upper)) todo.sort((a, b) => Number(upper(a)) - Number(upper(b)));
+    /** @type {Set<string>} bottom halves to take away again */
+    const lone = new Set();
     /** @type {Placed[]} */
     const placed = [];
     let changed = 0;
@@ -911,7 +917,20 @@ async function build(player, dim, cells, label, opts) {
       } catch {
         block = undefined;
       }
-      if (!block || (opts.redo ? block.typeId !== c.expect : !replaceable(block.typeId, opts.mode))) {
+      let bad = !block || (opts.redo ? block.typeId !== c.expect : !replaceable(block.typeId, opts.mode));
+      if (!bad && upper(c)) {
+        let below;
+        try {
+          below = dim.getBlock({ x: c.x, y: c.y - 1, z: c.z });
+        } catch {
+          below = undefined;
+        }
+        if (below?.typeId !== c.perm.type.id || below.permutation.getState("upper_block_bit") !== false) {
+          bad = true;
+          lone.add(`${c.x},${c.y - 1},${c.z}`);
+        }
+      }
+      if (!block || bad) {
         if (c.cost) paid.set(c.cost, (paid.get(c.cost) ?? 0) + 1);
         changed++;
         continue;
@@ -925,6 +944,21 @@ async function build(player, dim, cells, label, opts) {
         continue;
       }
       placed.push({ x: c.x, y: c.y, z: c.z, before, after: c.perm, cost: c.cost });
+    }
+    if (lone.size) {
+      for (let i = placed.length - 1; i >= 0; i--) {
+        const c = placed[i];
+        if (!lone.has(`${c.x},${c.y},${c.z}`)) continue;
+        try {
+          const block = dim.getBlock(c);
+          if (block?.typeId === c.after.type.id) block.setPermutation(c.before);
+        } catch {
+          continue;
+        }
+        if (c.cost) paid.set(c.cost, (paid.get(c.cost) ?? 0) + 1);
+        placed.splice(i, 1);
+        changed++;
+      }
     }
     // Anything paid for but not placed goes back.
     for (const [id, n] of [...paid]) if (n <= 0) paid.delete(id);
@@ -1872,6 +1906,7 @@ function command(registry, name, description, run) {
       const why = refusal(player);
       if (why) return { status: CustomCommandStatus.Failure, message: why };
       system.run(async () => {
+        if (!player.isValid) return; // left in the meantime
         try {
           await run(player);
         } catch (e) {
