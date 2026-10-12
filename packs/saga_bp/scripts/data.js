@@ -147,6 +147,9 @@ function tidy(st) {
 export function sagaOf(player) {
   let saga = cache.get(player.id);
   if (saga) return saga;
+  // A player who already left (an operator's menu outlived them): their property can't be read, and caching an
+  // empty save under their id would hide their progress when they come back (forget() ran when they left).
+  if (!player.isValid) return { s: {} };
   try {
     const raw = player.getDynamicProperty(PROP_PLAYER);
     const parsed = typeof raw === "string" ? JSON.parse(raw) : undefined;
@@ -453,7 +456,12 @@ export function entries(player) {
   for (const [npc, fs] of Object.entries(saga.fv ?? {})) {
     if (!fs?.a || fs.c) continue;
     const f = favorById(fs.id);
-    if (!f) continue;
+    if (!f) {
+      // The favor vanished from favors.js under this player: forget it, so the questgiver offers today's again.
+      delete saga.fv?.[npc];
+      markDirty(player);
+      continue;
+    }
     const { story, chapter } = favorShape(f);
     fs.o ??= [];
     list.push({ story, chapter, index: 0, st: fs, fav: npc });
