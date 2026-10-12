@@ -122,8 +122,8 @@ const turnWords = (v, k) =>
 const SIDE_KEY = /^(wall_connection_type_|minecraft:connection_|pale_moss_carpet_side_)(north|south|east|west)$/;
 const WORD_KEY = /direction|facing|face|orientation/;
 
-/** @type {Map<BlockPermutation, (BlockPermutation | undefined)[]>} */
-const turnCache = new Map();
+/** @type {WeakMap<BlockPermutation, (BlockPermutation | undefined)[]>} a copy's blocks die with its content; so do their turns */
+const turnCache = new WeakMap();
 /**
  * A block turned k quarter turns (south -> west first).
  * @param {BlockPermutation} perm @param {number} k
@@ -433,14 +433,25 @@ async function copyOrCut(player, cut) {
       // there was none
     }
     contents.delete(id);
+    // Last copy is empty until the new copy is complete: a player who leaves meanwhile doesn't keep a stale slot
+    // (the old size and facing) over the new structure.
+    delete meta.slots["0"];
+    saveMeta(player, meta);
     let structure;
     try {
       structure = sm.createFromWorld(id, dim, min, max, { includeEntities: false, saveMode: StructureSaveMode.World });
     } catch (e) {
-      delete meta.slots["0"];
-      saveMeta(player, meta);
       return player.sendMessage(`§eCouldn't copy that region (${String(e).slice(0, 120)}). Is all of it loaded?`);
     }
+    /** The player left before the copy was complete: no copy is kept. */
+    const abandon = () => {
+      try {
+        sm.delete(id);
+      } catch {
+        // gone
+      }
+      contents.delete(id);
+    };
     // What can't be pasted (forbidden blocks), or isn't cut (protected blocks, water and lava), is left out.
     /** @type {Map<string, BlockPermutation>} */
     const same = new Map();
@@ -450,7 +461,10 @@ async function copyOrCut(player, cut) {
     for (let y = 0; y < size.y; y++)
       for (let x = 0; x < size.x; x++)
         for (let z = 0; z < size.z; z++) {
-          if (++n % 4096 === 0) await ctx.tick();
+          if (++n % 4096 === 0) {
+            await ctx.tick();
+            if (!player.isValid) return abandon();
+          }
           const loc = { x, y, z };
           const perm = structure.getBlockPermutation(loc);
           if (!perm || perm.type.id === "minecraft:air") continue;
@@ -466,7 +480,7 @@ async function copyOrCut(player, cut) {
           if (!shared) same.set(key, (shared = perm));
           cells.push({ x, y, z, perm: shared });
         }
-    if (!player.isValid) return;
+    if (!player.isValid) return abandon();
     const creative = ctx.isCreative(player);
     if (cut && !cells.length) {
       sm.delete(id);
@@ -489,8 +503,31 @@ async function copyOrCut(player, cut) {
       const air = ctx.AIR();
       /** @type {Set<ClipCell>} */
       const kept = new Set();
+      /**
+       * The player left mid-cut: what was taken out goes back where it was (what hangs on others last), and nothing is
+       * kept as a copy. A spot that isn't loaded any more stays undoable in this session.
+       */
+      const abandonCut = () => {
+        /** @type {import("./undo.js").Placed[]} */
+        const lost = [];
+        for (let i = removed.length - 1; i >= 0; i--) {
+          const c = removed[i];
+          try {
+            const block = dim.getBlock(c);
+            if (block?.isAir) block.setPermutation(c.before);
+            else lost.push(c);
+          } catch {
+            lost.push(c);
+          }
+        }
+        if (lost.length) remember(player, { dim: dim.id, label: `Cut ${size.x} x ${size.y} x ${size.z}`, kind: "cut", cells: lost, slot: 0 });
+        abandon();
+      };
       for (let i = 0; i < order.length; i++) {
-        if (i && i % perTick === 0) await ctx.tick();
+        if (i && i % perTick === 0) {
+          await ctx.tick();
+          if (!player.isValid) return abandonCut();
+        }
         const c = order[i];
         const at = { x: min.x + c.x, y: min.y + c.y, z: min.z + c.z };
         let block;
@@ -520,6 +557,7 @@ async function copyOrCut(player, cut) {
       if (kept.size) cells.splice(0, cells.length, ...cells.filter((c) => !kept.has(c)));
       // A cut gives no drops: anything that popped off goes too.
       await ctx.tick();
+      if (!player.isValid) return abandonCut();
       for (const e of itemsIn(dim, min, max)) {
         if (before.has(e.id)) continue;
         try {
