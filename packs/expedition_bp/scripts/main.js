@@ -71,6 +71,7 @@ const PROP_ROLLS = "expedition:rolls"; // player: JSON { [levelKey]: string[] } 
 const PROP_GAUNTLETS = "expedition:gauntlets"; // world: JSON GauntletEntry[], the best Gauntlet clears
 const PROP_BUFFS = "expedition:buffs"; // player: JSON string[], the effects a run gave them (shrine, boons), taken away when they leave
 const PET_TAG = "realm:exp_pet"; // a Wolf Pack boon's wolves
+const IN_RUN_TAG = "realm_expedition"; // player: in a running expedition (other packs read it, e.g. the Deck's The Swap)
 
 const OVERWORLD = "minecraft:overworld";
 const MOB_TAG = "realm:exp_mob";
@@ -1451,6 +1452,7 @@ async function prepare(run) {
     const loc = p.location;
     p.setDynamicProperty(PROP_RETURN, JSON.stringify({ d: p.dimension.id, x: loc.x, y: loc.y, z: loc.z, run: run.id }));
     m.since = system.currentTick + 20;
+    p.addTag(IN_RUN_TAG);
     let kit = false;
     if (run.loadout) {
       kit = saveStash(p, overworld(), pocket);
@@ -1701,22 +1703,34 @@ function teleportBack(p, ret) {
   homecoming(p);
 }
 
+/** Players being given their things back right now. @type {Set<string>} */
+const homing = new Set();
+
 /**
  * Back home: run gear taken away, stored items (Fixed loadout) given back into their own slots first, then
- * what they dropped dying and the treasure left in the chests.
- * @param {Player} p
+ * what they dropped dying and the treasure left in the chests. What can't be handed over yet (the chunks at
+ * their feet aren't loaded) is tried again every 2 seconds for a minute, and when they next spawn.
+ * @param {Player} p @param {number} [tries]
  */
-function homecoming(p) {
+function homecoming(p, tries = 30) {
   system.runTimeout(async () => {
+    if (!p.isValid || runOf(p.id)) return;
+    if (homing.has(p.id)) {
+      // Already handing things over: look again once that's done (a parcel may have been made meanwhile).
+      if (tries > 1) system.runTimeout(() => homecoming(p, tries - 1), 35);
+      return;
+    }
+    homing.add(p.id);
+    let done = true;
     try {
-      if (!p.isValid) return;
-      if (stashOf(p)) await restoreStash(p);
+      if (stashOf(p)) done = (await restoreStash(p)) && done;
       else if (stripRunGear(p)) p.sendMessage("§7The expedition gear stayed in the dungeon.");
       if (!p.isValid) return;
       giveBack(p);
       giveSpoils(p);
       const got = await openParcels(p);
-      if (got && p.isValid) {
+      if (!got) done = false;
+      else if (p.isValid) {
         const full = got.spilled ? " Some are at your feet: your inventory is full." : "";
         if (got.kinds.has("dropped")) p.sendMessage(`§aThe items you dropped in the dungeon are back with you.${full}`);
         if (got.kinds.has("spoils")) p.sendMessage(`§aThe treasure left in the chests came back with you.${full}`);
@@ -1725,7 +1739,11 @@ function homecoming(p) {
       stripRunGear(p); // kit gear that was dropped dying and given back
     } catch (e) {
       console.warn(`[expedition] homecoming: ${e}`);
+      done = false;
+    } finally {
+      homing.delete(p.id);
     }
+    if (!done && tries > 1 && p.isValid) system.runTimeout(() => homecoming(p, tries - 1), 35);
   }, 5);
 }
 
@@ -1748,10 +1766,20 @@ function sendBack(p, withFade = true) {
   );
 }
 
+/** Takes the in-a-run tag off a player who is online (one offline loses it when they next spawn). @param {string} id */
+function untag(id) {
+  try {
+    online(id)?.removeTag(IN_RUN_TAG);
+  } catch {
+    // gone
+  }
+}
+
 /** A member is out: left, died or was sent back. Ends the run when nobody is left. @param {Run} run @param {string} id */
 function dropMember(run, id) {
   if (run.phase === "finishing" && run.members.size === 1 && run.members.has(id)) packSpoils(run, [id]); // the last one out takes what's left
   if (!run.members.delete(id)) return;
+  untag(id);
   if (run.phase === "finishing" && run.members.size) saveRun(run); // who gets the treasure after a restart
   // Their Wolf Pack wolves go too (tame wolves would follow them home).
   try {
@@ -1793,6 +1821,7 @@ async function endRun(run, why) {
     const p = online(id);
     if (p && returnSpot(p)) sendBack(p); // members still getting ready were never taken anywhere
   }
+  for (const id of run.members.keys()) untag(id);
   run.members.clear();
   for (const m of [...run.mobs, ...run.extra]) if (m.isValid) m.remove();
   if (run.bossId) world.getEntity(run.bossId)?.remove();
@@ -2936,6 +2965,7 @@ function tickRun(run, players) {
       p.sendMessage("§eYou left the dungeon, so you're out of the expedition.");
       tell(run, `§7${m.name} left the expedition.`);
       dropMember(run, id);
+      homecoming(p); // kit gear goes, their own items (and any treasure they took last) come back
       if (run.phase === "resetting") return;
     }
   }
@@ -3371,6 +3401,7 @@ world.afterEvents.playerInteractWithBlock.subscribe(({ player, block }) => {
 
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
   try {
+    if (!runOf(player.id) && player.hasTag(IN_RUN_TAG)) player.removeTag(IN_RUN_TAG); // the run ended (or the world restarted) meanwhile
     const raw = player.getDynamicProperty(PROP_RETURN);
     if (typeof raw !== "string") {
       // Back home, but stored items (Fixed loadout) still to give back: the last try didn't finish.
@@ -3531,6 +3562,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   // After a script reload players are still online: anyone left in a dungeon goes back to where they started.
   for (const p of world.getAllPlayers()) {
     try {
+      if (!runOf(p.id)) p.removeTag(IN_RUN_TAG);
       if (!runOf(p.id) && typeof p.getDynamicProperty(PROP_RETURN) === "string") sendBack(p, false);
     } catch (e) {
       console.warn(`[expedition] reload: ${e}`);
@@ -4074,20 +4106,22 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
  * @param {string} message
  */
 function debugState(message, may = true) {
-  const run = [...runs.values()][0];
+  /** @type {Run | undefined} */
+  let run = [...runs.values()][0];
   let want;
   let skip = false;
   try {
     const msg = JSON.parse(message || "{}");
     want = msg?.room;
     skip = msg?.skip === true && may;
+    if (typeof msg?.slot === "number") run = runs.get(msg.slot);
   } catch {
     want = undefined;
   }
   // Tests may skip the current room (a puzzle the harness can't solve): it counts as cleared.
   if (skip && run?.phase === "active" && run.room < run.lay.n - 2) clearRoom(run);
   /** @type {Record<string, unknown>} */
-  const out = { phase: run?.phase ?? "none", pending: pending.size };
+  const out = { phase: run?.phase ?? "none", pending: pending.size, runs: runs.size };
   if (run) {
     const i = typeof want === "number" ? want : Math.min(run.room, run.lay.rooms.length - 1);
     const rm = run.lay.rooms[i];
@@ -4095,6 +4129,8 @@ function debugState(message, may = true) {
     const fr = frame(rm.back);
     Object.assign(out, {
       id: run.id,
+      slot: run.slot,
+      members: [...run.members.values()].map((m) => m.name),
       level: run.level,
       room: run.room,
       n: run.lay.n,

@@ -661,7 +661,9 @@ function roomKinds(r, s, n, L, boonEvery) {
   /** @type {Map<number, Kind>} */
   const at = new Map();
   if (boonEvery > 0) {
-    for (let i = boonEvery; i <= n - 3; i += boonEvery) {
+    // At least one sanctuary, even when boonEvery is more than the rooms allow (10 rooms, a boon every 8).
+    const every = Math.min(boonEvery, n - 3);
+    for (let i = every; i <= n - 3; i += every) {
       at.set(i, "boon");
       fixed.add(i);
       if (i - 1 >= 1 && !fixed.has(i - 1)) {

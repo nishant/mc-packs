@@ -259,6 +259,84 @@ export function saveStash(p, dim, at) {
   }
 }
 
+/** @param {number} ticks */
+const wait = (ticks) => new Promise((res) => system.runTimeout(() => res(undefined), ticks));
+
+/** Is the block at this spot loaded (so a structure placed there really puts its carts down)? @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at */
+function loadedAt(dim, at) {
+  try {
+    return !!dim.getBlock(at);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The carts holding a stored record (stash or parcel): the ones put down before, or the structure's carts put down at
+ * the player's feet now. A player just sent home can stand in chunks that aren't loaded yet, and a structure placed
+ * there puts nothing down (without an error), so it's only placed where the chunk is loaded. The record is marked as
+ * put down before the carts appear (never placed twice while they exist); one put down where the carts never
+ * appeared is placed again, since the structure is only deleted once everything is handed over.
+ * Resolves the carts, `null` when the structure is missing, or `undefined` to try again later.
+ * @template {{ id: string, tag: string, placed?: boolean, at?: { x: number, y: number, z: number, d: string } }} R
+ * @param {Player} p @param {R} rec @param {(r: R) => void} save @param {number} want how many carts it has
+ * @returns {Promise<import("@minecraft/server").Entity[] | null | undefined>}
+ */
+async function cartsOf(p, rec, save, want) {
+  /** @param {string} d */
+  const find = (d) => {
+    try {
+      return world.getDimension(d).getEntities({ tags: [rec.tag] });
+    } catch {
+      return [];
+    }
+  };
+  /** @param {string} d */
+  const look = async (d) => {
+    let carts = find(d);
+    for (let t = 0; t < 10 && carts.length < want; t++) {
+      await wait(2);
+      if (!p.isValid) return undefined;
+      carts = find(d);
+    }
+    // A cart can take a tick or two longer than another to appear.
+    if (carts.length) {
+      await wait(2);
+      if (!p.isValid) return undefined;
+      const again = find(d);
+      if (again.length > carts.length) carts = again;
+    }
+    return carts;
+  };
+  if (rec.placed && rec.at) {
+    let dim;
+    try {
+      dim = world.getDimension(rec.at.d);
+    } catch {
+      dim = undefined;
+    }
+    if (!dim || !loadedAt(dim, rec.at)) return undefined; // where they were put down isn't loaded: later
+    const carts = await look(rec.at.d);
+    if (!carts) return undefined;
+    if (carts.length) return carts;
+  }
+  if (!world.structureManager.get(rec.id)) return null;
+  for (let t = 0; t < 20; t++) {
+    if (!p.isValid) return undefined;
+    const at = { x: Math.floor(p.location.x), y: Math.floor(p.location.y), z: Math.floor(p.location.z) };
+    if (loadedAt(p.dimension, at)) {
+      const dim = p.dimension;
+      // Marked before placing: if the carts appear and anything stops us, they're searched for, never placed twice.
+      save({ ...rec, placed: true, at: { ...at, d: dim.id } });
+      world.structureManager.place(rec.id, dim, at, { includeBlocks: false, includeEntities: true });
+      const carts = await look(dim.id);
+      return carts?.length ? carts : undefined;
+    }
+    await wait(5);
+  }
+  return undefined;
+}
+
 /**
  * Gives a player's stored items back: each into the slot it came from when that's empty, otherwise into
  * the inventory, otherwise at their feet. Run gear is taken away first. Resolves true once nothing is left to give.
@@ -273,38 +351,21 @@ export async function restoreStash(p) {
     return true;
   }
   const sm = world.structureManager;
-  const dim = p.dimension;
-  if (!st.placed) {
-    if (!sm.get(st.id)) {
-      console.warn(`[expedition] stash ${st.id} for ${p.name} is missing`);
-      p.setDynamicProperty(STASH_PROP, undefined);
-      p.sendMessage("§cYour stored items couldn't be found. Tell an operator.");
-      return true;
-    }
-    const at = { x: Math.floor(p.location.x), y: Math.floor(p.location.y), z: Math.floor(p.location.z) };
-    // Marked before placing: if the carts appear and anything stops us, they're searched for, never placed twice.
-    p.setDynamicProperty(STASH_PROP, JSON.stringify({ ...st, placed: true, at: { ...at, d: dim.id } }));
-    sm.place(st.id, dim, at, { includeBlocks: false, includeEntities: true });
+  const carts = await cartsOf(p, st, (r) => p.setDynamicProperty(STASH_PROP, JSON.stringify(r)), 2);
+  if (carts === null) {
+    console.warn(`[expedition] stash ${st.id} for ${p.name} is missing`);
+    p.setDynamicProperty(STASH_PROP, undefined);
+    p.sendMessage("§cYour stored items couldn't be found. Tell an operator.");
+    return true;
   }
-  /** @type {import("@minecraft/server").Entity[]} */
-  let carts = [];
-  for (let t = 0; t < 10 && carts.length < 2; t++) {
-    await new Promise((res) => system.runTimeout(() => res(undefined), 2));
-    if (!p.isValid) return false;
-    try {
-      carts = world.getDimension(stashOf(p)?.at?.d ?? dim.id).getEntities({ tags: [st.tag] });
-    } catch {
-      carts = [];
-    }
-  }
-  if (!carts.length) return false; // tried again when they next spawn
+  if (!carts || !p.isValid) return false; // tried again in a moment, and when they next spawn
   const { inv, eq } = carried(p);
   let spilled = 0;
   /** @param {ItemStack} it @param {number} slot */
   const put = (it, slot) => {
     if (slot < 36 && inv && !inv.getItem(slot)) return inv.setItem(slot, it);
-    if (slot >= 36 && eq && !eq.getEquipment(EQUIP[slot - 36])) return eq.setEquipment(EQUIP[slot - 36], it);
-    const rest = inv?.addItem(it) ?? it;
+    if (slot >= 36 && eq && !eq.getEquipment(EQUIP[slot - 36]) && eq.setEquipment(EQUIP[slot - 36], it)) return;
+    const rest = inv ? inv.addItem(it) : it; // addItem returns undefined when it all fit
     if (rest) {
       p.dimension.spawnItem(rest, p.location);
       spilled++;
@@ -347,7 +408,7 @@ const PARCELS = "expedition:parcels:"; // + player id. world: JSON Parcel[]
 const PARCEL_NEXT = "expedition:parcel_next"; // world: the next parcel number
 const PARCEL_TAG = "realm:exp_parcel";
 
-/** @typedef {{ id: string, tag: string, k: string, placed?: boolean, at?: { x: number, y: number, z: number, d: string } }} Parcel k: what it holds ("spoils", "dropped") */
+/** @typedef {{ id: string, tag: string, k: string, c?: number, placed?: boolean, at?: { x: number, y: number, z: number, d: string } }} Parcel k: what it holds ("spoils", "dropped"); c: its carts */
 
 /** @param {string} owner @returns {Parcel[]} */
 function parcelsOf(owner) {
@@ -395,7 +456,7 @@ export function saveParcel(owner, kind, items, dim, at) {
     world.structureManager.delete(id);
     world.structureManager.createFromWorld(id, dim, { x: at.x, y: at.y, z: at.z }, { x: at.x, y: at.y + 1, z: at.z }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
     if (!world.structureManager.get(id)) throw new Error("structure not saved");
-    setParcels(owner, [...parcelsOf(owner), { id, tag, k: kind }]);
+    setParcels(owner, [...parcelsOf(owner), { id, tag, k: kind, c: carts.length }]);
     return true;
   } catch (e) {
     console.warn(`[expedition] parcel: ${e}`);
@@ -444,45 +505,14 @@ async function handOver(p) {
   const sm = world.structureManager;
   for (const pc of parcelsOf(p.id)) {
     if (!p.isValid) return false;
-    const dim = p.dimension;
-    let rec = pc;
-    if (!rec.placed) {
-      if (!sm.get(rec.id)) {
-        console.warn(`[expedition] parcel ${rec.id} for ${p.name} is missing`);
-        setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== rec.id));
-        continue;
-      }
-      const at = { x: Math.floor(p.location.x), y: Math.floor(p.location.y), z: Math.floor(p.location.z) };
-      rec = { ...rec, placed: true, at: { ...at, d: dim.id } };
-      setParcels(p.id, parcelsOf(p.id).map((x) => (x.id === rec.id ? rec : x)));
-      sm.place(rec.id, dim, at, { includeBlocks: false, includeEntities: true });
-    }
-    /** @type {import("@minecraft/server").Entity[]} */
-    let carts = [];
-    for (let t = 0; t < 10 && !carts.length; t++) {
-      await new Promise((res) => system.runTimeout(() => res(undefined), 2));
-      if (!p.isValid) return false;
-      try {
-        carts = world.getDimension(rec.at?.d ?? dim.id).getEntities({ tags: [rec.tag] });
-      } catch {
-        carts = [];
-      }
-    }
-    if (!carts.length) {
-      const a = rec.at;
-      const here = a && a.d === p.dimension.id && Math.hypot(p.location.x - a.x, p.location.z - a.z) < 16;
-      if (!here) return false; // tried again when they next spawn
-      setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== rec.id));
+    const carts = await cartsOf(p, pc, (r) => setParcels(p.id, parcelsOf(p.id).map((x) => (x.id === r.id ? r : x))), pc.c ?? 1);
+    if (carts === null) {
+      console.warn(`[expedition] parcel ${pc.id} for ${p.name} is missing`);
+      setParcels(p.id, parcelsOf(p.id).filter((x) => x.id !== pc.id));
       continue;
     }
-    // A cart can take a tick or two longer than another to appear.
-    await new Promise((res) => system.runTimeout(() => res(undefined), 2));
-    if (!p.isValid) return false;
-    try {
-      carts = world.getDimension(rec.at?.d ?? dim.id).getEntities({ tags: [rec.tag] });
-    } catch {
-      // keep the ones found
-    }
+    if (!carts || !p.isValid) return false; // tried again in a moment, and when they next spawn
+    const rec = pc;
     const inv = p.getComponent("minecraft:inventory")?.container;
     for (const cart of carts) {
       const box = cart.getComponent("minecraft:inventory")?.container;
