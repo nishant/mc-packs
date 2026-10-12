@@ -146,7 +146,7 @@ async function runArena(p, seconds) {
     }
     if (s % 10 === 0)
       attempt(() => {
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 60 })); // other bar writers wait
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 60, from: "domt_bp" })); // other bar writers wait
         p.onScreenDisplay.setActionBar(`§cFoes left: ${left} §7| ${seconds - s}s`);
       });
   }
@@ -199,6 +199,13 @@ function inArena(dimId, l) {
   return false;
 }
 
+/** Is this player standing in a running Deck arena (theirs or someone else's)? @param {Player} p */
+export function inDeckArena(p) {
+  if (arenas.has(p.id)) return true;
+  const l = p.location;
+  return inArena(p.dimension.id, { x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z) });
+}
+
 // The arena's blocks are borrowed: mining the floor or the sea lanterns would keep free blocks after it's gone.
 world.beforeEvents.playerBreakBlock.subscribe((ev) => {
   try {
@@ -220,21 +227,23 @@ system.runInterval(() => {
   }
 }, 200);
 
-// After a restart mid-fight: send the player back down when they join.
+// After a restart mid-fight, or leaving the game mid-fight: send the player back down when they join
+// (at once, with Slow Falling: the arena under them may already be gone).
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
-  system.runTimeout(() => {
+  system.run(() => {
     try {
       if (!online(player) || arenas.has(player.id)) return;
       const raw = player.getDynamicProperty(PROP_ARENA);
       if (typeof raw !== "string") return;
       player.setDynamicProperty(PROP_ARENA, undefined);
+      attempt(() => player.addEffect("minecraft:slow_falling", 200, { showParticles: false }));
       const back = JSON.parse(raw);
       restoreDue(back.task);
       if (typeof back.x === "number") player.teleport({ x: back.x, y: back.y, z: back.z }, { dimension: world.getDimension(back.dim), keepVelocity: false });
     } catch (e) {
       console.warn(`[domt] arena return: ${e}`);
     }
-  }, 40);
+  });
 });
 
 // ---------------------------------------------------------------------------

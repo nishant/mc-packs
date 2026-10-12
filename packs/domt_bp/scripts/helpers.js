@@ -287,9 +287,10 @@ export function surface(dim, x, z) {
 /**
  * A safe spot `minD` to `maxD` blocks away in a random direction, in loaded chunks: near the
  * player's height first (so cave players stay in caves), then the surface.
- * @param {Entity} e @param {number} minD @param {number} maxD @param {number} [tries]
+ * `maxDy` limits how far above or below the player the spot may be (default: any height).
+ * @param {Entity} e @param {number} minD @param {number} maxD @param {number} [tries] @param {number} [maxDy]
  */
-export function randomSpot(e, minD, maxD, tries = 40) {
+export function randomSpot(e, minD, maxD, tries = 40, maxDy = Infinity) {
   const dim = e.dimension;
   const at = e.location;
   for (let i = 0; i < tries; i++) {
@@ -298,7 +299,7 @@ export function randomSpot(e, minD, maxD, tries = 40) {
     const x = at.x + Math.cos(a) * d;
     const z = at.z + Math.sin(a) * d;
     const spot = spotNear(dim, x, z, at.y, 6) ?? (dim.id === "minecraft:nether" ? undefined : surface(dim, x, z));
-    if (spot) return spot;
+    if (spot && Math.abs(spot.y - at.y) <= maxDy) return spot;
   }
   return undefined;
 }
@@ -406,8 +407,8 @@ export async function farTeleport(p, dim, targets) {
 // ---------------------------------------------------------------------------
 
 /**
- * Spawns `n` of a mob on safe spots `minR` to `maxR` blocks around the player (at their feet when
- * there's no room).
+ * Spawns `n` of a mob on safe spots `minR` to `maxR` blocks around the player, within 8 blocks of
+ * their height (at their feet when there's no room).
  * @param {Player} p @param {string} type @param {number} n @param {number} [minR] @param {number} [maxR]
  * @returns {Entity[]}
  */
@@ -415,7 +416,8 @@ export function spawnAround(p, type, n, minR = 3, maxR = 6) {
   /** @type {Entity[]} */
   const out = [];
   for (let i = 0; i < n; i++) {
-    const spot = randomSpot(p, minR, maxR, 20) ?? p.location;
+    // Near the player's height (not on the ground far below a sky base, or on the surface over a cave).
+    const spot = randomSpot(p, minR, maxR, 20, 8) ?? p.location;
     try {
       const e = p.dimension.spawnEntity(type, spot);
       out.push(e);
