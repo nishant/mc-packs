@@ -8,7 +8,7 @@
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { expireAdds, sweep, tendActors } from "./actors.js";
 import { entries, flush, flushAll, forget, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
-import { beginRun, championSlain, championTags, endScenesOf, holdUntil, loadWeather, open, playerGone, resolveAnswer, sideHold, sideWriter, sweepChampions, talked, tickPlayer } from "./objectives.js";
+import { beginRun, championSlain, championTags, endScenesOf, holdUntil, loadWeather, open, playerGone, resolveAnswer, sweepChampions, talked, tickPlayer } from "./objectives.js";
 import { autoTick, listPlaces, placeLabel, placesMenu, placesOf, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
@@ -170,7 +170,7 @@ system.afterEvents.scriptEventReceive.subscribe(
       for (const p of world.getAllPlayers()) sendSeals(p, true);
       return;
     }
-    if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain" && id !== "realm:actionbar" && id !== "realm:saga_debug" && id !== "realm:side") return;
+    if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain" && id !== "realm:actionbar" && id !== "realm:saga_debug") return;
     /** @type {any} */
     let msg;
     try {
@@ -180,13 +180,7 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (!msg || typeof msg !== "object") return;
     try {
-      if (id === "realm:side") {
-        // The last pack to write the right-side panel (hud_rp): ours is cleared only while it's still ours.
-        if (typeof msg.player === "string" && typeof msg.from === "string") {
-          sideWriter.set(msg.player, msg.from);
-          if (msg.from !== "saga" && typeof msg.ticks === "number" && msg.ticks > 0) sideHold.set(msg.player, system.currentTick + Math.min(200, msg.ticks));
-        }
-      } else if (id === "realm:actionbar") {
+      if (id === "realm:actionbar") {
         if (msg.from !== PACK && typeof msg.player === "string" && typeof msg.ticks === "number" && msg.ticks > 0) holdUntil.set(msg.player, system.currentTick + Math.min(200, msg.ticks));
       } else if (id === "realm:npc_talk") onTalk(msg);
       else if (id === "realm:npc_choose") onChoose(msg);

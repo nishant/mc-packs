@@ -1,7 +1,7 @@
 // Treasure Maps: a whole hunt the way a player would do it. Run with
 //   node tools/test-bds/run.mjs --quiet --only maps_bp --scenario tools/test-bds/examples/maps-hunt.js --timeout 900
 // The harness keeps action bar text but not subtitles, so test a copy whose map line shows above the hotbar:
-//   mkdir -p /tmp/mp && cp -r packs/maps_bp /tmp/mp/ && sed -i 's/showAt: "side"/showAt: "hotbar"/' /tmp/mp/maps_bp/scripts/config.js
+//   mkdir -p /tmp/mp && cp -r packs/maps_bp /tmp/mp/ && sed -i 's/showAt: "right3"/showAt: "hotbar"/' /tmp/mp/maps_bp/scripts/config.js
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/mp --scenario tools/test-bds/examples/maps-hunt.js --timeout 900
 // A simulated player gets a map, works out each clue from its words (headings, compass steps, coordinate
 // puzzles), goes there, finds the marker the pack builds (cairn, flag or standing stone) and reaches it for
@@ -77,7 +77,7 @@ function solve(clue, from) {
     };
     return { kind: "coords", x: axis(m[1]), z: axis(m[2]) };
   }
-  if (/, then /.test(c)) {
+  if (/, then /.test(c) || new RegExp(`, walk ${NUM} paces [^,.]*\\. `).test(c)) {
     const body = c.slice(c.indexOf(",") + 1, c.lastIndexOf(". ") >= 0 ? c.indexOf(". ") : undefined);
     let x = from.x, z = from.z;
     for (const seg of body.split(", then ")) {
@@ -131,7 +131,9 @@ export default async function (t) {
   /** Top blocks around (cx, cz), loading the land first. */
   async function scan(cx, cz, r, fn) {
     clearAreas();
-    for (const ox of [-96, 0, 96]) for (const oz of [-96, 0, 96]) await load(cx + ox, cz + oz);
+    for (const ox of [-96, 0, 96]) for (const oz of [-96, 0, 96]) {
+      try { await load(cx + ox, cz + oz); } catch (e) { t.log(`  part of the scan did not load: ${e.message ?? e}`); }
+    }
     let n = 0;
     for (let x = cx - r; x <= cx + r; x++) for (let z = cz - r; z <= cz + r; z++) {
       let top;
@@ -176,7 +178,12 @@ export default async function (t) {
     for (let ring = 1; !near && ring <= 4; ring++) {
       for (let k = 0; k < 8 && !near; k++) {
         const a = (k / 8) * Math.PI * 2;
-        await goTo(est.x + Math.cos(a) * ring * 70, est.z + Math.sin(a) * ring * 70);
+        try {
+          await goTo(est.x + Math.cos(a) * ring * 70, est.z + Math.sin(a) * ring * 70);
+        } catch (e) {
+          t.log(`  skipped a spot: ${e.message ?? e}`);
+          continue;
+        }
         near = await settledYet(140);
       }
     }
@@ -186,7 +193,12 @@ export default async function (t) {
       // The last leg: the chest is buried at the landmark.
       const me = { x: Math.floor(p.location.x), z: Math.floor(p.location.z) };
       const chest = await scan(me.x, me.z, 140, (top) => {
-        for (let k = 1; k <= 5; k++) if (typeBelow(top, k) === "minecraft:chest") return { x: top.location.x, y: top.location.y - k, z: top.location.z };
+        for (let k = 1; k <= 5; k++) {
+          if (typeBelow(top, k) !== "minecraft:chest") continue;
+          // Chests in villages and ruins stay empty until opened: the treasure chest is already filled.
+          const c = dim.getBlock({ x: top.location.x, y: top.location.y - k, z: top.location.z }).getComponent("minecraft:inventory").container;
+          if (c.emptySlotsCount < c.size) return { x: top.location.x, y: top.location.y - k, z: top.location.z };
+        }
         return undefined;
       });
       t.assert(chest, "found the buried chest");
@@ -232,7 +244,7 @@ export default async function (t) {
       seen.add(`${mark.x},${mark.z}`);
       t.log(`  marker: ${mark.kind} at ${mark.x}, ${mark.y}, ${mark.z}`);
       const since3 = t.tick;
-      await goTo(mark.x + 2, mark.z);
+      await goTo(mark.x, mark.z); // on top of the marker
       msg = await t.waitMessage(p, /You found the (cairn|flag|standing stone)/i, { since: since3, timeout: 100 });
       from = { x: mark.x, z: mark.z };
     }

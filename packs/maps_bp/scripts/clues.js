@@ -233,7 +233,8 @@ export const WOOLS = ["red", "yellow", "orange", "white", "lime", "light_blue", 
 export function markerLooks(id, wool) {
   const color = wool.replace("minecraft:", "").replace("_wool", "").replace("_", " ");
   if (id === "cairn") return any(["a cairn of mossy stones with a lantern on top", "a pile of mossy stones, lantern-topped", "an old cairn, a lantern glowing on its top"]);
-  if (id === "flag") return any([`a ${color} flag on a wooden pole`, `a pole flying a ${color} flag`, `a ${color} banner on a tall post`]);
+  const a = /^[aeiou]/.test(color) ? "an" : "a";
+  if (id === "flag") return any([`${a} ${color} flag on a wooden pole`, `a pole flying ${a} ${color} flag`, `${a} ${color} banner on a tall post`]);
   return any(["a standing stone with a carved top", "a tall carved stone", "a lone standing stone of old bricks"]);
 }
 

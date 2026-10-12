@@ -2,9 +2,9 @@
   "format_version": 2,
   "header": {
     "name": "Coordinates HUD",
-    "description": "Your coordinates, facing and the time of day above the hotbar, for players who enable it. /realm:hud",
+    "description": "Your coordinates, facing and the time of day above the hotbar or in a side box, for players who enable it. /realm:hud",
     "uuid": "ca1eb1d2-63ec-4bd0-aec5-8f7c1318f5bb",
-    "version": [1, 1, 0],
+    "version": [1, 2, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

@@ -1,17 +1,23 @@
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
-import { DRAW_DISTANCE, FALLBACK_DISTANCE, SPREAD, antisolarAngle, placement } from "./sky.js";
+import { COLORS, SPREAD, antisolarAngle, arcAngle, arcDots, beamSegments, boldness, center, toward } from "./sky.js";
 import { get } from "./settings.js";
 
-// World property "rainbow:pot": JSON { id, x, z, y?, until, expires, placed, missed?, found? } for the
-// current rainbow and its pot of gold (until / expires: Date.now() ms when the rainbow fades / the pot
+// World property "rainbow:pot": JSON { id, x, z, y?, ang, by, ground?, until, expires, placed, missed?, found? }
+// for the current rainbow and its pot of gold (until / expires: Date.now() ms when the rainbow fades / the pot
 // can no longer be found; placed: its chest is in the world; missed: no safe spot for a chest, so the
-// finder gets the loot straight into their inventory). Cleared once the pot expires.
+// finder gets the loot straight into their inventory; ang: the angle of the arc's plane, from the pot's foot
+// toward the other one; by: the arc's ground height, a guess until ground is true, when it was read at the pot's
+// spot once its chunk loaded). Cleared once the pot expires.
 const PROP_POT = "rainbow:pot";
 const OVERWORLD = "minecraft:overworld";
-const RAINBOW = "realm:sky_rainbow"; // particle from the Realm Skies resource pack
-const DRAW_TICKS = 20; // the rainbow is redrawn for each player every second (it's close by, so it follows you)...
-const LIFE = 1.6; // ...and each lasts 1.6 s (fading in over 0.2 s and out over the last 0.4 s), so they overlap with no gap
+const BAND = "realm:sky_rainbow_band"; // particles from the Realm Skies resource pack
+const BEAM = "realm:sky_rainbow_beam";
+const DRAW_TICKS = 20; // drawn every second for each player: dots stood in closer (see sky.js) last 1.5 s...
+const LIFE_NEAR = 1.5;
+const LIFE_REAL = 2.6; // ...dots at their real spot only every other second, lasting 2.6 s (they don't move)
+const MAX_SEE = 512; // players farther than this from the rainbow don't see it
+const EYE = 1.62;
 const PLACE_DISTANCE = 40; // the pot's chest is placed when a player comes this close (its chunk is loaded then)
 const FIND_DISTANCE = 3;
 const MAX_HEADROOM = 24; // deeper underground than this, no rainbow
@@ -29,7 +35,7 @@ const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|waxed_|copper_block|quartz_block|purpur|lamp|cauldron|crafter|beehive|_head$|_skull$|pot$|terracotta|(iron|gold|diamond|emerald|lapis|redstone|coal|netherite|amethyst)_block|raw_/;
 const NATURAL_EXCEPTIONS = /^minecraft:(moss_carpet|torchflower|(white|orange|yellow|brown|red|light_gray)?_?terracotta)$/;
 
-/** @typedef {{ id: number, x: number, z: number, y?: number, until: number, expires: number, placed: boolean, missed?: boolean, found?: string }} Pot */
+/** @typedef {{ id: number, x: number, z: number, y?: number, ang?: number, by?: number, ground?: boolean, until: number, expires: number, placed: boolean, missed?: boolean, found?: string }} Pot */
 
 /** @type {Pot | undefined} */
 let pot;
@@ -209,51 +215,127 @@ function appear(player) {
     const now = Date.now();
     // Replacing an earlier pot (an operator's /realm:rainbow_now, or one past its time): its chest goes if it's empty.
     if (pot) expire(pot);
-    pot = { id: now, x, z, until: now + get("durationSeconds") * 1000, expires: now + Math.max(get("durationSeconds") / 60, get("potMinutes")) * 60000, placed: false };
+    // The arc stands across this player's line of sight, so they see it side on. Its ground height is the
+    // surface at its end when that's loaded, else this player's surface (corrected once the end loads).
+    const here = topAt(dim, player.location.x, player.location.z);
+    const by = top ? top.location.y + 1 : Math.max(63, here ? here.location.y + 1 : Math.floor(player.location.y));
+    const ang = arcAngle(player.location, { x: x + 0.5, z: z + 0.5 }, Math.random() < 0.5);
+    pot = { id: now, x, z, ang, by, ground: !!top, until: now + get("durationSeconds") * 1000, expires: now + Math.max(get("durationSeconds") / 60, get("potMinutes")) * 60000, placed: false };
     saw.clear();
     savePot();
-    for (const p of dim.getPlayers()) p.sendMessage(`§eA rainbow! Its end is somewhere to the ${compass(x - p.location.x, z - p.location.z)}.`);
+    for (const p of dim.getPlayers()) p.sendMessage(`§eA rainbow! Its end is somewhere to the ${compass(x - p.location.x, z - p.location.z)}: look for the golden beam where it touches the ground.`);
     system.sendScriptEvent("realm:sky_event", JSON.stringify({ kind: "rainbow", dim: OVERWORLD, x, z, text: "A rainbow, with a pot of gold at its end" }));
-    draw();
+    draw(pot, true);
     return true;
   }
   return false;
 }
 
 // ---------------------------------------------------------------------------
-// Drawing it (Player.spawnParticle: each player gets their own, pointing at the end)
+// Drawing it: a fixed arc in the world plus a golden beam over the pot (see sky.js). Player.spawnParticle, so
+// each player gets their own stand-ins for the far parts, on their own lines of sight.
 // ---------------------------------------------------------------------------
 
+let cycle = 0;
 system.runInterval(() => {
-  if (pot && Date.now() < pot.until) draw();
-}, DRAW_TICKS);
-
-/**
- * For each player in the Overworld: the arc stands on the line toward its end, one foot exactly on that
- * line, about 100 blocks away (at its real spot when closer). The particle faces the player and its
- * position is the middle of the arc's base, so the middle goes half a width to the side of the end.
- */
-function draw() {
+  cycle++;
   const p0 = pot;
   if (!p0) return;
+  const now = Date.now();
+  // The rainbow while it lasts; the beam as long as the pot can be found.
+  if (now < p0.until || (!p0.found && now < p0.expires)) draw(p0, cycle % 2 === 0);
+}, DRAW_TICKS);
+
+/** Once the pot's chunk is loaded, the arc's ground height becomes the surface there (once). @param {Pot} p0 @param {Dimension} dim */
+function settleGround(p0, dim) {
+  if (p0.ground) return;
+  const top = topAt(dim, p0.x, p0.z);
+  if (!top) return;
+  p0.by = top.location.y + 1;
+  p0.ground = true;
+  savePot();
+}
+
+/**
+ * For each player in the Overworld within MAX_SEE of it and not deep underground: every dot of the arc (while
+ * the rainbow lasts) and of the beam (until the pot is found or expires), at its real spot when close or as a
+ * stand-in on the same line of sight. Dots whose spot isn't loaded are skipped.
+ * @param {Pot} p0 @param {boolean} even this second also redraws the dots at their real spots
+ */
+function draw(p0, even) {
   const dim = overworld();
+  const now = Date.now();
+  const sky = now < p0.until, beam = !p0.found && now < p0.expires;
+  try {
+    settleGround(p0, dim);
+  } catch {
+    // not loaded
+  }
+  const size = get("size");
+  /** @type {import("./sky.js").Anchor} */
+  const a = { x: p0.x, z: p0.z, y: p0.by ?? 64, ang: p0.ang ?? 0 };
+  const mid = center(a, size);
+  const beamY = typeof p0.y === "number" ? p0.y + (p0.placed ? 0.9 : 0) : a.y;
+  /** chunk "cx,cz" -> loaded, for this drawing @type {Map<string, boolean>} */
+  const chunks = new Map();
+  const loadedAt = (/** @type {number} */ x, /** @type {number} */ z) => {
+    const key = `${Math.floor(x) >> 4},${Math.floor(z) >> 4}`;
+    let ok = chunks.get(key);
+    if (ok === undefined) {
+      try {
+        ok = !!dim.getBlock({ x: Math.floor(x), y: 64, z: Math.floor(z) });
+      } catch {
+        ok = false;
+      }
+      chunks.set(key, ok);
+    }
+    return ok;
+  };
+  const vars = molang();
   for (const player of dim.getPlayers()) {
     try {
       const l = player.location;
+      if (Math.hypot(l.x - mid.x, l.z - mid.z) > MAX_SEE) continue;
       const top = topAt(dim, l.x, l.z);
       if (top && top.location.y - l.y > MAX_HEADROOM) continue; // far underground
-      for (const d of [DRAW_DISTANCE, FALLBACK_DISTANCE]) {
-        const at = placement(l, p0, get("size"), d);
-        molang().setFloat("variable.size", at.size);
-        molang().setFloat("variable.life", LIFE);
+      const eye = { x: l.x, y: l.y + EYE, z: l.z };
+      const bold = boldness(eye, mid);
+      let drawn = 0;
+      /** @param {string} id @param {import("./sky.js").Vec & { k: number }} at */
+      const spawn = (id, at) => {
+        if (at.y < -63 || at.y > 319 || !loadedAt(at.x, at.z)) return;
         try {
-          player.spawnParticle(RAINBOW, { x: at.x, y: at.y, z: at.z }, molang());
-          break;
+          player.spawnParticle(id, { x: at.x, y: at.y, z: at.z }, vars);
+          drawn++;
         } catch {
-          // not loaded there: try closer
+          // not loaded after all
+        }
+      };
+      if (sky) {
+        for (const dot of arcDots(a, size, bold)) {
+          const at = toward(eye, dot);
+          if (at.k === 1 && !even) continue; // still showing from last second
+          const c = COLORS[dot.band];
+          vars.setFloat("variable.size", dot.r * at.k);
+          vars.setFloat("variable.life", at.k === 1 ? LIFE_REAL : LIFE_NEAR);
+          vars.setFloat("variable.cr", c[0]);
+          vars.setFloat("variable.cg", c[1]);
+          vars.setFloat("variable.cb", c[2]);
+          spawn(BAND, at);
         }
       }
-      if (!saw.has(player.id)) {
+      if (beam) {
+        for (const seg of beamSegments(a, beamY, size, bold)) {
+          const at = toward(eye, seg);
+          if (at.k === 1 && !even) continue;
+          vars.setFloat("variable.size", seg.w * at.k);
+          vars.setFloat("variable.height", seg.hh * at.k);
+          vars.setFloat("variable.alpha", seg.alpha);
+          vars.setFloat("variable.life", at.k === 1 ? LIFE_REAL : LIFE_NEAR);
+          spawn(BEAM, at);
+        }
+      }
+      if (sky && drawn && !saw.has(player.id)) {
         saw.add(player.id);
         system.sendScriptEvent("realm:journal", JSON.stringify({ player: player.id, page: "weather", entry: "rainbow", label: "Rainbow" }));
       }
@@ -338,6 +420,8 @@ function* placePot(p0) {
       p0.x = x;
       p0.z = z;
       p0.y = spot.location.y;
+      p0.by = p0.y; // the arc's foot (and the beam) move onto the chest
+      p0.ground = true;
       p0.placed = true;
       savePot();
       return;
@@ -431,7 +515,9 @@ function describe(player) {
   if (p0.found) return now < p0.until ? `There's a rainbow, but its pot of gold was already found by ${p0.found}.` : `No rainbow right now. The last pot of gold was found by ${p0.found}.`;
   if (!player || player.dimension.id !== OVERWORLD) return now < p0.until ? "There's a rainbow in the Overworld." : "A pot of gold is still out there in the Overworld.";
   const dir = compass(p0.x + 0.5 - player.location.x, p0.z + 0.5 - player.location.z);
-  return now < p0.until ? `§eA rainbow is up! Its end is somewhere to the ${dir}.` : `§eThe rainbow has faded, but its pot of gold is still out there, somewhere to the ${dir}.`;
+  return now < p0.until
+    ? `§eA rainbow is up! Its end is somewhere to the ${dir}, under a golden beam.`
+    : `§eThe rainbow has faded, but its pot of gold is still out there, somewhere to the ${dir}, under a golden beam.`;
 }
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {

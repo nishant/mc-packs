@@ -1,0 +1,42 @@
+{
+  "format_version": "1.8.0",
+  "minecraft:spawn_rules": {
+    "description": {
+      "identifier": "realm:platypus",
+      "population_control": "animal"
+    },
+    "conditions": [
+      {
+        "minecraft:spawns_on_surface": {},
+        "minecraft:spawns_on_block_filter": [
+          "minecraft:grass_block",
+          "minecraft:dirt",
+          "minecraft:coarse_dirt",
+          "minecraft:podzol",
+          "minecraft:sand",
+          "minecraft:gravel",
+          "minecraft:clay",
+          "minecraft:mud",
+          "minecraft:mangrove_roots",
+          "minecraft:muddy_mangrove_roots"
+        ],
+        "minecraft:brightness_filter": { "min": 7, "max": 15, "adjust_for_weather": false },
+        "minecraft:weight": { "default": 2 },
+        "minecraft:herd": { "min_size": 1, "max_size": 2 },
+        "minecraft:density_limit": { "surface": 3 },
+        "minecraft:biome_filter": {
+          "any_of": [
+            {
+              "all_of": [
+                { "test": "has_biome_tag", "operator": "==", "value": "river" },
+                { "test": "has_biome_tag", "operator": "!=", "value": "frozen" }
+              ]
+            },
+            { "test": "has_biome_tag", "operator": "==", "value": "swamp" },
+            { "test": "has_biome_tag", "operator": "==", "value": "mangrove_swamp" }
+          ]
+        }
+      }
+    ]
+  }
+}

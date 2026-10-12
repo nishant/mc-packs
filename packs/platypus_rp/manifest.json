@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Platypus Models",
+    "description": "How the platypus looks: its model, brown and Perry (teal, with a fedora) skins, walk animation and spawn egg. Goes with the Platypus behavior pack.",
+    "uuid": "165ed677-2844-4f23-b879-c6b42b67fbb3",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "da3303fc-619b-456d-b8c2-dae2b66c9d80",
+      "version": [1, 0, 0]
+    }
+  ]
+}

@@ -91,27 +91,33 @@ function hsv(/** @type {number} */ h, /** @type {number} */ s, /** @type {number
 // ---------------------------------------------------------------------------
 
 /**
- * Rainbow, 256x128: a semicircular arc whose center is the middle of the bottom edge. Red outside, violet inside,
- * with soft inner and outer edges, a faint brightening of the sky inside the bow (as real rainbows have), and both
- * feet fading into the ground haze. Fully transparent pixels keep the band's color so filtering never fringes dark.
+ * A rainbow dot, 32x32, white: a soft round disc, flat in the middle and fading over its outer half, so a row of
+ * overlapping dots reads as one smooth stripe. The particle tints it with its band's color.
  */
-function rainbow() {
-  const w = 256, h = 128, img = blank(w, h);
-  const inner = 0.7, outer = 0.97;
+function dot() {
+  const n = 32, img = blank(n, n);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const r = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2) / (n / 2);
+      put(img, x, y, [255, 255, 255, (1 - smooth(0.4, 1, r)) * 255]);
+    }
+  }
+  return img;
+}
+
+/**
+ * The pot of gold's light beam, 16x32 in color: a white-hot core and a golden glow fading to the sides, the same
+ * all the way up so stacked segments join seamlessly.
+ */
+function beam() {
+  const w = 16, h = 32, img = blank(w, h);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const dx = (x + 0.5 - w / 2) / (w / 2), dy = (h - y - 0.5) / h;
-      const r = Math.hypot(dx, dy);
-      const t = clamp((r - inner) / (outer - inner)); // 0 inner (violet) .. 1 outer (red)
-      // Hue from violet (275) to red (0), weighted so green and blue get their fair width.
-      const rgb = hsv(275 * (1 - t) ** 1.08, 0.78, 1);
-      let a = smooth(inner - 0.035, inner + 0.03, r) * (1 - smooth(outer - 0.03, outer + 0.03, r));
-      a *= 0.82 + 0.18 * Math.sin(Math.PI * t); // the middle bands a little stronger
-      const glow = r < inner ? 0.07 * smooth(0.25, inner, r) : 0; // brighter sky inside the bow
-      const feet = smooth(0.0, 0.32, dy); // fade toward the ground
-      const alpha = Math.max(a, glow) * feet;
-      const col = a >= glow ? rgb : [255, 255, 255];
-      put(img, x, y, [...col, alpha * 255]);
+      const u = Math.abs(x + 0.5 - w / 2) / (w / 2);
+      const core = Math.exp(-((u / 0.18) ** 2)), halo = Math.exp(-((u / 0.55) ** 2));
+      const a = clamp(core + 0.7 * halo) * (1 - smooth(0.85, 1, u));
+      const rgb = [mix(255, 255, core), mix(200, 255, core), mix(70, 235, core)];
+      put(img, x, y, [...rgb, a * 255]);
     }
   }
   return img;
@@ -369,7 +375,8 @@ function icon() {
 }
 
 const TEXTURES = {
-  rainbow: rainbow(),
+  dot: dot(),
+  beam: beam(),
   aurora: aurora(),
   glow: glow(),
   meteor: meteor(),
@@ -447,22 +454,38 @@ function motes(/** @type {string} */ id, /** @type {number[]} */ color) {
 }
 
 const PARTICLES = {
-  // One big rainbow. The emitter point is the middle of the arc's base: the billboard is lifted by half its height.
-  sky_rainbow: effect("realm:sky_rainbow", "rainbow", "particles_blend", {
+  // One dot of a rainbow's color band. rainbow_bp builds a fixed arc in the world from these (7 bands, a dot per
+  // band every couple of blocks), so it never follows you: dots far away are drawn closer on the same line of
+  // sight and smaller, so they look the same. The script passes the band's color; at most 85% opaque.
+  sky_rainbow_band: effect("realm:sky_rainbow_band", "dot", "particles_blend", {
     ...burst(1),
     ...once(),
-    "minecraft:emitter_shape_point": { offset: [0, `${or("size", 60)} / 4`, 0] },
+    "minecraft:emitter_shape_point": {},
     "minecraft:particle_initial_speed": 0,
-    "minecraft:particle_lifetime_expression": { max_lifetime: or("life", 30) },
+    "minecraft:particle_lifetime_expression": { max_lifetime: or("life", 2) },
     "minecraft:particle_appearance_billboard": {
-      size: [`${or("size", 60)} / 2`, `${or("size", 60)} / 4`],
-      facing_camera_mode: "rotate_y",
-      uv: uv("rainbow"),
+      size: [or("size", 1), or("size", 1)],
+      facing_camera_mode: "lookat_xyz",
+      uv: uv("dot"),
     },
-    // rainbow_bp redraws it every second with a life of 1.6 s, close to the player (far particles are lost in
-    // the fog): it fades in over 0.2 s and out over the last 0.4 s, so each drawing overlaps the next with no gap.
-    // At most 70% opaque, so the sky shows through.
-    "minecraft:particle_appearance_tinting": { color: [1, 1, 1, `${fade(0.2, 0.4)} * 0.7`] },
+    // Redrawn every second (or two) and lasting a little longer, fading in over 0.3 s and out over the last 0.5 s.
+    "minecraft:particle_appearance_tinting": { color: ["variable.cr", "variable.cg", "variable.cb", `${fade(0.3, 0.5)} * 0.85`] },
+  }),
+
+  // One segment of the golden light beam over the pot of gold, upright and turning to face you; stacked
+  // segments make a beam like a beacon's.
+  sky_rainbow_beam: effect("realm:sky_rainbow_beam", "beam", "particles_blend", {
+    ...burst(1),
+    ...once(),
+    "minecraft:emitter_shape_point": {},
+    "minecraft:particle_initial_speed": 0,
+    "minecraft:particle_lifetime_expression": { max_lifetime: or("life", 2) },
+    "minecraft:particle_appearance_billboard": {
+      size: [or("size", 0.5), or("height", 2)],
+      facing_camera_mode: "rotate_y",
+      uv: uv("beam"),
+    },
+    "minecraft:particle_appearance_tinting": { color: [1, 1, 1, `${fade(0.3, 0.5)} * ${or("alpha", 1)} * 0.9`] },
   }),
 
   // One segment of an aurora curtain: upright, rippling (an 8-frame flipbook), additive, tinted green to purple.
@@ -870,10 +893,10 @@ const MANIFEST = {
     name: "Realm Skies",
     description: "Rainbows, auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 0, 2],
+    version: [1, 1, 0],
     min_engine_version: [1, 21, 100],
   },
-  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 0, 2] }],
+  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 1, 0] }],
 };
 
 // ---------------------------------------------------------------------------

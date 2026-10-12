@@ -4,6 +4,7 @@ import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { FAR, FAR_KINDS, MARKERS, WOOLS, coarse, markerLooks, nearRiddle, treeOf } from "./clues.js";
 import { isProtected, protectedBox } from "./zones.js";
+import { isSlot, sideBoxes } from "./side.js";
 
 const PACK = "maps_bp";
 const PROP_HUNTS = "maps:hunts"; // player: JSON Hunt[]
@@ -46,48 +47,8 @@ const TREE_TOP = /leaves|_log$|_wood$|mushroom_block|vine/;
  * regen: an older map whose clue is rewritten the next time its holder is online. place: older maps only.
  */
 
-// ---- The right side of the screen ----
-// Side HUD (hud_rp, in Realm Resources) shows the subtitle in a box above the scoreboard whenever the
-// title is exactly SIDE, and hides the vanilla title for SIDE and SIDE_CLEAR. Packs that share the box
-// say "realm:side" { player, from, ticks } when they write, so only the last writer clears it.
-const SIDE = "§s§1§r";
-const SIDE_CLEAR = "§s§0§r";
-/** player id -> the pack that last wrote the side box */
-const sideOwner = new Map();
-/** player id -> tick this pack's text is due to disappear */
-const sideUntil = new Map();
-
-/** Shows text on the right side for `ticks`, then clears it if nobody wrote there since. @param {Player} player @param {any} text @param {number} ticks */
-function showSide(player, text, ticks) {
-  player.onScreenDisplay.setTitle(SIDE, { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 0 });
-  sideOwner.set(player.id, "maps");
-  system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from: "maps", ticks }));
-  const until = system.currentTick + ticks;
-  sideUntil.set(player.id, until);
-  system.runTimeout(() => {
-    if (sideUntil.get(player.id) !== until) return;
-    sideUntil.delete(player.id);
-    if (sideOwner.get(player.id) !== "maps" || !player.isValid) return;
-    try {
-      player.onScreenDisplay.setTitle(SIDE_CLEAR, { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
-    } catch {
-      // left meanwhile
-    }
-  }, ticks);
-}
-
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:side") return;
-    try {
-      const m = JSON.parse(message);
-      if (typeof m?.player === "string" && typeof m.from === "string") sideOwner.set(m.player, m.from);
-    } catch {
-      // not ours
-    }
-  },
-  { namespaces: ["realm"] }
-);
+// Warmer / Colder in a Side HUD box (scripts/side.js, the side boxes protocol).
+const side = sideBoxes("maps");
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -190,12 +151,15 @@ function blockAt(dim, x, y, z) {
     return undefined; // unloaded or outside the world
   }
 }
-/** @param {Dimension} dim @param {number} x @param {number} z */
+/** The highest block that isn't air (water counts). @param {Dimension} dim @param {number} x @param {number} z */
 function topAt(dim, x, z) {
   try {
     const b = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
-    if (b) void b.typeId; // throws when the chunk is loaded but not ticking (it then answers y 319)
-    return b;
+    if (!b) return undefined;
+    void b.typeId; // throws when the chunk is loaded but not ticking (it then answers y 319)
+    // The topmost block skips water: answer the water (or seagrass, kelp) over it instead.
+    const up = b.above();
+    return up && WATERY.test(up.typeId) ? up : b;
   } catch {
     return undefined;
   }
@@ -502,15 +466,12 @@ system.runInterval(() => {
           else text = trend > 0 ? `§6Warmer ${leg}` : `§bColder ${leg}`;
         }
       }
-      if (getFor(player, "where") === "hotbar") {
+      const where = getFor(player, "where");
+      if (isSlot(where)) side.show(player, where, text, 45);
+      else {
         // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
-        send("realm:actionbar", { player: player.id, ticks: 45 });
+        send("realm:actionbar", { player: player.id, ticks: 45, from: "maps_bp" });
         player.onScreenDisplay.setActionBar(text);
-      } else if (getFor(player, "where") === "middle") {
-        // The subtitle line in the middle of the screen: other add-ons that redraw the action bar can't cover it.
-        player.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: 45, fadeOutDuration: 5 });
-      } else {
-        showSide(player, text, 45);
       }
     } catch (e) {
       console.warn(`[maps] ${e}`);
@@ -628,7 +589,7 @@ system.runInterval(() => {
 /**
  * A spot for a marker at `at`: natural ground with room above, nothing player-made in the 5 x 5 tops around it, no
  * player standing there, away from world spawn and outside safe zones and claims. Yields before every block read.
- * @param {Dimension} dim @param {XZ} at @returns {Generator<void, Vector3 | undefined, void>}
+ * @param {Dimension} dim @param {XZ} at @returns {Generator<void, (Vector3 & { styles: string[] }) | undefined, void>}
  */
 function* markerSpot(dim, at) {
   const x = Math.floor(at.x);
@@ -641,18 +602,23 @@ function* markerSpot(dim, at) {
     yield;
     g = blockAt(dim, x, g.location.y - 1, z);
   }
-  if (!g || !GROUND.test(g.typeId)) { console.warn(`[maps] DEBUG ground ${g?.typeId}`); return undefined; }
+  if (!g || !GROUND.test(g.typeId)) return undefined;
   const gy = g.location.y;
+  // Which marker styles fit: every block a style places must go where there is only air or plants now.
+  /** @type {Map<string, boolean>} */
+  const free = new Map();
   for (const o of MARKER_ROOM) {
     yield;
     const b = blockAt(dim, x + o.dx, gy + o.dy, z + o.dz);
-    if (!b || !(b.isAir || SOFT.test(b.typeId))) { console.warn(`[maps] DEBUG room ${b?.typeId}`); return undefined; } // a tree, a rock face or unloaded
+    free.set(`${o.dx},${o.dy},${o.dz}`, !!b && (b.isAir || SOFT.test(b.typeId)));
   }
+  const styles = MARKERS.filter((m) => m.blocks("minecraft:white_wool").every((o) => free.get(`${o.dx},${o.dy},${o.dz}`))).map((m) => m.id);
+  if (!styles.length) return undefined; // a tree, a rock face or unloaded
   for (let dx = -2; dx <= 2; dx++) {
     for (let dz = -2; dz <= 2; dz++) {
       yield;
       const t = topAt(dim, x + dx, z + dz);
-      if (!t || MADE.test(t.typeId)) { console.warn(`[maps] DEBUG made ${t?.typeId}`); return undefined; }
+      if (!t || MADE.test(t.typeId)) return undefined;
     }
   }
   try {
@@ -660,7 +626,7 @@ function* markerSpot(dim, at) {
   } catch {
     // fine
   }
-  return { x, y: gy, z };
+  return { x, y: gy, z, styles };
 }
 
 /** Every block any marker style places, relative to the ground block under it. */
@@ -767,7 +733,6 @@ function* settle(dim, hunt, final) {
   const used = hunt.feats ?? [];
   const kindOf = (/** @type {string} */ k) => k.split(":")[0];
   const found = landmarks(cells, c);
-  console.warn(`[maps] DEBUG settle cells=${cells.length} feats=${found.map((f) => `${f.kind}:${f.anchors.length}`).join(",")}`);
   const fresh = shuffled(found.filter((f) => f.kind !== "flat" && !used.includes(kindOf(f.kind))));
   const again = shuffled(found.filter((f) => f.kind !== "flat" && used.includes(kindOf(f.kind))));
   const order = [...fresh, ...found.filter((f) => f.kind === "flat"), ...again];
@@ -806,7 +771,9 @@ function settled(player, hunt, final, r) {
     return;
   }
   if (r?.spot && kind && get("markers") === true) {
-    const style = any(MARKERS.filter((m) => m.id !== hunt.style)) ?? MARKERS[0];
+    const styles = /** @type {Vector3 & { styles?: string[] }} */ (r.spot).styles;
+    const fits = MARKERS.filter((m) => !styles || styles.includes(m.id));
+    const style = any(fits.filter((m) => m.id !== hunt.style)) ?? fits[0] ?? MARKERS[0];
     const wool = any(WOOLS);
     let ok = true;
     for (const b of style.blocks(wool)) {

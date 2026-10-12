@@ -25,11 +25,11 @@ export const CONFIG = {
     /** Glow Honey: harvesting a full beehive or bee nest at night (bottle or shears). */
     glowHoney: 30,
     /** Starwright Flour: breaking ripe wheat soon after an aurora or a meteor. */
-    starwrightFlour: 10,
+    starwrightFlour: 25,
     /** Harvest Saffron: breaking any ripe crop during a Harvest Moon. */
     harvestSaffron: 8,
     /** Moon Salt: killing a hostile mob during a Blood Moon. */
-    moonSalt: 5,
+    moonSalt: 8,
     /** Ember Truffle: breaking ripe nether wart. */
     emberTruffle: 3,
     /** Frost Pepper: killing a stray. */
@@ -37,7 +37,7 @@ export const CONFIG = {
   },
 
   /** After an aurora or a meteor (sky events), ripe wheat can give Starwright Flour for this many minutes. */
-  starMinutes: 10,
+  starMinutes: 15,
 
   /** Blocks that make a cauldron on top of them a cooking pot (lit only). */
   potFires: ["minecraft:campfire", "minecraft:soul_campfire"],
