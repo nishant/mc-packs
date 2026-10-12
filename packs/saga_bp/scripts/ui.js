@@ -476,7 +476,7 @@ export async function chapterInfo(player, story) {
       lines.push("", `§fCurrent step: §e${stepLine(player, e, saga)}§r`, "", ...objectiveLines(player, e, saga));
       if (chapterDone(e, saga)) lines.push("", `§6All done: go back to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}.`);
       const cost = hintCost(e);
-      /** @type {[string, () => Promise<unknown>][]} */
+      /** @type {[string, () => Promise<unknown>, boolean?][]} label, action, and whether the action opens a form of its own once this page is gone */
       const actions = [];
       actions.push([
         st.h ? "Read the hint again" : cost.levels + cost.crowns > 0 ? `Ask for a hint\n§8Costs ${cost.levels} level${cost.levels === 1 ? "" : "s"}, ${cost.crowns} Crowns` : "Ask for a hint\n§8Free",
@@ -485,14 +485,16 @@ export async function chapterInfo(player, story) {
       actions.push(["Hear the intro again", () => dialog(player, story.title, chapterHeader(saga, story, cur.index), pagesFor(cur.chapter.intro, saga, story.id, player.name), ["OK"])]);
       e.chapter.objectives.forEach((obj, i) => {
         if (obj.type === "answer" && !obj.npc && !(obj.place || obj.at || obj.offset) && !objDone(e, i, saga))
-          actions.push([`Answer: ${obj.label}`, () => answerFromLog(player, e, i)]);
+          actions.push([`Answer: ${obj.label}`, () => answerFromLog(player, e, i), true]);
       });
       const form = new ActionFormData().title(story.title).body(lines.join("\n"));
       for (const [label] of actions) form.button(label);
       form.button("OK");
       const res = await show(player, form);
       if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length) return;
-      await actions[res.selection][1]();
+      const act = actions[res.selection];
+      await act[1]();
+      if (act[2]) return; // the riddle's form needs this page (and its busy mark) gone first
     }
   });
 }
@@ -953,22 +955,28 @@ async function opTools(player) {
   if (res.selection === 1) {
     const target = await pickPlayer(player, "Finish a step");
     if (!target) return;
+    const name = target.name;
     const list = entries(target);
-    if (!list.length) return player.sendMessage(`§7[Story] ${target.name} isn't working on any chapter.`);
-    const form = new ActionFormData().title("Finish a step").body(`${target.name}'s chapters: pick one to finish its current step.`);
+    if (!list.length) return player.sendMessage(`§7[Story] ${name} isn't working on any chapter.`);
+    const form = new ActionFormData().title("Finish a step").body(`${name}'s chapters: pick one to finish its current step.`);
     for (const e of list) form.button(`${e.story.title}\n§8${plain(stepLine(target, e, sagaOf(target))).slice(0, 60)}`);
     form.button("Back");
     const r = await show(player, form);
     if (!r || r.canceled || r.selection === undefined || r.selection >= list.length) return;
+    // They may have left while the menu was open.
+    if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
     const ok = completeStep(target, list[r.selection]);
-    player.sendMessage(ok ? `§a[Story] Finished ${target.name}'s current step in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
+    player.sendMessage(ok ? `§a[Story] Finished ${name}'s current step in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
     return;
   }
   if (res.selection === 2) {
     const target = await pickPlayer(player, "Reset stories");
     if (!target) return;
-    const sure = await show(player, new ActionFormData().title("Reset stories?").body(`Start all of ${target.name}'s stories over? Rewards already given are kept.`).button("Reset").button("Cancel"));
-    if (sure && !sure.canceled && sure.selection === 0) resetPlayer(target, player);
+    const name = target.name;
+    const sure = await show(player, new ActionFormData().title("Reset stories?").body(`Start all of ${name}'s stories over? Rewards already given are kept.`).button("Reset").button("Cancel"));
+    if (!sure || sure.canceled || sure.selection !== 0) return;
+    if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
+    resetPlayer(target, player);
   }
 }
 
