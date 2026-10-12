@@ -19,6 +19,7 @@ Building got a lot easier, and a few loose ends are tied up.
 - Deck of Many Things: Anvil Drop's anvil crumbles away a few seconds after it lands.
 - Treasure maps: cairns, flags and standing stones come down once you are done with them, and an empty treasure chest turns back into ground.
 - Expeditions: items you drop dying and treasure left in the chests are kept safe through a server restart.
+- Fixes: Easy Building no longer gives back double blocks on undo, mirrored copies turn rails, torches and levers too, and big shapes no longer stall the realm. Gauntlet items always come back, even far from the dungeon. Platypuses calm down 15 seconds after you stop hitting them. Doom ends if you die. A rainbow's pot of gold always gets its chest, even on water.
 
 ## Platypus, Gauntlets and a Dangerous Deck
 
