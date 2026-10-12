@@ -336,12 +336,13 @@ system.runInterval(() => {
 
 /**
  * Is the player somewhere a swap must not reach: a running Deck arena, or an Expedition run (the
- * Expeditions pack tags its dungeon mobs and pets `realm:exp_mob` / `realm:exp_pet`; any within 64
- * blocks means the player is in or by a dungeon)?
+ * Expeditions pack tags players in a run `realm_expedition`, and its dungeon mobs and pets `realm:exp_mob` /
+ * `realm:exp_pet`; any of those within 64 blocks means the player is in or by a dungeon)?
  * @param {Player} p
  */
 function busyElsewhere(p) {
   if (inDeckArena(p)) return true;
+  if (p.hasTag("realm_expedition")) return true;
   try {
     for (const tag of ["realm:exp_mob", "realm:exp_pet"]) if (p.dimension.getEntities({ tags: [tag], location: p.location, maxDistance: 64 }).length) return true;
   } catch {
