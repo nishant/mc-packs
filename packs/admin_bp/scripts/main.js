@@ -125,7 +125,7 @@ const resumed = new Set();
  */
 async function resume(player, back) {
   if (!back) return;
-  await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10) * 2 + 2);
+  await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10) * 2 + 5); // Realm Settings pings twice before it opens
   if (!player.isValid || !isOp(player)) return;
   resumed.add(player.id);
   return back();
