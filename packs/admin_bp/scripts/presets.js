@@ -22,12 +22,12 @@
 export const CATEGORIES = [
   { id: "world", title: "World & weather", packs: ["weather_bp", "climate_bp", "storm_bp", "tornado_bp", "rainbow_bp", "night_bp", "meteor_bp", "moon_bp", "rain_bp", "zones_bp", "guard_bp"] },
   { id: "story", title: "Story & townsfolk", packs: ["saga_bp", "npc_bp", "journal_bp", "quests_bp", "milestones_bp"] },
-  { id: "towns", title: "Towns & places", packs: ["town_bp", "waystone_bp", "caravan_bp", "claims_bp", "farm_bp"] },
+  { id: "towns", title: "Towns & places", packs: ["town_bp", "build_bp", "waystone_bp", "caravan_bp", "claims_bp", "farm_bp"] },
   { id: "economy", title: "Economy", packs: ["crowns_bp", "bounty_bp", "guilds_bp", "slots_bp"] },
   { id: "events", title: "Events & news", packs: ["fishing_bp", "goals_bp", "news_bp", "welcome_bp"] },
   { id: "players", title: "Players", packs: ["stats_bp", "titles_bp", "nick_bp", "party_bp", "skills_bp", "mail_bp", "afk_bp", "death_bp"] },
   { id: "dungeons", title: "Dungeons & loot", packs: ["expedition_bp", "elite_bp", "relics_bp", "maps_bp"] },
-  { id: "fun", title: "Fun", packs: ["domt_bp", "silly_bp", "dolphin_bp", "cooking_bp", "chairs_bp"] },
+  { id: "fun", title: "Fun", packs: ["domt_bp", "silly_bp", "dolphin_bp", "cooking_bp", "chairs_bp", "platypus_bp"] },
   { id: "utilities", title: "Utilities", packs: ["help_bp", "settings_bp", "admin_bp", "stash_bp", "find_bp", "cleanup_bp", "hud_bp", "mobhp_bp", "elytra_bp", "durability_bp", "refill_bp", "phantom_bp", "translucent_bp", "harvest_bp", "leaves_bp"] },
 ];
 
