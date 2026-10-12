@@ -159,7 +159,7 @@ function watchChampion(p, champ, tag) {
     try {
       if (champ.isValid && champ.hasTag("domt:boss")) for (const late of dim.getEntities({ tags: [tag] })) attempt(() => late.remove());
       if (died || !p.isValid || champ.isValid) return;
-      const spot = sightSpot(p, 6, 10) ?? randomSpot(p, 6, 10);
+      const spot = sightSpot(p, 6, 10) ?? randomSpot(p, 6, 10, 40, 8);
       if (!spot) return;
       deckChampion(p.dimension, spot);
       p.sendMessage(`§6[Deck] §7The champion slipped away, so the deck sends its own, ${Math.round(Math.hypot(spot.x - p.location.x, spot.z - p.location.z))} blocks to the ${compass(p.location, spot)}.`);
@@ -1275,7 +1275,7 @@ export const CARDS = [
     run: async ({ player, announce }) => {
       const dim = player.dimension;
       // Where the player can see it: a champion in a cave below or behind a wall looks like nothing came.
-      const spot = sightSpot(player, 6, 10) ?? randomSpot(player, 6, 10);
+      const spot = sightSpot(player, 6, 10) ?? randomSpot(player, 6, 10, 40, 8);
       if (!spot) return false;
       const tag = `realm:domt_champ_${Date.now().toString(36)}`;
       // Mobs that always come for a player, day or night (a spider is calm by day, a creeper just blows up).
