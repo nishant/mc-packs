@@ -6,6 +6,20 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Easy Building 2.0
+
+Building got a lot easier, and a few loose ends are tied up.
+
+- Easy Building 2.0: get the Building Book with /realm:build_book. Mirror, radial and array copies, 14 block palette patterns, Air Build, curves, ellipses and leaning cones.
+- Block guides outline exactly where a build, paste or destroy will go.
+- Copy, cut and paste whole areas, turned to face your way, with 19 saved copies.
+- Destroy mode breaks a whole shape with your pickaxe, axe or shovel. In survival you get the drops and the tool wears.
+- Undo and redo now survive a server restart.
+- Titles like a card's name, FIGHT!, a level-up or a story scene are no longer covered by the side boxes. The boxes step aside and come back when the title fades.
+- Deck of Many Things: Anvil Drop's anvil crumbles away a few seconds after it lands.
+- Treasure maps: cairns, flags and standing stones come down once you are done with them, and an empty treasure chest turns back into ground.
+- Expeditions: items you drop dying and treasure left in the chests are kept safe through a server restart.
+
 ## Platypus, Gauntlets and a Dangerous Deck
 
 New things to find, build and survive.
