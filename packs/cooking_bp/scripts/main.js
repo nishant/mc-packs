@@ -671,20 +671,70 @@ const isNight = () => {
   return t >= 13000 && t < 23000;
 };
 
-world.afterEvents.playerBreakBlock.subscribe(({ player, brokenBlockPermutation: perm }) => {
+/** Is this crop or nether wart fully grown? @param {import("@minecraft/server").BlockPermutation} perm */
+function ripe(perm) {
+  const type = perm.type.id;
+  if (CROPS.has(type)) return perm.getState("growth") === 7;
+  if (type === "minecraft:nether_wart") return perm.getState("age") === 3;
+  return false;
+}
+
+/** A ripe crop or nether wart was harvested (broken, or tapped by Right-click Harvest). @param {Player} player @param {string} type */
+function forageCrop(player, type) {
+  if (!foraging()) return;
+  if (CROPS.has(type)) {
+    if (type === "minecraft:wheat" && starNight() && chance(CONFIG.forage.starwrightFlour)) giveIngredient(player, "starwright_flour", "starlit wheat");
+    if (moonIs("harvest") && chance(CONFIG.forage.harvestSaffron)) giveIngredient(player, "harvest_saffron", "Harvest Moon");
+  } else if (type === "minecraft:nether_wart" && chance(CONFIG.forage.emberTruffle)) {
+    giveIngredient(player, "ember_truffle", "nether wart");
+  }
+}
+
+/** Where ripe crops were just broken: "dim x,y,z" to the tick, so a tap watched at the same spot doesn't count it twice. @type {Map<string, number>} */
+const recentBreaks = new Map();
+/** @param {string} dim @param {import("@minecraft/server").Vector3} at */
+const spotKey = (dim, at) => `${dim} ${at.x},${at.y},${at.z}`;
+
+world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermutation: perm }) => {
   try {
-    if (!foraging()) return;
-    const type = perm.type.id;
-    if (CROPS.has(type) && perm.getState("growth") === 7) {
-      if (type === "minecraft:wheat" && starNight() && chance(CONFIG.forage.starwrightFlour)) giveIngredient(player, "starwright_flour", "starlit wheat");
-      if (moonIs("harvest") && chance(CONFIG.forage.harvestSaffron)) giveIngredient(player, "harvest_saffron", "Harvest Moon");
-    } else if (type === "minecraft:nether_wart" && perm.getState("age") === 3 && chance(CONFIG.forage.emberTruffle)) {
-      giveIngredient(player, "ember_truffle", "nether wart");
-    }
+    if (!ripe(perm)) return;
+    const now = system.currentTick;
+    for (const [k, t] of recentBreaks) if (now - t > 20) recentBreaks.delete(k);
+    recentBreaks.set(spotKey(block.dimension.id, block.location), now);
+    forageCrop(player, perm.type.id);
   } catch (e) {
     console.warn(`[cooking] forage: ${e}`);
   }
 });
+
+/**
+ * A tap on a ripe crop that leaves it replanted (or gone) is a harvest too: the Right-click Harvest
+ * pack cancels the tap and resets the crop, so no playerBreakBlock fires. Checked a few ticks later.
+ * @param {Player} player @param {import("@minecraft/server").Block} block
+ */
+function watchTapHarvest(player, block) {
+  const type = block.typeId;
+  if (!CROPS.has(type) && type !== "minecraft:nether_wart") return;
+  if (!ripe(block.permutation)) return;
+  const dim = block.dimension;
+  const at = { ...block.location };
+  const tapped = system.currentTick;
+  system.runTimeout(() => {
+    try {
+      const b = dim.getBlock(at);
+      if (!b || !player.isValid) return;
+      // Broken by hand meanwhile: playerBreakBlock already counted it.
+      if ((recentBreaks.get(spotKey(dim.id, at)) ?? -1) >= tapped) return;
+      // Replanted (same crop, not ripe) or no seed to replant (air): harvested. Air over trampled
+      // farmland (now dirt) or washed away is not a harvest.
+      const soil = b.below()?.typeId;
+      const onSoil = type === "minecraft:nether_wart" ? soil === "minecraft:soul_sand" : soil === "minecraft:farmland";
+      if ((b.typeId === type && !ripe(b.permutation)) || (b.typeId === "minecraft:air" && onSoil)) forageCrop(player, type);
+    } catch (e) {
+      console.warn(`[cooking] forage tap: ${e}`);
+    }
+  }, 3);
+}
 
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   try {
@@ -723,6 +773,13 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
     const at = { dim: block.dimension.id, loc: { ...block.location } };
     system.run(() => potMenu(player, at).catch((e) => console.warn(`[cooking] pot: ${e}`)));
     return;
+  }
+  if (isFirstEvent && !player.isSneaking && foraging()) {
+    try {
+      watchTapHarvest(player, block);
+    } catch {
+      // the block can't be read: nothing to watch
+    }
   }
   if (HIVES.has(type) && itemStack && (itemStack.typeId === "minecraft:glass_bottle" || itemStack.typeId === "minecraft:shears")) {
     let full = false;
@@ -1055,11 +1112,23 @@ system.afterEvents.scriptEventReceive.subscribe(
           onChampion(msg);
           return;
         case "realm:moon":
-          if (msg.state === "blood" || msg.state === "harvest") saveJson(world, PROP_MOON, { s: msg.state, t: Date.now() });
-          else saveJson(world, PROP_MOON, undefined);
+          if (msg.state === "blood" || msg.state === "harvest") {
+            const was = moonIs(msg.state);
+            saveJson(world, PROP_MOON, { s: msg.state, t: Date.now() });
+            if (!was && foraging()) {
+              if (msg.state === "harvest" && CONFIG.forage.harvestSaffron > 0) world.sendMessage("§6Kitchen: §7ripe crops harvested tonight may give §fHarvest Saffron§7.");
+              if (msg.state === "blood" && CONFIG.forage.moonSalt > 0) world.sendMessage("§6Kitchen: §7monsters slain tonight may drop §fMoon Salt§7.");
+            }
+          } else saveJson(world, PROP_MOON, undefined);
           return;
         case "realm:sky_event":
-          if (msg.kind === "aurora" || msg.kind === "meteor") world.setDynamicProperty(PROP_STAR, Date.now());
+          if (msg.kind === "aurora" || msg.kind === "meteor") {
+            const open = starNight();
+            world.setDynamicProperty(PROP_STAR, Date.now());
+            if (!open && foraging() && CONFIG.forage.starwrightFlour > 0) {
+              world.sendMessage(`§6Stardust settles on the fields. §7Ripe wheat harvested in the next ${CONFIG.starMinutes} minutes may give §fStarwright Flour§7 (Kitchen).`);
+            }
+          }
           return;
       }
       // The rest name a player and a recipe, dish or ingredient.

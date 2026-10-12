@@ -16,15 +16,13 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { RARITY, boonEffects, boonOf, giveKit, isRunGear, restoreStash, rollBoons, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
-  CELL,
   COLORS,
-  HALF,
-  MAX_GRID,
   MAX_ROOM_H,
-  R,
+  MAX_SIZE,
   affixNames,
   affixOf,
   blocksDoor,
@@ -39,6 +37,7 @@ import {
   levelName,
   levelShort,
   parseLevelKey,
+  longScale,
   rng,
   rollAffixes,
   scaleFor,
@@ -69,6 +68,9 @@ const PROP_HISTORY = "expedition:history"; // world: JSON HistoryEntry[], newest
 const PROP_RETURN = "expedition:return"; // player: JSON { d, x, y, z, run } where to send them back
 const PROP_PROG = "expedition:prog"; // player: JSON Progress
 const PROP_ROLLS = "expedition:rolls"; // player: JSON { [levelKey]: string[] } the affixes shown for each level
+const PROP_GAUNTLETS = "expedition:gauntlets"; // world: JSON GauntletEntry[], the best Gauntlet clears
+const PROP_BUFFS = "expedition:buffs"; // player: JSON string[], the effects a run gave them (shrine, boons), taken away when they leave
+const PET_TAG = "realm:exp_pet"; // a Wolf Pack boon's wolves
 
 const OVERWORLD = "minecraft:overworld";
 const MOB_TAG = "realm:exp_mob";
@@ -84,7 +86,7 @@ const AWAY_TICKS = 100; // a member outside the dungeon this long has left it so
 const GRACE_TICKS = 60; // after teleporting in, before the away check counts
 const LONG = 1000000; // effect duration (ticks) that outlasts any run
 const FLOOR = Math.max(-58, Math.min(-20, Math.floor(CONFIG.depth)));
-const SPACING = Math.max(MAX_GRID * CELL + 12, CONFIG.slotSpacing);
+const SPACING = Math.max(MAX_SIZE + 12, CONFIG.slotSpacing);
 /** Mobs the Champions pack (elite_bp) can make into champions. */
 const ELITE_MOBS = new Set(["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:zombie_villager_v2", "minecraft:skeleton", "minecraft:stray", "minecraft:spider", "minecraft:witch"]);
 /** Mobs that can wear armor. */
@@ -118,7 +120,7 @@ const BLESSINGS = [
  * @typedef {{ active: boolean, solved: boolean, progress: number, busyUntil: number, startedAt: number, hit: Set<number>,
  *   state: boolean[], colors: number[], lockUntil: number, gave: boolean }} PuzState
  */
-/** @typedef {{ kind: string, x: number, y: number, z: number, r: number, at: number, until: number, ax?: "x" | "z" }} Hazard */
+/** @typedef {{ kind: string, x: number, y: number, z: number, r: number, at: number, until: number, ax?: "x" | "z", du?: number, dv?: number }} Hazard */
 /**
  * @typedef {{ id: number, slot: number, dungeon: Dungeon, level: number, s: Scale, seed: number, affixes: string[], o: Vector3, lay: Layout,
  *   size: number, top: number, leaderName: string, leaderId: string, members: Map<string, Member>,
@@ -128,13 +130,15 @@ const BLESSINGS = [
  *   puz: Map<number, PuzState>, elems: Map<string, Elem>, placed: Set<string>, placedTypes: Set<string>, placedAny: Set<string>, breakable: Set<string>,
  *   shrine: { bless: typeof BLESSINGS[number], curse: string | undefined }, cursed: boolean, fortune: boolean, sigil: boolean, sigilItem?: ItemStack,
  *   hazards: Hazard[], fires: { x: number, y: number, z: number, until: number }[], timers: Record<string, number>, trapNext: number,
- *   strays: Map<string, number> }} Run
+ *   strays: Map<string, number>, long: boolean, loadout: boolean, boons: Map<string, string[]>, finishCap: number,
+ *   sanct?: { i: number, offered: Set<string>, picked: Set<string>, offers: Map<string, string[]>, firstAt: number } }} Run
  * checked: the box was found to hold only natural blocks, so the dungeon may be built and later filled in
  * strays: ticks each wave mob (or the boss) has been out of its room with nobody near it
  */
 /** @typedef {{ t: number, n: string, at: number, a?: string[] }} Best */
 /** @typedef {{ id: string, n: string, l: number, d: string, at: number }} TierEntry */
-/** @typedef {{ d: string, l: number, ok: boolean, t: number, n: string, at: number, a?: string[] }} HistoryEntry */
+/** @typedef {{ d: string, l: number, ok: boolean, t: number, n: string, at: number, a?: string[], g?: number }} HistoryEntry g: rooms, for a Gauntlet */
+/** @typedef {{ d: string, l: number, t: number, n: string, at: number, r: number, k?: number }} GauntletEntry r: rooms; k: 1 with Fixed loadout */
 /** @typedef {{ u: number, b: number, c: number, r: HistoryEntry[] }} Progress */
 
 // ---------------------------------------------------------------------------
@@ -171,6 +175,8 @@ const B = {
   chest: "minecraft:chest",
   fire: "minecraft:fire",
   water: "minecraft:water",
+  soul: "minecraft:soul_sand",
+  magma: "minecraft:magma",
 };
 
 /** Every block a dungeon places. The box holds only NATURAL_IDS blocks before a run, so any of these in it are the dungeon's own. */
@@ -412,7 +418,7 @@ function extent(rec) {
 }
 
 /** Center of a room (x, z of its middle block). @param {Run} run @param {Room} rm */
-const roomCenter = (run, rm) => ({ x: run.o.x + rm.cx * CELL + HALF, z: run.o.z + rm.cz * CELL + HALF });
+const roomCenter = (run, rm) => ({ x: run.o.x + rm.cx * run.lay.cell + run.lay.cell / 2, z: run.o.z + rm.cz * run.lay.cell + run.lay.cell / 2 });
 
 /** A room's local (u, v, y) in the world. @param {Run} run @param {Room} rm @param {number} u @param {number} v @param {number} y */
 function wpos(run, rm, u, v, y) {
@@ -428,7 +434,7 @@ function wmid(run, rm, p) {
 /** Is p inside room rm's interior? @param {Run} run @param {Room} rm @param {Vector3} p */
 function inRoom(run, rm, p) {
   const c = roomCenter(run, rm);
-  return p.x >= c.x - R && p.x < c.x + R + 1 && p.z >= c.z - R && p.z < c.z + R + 1 && p.y >= run.o.y + 1 && p.y < run.o.y + rm.h + 1;
+  return p.x >= c.x - rm.r && p.x < c.x + rm.r + 1 && p.z >= c.z - rm.r && p.z < c.z + rm.r + 1 && p.y >= run.o.y + 1 && p.y < run.o.y + rm.h + 1;
 }
 
 /** facing_direction (buttons, ladders) for a local face. @param {Room} rm @param {import("./layout.js").Face} f */
@@ -447,13 +453,13 @@ function signDir(rm, f) {
 /** The bars (or high doorway) on a room's side toward room `to`, in world blocks. @param {Run} run @param {number} i @param {import("./layout.js").Door} door */
 function doorPlane(run, i, door) {
   const rm = run.lay.rooms[i];
-  const a = wpos(run, rm, ...sidePoint(door.side, -1), door.y + 1);
-  const b = wpos(run, rm, ...sidePoint(door.side, 1), door.y + 3);
+  const a = wpos(run, rm, ...sidePoint(door.side, (door.a ?? 0) - 1, rm.r), door.y + 1);
+  const b = wpos(run, rm, ...sidePoint(door.side, (door.a ?? 0) + 1, rm.r), door.y + 3);
   return { from: { x: Math.min(a.x, b.x), y: a.y, z: Math.min(a.z, b.z) }, to: { x: Math.max(a.x, b.x), y: b.y, z: Math.max(a.z, b.z) } };
 }
-/** Local (u, v) of a spot in a side's wall. @param {import("./layout.js").Face} side @param {number} a @returns {[number, number]} */
-function sidePoint(side, a) {
-  const d = R + 1;
+/** Local (u, v) of a spot in a side's wall, in a room of half width r. @param {import("./layout.js").Face} side @param {number} a @param {number} r @returns {[number, number]} */
+function sidePoint(side, a, r) {
+  const d = r + 1;
   if (side === "back") return [a, -d];
   if (side === "fwd") return [a, d];
   if (side === "left") return [-d, a];
@@ -561,34 +567,59 @@ function signText(run, t) {
   return t;
 }
 
-/** Corridors between two neighboring rooms (with the chute and pool below a shaft's high exit). @param {Run} run @param {Dimension} dim @param {number} i @param {number} j @param {number} ey */
+/**
+ * The corridor between two neighboring rooms. Each room's door sits where its own layout put it along the
+ * wall, so the corridor runs out of one door into the gap between the rooms, along the gap and into the
+ * other door. Under a shaft's high exit (both doors in the middle of their walls), a chute drops into a pool.
+ * @param {Run} run @param {Dimension} dim @param {number} i @param {number} j @param {number} ey
+ */
 function corridor(run, dim, i, j, ey) {
   const d = run.dungeon;
   const F = run.o.y;
   const A = run.lay.rooms[i];
   const Bm = run.lay.rooms[j];
-  const ax = run.o.x + A.cx * CELL;
-  const az = run.o.z + A.cz * CELL;
-  const bx = run.o.x + Bm.cx * CELL;
-  const bz = run.o.z + Bm.cz * CELL;
   const alongX = A.cx !== Bm.cx;
-  const lo = alongX ? Math.min(ax, bx) : Math.min(az, bz); // the lower cell's corner along the corridor
-  const c = alongX ? az + HALF : ax + HALF; // the middle across it
+  const lowA = alongX ? A.cx < Bm.cx : A.cz < Bm.cz;
+  const lo = lowA ? A : Bm;
+  const hi = lowA ? Bm : A;
+  const along = (/** @type {Room} */ rm) => (alongX ? roomCenter(run, rm).x : roomCenter(run, rm).z);
+  const wl = along(lo) + lo.r + 1; // the lower room's wall toward the other
+  const wh = along(hi) - hi.r - 1;
+  /** The across coordinate of a room's door toward the other room. @param {Room} rm @param {number} self @param {number} other */
+  const across = (rm, self, other) => {
+    const door = rm.doors.find((dd) => dd.to === other);
+    const p = wpos(run, rm, ...sidePoint(door?.side ?? "fwd", door?.a ?? 0, rm.r), 0);
+    return alongX ? p.z : p.x;
+  };
+  const qlo = across(lo, lowA ? i : j, lowA ? j : i);
+  const qhi = across(hi, lowA ? j : i, lowA ? i : j);
   /** @param {number} a1 @param {number} a2 @param {number} c1 @param {number} c2 @param {number} y1 @param {number} y2 @param {string} block */
   const put = (a1, a2, c1, c2, y1, y2, block) =>
-    alongX ? fill(dim, { x: lo + a1, y: F + y1, z: c + c1 }, { x: lo + a2, y: F + y2, z: c + c2 }, block) : fill(dim, { x: c + c1, y: F + y1, z: lo + a1 }, { x: c + c2, y: F + y2, z: lo + a2 }, block);
-  const aLow = alongX ? ax < bx : az < bz; // A is the lower cell
-  const top = ey > 0 ? ey + 4 : 4;
-  put(19, 21, -2, 2, 0, top, d.wall);
-  put(19, 21, -1, 1, 0, 0, d.floor);
+    alongX ? fill(dim, { x: a1, y: F + y1, z: c1 }, { x: a2, y: F + y2, z: c2 }, block) : fill(dim, { x: c1, y: F + y1, z: a1 }, { x: c2, y: F + y2, z: a2 }, block);
   if (ey > 0) {
-    put(19, 21, -1, 1, 1, ey + 3, "minecraft:air");
-    put(19, 21, -1, 1, 0, 0, B.water);
-    const aWall = aLow ? 18 : 22;
-    const bWall = aLow ? 22 : 18;
-    put(aWall, aWall, -1, 1, ey + 1, ey + 3, "minecraft:air");
-    put(bWall, bWall, -1, 1, 1, 3, "minecraft:air");
-  } else put(18, 22, -1, 1, 1, 3, "minecraft:air");
+    // A shaft's exit: straight across (both doors in the middle), a chute down into a pool.
+    const q = qlo;
+    const aWall = A === lo ? wl : wh;
+    const bWall = A === lo ? wh : wl;
+    put(wl + 1, wh - 1, q - 2, q + 2, 0, ey + 4, d.wall);
+    put(wl + 1, wh - 1, q - 1, q + 1, 1, ey + 3, "minecraft:air");
+    put(wl + 1, wh - 1, q - 1, q + 1, 0, 0, B.water);
+    put(aWall, aWall, q - 1, q + 1, ey + 1, ey + 3, "minecraft:air");
+    put(bWall, bWall, q - 1, q + 1, 1, 3, "minecraft:air");
+    return;
+  }
+  const m = Math.floor((wl + wh) / 2);
+  /** Air boxes [along1, along2, across1, across2]. @type {[number, number, number, number][]} */
+  const boxes = [
+    [wl, m + 1, qlo - 1, qlo + 1],
+    [m - 1, wh, qhi - 1, qhi + 1],
+    [m - 1, m + 1, Math.min(qlo, qhi) - 1, Math.max(qlo, qhi) + 1],
+  ];
+  for (const [a1, a2, c1, c2] of boxes) put(Math.max(wl, a1 - 1), Math.min(wh, a2 + 1), c1 - 1, c2 + 1, 0, 4, d.wall);
+  for (const [a1, a2, c1, c2] of boxes) {
+    put(Math.max(wl + 1, a1), Math.min(wh - 1, a2), c1, c2, 0, 0, d.floor);
+    put(a1, a2, c1, c2, 1, 3, "minecraft:air");
+  }
 }
 
 /** @param {Run} run */
@@ -600,15 +631,12 @@ function buildSteps(run) {
   const steps = fillBoxSteps(dim, o, run.size, run.top, "minecraft:deepslate"); // seal: caves and water inside the box become solid
   const n = lay.n;
   lay.rooms.forEach((rm) => {
-    const bx = o.x + rm.cx * CELL;
-    const bz = o.z + rm.cz * CELL;
-    steps.push(() => fill(dim, { x: bx + 2, y: F, z: bz + 2 }, { x: bx + 18, y: F + rm.h + 1, z: bz + 18 }, d.wall));
+    const c = roomCenter(run, rm);
+    const w = rm.r + 1;
+    steps.push(() => fill(dim, { x: c.x - w, y: F, z: c.z - w }, { x: c.x + w, y: F + rm.h + 1, z: c.z + w }, d.wall));
     steps.push(() => {
-      fill(dim, { x: bx + 3, y: F, z: bz + 3 }, { x: bx + 17, y: F, z: bz + 17 }, d.floor);
-      fill(dim, { x: bx + 3, y: F + 1, z: bz + 3 }, { x: bx + 17, y: F + rm.h, z: bz + 17 }, "minecraft:air");
-      for (const [px, pz] of [[3, 3], [17, 3], [3, 17], [17, 17]]) fill(dim, { x: bx + px, y: F + 1, z: bz + pz }, { x: bx + px, y: F + rm.h, z: bz + pz }, d.accent);
-      const lantern = perm(d.light, { hanging: true });
-      for (const [lx, lz] of [[6, 6], [14, 6], [6, 14], [14, 14]]) place(dim, { x: bx + lx, y: F + rm.h, z: bz + lz }, lantern);
+      fill(dim, { x: c.x - rm.r, y: F, z: c.z - rm.r }, { x: c.x + rm.r, y: F, z: c.z + rm.r }, d.floor);
+      fill(dim, { x: c.x - rm.r, y: F + 1, z: c.z - rm.r }, { x: c.x + rm.r, y: F + rm.h, z: c.z + rm.r }, "minecraft:air");
     });
   });
   // Corridors: along the path, then to side rooms.
@@ -652,6 +680,17 @@ function buildParts(run, dim, rm, i) {
         break;
       case "accent":
         fill(dim, at, to, d.accent);
+        break;
+      case "wall":
+        fill(dim, at, to, d.wall);
+        break;
+      case "hang":
+        place(dim, at, perm(d.light, { hanging: true }));
+        break;
+      case "pit":
+        // A pit one block deep: the floor goes, the box's own bottom layer becomes soul sand (magma from Nightmare 1).
+        fill(dim, at, at, "minecraft:air");
+        fill(dim, { x: at.x, y: at.y - 1, z: at.z }, { x: at.x, y: at.y - 1, z: at.z }, p.i ? B.magma : B.soul);
         break;
       case "glow":
         place(dim, at, perm(B.glow));
@@ -714,8 +753,8 @@ function buildParts(run, dim, rm, i) {
     const blocked = floorBlockers(rm);
     const spawnSet = new Set(rm.spawns.map((s) => `${s.u},${s.v}`));
     const spots = [];
-    for (let u = -6; u <= 6; u++)
-      for (let v = -6; v <= 6; v++) {
+    for (let u = -(rm.r - 1); u <= rm.r - 1; u++)
+      for (let v = -(rm.r - 1); v <= rm.r - 1; v++) {
         if (Math.abs(u) <= 1 || Math.abs(v) <= 1 || blocked.has(`${u},${v}`) || spawnSet.has(`${u},${v}`)) continue;
         spots.push({ u, v });
       }
@@ -863,7 +902,7 @@ async function resetBox(rec) {
           e.teleport(out, { dimension: dim });
           e.sendMessage("§eThe expedition dungeon was closed, so you were moved to the surface.");
         }
-      } else if (e.hasTag(MOB_TAG) || LITTER.has(e.typeId) || DUNGEON_MOBS.has(e.typeId)) e.remove();
+      } else if (e.hasTag(MOB_TAG) || e.hasTag(PET_TAG) || LITTER.has(e.typeId) || DUNGEON_MOBS.has(e.typeId)) e.remove();
       else e.teleport(out, { dimension: dim });
     }
   } catch (e) {
@@ -1053,6 +1092,8 @@ const runs = new Map();
 const pending = new Map();
 /** Items players dropped dying in a dungeon, given back when they respawn. @type {Map<string, ItemStack[]>} */
 const dropped = new Map();
+/** Treasure left in the chests when a run ends, given to its players back home. @type {Map<string, ItemStack[]>} */
+const spoils = new Map();
 /** Shrine effects given to players, taken away when they leave the run. @type {Map<string, string[]>} */
 const buffs = new Map();
 
@@ -1075,7 +1116,7 @@ const recordOf = (run) => ({
   phase: run.phase,
   l: run.level,
   g: run.lay.grid,
-  c: CELL,
+  c: run.lay.cell,
   h: run.top,
   pt: [...run.placedTypes],
 });
@@ -1155,13 +1196,18 @@ async function show(player, form, deadline = Infinity) {
   return undefined;
 }
 
-/** Asks a party member to come along; no answer in time is a no. @param {Player} p @param {string} leader @param {Dungeon} d @param {number} L @param {string[]} affixes */
-async function ask(p, leader, d, L, affixes) {
+/**
+ * Asks a party member to come along; no answer in time is a no.
+ * @param {Player} p @param {string} leader @param {Dungeon} d @param {number} L @param {string[]} affixes @param {{ loadout: boolean } | undefined} [g] a Gauntlet
+ */
+async function ask(p, leader, d, L, affixes, g) {
   const ticks = Math.max(5, CONFIG.confirmSeconds) * 20;
   const deadline = system.currentTick + ticks;
+  const what = g ? `a Gauntlet (${get("gauntletRooms")} rooms, a boon every ${get("boonEvery")})` : "an expedition";
+  const kit = g?.loadout ? "\n\n§6Fixed loadout:§r your own items are stored safely while you run with a starter kit, and given back when you return." : "";
   const form = new MessageFormData()
-    .title("§lExpedition")
-    .body(`${leader} is starting an expedition: §e${dungeonLabel(d, L)}§r.${affixes.length ? `\nAffixes: ${affixNames(affixes)}` : ""}\n\nYou'll be taken to a dungeon deep underground and brought back when it ends. Join?`)
+    .title(g ? "§lGauntlet" : "§lExpedition")
+    .body(`${leader} is starting ${what}: §e${dungeonLabel(d, L)}§r.${affixes.length ? `\nAffixes: ${affixNames(affixes)}` : ""}${kit}\n\nYou'll be taken to a dungeon deep underground and brought back when it ends. Join?`)
     .button1("Join")
     .button2("Not this time");
   let answered = false;
@@ -1190,10 +1236,22 @@ function cantStart(leader) {
 }
 
 /**
+ * The widest box a slot's dungeon may be: half of it plus `avoidSpawn` must stay away from world spawn
+ * (sites set before rooms grew were checked for 100 blocks, so never less than that).
+ * @param {{ x: number, z: number }} at @param {number} slot
+ */
+function maxSizeAt(at, slot) {
+  const spawn = world.getDefaultSpawnLocation();
+  const dist = Math.hypot(at.x + slot * SPACING - spawn.x, at.z - spawn.z);
+  return Math.max(100, Math.floor(2 * (dist - CONFIG.avoidSpawn)));
+}
+
+/**
  * Starts a run the leader confirmed: asks the party, then builds the dungeon.
  * @param {Player} leader @param {Dungeon} d @param {number} L @param {string[]} affixes @param {string} [sigilLine] the sigil to use up
+ * @param {{ loadout: boolean }} [g] a Gauntlet, with or without the fixed loadout
  */
-async function start(leader, d, L, affixes, sigilLine) {
+async function start(leader, d, L, affixes, sigilLine, g) {
   const why = cantStart(leader);
   if (why) return leader.sendMessage(why);
   if (!sigilLine && L > unlockedLevel(leader)) return leader.sendMessage(`§c${levelName(L)} isn't unlocked for you yet.`);
@@ -1206,9 +1264,10 @@ async function start(leader, d, L, affixes, sigilLine) {
   const id = typeof idRaw === "number" ? idRaw : 1;
   world.setDynamicProperty(PROP_NEXT, id + 1);
   const seed = Math.floor(Math.random() * 2147483647);
-  const lay = layout(seed, L);
-  const s = scaleFor(L);
-  const size = lay.grid * CELL;
+  if (g && get("gauntletEnabled") !== true) return leader.sendMessage("§cGauntlets are disabled on this realm right now.");
+  const lay = layout(seed, L, g ? { rooms: get("gauntletRooms"), boonEvery: get("boonEvery"), maxSize: maxSizeAt(now, slot) } : { maxSize: maxSizeAt(now, slot) });
+  const s = g ? longScale(scaleFor(L), lay.n, L) : scaleFor(L);
+  const size = lay.grid * lay.cell;
   const r = rng(seed ^ 0x5bd1e995);
   const others = partyNear(leader);
   /** @type {Run} */
@@ -1230,7 +1289,7 @@ async function start(leader, d, L, affixes, sigilLine) {
     phase: "gathering",
     started: 0,
     deadline: 0,
-    limitMin: timeLimit(get("timeLimitMinutes"), lay.n, L),
+    limitMin: Math.round(timeLimit(get("timeLimitMinutes"), lay.n, L) * (g ? 1.15 : 1)),
     room: 1,
     roomActive: false,
     wave: 0,
@@ -1261,6 +1320,10 @@ async function start(leader, d, L, affixes, sigilLine) {
     timers: {},
     trapNext: 0,
     strays: new Map(),
+    long: !!g,
+    loadout: !!g?.loadout,
+    boons: new Map(),
+    finishCap: 0,
   };
   runs.set(slot, run);
   if (!sigilLine) {
@@ -1272,7 +1335,7 @@ async function start(leader, d, L, affixes, sigilLine) {
   try {
     const invite = others.filter((p) => p.isValid && !runOf(p.id));
     if (invite.length) leader.sendMessage(`§7Asking ${invite.map((p) => p.name).join(", ")}...`);
-    const answers = await Promise.all(invite.map((p) => ask(p, leader.name, d, L, affixes)));
+    const answers = await Promise.all(invite.map((p) => ask(p, leader.name, d, L, affixes, g)));
     if (runs.get(slot) !== run || run.phase !== "gathering") return; // ended meanwhile (an operator's reset)
     invite.forEach((p, i) => {
       if (answers[i] && p.isValid && !runOf(p.id) && run.members.size < get("maxParty")) run.members.set(p.id, { name: p.name, since: 0, away: 0 });
@@ -1366,6 +1429,9 @@ async function prepare(run) {
   const entry = run.lay.rooms[0];
   const spots = [[0, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   let k = 0;
+  // Fixed loadout: a sealed pocket in the box's corner (outside every room) where the stash carts are made.
+  const pocket = { x: run.o.x, y: run.o.y + 1, z: run.o.z };
+  if (run.loadout) fill(overworld(), pocket, { ...pocket, y: pocket.y + 1 }, "minecraft:air");
   for (const [pid, m] of [...run.members]) {
     const p = online(pid);
     if (!p || runOf(pid) !== run) {
@@ -1376,17 +1442,28 @@ async function prepare(run) {
     const loc = p.location;
     p.setDynamicProperty(PROP_RETURN, JSON.stringify({ d: p.dimension.id, x: loc.x, y: loc.y, z: loc.z, run: run.id }));
     m.since = system.currentTick + 20;
+    let kit = false;
+    if (run.loadout) {
+      kit = saveStash(p, overworld(), pocket);
+      p.sendMessage(kit ? "§6Fixed loadout: your own items are stored safely until you're back. Here's your kit." : "§eYour items couldn't be stored, so you keep your own gear for this run.");
+    }
     fade(p);
     const to = wmid(run, entry, { u: du, v: dv, y: 1 });
-    const look = wmid(run, entry, { u: 0, v: 6, y: 2 });
+    const out = entry.doors.find((dd) => dd.to === 1);
+    const [lu, lv] = out ? sidePoint(out.side, out.a ?? 0, entry.r) : [0, entry.r];
+    const look = wmid(run, entry, { u: lu, v: lv, y: 2 });
     system.runTimeout(() => {
       try {
-        if (p.isValid) p.teleport(to, { dimension: overworld(), facingLocation: look });
+        // Left meanwhile (sent back home, their own items given back): no teleport in, no kit.
+        if (!p.isValid || runOf(p.id) !== run) return;
+        p.teleport(to, { dimension: overworld(), facingLocation: look });
+        if (kit) giveKit(p, run.level);
       } catch (e) {
         console.warn(`[expedition] teleport in: ${e}`);
       }
     }, 10);
   }
+  if (run.loadout) fill(overworld(), pocket, { ...pocket, y: pocket.y + 1 }, "minecraft:deepslate");
   if (!run.members.size) {
     await endRun(run, "");
     return;
@@ -1425,6 +1502,7 @@ function giveBack(p) {
   const inv = p.getComponent("minecraft:inventory")?.container;
   let spilled = false;
   for (const it of items) {
+    if (isRunGear(it)) continue; // kit and boon gear stays in the dungeon
     try {
       const rest = inv ? inv.addItem(it) : it;
       if (rest) {
@@ -1436,6 +1514,62 @@ function giveBack(p) {
     }
   }
   p.sendMessage(`§aThe items you dropped in the dungeon are back with you.${spilled ? " Some are at your feet: your inventory is full." : ""}`);
+}
+
+/** Gives a player the treasure left in the chests (in their inventory, or at their feet). @param {Player} p */
+function giveSpoils(p) {
+  const items = spoils.get(p.id);
+  if (!items?.length) return;
+  spoils.delete(p.id);
+  const inv = p.getComponent("minecraft:inventory")?.container;
+  let spilled = false;
+  for (const it of items) {
+    if (isRunGear(it)) continue; // kit and boon gear stays in the dungeon
+    try {
+      const rest = inv ? inv.addItem(it) : it;
+      if (rest) {
+        p.dimension.spawnItem(rest, p.location);
+        spilled = true;
+      }
+    } catch (e) {
+      console.warn(`[expedition] spoils: ${e}`);
+    }
+  }
+  p.sendMessage(`§aThe treasure left in the chests came back with you.${spilled ? " Some is at your feet: your inventory is full." : ""}`);
+}
+
+/**
+ * Empties the treasure chests (and opened side caches) and shares what's left between these players, item stack by item stack.
+ * @param {Run} run @param {string[]} ids
+ */
+function packSpoils(run, ids) {
+  if (!ids.length) return;
+  /** @type {ItemStack[]} */
+  const items = [];
+  try {
+    for (const [i, rm] of run.lay.rooms.entries()) {
+      if (rm.kind !== "treasure" && rm.kind !== "cache") continue;
+      if (rm.kind === "cache" && !run.puz.get(i)?.solved) continue;
+      for (const c of rm.chests) {
+        const box = overworld().getBlock(wpos(run, rm, c.u, c.v, c.y))?.getComponent("minecraft:inventory")?.container;
+        if (!box) continue;
+        for (let k = 0; k < box.size; k++) {
+          const it = box.getItem(k);
+          if (!it) continue;
+          items.push(it);
+          box.setItem(k);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`[expedition] leftovers: ${e}`);
+  }
+  items.forEach((it, k) => {
+    const id = ids[k % ids.length];
+    const list = spoils.get(id) ?? [];
+    list.push(it);
+    spoils.set(id, list);
+  });
 }
 
 /** Where the player started their expedition, or undefined. @param {Player} p @returns {any} */
@@ -1450,9 +1584,11 @@ function returnSpot(p) {
 
 /** Takes away the shrine's effects. @param {Player} p */
 function dropBuffs(p) {
-  const list = buffs.get(p.id);
-  if (!list) return;
+  let list = buffs.get(p.id);
+  if (!list) list = readPlayer(p, PROP_BUFFS) ?? undefined; // after a restart: what the run gave them is saved on them
+  if (!Array.isArray(list)) return;
   buffs.delete(p.id);
+  writePlayer(p, PROP_BUFFS, undefined);
   for (const e of list) {
     try {
       p.removeEffect(e);
@@ -1478,7 +1614,28 @@ function teleportBack(p, ret) {
   else p.teleport(world.getDefaultSpawnLocation(), { dimension: overworld() });
   p.setDynamicProperty(PROP_RETURN, undefined);
   dropBuffs(p);
-  giveBack(p);
+  homecoming(p);
+}
+
+/**
+ * Back home: run gear taken away, stored items (Fixed loadout) given back into their own slots first, then
+ * what they dropped dying and the treasure left in the chests.
+ * @param {Player} p
+ */
+function homecoming(p) {
+  system.runTimeout(async () => {
+    try {
+      if (!p.isValid) return;
+      if (stashOf(p)) await restoreStash(p);
+      else if (stripRunGear(p)) p.sendMessage("§7The expedition gear stayed in the dungeon.");
+      if (!p.isValid) return;
+      giveBack(p);
+      giveSpoils(p);
+      stripRunGear(p); // kit gear that was dropped dying and given back
+    } catch (e) {
+      console.warn(`[expedition] homecoming: ${e}`);
+    }
+  }, 5);
 }
 
 /**
@@ -1502,7 +1659,14 @@ function sendBack(p, withFade = true) {
 
 /** A member is out: left, died or was sent back. Ends the run when nobody is left. @param {Run} run @param {string} id */
 function dropMember(run, id) {
+  if (run.phase === "finishing" && run.members.size === 1 && run.members.has(id)) packSpoils(run, [id]); // the last one out takes what's left
   if (!run.members.delete(id)) return;
+  // Their Wolf Pack wolves go too (tame wolves would follow them home).
+  try {
+    for (const e of overworld().getEntities({ tags: [PET_TAG, `${PET_TAG}_of:${id}`] })) e.remove();
+  } catch {
+    // nothing loaded
+  }
   if (!run.members.size && (run.phase === "active" || run.phase === "finishing")) {
     endRun(run, run.phase === "finishing" ? "" : "§cThe expedition failed: nobody is left in the dungeon.").catch((e) => console.warn(`[expedition] ${e}`));
   }
@@ -1510,7 +1674,9 @@ function dropMember(run, id) {
 
 /** Remembers a run that ended without a clear. @param {Run} run @param {string[]} names */
 function recordFail(run, names) {
+  /** @type {HistoryEntry} */
   const h = { d: run.dungeon.id, l: run.level, ok: false, t: Date.now() - run.started, n: names.join(", ") || run.leaderName, at: Date.now(), a: run.affixes };
+  if (run.long) h.g = run.lay.n;
   addHistory(h);
   for (const id of run.members.keys()) {
     const p = online(id);
@@ -1528,6 +1694,7 @@ async function endRun(run, why) {
   const wasActive = run.phase === "active";
   const wasBuilt = run.checked; // only a box found clean was ever touched, so only that one is filled in
   if (wasActive) recordFail(run, [...run.members.values()].map((m) => m.name));
+  if (run.phase === "finishing") packSpoils(run, [...run.members.keys()]);
   run.phase = "resetting";
   if (why) tell(run, why);
   for (const id of [...run.members.keys()]) {
@@ -1537,6 +1704,7 @@ async function endRun(run, why) {
   run.members.clear();
   for (const m of [...run.mobs, ...run.extra]) if (m.isValid) m.remove();
   if (run.bossId) world.getEntity(run.bossId)?.remove();
+  removePets(run);
   if (!wasBuilt) {
     if (wasBuilding) removeArea(run.slot);
     runs.delete(run.slot);
@@ -1554,6 +1722,15 @@ async function endRun(run, why) {
   runs.delete(run.slot);
   if (ok) writeJson(PROP_RUN + run.slot, undefined);
   else pending.set(run.slot, rec); // tried again by /realm:expedition_reset or after a restart
+}
+
+/** Removes a run's Wolf Pack wolves. @param {Run} run */
+function removePets(run) {
+  try {
+    for (const e of overworld().getEntities({ tags: [PET_TAG, `realm:exp_run:${run.id}`] })) e.remove();
+  } catch {
+    // nothing loaded
+  }
 }
 
 /** Opens a room's bars (or does nothing for a door without bars). @param {Run} run @param {number} i */
@@ -1736,7 +1913,7 @@ function spawnWave(run) {
 function spawnBoss(run) {
   const d = run.dungeon;
   const rm = run.lay.rooms[run.room];
-  const c = wmid(run, rm, { u: 0, v: 2, y: 1 });
+  const c = wmid(run, rm, rm.bossAt ?? { u: 0, v: 2, y: 1 });
   try {
     const boss = overworld().spawnEntity(/** @type {any} */ (d.boss.mob), c);
     boss.nameTag = `§c${d.boss.name}`;
@@ -1790,6 +1967,7 @@ function finish(run) {
   run.phase = "finishing";
   run.clearMs = Date.now() - run.started;
   run.finishAt = system.currentTick + get("exitSeconds") * 20;
+  run.finishCap = run.finishAt + 2400; // opening a chest near the end adds time, up to 2 minutes more
   for (const m of [...run.mobs, ...run.extra]) if (m.isValid) m.remove();
   run.mobs = [];
   run.extra = [];
@@ -1816,7 +1994,15 @@ function finish(run) {
   const record = rank === 0 ? " §6A new record!" : rank > 0 ? ` §7#${rank + 1} on the leaderboard.` : "";
   /** @type {HistoryEntry} */
   const h = { d: d.id, l: L, ok: true, t: run.clearMs, n: entry.n, at: Date.now(), a: run.affixes };
+  if (run.long) h.g = run.lay.n;
   addHistory(h);
+  if (run.long) {
+    /** @type {GauntletEntry[]} */
+    const board = readJson(PROP_GAUNTLETS) ?? [];
+    board.push({ d: d.id, l: L, t: run.clearMs, n: entry.n, at: Date.now(), r: run.lay.n, ...(run.loadout ? { k: 1 } : {}) });
+    board.sort((a, b) => b.l - a.l || a.t - b.t);
+    writeJson(PROP_GAUNTLETS, board.slice(0, Math.max(1, CONFIG.leaderboardSize)));
+  }
   /** @type {TierEntry[]} */
   let tiers = readJson(PROP_TIERS) ?? [];
   const blessed = run.affixes.includes("blessed");
@@ -1824,9 +2010,10 @@ function finish(run) {
   for (const [id] of run.members) {
     const p = online(id);
     if (!p) continue;
-    p.onScreenDisplay.setTitle("§6Expedition complete", { subtitle: `§f${d.name} ${levelName(L)} cleared in ${clock(run.clearMs)}`, fadeInDuration: 10, stayDuration: 80, fadeOutDuration: 20 });
+    p.onScreenDisplay.setTitle(run.long ? "§6Gauntlet complete" : "§6Expedition complete", { subtitle: `§f${d.name} ${levelName(L)} cleared in ${clock(run.clearMs)}`, fadeInDuration: 10, stayDuration: 80, fadeOutDuration: 20 });
     p.playSound("random.totem", { volume: 0.6 });
-    payCrowns(p, crowns, `Expedition: ${d.name} ${levelShort(L)}`);
+    const mult = (hasFlag(run, id, "greed") ? 1.5 : 1) * (hasFlag(run, id, "midas") ? 2 : 1);
+    payCrowns(p, Math.round(crowns * mult), `${run.long ? "Gauntlet" : "Expedition"}: ${d.name} ${levelShort(L)}`);
     send("realm:quest_done", { player: p.id, pack: "expedition_bp", id: `expedition_${d.id}`, label: `Expedition: ${d.name} cleared`, kind: "expedition", guild: "wardens" });
     if (CONFIG.rep > 0) send("realm:rep_add", { player: p.id, guild: "wardens", amount: Math.round(CONFIG.rep * (1 + 0.1 * s.t)), reason: `Expedition: ${d.name}` });
     send("realm:journal", { player: p.id, page: "places", entry: `expedition_${d.id}`, label: `Expedition: ${d.name}` });
@@ -1850,7 +2037,7 @@ function finish(run) {
   }
   tiers = tiers.sort((a, b) => b.l - a.l || a.at - b.at).slice(0, Math.max(1, CONFIG.tierBoardSize));
   writeJson(PROP_TIERS, tiers);
-  tell(run, `§a${d.name} cleared in ${clock(run.clearMs)}!${record} §eThe treasure room is open: you have ${get("exitSeconds")} seconds before you're taken back.`);
+  tell(run, `§a${d.name} cleared in ${clock(run.clearMs)}!${record} §eThe treasure room is open: you have ${get("exitSeconds")} seconds before you're taken back (opening a chest near the end gives you more). Press the gold button there to leave sooner; treasure left in the chests comes back with you.`);
   world.sendMessage(`§6${names.join(", ")} cleared the ${dungeonLabel(d, L)} in ${clock(run.clearMs)}.`);
   saveRun(run);
 }
@@ -2063,7 +2250,16 @@ function reached(run, i) {
 function onButton(run, e, who) {
   const i = e.room;
   const rm = run.lay.rooms[i];
+  if (rm.kind === "treasure") {
+    // The gold button: leave now, with what you carry (what's left in the chests goes to whoever stays, or the last one out).
+    if (run.phase === "finishing" && who && run.members.has(who.id)) leave(who);
+    return;
+  }
   if (!reached(run, i) || run.phase !== "active") return;
+  if (rm.kind === "boon") {
+    if (who) offerBoon(run, who).catch((err) => console.warn(`[expedition] boon: ${err}`));
+    return;
+  }
   if (rm.kind === "shrine") return shrineChoice(run, i, e.i, who);
   const pz = rm.puzzle;
   const st = puzState(run, i);
@@ -2210,7 +2406,7 @@ function shrineChoice(run, i, choice, who) {
           const list = buffs.get(p.id) ?? [];
           list.push(b.effect);
           if (b.id === "haste") list.push("haste");
-          buffs.set(p.id, list);
+          setBuffs(p, list);
         } catch {
           // can't
         }
@@ -2226,6 +2422,138 @@ function shrineChoice(run, i, choice, who) {
     // Mobs already in the dungeon don't change; the next waves do.
   } else tell(run, `§7${name} passed the shrine by.`);
   clearRoom(run);
+}
+
+// ---------------------------------------------------------------------------
+// Gauntlet sanctuaries and boons
+// ---------------------------------------------------------------------------
+
+/** Players looking at a boon form right now. @type {Set<string>} */
+const choosing = new Set();
+
+/**
+ * Shows a player their three boons (the same three until they pick one) in the sanctuary they're in.
+ * @param {Run} run @param {Player} p
+ */
+async function offerBoon(run, p) {
+  const sc = run.sanct;
+  if (!sc || run.room !== sc.i || !run.roomActive || !run.members.has(p.id)) return;
+  if (sc.picked.has(p.id)) return actionbar(p, "§7You already chose your boon here.");
+  if (choosing.has(p.id)) return;
+  sc.offered.add(p.id);
+  let offer = sc.offers.get(p.id);
+  if (!offer) {
+    offer = rollBoons(run.boons.get(p.id) ?? [], Math.random).map((b) => b.id);
+    sc.offers.set(p.id, offer);
+  }
+  const have = (run.boons.get(p.id) ?? []).map((id) => boonOf(id)?.name).filter((x) => !!x);
+  const form = new ActionFormData()
+    .title("§lChoose a boon")
+    .body(`Pick one boon for the rest of this Gauntlet.${have.length ? `\n\nYour boons so far: ${have.join(", ")}` : ""}`);
+  for (const id of offer) {
+    const b = boonOf(id);
+    form.button(b ? `${RARITY[b.rarity]}${b.name}§r §8(${b.rarity})\n§8${b.desc}` : id);
+  }
+  choosing.add(p.id);
+  let res;
+  try {
+    res = await show(p, form);
+  } finally {
+    choosing.delete(p.id);
+  }
+  if (run.sanct !== sc || sc.picked.has(p.id) || !run.members.has(p.id) || !p.isValid) return;
+  if (!res || res.canceled || res.selection === undefined || !offer[res.selection]) {
+    p.sendMessage("§7Press the button on the altar (or open /realm:expedition) to choose your boon.");
+    return;
+  }
+  sc.picked.add(p.id);
+  if (!sc.firstAt) sc.firstAt = system.currentTick;
+  takeBoon(run, p, offer[res.selection]);
+  if ([...run.members.keys()].every((id) => sc.picked.has(id))) {
+    tell(run, "§aEveryone has chosen. The bars rise!");
+    clearRoom(run);
+  }
+}
+
+/** Gives a player a boon: its effects for the rest of the run, its items, its wolves. @param {Run} run @param {Player} p @param {string} id */
+function takeBoon(run, p, id) {
+  const b = boonOf(id);
+  if (!b) return;
+  const list = run.boons.get(p.id) ?? [];
+  list.push(id);
+  run.boons.set(p.id, list);
+  boonBuffs(run, p);
+  const inv = p.getComponent("minecraft:inventory")?.container;
+  for (const it of b.items?.(run.level) ?? []) {
+    try {
+      const rest = inv ? inv.addItem(it) : it;
+      if (rest) p.dimension.spawnItem(rest, p.location);
+    } catch (e) {
+      console.warn(`[expedition] boon item: ${e}`);
+    }
+  }
+  if (b.flag === "wolves") {
+    for (let k = 0; k < 2; k++) {
+      try {
+        const w = overworld().spawnEntity("minecraft:wolf", { x: p.location.x + (k ? 1 : -1), y: p.location.y, z: p.location.z });
+        w.getComponent("minecraft:tameable")?.tame(p);
+        w.addTag(PET_TAG);
+        w.addTag(`realm:exp_run:${run.id}`);
+        w.addTag(`${PET_TAG}_of:${p.id}`);
+        w.nameTag = `${p.name}'s wolf`;
+        w.addEffect("health_boost", LONG, { amplifier: 2 + Math.floor(run.s.t / 5), showParticles: false });
+        w.addEffect("resistance", LONG, { amplifier: 0, showParticles: false });
+        w.addEffect("fire_resistance", LONG, { amplifier: 0, showParticles: false });
+        system.runTimeout(() => {
+          try {
+            if (w.isValid) w.getComponent("minecraft:health")?.resetToMaxValue();
+          } catch {
+            // gone
+          }
+        }, 2);
+      } catch (e) {
+        console.warn(`[expedition] wolf: ${e}`);
+      }
+    }
+  }
+  tell(run, `§a${p.name} chose ${RARITY[b.rarity]}${b.name}§a: ${b.desc.charAt(0).toLowerCase()}${b.desc.slice(1)}.`);
+  p.playSound("random.levelup");
+}
+
+/** (Re)applies a player's boon effects, strongest of each, until the run's time is up. @param {Run} run @param {Player} p */
+function boonBuffs(run, p) {
+  const ticks = Math.max(200, Math.floor((run.deadline - Date.now()) / 50));
+  const mine = buffs.get(p.id) ?? [];
+  for (const [effect, amp] of boonEffects(run.boons.get(p.id) ?? [])) {
+    try {
+      const now = p.getEffect(effect);
+      if (now && now.amplifier > amp) continue;
+      p.addEffect(effect, ticks, { amplifier: amp, showParticles: false });
+      if (!mine.includes(effect)) mine.push(effect);
+    } catch {
+      // can't
+    }
+  }
+  setBuffs(p, mine);
+}
+
+/** Remembers the effects a run gave a player (also on the player, for a restart mid-run). @param {Player} p @param {string[]} list */
+function setBuffs(p, list) {
+  buffs.set(p.id, list);
+  writePlayer(p, PROP_BUFFS, list);
+}
+
+/** A boon's flag for a player. @param {Run} run @param {string} id @param {string} flag */
+const hasFlag = (run, id, flag) => (run.boons.get(id) ?? []).some((b) => boonOf(b)?.flag === flag);
+
+/** @param {Player} p @param {number} amount */
+function heal(p, amount) {
+  try {
+    const hp = p.getComponent("minecraft:health");
+    if (hp && hp.currentValue > 0) hp.setCurrentValue(Math.min(hp.effectiveMax, hp.currentValue + amount));
+  } catch {
+    // gone
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2299,7 +2627,7 @@ function tickAffixes(run, here) {
         for (const p of here) if (Math.hypot(p.location.x - hz.x, p.location.z - hz.z) < hz.r && Math.abs(p.location.y - hz.y) < 3) p.applyDamage(5 + Math.floor(t / 3), { cause: EntityDamageCause.lightning });
       }
     } else if (hz.kind === "beam") {
-      for (let k = -R; k <= R; k++) {
+      for (let k = -rm.r; k <= rm.r; k++) {
         const x = hz.ax === "x" ? c.x + k + 0.5 : hz.x;
         const z = hz.ax === "x" ? hz.z : c.z + k + 0.5;
         particle(warn ? "minecraft:blue_flame_particle" : "minecraft:dragon_breath_trail", { x, y: hz.y + 0.6, z });
@@ -2354,16 +2682,30 @@ function tickTraps(run, here) {
   const t = run.s.t;
   if (now >= run.trapNext) {
     run.trapNext = now + Math.max(20, 40 - t);
-    const patches = 2 + Math.floor(t / 7);
+    const patches = 2 + Math.floor(t / 7) + (rm.r >= 9 ? 1 : 0);
+    const lane = rm.lane ?? [];
     for (let k = 0; k < patches; k++) {
-      const p = wmid(run, rm, { u: Math.floor(Math.random() * 13) - 6, v: Math.floor(Math.random() * 11) - 5, y: 1 });
+      // On the way through (near someone on it, or anywhere along it), so the flames can't be walked around.
+      let cell;
+      if (lane.length > 6 && here.length && Math.random() < 0.5) {
+        const who = here[Math.floor(Math.random() * here.length)];
+        const c = roomCenter(run, rm);
+        const fr = frame(rm.back);
+        const dx = who.location.x - (c.x + 0.5);
+        const dz = who.location.z - (c.z + 0.5);
+        const u = Math.round(dx * fr.across.x + dz * fr.across.z);
+        const v = Math.round(dx * fr.fwd.x + dz * fr.fwd.z);
+        const ahead = lane.map((q, idx) => ({ idx, d: Math.abs(q[0] - u) + Math.abs(q[1] - v) })).sort((a, b) => a.d - b.d)[0];
+        cell = lane[Math.min(lane.length - 2, (ahead?.idx ?? 0) + 2 + Math.floor(Math.random() * 3))];
+      } else if (lane.length > 4) cell = lane[2 + Math.floor(Math.random() * (lane.length - 4))];
+      const p = wmid(run, rm, cell ? { u: cell[0], v: cell[1], y: 1 } : { u: Math.floor(Math.random() * (2 * rm.r - 1)) - rm.r + 1, v: Math.floor(Math.random() * (2 * rm.r - 3)) - rm.r + 2, y: 1 });
       run.hazards.push({ kind: "trap", ...p, r: 1.6, at: now + 30, until: now + 30 });
     }
-    if (Math.random() < 0.6) {
-      const side = Math.random() < 0.5 ? "left" : "right";
-      const v = Math.floor(Math.random() * 9) - 4;
-      const from = wmid(run, rm, { u: side === "left" ? -R : R, v, y: 2 });
-      run.hazards.push({ kind: side === "left" ? "volleyL" : "volleyR", ...from, r: 0, at: now + 15, until: now + 15 });
+    const slits = rm.volleys ?? [];
+    if (Math.random() < 0.6 && slits.length) {
+      const sl = slits[Math.floor(Math.random() * slits.length)];
+      const from = wmid(run, rm, { u: sl.u, v: sl.v, y: 2 });
+      run.hazards.push({ kind: "volley", ...from, r: 0, at: now + 15, until: now + 15, du: sl.du, dv: sl.dv });
     }
   }
   for (const hz of [...run.hazards]) {
@@ -2380,16 +2722,19 @@ function tickTraps(run, here) {
         }
         run.hazards.splice(run.hazards.indexOf(hz), 1);
       }
-    } else if (hz.kind === "volleyL" || hz.kind === "volleyR") {
+    } else if (hz.kind === "volley") {
       if (now < hz.at) {
         particle("minecraft:critical_hit_emitter", hz);
         continue;
       }
-      const dir = faceDir(frame(rm.back), hz.kind === "volleyL" ? "right" : "left");
+      const fr = frame(rm.back);
+      const du = hz.du ?? 1;
+      const dv = hz.dv ?? 0;
+      const dir = { x: fr.across.x * du + fr.fwd.x * dv, z: fr.across.z * du + fr.fwd.z * dv };
+      const side = { x: -dir.z, z: dir.x };
       for (let k = -1; k <= 1; k++) {
         try {
-          const fdir = faceDir(frame(rm.back), "fwd");
-          const a = overworld().spawnEntity("minecraft:arrow", { x: hz.x + dir.x * 0.6 + fdir.x * k * 1.5, y: hz.y + 0.2, z: hz.z + dir.z * 0.6 + fdir.z * k * 1.5 });
+          const a = overworld().spawnEntity("minecraft:arrow", { x: hz.x + dir.x * 0.6 + side.x * k * 0.9, y: hz.y + 0.2, z: hz.z + dir.z * 0.6 + side.z * k * 0.9 });
           a.applyImpulse({ x: dir.x * 1.6, y: 0.05, z: dir.z * 1.6 });
         } catch {
           // can't
@@ -2418,7 +2763,7 @@ function alive(e) {
 
 /** @param {Run} run */
 function objective(run) {
-  if (run.phase === "finishing") return `§6Treasure! §fLeaving in ${Math.max(0, Math.ceil((run.finishAt - system.currentTick) / 20))}s`;
+  if (run.phase === "finishing") return `§6Treasure! §fLeaving in ${Math.max(0, Math.ceil((run.finishAt - system.currentTick) / 20))}s §7(gold button: leave now)`;
   const rm = run.lay.rooms[run.room];
   const step = `Room ${run.room + 1}/${run.lay.n}`;
   if (!run.roomActive) return `${step}: go on to the next room`;
@@ -2440,6 +2785,8 @@ function objective(run) {
       return `${step}: climb to the exit high up`;
     case "shrine":
       return `${step}: choose at the shrine`;
+    case "boon":
+      return `${step}: choose a boon at the altar (${run.sanct?.picked.size ?? 0}/${run.members.size} chose)`;
     case "boss":
       return `${step}: defeat ${run.dungeon.boss.name}`;
   }
@@ -2541,6 +2888,10 @@ function tickRun(run, players) {
     } else if (rm.kind === "shaft") {
       run.nextWaveAt = now + 60;
       tell(run, `§eA vertical shaft! The way on is ${rm.ey} blocks up. ${run.s.ladders ? "Climb the ladder or the ledges" : "Jump up the ledges"}, build your way up with your own blocks${run.s.build && get("allowBuilding") === true ? "" : " (not allowed here)"}, or fly with an elytra.`);
+    } else if (rm.kind === "boon") {
+      run.sanct = { i: run.room, offered: new Set(), picked: new Set(), offers: new Map(), firstAt: 0 };
+      tell(run, "§dA sanctuary! Each of you may choose one of three boons for the rest of the Gauntlet. Press the button on the altar if the choice closed.");
+      sound(run, "random.orb", 0.6);
     } else if (rm.kind === "shrine") {
       const b = run.shrine.bless;
       const cu = run.shrine.curse ? affixOf(run.shrine.curse) : undefined;
@@ -2567,6 +2918,16 @@ function tickRun(run, players) {
       const st = puzState(run, run.room);
       if (rm.puzzle?.type === "levers" && !st.solved && beat % 2 === 0 && leversSolved(run, run.room)) solved(run, run.room);
       if (st.solved) clearRoom(run);
+    } else if (rm.kind === "boon") {
+      const sc = run.sanct;
+      if (sc) {
+        for (const p of here) if (p && !sc.offered.has(p.id)) offerBoon(run, p).catch((e) => console.warn(`[expedition] boon: ${e}`));
+        if ([...run.members.keys()].every((id) => sc.picked.has(id))) clearRoom(run);
+        else if (sc.firstAt && now > sc.firstAt + 1200) {
+          tell(run, "§7The sanctuary's light fades. Onward!");
+          clearRoom(run);
+        }
+      }
     } else if (rm.kind === "trap") {
       tickTraps(run, here.map((p) => /** @type {Player} */ (p)));
       if (here.some((p) => inZone(run, rm, /** @type {Player} */ (p)))) {
@@ -2596,7 +2957,7 @@ function tickRun(run, players) {
         run.bossGone = boss && alive(boss) ? 0 : run.bossGone + LOOP_TICKS;
         if (run.bossGone >= 60) finish(run); // gone without a death event (removed by a command): still a win
         else if (boss && alive(boss)) {
-          bringBack(run, rm, [boss], /** @type {Player[]} */ (all), { u: 0, v: 2, y: 1 });
+          bringBack(run, rm, [boss], /** @type {Player[]} */ (all), rm.bossAt ?? { u: 0, v: 2, y: 1 });
           const hp = boss.getComponent("minecraft:health");
           if (hp && !run.bossHalf && run.level >= 1 && hp.currentValue < hp.effectiveMax / 2) {
             run.bossHalf = true;
@@ -2655,6 +3016,7 @@ function tickRun(run, players) {
 
 /** @param {Run} run */
 function clearRoom(run) {
+  run.sanct = undefined;
   openDoor(run, run.room);
   run.room++;
   run.roomActive = false;
@@ -2785,7 +3147,7 @@ function runOfMob(e) {
   return undefined;
 }
 
-world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   try {
     const id = deadEntity.id;
     for (const run of runs.values()) {
@@ -2833,6 +3195,8 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
     const run = runOfMob(deadEntity);
     if (!run || run.phase !== "active") return;
     const at = deadEntity.location;
+    const killer = damageSource.damagingEntity;
+    if (killer instanceof Player && run.members.has(killer.id) && hasFlag(run, killer.id, "bloodthirst")) heal(killer, 3);
     if ((tags.includes(CHAMP_TAG) || tags.includes(ELITE_CHAMP)) && run.s.t >= 1 && Math.random() < get("sigilChanceChampion")) dropSigil(run, at, "The champion");
     if (run.affixes.includes("explosive")) {
       particle("minecraft:basic_flame_particle", at);
@@ -2872,6 +3236,7 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource, damage }) =>
     if (!(hurtEntity instanceof Player) && hurtEntity.hasTag(MOB_TAG)) {
       const run = runOfMob(hurtEntity);
       if (!run) return;
+      if (src instanceof Player && run.members.has(src.id) && damageSource.cause === EntityDamageCause.entityAttack && hasFlag(run, src.id, "lifesteal")) heal(src, damage * 0.2);
       if (src instanceof Player && run.members.has(src.id) && run.affixes.includes("thorned") && damageSource.cause === EntityDamageCause.entityAttack) {
         src.applyDamage(1 + (run.s.t >= 10 ? 1 : 0), { cause: EntityDamageCause.thorns });
       }
@@ -2893,10 +3258,30 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource, damage }) =>
   }
 });
 
+// Opening a treasure chest near the end of the time to collect it gives 20 seconds more (up to 2 minutes more in all).
+world.afterEvents.playerInteractWithBlock.subscribe(({ player, block }) => {
+  if (!runs.size || block.typeId !== B.chest) return;
+  try {
+    const run = runOf(player.id);
+    if (!run || run.phase !== "finishing" || !inBox(run.o, run.size, run.top, block.location)) return;
+    const now = system.currentTick;
+    if (run.finishAt - now < 400 && run.finishAt < run.finishCap) {
+      run.finishAt = Math.min(run.finishCap, now + 400);
+      actionbar(player, "§7More time to sort your treasure.");
+    }
+  } catch (e) {
+    console.warn(`[expedition] chest: ${e}`);
+  }
+});
+
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
   try {
     const raw = player.getDynamicProperty(PROP_RETURN);
-    if (typeof raw !== "string") return;
+    if (typeof raw !== "string") {
+      // Back home, but stored items (Fixed loadout) still to give back: the last try didn't finish.
+      if ((stashOf(player) || dropped.has(player.id) || spoils.has(player.id)) && !runOf(player.id)) homecoming(player);
+      return;
+    }
     if (runOf(player.id)) return; // still in a run (teleporting in)
     // Respawned after dying in a dungeon, or rejoined after leaving the game mid-run or after a restart.
     system.run(() => {
@@ -2904,6 +3289,19 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
     });
   } catch (e) {
     console.warn(`[expedition] spawn: ${e}`);
+  }
+});
+
+// A Wolf Pack wolf that followed its owner out of a run and loads again later (an unloaded chunk then) goes away.
+world.afterEvents.entityLoad.subscribe(({ entity }) => {
+  try {
+    if (entity.typeId !== "minecraft:wolf" || !entity.hasTag(PET_TAG)) return;
+    const tag = entity.getTags().find((t) => t.startsWith("realm:exp_run:"));
+    const run = [...runs.values()].find((r) => tag === `realm:exp_run:${r.id}`);
+    const owner = entity.getTags().find((t) => t.startsWith(`${PET_TAG}_of:`))?.slice(`${PET_TAG}_of:`.length);
+    if (!run || (owner && !run.members.has(owner))) entity.remove();
+  } catch {
+    // gone
   }
 });
 
@@ -3046,6 +3444,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   system.runTimeout(async () => {
     try {
       for (const e of overworld().getEntities({ tags: [MOB_TAG] })) e.remove();
+      for (const e of overworld().getEntities({ tags: [PET_TAG] })) e.remove();
     } catch {
       // nothing loaded
     }
@@ -3074,10 +3473,19 @@ async function runMenu(player, run) {
     run.phase === "active" ? `Time: ${clock(Date.now() - run.started)} of ${run.limitMin}:00\n${objective(run)}` : run.phase === "finishing" ? `Cleared in ${clock(run.clearMs)}! ${objective(run)}` : "Getting ready...",
     run.affixes.length ? `Affixes:\n${run.affixes.map((a) => `${affixOf(a)?.color}${affixOf(a)?.name}§r: ${affixOf(a)?.desc}`).join("\n")}` : "No affixes.",
     `Party: ${names}`,
-  ].join("\n\n");
-  const res = await show(player, new ActionFormData().title("§lExpedition").body(body).button("Leave the expedition").button("Close"));
-  if (!res || res.canceled || res.selection !== 0) return;
-  leave(player);
+    run.long ? `Your boons: ${(run.boons.get(player.id) ?? []).map((id) => boonOf(id)?.name ?? id).join(", ") || "none yet"}` : "",
+  ]
+    .filter((x) => x)
+    .join("\n\n");
+  const pick = !!run.sanct && run.room === run.sanct.i && !run.sanct.picked.has(player.id);
+  const form = new ActionFormData().title(run.long ? "§lGauntlet" : "§lExpedition").body(body);
+  if (pick) form.button("§dChoose your boon");
+  form.button("Leave the expedition").button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined) return;
+  const sel = res.selection - (pick ? 1 : 0);
+  if (sel === -1) return offerBoon(run, player);
+  if (sel === 0) leave(player);
 }
 
 /** @param {Player} player */
@@ -3115,16 +3523,24 @@ function rolled(p, L) {
   return fresh;
 }
 
-/** What a run at a level is like, for the preview. @param {Dungeon} d @param {number} L @param {string[]} affixes */
-function describe(d, L, affixes) {
-  const s = scaleFor(L);
-  const lo = timeLimit(get("timeLimitMinutes"), s.roomsMin, L);
-  const hi = timeLimit(get("timeLimitMinutes"), s.roomsMax, L);
+/**
+ * What a run at a level is like, for the preview.
+ * @param {Dungeon} d @param {number} L @param {string[]} affixes @param {{ loadout: boolean }} [g] a Gauntlet
+ */
+function describe(d, L, affixes, g) {
+  const rooms = get("gauntletRooms");
+  const s = g ? longScale(scaleFor(L), rooms, L) : scaleFor(L);
+  const lo = g ? Math.round(timeLimit(get("timeLimitMinutes"), rooms, L) * 1.15) : timeLimit(get("timeLimitMinutes"), s.roomsMin, L);
+  const hi = g ? lo : timeLimit(get("timeLimitMinutes"), s.roomsMax, L);
   const blessed = affixes.includes("blessed");
   const lines = [
-    `§e${dungeonLabel(d, L)}§r`,
+    `§e${g ? "Gauntlet: " : ""}${dungeonLabel(d, L)}§r`,
     d.lore ? `§o§7${d.lore}§r` : "",
-    `${s.roomsMin} to ${s.roomsMax} rooms, ${lo === hi ? lo : `${lo} to ${hi}`} minutes. ${s.waves} waves a fight, about ${s.mobs + Math.floor(s.t / 6)} to ${s.mobs + 1 + Math.floor(s.t / 6)} monsters each${s.elites ? `, ${s.elites} elite` : ""}${s.champChance ? `, ${Math.round(s.champChance * 100)}% chance of a champion` : ""}.`,
+    g
+      ? `§6A long run:§r ${rooms} rooms with a sanctuary after every ${get("boonEvery")}, where each of you picks one of three boons (effects, gear, wolves, more Crowns...). One more wave and monster each fight, tougher champions and boss; more Crowns and treasure.`
+      : "",
+    g ? `§6Fixed loadout: ${g.loadout ? "§aon" : "§7off"}§r. ${g.loadout ? "Your own items are stored safely while you run with a starter kit, and given back exactly when you return." : "You bring your own gear."}` : "",
+    `${g ? rooms : `${s.roomsMin} to ${s.roomsMax}`} rooms, ${lo === hi ? lo : `${lo} to ${hi}`} minutes. ${s.waves} waves a fight, about ${s.mobs + Math.floor(s.t / 6)} to ${s.mobs + 1 + Math.floor(s.t / 6)} monsters each${s.elites ? `, ${s.elites} elite` : ""}${s.champChance ? `, ${Math.round(s.champChance * 100)}% chance of a champion` : ""}.`,
     s.t >= 1
       ? `Monsters: ${[s.healthBoost >= 0 ? `+${(s.healthBoost + 1) * 4} health` : "", s.resistance >= 0 ? `Resistance ${s.resistance + 1}` : "", s.strength >= 0 ? `Strength ${s.strength + 1}` : "", s.speed >= 0 ? `Speed ${s.speed + 1}` : "", s.armor ? `${ARMOR[s.armor]} armor` : ""].filter((x) => x).join(", ")}.`
       : "",
@@ -3136,22 +3552,32 @@ function describe(d, L, affixes) {
 }
 
 /**
- * The last step before a run: what it's like, Start, Reroll (Nightmare, without a sigil), Back.
+ * The last step before a run: what it's like, Start, Reroll (Nightmare, without a sigil), Back. A Gauntlet also
+ * has the Fixed loadout switch.
  * @param {Player} player @param {Dungeon} d @param {number} L @param {string[]} [fixed] a sigil's affixes @param {string} [sigilLine]
+ * @param {boolean} [long] a Gauntlet
  */
-async function preview(player, d, L, fixed, sigilLine) {
+async function preview(player, d, L, fixed, sigilLine, long = false) {
+  const g = long ? { loadout: get("loadoutDefault") === true } : undefined;
   for (;;) {
-    const why = cantStart(player);
+    const why = cantStart(player) || (g && get("gauntletEnabled") !== true ? "§cGauntlets are disabled on this realm right now." : "");
     const affixes = fixed ?? rolled(player, L);
     const cost = Math.max(0, Math.floor(Number(get("rerollCost")) || 0));
-    const form = new ActionFormData().title(sigilLine ? "§lNightmare Sigil" : `§l${d.name}`).body(`${describe(d, L, affixes)}${why ? `\n\n${why}` : ""}`);
+    const form = new ActionFormData().title(sigilLine ? "§lNightmare Sigil" : g ? `§lGauntlet: ${d.name}` : `§l${d.name}`).body(`${describe(d, L, affixes, g)}${why ? `\n\n${why}` : ""}`);
     /** @type {(() => Promise<boolean | void> | boolean | void)[]} */
     const actions = [];
     if (!why) {
-      form.button(sigilLine ? "Start (uses the sigil)" : "Start");
+      form.button(sigilLine ? "Start (uses the sigil)" : g ? "Start the Gauntlet" : "Start");
       actions.push(async () => {
-        await start(player, d, L, affixes, sigilLine);
+        await start(player, d, L, affixes, sigilLine, g ? { ...g } : undefined);
         return true;
+      });
+    }
+    if (g) {
+      form.button(`Fixed loadout: ${g.loadout ? "Enabled" : "Disabled"}\n§8Tap to switch`);
+      actions.push(() => {
+        g.loadout = !g.loadout;
+        return false;
       });
     }
     if (!sigilLine && L >= 3) {
@@ -3176,20 +3602,23 @@ async function preview(player, d, L, fixed, sigilLine) {
   }
 }
 
-/** Pick a dungeon, then a level. @param {Player} player */
-async function chooseDungeon(player) {
+/** Pick a dungeon, then a level. @param {Player} player @param {boolean} [long] a Gauntlet */
+async function chooseDungeon(player, long = false) {
   const why = cantStart(player);
   if (why) return player.sendMessage(why);
-  const form = new ActionFormData().title("§lPick a dungeon").body("Each dungeon has its own monsters, boss, look and treasure. Any of them can be played at any difficulty you've unlocked.");
+  if (long && get("gauntletEnabled") !== true) return player.sendMessage("§cGauntlets are disabled on this realm right now.");
+  const form = new ActionFormData()
+    .title(long ? "§lGauntlet: pick a dungeon" : "§lPick a dungeon")
+    .body(`${long ? `A Gauntlet is a long run: ${get("gauntletRooms")} rooms, a boon every ${get("boonEvery")}, harder fights and bigger rewards. ` : ""}Each dungeon has its own monsters, boss, look and treasure. Any of them can be played at any difficulty you've unlocked.`);
   for (const d of CONFIG.dungeons) form.button(`${d.name}\n§8${d.mobs.slice(0, 3).map((m) => prettyId(typeof m === "string" ? m : m.id)).join(", ")}`);
   form.button("Back");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || res.selection >= CONFIG.dungeons.length) return;
-  await chooseLevel(player, CONFIG.dungeons[res.selection]);
+  await chooseLevel(player, CONFIG.dungeons[res.selection], long);
 }
 
-/** @param {Player} player @param {Dungeon} d */
-async function chooseLevel(player, d) {
+/** @param {Player} player @param {Dungeon} d @param {boolean} [long] a Gauntlet */
+async function chooseLevel(player, d, long = false) {
   const top = unlockedLevel(player);
   const best = bestFor(d);
   const next = top < topLvl() ? `\n\nClear ${levelName(top)} to unlock ${levelName(top + 1)}.` : "";
@@ -3199,13 +3628,13 @@ async function chooseLevel(player, d) {
   for (let L = 0; L <= top; L++) {
     const s = scaleFor(L);
     const b = best[levelKey(L)]?.[0];
-    form.button(`${L >= 3 ? "§5" : ""}${levelName(L)}§r\n§8${s.roomsMin}-${s.roomsMax} rooms${s.affixes ? `, ${s.affixes} affix${s.affixes > 1 ? "es" : ""}` : ""}${b ? `, best ${clock(b.t)}` : ""}`);
+    form.button(`${L >= 3 ? "§5" : ""}${levelName(L)}§r\n§8${long ? get("gauntletRooms") : `${s.roomsMin}-${s.roomsMax}`} rooms${s.affixes ? `, ${s.affixes} affix${s.affixes > 1 ? "es" : ""}` : ""}${b && !long ? `, best ${clock(b.t)}` : ""}`);
     levels.push(L);
   }
   form.button("Back");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || res.selection >= levels.length) return;
-  await preview(player, d, levels[res.selection]);
+  await preview(player, d, levels[res.selection], undefined, undefined, long);
 }
 
 /** @param {Player} player */
@@ -3227,6 +3656,7 @@ async function leaderboards(player) {
   for (const d of CONFIG.dungeons) form.button(`Fastest clears: ${d.name}`);
   form.button("Highest tiers");
   form.button("Recent runs");
+  form.button("Gauntlets");
   form.button("Back");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined) return;
@@ -3251,13 +3681,20 @@ async function leaderboards(player) {
     /** @type {HistoryEntry[]} */
     const hist = readJson(PROP_HISTORY) ?? [];
     await show(player, new ActionFormData().title("§lRecent runs").body(historyText(hist)).button("Close"));
+  } else if (res.selection === n + 2) {
+    /** @type {GauntletEntry[]} */
+    const board = readJson(PROP_GAUNTLETS) ?? [];
+    const body = board.length
+      ? board.map((e, i) => `${i + 1}. ${levelName(e.l)} ${dungeonById(e.d)?.name ?? e.d} in ${clock(e.t)}: ${e.n} §8(${e.r} rooms${e.k ? ", fixed loadout" : ""})§r`).join("\n")
+      : "§7Nobody has cleared a Gauntlet yet.";
+    await show(player, new ActionFormData().title("§lGauntlets").body(`The hardest Gauntlets cleared, then the fastest.\n\n${body}`).button("Close"));
   }
 }
 
 /** @param {HistoryEntry[]} hist */
 function historyText(hist) {
   if (!hist.length) return "§7No runs yet.";
-  return hist.map((h) => `${h.ok ? "§a" : "§c"}${h.ok ? "Cleared" : "Failed"}§r ${dungeonById(h.d)?.name ?? h.d} ${levelShort(h.l)} in ${clock(h.t)}: ${h.n}`).join("\n");
+  return hist.map((h) => `${h.ok ? "§a" : "§c"}${h.ok ? "Cleared" : "Failed"}§r ${h.g ? "§6Gauntlet§r " : ""}${dungeonById(h.d)?.name ?? h.d} ${levelShort(h.l)} in ${clock(h.t)}: ${h.n}`).join("\n");
 }
 
 /** @param {Player} player */
@@ -3291,6 +3728,10 @@ async function mainMenu(player) {
   const actions = [];
   form.button("Start an expedition\n§8Pick a dungeon and difficulty");
   actions.push(() => chooseDungeon(player));
+  if (get("gauntletEnabled") === true) {
+    form.button(`Start a Gauntlet\n§8${get("gauntletRooms")} rooms, a boon every ${get("boonEvery")}`);
+    actions.push(() => chooseDungeon(player, true));
+  }
   const sig = sigilsOf(player).reduce((n, x) => n + x.amount, 0);
   if (sig) {
     form.button(`Use a Nightmare Sigil\n§8You have ${sig}`);
@@ -3374,7 +3815,7 @@ function setSite(player, x, z) {
   const spawn = world.getDefaultSpawnLocation();
   const fromSpawn = Math.hypot(sx - spawn.x, sz - spawn.z);
   const avoid = CONFIG.avoidSpawn;
-  const half = Math.floor((MAX_GRID * CELL) / 2);
+  const half = Math.floor(MAX_SIZE / 2);
   if (fromSpawn < avoid + half) {
     player.sendMessage(`§cThat's only ${Math.round(fromSpawn)} blocks from world spawn. The site must be at least ${avoid + half} blocks away (avoidSpawn plus half the biggest dungeon), so it's never under the spawn town.`);
     return;
@@ -3382,7 +3823,7 @@ function setSite(player, x, z) {
   /** @type {string[]} */
   const notes = [];
   const slots = Math.max(1, Math.min(3, get("slots")));
-  const size = MAX_GRID * CELL;
+  const size = MAX_SIZE;
   const top = MAX_ROOM_H + 2;
   for (let slot = 0; slot < slots; slot++) {
     const o = originFor({ x: sx, z: sz }, slot, size);
@@ -3447,6 +3888,24 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       const player = originPlayer(origin);
       if (!player) return notPlayer;
       system.run(() => mainMenu(player).catch((e) => console.warn(`[expedition] ${e}`)));
+      return ok;
+    },
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:expedition_gauntlet",
+      description: "Start a Gauntlet: a long dungeon run with a boon to pick every few rooms (and an optional fixed loadout)",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = originPlayer(origin);
+      if (!player) return notPlayer;
+      system.run(() => {
+        const mine = runOf(player.id);
+        (mine ? runMenu(player, mine) : chooseDungeon(player, true)).catch((e) => console.warn(`[expedition] ${e}`));
+      });
       return ok;
     },
   );
@@ -3519,14 +3978,19 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
  * `realm:expedition_state` in parts of under 2000 characters: { part, parts, data }.
  * @param {string} message
  */
-function debugState(message) {
+function debugState(message, may = true) {
   const run = [...runs.values()][0];
   let want;
+  let skip = false;
   try {
-    want = JSON.parse(message || "{}")?.room;
+    const msg = JSON.parse(message || "{}");
+    want = msg?.room;
+    skip = msg?.skip === true && may;
   } catch {
     want = undefined;
   }
+  // Tests may skip the current room (a puzzle the harness can't solve): it counts as cleared.
+  if (skip && run?.phase === "active" && run.room < run.lay.n - 2) clearRoom(run);
   /** @type {Record<string, unknown>} */
   const out = { phase: run?.phase ?? "none", pending: pending.size };
   if (run) {
@@ -3548,10 +4012,18 @@ function debugState(message) {
       size: run.size,
       top: run.top,
       sides: run.lay.rooms.map((r, j) => [j, r.parent]).filter((x) => x[1] >= 0),
+      long: run.long,
+      loadout: run.loadout,
+      cell: run.lay.cell,
+      boons: Object.fromEntries(run.boons),
       rm: {
         i,
         kind: rm.kind,
         h: rm.h,
+        r: rm.r,
+        shape: rm.shape,
+        doors: rm.doors.map((dd) => [dd.side, dd.a ?? 0, dd.to, dd.y]),
+        lane: rm.lane?.length,
         ey: rm.ey,
         c: wmid(run, rm, { u: 0, v: 0, y: 1 }),
         fwd: fr.fwd,
@@ -3571,11 +4043,12 @@ function debugState(message) {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
+  ({ id, message, sourceEntity }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "expedition_bp");
     else if (id === "realm:expedition_debug") {
       try {
-        debugState(message);
+        // Skipping a room is for tests and operators only.
+        debugState(message, !(sourceEntity instanceof Player) || isOp(sourceEntity));
       } catch (e) {
         console.warn(`[expedition] debug: ${e}`);
       }

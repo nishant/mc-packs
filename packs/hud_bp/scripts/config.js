@@ -11,6 +11,13 @@ export const CONFIG = {
   /** Facing in 8 directions (N, NE, E...). false: 4 directions (N, E, S, W). */
   eightWay: true,
 
+  /**
+   * Where the HUD shows for players who haven't chosen in /realm:prefs: "hotbar" (the action bar above the
+   * hotbar) or one of the Side HUD boxes (Realm Resources) "right1".."right4", "left1".."left4" (top to bottom),
+   * which show at the same time as the other packs' boxes. Without Side HUD a box's text shows in the middle.
+   */
+  showAt: "hotbar",
+
   /** How often (ticks) the HUD updates. 10 = twice a second, the fastest it goes. Read when the world starts. */
   intervalTicks: 10,
 

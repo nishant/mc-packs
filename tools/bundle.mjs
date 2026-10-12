@@ -13,7 +13,8 @@
 //   - any other files (recipes, entities, textures, particles, fogs…) are copied as-is; two packs
 //     shipping the same path with different contents is an error, except the JSON files the game
 //     reads as one list (sounds.json, sound_definitions.json, *_texture.json, blocks.json…), whose
-//     entries are merged as long as no entry is defined twice differently
+//     entries are merged as long as no entry is defined twice differently, and language files
+//     (texts/*.lang), whose lines are put one pack after the other
 //   - @minecraft/* dependencies are merged to the highest version (same major)
 //   - the bundle's UUIDs are derived from --name, so rebuilding with a different
 //     selection updates the same pack on the Realm instead of adding a new one
@@ -152,6 +153,8 @@ if (namespaces.size > 1) {
 
 // ---------------------------------------------------------------------------
 
+/** Language files (texts/en_US.lang ...): merged by putting one pack's lines after the other's. */
+const LANG = /^texts\/[^/]+\.lang$/;
 /** JSON files the game reads as one merged list, so two packs may each add entries to them. */
 const MERGEABLE = /^(sounds\.json|sounds\/sound_definitions\.json|blocks\.json|biomes_client\.json|textures\/(item_texture|terrain_texture|flipbook_textures)\.json|texts\/languages\.json)$/;
 
@@ -218,6 +221,13 @@ for (const pack of selected) {
     const data = readFileSync(abs);
     const existing = files.get(out);
     if (existing && !existing.data.equals(data)) {
+      if (LANG.test(out)) {
+        // Language files are lines of key=value: two packs' lines simply follow each other.
+        const text = existing.data.toString("utf8").replace(/\n*$/, "\n");
+        const more = data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf ? data.subarray(3) : data; // no BOM mid-file
+        files.set(out, { data: Buffer.concat([Buffer.from(text), more]), from: `${existing.from} + ${folder}` });
+        continue;
+      }
       if (!MERGEABLE.test(out)) fail(`${out} exists in both ${existing.from} and ${folder}`);
       const merged = mergeJson(JSON.parse(existing.data.toString("utf8")), JSON.parse(data.toString("utf8")), `${out} (${existing.from} + ${folder})`);
       files.set(out, { data: Buffer.from(JSON.stringify(merged, null, 2) + "\n"), from: `${existing.from} + ${folder}` });

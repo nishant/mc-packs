@@ -13,6 +13,7 @@ const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Silly effects", help: "Silly enchants on gear play their effects" },
   { key: "maxPerItem", type: "int", scope: "world", label: "Silly enchants per item", min: 1, max: 5, step: 1 },
   { key: "hyperJumpCooldownSeconds", type: "int", scope: "world", label: "Hyper Jump cooldown (seconds)", min: 1, max: 30, step: 1 },
+  { key: "hyperJumpSoftLanding", type: "bool", scope: "world", label: "Hyper Jump soft landing", help: "A puff of slow falling just above the ground, so landings don't hurt" },
   { key: "effects", type: "bool", scope: "player", label: "My silly effects", help: "Your own silly enchants play (they stay on your gear either way)", default: true },
 ];
 

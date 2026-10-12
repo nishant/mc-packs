@@ -6,6 +6,20 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Platypus, Gauntlets and a Dangerous Deck
+
+New things to find, build and survive.
+
+- New animal: the platypus! Look along rivers and in swamps. It is peaceful, but hit it and it bites back with poison and a wobbly screen. About 1 in 200 is teal and wears a brown fedora. /realm:platypus helps you find them.
+- New: Easy Building. Run /realm:build, pick one of 22 shapes (walls, floors, towers, domes, roofs, stairs, bridges, huts...) and place a block to build it all at once. Patterns, mirrors and repeats too. Survival uses your blocks; /realm:build_undo gives them back.
+- Expeditions: bigger rooms in many shapes, the exit is always across the room, and trap halls wind past flames, arrows and pits. New Gauntlet: 14 rooms with a boon every 5, optional fixed loadout (your items come back exactly). 90 seconds at the treasure, a Leave now button, and leftover loot comes home with you.
+- The Deck of Many Things got dangerous: The Sky really drops you, and lightning, anvils, lit fuses and half-heart curses can kill. Effects last 15 minutes to an hour, and there are 32 new cards (operators can add 15 wild ones). The Champion card now always brings a champion you can see.
+- Treasure maps have new riddles (headings, compass steps, coordinate puzzles), each leading to a real landmark with a cairn, flag or standing stone. Warmer / Colder only works within 64 blocks.
+- Rainbows stay put in the sky and grow as you walk to them. A golden beam marks the pot of gold until someone finds it.
+- Several readouts now show at once in 8 side boxes (pick each one's box in /realm:prefs). Mob health can also float above the mob.
+- Hyper Jump boots launch you 30 to 50 blocks up, sometimes into orbit with the Realm Space Program. Bring Feather Falling. Silly enchants are louder and wackier.
+- Kitchen: crops harvested by tapping now give Starwright Flour, Harvest Saffron and Ember Truffle, and chat tells you when a window opens. Starwright Flour: 25% per ripe wheat for 15 minutes after an aurora or meteor.
+
 ## The Lantern and the Hollow
 
 The biggest update yet. Talk to the townsfolk: something is wrong with the sky.

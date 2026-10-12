@@ -679,14 +679,14 @@ export const PACKS = [
     "folder": "hud_bp",
     "topic": "hud",
     "name": "Coordinates HUD",
-    "summary": "Your own coordinates, the direction you're facing and the day and time, on the bar above the hotbar, for players who enable it. Handy for building, mapping and meeting up without opening a map.",
+    "summary": "Your own coordinates, the direction you're facing and the day and time, on the bar above the hotbar (or in a Side HUD box, if you prefer), for players who enable it. Handy for building, mapping and meeting up without opening a map.",
     "steps": [
       {
         "text": "Run §e/realm:hud§r. Above your hotbar you now see §eXYZ 120 64 -340  Facing NE  Day 12 at 6:30 AM§r, updated as you move. Only you see yours.",
         "ops": false
       },
       {
-        "text": "Run §e/realm:hud§r again to hide it. The choice is remembered. The same switch is §lCoordinates HUD above my hotbar§r in §e/realm:prefs§r.",
+        "text": "Run §e/realm:hud§r again to hide it. The choice is remembered. The same switch is §lCoordinates HUD§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
@@ -694,7 +694,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lCoordinates HUD§r disables it for the whole realm (for servers that play without coordinates), shows it to new players from the start, or switches the facing to 4 directions.",
+        "text": "Want it off the hotbar bar, where other packs' notes push it aside? Set §lWhere my HUD shows§r in §e/realm:prefs§r to one of the side boxes (§lRight 1§r to §lRight 4§r, §lLeft 1§r to §lLeft 4§r). Pick one no other pack of yours uses (Mob Health uses Right 1, the Elytra HUD Right 2, Warmer / Colder Right 3 and the story tracker Right 4 unless you changed them).",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lCoordinates HUD§r disables it for the whole realm (for servers that play without coordinates), shows it to new players from the start, switches the facing to 4 directions, or changes where it shows for players who haven't chosen.",
         "ops": true
       }
     ],
@@ -711,10 +715,14 @@ export const PACKS = [
     "folder": "mobhp_bp",
     "topic": "mobhp",
     "name": "Mob Health",
-    "summary": "Hit a mob and its name and health show in a small box on the right side of your screen (or in the middle, or above your hotbar, if you prefer), so you know how close it is to going down.",
+    "summary": "Hit a mob and its name and health show in a small box on the right side of your screen (or in another box, above the mob's head, or above your hotbar, if you prefer), so you know how close it is to going down.",
     "steps": [
       {
-        "text": "Nothing to set up: hit a mob with anything, or shoot it, and a small box on the right side of your screen, above the scoreboard, shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
+        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the top box on the right side of your screen (§lRight 1§r) shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
+        "ops": false
+      },
+      {
+        "text": "Prefer it somewhere else? Set §lWhere the health of mobs I hit shows§r in §e/realm:prefs§r: another Side HUD box, §lAbove the mob§r (the health floats over the mob's head for 2 seconds) or §lAbove the hotbar§r.",
         "ops": false
       },
       {
@@ -722,7 +730,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lMob Health§r disables it for the whole realm, shows players' health too when one player hurts another, changes the bar length, or changes what new players start with.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lMob Health§r disables it for the whole realm, shows players' health too when one player hurts another, changes the bar length, or changes what new players start with (on or off, and where it shows).",
         "ops": true
       }
     ],
@@ -739,10 +747,10 @@ export const PACKS = [
     "folder": "elytra_bp",
     "topic": "elytra",
     "name": "Elytra HUD",
-    "summary": "While you glide, a small box on the right side of your screen (or the middle, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
+    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
     "steps": [
       {
-        "text": "Put on an elytra and glide. On the right side of the screen, above the scoreboard, you see something like §e31.4 blocks/s  Y 142  Elytra 87%  Rockets 12§r, updated 4 times a second.",
+        "text": "Put on an elytra and glide. In the second box on the right side of the screen (§lRight 2§r) you see something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12§r, updated 4 times a second. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
@@ -1228,14 +1236,14 @@ export const PACKS = [
     "folder": "saga_bp",
     "topic": "saga",
     "name": "Story Questlines",
-    "summary": "An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (about 40 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, and a §ldaily favor§r from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker above the hotbar points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
+    "summary": "An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (about 40 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, and a §ldaily favor§r from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
     "steps": [
       {
         "text": "Tap a townsfolk with a story button: §eMain story: The Drowned Bell§r (Old Tobin) or §eMain story: The Cartographer's Last Map§r (Mara) to begin. Read the pages with §lNext§r, then pick §lAccept§r (or §lNot now§r: you can come back any time). Some intros end with a choice instead of Accept.",
         "ops": false
       },
       {
-        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker on the right side of the screen (above the scoreboard) always shows where to go next (§eDrowned Bell: Lighthouse NE 240m§r), or who to report to.",
+        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker in the bottom box on the right side of the screen (§lRight 4§r, just above the scoreboard) always shows where to go next (§eDrowned Bell: Lighthouse NE 240m§r), or who to report to.",
         "ops": false
       },
       {
@@ -1259,7 +1267,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Don't want the tracker? Disable §lStory tracker§r in §e/realm:prefs§r. §lWhere my story tracker shows§r there moves it to the middle of the screen or above the hotbar (the right side and the middle can't be covered by other add-ons, such as waypoint add-ons, that redraw the line above the hotbar all the time).",
+        "text": "Don't want the tracker? Disable §lStory tracker§r in §e/realm:prefs§r. §lWhere my story tracker shows§r there moves it to another Side HUD box (§lRight 1§r to §lRight 4§r, §lLeft 1§r to §lLeft 4§r, §lMiddle of the screen§r) or above the hotbar (the boxes can't be covered by other add-ons, such as waypoint add-ons, that redraw the line above the hotbar all the time).",
         "ops": false
       },
       {
@@ -1805,7 +1813,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Collect rare ingredients: defeat champions, catch a Storm Eel in a thunderstorm, harvest full beehives at night, and harvest crops during a Harvest Moon or after an aurora (see the table below). §e/realm:cooking§r -> §lRare ingredients§r lists them, what they're for and how many you carry.",
+        "text": "Collect rare ingredients: defeat champions, catch a Storm Eel in a thunderstorm, harvest full beehives at night, and harvest crops during a Harvest Moon or after an aurora or a meteor, and hunt monsters under a Blood Moon (see the table below). When one of those windows opens, chat says so: §eStardust settles on the fields. Ripe wheat harvested in the next 15 minutes may give Starwright Flour (Kitchen).§r §e/realm:cooking§r -> §lRare ingredients§r lists them, what they're for and how many you carry.",
         "ops": false
       },
       {
@@ -1830,10 +1838,14 @@ export const PACKS = [
     "folder": "domt_bp",
     "topic": "domt",
     "name": "Deck of Many Things",
-    "summary": "Draw a card from the Deck of Many Things for a random effect: 100 cards, from a loaf of bread or a dizzy spell to a sky arena, a champion on your heels, a trip to the Nether or, once in a hundred draws, a wish. Most cards are small and quick (70 common), some are a real treat or a real nuisance (20 uncommon), a few are big swings (9 rare) and one is legendary. Everyone draws, with a cooldown between draws, or, if an operator sets it up that way, only operators draw, for themselves or for any player.",
+    "summary": "Draw a card from the Deck of Many Things for a random effect: 132 cards, from a stack of bread or an hour of night vision to a lightning strike, a sky arena, a champion on your heels, a trip to the Nether or, once in a hundred draws, a wish or the Fates' coin flip. The deck is dangerous: bad cards hurt, and a few can kill you if you don't move fast. Good cards are worth it, and their effects last a long time (15 minutes to an hour, some until you die). Most cards are common (79), some are a real treat or a real threat (36 uncommon), a few are big swings (15 rare) and two are legendary. 15 more §lwild cards§r (swap places with another player, the floor is lava, a warden...) wait switched off until an operator turns them on. Everyone draws, with a cooldown between draws, or, if an operator sets it up that way, only operators draw, for themselves or for any player.",
     "steps": [
       {
         "text": "Run §e/realm:domt§r and pick §lDraw a card§r. The deck shuffles, the card's name shows on screen in its rarity's color, and chat says what it does, like §e[Deck] You drew The Merchant (Uncommon): A wandering trader appears with wares to sell.§r",
+        "ops": false
+      },
+      {
+        "text": "Read the card and react: §eLook up!§r, §eRUN!§r or a countdown above the hotbar means you have a second or a few to get out of the way.",
         "ops": false
       },
       {
@@ -1841,7 +1853,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lThe odds§r lists every card and the chance of each rarity: Common 70%, Uncommon 20%, Rare 9%, Legendary 1% by default.",
+        "text": "§lThe odds§r lists every card and the chance of each rarity: Common 70%, Uncommon 20%, Rare 9%, Legendary 1% by default. Gray cards are switched off, and a purple §e*§r marks a wild card.",
         "ops": false
       },
       {
@@ -1849,7 +1861,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:domt_draw <player>§r draws for a player (no cooldown), and §lDraw for a player§r in the menu can pick the card too. §lCards on/off§r (or §e/realm:domt_effects§r) switches each card on or off, a page per rarity. §lReset a cooldown§r lets a player draw again at once. §e/realm:config§r -> §lDeck of Many Things§r sets who draws (everyone with a cooldown, or operators only), the cooldown, the rarity weights, whether rare draws are announced, whether block-changing cards are allowed and how long The Spore lasts.",
+        "text": "§lOperators:§r §e/realm:domt_draw <player>§r draws for a player (no cooldown), and §lDraw for a player§r in the menu can pick the card too. §lCards on/off§r (or §e/realm:domt_effects§r) switches each card on or off, a page per rarity, plus a §lWild cards§r page and buttons to enable or disable every wild card at once. §lReset a cooldown§r lets a player draw again at once. §e/realm:config§r -> §lDeck of Many Things§r sets who draws (everyone with a cooldown, or operators only), the cooldown, the rarity weights, whether rare draws are announced, whether block-changing cards are allowed and how long The Spore lasts.",
         "ops": true
       }
     ],
@@ -1870,7 +1882,7 @@ export const PACKS = [
         "usage": "/realm:domt_effects",
         "ops": false,
         "who": "Operators",
-        "text": "Switches each of the 100 cards on or off, a page per rarity (saved in the world)"
+        "text": "Switches each of the 147 cards on or off, a page per rarity and a page of wild cards (saved in the world); the 15 wild cards start disabled"
       }
     ]
   },
@@ -1930,7 +1942,7 @@ export const PACKS = [
     "folder": "silly_bp",
     "topic": "silly",
     "name": "Silly Enchants",
-    "summary": "Fourteen silly \"enchantments\" for your gear. They only add particles, sounds and a harmless bounce: none of them changes damage, armor, speed, drops or durability. Each one is a lore line on the item, like §eSilly: Grunt Birthday§r, and an item holds at most two. They come on §lSilly Books§r (enchanted books named §eSilly Book§r), which you apply from §e/realm:silly§r to the item in your hand.",
+    "summary": "Fourteen silly \"enchantments\" for your gear. They only add particles, sounds and some very big bounces: none of them changes damage, armor, speed, drops or durability. Most effects come in a few random variants, so they rarely sound the same twice. Each one is a lore line on the item, like §eSilly: Grunt Birthday§r, and an item holds at most two. They come on §lSilly Books§r (enchanted books named §eSilly Book§r), which you apply from §e/realm:silly§r to the item in your hand.",
     "steps": [
       {
         "text": "Get a §lSilly Book§r: operators hand them out, and the realm may sell them (at the caravan or market, if an operator adds them). A book says what it holds (§eSilly Book: Hyper Jump§r), or §eSilly Book: Random§r for a surprise.",
@@ -1953,7 +1965,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:silly§r -> §lGive Silly Books§r, or §e/realm:silly_give <player> <book> [amount]§r. §e/realm:config§r -> §lSilly Enchants§r switches the effects, sets the enchants per item and the Hyper Jump cooldown.",
+        "text": "§lOperators:§r §e/realm:silly§r -> §lGive Silly Books§r, or §e/realm:silly_give <player> <book> [amount]§r. §e/realm:config§r -> §lSilly Enchants§r switches the effects, sets the enchants per item, the Hyper Jump cooldown and §lHyper Jump soft landing§r.",
         "ops": true
       }
     ],
@@ -2019,29 +2031,73 @@ export const PACKS = [
     ]
   },
   {
+    "folder": "platypus_bp",
+    "topic": "platypus",
+    "name": "Platypus",
+    "summary": "An uncommon new animal, the platypus (§erealm:platypus§r), lives along rivers and in swamps and mangrove swamps, always close to the water. It is passive until you hit it: then it fights back, and its bite poisons you and makes your screen wobble (nausea). About 1 in 200 is a teal platypus in a brown fedora: Perry the Platypus. There is a spawn egg too. Needs Platypus Models (in Realm Resources) to look like a platypus.",
+    "steps": [
+      {
+        "text": "Look along rivers and in swamps and mangrove swamps: platypuses spawn on the banks (grass, dirt, sand, gravel, clay, mud, mangrove roots), alone or in pairs, in daylight-bright spots. They are uncommon: you may walk a long river before you meet one.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:platypus§r to see how many platypuses are within 64 blocks (§efindRadius§r) and how far, and in which direction, the nearest one is. If one of them is a Perry, it tells you where that one is too.",
+        "ops": false
+      },
+      {
+        "text": "Leave it be and it wanders, swims and waddles back to the water. Hold §lraw cod§r or §lraw salmon§r and it follows you. You can put it on a lead and name it with a name tag.",
+        "ops": false
+      },
+      {
+        "text": "Hit it and it bites back for 15 seconds: each bite does 1 heart of damage, 5 seconds of §lPoison§r and 8 seconds of §lNausea§r (§enauseaSeconds§r). Then it calms down.",
+        "ops": false
+      },
+      {
+        "text": "§lCreative:§r the §lPlatypus Spawn Egg§r (brown with teal spots) is in the creative inventory with the other spawn eggs, and every egg has the same 1 in 200 chance of hatching a Perry.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/summon realm:platypus ~ ~ ~ 0 0 realm:platypus_make_perry§r summons a Perry (§erealm:platypus_make_brown§r a brown one). §e/realm:config§r -> §lPlatypus§r sets the nausea length, the Perry message and the §e/realm:platypus§r search radius.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:platypus",
+        "ops": false,
+        "who": "Everyone",
+        "text": "How many platypuses are near you (default 64 blocks, §efindRadius§r), how far and which way the nearest is, and where a Perry among them is"
+      }
+    ]
+  },
+  {
     "folder": "maps_bp",
     "topic": "maps",
     "name": "Treasure Maps & Riddles",
-    "summary": "Buy a treasure map from Mara the Cartographer and follow its riddles across the land: each clue tells you which way to walk and roughly how far, and where it ends the next clue appears. After two or three clues, 800 to 2,000 blocks from where you bought the map, a chest lies buried. Hold the map and it tells you whether you're getting warmer. Finding the treasure pays Crowns, and the chest holds gold, iron, emeralds and sometimes a diamond or even a relic.",
+    "summary": "Buy a treasure map from Mara the Cartographer and puzzle your way across the land. Each clue is a different kind of riddle: a heading and a distance, a set of compass steps, a coordinate puzzle, or a walk until your coordinates read right. Near where it points, the map names a real landmark there (the edge of a birch wood, a pond's shore, a hilltop...) and a marker stands at it: a cairn, a flag or a standing stone that holds the next clue. After two to four clues, 800 to 2,000 blocks from where you bought the map, a chest lies buried at the last landmark. The map only tells you warmer or colder once you're close, so the clues are how you get there. Finding the treasure pays Crowns, and the chest holds gold, iron, emeralds and sometimes a diamond or even a relic.",
     "steps": [
       {
-        "text": "Find Mara the Cartographer (or any NPC with the §ecartographer§r role, from Townsfolk), tap her and pick §lBuy a treasure map (50 Crowns)§r. You get a piece of paper named §eTreasure Map§r, and chat reads the first clue, for example §e\"Walk toward the setting sun for about twelve hundred paces, and there the next riddle waits.\"§r",
+        "text": "Find Mara the Cartographer (or any NPC with the §ecartographer§r role, from Townsfolk), tap her and pick §lBuy a treasure map (50 Crowns)§r. You get a piece of paper named §eTreasure Map§r, and chat reads the first clue, for example §e\"From where you got this map, walk 640 paces toward the dusk, then turn and go 560 paces north. Another traveler left a mark there.\"§r",
         "ops": false
       },
       {
-        "text": "Work out the direction: the North Star is north, the rising sun is east, the setting sun is west, and \"with the North Star at your back\" is south. A pace is a block.",
+        "text": "Work out the clue. The North Star (or Pole Star, the cold north wind) is north; the rising sun, the dawn and the way your shadow points at sunset are east; the warm south wind and \"with the North Star at your back\" are south; the setting sun, the dusk and the way your shadow points at sunrise are west. A pace is a block. Coordinate clues need your coordinates (the Coordinates HUD, or the game's own §lShow Coordinates§r).",
         "ops": false
       },
       {
-        "text": "Hold the map in your hand: every 2 seconds the box on the right side of the screen, above the scoreboard (or the middle of the screen or the line above the hotbar, if you choose it in §e/realm:prefs§r), says §eWarmer§r, §eColder§r or §eVery warm§r, with which clue you're on.",
+        "text": "Within 96 blocks of where the clue points, chat says §eThe map's ink darkens:§r and names the landmark, for example §eA pole flying a red flag stands at the edge of the birch wood.§r Look for it.",
         "ops": false
       },
       {
-        "text": "Get within 30 blocks of where the clue points and the next clue appears in chat and on the map. As you get close, the map also names what the spot looks like (§eThe spot lies among the trees.§r).",
+        "text": "Hold the map in your hand: every 2 seconds the third box on the right side of the screen (§lRight 3§r; another box or the line above the hotbar, if you choose it with §lWhere Warmer / Colder shows for me§r in §e/realm:prefs§r) says §eWarmer§r, §eColder§r or §eVery warm§r, with which clue you're on. Far from the marker or the chest (more than 64 blocks) the map only says §eThe map is cold.§r, §eThe map is cool.§r or §eThe map is faintly warm.§r, so it can't steer you there.",
         "ops": false
       },
       {
-        "text": "On the last clue, once you're close, the map grows hot: the chest is buried nearby, 1 to 3 blocks down. Follow §eHot§r to §eBurning hot! Dig here.§r; standing over it pays the Crowns. Then dig up the chest for the rest.",
+        "text": "Walk up to the marker (within 4 blocks) and the next clue appears in chat and on the map: §eYou found the cairn! Tucked between its stones: the next clue (2 of 3).§r",
+        "ops": false
+      },
+      {
+        "text": "On the last clue the ink names where the treasure lies buried (§eThe treasure lies buried on the shore of the wide water.§r). Follow §eHot§r to §eBurning hot! Dig here.§r; standing over it pays the Crowns. Then dig up the chest, 1 to 3 blocks down, for the rest.",
         "ops": false
       },
       {
@@ -2049,7 +2105,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:maps§r opens the §lTreasure Maps§r menu instead: §eYour treasure hunts§r, §eGive a treasure map§r (pick a player online) and §eSettings§r (which points to §e/realm:config§r -> Treasure Maps & Riddles). §e/realm:maps_give <player>§r gives a free map from chat. §e/realm:config§r -> §lTreasure Maps & Riddles§r sets the price, how far maps lead, how many hunts a player can have, the Crowns found, the distance from world spawn and the hints.",
+        "text": "§lOperators:§r §e/realm:maps§r opens the §lTreasure Maps§r menu instead: §eYour treasure hunts§r, §eGive a treasure map§r (pick a player online) and §eSettings§r (which points to §e/realm:config§r -> Treasure Maps & Riddles). §e/realm:maps_give <player>§r gives a free map from chat. §e/realm:config§r -> §lTreasure Maps & Riddles§r sets the price, how far maps lead, how many hunts a player can have, the Warmer / Colder range, whether markers are built, the Crowns found, the distance from world spawn and the hints.",
         "ops": true
       }
     ],
@@ -2064,7 +2120,7 @@ export const PACKS = [
         "usage": "/realm:maps_hunts",
         "ops": false,
         "who": "Everyone",
-        "text": "Your treasure hunt: the clue, the place once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up"
+        "text": "Your treasure hunt: the clue, the landmark once seen, which clue you're on; buttons for a new copy of the map (when you don't carry one) and to give the hunt up"
       },
       {
         "usage": "/realm:maps_give <player>",
@@ -2134,7 +2190,7 @@ export const PACKS = [
     "folder": "expedition_bp",
     "topic": "expedition",
     "name": "Expeditions",
-    "summary": "Dungeon runs for you and your party, in the spirit of Diablo's Nightmare Dungeons. Pick one of eight dungeons (the Crypt, the Drowned Vault, Frost Hollow, the Nether Forge, the Sculk Depths, the Pillager Keep, the Spider Nest or the Ender Spire) and a difficulty: §lEasy§r, §lNormal§r, §lHard§r, or §lNightmare tiers 1 to 20§r, which you unlock one by one by clearing the tier below. A fresh dungeon is built for you deep underground: 6 to 18 rooms joined by corridors, with waves of mobs, elite halls, trap halls, shrines, puzzles (nine kinds), vertical shafts, hidden side caches, a boss and treasure. Higher tiers have more rooms and waves, tougher and armored mobs, champions, tall rooms you climb, build or fly up, and §laffixes§r that change the run (Frenzied, Volcanic, Lightning Storm...). The clock runs from the moment you arrive; the fastest clears of each dungeon and difficulty go on a leaderboard. Finishing pays Crowns, Warden reputation in Guilds & Reputation, a page in the Field Journal, sometimes a relic, and bosses and champions may drop a §lNightmare Sigil§r that opens one exact run. No structure files: every dungeon is generated from a random seed, and the ground is filled back in after each run, so the next one is new.",
+    "summary": "Dungeon runs for you and your party, in the spirit of Diablo's Nightmare Dungeons. Pick one of eight dungeons (the Crypt, the Drowned Vault, Frost Hollow, the Nether Forge, the Sculk Depths, the Pillager Keep, the Spider Nest or the Ender Spire) and a difficulty: §lEasy§r, §lNormal§r, §lHard§r, or §lNightmare tiers 1 to 20§r, which you unlock one by one by clearing the tier below. A fresh dungeon is built for you deep underground: 6 to 18 rooms joined by corridors, with waves of mobs, elite halls, trap halls, shrines, puzzles (nine kinds), vertical shafts, hidden side caches, a boss and treasure. Rooms come in many shapes (L, T, cross, round, octagon, a ring around a pillar, long halls, halls split by walls, raised ledges, cover) and grow with the difficulty, and the way out is always across the room from the way in. For a longer run, the §lGauntlet§r has 14 rooms, harder fights and a sanctuary every 5 rooms where each player picks one of three §lboons§r, optionally with a §lfixed loadout§r (your own items are stored safely and you run with a starter kit). Higher tiers have more rooms and waves, tougher and armored mobs, champions, tall rooms you climb, build or fly up, and §laffixes§r that change the run (Frenzied, Volcanic, Lightning Storm...). The clock runs from the moment you arrive; the fastest clears of each dungeon and difficulty go on a leaderboard. Finishing pays Crowns, Warden reputation in Guilds & Reputation, a page in the Field Journal, sometimes a relic, and bosses and champions may drop a §lNightmare Sigil§r that opens one exact run. No structure files: every dungeon is generated from a random seed, and the ground is filled back in after each run, so the next one is new.",
     "steps": [
       {
         "text": "Run §e/realm:expedition§r and tap §lStart an expedition§r. Pick a dungeon, then a difficulty: Easy, Normal and Hard are open to everyone; §lNightmare 1§r unlocks when you clear Hard, and each Nightmare tier unlocks the next.",
@@ -2149,11 +2205,15 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Walk into each room. The bars on the way out rise once the room is done (§eThe bars rise. Onward!§r):\n  - §lCombat§r and §lelite§r rooms send waves (§eWave 1 of 4!§r): kill every mob. Elite halls bring a champion every wave.\n  - §lPuzzle§r rooms explain themselves on signs and in chat: levers, a memory sequence, a safe path of pressure plates, target practice, lights out, a color riddle, a climb, a button rush or a riddle (see below).\n  - §lTrap halls§r: the door out is already open. Run for it while flames flicker on the floor (they burst a moment later) and arrows fly from the walls.\n  - §lShrines§r: press one of three buttons: a §lBlessing§r for the rest of the run, a §lcurse§r (one more affix, but more treasure and Crowns), or pass by.\n  - §lShafts§r (Nightmare 3 and up): the way on is high up the wall. Climb the ladder (below tier 10) or the ledges, pillar up with your own blocks, or fly with an elytra. At the top, drop down the chute into the pool.\n  - §lSide rooms§r (Nightmare): an open doorway off a room leads to a puzzle; solve it for a hidden cache chest.",
+        "text": "Walk into each room. The bars on the way out rise once the room is done (§eThe bars rise. Onward!§r):\n  - §lCombat§r and §lelite§r rooms send waves (§eWave 1 of 4!§r): kill every mob. Elite halls bring a champion every wave.\n  - §lPuzzle§r rooms explain themselves on signs and in chat: levers, a memory sequence, a safe path of pressure plates, target practice, lights out, a color riddle, a climb, a button rush or a riddle (see below).\n  - §lTrap halls§r: the door out is already open, but it's on the far side and walls make the way wind through the hall. Run for it while flames flicker on the floor along the way (they burst a moment later), arrows fly from the walls across it, and pits cross it (soul sand at the bottom, magma from Nightmare 1): jump them.\n  - §lShrines§r: press one of three buttons: a §lBlessing§r for the rest of the run, a §lcurse§r (one more affix, but more treasure and Crowns), or pass by.\n  - §lShafts§r (Nightmare 3 and up): the way on is high up the wall. Climb the ladder (below tier 10) or the ledges, pillar up with your own blocks, or fly with an elytra. At the top, drop down the chute into the pool.\n  - §lSide rooms§r (Nightmare): an open doorway off a room leads to a puzzle; solve it for a hidden cache chest.",
         "ops": false
       },
       {
-        "text": "In the boss room the boss appears with its name as a title; on high tiers it calls adds onto the balconies. Defeat it: §eExpedition complete§r and your time fill the screen, everyone still in the dungeon is paid, and the treasure room opens. You have 30 seconds to empty the chests, then you're taken back to where you started.",
+        "text": "In the boss room the boss appears with its name as a title; on high tiers it calls adds onto the balconies. Defeat it: §eExpedition complete§r and your time fill the screen, everyone still in the dungeon is paid, and the treasure room opens. You have 90 seconds (§eexitSeconds§r) to empty the chests; opening a chest when less than 20 seconds are left gives you 20 more (up to 2 minutes more in all). Press the gold button by the treasure room's far wall (or run §e/realm:expedition_leave§r) to go back sooner. When the time is up you're taken back to where you started, and whatever is still in the chests comes with you (in your inventory, or at your feet when it's full); the last player to leave early takes what's left.",
+        "ops": false
+      },
+      {
+        "text": "§lGauntlet:§r run §e/realm:expedition_gauntlet§r (or §lStart a Gauntlet§r in §e/realm:expedition§r), pick a dungeon and a difficulty you've unlocked. The preview has a §lFixed loadout§r switch (Disabled by default, §eloadoutDefault§r): enabled, everyone's own inventory, armor and offhand are stored away when the run starts and they get a starter kit instead; it all comes back exactly when they return. Every 5 rooms (§eboonEvery§r) is a §lsanctuary§r: a form shows each player three boons, and the bars rise once everyone has picked (or a minute after the first pick). Closed it by mistake? Press the button on the altar, or open §e/realm:expedition§r -> §lChoose your boon§r.",
         "ops": false
       },
       {
@@ -2165,11 +2225,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§e/realm:expedition§r -> §lLeaderboards§r shows the fastest clears of each dungeon at each difficulty, the §lHighest tiers§r players have cleared and the §lRecent runs§r; §lMy progress§r shows what you've unlocked, your best and your own recent runs.",
+        "text": "§e/realm:expedition§r -> §lLeaderboards§r shows the fastest clears of each dungeon at each difficulty, the §lHighest tiers§r players have cleared, the §lRecent runs§r and the best §lGauntlets§r; §lMy progress§r shows what you've unlocked, your best and your own recent runs.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r stand somewhere far from spawn and from anyone's builds and mines, and run §e/realm:expedition_site§r once (or §e/realm:expedition_site <x> <z>§r, or §lOperator tools§r -> §lSet the site where I stand§r). Dungeons are built deep underground around that spot (up to 100 by 100 blocks, y -41 to -8), and the site is refused if it's within 114 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. §e/realm:expedition_reset§r ends a run in progress and fills the dungeon back in. §lOperator tools§r also has §lCreate a Nightmare Sigil§r (any dungeon, tier and affixes) and §lUnlock every tier for me§r. §e/realm:config§r -> §lExpeditions§r sets the party size, the time limit, the highest tier, building, the reroll cost and more.",
+        "text": "§lOperators:§r stand somewhere far from spawn and from anyone's builds and mines, and run §e/realm:expedition_site§r once (or §e/realm:expedition_site <x> <z>§r, or §lOperator tools§r -> §lSet the site where I stand§r). Dungeons are built deep underground around that spot (up to 120 by 120 blocks, y -41 to -8), and the site is refused if it's within 124 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. §e/realm:expedition_reset§r ends a run in progress and fills the dungeon back in. §lOperator tools§r also has §lCreate a Nightmare Sigil§r (any dungeon, tier and affixes) and §lUnlock every tier for me§r. §e/realm:config§r -> §lExpeditions§r sets the party size, the time limit, the time at the treasure, the highest tier, building, the reroll cost, the Gauntlet's length and boons, and more.",
         "ops": true
       }
     ],
@@ -2181,16 +2241,22 @@ export const PACKS = [
         "text": "The Expeditions menu: start an expedition (dungeon, difficulty or Nightmare tier, affix preview and reroll), use a Nightmare Sigil, leaderboards (fastest clears per dungeon and difficulty, highest tiers, recent runs), your progress, go back to where you started. During a run: how it's going, the affixes, and leave it. Operators also get §lOperator tools§r (set the site, reset, create a sigil, unlock every tier)"
       },
       {
+        "usage": "/realm:expedition_gauntlet",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Start a Gauntlet: pick a dungeon and difficulty, then switch Fixed loadout and start (14 rooms, default §egauntletRooms§r; a sanctuary every 5, §eboonEvery§r). During a run it opens the run menu"
+      },
+      {
         "usage": "/realm:expedition_leave",
         "ops": false,
         "who": "Everyone",
-        "text": "Leave your expedition and go back to where you started it"
+        "text": "Leave your expedition and go back to where you started it (also how to leave the treasure room early)"
       },
       {
         "usage": "/realm:expedition_site [x] [z]",
         "ops": false,
         "who": "Operators",
-        "text": "Sets where dungeons are built: where you stand, or at x z. Refused within 114 blocks of world spawn (default 64, §eavoidSpawn§r, plus half the biggest dungeon) or where anything but natural underground blocks is in the way of the biggest dungeon, with what and where"
+        "text": "Sets where dungeons are built: where you stand, or at x z. Refused within 124 blocks of world spawn (default 64, §eavoidSpawn§r, plus half the biggest dungeon) or where anything but natural underground blocks is in the way of the biggest dungeon, with what and where"
       },
       {
         "usage": "/realm:expedition_reset",
@@ -2265,6 +2331,82 @@ export const PACKS = [
         "ops": false,
         "who": "Operators",
         "text": "Removes the town you're in and its project progress, after asking. What's built stays standing"
+      }
+    ]
+  },
+  {
+    "folder": "build_bp",
+    "topic": "build",
+    "name": "Easy Building",
+    "summary": "Build a whole wall, floor, tower, dome, roof, staircase or bridge in one go, like the Effortless Building add-on: pick a shape and its size in a menu, then place one block and the shape appears there, made of the block you placed. Survival builds use blocks from your inventory, and undo gives them back.",
+    "steps": [
+      {
+        "text": "Run §e/realm:build§r and pick §lChoose a shape§r, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap §lUse this shape§r. That turns §lbuild mode§r on.",
+        "ops": false
+      },
+      {
+        "text": "Hold a block and place it as usual: the shape is built where the block went, made of that block. Facing matters: a wall runs across your view, depth goes away from you, and stairs, slopes and roofs climb away from you. Sneak while placing to place just one block.",
+        "ops": false
+      },
+      {
+        "text": "While build mode is on and you hold a block, green sparkles outline where the shape would go at the block you look at, and the bar above the hotbar says what placing will build (§eBuild: Wall 5 x 3 x 1 - place a block (sneak: just one)§r).",
+        "ops": false
+      },
+      {
+        "text": "§lBetween two blocks:§r most shapes can take their size from two blocks instead (§lSize§r -> §lFrom two blocks you place§r). Place the start block, then the end block: the shape fills the box between them, and a line or a wall goes straight from one to the other, diagonals too. With both blocks at the same height, the shape keeps the height from its settings (a 3-high wall along the ground).",
+        "ops": false
+      },
+      {
+        "text": "§lBlocks and placing§r (in §e/realm:build§r) picks the main block (the block you place, a random mix of your hotbar blocks, or a block id you type such as §eminecraft:stone_bricks§r), the second block for patterns, posts and trim (by default the block in the hotbar slot right of your hand), what may be replaced, where the shape sits, and copies: mirrored, turned four ways around the block, or repeated in a row.",
+        "ops": false
+      },
+      {
+        "text": "Made a mistake? §e/realm:build_undo§r puts back what was there and gives survival blocks back; §e/realm:build_redo§r builds it again. Your last 5 builds can be undone (§eundoSteps§r).",
+        "ops": false
+      },
+      {
+        "text": "No block to place, or want a look first? Look at a spot and pick §lBuild here now§r in §e/realm:build§r: the outline shows for 3 seconds (§epreviewSeconds§r), then a box lists the cost and asks §lBuild it§r. §e/realm:build_here§r builds at the block you look at straight away.",
+        "ops": false
+      },
+      {
+        "text": "§e/realm:build_mode§r turns build mode on or off without the menu. §lOutline preview in build mode§r, its color and the build mode line are your own choices in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r sets the limits (most blocks per build, largest size, blocks placed per tick), whether survival builds use items, and who may build where.",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:build",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens Easy Building: build mode on or off, §lChoose a shape§r (22 shapes, sizes up to 64 blocks, §emaxSize§r), the current shape's settings, §lBlocks and placing§r, §lBuild here now§r (an outline for 3 seconds, §epreviewSeconds§r, then the cost and §lBuild it§r), undo and redo"
+      },
+      {
+        "usage": "/realm:build_here",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Builds your shape at the block you look at (up to 16 blocks away, §ereach§r), no questions. In two-block mode the first use sets the start and the second builds"
+      },
+      {
+        "usage": "/realm:build_mode",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Turns build mode on or off: while on, placing a block builds your shape there (sneak to place just one)"
+      },
+      {
+        "usage": "/realm:build_undo",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Undoes your last build: what was there comes back, and survival blocks are given back. Up to 5 builds (§eundoSteps§r), forgotten on restart"
+      },
+      {
+        "usage": "/realm:build_redo",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Builds again what you last undid"
       }
     ]
   },
@@ -2504,18 +2646,18 @@ export const PACKS = [
     "folder": "rainbow_bp",
     "topic": "rainbow",
     "name": "Rainbows & the Pot of Gold",
-    "summary": "When rain clears in the morning or the evening, a big rainbow often arches across the sky, and it really does end somewhere: a pot of gold waits at its foot, 150 to 300 blocks away. Race your friends to it. The first one there gets Crowns, the chest of gold and dyes, and sometimes a relic. The rainbow is drawn with a particle from Realm Skies: without that resource pack there's no rainbow to see, but the chat hint, §e/realm:rainbow§r and the pot of gold still work.",
+    "summary": "When rain clears in the morning or the evening, a big rainbow often arches across the sky, and it really does end somewhere: a pot of gold waits at its foot, 150 to 300 blocks away. Race your friends to it. The first one there gets Crowns, the chest of gold and dyes, and sometimes a relic. The rainbow is a real thing in the world: one fixed arc, one foot standing on the pot of gold under a golden light beam, so walking toward it brings you closer. It's drawn with particles from Realm Skies: without that resource pack there's no rainbow or beam to see, but the chat hint, §e/realm:rainbow§r and the pot of gold still work.",
     "steps": [
       {
-        "text": "When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (§echance§r, 0.7) of a rainbow. Chat says where its end is, for example §e&eA rainbow! Its end is somewhere to the NE.§r",
+        "text": "When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (§echance§r, 0.7) of a rainbow. Chat says where its end is, for example §e&eA rainbow! Its end is somewhere to the NE: look for the golden beam where it touches the ground.§r",
         "ops": false
       },
       {
-        "text": "Look that way, with the sun at your back: the rainbow stands over the horizon, one end coming down right in the direction of the pot. It stays up for 2.5 minutes (§edurationSeconds§r). Run §e/realm:rainbow§r any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).",
+        "text": "Look that way, with the sun at your back: the rainbow stands on the horizon, and a golden beam of light rises from the foot that ends at the pot. The rainbow stays up for 2.5 minutes (§edurationSeconds§r); the beam stays as long as the pot can be found. Run §e/realm:rainbow§r any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).",
         "ops": false
       },
       {
-        "text": "Head that way. As you get close, the rainbow comes down at its real spot, and a §lchest§r appears where it touches the ground.",
+        "text": "Head for the beam. The rainbow doesn't move: it grows as you get closer, and you can walk around it. Within 40 blocks a §lchest§r appears at the foot of the beam.",
         "ops": false
       },
       {
@@ -2523,7 +2665,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Missed the rainbow? The pot stays findable for 15 minutes (§epotMinutes§r) after it appeared: §e/realm:rainbow§r says §eThe rainbow has faded, but its pot of gold is still out there, somewhere to the NE.§r",
+        "text": "Missed the rainbow? The pot stays findable for 15 minutes (§epotMinutes§r) after it appeared: §e/realm:rainbow§r says §eThe rainbow has faded, but its pot of gold is still out there, somewhere to the NE, under a golden beam.§r Follow the beam.",
         "ops": false
       },
       {
@@ -2536,7 +2678,7 @@ export const PACKS = [
         "usage": "/realm:rainbow",
         "ops": false,
         "who": "Everyone",
-        "text": "Whether a rainbow is up, and which way its end is from you (§e&eA rainbow is up! Its end is somewhere to the NE.§r); after it fades, whether its pot of gold is still out there and which way, or who found it"
+        "text": "Whether a rainbow is up, and which way its end is from you (§e&eA rainbow is up! Its end is somewhere to the NE, under a golden beam.§r); after it fades, whether its pot of gold is still out there and which way, or who found it"
       },
       {
         "usage": "/realm:rainbow_now",

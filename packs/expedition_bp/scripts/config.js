@@ -18,8 +18,8 @@ export const CONFIG = {
    */
   slots: 1,
 
-  /** Blocks between the dungeons of `slots` (east of the site). At least 112 (the biggest dungeon is 100 wide). */
-  slotSpacing: 128,
+  /** Blocks between the dungeons of `slots` (east of the site). At least 132 (the biggest dungeon is 120 wide). */
+  slotSpacing: 132,
 
   /** Most players in one expedition: the leader plus party members (1 to 4). */
   maxParty: 4,
@@ -37,14 +37,56 @@ export const CONFIG = {
    */
   timeLimitMinutes: 20,
 
-  /** Seconds after the boss falls before everyone is sent back, to collect the treasure. */
-  exitSeconds: 30,
+  /**
+   * Seconds after the boss falls before everyone is sent back, to collect the treasure. Opening a treasure
+   * chest near the end gives 20 seconds more (up to 2 minutes more in all); the gold button in the treasure
+   * room (or /realm:expedition_leave) leaves at once. Treasure left in the chests is given to the players
+   * still there when they're sent back.
+   */
+  exitSeconds: 90,
 
   /** Items a player drops when dying in the dungeon are given back after they respawn (they would be lost when the dungeon resets). */
   returnItemsOnDeath: true,
 
   /** Fastest clears kept on each leaderboard (one per dungeon and difficulty or tier). */
   leaderboardSize: 10,
+
+  /** Gauntlets (long runs with boons) can start. */
+  gauntletEnabled: true,
+
+  /** Rooms in a Gauntlet, entry, boss and treasure included (10 to 20). */
+  gauntletRooms: 14,
+
+  /** A Gauntlet has a sanctuary (pick one of three boons) after every this many rooms (3 to 8). */
+  boonEvery: 5,
+
+  /** The Gauntlet preview starts with Fixed loadout on: players' own items are stored and they run with the starter kit. */
+  loadoutDefault: false,
+
+  /**
+   * The Fixed loadout starter kit: an item, how many, the levels it's given at (`from` and `to`: 0 Easy, 1 Normal,
+   * 2 Hard, 3 to 22 Nightmare 1 to 20), an armor or offhand `slot`, and enchantments (`ench`, id: level).
+   * Everything from the kit (food, arrows and blocks too) stays in the dungeon: it is taken back when the run ends.
+   * @type {{ item: string, count?: number, from?: number, to?: number, slot?: "head" | "chest" | "legs" | "feet" | "offhand", ench?: Record<string, number> }[]}
+   */
+  gauntletKit: [
+    { item: "minecraft:iron_sword", to: 9, ench: { sharpness: 1 } },
+    { item: "minecraft:diamond_sword", from: 10, ench: { sharpness: 2 } },
+    { item: "minecraft:bow", ench: { power: 1 } },
+    { item: "minecraft:arrow", count: 32 },
+    { item: "minecraft:shield", slot: "offhand" },
+    { item: "minecraft:iron_helmet", slot: "head", to: 9, ench: { protection: 1 } },
+    { item: "minecraft:iron_chestplate", slot: "chest", to: 9, ench: { protection: 1 } },
+    { item: "minecraft:iron_leggings", slot: "legs", to: 9, ench: { protection: 1 } },
+    { item: "minecraft:iron_boots", slot: "feet", to: 9, ench: { protection: 1 } },
+    { item: "minecraft:diamond_helmet", slot: "head", from: 10, ench: { protection: 2 } },
+    { item: "minecraft:diamond_chestplate", slot: "chest", from: 10, ench: { protection: 2 } },
+    { item: "minecraft:diamond_leggings", slot: "legs", from: 10, ench: { protection: 2 } },
+    { item: "minecraft:diamond_boots", slot: "feet", from: 10, ench: { protection: 2 } },
+    { item: "minecraft:cooked_beef", count: 16 },
+    { item: "minecraft:golden_apple", count: 2 },
+    { item: "minecraft:cobbled_deepslate", count: 64, from: 3 },
+  ],
 
   /** Players kept on the Highest tier board. */
   tierBoardSize: 20,

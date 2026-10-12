@@ -34,7 +34,7 @@ import {
   target,
   today,
 } from "./data.js";
-import { askAnswer, completeStep, counting, endScene, endScenesOf, giveItem, holdUntil, ownUntil, sideHold, radiusOf, reportTo, sceneFocus, showLine, timeText, weather } from "./objectives.js";
+import { askAnswer, completeStep, counting, endScene, endScenesOf, giveItem, holdUntil, ownUntil, radiusOf, reportTo, sceneFocus, showLine, side, timeText, weather } from "./objectives.js";
 import { ensurePlace, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PACK, across, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
@@ -706,10 +706,9 @@ function trackLine(player, e, saga) {
 export function track(player, list) {
   // Our own note is showing, or (above the hotbar) another pack's (a quest, a bounty, mob health): don't write over it.
   if (system.currentTick < (ownUntil.get(player.id) ?? 0)) return;
-  // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or the right-side box (realm:side).
+  // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or our Side HUD box (realm:side).
   const where = getFor(player, "trackerAt");
-  const hold = where === "hotbar" ? holdUntil : where === "middle" ? undefined : sideHold;
-  if (hold && system.currentTick < (hold.get(player.id) ?? 0)) return;
+  if (where === "hotbar" ? system.currentTick < (holdUntil.get(player.id) ?? 0) : side.taken(player, where)) return;
   const saga = sagaOf(player);
   const sorted = [...list].sort((a, b) => (b.st.t ?? 0) - (a.st.t ?? 0));
   for (const e of sorted) {

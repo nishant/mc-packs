@@ -1,5 +1,5 @@
 // Small tools the cards use: safe teleports, gifts, spawns, safe zones and timed block restores.
-import { Dimension, Entity, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
+import { Dimension, Entity, EntityDamageCause, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
 
 // ---------------------------------------------------------------------------
 // Basics
@@ -45,6 +45,81 @@ export function burst(dim, id, at, n = 12, spread = 1.2) {
 /** Adds a status effect. @param {Entity} e @param {string} id @param {number} seconds @param {number} [amp] */
 export function effect(e, id, seconds, amp = 0) {
   e.addEffect(id, Math.max(1, Math.round(seconds * 20)), { amplifier: amp, showParticles: true });
+}
+
+/** How long an "until you die" effect lasts, in seconds: 6 hours (dying or milk clears it first). */
+export const UNTIL_DEATH = 6 * 3600;
+
+/**
+ * Text above the hotbar, after telling the other action bar writers to wait (realm:actionbar).
+ * @param {Player} p @param {string} text @param {number} [ticks] how long it should stay
+ */
+export function bar(p, text, ticks = 30) {
+  attempt(() => {
+    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks, from: "domt_bp" }));
+    p.onScreenDisplay.setActionBar(text);
+  });
+}
+
+/**
+ * Fire blocks within `r` blocks of a point, as "x,y,z" keys.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] @returns {Set<string>}
+ */
+function firesAround(dim, at, r = 4) {
+  const cx = Math.floor(at.x);
+  const cy = Math.floor(at.y);
+  const cz = Math.floor(at.z);
+  const out = new Set();
+  for (let x = cx - r; x <= cx + r; x++)
+    for (let y = cy - 2; y <= cy + r; y++)
+      for (let z = cz - r; z <= cz + r; z++) {
+        const b = blockAt(dim, { x, y, z });
+        if (b && b.typeId === "minecraft:fire") out.add(`${x},${y},${z}`);
+      }
+  return out;
+}
+
+/**
+ * Puts out fire blocks within `r` blocks of a point, except the ones in `keep` (fires that were
+ * burning before, like a fireplace). Only fire is touched.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] @param {Set<string>} [keep]
+ */
+export function clearFire(dim, at, r = 4, keep = new Set()) {
+  for (const key of firesAround(dim, at, r)) {
+    if (keep.has(key)) continue;
+    const [x, y, z] = key.split(",").map(Number);
+    const b = blockAt(dim, { x, y, z });
+    if (b && b.typeId === "minecraft:fire") attempt(() => b.setType("minecraft:air"));
+  }
+}
+
+/**
+ * A lightning bolt at a point. Any fire it starts there is put out, so it never burns a build (fires
+ * that were already burning stay). Within 8 blocks of a safe zone there is no real bolt (it would turn
+ * villagers into witches and pigs into piglins): `victim` takes the hit directly, with thunder and sparks.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {Entity} [victim]
+ */
+export function strike(dim, at, victim) {
+  const spot = { x: at.x, y: at.y, z: at.z };
+  if (inZone(dim.id, spot.x, spot.z, 8)) {
+    if (victim) {
+      attempt(() => victim.applyDamage(5, { cause: EntityDamageCause.lightning }));
+      attempt(() => victim.setOnFire(8, true));
+    }
+    attempt(() => dim.playSound("ambient.weather.lightning.impact", spot, { volume: 1.5 }));
+    burst(dim, "minecraft:electric_spark_particle", spot, 16, 1);
+    return;
+  }
+  const before = firesAround(dim, spot);
+  dim.spawnEntity("minecraft:lightning_bolt", spot);
+  for (const t of [2, 10, 30, 60, 100]) system.runTimeout(() => attempt(() => clearFire(dim, spot, 4, before)), t);
+}
+
+/** Compass direction from one point to another ("north-east"). @param {import("@minecraft/server").Vector3} from @param {import("@minecraft/server").Vector3} to */
+export function compass(from, to) {
+  const deg = (Math.atan2(to.x - from.x, -(to.z - from.z)) * 180) / Math.PI; // 0 = north (-z), 90 = east (+x)
+  const names = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+  return names[Math.round(((deg + 360) % 360) / 45) % 8];
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +299,31 @@ export function randomSpot(e, minD, maxD, tries = 40) {
     const z = at.z + Math.sin(a) * d;
     const spot = spotNear(dim, x, z, at.y, 6) ?? (dim.id === "minecraft:nether" ? undefined : surface(dim, x, z));
     if (spot) return spot;
+  }
+  return undefined;
+}
+
+/**
+ * A safe spot `minD` to `maxD` away that the player can see: within 3 blocks of their height, with
+ * nothing solid between their eyes and it. So what appears there isn't hidden in a cave or behind a wall.
+ * @param {Player} p @param {number} minD @param {number} maxD @param {number} [tries]
+ */
+export function sightSpot(p, minD, maxD, tries = 40) {
+  const dim = p.dimension;
+  const eye = p.getHeadLocation();
+  for (let i = 0; i < tries; i++) {
+    const spot = randomSpot(p, minD, maxD, 1);
+    if (!spot || Math.abs(spot.y - p.location.y) > 3) continue;
+    const to = { x: spot.x - eye.x, y: spot.y + 1.5 - eye.y, z: spot.z - eye.z };
+    const d = Math.hypot(to.x, to.y, to.z);
+    if (d < 1) continue;
+    let hit;
+    try {
+      hit = dim.getBlockFromRay(eye, { x: to.x / d, y: to.y / d, z: to.z / d }, { maxDistance: d, includeLiquidBlocks: false, includePassableBlocks: false });
+    } catch {
+      continue;
+    }
+    if (!hit) return spot;
   }
   return undefined;
 }

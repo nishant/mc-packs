@@ -2,6 +2,9 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Di
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { FAR, FAR_KINDS, MARKERS, WOOLS, coarse, markerLooks, nearRiddle, treeOf } from "./clues.js";
+import { isProtected, protectedBox } from "./zones.js";
+import { isSlot, sideBoxes } from "./side.js";
 
 const PACK = "maps_bp";
 const PROP_HUNTS = "maps:hunts"; // player: JSON Hunt[]
@@ -10,13 +13,14 @@ const MAP_ITEM = "minecraft:paper"; // paper, not a real map: no map mechanics t
 const MAP_NAME = "§r§6Treasure Map";
 const MAP_ID_PREFIX = "§8Map ";
 const LORE_WIDTH = 38;
-const DESCRIBE_DISTANCE = 96; // the map names what the spot looks like once its chunk is about to load
+const SCAN_RADIUS = 32; // blocks around a leg's planned end searched for a landmark (every 4th column)
+const SCAN_STEP = 4;
+const MARK_RADIUS = 4; // blocks (ignoring height, within 8 up or down) from a marker that count as reaching it
+const ANCHOR_SPOT_RADIUS = 8; // how far from a landmark the chest may be buried and still be "at" it
 const FOUND_RADIUS = 3; // blocks (ignoring height, within 6 up or down) from the chest that count as finding it
 const MAX_TRIES = 4; // places tried for the chest before the treasure is handed over directly
 const READS_PER_RUN = 150; // block reads for chest-spot searches every 10 ticks (300 a second at most, all players together)
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-const ONES = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
-const TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
 
 // Blocks the chest may replace, and that may lie over it: natural ground only.
 const GROUND =
@@ -27,57 +31,24 @@ const SOFT = /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|al
 const MADE =
   /planks|glass|chest|barrel|sign|bed\b|_bed|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|slab|stairs|_wall|lectern|bookshelf|anvil|hopper|rail|ladder|scaffolding|campfire|bell|banner|lever|button|pressure_plate|shulker|smooth|polished|stripped|chiseled|cut_|beacon|cauldron|composter|loom|cartography|fletching|smithing|stonecutter|grindstone|brewing|enchanting|jukebox|noteblock|note_block|target|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|tnt|frame|flower_pot|farmland|grass_path|dirt_path|hay_block|cobblestone|candle|chain|bars|trapdoor|copper_bulb|copper_grate|lightning_rod|end_rod|sea_lantern|glowstone|quartz|purpur|prismarine_bricks|bamboo_mosaic|bamboo_block|crafter|vault|spawner|tiles|_wood$|_hyphae$|:(black|blue|cyan|gray|green|light_blue|lime|magenta|pink|purple)_terracotta$|:(iron|gold|diamond|emerald|lapis|redstone|netherite|coal|raw_iron|raw_gold|raw_copper|honey|honeycomb|slime|dried_kelp|amethyst|resin)_block$|copper|packed_mud|sponge|skull|_head$|decorated_pot|cake|lodestone|respawn_anchor|light_block|mud_bricks|tinted/;
 const WATERY = /water|seagrass|kelp|bubble_column/;
+const FLOWERS = /flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|petals|torchflower/;
+const TREE_TOP = /leaves|_log$|_wood$|mushroom_block|vine/;
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {{ x: number, z: number }} XZ */
 /**
- * @typedef {{ id: string, dim: string, pts: XZ[], leg: number, clue: string, place?: string, chest?: Vector3, tries: number, t: number }} Hunt
- * pts: the end of each leg (the last is the treasure), leg: the leg being followed (0-based), clue: its riddle,
- * place: what the end of the leg looks like (once seen), chest: where the chest was buried, tries: chest spots that failed
+ * @typedef {{ id: string, dim: string, pts: XZ[], leg: number, clue: string, place?: string, chest?: Vector3, tries: number, t: number,
+ *   v?: number, from?: XZ, fromName?: string, used?: string[], feats?: string[], near?: string, mark?: Vector3, style?: string, nomark?: boolean, regen?: boolean }} Hunt
+ * pts: the planned end of each leg (the last is the treasure), leg: the leg being followed (0-based), clue: its riddle,
+ * chest: where the chest was buried, tries: chest spots that failed. Version 2 (v: 2): from/fromName: where the leg
+ * starts and what the clue calls it, used: far clue kinds this hunt has used, feats: landmark kinds used, near: the
+ * riddle for what the spot looks like (once its land loaded), mark: the marker built at the end of the leg (its
+ * ground block), style: that marker's kind, nomark: no marker could stand there (the clue is found by coming close),
+ * regen: an older map whose clue is rewritten the next time its holder is online. place: older maps only.
  */
 
-// ---- The right side of the screen ----
-// Side HUD (hud_rp, in Realm Resources) shows the subtitle in a box above the scoreboard whenever the
-// title is exactly SIDE, and hides the vanilla title for SIDE and SIDE_CLEAR. Packs that share the box
-// say "realm:side" { player, from, ticks } when they write, so only the last writer clears it.
-const SIDE = "§s§1§r";
-const SIDE_CLEAR = "§s§0§r";
-/** player id -> the pack that last wrote the side box */
-const sideOwner = new Map();
-/** player id -> tick this pack's text is due to disappear */
-const sideUntil = new Map();
-
-/** Shows text on the right side for `ticks`, then clears it if nobody wrote there since. @param {Player} player @param {any} text @param {number} ticks */
-function showSide(player, text, ticks) {
-  player.onScreenDisplay.setTitle(SIDE, { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 0 });
-  sideOwner.set(player.id, "maps");
-  system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from: "maps", ticks }));
-  const until = system.currentTick + ticks;
-  sideUntil.set(player.id, until);
-  system.runTimeout(() => {
-    if (sideUntil.get(player.id) !== until) return;
-    sideUntil.delete(player.id);
-    if (sideOwner.get(player.id) !== "maps" || !player.isValid) return;
-    try {
-      player.onScreenDisplay.setTitle(SIDE_CLEAR, { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
-    } catch {
-      // left meanwhile
-    }
-  }, ticks);
-}
-
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:side") return;
-    try {
-      const m = JSON.parse(message);
-      if (typeof m?.player === "string" && typeof m.from === "string") sideOwner.set(m.player, m.from);
-    } catch {
-      // not ours
-    }
-  },
-  { namespaces: ["realm"] }
-);
+// Warmer / Colder in a Side HUD box (scripts/side.js, the side boxes protocol).
+const side = sideBoxes("maps");
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -173,15 +144,22 @@ function wrap(text, width) {
 /** @param {Dimension} dim @param {number} x @param {number} y @param {number} z */
 function blockAt(dim, x, y, z) {
   try {
-    return dim.getBlock({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) });
+    const b = dim.getBlock({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) });
+    if (b) void b.typeId; // throws when the chunk is loaded but not ticking
+    return b;
   } catch {
     return undefined; // unloaded or outside the world
   }
 }
-/** @param {Dimension} dim @param {number} x @param {number} z */
+/** The highest block that isn't air (water counts). @param {Dimension} dim @param {number} x @param {number} z */
 function topAt(dim, x, z) {
   try {
-    return dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    const b = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    if (!b) return undefined;
+    void b.typeId; // throws when the chunk is loaded but not ticking (it then answers y 319)
+    // The topmost block skips water: answer the water (or seagrass, kelp) over it instead.
+    const up = b.above();
+    return up && WATERY.test(up.typeId) ? up : b;
   } catch {
     return undefined;
   }
@@ -197,32 +175,24 @@ function octant(a, b) {
   return Math.round((((deg % 360) + 360) % 360) / 45) % 8;
 }
 
-/** 1230 -> "about twelve hundred". @param {number} d */
-function distanceWords(d) {
-  const h = Math.max(1, Math.round(d / 100));
-  if (h === 1) return "about a hundred";
-  if (h < 10) return `about ${ONES[h]} hundred`;
-  if (h === 10) return "about a thousand";
-  if (h < 20) return `about ${TEENS[h - 10]} hundred`;
-  if (h < 100 && h % 10 === 0) return `about ${ONES[h / 10]} thousand`;
-  if (h < 100) return `about ${ONES[Math.floor(h / 10)]} thousand ${ONES[h % 10]} hundred`;
-  return "many thousand";
-}
-
-/** The riddle for the hunt's current leg, from where the player stands. @param {Hunt} hunt @param {XZ} at */
-function makeClue(hunt, at) {
+/**
+ * The riddle for the hunt's current leg, from where the leg starts: a far clue kind this hunt hasn't used yet
+ * (bearing, steps, coordinates or mixed), unless `kind` is given.
+ * @param {Hunt} hunt @param {string} [kind]
+ */
+function makeClue(hunt, kind) {
+  const used = (hunt.used ??= []);
+  const fresh = FAR_KINDS.filter((k) => !used.includes(k));
+  const pick = kind ?? any(fresh.length ? fresh : FAR_KINDS);
+  used.push(pick);
   const target = hunt.pts[hunt.leg];
   const final = hunt.leg === hunt.pts.length - 1;
-  const templates = final ? CONFIG.finalClues : CONFIG.clues;
-  const text = any(templates.length ? templates : ["Walk {dir} for {dist} paces."])
-    .replaceAll("{dir}", CONFIG.directions[octant(at, target)] ?? COMPASS[octant(at, target)])
-    .replaceAll("{dist}", distanceWords(flat(at, target)));
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  return FAR[pick](hunt.from ?? target, target, hunt.fromName ?? "", final);
 }
 
 /** "(W, about 1,000 blocks)" from where the player stands. @param {Hunt} hunt @param {XZ} at */
 function plainHint(hunt, at) {
-  const target = hunt.chest ?? hunt.pts[hunt.leg];
+  const target = hunt.chest ?? hunt.mark ?? hunt.pts[hunt.leg];
   return `(${COMPASS[octant(at, target)]}, about ${fmt(Math.max(10, Math.round(flat(at, target) / 10) * 10))} blocks)`;
 }
 
@@ -254,6 +224,8 @@ function describe(dim, p) {
 
 /** @type {Map<string, Hunt[]>} */
 const cache = new Map();
+/** When a landmark search that found the land not loaded yet may run again, per player and hunt. @type {Map<string, number>} */
+const retryAt = new Map();
 /** Last distance shown per player and hunt, for Warmer / Colder. @type {Map<string, number>} */
 const lastDistance = new Map();
 
@@ -262,6 +234,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   lastNpc.delete(playerId);
   for (const key of [...jobs.keys()]) if (key.startsWith(`${playerId}/`)) jobs.delete(key);
   for (const key of [...lastDistance.keys()]) if (key.startsWith(`${playerId}/`)) lastDistance.delete(key);
+  for (const key of [...retryAt.keys()]) if (key.startsWith(`${playerId}/`)) retryAt.delete(key);
 });
 
 /** @param {Player} player @returns {Hunt[]} */
@@ -275,6 +248,16 @@ function huntsOf(player) {
     if (Array.isArray(parsed)) hunts = parsed.filter((h) => h && typeof h.id === "string" && Array.isArray(h.pts) && h.pts.length && typeof h.leg === "number");
   } catch {
     // corrupt: no hunts
+  }
+  for (const h of hunts) {
+    if (h.v === 2) continue;
+    // A map bought before clues and markers: keep its route and any buried chest; its clue is rewritten as
+    // coordinates (which work from anywhere) the next time step() sees its holder.
+    h.v = 2;
+    h.used = [];
+    h.feats = [];
+    h.place = undefined;
+    if (!h.chest) h.regen = true;
   }
   cache.set(player.id, hunts);
   return hunts;
@@ -323,8 +306,8 @@ function newHunt(player) {
   do id = Math.floor(Math.random() * 46656).toString(36).padStart(3, "0").toUpperCase();
   while (taken.has(id));
   /** @type {Hunt} */
-  const hunt = { id, dim: OVERWORLD, pts, leg: 0, clue: "", tries: 0, t: Date.now() };
-  hunt.clue = makeClue(hunt, from);
+  const hunt = { v: 2, id, dim: OVERWORLD, pts, leg: 0, clue: "", tries: 0, t: Date.now(), from: { x: Math.round(from.x), z: Math.round(from.z) }, fromName: "", used: [], feats: [] };
+  hunt.clue = makeClue(hunt);
   return hunt;
 }
 
@@ -333,7 +316,7 @@ function mapStack(hunt) {
   const stack = new ItemStack(MAP_ITEM, 1);
   stack.nameTag = MAP_NAME;
   const lore = wrap(hunt.clue, LORE_WIDTH).map((l) => `§7${l}`);
-  if (hunt.place) lore.push(...wrap(`The spot lies ${hunt.place}.`, LORE_WIDTH).map((l) => `§e${l}`));
+  if (hunt.near) lore.push(...wrap(hunt.near, LORE_WIDTH).map((l) => `§e${l}`));
   lore.push(`§8Clue ${hunt.leg + 1} of ${hunt.pts.length}`, `${MAP_ID_PREFIX}${hunt.id}`);
   stack.setLore(lore.slice(-20));
   return stack;
@@ -395,30 +378,48 @@ system.runInterval(() => {
 function step(player, hunt) {
   if (hunt.dim !== player.dimension.id) return;
   const at = { x: player.location.x, z: player.location.z };
+  const key = `${player.id}/${hunt.id}`;
+  if (hunt.regen) {
+    // An older map: its clue becomes coordinates, which read the same from anywhere.
+    hunt.regen = false;
+    hunt.from = { x: Math.round(at.x), z: Math.round(at.z) };
+    hunt.fromName = "";
+    hunt.clue = makeClue(hunt, "coords");
+    saveHunts(player, huntsOf(player));
+    updateMaps(player, hunt);
+    player.sendMessage(`§6The ink on your treasure map stirs and rewrites itself. §f"${hunt.clue}"`);
+  }
   const final = hunt.leg >= hunt.pts.length - 1;
-  const target = hunt.pts[hunt.leg];
-  const d = flat(at, target);
+  const planned = hunt.pts[hunt.leg];
 
-  if (!hunt.place && d <= DESCRIBE_DISTANCE) {
-    const place = describe(player.dimension, target);
-    if (place) {
-      hunt.place = place;
-      saveHunts(player, huntsOf(player));
-      updateMaps(player, hunt);
-      player.sendMessage(`§6The map's ink darkens: §7the spot lies ${place}.`);
-    }
+  // Close to the planned spot, with its land loaded: find a landmark there and build the marker (or bury the chest).
+  if (!hunt.near && !hunt.chest && !hunt.mark && !hunt.nomark && !jobs.has(key) && (retryAt.get(key) ?? 0) <= system.currentTick && flat(at, planned) <= get("revealDistance") && topAt(player.dimension, planned.x, planned.z)) {
+    const dim = player.dimension;
+    jobs.set(key, { gen: settle(dim, hunt, final), player, hunt, done: (/** @type {any} */ r) => settled(player, hunt, final, r) });
   }
 
   if (!final) {
-    if (d > CONFIG.legRadius) return;
+    let reached = false;
+    if (hunt.mark) reached = flat(at, hunt.mark) <= MARK_RADIUS && Math.abs(player.location.y - hunt.mark.y) <= 8;
+    else if (hunt.nomark) reached = flat(at, planned) <= CONFIG.legRadius;
+    if (!reached) return;
+    const hadMark = !!hunt.mark;
+    const name = hunt.mark ? (MARKERS.find((m) => m.id === hunt.style)?.name ?? "the marker") : "the bottle";
+    hunt.from = hunt.mark ? { x: hunt.mark.x, z: hunt.mark.z } : { x: Math.round(at.x), z: Math.round(at.z) };
+    hunt.fromName = hunt.mark ? name : "where you found the bottle";
     hunt.leg++;
-    hunt.place = undefined;
-    hunt.clue = makeClue(hunt, at);
+    hunt.near = undefined;
+    hunt.mark = undefined;
+    hunt.nomark = undefined;
+    hunt.clue = makeClue(hunt);
     saveHunts(player, huntsOf(player));
     updateMaps(player, hunt);
-    lastDistance.delete(`${player.id}/${hunt.id}`);
+    lastDistance.delete(key);
     const last = hunt.leg === hunt.pts.length - 1;
-    player.sendMessage(`§6You found ${last ? "the last" : "the next"} clue! §7(${hunt.leg + 1} of ${hunt.pts.length}) §f"${hunt.clue}"`);
+    const where = !hadMark
+      ? "Inside it"
+      : any(name === "the flag" ? ["Tied to the pole", "Rolled up in the flag"] : name === "the cairn" ? ["Tucked between its stones", "Wedged under the lantern"] : ["Scratched into the stone", "Wedged beneath it"]);
+    player.sendMessage(`§6You found ${name}! §7${where}: ${last ? "the last" : "the next"} clue (${hunt.leg + 1} of ${hunt.pts.length}). §f"${hunt.clue}"`);
     player.playSound("item.book.page_turn");
     player.playSound("random.orb", { pitch: 0.8 });
     return;
@@ -427,10 +428,7 @@ function step(player, hunt) {
   if (hunt.chest) {
     const c = hunt.chest;
     if (flat(at, c) <= FOUND_RADIUS && Math.abs(player.location.y - c.y) <= 6) found(player, hunt, true);
-    return;
   }
-  const key = `${player.id}/${hunt.id}`;
-  if (d <= CONFIG.buryDistance && !jobs.has(key)) jobs.set(key, { gen: findSpot(player.dimension, target), player, hunt });
 }
 
 system.runInterval(() => {
@@ -448,28 +446,32 @@ system.runInterval(() => {
       else if (hunt.dim !== player.dimension.id) text = "§7The map shows nothing in this dimension.";
       else {
         const key = `${player.id}/${hunt.id}`;
-        const d = flat(player.location, hunt.chest ?? hunt.pts[hunt.leg]);
-        const prev = lastDistance.get(key);
-        lastDistance.set(key, d);
+        const d = flat(player.location, hunt.chest ?? hunt.mark ?? hunt.pts[hunt.leg]);
         const leg = `§8(clue ${hunt.leg + 1} of ${hunt.pts.length})`;
-        const trend = prev === undefined || Math.abs(d - prev) < 1 ? 0 : d < prev ? 1 : -1;
-        const then = trend > 0 ? ", warmer" : trend < 0 ? ", colder" : "";
-        // Near the buried chest the bands get finer, so the player can find the spot to dig.
-        if (hunt.chest && d <= FOUND_RADIUS + 1) text = "§4Burning hot! Dig here.";
-        else if (hunt.chest && d <= 12) text = `§cHot${then} ${leg}`;
-        else if (d <= CONFIG.veryWarm) text = `§cVery warm${then} ${leg}`;
-        else if (!trend) text = `§7The map is quiet ${leg}`;
-        else text = trend > 0 ? `§6Warmer ${leg}` : `§bColder ${leg}`;
+        const radius = Math.max(8, get("warmthRadius"));
+        if (d > radius) {
+          // Far away the map only knows cold, cool or faintly warm: the clue, not the map, shows the way.
+          lastDistance.delete(key);
+          text = `${coarse(d, radius)} ${leg}`;
+        } else {
+          const prev = lastDistance.get(key);
+          lastDistance.set(key, d);
+          const trend = prev === undefined || Math.abs(d - prev) < 1 ? 0 : d < prev ? 1 : -1;
+          const then = trend > 0 ? ", warmer" : trend < 0 ? ", colder" : "";
+          // Near the buried chest (or a marker) the bands get finer, so the player can find the spot.
+          if (hunt.chest && d <= FOUND_RADIUS + 1) text = "§4Burning hot! Dig here.";
+          else if ((hunt.chest || hunt.mark) && d <= 12) text = `§cHot${then} ${leg}`;
+          else if (d <= CONFIG.veryWarm) text = `§cVery warm${then} ${leg}`;
+          else if (!trend) text = `§7The map is quiet ${leg}`;
+          else text = trend > 0 ? `§6Warmer ${leg}` : `§bColder ${leg}`;
+        }
       }
-      if (getFor(player, "where") === "hotbar") {
+      const where = getFor(player, "where");
+      if (isSlot(where)) side.show(player, where, text, 45);
+      else {
         // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
-        send("realm:actionbar", { player: player.id, ticks: 45 });
+        send("realm:actionbar", { player: player.id, ticks: 45, from: "maps_bp" });
         player.onScreenDisplay.setActionBar(text);
-      } else if (getFor(player, "where") === "middle") {
-        // The subtitle line in the middle of the screen: other add-ons that redraw the action bar can't cover it.
-        player.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: 45, fadeOutDuration: 5 });
-      } else {
-        showSide(player, text, 45);
       }
     } catch (e) {
       console.warn(`[maps] ${e}`);
@@ -481,14 +483,14 @@ system.runInterval(() => {
 // Burying the chest: a spot search spread over time (block reads are budgeted)
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, { gen: Generator<void, Vector3 | undefined, void>, player: Player, hunt: Hunt }>} key: player id/hunt id */
+/** @type {Map<string, { gen: Generator<void, any, void>, player: Player, hunt: Hunt, done: (value: any) => void }>} key: player id/hunt id */
 const jobs = new Map();
 
-/** Offsets to try around the planned spot: the spot itself, then rings outward. */
-function candidates() {
+/** Offsets to try around a spot: the spot itself, then rings outward. @param {number} radius */
+function candidates(radius) {
   /** @type {XZ[]} */
   const out = [{ x: 0, z: 0 }];
-  for (let r = 6; r <= CONFIG.searchRadius; r += 6) {
+  for (let r = 6; r <= radius; r += 6) {
     const n = Math.max(8, Math.round(r / 2));
     const turn = Math.random() * Math.PI * 2;
     for (let i = 0; i < n; i++) {
@@ -501,15 +503,17 @@ function candidates() {
 
 /**
  * Looks for a buried-chest spot near `center`: dry natural ground, 1-3 blocks down, nothing player-made in the 9 x 9
- * columns around it (surface +-4), far enough from world spawn. Yields before every block read so the caller can budget them.
- * @param {Dimension} dim @param {XZ} center @returns {Generator<void, Vector3 | undefined, void>}
+ * columns around it (surface +-4), far enough from world spawn and outside safe zones and claims. Yields before every block
+ * read so the caller can budget them.
+ * @param {Dimension} dim @param {XZ} center @param {number} radius @returns {Generator<void, Vector3 | undefined, void>}
  */
-function* findSpot(dim, center) {
+function* findSpot(dim, center, radius) {
   const spawn = world.getDefaultSpawnLocation();
-  for (const off of candidates()) {
+  for (const off of candidates(radius)) {
     const x = Math.floor(center.x) + off.x;
     const z = Math.floor(center.z) + off.z;
     if (flat({ x, z }, spawn) < get("avoidSpawn")) continue;
+    if (protectedBox(dim.id, { x: x - 4, z: z - 4 }, { x: x + 4, z: z + 4 })) continue;
     yield;
     let g = topAt(dim, x, z);
     for (let i = 0; i < 3 && g && !GROUND.test(g.typeId) && SOFT.test(g.typeId); i++) {
@@ -571,7 +575,7 @@ system.runInterval(() => {
       if (r.done) {
         jobs.delete(key);
         try {
-          buried(job.player, job.hunt, r.value);
+          job.done(r.value);
         } catch (e) {
           console.warn(`[maps] bury: ${e}`);
         }
@@ -581,6 +585,227 @@ system.runInterval(() => {
     if (budget <= 0) break;
   }
 }, 10);
+
+/**
+ * A spot for a marker at `at`: natural ground with room above, nothing player-made in the 5 x 5 tops around it, no
+ * player standing there, away from world spawn and outside safe zones and claims. Yields before every block read.
+ * @param {Dimension} dim @param {XZ} at @returns {Generator<void, (Vector3 & { styles: string[] }) | undefined, void>}
+ */
+function* markerSpot(dim, at) {
+  const x = Math.floor(at.x);
+  const z = Math.floor(at.z);
+  if (flat({ x, z }, world.getDefaultSpawnLocation()) < get("avoidSpawn")) return undefined;
+  if (isProtected(dim.id, x + 0.5, z + 0.5) || protectedBox(dim.id, { x: x - 3, z: z - 3 }, { x: x + 3, z: z + 3 })) return undefined;
+  yield;
+  let g = topAt(dim, x, z);
+  for (let i = 0; i < 3 && g && !GROUND.test(g.typeId) && SOFT.test(g.typeId); i++) {
+    yield;
+    g = blockAt(dim, x, g.location.y - 1, z);
+  }
+  if (!g || !GROUND.test(g.typeId)) return undefined;
+  const gy = g.location.y;
+  // Which marker styles fit: every block a style places must go where there is only air or plants now.
+  /** @type {Map<string, boolean>} */
+  const free = new Map();
+  for (const o of MARKER_ROOM) {
+    yield;
+    const b = blockAt(dim, x + o.dx, gy + o.dy, z + o.dz);
+    free.set(`${o.dx},${o.dy},${o.dz}`, !!b && (b.isAir || SOFT.test(b.typeId)));
+  }
+  const styles = MARKERS.filter((m) => m.blocks("minecraft:white_wool").every((o) => free.get(`${o.dx},${o.dy},${o.dz}`))).map((m) => m.id);
+  if (!styles.length) return undefined; // a tree, a rock face or unloaded
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      yield;
+      const t = topAt(dim, x + dx, z + dz);
+      if (!t || MADE.test(t.typeId)) return undefined;
+    }
+  }
+  try {
+    if (dim.getPlayers({ location: { x: x + 0.5, y: gy + 1, z: z + 0.5 }, maxDistance: 3 }).length) return undefined;
+  } catch {
+    // fine
+  }
+  return { x, y: gy, z, styles };
+}
+
+/** Every block any marker style places, relative to the ground block under it. */
+const MARKER_ROOM = [...new Map(MARKERS.flatMap((m) => m.blocks("minecraft:white_wool")).map((b) => [`${b.dx},${b.dy},${b.dz}`, b])).values()];
+
+/** @template T @param {T[]} list @returns {T[]} a shuffled copy */
+function shuffled(list) {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/**
+ * Landmarks around a leg's planned end, from the top blocks of every 4th column: water, the edge of a wood (by
+ * tree), the highest and lowest ground, sand, snow, flowers and level ground. Each with the columns that stand
+ * "at" it, nearest the center first.
+ * @param {{ x: number, z: number, y: number, id: string }[]} cells @param {XZ} center
+ * @returns {{ kind: string, info: { tree?: string, y?: number, big?: boolean }, anchors: { x: number, z: number, y: number }[] }[]}
+ */
+function landmarks(cells, center) {
+  const at = new Map(cells.map((c) => [`${c.x},${c.z}`, c]));
+  /** @param {{ x: number, z: number }} c */
+  const around = (c) => {
+    const out = [];
+    for (let dx = -SCAN_STEP; dx <= SCAN_STEP; dx += SCAN_STEP)
+      for (let dz = -SCAN_STEP; dz <= SCAN_STEP; dz += SCAN_STEP) {
+        if (!dx && !dz) continue;
+        const n = at.get(`${c.x + dx},${c.z + dz}`);
+        if (n) out.push(n);
+      }
+    return out;
+  };
+  const land = cells.filter((c) => !WATERY.test(c.id) && !TREE_TOP.test(c.id) && !MADE.test(c.id));
+  /** @param {typeof cells} list */
+  const near = (list) => [...list].sort((a, b) => flat(a, center) - flat(b, center));
+  /** @type {ReturnType<typeof landmarks>} */
+  const out = [];
+  if (!land.length) return out;
+  const water = cells.filter((c) => WATERY.test(c.id));
+  if (water.length >= 2) {
+    const shore = land.filter((c) => around(c).some((n) => WATERY.test(n.id)));
+    if (shore.length) out.push({ kind: "water", info: { big: water.length >= cells.length / 4 }, anchors: near(shore) });
+  }
+  /** @type {Map<string, number>} */
+  const trees = new Map();
+  for (const c of cells) {
+    const m = /^minecraft:(\w+?)_leaves/.exec(c.id);
+    if (m) trees.set(m[1], (trees.get(m[1]) ?? 0) + 1);
+  }
+  for (const [tree, n] of trees) {
+    const name = treeOf(`minecraft:${tree}_leaves`);
+    if (n < 3 || !name) continue;
+    const edge = land.filter((c) => around(c).some((o) => o.id.startsWith(`minecraft:${tree}_leaves`)));
+    if (edge.length) out.push({ kind: `trees:${tree}`, info: { tree: name }, anchors: near(edge) });
+  }
+  const ys = land.map((c) => c.y).sort((a, b) => a - b);
+  const median = ys[Math.floor(ys.length / 2)];
+  const top = ys[ys.length - 1];
+  const low = ys[0];
+  if (top - median >= 6) out.push({ kind: "peak", info: { y: top }, anchors: near(land.filter((c) => c.y >= top - 1)) });
+  if (median - low >= 5) out.push({ kind: "hollow", info: { y: low }, anchors: near(land.filter((c) => c.y <= low + 1)) });
+  const sand = land.filter((c) => /sand$/.test(c.id));
+  if (sand.length >= 3) out.push({ kind: "sand", info: {}, anchors: near(sand) });
+  const snow = land.filter((c) => /snow/.test(c.id));
+  if (snow.length >= 3) out.push({ kind: "snow", info: {}, anchors: near(snow) });
+  const flowers = land.filter((c) => FLOWERS.test(c.id));
+  if (flowers.length >= 3) out.push({ kind: "flowers", info: {}, anchors: near(flowers) });
+  const level = land.filter((c) => {
+    const ns = around(c);
+    return ns.length === 8 && ns.every((n) => n.y === c.y && !WATERY.test(n.id));
+  });
+  if (level.length) out.push({ kind: "flat", info: { y: level[0].y }, anchors: near(level) });
+  return out;
+}
+
+/**
+ * Settles the end of a leg once its land is loaded: reads the top block of every 4th column within 32 blocks,
+ * picks a landmark this hunt hasn't used (level ground last), and finds a spot at it for the marker or, on the last
+ * leg, the buried chest. Yields before every block read.
+ * @param {Dimension} dim @param {Hunt} hunt @param {boolean} final
+ * @returns {Generator<void, { kind?: string, info?: object, spot?: Vector3, retry?: boolean } | undefined, void>}
+ */
+function* settle(dim, hunt, final) {
+  const c = hunt.pts[hunt.leg];
+  const cx = Math.floor(c.x);
+  const cz = Math.floor(c.z);
+  /** @type {{ x: number, z: number, y: number, id: string }[]} */
+  const cells = [];
+  let columns = 0;
+  for (let dx = -SCAN_RADIUS; dx <= SCAN_RADIUS; dx += SCAN_STEP) {
+    for (let dz = -SCAN_RADIUS; dz <= SCAN_RADIUS; dz += SCAN_STEP) {
+      if (dx * dx + dz * dz > SCAN_RADIUS * SCAN_RADIUS) continue;
+      columns++;
+      yield;
+      const t = topAt(dim, cx + dx, cz + dz);
+      if (t) cells.push({ x: cx + dx, z: cz + dz, y: t.location.y, id: t.typeId });
+    }
+  }
+  // Part of the land isn't loaded (and ticking) yet: try again when the player is closer.
+  if (cells.length < columns * 0.9) return { retry: true };
+  const used = hunt.feats ?? [];
+  const kindOf = (/** @type {string} */ k) => k.split(":")[0];
+  const found = landmarks(cells, c);
+  const fresh = shuffled(found.filter((f) => f.kind !== "flat" && !used.includes(kindOf(f.kind))));
+  const again = shuffled(found.filter((f) => f.kind !== "flat" && used.includes(kindOf(f.kind))));
+  const order = [...fresh, ...found.filter((f) => f.kind === "flat"), ...again];
+  for (const f of order) {
+    for (const a of f.anchors.slice(0, 4)) {
+      const spot = final ? yield* findSpot(dim, a, ANCHOR_SPOT_RADIUS) : yield* markerSpot(dim, a);
+      if (spot) return { kind: f.kind, info: f.info, spot };
+    }
+  }
+  if (!final) return undefined;
+  const spot = yield* findSpot(dim, c, CONFIG.searchRadius);
+  return spot ? { spot } : undefined;
+}
+
+/**
+ * The end of a leg is settled: build the marker and tell the player what the spot looks like, or bury the chest.
+ * @param {Player} player @param {Hunt} hunt @param {boolean} final @param {{ kind?: string, info?: any, spot?: Vector3, retry?: boolean } | undefined} r
+ */
+function settled(player, hunt, final, r) {
+  const hunts = huntsOf(player);
+  if (r?.retry) {
+    retryAt.set(`${player.id}/${hunt.id}`, system.currentTick + 100); // not loaded yet: look again in 5 seconds
+    return;
+  }
+  if (!hunts.includes(hunt) || hunt.chest || hunt.mark) return; // given up or done meanwhile
+  let dim;
+  try {
+    dim = world.getDimension(hunt.dim);
+  } catch {
+    dim = player.dimension;
+  }
+  const kind = r?.kind ? r.kind.split(":")[0] : undefined;
+  if (final) {
+    const near = kind ? nearRiddle(kind, "the treasure lies buried", r?.info ?? {}) : undefined;
+    buried(player, hunt, r?.spot, near, kind);
+    return;
+  }
+  if (r?.spot && kind && get("markers") === true) {
+    const styles = /** @type {Vector3 & { styles?: string[] }} */ (r.spot).styles;
+    const fits = MARKERS.filter((m) => !styles || styles.includes(m.id));
+    const style = any(fits.filter((m) => m.id !== hunt.style)) ?? fits[0] ?? MARKERS[0];
+    const wool = any(WOOLS);
+    let ok = true;
+    for (const b of style.blocks(wool)) {
+      const block = blockAt(dim, r.spot.x + b.dx, r.spot.y + b.dy, r.spot.z + b.dz);
+      if (!block || !(block.isAir || SOFT.test(block.typeId))) continue; // something moved in meanwhile
+      try {
+        block.setType(b.type);
+      } catch (e) {
+        ok = false;
+        console.warn(`[maps] marker: ${e}`);
+      }
+    }
+    if (ok) {
+      hunt.mark = { x: r.spot.x, y: r.spot.y + 1, z: r.spot.z };
+      hunt.style = style.id;
+      hunt.near = nearRiddle(kind, `${markerLooks(style.id, wool)} stands`, r.info ?? {});
+      (hunt.feats ??= []).push(kind);
+      saveHunts(player, hunts);
+      updateMaps(player, hunt);
+      player.sendMessage(`§6The map's ink darkens: §e${hunt.near}`);
+      player.playSound("item.book.page_turn");
+      return;
+    }
+  }
+  // Water, builds or no markers: the next clue waits in a bottle, found by coming close.
+  hunt.nomark = true;
+  const place = describe(dim, hunt.pts[hunt.leg]);
+  hunt.near = `A bottle with the next clue lies ${place ?? "somewhere close"}, within ${CONFIG.legRadius} paces of the spot.`;
+  saveHunts(player, hunts);
+  updateMaps(player, hunt);
+  player.sendMessage(`§6The map's ink darkens: §e${hunt.near}`);
+}
 
 /** The chest's loot. @returns {ItemStack[]} */
 function rollLoot() {
@@ -607,9 +832,9 @@ function rollLoot() {
 
 /**
  * The search finished: bury the chest, or move the treasure a little further and try again.
- * @param {Player} player @param {Hunt} hunt @param {Vector3 | undefined} spot
+ * @param {Player} player @param {Hunt} hunt @param {Vector3 | undefined} spot @param {string} [near] the riddle for the spot @param {string} [kind] its landmark
  */
-function buried(player, hunt, spot) {
+function buried(player, hunt, spot, near, kind) {
   const hunts = huntsOf(player);
   if (!hunts.includes(hunt) || hunt.chest) return; // given up meanwhile
   let dim;
@@ -625,8 +850,11 @@ function buried(player, hunt, spot) {
       const inv = b.getComponent("minecraft:inventory")?.container;
       for (const stack of rollLoot()) inv?.addItem(stack);
       hunt.chest = spot;
+      hunt.near = near ?? `The treasure lies buried ${describe(dim, spot) ?? "close by"}.`;
+      if (kind) (hunt.feats ??= []).push(kind);
       saveHunts(player, hunts);
-      player.sendMessage("§6The map grows hot in your hands. §7The treasure is buried close by: follow the warmth, then dig.");
+      updateMaps(player, hunt);
+      player.sendMessage(`§6The map grows warm in your hands. §e${hunt.near} §7Close by, follow the warmth, then dig.`);
       return;
     }
   }
@@ -640,8 +868,10 @@ function buried(player, hunt, spot) {
   const r = randInt(60, 120);
   const last = hunt.pts.length - 1;
   hunt.pts[last] = { x: Math.round(hunt.pts[last].x + Math.sin(a) * r), z: Math.round(hunt.pts[last].z - Math.cos(a) * r) };
-  hunt.place = undefined;
-  hunt.clue = makeClue(hunt, player.location);
+  hunt.near = undefined;
+  hunt.from = { x: Math.round(player.location.x), z: Math.round(player.location.z) };
+  hunt.fromName = "where you stand";
+  hunt.clue = FAR.bearing(hunt.from, hunt.pts[last], "where you stand", true);
   saveHunts(player, hunts);
   updateMaps(player, hunt);
   player.sendMessage(`§6The map's ink shifts: the treasure isn't here after all. §f"${hunt.clue}"`);
@@ -706,8 +936,8 @@ async function buyMenu(player, title) {
     return;
   }
   const body = [
-    `A treasure map leads ${fmt(lo)} to ${fmt(hi)} blocks from here, in riddles: each clue tells you which way and how far to walk, and the next clue waits at the end.`,
-    "Hold the map and it tells you whether you're getting warmer. At the end, a chest lies buried.",
+    `A treasure map leads ${fmt(lo)} to ${fmt(hi)} blocks from here, in riddles: a heading, compass steps or coordinates to puzzle out, and at the end of each a marker holds the next clue.`,
+    `Hold the map near a marker or the treasure (within ${fmt(Math.max(8, get("warmthRadius")))} blocks) and it tells you whether you're getting warmer. At the end, a chest lies buried.`,
     "",
     price > 0 ? `A map costs §6${fmt(price)} Crowns§r. You have §6${fmt(crownsOf(player))}§r.` : "Today the maps are free.",
   ].join("\n");
@@ -744,10 +974,10 @@ async function showHunts(player) {
     hunt = hunts[res.selection];
   }
   const lines = [`§lClue ${hunt.leg + 1} of ${hunt.pts.length}§r (${hunt.leg} found)`, "", `§f"${hunt.clue}"`];
-  if (hunt.place) lines.push(`§eThe spot lies ${hunt.place}.`);
+  if (hunt.near) lines.push(`§e${hunt.near}`);
   if (hunt.chest) lines.push("§6The chest is buried close by: follow the warmth, then dig.");
   if (get("plainHints") === true && hunt.dim === player.dimension.id) lines.push(`§7${plainHint(hunt, player.location)}`);
-  lines.push("", "§7Hold the map to feel whether you're getting warmer. Each clue is told from where the last one was found.");
+  lines.push("", `§7Within ${fmt(Math.max(8, get("warmthRadius")))} blocks of the marker or the chest, hold the map to feel whether you're getting warmer. Each clue is told from the marker where you found it.`);
   const res = await show(player, new ActionFormData().title(`§lTreasure Map ${hunt.id}`).body(lines.join("\n")).button("A new copy of the map").button("Give up this hunt").button("Close"));
   if (!res || res.canceled || !player.isValid) return;
   if (res.selection === 0) {

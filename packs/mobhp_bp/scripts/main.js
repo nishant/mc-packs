@@ -1,6 +1,7 @@
 import { CommandPermissionLevel, CustomCommandStatus, Entity, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
+import { isSlot, sideBoxes } from "./side.js";
 
 // The "on" preference (player property "mobhp:pref") and the world options live in settings.js.
 
@@ -10,7 +11,7 @@ const showsFor = (player) => get("enabled") === true && getFor(player, "on") ===
 /** The mob's name as the game shows it: its name tag, a player's name, or the translated mob name. @param {Entity} entity */
 function nameOf(entity) {
   if (entity instanceof Player) return { text: entity.name };
-  if (entity.nameTag) return { text: entity.nameTag };
+  if (entity.nameTag && !showingOurs(entity)) return { text: entity.nameTag };
   return { translate: entity.localizationKey };
 }
 
@@ -23,6 +24,21 @@ function bar(current, max) {
   return `${color}${"|".repeat(filled)}§8${"|".repeat(length - filled)}`;
 }
 
+/** The mob's name as plain text, for the side boxes and name tags: its name tag, a player's name, or its id made readable. @param {Entity} entity */
+function plainName(entity) {
+  if (entity instanceof Player) return entity.name;
+  if (entity.nameTag && !showingOurs(entity)) return entity.nameTag;
+  const id = entity.typeId.includes(":") ? entity.typeId.slice(entity.typeId.indexOf(":") + 1) : entity.typeId;
+  return id
+    .split("_")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+const side = sideBoxes("mobhp");
+/** The box mob health uses when "Above the mob" can't be used (players, named mobs). */
+const FALLBACK_SLOT = "right1";
+
 world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
   const attacker = damageSource.damagingEntity;
   if (!(attacker instanceof Player) || attacker.id === hurtEntity.id) return;
@@ -33,64 +49,120 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
     if (!health) return;
     const max = Math.round(health.effectiveMax);
     const current = Math.max(0, Math.ceil(health.currentValue));
-    const text = { rawtext: [{ text: "§f" }, nameOf(hurtEntity), { text: `  §f${current}/${max} ${bar(current, max)}` }] };
-    if (getFor(attacker, "where") === "hotbar") {
-      attacker.onScreenDisplay.setActionBar(text);
-      // Ask the Coordinates HUD, if installed, to leave this on screen for a moment.
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: attacker.id, ticks: CONFIG.holdTicks }));
-    } else if (getFor(attacker, "where") === "middle") {
-      // The subtitle line in the middle of the screen: other add-ons that redraw the action bar can't cover it.
-      attacker.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: CONFIG.holdTicks, fadeOutDuration: 6 });
-    } else {
-      showSide(attacker, text, CONFIG.holdTicks);
+    const numbers = `§f${current}/${max} ${bar(current, max)}`;
+    let where = getFor(attacker, "where");
+    if (where === "overhead") {
+      // A killing blow: no name on a dying mob (a named mob's death can show in chat); take ours off now.
+      if (current <= 0) dropOverhead(hurtEntity);
+      else if (showOverhead(hurtEntity, numbers)) return;
+      // Players and mobs with a name of their own keep it: the realm's default box, or the first box.
+      const base = get("showAt");
+      where = isSlot(base) ? base : FALLBACK_SLOT;
     }
+    if (where === "hotbar") {
+      const text = { rawtext: [{ text: "§f" }, nameOf(hurtEntity), { text: `  ${numbers}` }] };
+      // Ask the Coordinates HUD, if installed, to leave this on screen for a moment.
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: attacker.id, ticks: CONFIG.holdTicks, from: "mobhp_bp" }));
+      attacker.onScreenDisplay.setActionBar(text);
+      return;
+    }
+    side.show(attacker, isSlot(where) ? where : FALLBACK_SLOT, `§f${plainName(hurtEntity)}  ${numbers}`, CONFIG.holdTicks);
   } catch (e) {
     console.warn(`[mobhp] ${e}`);
   }
 });
 
-// ---- The right side of the screen ----
-// Side HUD (hud_rp, in Realm Resources) shows the subtitle in a box above the scoreboard whenever the
-// title is exactly SIDE, and hides the vanilla title for SIDE and SIDE_CLEAR. Packs that share the box
-// say "realm:side" { player, from, ticks } when they write, so only the last writer clears it.
-const SIDE = "§s§1§r";
-const SIDE_CLEAR = "§s§0§r";
-/** player id -> the pack that last wrote the side box */
-const sideOwner = new Map();
-/** player id -> tick this pack's text is due to disappear */
-const sideUntil = new Map();
+// ---- Above the mob ----
+// The health goes in the mob's name tag for holdTicks, then the tag is taken off again. While it shows, the
+// mob carries the tag TAGGED and the property TAG_PROP (the name tag we wrote), so a restart or an unloaded
+// chunk mid-display still takes it off when the mob loads again. Named mobs never despawn, so no name may stay.
+const TAGGED = "mobhp_tag";
+const TAG_PROP = "mobhp:tag";
+/** entity id -> { entity, until } of name tags showing now */
+const overhead = new Map();
 
-/** Shows text on the right side for `ticks`, then clears it if nobody wrote there since. @param {Player} player @param {any} text @param {number} ticks */
-function showSide(player, text, ticks) {
-  player.onScreenDisplay.setTitle(SIDE, { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 0 });
-  sideOwner.set(player.id, "mobhp");
-  system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from: "mobhp", ticks }));
-  const until = system.currentTick + ticks;
-  sideUntil.set(player.id, until);
-  system.runTimeout(() => {
-    if (sideUntil.get(player.id) !== until) return;
-    sideUntil.delete(player.id);
-    if (sideOwner.get(player.id) !== "mobhp" || !player.isValid) return;
-    try {
-      player.onScreenDisplay.setTitle(SIDE_CLEAR, { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
-    } catch {
-      // left meanwhile
-    }
-  }, ticks);
+/** Is the mob's name tag the health this pack wrote (not a name someone gave it meanwhile)? @param {Entity} entity */
+function showingOurs(entity) {
+  try {
+    return entity.hasTag(TAGGED) && entity.nameTag === entity.getDynamicProperty(TAG_PROP);
+  } catch {
+    return false;
+  }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
-    if (id !== "realm:side") return;
-    try {
-      const m = JSON.parse(message);
-      if (typeof m?.player === "string" && typeof m.from === "string") sideOwner.set(m.player, m.from);
-    } catch {
-      // not ours
+/** @param {Entity} entity @param {string} numbers @returns {boolean} false when this mob can't show it (a player, or a mob with a name) */
+function showOverhead(entity, numbers) {
+  if (entity instanceof Player) return false;
+  const ours = showingOurs(entity);
+  if (entity.nameTag && !ours) {
+    // Named (with a name tag, or by another pack) while our health showed: keep that name and forget ours.
+    if (entity.hasTag(TAGGED)) {
+      overhead.delete(entity.id);
+      untag(entity);
     }
-  },
-  { namespaces: ["realm"] }
-);
+    return false;
+  }
+  const text = numbers;
+  if (!ours) entity.addTag(TAGGED);
+  entity.setDynamicProperty(TAG_PROP, text);
+  entity.nameTag = text;
+  overhead.set(entity.id, { entity, until: system.currentTick + CONFIG.holdTicks });
+  return true;
+}
+
+/** Takes our name tag off a mob (only if it's still ours: another pack may have named it meanwhile). @param {Entity} entity */
+function untag(entity) {
+  try {
+    if (!entity.isValid) return;
+    const wrote = entity.getDynamicProperty(TAG_PROP);
+    if (typeof wrote !== "string" || entity.nameTag === wrote) entity.nameTag = "";
+    entity.setDynamicProperty(TAG_PROP, undefined);
+    entity.removeTag(TAGGED);
+  } catch (e) {
+    console.warn(`[mobhp] ${e}`);
+  }
+}
+
+/** Takes our name tag off a mob now, if it shows one. @param {Entity} entity */
+function dropOverhead(entity) {
+  try {
+    if (entity instanceof Player || !entity.hasTag(TAGGED)) return;
+  } catch {
+    return;
+  }
+  overhead.delete(entity.id);
+  untag(entity);
+}
+
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => dropOverhead(deadEntity));
+
+system.runInterval(() => {
+  if (!overhead.size) return;
+  const now = system.currentTick;
+  for (const [id, o] of overhead) {
+    if (o.until > now && o.entity.isValid) continue;
+    overhead.delete(id);
+    untag(o.entity);
+  }
+}, 5);
+
+// Left over from before a restart, or from a chunk that unloaded while the health showed.
+world.afterEvents.entityLoad.subscribe(({ entity }) => {
+  try {
+    if (entity.hasTag(TAGGED) && !overhead.has(entity.id)) untag(entity);
+  } catch {
+    // gone again
+  }
+});
+world.afterEvents.worldLoad.subscribe(() => {
+  for (const dim of ["overworld", "nether", "the_end"]) {
+    try {
+      for (const e of world.getDimension(dim).getEntities({ tags: [TAGGED] })) untag(e);
+    } catch {
+      // not loaded
+    }
+  }
+});
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
