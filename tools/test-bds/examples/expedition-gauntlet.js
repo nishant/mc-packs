@@ -42,6 +42,7 @@ export default async function (t) {
   plate.getComponent("minecraft:enchantable").addEnchantment({ type: new EnchantmentType("protection"), level: 4 });
   eq.setEquipment(EquipmentSlot.Chest, plate);
   eq.setEquipment(EquipmentSlot.Offhand, new ItemStack("minecraft:shield", 1));
+  eq.setEquipment(EquipmentSlot.Head, new ItemStack("minecraft:turtle_helmet", 1));
   const before = snapshot(p);
   t.log(`own items: ${before.filter((x) => x).length}`);
   // Gauntlet, Easy, Fixed loadout switched on.
@@ -97,21 +98,41 @@ export default async function (t) {
   t.log(`boons: ${JSON.stringify(st.boons)}`);
   // Mess with the inventory: take something into the freed sword slot so the restore must go elsewhere.
   inv.setItem(3, new ItemStack("minecraft:stick", 5));
+  // ...and wear a helmet of their own over the stored one's slot, so that one must go into the inventory.
+  eq.setEquipment(EquipmentSlot.Head, new ItemStack("minecraft:leather_helmet", 1));
+  const loot = new Map();
+  for (const x of snapshot(p)) if (x && !x.includes("Expedition gear")) { const j = JSON.parse(x); loot.set(j.id, (loot.get(j.id) ?? 0) + j.n); }
+  // The treasure left in the chests comes home with the last one out.
+  for (const c of (await state(t, st.n - 1)).rm.chests) {
+    const box = t.dimension.getBlock(c)?.getComponent("minecraft:inventory")?.container;
+    for (let k = 0; k < (box?.size ?? 0); k++) { const it = box.getItem(k); if (it) loot.set(it.typeId, (loot.get(it.typeId) ?? 0) + it.amount); }
+  }
   t.cmd(p, "/realm:expedition_leave");
   await t.waitMessage(p, /own items are back/i, { timeout: 300 });
   await t.wait(10);
   const after = snapshot(p);
   for (let k = 0; k < before.length; k++) {
-    if (k === 3 || before[k] === null) continue;
+    if (k === 3 || k === 36 || before[k] === null) continue;
     t.check(after[k] === before[k], `slot ${k} restored exactly: ${after[k]} vs ${before[k]}`);
   }
   t.check(after.some((x) => x === before[3]), "the sword came back (moved: its slot was taken)");
   t.check(after[3]?.includes("stick"), "the stick wasn't overwritten");
+  t.check(after.some((x) => x === before[36]), "the stored helmet came back into the inventory (its slot was taken)");
+  // Exactly what was stored (plus what they carried at the end): nothing doubled, nothing on the ground.
+  const want = new Map(loot);
+  for (const x of before) if (x) { const j = JSON.parse(x); want.set(j.id, (want.get(j.id) ?? 0) + j.n); }
+  const have = new Map();
+  for (const x of after) if (x) { const j = JSON.parse(x); have.set(j.id, (have.get(j.id) ?? 0) + j.n); }
+  for (const [id, n] of new Map([...want, ...have])) t.check(have.get(id) === want.get(id), `${id}: ${have.get(id)} carried, ${want.get(id)} expected`);
+  const ground = t.dimension.getEntities({ type: "minecraft:item", location: p.location, maxDistance: 8 });
+  t.check(ground.length === 0, `nothing on the ground (${ground.map((e) => e.getComponent("minecraft:item")?.itemStack.typeId).join(", ")})`);
   t.check(!after.some((x) => x && x.includes("Expedition gear")), "kit gear taken away");
-  t.check(!p.getDynamicProperty("expedition:stash"), "stash cleared");
   t.check(t.world.structureManager.getWorldStructureIds().filter((x) => x.startsWith("expedition:stash")).length === 0, "stash structure deleted");
   const carts = t.dimension.getEntities({ type: "minecraft:chest_minecart" });
   t.check(carts.length === 0, `no carts left (${carts.length})`);
+  t.check(!p.hasTag("realm_expedition"), "the realm_expedition tag is gone");
+  await t.waitUntil(async () => (await state(t))?.phase === "none", { timeout: 600, interval: 20, message: "run over" });
+  t.check(t.dimension.getEntities({ tags: ["realm:exp_pet"] }).length === 0, "Wolf Pack wolves removed");
 }
 // shared helpers (pasted into each scenario: scenarios can't import)
 const PASS = /air|bars|sign|button|plate|ladder|lever|web|fire|lantern|torch|water|carpet|chain/;
