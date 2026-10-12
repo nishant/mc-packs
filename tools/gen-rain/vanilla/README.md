@@ -4,8 +4,8 @@ Unmodified copies from Mojang's [bedrock-samples](https://github.com/Mojang/bedr
 
 | File | Used by | For |
 |---|---|---|
-| `weather.png` | `textures.mjs` | The 32×32 weather atlas. The four swatches (rows 20–30) are kept pixel-identical at 4×; the rain rows (5–19) are redrawn, and each of the 8 snowflakes (rows 0–2) is redrawn inside its own 3×3 cell |
-| `fogs/*_fog_setting.json` | `fogs.mjs` | The vanilla fogs that define a `weather` (rain/snow) fog in the overworld, plus the fogs of the biomes where it always snows (cold beach, cold taiga ×3, frozen ocean, frozen river, ice mountains, ice plains, ice spikes), which have none. Each override is this file with only `distance.weather` changed or added |
+| `weather.png` | `textures.mjs`, `renders.mjs` | The 32×32 weather atlas. The four swatches (rows 20–30) are kept pixel-identical at 4×; the rain rows (5–19) are redrawn, and each of the 8 snowflakes (rows 0–2) is redrawn inside its own 3×3 cell |
+| `fogs/*_fog_setting.json` | `fogs.mjs` | The vanilla fogs that define a `weather` (rain/snow) fog in the overworld, plus the fogs of the biomes where it always snows (cold beach, cold taiga ×3, frozen ocean, frozen river, ice mountains, ice plains, ice spikes, and `dry`, which frozen and jagged peaks share with biomes that get no rain), most of which have none. Each override is this file with only `distance.weather` changed or added |
 | `biomes/grove.client_biome.json`, `biomes/snowy_slopes.client_biome.json` | `fogs.mjs` | The snowy biomes that use `minecraft:fog_default` (shared with rainy biomes). Each override is this file with only its fog identifier changed |
 
 Which biomes always snow comes from `behavior_pack/biomes/*.biome.json` (`minecraft:climate` temperature below 0.15) and which fog each uses from `resource_pack/biomes/*.client_biome.json`; neither is copied.

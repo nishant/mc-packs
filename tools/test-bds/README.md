@@ -42,6 +42,7 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--keep` | off | Keep the temp server folder (path printed at the end). |
 | `--log <file>` | `logs/...` | Where to write the full log. |
 | `--quiet` | off | Print only harness lines, warnings and errors. Recommended. |
+| `-h`, `--help` | | Print the usage and exit. |
 
 Environment: `BDS_DIR` (pristine BDS, default `/home/user/bds`; downloaded by `setup.mjs` if
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
@@ -218,19 +219,19 @@ Examples: `examples/smoke.js` (help menu, commands from several packs), `example
 - **Start-up phase.** "startup" in the summary means before the scenario started (the scenario
   starts right after `Server started.`); an error a pack logs on its first ticks may be listed under
   "scenario".
-- **Watchdog.** With all 53 packs, BDS logs `[Watchdog] High memory usage detected` once at
+- **Watchdog.** With every pack installed, BDS logs `[Watchdog] High memory usage detected` once at
   startup (also without the shim). It is listed, not failed.
 - **Network.** `transport=nethernet` signs in to Microsoft's signaling service at startup (needs
   internet; nothing else does once BDS is installed).
 
-## Timings (4-core container)
+## Timings (4-core container, measured with 53 behavior and 3 resource packs; there are more now)
 
 | | |
 |---|---|
 | First run for a new seed (world template) | +5 s, once |
 | Prepare the temp server | 0.3 s |
 | Boot, 1 pack | 2.5 to 3 s to `Server started.` |
-| Boot, all 53 behavior + 3 resource packs | 5.5 to 7 s |
+| Boot, all behavior and resource packs | 5.5 to 7 s |
 | Idle run, all packs, 100 ticks | about 17 s total |
 | `examples/smoke.js`, all packs | about 27 s total |
 | `examples/forms.js`, 1 pack | about 10 s total |
