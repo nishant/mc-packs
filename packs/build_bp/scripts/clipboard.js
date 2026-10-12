@@ -241,6 +241,22 @@ function surfaceOf(c) {
   return c.surface;
 }
 
+/** @type {WeakMap<object, Map<number, Vec[]>>} each copy's surface turned to each facing, placed at 0 0 0 */
+const turnedSurfaces = new WeakMap();
+
+/**
+ * A copy's surface turned the way the player faces, relative to the spot they look at: the same list every time
+ * (so the paste preview's outline is worked out once, not twice a second), moved there with the guide's offset.
+ * @param {Content} c @param {Slot} slot @param {number} facing
+ */
+function turnedSurface(c, slot, facing) {
+  let byFacing = turnedSurfaces.get(c);
+  if (!byFacing) turnedSurfaces.set(c, (byFacing = new Map()));
+  let list = byFacing.get(facing);
+  if (!list) byFacing.set(facing, (list = surfaceOf(c).map(placement(slot, facing, { x: 0, y: 0, z: 0 }).at)));
+  return list;
+}
+
 /**
  * Where a copy goes at T: it starts at T and goes away from you, centered left to right, turned from the
  * way its maker faced to the way you face. Returns a function from copy cells to world spots, and the turn.
@@ -750,7 +766,8 @@ system.runInterval(() => {
         }
         const { at } = placement(slot, facingIndex(player), T);
         const free = !!slot.cut && !meta.used.includes(slot.cut);
-        drawGuide(player, free ? surfaceOf(c).map(at) : guideMods(player, surfaceOf(c).map(at), T), "paste");
+        if (free || !ctx.modsActive(player)) drawGuide(player, turnedSurface(c, slot, facingIndex(player)), "paste", { offset: T });
+        else drawGuide(player, guideMods(player, surfaceOf(c).map(at), T), "paste");
       }
     } catch (e) {
       console.warn(`[build] clipboard: ${e}`);
