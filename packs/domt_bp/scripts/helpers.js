@@ -1,5 +1,5 @@
 // Small tools the cards use: safe teleports, gifts, spawns, safe zones and timed block restores.
-import { Dimension, Entity, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
+import { Dimension, Entity, EntityDamageCause, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
 
 // ---------------------------------------------------------------------------
 // Basics
@@ -61,24 +61,58 @@ export function bar(p, text, ticks = 30) {
   });
 }
 
-/** Puts out fire blocks within `r` blocks of a point. @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] */
-export function clearFire(dim, at, r = 4) {
+/**
+ * Fire blocks within `r` blocks of a point, as "x,y,z" keys.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] @returns {Set<string>}
+ */
+function firesAround(dim, at, r = 4) {
   const cx = Math.floor(at.x);
   const cy = Math.floor(at.y);
   const cz = Math.floor(at.z);
+  const out = new Set();
   for (let x = cx - r; x <= cx + r; x++)
     for (let y = cy - 2; y <= cy + r; y++)
       for (let z = cz - r; z <= cz + r; z++) {
         const b = blockAt(dim, { x, y, z });
-        if (b && b.typeId === "minecraft:fire") attempt(() => b.setType("minecraft:air"));
+        if (b && b.typeId === "minecraft:fire") out.add(`${x},${y},${z}`);
       }
+  return out;
 }
 
-/** A lightning bolt at a point. Any fire it starts there is put out, so it never burns a build. @param {Dimension} dim @param {import("@minecraft/server").Vector3} at */
-export function strike(dim, at) {
+/**
+ * Puts out fire blocks within `r` blocks of a point, except the ones in `keep` (fires that were
+ * burning before, like a fireplace). Only fire is touched.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} [r] @param {Set<string>} [keep]
+ */
+export function clearFire(dim, at, r = 4, keep = new Set()) {
+  for (const key of firesAround(dim, at, r)) {
+    if (keep.has(key)) continue;
+    const [x, y, z] = key.split(",").map(Number);
+    const b = blockAt(dim, { x, y, z });
+    if (b && b.typeId === "minecraft:fire") attempt(() => b.setType("minecraft:air"));
+  }
+}
+
+/**
+ * A lightning bolt at a point. Any fire it starts there is put out, so it never burns a build (fires
+ * that were already burning stay). Within 8 blocks of a safe zone there is no real bolt (it would turn
+ * villagers into witches and pigs into piglins): `victim` takes the hit directly, with thunder and sparks.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {Entity} [victim]
+ */
+export function strike(dim, at, victim) {
   const spot = { x: at.x, y: at.y, z: at.z };
+  if (inZone(dim.id, spot.x, spot.z, 8)) {
+    if (victim) {
+      attempt(() => victim.applyDamage(5, { cause: EntityDamageCause.lightning }));
+      attempt(() => victim.setOnFire(8, true));
+    }
+    attempt(() => dim.playSound("ambient.weather.lightning.impact", spot, { volume: 1.5 }));
+    burst(dim, "minecraft:electric_spark_particle", spot, 16, 1);
+    return;
+  }
+  const before = firesAround(dim, spot);
   dim.spawnEntity("minecraft:lightning_bolt", spot);
-  for (const t of [2, 10, 30, 60, 100]) system.runTimeout(() => attempt(() => clearFire(dim, spot)), t);
+  for (const t of [2, 10, 30, 60, 100]) system.runTimeout(() => attempt(() => clearFire(dim, spot, 4, before)), t);
 }
 
 /** Compass direction from one point to another ("north-east"). @param {import("@minecraft/server").Vector3} from @param {import("@minecraft/server").Vector3} to */

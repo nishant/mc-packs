@@ -690,9 +690,18 @@ function forageCrop(player, type) {
   }
 }
 
-world.afterEvents.playerBreakBlock.subscribe(({ player, brokenBlockPermutation: perm }) => {
+/** Where ripe crops were just broken: "dim x,y,z" to the tick, so a tap watched at the same spot doesn't count it twice. @type {Map<string, number>} */
+const recentBreaks = new Map();
+/** @param {string} dim @param {import("@minecraft/server").Vector3} at */
+const spotKey = (dim, at) => `${dim} ${at.x},${at.y},${at.z}`;
+
+world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermutation: perm }) => {
   try {
-    if (ripe(perm)) forageCrop(player, perm.type.id);
+    if (!ripe(perm)) return;
+    const now = system.currentTick;
+    for (const [k, t] of recentBreaks) if (now - t > 20) recentBreaks.delete(k);
+    recentBreaks.set(spotKey(block.dimension.id, block.location), now);
+    forageCrop(player, perm.type.id);
   } catch (e) {
     console.warn(`[cooking] forage: ${e}`);
   }
@@ -709,12 +718,18 @@ function watchTapHarvest(player, block) {
   if (!ripe(block.permutation)) return;
   const dim = block.dimension;
   const at = { ...block.location };
+  const tapped = system.currentTick;
   system.runTimeout(() => {
     try {
       const b = dim.getBlock(at);
       if (!b || !player.isValid) return;
-      // Replanted (same crop, not ripe) or no seed to replant (air): harvested. A real break is counted above.
-      if ((b.typeId === type && !ripe(b.permutation)) || b.typeId === "minecraft:air") forageCrop(player, type);
+      // Broken by hand meanwhile: playerBreakBlock already counted it.
+      if ((recentBreaks.get(spotKey(dim.id, at)) ?? -1) >= tapped) return;
+      // Replanted (same crop, not ripe) or no seed to replant (air): harvested. Air over trampled
+      // farmland (now dirt) or washed away is not a harvest.
+      const soil = b.below()?.typeId;
+      const onSoil = type === "minecraft:nether_wart" ? soil === "minecraft:soul_sand" : soil === "minecraft:farmland";
+      if ((b.typeId === type && !ripe(b.permutation)) || (b.typeId === "minecraft:air" && onSoil)) forageCrop(player, type);
     } catch (e) {
       console.warn(`[cooking] forage tap: ${e}`);
     }

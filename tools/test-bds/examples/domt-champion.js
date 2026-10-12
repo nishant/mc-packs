@@ -1,5 +1,5 @@
 // Deck of Many Things: The Champion makes a champion the player can see (with or without the
-// Champions pack), and if it vanishes right away the deck sends its own. Run with --only domt_bp,elite_bp
+// Champions pack), if it vanishes right away the deck sends its own, and a quick kill isn't replaced. Run with --only domt_bp,elite_bp
 // and with --only domt_bp.
 export default async function (t) {
   const p = await t.player("Tester", { op: true });
@@ -32,4 +32,15 @@ export default async function (t) {
   const back = await t.waitUntil(() => champs().find((e) => e.typeId === "minecraft:vindicator"), { timeout: 200, message: "the deck sent its own after removal" });
   t.log(`replacement: ${back.typeId} ${back.nameTag}`);
   await t.waitMessage(p, /slipped away/, { since: since2 });
+  // 3. A champion killed at once is not replaced (no second champion for a quick kill).
+  for (const e of champs()) e.remove();
+  await t.seconds(2);
+  const since3 = t.tick;
+  await draw();
+  await t.waitMessage(p, /blocks to the/, { since: since3 });
+  const c3 = await t.waitUntil(() => champs()[0], { timeout: 200, message: "third champion appeared" });
+  c3.kill();
+  await t.seconds(5);
+  t.check(!champs().length, "a killed champion is not replaced");
+  t.check(!t.messages(p, { since: since3 }).some((m) => /slipped away/.test(m.plain)), "no 'slipped away' after a kill");
 }
