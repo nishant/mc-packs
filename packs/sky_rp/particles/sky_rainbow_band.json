@@ -1,0 +1,52 @@
+{
+  "format_version": "1.10.0",
+  "particle_effect": {
+    "description": {
+      "identifier": "realm:sky_rainbow_band",
+      "basic_render_parameters": {
+        "material": "particles_blend",
+        "texture": "textures/particle/realm_sky_dot"
+      }
+    },
+    "components": {
+      "minecraft:emitter_rate_instant": {
+        "num_particles": 1
+      },
+      "minecraft:emitter_lifetime_once": {
+        "active_time": 0
+      },
+      "minecraft:emitter_shape_point": {},
+      "minecraft:particle_initial_speed": 0,
+      "minecraft:particle_lifetime_expression": {
+        "max_lifetime": "(variable.life > 0 ? variable.life : 2)"
+      },
+      "minecraft:particle_appearance_billboard": {
+        "size": [
+          "(variable.size > 0 ? variable.size : 1)",
+          "(variable.size > 0 ? variable.size : 1)"
+        ],
+        "facing_camera_mode": "lookat_xyz",
+        "uv": {
+          "texture_width": 32,
+          "texture_height": 32,
+          "uv": [
+            0,
+            0
+          ],
+          "uv_size": [
+            32,
+            32
+          ]
+        }
+      },
+      "minecraft:particle_appearance_tinting": {
+        "color": [
+          "variable.cr",
+          "variable.cg",
+          "variable.cb",
+          "Math.clamp(Math.min(variable.particle_age / 0.3, (variable.particle_lifetime - variable.particle_age) / 0.5), 0, 1) * 0.85"
+        ]
+      }
+    }
+  }
+}
