@@ -20,6 +20,12 @@
           "broadcast_anger": false,
           "calm_event": { "event": "realm:platypus_calm", "target": "self" }
         },
+        "minecraft:timer": {
+          "looping": false,
+          "time": 15,
+          "randomInterval": false,
+          "time_down_event": { "event": "realm:platypus_calm", "target": "self" }
+        },
         "minecraft:behavior.melee_attack": {
           "priority": 2,
           "speed_multiplier": 1.4,
@@ -103,7 +109,10 @@
         "remove": { "component_groups": ["realm:platypus_brown"] }
       },
       "realm:platypus_anger": {
-        "add": { "component_groups": ["realm:platypus_angry"] }
+        "sequence": [
+          { "remove": { "component_groups": ["realm:platypus_angry"] } },
+          { "add": { "component_groups": ["realm:platypus_angry"] } }
+        ]
       },
       "realm:platypus_calm": {
         "remove": { "component_groups": ["realm:platypus_angry"] }
