@@ -52,7 +52,9 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
     const numbers = `§f${current}/${max} ${bar(current, max)}`;
     let where = getFor(attacker, "where");
     if (where === "overhead") {
-      if (showOverhead(hurtEntity, numbers)) return;
+      // A killing blow: no name on a dying mob (a named mob's death can show in chat); take ours off now.
+      if (current <= 0) dropOverhead(hurtEntity);
+      else if (showOverhead(hurtEntity, numbers)) return;
       // Players and mobs with a name of their own keep it: the realm's default box, or the first box.
       const base = get("showAt");
       where = isSlot(base) ? base : FALLBACK_SLOT;
@@ -120,6 +122,19 @@ function untag(entity) {
     console.warn(`[mobhp] ${e}`);
   }
 }
+
+/** Takes our name tag off a mob now, if it shows one. @param {Entity} entity */
+function dropOverhead(entity) {
+  try {
+    if (entity instanceof Player || !entity.hasTag(TAGGED)) return;
+  } catch {
+    return;
+  }
+  overhead.delete(entity.id);
+  untag(entity);
+}
+
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => dropOverhead(deadEntity));
 
 system.runInterval(() => {
   if (!overhead.size) return;
