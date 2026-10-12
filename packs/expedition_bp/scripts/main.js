@@ -1062,12 +1062,19 @@ function useSigil(p, line) {
   return undefined;
 }
 
-/** A run called off before anyone went in gives its sigil back to the leader. @param {Run} run */
+/**
+ * A run called off before anyone went in gives its sigil back to the leader (when they're offline, as soon as they
+ * next spawn). @param {Run} run
+ */
 function refundSigil(run) {
   const it = run.sigilItem;
   run.sigilItem = undefined;
-  const p = it && online(run.leaderId);
-  if (!it || !p) return;
+  if (!it) return;
+  const p = online(run.leaderId);
+  if (!p) {
+    dropped.set(run.leaderId, [...(dropped.get(run.leaderId) ?? []), it]);
+    return;
+  }
   try {
     const rest = p.getComponent("minecraft:inventory")?.container?.addItem(it);
     if (rest) p.dimension.spawnItem(rest, p.location);
@@ -1816,6 +1823,7 @@ async function endRun(run, why) {
   if (wasActive) recordFail(run, [...run.members.values()].map((m) => m.name));
   if (run.phase === "finishing") packSpoils(run, [...run.members.keys()]);
   run.phase = "resetting";
+  refundSigil(run); // still held while gathering or building (an operator's reset): nobody went in
   if (why) tell(run, why);
   for (const id of [...run.members.keys()]) {
     const p = online(id);
