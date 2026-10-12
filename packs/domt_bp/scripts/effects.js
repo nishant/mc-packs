@@ -25,7 +25,9 @@ import {
   prettyId,
   randomEnchanted,
   randomSpot,
+  restoreDue,
   safeHop,
+  saveTask,
   sightSpot,
   sound,
   spawnAround,
@@ -248,6 +250,43 @@ function spawnAbove(p, type, n, up, r) {
   }
   return out;
 }
+
+const ANVILS = ["minecraft:anvil", "minecraft:chipped_anvil", "minecraft:damaged_anvil"];
+
+/**
+ * Anvil Drop's anvil goes away `seconds` after it drops (saved, so a restart doesn't keep it). It
+ * lands on the block at `floor` (or replaces it, if that was grass or a flower): only an anvil
+ * there is removed, never one that was there before, and the block it replaced comes back.
+ * @param {string} dim @param {number} x @param {number} floor @param {number} z @param {string} under the block at `floor` before the drop @param {number} seconds
+ */
+function removeAnvil(dim, x, floor, z, under, seconds) {
+  const types = ["minecraft:air", ...ANVILS];
+  /** @type {number[][]} */
+  const blocks = ANVILS.map((_, i) => [x, floor + 1, z, 0, i + 1]);
+  if (!ANVILS.includes(under) && under !== "minecraft:air") {
+    types.push(under);
+    for (let i = 0; i < ANVILS.length; i++) blocks.push([x, floor, z, types.length - 1, i + 1]);
+  }
+  const id = `anvil_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e4)}`;
+  saveTask({ id, dim, at: Date.now() + seconds * 1000, types, blocks });
+  system.runTimeout(() => attempt(() => restoreDue(id)), seconds * 20);
+}
+
+/** A Hot Potato whose 30 seconds ran out while its holder was away (or the server restarted) is removed when they join, without the bang. */
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (!initialSpawn) return;
+  attempt(() => {
+    const inv = player.getComponent("minecraft:inventory")?.container;
+    if (!inv) return;
+    for (let i = 0; i < inv.size; i++) {
+      const it = inv.getItem(i);
+      if (!it || it.typeId !== "minecraft:potato") continue;
+      const mark = it.getLore().find((l) => l.startsWith("§8Deck of Many Things "));
+      const made = mark ? parseInt(mark.slice("§8Deck of Many Things ".length), 36) : NaN;
+      if (Number.isFinite(made) && Date.now() - made > 40000) inv.setItem(i, undefined);
+    }
+  });
+});
 
 const TEMP_TAG = "domt:temp"; // mobs that leave after a while
 const PROP_GONE = "domt:gone"; // entity: when it leaves (ms since 1970)
@@ -995,7 +1034,7 @@ export const CARDS = [
     name: "Anvil Drop",
     rarity: "uncommon",
     kind: "bad",
-    text: "An anvil falls from the sky onto your head. Move! If you live, keep the anvil.",
+    text: "An anvil falls from the sky onto your head. Move! It crumbles away a few seconds after it lands.",
     expect: "hurt",
     blocks: true,
     prep: (p) => {
@@ -1012,19 +1051,17 @@ export const CARDS = [
       let top = 1;
       while (top < 8 && blockAt(dim, { x, y: y + top + 1, z })?.isAir) top++;
       if (top < 5) return false;
+      // Where it will land: just above the first non-air block under the drop point.
+      let floor = y + top - 1;
+      while (floor > y - 6 && blockAt(dim, { x, y: floor, z })?.isAir) floor--;
+      const under = blockAt(dim, { x, y: floor, z })?.typeId ?? "minecraft:air";
       bar(player, "§c§lLook up!", 40);
       sound(player, "random.anvil_land", 0.6);
       system.runTimeout(() => {
         const b = blockAt(dim, { x, y: y + top, z });
         if (!b || !b.isAir) return;
         attempt(() => b.setType("minecraft:anvil"));
-        if (test)
-          system.runTimeout(() => {
-            for (let yy = y - 1; yy <= y + top; yy++) {
-              const a = blockAt(dim, { x, y: yy, z });
-              if (a && /anvil/.test(a.typeId)) attempt(() => a.setType("minecraft:air"));
-            }
-          }, 60);
+        removeAnvil(dim.id, x, floor, z, under, test ? 3 : 8);
       }, test ? 1 : 25);
     },
   },

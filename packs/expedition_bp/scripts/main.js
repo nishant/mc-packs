@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, giveKit, isRunGear, restoreStash, rollBoons, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -111,8 +111,10 @@ const BLESSINGS = [
 /** @typedef {ReturnType<typeof scaleFor>} Scale */
 /**
  * @typedef {{ id: number, slot: number, dungeon: string, seed: number, x: number, z: number, y: number, leader: string, phase: string,
- *   l?: number, g?: number, c?: number, h?: number, pt?: string[] }} RunRecord
- * l: level; g, c, h: the box's grid, cell size and height above the floor (missing in records from before tiers); pt: block types players placed
+ *   l?: number, g?: number, c?: number, h?: number, pt?: string[], to?: string[], ch?: number[][] }} RunRecord
+ * l: level; g, c, h: the box's grid, cell size and height above the floor (missing in records from before tiers); pt: block types players placed;
+ * to, ch: while the treasure room is open, the players still in the run and the treasure chests (x, y, z), so a restart
+ * hands what's left in them to those players before the box is reset
  */
 /** @typedef {{ name: string, since: number, away: number }} Member */
 /** @typedef {{ room: number, k: string, i: number, at: Vector3 }} Elem */
@@ -885,6 +887,12 @@ async function resetBox(rec) {
   const dim = overworld();
   const { from, to } = box(o, size, top);
   try {
+    if (!leftoversAfterRestart(rec)) return false;
+  } catch (e) {
+    console.warn(`[expedition] leftovers after restart: ${e}`);
+    return false;
+  }
+  try {
     for (const at of findBlocks(from, to, { includeTypes: [B.chest] }, 64)) dim.getBlock(at)?.getComponent("minecraft:inventory")?.container?.clearAll();
   } catch (e) {
     console.warn(`[expedition] chests: ${e}`);
@@ -1090,9 +1098,9 @@ function dropSigil(run, at, why) {
 const runs = new Map();
 /** Slots whose box still needs a reset (from a run cut short by a restart). @type {Map<number, RunRecord>} */
 const pending = new Map();
-/** Items players dropped dying in a dungeon, given back when they respawn. @type {Map<string, ItemStack[]>} */
+/** Items players dropped dying in a dungeon, given back when they respawn (only when a parcel couldn't be made). @type {Map<string, ItemStack[]>} */
 const dropped = new Map();
-/** Treasure left in the chests when a run ends, given to its players back home. @type {Map<string, ItemStack[]>} */
+/** Treasure left in the chests when a run ends, given to its players back home (only when a parcel couldn't be made). @type {Map<string, ItemStack[]>} */
 const spoils = new Map();
 /** Shrine effects given to players, taken away when they leave the run. @type {Map<string, string[]>} */
 const buffs = new Map();
@@ -1119,6 +1127,7 @@ const recordOf = (run) => ({
   c: run.lay.cell,
   h: run.top,
   pt: [...run.placedTypes],
+  ...(run.phase === "finishing" ? { to: [...run.members.keys()], ch: spoilChests(run).map((v) => [v.x, v.y, v.z]) } : {}),
 });
 /** @param {Run} run */
 const saveRun = (run) => writeJson(PROP_RUN + run.slot, recordOf(run));
@@ -1539,8 +1548,47 @@ function giveSpoils(p) {
   p.sendMessage(`§aThe treasure left in the chests came back with you.${spilled ? " Some is at your feet: your inventory is full." : ""}`);
 }
 
+/** The treasure chests and the opened side caches' chests. @param {Run} run @returns {Vector3[]} */
+function spoilChests(run) {
+  /** @type {Vector3[]} */
+  const out = [];
+  for (const [i, rm] of run.lay.rooms.entries()) {
+    if (rm.kind !== "treasure" && rm.kind !== "cache") continue;
+    if (rm.kind === "cache" && !run.puz.get(i)?.solved) continue;
+    for (const c of rm.chests) out.push(wpos(run, rm, c.u, c.v, c.y));
+  }
+  return out;
+}
+
 /**
- * Empties the treasure chests (and opened side caches) and shares what's left between these players, item stack by item stack.
+ * Stores items for players in parcels (scripts/gauntlet.js), made in the sealed pocket in the box's corner, so a
+ * restart before they get home loses nothing. Returns the players whose parcel couldn't be made (their items are
+ * still in `by`).
+ * @param {Vector3} o the box's corner @param {string} kind @param {Map<string, ItemStack[]>} by
+ */
+function parcelUp(o, kind, by) {
+  /** @type {string[]} */
+  const failed = [];
+  if (![...by.values()].some((l) => l.length)) return failed;
+  const dim = overworld();
+  const pocket = { x: o.x, y: o.y + 1, z: o.z };
+  try {
+    fill(dim, pocket, { ...pocket, y: pocket.y + 1 }, "minecraft:air");
+  } catch (e) {
+    console.warn(`[expedition] pocket: ${e}`);
+  }
+  for (const [id, items] of by) if (items.length && !saveParcel(id, kind, items, dim, pocket)) failed.push(id);
+  try {
+    fill(dim, pocket, { ...pocket, y: pocket.y + 1 }, "minecraft:deepslate");
+  } catch {
+    // reset with the box
+  }
+  return failed;
+}
+
+/**
+ * Empties the treasure chests (and opened side caches) and shares what's left between these players, item stack by
+ * item stack, in parcels (or, if one can't be made, in memory until they're home).
  * @param {Run} run @param {string[]} ids
  */
 function packSpoils(run, ids) {
@@ -1548,29 +1596,64 @@ function packSpoils(run, ids) {
   /** @type {ItemStack[]} */
   const items = [];
   try {
-    for (const [i, rm] of run.lay.rooms.entries()) {
-      if (rm.kind !== "treasure" && rm.kind !== "cache") continue;
-      if (rm.kind === "cache" && !run.puz.get(i)?.solved) continue;
-      for (const c of rm.chests) {
-        const box = overworld().getBlock(wpos(run, rm, c.u, c.v, c.y))?.getComponent("minecraft:inventory")?.container;
-        if (!box) continue;
-        for (let k = 0; k < box.size; k++) {
-          const it = box.getItem(k);
-          if (!it) continue;
-          items.push(it);
-          box.setItem(k);
-        }
+    for (const at of spoilChests(run)) {
+      const box = overworld().getBlock(at)?.getComponent("minecraft:inventory")?.container;
+      if (!box) continue;
+      for (let k = 0; k < box.size; k++) {
+        const it = box.getItem(k);
+        if (!it) continue;
+        items.push(it);
+        box.setItem(k);
       }
     }
   } catch (e) {
     console.warn(`[expedition] leftovers: ${e}`);
   }
+  /** @type {Map<string, ItemStack[]>} */
+  const by = new Map();
   items.forEach((it, k) => {
     const id = ids[k % ids.length];
-    const list = spoils.get(id) ?? [];
-    list.push(it);
-    spoils.set(id, list);
+    by.set(id, [...(by.get(id) ?? []), it]);
   });
+  for (const id of parcelUp(run.o, "spoils", by)) spoils.set(id, [...(spoils.get(id) ?? []), ...(by.get(id) ?? [])]);
+}
+
+/**
+ * After a restart in the treasure window: what's left in the record's chests goes into parcels for the players who
+ * were in the run, before the box is reset. False when a parcel couldn't be made (those items stay in the chests, and
+ * the reset waits).
+ * @param {RunRecord} rec
+ */
+function leftoversAfterRestart(rec) {
+  if (rec.phase !== "finishing" || !Array.isArray(rec.to) || !rec.to.length || !Array.isArray(rec.ch)) return true;
+  const ids = rec.to;
+  const dim = overworld();
+  /** @type {Map<string, ItemStack[]>} */
+  const by = new Map();
+  /** @type {Map<string, { box: import("@minecraft/server").Container, k: number }[]>} */
+  const slots = new Map();
+  let n = 0;
+  for (const [x, y, z] of rec.ch) {
+    const box = dim.getBlock({ x, y, z })?.getComponent("minecraft:inventory")?.container;
+    if (!box) continue;
+    for (let k = 0; k < box.size; k++) {
+      const it = box.getItem(k);
+      if (!it) continue;
+      const id = ids[n++ % ids.length];
+      by.set(id, [...(by.get(id) ?? []), it]);
+      slots.set(id, [...(slots.get(id) ?? []), { box, k }]);
+    }
+  }
+  if (!n) return true;
+  const failed = parcelUp({ x: rec.x, y: rec.y, z: rec.z }, "spoils", by);
+  // Taken out of the chests in the same tick they were stored: never given twice.
+  for (const [id, list] of slots) if (!failed.includes(id)) for (const { box, k } of list) box.setItem(k);
+  console.warn(`[expedition] slot ${rec.slot}: treasure left after a restart went to ${by.size - failed.length} player(s)${failed.length ? `, ${failed.length} failed` : ""}`);
+  for (const id of by.keys()) {
+    const p = online(id);
+    if (p && !failed.includes(id) && !runOf(id) && typeof p.getDynamicProperty(PROP_RETURN) !== "string") homecoming(p); // already back home
+  }
+  return !failed.length;
 }
 
 /** Where the player started their expedition, or undefined. @param {Player} p @returns {any} */
@@ -1632,6 +1715,13 @@ function homecoming(p) {
       if (!p.isValid) return;
       giveBack(p);
       giveSpoils(p);
+      const got = await openParcels(p);
+      if (got && p.isValid) {
+        const full = got.spilled ? " Some are at your feet: your inventory is full." : "";
+        if (got.kinds.has("dropped")) p.sendMessage(`§aThe items you dropped in the dungeon are back with you.${full}`);
+        if (got.kinds.has("spoils")) p.sendMessage(`§aThe treasure left in the chests came back with you.${full}`);
+      }
+      if (!p.isValid) return;
       stripRunGear(p); // kit gear that was dropped dying and given back
     } catch (e) {
       console.warn(`[expedition] homecoming: ${e}`);
@@ -1662,6 +1752,7 @@ function sendBack(p, withFade = true) {
 function dropMember(run, id) {
   if (run.phase === "finishing" && run.members.size === 1 && run.members.has(id)) packSpoils(run, [id]); // the last one out takes what's left
   if (!run.members.delete(id)) return;
+  if (run.phase === "finishing" && run.members.size) saveRun(run); // who gets the treasure after a restart
   // Their Wolf Pack wolves go too (tame wolves would follow them home).
   try {
     for (const e of overworld().getEntities({ tags: [PET_TAG, `${PET_TAG}_of:${id}`] })) e.remove();
@@ -3169,14 +3260,15 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
         system.runTimeout(() => {
           try {
             /** @type {ItemStack[]} */
-            const items = dropped.get(id) ?? [];
+            const items = [];
             for (const e of overworld().getEntities({ type: "minecraft:item", location: where, maxDistance: 6 })) {
               const stack = e.getComponent("minecraft:item")?.itemStack;
               if (!stack) continue;
               items.push(stack);
               e.remove();
             }
-            if (items.length) dropped.set(id, items);
+            // Kept in a parcel, so a restart before they respawn loses nothing.
+            if (items.length && parcelUp(run.o, "dropped", new Map([[id, items]])).length) dropped.set(id, [...(dropped.get(id) ?? []), ...items]);
           } catch (e) {
             console.warn(`[expedition] collect drops: ${e}`);
           }
@@ -3282,7 +3374,7 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
     const raw = player.getDynamicProperty(PROP_RETURN);
     if (typeof raw !== "string") {
       // Back home, but stored items (Fixed loadout) still to give back: the last try didn't finish.
-      if ((stashOf(player) || dropped.has(player.id) || spoils.has(player.id)) && !runOf(player.id)) homecoming(player);
+      if ((stashOf(player) || dropped.has(player.id) || spoils.has(player.id) || hasParcels(player.id)) && !runOf(player.id)) homecoming(player);
       return;
     }
     if (runOf(player.id)) return; // still in a run (teleporting in)
