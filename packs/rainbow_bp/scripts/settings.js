@@ -17,7 +17,7 @@ const OPTIONS = [
   { key: "crowns", type: "int", scope: "world", label: "Crowns for finding the pot of gold", min: 0, max: 1000, step: 5 },
   { key: "relicChance", type: "float", scope: "world", label: "Chance the pot of gold holds a relic", help: "Needs the Relics pack", min: 0, max: 1, step: 0.05 },
   { key: "avoidSpawn", type: "int", scope: "world", label: "Distance kept from world spawn (blocks)", min: 0, max: 1024, step: 16 },
-  { key: "size", type: "int", scope: "world", label: "Rainbow width (blocks)", min: 40, max: 200, step: 10 },
+  { key: "size", type: "int", scope: "world", label: "Rainbow width (blocks)", help: "Foot to foot; it's half as tall", min: 40, max: 160, step: 10 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
