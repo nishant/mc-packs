@@ -1,5 +1,5 @@
 // Small tools the cards use: safe teleports, gifts, spawns, safe zones and timed block restores.
-import { Dimension, Entity, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
+import { Dimension, Entity, EntityDamageCause, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
 
 // ---------------------------------------------------------------------------
 // Basics
@@ -93,9 +93,23 @@ export function clearFire(dim, at, r = 4, keep = new Set()) {
   }
 }
 
-/** A lightning bolt at a point. Any fire it starts there is put out, so it never burns a build (fires that were already burning stay). @param {Dimension} dim @param {import("@minecraft/server").Vector3} at */
-export function strike(dim, at) {
+/**
+ * A lightning bolt at a point. Any fire it starts there is put out, so it never burns a build (fires
+ * that were already burning stay). Within 8 blocks of a safe zone there is no real bolt (it would turn
+ * villagers into witches and pigs into piglins): `victim` takes the hit directly, with thunder and sparks.
+ * @param {Dimension} dim @param {import("@minecraft/server").Vector3} at @param {Entity} [victim]
+ */
+export function strike(dim, at, victim) {
   const spot = { x: at.x, y: at.y, z: at.z };
+  if (inZone(dim.id, spot.x, spot.z, 8)) {
+    if (victim) {
+      attempt(() => victim.applyDamage(5, { cause: EntityDamageCause.lightning }));
+      attempt(() => victim.setOnFire(8, true));
+    }
+    attempt(() => dim.playSound("ambient.weather.lightning.impact", spot, { volume: 1.5 }));
+    burst(dim, "minecraft:electric_spark_particle", spot, 16, 1);
+    return;
+  }
   const before = firesAround(dim, spot);
   dim.spawnEntity("minecraft:lightning_bolt", spot);
   for (const t of [2, 10, 30, 60, 100]) system.runTimeout(() => attempt(() => clearFire(dim, spot, 4, before)), t);

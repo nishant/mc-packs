@@ -11,7 +11,6 @@ import {
   bar,
   between,
   blockAt,
-  clearFire,
   compass,
   burst,
   crownsOf,
@@ -635,7 +634,7 @@ export const CARDS = [
     expect: "fire",
     prep: toughen,
     run: ({ player }) => {
-      strike(player.dimension, player.location);
+      strike(player.dimension, player.location, player);
     },
   },
   {
@@ -1362,7 +1361,7 @@ export const CARDS = [
       // A strike every `gap` seconds: two during the countdown and one at the end.
       const gap = test ? 1 : 20;
       const zap = () => {
-        strike(player.dimension, player.location);
+        strike(player.dimension, player.location, player);
         sound(player, "ambient.weather.thunder", 1, 0.6);
       };
       everySecond(
