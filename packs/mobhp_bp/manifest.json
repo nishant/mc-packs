@@ -4,7 +4,7 @@
     "name": "Mob Health",
     "description": "Shows a mob's name and health in a side box, above the mob or above your hotbar when you hit it. /realm:mobhp",
     "uuid": "16bba1e2-c541-41a6-af73-8d15cf7d3145",
-    "version": [1, 2, 0],
+    "version": [1, 2, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

@@ -115,6 +115,7 @@ async function welcome(player, { force = false } = {}) {
     );
   }
   if (settings.screenTitle) {
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: player.id, ticks: 90, from: "welcome_bp" }));
     player.onScreenDisplay.setTitle(fillPlaceholders(settings.title, player), {
       fadeInDuration: 10,
       stayDuration: 60,

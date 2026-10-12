@@ -99,11 +99,13 @@ async function runArena(p, seconds) {
   const dim = world.getDimension(state.back.dim);
   for (const n of ["3", "2", "1"]) {
     if (!online(p)) break;
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 20, from: "domt_bp" }));
     attempt(() => p.onScreenDisplay.setTitle(`§c${n}`, { fadeInDuration: 0, stayDuration: 15, fadeOutDuration: 5 }));
     sound(p, "random.click");
     await wait(20);
   }
   if (online(p)) {
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 30, from: "domt_bp" }));
     attempt(() => p.onScreenDisplay.setTitle("§4§lFIGHT!", { fadeInDuration: 0, stayDuration: 20, fadeOutDuration: 10, subtitle: "Defeat every foe" }));
     sound(p, "raid.horn", 1, 0.6);
   }
@@ -160,6 +162,7 @@ async function endArena(p, outcome) {
   for (const e of dim.getEntities({ tags: [`${ARENA_TAG}:${state.task}`] })) attempt(() => e.remove());
   if (online(p)) {
     if (outcome === "win") {
+      system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 50, from: "domt_bp" }));
       attempt(() => p.onScreenDisplay.setTitle("§6§lVICTORY", { fadeInDuration: 0, stayDuration: 40, fadeOutDuration: 10, subtitle: "The deck is pleased" }));
       sound(p, "random.levelup");
       const { stack } = randomEnchanted("minecraft:enchanted_book", ENCHANTS.book, 1, 3);

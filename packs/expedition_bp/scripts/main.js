@@ -1477,6 +1477,7 @@ async function prepare(run) {
     for (const id of run.members.keys()) {
       const p = online(id);
       if (!p) continue;
+      system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 80, from: "expedition_bp" }));
       p.onScreenDisplay.setTitle(`§l${run.dungeon.name}`, { subtitle: `§7${levelName(run.level)} - the clock is running`, fadeInDuration: 10, stayDuration: 50, fadeOutDuration: 20 });
     }
     tell(run, `§eThe ${dungeonLabel(run.dungeon, run.level)}: clear each room to open the bars ahead. ${run.lay.n} rooms, ${run.limitMin} minutes. Leave with /realm:expedition_leave.`);
@@ -1945,6 +1946,7 @@ function spawnBoss(run) {
     finish(run); // no boss to fight: don't strand the party
     return;
   }
+  for (const id of run.members.keys()) if (online(id)) system.sendScriptEvent("realm:title", JSON.stringify({ player: id, ticks: 60, from: "expedition_bp" }));
   for (const id of run.members.keys()) online(id)?.onScreenDisplay.setTitle(`§c${d.boss.name}`, { subtitle: `§7${rm.h >= 14 ? "rules the heights" : "guards the treasure"}`, fadeInDuration: 5, stayDuration: 40, fadeOutDuration: 15 });
   sound(run, "mob.wither.spawn");
 }
@@ -2010,6 +2012,7 @@ function finish(run) {
   for (const [id] of run.members) {
     const p = online(id);
     if (!p) continue;
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 110, from: "expedition_bp" }));
     p.onScreenDisplay.setTitle(run.long ? "§6Gauntlet complete" : "§6Expedition complete", { subtitle: `§f${d.name} ${levelName(L)} cleared in ${clock(run.clearMs)}`, fadeInDuration: 10, stayDuration: 80, fadeOutDuration: 20 });
     p.playSound("random.totem", { volume: 0.6 });
     const mult = (hasFlag(run, id, "greed") ? 1.5 : 1) * (hasFlag(run, id, "midas") ? 2 : 1);
