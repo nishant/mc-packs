@@ -454,10 +454,43 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 });
 
+// Other packs ask whose claims a box reaches into before changing blocks there (Easy Building):
+//   realm:claims_check        { id, player, dim, x1, z1, x2, z2 }
+//   realm:claims_check_result { id, claims: [{ n, x1, z1, x2, z2 }] }
+// `claims` lists (up to 10) the claims overlapping the box that the player may not build in: none while
+// claims are disabled. Always answered, so the asker also learns that Land Claims is installed.
+/** @param {string} message */
+function answerCheck(message) {
+  const q = JSON.parse(message);
+  if (!q || typeof q !== "object") return;
+  const nums = [q.x1, q.z1, q.x2, q.z2].map(Number);
+  /** @type {{ n: string, x1: number, z1: number, x2: number, z2: number }[]} */
+  const found = [];
+  if (enabled() && nums.every(Number.isFinite)) {
+    const [ax, az, bx, bz] = nums;
+    const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), z0 = Math.min(az, bz), z1 = Math.max(az, bz);
+    const who = world.getAllPlayers().find((p) => p.id === q.player);
+    for (const c of claims().values()) {
+      if (found.length >= 10) break;
+      if (c.dim !== String(q.dim) || c.x + c.r < x0 || c.x - c.r > x1 || c.z + c.r < z0 || c.z - c.r > z1) continue;
+      if (who ? allowed(who, c) : c.o === q.player || c.s.some((s) => s.i === q.player)) continue;
+      found.push({ n: c.n.slice(0, 32), x1: c.x - c.r, z1: c.z - c.r, x2: c.x + c.r, z2: c.z + c.r });
+    }
+  }
+  system.sendScriptEvent("realm:claims_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), claims: found }));
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "claims_bp");
+    else if (id === "realm:claims_check") {
+      try {
+        answerCheck(message);
+      } catch (e) {
+        console.warn(`[claims] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

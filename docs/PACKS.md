@@ -66,6 +66,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Waystones & Inns — `waystone_bp`](#waystones--inns--waystone_bp)
 - [Expeditions — `expedition_bp`](#expeditions--expedition_bp)
 - [Town Projects — `town_bp`](#town-projects--town_bp)
+- [Easy Building — `build_bp`](#easy-building--build_bp)
 - [Safe Zones — `zones_bp`](#safe-zones--zones_bp)
 - [Weather Almanac — `weather_bp`](#weather-almanac--weather_bp)
 - [Regional Weather — `climate_bp`](#regional-weather--climate_bp)
@@ -1099,6 +1100,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `pro
 - `beforeEvents.playerBreakBlock` and `beforeEvents.playerInteractWithBlock` are canceled inside someone else's claim. The tap is checked at the block and at the spot a block would be placed, since the stable API has no "before place" event and placing starts with that tap. `afterEvents.playerPlaceBlock` removes anything that still got placed. `beforeEvents.playerInteractWithEntity` is canceled for `protectedEntities`.
 - `beforeEvents.explosion` takes the blocks inside claims out of the blast without canceling it.
 - The pack is the `claims` provider of the safe zones protocol: while claims are enabled and `protectWorldEvents` is on, it sends every claim as a square zone (`realm:zones`) whenever claims change, when the world starts and when asked (`realm:zones_ping`); otherwise it sends an empty list.
+- Other packs ask before changing blocks in a box (Easy Building): `realm:claims_check` `{ id, player, dim, x1, z1, x2, z2 }` is answered with `realm:claims_check_result` `{ id, claims: [{ n, x1, z1, x2, z2 }] }`, the owner's name and corners of up to 10 claims in that box the player may not build in (none while claims are disabled; shared players, and operators with `operatorsBypass`, may build). It is always answered, so the asker also learns that Land Claims is installed.
 - Once a second, each player's claim is looked up to say when they walk in or out of one. Messages above the hotbar send `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) leaves them on screen.
 
 ---
@@ -4161,6 +4163,119 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 - **Safe zones:** every town with **Protect from world events** Enabled is sent as `realm:zones` `{ src: "town", part, parts, zones: [{ id, name, dim, x, z, r, shape: "circle" }] }` (`r` = `townRadius`, `part` from 1, split under 2,048 characters; an empty list has `parts: 0`) when a town is added, removed or toggled, when `townRadius` changes, 5 seconds after the world loads, and in reply to `realm:zones_ping`.
 - **Scenario tests:** `/scriptevent realm:town_test {"action": ...}` runs the operator actions without forms (`add`, `spot` with an optional `spot: { x, y, z, f }`, `finish`, `remove`, `rebuild`, `protect`, `zones`, `dump`), for the test harness. It's only honored from the server console or an operator.
 - **Not Community Goals:** [Community Goals](#community-goals--goals_bp) is a realm-wide donation chest for one item; Town Projects belong to a town, need several items, go through the mayor and build something. They don't share data.
+
+---
+
+## Easy Building — `build_bp`
+
+Build a whole wall, floor, tower, dome, roof, staircase or bridge in one go, like the Effortless Building add-on: pick a shape and its size in a menu, then place one block and the shape appears there, made of the block you placed. Survival builds use blocks from your inventory, and undo gives them back.
+
+### How to use
+
+1. Run `/realm:build` and pick **Choose a shape**, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap **Use this shape**. That turns **build mode** on.
+2. Hold a block and place it as usual: the shape is built where the block went, made of that block. Facing matters: a wall runs across your view, depth goes away from you, and stairs, slopes and roofs climb away from you. Sneak while placing to place just one block.
+3. While build mode is on and you hold a block, green sparkles outline where the shape would go at the block you look at, and the bar above the hotbar says what placing will build (`Build: Wall 5 x 3 x 1 - place a block (sneak: just one)`).
+4. **Between two blocks:** most shapes can take their size from two blocks instead (**Size** -> **From two blocks you place**). Place the start block, then the end block: the shape fills the box between them, and a line or a wall goes straight from one to the other, diagonals too. With both blocks at the same height, the shape keeps the height from its settings (a 3-high wall along the ground).
+5. **Blocks and placing** (in `/realm:build`) picks the main block (the block you place, a random mix of your hotbar blocks, or a block id you type such as `minecraft:stone_bricks`), the second block for patterns, posts and trim (by default the block in the hotbar slot right of your hand), what may be replaced, where the shape sits, and copies: mirrored, turned four ways around the block, or repeated in a row.
+6. Made a mistake? `/realm:build_undo` puts back what was there and gives survival blocks back; `/realm:build_redo` builds it again. Your last 5 builds can be undone (`undoSteps`).
+7. No block to place, or want a look first? Look at a spot and pick **Build here now** in `/realm:build`: the outline shows for 3 seconds (`previewSeconds`), then a box lists the cost and asks **Build it**. `/realm:build_here` builds at the block you look at straight away.
+8. `/realm:build_mode` turns build mode on or off without the menu. **Outline preview in build mode**, its color and the build mode line are your own choices in `/realm:prefs`.
+9. **Operators:** `/realm:config` -> **Easy Building** sets the limits (most blocks per build, largest size, blocks placed per tick), whether survival builds use items, and who may build where.
+
+### The shapes
+
+| Group | Shape | Settings |
+|---|---|---|
+| Basic | **Line** | Length, thickness, direction (away from you, left to right, straight up, rising away from you) |
+| Basic | **Wall** | Width, height, thickness, pattern |
+| Basic | **Floor or platform** | Width, depth, thickness, pattern |
+| Basic | **Box or room** | Width, height, depth, fill (hollow, filled, walls only, frame), pattern |
+| Basic | **Column or pillar** | Height, width (1 to 7), round or square, a base and top of the second block |
+| Basic | **Fence or railing** | Width, height, posts of the second block every N blocks, a gate in the middle (matching the fence: oak fence gate otherwise), torches on the posts. Hold a fence or wall |
+| Basic | **Animal pen** | Width, depth, a gate in the middle of the front, corner posts of the second block, torches on the corners |
+| Slopes and curves | **Staircase** | Width, height, fill underneath. Hold stairs for real steps (any block works) |
+| Slopes and curves | **Slope or ramp** | Width, height, depth, fill underneath. Stairs where it rises |
+| Slopes and curves | **Arch** | Width, height, thickness of the band, depth |
+| Slopes and curves | **Circle or ring** | Radius, thickness, filled |
+| Slopes and curves | **Tower or cylinder** | Radius, height, wall thickness, filled, battlements of the second block on top |
+| Slopes and curves | **Sphere**, **Dome** | Radius, hollow |
+| Slopes and curves | **Pyramid** | Width (height is half of it), hollow; stairs give it smooth sides |
+| Slopes and curves | **Cone or spire** | Radius, height, hollow |
+| Slopes and curves | **Roof** | Width, depth, gable (two slopes, ridge running away from you) or hip (four slopes), gable ends of the second block. Hold stairs |
+| Ready-made | **Small hut** | Width, depth, wall height: walls of your block; floor, corner posts and roof of the second block; a doorway, three `glass_pane` windows and a `lantern` |
+| Ready-made | **Watchtower** | Height: four corner posts, a center column with a `ladder`, a platform, railings (the second block, `oak_fence` without one) and four `lantern`s |
+| Ready-made | **Bridge** | Width, length, lantern spacing: a deck of your block, railings of the second block (`oak_fence` without one), `lantern`s |
+| Ready-made | **Lamp post** | Height: a base of your block, a post of the second block (`oak_fence` without one), a `lantern` on top |
+| Ready-made | **Farm plot** | Width, depth: a border of your block, `farmland` (costs `dirt`) and a `water` channel down the middle (free) |
+
+Sizes go up to 64 blocks (`maxSize`; radius up to half of it), and so does the distance between the two blocks of a two-block shape. **Patterns** for walls, floors and boxes use the second block: checkerboard, stripes, border, pillars every N blocks, or speckled (about one block in three).
+
+### What players see
+
+- **What a build replaces** (Blocks and placing -> **Replace**): **Air and soft blocks** (the default: air plus water, lava, grass, ferns, flowers, snow layers, vines, fire...), **Air only**, or **Everything but chests and other protected blocks**. Containers, signs, banners, beds, spawners, portals, bedrock and the other `protectedBlocks` are never replaced. **Everything** is for creative players only (survival and adventure players too with `survivalReplaceAll`, default disabled), since it destroys blocks without drops. A spot that is already taken is skipped.
+- **Where it goes** (Blocks and placing): **Starts at the block, centered** (the default: the shape starts at the block and goes away from you, centered left to right), **Centered on the block** or **Corner at the block (goes away and right)**; **Move up or down** shifts it up to 16 blocks; **Turn it a quarter (sideways)** turns it so a wall runs away from you.
+- **Copies:** **Mirror left-right**, **Mirror front-back**, **Mirror both ways (4)**, **Turned around the block (4)** (stairs turn with them), and **Repeat in a row** (1 to 16 copies, a gap of 0 to 16 blocks, away from you, to the right or up). Copies that land on the same spot count once.
+- **The block you place marks the spot:** in build mode it is taken back (and returned to your hand in survival) and the shape is built there instead. In two-block mode the start block stays until the end block is placed. Doors, beds, tall flowers and the `forbiddenBlocks` always place normally.
+- **Survival and adventure** (`requireItems`, default enabled): every block comes from your inventory. A stair, log or slab costs its own item, farmland costs dirt, water is free. Short of blocks, it builds as much as you have, bottom first, and says what's missing: `Out of blocks: built 10 of 15. Still needed: 5 cobblestone.` (with `partialBuilds` disabled it builds nothing and says how many you need). Creative builds are free. Blocks with no item (fire, typed-in water...) can't be built in survival.
+- **Limits:** one build places at most 4096 blocks in survival (`maxBlocks`) and 32768 in creative (`maxBlocksCreative`), copies included; bigger ones are refused with the count. Big builds go up 400 blocks a tick (`blocksPerTick`), so a 30,000-block dome takes a few seconds. One build at a time per player.
+- **Undo** puts back exactly what each spot held before (a flower, water, air) and gives survival blocks back, but only where your block is still there: blocks someone mined or changed since stay as they are. Redo builds the same blocks again (and charges for them again in survival). Undo history lives in memory: a server restart forgets it.
+- **Land claims:** a build that would reach into another player's claim ([Land Claims](#land-claims--claims_bp)) is refused: `That would reach into Sam's claim. Build somewhere else, or make it smaller.` Your own claims and claims shared with you are fine. Operators can allow it (`inOthersClaims`).
+- **Safe zones:** inside a zone made with [Safe Zones](#safe-zones--zones_bp) (`/realm:zones`), only operators can use the tools (`safeZonesOperatorsOnly`, default enabled). Towns and claims don't count here.
+- **Your setup is remembered** (shape, every shape's own settings, blocks and placing); build mode itself starts off each time you join.
+
+### Commands
+
+| Command | Who | What it does |
+|---|---|---|
+| `/realm:build` | Everyone | Opens Easy Building: build mode on or off, **Choose a shape** (22 shapes, sizes up to 64 blocks, `maxSize`), the current shape's settings, **Blocks and placing**, **Build here now** (an outline for 3 seconds, `previewSeconds`, then the cost and **Build it**), undo and redo |
+| `/realm:build_here` | Everyone | Builds your shape at the block you look at (up to 16 blocks away, `reach`), no questions. In two-block mode the first use sets the start and the second builds |
+| `/realm:build_mode` | Everyone | Turns build mode on or off: while on, placing a block builds your shape there (sneak to place just one) |
+| `/realm:build_undo` | Everyone | Undoes your last build: what was there comes back, and survival blocks are given back. Up to 5 builds (`undoSteps`), forgotten on restart |
+| `/realm:build_redo` | Everyone | Builds again what you last undid |
+
+All five only work while Easy Building is enabled (`enabled`, default enabled) and, with `operatorsOnly` enabled (default disabled), only for operators.
+
+### Configuration (`scripts/config.js` → `CONFIG`)
+
+| Option | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Easy Building for the whole realm. Disabled: `/realm:build` only says so and placing blocks builds nothing extra |
+| `operatorsOnly` | `false` | Only operators can use the building tools |
+| `maxBlocks` | `4096` | Most blocks one build may place in survival and adventure, copies and repeats included (64 to 16384 in game) |
+| `maxBlocksCreative` | `32768` | Most blocks one build may place in creative (256 to 65536 in game) |
+| `maxSize` | `64` | Largest width, height, depth or length the menus offer, in blocks; a radius goes up to half of it (8 to 128 in game) |
+| `blocksPerTick` | `400` | Blocks placed per tick; bigger builds are spread over several ticks (50 to 2000 in game). Lower it if big builds make the realm stutter |
+| `requireItems` | `true` | In survival and adventure, every block a build places is taken from your inventory, and undo gives it back |
+| `partialBuilds` | `true` | Short of blocks in survival: build as much as you have. Disabled: build nothing and say what's missing |
+| `survivalReplaceAll` | `false` | Survival and adventure players may pick **Everything but chests and other protected blocks** (it destroys blocks without drops). Creative players always can |
+| `inOthersClaims` | `false` | Builds may reach into other players' land claims. Disabled: a build that would is refused |
+| `safeZonesOperatorsOnly` | `true` | Inside a safe zone made with Safe Zones, only operators can build with the tools |
+| `undoSteps` | `5` | Builds each player can undo and redo (1 to 20 in game). Kept in memory: a restart forgets them |
+| `reach` | `16` | How far away the block you look at may be for `/realm:build_here`, **Build here now** and the outline, in blocks (4 to 64 in game) |
+| `previewSeconds` | `3` | Seconds the outline shows before **Build here now** asks to confirm (0 to 10 in game) |
+| `softBlocks` | water, lava, grass, ferns, flowers, snow layers, vines, fire... | What **Air and soft blocks** replaces besides air, `*` as a wildcard |
+| `protectedBlocks` | containers, signs, banners, beds, spawners, portals, bedrock, command blocks, heads, beehives, sculk... | Never replaced by a build, whatever the replace mode |
+| `forbiddenBlocks` | bedrock, barriers, command and structure blocks, light blocks, portals, spawners, shulker boxes, TNT, beds, doors, fire | Never placed by the tools, not even typed in by an operator. These place normally in build mode |
+
+Operators can change every option but the three block lists in game with `/realm:config` (**Easy Building**). Each player's own choices in `/realm:prefs`: **Outline preview in build mode** (default enabled; also in Blocks and placing), **Outline sparkles** (green, white, flame or blue flame) and **Build mode line above the hotbar** (default enabled).
+
+### Saved data
+
+| Key | Scope | Contents |
+|---|---|---|
+| `build:plan` | Player | JSON: the chosen shape, each shape's own settings, the size mode, main and second block, replace mode, where it goes, copies and repeats |
+| `build:pref` | Player | Choices made in `/realm:prefs` |
+| `build:cfg` | World | Settings changed in `/realm:config` |
+
+Undo and redo history, build mode and a pending start block are kept in memory only.
+
+### How it works
+
+- Shapes are pure geometry (`scripts/shapes.js`): each fills a box of width x height x depth in its own frame (right, up, away from you), with cells marked as main block, second block, stair (and which way it climbs), gate or a fixed block. `main.js` turns the frame to the way you face (snapped to north, south, east or west), anchors it at the block, adds copies and repeats, and picks the real blocks: stairs get their `weirdo_direction`, gates their `minecraft:cardinal_direction`, ladders their `facing_direction`, and a ladder's backing is oak planks when your block isn't a full one.
+- Build mode listens to `afterEvents.playerPlaceBlock`: the placed block is set back to air (and returned in survival), and the build starts there.
+- A build first reads every spot (what's there, what may be replaced, what each block costs), takes the items, then places blocks bottom first, `blocksPerTick` a tick, with lanterns, torches and ladders last. Anything paid for but not placed is given back. Each placed block is remembered with what it replaced, for undo.
+- Before building it asks Land Claims over `realm:claims_check` (see Land Claims' **How it works**) and waits for the answer; without Land Claims installed it waits a few ticks at most. It takes part in the safe zones protocol as a listener (`scripts/zones.js`), for the Safe Zones check.
+- The outline is `Player.spawnParticle` along the 12 edges of the box the shape fills, every half second, only for you. The build mode line is a steady line of the action bar protocol: it sends `realm:actionbar` before each write and waits while another pack's note shows. Its notes (`Built 15 blocks`, `Undone: ...`) send `realm:actionbar` too.
 
 ---
 
