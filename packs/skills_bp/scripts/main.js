@@ -254,6 +254,7 @@ function award(player, skill, base, opts = {}) {
 /** @param {Player} player @param {Skill} skill @param {number} from @param {number} to */
 function levelUp(player, skill, from, to) {
   try {
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: player.id, ticks: 70, from: "skills_bp" }));
     player.onScreenDisplay.setTitle(`§6${NAMES[skill]} ${to}`, { subtitle: "§fLevel up!", fadeInDuration: 5, stayDuration: 50, fadeOutDuration: 15 });
     player.playSound("random.levelup", { pitch: 1.2, volume: 0.8 });
     const fresh = (CONFIG.perks[skill] ?? []).filter((p) => p.level > from && p.level <= to);

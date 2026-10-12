@@ -1,7 +1,8 @@
 // Easy Building (build_bp) with Land Claims: shapes from the menus, /realm:build_here, build mode
 // (placing a block builds the shape), survival costs and partial builds, undo/redo refunds, two-block
-// mode, mirror copies and a claim that refuses a build.
-// Run with: node tools/test-bds/run.mjs --quiet --flat --only build_bp,claims_bp --scenario tools/test-bds/examples/build.js
+// mode, mirror copies, a claim that refuses a build, and v2: modifiers (mirror, radial, array), palette
+// patterns, ellipse and curve block counts, Air Build, the Building Book and modifiers on hand placing/breaking.
+// Run with: node tools/test-bds/run.mjs --quiet --flat --only build_bp,build_rp,claims_bp --scenario tools/test-bds/examples/build.js
 export default async function (t) {
   const { ItemStack, BlockPermutation } = t.mc;
   const dim = t.dimension;
@@ -73,7 +74,7 @@ export default async function (t) {
   t.answerForm(cre, "Blocks and placing", { "Main block": 2, "Main block id": "minecraft:glass" });
   t.cmd(cre, "/realm:build");
   await t.waitMessage(cre, /Saved/, { pack: "build_bp" });
-  await shape(cre, 12, { Radius: 3, Hollow: true, Size: 0 }); // sphere
+  await shape(cre, 14, { Radius: 3, Hollow: true, Size: 0 }); // sphere
   T = await aim(cre, 30, 0);
   t.cmd(cre, "/realm:build_here");
   const sphereMsg = await t.waitMessage(cre, /Built \d+ blocks/, { kind: "actionbar" });
@@ -107,7 +108,8 @@ export default async function (t) {
   await t.loadArea(400, 0, { radius: 4 });
   const spot = (/** @type {number} */ i) => ({ x: 360 + (i % 6) * 16, z: -40 + Math.floor(i / 6) * 24 });
   const sizes = [];
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 26; i++) {
+    if (i === 19 || i === 20) continue; // the curves are built through points (below)
     t.answerForm(cre, "Choose a shape", i, (form) => (form.elements?.some((e) => e.label === "Size") ? { Size: 0 } : true));
     t.cmd(cre, "/realm:build");
     await t.waitMessage(cre, /build mode is on|place the start block/i, { pack: "build_bp" });
@@ -122,7 +124,7 @@ export default async function (t) {
   const st = dim.getBlock({ x: spot(7).x, y: Y, z: spot(7).z + 3 });
   t.log("staircase first step:", st?.typeId, JSON.stringify(st?.permutation.getAllStates()));
   t.check(st?.permutation.getState("weirdo_direction") === 2, "staircase steps rise away from the player");
-  const ladder = dim.getBlock({ x: spot(18).x, y: Y + 1, z: spot(18).z + 4 });
+  const ladder = dim.getBlock({ x: spot(22).x, y: Y + 1, z: spot(22).z + 4 });
   t.log("tower ladder:", ladder?.typeId, JSON.stringify(ladder?.permutation.getAllStates()));
   t.check(ladder?.typeId === "minecraft:ladder" && ladder.permutation.getState("facing_direction") === 2, "the tower's ladder faces the player (north)");
 
@@ -168,7 +170,11 @@ export default async function (t) {
   const placedMsg = await t.waitMessage(sur, /Built \d+ blocks/, { kind: "actionbar" });
   t.log("placed:", placedMsg.plain, "ground", ground?.typeId);
   t.check(/Built 15 blocks/.test(placedMsg.plain), "placing a block builds the 15-block wall");
-  t.check(items(sur, "minecraft:oak_planks") === 5, `20 planks - 15 = 5 left (${items(sur, "minecraft:oak_planks")})`);
+  // 20 - 15 = 5, or 6: a simulated player's placement doesn't always use up the placed item (it ends at 6 a few
+  // ticks later with the old code too); the placed plank goes back to the hand either way.
+  await t.wait(10);
+  const left = items(sur, "minecraft:oak_planks");
+  t.check(left === 5 || left === 6, `20 planks - 15 = 5 left (6 if the simulated placement kept its item) (${left})`);
 
   // Two-block mode in survival: a diagonal wall 3 high from one look target to another.
   hold(sur, "minecraft:oak_planks", 64);
@@ -204,4 +210,193 @@ export default async function (t) {
   t.log("claims:", refused.plain);
   t.check(/Owner's claim/.test(refused.plain), "a build in someone else's claim is refused");
   t.check(count("minecraft:stone_bricks", T.x - 2, T.y, T.z, T.x + 2, T.y + 2, T.z) === 0, "nothing built in the claim");
+
+  // ===================== v2 =====================
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "t2", pack: "claims_bp", key: "enabled", value: false }));
+  t.server("/tickingarea remove_all"); // Bedrock allows 10 ticking areas; the ones above are done with
+  await t.wait(2);
+  await t.loadArea(600, 0, { radius: 4 });
+  const v2 = await t.player("Vee", { x: 600, z: 0, gameMode: "creative", op: true });
+  /** Saves a form reached from a /realm:build button. */
+  const viaMenu = async (p, button, answers, done = /Saved|Modifiers:|Palette:/) => {
+    t.answerForm(p, button, answers);
+    t.cmd(p, "/realm:build");
+    return t.waitMessage(p, done, { pack: "build_bp" });
+  };
+  hold(v2, "minecraft:stone", 64);
+
+  // ---- Modifiers: a 3-high column 6 blocks east of a center, mirrored on X; radial 4; array ----
+  await shape(v2, 4, { Height: 3, "Column width": 1, "Base and top": false });
+  t.cmd(v2, "/realm:build_mode"); // build mode off again (choosing a shape turned it on)
+  const C = await aim(v2, 600, 0); // looks at the marker at (600, Y, 4)
+  await viaMenu(v2, "Modifiers", { Center: 1, "Mirror X": true });
+  const center = { x: 600, y: Y, z: 4 };
+  T = await aim(v2, 606, 0);
+  t.log("modifier center", JSON.stringify(center), "target", JSON.stringify(T), "C", JSON.stringify(C));
+  t.cmd(v2, "/realm:build_here");
+  let m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+  t.check(/Built 6 blocks/.test(m.plain), `mirror X: column and its mirror = 6 (${m.plain})`);
+  t.check(count("minecraft:stone", 2 * center.x - T.x, T.y, T.z, 2 * center.x - T.x, T.y + 2, T.z) === 3, "the mirrored column is at x = 2 * center - x");
+  t.cmd(v2, "/realm:build_undo");
+  await t.waitMessage(v2, /Undone/, { kind: "actionbar" });
+  await viaMenu(v2, "Modifiers", { "Mirror X": false, "Radial: turned": true, "Radial slices": 4 });
+  t.cmd(v2, "/realm:build_here");
+  m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+  t.check(/Built 12 blocks/.test(m.plain), `radial 4: four columns = 12 (${m.plain})`);
+  // A quarter turn around the center block takes (dx, dz) to (-dz, dx).
+  const qx = center.x - (T.z - center.z), qz = center.z + (T.x - center.x);
+  t.check(count("minecraft:stone", qx, T.y, qz, qx, T.y + 2, qz) === 3, `radial: a column a quarter turn around at ${qx} ${qz}`);
+  t.cmd(v2, "/realm:build_undo");
+  await t.waitMessage(v2, /Undone/, { kind: "actionbar" });
+  await viaMenu(v2, "Modifiers", { "Radial: turned": false, "Array: repeat": true, "Array step X": 0, "Array step Y": 0, "Array step Z": 3, "Array copies": 2 });
+  t.cmd(v2, "/realm:build_here");
+  m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+  t.check(/Built 9 blocks/.test(m.plain), `array 2 copies 3 apart: 9 blocks (${m.plain})`);
+  t.check(count("minecraft:stone", T.x, T.y, T.z + 6, T.x, T.y + 2, T.z + 6) === 3, "array: the second copy is 6 blocks south");
+  // Stairs turn with a mirror: built facing south, a stair's mirror across Z faces north.
+  await viaMenu(v2, "Modifiers", { "Array: repeat": false, "Mirror Z": true });
+  hold(v2, "minecraft:oak_stairs", 64);
+  await shape(v2, 7, { Width: 1, Height: 2, "Fill underneath": false, Size: 0 }); // staircase
+  t.cmd(v2, "/realm:build_mode");
+  T = await aim(v2, 620, 0);
+  t.cmd(v2, "/realm:build_here");
+  m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+  const mirrored = dim.getBlock({ x: T.x, y: T.y, z: 2 * center.z - T.z });
+  t.log("mirrored stair:", m.plain, mirrored?.typeId, JSON.stringify(mirrored?.permutation.getAllStates()));
+  t.check(mirrored?.typeId === "minecraft:oak_stairs" && mirrored.permutation.getState("weirdo_direction") === 3, "a stair mirrored on Z rises north (weirdo_direction 3)");
+  await viaMenu(v2, "Modifiers", { "Mirror Z": false, Center: 3 });
+
+  // ---- Palette: checkerboard and gradient over a wall of stone and oak planks ----
+  const inv = v2.getComponent("inventory").container;
+  inv.clearAll();
+  inv.setItem(0, new ItemStack("minecraft:stone", 64));
+  inv.setItem(1, new ItemStack("minecraft:oak_planks", 64));
+  v2.selectedSlotIndex = 0;
+  await viaMenu(v2, "Palette", { "Build with the palette": true, Pattern: 4, "Pattern size": 1 });
+  await shape(v2, 1, { Width: 4, Height: 2, Thickness: 1, Pattern: 0, Size: 0 });
+  t.cmd(v2, "/realm:build_mode");
+  T = await aim(v2, 640, 0);
+  t.cmd(v2, "/realm:build_here");
+  m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+  const box = [T.x - 2, T.y, T.z, T.x + 2, T.y + 1, T.z];
+  const stn = count("minecraft:stone", ...box), pln = count("minecraft:oak_planks", ...box);
+  t.check(stn === 4 && pln === 4, `checkerboard: 4 stone and 4 planks (${stn}, ${pln})`);
+  await viaMenu(v2, "Palette", { Pattern: 6, Direction: 0 });
+  await shape(v2, 1, { Width: 5, Height: 4, Thickness: 1, Size: 0 });
+  t.cmd(v2, "/realm:build_mode");
+  T = await aim(v2, 660, 0);
+  t.cmd(v2, "/realm:build_here");
+  m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+  t.check(count("minecraft:stone", T.x - 2, T.y, T.z, T.x + 2, T.y + 1, T.z) === 10 && count("minecraft:oak_planks", T.x - 2, T.y + 2, T.z, T.x + 2, T.y + 3, T.z) === 10, "gradient up: stone below, planks above");
+  await t.loadArea(740, 0, { radius: 4 });
+  for (const pat of [1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13]) {
+    await viaMenu(v2, "Palette", { Pattern: pat, "Pattern size": 2 });
+    T = await aim(v2, 680 + pat * 8, 0);
+    t.cmd(v2, "/realm:build_here");
+    m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+    t.check(/Built 20 blocks/.test(m.plain), `palette pattern ${pat} builds the 5 x 4 wall (${m.plain})`);
+  }
+  await viaMenu(v2, "Palette", { "Build with the palette": false, Pattern: 0 });
+
+  // ---- Ellipse, semicircle and a leaning cone: block counts ----
+  hold(v2, "minecraft:stone", 64);
+  const counts = [
+    [11, { "Radius left to right": 6, "Radius away from you": 3, Thickness: 1, Filled: false, Size: 0 }, 28, "ellipse 6 x 3 ring"],
+    [11, { "Radius left to right": 6, "Radius away from you": 3, Filled: true, Size: 0 }, 75, "filled ellipse 6 x 3"],
+    [12, { Radius: 4, Thickness: 1, Filled: false }, 13, "semicircle radius 4"],
+    [17, { Radius: 3, Height: 6, Hollow: false, Points: 2, Size: 0 }, 98, "cone lying down"],
+    [17, { Radius: 3, Height: 6, Hollow: false, Points: 1, Size: 0 }, 98, "leaning cone"],
+  ];
+  await t.loadArea(640, 40, { radius: 4 });
+  for (const [i, [idx, answers, want, label]] of counts.entries()) {
+    await shape(v2, idx, answers);
+    t.cmd(v2, "/realm:build_mode");
+    T = await aim(v2, 600 + i * 20, 40);
+    dim.setBlockType({ x: 600 + i * 20, y: Y, z: 44 }, "minecraft:air"); // the marker would take a spot of the filled shapes
+    t.cmd(v2, "/realm:build_here");
+    m = await t.waitMessage(v2, /Built \d+ blocks|Nothing/, { kind: "actionbar" });
+    t.check(new RegExp(`Built ${want} blocks`).test(m.plain), `${label}: ${want} blocks (${m.plain})`);
+  }
+
+  // ---- Curved line through three points: 25 blocks; curved wall 3 high: 75 ----
+  await t.loadArea(730, 85, { radius: 3 });
+  for (const [idx, answers, want] of [[19, { Thickness: 1 }, 25], [20, { Kind: 0, Height: 3 }, 75]]) {
+    await shape(v2, idx, answers);
+    const base = idx === 19 ? 700 : 740;
+    for (const [dx, dz] of [[0, 0], [8, 4], [16, 0]]) {
+      await aim(v2, base + dx, 80 + dz);
+      t.cmd(v2, "/realm:build_here");
+      await t.waitMessage(v2, /Point \d+ set/, { kind: "actionbar" });
+    }
+    t.cmd(v2, "/realm:build_finish");
+    m = await t.waitMessage(v2, /Built \d+ blocks|Nothing|curve/, { pack: "build_bp" });
+    t.log("curve:", m.plain);
+    t.check(new RegExp(`Built ${want} blocks`).test(m.plain), `curve ${idx}: ${want} blocks (${m.plain})`);
+  }
+
+  // ---- Air Build: one block in midair, then a whole shape ----
+  hold(v2, "minecraft:glass", 64);
+  await shape(v2, 4, { Height: 3, "Column width": 1, "Base and top": false });
+  t.cmd(v2, "/realm:build_mode"); // off: one block at a time
+  await viaMenu(v2, "Guides, reach and Air Build", { "Air Build:": true, "Air Build distance": 4 }, /Saved/);
+  await t.loadArea(805, 0, { radius: 2 });
+  dim.setBlockType({ x: 800, y: Y + 9, z: 0 }, "minecraft:stone");
+  dim.setBlockType({ x: 810, y: Y + 9, z: 0 }, "minecraft:stone");
+  v2.teleport({ x: 800.5, y: Y + 10, z: 0.5 }, { rotation: { x: 0, y: 0 } });
+  await t.waitUntil(() => dim.getBlock({ x: 800, y: Y, z: 8 }), { timeout: 200, message: "air area loads" });
+  await t.wait(5);
+  const head = v2.getHeadLocation(), view = v2.getViewDirection();
+  const A1 = { x: Math.floor(head.x + view.x * 4), y: Math.floor(head.y + view.y * 4), z: Math.floor(head.z + view.z * 4) };
+  v2.useItemInSlot(0);
+  m = await t.waitMessage(v2, /Built \d+ block|Nothing|Look/, { pack: "build_bp" });
+  t.log("air:", m.plain, JSON.stringify(A1));
+  t.check(dim.getBlock(A1)?.typeId === "minecraft:glass", "Air Build puts one glass block 4 blocks in front, in midair");
+  t.cmd(v2, "/realm:build_mode"); // on: the column
+  await t.wait(10);
+  v2.teleport({ x: 810.5, y: Y + 10, z: 0.5 }, { rotation: { x: 0, y: 0 } });
+  await t.wait(5);
+  v2.useItemInSlot(0);
+  m = await t.waitMessage(v2, /Built \d+ block|Nothing/, { pack: "build_bp" });
+  t.check(/Built 3 blocks/.test(m.plain), `Air Build in build mode builds the column in midair (${m.plain})`);
+  t.cmd(v2, "/realm:build_mode");
+
+  // ---- The Building Book: /realm:build_book, use opens the menu, sneak-use toggles build mode ----
+  const bk = await t.player("Book", { x: 805, z: 0, gameMode: "creative" });
+  bk.getComponent("inventory").container.clearAll();
+  bk.selectedSlotIndex = 0;
+  t.cmd(bk, "/realm:build_book");
+  await t.waitMessage(bk, /Building Book/, { pack: "build_bp" });
+  t.check(items(bk, "realm:building_book") === 1, "/realm:build_book gives one Building Book");
+  const menu = t.waitForm(bk, { timeout: 100 });
+  bk.useItemInSlot(0);
+  const bookForm = await menu;
+  t.check(bookForm.title === "Easy Building", `using the book opens Easy Building (${bookForm.title})`);
+  bookForm.answer(null);
+  await t.wait(12);
+  bk.stopUsingItem();
+  bk.isSneaking = true;
+  bk.useItemInSlot(0);
+  m = await t.waitMessage(bk, /Build mode/, { kind: "actionbar" });
+  t.check(/Build mode on/.test(m.plain), `sneak-using the book turns build mode on (${m.plain})`);
+  bk.isSneaking = false;
+
+  // ---- Modifiers on hand placing and breaking (survival pays for the copy) ----
+  await t.loadArea(900, 0, { radius: 2 });
+  const hp = await t.player("Hand", { x: 900, z: 0, gameMode: "survival" });
+  hold(hp, "minecraft:oak_planks", 10);
+  await viaMenu(hp, "Guides, reach and Air Build", { "Modifiers copy": true }, /Saved/);
+  hp.teleport({ x: 900.5, y: Y, z: 0.5 }, { rotation: { x: 0, y: 0 } });
+  await t.wait(5);
+  await viaMenu(hp, "Modifiers", { Center: 2, "Mirror X": true });
+  hp.useItemInSlotOnBlock(0, { x: 903, y: Y - 1, z: 2 }, t.mc.Direction.Up);
+  await t.waitUntil(() => dim.getBlock({ x: 897, y: Y, z: 2 })?.typeId === "minecraft:oak_planks", { timeout: 60, message: "the mirrored plank appears" });
+  t.check(dim.getBlock({ x: 903, y: Y, z: 2 })?.typeId === "minecraft:oak_planks", "the hand-placed plank stays");
+  t.check(items(hp, "minecraft:oak_planks") === 8, `one plank placed by hand plus one copy paid: 8 left (${items(hp, "minecraft:oak_planks")})`);
+  t.cmd(hp, "/realm:build_undo"); // takes back only the copy
+  await t.waitMessage(hp, /Undone/, { kind: "actionbar" });
+  t.check(dim.getBlock({ x: 897, y: Y, z: 2 })?.typeId === "minecraft:air" && items(hp, "minecraft:oak_planks") === 9, "undo takes the copy back and refunds it");
+  dim.setBlockType({ x: 897, y: Y, z: 2 }, "minecraft:oak_planks");
+  hp.breakBlock({ x: 903, y: Y, z: 2 });
+  await t.waitUntil(() => dim.getBlock({ x: 897, y: Y, z: 2 })?.typeId === "minecraft:air", { timeout: 300, message: "breaking by hand breaks the mirrored copy" });
+  t.log("hand break: the copy at 897 is gone");
 }

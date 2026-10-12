@@ -126,7 +126,9 @@ function remember(p, card, by) {
 /** Milliseconds until this player may draw (0 = now). @param {Player} p */
 function waitLeft(p) {
   const next = p.getDynamicProperty(PROP_NEXT);
-  return typeof next === "number" ? Math.max(0, next - Date.now()) : 0;
+  // Never longer than the cooldown is now, so an operator who shortens it (or sets 0) helps at once.
+  const cap = Math.max(0, Number(get("cooldownMinutes")) || 0) * 60000;
+  return typeof next === "number" ? Math.min(cap, Math.max(0, next - Date.now())) : 0;
 }
 
 /** @param {number} ms */
@@ -170,6 +172,7 @@ async function reveal(p, card) {
   }
   if (!p.isValid) return;
   const color = RARITY_COLOR[card.rarity];
+  system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 70, from: "domt_bp" }));
   attempt(() =>
     p.onScreenDisplay.setTitle(`${color}§l${card.name}`, {
       fadeInDuration: 5,
@@ -290,7 +293,7 @@ async function menu(p) {
       ? op
         ? "Only operators draw on this realm. Draw for yourself, or for any player."
         : "Only operators draw from the deck on this realm. Ask one to draw for you."
-      : why ?? `Draw a card for a random effect. Then the deck rests for ${duration(Math.max(1, Number(get("cooldownMinutes")) || 0) * 60000)}.`;
+      : why ?? `Draw a card for a random effect.${(Number(get("cooldownMinutes")) || 0) > 0 ? ` Then the deck rests for ${duration(Number(get("cooldownMinutes")) * 60000)}.` : ""}`;
     const form = new ActionFormData().title("§lDeck of Many Things").body(body);
     for (const [label] of actions) form.button(label);
     const res = await show(p, form);

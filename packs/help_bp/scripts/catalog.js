@@ -2338,10 +2338,10 @@ export const PACKS = [
     "folder": "build_bp",
     "topic": "build",
     "name": "Easy Building",
-    "summary": "Build a whole wall, floor, tower, dome, roof, staircase or bridge in one go, like the Effortless Building add-on: pick a shape and its size in a menu, then place one block and the shape appears there, made of the block you placed. Survival builds use blocks from your inventory, and undo gives them back.",
+    "summary": "Build a whole wall, floor, tower, dome, roof, curve or bridge in one go, like the Effortless Building add-on: pick a shape and its size in a menu, then place one block and the shape appears there, made of the block you placed. Mirror, radial and array modifiers copy every build around a center, a palette spreads your blocks in patterns, Air Build builds in midair, copy, cut and paste move whole regions (with 19 saved copies), destroy mode breaks a shape with your tool, and block guides outline exactly where it will go. Survival builds use blocks from your inventory, and undo (which survives a restart) gives them back. Everything is in §e/realm:build§r, or in the §lBuilding Book§r.",
     "steps": [
       {
-        "text": "Run §e/realm:build§r and pick §lChoose a shape§r, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap §lUse this shape§r. That turns §lbuild mode§r on.",
+        "text": "Run §e/realm:build§r (or use the §lBuilding Book§r) and pick §lChoose a shape§r, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap §lUse this shape§r. That turns §lbuild mode§r on.",
         "ops": false
       },
       {
@@ -2349,7 +2349,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "While build mode is on and you hold a block, green sparkles outline where the shape would go at the block you look at, and the bar above the hotbar says what placing will build (§eBuild: Wall 5 x 3 x 1 - place a block (sneak: just one)§r).",
+        "text": "While build mode is on and you hold a block (or the Building Book), the §lblock guide§r outlines every block the shape would fill at the spot you look at, modifiers included, and the bar above the hotbar says what placing will build (§eBuild: Wall 5 x 3 x 1 - place a block (sneak: just one)§r). Gold outlines mark the modifier center, a start block and curve points.",
         "ops": false
       },
       {
@@ -2357,23 +2357,51 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lBlocks and placing§r (in §e/realm:build§r) picks the main block (the block you place, a random mix of your hotbar blocks, or a block id you type such as §eminecraft:stone_bricks§r), the second block for patterns, posts and trim (by default the block in the hotbar slot right of your hand), what may be replaced, where the shape sits, and copies: mirrored, turned four ways around the block, or repeated in a row.",
+        "text": "§lCurves:§r pick §lCurved line§r or §lCurved wall or path§r, then place a block at each point the curve should pass through (or look and use §e/realm:build_here§r). Finish with §lFinish the curve§r at the top of §e/realm:build§r or §e/realm:build_finish§r.",
         "ops": false
       },
       {
-        "text": "Made a mistake? §e/realm:build_undo§r puts back what was there and gives survival blocks back; §e/realm:build_redo§r builds it again. Your last 5 builds can be undone (§eundoSteps§r).",
+        "text": "§lModifiers§r (in §e/realm:build§r) copy every build: mirror on X, Y and/or Z, turn it around a center in 2 to 16 slices (radial), or repeat it in a row (array). Pick §lCenter here§r in the same form to set the center at the block you look at or where you stand.",
         "ops": false
       },
       {
-        "text": "No block to place, or want a look first? Look at a spot and pick §lBuild here now§r in §e/realm:build§r: the outline shows for 3 seconds (§epreviewSeconds§r), then a box lists the cost and asks §lBuild it§r. §e/realm:build_here§r builds at the block you look at straight away.",
+        "text": "§lPalette§r (in §e/realm:build§r) builds with a mix of your blocks: from your hotbar, your inventory or both, spread at random, weighted, or in a pattern (checkerboard, stripes, gradient, brick, noise, marble, border, wave, spiral, dissolve).",
         "ops": false
       },
       {
-        "text": "§e/realm:build_mode§r turns build mode on or off without the menu. §lOutline preview in build mode§r, its color and the build mode line are your own choices in §e/realm:prefs§r.",
+        "text": "§lBlocks and placing§r picks the main block (the block you place, your palette, or a block id you type such as §eminecraft:stone_bricks§r), the second block for patterns, posts and trim (by default the block in the hotbar slot right of your hand), what may be replaced, where the shape sits, and quick copies: mirrored, turned four ways around the block, or repeated in a row.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r sets the limits (most blocks per build, largest size, blocks placed per tick), whether survival builds use items, and who may build where.",
+        "text": "Made a mistake? §e/realm:build_undo§r takes back your last build, paste, cut or destroy and gives survival blocks back; §e/realm:build_redo§r does it again. Your last 5 steps can be undone (§eundoSteps§r), and the newest 10 of up to 2000 blocks each are kept when the server restarts (§eundoSaveSteps§r, §eundoSaveBlocks§r).",
+        "ops": false
+      },
+      {
+        "text": "No block to place, or want a look first? Look at a spot and pick §lBuild here now§r in §e/realm:build§r: the guide shows for 3 seconds (§epreviewSeconds§r), then a box lists the cost and asks §lBuild it§r. §e/realm:build_here§r builds at the block you look at straight away.",
+        "ops": false
+      },
+      {
+        "text": "§lGuides, reach and Air Build§r (in §e/realm:build§r, also in §e/realm:prefs§r) picks the guide style, color and refresh, how far away you build at a look, §lAir Build§r (build in midair in front of you) and whether your modifiers also copy blocks you place and break by hand.",
+        "ops": false
+      },
+      {
+        "text": "§e/realm:build_mode§r turns build mode on or off without the menu; so does sneaking and using the Building Book. §e/realm:build_book§r gives you a Building Book.",
+        "ops": false
+      },
+      {
+        "text": "§lCopy, cut and paste:§r in §e/realm:build§r pick §lCopy, cut and paste§r, then §lSelect a region§r. Use (right-click or long-press) a block for the first corner and another for the opposite corner; a third block sets the height (using an item in the air sets a corner in front of you, at your Air Build distance, 4 blocks by default). Then pick §lCopy§r (or §e/realm:build_copy§r) or §lCut§r (§e/realm:build_cut§r, which takes the blocks away without drops). Look at a spot and pick §lPaste here now§r (the paste ghost for 3 seconds, §epreviewSeconds§r, then the cost and §lPaste it§r), or use §e/realm:build_paste§r. Pastes turn to face the way you look.",
+        "ops": false
+      },
+      {
+        "text": "§lPaste mode§r (same menu): placing a block pastes your copy there, like build mode builds a shape. §lSaved copies§r keeps up to 19 named copies (§eclipboardSlots§r) besides §lLast copy§r; they stay after a restart.",
+        "ops": false
+      },
+      {
+        "text": "§lDestroy mode:§r §e/realm:build_destroy§r (or §lDestroy mode§r in §e/realm:build§r). Break a block with a pickaxe, axe or shovel and your shape breaks there (sneak to break just one). §lDestroy here now§r shows what would break at the block you look at and asks first.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r sets the limits (most blocks per build, largest size, blocks placed per tick, longest reach, guide particles), whether survival builds use items, Air Build, hand modifiers, destroy mode, saved copies and undo after a restart, and who may build where.",
         "ops": true
       }
     ],
@@ -2382,13 +2410,13 @@ export const PACKS = [
         "usage": "/realm:build",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens Easy Building: build mode on or off, §lChoose a shape§r (22 shapes, sizes up to 64 blocks, §emaxSize§r), the current shape's settings, §lBlocks and placing§r, §lBuild here now§r (an outline for 3 seconds, §epreviewSeconds§r, then the cost and §lBuild it§r), undo and redo"
+        "text": "Opens Easy Building: build mode on or off, §lChoose a shape§r (26 shapes, sizes up to 64 blocks, §emaxSize§r), the current shape's settings, §lBlocks and placing§r, §lBuild here now§r (the guide for 3 seconds, §epreviewSeconds§r, then the cost and §lBuild it§r), §lModifiers§r, §lPalette§r, §lGuides, reach and Air Build§r, §lCopy, cut and paste§r, §lDestroy mode§r, §lGet a Building Book§r, finishing or forgetting a curve, undo and redo"
       },
       {
         "usage": "/realm:build_here",
         "ops": false,
         "who": "Everyone",
-        "text": "Builds your shape at the block you look at (up to 16 blocks away, §ereach§r), no questions. In two-block mode the first use sets the start and the second builds"
+        "text": "Builds your shape at the block you look at (within your reach, default 16 blocks, §ereach§r; or in midair with Air Build), no questions. In two-block mode the first use sets the start and the second builds; for a curve, each use adds a point"
       },
       {
         "usage": "/realm:build_mode",
@@ -2397,16 +2425,52 @@ export const PACKS = [
         "text": "Turns build mode on or off: while on, placing a block builds your shape there (sneak to place just one)"
       },
       {
+        "usage": "/realm:build_finish",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Builds your curve through the points you placed (at least 2, up to 32)"
+      },
+      {
+        "usage": "/realm:build_book",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Gives you a Building Book (one at a time): use it to open §e/realm:build§r, sneak and use it to turn build mode on or off"
+      },
+      {
         "usage": "/realm:build_undo",
         "ops": false,
         "who": "Everyone",
-        "text": "Undoes your last build: what was there comes back, and survival blocks are given back. Up to 5 builds (§eundoSteps§r), forgotten on restart"
+        "text": "Undoes your last build, paste, cut or destroy: what was there comes back, and survival blocks are given back. Up to 5 steps (§eundoSteps§r); the newest 10 of up to 2000 blocks each survive a restart (§eundoSaveSteps§r, §eundoSaveBlocks§r)"
       },
       {
         "usage": "/realm:build_redo",
         "ops": false,
         "who": "Everyone",
-        "text": "Builds again what you last undid"
+        "text": "Does again what you last undid"
+      },
+      {
+        "usage": "/realm:build_copy",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Copies the region you selected into §lLast copy§r (up to 64 blocks across and 32768 blocks, §ecopyMaxBlocks§r). With nothing selected, starts selecting: use a block for each corner"
+      },
+      {
+        "usage": "/realm:build_cut",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Like copy, but takes the blocks away (no drops). In survival the next paste of it is free"
+      },
+      {
+        "usage": "/realm:build_paste",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Pastes your copy at the block you look at (within your reach, default 16 blocks, §ereach§r), turned to face your way, with your modifier copies. Survival pastes cost the blocks"
+      },
+      {
+        "usage": "/realm:build_destroy",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Turns destroy mode on or off: breaking a block with a pickaxe, axe or shovel breaks your shape (sneak to break just one). Needs §edestroyMode§r (default enabled)"
       }
     ]
   },

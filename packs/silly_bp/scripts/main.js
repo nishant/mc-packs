@@ -467,6 +467,7 @@ function spaceProgram(p) {
     system.runTimeout(() => {
       try {
         if (!p.isValid) return;
+        system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 18, from: "silly_bp" }));
         p.onScreenDisplay.setTitle(t, { subtitle: "§7Realm Space Program", fadeInDuration: 0, stayDuration: 14, fadeOutDuration: 4 });
         sound(p.dimension, "note.pling", p.location, 2, 0.8 + i * 0.25);
         particle(p.dimension, "minecraft:basic_smoke_particle", p.location);
@@ -481,6 +482,7 @@ function spaceProgram(p) {
       if (!p.isValid) return;
       const dim = p.dimension;
       const pad = p.location;
+      system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 40, from: "silly_bp" }));
       p.onScreenDisplay.setTitle("§cLIFTOFF!", { subtitle: "§7Realm Space Program", fadeInDuration: 0, stayDuration: 30, fadeOutDuration: 10 });
       sound(dim, "random.explode", pad, 3, 0.7);
       sound(dim, "firework.launch", pad, 3, 0.5);

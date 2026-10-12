@@ -115,8 +115,9 @@ Messages (what packs tell players)
 - `t.messages(p?, { kind, pack, since })`: everything packs sent to `p` (or anyone) so far:
   `{ tick, pack, kind, to, text, plain, raw }`. `kind` is `"chat"` (`player.sendMessage`),
   `"broadcast"` (`world.sendMessage`, `to: "*"`, included for every player), `"title"` or
-  `"actionbar"` (`onScreenDisplay.setTitle` / `setActionBar`). `plain` has the color codes removed;
-  translated text shows as `%key(args)`. `pack` is the folder of the pack that sent it.
+  `"actionbar"` (`onScreenDisplay.setTitle` / `setActionBar`), or `"subtitle"` (`updateSubtitle`). `plain` has the color codes removed;
+  translated text shows as `%key(args)`. `pack` is the folder of the pack that sent it. A title also has
+  `subtitle` (as sent, color codes kept) and `ticks` (fade in + stay + fade out) when the pack passed options.
 - `await t.waitMessage(p, pattern, { timeout: 200, kind, pack, since })`: waits for the next
   message whose plain text matches (`string` = contains, case-insensitive; `RegExp`; or a
   function). Pass `since: t.tick` before running a command to also accept a message that arrived

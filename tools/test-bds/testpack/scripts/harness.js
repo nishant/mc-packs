@@ -169,6 +169,11 @@ function onForm(raw) {
 
 function onMsg(m) {
   const msg = { tick: system.currentTick, pack: m.pack, kind: m.kind, to: m.to, text: m.text, plain: strip(m.text), raw: m.raw };
+  // setTitle's options: the subtitle as sent, and how long the title shows (fade in + stay + fade out).
+  if (m.kind === "title" && m.sub && typeof m.sub === "object") {
+    if (typeof m.sub.subtitle === "string") msg.subtitle = m.sub.subtitle;
+    msg.ticks = (Number(m.sub.fadeInDuration) || 0) + (Number(m.sub.stayDuration) || 0) + (Number(m.sub.fadeOutDuration) || 0);
+  }
   messages.push(msg);
   if (messages.length > 5000) messages.splice(0, 1000);
   if (m.kind !== "actionbar" || echoActionBar) out({ type: "msg", kind: m.kind, pack: m.pack, to: m.to, text: msg.plain.slice(0, 500) });

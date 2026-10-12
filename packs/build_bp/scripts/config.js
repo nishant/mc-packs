@@ -32,14 +32,41 @@ export const CONFIG = {
   /** Inside a safe zone made with Safe Zones (/realm:zones), only operators can build with the tools. */
   safeZonesOperatorsOnly: true,
 
-  /** Builds each player can undo (and redo). Kept in memory: a server restart forgets them. */
+  /** Steps each player can undo (and redo): builds, pastes, cuts and destroy mode. */
   undoSteps: 5,
 
-  /** How far away the block you look at may be for /realm:build_here and the outline preview, in blocks. */
+  /** How many of the newest undo (and redo) steps are also saved on the player, so they survive a restart (0 to 10). */
+  undoSaveSteps: 10,
+
+  /** Most blocks a step may change and still be saved for after a restart; bigger steps are kept in memory only. */
+  undoSaveBlocks: 2000,
+
+  /** The longest reach players may pick: how far away the block you look at may be for build mode guides, /realm:build_here and Air Build, in blocks. */
   reach: 16,
+
+  /** Players may use Air Build: building in midair at a distance in front of them. */
+  airBuild: true,
+
+  /** Players may let their modifiers (mirror, radial, array) also copy blocks they place and break by hand. */
+  handModifiers: true,
+
+  /** Most guide particles drawn for one player at each refresh; bigger shapes are thinned evenly. */
+  guideMax: 400,
+
+  /** The fastest guide refresh players may pick, in ticks (1 = every tick). */
+  guideFastest: 2,
 
   /** Seconds the outline shows before "Build here now" asks to confirm. */
   previewSeconds: 3,
+
+  /** Saved copies each player can keep besides "Last copy" (0 to 19). Each one is a structure saved in the world. */
+  clipboardSlots: 19,
+
+  /** Largest region one copy or cut may cover, air included. Each side is at most 64 blocks across (384 high). */
+  copyMaxBlocks: 32768,
+
+  /** Players can use destroy mode (breaking a block with a pickaxe, axe or shovel breaks the whole shape). */
+  destroyMode: true,
 
   /** "Air and soft blocks" also replaces these (`*` is a wildcard). Air is always replaced. */
   softBlocks: [

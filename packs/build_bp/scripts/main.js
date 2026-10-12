@@ -13,8 +13,14 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
-import { PARAMS, SHAPES, TooBig, boxOf, cellsOf, shapeOf, valueOf } from "./shapes.js";
+import { PARAMS, SHAPES, TooBig, boxOf, cellsJob, curveCells, shapeOf, valueOf } from "./shapes.js";
 import { allZones } from "./zones.js";
+import { drawBox, drawGuide, forgetGuides, guideRate, outlineJob } from "./guides.js";
+import { DEFAULT_MODS, applyMods, applyModsJob, modsLabel, modsOn, needsCenter, normalizeMods } from "./modifiers.js";
+import { DEFAULT_PALETTE, DIRS, DIR_NAMES, FROM, FROM_NAMES, PATTERNS, PATTERN_NAMES, normalizePalette, paletteLabel, picker } from "./palette.js";
+import { lastLabel, remember, setupUndo, undo } from "./undo.js";
+import { clipboardMenu, copyCommand, cutCommand, isPasting, isSelecting, pasteCommand, setupClipboard } from "./clipboard.js";
+import { destroyMenu, isDestroying, setupDestroy, toggleDestroy } from "./destroy.js";
 
 const PACK = "build_bp";
 const PLAN_PROP = "build:plan"; // player: JSON Plan
@@ -40,6 +46,8 @@ const HINT_TICKS = 30;
  * @property {number} repeat
  * @property {number} gap
  * @property {"away" | "right" | "up"} repeatDir
+ * @property {import("./modifiers.js").Mods} mods mirror, radial and array (world axes, around a center)
+ * @property {import("./palette.js").Palette} palette where the palette's blocks come from and how they are spread
  */
 
 /** @type {Plan} */
@@ -59,10 +67,16 @@ const DEFAULT_PLAN = {
   repeat: 1,
   gap: 1,
   repeatDir: "away",
+  mods: DEFAULT_MODS,
+  palette: DEFAULT_PALETTE,
 };
 
+const BOOK = "realm:building_book";
+/** Most points a curve can go through. */
+const MAX_POINTS = 32;
+
 const SRC = ["hand", "mix", "typed"];
-const SRC_NAMES = ["The block you place (or hold)", "Random mix of your hotbar blocks", "The block id typed below"];
+const SRC_NAMES = ["The block you place (or hold)", "Your palette (hotbar blocks by default; see Palette)", "The block id typed below"];
 const SECOND = ["next", "none", "typed"];
 const SECOND_NAMES = ["The block in the hotbar slot right of your hand", "None (the main block)", "The block id typed below"];
 const REPLACE = ["air", "soft", "all"];
@@ -106,9 +120,9 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ x: number, y: number, z: number, before: BlockPermutation, after: BlockPermutation, cost?: string }} Placed
- * @typedef {{ dim: string, label: string, cells: Placed[] }} BuildRecord
- * @typedef {{ on: boolean, start?: { dim: string, x: number, y: number, z: number, id: string, paid?: string }, busy: boolean, undo: BuildRecord[], redo: BuildRecord[], paused: number, hintAt: number }} State
+ * Undo and redo history lives in undo.js.
+ * @typedef {import("./undo.js").Placed} Placed
+ * @typedef {{ on: boolean, start?: { dim: string, x: number, y: number, z: number, id: string, paid?: string }, way?: { dim: string, pts: { x: number, y: number, z: number }[] }, busy: boolean, paused: number, hintAt: number, usedAt: number, bookAt: number }} State
  */
 
 /** @type {Map<string, State>} */
@@ -116,7 +130,7 @@ const states = new Map();
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let s = states.get(player.id);
-  if (!s) states.set(player.id, (s = { on: false, busy: false, undo: [], redo: [], paused: 0, hintAt: 0 }));
+  if (!s) states.set(player.id, (s = { on: false, busy: false, paused: 0, hintAt: 0, usedAt: -99, bookAt: -99 }));
   return s;
 }
 
@@ -153,6 +167,8 @@ function planOf(player) {
   if (!ANCHOR.includes(plan.anchor)) plan.anchor = "front";
   if (!COPIES.includes(plan.copies)) plan.copies = "none";
   if (!REPEAT_DIR.includes(plan.repeatDir)) plan.repeatDir = "away";
+  plan.mods = normalizeMods(p?.mods);
+  plan.palette = normalizePalette(p?.palette);
   return plan;
 }
 
@@ -175,6 +191,7 @@ function val(plan, key) {
 /** "Wall 5 x 3 x 1" @param {Plan} plan */
 function planLabel(plan) {
   const s = shapeOf(plan.shape);
+  if (s.way) return `${s.name} (through points)`;
   if (plan.size === "points" && s.points) return `${s.name} (between two blocks)`;
   const { W, H, D } = boxOf(plan.shape, (k) => val(plan, k));
   return `${s.name} ${W} x ${H} x ${D}`;
@@ -257,6 +274,8 @@ function costOf(perm) {
   if (id === "minecraft:farmland") return "minecraft:dirt";
   // A double slab's item is one slab, but it breaks into two: building them for one each would make slabs.
   if (id.includes("double_slab")) return undefined;
+  // The top half of a door or tall plant comes with its bottom half (pastes, undo of destroy mode).
+  if (perm.getState("upper_block_bit") === true) return null;
   try {
     return perm.getItemStack(1)?.typeId;
   } catch {
@@ -292,18 +311,23 @@ function withState(perm, state, value) {
 /** @param {Player} player */
 const containerOf = (player) => player.getComponent("minecraft:inventory")?.container;
 
-/** Hotbar block items, each once. @param {Player} player @returns {{ perm: BlockPermutation, item: string }[]} */
-function hotbarBlocks(player) {
+/**
+ * The palette's blocks: block items in the hotbar, the rest of the inventory or both, one entry per slot, in slot
+ * order, each with how many of that item the player has in all.
+ * @param {Player} player @param {"hotbar" | "inventory" | "both"} from
+ * @returns {import("./palette.js").Entry[]}
+ */
+function paletteBlocks(player, from) {
   const c = containerOf(player);
   if (!c) return [];
-  const seen = new Set();
+  const have = countItems(player);
   const out = [];
-  for (let i = 0; i < 9; i++) {
+  const lo = from === "inventory" ? 9 : 0, hi = from === "hotbar" ? 9 : c.size;
+  for (let i = lo; i < hi; i++) {
     const item = c.getItem(i);
     const perm = blockOfItem(item);
-    if (!perm || !item || seen.has(item.typeId) || isForbidden(perm.type.id)) continue;
-    seen.add(item.typeId);
-    out.push({ perm, item: item.typeId });
+    if (!perm || !item || isForbidden(perm.type.id)) continue;
+    out.push({ perm, item: item.typeId, slot: i, count: have.get(item.typeId) ?? 0 });
   }
   return out;
 }
@@ -321,7 +345,16 @@ function countItems(player) {
   return have;
 }
 
-/** Takes up to n of an item from the inventory (hotbar last). @param {Player} player @param {string} id @param {number} n */
+/** Has the player named this stack or given it lore? Those are used last. @param {ItemStack} it */
+const special = (it) => {
+  try {
+    return it.nameTag !== undefined || it.getLore().length > 0;
+  } catch {
+    return false;
+  }
+};
+
+/** Takes up to n of an item from the inventory (hotbar last, named stacks after plain ones). @param {Player} player @param {string} id @param {number} n */
 function takeItems(player, id, n) {
   const c = containerOf(player);
   if (!c || n <= 0) return 0;
@@ -329,7 +362,13 @@ function takeItems(player, id, n) {
   const order = [];
   for (let i = 9; i < c.size; i++) order.push(i);
   for (let i = 0; i < 9; i++) order.push(i);
+  /** @type {number[]} */
+  const last = [];
   for (const i of order) {
+    const it = c.getItem(i);
+    if (it?.typeId === id && special(it)) last.push(i);
+  }
+  for (const i of [...order.filter((i) => !last.includes(i)), ...last]) {
     if (taken >= n) break;
     const it = c.getItem(i);
     if (!it || it.typeId !== id) continue;
@@ -358,7 +397,8 @@ function giveItems(player, items) {
       }
       stack.amount = Math.min(left, stack.maxAmount);
       left -= stack.amount;
-      const rest = c?.addItem(stack) ?? stack;
+      // addItem returns what didn't fit, or undefined when all of it did (`?? stack` here would drop a copy).
+      const rest = c ? c.addItem(stack) : stack;
       if (rest) {
         try {
           player.dimension.spawnItem(rest, player.location);
@@ -412,8 +452,10 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 });
 
 /**
- * The blocks a build uses.
- * @typedef {{ main: () => BlockPermutation, base: BlockPermutation, second?: BlockPermutation, mix?: string[] }} Materials
+ * The blocks a build uses. `chooser(box)` gives the main block for each spot of a build that fills `box`
+ * (the same block everywhere, unless it is the palette).
+ * @typedef {{ base: BlockPermutation, second?: BlockPermutation, mix?: string[], chooser: (box: { min: Pos, max: Pos }) => (x: number, y: number, z: number) => BlockPermutation }} Materials
+ * @typedef {{ x: number, y: number, z: number }} Pos
  */
 
 /**
@@ -425,8 +467,8 @@ function materialsOf(player, plan, placed) {
   const survival = !isCreative(player);
   /** @type {BlockPermutation | undefined} */
   let base;
-  /** @type {(() => BlockPermutation) | undefined} */
-  let main;
+  /** @type {Materials["chooser"] | undefined} */
+  let chooser;
   /** @type {string[] | undefined} */
   let mix;
   if (plan.src === "typed") {
@@ -434,27 +476,12 @@ function materialsOf(player, plan, placed) {
     if (!base) return `There is no block called "${plan.block}". Change it in /realm:build -> Blocks and placing.`;
     if (base.type.id === "minecraft:air" && (survival || !isOp(player))) return "Only operators in creative can build with air.";
   } else if (plan.src === "mix") {
-    const list = hotbarBlocks(player);
-    if (!list.length) return "Put some blocks in your hotbar for the random mix.";
-    const have = countItems(player);
-    const left = list.map((b) => (survival ? have.get(b.item) ?? 0 : 1));
+    const pal = plan.palette;
+    const list = paletteBlocks(player, pal.from);
+    if (!list.length) return `Put some blocks in ${pal.from === "hotbar" ? "your hotbar" : "your inventory"} for the palette (/realm:build -> Palette).`;
     base = list[0].perm;
-    mix = list.map((b) => nice(b.perm.type.id));
-    main = () => {
-      let total = left.reduce((a, b) => a + b, 0);
-      if (total <= 0) {
-        left.fill(1);
-        total = left.length;
-      }
-      let r = Math.random() * total;
-      let i = 0;
-      for (; i < left.length - 1; i++) {
-        r -= left[i];
-        if (r < 0) break;
-      }
-      if (survival) left[i] = Math.max(0, left[i] - 1);
-      return list[i].perm;
-    };
+    mix = [...new Set(list.map((b) => nice(b.perm.type.id)))];
+    chooser = (box) => picker(list, pal, survival, box);
   } else {
     base = placed ?? blockOfItem(c?.getItem(player.selectedSlotIndex));
     if (!base) return "Hold a block (or pick another main block in /realm:build -> Blocks and placing).";
@@ -468,10 +495,12 @@ function materialsOf(player, plan, placed) {
     if (!second) return `There is no block called "${plan.secondBlock}". Change it in /realm:build -> Blocks and placing.`;
   } else if (plan.second === "next" && player.selectedSlotIndex < 8) {
     second = blockOfItem(c?.getItem(player.selectedSlotIndex + 1));
+    // A block the tools never place (TNT, a door...) next to your hand just isn't a second block.
+    if (second && isForbidden(second.type.id)) second = undefined;
   }
   if (second && isForbidden(second.type.id)) return `${nice(second.type.id)} can't be built with the tools.`;
   const fixed = base;
-  return { main: main ?? (() => fixed), base, second, mix };
+  return { base, second, mix, chooser: chooser ?? (() => () => fixed) };
 }
 
 // ---------------------------------------------------------------------------
@@ -497,8 +526,12 @@ const slack = (cap) => (Number.isFinite(cap) ? Math.ceil(cap * 1.25) + 64 : cap)
 /** The most blocks one build of this player's may place. @param {Player} player @returns {number} */
 const limitOf = (player) => (isCreative(player) ? get("maxBlocksCreative") : get("maxBlocks"));
 
-/** @type {Map<string, { key: string, rel: Rel[], min: number[], max: number[] }>} preview boxes per player */
+/** @type {Map<string, { key: string, guide: { cells: Pos[], offset?: Pos } | undefined }>} guide cells per player */
 const layoutCache = new Map();
+/** @type {Map<string, { key: string, rel: Rel[] | undefined, turned: Map<string, Pos[]>, busy: boolean, job: number | undefined }>} each player's shape relative to its start block (undefined: too big), turned to each facing; busy: still being laid out */
+const relCache = new Map();
+/** Thrown while the guide's layout is still being worked out. */
+class Pending extends Error {}
 
 /**
  * The shape's cells relative to the block it is built at (du right, dv up, dw away), copies included.
@@ -508,25 +541,42 @@ const layoutCache = new Map();
  * @returns {Rel[]}
  */
 function relCells(plan, stairs, pts, cap = Infinity) {
+  const job = relCellsJob(plan, stairs, pts, cap);
+  let r = job.next();
+  while (!r.done) r = job.next();
+  return r.value;
+}
+
+/**
+ * relCells as a generator for system.runJob (the guide lays big shapes out over several ticks).
+ * @param {Plan} plan @param {boolean} stairs @param {{ W: number, H: number, D: number, a: number[], b: number[] }} [pts]
+ * @param {number} [cap]
+ * @returns {Generator<void, Rel[], void>}
+ */
+function* relCellsJob(plan, stairs, pts, cap = Infinity) {
   const v = (/** @type {string} */ k) => val(plan, k);
   let W, H, D, au, av, aw;
-  /** @type {Map<string, import("./shapes.js").Cell>} */
+  /** @type {Map<number, import("./shapes.js").Cell>} */
   let cells;
   if (pts) {
     ({ W, H, D } = pts);
     // Two blocks at the same height: the shape keeps the height from its settings.
-    if (H === 1 && shapeOf(plan.shape).params.includes("height")) H = v("height");
+    if (H === 1 && shapeOf(plan.shape).params.includes("height")) H = boxOf(plan.shape, v).H;
     [au, av, aw] = pts.a;
-    cells = cellsOf(plan.shape, v, W, H, D, { a: pts.a, b: pts.b }, stairs, slack(cap));
+    cells = yield* cellsJob(plan.shape, v, W, H, D, { a: pts.a, b: pts.b }, stairs, slack(cap));
   } else {
     ({ W, H, D } = boxOf(plan.shape, v));
     au = plan.anchor === "corner" ? 0 : Math.floor((W - 1) / 2);
     aw = plan.anchor === "center" ? Math.floor((D - 1) / 2) : 0;
     av = -Math.max(-32, Math.min(32, plan.up));
-    cells = cellsOf(plan.shape, v, W, H, D, undefined, stairs, slack(cap));
+    cells = yield* cellsJob(plan.shape, v, W, H, D, undefined, stairs, slack(cap));
   }
   /** @type {Rel[]} */
-  let rel = [...cells.values()].map((c) => ({ du: c.u - au, dv: c.v - av, dw: c.w - aw, c }));
+  let rel = [];
+  for (const c of cells.values()) {
+    rel.push({ du: c.u - au, dv: c.v - av, dw: c.w - aw, c });
+    if (rel.length % 4096 === 0) yield;
+  }
   const n = Math.max(1, Math.min(16, Math.round(plan.repeat)));
   if (cells.size * n > cap) throw new TooBig(cells.size * n);
   if (n > 1) {
@@ -589,33 +639,55 @@ function pointsBox(A, B, fr) {
  */
 
 /**
- * The world blocks of a build at T.
+ * The world blocks of a build at T, modifiers included.
  * @param {Plan} plan @param {Materials} mats @param {{ x: number, y: number, z: number }} T
  * @param {{ R: number[], F: number[] }} fr @param {{ x: number, y: number, z: number }} [B] two-point mode: the end
  * @param {number} [cap] see relCells
- * @returns {WorldCell[]}
+ * @param {string} [dimId] the dimension it is built in (a modifier center elsewhere doesn't count)
+ * @returns {Promise<WorldCell[]>}
  */
-function worldCells(plan, mats, T, fr, B, cap) {
+function worldCells(plan, mats, T, fr, B, cap, dimId) {
+  // Laid out by a job: a big shape takes a few ticks instead of stalling one.
+  return jobResult(worldCellsJob(plan, mats, T, fr, B, cap, dimId));
+}
+
+/**
+ * worldCells as a generator for system.runJob.
+ * @param {Plan} plan @param {Materials} mats @param {Pos} T @param {{ R: number[], F: number[] }} fr @param {Pos} [B]
+ * @param {number} [cap] @param {string} [dimId] @returns {Generator<void, WorldCell[], void>}
+ */
+function* worldCellsJob(plan, mats, T, fr, B, cap, dimId) {
   const stairs = isStair(mats.base);
-  const rel = relCells(plan, stairs, B ? pointsBox(T, B, fr) : undefined, cap);
+  const rel = yield* relCellsJob(plan, stairs, B ? pointsBox(T, B, fr) : undefined, cap);
   const { R, F } = fr;
   /** @param {number[]} d */
   const wd = (d) => [d[0] * R[0] + d[1] * F[0], d[0] * R[1] + d[1] * F[1]];
+  /** @type {Pos[]} */
+  const pos = [];
+  for (const { du, dv, dw } of rel) {
+    pos.push({ x: T.x + du * R[0] + dw * F[0], y: T.y + dv, z: T.z + du * R[1] + dw * F[1] });
+    if (pos.length % 2048 === 0) yield;
+  }
+  const main = mats.chooser(boundsOf(pos.length ? pos : [T]));
+  yield;
   /** @type {WorldCell[]} */
   const out = [];
-  for (const { du, dv, dw, c } of rel) {
+  for (let i = 0; i < rel.length; i++) {
+    if (i && i % 2048 === 0) yield;
+    const { c } = rel[i];
+    const { x, y, z } = pos[i];
     /** @type {BlockPermutation | undefined} */
     let perm;
     let late = false;
     switch (c.k) {
       case "m":
-        perm = mats.main();
+        perm = main(x, y, z);
         break;
       case "a":
-        perm = mats.second ?? (c.fb ? permOf(c.fb) : undefined) ?? mats.main();
+        perm = mats.second ?? (c.fb ? permOf(c.fb) : undefined) ?? main(x, y, z);
         break;
       case "s": {
-        const m = mats.main();
+        const m = main(x, y, z);
         perm = isStair(m) && c.d ? withState(withState(m, "weirdo_direction", weirdo(wd(c.d))), "upside_down_bit", !!c.up) : m;
         break;
       }
@@ -636,11 +708,82 @@ function worldCells(plan, mats, T, fr, B, cap) {
     }
     if (!perm) continue;
     if (c.full && NOT_FULL.test(perm.type.id)) perm = permOf("minecraft:oak_planks") ?? perm;
-    out.push({ x: T.x + du * R[0] + dw * F[0], y: T.y + dv, z: T.z + du * R[1] + dw * F[1], perm, late });
+    out.push({ x, y, z, perm, late });
   }
-  // Bottom up, things that hang on others last.
-  out.sort((a, b) => (a.late === b.late ? a.y - b.y : a.late ? 1 : -1));
-  return out;
+  yield;
+  return yield* finishCellsJob(plan, out, T, cap, dimId);
+}
+
+/**
+ * Runs a generator as a job (system.runJob) and gives its result.
+ * @template R @param {Generator<void, R, void>} gen @returns {Promise<R>}
+ */
+function jobResult(gen) {
+  return new Promise((resolve, reject) => {
+    system.runJob(
+      (function* () {
+        try {
+          resolve(yield* gen);
+        } catch (e) {
+          reject(e);
+        }
+      })()
+    );
+  });
+}
+
+/** Where mirrors and radial copies turn: the set center (in this dimension), else the block the build starts at. @param {Plan} plan @param {Pos} T @param {string} [dimId] */
+const centerOf = (plan, T, dimId) => (plan.mods.center && (!dimId || plan.mods.center.dim === dimId) ? plan.mods.center : T);
+
+/**
+ * Adds the modifier copies and sorts: bottom up, things that hang on others last.
+ * @template {{ x: number, y: number, z: number, late?: boolean }} C
+ * @param {Plan} plan @param {C[]} cells @param {Pos} T @param {number} [cap] @param {string} [dimId] @returns {C[]}
+ */
+function finishCells(plan, cells, T, cap = Infinity, dimId) {
+  const job = finishCellsJob(plan, cells, T, cap, dimId);
+  let r = job.next();
+  while (!r.done) r = job.next();
+  return r.value;
+}
+
+/**
+ * finishCells as a generator for system.runJob.
+ * @template {{ x: number, y: number, z: number, late?: boolean }} C
+ * @param {Plan} plan @param {C[]} cells @param {Pos} T @param {number} [cap] @param {string} [dimId] @returns {Generator<void, C[], void>}
+ */
+function* finishCellsJob(plan, cells, T, cap = Infinity, dimId) {
+  let out = cells;
+  if (modsOn(plan.mods)) {
+    try {
+      out = yield* applyModsJob(cells, plan.mods, centerOf(plan, T, dimId), cap);
+    } catch (e) {
+      if (e instanceof RangeError) throw new TooBig(Math.max(cap + 1, Number(e.message) || 0));
+      throw e;
+    }
+  }
+  // Bottom up, things that hang on others last: by layer (linear, unlike a sort of thousands of blocks).
+  let lo = Infinity, hi = -Infinity;
+  for (const c of out) {
+    if (c.y < lo) lo = c.y;
+    if (c.y > hi) hi = c.y;
+  }
+  if (out.length < 2) return out;
+  /** @type {C[][]} */
+  const layers = Array.from({ length: 2 * (hi - lo + 1) }, () => []);
+  for (const c of out) layers[(c.late ? hi - lo + 1 : 0) + c.y - lo].push(c);
+  return layers.flat();
+}
+
+/**
+ * The world blocks of a curve through points, modifiers included.
+ * @param {Plan} plan @param {Materials} mats @param {Pos[]} pts @param {number} cap @param {string} dimId @returns {WorldCell[]}
+ */
+function curveWorldCells(plan, mats, pts, cap, dimId) {
+  const pos = curveCells(/** @type {"curve" | "curvewall"} */ (plan.shape), (k) => val(plan, k), pts, slack(cap));
+  if (pos.length > cap) throw new TooBig(pos.length);
+  const main = mats.chooser(boundsOf(pos));
+  return finishCells(plan, pos.map((p) => ({ ...p, perm: main(p.x, p.y, p.z), late: false })), pts[0], cap, dimId);
 }
 
 /** @param {{ x: number, y: number, z: number }[]} cells */
@@ -708,6 +851,25 @@ const tick = () => new Promise((r) => system.run(() => r(undefined)));
 const AIR = () => /** @type {BlockPermutation} */ (permOf("minecraft:air"));
 
 /**
+ * Why a player may not change blocks in this box (safe zones, other players' claims), or undefined.
+ * @param {Player} player @param {Dimension} dim
+ * @param {{ x: number, y: number, z: number }} min @param {{ x: number, y: number, z: number }} max
+ * @param {string} [verb] "build", "cut", "destroy"...
+ * @returns {Promise<string | undefined>}
+ */
+async function areaRefusal(player, dim, min, max, verb = "build") {
+  if (!isOp(player) && get("safeZonesOperatorsOnly") === true) {
+    const zone = safeZoneIn(dim.id, min, max);
+    if (zone) return `That would ${verb} in the safe zone ${zone.name}. Only operators can ${verb} there with the tools.`;
+  }
+  if (get("inOthersClaims") === true) return undefined;
+  const claims = await claimsIn(player, dim.id, min, max);
+  if (!claims) return `Land Claims didn't answer, so nothing was done. Try again.`;
+  if (claims.length) return `That would reach into ${claims[0].n}'s claim. Do it somewhere else, or make it smaller.`;
+  return undefined;
+}
+
+/**
  * May a build put a block where `id` is?
  * @param {string} id @param {"air" | "soft" | "all"} mode
  */
@@ -729,9 +891,10 @@ function replaceMode(player, plan) {
  * a few ticks and remembers it for undo.
  * @param {Player} player
  * @param {Dimension} dim
- * @param {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string }[]} cells `expect`: only where this block is (redo)
+ * @param {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string, free?: boolean }[]} cells `expect`: only where this block is (redo); `free`: costs nothing
  * @param {string} label
- * @param {{ mode: "air" | "soft" | "all", redo?: boolean }} opts
+ * @param {{ mode: "air" | "soft" | "all", redo?: boolean, free?: boolean, kind?: import("./undo.js").Kind, rec?: Partial<import("./undo.js").BuildRecord>, done?: (placed: Placed[]) => void }} opts
+ *   `free`: nothing costs items (a cut pasted back); `kind` and `rec`: what undo remembers; `done`: gets the placed blocks instead of undo
  * @returns {Promise<boolean>} whether anything was built
  */
 async function build(player, dim, cells, label, opts) {
@@ -752,26 +915,13 @@ async function build(player, dim, cells, label, opts) {
     return false;
   }
   const { min, max } = boundsOf(cells);
-  if (!isOp(player) && get("safeZonesOperatorsOnly") === true) {
-    const zone = safeZoneIn(dim.id, min, max);
-    if (zone) {
-      player.sendMessage(`§eThat would build in the safe zone ${zone.name}. Only operators can build there with the tools.`);
-      return false;
-    }
-  }
   s.busy = true;
   try {
-    if (get("inOthersClaims") !== true) {
-      const claims = await claimsIn(player, dim.id, min, max);
-      if (!player.isValid) return false;
-      if (!claims) {
-        player.sendMessage("§eLand Claims didn't answer, so nothing was built. Try again.");
-        return false;
-      }
-      if (claims.length) {
-        player.sendMessage(`§eThat would reach into ${claims[0].n}'s claim. Build somewhere else, or make it smaller.`);
-        return false;
-      }
+    const why = await areaRefusal(player, dim, min, max);
+    if (!player.isValid) return false;
+    if (why) {
+      player.sendMessage(`§e${why}`);
+      return false;
     }
     const range = dim.heightRange;
     const perTick = Math.max(10, get("blocksPerTick"));
@@ -779,16 +929,16 @@ async function build(player, dim, cells, label, opts) {
     // 1. What can go where (reading only).
     /** @type {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string, cost?: string }[]} */
     const todo = [];
-    let blocked = 0, unloaded = 0, unpayable = 0;
-    const pay = !creative && get("requireItems") === true;
+    let blocked = 0, unloaded = 0, unpayable = 0, outside = 0;
+    const pay = !creative && get("requireItems") === true && !opts.free;
     for (let i = 0; i < cells.length; i++) {
-      if (i && i % (perTick * 4) === 0) {
+      if (i && i % perTick === 0) {
         await tick();
         if (!player.isValid) return false;
       }
       const c = cells[i];
       if (c.y < range.min || c.y >= range.max) {
-        blocked++;
+        outside++;
         continue;
       }
       let block;
@@ -807,7 +957,7 @@ async function build(player, dim, cells, label, opts) {
         blocked++;
         continue;
       }
-      if (!pay) {
+      if (!pay || c.free) {
         todo.push(c);
         continue;
       }
@@ -837,7 +987,12 @@ async function build(player, dim, cells, label, opts) {
       for (const [id, n] of need) paid.set(id, takeItems(player, id, n));
     }
 
-    // 3. Place, a few hundred blocks a tick.
+    // 3. Place, a few hundred blocks a tick. The top half of a door or tall flower (pastes, undo of destroy mode)
+    // goes last and only onto its own bottom half; a bottom half whose top can't go is taken away again.
+    const upper = (/** @type {{ perm: BlockPermutation }} */ c) => c.perm.getState("upper_block_bit") === true;
+    if (todo.some(upper)) todo.sort((a, b) => Number(upper(a)) - Number(upper(b)));
+    /** @type {Set<string>} bottom halves to take away again */
+    const lone = new Set();
     /** @type {Placed[]} */
     const placed = [];
     let changed = 0;
@@ -858,7 +1013,20 @@ async function build(player, dim, cells, label, opts) {
       } catch {
         block = undefined;
       }
-      if (!block || (opts.redo ? block.typeId !== c.expect : !replaceable(block.typeId, opts.mode))) {
+      let bad = !block || (opts.redo ? block.typeId !== c.expect : !replaceable(block.typeId, opts.mode));
+      if (!bad && upper(c)) {
+        let below;
+        try {
+          below = dim.getBlock({ x: c.x, y: c.y - 1, z: c.z });
+        } catch {
+          below = undefined;
+        }
+        if (below?.typeId !== c.perm.type.id || below.permutation.getState("upper_block_bit") !== false) {
+          bad = true;
+          lone.add(`${c.x},${c.y - 1},${c.z}`);
+        }
+      }
+      if (!block || bad) {
         if (c.cost) paid.set(c.cost, (paid.get(c.cost) ?? 0) + 1);
         changed++;
         continue;
@@ -873,20 +1041,35 @@ async function build(player, dim, cells, label, opts) {
       }
       placed.push({ x: c.x, y: c.y, z: c.z, before, after: c.perm, cost: c.cost });
     }
+    if (lone.size) {
+      for (let i = placed.length - 1; i >= 0; i--) {
+        const c = placed[i];
+        if (!lone.has(`${c.x},${c.y},${c.z}`)) continue;
+        try {
+          const block = dim.getBlock(c);
+          if (block?.typeId === c.after.type.id) block.setPermutation(c.before);
+        } catch {
+          continue;
+        }
+        if (c.cost) paid.set(c.cost, (paid.get(c.cost) ?? 0) + 1);
+        placed.splice(i, 1);
+        changed++;
+      }
+    }
     // Anything paid for but not placed goes back.
     for (const [id, n] of [...paid]) if (n <= 0) paid.delete(id);
     refund(player, pid, paid);
 
     if (placed.length) {
-      s.undo.push({ dim: dim.id, label, cells: placed });
-      while (s.undo.length > Math.max(1, get("undoSteps"))) s.undo.shift();
-      if (!opts.redo) s.redo = [];
+      if (opts.done) opts.done(placed);
+      else remember(player, { ...opts.rec, dim: dim.id, label, kind: opts.kind ?? "build", cells: placed }, !!opts.redo);
     }
     if (!player.isValid) return placed.length > 0;
     const skipped = blocked + changed;
     const notes = [];
     if (skipped) notes.push(`${plural(skipped, "spot")} already taken`);
     if (unloaded) notes.push(`${plural(unloaded, "block")} too far away`);
+    if (outside) notes.push(`${plural(outside, "block")} above or below the world`);
     if (unpayable) notes.push(`${plural(unpayable, "block")} that can't be built in survival`);
     if (!placed.length) {
       player.sendMessage(short.length ? `§eNot enough blocks: you need ${short.join(", ")}.` : `§eNothing was built${notes.length ? `: ${notes.join(", ")}` : ""}.`);
@@ -894,67 +1077,8 @@ async function build(player, dim, cells, label, opts) {
     }
     note(player, `§aBuilt ${plural(placed.length, "block")}§7 - /realm:build_undo takes it back`);
     if (short.length) player.sendMessage(`§eOut of blocks: built ${placed.length} of ${todo.length}. Still needed: ${short.join(", ")}.`);
-    if (notes.length && skipped + unloaded + unpayable >= Math.max(4, cells.length / 10)) player.sendMessage(`§7Skipped ${notes.join(", ")}.`);
+    if (notes.length && skipped + unloaded + unpayable + outside >= Math.max(4, cells.length / 10)) player.sendMessage(`§7Skipped ${notes.join(", ")}.`);
     return true;
-  } finally {
-    s.busy = false;
-  }
-}
-
-/**
- * Undoes (or redoes) the player's last build.
- * @param {Player} player @param {boolean} redo
- */
-async function undo(player, redo) {
-  const s = stateOf(player);
-  if (s.busy) return player.sendMessage("§eWait for the build to finish.");
-  if (cantBuild(player)) return player.sendMessage(CANT_BUILD);
-  const list = redo ? s.redo : s.undo;
-  const rec = list.pop();
-  if (!rec) return player.sendMessage(redo ? "§eNothing to redo." : "§eNothing to undo. Builds are forgotten when the server restarts.");
-  const dim = world.getDimension(rec.dim);
-  if (redo) {
-    const cells = rec.cells.map((c) => ({ x: c.x, y: c.y, z: c.z, perm: c.after, expect: c.before.type.id }));
-    const ok = await build(player, dim, cells, rec.label, { mode: "air", redo: true });
-    if (!ok) s.redo.push(rec);
-    return;
-  }
-  const pid = player.id;
-  s.busy = true;
-  try {
-    const perTick = Math.max(10, get("blocksPerTick"));
-    /** @type {Map<string, number>} */
-    const owed = new Map();
-    let back = 0, gone = 0;
-    for (let i = rec.cells.length - 1, n = 0; i >= 0; i--, n++) {
-      if (n && n % perTick === 0) await tick();
-      const c = rec.cells[i];
-      let block;
-      try {
-        block = dim.getBlock(c);
-      } catch {
-        block = undefined;
-      }
-      if (!block || block.typeId !== c.after.type.id) {
-        gone++;
-        continue;
-      }
-      try {
-        block.setPermutation(c.before);
-      } catch {
-        gone++;
-        continue;
-      }
-      back++;
-      if (c.cost) owed.set(c.cost, (owed.get(c.cost) ?? 0) + 1);
-    }
-    refund(player, pid, owed);
-    if (back) s.redo.push(rec);
-    while (s.redo.length > Math.max(1, get("undoSteps"))) s.redo.shift();
-    if (!player.isValid) return;
-    const given = [...owed.values()].reduce((a, b) => a + b, 0);
-    note(player, `§aUndone: ${rec.label}§7 (${plural(back, "block")}${given ? `, ${given} given back` : ""})`);
-    if (gone) player.sendMessage(`§7${plural(gone, "block")} had changed since and stayed as they are.`);
   } finally {
     s.busy = false;
   }
@@ -967,15 +1091,32 @@ async function undo(player, redo) {
 /** @type {Record<string, number[]>} */
 const FACE = { Up: [0, 1, 0], Down: [0, -1, 0], North: [0, 0, -1], South: [0, 0, 1], East: [1, 0, 0], West: [-1, 0, 0] };
 
-/** The spot a block would be placed on the face you look at. @param {Player} player */
-function lookTarget(player) {
+/** How far away this player builds at a look: their own reach, never past the realm's. @param {Player} player */
+const reachOf = (player) => Math.max(1, Math.min(Number(get("reach")) || 16, Number(getFor(player, "myReach")) || 16));
+/** Is Air Build on for this player (and allowed on the realm)? @param {Player} player */
+const airOn = (player) => get("airBuild") === true && getFor(player, "airMode") === true;
+
+/** The block spot in midair this player's Air Build aims at. @param {Player} player */
+function airTarget(player) {
+  const d = Math.max(1, Math.min(reachOf(player), Number(getFor(player, "airDistance")) || 4));
+  const head = player.getHeadLocation(), dir = player.getViewDirection();
+  return { x: Math.floor(head.x + dir.x * d), y: Math.floor(head.y + dir.y * d), z: Math.floor(head.z + dir.z * d), air: true };
+}
+
+/**
+ * The spot a block would be placed on the face you look at (within your reach); with Air Build on and no block
+ * in reach, the spot in midair in front of you.
+ * @param {Player} player @param {boolean} [air] allow Air Build's spot
+ * @returns {{ x: number, y: number, z: number, air?: boolean } | undefined}
+ */
+function lookTarget(player, air = true) {
   let hit;
   try {
-    hit = player.getBlockFromViewDirection({ maxDistance: get("reach"), includeLiquidBlocks: false, includePassableBlocks: false });
+    hit = player.getBlockFromViewDirection({ maxDistance: reachOf(player), includeLiquidBlocks: false, includePassableBlocks: false });
   } catch {
     hit = undefined;
   }
-  if (!hit) return undefined;
+  if (!hit) return air && airOn(player) ? airTarget(player) : undefined;
   const n = FACE[hit.face] ?? [0, 1, 0];
   const b = hit.block.location;
   return { x: b.x + n[0], y: b.y + n[1], z: b.z + n[2] };
@@ -992,6 +1133,10 @@ const tooBig = (player, e) =>
 async function buildAt(player, T, placed) {
   const plan = planOf(player);
   const s = stateOf(player);
+  if (shapeOf(plan.shape).way) {
+    addPoint(player, T);
+    return false;
+  }
   const mats = materialsOf(player, plan, placed);
   if (typeof mats === "string") {
     player.sendMessage(`§e${mats}`);
@@ -1017,15 +1162,75 @@ async function buildAt(player, T, placed) {
     }
   }
   let cells;
+  s.busy = true; // while it is laid out
   try {
-    cells = worldCells(plan, mats, start, fr, end, limitOf(player));
+    cells = await worldCells(plan, mats, start, fr, end, limitOf(player), player.dimension.id);
   } catch (e) {
     if (!(e instanceof TooBig)) throw e;
-    player.sendMessage(tooBig(player, e));
+    if (player.isValid) player.sendMessage(tooBig(player, e));
     return false;
+  } finally {
+    s.busy = false;
   }
+  if (!player.isValid) return false;
   const label = twoPoint ? shapeOf(plan.shape).name : planLabel(plan);
   return build(player, player.dimension, cells, label, { mode: replaceMode(player, plan) });
+}
+
+// ---------------------------------------------------------------------------
+// Curves: points placed one by one, then finished
+// ---------------------------------------------------------------------------
+
+/** Adds a point to the player's curve. @param {Player} player @param {Pos} T */
+function addPoint(player, T) {
+  const s = stateOf(player);
+  const dim = player.dimension.id;
+  if (!s.way || s.way.dim !== dim) s.way = { dim, pts: [] };
+  const last = s.way.pts[s.way.pts.length - 1];
+  if (last && last.x === T.x && last.y === T.y && last.z === T.z) return;
+  if (s.way.pts.length >= MAX_POINTS) {
+    note(player, `§eA curve can have ${MAX_POINTS} points: finish it in /realm:build or /realm:build_finish`);
+    return;
+  }
+  const size = get("maxSize");
+  const first = s.way.pts[0];
+  if (first && Math.max(Math.abs(T.x - first.x), Math.abs(T.y - first.y), Math.abs(T.z - first.z)) >= 2 * size) {
+    note(player, `§eThat point is too far from the first one (at most ${2 * size - 1} blocks)`);
+    return;
+  }
+  s.way.pts.push({ x: T.x, y: T.y, z: T.z });
+  const n = s.way.pts.length;
+  note(player, n === 1 ? "§bPoint 1 set§7 - place the next point" : `§bPoint ${n} set§7 - more points, or finish: /realm:build_finish`, 80);
+}
+
+/** Builds the player's curve through its points. @param {Player} player */
+async function finishCurve(player) {
+  const s = stateOf(player);
+  if (s.busy) return player.sendMessage("§eWait for the last build to finish.");
+  const plan = planOf(player);
+  const shape = shapeOf(plan.shape);
+  if (!shape.way) return player.sendMessage("§eChoose Curved line or Curved wall or path first (/realm:build -> Choose a shape).");
+  const way = s.way;
+  if (!way || way.dim !== player.dimension.id || way.pts.length < 2) {
+    return player.sendMessage("§eA curve needs at least two points: place them (build mode) or use /realm:build_here at each.");
+  }
+  const mats = materialsOf(player, plan);
+  if (typeof mats === "string") return player.sendMessage(`§e${mats}`);
+  let cells;
+  try {
+    cells = curveWorldCells(plan, mats, way.pts, limitOf(player), way.dim);
+  } catch (e) {
+    if (!(e instanceof TooBig)) throw e;
+    return player.sendMessage(tooBig(player, e));
+  }
+  const n = way.pts.length;
+  s.way = undefined;
+  layoutCache.delete(player.id);
+  const ok = await build(player, player.dimension, cells, `${shape.name} through ${n} points`, { mode: replaceMode(player, plan) });
+  if (!ok && player.isValid) {
+    s.way = way; // keep the points to try again
+    layoutCache.delete(player.id);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1034,7 +1239,10 @@ async function buildAt(player, T, placed) {
 
 world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
   const s = states.get(player.id);
-  if (!s?.on || player.isSneaking) return;
+  if (!s?.on || player.isSneaking) {
+    handPlaced(player, block);
+    return;
+  }
   if (refusal(player)) return;
   if (s.busy) {
     note(player, "§eStill building the last one...");
@@ -1078,79 +1286,276 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
 });
 
 // ---------------------------------------------------------------------------
+// Modifiers on blocks placed and broken by hand (a player choice, default off)
+// ---------------------------------------------------------------------------
+
+/** Has this player asked for (and may they have) modifier copies of what they place and break by hand? Cheap: checked on every block. @param {Player} player */
+const wantsHandMods = (player) => get("handModifiers") === true && getFor(player, "modsByHand") === true;
+/** ...and are any modifiers on, and may they build? @param {Player} player @param {Plan} plan */
+const handMods = (player, plan) => wantsHandMods(player) && modsOn(plan.mods) && !refusal(player) && !cantBuild(player);
+
+/** The copies of one block a player's modifiers make (the block itself left out). @param {Plan} plan @param {Pos} p @param {string} dimId */
+function handCopies(plan, p, dimId) {
+  try {
+    return applyMods([{ x: p.x, y: p.y, z: p.z }], plan.mods, centerOf(plan, p, dimId), 4096).filter((c) => c.x !== p.x || c.y !== p.y || c.z !== p.z);
+  } catch {
+    return [];
+  }
+}
+
+/** A block placed one at a time: its modifier copies are built too (paid for, claims and zones checked, undoable). @param {Player} player @param {import("@minecraft/server").Block} block */
+function handPlaced(player, block) {
+  if (!wantsHandMods(player) || isPasting(player) || isSelecting(player)) return;
+  const plan = planOf(player);
+  if (!handMods(player, plan)) return;
+  const s = stateOf(player);
+  if (s.busy) return;
+  const perm = block.permutation;
+  if (isForbidden(perm.type.id) || perm.getState("upper_block_bit") !== undefined || stacked(perm)) return;
+  const dim = block.dimension;
+  const T = { x: block.location.x, y: block.location.y, z: block.location.z };
+  const copies = applyModsTo(plan, [{ ...T, perm }], T, dim.id).filter((c) => c.x !== T.x || c.y !== T.y || c.z !== T.z);
+  if (!copies.length) return;
+  build(player, dim, copies, `copies of ${nice(perm.type.id)}`, { mode: replaceMode(player, plan) }).catch((e) => console.warn(`[build] ${e}`));
+}
+
+/** @template {{ x: number, y: number, z: number, perm?: BlockPermutation }} C @param {Plan} plan @param {C[]} cells @param {Pos} T @param {string} dimId @returns {C[]} */
+function applyModsTo(plan, cells, T, dimId) {
+  try {
+    return applyMods(cells, plan.mods, centerOf(plan, T, dimId), 4096);
+  } catch {
+    return cells;
+  }
+}
+
+world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermutation: broken }) => {
+  try {
+    if (!wantsHandMods(player) || isDestroying(player)) return;
+    const plan = planOf(player);
+    if (!handMods(player, plan) || stateOf(player).busy) return;
+    const id = broken.type.id;
+    if (isProtectedBlock(id) || id === "minecraft:air") return;
+    const dim = block.dimension;
+    const copies = handCopies(plan, block.location, dim.id);
+    if (copies.length) handBroken(player, dim, copies, id).catch((e) => console.warn(`[build] ${e}`));
+  } catch (e) {
+    console.warn(`[build] ${e}`);
+  }
+});
+
+/**
+ * Breaks the modifier copies of a block broken by hand: only where the same block is. Creative players just
+ * clear them; survival players get the drops (the game's own, as if broken by hand: `setblock ... destroy`).
+ * Copies in someone else's claim or (for non-operators) a safe zone are left alone; undo doesn't bring them back.
+ * @param {Player} player @param {Dimension} dim @param {Pos[]} copies @param {string} id
+ */
+async function handBroken(player, dim, copies, id) {
+  const { min, max } = boundsOf(copies);
+  if (!isOp(player) && get("safeZonesOperatorsOnly") === true && safeZoneIn(dim.id, min, max)) return;
+  if (get("inOthersClaims") !== true) {
+    const claims = await claimsIn(player, dim.id, min, max);
+    if (!claims || claims.length || !player.isValid) return;
+  }
+  const creative = isCreative(player);
+  let n = 0;
+  for (const c of copies) {
+    try {
+      const b = dim.getBlock(c);
+      if (!b || b.typeId !== id) continue;
+      if (creative) b.setPermutation(AIR());
+      else dim.runCommand(`setblock ${c.x} ${c.y} ${c.z} air destroy`);
+      n++;
+    } catch {
+      // unloaded
+    }
+  }
+  if (n) note(player, `§7Broke ${plural(n, "copy", "copies")} too`, 30);
+}
+
+// ---------------------------------------------------------------------------
+// The Building Book and Air Build: using an item in the air
+// ---------------------------------------------------------------------------
+
+/** Opens the menu (or, sneaking, turns build mode on or off) with the Building Book. @param {Player} player */
+function useBook(player) {
+  const s = stateOf(player);
+  if (system.currentTick - s.bookAt < 8) return;
+  s.bookAt = system.currentTick;
+  const why = refusal(player);
+  if (why) return player.sendMessage(`§e${why}`);
+  if (player.isSneaking) toggleMode(player);
+  else mainMenu(player).catch((e) => console.warn(`[build] ${e}`));
+}
+
+world.afterEvents.itemUse.subscribe(({ source: player, itemStack }) => {
+  try {
+    if (!(player instanceof Player)) return;
+    // While choosing a region's corners, using any item (the book too) sets a corner: clipboard.js handles it.
+    if (isSelecting(player)) return;
+    if (itemStack?.typeId === BOOK) return useBook(player);
+    const perm = blockOfItem(itemStack);
+    if (!perm || !airOn(player) || refusal(player) || cantBuild(player)) return;
+    const s = stateOf(player);
+    if (system.currentTick - s.usedAt < 4 || s.busy) return;
+    // Looking at a block within normal reach: the game places it there as usual.
+    try {
+      if (player.getBlockFromViewDirection({ maxDistance: 6, includeLiquidBlocks: false, includePassableBlocks: false })) return;
+    } catch {
+      // nothing in view
+    }
+    s.usedAt = system.currentTick;
+    airUse(player, perm).catch((e) => console.warn(`[build] ${e}`));
+  } catch (e) {
+    console.warn(`[build] ${e}`);
+  }
+});
+
+/**
+ * Air Build: in build mode the shape is built at the spot in midair; otherwise (or sneaking) one block goes
+ * there (with its modifier copies when those are on for blocks placed by hand).
+ * @param {Player} player @param {BlockPermutation} perm the held block
+ */
+async function airUse(player, perm) {
+  const T = airTarget(player);
+  const s = stateOf(player);
+  if (s.on && !player.isSneaking) {
+    await buildAt(player, T);
+    return;
+  }
+  const plan = planOf(player);
+  if (isForbidden(perm.type.id)) return player.sendMessage(`§e${nice(perm.type.id)} can't be built with the tools.`);
+  const p = isStair(perm) ? withState(perm, "weirdo_direction", weirdo(facingOf(player))) : perm;
+  const cells = handMods(player, plan) ? applyModsTo(plan, [{ ...T, perm: p }], T, player.dimension.id) : [{ x: T.x, y: T.y, z: T.z, perm: p }];
+  await build(player, player.dimension, cells, `${nice(perm.type.id)} in the air`, { mode: replaceMode(player, plan) });
+}
+
+world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.itemStack?.typeId !== BOOK || isSelecting(ev.player)) return;
+  ev.cancel = true; // every repeat while the button is held too, so the block is never used
+  if (!ev.isFirstEvent) return;
+  const player = ev.player;
+  system.run(() => {
+    if (player.isValid) useBook(player);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Outline preview and the build mode line
 // ---------------------------------------------------------------------------
 
 /**
- * The box a build would fill at T, relative cells cached per plan.
- * @param {Player} player @param {Plan} plan @param {{ x: number, y: number, z: number }} T
+ * The blocks the player's build would fill at T, for the guide: cached until the plan, the way they face or
+ * (when the result depends on it) T changes. Without modifiers, two blocks or points it is cached relative to T
+ * and drawn with T as the offset.
+ * @param {Player} player @param {Plan} plan @param {Pos} T
+ * @returns {{ cells: Pos[], offset?: Pos, mods?: { m: import("./modifiers.js").Mods, center: Pos } } | undefined}
  */
-function previewBox(player, plan, T) {
+function guideFor(player, plan, T) {
   const fr = frameOf(facingOf(player), plan.turn);
   const s = stateOf(player);
-  const twoPoint = plan.size === "points" && shapeOf(plan.shape).points;
-  if (twoPoint && s.start && s.start.dim === player.dimension.id) {
-    const a = s.start;
-    const flat = a.y === T.y && shapeOf(plan.shape).params.includes("height") ? val(plan, "height") - 1 : 0;
-    return { min: { x: Math.min(a.x, T.x), y: Math.min(a.y, T.y), z: Math.min(a.z, T.z) }, max: { x: Math.max(a.x, T.x), y: Math.max(a.y, T.y) + flat, z: Math.max(a.z, T.z) } };
-  }
-  if (twoPoint) return { min: T, max: T };
+  const dim = player.dimension.id;
+  const shape = shapeOf(plan.shape);
   const cap = limitOf(player);
-  const key = JSON.stringify(plan) + fr.R.join() + fr.F.join() + get("maxSize") + cap;
-  let cached = layoutCache.get(player.id);
-  if (!cached || cached.key !== key) {
-    /** @type {Rel[]} */
-    let rel;
-    try {
-      rel = relCells(plan, false, undefined, cap);
-    } catch (e) {
-      if (!(e instanceof TooBig)) throw e;
-      rel = []; // too big to build: no outline (placing says why)
+  const twoPoint = plan.size === "points" && shape.points;
+  const start = twoPoint && s.start && s.start.dim === dim ? s.start : undefined;
+  const pts = shape.way && s.way && s.way.dim === dim ? s.way.pts : [];
+  // Curves and two-block shapes depend on where you look; other shapes are laid out once and moved (their modifier
+  // copies are worked out face by face when drawn).
+  const moving = shape.way || twoPoint;
+  const planKey = JSON.stringify(plan) + get("maxSize") + cap;
+  const baseKey = planKey + fr.R.join() + fr.F.join() + dim;
+  const key = baseKey + (moving ? `|${T.x},${T.y},${T.z}|${start ? `${start.x},${start.y},${start.z}` : ""}|${pts.length}` : "");
+  const cached = layoutCache.get(player.id);
+  if (cached && cached.key === key) return cached.guide;
+  /** The shape's blocks relative to the block it starts at: laid out once per plan (and turned once per facing), not per look. */
+  const fk = fr.R.join() + fr.F.join();
+  const relPos = () => {
+    let hit = relCache.get(player.id);
+    if (!hit || hit.key !== planKey) {
+      if (hit?.job !== undefined) system.clearJob(hit.job); // a layout for settings since changed
+      hit = { key: planKey, rel: undefined, turned: new Map(), busy: true, job: undefined };
+      relCache.set(player.id, hit);
     }
-    const pts = rel.map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }));
-    const b = pts.length ? boundsOf(pts) : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
-    cached = { key, rel, min: [b.min.x, b.min.y, b.min.z], max: [b.max.x, b.max.y, b.max.z] };
-    layoutCache.set(player.id, cached);
-  }
-  return {
-    min: { x: T.x + cached.min[0], y: T.y + cached.min[1], z: T.z + cached.min[2] },
-    max: { x: T.x + cached.max[0], y: T.y + cached.max[1], z: T.z + cached.max[2] },
+    const pos = hit.turned.get(fk);
+    if (pos) return pos;
+    if (!hit.busy && !hit.rel) throw new TooBig(cap + 1);
+    if (hit.job === undefined) {
+      // Laid out (and outlined) over the next ticks, so a big shape doesn't stall one; no guide until then.
+      const entry = hit;
+      entry.job = system.runJob(
+        (function* () {
+          try {
+            if (entry.busy) entry.rel = yield* relCellsJob(plan, false, undefined, cap);
+            const list = [];
+            for (const r of entry.rel ?? []) {
+              list.push({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] });
+              if (list.length % 4096 === 0) yield;
+            }
+            if (entry.rel) {
+              yield* outlineJob(list);
+              entry.turned.set(fk, list);
+            }
+          } catch (e) {
+            if (!(e instanceof TooBig)) console.warn(`[build] guide: ${e}`);
+          }
+          entry.busy = false;
+          entry.job = undefined;
+        })()
+      );
+    }
+    throw new Pending();
   };
+  /** @type {{ cells: Pos[], offset?: Pos } | undefined} */
+  let guide;
+  try {
+    if (shape.way) {
+      const pos = curveCells(/** @type {"curve" | "curvewall"} */ (plan.shape), (k) => val(plan, k), [...pts, T], slack(cap));
+      guide = { cells: finishCells(plan, pos, pts[0] ?? T, cap, dim) };
+    } else {
+      const O = start ?? T;
+      const pos = moving
+        ? (start ? relCells(plan, false, pointsBox(start, T, fr), cap) : [{ du: 0, dv: 0, dw: 0 }]).map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }))
+        : relPos();
+      guide = moving ? { cells: withModsGuide(plan, pos.map((p) => ({ x: p.x + O.x, y: p.y + O.y, z: p.z + O.z })), O, cap, dim) } : { cells: pos };
+    }
+  } catch (e) {
+    if (e instanceof Pending) return undefined; // not laid out yet: asked again at the next refresh
+    if (!(e instanceof TooBig)) throw e;
+    guide = undefined; // too big to build: no guide (building says why)
+  }
+  layoutCache.set(player.id, { key, guide });
+  if (guide && !moving) return { cells: guide.cells, offset: T, mods: modsOn(plan.mods) ? { m: plan.mods, center: centerOf(plan, T, dim) } : undefined };
+  return guide;
 }
 
-/**
- * Sparkles along the 12 edges of a box (whole blocks min..max), only the player sees them.
- * @param {Player} player @param {{ min: { x: number, y: number, z: number }, max: { x: number, y: number, z: number } }} box
- */
-function drawBox(player, box) {
-  const particle = String(getFor(player, "particle"));
-  const x0 = box.min.x, y0 = box.min.y, z0 = box.min.z, x1 = box.max.x + 1, y1 = box.max.y + 1, z1 = box.max.z + 1;
-  const perimeter = 4 * (x1 - x0 + y1 - y0 + z1 - z0);
-  const step = Math.max(0.5, perimeter / 240);
-  /** @param {number[]} a @param {number[]} b */
-  const edge = (a, b) => {
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-    const n = Math.max(1, Math.round(len / step));
-    for (let i = 0; i <= n; i++) {
-      const f = i / n;
-      try {
-        player.spawnParticle(particle, { x: a[0] + (b[0] - a[0]) * f, y: a[1] + (b[1] - a[1]) * f, z: a[2] + (b[2] - a[2]) * f });
-      } catch {
-        // unloaded or a bad particle
-      }
-    }
-  };
-  for (const y of [y0, y1]) {
-    edge([x0, y, z0], [x1, y, z0]);
-    edge([x0, y, z1], [x1, y, z1]);
-    edge([x0, y, z0], [x0, y, z1]);
-    edge([x1, y, z0], [x1, y, z1]);
+/** The guide's modifier copies (like finishCells, without sorting). @param {Plan} plan @param {Pos[]} cells @param {Pos} T @param {number} cap @param {string} dim */
+function withModsGuide(plan, cells, T, cap, dim) {
+  if (!modsOn(plan.mods)) return cells;
+  try {
+    return applyMods(cells, plan.mods, centerOf(plan, T, dim), cap);
+  } catch (e) {
+    if (e instanceof RangeError) throw new TooBig(cap + 1);
+    throw e;
   }
-  for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) edge([x, y0, z], [x, y1, z]);
 }
 
-/** Is the player holding a block that can be placed? @param {Player} player */
-const holdingBlock = (player) => !!blockOfItem(containerOf(player)?.getItem(player.selectedSlotIndex));
+/** Gold marks: the modifier center, a two-block start and a curve's points. @param {Player} player @param {State} s @param {Plan} plan */
+function marksOf(player, s, plan) {
+  const dim = player.dimension.id;
+  /** @type {Pos[]} */
+  const out = [];
+  const c = plan.mods.center;
+  if (c && c.dim === dim && needsCenter(plan.mods)) out.push(c);
+  if (s.start && s.start.dim === dim) out.push(s.start);
+  if (s.way && s.way.dim === dim) out.push(...s.way.pts);
+  return out;
+}
+
+/** Is the player holding a block that can be placed, or the Building Book? @param {Player} player */
+function holdingTool(player) {
+  const item = containerOf(player)?.getItem(player.selectedSlotIndex);
+  return item?.typeId === BOOK || !!blockOfItem(item);
+}
 
 system.runInterval(() => {
   const now = system.currentTick;
@@ -1159,20 +1564,29 @@ system.runInterval(() => {
     if (!s?.on) continue;
     try {
       if (refusal(player)) continue;
-      if (!holdingBlock(player)) continue;
+      const hintDue = now - s.hintAt >= 20 && now >= s.paused && getFor(player, "hint") === true;
+      const guideDue = now % guideRate(player) === 0;
+      if ((!hintDue && !guideDue) || !holdingTool(player)) continue;
       const plan = planOf(player);
-      if (getFor(player, "preview") === true) {
+      if (guideDue) {
         const T = lookTarget(player);
-        if (T) drawBox(player, previewBox(player, plan, T));
+        const g = T && guideFor(player, plan, T);
+        if (g) drawGuide(player, g.cells, "build", { offset: g.offset, mods: g.mods, force: true });
+        const marks = marksOf(player, s, plan);
+        if (marks.length) drawGuide(player, marks, "mark", { force: true });
       }
-      if (now - s.hintAt >= 20 && now >= s.paused && getFor(player, "hint") === true) {
+      if (hintDue) {
         s.hintAt = now;
-        const twoPoint = plan.size === "points" && shapeOf(plan.shape).points;
-        const text = twoPoint && s.start
-          ? `§bBuild: §f${shapeOf(plan.shape).name}§7 - place the end block (start ${s.start.x} ${s.start.y} ${s.start.z})`
-          : twoPoint
-            ? `§bBuild: §f${shapeOf(plan.shape).name}§7 - place the start block (sneak: just one block)`
-            : `§bBuild: §f${planLabel(plan)}§7 - place a block (sneak: just one)`;
+        const shape = shapeOf(plan.shape);
+        const twoPoint = plan.size === "points" && shape.points;
+        const n = s.way?.pts.length ?? 0;
+        const text = shape.way
+          ? `§bBuild: §f${shape.name}§7 - ${n ? `${plural(n, "point")} set: place more, then /realm:build_finish` : "place the first point (sneak: just one block)"}`
+          : twoPoint && s.start
+            ? `§bBuild: §f${shape.name}§7 - place the end block (start ${s.start.x} ${s.start.y} ${s.start.z})`
+            : twoPoint
+              ? `§bBuild: §f${shape.name}§7 - place the start block (sneak: just one block)`
+              : `§bBuild: §f${planLabel(plan)}§7 - place a block (sneak: just one)`;
         system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HINT_TICKS, from: PACK }));
         player.onScreenDisplay.setActionBar(text);
       }
@@ -1180,15 +1594,20 @@ system.runInterval(() => {
       console.warn(`[build] ${e}`);
     }
   }
-}, 10);
+}, 1);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   const s = states.get(playerId);
   if (s) {
     s.on = false;
     s.start = undefined;
+    s.way = undefined;
   }
   layoutCache.delete(playerId);
+  const job = relCache.get(playerId);
+  if (job?.job !== undefined) system.clearJob(job.job);
+  relCache.delete(playerId);
+  forgetGuides(playerId);
 });
 
 // ---------------------------------------------------------------------------
@@ -1220,12 +1639,13 @@ async function mainMenu(player) {
   if (why) return player.sendMessage(`§e${why}`);
   const s = stateOf(player);
   const plan = planOf(player);
-  const blocks = plan.src === "typed" ? nice(plan.block) : plan.src === "mix" ? "a random mix of your hotbar blocks" : "the block you place";
+  const blocks = plan.src === "typed" ? nice(plan.block) : plan.src === "mix" ? `your palette (${paletteLabel(plan.palette)})` : "the block you place";
   const second = plan.second === "typed" && plan.secondBlock ? nice(plan.secondBlock) : plan.second === "none" ? "none" : "the hotbar slot right of your hand";
   const body = [
     `Shape: §b${planLabel(plan)}§r`,
     `Blocks: ${blocks}; second block: ${second}`,
     `Replace: ${REPLACE_NAMES[REPLACE.indexOf(plan.replace)]}`,
+    `Modifiers: ${modsLabel(plan.mods)}${needsCenter(plan.mods) ? `, around ${plan.mods.center ? `${plan.mods.center.x} ${plan.mods.center.y} ${plan.mods.center.z}` : "the block each build starts at"}` : ""}`,
     s.on ? "§aBuild mode is on:§r placing a block builds the shape there. Sneak to place just one." : "Build mode is off: turn it on to build by placing a block, or use Build here now.",
     isCreative(player) || get("requireItems") !== true ? "Building is free in creative." : "Builds use blocks from your inventory; undo gives them back.",
   ].join("\n");
@@ -1236,10 +1656,22 @@ async function mainMenu(player) {
     { text: `Shape settings: ${shapeOf(plan.shape).name}`, run: () => shapeForm(player, plan.shape) },
     { text: "Blocks and placing", run: () => placingForm(player) },
     { text: "Build here now", run: () => buildHereMenu(player) },
+    { text: `Modifiers: ${modsLabel(plan.mods)}`, run: () => modifiersForm(player) },
+    { text: `Palette: ${paletteLabel(plan.palette)}${plan.src === "mix" ? "" : " (not in use)"}`, run: () => paletteForm(player) },
+    { text: "Guides, reach and Air Build", run: () => guidesForm(player) },
+    { text: "Copy, cut and paste", run: () => clipboardMenu(player) },
+    { text: "Destroy mode", run: () => destroyMenu(player) },
   ];
+  if (s.way?.pts.length) {
+    const n = s.way.pts.length;
+    if (n >= 2) actions.unshift({ text: `Finish the curve (${plural(n, "point")})`, run: () => finishCurve(player) });
+    actions.push({ text: "Forget the curve points", run: () => ((s.way = undefined), layoutCache.delete(player.id), note(player, "§7Curve points forgotten")) });
+  }
+  if (!hasBook(player)) actions.push({ text: "Get a Building Book", run: () => giveBook(player) });
   if (s.start) actions.push({ text: "Forget the start block", run: () => ((s.start = undefined), note(player, "§7Start block forgotten")) });
-  if (s.undo.length) actions.push({ text: `Undo: ${s.undo[s.undo.length - 1].label}`, run: () => undo(player, false) });
-  if (s.redo.length) actions.push({ text: `Redo: ${s.redo[s.redo.length - 1].label}`, run: () => undo(player, true) });
+  const undoLabel = lastLabel(player, false), redoLabel = lastLabel(player, true);
+  if (undoLabel) actions.push({ text: `Undo: ${undoLabel}`, run: () => undo(player, false) });
+  if (redoLabel) actions.push({ text: `Redo: ${redoLabel}`, run: () => undo(player, true) });
   const form = new ActionFormData().title(TITLE).body(body);
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
@@ -1311,9 +1743,12 @@ async function shapeForm(player, id) {
   const s = stateOf(player);
   s.on = true;
   s.start = undefined;
+  if (!shape.way) s.way = undefined;
   const twoPoint = plan.size === "points";
   player.sendMessage(
-    twoPoint
+    shape.way
+      ? `§a${shape.name}:§r build mode is on. Place a block at each point (or look and use /realm:build_here), then finish with /realm:build_finish or in /realm:build.`
+      : twoPoint
       ? `§a${shape.name}:§r place the start block, then the end block, and it fills the space between. Or look at a spot and use /realm:build_here twice.`
       : `§a${planLabel(plan)}:§r build mode is on. Place a block and it builds there, or look at a spot and use /realm:build_here. Sneak to place just one block.`
   );
@@ -1339,7 +1774,6 @@ async function placingForm(player) {
     .slider("Repeat in a row", 1, 16, { defaultValue: plan.repeat, valueStep: 1 })
     .slider("Gap between repeats", 0, 16, { defaultValue: plan.gap, valueStep: 1 })
     .dropdown("Repeat toward", REPEAT_DIR_NAMES, { defaultValueIndex: REPEAT_DIR.indexOf(plan.repeatDir) })
-    .toggle("Outline preview in build mode", { defaultValue: getFor(player, "preview") === true })
     .submitButton("Save");
   const res = await show(player, form);
   if (!res || res.canceled || !player.isValid) return;
@@ -1357,7 +1791,6 @@ async function placingForm(player) {
   next.repeat = Math.max(1, Math.round(Number(v[9]) || 1));
   next.gap = Math.max(0, Math.round(Number(v[10]) || 0));
   next.repeatDir = /** @type {Plan["repeatDir"]} */ (REPEAT_DIR[Number(v[11])] ?? "away");
-  setFor(player, "preview", !!v[12]);
   /** @type {string[]} */
   const problems = [];
   if (next.src === "typed" && !permOf(next.block)) problems.push(`there is no block called "${next.block}"`);
@@ -1374,27 +1807,175 @@ async function placingForm(player) {
   player.sendMessage(`§aSaved.§r ${planLabel(next)}, replacing ${REPLACE_NAMES[REPLACE.indexOf(next.replace)].toLowerCase()}.`);
 }
 
+/** Mirror, radial and array, and their center. @param {Player} player */
+async function modifiersForm(player) {
+  const plan = planOf(player);
+  const m = plan.mods;
+  const c = m.center;
+  const where = c ? `${c.x} ${c.y} ${c.z}${c.dim !== player.dimension.id ? " (in another dimension)" : ""}` : "the block each build starts at";
+  const form = new ModalFormData()
+    .title("Modifiers")
+    .label(`Copies of every build, mirrored, turned around a center or repeated. Center now: ${where}.`)
+    .dropdown("Center", ["Keep it", "Center here: the block you look at", "Center here: where you stand", "The block each build starts at"], { defaultValueIndex: 0 })
+    .toggle("Mirror X (east-west)", { defaultValue: m.mirrorX })
+    .toggle("Mirror Y (up-down)", { defaultValue: m.mirrorY })
+    .toggle("Mirror Z (north-south)", { defaultValue: m.mirrorZ })
+    .toggle("Mirror between blocks (not through the center block)", { defaultValue: m.half })
+    .slider("Only within this many blocks of the center (0: no limit)", 0, 64, { defaultValue: Math.min(64, m.radius), valueStep: 1 })
+    .toggle("Radial: turned around the center", { defaultValue: m.radial })
+    .slider("Radial slices", 2, 16, { defaultValue: m.slices, valueStep: 1 })
+    .toggle("Every other slice mirrored", { defaultValue: m.alt })
+    .toggle("Array: repeat in a row", { defaultValue: m.array })
+    .slider("Array step X (east)", -32, 32, { defaultValue: Math.max(-32, Math.min(32, m.ax)), valueStep: 1 })
+    .slider("Array step Y (up)", -32, 32, { defaultValue: Math.max(-32, Math.min(32, m.ay)), valueStep: 1 })
+    .slider("Array step Z (south)", -32, 32, { defaultValue: Math.max(-32, Math.min(32, m.az)), valueStep: 1 })
+    .slider("Array copies", 1, 16, { defaultValue: m.count, valueStep: 1 })
+    .submitButton("Save");
+  const res = await show(player, form);
+  if (!res || res.canceled || !player.isValid) return;
+  const v = inputs(res);
+  /** @type {any} */
+  const next = { ...m };
+  const pick = Number(v[0]);
+  if (pick === 1) {
+    const hit = (() => {
+      try {
+        return player.getBlockFromViewDirection({ maxDistance: reachOf(player), includeLiquidBlocks: false, includePassableBlocks: false });
+      } catch {
+        return undefined;
+      }
+    })();
+    if (!hit) return player.sendMessage(`§eNot saved: look at a block within ${reachOf(player)} blocks to center on it.`);
+    next.center = { dim: player.dimension.id, ...hit.block.location };
+  } else if (pick === 2) {
+    const l = player.location;
+    next.center = { dim: player.dimension.id, x: Math.floor(l.x), y: Math.floor(l.y), z: Math.floor(l.z) };
+  } else if (pick === 3) next.center = null;
+  [next.mirrorX, next.mirrorY, next.mirrorZ, next.half] = [!!v[1], !!v[2], !!v[3], !!v[4]];
+  next.radius = Number(v[5]) || 0;
+  [next.radial, next.slices, next.alt] = [!!v[6], Number(v[7]) || 4, !!v[8]];
+  [next.array, next.ax, next.ay, next.az, next.count] = [!!v[9], Number(v[10]) || 0, Number(v[11]) || 0, Number(v[12]) || 0, Number(v[13]) || 1];
+  plan.mods = normalizeMods(next);
+  savePlan(player, plan);
+  const cc = plan.mods.center;
+  const hand = get("handModifiers") === true && getFor(player, "modsByHand") === true ? " Blocks you place and break by hand get copies too." : "";
+  player.sendMessage(
+    `§aModifiers:§r ${modsLabel(plan.mods)}${needsCenter(plan.mods) ? ` around ${cc ? `${cc.x} ${cc.y} ${cc.z}` : "the block each build starts at"}` : ""}.${hand}`
+  );
+}
+
+/** Where the palette's blocks come from and how they are spread. @param {Player} player */
+async function paletteForm(player) {
+  const plan = planOf(player);
+  const pal = plan.palette;
+  const list = paletteBlocks(player, pal.from);
+  const kinds = [...new Set(list.map((e) => nice(e.perm.type.id)))];
+  const form = new ModalFormData()
+    .title("Palette")
+    .label(
+      `Builds use your palette when the main block is "Your palette". Its blocks now: ${kinds.length ? kinds.slice(0, 12).join(", ") + (kinds.length > 12 ? "..." : "") : "none (put blocks in your hotbar)"}. Patterns go through the blocks in slot order.`
+    )
+    .toggle("Build with the palette (main block)", { defaultValue: plan.src === "mix" })
+    .dropdown("Blocks from", FROM_NAMES, { defaultValueIndex: Math.max(0, FROM.indexOf(pal.from)) })
+    .dropdown("Pattern", PATTERN_NAMES, { defaultValueIndex: Math.max(0, PATTERNS.indexOf(pal.pattern)) })
+    .dropdown("Direction (stripes, gradient, wave, marble, dissolve)", DIR_NAMES, { defaultValueIndex: Math.max(0, DIRS.indexOf(pal.dir)) })
+    .slider("Pattern size (blocks)", 1, 16, { defaultValue: pal.scale, valueStep: 1 })
+    .submitButton("Save");
+  const res = await show(player, form);
+  if (!res || res.canceled || !player.isValid) return;
+  const v = inputs(res);
+  plan.palette = normalizePalette({ from: FROM[Number(v[1])], pattern: PATTERNS[Number(v[2])], dir: DIRS[Number(v[3])], scale: Number(v[4]) });
+  if (v[0]) plan.src = "mix";
+  else if (plan.src === "mix") plan.src = "hand";
+  savePlan(player, plan);
+  player.sendMessage(`§aPalette:§r ${paletteLabel(plan.palette)}${plan.src === "mix" ? ", in use" : ", not in use (builds use the block you place)"}.`);
+}
+
+/** The player's own guide, reach and Air Build choices (the same as in /realm:prefs). @param {Player} player */
+async function guidesForm(player) {
+  const STYLES = ["outline", "corners", "dots", "box", "off"];
+  const STYLE_NAMES = ["Outline", "Corner outline", "Particles (a dot per block)", "Box edges (sparkles)", "Off"];
+  const COLORS = ["white", "green", "cyan", "yellow", "orange", "purple"];
+  const COLOR_NAMES = ["White", "Green", "Cyan", "Yellow", "Orange", "Purple"];
+  const maxReach = Math.max(4, Number(get("reach")) || 16);
+  const fastest = Math.max(1, Math.min(20, Number(get("guideFastest")) || 1));
+  const air = get("airBuild") === true, hand = get("handModifiers") === true;
+  const form = new ModalFormData()
+    .title("Guides, reach and Air Build")
+    .dropdown("Block guides", STYLE_NAMES, { defaultValueIndex: Math.max(0, STYLES.indexOf(String(getFor(player, "guideStyle")))) })
+    .dropdown("Guide color", COLOR_NAMES, { defaultValueIndex: Math.max(0, COLORS.indexOf(String(getFor(player, "guideColor")))) })
+    .slider("Guide refresh (ticks; 20 is once a second)", Math.min(19, fastest), 20, { defaultValue: guideRate(player), valueStep: 1 })
+    .slider("My reach (blocks)", 4, Math.max(5, maxReach), { defaultValue: reachOf(player), valueStep: 1 });
+  if (air) {
+    form
+      .toggle("Air Build: with nothing in reach, using a block in the air builds in midair", { defaultValue: getFor(player, "airMode") === true })
+      .slider("Air Build distance (blocks)", 1, maxReach, { defaultValue: Math.min(maxReach, Number(getFor(player, "airDistance")) || 4), valueStep: 1 });
+  }
+  if (hand) form.toggle("Modifiers copy blocks I place and break by hand", { defaultValue: getFor(player, "modsByHand") === true });
+  form.toggle("Build mode line above the hotbar", { defaultValue: getFor(player, "hint") === true }).submitButton("Save");
+  const res = await show(player, form);
+  if (!res || res.canceled || !player.isValid) return;
+  const v = inputs(res);
+  let i = 0;
+  setFor(player, "guideStyle", STYLES[Number(v[i++])] ?? "outline");
+  setFor(player, "guideColor", COLORS[Number(v[i++])] ?? "white");
+  setFor(player, "guideRate", Math.round(Number(v[i++]) || 4));
+  setFor(player, "myReach", Math.round(Number(v[i++]) || 16));
+  if (air) {
+    setFor(player, "airMode", !!v[i++]);
+    setFor(player, "airDistance", Math.round(Number(v[i++]) || 4));
+  }
+  if (hand) setFor(player, "modsByHand", !!v[i++]);
+  setFor(player, "hint", !!v[i++]);
+  layoutCache.delete(player.id);
+  player.sendMessage(`§aSaved.§r Guides: ${STYLE_NAMES[STYLES.indexOf(String(getFor(player, "guideStyle")))] ?? "Outline"}; reach ${reachOf(player)}${airOn(player) ? `; Air Build on, ${getFor(player, "airDistance")} blocks away` : ""}.`);
+}
+
+/** Does the player carry a Building Book? @param {Player} player */
+function hasBook(player) {
+  const c = containerOf(player);
+  if (!c) return false;
+  for (let i = 0; i < c.size; i++) if (c.getItem(i)?.typeId === BOOK) return true;
+  return false;
+}
+
+/** Gives the player a Building Book (one at a time). @param {Player} player */
+function giveBook(player) {
+  if (hasBook(player)) return player.sendMessage("§eYou already have a Building Book. Use it to open Easy Building; sneak and use it to turn build mode on or off.");
+  let book;
+  try {
+    book = new ItemStack(BOOK, 1);
+  } catch {
+    return player.sendMessage("§eThe Building Book isn't available on this realm.");
+  }
+  book.setLore(["Use: open Easy Building", "Sneak and use: build mode on or off"]);
+  const rest = containerOf(player)?.addItem(book);
+  if (rest) player.dimension.spawnItem(rest, player.location);
+  player.sendMessage("§aHere's a Building Book.§r Use it to open Easy Building; sneak and use it to turn build mode on or off.");
+}
+
 /** Outline at the block you look at for a few seconds, then confirm with the cost. @param {Player} player */
 async function buildHereMenu(player) {
   const plan = planOf(player);
-  if (plan.size === "points" && shapeOf(plan.shape).points) return buildHere(player);
+  if ((plan.size === "points" && shapeOf(plan.shape).points) || shapeOf(plan.shape).way) return buildHere(player);
   const T = lookTarget(player);
-  if (!T) return player.sendMessage(`§eLook at a block within ${get("reach")} blocks first.`);
+  if (!T) return player.sendMessage(`§eLook at a block within ${reachOf(player)} blocks first.`);
   const mats = materialsOf(player, plan);
   if (typeof mats === "string") return player.sendMessage(`§e${mats}`);
   let cells;
   try {
-    cells = worldCells(plan, mats, T, frameOf(facingOf(player), plan.turn), undefined, limitOf(player));
+    cells = await worldCells(plan, mats, T, frameOf(facingOf(player), plan.turn), undefined, limitOf(player), player.dimension.id);
   } catch (e) {
     if (!(e instanceof TooBig)) throw e;
     return player.sendMessage(tooBig(player, e));
   }
-  const box = boundsOf(cells);
+  // The guide over the real blocks for a few seconds (drawn every `guideRate` ticks, each lasting until the next).
   const secs = Math.max(0, get("previewSeconds"));
-  for (let t = 0; t < secs * 2; t++) {
+  const rate = guideRate(player);
+  for (let t = 0; t < secs * 20; t += rate) {
     if (!player.isValid) return;
-    drawBox(player, box);
-    await new Promise((r) => system.runTimeout(() => r(undefined), 10));
+    drawGuide(player, cells, "build", { force: true });
+    await new Promise((r) => system.runTimeout(() => r(undefined), rate));
   }
   /** @type {Map<string, number>} */
   const need = new Map();
@@ -1422,7 +2003,7 @@ async function buildHereMenu(player) {
 async function buildHere(player) {
   if (stateOf(player).busy) return player.sendMessage("§eWait for the last build to finish.");
   const T = lookTarget(player);
-  if (!T) return player.sendMessage(`§eLook at a block within ${get("reach")} blocks first.`);
+  if (!T) return player.sendMessage(`§eLook at a block within ${reachOf(player)} blocks first${get("airBuild") === true ? ", or turn on Air Build (/realm:build -> Guides, reach and Air Build)" : ""}.`);
   await buildAt(player, T);
 }
 
@@ -1482,6 +2063,7 @@ function command(registry, name, description, run) {
       const why = refusal(player);
       if (why) return { status: CustomCommandStatus.Failure, message: why };
       system.run(async () => {
+        if (!player.isValid) return; // left in the meantime
         try {
           await run(player);
         } catch (e) {
@@ -1499,4 +2081,73 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
   command(r, "realm:build_mode", "Build mode on or off: placing a block builds your shape", toggleMode);
   command(r, "realm:build_undo", "Undo your last build (blocks come back)", (p) => undo(p, false));
   command(r, "realm:build_redo", "Build again what you last undid", (p) => undo(p, true));
+  command(r, "realm:build_finish", "Build your curve through the points you placed", finishCurve);
+  command(r, "realm:build_book", "Get a Building Book: use it to open Easy Building", giveBook);
+  command(r, "realm:build_copy", "Copy the region you selected (or start selecting one)", copyCommand);
+  command(r, "realm:build_cut", "Cut the region you selected: copy it and take it away", cutCommand);
+  command(r, "realm:build_paste", "Paste your copy at the block you look at, turned to face your way", pasteCommand);
+  command(r, "realm:build_destroy", "Destroy mode on or off: breaking a block with a pickaxe, axe or shovel breaks your shape", toggleDestroy);
 });
+
+// ---------------------------------------------------------------------------
+// What clipboard.js, destroy.js and undo.js use from here
+// ---------------------------------------------------------------------------
+
+/**
+ * World positions of the player's shape at T (or between T and `end` in two-block mode). Throws TooBig.
+ * @param {Player} player @param {{ x: number, y: number, z: number }} T @param {{ x: number, y: number, z: number }} [end]
+ */
+function shapeAt(player, T, end) {
+  const plan = planOf(player);
+  const fr = frameOf(facingOf(player), plan.turn);
+  const rel = relCells(plan, false, end ? pointsBox(T, end, fr) : undefined, limitOf(player));
+  const pos = rel.map(({ du, dv, dw }) => ({ x: T.x + du * fr.R[0] + dw * fr.F[0], y: T.y + dv, z: T.z + du * fr.R[1] + dw * fr.F[1] }));
+  return finishCells(plan, pos, T, limitOf(player), player.dimension.id);
+}
+
+/** Are any modifiers on (so a layout depends on where it is, not only on its shape)? @param {Player} player */
+const modsActive = (player) => modsOn(planOf(player).mods);
+
+/**
+ * The player's modifier copies added to a list of blocks (a paste), each copy's block turned or mirrored.
+ * @template {{ x: number, y: number, z: number, perm?: BlockPermutation }} C @param {Player} player @param {C[]} cells @param {Pos} T @returns {C[]}
+ */
+function withMods(player, cells, T) {
+  const plan = planOf(player);
+  if (!modsOn(plan.mods)) return cells;
+  try {
+    return applyMods(cells, plan.mods, centerOf(plan, T, player.dimension.id), limitOf(player));
+  } catch (e) {
+    if (e instanceof RangeError) throw new TooBig(Math.max(limitOf(player) + 1, Number(e.message) || 0));
+    throw e;
+  }
+}
+
+/** How far in front of the eyes a spot in the air is (Air Build distance, within reach). @param {Player} player */
+const airDistance = (player) => Math.max(1, Math.min(reachOf(player), Number(getFor(player, "airDistance")) || 4));
+
+/** The selection box and other plain boxes, as sparkles along its edges. @param {Player} player @param {{ min: Pos, max: Pos }} box */
+const drawSelection = (player, box) => drawBox(player, box.min, box.max, String(getFor(player, "particle")));
+
+/** Two-block mode is set for the current shape. @param {Player} player */
+const twoBlocks = (player) => {
+  const plan = planOf(player);
+  return plan.size === "points" && !!shapeOf(plan.shape).points;
+};
+
+/** @param {Player} player @param {boolean} on */
+function setBuildMode(player, on) {
+  const s = stateOf(player);
+  s.on = on;
+  s.start = undefined;
+}
+
+const ctx = {
+  isOp, isCreative, cantBuild, CANT_BUILD, note, show, inputs, permOf, nice, plural, containerOf, countItems, giveItems, refund,
+  build, areaRefusal, isProtectedBlock, isForbidden, isSoft, stacked, costOf, facingOf, frameOf, FACINGS, lookTarget, planOf,
+  replaceMode, limitOf, stateOf, refusal, tick, AIR, boundsOf, drawBox: drawSelection, shapeAt, modsActive, withMods, airDistance, reachOf, twoBlocks, planLabel, mainMenu, setBuildMode, TooBig, tooBig,
+};
+/** @typedef {typeof ctx} Ctx */
+setupUndo(ctx);
+setupClipboard(ctx);
+setupDestroy(ctx);

@@ -61,12 +61,30 @@ export const PARAMS = {
   under: { label: "Fill underneath", type: "bool", def: false },
   battlements: { label: "Battlements on top", type: "bool", def: false },
   ends: { label: "Close the gable ends (second block)", type: "bool", def: true },
+  rx: { label: "Radius left to right", type: "int", min: 1, max: "half", def: 6 },
+  rz: { label: "Radius away from you", type: "int", min: 1, max: "half", def: 3 },
+  lean: {
+    label: "Points",
+    type: "enum",
+    choices: ["up", "lean", "flat"],
+    names: ["Straight up", "Up and away from you (leaning 45 degrees)", "Away from you (lying down)"],
+    def: "up",
+  },
+  cstyle: {
+    label: "Kind",
+    type: "enum",
+    choices: ["wall", "path"],
+    names: ["Wall (height below)", "Path on the ground (width below)"],
+    def: "wall",
+  },
+  pathWidth: { label: "Path width", type: "int", min: 1, max: 16, def: 3 },
 };
 
 /**
  * Every shape: its menu name, group, settings and defaults. `points`: can also be sized by placing
  * two blocks (the shape then fills the box between them).
- * @type {{ id: string, name: string, group: string, params: string[], defaults?: Values, points: boolean, about: string }[]}
+ * `way`: built through any number of points the player places one by one, then finishes (curves).
+ * @type {{ id: string, name: string, group: string, params: string[], defaults?: Values, points: boolean, way?: boolean, about: string }[]}
  */
 export const SHAPES = [
   { id: "line", name: "Line", group: "Basic", params: ["length", "thick", "dir"], points: true, about: "A straight line; with two blocks, from one to the other at any angle" },
@@ -80,12 +98,16 @@ export const SHAPES = [
   { id: "ramp", name: "Slope or ramp", group: "Slopes and curves", params: ["width", "height", "depth", "under"], defaults: { width: 3, height: 3, depth: 6 }, points: true, about: "Rises away from you over the depth" },
   { id: "arch", name: "Arch", group: "Slopes and curves", params: ["width", "height", "thick", "depth"], defaults: { width: 7, height: 5, depth: 1 }, points: true, about: "A round arch across your view" },
   { id: "circle", name: "Circle or ring", group: "Slopes and curves", params: ["radius", "thick", "filled"], points: true, about: "Flat on the ground" },
+  { id: "ellipse", name: "Ellipse (oval)", group: "Slopes and curves", params: ["rx", "rz", "thick", "filled"], points: true, about: "A circle with its own radius each way, flat on the ground" },
+  { id: "semicircle", name: "Semicircle", group: "Slopes and curves", params: ["radius", "thick", "filled"], points: false, about: "Half a circle on the ground, curving away from you" },
   { id: "cylinder", name: "Tower or cylinder", group: "Slopes and curves", params: ["radius", "height", "thick", "filled", "battlements"], defaults: { height: 8 }, points: true, about: "Round walls; battlements in the second block" },
   { id: "sphere", name: "Sphere", group: "Slopes and curves", params: ["radius", "hollow"], points: true, about: "A ball sitting on the ground" },
   { id: "dome", name: "Dome", group: "Slopes and curves", params: ["radius", "hollow"], points: true, about: "The top half of a sphere" },
   { id: "pyramid", name: "Pyramid", group: "Slopes and curves", params: ["width", "hollow"], defaults: { width: 9 }, points: true, about: "Hold stairs for smooth sides" },
-  { id: "cone", name: "Cone or spire", group: "Slopes and curves", params: ["radius", "height", "hollow"], defaults: { height: 8 }, points: true, about: "A round point" },
+  { id: "cone", name: "Cone or spire", group: "Slopes and curves", params: ["radius", "height", "hollow", "lean"], defaults: { height: 8 }, points: true, about: "A round point, straight up, leaning or lying down" },
   { id: "roof", name: "Roof", group: "Slopes and curves", params: ["width", "depth", "style", "ends"], defaults: { width: 7, depth: 9 }, points: true, about: "Hold stairs; the ridge runs away from you" },
+  { id: "curve", name: "Curved line", group: "Slopes and curves", params: ["thick"], points: false, way: true, about: "A smooth curve through points you place one by one (Bezier line)" },
+  { id: "curvewall", name: "Curved wall or path", group: "Slopes and curves", params: ["cstyle", "height", "pathWidth"], points: false, way: true, about: "A wall or a path along a smooth curve through your points" },
   { id: "hut", name: "Small hut", group: "Ready-made", params: ["width", "depth", "height"], defaults: { width: 7, depth: 7, height: 4 }, points: false, about: "Walls of your block; floor, corners and roof of the second block; a doorway, windows and a lantern" },
   { id: "tower", name: "Watchtower", group: "Ready-made", params: ["height"], defaults: { height: 8 }, points: false, about: "Corner posts, a ladder, a platform with railings and lanterns" },
   { id: "bridge", name: "Bridge", group: "Ready-made", params: ["width", "length", "spacing", "lights"], defaults: { width: 5, length: 12, spacing: 6 }, points: false, about: "A deck of your block, railings of the second block (oak fence without one) and lanterns" },
@@ -142,11 +164,18 @@ export function boxOf(shape, val) {
     case "ramp": return { W: val("width"), H: val("height"), D: val("depth") };
     case "arch": return { W: val("width"), H: val("height"), D: val("depth") };
     case "circle": return { W: 2 * r + 1, H: 1, D: 2 * r + 1 };
+    case "ellipse": return { W: 2 * val("rx") + 1, H: 1, D: 2 * val("rz") + 1 };
+    case "semicircle": return { W: 2 * r + 1, H: 1, D: r + 1 };
     case "cylinder": return { W: 2 * r + 1, H: val("height") + (val("battlements") ? 1 : 0), D: 2 * r + 1 };
     case "sphere": return { W: 2 * r + 1, H: 2 * r + 1, D: 2 * r + 1 };
     case "dome": return { W: 2 * r + 1, H: r + 1, D: 2 * r + 1 };
     case "pyramid": return { W: val("width"), H: Math.ceil(val("width") / 2), D: val("width") };
-    case "cone": return { W: 2 * r + 1, H: val("height"), D: 2 * r + 1 };
+    case "cone": {
+      const lean = val("lean"), h = val("height");
+      if (lean === "flat") return { W: 2 * r + 1, H: 2 * r + 1, D: h };
+      if (lean === "lean") return { W: 2 * r + 1, H: h, D: 2 * r + h };
+      return { W: 2 * r + 1, H: h, D: 2 * r + 1 };
+    }
     case "roof": return { W: val("width"), H: Math.ceil(val("width") / 2), D: val("depth") };
     case "hut": return { W: Math.max(5, val("width")), H: Math.max(3, val("height")) + 1 + Math.ceil(Math.max(5, Math.min(val("width"), val("depth"))) / 2), D: Math.max(5, val("depth")) };
     case "tower": return { W: 5, H: Math.max(3, val("height")) + 3, D: 5 };
@@ -155,6 +184,57 @@ export function boxOf(shape, val) {
     case "farm": return { W: Math.max(3, val("width")), H: 1, D: Math.max(3, val("depth")) };
   }
   return { W: 1, H: 1, D: 1 };
+}
+
+/**
+ * At least how many blocks a shape has (a low estimate, from its size alone), so one far over the limit is refused
+ * without laying it out. 0 when there is no quick formula.
+ * @param {string} shape @param {(key: string) => any} val @param {number} W @param {number} H @param {number} D
+ */
+export function leastCells(shape, val, W, H, D) {
+  const t = Math.max(1, val("thick") ?? 1);
+  const hollowBox = (/** @type {number} */ w, /** @type {number} */ h, /** @type {number} */ d) => w * h * d - Math.max(0, w - 2) * Math.max(0, h - 2) * Math.max(0, d - 2);
+  const PI = Math.PI;
+  const LOW = 0.8; // round shapes: a little under the smooth formula
+  switch (shape) {
+    case "line":
+      return val("dir") === "diagonal" ? D * t * t : W * H * D;
+    case "wall":
+    case "floor":
+      return W * H * D;
+    case "box": {
+      const f = val("fill");
+      if (f === "filled") return W * H * D;
+      if (f === "walls") return W * H * D - Math.max(0, W - 2) * H * Math.max(0, D - 2);
+      if (f === "frame") return 0;
+      return hollowBox(W, H, D);
+    }
+    case "stairs":
+    case "ramp":
+      return W * D;
+    case "circle":
+    case "ellipse":
+    case "cylinder": {
+      const rx = W / 2, rz = D / 2;
+      const area = PI * rx * rz;
+      const inner = PI * Math.max(0, rx - t) * Math.max(0, rz - t);
+      const layers = shape === "cylinder" ? H - (val("battlements") ? 1 : 0) : 1;
+      return LOW * layers * (val("filled") ? area : area - inner);
+    }
+    case "sphere":
+    case "dome": {
+      const r = (W - 1) / 2;
+      const part = shape === "dome" ? 0.5 : 1;
+      return LOW * part * (val("hollow") ? 4 * PI * r * r : (4 / 3) * PI * r * r * r);
+    }
+    case "cone": {
+      const r = (W - 1) / 2, h = val("lean") === "flat" ? D : H;
+      return val("hollow") ? 0 : LOW * (PI * r * r * h) / 3;
+    }
+    case "pyramid":
+      return val("hollow") ? 0 : LOW * (W * D * H) / 3;
+  }
+  return 0;
 }
 
 /** Small deterministic hash for speckled patterns. @param {number} u @param {number} v @param {number} w */
@@ -182,19 +262,38 @@ export class TooBig extends Error {
  * @param {boolean} [stairs] the main block is a stair: slopes use stair cells
  * @param {number} [cap] stop (throw TooBig) once the shape has more cells than this, so a huge filled shape
  *   isn't laid out cell by cell only to be refused
- * @returns {Map<string, Cell>}
+ * @returns {Map<number, Cell>}
  */
 export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infinity) {
-  /** @type {Map<string, Cell>} */
+  const job = cellsJob(shape, val, W, H, D, points, stairs, cap);
+  let r = job.next();
+  while (!r.done) r = job.next();
+  return r.value;
+}
+
+/**
+ * cellsOf as a generator that pauses every few thousand cells, for system.runJob: big shapes are laid out over
+ * several ticks instead of stalling one. Its return value is the cells.
+ * @param {string} shape @param {(key: string) => any} val @param {number} W @param {number} H @param {number} D
+ * @param {{ a: number[], b: number[] }} [points] @param {boolean} [stairs] @param {number} [cap]
+ * @returns {Generator<void, Map<number, Cell>, void>}
+ */
+export function* cellsJob(shape, val, W, H, D, points, stairs = false, cap = Infinity) {
+  // A shape that can't fit is refused before it is laid out cell by cell.
+  if (!points) {
+    const least = leastCells(shape, val, W, H, D);
+    if (least > cap) throw new TooBig(Math.ceil(least));
+  }
+  /** @type {Map<number, Cell>} keyed by (u * H + v) * D + w */
   const out = new Map();
   /** @param {number} u @param {number} v @param {number} w @param {Omit<Cell, "u" | "v" | "w">} c */
   const put = (u, v, w, c) => {
     if (u < 0 || v < 0 || w < 0 || u >= W || v >= H || w >= D) return;
-    out.set(`${u},${v},${w}`, { u, v, w, ...c });
+    out.set((u * H + v) * D + w, { u, v, w, ...c });
     if (out.size > cap) throw new TooBig(out.size);
   };
   /** @param {number} u @param {number} v @param {number} w */
-  const del = (u, v, w) => out.delete(`${u},${v},${w}`);
+  const del = (u, v, w) => out.delete((u * H + v) * D + w);
   const M = { k: /** @type {"m"} */ ("m") };
   const A = { k: /** @type {"a"} */ ("a") };
   /** @param {[number, number]} d */
@@ -205,10 +304,13 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
   const cx = (W - 1) / 2, cz = (D - 1) / 2;
 
   /** Fills a whole box with a cell maker. @param {(u: number, v: number, w: number) => Omit<Cell, "u" | "v" | "w"> | undefined} fn */
-  const each = (fn) => {
-    for (let v = 0; v < H; v++) for (let w = 0; w < D; w++) for (let u = 0; u < W; u++) {
-      const c = fn(u, v, w);
-      if (c) put(u, v, w, c);
+  const each = function* (fn) {
+    for (let v = 0; v < H; v++) {
+      for (let w = 0; w < D; w++) for (let u = 0; u < W; u++) {
+        const c = fn(u, v, w);
+        if (c) put(u, v, w, c);
+      }
+      yield;
     }
   };
 
@@ -218,14 +320,25 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
    * @param {{ x?: boolean, up?: boolean, down?: boolean }} axes which ways count as "outside" (x: u and w)
    * @param {number} thickness
    */
-  const shell = (solid, axes, thickness) => (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
-    if (!solid(u, v, w)) return false;
-    for (let k = 1; k <= thickness; k++) {
-      if (axes.x && (!solid(u + k, v, w) || !solid(u - k, v, w) || !solid(u, v, w + k) || !solid(u, v, w - k))) return true;
-      if (axes.up && !solid(u, v + k, w)) return true;
-      if (axes.down && !solid(u, v - k, w)) return true;
-    }
-    return false;
+  const shell = (solid, axes, thickness) => {
+    // Each spot's answer is worked out once (a surface asks about every neighbor): 0 unknown, 1 outside, 2 inside.
+    const m = thickness, sw = W + 2 * m, sh = H + 2 * m, sd = D + 2 * m;
+    const memo = new Uint8Array(sw * sh * sd);
+    const inside = (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
+      if (u < -m || v < -m || w < -m || u >= W + m || v >= H + m || w >= D + m) return solid(u, v, w);
+      const i = ((u + m) * sh + (v + m)) * sd + (w + m);
+      if (!memo[i]) memo[i] = solid(u, v, w) ? 2 : 1;
+      return memo[i] === 2;
+    };
+    return (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
+      if (!inside(u, v, w)) return false;
+      for (let k = 1; k <= thickness; k++) {
+        if (axes.x && (!inside(u + k, v, w) || !inside(u - k, v, w) || !inside(u, v, w + k) || !inside(u, v, w - k))) return true;
+        if (axes.up && !inside(u, v + k, w)) return true;
+        if (axes.down && !inside(u, v - k, w)) return true;
+      }
+      return false;
+    };
   };
   /** @param {number} u @param {number} v @param {number} w */
   const inBox = (u, v, w) => u >= 0 && v >= 0 && w >= 0 && u < W && v < H && w < D;
@@ -281,24 +394,24 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
       if (points) for (const [u, v, w] of line3(points.a, points.b)) put(u, v, w, M);
       else if (val("dir") === "diagonal") {
         for (let i = 0; i < D; i++) for (let a = 0; a < t; a++) for (let b = 0; b < t; b++) put(a, i + b, i, M);
-      } else each(() => M);
+      } else yield* each(() => M);
       break;
     }
     case "wall": {
       if (points) {
         const a = points.a, b = points.b;
         for (const [u, , w] of line3([a[0], 0, a[2]], [b[0], 0, b[2]])) for (let v = 0; v < H; v++) put(u, v, w, M);
-      } else each(() => M);
+      } else yield* each(() => M);
       pattern();
       break;
     }
     case "floor":
-      each(() => M);
+      yield* each(() => M);
       pattern();
       break;
     case "box": {
       const f = val("fill");
-      each((u, v, w) => {
+      yield* each((u, v, w) => {
         const eu = u === 0 || u === W - 1, ev = v === 0 || v === H - 1, ew = w === 0 || w === D - 1;
         if (f === "filled") return M;
         if (f === "walls") return eu || ew ? M : undefined;
@@ -312,7 +425,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
       const base = val("base"), round = val("round");
       const inner = base ? 1 : 0;
       const r = (W - 2 * inner) / 2, rb = W / 2;
-      each((u, v, w) => {
+      yield* each((u, v, w) => {
         const capital = base && (v === 0 || v === H - 1);
         const rad = capital ? rb : r;
         const du = u - cx, dw = w - cz;
@@ -373,7 +486,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
     }
     case "arch": {
       const a = W / 2, b = H, ai = Math.max(0, a - t), bi = Math.max(0, b - t);
-      each((u, v) => {
+      yield* each((u, v) => {
         const x = u - cx, y = v + 0.5;
         const outer = (x * x) / (a * a) + (y * y) / (b * b) <= 1;
         const inner = ai > 0 && bi > 0 && (x * x) / (ai * ai) + (y * y) / (bi * bi) <= 1;
@@ -383,6 +496,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
       break;
     }
     case "circle":
+    case "ellipse":
     case "cylinder": {
       const rx = W / 2, rz = D / 2;
       const disk = (/** @type {number} */ u, /** @type {number} */ w) => {
@@ -392,7 +506,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
       const walls = shape === "cylinder" && val("battlements") ? H - 1 : H;
       const solid = (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => inBox(u, v, w) && v < walls && disk(u, w);
       const ring = shell(solid, { x: true }, t);
-      each((u, v, w) => (v < walls && (val("filled") ? solid(u, v, w) : ring(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => (v < walls && (val("filled") ? solid(u, v, w) : ring(u, v, w)) ? M : undefined));
       if (walls < H) {
         // Battlements: every other cell of the outer ring, one block up.
         const outerRing = shell(solid, { x: true }, 1);
@@ -414,7 +528,7 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
         return x * x + y * y + z * z <= 1;
       };
       const surface = shell(solid, { x: true, up: true, down: true }, 1);
-      each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
       break;
     }
     case "pyramid": {
@@ -426,21 +540,42 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
         return u >= i && u <= W - 1 - i && w >= i && w <= D - 1 - i;
       };
       const surface = shell(solid, { x: true, up: true }, 1);
-      each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
+      yield* each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
       // With stairs, each layer's outer ring becomes steps facing out (the top stays full blocks).
       if (stairs) for (let v = 0; v < H - 1; v++) if (inset(v + 1) > inset(v)) ringLayer(v, inset(v), true);
       break;
     }
-    case "cone": {
-      const rx = W / 2, rz = D / 2;
-      const solid = (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
-        if (!inBox(u, v, w)) return false;
-        const s = 1 - v / H;
-        const x = (u - cx) / (rx * s), z = (w - cz) / (rz * s);
-        return x * x + z * z <= 1 || (Math.abs(u - cx) < 0.6 && Math.abs(w - cz) < 0.6);
+    case "semicircle": {
+      const rr = (W - 1) / 2 + 0.5;
+      const half = (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
+        if (u < 0 || u >= W || v !== 0) return false;
+        if (w < 0) return true; // behind the straight side counts as inside, so only the curve is an edge
+        const x = (u - cx) / rr, z = w / rr;
+        return w < D && x * x + z * z <= 1;
       };
-      const surface = shell(solid, { x: true, up: true }, 1);
-      each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
+      const ring = shell(half, { x: true }, t);
+      yield* each((u, v, w) => (half(u, v, w) && (val("filled") || ring(u, v, w)) ? M : undefined));
+      break;
+    }
+    case "cone": {
+      // The upright cone: a disk of the box's width shrinking to a point over `height` layers.
+      const lean = val("lean");
+      const h = lean === "flat" ? D : H, d = W, c0 = (d - 1) / 2, rr = d / 2;
+      const upright = (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => {
+        if (u < 0 || v < 0 || w < 0 || u >= d || v >= h || w >= d) return false;
+        const s = 1 - v / h;
+        const x = (u - c0) / (rr * s), z = (w - c0) / (rr * s);
+        return x * x + z * z <= 1 || (Math.abs(u - c0) < 0.6 && Math.abs(w - c0) < 0.6);
+      };
+      // Leaning: each layer one block further away. Lying down: the cone's up is away from the player.
+      const solid =
+        lean === "flat"
+          ? (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => upright(u, w, v)
+          : lean === "lean"
+            ? (/** @type {number} */ u, /** @type {number} */ v, /** @type {number} */ w) => upright(u, v, w - v)
+            : upright;
+      const surface = shell(solid, lean === "up" ? { x: true, up: true } : { x: true, up: true, down: true }, 1);
+      yield* each((u, v, w) => ((val("hollow") ? surface(u, v, w) : solid(u, v, w)) ? M : undefined));
       break;
     }
     case "roof": {
@@ -537,4 +672,84 @@ export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infin
     }
   }
   return out;
+}
+
+/**
+ * A smooth curve (Catmull-Rom: it passes through every point) as connected block positions.
+ * @param {{ x: number, y: number, z: number }[]} pts at least one
+ * @returns {{ pos: number[][], samples: { p: number[], t: number[] }[] }} pos: blocks along it; samples: points on it with their direction
+ */
+export function curveThrough(pts) {
+  const P = pts.map((p) => [p.x + 0.5, p.y + 0.5, p.z + 0.5]);
+  /** @type {{ p: number[], t: number[] }[]} */
+  const samples = [];
+  if (P.length === 1) samples.push({ p: P[0], t: [0, 0, 1] });
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)];
+    const n = Math.max(4, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]) * 3));
+    for (let k = 0; k <= n; k++) {
+      if (k === n && i < P.length - 2) continue; // the next segment starts here
+      const t = k / n, t2 = t * t, t3 = t2 * t;
+      const p = [0, 1, 2].map((a) => 0.5 * (2 * p1[a] + (-p0[a] + p2[a]) * t + (2 * p0[a] - 5 * p1[a] + 4 * p2[a] - p3[a]) * t2 + (-p0[a] + 3 * p1[a] - 3 * p2[a] + p3[a]) * t3));
+      const d = [0, 1, 2].map((a) => 0.5 * ((-p0[a] + p2[a]) + 2 * (2 * p0[a] - 5 * p1[a] + 4 * p2[a] - p3[a]) * t + 3 * (-p0[a] + 3 * p1[a] - 3 * p2[a] + p3[a]) * t2));
+      samples.push({ p, t: d });
+    }
+  }
+  /** @type {number[][]} */
+  const pos = [];
+  const seen = new Set();
+  /** @param {number[]} b */
+  const add = (b) => {
+    const k = b.join();
+    if (seen.has(k)) return;
+    seen.add(k);
+    pos.push(b);
+  };
+  /** @type {number[] | undefined} */
+  let last;
+  for (const s of samples) {
+    const b = s.p.map(Math.floor);
+    const l = last;
+    if (l) {
+      // Fill any gap with a straight run, so the curve has no holes.
+      const n = Math.max(Math.abs(b[0] - l[0]), Math.abs(b[1] - l[1]), Math.abs(b[2] - l[2]));
+      for (let i = 1; i < n; i++) add([0, 1, 2].map((a) => Math.round(l[a] + ((b[a] - l[a]) * i) / n)));
+    }
+    add(b);
+    last = b;
+  }
+  return { pos, samples };
+}
+
+/**
+ * The blocks of a curved shape through points.
+ * @param {"curve" | "curvewall"} shape @param {(key: string) => any} val @param {{ x: number, y: number, z: number }[]} pts
+ * @param {number} [cap] throw TooBig past this many
+ * @returns {{ x: number, y: number, z: number }[]}
+ */
+export function curveCells(shape, val, pts, cap = Infinity) {
+  const { pos, samples } = curveThrough(pts);
+  /** @type {Map<string, { x: number, y: number, z: number }>} */
+  const out = new Map();
+  /** @param {number} x @param {number} y @param {number} z */
+  const put = (x, y, z) => {
+    out.set(`${x},${y},${z}`, { x, y, z });
+    if (out.size > cap) throw new TooBig(out.size);
+  };
+  if (shape === "curve") {
+    const t = Math.max(1, val("thick") ?? 1), lo = -Math.floor((t - 1) / 2), hi = lo + t - 1;
+    for (const [x, y, z] of pos) for (let a = lo; a <= hi; a++) for (let b = lo; b <= hi; b++) for (let c = lo; c <= hi; c++) put(x + a, y + b, z + c);
+  } else if (val("cstyle") === "path") {
+    const w = Math.max(1, val("pathWidth") ?? 3);
+    for (const { p, t } of samples) {
+      const len = Math.hypot(t[0], t[2]) || 1;
+      const nx = -t[2] / len, nz = t[0] / len;
+      for (let k = -(w - 1) / 2; k <= (w - 1) / 2 + 1e-9; k += 0.5) put(Math.floor(p[0] + nx * k), Math.floor(p[1]), Math.floor(p[2] + nz * k));
+    }
+    for (const [x, y, z] of pos) put(x, y, z);
+  } else {
+    const h = Math.max(1, val("height") ?? 3);
+    for (const [x, y, z] of pos) for (let v = 0; v < h; v++) put(x, y + v, z);
+  }
+  return [...out.values()];
 }
