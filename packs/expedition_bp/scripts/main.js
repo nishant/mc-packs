@@ -3676,7 +3676,7 @@ function describe(d, L, affixes, g) {
       ? `§6A long run:§r ${rooms} rooms with a sanctuary after every ${get("boonEvery")}, where each of you picks one of three boons (effects, gear, wolves, more Crowns...). One more wave and monster each fight, tougher champions and boss; more Crowns and treasure.`
       : "",
     g ? `§6Fixed loadout: ${g.loadout ? "§aon" : "§7off"}§r. ${g.loadout ? "Your own items are stored safely while you run with a starter kit, and given back exactly when you return." : "You bring your own gear."}` : "",
-    `${g ? rooms : `${s.roomsMin} to ${s.roomsMax}`} rooms, ${lo === hi ? lo : `${lo} to ${hi}`} minutes. ${s.waves} waves a fight, about ${s.mobs + Math.floor(s.t / 6)} to ${s.mobs + 1 + Math.floor(s.t / 6)} monsters each${s.elites ? `, ${s.elites} elite` : ""}${s.champChance ? `, ${Math.round(s.champChance * 100)}% chance of a champion` : ""}.`,
+    `${g ? rooms : `${s.roomsMin} to ${s.roomsMax}`} rooms, ${lo === hi ? lo : `${lo} to ${hi}`} minutes. ${s.waves} waves a fight, about ${s.mobs} to ${s.mobs + 1} monsters each${s.elites ? `, ${s.elites} elite` : ""}${s.champChance ? `, ${Math.round(s.champChance * 100)}% chance of a champion` : ""}.`,
     s.t >= 1
       ? `Monsters: ${[s.healthBoost >= 0 ? `+${(s.healthBoost + 1) * 4} health` : "", s.resistance >= 0 ? `Resistance ${s.resistance + 1}` : "", s.strength >= 0 ? `Strength ${s.strength + 1}` : "", s.speed >= 0 ? `Speed ${s.speed + 1}` : "", s.armor ? `${ARMOR[s.armor]} armor` : ""].filter((x) => x).join(", ")}.`
       : "",
