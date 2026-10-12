@@ -228,6 +228,22 @@ system.runInterval(() => {
   }
 }, 20);
 
+// A player who changed their gamertag: their claims and shares keep their id, so update the saved name
+// ("This land is claimed by ...", the zones, the share lists) when they join.
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (!initialSpawn) return;
+  try {
+    const { id, name } = player;
+    for (const c of [...claims().values()]) {
+      const owner = c.o === id && c.n !== name;
+      const shared = c.s.some((s) => s.i === id && s.n !== name);
+      if (owner || shared) saveClaim({ ...c, n: owner ? name : c.n, s: c.s.map((s) => (s.i === id ? { i: id, n: name } : s)) });
+    }
+  } catch (e) {
+    console.warn(`[claims] ${e}`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Borders
 // ---------------------------------------------------------------------------
