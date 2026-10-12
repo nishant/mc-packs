@@ -3902,12 +3902,12 @@ Dungeon runs for you and your [party](#parties--party_bp), in the spirit of Diab
   | Normal | 6-8 | 17-23 | 3 | 2-3 | none | 0 / 0% | 0 | x1.2 health | x1.25 / x1.1 | 1 puzzle, 1 trap |
   | Hard | 7-9 | 20-26 | 4 | 2-3 | Strength 1 | 1 / 0% | 0 | x1.4 health | x1.50 / x1.2 | 1 puzzle, 1 trap, shrine (75%), 1 elite |
   | Nightmare 1 | 7-9 | 20-25 | 4 | 3-4 | +4 health, Strength 1 | 1 / 14% | 1 | x1.6 health | x1.75 / x1.3 | as Hard, 1 side cache |
-  | Nightmare 3 | 8-10 | 22-28 | 4 | 3-4 | +8 health, Strength 1, chainmail armor (31%) | 1 / 21% | 1 | x2.0 health | x2.25 / x1.5 | as above, 1 shaft, tall rooms 41% up to 16 high |
-  | Nightmare 5 | 9-11 | 24-30 | 4 | 4-5 | +12 health, Strength 1, Speed 1, chainmail (38%) | 1 / 28% | 2 | x2.4 health, 2 adds every 20 s | x2.75 / x1.7 | tall rooms 45% up to 20 high |
-  | Nightmare 6 | 9-12 | 24-32 | 5 | 4-5 | +12 health, Resistance 1, Strength 1, Speed 1, chainmail (41%) | 2 / 31% | 2 | x2.6, 2 adds | x3.00 / x1.8 | 2 puzzles, up to 22 high |
-  | Nightmare 8 | 10-13 | 26-34 | 5 | 5-6 | +16 health, Resistance 1, Strength 2, Speed 1, iron (48%) | 2 / 38% | 2 | x3.0, 2 adds | x3.50 / x2.0 | 2 elite halls, up to 26 high |
-  | Nightmare 10 | 10-13 | 26-33 | 5 | 6-7 | +20 health, Resistance 1, Strength 2, Speed 1, iron (55%) | 2 / 45% | 3 | x3.4, 3 adds | x4.00 / x2.2 | 2 traps, 2 side caches, up to 30 high, shafts without ladders |
-  | Nightmare 12 | 11-14 | 28-35 | 6 | 6-7 | +24 health, Resistance 1, Strength 2, Speed 1, diamond (62%) | 3 / 52% | 3 | x3.8, 3 adds | x4.50 / x2.4 | up to 32 high |
+  | Nightmare 3 | 8-10 | 22-28 | 4 | 3-4 | +8 health, Strength 1, chainmail armor (31%) | 1 / 21% | 1 | x2.0 health | x2.25 / x1.5 | as above, 1 shaft, tall rooms 41% up to 14 high |
+  | Nightmare 5 | 9-11 | 24-30 | 4 | 4-5 | +12 health, Strength 1, Speed 1, chainmail (38%) | 1 / 28% | 2 | x2.4 health, 2 adds every 20 s | x2.75 / x1.7 | tall rooms 45% up to 18 high |
+  | Nightmare 6 | 9-12 | 24-32 | 5 | 4-5 | +12 health, Resistance 1, Strength 1, Speed 1, chainmail (41%) | 2 / 31% | 2 | x2.6, 2 adds | x3.00 / x1.8 | 2 puzzles, up to 20 high |
+  | Nightmare 8 | 10-13 | 26-34 | 5 | 5-6 | +16 health, Resistance 1, Strength 2, Speed 1, iron (48%) | 2 / 38% | 2 | x3.0, 2 adds | x3.50 / x2.0 | 2 elite halls, up to 24 high |
+  | Nightmare 10 | 10-13 | 26-33 | 5 | 6-7 | +20 health, Resistance 1, Strength 2, Speed 1, iron (55%) | 2 / 45% | 3 | x3.4, 3 adds | x4.00 / x2.2 | 2 traps, 2 side caches, up to 28 high, shafts without ladders |
+  | Nightmare 12 | 11-14 | 28-35 | 6 | 6-7 | +24 health, Resistance 1, Strength 2, Speed 1, diamond (62%) | 3 / 52% | 3 | x3.8, 3 adds | x4.50 / x2.4 | up to 30 high |
   | Nightmare 15 | 12-16 | 29-39 | 6 | 7-8 | +32 health, Resistance 1, Strength 3, Speed 2, diamond (73%) | 3 / 63% | 4 | x4.4, 4 adds | x5.25 / x2.7 | 3 puzzles, 2 shafts |
   | Nightmare 17 | 13-17 | 31-40 | 7 | 8-9 | +36 health, Resistance 2, Strength 3, Speed 2, netherite (80%) | 3 / 70% | 4 | x4.8, 4 adds | x5.75 / x2.9 | 3 elite halls |
   | Nightmare 20 | 14-18 | 32-41 | 7 | 9-10 | +40 health, Resistance 2, Strength 3, Speed 2, netherite (90%) | 4 / 80% | 4 | x5.4, 5 adds | x6.50 / x3.2 | 3 puzzles, 2 traps, shrine, 3 elite, 2 shafts, 2 side caches, tall rooms 75% |
@@ -3960,7 +3960,7 @@ Dungeon runs for you and your [party](#parties--party_bp), in the spirit of Diab
   | Puzzle | One of nine puzzles (below) | Solved |
   | Trap hall | The exit is open at once; flame patches telegraphed by flickering flames, arrow volleys from the side walls telegraphed by sparks | Someone reaches the far door |
   | Shrine | Three buttons: the Blessing (Vigor: extra hearts, Swiftness, Ward: Resistance, Haste: Haste and Strength, or Fortune: a quarter more treasure), a curse (one more affix for the rest of the run; treasure x1.4 and Crowns x1.25), or pass by. The effects last until the run ends or you leave it | Someone presses a button |
-  | Shaft (N3+) | 18 to 32 blocks high; the exit is in the wall near the top, over a landing. Ledges climb the walls to it (1 block apart, 2 from tier 8), a ladder too below tier 10; flyers harass you. Over the exit, a chute drops into a pool, so the fall never hurts | Someone stands on the landing |
+  | Shaft (N3+) | 17 to 30 blocks high; the exit is in the wall near the top, over a landing. Ledges climb the walls to it (1 block apart, 2 from tier 8), a ladder too below tier 10; flyers harass you. Over the exit, a chute drops into a pool, so the fall never hurts | Someone stands on the landing |
   | Side cache (N1+) | An open doorway off a room leads to a puzzle; solving it puts a chest with extra loot in the side room | Optional |
   | Boss | The boss, with its name as a title. From Normal it calls its guards once at half health; from N5 it calls adds every 20 seconds. Tall arenas (N3+) have balconies on several levels | The boss dies |
   | Treasure | The treasure chest (two from N6) | (open after the boss) |
@@ -4015,7 +4015,7 @@ Dungeon runs for you and your [party](#parties--party_bp), in the spirit of Diab
 | `tierBoardSize` | `20` | Players kept on the Highest tiers board |
 | `historySize` | `20` | Runs kept in the world's run history and in each player's |
 | `maxTier` | `20` | Highest Nightmare tier (1 to 20) |
-| `tallFromTier` | `3` | From this Nightmare tier, rooms can be tall (16 to 32 blocks) with balconies, and shafts appear |
+| `tallFromTier` | `3` | From this Nightmare tier, rooms can be tall (14 to 30 blocks) with balconies, and shafts appear |
 | `buildFromTier` | `1` | Players may place blocks in a dungeon from this Nightmare tier |
 | `allowBuilding` | `true` | Players may place blocks at all (see `buildFromTier`). Disabled: blocks placed in a dungeon always pop back out |
 | `useChampionsPack` | `true` | Champions in waves come from the Champions pack when it's installed and knows the mob (zombie, husk, drowned, zombie villager, skeleton, stray, spider, witch); otherwise, or when disabled, the pack makes its own |
@@ -4362,7 +4362,7 @@ Operators can change `enabled`, `slowness`, `sandstorm.enabled`, `sandstorm.helm
 ### How it works
 
 - `weatherChange` in the overworld keeps the weather (saved as `climate:weather`), and a change to clear after rain saves the time as `climate:dry`. The pack's loop only runs while it rains, during the fog bank window after rain, or while a player still has its fog; it runs twice a second and updates half of the players each time, so each player once a second.
-- Each update: one `getTopmostBlock` over the player (outdoors, and the ground) and, in rain, one over a random column within 4 blocks. In a blizzard, a lit campfire is looked for with `Dimension.getBlocks` in the 9 x 9 x 9 blocks around the player every 3 seconds; on sand, water (for a beach) with `Dimension.containsBlock` in the 17 x 17 blocks around and up to 3 below every 5 seconds; for a fog bank, water the same way every 5 seconds. Each is a single native call.
+- Each update: one `getTopmostBlock` over the player (outdoors, and the ground) and, in rain, one over a random column within 4 blocks. In a blizzard, a lit campfire is looked for with `Dimension.getBlocks` in the 9 x 9 x 9 blocks around the player (at the default `blizzard.campfireRadius` of 4) every 3 seconds; on sand, water (for a beach) with `Dimension.containsBlock` in the 17 x 17 blocks around and up to 3 below every 5 seconds; for a fog bank, water the same way every 5 seconds. Each is a single native call.
 - Fogs use `/fog @s push realm:sky_… climate_sky` and `/fog @s remove climate_sky`, so only this pack's fog entry is ever touched; joining clears it and the next update puts back what's needed. Particles use `Player.spawnParticle` with the wind in `variable.wx` and `variable.wz`, so only that player sees them.
 - Slowness uses `addEffect("slowness", 40, { amplifier: 0, showParticles: false })`, skipped while a stronger or longer Slowness is on.
 - The first time in each condition sends `realm:journal` `{ player, page: "weather", entry, label }` and the note above the hotbar sends `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside.
@@ -4452,7 +4452,7 @@ Operators can change `enabled`, `lightning`, `avoidZones`, `gapSeconds` and `for
 - Weather comes from `weatherChange` (saved as `storm:weather`). Once a second the cell moves along its heading and counts down to its next strike; the cell itself is just a point, not an entity.
 - A strike first checks the spot's column with `getTopmostBlock`: in an unloaded chunk that fails and the strike is skipped. Then the 9 x 9 build check (at most 405 block lookups, only when a strike is due), then `dimension.spawnEntity("minecraft:lightning_bolt")` on the surface.
 - Rods are remembered from `afterEvents.playerPlaceBlock` and forgotten on `playerBreakBlock`, or when found missing (a strike aimed at one, a tap, or the spark check of a charged rod near a player, so a rod blown up or pushed away stops sparking). `afterEvents.entitySpawn` of a `minecraft:lightning_bolt` within 3 blocks of a rod charges it. A tap is `beforeEvents.playerInteractWithBlock`; on a charged rod it's canceled (so no block is placed against it) and the glass is given.
-- Every 2 seconds the pack sends `realm:storm_cell` `{ dim, x, z, strength }` (`{ dim: null }` once the cell is gone), which the [Relics](#relics--relics_bp) Storm Meter shows, and `realm:journal` `{ page: "weather", entry: "storm_cell" }` to players within `journalRadius` (once per cell). A new cell sends `realm:sky_event` `{ kind: "storm_cell", dim, x, z }` that the journal (and [Realm News & Tips](#realm-news--tips--news_bp), if it listens) can pick up.
+- Every 2 seconds the pack sends `realm:storm_cell` `{ dim, x, z, strength }` (`{ dim: null }` once the cell is gone), which the [Relics](#relics--relics_bp) Storm Meter shows, and `realm:journal` `{ page: "weather", entry: "storm_cell" }` to players within `journalRadius` (once per cell). A new cell sends `realm:sky_event` `{ kind: "storm_cell", dim, x, z, text: "A storm cell is forming" }` for the packs that listen to sky events (see [How the packs work together](#how-the-packs-work-together)).
 
 ---
 
@@ -4478,7 +4478,7 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 - **Players:** at the edge of the pull radius you feel a tug toward the funnel; within half of it you're thrown a few blocks up and sideways (at most once every 4 seconds), and get Slow Falling for `slowFallingSeconds` (6) seconds near the top of the throw. `throwPlayers` disabled leaves players alone.
 - **Warnings and sounds:** within `warnDistance` (150) blocks, a chat warning once per tornado with its distance, direction and heading (`§cTornado! 140m to the SW, moving NE.`), and the raid horn every `hornEvery` (20) seconds. Within 100 blocks a deep thunder rumble every 6 s; within 48 blocks the roar of wind every 5 s. Sounds come from the tornado's direction.
 - **When it ends:** chat says `§7The tornado has died down.` to everyone who was warned, and 2 to 5 (`stormGlass`) Storm Glass drop along the last part of its path: prismarine crystals named `Storm Glass` with the lore `Charged by a lightning strike`, the same item other packs use. A natural tornado dies down within 10 seconds once the thunderstorm ends.
-- **Journal:** players who see it (within `viewDistance`) get the **Tornado** page in their journal (Journal pack), and the realm's news hears `A tornado touched down` (the `realm:sky_event` script event).
+- **Journal:** players who see it (within `viewDistance`) get the **Tornado** page in their journal (Journal pack), and innkeepers' **Hear the news** ([Waystones & Inns](#waystones--inns--waystone_bp)) passes on `A tornado touched down` (the `realm:sky_event` script event).
 
 ### Commands
 
@@ -4560,7 +4560,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 - **The finder:** the first player (not in spectator mode) within 3 blocks of the chest gets `crowns` (50) Crowns on the shared `crowns` scoreboard (`§6+50 Crowns §7(Pot of gold)`; the Crowns pack shows balances, and the Crowns are paid without it too), a level-up sound, and with `relicChance` a relic picked from `relics` (the Relics pack hands it out; without that pack nothing happens). Everyone reads `§6Ann found the pot of gold at the rainbow's end!` Later players find the chest, but no Crowns.
 - **The chest's loot** (`loot`): 3-8 gold ingots and 8-24 gold nuggets always; each of magenta, cyan, pink, light blue and lime dye (1-4) at 40%; a golden apple at 30%; 1-3 emeralds at 25%. Put in random slots.
 - **Afterwards:** when the pot expires (`potMinutes` after the rainbow appeared), an empty pot chest is removed if that spot is loaded; a chest that still holds anything is never removed.
-- **Journal:** every player who sees the rainbow gets the **Rainbow** page in their journal (Journal pack), and the realm's news hears about it (the `realm:sky_event` script event).
+- **Journal:** every player who sees the rainbow gets the **Rainbow** page in their journal (Journal pack), and innkeepers' **Hear the news** ([Waystones & Inns](#waystones--inns--waystone_bp)) passes it on (the `realm:sky_event` script event).
 
 ### Commands
 
@@ -4626,7 +4626,7 @@ Clear nights in the Overworld get a sky show. Every so often a shooting star str
 - **Shooting stars:** for each player, one every 15 to 30 seconds (`stars.every`), at a random time of its own: a bright streak with a fading trail, 60 to 100 blocks away and 50 to 80 blocks up, mostly in the direction you're looking (7 in 10), moving 35 to 55 blocks a second in a random direction, slightly downward, for about a second. Each player gets their own stars.
 - **Wishes:** sneaking within `wish.windowSeconds` (3) seconds after one of your stars gives `wish.effect` (Hero of the Village, level I) for `wish.minutes` (5) minutes, once per night. Bedrock has no Luck effect, so the wish brings luck with traders instead.
 - **The aurora:** each night is an aurora night with `aurora.chance` (0.4), rolled once. On aurora nights, players within `aurora.snowRadius` (16) blocks of snowy ground (snow, snow layers, powder snow or ice on top, checked every 10 s) see a curtain of `aurora.segments` (9) tall ribbon segments in a row 180 blocks wide, about 100 blocks north of them and 60 to 90 blocks up, waving north and south and up and down, its color drifting from green to purple along it and through the night. It's redrawn every `aurora.refreshSeconds` (4) seconds, each segment fading in and out over 2 seconds, so it ripples without gaps. It moves with you.
-- **Journal:** the first shooting star and the first aurora you see add the **Shooting star** and **Aurora** pages to your journal (Journal pack), and the realm's news hears about the first aurora of a night (the `realm:sky_event` script event).
+- **Journal:** the first shooting star and the first aurora you see add the **Shooting star** and **Aurora** pages to your journal (Journal pack), and innkeepers' **Hear the news** ([Waystones & Inns](#waystones--inns--waystone_bp)) passes on the first aurora of a night (the `realm:sky_event` script event).
 
 ### Commands
 
@@ -4922,7 +4922,7 @@ The rain, thunder, lightning-strike and thunderstorm sounds are excerpts of reco
 
 ## Rain Extras — `rain_bp`
 
-Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. Part of the Realm Bundle (it used to be standalone).
+Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. Part of the Realm Bundle.
 
 ### See and hear it
 
@@ -5049,7 +5049,7 @@ Rainbows, auroras, stars, meteors, sparks, embers, moon motes and sparkles glow 
 
 ### What's in it
 
-Particles, each spawned by a behavior pack with `dimension.spawnParticle(id, location, molang)`. Numbers go in with `MolangVariableMap.setFloat("variable.<name>", n)`; one left at 0 uses the default in parentheses.
+Particles, each spawned by a behavior pack with `player.spawnParticle(id, location, molang)` (seen by that player only) or `dimension.spawnParticle(id, location, molang)`. Numbers go in with `MolangVariableMap.setFloat("variable.<name>", n)`; one left at 0 uses the default in parentheses.
 
 | Particle | What it is | Variables | Used by |
 |---|---|---|---|
@@ -5057,13 +5057,13 @@ Particles, each spawned by a behavior pack with `dimension.spawnParticle(id, loc
 | `realm:sky_aurora` | One segment of an aurora curtain, rippling and additive. A segment is `size * 0.8` wide with soft sides: place them about `size * 0.6` apart so they overlap | `variable.size` height in blocks (40), `variable.life` seconds (20), `variable.hue` 0 green .. 1 purple | [Aurora & Shooting Stars](#aurora--shooting-stars--night_bp) |
 | `realm:sky_star` | A shooting star flying from the location along the velocity, leaving a short glowing tail | `variable.dx`, `variable.dy`, `variable.dz` blocks/s, `variable.life` seconds (1.2) | [Aurora & Shooting Stars](#aurora--shooting-stars--night_bp) |
 | `realm:sky_meteor` | A fireball flying from the location along the velocity, with a long fiery trail | `variable.dx`, `variable.dy`, `variable.dz` blocks/s, `variable.life` seconds (3), `variable.size` fireball scale (1) | [Meteor Strikes](#meteor-strikes--meteor_bp) |
-| `realm:sky_meteor_smoke` | 8 dark smoke puffs rising from a crater for 4 to 5 s | none | [Meteor Strikes](#meteor-strikes--meteor_bp) |
+| `realm:sky_meteor_smoke` | 8 dark smoke puffs rising from a crater for 3.5 to 5.5 s | none | [Meteor Strikes](#meteor-strikes--meteor_bp) |
 | `realm:sky_sand` | 20 sand grains in an 8 x 3 x 8 box around the location, blown by the wind | `variable.wx`, `variable.wz` wind in blocks/s | [Regional Weather](#regional-weather--climate_bp) |
 | `realm:sky_snow` | 20 snow streaks in an 8 x 4 x 8 box, driven by the wind and falling | `variable.wx`, `variable.wz` | [Regional Weather](#regional-weather--climate_bp) |
 | `realm:sky_fogbank` | 4 big pale fog puffs drifting low within 5 blocks, for about 10 s | none | [Regional Weather](#regional-weather--climate_bp) |
 | `realm:sky_tornado` | One ring of dust circling the location and climbing for about a second (8 to 40 puffs, 5 per block of radius) | `variable.radius` blocks (2), `variable.spin` radians/s (4) | [Tornadoes](#tornadoes--tornado_bp) |
 | `realm:sky_debris` | 5 dark leaves and clods thrown outward and up from the ring, tumbling | `variable.radius` (2) | [Tornadoes](#tornadoes--tornado_bp) |
-| `realm:sky_blood` | 6 slow red motes rising in an 8 x 2 x 8 box, 4 to 6 s | none | [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) |
+| `realm:sky_blood` | 6 slow red motes rising in an 8 x 2 x 8 box, 4 to 6.5 s | none | [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) |
 | `realm:sky_harvest` | The same, golden | none | [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) |
 | `realm:sky_spark` | 4 blue zigzag sparks, a quarter second | none | [Storm Chasing](#storm-chasing--storm_bp) |
 | `realm:trail_cloud` | A small gray cloud puff, sometimes with a raindrop falling from it | none | [Titles & Trails](#titles--trails--titles_bp) |
@@ -5154,7 +5154,7 @@ Everything in `packs/translucent_rp/` except `manifest.json` is generated by `np
 | `textures/translucent_tools/<item>.png` | The vanilla texture with every pixel at 50% opacity (`OPACITY` in the generator) |
 | `textures/translucent_tools/shape/<item>.png` | The vanilla texture, opaque. The game builds the held item's 3D outline from it (`texture_meshes`), so the outline is exactly vanilla's whatever the opacity |
 | `attachables/<item>.json` | One per tool and the mace (vanilla draws those without an attachable), with the `entity_alphablend` material, plus vanilla's `entity_alphatest` and `entity_alphatest_glint` for the solid look. The bow, crossbow, shield and trident files are vanilla's with only the materials, textures and render controller swapped, and one `pre_animation` line that reads `realm:solid_tools` (attachable queries run on the entity holding the item; mobs don't have it, so they read 0, see-through) |
-| `models/entity/translucent_tools.geo.json`, `animations/translucent_tools.animation.json` | The tool mesh, bound to the hand (`q.item_slot_to_bone_name(c.item_slot)`), and its pose: Minecraft's hand-held item display (`item/handheld`: third person rotated 0, -90, 55, raised 4 and scaled 0.85; first person rotated 0, -90, 25, moved 1.13, 3.2, 1.13 and scaled 0.68) applied with the bone layout and base offsets Geyser's java2bedrock converter uses for 2D items on Bedrock, for each hand and view. Until version 1.1.0 the tools borrowed vanilla's bow pose, which grips the sprite at its middle: every swing turned a sword around the middle of its blade, and in third person it stood upright like a bow. Also the bow and crossbow frames |
+| `models/entity/translucent_tools.geo.json`, `animations/translucent_tools.animation.json` | The tool mesh, bound to the hand (`q.item_slot_to_bone_name(c.item_slot)`), and its pose: Minecraft's hand-held item display (`item/handheld`: third person rotated 0, -90, 55, raised 4 and scaled 0.85; first person rotated 0, -90, 25, moved 1.13, 3.2, 1.13 and scaled 0.68) applied with the bone layout and base offsets Geyser's java2bedrock converter uses for 2D items on Bedrock, for each hand and view. Also the bow and crossbow frames |
 | `render_controllers/translucent_tools.render_controllers.json` | See-through or solid (by `realm:solid_tools`) for every item, and the purple shimmer when enchanted and see-through |
 | `pack_icon.png`, `docs/media/translucent/textures.png` | The pack icon and the picture above |
 
@@ -5213,7 +5213,7 @@ A small box on the right side of the screen, just above where the scoreboard sid
 
 1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join. Hit a mob, glide or hold a treasure map and the readout shows in the box on the right.
 2. Prefer another spot? Run `/realm:prefs`, pick the pack (Mob Health, Elytra HUD, Treasure Maps, Story Questlines) and change **Where ... shows** to **Middle of the screen** or **Above the hotbar**.
-3. **Operators:** it comes with Realm Resources. The realm default for each pack is its `showAt` setting in `/realm:config` (`side`).
+3. **Operators:** it comes with Realm Resources. The realm default for each pack is its `showAt` setting in `/realm:config` (`trackerAt` for Story Questlines; default `side`).
 
 ### What players see
 
@@ -5260,6 +5260,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Icon | `pack_icon.png` of `--icon` (default `sky_rp`, Realm Skies' night sky) |
 | Resource packs | `--resources` merges every resource pack into **Realm Resources** (`dist/realm_resources.mcpack`): all files side by side, one manifest. Behavior and resource packs never share a bundle |
 | Limits | `--all` and `--resources` leave out packs listed in `tools/standalone.json` (none today); `--list` shows which bundle takes each pack |
+| Realm News | Runs `node tools/gen-news.mjs` first, so the bundle's update popup is the newest `docs/NEWS.md` entry |
 
 > ⚠️ **Saved settings don't move between the bundle and individual packs.** Bedrock keeps each pack's script data (dynamic properties) separately. Switching resets in-game edits: welcome text, news, tips, `/realm:config` settings, per-player toggles and preferences, first-joined dates, Creeper Guard zones, the Farm Loader list (the ticking areas themselves stay loaded) and what Chest Finder remembers. **Scoreboard stats are kept.** Rebuilding the same bundle name keeps everything.
 
@@ -5285,7 +5286,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Chairs → AFK, Stats | A seated, idle player is still marked AFK. Sitting adds nothing to `travelled` |
 | Death Point ↔ Farm Loader | `/realm:death_back` adds a ticking area for a few seconds to load a faraway death point, so it counts toward the same 10 per world. If Farm Loader has used all 10, `/realm:death_back` says it can't load the death point; a `/realm:farm_add` during those seconds may be refused by the game |
 | Hotbar Refill ↔ Low Durability Warning | Separate: the warning still comes before a tool breaks, and Hotbar Refill moves a spare in once it has. The spare starts with no warning until it runs low |
-| Coordinates HUD ↔ packs with action bar messages | Every pack that writes the bar above the hotbar (Low Durability Warning, Quick Stack & Sort, Land Claims, Chairs, AFK, Mob Health, Daily Quests, Skills, Realm Mail and the adventure packs) sends `realm:actionbar` first, so the HUD, the stats ticker, Story Questlines' tracker, the Party HUD and an expedition's run line wait while its note shows (the action bar protocol, below) |
+| Coordinates HUD ↔ packs with action bar messages | Every pack that writes the bar above the hotbar (Low Durability Warning, Quick Stack & Sort, Land Claims, Chairs, AFK, Right-click Harvest, Mob Health, Daily Quests, Skills, Realm Mail, Safe Zones, Storm Chasing, Regional Weather and the adventure packs) sends `realm:actionbar` first, so the HUD, the stats ticker, Story Questlines' tracker, the Party HUD and an expedition's run line wait while its note shows (the action bar protocol, below) |
 | Mob Health → Coordinates HUD | Each hit shows the mob's health and asks the HUD to hold off for `holdTicks` (2 seconds); then the coordinates come back |
 | Stats → Coordinates HUD | A player with both the stats ticker and the HUD on sees the ticker as a second line under the coordinates (`realm:hud_line`); the HUD says who sees it (`realm:hud_state`). Without the HUD the ticker draws on its own and waits for `realm:actionbar` notes, as the HUD does |
 | Elytra HUD → Coordinates HUD | While a player glides, the Elytra HUD sends `realm:actionbar`, so the Coordinates HUD pauses for that player and comes back a second or two after landing |
@@ -5344,7 +5345,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 
 - **Every write** to a player's action bar is preceded by `realm:actionbar` `{ player, ticks, from?, background? }`: "my text is on this player's bar, leave it for `ticks` ticks" (at most 200). `from` is the sending pack's folder, so a pack can ignore its own requests.
 - **Steady lines** that redraw every second or two wait while someone else's request lasts, then redraw: the Coordinates HUD, the stats ticker (without the HUD), Story Questlines' tracker, the Party HUD and an expedition's run line. So a note (a durability warning, skill XP, mob health, a sort result) stays readable instead of being drawn over within a second.
-- **`background: true`** marks a steady line that other steady lines needn't wait for. The Party HUD sends it, so an expedition's run line takes the bar during a party run; the Party HUD itself waits for the run line and for every note.
+- **`background: true`** marks a steady line that an expedition's run line needn't wait for (the other steady lines still do). The Party HUD sends it, so an expedition's run line takes the bar during a party run; the Party HUD itself waits for the run line and for every note.
 - Packs that only show a short note now and then just send the request and write; they don't listen. Without any listener nothing happens.
 
 **The side box protocol** (one box on the right side, from [Side HUD](#side-hud--hud_rp)): a pack that writes the box sends `realm:side` `{ player, from, ticks }` right after, and every pack that uses the box remembers the last `from` per player. When its readout ends, a pack clears the box (`setTitle("§s§0§r")`) only if it is still the last writer, so it never wipes another pack's text. The story tracker, which redraws every 2 seconds, waits while another pack's `ticks` last, so a hit's mob health or a Warmer / Colder note stays readable. Mob Health, the Elytra HUD, Treasure Maps and Story Questlines use it.
@@ -5372,24 +5373,33 @@ Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, 
 | No storm fog, haze, mist, drips, wind or roof sound | Is Rain Extras active under **Behavior Packs**, and Realistic Rain under **Resource Packs**? Run `/realm:rain` in case they're off for you, and check `/realm:config` → Rain Extras. If the pack was added during rain, they start at the next weather change. Nothing shows in deserts, badlands or snowy places, or deep underground. The haze only shows on Vibrant Visuals |
 | Storm fog or haze stays after a storm | Rejoin: Rain Extras clears its fogs when you join. Running `/realm:rain` twice also resets them |
 | Wind, thunderstorm or rain on the roof too loud or too quiet | Operators: `/realm:config` → Rain Extras → **Storm wind volume**, **Rain breeze volume**, **Thunderstorm sound volume**, **Rain on the roof volume** (also the muffled rain indoors). Everyone: the game's **Weather** volume slider covers them too |
-| Rain as loud indoors as outdoors | Is **Muffled rain indoors** enabled (`/realm:config` → Rain Extras), and are the extras on for you (`/realm:rain`)? It needs Realistic Rain 1.3 or newer, whose rain clips fade in slowly enough to be stopped quietly. Leaves don't count as a roof |
+| Rain as loud indoors as outdoors | Is **Muffled rain indoors** enabled (`/realm:config` → Rain Extras), and are the extras on for you (`/realm:rain`)? It needs Realistic Rain, whose rain clips fade in slowly enough to be stopped quietly. Leaves don't count as a roof |
 | Tools still look solid in your hand | Is Translucent Tools active under **Resource Packs**, above other packs that change held items? Did you accept the resource pack download when you joined? Inventory icons stay solid; only the item in your hand is see-through |
-| The pack shows a pink and black placeholder icon | Harmless, and gone in current builds: both bundles now carry Realm Skies' icon (`--icon`). Single behavior packs still have none |
+| The pack shows a pink and black placeholder icon | Harmless: single behavior packs have no icon. Both bundles carry Realm Skies' icon (`--icon`) |
 
 ---
 
 ## Keeping this file current
 
-`npm run check` runs `tools/check-docs.mjs` after the type check, and fails if this file is missing any of:
+`npm run check` runs these, in order, and stops at the first that fails:
 
-- a `##` section whose heading contains `` `<folder>` `` for **every pack** in `packs/`
-- a `### How to use` section in every pack section: short numbered steps for players, operators last
-- **every command** a pack registers, e.g. `` `/realm:stats` ``
-- **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
-
-It also runs `tools/sync-settings.mjs --check`, which fails if a behavior pack (other than Realm Settings) has no `scripts/settings.js`, or its copy of the shared Realm Settings helper differs from `tools/settings-shared.js`. Change the helper there, then run `node tools/sync-settings.mjs` and bump the version of every pack it updates.
-
-It also runs `tools/gen-rain/textures.mjs --check` and `tools/gen-rain/fogs.mjs --check`, which fail if Realistic Rain's textures or fogs differ from what `npm run gen:rain` generates, and `tools/help-catalog.mjs --check`: the in-game `/realm:help` text is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs`. It also fails if a pack doesn't answer `/realm:help`'s `realm:help_ping` script event. Resource packs have no scripts, so they're left out of the help.
+- `tsc -p .`: the type check.
+- `tools/check-ascii.mjs`: every pack's script code (comments aside) is plain ASCII plus `§`, since Bedrock draws a line with `…`, `–`, `•` or an emoji in a smaller fallback font.
+- `tools/check-docs.mjs`: this file has
+  - a `##` section whose heading contains `` `<folder>` `` for **every pack** in `packs/`
+  - a `### How to use` section in every pack section: short numbered steps for players, operators last
+  - **every command** a pack registers, e.g. `` `/realm:stats` ``
+  - **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
+- `tools/check-commands.mjs`: every command and enum a pack registers uses the `realm:` namespace (a second namespace in one add-on throws `NamespaceMismatch`, so a bundle would lose those commands), and no two packs register the same command.
+- `tools/check-stories.mjs`: Story Questlines' story content (`packs/saga_bp/scripts/stories/`) uses known objective types and fields, places, NPC ids, unique ids, champion tags and requirements. Flags read that nothing sets are only warnings.
+- `tools/sync-settings.mjs --check`: fails if a behavior pack (other than Realm Settings) has no `scripts/settings.js`, or its copy of the shared Realm Settings helper differs from `tools/settings-shared.js`. Change the helper there, then run `node tools/sync-settings.mjs` and bump the version of every pack it updates.
+- `tools/sync-zones.mjs --check`: the same for the safe zones protocol: every pack with a `scripts/zones.js` has the same copy as `tools/zones-shared.js`. Change it there, then run `node tools/sync-zones.mjs` (with pack folders to add the file to new ones) and bump the version of every pack it updates.
+- `tools/help-catalog.mjs --check`: the in-game `/realm:help` text (`packs/help_bp/scripts/catalog.js`) is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs` (it bumps `help_bp`'s patch version). It also fails if a behavior pack doesn't answer `/realm:help`'s `realm:help_ping` script event. Resource packs have no scripts, so they're left out of the help.
+- `tools/admin-catalog.mjs --check`: the Realm Configuration menu's list of commands (`packs/admin_bp/scripts/catalog.js`) matches what the packs register. After adding or changing a command or its parameters, run `node tools/admin-catalog.mjs` and bump `admin_bp`'s version.
+- `tools/gen-news.mjs --check`: Realm News' update popup (`packs/news_bp/scripts/release.js`) is the newest entry of `docs/NEWS.md`. After adding an entry, run `node tools/gen-news.mjs` (it bumps `news_bp`'s patch version; `npm run bundle` runs it too).
+- `tools/gen-rain/textures.mjs --check` and `tools/gen-rain/fogs.mjs --check`: Realistic Rain's textures, fogs and client biomes are what `npm run gen:rain` generates.
+- `tools/gen-sky/gen.mjs --check`: every file in Realm Skies is what `npm run gen:sky` generates, none missing or left over.
+- `tools/gen-translucent/generate.mjs --check`: Translucent Tools (all but its `manifest.json`) is what `npm run gen:translucent` generates.
 
 When adding or changing a pack: update its section here, and the pack table in `README.md`, in the same commit.
 
@@ -5403,9 +5413,11 @@ The [Our realm](https://mc.nish.software/realm/) page shows this file to players
 |---|---|
 | What goes on the site | Every pack section (one collapsible card per pack, `### How to use` first; behavior packs under the Realm Bundle, resource packs under **Realm Resources**), plus every section marked `<!-- on the site -->` |
 | What stays behind "For operators" | A pack's `### Configuration…`, `### Saved data` and `### Resetting…` subsections, collapsed |
+| What goes in "How it works in detail" | A pack's other subsections (`### What players see`, `### How it works`, `### Known limits`…), collapsed |
+| Commands page | Every pack's Commands rows also go into the searchable commands table on mc.nish.software (`site/commands/index.html`) |
 | Pictures and sound clips | A pack's `### See and hear it` subsection becomes a gallery at the top of its card: each `[label](media/….mp3)` link as a listening clip at the top (with a **Listen** button in the card's header, so it plays without opening the card), each `![caption](media/…)` image (`.webp`, `.png`, `.jpg`, `.gif`) with its caption, two images on one line (`![Before label](media/…) ![After label](media/…) caption`) as a before/after comparison you drag across, and any other paragraph as a note. The files live in `docs/media/` here, and `pack-docs.mjs` copies the ones the page uses to `site/realm/media/` |
-| How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`), then commit and push there. `--check` fails if the page is out of date |
-| Downloads | `node tools/publish-packs.mjs --notes "what changed"` there builds the Realm Bundle, Realm Resources and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"). A single pack is only published when its `header.version` goes up; a bundle whenever anything in it changed. The realm page leads with the two bundles, and every pack can still be downloaded on its own from its card |
+| How | In a checkout of `nishant/hosting`: `cd minecraft && node tools/pack-docs.mjs --from <path to this repo>` (default `../../mc-packs`, or `MC_PACKS`), then `node tools/check-site.mjs` and a PR to `main` there, which you merge (the merge is the deploy); `node tools/check-live.mjs` then checks the live pages. `--check` fails if the page is out of date |
+| Downloads | `node tools/publish-packs.mjs --from <path to this repo> --notes "what changed" --pack-notes <folder>="what changed"` there builds the Realm Bundle, Realm Resources and every single pack from this repo and publishes each new version (see `minecraft/docs/OPERATIONS.md`, "Publishing a pack version"; `--resource-notes` gives Realm Resources its own notes, `--dry-run` writes nothing). A single pack is only published when its `header.version` goes up, and then needs its `--pack-notes` (a first version gets `First version hosted here.`); the same version with different files is an error, since a published version is never replaced. A bundle is published whenever anything in it changed, and needs `--notes`. The realm page leads with the two bundles, and every pack can still be downloaded on its own from its card |
 | When | After every change to this file that players should see, and with every new bundle or pack version published on the site |
 
 Links in this file to its own sections (`#…`) are dropped on the site; links to web pages are kept.
