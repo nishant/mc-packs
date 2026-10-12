@@ -122,9 +122,10 @@ function progress(player, kind, id, n = 1) {
     } else if (getFor(player, "progressNotes") === true) {
       const step = q.count / 4;
       if (Math.floor(before / step) !== Math.floor(p.p / step)) {
+        // The action bar protocol: ask the Coordinates HUD and other steady lines, if installed, to leave the note on
+        // screen for a moment, before writing it.
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "quests_bp" }));
         player.onScreenDisplay.setActionBar(`§eQuest: ${q.label} §f${fmt(p.p)}/${fmt(q.count)}`);
-        // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
       }
     }
   }
