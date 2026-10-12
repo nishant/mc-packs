@@ -439,12 +439,11 @@ system.runInterval(() => {
   if (get("warmth") !== true) return;
   for (const player of world.getAllPlayers()) {
     try {
-      const hunts = huntsOf(player);
-      if (!hunts.length) continue;
       const inv = inventoryOf(player);
       const id = mapIdOf(inv?.getItem(player.selectedSlotIndex));
       if (!id) continue;
-      const hunt = hunts.find((h) => h.id === id);
+      // A map from a finished or abandoned hunt (a copy kept in a chest) says so, also when no hunt is left.
+      const hunt = huntsOf(player).find((h) => h.id === id);
       let text;
       if (!hunt) text = "§7This map's treasure was found or given up.";
       else if (hunt.dim !== player.dimension.id) text = "§7The map shows nothing in this dimension.";

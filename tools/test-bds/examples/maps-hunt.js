@@ -159,12 +159,12 @@ export default async function (t) {
   t.check(titles.some((s) => /map is (cold|cool|faintly warm)/i.test(s)), "far away the map only says cold / cool / faintly warm");
   t.check(!titles.some((s) => /Warmer|Colder/.test(s)), "no Warmer / Colder far away");
 
-  for (let leg = 1; leg <= 4; leg++) {
+  for (let leg = 1, rounds = 0; leg <= 4 && rounds < 12; leg++, rounds++) {
     const est = solve(clue, from);
     t.log(`leg ${leg}: [${est.kind}] "${clue}" -> ${Math.round(est.x)}, ${Math.round(est.z)} (from ${from.x}, ${from.z})`);
     const since = t.tick;
     await goTo(est.x, est.z);
-    const settledRe = /ink darkens|grows warm/i;
+    const settledRe = /ink darkens|grows warm|ink shifts|washed up/i;
     const settledYet = async (ticks) => {
       for (let i = 0; i < ticks; i += 10) {
         const m = t.messages(p, { since }).find((q) => settledRe.test(q.plain));
@@ -189,6 +189,19 @@ export default async function (t) {
     }
     if (!near) near = await t.waitMessage(p, settledRe, { since, timeout: 400 });
     t.log(`  ${near.plain}`);
+    if (/washed up/i.test(near.plain)) {
+      t.log("  no spot for the chest after 4 tries: the treasure was handed over");
+      t.check(leg >= 2, "the hunt had at least 2 legs");
+      clearAreas();
+      return;
+    }
+    if (/ink shifts/i.test(near.plain)) {
+      // Water or a build where the treasure was: it moved, with a heading from where the player stood.
+      clue = /"(.*)"/.exec(near.plain)[1];
+      from = { x: Math.round(p.location.x), z: Math.round(p.location.z) };
+      leg--;
+      continue;
+    }
     if (/grows warm/i.test(near.plain)) {
       // The last leg: the chest is buried at the landmark.
       const me = { x: Math.floor(p.location.x), z: Math.floor(p.location.z) };
