@@ -2,6 +2,7 @@
 // options with get() / getFor() instead of config.js directly, so changes apply without a restart.
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { SLOT_NAMES, SLOTS } from "./side.js";
 
 const PACK = "hud_bp";
 const PREFIX = "hud";
@@ -15,8 +16,10 @@ const OPTIONS = [
   { key: "showTime", type: "bool", scope: "world", label: "Show the day and time", help: "What players start with; each can change it in /realm:prefs" },
   { key: "eightWay", type: "bool", scope: "world", label: "Facing in 8 directions", help: "Disabled: N, E, S and W only" },
   { key: "intervalTicks", type: "int", scope: "world", label: "Update every (ticks)", restart: true },
-  { key: "on", type: "bool", scope: "player", base: "defaultOn", label: "Coordinates HUD above my hotbar", help: "Your coordinates and facing above the hotbar. The same switch as /realm:hud" },
+  { key: "showAt", type: "enum", scope: "world", choices: ["hotbar", ...SLOTS.slice(0, 8)], names: ["Above the hotbar", ...SLOT_NAMES.slice(0, 8)], label: "Where the HUD shows (realm default)", help: "Above the hotbar, or a Side HUD box (Realm Resources) that other packs' boxes show next to" },
+  { key: "on", type: "bool", scope: "player", base: "defaultOn", label: "Coordinates HUD", help: "Your coordinates and facing, above the hotbar or in a side box. The same switch as /realm:hud" },
   { key: "showTime", type: "bool", scope: "player", base: "showTime", label: "HUD shows the day and time" },
+  { key: "where", type: "enum", scope: "player", base: "showAt", choices: ["hotbar", ...SLOTS.slice(0, 8)], names: ["Above the hotbar", ...SLOT_NAMES.slice(0, 8)], label: "Where my HUD shows", help: "A Side HUD box can't be covered by other packs' notes above the hotbar" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

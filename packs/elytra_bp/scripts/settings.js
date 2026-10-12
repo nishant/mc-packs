@@ -2,6 +2,7 @@
 // options with get() / getFor() instead of config.js directly, so changes apply without a restart.
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { SLOT_NAMES, SLOTS } from "./side.js";
 
 const PACK = "elytra_bp";
 const PREFIX = "elytra";
@@ -10,12 +11,12 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Elytra HUD", help: "Speed, height, elytra durability and rockets above the hotbar while gliding" },
+  { key: "enabled", type: "bool", scope: "world", label: "Elytra HUD", help: "Speed, height, elytra durability and rockets while gliding" },
   { key: "lowPercent", type: "int", scope: "world", label: "Elytra durability in red at (percent left)", min: 1, max: 50, step: 1 },
   { key: "intervalTicks", type: "int", scope: "world", label: "Ticks between HUD updates", restart: true },
   { key: "off", type: "bool", scope: "player", default: false, invert: true, label: "Elytra HUD while gliding", help: "The same switch as /realm:elytra" },
-  { key: "showAt", type: "enum", scope: "world", choices: ["side", "middle", "hotbar"], names: ["Right side, above the scoreboard", "Middle of the screen", "Above the hotbar"], label: "Where the Elytra HUD shows (realm default)", help: "Middle of the screen: other add-ons that use the line above the hotbar (waypoint and compass add-ons) cannot cover it" },
-  { key: "where", type: "enum", scope: "player", base: "showAt", choices: ["middle", "hotbar"], names: ["Middle of the screen", "Above the hotbar"], label: "Where my Elytra HUD shows", help: "The right side and the middle can't be covered by other add-ons" },
+  { key: "showAt", type: "enum", scope: "world", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where the Elytra HUD shows (realm default)", help: "Right and Left 1-4 are boxes from Side HUD (Realm Resources); each pack can take its own, so they show at once. Other add-ons that use the line above the hotbar cannot cover them" },
+  { key: "where", type: "enum", scope: "player", base: "showAt", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where my Elytra HUD shows", help: "Pick a box no other pack uses so they show at once" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

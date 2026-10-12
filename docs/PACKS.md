@@ -1218,14 +1218,15 @@ Operators can change all three in game with `/realm:config`. Players whose own c
 
 ## Coordinates HUD — `hud_bp`
 
-Your own coordinates, the direction you're facing and the day and time, on the bar above the hotbar, for players who enable it. Handy for building, mapping and meeting up without opening a map.
+Your own coordinates, the direction you're facing and the day and time, on the bar above the hotbar (or in a [Side HUD](#side-hud--hud_rp) box, if you prefer), for players who enable it. Handy for building, mapping and meeting up without opening a map.
 
 ### How to use
 
 1. Run `/realm:hud`. Above your hotbar you now see `XYZ 120 64 -340  Facing NE  Day 12 at 6:30 AM`, updated as you move. Only you see yours.
-2. Run `/realm:hud` again to hide it. The choice is remembered. The same switch is **Coordinates HUD above my hotbar** in `/realm:prefs`.
+2. Run `/realm:hud` again to hide it. The choice is remembered. The same switch is **Coordinates HUD** in `/realm:prefs`.
 3. Only want the coordinates? Disable **HUD shows the day and time** in `/realm:prefs`.
-4. **Operators:** `/realm:config` → **Coordinates HUD** disables it for the whole realm (for servers that play without coordinates), shows it to new players from the start, or switches the facing to 4 directions.
+4. Want it off the hotbar bar, where other packs' notes push it aside? Set **Where my HUD shows** in `/realm:prefs` to one of the side boxes (**Right 1** to **Right 4**, **Left 1** to **Left 4**). Pick one no other pack of yours uses (Mob Health uses Right 1, the Elytra HUD Right 2, Warmer / Colder Right 3 and the story tracker Right 4 unless you changed them).
+5. **Operators:** `/realm:config` → **Coordinates HUD** disables it for the whole realm (for servers that play without coordinates), shows it to new players from the start, switches the facing to 4 directions, or changes where it shows for players who haven't chosen.
 
 ### What players see
 
@@ -1234,7 +1235,8 @@ Your own coordinates, the direction you're facing and the day and time, on the b
 - Off for every player until they enable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it and `/realm:hud` says `The coordinates HUD is disabled on this realm.`
 - It updates at most twice a second (`intervalTicks`), and only when the text changes, or every 2 seconds (`refreshTicks`) so it doesn't fade while you stand still.
 - **The stats ticker:** a player who also has the [Stats pack](#stats--leaderboards--stats_bp)'s ticker on sees it as a second line under the coordinates, such as `Mob kills 120 #2 of 7`, instead of the two taking turns on the bar.
-- **Sharing the bar with other packs:** the same bar also shows other packs' short messages: low-durability warnings, `Sorted 31 stacks` and other Quick Stack & Sort results, entering or leaving a claim, the Chairs reminder, the smart sleep count, [Mob Health](#mob-health--mobhp_bp) after a hit, [Daily Quests](#daily-quests--quests_bp) progress notes and others. Each of them asks the HUD to wait (usually 2 to 3 seconds) so the message stays readable, and the HUD redraws right after. While you glide with the [Elytra HUD](#elytra-hud--elytra_bp) above the hotbar, it keeps the bar to itself; the coordinates come back a second or two after you land. Other packs can do the same (see How it works).
+- **In a side box** (`showAt`, default **Above the hotbar**; each player's **Where my HUD shows**): the same text in a [Side HUD](#side-hud--hud_rp) box, the day and time on a second line. There it never waits for other packs' notes, and it shows next to the other packs' boxes. It is sent again only when it changes or every 5 seconds. Without Side HUD the text shows in the middle of the screen.
+- **Sharing the bar with other packs:** above the hotbar, the same bar also shows other packs' short messages: low-durability warnings, `Sorted 31 stacks` and other Quick Stack & Sort results, entering or leaving a claim, the Chairs reminder, the smart sleep count, [Mob Health](#mob-health--mobhp_bp) after a hit, [Daily Quests](#daily-quests--quests_bp) progress notes and others. Each of them asks the HUD to wait (usually 2 to 3 seconds) so the message stays readable, and the HUD redraws right after. While you glide with the [Elytra HUD](#elytra-hud--elytra_bp) above the hotbar, it keeps the bar to itself; the coordinates come back a second or two after you land. Other packs can do the same (see How it works).
 
 ### Commands
 
@@ -1252,21 +1254,22 @@ Your own coordinates, the direction you're facing and the day and time, on the b
 | `eightWay` | `true` | Facing in 8 directions; `false` shows `N`, `E`, `S` and `W` only |
 | `intervalTicks` | `10` | How often (ticks) the HUD updates. 10 is the fastest it goes (twice a second). Read when the world starts |
 | `refreshTicks` | `40` | Send an unchanged HUD again after this many ticks, so the bar doesn't fade |
+| `showAt` | `"hotbar"` | Where the HUD shows for players who haven't chosen: `hotbar` (the bar above the hotbar) or a [Side HUD](#side-hud--hud_rp) box, `right1` to `right4` or `left1` to `left4` (top to bottom) |
 
-Operators can change `enabled`, `defaultOn`, `showTime` and `eightWay` in game with `/realm:config`; `intervalTicks` is fixed when the world starts, so `/realm:config` only shows it. `refreshTicks` stays in `config.js`. Each player chooses **Coordinates HUD above my hotbar** (`/realm:hud`) and **HUD shows the day and time** in `/realm:prefs`; a player who never chose follows `defaultOn` and `showTime`.
+Operators can change `enabled`, `defaultOn`, `showTime`, `eightWay` and `showAt` in game with `/realm:config`; `intervalTicks` is fixed when the world starts, so `/realm:config` only shows it. `refreshTicks` stays in `config.js`. Each player chooses **Coordinates HUD** (`/realm:hud`), **HUD shows the day and time** and **Where my HUD shows** in `/realm:prefs`; a player who never chose follows `defaultOn`, `showTime` and `showAt`.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `hud:pref` | Player | JSON of the player's choices (HUD shown, day and time) that differ from the realm's |
+| `hud:pref` | Player | JSON of the player's choices (HUD shown, day and time, where it shows) that differ from the realm's |
 | `hud:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
-- Every `intervalTicks`, for each player with the HUD on, the pack builds the text from the player's location, `getRotation()` (the yaw), `world.getDay()` and `world.getTimeOfDay()`, and calls `onScreenDisplay.setActionBar` only if it changed or `refreshTicks` have passed.
+- Every `intervalTicks`, for each player with the HUD on, the pack builds the text from the player's location, `getRotation()` (the yaw), `world.getDay()` and `world.getTimeOfDay()`, and calls `onScreenDisplay.setActionBar` only if it changed or `refreshTicks` have passed. In a side box it shows the text with the side boxes protocol instead (`scripts/side.js`, see [How the packs work together](#how-the-packs-work-together)), for 140 ticks, sent again when it changes or after 100 ticks; `realm:actionbar` requests don't pause it there.
 - Another pack that puts a message on the bar can send the script event `realm:actionbar` with `{"player":"<player id>","ticks":40}`; the HUD then leaves that player's bar alone for that many ticks (up to 200) and redraws right after. Every pack that writes the bar does this (see the action bar protocol in [How the packs work together](#how-the-packs-work-together)); the packs never import each other.
-- Turning the HUD off clears the bar right away.
+- Turning the HUD off (or moving it) clears the bar or its box right away.
 - Another pack can add a line under the HUD for one player with the script event `realm:hud_line` (`{"player":"<player id>","key":"stats","text":"...","ticks":80}`): it shows while the HUD is on, until `ticks` pass (up to 400; resend to keep it) or a message with `"text":""` removes it. Lines show in `key` order. The Stats pack's ticker uses it.
 - So those packs know whether to draw on their own, the HUD sends `realm:hud_state` (`{"players":["<player id>", ...]}`, the players who see it) when that changes, every 5 seconds, and in reply to `realm:hud_ping`.
 
@@ -1274,22 +1277,24 @@ Operators can change `enabled`, `defaultOn`, `showTime` and `eightWay` in game w
 
 ## Mob Health — `mobhp_bp`
 
-Hit a mob and its name and health show in a small box on the right side of your screen (or in the middle, or above your hotbar, if you prefer), so you know how close it is to going down.
+Hit a mob and its name and health show in a small box on the right side of your screen (or in another box, above the mob's head, or above your hotbar, if you prefer), so you know how close it is to going down.
 
 ### How to use
 
-1. Nothing to set up: hit a mob with anything, or shoot it, and a small box on the right side of your screen, above the scoreboard, shows something like `Zombie  14/20 ||||||||||` with the bar in color. Only you see it.
-2. Don't want it? Run `/realm:mobhp` to hide it for yourself; run it again to show it. The same switch is **Show the health of mobs I hit** in `/realm:prefs`. The choice is remembered.
-3. **Operators:** `/realm:config` → **Mob Health** disables it for the whole realm, shows players' health too when one player hurts another, changes the bar length, or changes what new players start with.
+1. Nothing to set up: hit a mob with anything, or shoot it, and the top box on the right side of your screen (**Right 1**) shows something like `Zombie  14/20 ||||||||||` with the bar in color. Only you see it.
+2. Prefer it somewhere else? Set **Where the health of mobs I hit shows** in `/realm:prefs`: another [Side HUD](#side-hud--hud_rp) box, **Above the mob** (the health floats over the mob's head for 2 seconds) or **Above the hotbar**.
+3. Don't want it? Run `/realm:mobhp` to hide it for yourself; run it again to show it. The same switch is **Show the health of mobs I hit** in `/realm:prefs`. The choice is remembered.
+4. **Operators:** `/realm:config` → **Mob Health** disables it for the whole realm, shows players' health too when one player hurts another, changes the bar length, or changes what new players start with (on or off, and where it shows).
 
 ### What players see
 
-- **Name:** the mob's name tag if it has one, otherwise its name in the game's language (`Zombie`, `Iron Golem`).
+- **Name:** the mob's name tag if it has one, otherwise its name made from its id (`Zombie`, `Iron Golem`; above the hotbar, in the game's language).
 - **Health** after the hit, rounded up to whole points, out of its maximum (`14/20`; 2 points are one heart), then a bar of 10 `|` characters (`barLength`): green above half health, yellow above a quarter, red below that, with the lost part in dark gray. A killing blow shows `0/20`.
 - Shown for melee hits and for arrows, tridents and other projectiles you fired, every time the mob is hurt by you.
 - **Other players** only when an operator enabled **Show players' health too** (`players`, disabled by default): then hurting a player shows their name and health the same way.
 - Enabled for every player until they disable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it.
-- **Where it shows** (`showAt`, default **Right side, above the scoreboard**): a small box on the right side of the screen, just above where the scoreboard sidebar sits, for 2 seconds (`holdTicks`). The box is drawn by [Side HUD](#side-hud--hud_rp) in Realm Resources; without it the text shows in the middle of the screen instead. Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover it there; that's why it never showed on realms with such an add-on. Each player can pick **Middle of the screen** or **Above the hotbar** instead (**Where the health of mobs I hit shows** in `/realm:prefs`); then, with the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD waits 2 seconds after each hit before it draws itself again.
+- **Where it shows** (`showAt`, default **Right 1**): the top box on the right side of the screen, for 2 seconds (`holdTicks`). The boxes are drawn by [Side HUD](#side-hud--hud_rp) in Realm Resources, and each pack can use its own, so the Elytra HUD, Warmer / Colder and the story tracker show at the same time in theirs (without Side HUD the text shows in the middle of the screen). Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover the boxes. Each player can pick another box (**Right 1** to **Right 4**, **Left 1** to **Left 4**, top to bottom, or **Middle of the screen**), **Above the mob** or **Above the hotbar** (**Where the health of mobs I hit shows** in `/realm:prefs`); above the hotbar, with the [Coordinates HUD](#coordinates-hud--hud_bp) on, the HUD waits 2 seconds after each hit before it draws itself again.
+- **Above the mob:** the health, like `14/20 ||||||||||`, becomes the mob's name tag for 2 seconds, then the mob is unnamed again. It's a name tag, so **everyone nearby sees it**, and it shows as name tags do (when you look at the mob). Players and mobs that already have a name keep it: their health shows in the realm's default box instead (**Right 1** when the realm default is also Above the mob).
 
 ### Commands
 
@@ -1305,8 +1310,8 @@ Hit a mob and its name and health show in a small box on the right side of your 
 | `defaultOn` | `true` | Players see it until they disable it for themselves |
 | `players` | `false` | Also show a player's health when you hurt another player |
 | `barLength` | `10` | How many `\|` characters make up the bar (5 to 20 in game) |
-| `showAt` | `"side"` | Where it shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
-| `holdTicks` | `40` | How long (ticks) the health stays on screen; above the hotbar, how long the Coordinates HUD leaves it before drawing itself again |
+| `showAt` | `"right1"` | Where it shows for players who haven't chosen: a [Side HUD](#side-hud--hud_rp) box, `right1` to `right4` or `left1` to `left4` (top to bottom) or `middle` (under the crosshair); `overhead` (the hit mob's name tag, which everyone nearby sees); or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
+| `holdTicks` | `40` | How long (ticks) the health stays on screen or above the mob; above the hotbar, how long the Coordinates HUD leaves it before drawing itself again |
 
 Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt` in game with `/realm:config`. Players pick their own place with **Where the health of mobs I hit shows** in `/realm:prefs`. `holdTicks` stays in `config.js`. Each player switches it for themselves with `/realm:mobhp` or **Show the health of mobs I hit** in `/realm:prefs`; players whose own choice differs from `defaultOn` keep it when `defaultOn` changes.
 
@@ -1316,21 +1321,23 @@ Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt`
 |---|---|---|
 | `mobhp:pref` | Player | JSON of the player's choices from `/realm:mobhp` or `/realm:prefs` (shown or hidden, where it shows) that differ from the realm's |
 | `mobhp:cfg` | World | Settings changed in `/realm:config` |
+| `mobhp:tag` | Entity | While the health shows above a mob: the name tag the pack wrote, so it only takes off its own. The mob also carries the tag `mobhp_tag` |
 
 ### How it works
 
-- `world.afterEvents.entityHurt` gives the hurt mob and the damage source. When the damaging entity (the shooter, for a projectile) is a player with it on, the pack reads the mob's `minecraft:health` component and shows it on that player's screen, with the mob's name as a translated text so it reads in each player's language: on the right side as a title marked `§s§1§r` that [Side HUD](#side-hud--hud_rp) draws as a box (cleared with `§s§0§r` after `holdTicks`, unless another pack took the box meanwhile: each sends the script event `realm:side` `{player, from, ticks}` when it does), on the subtitle line, or on the action bar.
+- `world.afterEvents.entityHurt` gives the hurt mob and the damage source. When the damaging entity (the shooter, for a projectile) is a player with it on, the pack reads the mob's `minecraft:health` component and shows it: in the player's [Side HUD](#side-hud--hud_rp) box for `holdTicks` with the side boxes protocol (`scripts/side.js`, see [How the packs work together](#how-the-packs-work-together)), or on the action bar with the mob's name as a translated text so it reads in each player's language.
+- **Above the mob:** the pack sets the mob's `nameTag` to the health, adds the tag `mobhp_tag` and saves what it wrote in `mobhp:tag`; every 5 ticks it takes the name off mobs whose `holdTicks` passed (only if the name is still what it wrote: another pack may have named the mob meanwhile). A mob that unloaded or a server that stopped mid-display is cleaned up when the mob loads again (`entityLoad`) and when the world loads (every mob tagged `mobhp_tag`), because named mobs never despawn. Players and mobs with a name tag are never renamed.
 - Above the hotbar it also sends the script event `realm:actionbar` with `{"player":"<id>","ticks":40}` (`holdTicks`), which the Coordinates HUD understands. Without the HUD nothing listens and nothing happens.
 
 ---
 
 ## Elytra HUD — `elytra_bp`
 
-While you glide, a small box on the right side of your screen (or the middle, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.
+While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.
 
 ### How to use
 
-1. Put on an elytra and glide. On the right side of the screen, above the scoreboard, you see something like `31.4 blocks/s  Y 142  Elytra 87%  Rockets 12`, updated 4 times a second.
+1. Put on an elytra and glide. In the second box on the right side of the screen (**Right 2**) you see something like `31.4 blocks/s  Y 142` and under it `Elytra 87%  Rockets 12`, updated 4 times a second. Prefer another place? **Where my Elytra HUD shows** in `/realm:prefs`.
 2. Don't want it? Run `/realm:elytra`, or disable **Elytra HUD while gliding** in `/realm:prefs`. Chat says `Elytra HUD: Disabled. Run /realm:elytra again to enable it.` The choice is remembered.
 3. **Operators:** to turn it off for everyone, disable **Elytra HUD** in `/realm:config` → **Elytra HUD**. The same page sets when durability turns red.
 
@@ -1338,9 +1345,9 @@ While you glide, a small box on the right side of your screen (or the middle, or
 
 - **Speed** in blocks per second (your total speed, diving included), **Y** (your height), **Elytra** durability left in percent and **Rockets**: firework rockets in your inventory and offhand.
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
-- The bar only shows while you're gliding and fades a moment after you land. Nothing is shown, and nothing is checked, for players who aren't gliding.
-- When it shows above the hotbar and the [Coordinates HUD](#coordinates-hud--hud_bp) is on, the coordinates pause while you glide, so the two don't take turns on the bar; they come back a second or two after you land. On the right side or in the middle, both show at once.
-- **Where it shows** (`showAt`, default **Right side, above the scoreboard**): a small box drawn by [Side HUD](#side-hud--hud_rp) (in the middle of the screen without it), which other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover; that's why it never showed on realms with such an add-on. Players can pick **Middle of the screen** or **Above the hotbar** in `/realm:prefs` (**Where my Elytra HUD shows**); there, other messages (low durability warnings, claim borders, the sleep count) can briefly swap places with it.
+- It only shows while you're gliding: the box goes away as you land (above the hotbar, the bar fades a moment after). Nothing is shown, and nothing is checked, for players who aren't gliding.
+- When it shows above the hotbar and the [Coordinates HUD](#coordinates-hud--hud_bp) is on, the coordinates pause while you glide, so the two don't take turns on the bar; they come back a second or two after you land. In a side box, both show at once.
+- **Where it shows** (`showAt`, default **Right 2**): a [Side HUD](#side-hud--hud_rp) box (in the middle of the screen without Side HUD), which shows at the same time as the other packs' boxes and which other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover. Players can pick another box (**Right 1** to **Right 4**, **Left 1** to **Left 4**, or **Middle of the screen**) or **Above the hotbar** in `/realm:prefs` (**Where my Elytra HUD shows**); above the hotbar it's one line, and other messages (low durability warnings, claim borders, the sleep count) can briefly swap places with it.
 
 ### Commands
 
@@ -1355,7 +1362,7 @@ While you glide, a small box on the right side of your screen (or the middle, or
 | `enabled` | `true` | The gliding HUD for the whole realm. Disabled: nobody sees it and `/realm:elytra` says so |
 | `intervalTicks` | `5` | Ticks between HUD updates while gliding (5 = 4 times a second) |
 | `lowPercent` | `10` | Elytra durability left (percent) at or below which it shows in red (1 to 50 in game) |
-| `showAt` | `"side"` | Where it shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
+| `showAt` | `"right2"` | Where it shows for players who haven't chosen: a [Side HUD](#side-hud--hud_rp) box, `right1` to `right4` or `left1` to `left4` (top to bottom) or `middle` (under the crosshair), or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
 
 Operators can change `enabled`, `lowPercent` and `showAt` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`, and pick where it shows (**Where my Elytra HUD shows**).
 
@@ -1368,7 +1375,7 @@ Operators can change `enabled`, `lowPercent` and `showAt` in game with `/realm:c
 
 ### How it works
 
-Every `intervalTicks` the pack looks at each player's `isGliding`. For gliding players who haven't disabled it, it reads `getVelocity()` (blocks per tick, times 20), their Y, the chest slot's durability through the equippable component, and counts rockets in the inventory and offhand, then writes the line: on the right side as a title marked `§s§1§r` that [Side HUD](#side-hud--hud_rp) draws as a box (with `realm:side`, as Mob Health does), on the subtitle line, or with `onScreenDisplay.setActionBar`.
+Every `intervalTicks` the pack looks at each player's `isGliding`. For gliding players who haven't disabled it, it reads `getVelocity()` (blocks per tick, times 20), their Y, the chest slot's durability through the equippable component, and counts rockets in the inventory and offhand, then writes it: in the player's [Side HUD](#side-hud--hud_rp) box for `intervalTicks` + 10 ticks with the side boxes protocol (`scripts/side.js`, as Mob Health does), taken off as soon as the player stops gliding, or with `onScreenDisplay.setActionBar`.
 
 Above the hotbar, it also sends the script event `realm:actionbar` with `{"player":"<id>","ticks":30}` (renewed every 10 ticks; `ticks` is at least 3 times `intervalTicks`), the same request Mob Health makes, so the Coordinates HUD leaves that player's bar alone until they stop gliding. Without the HUD nothing listens.
 
@@ -2120,18 +2127,18 @@ Operators can change `enabled`, `everyDays`, `offsetDays`, `hourUtc`, `stayMinut
 
 ## Story Questlines — `saga_bp`
 
-An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (about 40 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker above the hotbar points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
+An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (about 40 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
 
 ### How to use
 
 1. Tap a townsfolk with a story button: `Main story: The Drowned Bell` (Old Tobin) or `Main story: The Cartographer's Last Map` (Mara) to begin. Read the pages with **Next**, then pick **Accept** (or **Not now**: you can come back any time). Some intros end with a choice instead of Accept.
-2. Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker on the right side of the screen (above the scoreboard) always shows where to go next (`Drowned Bell: Lighthouse NE 240m`), or who to report to.
+2. Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker in the bottom box on the right side of the screen (**Right 4**, just above the scoreboard) always shows where to go next (`Drowned Bell: Lighthouse NE 240m`), or who to report to.
 3. Stuck? Open `/realm:saga`, pick **Current quests** and the story, then **Ask for a hint**: it says what to do and gives the exact coordinates of every place in the chapter, for a quarter of the chapter's levels and Crowns (once per chapter).
 4. When everything is done, chat says `[Story] The Drowned Bell: "Salt and Silence" is done. Go back to Old Tobin to hear what happens.` Tap that NPC and pick the story (`Done: report back`). If the chapter ends with a choice, nothing is final until you pick one: close the form and the report waits.
 5. Finished stories open new ones: chat names them, and **Available** in `/realm:saga` lists what you can start and what's still locked.
 6. Each questgiver also has a **Daily favor** button: a short job, a new one each day (UTC), for a few levels and Crowns.
 7. In a party (the [Parties](#parties--party_bp) pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.
-8. Don't want the tracker? Disable **Story tracker** in `/realm:prefs`. **Where my story tracker shows** there moves it to the middle of the screen or above the hotbar (the right side and the middle can't be covered by other add-ons, such as waypoint add-ons, that redraw the line above the hotbar all the time).
+8. Don't want the tracker? Disable **Story tracker** in `/realm:prefs`. **Where my story tracker shows** there moves it to another [Side HUD](#side-hud--hud_rp) box (**Right 1** to **Right 4**, **Left 1** to **Left 4**, **Middle of the screen**) or above the hotbar (the boxes can't be covered by other add-ons, such as waypoint add-ons, that redraw the line above the hotbar all the time).
 9. **Operators:** stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. `/realm:saga_places` (also in `/realm:saga`) lists every place with its status and lets you **Teleport**, **Set here**, **Build here** (a green outline preview with Build here, Rotate, Look around and Cancel), **Rebuild**, **Remove** (puts the terrain back exactly) and **Relocate**. `/realm:saga_place <name>` sets a spot where you stand without building. **Operator tools** in `/realm:saga` finish a stuck player's current step or reset their stories. `/realm:config` → **Story Questlines** has the switches.
 
 ### What players see
@@ -2166,7 +2173,7 @@ An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (
   - **Use:** use an item (eat, drink, right-click), sometimes at a place.
   - **Wait:** some real minutes or in-game days pass (`2 days left`); it counts while you're away too (in-game days only while the realm runs).
 - **Progress notes:** chat says `[Story] Defeat 12 drowned: done.` and the next step for each objective; for counts of 4 or more, a note shows each quarter where the tracker shows.
-- **The tracker** (every 2 seconds): `Drowned Bell: Lighthouse NE 240m`, `here` once you're in range, `in the Nether`, a countdown for timed steps, `report to Old Tobin NE 40m` when the chapter is done, the wisp or the person you're escorting, or `Lighthouse isn't set yet`. With several stories going, it follows the chapter you accepted last. On the right side or above the hotbar, it waits while another pack's note is showing there.
+- **The tracker** (every 2 seconds): `Drowned Bell: Lighthouse NE 240m`, `here` once you're in range, `in the Nether`, a countdown for timed steps, `report to Old Tobin NE 40m` when the chapter is done, the wisp or the person you're escorting, or `Lighthouse isn't set yet`. With several stories going, it follows the chapter you accepted last. It waits while another pack's note is showing in the same place (above the hotbar, or in its box if you put another pack's readout there too).
 - **Hints:** **Ask for a hint** on a chapter's page shows the chapter's hint, each step's hint, and the exact coordinates of every place in the unfinished steps (and where the NPC you need stands, when loaded), and shows the tracker arrow for secret steps. It costs 25% of the chapter's levels and Crowns (`hintPenalty`, asked for once per chapter; items, relics and titles are kept).
 - **Rewards** at the end of each chapter: XP levels and items (some named, with a description), Crowns (on the [Crowns](#crowns--crowns_bp) scoreboard), a **Codex** entry (`[Codex] New entry: ...`), and, through other packs when they're installed, a relic ([Relics](#relics--relics_bp)), a title ([Titles & Trails](#titles--trails--titles_bp)), a `story` page in the [Field Journal](#field-journal--journal_bp) and guild reputation ([Guilds & Reputation](#guilds--reputation--guilds_bp)). Without those packs, those parts are skipped.
 - **The story log** (`/realm:saga`): the story you're on and its **Current step**, then **Current quests** (main story first, then side stories and favors; each opens the chapter's page with its objectives, distance and direction, who to report to, **Ask for a hint** and **Hear the intro again**), **Available** (stories to start and who starts them, and the next locked ones with what they need), **Finished** (each story's chapters, your choices and the ending), **Codex** (every lore entry you've found, to reread), **Daily favors** (each questgiver's favor today), and for operators **Story places** and **Operator tools**.
@@ -2220,7 +2227,7 @@ The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, o
 |---|---|---|
 | `enabled` | `true` | Stories can be started and make progress. Disabled, the story log still opens (`Stories are paused by an operator`) but nothing counts and NPCs offer nothing |
 | `tracker` | `true` | The story tracker, for players who haven't chosen in `/realm:prefs` |
-| `trackerAt` | `"side"` | Where the tracker and progress notes show for players who haven't chosen in `/realm:prefs`: `"side"` (a panel on the right, above the scoreboard sidebar, drawn by the HUD resource pack `hud_rp`), `"middle"` (the subtitle line in the middle of the screen) or `"hotbar"` (above the hotbar). Add-ons that redraw the action bar every tick can't cover the first two |
+| `trackerAt` | `"right4"` | Where the tracker and progress notes show for players who haven't chosen in `/realm:prefs`: a [Side HUD](#side-hud--hud_rp) box, `"right1"` to `"right4"` or `"left1"` to `"left4"` (top to bottom) or `"middle"` (under the crosshair), or `"hotbar"` (above the hotbar). The boxes show at the same time as other packs' boxes, and add-ons that redraw the action bar every tick can't cover them |
 | `partyShare` | `true` | Party mates on the same chapter share progress for defeat, survive and reach objectives |
 | `partyRange` | `64` | How close (blocks) a party mate must be to share progress |
 | `skipCreative` | `true` | Players in creative mode make no story progress |
@@ -2261,7 +2268,7 @@ Operators can change every option but `offerOrder` in game with `/realm:config`.
 - **Places:** a picked place is built by a job that tries the picked spot and 32 spots around it within 48 blocks, asks the prefab's `siteOk` whether the column suits the place, checks that the building's box holds nothing player-made, saves the box with `structureManager.createFromWorld` (tiles of up to 64 by 64, saved in the world), then runs the prefab's build steps. After 3 moves any open land will do; after 6 it gives up and tells operators. Remove places the snapshot back and deletes it.
 - **Seals:** for the Relics pack's Lantern Shard, the pack sends `realm:seals` `{ player, seals: [{ name, dim, x, z }] }` with the seal places that are set and whose Act IV relight chapter that player hasn't finished, when it changes (checked every 5 seconds), at load and in reply to `realm:seals_ping`.
 - **Finishing a chapter** gives the reward (levels and Crowns cut by `hintPenalty` after a hint) and sends `realm:quest_done` `{ player, pack: "saga_bp", id: "<story>:<chapter>", label, kind: "story" }` (`kind: "favor"` for favors), `realm:rep_add` for the choice's and chapter's reputation, `realm:relic_give`, `realm:title_unlock` and `realm:journal` (page `story`). Crowns go straight onto the `crowns` scoreboard.
-- **The tracker** shows on the right side by default: `setTitle("§s§1§r", { subtitle })`, which `hud_rp` draws as a panel above the sidebar, then `realm:side` `{ player, from: "saga", ticks }`; the pack remembers the last `realm:side` writer per player and, when its text runs out, clears the panel (`setTitle("§s§0§r")`) only if it was the last to write. `middle` is a plain subtitle (`setTitle("§r", { subtitle })`). Above the hotbar it listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds), and sends its own with `from: "saga_bp"`; on the right side it likewise skips while another pack's `realm:side` text lasts (its `ticks`, up to 10 seconds); in the middle only its own progress notes make it wait.
+- **The tracker** shows in a [Side HUD](#side-hud--hud_rp) box by default (`right4`), with the side boxes protocol (`scripts/side.js`, see [How the packs work together](#how-the-packs-work-together)): each update shows for 50 ticks, a progress note for its own length. In a box it skips its update while another pack's readout is in the same box. Above the hotbar it listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds), and sends its own with `from: "saga_bp"`; its own progress notes make it wait in either place.
 - **Testing hook:** `/scriptevent realm:saga_debug {"player":"<name>","action":"state"}` prints a player's saved progress to the content log; `"action":"finish","story":"<id>"` marks a whole story finished; `"action":"places"` sends the player every saved place as JSON; `"action":"jump","story":"<id>","chapter":"<id>"` marks every chapter before that one finished; both take `"flags":{...}` to set (a `g:` key is player-wide); `"action":"answer","text":"..."` answers the player's open riddle. Script events need operator rights.
 
 ---
@@ -3821,7 +3828,7 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 
 1. Find Mara the Cartographer (or any NPC with the `cartographer` role, from [Townsfolk](#townsfolk--npc_bp)), tap her and pick **Buy a treasure map (50 Crowns)**. You get a piece of paper named `Treasure Map`, and chat reads the first clue, for example `"Walk toward the setting sun for about twelve hundred paces, and there the next riddle waits."`
 2. Work out the direction: the North Star is north, the rising sun is east, the setting sun is west, and "with the North Star at your back" is south. A pace is a block.
-3. Hold the map in your hand: every 2 seconds the box on the right side of the screen, above the scoreboard (or the middle of the screen or the line above the hotbar, if you choose it in `/realm:prefs`), says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
+3. Hold the map in your hand: every 2 seconds the third box on the right side of the screen (**Right 3**; another box or the line above the hotbar, if you choose it with **Where Warmer / Colder shows for me** in `/realm:prefs`) says `Warmer`, `Colder` or `Very warm`, with which clue you're on.
 4. Get within 30 blocks of where the clue points and the next clue appears in chat and on the map. As you get close, the map also names what the spot looks like (`The spot lies among the trees.`).
 5. On the last clue, once you're close, the map grows hot: the chest is buried nearby, 1 to 3 blocks down. Follow `Hot` to `Burning hot! Dig here.`; standing over it pays the Crowns. Then dig up the chest for the rest.
 6. Lost the map, or the clue? Run `/realm:maps` (or `/realm:maps_hunts`) for your hunt's clue, a new copy of the map, or to give the hunt up.
@@ -3864,7 +3871,7 @@ Buy a treasure map from Mara the Cartographer and follow its riddles across the 
 | `searchRadius` | `32` | How far from the planned spot the chest may be buried |
 | `avoidSpawn` | `64` | Never bury a chest closer than this to world spawn |
 | `warmth` | `true` | Show Warmer / Colder / Very warm while holding a Treasure Map |
-| `showAt` | `"side"` | Where Warmer / Colder shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar`. Other add-ons that redraw the line above the hotbar (waypoint and compass add-ons) can cover only `hotbar`. Players pick their own with **Where Warmer / Colder shows for me** in `/realm:prefs` |
+| `showAt` | `"right3"` | Where Warmer / Colder shows for players who haven't chosen: a [Side HUD](#side-hud--hud_rp) box, `right1` to `right4` or `left1` to `left4` (top to bottom) or `middle` (under the crosshair), or `hotbar`. The boxes show at the same time as other packs' boxes. Other add-ons that redraw the line above the hotbar (waypoint and compass add-ons) can cover only `hotbar`. Players pick their own with **Where Warmer / Colder shows for me** in `/realm:prefs` |
 | `veryWarm` | `40` | `Very warm` within this many blocks of the next clue or the chest |
 | `plainHints` | `false` | `/realm:maps` also shows the plain direction and distance from where you stand, like `(W, about 1,000 blocks)` |
 | `crownsMin` | `30` | Least Crowns found with a treasure |
@@ -3892,7 +3899,7 @@ Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`
 ### How it works
 
 - **The route** is planned when the map is bought: a random direction (retried up to 16 times to keep the treasure away from world spawn), a distance, and evenly spaced leg ends with a sideways wander of up to a quarter of a leg. Nothing is placed then: the far land isn't loaded yet.
-- **Following:** once a second the pack checks each player with a hunt (Overworld only) against the end of their leg; the Warmer / Colder line runs every 2 seconds for players holding a map. On the right side it follows the side box protocol (`realm:side`, see [How the packs work together](#how-the-packs-work-together)); above the hotbar it sends `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside. The place description reads the highest block at the leg's end (and 4 around it, for water).
+- **Following:** once a second the pack checks each player with a hunt (Overworld only) against the end of their leg; the Warmer / Colder line runs every 2 seconds for players holding a map. In a box it follows the side boxes protocol (`scripts/side.js`, `realm:side`, see [How the packs work together](#how-the-packs-work-together)) and shows for 45 ticks; above the hotbar it sends `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside. The place description reads the highest block at the leg's end (and 4 around it, for water).
 - **Burying** is a search spread over time: at most 150 block reads every 10 ticks for all players together. It tries the planned spot, then rings 6, 12, 18, 24 and 30 blocks out, and for each candidate reads the ground, the blocks down to the chest, and the 9 x 9 columns around it (surface +4 to -4). The chest is placed with `Block.setType` and filled through its inventory component.
 - **The map** is plain paper (no map mechanics) identified by its name and its last lore line, `Map <id>`; its lore is rewritten in the inventory when the clue changes, and it's taken away when the hunt ends.
 - **Cartographers:** on `realm:npc_talk` with the `cartographer` role the pack answers `realm:npc_offer` with **Buy a treasure map** (`order` 20) and, during a hunt, **Your treasure hunt** (21).
@@ -5320,20 +5327,21 @@ Player preference, in `/realm:prefs` (**Translucent Tools**): **Translucent tool
 
 ## Side HUD — `hud_rp`
 
-A small box on the right side of the screen, just above where the scoreboard sidebar sits, for the short readouts other packs show: [Mob Health](#mob-health--mobhp_bp), the [Elytra HUD](#elytra-hud--elytra_bp), treasure map [Warmer / Colder](#treasure-maps--maps_bp) and the [story tracker](#story-questlines--saga_bp). Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover it. A **resource pack**, part of **Realm Resources** (or on its own).
+Nine small boxes for the short readouts other packs show, so several can be on screen at once: four down the right side of the screen (**Right 1** to **Right 4**, just above where the scoreboard sidebar sits), four down the left side (**Left 1** to **Left 4**) and one just under the crosshair (**Middle of the screen**). [Mob Health](#mob-health--mobhp_bp), the [Elytra HUD](#elytra-hud--elytra_bp), treasure map [Warmer / Colder](#treasure-maps--maps_bp), the [story tracker](#story-questlines--saga_bp) and, if you choose, the [Coordinates HUD](#coordinates-hud--hud_bp) each use their own. Other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover them. A **resource pack**, part of **Realm Resources** (or on its own).
 
 ### How to use
 
-1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join. Hit a mob, glide or hold a treasure map and the readout shows in the box on the right.
-2. Prefer another spot? Run `/realm:prefs`, pick the pack (Mob Health, Elytra HUD, Treasure Maps, Story Questlines) and change **Where ... shows** to **Middle of the screen** or **Above the hotbar**.
-3. **Operators:** it comes with Realm Resources. The realm default for each pack is its `showAt` setting in `/realm:config` (`trackerAt` for Story Questlines; default `side`).
+1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join. Hit a mob, glide, hold a treasure map or follow a story and each readout shows in its own box: out of the box Mob Health uses **Right 1**, the Elytra HUD **Right 2**, Warmer / Colder **Right 3** and the story tracker **Right 4**, so all four can show together.
+2. Prefer another spot? Run `/realm:prefs`, pick the pack (Mob Health, Elytra HUD, Treasure Maps & Riddles, Story Questlines, Coordinates HUD) and change **Where ... shows** to any box, **Above the hotbar**, or for Mob Health **Above the mob**. Two packs in the same box take turns (the newest readout shows).
+3. **Operators:** it comes with Realm Resources. The realm default for each pack is its `showAt` setting in `/realm:config` (`trackerAt` for Story Questlines); give each pack a different box so they don't take turns.
 
 ### What players see
 
-- **The box:** white text on a dark, half see-through background, right-aligned against the edge of the screen, its bottom 60 pixels above the middle of the right edge. The scoreboard sidebar is centered on that edge, so the box sits above a sidebar of up to about 10 rows (a taller one overlaps it).
-- **One readout at a time:** the last pack to write wins, and the box disappears when that readout ends (2 seconds after a hit, as soon as you land, 2 seconds after you stop holding the map).
-- **Without this pack** (or with an older Realm Resources) the same text shows in the middle of the screen instead, as a subtitle. Nothing breaks.
-- **Titles from commands and other packs** (`/title`, area names, boss intros) show in the middle as always.
+- **The boxes:** white text on a dark, half see-through background, up to 200 pixels wide and 60 high (about 6 lines; longer text wraps). A box shows only while its readout lasts and disappears when it ends (2 seconds after a hit, as soon as you land, 2 seconds after you stop holding the map).
+- **Right 1 to Right 4** are stacked top to bottom against the right edge, right-aligned; the bottom of the stack sits 60 pixels above the middle of the edge, so it grows upward from just above a scoreboard sidebar of up to about 10 rows. **Left 1 to Left 4** are stacked against the left edge, left-aligned, starting 20 pixels above the middle of the edge. **Middle of the screen** is centered 14 pixels under the crosshair. Empty boxes take no room, or at most a thin line (not checked in a game client).
+- **Each pack keeps its own box** and they update independently: mob health on a hit while the Elytra HUD counts your speed and the story tracker points the way.
+- **Without this pack** (or with an older Realm Resources) the same readouts show in the middle of the screen instead, as a subtitle, one per line (a readout may end with a `~` or two there). Nothing breaks.
+- **Titles from commands and other packs** (`/title`, area names, boss intros) show in the middle as always, but a pack that updates a box afterward replaces them, as before: titles are one channel.
 
 ### Saved data
 
@@ -5341,9 +5349,11 @@ None. It's a resource pack: no scripts and no commands.
 
 ### How it works
 
-- `ui/hud_screen.json` adds to Minecraft's HUD (JSON UI `modifications`, so other packs that change the HUD still merge): a box anchored to the right edge that shows the subtitle text whenever the title text is exactly `§s§1§r` (color codes only, so it's invisible on its own), and a visibility binding on the vanilla title and subtitle that hides them for `§s§1§r` and `§s§0§r`. The vanilla title and subtitle frames are copied from Mojang's `hud_screen.json` with only that binding added; after a Minecraft update that changes them, copy them again.
-- A pack shows text with `setTitle("§s§1§r", { subtitle })` and clears the box with `setTitle("§s§0§r")` when its readout ends. The `realm:side` script event (in [How the packs work together](#how-the-packs-work-together)) makes sure only the last writer clears it.
-- Checked by reading against Mojang's files, not in a game client (a dedicated server doesn't draw the HUD). If the box sits in the wrong spot on some screen size, the numbers to change are `anchor_from`, `anchor_to` and `offset` of `realm_side_box`.
+- `ui/hud_screen.json` adds to Minecraft's HUD (JSON UI `modifications`, so other packs that change the HUD still merge) a panel with the nine boxes, and a visibility binding on the vanilla title and subtitle that hides them when the title is `§s§2§r`, `§s§1§r` or `§s§0§r` (color codes only, so they're invisible on their own). The vanilla title and subtitle frames are copied from Mojang's `hud_screen.json` with only that binding added; after a Minecraft update that changes them, copy them again.
+- **The message:** the server can send the HUD only the title, the subtitle and the action bar, so all nine boxes travel in one subtitle: the title is `§s§2§r`, and the subtitle is `§s§2§r` followed by nine segments of exactly 160 bytes (UTF-8) in the order Right 1-4, Left 1-4, Middle. A segment is one separator byte (a space, or a new line so the vanilla fallback shows one readout per line), the text (up to 159 bytes, `\n` for a new line), 0 to 2 `~` and then `§r` up to the full width; an empty one is a space and 53 `§r`. Packs build it with `scripts/side.js` (the side boxes protocol in [How the packs work together](#how-the-packs-work-together)).
+- **Cutting it up:** each box (the `realm_slot` template, with its own `$skip`) reads its segment with JSON UI string expressions: `('%.Ns' * text)` keeps the first N bytes (byte-counted, per the [Bedrock wiki](https://wiki.bedrock.dev/json-ui/json-ui-intro)) and `(a - b)` removes `b` from `a`, so `('%.159s' * (sub - ($skip * sub)))` is the segment after the separator (`$skip` is `%.10s` for Right 1, 160 more for each next box). The box shows while the title is `§s§2§r` and the segment isn't the empty one; its label removes the `~` filler, and the `§r` filler is invisible. Nothing else in the subtitle starts with `§s§2§r`, so the removed prefix is only ever found once. `tools/side-shared.js` explains the format next to the code that writes it.
+- **Older packs:** the single box of the first version (title exactly `§s§1§r`, the subtitle as its text, cleared with `§s§0§r`) still works, at the place of the right-hand stack.
+- Checked by reading against Mojang's files and with a byte-exact simulation of the expressions on the subtitles the packs send (in a dedicated server test), not in a game client (a dedicated server doesn't draw the HUD). If the boxes sit in the wrong spot on some screen size, the numbers to change are `anchor_from`, `anchor_to` and `offset` of `realm_side_right`, `realm_side_left` and `realm_side_middle`.
 
 ---
 
@@ -5461,7 +5471,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 - **`background: true`** marks a steady line that an expedition's run line needn't wait for (the other steady lines still do). The Party HUD sends it, so an expedition's run line takes the bar during a party run; the Party HUD itself waits for the run line and for every note.
 - Packs that only show a short note now and then just send the request and write; they don't listen. Without any listener nothing happens.
 
-**The side box protocol** (one box on the right side, from [Side HUD](#side-hud--hud_rp)): a pack that writes the box sends `realm:side` `{ player, from, ticks }` right after, and every pack that uses the box remembers the last `from` per player. When its readout ends, a pack clears the box (`setTitle("§s§0§r")`) only if it is still the last writer, so it never wipes another pack's text. The story tracker, which redraws every 2 seconds, waits while another pack's `ticks` last, so a hit's mob health or a Warmer / Colder note stays readable. Mob Health, the Elytra HUD, Treasure Maps and Story Questlines use it.
+**The side boxes protocol** (nine boxes, from [Side HUD](#side-hud--hud_rp)): every pack that shows a readout in a box keeps a copy of `tools/side-shared.js` as `scripts/side.js` (`node tools/sync-side.mjs` keeps them the same; `--check` is part of `npm run check`) and calls `show(player, slot, text, ticks)` or `clear(player)`. Slots are `right1`-`right4`, `left1`-`left4` and `middle`; a pack holds one slot per player, and two packs in the same slot take turns (the newest wins). Each copy keeps the same picture of every player's slots: a pack that changes its slot sends `realm:side` `{ player, from, slot, text, ticks, tick }` (`text` up to 159 bytes, `""` when its readout ended; `ticks` up to 1200; `tick` when it was sent), then draws the whole title with every slot that hasn't run out (`setTitle("§s§2§r", { subtitle })`, no fade, staying until the last one runs out). The other copies update their picture, and draw again only if they drew in the last 2 ticks or later (their title may have crossed this one on the way). When a readout runs out (checked every 4 ticks), the pack that wrote it draws again without it, or clears the title (`§s§0§r`) when nothing is left. Mob Health (`right1`), the Elytra HUD (`right2`), Treasure Maps (`right3`), Story Questlines (`right4`) and the Coordinates HUD (when a player puts it in a box) use it; the story tracker skips its update while another pack's readout is in its box.
 
 Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, both in Realm Resources; and the adventure packs are best together, but any combination works. Translucent Tools only changes how held items are drawn; its one link is Translucent Tools Switch, which tells it per player whether to draw tools solid.
 

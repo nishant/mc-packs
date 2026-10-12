@@ -1,6 +1,7 @@
 import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
+import { isSlot, sideBoxes } from "./side.js";
 
 // The "on" and "showTime" preferences (player property "hud:pref") and the world options live in settings.js.
 
@@ -9,7 +10,11 @@ const COMPASS_4 = ["N", "E", "S", "W"];
 /** The fastest the HUD may update: twice a second. */
 const MIN_INTERVAL = 10;
 
-/** player id -> { text, at } of what was last shown */
+/** In a side box the HUD is sent again only after this many ticks when nothing changed (each send redraws every box). */
+const BOX_REFRESH = 100;
+const side = sideBoxes("hud");
+
+/** player id -> { text, at, inBox } of what was last shown */
 const shown = new Map();
 /** player id -> tick until which another pack's action bar message is left alone */
 const pausedUntil = new Map();
@@ -48,11 +53,11 @@ function extraLines(playerId, now) {
   return [...lines].sort((a, b) => a[0].localeCompare(b[0])).map(([, line]) => line.text);
 }
 
-/** @param {Player} player @param {number} now */
-function hudText(player, now) {
+/** @param {Player} player @param {number} now @param {string} [gap] before the day and time: a new line in a side box */
+function hudText(player, now, gap = "  ") {
   const at = player.location;
   let text = `§7XYZ §f${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)}  §7Facing §f${facing(player)}`;
-  if (getFor(player, "showTime") === true) text += `  §7Day §f${world.getDay() + 1} §7at §f${clock()}`;
+  if (getFor(player, "showTime") === true) text += `${gap}§7Day §f${world.getDay() + 1} §7at §f${clock()}`;
   for (const line of extraLines(player.id, now)) text += `§r\n${line}`;
   return text;
 }
@@ -79,12 +84,18 @@ system.runInterval(() => {
     try {
       if (!hudFor(player)) continue;
       seeing.push(player.id);
-      if ((pausedUntil.get(player.id) ?? 0) > now) continue;
-      const text = hudText(player, now);
+      const where = getFor(player, "where");
+      const inBox = isSlot(where);
+      // Notes above the hotbar from other packs (realm:actionbar) only pause the HUD when it's there too.
+      if (!inBox && (pausedUntil.get(player.id) ?? 0) > now) continue;
+      const text = hudText(player, now, inBox ? "\n" : "  ");
+      const key = `${where}|${text}`;
       const last = shown.get(player.id);
-      if (last && last.text === text && now - last.at < CONFIG.refreshTicks) continue;
-      player.onScreenDisplay.setActionBar(text);
-      shown.set(player.id, { text, at: now });
+      if (last && last.text === key && now - last.at < (inBox ? BOX_REFRESH : CONFIG.refreshTicks)) continue;
+      if (last && last.inBox && !inBox) side.clear(player); // moved from a box to the hotbar
+      if (inBox) side.show(player, where, text, BOX_REFRESH + 40);
+      else player.onScreenDisplay.setActionBar(text);
+      shown.set(player.id, { text: key, at: now, inBox });
     } catch (e) {
       console.warn(`[hud] ${e}`);
     }
@@ -104,8 +115,11 @@ const seeingNow = () => world.getAllPlayers().filter(hudFor).map((p) => p.id);
 onChange((key, player) => {
   const players = player ? [player] : world.getAllPlayers();
   for (const p of players) {
-    const had = shown.delete(p.id);
-    if (had && !hudFor(p)) p.onScreenDisplay.setActionBar("");
+    const had = shown.get(p.id);
+    shown.delete(p.id);
+    // Off, or moved: the next round draws it again where it belongs.
+    if (had?.inBox) side.clear(p);
+    else if (had && !hudFor(p)) p.onScreenDisplay.setActionBar("");
   }
   sendState(seeingNow());
 });
@@ -137,7 +151,7 @@ system.afterEvents.scriptEventReceive.subscribe(
       //   /scriptevent realm:actionbar {"player":"<player id>","ticks":40}
       const ticks = Math.min(Math.max(Number(req.ticks) || 40, 0), 200);
       pausedUntil.set(req.player, system.currentTick + ticks);
-      shown.delete(req.player); // redraw as soon as the pause ends
+      if (!shown.get(req.player)?.inBox) shown.delete(req.player); // redraw as soon as the pause ends
     } catch {
       // not for us
     }

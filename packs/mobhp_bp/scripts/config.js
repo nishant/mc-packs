@@ -1,12 +1,13 @@
 export const CONFIG = {
   /**
-   * Where it shows for players who haven't chosen in /realm:prefs: "side" (a box on the right side of the
-   * screen, just above the scoreboard; needs Side HUD from Realm Resources, otherwise it shows in the
-   * middle), "middle" (the subtitle line in the middle of the screen) or "hotbar" (the action bar above
-   * the hotbar). Other add-ons that redraw the action bar all the time, like waypoint and compass add-ons,
-   * can't cover the side or the middle.
+   * Where it shows for players who haven't chosen in /realm:prefs: one of the Side HUD boxes (Realm Resources)
+   * "right1".."right4", "left1".."left4" (top to bottom) or "middle" (under the crosshair); "overhead" (a name
+   * tag above the hit mob for holdTicks, which everyone nearby sees; players and mobs with a name show in
+   * "right1" instead); or "hotbar" (the action bar above the hotbar). The boxes show at the same time as the
+   * other packs' boxes, and other add-ons that redraw the action bar all the time can't cover them.
+   * Without Side HUD the boxes' text shows in the middle of the screen.
    */
-  showAt: "side",
+  showAt: "right1",
 
   /** Mob health on the action bar for the whole realm. Disabled: nobody sees it, whatever they chose. */
   enabled: true,
@@ -20,6 +21,6 @@ export const CONFIG = {
   /** How many | characters make up the health bar. */
   barLength: 10,
 
-  /** How long (ticks) the Coordinates HUD leaves the health on the action bar before drawing itself again. */
+  /** How long (ticks) the health shows after a hit (and the Coordinates HUD leaves it on the action bar). */
   holdTicks: 40,
 };

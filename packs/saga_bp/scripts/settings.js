@@ -2,6 +2,7 @@
 // options with get() / getFor() instead of config.js directly, so changes apply without a restart.
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { SLOT_NAMES, SLOTS } from "./side.js";
 
 const PACK = "saga_bp";
 const PREFIX = "saga";
@@ -12,7 +13,7 @@ const BASE = CONFIG;
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Story questlines", help: "Disabled, no story offers and no progress; the story log still opens" },
   { key: "tracker", type: "bool", scope: "world", label: "Story tracker", help: "Default for players: where to go next, above the hotbar" },
-  { key: "trackerAt", type: "enum", scope: "world", choices: ["side", "middle", "hotbar"], names: ["Right side", "Middle of the screen", "Above the hotbar"], label: "Where the story tracker shows (realm default)", help: "Right side and middle of the screen: other add-ons that use the line above the hotbar (waypoint and compass add-ons) cannot cover them" },
+  { key: "trackerAt", type: "enum", scope: "world", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where the story tracker shows (realm default)", help: "Right and Left 1-4 are boxes from Side HUD (Realm Resources); each pack can take its own, so they show at once. Other add-ons that use the line above the hotbar cannot cover them" },
   { key: "partyShare", type: "bool", scope: "world", label: "Party mates share story progress", help: "Defeat, survive and reach objectives, on the same chapter" },
   { key: "partyRange", type: "int", scope: "world", label: "Party sharing range (blocks)", min: 8, max: 256, step: 8 },
   { key: "skipCreative", type: "bool", scope: "world", label: "Creative mode makes no story progress" },
@@ -25,7 +26,7 @@ const OPTIONS = [
   { key: "actorTimeoutSeconds", type: "int", scope: "world", label: "Story characters wait for their player (seconds)", min: 60, max: 1800, step: 30 },
   { key: "favors", type: "bool", scope: "world", label: "Daily favors", help: "Questgivers offer a short job each real day" },
   { key: "tracker", type: "bool", scope: "player", base: "tracker", label: "Story tracker", help: "Where to go next for your story" },
-  { key: "trackerAt", type: "enum", scope: "player", base: "trackerAt", choices: ["side", "middle", "hotbar"], names: ["Right side", "Middle of the screen", "Above the hotbar"], label: "Where my story tracker shows", help: "Right side and middle of the screen can't be covered by other add-ons" },
+  { key: "trackerAt", type: "enum", scope: "player", base: "trackerAt", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where my story tracker shows", help: "Pick a box no other pack uses so they show at once" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
