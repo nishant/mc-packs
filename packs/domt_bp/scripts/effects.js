@@ -204,15 +204,26 @@ function toOpenSky(p, h) {
 /** Is the player's spot (and `pad` blocks around it) inside a safe zone? @param {Player} p @param {number} pad */
 const zoned = (p, pad) => inZone(p.dimension.id, p.location.x, p.location.z, pad);
 
+/** @type {Map<string, number>} player id -> the tick they last died */
+const deaths = new Map();
+world.afterEvents.entityDie.subscribe(
+  ({ deadEntity }) => attempt(() => void deaths.set(deadEntity.id, system.currentTick)),
+  { entityTypes: ["minecraft:player"] },
+);
+/** Has the player died since `tick`? @param {Player} p @param {number} tick */
+const diedSince = (p, tick) => (deaths.get(p.id) ?? -1) >= tick;
+
 /**
  * Runs `tick(secondsLeft)` now and then once a second, `seconds` times, in the background, then
- * `done` when the time is up. Stops early (without `done`) when the player leaves or `tick` returns false.
+ * `done` when the time is up. Stops early (without `done`) when the player leaves or dies (a card's
+ * curse ends with the player: no lightning at their respawn point), or `tick` returns false.
  * @param {Player} p @param {number} seconds @param {(left: number) => boolean | void} tick @param {() => void} [done]
  */
 function everySecond(p, seconds, tick, done) {
   let left = seconds;
+  const start = system.currentTick;
   const step = () => {
-    if (!p.isValid) return false;
+    if (!p.isValid || diedSince(p, start)) return false;
     if (left <= 0) {
       done?.();
       return false;
@@ -272,19 +283,21 @@ function removeAnvil(dim, x, floor, z, under, seconds) {
   system.runTimeout(() => attempt(() => restoreDue(id)), seconds * 20);
 }
 
+/** A Hot Potato whose 30 seconds ran out without the bang (a restart)? @param {ItemStack | undefined} it */
+function stalePotato(it) {
+  if (!it || it.typeId !== "minecraft:potato") return false;
+  const mark = it.getLore().find((l) => l.startsWith("§8Deck of Many Things "));
+  const made = mark ? parseInt(mark.slice("§8Deck of Many Things ".length), 36) : NaN;
+  return Number.isFinite(made) && Date.now() - made > 40000;
+}
+
 /** A Hot Potato whose 30 seconds ran out while its holder was away (or the server restarted) is removed when they join, without the bang. */
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   attempt(() => {
     const inv = player.getComponent("minecraft:inventory")?.container;
     if (!inv) return;
-    for (let i = 0; i < inv.size; i++) {
-      const it = inv.getItem(i);
-      if (!it || it.typeId !== "minecraft:potato") continue;
-      const mark = it.getLore().find((l) => l.startsWith("§8Deck of Many Things "));
-      const made = mark ? parseInt(mark.slice("§8Deck of Many Things ".length), 36) : NaN;
-      if (Number.isFinite(made) && Date.now() - made > 40000) inv.setItem(i, undefined);
-    }
+    for (let i = 0; i < inv.size; i++) if (stalePotato(inv.getItem(i))) inv.setItem(i, undefined);
   });
 });
 
@@ -306,7 +319,14 @@ function expire(e) {
   if (typeof gone !== "number" || Date.now() >= gone) e.remove();
 }
 
-world.afterEvents.entityLoad.subscribe(({ entity }) => attempt(() => entity.isValid && entity.hasTag(TEMP_TAG) && expire(entity)));
+world.afterEvents.entityLoad.subscribe(({ entity }) =>
+  attempt(() => {
+    if (!entity.isValid) return;
+    if (entity.hasTag(TEMP_TAG)) expire(entity);
+    // A Hot Potato left lying on the ground when the server restarted goes quietly too.
+    else if (entity.typeId === "minecraft:item" && stalePotato(entity.getComponent("minecraft:item")?.itemStack)) entity.remove();
+  }),
+);
 system.runInterval(() => {
   for (const id of ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"])
     attempt(() => {
@@ -516,7 +536,8 @@ export const CARDS = [
       let at = player.location;
       for (let i = 0; i < 12 && !clear(at); i++) {
         const spot = randomSpot(player, 1, 8, 4);
-        at = spot && clear(spot) ? spot : at;
+        // Near the player's own height: never a spot on the surface far above a cave.
+        at = spot && Math.abs(spot.y - player.location.y) <= 3 && clear(spot) ? spot : at;
       }
       if (!clear(at)) return false;
       bar(player, "§cThe ground lets go of you...", 40);
@@ -1054,7 +1075,11 @@ export const CARDS = [
       // Where it will land: just above the first non-air block under the drop point.
       let floor = y + top - 1;
       while (floor > y - 6 && blockAt(dim, { x, y: floor, z })?.isAir) floor--;
-      const under = blockAt(dim, { x, y: floor, z })?.typeId ?? "minecraft:air";
+      // It must land on something solid nearby, where it can be found again: not in water or lava
+      // (it would sink out of reach), and not under a player flying or falling high up.
+      const ground = blockAt(dim, { x, y: floor, z });
+      if (!ground || ground.isAir || ground.isLiquid || /water|lava|bubble_column/.test(ground.typeId)) return false;
+      const under = ground.typeId;
       bar(player, "§c§lLook up!", 40);
       sound(player, "random.anvil_land", 0.6);
       system.runTimeout(() => {
@@ -1620,9 +1645,10 @@ export const CARDS = [
     expect: "fire",
     run: ({ player, test }) => {
       let tick = 0;
+      const start = system.currentTick;
       const id = system.runInterval(() => {
         try {
-          if (!player.isValid || ++tick > (test ? 60 : 600) / 5) return system.clearRun(id);
+          if (!player.isValid || diedSince(player, start) || ++tick > (test ? 60 : 600) / 5) return system.clearRun(id);
           if (player.isOnGround && !player.isInWater) player.setOnFire(2, true);
         } catch {
           system.clearRun(id);
@@ -1780,39 +1806,53 @@ export const CARDS = [
       give(player, "minecraft:potato", 1, { name: "§c§lHot Potato", lore: ["§7Explodes in 30 seconds.", "§7Drop it near a friend!", mark] });
       sound(player, "random.fuse");
       const isIt = (/** @type {ItemStack | undefined} */ it) => !!it && it.typeId === "minecraft:potato" && it.getLore().includes(mark);
-      everySecond(
-        player,
-        test ? 2 : 30,
-        (left) => {
-          for (const q of world.getAllPlayers()) {
-            const inv = q.getComponent("minecraft:inventory")?.container;
-            if (!inv) continue;
-            for (let i = 0; i < inv.size; i++) if (isIt(inv.getItem(i))) bar(q, `§c§lHot Potato! §r§f${left}s`, 25);
-          }
-        },
-        () => {
-          // Whoever holds it (or wherever it lies) gets the bang. It breaks no blocks.
-          for (const q of world.getAllPlayers()) {
-            const inv = q.getComponent("minecraft:inventory")?.container;
-            if (!inv) continue;
-            for (let i = 0; i < inv.size; i++)
-              if (isIt(inv.getItem(i))) {
-                inv.setItem(i, undefined);
-                bang(q.dimension, q.location);
-                world.sendMessage(`§6[Deck] §c${q.name} was holding the Hot Potato!`);
-                return;
-              }
-          }
-          for (const dim of ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"].map((d) => world.getDimension(d)))
-            for (const e of dim.getEntities({ type: "minecraft:item" })) {
-              if (!isIt(e.getComponent("minecraft:item")?.itemStack)) continue;
-              const at = e.location;
-              e.remove();
-              bang(dim, at);
+      // Its own clock, not the drawer's: the potato goes off on time even if they passed it on and left.
+      let left = test ? 2 : 30;
+      const showLeft = () => {
+        for (const q of world.getAllPlayers()) {
+          const inv = q.getComponent("minecraft:inventory")?.container;
+          if (!inv) continue;
+          for (let i = 0; i < inv.size; i++)
+            if (isIt(inv.getItem(i))) {
+              bar(q, `§c§lHot Potato! §r§f${left}s`, 25);
+              break;
+            }
+        }
+      };
+      attempt(showLeft);
+      const clock = system.runInterval(() => {
+        try {
+          left--;
+          if (left > 0) return showLeft();
+          system.clearRun(clock);
+          goOff();
+        } catch (e) {
+          system.clearRun(clock);
+          console.warn(`[domt] hot potato: ${e}`);
+        }
+      }, 20);
+      const goOff = () => {
+        // Whoever holds it (or wherever it lies) gets the bang. It breaks no blocks.
+        for (const q of world.getAllPlayers()) {
+          const inv = q.getComponent("minecraft:inventory")?.container;
+          if (!inv) continue;
+          for (let i = 0; i < inv.size; i++)
+            if (isIt(inv.getItem(i))) {
+              inv.setItem(i, undefined);
+              bang(q.dimension, q.location);
+              world.sendMessage(`§6[Deck] §c${q.name} was holding the Hot Potato!`);
               return;
             }
-        },
-      );
+        }
+        for (const dim of ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"].map((d) => world.getDimension(d)))
+          for (const e of dim.getEntities({ type: "minecraft:item" })) {
+            if (!isIt(e.getComponent("minecraft:item")?.itemStack)) continue;
+            const at = e.location;
+            e.remove();
+            bang(dim, at);
+            return;
+          }
+      };
     },
   },
 ];
