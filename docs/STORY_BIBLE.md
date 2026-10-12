@@ -135,8 +135,9 @@ weather, 4 idle lines).
 ## 5. Places
 
 Each place is a name an operator can set with `/realm:saga_place <name>` (standing on the spot), or
-that the pack picks and builds itself (see the engine spec, "Places and prefabs"). Every place has a
-**prefab**: a small structure the pack can build there. The `auto` column says where the pack looks
+that the pack picks and builds itself (`scripts/places.js` and `scripts/prefabs.js`; "Places" in the Story
+Questlines section of `docs/PACKS.md`). Every place has a **prefab**: a small structure the pack can
+build there. The Auto site column says where the pack looks
 when it picks the spot itself.
 
 | Place | Label | Prefab | Auto site |
@@ -352,6 +353,11 @@ they differ (October 2026):
 - **Hearth and Table** teaches the Kitchen's story recipes with a chapter's `teach` (Lantern Cake in
   *A Feast for Marta*, Starwright Bread in *Elsie's Old Recipe*), and every chapter that asks for a
   dish has an "old way" with plain food, chosen in *Rations for the Wardens*.
+- **Act IV** has 12 chapters, as planned.
+- **Side questline requirements:** `inn_ghost` needs all of Act I, and `smugglers_run` and
+  `vesna_bargain` all of Act II (not a chapter of them); `star_kittens` is given by `wren` only.
+- **The Herald** (Act V) is one `sequential` chapter: its phases are `defeat` objectives that count
+  one at a time.
 - **Story champions** whose mob the Champions pack can't make (the elder guardian, pillagers,
   vindicators, evokers, guardians, the phantom) are spawned by Story Questlines itself, never sent
   as `realm:champion_spawn`.
@@ -382,8 +388,14 @@ main story (`requires`), so they unlock as the world opens. Target length per qu
 
 Stories are data in `packs/saga_bp/scripts/stories/*.js`, one file per writer (for example
 `stories/act1_signs.js`), each exporting `export const STORIES = [ ... ]` (an array of `Story`).
-`stories.js` keeps `NPC_NAMES`, `PLACES` and the prologue, and imports and concatenates the rest.
-Use the typedefs from `stories.js` (JSDoc, checked by `tsc`). Keep every id stable once published.
+`stories/index.js` imports them in log order (main acts, then side questlines) and re-exports the
+favors; `stories.js` keeps `NPC_NAMES`, `PLACES` and the prologue and adds the rest. Use the typedefs
+from `types.js` (`@typedef {import("../types.js").Story} Story`; JSDoc, checked by `tsc`). Keep every
+id stable once published. `node tools/check-stories.mjs` (part of `npm run check`) validates it all:
+unique ids, known NPCs, places, objective types and their required fields, item, block and mob ids,
+champion tags, requirements, interact blocks present in the place's prefab, every path through the
+choices, and the Kitchen dishes against the Cooking pack; flags read but never set, a missing hint, a
+`short` over 18 characters and pages over 450 characters are warnings.
 
 ### Story
 
@@ -393,7 +405,7 @@ Use the typedefs from `stories.js` (JSDoc, checked by `tsc`). Keep every id stab
   title: "Signs in the Sky",  // log title
   short: "Signs in the Sky",  // tracker name, <= 18 chars
   giver: "sol",               // NPC id who starts it
-  kind: "main",               // "main" | "side"
+  kind: "main",               // "main" | "side" (default "side")
   act: 1,                     // main story only
   tones: ["mystery", "eerie"],
   summary: "Sol sees something in the eastern sky.", // log line before you start
@@ -433,10 +445,13 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
   reward: Reward,
   rep: [Rep, ...],
   hint: "Sol's spyglass works best from the lighthouse balcony.", // shown by "Ask for a hint"
+  sequential: true,    // optional: objectives count one at a time, in order (a boss's phases)
 }
 ```
 
 A Page is a string or `{ text, when }`. A Choice is `{ id, label, set?, inc?, rep?, reply?, requires? }`.
+A Rep is `{ guild, amount, when? }` (guild `miners`, `growers`, `wardens` or `wayfarers`), sent to the
+Guilds pack.
 
 ### Objectives
 
@@ -452,17 +467,17 @@ blocks.
 |---|---|---|
 | `talk` | `npc` | Talk to a townsfolk |
 | `reach` | location, `radius`, or `dim` ("minecraft:nether" / "minecraft:the_end"), `belowY`, `aboveY` | Go somewhere, to a dimension, deep or high |
-| `deliver` | `npc`, `item`, `count`, `name?` (an item's custom name, for quest items) | Bring items to an NPC (taken on talk) |
-| `collect` | `item`, `count`, `name?` | Have items in your inventory |
+| `deliver` | `npc`, `item` and/or `name` (an item's custom name, for quest items), `count` | Bring items to an NPC (taken on talk) |
+| `collect` | `item` and/or `name`, `count` | Have items in your inventory |
 | `defeat` | `mobs?`, `count`, location?, `night?`, `within?` (seconds, timed: progress resets if not done in time), `champion?` | Defeat mobs, or a champion at a place |
 | `interact` | location, `blocks`, `count`, `radius` | Tap or hit blocks near a place |
 | `survive` | location?, `seconds`, `weather?` ("thunder" default, "rain", "any"), `radius` | Stay outdoors in weather |
-| `vigil` | location, `seconds`, `timeOfDay?: [from, to]` (ticks; 18000 = midnight), `outdoors?`, `sneaking?`, `radius` | Stay at a place at a time of day |
+| `vigil` | location, `seconds`, `timeOfDay?: [from, to]` (ticks; 18000 = midnight), `outdoors?`, `sneaking?`, `weather?` (no default), `radius` | Stay at a place at a time of day |
 | `mine` | `blocks?`, `count` | Break blocks |
 | `fish` | `items?`, `count` | Catch with a rod |
 | `meet` | `who: { id, name, entity }`, location, `pages`, `choices?` | A story character appears at the place; talk to them there |
-| `inspect` | location, `clues: [{ dx, dy?, dz, text }]` | Find clues around a place (faint particles); tap near each to read it |
-| `stealth` | location, `radius`, `guards: { mob, count, name }`, `goal: { dx, dz }`, `detect` (blocks), `detectSneak`, `onSpotted?: "reset" \| "ambush"`, `disguise?: { slot, item }` | Reach the goal spot without a guard seeing you |
+| `inspect` | location, `clues: [{ dx, dy?, dz, text }]` (at most 30) | Find clues around a place (faint particles); tap near each to read it |
+| `stealth` | location, `radius`, `guards: { mob, count, name? }`, `goal: { dx, dz }`, `detect` (blocks), `detectSneak`, `onSpotted?: "reset" \| "ambush"`, `disguise?: { slot, item }` | Reach the goal spot without a guard seeing you |
 | `escort` | `who: { id, name, entity }`, `from` (location object), `to` (location object), `radius`, `ambush?: { mobs, count, every }` | Lead a character safely; they follow you |
 | `lead` | `mob`, `name?`, `spawnAt?` (location object), `to` (location object), `count?` | Bring an animal on a lead |
 | `defend` | location, `radius`, `waves: [{ mobs, count }]`, `ward?: { id, name, entity }` | Hold a place against waves; protect the ward |
@@ -479,7 +494,9 @@ blocks.
 | `wait` | `minutes` (real) or `days` (in-game) | Wait; the story continues later |
 
 Mob and item ids are vanilla `minecraft:` ids. Champions: `champion: { tag: "realm:saga:<id>", mob,
-name, warn?, health?, adds?: { mobs, count } }` (tag must start with `realm:`).
+name, trait?, warn?, health?, adds?: { mobs, count } }` (tag must start with `realm:`; `trait` is a
+Champions pack trait, `stormcaller`, `frostbound`, `vampiric`, `splitting` or `shielded`, and only
+applies when the Champions pack makes the mob).
 
 ### Reward
 

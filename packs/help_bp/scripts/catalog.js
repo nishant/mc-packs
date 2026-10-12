@@ -51,7 +51,7 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators: All settings.§r With the whole Realm Bundle that is about 300 settings, so they come on a few pages, §eAll settings (page 1 of 4)§r, of about 100 lines each (§eallPageSize§r); a pack is never split across pages. The list at the top, §lAfter saving, go to§r, picks where §lSave and go§r takes you next: the next page (already chosen), any other page (each named by its first and last pack, such as §ePage 2: Field Journal to Rain Extras§r) or §lDone (show what was saved)§r. Each page saves its changes when you tap §lSave and go§r; closing a page saves nothing on it. At the end one summary lists every change from every page, each as §ePack > Setting: before -> after§r. All settings and a pack's own page show the same saved values: change Leaderboard size on one and the other shows the new number the next time it opens.",
+        "text": "§lOperators: All settings.§r With the whole Realm Bundle that is about 370 settings, so they come on a few pages, such as §eAll settings (page 1 of 5)§r, of at most 100 lines each (§eallPageSize§r); a pack is never split across pages. The list at the top, §lAfter saving, go to§r, picks where §lSave and go§r takes you next: the next page (already chosen), any other page (each named by its first and last pack, §ePage 2: <first pack> to <last pack>§r) or §lDone (show what was saved)§r. Each page saves its changes when you tap §lSave and go§r; closing a page saves nothing on it. At the end one summary lists every change from every page, each as §ePack > Setting: before -> after§r. All settings and a pack's own page show the same saved values: change Leaderboard size on one and the other shows the new number the next time it opens.",
         "ops": true
       },
       {
@@ -355,7 +355,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:guard§r for the menu: §lStatus§r shows the mode, which blasts are covered and any protected zones (§e/realm:guard_status§r shows the same in chat). With Safe Zones installed, §lSafe zones§r opens its menu.",
+        "text": "Run §e/realm:guard§r for the menu: it shows whether you stand in a protected spot, the mode, which blasts are covered and any protected zones, and §lStatus§r posts the same in chat (like §e/realm:guard_status§r). With Safe Zones installed, §lSafe zones§r opens its menu.",
         "ops": false
       },
       {
@@ -454,7 +454,7 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators:§r tap §eRemove <name>§r in §e/realm:farm§r (the menu comes back afterwards, so you can remove another), or run §e/realm:farm_remove <name>§r. The menu's §eSettings§r button points to §e/realm:config§r -> Farm Loader.",
+        "text": "§lOperators:§r tap §eRemove <name>§r in §e/realm:farm§r and confirm with §eRemove§r (the menu comes back afterwards, so you can remove another), or run §e/realm:farm_remove <name>§r. The menu's §eSettings§r button points to §e/realm:config§r -> Farm Loader.",
         "ops": true
       }
     ],
@@ -498,7 +498,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lYour way:§r in §e/realm:prefs§r, choose what sneak-tapping a container does for you (§emenu§r, §esort§r right away, or §eoff§r so it just opens), and whether sorting your inventory includes your hotbar.",
+        "text": "§lYour way:§r in §e/realm:prefs§r, choose what sneak-tapping a container does for you (§lWhen I sneak-tap a container§r: §eOpen the menu§r, §eSort it right away§r or §eNothing (opens as usual)§r), and whether sorting your inventory includes your hotbar.",
         "ops": false
       },
       {
@@ -546,7 +546,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark.",
+        "text": "Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark. A container in another dimension only gets its coordinates in chat.",
         "ops": false
       }
     ],
@@ -711,10 +711,10 @@ export const PACKS = [
     "folder": "mobhp_bp",
     "topic": "mobhp",
     "name": "Mob Health",
-    "summary": "Hit a mob and its name and health show in the middle of your screen (or above your hotbar, if you prefer), so you know how close it is to going down.",
+    "summary": "Hit a mob and its name and health show in a small box on the right side of your screen (or in the middle, or above your hotbar, if you prefer), so you know how close it is to going down.",
     "steps": [
       {
-        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the subtitle line in the middle of your screen shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
+        "text": "Nothing to set up: hit a mob with anything, or shoot it, and a small box on the right side of your screen, above the scoreboard, shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
         "ops": false
       },
       {
@@ -739,7 +739,7 @@ export const PACKS = [
     "folder": "elytra_bp",
     "topic": "elytra",
     "name": "Elytra HUD",
-    "summary": "While you glide, the middle of your screen (or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
+    "summary": "While you glide, a small box on the right side of your screen (or the middle, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
     "steps": [
       {
         "text": "Put on an elytra and glide. On the right side of the screen, above the scoreboard, you see something like §e31.4 blocks/s  Y 142  Elytra 87%  Rockets 12§r, updated 4 times a second.",
@@ -1243,7 +1243,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "When everything is done, chat says §e\"Salt and Silence\" is done. Go back to Old Tobin to hear what happens.§r Tap that NPC and pick the story (§eDone: report back§r). If the chapter ends with a choice, nothing is final until you pick one: close the form and the report waits.",
+        "text": "When everything is done, chat says §e[Story] The Drowned Bell: \"Salt and Silence\" is done. Go back to Old Tobin to hear what happens.§r Tap that NPC and pick the story (§eDone: report back§r). If the chapter ends with a choice, nothing is final until you pick one: close the form and the report waits.",
         "ops": false
       },
       {
@@ -1263,7 +1263,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. §e/realm:saga_places§r (also in §e/realm:saga§r) lists every place with its status and lets you §lTeleport§r, §lSet here§r, §lBuild here§r (a green outline preview with Build here, Rotate and Cancel), §lRebuild§r, §lRemove§r (puts the terrain back exactly) and §lRelocate§r. §e/realm:saga_place <name>§r sets a spot where you stand without building. §lOperator tools§r in §e/realm:saga§r finish a stuck player's current step or reset their stories. §e/realm:config§r -> §lStory Questlines§r has the switches.",
+        "text": "§lOperators:§r stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. §e/realm:saga_places§r (also in §e/realm:saga§r) lists every place with its status and lets you §lTeleport§r, §lSet here§r, §lBuild here§r (a green outline preview with Build here, Rotate, Look around and Cancel), §lRebuild§r, §lRemove§r (puts the terrain back exactly) and §lRelocate§r. §e/realm:saga_place <name>§r sets a spot where you stand without building. §lOperator tools§r in §e/realm:saga§r finish a stuck player's current step or reset their stories. §e/realm:config§r -> §lStory Questlines§r has the switches.",
         "ops": true
       }
     ],
@@ -1284,7 +1284,7 @@ export const PACKS = [
         "usage": "/realm:saga_places",
         "ops": false,
         "who": "Operators",
-        "text": "Every story place with its status (set, picked, built, missing), coordinates and the stories that use it: Teleport, Set here, Build here (outline preview with Build here, Rotate, Cancel), Rebuild, Remove (terrain restored), Relocate"
+        "text": "Every story place with its status (set, picked, built, missing), coordinates and the stories that use it: Teleport, Set here, Build here (outline preview with Build here, Rotate, Look around, Cancel), Rebuild, Remove (terrain restored), Relocate"
       },
       {
         "usage": "/realm:saga_place [name]",
@@ -1513,7 +1513,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "The invited player sees §e[Party] Ann invited you to their party.§r and joins with §e/realm:party_accept§r, or with the §lAccept§r button in §e/realm:party§r. An invite lasts 2 minutes.",
+        "text": "The invited player sees §e[Party] Ann invited you to their party.§r and joins with §e/realm:party_accept§r, or with the §lAccept Ann's invite§r button in §e/realm:party§r. An invite lasts 2 minutes.",
         "ops": false
       },
       {
@@ -1983,7 +1983,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lRide:§r tap your tamed dolphin with an empty hand. It swims where you look: push forward to go, back to slow down. Look up or down to rise or dive.",
+        "text": "§lRide:§r tap your tamed dolphin with an empty hand. It swims where you look: push forward to go, back to back up, left or right to drift sideways. Look up or down to rise or dive.",
         "ops": false
       },
       {
@@ -2686,7 +2686,7 @@ export const PACKS = [
     "folder": "rain_bp",
     "topic": "rain",
     "name": "Rain Extras",
-    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. Part of the Realm Bundle (it used to be standalone).",
+    "summary": "Storm fog, a darker rain haze on Vibrant Visuals, ground mist, drips under leaves and roof edges, the thunderstorm recording during storms, storm wind, rain on the roof and the rain muffled indoors, for the Realistic Rain resource pack. Part of the Realm Bundle.",
     "steps": [
       {
         "text": "When it rains, water drips from the leaves of trees and from roof edges near you, and keeps dripping for a while after the rain stops. Outdoors a soft breeze blows; indoors the rain sounds muffled through the roof, and drums on it.",
