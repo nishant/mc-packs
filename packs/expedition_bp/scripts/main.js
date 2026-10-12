@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, giveKit, restoreStash, rollBoons, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, giveKit, isRunGear, restoreStash, rollBoons, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -69,6 +69,7 @@ const PROP_RETURN = "expedition:return"; // player: JSON { d, x, y, z, run } whe
 const PROP_PROG = "expedition:prog"; // player: JSON Progress
 const PROP_ROLLS = "expedition:rolls"; // player: JSON { [levelKey]: string[] } the affixes shown for each level
 const PROP_GAUNTLETS = "expedition:gauntlets"; // world: JSON GauntletEntry[], the best Gauntlet clears
+const PROP_BUFFS = "expedition:buffs"; // player: JSON string[], the effects a run gave them (shrine, boons), taken away when they leave
 const PET_TAG = "realm:exp_pet"; // a Wolf Pack boon's wolves
 
 const OVERWORLD = "minecraft:overworld";
@@ -1453,8 +1454,10 @@ async function prepare(run) {
     const look = wmid(run, entry, { u: lu, v: lv, y: 2 });
     system.runTimeout(() => {
       try {
-        if (p.isValid) p.teleport(to, { dimension: overworld(), facingLocation: look });
-        if (kit && p.isValid) giveKit(p, run.level);
+        // Left meanwhile (sent back home, their own items given back): no teleport in, no kit.
+        if (!p.isValid || runOf(p.id) !== run) return;
+        p.teleport(to, { dimension: overworld(), facingLocation: look });
+        if (kit) giveKit(p, run.level);
       } catch (e) {
         console.warn(`[expedition] teleport in: ${e}`);
       }
@@ -1499,6 +1502,7 @@ function giveBack(p) {
   const inv = p.getComponent("minecraft:inventory")?.container;
   let spilled = false;
   for (const it of items) {
+    if (isRunGear(it)) continue; // kit and boon gear stays in the dungeon
     try {
       const rest = inv ? inv.addItem(it) : it;
       if (rest) {
@@ -1520,6 +1524,7 @@ function giveSpoils(p) {
   const inv = p.getComponent("minecraft:inventory")?.container;
   let spilled = false;
   for (const it of items) {
+    if (isRunGear(it)) continue; // kit and boon gear stays in the dungeon
     try {
       const rest = inv ? inv.addItem(it) : it;
       if (rest) {
@@ -1579,9 +1584,11 @@ function returnSpot(p) {
 
 /** Takes away the shrine's effects. @param {Player} p */
 function dropBuffs(p) {
-  const list = buffs.get(p.id);
-  if (!list) return;
+  let list = buffs.get(p.id);
+  if (!list) list = readPlayer(p, PROP_BUFFS) ?? undefined; // after a restart: what the run gave them is saved on them
+  if (!Array.isArray(list)) return;
   buffs.delete(p.id);
+  writePlayer(p, PROP_BUFFS, undefined);
   for (const e of list) {
     try {
       p.removeEffect(e);
@@ -1654,6 +1661,12 @@ function sendBack(p, withFade = true) {
 function dropMember(run, id) {
   if (run.phase === "finishing" && run.members.size === 1 && run.members.has(id)) packSpoils(run, [id]); // the last one out takes what's left
   if (!run.members.delete(id)) return;
+  // Their Wolf Pack wolves go too (tame wolves would follow them home).
+  try {
+    for (const e of overworld().getEntities({ tags: [PET_TAG, `${PET_TAG}_of:${id}`] })) e.remove();
+  } catch {
+    // nothing loaded
+  }
   if (!run.members.size && (run.phase === "active" || run.phase === "finishing")) {
     endRun(run, run.phase === "finishing" ? "" : "§cThe expedition failed: nobody is left in the dungeon.").catch((e) => console.warn(`[expedition] ${e}`));
   }
@@ -2393,7 +2406,7 @@ function shrineChoice(run, i, choice, who) {
           const list = buffs.get(p.id) ?? [];
           list.push(b.effect);
           if (b.id === "haste") list.push("haste");
-          buffs.set(p.id, list);
+          setBuffs(p, list);
         } catch {
           // can't
         }
@@ -2486,6 +2499,7 @@ function takeBoon(run, p, id) {
         w.getComponent("minecraft:tameable")?.tame(p);
         w.addTag(PET_TAG);
         w.addTag(`realm:exp_run:${run.id}`);
+        w.addTag(`${PET_TAG}_of:${p.id}`);
         w.nameTag = `${p.name}'s wolf`;
         w.addEffect("health_boost", LONG, { amplifier: 2 + Math.floor(run.s.t / 5), showParticles: false });
         w.addEffect("resistance", LONG, { amplifier: 0, showParticles: false });
@@ -2520,7 +2534,13 @@ function boonBuffs(run, p) {
       // can't
     }
   }
-  buffs.set(p.id, mine);
+  setBuffs(p, mine);
+}
+
+/** Remembers the effects a run gave a player (also on the player, for a restart mid-run). @param {Player} p @param {string[]} list */
+function setBuffs(p, list) {
+  buffs.set(p.id, list);
+  writePlayer(p, PROP_BUFFS, list);
 }
 
 /** A boon's flag for a player. @param {Run} run @param {string} id @param {string} flag */
@@ -3272,6 +3292,19 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   }
 });
 
+// A Wolf Pack wolf that followed its owner out of a run and loads again later (an unloaded chunk then) goes away.
+world.afterEvents.entityLoad.subscribe(({ entity }) => {
+  try {
+    if (entity.typeId !== "minecraft:wolf" || !entity.hasTag(PET_TAG)) return;
+    const tag = entity.getTags().find((t) => t.startsWith("realm:exp_run:"));
+    const run = [...runs.values()].find((r) => tag === `realm:exp_run:${r.id}`);
+    const owner = entity.getTags().find((t) => t.startsWith(`${PET_TAG}_of:`))?.slice(`${PET_TAG}_of:`.length);
+    if (!run || (owner && !run.members.has(owner))) entity.remove();
+  } catch {
+    // gone
+  }
+});
+
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   const run = runOf(playerId);
   if (!run) return;
@@ -3945,14 +3978,14 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
  * `realm:expedition_state` in parts of under 2000 characters: { part, parts, data }.
  * @param {string} message
  */
-function debugState(message) {
+function debugState(message, may = true) {
   const run = [...runs.values()][0];
   let want;
   let skip = false;
   try {
     const msg = JSON.parse(message || "{}");
     want = msg?.room;
-    skip = msg?.skip === true;
+    skip = msg?.skip === true && may;
   } catch {
     want = undefined;
   }
@@ -4010,11 +4043,12 @@ function debugState(message) {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
+  ({ id, message, sourceEntity }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "expedition_bp");
     else if (id === "realm:expedition_debug") {
       try {
-        debugState(message);
+        // Skipping a room is for tests and operators only.
+        debugState(message, !(sourceEntity instanceof Player) || isOp(sourceEntity));
       } catch (e) {
         console.warn(`[expedition] debug: ${e}`);
       }

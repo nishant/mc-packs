@@ -121,8 +121,8 @@ export function boonEffects(ids) {
 const SLOT_OF = { head: EquipmentSlot.Head, chest: EquipmentSlot.Chest, legs: EquipmentSlot.Legs, feet: EquipmentSlot.Feet, offhand: EquipmentSlot.Offhand };
 
 /**
- * Gives the starter kit for a level (from `gauntletKit`). Kit gear is marked and taken away when the run ends;
- * food, arrows and blocks are not.
+ * Gives the starter kit for a level (from `gauntletKit`). Everything in it (food, arrows and blocks too) is
+ * marked as run gear and taken away when the run ends.
  * @param {Player} p @param {number} L
  */
 export function giveKit(p, L) {
@@ -131,7 +131,7 @@ export function giveKit(p, L) {
   for (const k of /** @type {KitEntry[]} */ (CONFIG.gauntletKit)) {
     if ((k.from ?? 0) > L || (k.to ?? 99) < L) continue;
     try {
-      const it = makeItem(k.item, k.count ?? 1, { ench: k.ench, gear: (new ItemStack(k.item, 1).maxAmount ?? 64) === 1 });
+      const it = makeItem(k.item, k.count ?? 1, { ench: k.ench, gear: true });
       const slot = k.slot ? SLOT_OF[k.slot] : undefined;
       if (slot && eq && !eq.getEquipment(slot)) eq.setEquipment(slot, it);
       else {
@@ -318,7 +318,13 @@ export async function restoreStash(p) {
         const it = box.getItem(k);
         if (!it) continue;
         box.setItem(k);
-        put(it, part * CART + k);
+        try {
+          put(it, part * CART + k);
+        } catch (e) {
+          console.warn(`[expedition] stash item: ${e}`);
+          p.dimension.spawnItem(it, p.location);
+          spilled++;
+        }
       }
     cart.remove();
   }
