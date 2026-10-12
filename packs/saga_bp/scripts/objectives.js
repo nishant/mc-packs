@@ -23,6 +23,7 @@ import {
 } from "./data.js";
 import { featureSpot, locate, placeSpot, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
+import { isSlot, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
 import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait } from "./util.js";
@@ -115,47 +116,21 @@ export const holdUntil = new Map();
 /** Tick until which our own note owns the line the tracker uses. @type {Map<string, number>} */
 export const ownUntil = new Map();
 
-/** Does this player see the tracker off the action bar (right side or middle, not above the hotbar)? @param {Player} player */
+/** Does this player see the tracker off the action bar (in a Side HUD box, not above the hotbar)? @param {Player} player */
 export const inMiddle = (player) => getFor(player, "trackerAt") !== "hotbar";
 
-/** The title text the HUD resource pack (hud_rp) shows as a panel on the right; SIDE_OFF clears it. */
-const SIDE = "§s§1§r";
-const SIDE_OFF = "§s§0§r";
-/** Who last wrote the side panel, per player (realm:side `from`). @type {Map<string, string>} */
-export const sideWriter = new Map();
-/** Until which tick another pack's side text should stay, per player (realm:side `ticks`); the tracker waits. @type {Map<string, number>} */
-export const sideHold = new Map();
-/** Tick our side text should go, per player. @type {Map<string, number>} */
-const sideUntil = new Map();
+/** The tracker and progress notes in a Side HUD box (scripts/side.js, the side boxes protocol). */
+export const side = sideBoxes("saga");
 
 /**
- * Shows a line for a while: in the panel on the right (hud_rp) or as the subtitle in the middle of the
- * screen (other add-ons that redraw the action bar every tick can't cover either), or above the hotbar
- * for players who chose that.
+ * Shows a line for a while: in the player's Side HUD box (hud_rp; other add-ons that redraw the action bar
+ * every tick can't cover it), or above the hotbar for players who chose that.
  * @param {Player} player @param {string} text @param {number} ticks
  */
 export function showLine(player, text, ticks) {
   const where = getFor(player, "trackerAt");
-  if (where === "middle") {
-    player.onScreenDisplay.setTitle("§r", { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 4 });
-    return;
-  }
-  if (where !== "hotbar") {
-    player.onScreenDisplay.setTitle(SIDE, { subtitle: text, fadeInDuration: 0, stayDuration: ticks, fadeOutDuration: 0 });
-    sideWriter.set(player.id, "saga");
-    send("realm:side", { player: player.id, from: "saga", ticks });
-    const until = system.currentTick + ticks;
-    sideUntil.set(player.id, until);
-    system.runTimeout(() => {
-      try {
-        // Gone when nothing newer was written, by us or another pack.
-        if (sideUntil.get(player.id) !== until || sideWriter.get(player.id) !== "saga" || !player.isValid) return;
-        sideUntil.delete(player.id);
-        player.onScreenDisplay.setTitle(SIDE_OFF, { fadeInDuration: 0, stayDuration: 1, fadeOutDuration: 0 });
-      } catch {
-        // left
-      }
-    }, ticks);
+  if (isSlot(where)) {
+    side.show(player, where, text, ticks);
     return;
   }
   send("realm:actionbar", { player: player.id, ticks, from: PACK });
@@ -2145,8 +2120,6 @@ export function playerGone(pid) {
   dreams.delete(pid);
   holdUntil.delete(pid);
   ownUntil.delete(pid);
-  sideWriter.delete(pid);
-  sideUntil.delete(pid);
   for (const k of [...tended.keys()]) if (k.includes(pid)) tended.delete(k);
 }
 

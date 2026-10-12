@@ -7,12 +7,13 @@ export const CONFIG = {
   tracker: true,
 
   /**
-   * Where the tracker and progress notes show for players who haven't chosen in /realm:prefs: "side" (a
-   * panel on the right, above the scoreboard sidebar; needs the HUD resource pack hud_rp), "middle" (the
-   * subtitle line in the middle of the screen) or "hotbar" (the action bar above the hotbar). Other add-ons
-   * that redraw the action bar all the time, like waypoint and compass add-ons, can't cover the first two.
+   * Where the tracker and progress notes show for players who haven't chosen in /realm:prefs: one of the Side
+   * HUD boxes (Realm Resources) "right1".."right4", "left1".."left4" (top to bottom) or "middle" (under the
+   * crosshair), or "hotbar" (the action bar above the hotbar). The boxes show at the same time as the other
+   * packs' boxes, and other add-ons that redraw the action bar all the time can't cover them. Without Side HUD
+   * the text shows in the middle of the screen.
    */
-  trackerAt: "side",
+  trackerAt: "right4",
 
   /** Party mates (Parties pack) on the same chapter share progress for defeat, survive and reach objectives. */
   partyShare: true,

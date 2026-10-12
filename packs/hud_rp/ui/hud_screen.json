@@ -69,7 +69,7 @@
               },
               {
                 "binding_type": "view",
-                "source_property_name": "(not ((#hud_title_text_string = '§s§1§r') or (#hud_title_text_string = '§s§0§r')))",
+                "source_property_name": "(not ((#hud_title_text_string = '§s§1§r') or (#hud_title_text_string = '§s§0§r') or (#hud_title_text_string = '§s§2§r')))",
                 "target_property_name": "#visible"
               }
             ]
@@ -166,7 +166,7 @@
               },
               {
                 "binding_type": "view",
-                "source_property_name": "(not ((#hud_title_text_string = '§s§1§r') or (#hud_title_text_string = '§s§0§r')))",
+                "source_property_name": "(not ((#hud_title_text_string = '§s§1§r') or (#hud_title_text_string = '§s§0§r') or (#hud_title_text_string = '§s§2§r')))",
                 "target_property_name": "#visible"
               }
             ]
@@ -189,6 +189,88 @@
       }
     ]
   },
+  "realm_slot_text": {
+    "type": "label",
+    "text": "#text",
+    "size": [
+      "default",
+      "default"
+    ],
+    "max_size": [
+      200,
+      60
+    ],
+    "anchor_from": "center",
+    "anchor_to": "center",
+    "text_alignment": "$slot_align",
+    "color": [
+      1,
+      1,
+      1
+    ],
+    "locked_alpha": 1.0,
+    "shadow": true,
+    "localize": false,
+    "layer": 1,
+    "bindings": [
+      {
+        "binding_name": "#hud_subtitle_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_type": "view",
+        "source_property_name": "((('%.159s' * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) - '~~') - '~')",
+        "target_property_name": "#text"
+      }
+    ]
+  },
+  "realm_slot_box": {
+    "type": "image",
+    "texture": "textures/ui/Black",
+    "alpha": 0.55,
+    "anchor_from": "$slot_anchor",
+    "anchor_to": "$slot_anchor",
+    "size": [
+      "100%c + 6px",
+      "100%c + 4px"
+    ],
+    "controls": [
+      {
+        "realm_slot_text@hud.realm_slot_text": {}
+      }
+    ]
+  },
+  "realm_slot": {
+    "type": "panel",
+    "size": [
+      "100%",
+      "100%c + 2px"
+    ],
+    "$slot_anchor|default": "top_right",
+    "$slot_align|default": "right",
+    "$skip|default": "%.10s",
+    "$slot_empty|default": "§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
+    "controls": [
+      {
+        "realm_slot_box@hud.realm_slot_box": {}
+      }
+    ],
+    "bindings": [
+      {
+        "binding_name": "#hud_title_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_name": "#hud_subtitle_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_type": "view",
+        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (('%.159s' * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $slot_empty)))",
+        "target_property_name": "#visible"
+      }
+    ]
+  },
   "realm_side_area": {
     "type": "panel",
     "size": [
@@ -197,6 +279,114 @@
     ],
     "layer": 2,
     "controls": [
+      {
+        "realm_side_right": {
+          "type": "stack_panel",
+          "orientation": "vertical",
+          "size": [
+            "50%",
+            "100%c"
+          ],
+          "anchor_from": "right_middle",
+          "anchor_to": "bottom_right",
+          "offset": [
+            -1,
+            -60
+          ],
+          "controls": [
+            {
+              "realm_right1@hud.realm_slot": {
+                "$skip": "%.10s"
+              }
+            },
+            {
+              "realm_right2@hud.realm_slot": {
+                "$skip": "%.170s"
+              }
+            },
+            {
+              "realm_right3@hud.realm_slot": {
+                "$skip": "%.330s"
+              }
+            },
+            {
+              "realm_right4@hud.realm_slot": {
+                "$skip": "%.490s"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "realm_side_left": {
+          "type": "stack_panel",
+          "orientation": "vertical",
+          "size": [
+            "50%",
+            "100%c"
+          ],
+          "anchor_from": "left_middle",
+          "anchor_to": "top_left",
+          "offset": [
+            1,
+            -20
+          ],
+          "controls": [
+            {
+              "realm_left1@hud.realm_slot": {
+                "$skip": "%.650s",
+                "$slot_anchor": "top_left",
+                "$slot_align": "left"
+              }
+            },
+            {
+              "realm_left2@hud.realm_slot": {
+                "$skip": "%.810s",
+                "$slot_anchor": "top_left",
+                "$slot_align": "left"
+              }
+            },
+            {
+              "realm_left3@hud.realm_slot": {
+                "$skip": "%.970s",
+                "$slot_anchor": "top_left",
+                "$slot_align": "left"
+              }
+            },
+            {
+              "realm_left4@hud.realm_slot": {
+                "$skip": "%.1130s",
+                "$slot_anchor": "top_left",
+                "$slot_align": "left"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "realm_side_middle": {
+          "type": "panel",
+          "size": [
+            "50%",
+            "100%c"
+          ],
+          "anchor_from": "center",
+          "anchor_to": "top_middle",
+          "offset": [
+            0,
+            14
+          ],
+          "controls": [
+            {
+              "realm_middle@hud.realm_slot": {
+                "$skip": "%.1290s",
+                "$slot_anchor": "top_middle",
+                "$slot_align": "center"
+              }
+            }
+          ]
+        }
+      },
       {
         "realm_side_box": {
           "type": "image",
