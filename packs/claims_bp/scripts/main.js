@@ -367,10 +367,19 @@ async function manage(player, c) {
   }
   actions.push({
     text: `Remove this claim\n§8Anyone can build here again`,
-    run: () => {
-      removeClaim(c.id);
-      player.sendMessage(`§aClaim ${span(c)} removed.`);
-    },
+    // Asks first: removing can't be undone, and the shares go with it.
+    run: () =>
+      menu(player, "§lRemove this claim?", `${span(c)} (${shortDim(c.dim)}). Anyone will be able to build, break and open things there again${c.s.length ? `, and it stops being shared with ${c.s.map((s) => s.n).join(", ")}` : ""}.`, [
+        {
+          text: "§cRemove it",
+          run: () => {
+            if (!claims().has(c.id)) return;
+            removeClaim(c.id);
+            player.sendMessage(`§aClaim ${span(c)} removed.`);
+          },
+        },
+        { text: "Keep it", run: () => {} },
+      ]),
   });
   const body = [
     `${2 * c.r + 1} x ${2 * c.r + 1} blocks, ${span(c)} (${shortDim(c.dim)}), top to bottom.`,
