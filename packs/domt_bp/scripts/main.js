@@ -170,6 +170,7 @@ async function reveal(p, card) {
   }
   if (!p.isValid) return;
   const color = RARITY_COLOR[card.rarity];
+  system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 70, from: "domt_bp" }));
   attempt(() =>
     p.onScreenDisplay.setTitle(`${color}§l${card.name}`, {
       fadeInDuration: 5,

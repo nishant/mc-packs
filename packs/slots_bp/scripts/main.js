@@ -328,6 +328,7 @@ async function play(p, cur, stake) {
 function finish(p, cur, stake, result) {
   const bal = `Balance: ${fmt(balanceOf(p, cur))}`;
   if (result.line?.jackpot) {
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 85, from: "slots_bp" }));
     p.onScreenDisplay.setTitle("§dJACKPOT!", { subtitle: `§6+${money(cur, result.won)}`, fadeInDuration: 5, stayDuration: 60, fadeOutDuration: 20 });
     p.sendMessage(`§dJACKPOT! §6+${money(cur, result.won)} §7(${bal})`);
     celebrate(p);

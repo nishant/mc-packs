@@ -21,6 +21,12 @@
 // last 2 ticks or later (so a write that crossed theirs isn't lost). When a readout runs out, the pack that
 // wrote it redraws (or clears the title with "§s§0§r" when nothing is left). A pack holds one slot per
 // player: writing another slot moves its readout there.
+//
+// Real titles (a card name, FIGHT!, a level-up) share the channel, so the title protocol keeps them readable:
+//   realm:title {player, ticks, from}     sent right before any other title or subtitle
+// ("my title is on this player's screen for ticks", at most MAX_HOLD; ticks 0 ends the sender's hold early).
+// While a hold lasts every copy keeps its picture but doesn't draw; when the last hold ends, each pack with a
+// readout for that player draws the title again, so the boxes come back.
 import { Player, system, world } from "@minecraft/server";
 
 export const MARK = "§s§2§r";
@@ -33,6 +39,8 @@ const SEG_BYTES = 160;
 /** Bytes of readout text a slot holds (the separator takes one). */
 export const TEXT_BYTES = SEG_BYTES - 1;
 const MAX_TICKS = 1200;
+/** Longest real title a hold covers (a story scene line can stay 20 seconds). */
+const MAX_HOLD = 600;
 const SWEEP_TICKS = 4;
 /** A title drawn this close before another pack's write may have crossed it on the way. */
 const CROSS_TICKS = 2;
@@ -101,6 +109,38 @@ const drewAt = new Map();
 /** player id -> whether the last title this pack drew had something in it. @type {Map<string, boolean>} */
 const drewSome = new Map();
 let me = "";
+/** player id -> pack -> tick its real title ends (the title protocol). @type {Map<string, Map<string, number>>} */
+const holds = new Map();
+
+/** @param {string} playerId @param {string} from @param {number} ticks */
+function hold(playerId, from, ticks) {
+  let byPack = holds.get(playerId);
+  if (!byPack) holds.set(playerId, (byPack = new Map()));
+  if (ticks > 0) byPack.set(from, system.currentTick + Math.min(ticks, MAX_HOLD));
+  else byPack.delete(from);
+  if (!byPack.size) holds.delete(playerId);
+  // The real title replaced whatever we drew.
+  drewSome.set(playerId, false);
+}
+
+/** Is a real title on this player's screen? @param {string} playerId @param {number} now */
+function held(playerId, now) {
+  const byPack = holds.get(playerId);
+  if (!byPack) return false;
+  for (const until of byPack.values()) if (until > now) return true;
+  return false;
+}
+
+/**
+ * The title protocol: call right before showing a real title (setTitle with text, updateSubtitle). Every pack's
+ * side boxes wait until it is over, then draw again.
+ * @param {Player} player @param {number} ticks fadeIn + stay + fadeOut of the title (0 = it's gone now)
+ */
+export function holdTitle(player, ticks) {
+  const t = Math.min(Math.max(Math.round(Number(ticks) || 0), 0), MAX_HOLD);
+  hold(player.id, me || "?", t);
+  system.sendScriptEvent("realm:title", JSON.stringify({ player: player.id, ticks: t, from: me || "?" }));
+}
 
 /** @param {string} playerId @param {string} from @param {string} slot @param {string} text @param {number} until */
 function apply(playerId, from, slot, text, until) {
@@ -129,6 +169,8 @@ function prune(playerId, now) {
 function draw(player) {
   const now = system.currentTick;
   prune(player.id, now);
+  // A real title is showing: keep the picture, draw once the hold ends (the sweep below).
+  if (held(player.id, now)) return;
   const slots = picture.get(player.id);
   drewAt.set(player.id, now);
   try {
@@ -187,6 +229,10 @@ export function sideBoxes(from) {
       const e = picture.get(player.id)?.get(slot);
       return !!e && e.from !== me && e.until > system.currentTick;
     },
+    /** Is a real title holding the player's boxes back (the title protocol)? @param {Player} player */
+    held(player) {
+      return held(player.id, system.currentTick);
+    },
     /** What this pack's copy would put in the subtitle now (for tests). @param {Player} player */
     payload(player) {
       prune(player.id, system.currentTick);
@@ -200,6 +246,16 @@ export function sideBoxes(from) {
 
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
+    if (id === "realm:title" && me) {
+      try {
+        const m = JSON.parse(message);
+        // Our own holdTitle already applied it (and the clock moved since).
+        if (m && typeof m.player === "string" && typeof m.from === "string" && m.from !== me) hold(m.player, m.from, Math.max(Number(m.ticks) || 0, 0));
+      } catch {
+        // not ours
+      }
+      return;
+    }
     if (id !== "realm:side" || !me) return;
     try {
       const m = JSON.parse(message);
@@ -220,10 +276,20 @@ system.afterEvents.scriptEventReceive.subscribe(
   { namespaces: ["realm"] }
 );
 
-// Readouts that run out: the pack that wrote one draws the title again without it.
+// Readouts that run out: the pack that wrote one draws the title again without it. Real titles that end:
+// every pack with a readout for that player draws the boxes again (they all draw the same picture).
 system.runInterval(() => {
-  if (!picture.size) return;
   const now = system.currentTick;
+  for (const [playerId, byPack] of [...holds]) {
+    for (const [from, until] of [...byPack]) if (until <= now) byPack.delete(from);
+    if (byPack.size) continue;
+    holds.delete(playerId);
+    prune(playerId, now);
+    if (![...(picture.get(playerId)?.values() ?? [])].some((e) => e.from === me)) continue;
+    const p = playerById(playerId);
+    if (p) draw(p);
+  }
+  if (!picture.size) return;
   for (const playerId of [...picture.keys()]) {
     if (!prune(playerId, now)) continue;
     const p = playerById(playerId);
@@ -235,4 +301,5 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   picture.delete(playerId);
   drewAt.delete(playerId);
   drewSome.delete(playerId);
+  holds.delete(playerId);
 });

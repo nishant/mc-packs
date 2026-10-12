@@ -127,6 +127,7 @@ function startNight(day, state) {
     try {
       p.sendMessage(blood ? `§4A Blood Moon rises. §7More monsters roam tonight.${reward ? ` Survive until dawn without dying: ${reward}.` : ""}` : "§6A Harvest Moon rises. §7Crops grow faster until dawn.");
       if (p.dimension.id !== OVERWORLD) continue;
+      system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks: 130, from: "moon_bp" }));
       p.onScreenDisplay.setTitle(blood ? "§4Blood Moon" : "§6Harvest Moon", {
         subtitle: blood ? "§cSurvive until dawn" : "§eCrops grow faster tonight",
         fadeInDuration: 20,

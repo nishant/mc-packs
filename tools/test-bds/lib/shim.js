@@ -104,6 +104,7 @@ try {
 if (ScreenDisplay) {
   patch(ScreenDisplay.prototype, "setActionBar", "actionbar", (sd) => screenOwner.get(sd) || "?");
   patch(ScreenDisplay.prototype, "setTitle", "title", (sd) => screenOwner.get(sd) || "?");
+  patch(ScreenDisplay.prototype, "updateSubtitle", "subtitle", (sd) => screenOwner.get(sd) || "?");
 }
 
 // ---------------------------------------------------------------------------
