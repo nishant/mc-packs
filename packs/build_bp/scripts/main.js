@@ -15,6 +15,9 @@ import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
 import { PARAMS, SHAPES, TooBig, boxOf, cellsOf, shapeOf, valueOf } from "./shapes.js";
 import { allZones } from "./zones.js";
+import { lastLabel, remember, setupUndo, undo } from "./undo.js";
+import { clipboardMenu, copyCommand, cutCommand, pasteCommand, setupClipboard } from "./clipboard.js";
+import { destroyMenu, setupDestroy, toggleDestroy } from "./destroy.js";
 
 const PACK = "build_bp";
 const PLAN_PROP = "build:plan"; // player: JSON Plan
@@ -106,9 +109,9 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ x: number, y: number, z: number, before: BlockPermutation, after: BlockPermutation, cost?: string }} Placed
- * @typedef {{ dim: string, label: string, cells: Placed[] }} BuildRecord
- * @typedef {{ on: boolean, start?: { dim: string, x: number, y: number, z: number, id: string, paid?: string }, busy: boolean, undo: BuildRecord[], redo: BuildRecord[], paused: number, hintAt: number }} State
+ * Undo and redo history lives in undo.js.
+ * @typedef {import("./undo.js").Placed} Placed
+ * @typedef {{ on: boolean, start?: { dim: string, x: number, y: number, z: number, id: string, paid?: string }, busy: boolean, paused: number, hintAt: number }} State
  */
 
 /** @type {Map<string, State>} */
@@ -116,7 +119,7 @@ const states = new Map();
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let s = states.get(player.id);
-  if (!s) states.set(player.id, (s = { on: false, busy: false, undo: [], redo: [], paused: 0, hintAt: 0 }));
+  if (!s) states.set(player.id, (s = { on: false, busy: false, paused: 0, hintAt: 0 }));
   return s;
 }
 
@@ -257,6 +260,8 @@ function costOf(perm) {
   if (id === "minecraft:farmland") return "minecraft:dirt";
   // A double slab's item is one slab, but it breaks into two: building them for one each would make slabs.
   if (id.includes("double_slab")) return undefined;
+  // The top half of a door or tall plant comes with its bottom half (pastes, undo of destroy mode).
+  if (perm.getState("upper_block_bit") === true) return null;
   try {
     return perm.getItemStack(1)?.typeId;
   } catch {
@@ -708,6 +713,25 @@ const tick = () => new Promise((r) => system.run(() => r(undefined)));
 const AIR = () => /** @type {BlockPermutation} */ (permOf("minecraft:air"));
 
 /**
+ * Why a player may not change blocks in this box (safe zones, other players' claims), or undefined.
+ * @param {Player} player @param {Dimension} dim
+ * @param {{ x: number, y: number, z: number }} min @param {{ x: number, y: number, z: number }} max
+ * @param {string} [verb] "build", "cut", "destroy"...
+ * @returns {Promise<string | undefined>}
+ */
+async function areaRefusal(player, dim, min, max, verb = "build") {
+  if (!isOp(player) && get("safeZonesOperatorsOnly") === true) {
+    const zone = safeZoneIn(dim.id, min, max);
+    if (zone) return `That would ${verb} in the safe zone ${zone.name}. Only operators can ${verb} there with the tools.`;
+  }
+  if (get("inOthersClaims") === true) return undefined;
+  const claims = await claimsIn(player, dim.id, min, max);
+  if (!claims) return `Land Claims didn't answer, so nothing was done. Try again.`;
+  if (claims.length) return `That would reach into ${claims[0].n}'s claim. Do it somewhere else, or make it smaller.`;
+  return undefined;
+}
+
+/**
  * May a build put a block where `id` is?
  * @param {string} id @param {"air" | "soft" | "all"} mode
  */
@@ -729,9 +753,10 @@ function replaceMode(player, plan) {
  * a few ticks and remembers it for undo.
  * @param {Player} player
  * @param {Dimension} dim
- * @param {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string }[]} cells `expect`: only where this block is (redo)
+ * @param {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string, free?: boolean }[]} cells `expect`: only where this block is (redo); `free`: costs nothing
  * @param {string} label
- * @param {{ mode: "air" | "soft" | "all", redo?: boolean }} opts
+ * @param {{ mode: "air" | "soft" | "all", redo?: boolean, free?: boolean, kind?: import("./undo.js").Kind, rec?: Partial<import("./undo.js").BuildRecord>, done?: (placed: Placed[]) => void }} opts
+ *   `free`: nothing costs items (a cut pasted back); `kind` and `rec`: what undo remembers; `done`: gets the placed blocks instead of undo
  * @returns {Promise<boolean>} whether anything was built
  */
 async function build(player, dim, cells, label, opts) {
@@ -752,26 +777,13 @@ async function build(player, dim, cells, label, opts) {
     return false;
   }
   const { min, max } = boundsOf(cells);
-  if (!isOp(player) && get("safeZonesOperatorsOnly") === true) {
-    const zone = safeZoneIn(dim.id, min, max);
-    if (zone) {
-      player.sendMessage(`§eThat would build in the safe zone ${zone.name}. Only operators can build there with the tools.`);
-      return false;
-    }
-  }
   s.busy = true;
   try {
-    if (get("inOthersClaims") !== true) {
-      const claims = await claimsIn(player, dim.id, min, max);
-      if (!player.isValid) return false;
-      if (!claims) {
-        player.sendMessage("§eLand Claims didn't answer, so nothing was built. Try again.");
-        return false;
-      }
-      if (claims.length) {
-        player.sendMessage(`§eThat would reach into ${claims[0].n}'s claim. Build somewhere else, or make it smaller.`);
-        return false;
-      }
+    const why = await areaRefusal(player, dim, min, max);
+    if (!player.isValid) return false;
+    if (why) {
+      player.sendMessage(`§e${why}`);
+      return false;
     }
     const range = dim.heightRange;
     const perTick = Math.max(10, get("blocksPerTick"));
@@ -780,7 +792,7 @@ async function build(player, dim, cells, label, opts) {
     /** @type {{ x: number, y: number, z: number, perm: BlockPermutation, expect?: string, cost?: string }[]} */
     const todo = [];
     let blocked = 0, unloaded = 0, unpayable = 0;
-    const pay = !creative && get("requireItems") === true;
+    const pay = !creative && get("requireItems") === true && !opts.free;
     for (let i = 0; i < cells.length; i++) {
       if (i && i % (perTick * 4) === 0) {
         await tick();
@@ -807,7 +819,7 @@ async function build(player, dim, cells, label, opts) {
         blocked++;
         continue;
       }
-      if (!pay) {
+      if (!pay || c.free) {
         todo.push(c);
         continue;
       }
@@ -878,9 +890,8 @@ async function build(player, dim, cells, label, opts) {
     refund(player, pid, paid);
 
     if (placed.length) {
-      s.undo.push({ dim: dim.id, label, cells: placed });
-      while (s.undo.length > Math.max(1, get("undoSteps"))) s.undo.shift();
-      if (!opts.redo) s.redo = [];
+      if (opts.done) opts.done(placed);
+      else remember(player, { ...opts.rec, dim: dim.id, label, kind: opts.kind ?? "build", cells: placed }, !!opts.redo);
     }
     if (!player.isValid) return placed.length > 0;
     const skipped = blocked + changed;
@@ -896,65 +907,6 @@ async function build(player, dim, cells, label, opts) {
     if (short.length) player.sendMessage(`§eOut of blocks: built ${placed.length} of ${todo.length}. Still needed: ${short.join(", ")}.`);
     if (notes.length && skipped + unloaded + unpayable >= Math.max(4, cells.length / 10)) player.sendMessage(`§7Skipped ${notes.join(", ")}.`);
     return true;
-  } finally {
-    s.busy = false;
-  }
-}
-
-/**
- * Undoes (or redoes) the player's last build.
- * @param {Player} player @param {boolean} redo
- */
-async function undo(player, redo) {
-  const s = stateOf(player);
-  if (s.busy) return player.sendMessage("§eWait for the build to finish.");
-  if (cantBuild(player)) return player.sendMessage(CANT_BUILD);
-  const list = redo ? s.redo : s.undo;
-  const rec = list.pop();
-  if (!rec) return player.sendMessage(redo ? "§eNothing to redo." : "§eNothing to undo. Builds are forgotten when the server restarts.");
-  const dim = world.getDimension(rec.dim);
-  if (redo) {
-    const cells = rec.cells.map((c) => ({ x: c.x, y: c.y, z: c.z, perm: c.after, expect: c.before.type.id }));
-    const ok = await build(player, dim, cells, rec.label, { mode: "air", redo: true });
-    if (!ok) s.redo.push(rec);
-    return;
-  }
-  const pid = player.id;
-  s.busy = true;
-  try {
-    const perTick = Math.max(10, get("blocksPerTick"));
-    /** @type {Map<string, number>} */
-    const owed = new Map();
-    let back = 0, gone = 0;
-    for (let i = rec.cells.length - 1, n = 0; i >= 0; i--, n++) {
-      if (n && n % perTick === 0) await tick();
-      const c = rec.cells[i];
-      let block;
-      try {
-        block = dim.getBlock(c);
-      } catch {
-        block = undefined;
-      }
-      if (!block || block.typeId !== c.after.type.id) {
-        gone++;
-        continue;
-      }
-      try {
-        block.setPermutation(c.before);
-      } catch {
-        gone++;
-        continue;
-      }
-      back++;
-      if (c.cost) owed.set(c.cost, (owed.get(c.cost) ?? 0) + 1);
-    }
-    refund(player, pid, owed);
-    if (back) s.redo.push(rec);
-    while (s.redo.length > Math.max(1, get("undoSteps"))) s.redo.shift();
-    if (!player.isValid) return;
-    const given = [...owed.values()].reduce((a, b) => a + b, 0);
-    note(player, `§aUndone: ${rec.label}§7 (${plural(back, "block")}${given ? `, ${given} given back` : ""})`);
-    if (gone) player.sendMessage(`§7${plural(gone, "block")} had changed since and stayed as they are.`);
   } finally {
     s.busy = false;
   }
@@ -1238,8 +1190,11 @@ async function mainMenu(player) {
     { text: "Build here now", run: () => buildHereMenu(player) },
   ];
   if (s.start) actions.push({ text: "Forget the start block", run: () => ((s.start = undefined), note(player, "§7Start block forgotten")) });
-  if (s.undo.length) actions.push({ text: `Undo: ${s.undo[s.undo.length - 1].label}`, run: () => undo(player, false) });
-  if (s.redo.length) actions.push({ text: `Redo: ${s.redo[s.redo.length - 1].label}`, run: () => undo(player, true) });
+  actions.push({ text: "Copy, cut and paste", run: () => clipboardMenu(player) });
+  actions.push({ text: "Destroy mode", run: () => destroyMenu(player) });
+  const undoLabel = lastLabel(player, false), redoLabel = lastLabel(player, true);
+  if (undoLabel) actions.push({ text: `Undo: ${undoLabel}`, run: () => undo(player, false) });
+  if (redoLabel) actions.push({ text: `Redo: ${redoLabel}`, run: () => undo(player, true) });
   const form = new ActionFormData().title(TITLE).body(body);
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
@@ -1499,4 +1454,46 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
   command(r, "realm:build_mode", "Build mode on or off: placing a block builds your shape", toggleMode);
   command(r, "realm:build_undo", "Undo your last build (blocks come back)", (p) => undo(p, false));
   command(r, "realm:build_redo", "Build again what you last undid", (p) => undo(p, true));
+  command(r, "realm:build_copy", "Copy the region you selected (or start selecting one)", copyCommand);
+  command(r, "realm:build_cut", "Cut the region you selected: copy it and take it away", cutCommand);
+  command(r, "realm:build_paste", "Paste your copy at the block you look at, turned to face your way", pasteCommand);
+  command(r, "realm:build_destroy", "Destroy mode on or off: breaking a block with a pickaxe, axe or shovel breaks your shape", toggleDestroy);
 });
+
+// ---------------------------------------------------------------------------
+// What clipboard.js, destroy.js and undo.js use from here
+// ---------------------------------------------------------------------------
+
+/**
+ * World positions of the player's shape at T (or between T and `end` in two-block mode). Throws TooBig.
+ * @param {Player} player @param {{ x: number, y: number, z: number }} T @param {{ x: number, y: number, z: number }} [end]
+ */
+function shapeAt(player, T, end) {
+  const plan = planOf(player);
+  const fr = frameOf(facingOf(player), plan.turn);
+  const rel = relCells(plan, false, end ? pointsBox(T, end, fr) : undefined, limitOf(player));
+  return rel.map(({ du, dv, dw }) => ({ x: T.x + du * fr.R[0] + dw * fr.F[0], y: T.y + dv, z: T.z + du * fr.R[1] + dw * fr.F[1] }));
+}
+
+/** Two-block mode is set for the current shape. @param {Player} player */
+const twoBlocks = (player) => {
+  const plan = planOf(player);
+  return plan.size === "points" && !!shapeOf(plan.shape).points;
+};
+
+/** @param {Player} player @param {boolean} on */
+function setBuildMode(player, on) {
+  const s = stateOf(player);
+  s.on = on;
+  s.start = undefined;
+}
+
+const ctx = {
+  isOp, isCreative, cantBuild, CANT_BUILD, note, show, inputs, permOf, nice, plural, containerOf, countItems, giveItems, refund,
+  build, areaRefusal, isProtectedBlock, isForbidden, isSoft, stacked, costOf, facingOf, frameOf, FACINGS, lookTarget, planOf,
+  replaceMode, limitOf, stateOf, refusal, tick, AIR, boundsOf, drawBox, shapeAt, twoBlocks, planLabel, mainMenu, setBuildMode, TooBig, tooBig,
+};
+/** @typedef {typeof ctx} Ctx */
+setupUndo(ctx);
+setupClipboard(ctx);
+setupDestroy(ctx);
