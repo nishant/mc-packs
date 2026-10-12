@@ -3,18 +3,25 @@
 // thousands of layouts (rooms fit the box, paths connect, every puzzle has an answer).
 //
 // Levels: 0 Easy, 1 Normal, 2 Hard, then 3 to 22 are Nightmare tiers 1 to 20.
-// Coordinates: a dungeon is a grid of cells CELL blocks wide. A room's interior is 15 x 15 blocks
-// around its cell's center. Inside a room, positions are local: u across, v forward (from the door
-// players come in by toward the far wall), y up from the floor block (players stand at y 1).
-// Interior u and v run -7 to 7; the walls are at -8 and 8.
+// Coordinates: a dungeon is a grid of cells `cell` blocks wide (20 to 24, bigger from Normal). A room's
+// interior is (2r + 1) x (2r + 1) blocks around its cell's center, r from 7 to cell / 2 - 3. Inside a room,
+// positions are local: u across, v forward (from the door players come in by toward the far wall), y up
+// from the floor block (players stand at y 1). Interior u and v run -r to r; the walls are at -r - 1 and
+// r + 1. Shapes (rooms.js) fill parts of the interior with wall to make Ls, crosses, halls and so on.
 
 import { CONFIG } from "./config.js";
+import { SHAPES, bfs, cover, doorCells, key, ledge, pathTo, shapesFor, wallParts } from "./rooms.js";
 
+/** The smallest cell (and the cell of every dungeon from before rooms grew). */
 export const CELL = 20;
-export const HALF = 10; // a room's center from its cell's corner
-export const R = 7; // interior half width
+/** The biggest cell: rooms up to 19 x 19 inside. */
+export const MAX_CELL = 24;
+export const HALF = 10; // a 20-block cell's center from its corner
+export const R = 7; // the smallest room's interior half width
 export const BASE_LEVELS = ["Easy", "Normal", "Hard"];
 export const MAX_GRID = 5;
+/** The biggest dungeon box, in blocks across. */
+export const MAX_SIZE = MAX_GRID * MAX_CELL;
 export const MAX_ROOM_H = 30;
 
 /** @typedef {{ x: number, z: number }} V2 */
@@ -30,16 +37,18 @@ export const MAX_ROOM_H = 30;
  *   solution?: boolean[], clues?: string[], seq?: number[], n?: number, path?: number[], count?: number, start?: boolean[],
  *   answer?: number[], seconds?: number, q?: string, options?: string[], correct?: number }} Puzzle
  */
-/** @typedef {{ side: Face, y: number, bars: boolean, to: number }} Door */
+/** @typedef {{ side: Face, y: number, bars: boolean, to: number, a?: number }} Door a: the door's middle across its wall (0 is the middle of the wall) */
 /**
- * @typedef {{ kind: Kind, cx: number, cz: number, h: number, back: V2, exit: V2 | null, ey: number, parent: number,
+ * @typedef {{ kind: Kind, cx: number, cz: number, h: number, r: number, back: V2, exit: V2 | null, ey: number, parent: number,
  *   parts: Part[], spawns: P3[], fly: P3[], puzzle?: Puzzle, doors: Door[], zone?: { u: number, v: number, y: number, r: number },
- *   chests: P3[], decor: number, variant: string }} Room
- * ey: the exit doorway's floor above the room's floor (0 for a normal door; a shaft's is high up).
- * parent: for a side room, the path room it opens off; -1 otherwise.
+ *   chests: P3[], decor: number, variant: string, shape: string, lane?: [number, number][], volleys?: { u: number, v: number, du: number, dv: number }[],
+ *   bossAt?: P3, solid?: Set<string> }} Room
+ * r: the interior's half width. ey: the exit doorway's floor above the room's floor (0 for a normal door; a shaft's is high up).
+ * parent: for a side room, the path room it opens off; -1 otherwise. shape: its shape (rooms.js). lane: a trap hall's way through,
+ * entry to exit. volleys: where a trap hall's arrows fly from, and which way. bossAt: where the boss appears.
  */
-/** @typedef {"entry" | "combat" | "elite" | "puzzle" | "trap" | "shrine" | "shaft" | "boss" | "treasure" | "cache"} Kind */
-/** @typedef {{ grid: number, n: number, height: number, rooms: Room[], level: number }} Layout */
+/** @typedef {"entry" | "combat" | "elite" | "puzzle" | "trap" | "shrine" | "shaft" | "boss" | "treasure" | "cache" | "boon"} Kind */
+/** @typedef {{ grid: number, cell: number, n: number, height: number, rooms: Room[], level: number, long: boolean }} Layout */
 
 // ---------------------------------------------------------------------------
 // Random
@@ -143,6 +152,26 @@ export function scaleFor(L) {
     /** Shafts get a ladder below tier 10; from tier 10 it's ledges, your own blocks or an elytra. */
     ladders: t < 10,
     build: t >= Math.max(1, Math.floor(CONFIG.buildFromTier)),
+  };
+}
+
+/**
+ * A Gauntlet is harder than a run at the same level: one more wave and mob, one more elite from Normal,
+ * champions more often, a tougher boss; it pays more Crowns and treasure for its length.
+ * @param {ReturnType<typeof scaleFor>} s @param {number} rooms @param {number} L
+ */
+export function longScale(s, rooms, L) {
+  const len = rooms / 8;
+  return {
+    ...s,
+    waves: Math.min(8, s.waves + 1),
+    mobs: s.mobs + 1,
+    elites: s.elites + (L >= 1 ? 1 : 0),
+    champChance: Math.min(0.9, s.champChance + (L >= 1 ? 0.1 : 0)),
+    bossHealth: s.bossHealth * 1.3,
+    crowns: s.crowns * len * 1.25,
+    loot: s.loot * 1.5,
+    relic: s.relic + 0.1,
   };
 }
 
@@ -276,27 +305,34 @@ export const opposite = (f) => OPPOSITE[f];
 const OPPOSITE = { back: "fwd", fwd: "back", left: "right", right: "left", up: "down", down: "up" };
 
 /**
- * The ring of interior blocks along the walls, clockwise, without the four corners (where the pillars stand).
- * @returns {{ u: number, v: number, side: Face, a: number }[]}
+ * The ring of interior blocks along the walls of a room of half width r, clockwise, without the four corners (where the pillars stand).
+ * @param {number} [r] @returns {{ u: number, v: number, side: Face, a: number }[]}
  */
-export function ring() {
+export function ring(r = R) {
+  const have = RINGS.get(r);
+  if (have) return have;
   /** @type {{ u: number, v: number, side: Face, a: number }[]} */
   const out = [];
-  for (let a = -R + 1; a <= R - 1; a++) out.push({ ...onSide("fwd", a, R), side: "fwd", a });
-  for (let a = R - 1; a >= -R + 1; a--) out.push({ ...onSide("right", a, R), side: "right", a });
-  for (let a = R - 1; a >= -R + 1; a--) out.push({ ...onSide("back", a, R), side: "back", a });
-  for (let a = -R + 1; a <= R - 1; a++) out.push({ ...onSide("left", a, R), side: "left", a });
+  for (let a = -r + 1; a <= r - 1; a++) out.push({ ...onSide("fwd", a, r), side: "fwd", a });
+  for (let a = r - 1; a >= -r + 1; a--) out.push({ ...onSide("right", a, r), side: "right", a });
+  for (let a = r - 1; a >= -r + 1; a--) out.push({ ...onSide("back", a, r), side: "back", a });
+  for (let a = -r + 1; a <= r - 1; a++) out.push({ ...onSide("left", a, r), side: "left", a });
+  RINGS.set(r, out);
   return out;
 }
-const RING = ring();
+/** @type {Map<number, { u: number, v: number, side: Face, a: number }[]>} */
+const RINGS = new Map();
 
-/** Is local (u, v) right in front of one of these doors (where walking in and out must stay clear)? @param {Door[]} doors @param {number} u @param {number} v @param {number} [y] */
-export function blocksDoor(doors, u, v, y = 1) {
+/**
+ * Is local (u, v) right in front of one of these doors (where walking in and out must stay clear)?
+ * @param {Door[]} doors @param {number} u @param {number} v @param {number} [y] @param {number} [r] the room's half width
+ */
+export function blocksDoor(doors, u, v, y = 1, r = R) {
   for (const d of doors) {
     if (d.side === "up" || d.side === "down") continue;
     if (y < d.y + 1 || y > d.y + 3) continue;
     for (let a = -1; a <= 1; a++) {
-      const p = onSide(d.side, a, R);
+      const p = onSide(d.side, (d.a ?? 0) + a, r);
       if (p.u === u && p.v === v) return true;
     }
   }
@@ -476,10 +512,10 @@ export function walk(r, n, g) {
 /**
  * Ledges along the walls, every `step` ring places, from (ring index `from`, height `top`) down to height 1,
  * going `dir` around the ring. Undefined when a ledge would land where it mustn't.
- * @param {number} from @param {number} dir @param {number} step @param {number} top
+ * @param {{ u: number, v: number }[]} RING @param {number} from @param {number} dir @param {number} step @param {number} top
  * @param {(p: { u: number, v: number }, y: number) => boolean} bad
  */
-function chain(from, dir, step, top, bad) {
+function chain(RING, from, dir, step, top, bad) {
   /** @type {P3[]} */
   const out = [];
   const n = RING.length;
@@ -495,32 +531,43 @@ function chain(from, dir, step, top, bad) {
   return out;
 }
 
+/** The cell size for a level: rooms grow from Normal. @param {number} L @param {boolean} long */
+const cellFor = (L, long) => (long || L >= 1 ? MAX_CELL : 22);
+
 /**
  * The whole dungeon for a seed and level.
- * @param {number} seed @param {number} L
+ * opts.rooms: a Gauntlet's room count (a long run: boon rooms every opts.boonEvery rooms); opts.maxSize: the widest box allowed here.
+ * @param {number} seed @param {number} L @param {{ rooms?: number, boonEvery?: number, maxSize?: number }} [opts]
  * @returns {Layout}
  */
-export function layout(seed, L) {
+export function layout(seed, L, opts = {}) {
   const r = rng(seed);
   const s = scaleFor(L);
-  const n = s.roomsMin + Math.floor(r() * (s.roomsMax - s.roomsMin + 1));
+  const long = !!opts.rooms;
+  const n = long ? clamp(Math.floor(opts.rooms ?? 14), 8, 20) : s.roomsMin + Math.floor(r() * (s.roomsMax - s.roomsMin + 1));
+  const sideCount = s.sides;
   let g = 3;
-  while (g < MAX_GRID && g * g < n + s.sides) g++;
+  while (g < MAX_GRID && g * g < n + sideCount) g++;
+  let cell = cellFor(L, long);
+  while (cell > CELL && g * cell > (opts.maxSize ?? MAX_SIZE)) cell -= 2;
+  const rMax = cell / 2 - 3;
   const cells = walk(r, n, g);
-  const kinds = roomKinds(r, s, n, L);
+  const kinds = roomKinds(r, s, n, L, long ? clamp(Math.floor(opts.boonEvery ?? 5), 3, 8) : 0);
+  /** @param {Kind} kind @param {number} cx @param {number} cz @param {V2} back @param {V2 | null} exit @param {number} parent @returns {Room} */
+  const blank = (kind, cx, cz, back, exit, parent) => ({ kind, cx, cz, h: 5, r: 7, back, exit, ey: 0, parent, parts: [], spawns: [], fly: [], doors: [], chests: [], decor: 0, variant: "plain", shape: "plain" });
   /** @type {Room[]} */
   const rooms = cells.map(([cx, cz], i) => {
     const exit = i < n - 1 ? { x: cells[i + 1][0] - cx, z: cells[i + 1][1] - cz } : null;
     const back = i > 0 ? { x: cells[i - 1][0] - cx, z: cells[i - 1][1] - cz } : exit ? { x: -exit.x, z: -exit.z } : { x: 0, z: -1 };
-    return { kind: kinds[i], cx, cz, h: 5, back, exit, ey: 0, parent: -1, parts: [], spawns: [], fly: [], doors: [], chests: [], decor: 0, variant: "plain" };
+    return blank(kinds[i], cx, cz, back, exit, -1);
   });
   // Side rooms: a free cell next to a path room (not the entry, a shaft, the boss or the treasure).
   const used = new Set(cells.map(([x, z]) => x * 10 + z));
   const hosts = shuffle(
-    rooms.map((rm, i) => ({ rm, i })).filter(({ rm, i }) => i > 0 && i < n - 2 && rm.kind !== "shaft"),
+    rooms.map((rm, i) => ({ rm, i })).filter(({ rm, i }) => i > 0 && i < n - 2 && rm.kind !== "shaft" && rm.kind !== "boon"),
     r,
   );
-  for (let k = 0; k < s.sides; k++) {
+  for (let k = 0; k < sideCount; k++) {
     let placed = false;
     for (const { rm, i } of hosts) {
       if (rooms.some((o) => o.parent === i)) continue;
@@ -529,14 +576,14 @@ export function layout(seed, L) {
         const z = rm.cz + dz;
         if (x < 0 || z < 0 || x >= g || z >= g || used.has(x * 10 + z)) continue;
         used.add(x * 10 + z);
-        rooms.push({ kind: "cache", cx: x, cz: z, h: 5, back: { x: -dx, z: -dz }, exit: null, ey: 0, parent: i, parts: [], spawns: [], fly: [], doors: [], chests: [], decor: 0, variant: "plain" });
+        rooms.push(blank("cache", x, z, { x: -dx, z: -dz }, null, i));
         placed = true;
         break;
       }
       if (placed) break;
     }
   }
-  // Heights and exits.
+  // Heights, sizes and exits.
   for (const rm of rooms) {
     if (rm.kind === "shaft") {
       rm.h = clamp(16 + Math.floor(s.t * 0.6) + Math.floor(r() * 4), 16, MAX_ROOM_H);
@@ -545,17 +592,18 @@ export function layout(seed, L) {
     else if (rm.kind === "combat" || rm.kind === "elite") {
       if (s.tall && r() < s.tallChance) rm.h = clamp(14 + Math.floor(r() * (s.tallMax - 13)), 14, s.tallMax);
       else if (L >= 2 && r() < 0.35) rm.h = 8;
-    }
+    } else if (rm.kind === "trap") rm.h = r() < 0.5 ? 6 : 5;
+    rm.r = sizeFor(rm.kind, rMax, r);
   }
   // Doors (now that every room's exit height is known).
   rooms.forEach((rm, i) => {
     const fr = frame(rm.back);
-    if (i > 0 && rm.parent < 0) rm.doors.push({ side: "back", y: 0, bars: false, to: i - 1 });
-    if (rm.exit) rm.doors.push({ side: faceOf(fr, rm.exit), y: rm.ey, bars: rm.kind !== "shaft", to: i + 1 });
+    if (i > 0 && rm.parent < 0) rm.doors.push({ side: "back", y: 0, bars: false, to: i - 1, a: 0 });
+    if (rm.exit) rm.doors.push({ side: faceOf(fr, rm.exit), y: rm.ey, bars: rm.kind !== "shaft", to: i + 1, a: 0 });
     if (rm.parent >= 0) {
-      rm.doors.push({ side: "back", y: 0, bars: false, to: rm.parent });
+      rm.doors.push({ side: "back", y: 0, bars: false, to: rm.parent, a: 0 });
       const host = rooms[rm.parent];
-      host.doors.push({ side: faceOf(frame(host.back), { x: -rm.back.x, z: -rm.back.z }), y: 0, bars: false, to: i });
+      host.doors.push({ side: faceOf(frame(host.back), { x: -rm.back.x, z: -rm.back.z }), y: 0, bars: false, to: i, a: 0 });
     }
   });
   // Puzzle kinds: different ones where possible.
@@ -572,45 +620,320 @@ export function layout(seed, L) {
     if (kind === "targets") rm.h = 5 + Math.min(5, Math.floor(s.t / 2));
     rm.puzzle = { type: kind };
   }
-  rooms.forEach((rm, i) => fillRoom(rm, i, r, s, L, n));
+  rooms.forEach((rm, i) => shapeRoom(rm, i, rooms, r, s, L, n));
   const height = Math.max(7, ...rooms.map((rm) => rm.h + 2));
-  return { grid: g, n, height, rooms, level: L };
+  return { grid: g, cell, n, height, rooms, level: L, long };
 }
 
 /**
- * What each path room is: entry, a shuffled middle, boss, treasure.
- * @param {() => number} r @param {ReturnType<typeof scaleFor>} s @param {number} n @param {number} L @returns {Kind[]}
+ * A room's half width: entry and treasure rooms stay small, puzzles and shafts middling, fights and traps big, the boss biggest.
+ * @param {Kind} kind @param {number} rMax @param {() => number} r
  */
-function roomKinds(r, s, n, L) {
-  const middle = n - 3;
+function sizeFor(kind, rMax, r) {
+  const big = Math.min(rMax, 8);
+  switch (kind) {
+    case "entry":
+    case "treasure":
+      return 7;
+    case "puzzle":
+    case "cache":
+    case "shaft":
+      return Math.min(rMax, 7 + (r() < 0.4 ? 1 : 0));
+    case "boss":
+      return rMax;
+    case "shrine":
+    case "boon":
+      return big;
+    default:
+      return big + Math.floor(r() * (rMax - big + 1));
+  }
+}
+
+/**
+ * What each path room is: entry, a shuffled middle, boss, treasure. A Gauntlet (boonEvery > 0) has a boon room
+ * every boonEvery rooms, each behind an elite hall, and one more puzzle, trap and shrine.
+ * @param {() => number} r @param {ReturnType<typeof scaleFor>} s @param {number} n @param {number} L @param {number} boonEvery
+ * @returns {Kind[]}
+ */
+function roomKinds(r, s, n, L, boonEvery) {
+  /** @type {Set<number>} */
+  const fixed = new Set();
+  /** @type {Map<number, Kind>} */
+  const at = new Map();
+  if (boonEvery > 0) {
+    for (let i = boonEvery; i <= n - 3; i += boonEvery) {
+      at.set(i, "boon");
+      fixed.add(i);
+      if (i - 1 >= 1 && !fixed.has(i - 1)) {
+        at.set(i - 1, "elite");
+        fixed.add(i - 1);
+      }
+    }
+  }
+  const middle = n - 3 - fixed.size;
   const room = middle - 2; // at least two combat rooms
   /** @type {Kind[]} */
   const wanted = ["puzzle"];
+  const extra = boonEvery > 0 ? 1 : 0;
   for (let k = 0; k < s.shafts; k++) wanted.push("shaft");
   for (let k = 0; k < s.eliteRooms; k++) wanted.push("elite");
-  for (let k = 0; k < s.traps; k++) wanted.push("trap");
-  if (s.shrines && r() < 0.75) wanted.push("shrine");
-  for (let k = 1; k < s.puzzles; k++) wanted.push("puzzle");
+  for (let k = 0; k < s.traps + extra; k++) wanted.push("trap");
+  if ((s.shrines || extra) && (extra || r() < 0.75)) wanted.push("shrine");
+  for (let k = 1; k < s.puzzles + extra; k++) wanted.push("puzzle");
   const special = wanted.slice(0, Math.max(1, room));
   /** @type {Kind[]} */
   const combat = Array(Math.max(0, middle - special.length)).fill("combat");
-  let mid = shuffle([...special, ...combat], r);
-  // A shaft drops you into the next room by a pool: keep it off the room before the boss, so the boss room never starts under a drop.
-  if (L >= 0 && mid.length > 1 && mid[mid.length - 1] === "shaft") {
-    const j = mid.findIndex((k) => k !== "shaft");
-    if (j >= 0) [mid[j], mid[mid.length - 1]] = [mid[mid.length - 1], mid[j]];
+  const mid = shuffle([...special, ...combat], r);
+  /** @type {Kind[]} */
+  const out = ["entry"];
+  for (let i = 1; i <= n - 3; i++) out.push(at.get(i) ?? /** @type {Kind} */ (mid.shift() ?? "combat"));
+  // A shaft drops you into the next room by a pool: keep it off the room before the boss (and before a boon room).
+  for (let i = 1; i <= n - 3; i++) {
+    if (out[i] !== "shaft" || (i < n - 3 && out[i + 1] !== "boon")) continue;
+    const j = out.findIndex((k, x) => x >= 1 && x <= n - 3 && !fixed.has(x) && k !== "shaft" && (x === n - 3 || out[x + 1] !== "boon"));
+    if (j >= 0) [out[i], out[j]] = [out[j], out[i]];
   }
-  return ["entry", ...mid, "boss", "treasure"];
+  return [...out, "boss", "treasure"];
 }
 
-/** Floor spots for wave mobs: a ring halfway out, clear of the doors. @returns {P3[]} */
-function floorSpawns() {
+/** Floor spots for wave mobs: a ring near the walls and one around the middle (shapes and the walk weed them out). @param {number} r @returns {P3[]} */
+function floorSpawns(r) {
   /** @type {P3[]} */
   const out = [];
-  for (let a = -4; a <= 4; a += 2) {
-    out.push({ u: a, v: 5, y: 1 }, { u: a, v: -5, y: 1 }, { u: 5, v: a, y: 1 }, { u: -5, v: a, y: 1 });
+  const seen = new Set();
+  /** @param {number} u @param {number} v */
+  const add = (u, v) => {
+    if (seen.has(key(u, v))) return;
+    seen.add(key(u, v));
+    out.push({ u, v, y: 1 });
+  };
+  for (const d of [r - 2, 3]) {
+    for (let a = -d + 1; a <= d - 1; a += 2) {
+      add(a, d);
+      add(a, -d);
+      add(d, a);
+      add(-d, a);
+    }
   }
   return out;
+}
+
+/** Kinds whose doors may sit off the middle of the wall (entrance and exit far apart). */
+const OFFSET_KINDS = new Set(["entry", "combat", "elite", "trap", "shrine", "boss", "treasure", "boon"]);
+
+/**
+ * Where the room's doors sit along their walls: entrance and exit pushed apart (to opposite ends, or
+ * away from the corner they share), so a room can't be skipped by a step around the corner.
+ * Doors to and from a shaft's chute and side rooms stay in the middle of the wall.
+ * @param {Room} rm @param {number} i @param {Room[]} rooms @param {() => number} r @param {boolean} far @param {boolean} middle
+ */
+function placeDoors(rm, i, rooms, r, far, middle) {
+  for (const d of rm.doors) d.a = 0;
+  if (middle || !OFFSET_KINDS.has(rm.kind)) return;
+  const max = rm.r - 2;
+  const entry = rm.parent < 0 && i > 0 && rooms[i - 1].kind !== "shaft" ? rm.doors.find((d) => d.to === i - 1) : undefined;
+  const exit = rm.doors.find((d) => d.to === i + 1 && d.y === 0);
+  const k1 = far ? max : 1 + Math.floor(r() * max);
+  const k2 = far ? max : 1 + Math.floor(r() * max);
+  const s = r() < 0.5 ? -1 : 1;
+  if (!exit) {
+    if (entry) entry.a = s * k1;
+    return;
+  }
+  if (exit.side === "fwd") {
+    if (entry) entry.a = s * k1;
+    exit.a = -s * k2;
+  } else if (exit.side === "left") {
+    // The exit is on the left wall: come in toward the right, leave toward the far end.
+    if (entry) entry.a = k1;
+    exit.a = k2;
+  } else {
+    if (entry) entry.a = -k1;
+    exit.a = k2;
+  }
+}
+
+/**
+ * Gives a room its shape, door spots and parts, and checks it with a walk: every door, chest, button and
+ * spawn can be reached, and the way from the entrance to the exit is long enough (a trap hall's winds
+ * through its traps). Tries again with another shape when it isn't; the last tries are the plain square.
+ * @param {Room} rm @param {number} i @param {Room[]} rooms @param {() => number} r @param {ReturnType<typeof scaleFor>} s @param {number} L @param {number} n
+ */
+function shapeRoom(rm, i, rooms, r, s, L, n) {
+  const options = shapesFor(rm.kind, rm.h >= 8, s.t);
+  const type = rm.puzzle?.type;
+  const trap = rm.kind === "trap";
+  // Up to 7 shapes, each with 4 door placements (far apart, then anywhere, then near the middle); then the plain square.
+  for (let attempt = 0; attempt < 7 * 4 + 3; attempt++) {
+    const plain = attempt >= 28 || options.length === 1;
+    const doorTry = plain ? attempt - 28 : attempt % 4;
+    if (plain && attempt < 28) attempt = 28;
+    if (doorTry === 0 || plain) {
+      rm.shape = plain ? "plain" : pick(options, r);
+    }
+    rm.parts = [];
+    rm.spawns = [];
+    rm.fly = [];
+    rm.chests = [];
+    rm.zone = undefined;
+    rm.decor = 0;
+    rm.variant = "plain";
+    rm.lane = undefined;
+    rm.volleys = undefined;
+    rm.bossAt = undefined;
+    if (type) rm.puzzle = { type };
+    placeDoors(rm, i, rooms, r, doorTry === 0 || (trap && doorTry === 1), plain && attempt >= 30);
+    if (doorTry === 3 && !plain) for (const d of rm.doors) d.a = Math.sign(d.a ?? 0);
+    const gen = SHAPES[rm.shape];
+    const shape = rm.shape === "plain" || !gen ? { name: "plain", solid: new Set(), parts: [] } : gen(rm.r, rm.h, r, trap);
+    if (rm.doors.some((d) => d.y === 0 && doorCells(d, rm.r).some((c) => shape.solid.has(key(c.u, c.v))))) continue;
+    rm.solid = shape.solid;
+    rm.parts.push(...wallParts(shape.solid, rm.r, rm.h), ...shape.parts);
+    if (!plain && (rm.kind === "combat" || rm.kind === "elite") && rm.h < 8) {
+      if (r() < 0.4) rm.parts.push(...cover(rm.r, r));
+      if (r() < 0.3) {
+        const lg = ledge(rm.r, rm.doors, r);
+        if (lg) {
+          rm.parts.push(...lg.parts);
+          rm.spawns.push(...lg.top);
+          rm.variant = "ledge";
+        }
+      }
+    }
+    fillRoom(rm, i, r, s, L, n);
+    framing(rm);
+    if (check(rm, i, s, r)) break;
+  }
+  delete rm.solid;
+}
+
+/** Corner pillars and hanging lanterns, where the shape leaves room. @param {Room} rm */
+function framing(rm) {
+  const R0 = rm.r;
+  const solid = rm.solid ?? new Set();
+  for (const [u, v] of [[-R0, -R0], [R0, -R0], [-R0, R0], [R0, R0]]) if (!solid.has(key(u, v))) rm.parts.push({ k: "accent", u, v, y: 1, y2: rm.h });
+  const q = Math.max(3, Math.round(R0 * 0.55));
+  const spots = [[-q, -q], [q, -q], [-q, q], [q, q], ...(R0 >= 9 ? [[0, 0]] : [])];
+  const taken = new Set(rm.parts.filter((p) => (p.y2 ?? p.y) >= rm.h || p.y >= rm.h - 1).map((p) => key(p.u, p.v)));
+  for (const [u, v] of spots) {
+    const k = key(u, v);
+    if (solid.has(k) || taken.has(k)) continue;
+    rm.parts.push({ k: "hang", u, v, y: rm.h });
+  }
+}
+
+/**
+ * Is a room playable? Fills in what follows from the walk: reachable spawns, the boss's spot, a trap hall's lane, pits and arrow slits.
+ * @param {Room} rm @param {number} i @param {ReturnType<typeof scaleFor>} s @param {() => number} r
+ */
+function check(rm, i, s, r) {
+  const R0 = rm.r;
+  const solid = rm.solid ?? new Set();
+  const blocked = floorBlockers(rm);
+  for (const d of rm.doors) if (d.y === 0 && doorCells(d, R0).some((c) => blocked.has(key(c.u, c.v)))) return false;
+  // Nothing but walls inside the shape's walls.
+  for (const p of rm.parts) {
+    if (p.k === "wall" || p.k === "target" || Math.min(p.y, p.y2 ?? p.y) > 3) continue;
+    for (let u = Math.min(p.u, p.u2 ?? p.u); u <= Math.max(p.u, p.u2 ?? p.u); u++) for (let v = Math.min(p.v, p.v2 ?? p.v); v <= Math.max(p.v, p.v2 ?? p.v); v++) if (solid.has(key(u, v))) return false;
+  }
+  const entry = rm.doors.find((d) => d.side === "back" && d.y === 0);
+  const starts = entry ? doorCells(entry, R0) : [{ u: 0, v: 0 }, { u: 1, v: 1 }, { u: -1, v: 1 }, { u: 1, v: -1 }, { u: -1, v: -1 }];
+  if (!entry && starts.some((c) => blocked.has(key(c.u, c.v)))) return false;
+  const walk = bfs(R0, blocked, starts);
+  /** @param {{ u: number, v: number }} c */
+  const reach = (c) => walk.has(key(c.u, c.v));
+  /** @param {{ u: number, v: number }} c */
+  const near = (c) => [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([du, dv]) => reach({ u: c.u + du, v: c.v + dv }));
+  for (const d of rm.doors) if (d !== entry && d.y === 0 && !doorCells(d, R0).some(reach)) return false;
+  if (rm.zone && rm.zone.y === 1 && !near(rm.zone)) return false;
+  if (rm.chests.some((c) => !near(c))) return false;
+  if (rm.parts.some((p) => p.k === "button" && p.f === "up" && !near(p))) return false;
+  rm.spawns = rm.spawns.filter((p) => p.y > 1 || (reach(p) && !blocked.has(key(p.u, p.v))));
+  if (["combat", "elite", "boss"].includes(rm.kind) && rm.spawns.filter((p) => p.y === 1).length < 4) return false;
+  if (rm.kind === "boss") {
+    const spots = [...walk.keys()].map((k) => k.split(",").map(Number)).filter(([u, v]) => Math.abs(u) <= R0 - 2 && Math.abs(v) <= R0 - 2);
+    spots.sort((a, b) => Math.hypot(a[0], a[1] - 2) - Math.hypot(b[0], b[1] - 2));
+    if (!spots.length) return false;
+    rm.bossAt = { u: spots[0][0], v: spots[0][1], y: 1 };
+  }
+  const exit = rm.doors.find((d) => d.to === i + 1 && d.y === 0);
+  if (entry && exit) {
+    let best;
+    for (const c of doorCells(exit, R0)) {
+      const w = walk.get(key(c.u, c.v));
+      if (w && (!best || w.d < best.d)) best = { d: w.d, k: key(c.u, c.v) };
+    }
+    if (!best) return false;
+    const need = rm.kind === "trap" ? Math.round(2.4 * R0) : ["combat", "elite", "boss", "shrine", "boon"].includes(rm.kind) ? R0 + 3 : 0;
+    if (best.d < need) return false;
+    if (rm.kind === "trap") traps(rm, pathTo(walk, best.k), blocked, s, r);
+  }
+  return true;
+}
+
+/**
+ * A trap hall's traps along the way through: pits across the lane (soul sand at the bottom, magma from
+ * Nightmare 1) and arrow slits where a wall faces the lane.
+ * @param {Room} rm @param {[number, number][]} lane @param {Set<string>} blocked @param {ReturnType<typeof scaleFor>} s @param {() => number} r
+ */
+function traps(rm, lane, blocked, s, r) {
+  const R0 = rm.r;
+  rm.lane = lane;
+  const doorSet = new Set();
+  for (const d of rm.doors) for (const c of doorCells(d, R0)) for (const [du, dv] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) doorSet.add(key(c.u + du, c.v + dv));
+  const zone = rm.zone;
+  const pits = Math.min(4, 1 + Math.floor(s.t / 5) + (s.t >= 1 ? 1 : 0));
+  const pitCells = new Set();
+  let idx = 4 + Math.floor(r() * 3);
+  for (let k = 0; k < pits && idx < lane.length - 5; k++, idx += 4 + Math.floor(r() * 4)) {
+    const [u, v] = lane[idx];
+    const [pu, pv] = lane[idx - 1];
+    const du = u - pu;
+    const dv = v - pv;
+    // Across the lane: both ways until a wall, at most 3.
+    /** @type {[number, number][]} */
+    const row = [[u, v]];
+    for (const sgn of [1, -1]) {
+      for (let x = 1; x <= 3; x++) {
+        const cu = u + sgn * dv * x;
+        const cv = v + sgn * du * x;
+        if (Math.abs(cu) > R0 || Math.abs(cv) > R0 || blocked.has(key(cu, cv))) break;
+        row.push([cu, cv]);
+      }
+    }
+    if (row.some(([cu, cv]) => doorSet.has(key(cu, cv)) || (zone && Math.hypot(cu - zone.u, cv - zone.v) < zone.r + 1))) continue;
+    for (const [cu, cv] of row) {
+      pitCells.add(key(cu, cv));
+      rm.parts.push({ k: "pit", u: cu, v: cv, y: 0, i: s.t >= 1 ? 1 : 0 });
+    }
+  }
+  // Arrow slits: from lane cells, look across the lane to the nearest wall; arrows fly back from there.
+  /** @type {{ u: number, v: number, du: number, dv: number }[]} */
+  const volleys = [];
+  for (let k = 3; k < lane.length - 3; k += 3) {
+    const [u, v] = lane[k];
+    const [pu, pv] = lane[k - 1];
+    const du = u - pu;
+    const dv = v - pv;
+    for (const sgn of r() < 0.5 ? [1, -1] : [-1, 1]) {
+      let cu = u;
+      let cv = v;
+      let len = 0;
+      while (len < 6) {
+        const nu = cu + sgn * dv;
+        const nv = cv + sgn * du;
+        if (Math.abs(nu) > R0 || Math.abs(nv) > R0 || blocked.has(key(nu, nv))) break;
+        cu = nu;
+        cv = nv;
+        len++;
+      }
+      if (len >= 2) {
+        volleys.push({ u: cu, v: cv, du: -sgn * dv, dv: -sgn * du });
+        break;
+      }
+    }
+  }
+  rm.volleys = volleys;
 }
 
 /**
@@ -619,16 +942,17 @@ function floorSpawns() {
  */
 function fillRoom(rm, i, r, s, L, n) {
   const P = rm.parts;
+  const R0 = rm.r;
   if (rm.kind === "combat" || rm.kind === "elite" || rm.kind === "boss") {
-    rm.spawns = floorSpawns();
+    rm.spawns.push(...floorSpawns(R0));
     if (rm.h >= 8) balconies(rm, r);
     if (rm.h >= 10) rm.fly = [{ u: 0, v: 0, y: Math.min(rm.h - 2, 9) }, { u: 3, v: -3, y: Math.min(rm.h - 3, 7) }, { u: -3, v: 3, y: Math.min(rm.h - 3, 7) }];
-    // Variety: cover pillars or a low ring wall in some rooms.
+    // Variety in plain rooms: cover pillars or a low ring wall.
     const roll = r();
-    if (rm.kind !== "boss" && roll < 0.3) {
+    if (rm.kind !== "boss" && rm.shape === "plain" && roll < 0.3) {
       rm.variant = "pillars";
       for (const [u, v] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) P.push({ k: "accent", u, v, y: 1, y2: Math.min(rm.h, 4) });
-    } else if (rm.kind !== "boss" && roll < 0.5) {
+    } else if (rm.kind !== "boss" && rm.shape === "plain" && roll < 0.5) {
       rm.variant = "ring";
       for (let a = -3; a <= 3; a++) {
         if (Math.abs(a) <= 1) continue;
@@ -640,42 +964,56 @@ function fillRoom(rm, i, r, s, L, n) {
     P.push({ k: "sign", u: 0, v: 3, y: 1, f: "back", t: "name" }, { k: "sign", u: -2, v: 3, y: 1, f: "back", t: "lore" }, { k: "sign", u: 2, v: 3, y: 1, f: "back", t: "affixes" });
   } else if (rm.kind === "treasure") {
     rm.chests.push({ u: 0, v: 0, y: 1 });
-    if (L >= 8) rm.chests.push({ u: 2, v: 0, y: 1 });
+    if (L >= 8 || n >= 12) rm.chests.push({ u: 2, v: 0, y: 1 });
+    if (n >= 12 && L >= 8) rm.chests.push({ u: -2, v: 0, y: 1 });
+    // Leave early: a gold button by the far wall.
+    P.push({ k: "gold", u: 0, v: 4, y: 1 }, { k: "button", u: 0, v: 4, y: 2, f: "up", i: 0 }, { k: "sign", u: 0, v: 3, y: 1, f: "back", t: "§lLeave now§r\nPress the button\nto go back with\nwhat you carry" });
   } else if (rm.kind === "trap") {
-    const exitSide = rm.doors.find((d) => d.to === i + 1)?.side ?? "fwd";
-    const z = onSide(exitSide, 0, R - 1);
+    const exit = rm.doors.find((d) => d.to === i + 1);
+    const z = onSide(exit?.side ?? "fwd", exit?.a ?? 0, R0 - 1);
     rm.zone = { u: z.u, v: z.v, y: 1, r: 2.5 };
-    P.push({ k: "sign", u: 2, v: -5, y: 1, f: "back", t: "§lTrap hall§r\nWatch the floor\nand the walls.\nRun for the exit!" });
+    const entry = rm.doors.find((d) => d.to === i - 1);
+    const sg = onSide(entry?.side ?? "back", (entry?.a ?? 0) + 2 > R0 - 1 ? (entry?.a ?? 0) - 2 : (entry?.a ?? 0) + 2, R0 - 1);
+    P.push({ k: "sign", u: sg.u, v: sg.v, y: 1, f: "back", t: "§lTrap hall§r\nWatch the floor\nand the walls.\nRun for the exit!" });
   } else if (rm.kind === "shrine") {
     P.push({ k: "gold", u: -3, v: 2, y: 1 }, { k: "button", u: -3, v: 2, y: 2, f: "up", i: 0 });
     P.push({ k: "pass", u: 0, v: 2, y: 1 }, { k: "button", u: 0, v: 2, y: 2, f: "up", i: 1 });
     P.push({ k: "curse", u: 3, v: 2, y: 1 }, { k: "button", u: 3, v: 2, y: 2, f: "up", i: 2 });
     P.push({ k: "sign", u: -3, v: 0, y: 1, f: "back", t: "blessing" }, { k: "sign", u: 0, v: 0, y: 1, f: "back", t: "§lPass by§r\nTake nothing\nand go on" }, { k: "sign", u: 3, v: 0, y: 1, f: "back", t: "curse" });
+  } else if (rm.kind === "boon") {
+    P.push({ k: "gold", u: 0, v: 2, y: 1 }, { k: "button", u: 0, v: 2, y: 2, f: "up", i: 0 }, { k: "sign", u: 0, v: 1, y: 1, f: "back", t: "§lSanctuary§r\nPress the button\nto choose\na boon" });
+    for (const [u, v] of [[-2, 2], [2, 2]]) P.push({ k: "glow", u, v, y: 1 });
   } else if (rm.kind === "shaft") shaft(rm, r, s);
-  else if (rm.kind === "cache") rm.chests.push({ u: 5, v: 5, y: 1 });
+  else if (rm.kind === "cache") rm.chests.push({ u: R0 - 2, v: R0 - 2, y: 1 });
   if (rm.puzzle) puzzleParts(rm, r, s, L);
 }
 
-/** Balconies on alternating walls, each with a ladder up from the floor. @param {Room} rm @param {() => number} r */
+/** Balconies on alternating walls, each with a ladder up from the floor, never over a door or a wall of the shape. @param {Room} rm @param {() => number} r */
 function balconies(rm, r) {
+  const R0 = rm.r;
+  const solid = rm.solid ?? new Set();
   /** @type {Face[]} */
   const sides = shuffle(/** @type {Face[]} */ (["fwd", "right", "back", "left"]), r);
   let k = 0;
   for (let y = 4; y <= rm.h - 4; y += 6) {
-    const side = sides[k++ % 4];
-    const flip = r() < 0.5 ? 1 : -1;
-    // Platform 3 deep along the wall, from a = -5 to 6 (or mirrored), with a ladder at a = -6 by the wall.
-    const a1 = flip > 0 ? -5 : -6;
-    const a2 = flip > 0 ? 6 : 5;
-    const p1 = onSide(side, a1, R - 2);
-    const p2 = onSide(side, a2, R);
-    rm.parts.push({ k: "trim", u: p1.u, v: p1.v, y, u2: p2.u, v2: p2.v, y2: y });
-    const lad = onSide(side, -6 * flip, R);
-    rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) });
-    const lamp = onSide(side, 4 * flip, R);
-    rm.parts.push({ k: "lantern", u: lamp.u, v: lamp.v, y: y + 1 });
-    const mid = onSide(side, 0, R - 1);
-    rm.spawns.push({ u: mid.u, v: mid.v, y: y + 1 });
+    for (let tries = 0; tries < 8; tries++) {
+      const side = sides[k++ % 4];
+      const flip = tries % 2 === 0 ? (r() < 0.5 ? 1 : -1) : -1;
+      // Platform 3 deep along the wall, from a = -(r - 2) to r - 1 (or mirrored), with a ladder at a = -(r - 1) by the wall.
+      const a1 = flip > 0 ? -(R0 - 2) : -(R0 - 1);
+      const a2 = flip > 0 ? R0 - 1 : R0 - 2;
+      const lad = onSide(side, -(R0 - 1) * flip, R0);
+      if (solid.has(key(lad.u, lad.v)) || blocksDoor(rm.doors, lad.u, lad.v, 1, R0) || blocksDoor(rm.doors, lad.u, lad.v, 2, R0) || blocksDoor(rm.doors, lad.u, lad.v, 3, R0)) continue;
+      const p1 = onSide(side, a1, R0 - 2);
+      const p2 = onSide(side, a2, R0);
+      rm.parts.push({ k: "trim", u: p1.u, v: p1.v, y, u2: p2.u, v2: p2.v, y2: y });
+      rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) });
+      const lamp = onSide(side, (R0 - 3) * flip, R0);
+      rm.parts.push({ k: "lantern", u: lamp.u, v: lamp.v, y: y + 1 });
+      const mid = onSide(side, 0, R0 - 1);
+      rm.spawns.push({ u: mid.u, v: mid.v, y: y + 1 });
+      break;
+    }
   }
 }
 
@@ -685,17 +1023,19 @@ function balconies(rm, r) {
  * @param {Room} rm @param {() => number} r @param {ReturnType<typeof scaleFor>} s
  */
 function shaft(rm, r, s) {
+  const R0 = rm.r;
+  const RING = ring(R0);
   const exit = rm.doors.find((d) => d.y > 0);
   const side = exit?.side ?? "fwd";
   const y = rm.ey;
   const ladderSide = r() < 0.5 ? 1 : -1; // the ladder goes on this side of the landing, the ledges start on the other
-  const l1 = onSide(side, -1, R - 1);
-  const l2 = onSide(side, 1, R);
+  const l1 = onSide(side, -1, R0 - 1);
+  const l2 = onSide(side, 1, R0);
   rm.parts.push({ k: "trim", u: l1.u, v: l1.v, y, u2: l2.u, v2: l2.v, y2: y });
-  const z = onSide(side, 0, R - 1);
+  const z = onSide(side, 0, R0 - 1);
   rm.zone = { u: z.u, v: z.v, y: y + 1, r: 2 };
   const ladderA = 2 * ladderSide;
-  const lad = onSide(side, ladderA, R);
+  const lad = onSide(side, ladderA, R0);
   if (s.ladders) rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) });
   // The ring index of the landing's edge on the ledge side, then down from there.
   const edgeA = -ladderSide;
@@ -707,11 +1047,11 @@ function shaft(rm, r, s) {
   })();
   /** @param {{ u: number, v: number }} p @param {number} yy */
   const bad = (p, yy) => {
-    if (blocksDoor(rm.doors, p.u, p.v, yy) || blocksDoor(rm.doors, p.u, p.v, yy + 1) || blocksDoor(rm.doors, p.u, p.v, yy + 2)) return true;
+    if (blocksDoor(rm.doors, p.u, p.v, yy, R0) || blocksDoor(rm.doors, p.u, p.v, yy + 1, R0) || blocksDoor(rm.doors, p.u, p.v, yy + 2, R0)) return true;
     if (s.ladders && p.u === lad.u && p.v === lad.v) return true;
     // Not in or right under the landing.
     for (let a = -1; a <= 1; a++) {
-      const q = onSide(side, a, R);
+      const q = onSide(side, a, R0);
       if (q.u === p.u && q.v === p.v && Math.abs(y - yy) < 4) return true;
     }
     return false;
@@ -720,7 +1060,7 @@ function shaft(rm, r, s) {
   for (const step of [s.gap + 1, s.gap + 1, 2]) {
     for (const d of [dir, -dir]) {
       if (ledges) break;
-      ledges = chain(from + (d === dir ? 0 : 0), d, step, y - 1, bad);
+      ledges = chain(RING, from, d, step, y - 1, bad);
     }
     if (ledges) break;
   }
@@ -797,9 +1137,9 @@ function puzzleParts(rm, r, s, L) {
       pz.count = count;
       const spots = [];
       for (const side of /** @type {Face[]} */ (["fwd", "left", "right", "back"])) {
-        for (let a = -6; a <= 6; a++) {
+        for (let a = -(rm.r - 1); a <= rm.r - 1; a++) {
           if (Math.abs(a) < 3) continue;
-          for (let y = 2; y <= rm.h - 1; y++) spots.push({ ...onSide(side, a, R + 1), y });
+          for (let y = 2; y <= rm.h - 1; y++) spots.push({ ...onSide(side, a, rm.r + 1), y });
         }
       }
       shuffle(spots, r)
@@ -830,6 +1170,7 @@ function puzzleParts(rm, r, s, L) {
       break;
     }
     case "parkour": {
+      const RING = ring(rm.r);
       const top = rm.h - 3;
       /** @type {Face[]} */
       const sides = shuffle(/** @type {Face[]} */ (["fwd", "left", "right"]), r);
@@ -844,9 +1185,9 @@ function puzzleParts(rm, r, s, L) {
             const stand = RING[(from + d + RING.length) % RING.length];
             /** @param {{ u: number, v: number }} p @param {number} yy */
             const bad = (p, yy) =>
-              blocksDoor(rm.doors, p.u, p.v, yy) || blocksDoor(rm.doors, p.u, p.v, yy + 1) || ((p.u === plat.u && p.v === plat.v) || (p.u === stand.u && p.v === stand.v) ? Math.abs(yy - top) < 4 : false);
+              blocksDoor(rm.doors, p.u, p.v, yy, rm.r) || blocksDoor(rm.doors, p.u, p.v, yy + 1, rm.r) || ((p.u === plat.u && p.v === plat.v) || (p.u === stand.u && p.v === stand.v) ? Math.abs(yy - top) < 4 : false);
             const fromIdx = (from + d + RING.length) % RING.length;
-            const ledges = chain(fromIdx, d, s.gap + 1, top - 1, bad);
+            const ledges = chain(RING, fromIdx, d, s.gap + 1, top - 1, bad);
             if (!ledges) continue;
             P.push({ k: "trim", u: plat.u, v: plat.v, y: top }, { k: "trim", u: stand.u, v: stand.v, y: top }, { k: "button", u: plat.u, v: plat.v, y: top + 1, f: "up", i: 0 });
             for (const p of ledges) P.push({ k: "trim", u: p.u, v: p.v, y: p.y });
@@ -869,11 +1210,11 @@ function puzzleParts(rm, r, s, L) {
       pz.count = count;
       pz.seconds = Math.max(count * 2 + 4, Math.round(count * 3 + 6 - s.t * 0.25));
       const spots = [];
-      for (const side of /** @type {Face[]} */ (["fwd", "left", "right", "back"])) for (let a = -6; a <= 6; a++) if (Math.abs(a) >= 3) spots.push({ side, a });
+      for (const side of /** @type {Face[]} */ (["fwd", "left", "right", "back"])) for (let a = -(rm.r - 1); a <= rm.r - 1; a++) if (Math.abs(a) >= 3) spots.push({ side, a });
       shuffle(spots, r)
         .slice(0, count)
         .forEach((p, k) => {
-          const at = onSide(p.side, p.a, R);
+          const at = onSide(p.side, p.a, rm.r);
           P.push({ k: "button", u: at.u, v: at.v, y: 2, f: opposite(p.side), i: k });
         });
       P.push({ k: "sign", u: 0, v: signRow, y: 1, f: "back", t: `§lButton rush§r\nPress all ${count}\nbuttons within\n${pz.seconds} seconds` });
@@ -912,6 +1253,5 @@ export function floorBlockers(rm) {
     for (let u = Math.min(p.u, p.u2 ?? p.u); u <= Math.max(p.u, p.u2 ?? p.u); u++) for (let v = Math.min(p.v, p.v2 ?? p.v); v <= Math.max(p.v, p.v2 ?? p.v); v++) out.add(`${u},${v}`);
   }
   for (const c of rm.chests) out.add(`${c.u},${c.v}`);
-  for (const [u, v] of [[-R, -R], [R, -R], [-R, R], [R, R]]) out.add(`${u},${v}`);
   return out;
 }
