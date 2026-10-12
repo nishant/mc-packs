@@ -3285,7 +3285,8 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       const m = run.members.get(id);
       const where = deadEntity.location;
       tell(run, `§c${m?.name ?? "A member"} fell and is out of the expedition.`);
-      if (get("returnItemsOnDeath") === true) {
+      // Only a death in the dungeon: one just teleported out of it dies among their own things (and other people's).
+      if (get("returnItemsOnDeath") === true && deadEntity.dimension.id === OVERWORLD && inBox(run.o, run.size, run.top, where, 2)) {
         // The drops appear this tick: collect them before anyone else can, and give them back on respawn.
         system.runTimeout(() => {
           try {
