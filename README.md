@@ -25,8 +25,8 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 | [Death Point](docs/PACKS.md#death-point--death_bp) | `death_bp` | Tells you where you died when you respawn, with the distance and direction back; optional once-per-death teleport back (off until an operator enables it) | `/realm:death` · `/realm:death_info` · `/realm:death_back` |
 | [Hotbar Refill](docs/PACKS.md#hotbar-refill--refill_bp) | `refill_bp` | Refills a hotbar slot from your inventory when its stack runs out or its tool breaks | `/realm:refill` |
 | [Coordinates HUD](docs/PACKS.md#coordinates-hud--hud_bp) | `hud_bp` | Your coordinates, facing and the day and time above the hotbar, for players who enable it; operators can disable it realm-wide | `/realm:hud` |
-| [Mob Health](docs/PACKS.md#mob-health--mobhp_bp) | `mobhp_bp` | Shows a mob's name and health above your hotbar when you hit it; players' health too if an operator enables it | `/realm:mobhp` |
-| [Elytra HUD](docs/PACKS.md#elytra-hud--elytra_bp) | `elytra_bp` | Speed, height, elytra durability and rockets above the hotbar while gliding | `/realm:elytra` |
+| [Mob Health](docs/PACKS.md#mob-health--mobhp_bp) | `mobhp_bp` | Shows a mob's name and health in a small box on the right side of your screen (or the middle, or above the hotbar) when you hit it; players' health too if an operator enables it | `/realm:mobhp` |
+| [Elytra HUD](docs/PACKS.md#elytra-hud--elytra_bp) | `elytra_bp` | Speed, height, elytra durability and rockets on the right side of your screen (or the middle, or above the hotbar) while gliding | `/realm:elytra` |
 | [Realm Mail](docs/PACKS.md#realm-mail--mail_bp) | `mail_bp` | Letters to any player who has joined, waiting for offline players; inbox, replies and sent list | `/realm:mail` |
 | [Nicknames](docs/PACKS.md#nicknames--nick_bp) | `nick_bp` | A nickname and color above your head (chat still shows gamertags) | `/realm:nick` |
 | [Daily Quests](docs/PACKS.md#daily-quests--quests_bp) | `quests_bp` | Three quests a day per player (mine, defeat, harvest, place, travel, eat, fish) with XP and item rewards | `/realm:quests` |

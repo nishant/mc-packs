@@ -217,7 +217,7 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 1. Run `/realm:prefs` to open **My preferences**: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means **Enabled**. Change what you like and tap **Save**. A summary pops up with how many changes were saved and each one as before -> after, for example `1 change saved` and `Phantom Opt-out > Phantoms near me: Enabled -> Disabled` (chat gets the same). Tap **Back to my preferences** to change more, or **Done**.
 2. Your choices are remembered. `/realm:durability`, `/realm:phantoms` and `/realm:rain` flip the same switches as the form.
 3. **Operators:** run `/realm:config`, or use any item renamed `Realm Settings` on an anvil (a stick works). The first button, **All settings**, holds every pack's settings with a heading per pack (see below); the buttons under it open one pack each. Change settings (switches, sliders and lists) and tap **Save**. They apply right away for everyone. A summary pops up with how many changes were saved and each one as before -> after, such as `Storm wind volume: 70% -> 50%`; tap **Back to Realm Settings** for another pack, or **Done**. A setting shown as text with `(change in config.js, then restart the world)` can only be changed there.
-4. **Operators: All settings.** With the whole Realm Bundle that is about 300 settings, so they come on a few pages, `All settings (page 1 of 4)`, of about 100 lines each (`allPageSize`); a pack is never split across pages. The list at the top, **After saving, go to**, picks where **Save and go** takes you next: the next page (already chosen), any other page (each named by its first and last pack, such as `Page 2: Field Journal to Rain Extras`) or **Done (show what was saved)**. Each page saves its changes when you tap **Save and go**; closing a page saves nothing on it. At the end one summary lists every change from every page, each as `Pack > Setting: before -> after`. All settings and a pack's own page show the same saved values: change Leaderboard size on one and the other shows the new number the next time it opens.
+4. **Operators: All settings.** With the whole Realm Bundle that is about 370 settings, so they come on a few pages, such as `All settings (page 1 of 5)`, of at most 100 lines each (`allPageSize`); a pack is never split across pages. The list at the top, **After saving, go to**, picks where **Save and go** takes you next: the next page (already chosen), any other page (each named by its first and last pack, `Page 2: <first pack> to <last pack>`) or **Done (show what was saved)**. Each page saves its changes when you tap **Save and go**; closing a page saves nothing on it. At the end one summary lists every change from every page, each as `Pack > Setting: before -> after`. All settings and a pack's own page show the same saved values: change Leaderboard size on one and the other shows the new number the next time it opens.
 5. **Operators:** **Reset a pack to defaults**, at the bottom of the menu, puts one pack's settings back to its `config.js` values after asking. Players' own preferences are kept.
 
 ### What players see
@@ -240,7 +240,7 @@ Change the packs' settings in game: operators set them for everyone with `/realm
 
 ### What each pack offers
 
-Each pack's own section says which of its options are in `/realm:config` and which are preferences in `/realm:prefs` (under its Configuration). With the whole Realm Bundle, `/realm:config` lists every pack that has settings (about 50) and `/realm:prefs` holds about 40 preferences in one form, with a heading per pack, such as **Stats ticker above my hotbar** and its stats, speed, style and colors (`/realm:stats_ticker`), **Welcome popup when I join**, **Low-durability warnings** (`/realm:durability`), **Phantoms near me** (`/realm:phantoms`), **Announce when I go AFK**, Quick Stack & Sort's sneak-tap and hotbar choices, **Unread letters notice on join** and **Rain extras** (`/realm:rain`).
+Each pack's own section says which of its options are in `/realm:config` and which are preferences in `/realm:prefs` (under its Configuration). With the whole Realm Bundle, `/realm:config` lists every pack that has settings (about 60) and `/realm:prefs` holds about 40 preferences in one form, with a heading per pack, such as **Stats ticker above my hotbar** and its stats, speed, style and colors (`/realm:stats_ticker`), **Welcome popup when I join**, **Low-durability warnings** (`/realm:durability`), **Phantoms near me** (`/realm:phantoms`), **Announce when I go AFK**, Quick Stack & Sort's sneak-tap and hotbar choices, **Unread letters notice on join** and **Rain extras** (`/realm:rain`).
 
 Everything else (lists such as crops, `keepItems` and container types, texts such as name tag prefixes, tick intervals, and command permissions) stays in `config.js`.
 
@@ -250,7 +250,7 @@ Everything else (lists such as crops, `keepItems` and container types, texts suc
 |---|---|---|
 | `answerTicks` | `10` | Ticks to wait for the installed packs to answer, and for each change to be confirmed (20 = 1 s) |
 | `itemName` | `Realm Settings` | Operators who use an item with exactly this name (renamed on an anvil) open `/realm:config`. `""` turns it off |
-| `allPageSize` | `100` | **All settings** puts at most this many lines on a page (a heading per pack plus a line per setting); a pack bigger than that gets a page of its own. `0` puts everything on one page (with the whole bundle about 300 controls and 47 KB of form, slow to open and to scroll on phones) |
+| `allPageSize` | `100` | **All settings** puts at most this many lines on a page (a heading per pack plus a line per setting); a pack bigger than that gets a page of its own. `0` puts everything on one page (with the whole bundle about 370 controls, slow to open and to scroll on phones) |
 
 ### Saved data
 
@@ -291,7 +291,7 @@ Every operator carries a **Realm Configuration** item (a nether star with a gold
 
 ### What players see
 
-- **Operators:** the item in their inventory, a chat line the first time (`You have the Realm Configuration item: use it to run any realm command from one menu.`), and the menu. The menu shows only the commands of installed packs that the operator's permission level allows.
+- **Operators:** the item in their inventory, a chat line each time they're given one (`You have the Realm Configuration item: use it to run any realm command from one menu.`), and the menu. The menu shows only the commands of installed packs that the operator's permission level allows.
 - **Everyone else:** nothing. A player who isn't an operator and uses an item with that name sees `Realm Configuration is for operators. Your own options: /realm:prefs` above the hotbar, and the real item is taken from them (`removeFromOthers`): `The Realm Configuration item is for operators, so it was put away.` An item renamed on an anvil is never taken (it has no Realm Configuration lore), it just doesn't open anything.
 - An item renamed `Realm Settings` on an anvil still opens [Realm Settings](#realm-settings--settings_bp) as before; the Realm Configuration menu's first button opens it too.
 
@@ -326,7 +326,7 @@ Operators can change `giveToOperators`, `removeFromOthers`, `checkSeconds` and `
 
 - `scripts/catalog.js` lists every `realm:` command of every pack: name, description, permission level, parameters (type, optional, enum values) and the pack. `node tools/admin-catalog.mjs` writes it by loading each pack's `scripts/main.js` in Node with a stand-in for the Minecraft modules and recording what its startup handler registers, so enum values computed from `config.js` (townsfolk ids, relics, story places...) are exact. `npm run check` runs it with `--check` and fails when a command was added or changed and the catalog wasn't rewritten. `scripts/presets.js` (hand-written) adds categories, friendlier labels, slider ranges and defaults, the commands that ask first and the setup checklist; a command it doesn't mention still shows, with plain inputs.
 - Which packs are installed: the menu sends `realm:help_ping` like `/realm:help` and keeps the folders that answer (for a minute). If nobody answers, it shows everything.
-- Commands run with `player.runCommand`, so a command does exactly what it does when typed by that operator. When a command refuses (a bad name, too far from a town...), the game doesn't hand its reason to the script, so chat says `didn't run: the command refused` (some packs also explain in chat); a command that doesn't parse shows the game's own error.
+- Commands run with `player.runCommand`, so a command does exactly what it does when typed by that operator. When a command refuses (a bad name, too far from a town...), the game doesn't hand its reason to the script, so chat says `didn't run: the command refused. Check the options, or type it to see its reason` (some packs also explain in chat); a command that doesn't parse shows the game's own error.
 - The setup checklist pings the safe zones protocol (`realm:zones_ping`) and counts the `zones` and `town` lists it hears back.
 - The menu checks the operator level itself (`commandPermissionLevel` of `GameDirectors` or higher) before opening and again right before each command or quick action runs (someone who stopped being an operator with the menu open gets `didn't run: you aren't an operator any more.`), and hides commands above the player's level.
 
@@ -406,7 +406,7 @@ Warns players before a tool, weapon or armor piece breaks.
 | Level | When | Shows |
 |---|---|---|
 | **Warning** | ≤ `warnPercent` (10%) left | Yellow message above the hotbar: `! Diamond Pickaxe is low: 141/1561 (9.0%)` + soft "pling" |
-| **Critical** | ≤ `criticalPercent` (3%) left | Red message `! Diamond Pickaxe is about to break!` above the hotbar **and in chat** (`chatOnCritical`) + anvil sound |
+| **Critical** | ≤ `criticalPercent` (3%) left | Red message `! Diamond Pickaxe is about to break! 31/1561 (2.0%)` above the hotbar **and in chat** (`chatOnCritical`) + anvil sound |
 
 - Checks the **main hand, offhand, helmet, chestplate (including elytra), leggings and boots** every `checkIntervalTicks`.
 - Warns **once per level**. It only warns again when the item drops to the next level.
@@ -600,7 +600,7 @@ Tracks player stats as scoreboards, with leaderboard menus, a stats ticker above
 | `tickerStats` | `playtime`, `deaths`, `mobkills`, `mined`, `travelled` | What players start with: the stats the ticker shows |
 | `maxSpeed` | `100` | Faster movement (blocks/s) counts as a teleport and isn't added to distance |
 
-Operators can change every option except `afkTag` and `maxSpeed` in game with `/realm:config` (27 settings; `sidebarStats` and `tickerStats` as one switch per stat, such as **Sidebar rotation includes Deaths** and **Ticker shows Deaths (players start with)**). A new cycle length applies from the next second. Each player chooses their own ticker (on or off, mode, seconds, style, both colors and a switch per stat: 15 preferences) in `/realm:prefs` or **My ticker settings**; a player who never chose follows the realm's value, including later changes to it.
+Operators can change every option except `afkTag` and `maxSpeed` in game with `/realm:config` (28 settings; `sidebarStats` and `tickerStats` as one switch per stat, such as **Sidebar rotation includes Deaths** and **Ticker shows Deaths (players start with)**). A new cycle length applies from the next second. Each player chooses their own ticker (on or off, mode, seconds, style, both colors and a switch per stat: 15 preferences) in `/realm:prefs` or **My ticker settings**; a player who never chose follows the realm's value, including later changes to it.
 
 ### Saved data
 
@@ -643,7 +643,7 @@ A news popup with what changed in the latest update (written automatically for e
 
 ### News popup
 
-- **Release news:** each bundle carries `scripts/release.js`, generated by `node tools/gen-news.mjs` (which `npm run bundle` runs) from the newest `## ` entry of `docs/NEWS.md`. When the world loads (or a player joins) with a release id it hasn't posted (`news:release`), that entry becomes the news and pops up once for everyone, like news saved with the pop-up toggle. Operators can still write news in game; the next update's release news replaces it. `releaseNews` `false` turns this off.
+- **Release news:** the pack carries `scripts/release.js`, generated by `node tools/gen-news.mjs` (which `npm run bundle` runs) from the newest `## ` entry of `docs/NEWS.md`. When the world loads (or a player joins) with a release id it hasn't posted (`news:release`), that entry becomes the news and pops up once for everyone, like news saved with the pop-up toggle. Operators can still write news in game; the next update's release news replaces it. `releaseNews` `false` turns this off.
 - When an op saves news with **"Pop up for everyone on their next join"** checked, every player sees it **once** on their next join, and everyone online gets `Realm news updated. Run /realm:news to read it.` in chat. Reading it with `/realm:news` counts, so a player who already read it isn't shown the popup again.
 - The popup is timed after the welcome popup (`delayTicks` = 5 s). If another popup is still open, it waits up to about 90 s.
 - If it still can't show, chat says `There's new Realm news! Run /realm:news to read it.` (on the same line after the "welcome back" notice, if there is one), and the player sees the popup on their next join instead.
@@ -711,7 +711,7 @@ Creepers still hurt, but their explosions break no blocks, so nobody comes home 
 ### How to use
 
 1. Nothing to set up: a creeper that explodes still damages and knocks back players and mobs, but the ground and your builds stay intact.
-2. Run `/realm:guard` for the menu: **Status** shows the mode, which blasts are covered and any protected zones (`/realm:guard_status` shows the same in chat). With [Safe Zones](#safe-zones--zones_bp) installed, **Safe zones** opens its menu.
+2. Run `/realm:guard` for the menu: it shows whether you stand in a protected spot, the mode, which blasts are covered and any protected zones, and **Status** posts the same in chat (like `/realm:guard_status`). With [Safe Zones](#safe-zones--zones_bp) installed, **Safe zones** opens its menu.
 3. **Operators:** to keep creeper craters in the wild and protect only bases, set the mode to `zones` in `/realm:config` (or `mode` in `config.js`), then stand in a base and pick **Protect this spot** in `/realm:guard` (a name and a radius), or run `/realm:guard_add <name> [radius]` (for example `/realm:guard_add home 64`). **Remove a zone** or `/realm:guard_remove <name>` removes one. In `zones` mode, safe zones from [Safe Zones](#safe-zones--zones_bp), and towns and claims protected from world events, are protected too (`safeZones`).
 
 ### What players see
@@ -785,7 +785,7 @@ Lets each player disable phantoms for themselves. Phantoms come from not sleepin
 | `minHeightAbovePlayer` | `10` | Only remove phantoms that appear at least this many blocks above their nearest player, as natural spawns do |
 | `searchRadius` | `64` | How far (blocks) to look for a new phantom's nearest player. Phantoms with no player this close are left alone |
 
-Operators can change `defaultOff` in game with `/realm:config`. Players who already chose keep their choice.
+Operators can change `defaultOff` in game with `/realm:config`. Players whose own choice differs from the realm's keep it.
 
 ### Saved data
 
@@ -857,7 +857,7 @@ Keeps named farms loaded with Bedrock ticking areas, so crops grow, furnaces sme
 
 1. Run `/realm:farm` to open the **Farm Loader** menu: it lists which farms are kept loaded (name, dimension, coordinates, size, who added it and when).
 2. **Operators:** stand in the middle of a farm, run `/realm:farm` and tap `Add a farm here`: type a name and pick the radius (1 to 4 chunks). Or run `/realm:farm_add <name> [radius]`, for example `/realm:farm_add kelp 2`. The chunks within that many chunks of you stay loaded, and chat confirms `Farm "kelp" stays loaded (radius 2 chunks, 3/10 used)`.
-3. **Operators:** tap `Remove <name>` in `/realm:farm` (the menu comes back afterwards, so you can remove another), or run `/realm:farm_remove <name>`. The menu's `Settings` button points to `/realm:config` → Farm Loader.
+3. **Operators:** tap `Remove <name>` in `/realm:farm` and confirm with `Remove` (the menu comes back afterwards, so you can remove another), or run `/realm:farm_remove <name>`. The menu's `Settings` button points to `/realm:config` → Farm Loader.
 
 ### What keeps running, and what doesn't
 
@@ -912,7 +912,7 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
    - **Sort my inventory:** the same as `/realm:sort`, below.
 2. **Quick stack:** stand near your storage and run `/realm:stash`. Every item in your main inventory goes into a chest, copper chest or barrel within 8 blocks that already holds the same item. Your gear, shulker boxes, bundles, totems, maps and compasses stay with you. The bar says `Stashed 143 items into 3 chests`, and each container that got something sparkles.
 3. **Sort your inventory:** run `/realm:sort`. Your main inventory is sorted; the hotbar stays as it is.
-4. **Your way:** in `/realm:prefs`, choose what sneak-tapping a container does for you (`menu`, `sort` right away, or `off` so it just opens), and whether sorting your inventory includes your hotbar.
+4. **Your way:** in `/realm:prefs`, choose what sneak-tapping a container does for you (**When I sneak-tap a container**: `Open the menu`, `Sort it right away` or `Nothing (opens as usual)`), and whether sorting your inventory includes your hotbar.
 5. **Help:** run `/realm:stash_help` for a page that explains the menu, chest locks and every command with its usage. `/help realm:stash` and `/help realm:sort` also describe them.
 6. **Operators:** sneak-tap someone else's locked container for **Remove the lock (operator)**. To switch chest locks off for the realm, disable **Chest locks** in `/realm:config` (existing locks are kept for when they're enabled again).
 
@@ -936,7 +936,7 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
 - Each player can have up to 50 locked containers (`maxLocks`); a double chest counts once.
 - Breaking a locked container (you can, as its owner) removes its lock. Breaking one half of a locked double chest leaves the other half locked, and it still counts once toward `maxLocks`.
 - **What a lock can't stop:** a hopper (or hopper minecart) that was already under it before it was locked, a copper golem that takes from a locked copper chest, and pistons. Chest Finder still points to a locked chest that holds what you search for; it can't open it.
-- Locks only show in the sneak-tap menu, so a player who chose `sort` or `off` for the sneak-tap in `/realm:prefs` locks nothing until they switch back to `menu`. Their own locks still hold.
+- Locks only show in the sneak-tap menu, so a player who chose `Sort it right away` or `Nothing (opens as usual)` for the sneak-tap in `/realm:prefs` locks nothing until they switch back to `Open the menu`. Their own locks still hold.
 
 ### Commands
 
@@ -995,7 +995,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 
 1. Open chests as usual. The pack quietly remembers what's in them.
 2. Run `/realm:find iron`, or just `/realm:find` while holding the item. A menu lists the containers that have it, nearest first, for example `Chest - 23 Iron Ingot` with `35 blocks NE - seen 2h ago` under it.
-3. Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark.
+3. Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark. A container in another dimension only gets its coordinates in chat.
 
 ### What players see
 
@@ -1197,7 +1197,7 @@ When the stack in your hand runs out, or your tool breaks, the same slot is refi
 | `refillTools` | `true` | Also replace a tool, weapon or other item with durability that breaks |
 | `defaultOn` | `true` | Players get refills until they disable them for themselves |
 
-Operators can change all three in game with `/realm:config`. Players who already chose keep their choice when `defaultOn` changes. Each player switches it for themselves with `/realm:refill` or **Refill my hotbar** in `/realm:prefs`.
+Operators can change all three in game with `/realm:config`. Players whose own choice differs from `defaultOn` keep it when `defaultOn` changes. Each player switches it for themselves with `/realm:refill` or **Refill my hotbar** in `/realm:prefs`.
 
 ### Saved data
 
@@ -1232,7 +1232,7 @@ Your own coordinates, the direction you're facing and the day and time, on the b
 - Off for every player until they enable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it and `/realm:hud` says `The coordinates HUD is disabled on this realm.`
 - It updates at most twice a second (`intervalTicks`), and only when the text changes, or every 2 seconds (`refreshTicks`) so it doesn't fade while you stand still.
 - **The stats ticker:** a player who also has the [Stats pack](#stats--leaderboards--stats_bp)'s ticker on sees it as a second line under the coordinates, such as `Mob kills 120 #2 of 7`, instead of the two taking turns on the bar.
-- **Sharing the bar with other packs:** the same bar also shows other packs' short messages: low-durability warnings, `Sorted 31 stacks` and other Quick Stack & Sort results, entering or leaving a claim, the Chairs reminder, AFK and others. The HUD can't see them, so a message is replaced by the HUD as soon as the HUD's text changes (within half a second while you walk) or after 2 seconds when you stand still. The low-durability warning's red line also goes to chat, so it isn't lost. [Mob Health](#mob-health--mobhp_bp) asks the HUD to wait 2 seconds after each hit, so the health stays readable, and so do [Daily Quests](#daily-quests--quests_bp) progress notes. While you glide, the [Elytra HUD](#elytra-hud--elytra_bp) keeps the bar to itself; the coordinates come back a second or two after you land. Other packs can do the same (see How it works).
+- **Sharing the bar with other packs:** the same bar also shows other packs' short messages: low-durability warnings, `Sorted 31 stacks` and other Quick Stack & Sort results, entering or leaving a claim, the Chairs reminder, the smart sleep count, [Mob Health](#mob-health--mobhp_bp) after a hit, [Daily Quests](#daily-quests--quests_bp) progress notes and others. Each of them asks the HUD to wait (usually 2 to 3 seconds) so the message stays readable, and the HUD redraws right after. While you glide with the [Elytra HUD](#elytra-hud--elytra_bp) above the hotbar, it keeps the bar to itself; the coordinates come back a second or two after you land. Other packs can do the same (see How it works).
 
 ### Commands
 
@@ -1272,11 +1272,11 @@ Operators can change `enabled`, `defaultOn`, `showTime` and `eightWay` in game w
 
 ## Mob Health — `mobhp_bp`
 
-Hit a mob and its name and health show in the middle of your screen (or above your hotbar, if you prefer), so you know how close it is to going down.
+Hit a mob and its name and health show in a small box on the right side of your screen (or in the middle, or above your hotbar, if you prefer), so you know how close it is to going down.
 
 ### How to use
 
-1. Nothing to set up: hit a mob with anything, or shoot it, and the subtitle line in the middle of your screen shows something like `Zombie  14/20 ||||||||||` with the bar in color. Only you see it.
+1. Nothing to set up: hit a mob with anything, or shoot it, and a small box on the right side of your screen, above the scoreboard, shows something like `Zombie  14/20 ||||||||||` with the bar in color. Only you see it.
 2. Don't want it? Run `/realm:mobhp` to hide it for yourself; run it again to show it. The same switch is **Show the health of mobs I hit** in `/realm:prefs`. The choice is remembered.
 3. **Operators:** `/realm:config` → **Mob Health** disables it for the whole realm, shows players' health too when one player hurts another, changes the bar length, or changes what new players start with.
 
@@ -1306,25 +1306,25 @@ Hit a mob and its name and health show in the middle of your screen (or above yo
 | `showAt` | `"side"` | Where it shows for players who haven't chosen: `side` (a box on the right side, above the scoreboard, from [Side HUD](#side-hud--hud_rp)), `middle` (the subtitle line in the middle of the screen) or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
 | `holdTicks` | `40` | How long (ticks) the health stays on screen; above the hotbar, how long the Coordinates HUD leaves it before drawing itself again |
 
-Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt` in game with `/realm:config`. Players pick their own place with **Where the health of mobs I hit shows** in `/realm:prefs`. `holdTicks` stays in `config.js`. Each player switches it for themselves with `/realm:mobhp` or **Show the health of mobs I hit** in `/realm:prefs`; players who already chose keep their choice when `defaultOn` changes.
+Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt` in game with `/realm:config`. Players pick their own place with **Where the health of mobs I hit shows** in `/realm:prefs`. `holdTicks` stays in `config.js`. Each player switches it for themselves with `/realm:mobhp` or **Show the health of mobs I hit** in `/realm:prefs`; players whose own choice differs from `defaultOn` keep it when `defaultOn` changes.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `mobhp:pref` | Player | The player's choice from `/realm:mobhp` or `/realm:prefs`, when it differs from `defaultOn` |
+| `mobhp:pref` | Player | JSON of the player's choices from `/realm:mobhp` or `/realm:prefs` (shown or hidden, where it shows) that differ from the realm's |
 | `mobhp:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
-- `world.afterEvents.entityHurt` gives the hurt mob and the damage source. When the damaging entity (the shooter, for a projectile) is a player with it on, the pack reads the mob's `minecraft:health` component and shows it on that player's screen (the subtitle line, or the action bar for players who chose it), with the mob's name as a translated text so it reads in each player's language.
-- After each one it sends the script event `realm:actionbar` with `{"player":"<id>","ticks":40}`, which the Coordinates HUD understands. Without the HUD nothing listens and nothing happens.
+- `world.afterEvents.entityHurt` gives the hurt mob and the damage source. When the damaging entity (the shooter, for a projectile) is a player with it on, the pack reads the mob's `minecraft:health` component and shows it on that player's screen, with the mob's name as a translated text so it reads in each player's language: on the right side as a title marked `§s§1§r` that [Side HUD](#side-hud--hud_rp) draws as a box (cleared with `§s§0§r` after `holdTicks`, unless another pack took the box meanwhile: each sends the script event `realm:side` `{player, from, ticks}` when it does), on the subtitle line, or on the action bar.
+- Above the hotbar it also sends the script event `realm:actionbar` with `{"player":"<id>","ticks":40}` (`holdTicks`), which the Coordinates HUD understands. Without the HUD nothing listens and nothing happens.
 
 ---
 
 ## Elytra HUD — `elytra_bp`
 
-While you glide, the middle of your screen (or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.
+While you glide, a small box on the right side of your screen (or the middle, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.
 
 ### How to use
 
@@ -1337,7 +1337,7 @@ While you glide, the middle of your screen (or the line above your hotbar, if yo
 - **Speed** in blocks per second (your total speed, diving included), **Y** (your height), **Elytra** durability left in percent and **Rockets**: firework rockets in your inventory and offhand.
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
 - The bar only shows while you're gliding and fades a moment after you land. Nothing is shown, and nothing is checked, for players who aren't gliding.
-- With the [Coordinates HUD](#coordinates-hud--hud_bp) on, it pauses while you glide, so the two don't take turns on the bar; your coordinates come back a second or two after you land.
+- When it shows above the hotbar and the [Coordinates HUD](#coordinates-hud--hud_bp) is on, the coordinates pause while you glide, so the two don't take turns on the bar; they come back a second or two after you land. On the right side or in the middle, both show at once.
 - **Where it shows** (`showAt`, default **Right side, above the scoreboard**): a small box drawn by [Side HUD](#side-hud--hud_rp) (in the middle of the screen without it), which other add-ons that redraw the line above the hotbar all the time (waypoint and compass add-ons) can't cover; that's why it never showed on realms with such an add-on. Players can pick **Middle of the screen** or **Above the hotbar** in `/realm:prefs` (**Where my Elytra HUD shows**); there, other messages (low durability warnings, claim borders, the sleep count) can briefly swap places with it.
 
 ### Commands
@@ -1361,14 +1361,14 @@ Operators can change `enabled`, `lowPercent` and `showAt` in game with `/realm:c
 
 | Key | Scope | Contents |
 |---|---|---|
-| `elytra:pref` | Player | JSON `{ "off": true }` when the player disabled the HUD for themselves. Set by `/realm:elytra` and `/realm:prefs` |
+| `elytra:pref` | Player | JSON of the player's own choices: `"off": true` when they disabled the HUD (`/realm:elytra` or `/realm:prefs`), and `where` when they picked where it shows |
 | `elytra:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
-Every `intervalTicks` the pack looks at each player's `isGliding`. For gliding players who haven't disabled it, it reads `getVelocity()` (blocks per tick, times 20), their Y, the chest slot's durability through the equippable component, and counts rockets in the inventory and offhand, then writes the line with `onScreenDisplay.setActionBar`.
+Every `intervalTicks` the pack looks at each player's `isGliding`. For gliding players who haven't disabled it, it reads `getVelocity()` (blocks per tick, times 20), their Y, the chest slot's durability through the equippable component, and counts rockets in the inventory and offhand, then writes the line: on the right side as a title marked `§s§1§r` that [Side HUD](#side-hud--hud_rp) draws as a box (with `realm:side`, as Mob Health does), on the subtitle line, or with `onScreenDisplay.setActionBar`.
 
-While it shows, it also sends the script event `realm:actionbar` with `{"player":"<id>","ticks":30}` (renewed every 10 ticks; `ticks` is at least 3 times `intervalTicks`), the same request Mob Health makes, so the Coordinates HUD leaves that player's bar alone until they stop gliding. Without the HUD nothing listens.
+Above the hotbar, it also sends the script event `realm:actionbar` with `{"player":"<id>","ticks":30}` (renewed every 10 ticks; `ticks` is at least 3 times `intervalTicks`), the same request Mob Health makes, so the Coordinates HUD leaves that player's bar alone until they stop gliding. Without the HUD nothing listens.
 
 ---
 
@@ -1482,7 +1482,7 @@ Operators can change `enabled` and `showGamertag` in game with `/realm:config`; 
 ### How it works
 
 - The nickname is the player's `nameTag` (`§<color><nickname>§r`, then `\n§7<gamertag>`, then `\n§7<title>` when the player has the tag `realm_title:<title>`). Bedrock forgets a player's name tag when they leave, so it's set again whenever a player spawns.
-- Twice a second the pack compares each nicknamed player's name tag with what it should be and sets it again if it differs. That undoes the AFK pack, which writes `[AFK] Gamertag` and then the bare gamertag to the same name tag, while keeping its `[AFK]` prefix for players with the `afk` tag. The same check picks up a title being put on or taken off, and puts the plain gamertag back once a player has neither a nickname nor a title.
+- Twice a second the pack compares each nicknamed player's name tag with what it should be and sets it again if it differs. That puts the tag back whatever else changed it, and adds `afkPrefix` itself for players with the `afk` tag (the AFK pack only adds and removes its prefix in front of the existing tag, so the two agree). The same check picks up a title being put on or taken off, and puts the plain gamertag back once a player has neither a nickname nor a title.
 - Nicknames are read into memory once and kept in step as they change.
 
 ---
