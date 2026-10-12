@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Easy Building",
+    "description": "Build walls, floors, towers, domes, roofs, bridges and more in one go: pick a shape, place a block. Undo and redo. /realm:build",
+    "uuid": "7cecc8a2-a1ca-4f4d-a828-871169ed7e31",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "43736eb8-a9a4-4664-95be-c4c60e1310e9",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}
