@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 141 commands in 58 packs */
+/** @type {Pack[]} 148 commands in 60 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -31,6 +31,17 @@ export const PACKS = [
       {"name":"realm:bounty_board","description":"Make the lectern you are looking at a bounty board","permission":"op","params":[]},
       {"name":"realm:bounty_board_remove","description":"Make the bounty board you are looking at an ordinary lectern again","permission":"op","params":[]},
       {"name":"realm:bounty_list","description":"Bounty Board: today's bounties, where the targets were last seen, and where the board is","permission":"any","params":[]},
+    ],
+  },
+  {
+    folder: "build_bp",
+    pack: "Easy Building",
+    commands: [
+      {"name":"realm:build","description":"Easy Building: pick a shape, its blocks and where it goes","permission":"any","params":[]},
+      {"name":"realm:build_here","description":"Build your shape at the block you look at","permission":"any","params":[]},
+      {"name":"realm:build_mode","description":"Build mode on or off: placing a block builds your shape","permission":"any","params":[]},
+      {"name":"realm:build_redo","description":"Build again what you last undid","permission":"any","params":[]},
+      {"name":"realm:build_undo","description":"Undo your last build (blocks come back)","permission":"any","params":[]},
     ],
   },
   {
@@ -144,6 +155,7 @@ export const PACKS = [
     pack: "Expeditions",
     commands: [
       {"name":"realm:expedition","description":"Expeditions: start a dungeon run (Easy to Nightmare 20), use a sigil, see leaderboards and your progress","permission":"any","params":[]},
+      {"name":"realm:expedition_gauntlet","description":"Start a Gauntlet: a long dungeon run with a boon to pick every few rooms (and an optional fixed loadout)","permission":"any","params":[]},
       {"name":"realm:expedition_leave","description":"Leave the expedition you're on and go back to where you started","permission":"any","params":[]},
       {"name":"realm:expedition_reset","description":"End every expedition in progress, send its players back and reset the dungeon","permission":"op","params":[]},
       {"name":"realm:expedition_site","description":"Set where expedition dungeons are built, deep underground: here, or at x z","permission":"op","params":[{"name":"x","type":"Integer","optional":true},{"name":"z","type":"Integer","optional":true}]},
@@ -324,6 +336,13 @@ export const PACKS = [
     pack: "Phantom Opt-out",
     commands: [
       {"name":"realm:phantoms","description":"Enable or disable phantoms for yourself","permission":"any","params":[]},
+    ],
+  },
+  {
+    folder: "platypus_bp",
+    pack: "Platypus",
+    commands: [
+      {"name":"realm:platypus","description":"Platypus: how many platypuses are near you and where the nearest one is","permission":"any","params":[]},
     ],
   },
   {

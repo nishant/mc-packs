@@ -1433,7 +1433,7 @@ async function buildHere(player) {
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id === "realm:help_ping") {
-      system.sendScriptEvent("realm:help_pong", PACK);
+      system.sendScriptEvent("realm:help_pong", "build_bp");
       return;
     }
     if (id === "realm:claims_check_result") {
