@@ -5,7 +5,7 @@ description: Combine the packs from this repo's packs/ folder into bundles (dist
 
 # Bundle packs into one .mcpack
 
-`tools/bundle.mjs` merges the selected behavior packs into one: each pack's `scripts/` goes to `scripts/<pack>/`, and a generated `scripts/main.js` imports each of them. `--resources` merges every resource pack into one resource pack, Realm Resources (`dist/realm_resources.mcpack`); a pack can't hold both kinds, so behavior and resource packs are always two bundles. Dependencies are merged to the highest version. The bundle's UUID comes from `--name`, so rebuilding updates the same pack on the Realm instead of adding a second one.
+`tools/bundle.mjs` merges the selected behavior packs into one: each pack's `scripts/` goes to `scripts/<pack>/`, and a generated `scripts/main.js` imports each of them; other files are copied as they are (two packs shipping the same path differently is an error, except list-like JSON such as `sounds.json`, `sound_definitions.json`, `blocks.json`, `biomes_client.json` and the `*_texture.json` files, whose entries are merged). Every command must be in the one `realm:` namespace. `--resources` merges every resource pack into one resource pack, Realm Resources (`dist/realm_resources.mcpack`); a pack can't hold both kinds, so behavior and resource packs are always two bundles. `@minecraft/*` dependencies are merged to the highest version of the same major. The bundle uses Realm Skies' (`sky_rp`) `pack_icon.png` unless `--icon <folder>` names another pack. Every run first runs `node tools/gen-news.mjs`, which copies the newest `docs/NEWS.md` entry into `news_bp` (when the entry changed, it rewrites `news_bp` and bumps its patch version, once per commit). The bundle's UUID comes from `--name`, so rebuilding updates the same pack on the Realm instead of adding a second one.
 
 ## Steps
 
@@ -27,7 +27,7 @@ description: Combine the packs from this repo's packs/ folder into bundles (dist
      - A question can hold at most 4 options, so split the packs into chunks of 4. Each chunk is its own question in the **same call**, with headers `Packs 1`, `Packs 2`, …, up to 4 questions (16 packs) per call. Use another call for more.
      - Map the chosen labels back to folders. If nothing was picked, ask again instead of building an empty bundle.
 
-3. **Build it.** Default name `realm_bundle`, title `Realm Bundle`, unless the args override them:
+3. **Build it.** Default name `realm_bundle`, title `Realm Bundle` (`realm_resources`, `Realm Resources` for resource packs), unless the args override them:
    ```bash
    npm run bundle -- --all                                  # every bundled (non-standalone) behavior pack
    npm run bundle -- --resources                            # every bundled resource pack → dist/realm_resources.mcpack
@@ -36,7 +36,7 @@ description: Combine the packs from this repo's packs/ folder into bundles (dist
    ```
    If it errors (file conflict between packs, mismatched major `@minecraft/*` versions, …), show the error and explain which packs conflict. Don't work around it by editing the packs unless the user asks.
 
-4. **Check it.** Run `npm run check`, then `python3 -m zipfile -l dist/<name>.mcpack` and confirm `manifest.json` plus `scripts/<pack>/…` for every chosen pack are in it.
+4. **Check it.** Run `npm run check`, then `python3 -m zipfile -l dist/<name>.mcpack` and confirm `manifest.json` plus `scripts/<pack>/…` for every chosen behavior pack (or each resource pack's files) are in it.
 
 5. **Report back.** Send `dist/<name>.mcpack` with `SendUserFile` if that tool exists, otherwise give the path. Include:
    - a table of the packs included, with each pack's version and commands (from its manifest description), and the bundle version (`[YYYY, MMDD, HHMM]` UTC, so it always goes up)
