@@ -11,7 +11,7 @@ const showsFor = (player) => get("enabled") === true && getFor(player, "on") ===
 /** The mob's name as the game shows it: its name tag, a player's name, or the translated mob name. @param {Entity} entity */
 function nameOf(entity) {
   if (entity instanceof Player) return { text: entity.name };
-  if (entity.nameTag) return { text: entity.nameTag };
+  if (entity.nameTag && !showingOurs(entity)) return { text: entity.nameTag };
   return { translate: entity.localizationKey };
 }
 
@@ -27,7 +27,7 @@ function bar(current, max) {
 /** The mob's name as plain text, for the side boxes and name tags: its name tag, a player's name, or its id made readable. @param {Entity} entity */
 function plainName(entity) {
   if (entity instanceof Player) return entity.name;
-  if (entity.nameTag) return entity.nameTag;
+  if (entity.nameTag && !showingOurs(entity)) return entity.nameTag;
   const id = entity.typeId.includes(":") ? entity.typeId.slice(entity.typeId.indexOf(":") + 1) : entity.typeId;
   return id
     .split("_")
@@ -52,7 +52,9 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
     const numbers = `§f${current}/${max} ${bar(current, max)}`;
     let where = getFor(attacker, "where");
     if (where === "overhead") {
-      if (showOverhead(hurtEntity, numbers)) return;
+      // A killing blow: no name on a dying mob (a named mob's death can show in chat); take ours off now.
+      if (current <= 0) dropOverhead(hurtEntity);
+      else if (showOverhead(hurtEntity, numbers)) return;
       // Players and mobs with a name of their own keep it: the realm's default box, or the first box.
       const base = get("showAt");
       where = isSlot(base) ? base : FALLBACK_SLOT;
@@ -79,11 +81,27 @@ const TAG_PROP = "mobhp:tag";
 /** entity id -> { entity, until } of name tags showing now */
 const overhead = new Map();
 
+/** Is the mob's name tag the health this pack wrote (not a name someone gave it meanwhile)? @param {Entity} entity */
+function showingOurs(entity) {
+  try {
+    return entity.hasTag(TAGGED) && entity.nameTag === entity.getDynamicProperty(TAG_PROP);
+  } catch {
+    return false;
+  }
+}
+
 /** @param {Entity} entity @param {string} numbers @returns {boolean} false when this mob can't show it (a player, or a mob with a name) */
 function showOverhead(entity, numbers) {
   if (entity instanceof Player) return false;
-  const ours = entity.hasTag(TAGGED);
-  if (entity.nameTag && !ours) return false;
+  const ours = showingOurs(entity);
+  if (entity.nameTag && !ours) {
+    // Named (with a name tag, or by another pack) while our health showed: keep that name and forget ours.
+    if (entity.hasTag(TAGGED)) {
+      overhead.delete(entity.id);
+      untag(entity);
+    }
+    return false;
+  }
   const text = numbers;
   if (!ours) entity.addTag(TAGGED);
   entity.setDynamicProperty(TAG_PROP, text);
@@ -104,6 +122,19 @@ function untag(entity) {
     console.warn(`[mobhp] ${e}`);
   }
 }
+
+/** Takes our name tag off a mob now, if it shows one. @param {Entity} entity */
+function dropOverhead(entity) {
+  try {
+    if (entity instanceof Player || !entity.hasTag(TAGGED)) return;
+  } catch {
+    return;
+  }
+  overhead.delete(entity.id);
+  untag(entity);
+}
+
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => dropOverhead(deadEntity));
 
 system.runInterval(() => {
   if (!overhead.size) return;
