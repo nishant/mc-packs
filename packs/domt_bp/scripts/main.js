@@ -52,14 +52,17 @@ function saveOff(map) {
   /** @type {Record<string, boolean>} */
   const keep = {};
   for (const c of CARDS) {
-    const base = CONFIG.disabled.includes(c.id);
+    const base = offByDefault(c);
     if (c.id in map && map[c.id] !== base) keep[c.id] = map[c.id];
   }
   world.setDynamicProperty(PROP_OFF, Object.keys(keep).length ? JSON.stringify(keep) : undefined);
 }
 
-/** Switched off by an operator (or config.js)? @param {Card} c @param {Record<string, boolean>} [map] */
-const switchedOff = (c, map = offMap()) => map[c.id] ?? CONFIG.disabled.includes(c.id);
+/** Off unless an operator switches it on: listed in config.js `disabled`, or a wild card. @param {Card} c */
+const offByDefault = (c) => CONFIG.disabled.includes(c.id) || !!c.wild;
+
+/** Switched off by an operator (or by default)? @param {Card} c @param {Record<string, boolean>} [map] */
+const switchedOff = (c, map = offMap()) => map[c.id] ?? offByDefault(c);
 
 /** Can it be drawn right now? @param {Card} c @param {Record<string, boolean>} [map] */
 const drawable = (c, map = offMap()) => !switchedOff(c, map) && (!c.blocks || get("blockCards") === true);
@@ -158,7 +161,7 @@ async function reveal(p, card) {
   for (let i = 0; i < 3; i++) {
     if (!p.isValid) return;
     attempt(() => {
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 20 })); // other bar writers wait
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 20, from: "domt_bp" })); // other bar writers wait
       p.onScreenDisplay.setActionBar(`§7The deck shuffles${".".repeat(i + 1)}`);
     });
     sound(p, "item.book.page_turn", 0.8 + i * 0.2);
@@ -323,10 +326,10 @@ async function showOdds(p) {
   for (const { r, cards, chance } of table) {
     const all = CARDS.filter((c) => c.rarity === r);
     lines.push(`${RARITY_COLOR[r]}§l${RARITY_NAME[r]}§r ${(chance * 100).toFixed(1)}% §7(${cards.length} of ${all.length} cards on; each ${cards.length ? ((chance / cards.length) * 100).toFixed(2) : "0"}%)`);
-    lines.push(`§7${all.map((c) => (drawable(c, map) ? c.name : `§8${c.name}§7`)).join(", ")}`);
+    lines.push(`§7${all.map((c) => (drawable(c, map) ? c.name : `§8${c.name}§7`) + (c.wild ? "§5*§7" : "")).join(", ")}`);
     lines.push("");
   }
-  lines.push("§8Gray cards are disabled.");
+  lines.push("§8Gray cards are disabled. §5*§8 marks a wild card (off until an operator switches it on).");
   await show(p, new ActionFormData().title("§lThe odds").body(lines.join("\n")).button("Back"));
 }
 
@@ -369,37 +372,51 @@ async function cardsMenu(p) {
     const map = offMap();
     const form = new ActionFormData().title("§lCards on/off").body(`Switch cards on or off. ${get("blockCards") === true ? "" : "§cBlock-changing cards are disabled in /realm:config.§r "}Safe zones known: ${zoneCount()}. Block restores waiting: ${pendingTasks()}.`);
     for (const r of RARITIES) {
-      const all = CARDS.filter((c) => c.rarity === r);
+      const all = CARDS.filter((c) => c.rarity === r && !c.wild);
       form.button(`${RARITY_COLOR[r]}${RARITY_NAME[r]}\n§8${all.filter((c) => !switchedOff(c, map)).length} of ${all.length} enabled`);
     }
-    form.button("Enable every card");
-    form.button("Back to config.js defaults");
+    const wild = CARDS.filter((c) => c.wild);
+    form.button(`§5Wild cards\n§8${wild.filter((c) => !switchedOff(c, map)).length} of ${wild.length} enabled`);
+    form.button("Enable every card\n§8Not the wild cards");
+    form.button("Enable every wild card");
+    form.button("Disable every wild card");
+    form.button("Back to the defaults\n§8config.js, wild cards off");
     form.button("Back");
     const res = await show(p, form);
     if (!res || res.canceled || res.selection === undefined) return;
-    if (res.selection < RARITIES.length) {
+    const n = RARITIES.length;
+    if (res.selection < n) {
       await rarityPages(p, RARITIES[res.selection]);
       continue;
     }
-    if (res.selection === RARITIES.length) {
-      saveOff(Object.fromEntries(CARDS.map((c) => [c.id, false])));
-      p.sendMessage("§aEvery card is enabled.");
-    } else if (res.selection === RARITIES.length + 1) {
+    const choice = res.selection - n;
+    if (choice === 0) {
+      await rarityPages(p, "wild");
+      continue;
+    }
+    if (choice === 1) {
+      saveOff({ ...map, ...Object.fromEntries(CARDS.filter((c) => !c.wild).map((c) => [c.id, false])) });
+      p.sendMessage("§aEvery card is enabled (the wild cards are as they were).");
+    } else if (choice === 2 || choice === 3) {
+      saveOff({ ...map, ...Object.fromEntries(wild.map((c) => [c.id, choice === 3])) });
+      p.sendMessage(choice === 2 ? "§aEvery wild card is enabled. Brace yourselves." : "§aEvery wild card is disabled.");
+    } else if (choice === 4) {
       world.setDynamicProperty(PROP_OFF, undefined);
-      p.sendMessage("§aCards are back to config.js.");
+      p.sendMessage("§aCards are back to their defaults.");
     } else return;
   }
 }
 
-/** @param {Player} p @param {Rarity} r */
+/** @param {Player} p @param {Rarity | "wild"} r */
 async function rarityPages(p, r) {
-  const cards = CARDS.filter((c) => c.rarity === r);
+  const cards = CARDS.filter((c) => (r === "wild" ? c.wild : c.rarity === r && !c.wild));
+  const title = r === "wild" ? "Wild" : RARITY_NAME[r];
   const pages = Math.ceil(cards.length / PAGE);
   for (let page = 0; page < pages; page++) {
     const slice = cards.slice(page * PAGE, (page + 1) * PAGE);
     const map = offMap();
-    const form = new ModalFormData().title(`§l${RARITY_NAME[r]} cards${pages > 1 ? ` (${page + 1}/${pages})` : ""}`);
-    for (const c of slice) form.toggle(`${c.name} §8(${c.kind}) §7${c.text}`, { defaultValue: !switchedOff(c, map) });
+    const form = new ModalFormData().title(`§l${title} cards${pages > 1 ? ` (${page + 1}/${pages})` : ""}`);
+    for (const c of slice) form.toggle(`${c.name} §8(${r === "wild" ? `${RARITY_NAME[c.rarity]}, ` : ""}${c.kind}) §7${c.text}`, { defaultValue: !switchedOff(c, map) });
     form.submitButton(page + 1 < pages ? "Save, next page" : "Save");
     const res = await show(p, form);
     if (!res || res.canceled || !res.formValues) return;
@@ -410,11 +427,11 @@ async function rarityPages(p, r) {
     });
     saveOff(next);
   }
-  p.sendMessage(`§a${RARITY_NAME[r]} cards saved.`);
+  p.sendMessage(`§a${title} cards saved.`);
 }
 
 // ---------------------------------------------------------------------------
-// Test path (operators and the server console): run one card's handler, or all 100, and check it
+// Test path (operators and the server console): run one card's handler, or all of them, and check it
 // ---------------------------------------------------------------------------
 
 /** @param {Player} p */
@@ -424,6 +441,7 @@ function snapshot(p) {
   const items = new Map();
   let total = 0;
   const hotbar = [];
+  const hand = inv?.getItem(p.selectedSlotIndex);
   if (inv)
     for (let i = 0; i < inv.size; i++) {
       const it = inv.getItem(i);
@@ -450,6 +468,9 @@ function snapshot(p) {
     xp: p.getTotalXp(),
     crowns: crownsOf(p),
     health: p.getComponent("minecraft:health")?.currentValue ?? 0,
+    onFire: !!p.getComponent("minecraft:onfire"),
+    handName: hand?.nameTag ?? "",
+    handDamage: hand?.getComponent("minecraft:durability")?.damage ?? -1,
     name: p.nameTag,
     time: world.getTimeOfDay(),
     tasks: pendingTasks(),
@@ -493,6 +514,18 @@ function satisfied(expect, p, a, b) {
       return b.xp > a.xp || b.level > a.level || b.crowns > a.crowns || [...b.items].some(([id, n]) => n > (a.items.get(id) ?? 0));
     case "health":
       return b.health > a.health;
+    case "hurt":
+      return b.health < a.health;
+    case "fire":
+      return b.onFire;
+    case "day":
+      return Math.abs(b.time - 1000) < 400;
+    case "mended":
+      return a.handDamage > 0 && b.handDamage === 0;
+    case "worn":
+      return b.handDamage > a.handDamage;
+    case "heldname":
+      return b.handName !== a.handName;
     case "noeffects":
       return b.effects.size === 0;
     case "hotbar":

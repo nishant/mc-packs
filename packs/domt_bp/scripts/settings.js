@@ -17,7 +17,7 @@ const OPTIONS = [
   { key: "weights.rare", type: "int", scope: "world", label: "Rare weight", min: 0, max: 100, step: 1 },
   { key: "weights.legendary", type: "int", scope: "world", label: "Legendary weight", min: 0, max: 100, step: 1 },
   { key: "announceRare", type: "bool", scope: "world", label: "Announce rare draws", help: "Rare and legendary draws are told to everyone in chat" },
-  { key: "blockCards", type: "bool", scope: "world", label: "Block-changing cards", help: "The Arena and The Spore, which place blocks for a while (never in safe zones)" },
+  { key: "blockCards", type: "bool", scope: "world", label: "Block-changing cards", help: "Cards that place or break blocks: The Arena, The Spore, Anvil Drop, creepers, blazes (never in safe zones)" },
   { key: "sporeMinutes", type: "int", scope: "world", label: "Spore field lasts (minutes)", min: 5, max: 240, step: 5 },
 ];
 

@@ -22,15 +22,19 @@ export const CONFIG = {
   /** Rare and legendary draws are announced in chat to everyone. */
   announceRare: true,
 
-  /** Cards that place blocks for a while (The Arena, The Spore) can be drawn. They never work inside a safe zone. */
+  /**
+   * Cards that place or break blocks (The Arena, The Spore, Anvil Drop, Hiss, Hot Headed, and the wild
+   * Creeper Party and The Ghast) can be drawn. They never work inside or near a safe zone.
+   */
   blockCards: true,
 
   /** Minutes before The Spore's mushroom field turns back to grass. */
   sporeMinutes: 60,
 
   /**
-   * Card ids that start disabled (see the card table in docs/PACKS.md). Operators can switch each card
-   * on or off in game with /realm:domt_effects; that choice wins over this list.
+   * Card ids that start disabled (see the card tables in docs/PACKS.md), besides the wild cards, which
+   * always start disabled. Operators can switch each card on or off in game with /realm:domt_effects;
+   * that choice wins over this list.
    * @type {string[]}
    */
   disabled: [],
