@@ -1697,6 +1697,10 @@ function dropBuffs(p) {
  * @param {Player} p @param {any} ret
  */
 function teleportBack(p, ret) {
+  // Dead (killed just before the fade ended): a teleport would only move the body and the spot would be lost.
+  // It stays, and playerSpawn sends them back when they respawn.
+  const hp = p.getComponent("minecraft:health");
+  if (hp && hp.currentValue <= 0) return;
   let dim;
   try {
     dim = ret && typeof ret.d === "string" ? world.getDimension(ret.d) : undefined;
@@ -3289,10 +3293,13 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
         finish(run);
         return;
       }
-      if (!(deadEntity instanceof Player) || !run.members.has(id)) continue;
+      if (!(deadEntity instanceof Player)) continue;
+      const member = run.members.has(id);
+      // One who just left this run and died in it before the fade sent them home: their drops are kept the same way.
+      if (!member && returnSpot(deadEntity)?.run !== run.id) continue;
       const m = run.members.get(id);
       const where = deadEntity.location;
-      tell(run, `§c${m?.name ?? "A member"} fell and is out of the expedition.`);
+      if (member) tell(run, `§c${m?.name ?? "A member"} fell and is out of the expedition.`);
       // Only a death in the dungeon: one just teleported out of it dies among their own things (and other people's).
       if (get("returnItemsOnDeath") === true && deadEntity.dimension.id === OVERWORLD && inBox(run.o, run.size, run.top, where, 2)) {
         // The drops appear this tick: collect them before anyone else can, and give them back on respawn.
@@ -3314,7 +3321,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
         }, 1);
       }
       dropBuffs(deadEntity);
-      dropMember(run, id); // their return spot stays: playerSpawn sends them back
+      if (member) dropMember(run, id); // their return spot stays: playerSpawn sends them back
       return;
     }
     // Dungeon mobs: champions may drop a sigil, Explosive Death bursts.
