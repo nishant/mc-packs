@@ -379,7 +379,7 @@ export const STORIES = [
             id: "ask_master",
             label: "Ask about her master",
             reply: [
-              `${I}Corvin. Big hands, bad knees, sang while he worked. Off key. He forged the first relics from the stones that fell in the Long Storm. Said they were warm when he found them. Said they hummed.`,
+              `${I}Dunmore. Big hands, bad knees, sang while he worked. Off key. He forged the first relics from the stones that fell in the Long Storm. Said they were warm when he found them. Said they hummed.`,
               `${I}He never went below forty either. Said the rock down there listened back. I thought he was a superstitious old man.\n\nShe tightens a strap.\n\n${I}He was right about most things. I hate that.`,
             ],
           },
@@ -443,7 +443,7 @@ export const STORIES = [
           {
             id: "promise_watch",
             label: "Tell her you'll watch her back",
-            reply: [`${I}Good. I'll watch the frame. You watch the dark. If it comes, tap my shoulder twice and get down.\n\nShe almost smiles.\n\n${I}Corvin and I used to do that. He tapped too hard. You tap soft.`],
+            reply: [`${I}Good. I'll watch the frame. You watch the dark. If it comes, tap my shoulder twice and get down.\n\nShe almost smiles.\n\n${I}Dunmore and I used to do that. He tapped too hard. You tap soft.`],
           },
         ],
         objectives: [
@@ -484,7 +484,7 @@ export const STORIES = [
           {
             id: "ask_letters",
             label: "Ask Ida what the letters say",
-            reply: [`${I}Most of it I can't read. The first line Elsie told me: HERE THE WORLD STOPS ITS EARS. The last line is newer. Scratched, not carved. Corvin's hand, I think.\n\nShe swallows.\n\n${I}It says I WAS HERE. I LISTENED. FORGIVE ME.`],
+            reply: [`${I}Most of it I can't read. The first line Elsie told me: HERE THE WORLD STOPS ITS EARS. The last line is newer. Scratched, not carved. Dunmore's hand, I think.\n\nShe swallows.\n\n${I}It says I WAS HERE. I LISTENED. FORGIVE ME.`],
           },
           {
             id: "ask_wrong",
@@ -537,7 +537,7 @@ export const STORIES = [
         npc: "sol",
         when: NOW("sky"),
         intro: [
-          { text: `§eSol§r is on the inn roof with a spyglass when you find them.\n\n${S}The sky first. Of course. You were always going to look up.`, when: FIRST("sky") },
+          { text: `§eSol§r is on the inn roof with a spyglass when you find him.\n\n${S}The sky first. Of course. You were always going to look up.`, when: FIRST("sky") },
           { text: `§eSol§r is on the inn roof with a spyglass.\n\n${S}One seal sings already. I heard it in the starlight last night: Vega flickered, just once, like a wink. Now the high road.`, when: SECOND("sky") },
           { text: `§eSol§r is on the inn roof, spyglass in hand.\n\n${S}Two seals singing, and the third is mine: the highest, and the last. Deneb is very bright tonight. I think it is showing off for you.`, when: LAST("sky") },
           `${S}The Sky Seal is a ring of quartz and glass floating far above the clouds, higher than two hundred. The Starwrights built it closest to where the Lantern passes, so its light would land there first.`,
@@ -547,7 +547,7 @@ export const STORIES = [
         introChoices: [
           {
             id: "ask_heights",
-            label: "Ask Sol if they're afraid of heights",
+            label: "Ask Sol if he's afraid of heights",
             reply: [`${S}Terribly. I have been afraid of heights my whole life. It is very inconvenient for an astronomer.\n\nSol shrugs.\n\n${S}But the stars do not come down to visit, so someone has to go up. I will follow your climb. Slowly. With my eyes closed for parts of it.`],
           },
           {
@@ -679,7 +679,7 @@ export const STORIES = [
         introChoices: [
           {
             id: "ask_afraid",
-            label: "Ask Sol what they're afraid you'll see",
+            label: "Ask Sol what he's afraid you'll see",
             reply: [`${S}That it was always going to break. That the Starwrights knew, and built it anyway, and hoped.\n\nSol turns the spyglass over and over.\n\n${S}No. I am afraid it will be beautiful, and I will not be able to see it, and you will not have the words to tell me. Try anyway.`],
           },
           {

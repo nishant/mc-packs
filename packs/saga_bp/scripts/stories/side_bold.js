@@ -340,7 +340,7 @@ const SMUGGLERS_RUN = {
       title: "The Crate Job",
       intro: [
         { text: `§eQuill§r is leaning on his stall like he owns the square. He doesn't, but he's working on it.\n\n${Q}My favorite double agent! Partner. Friend. Person who knows exactly how much trouble I'm in. Sit. Have a fig.`, when: TRUSTED },
-        { text: `§eQuill§r is thinner than you remember, with a gray jail pallor under the charm. He sees you and his smile goes flat.\n\n${Q}Well. The one who turned me in. Reyes let me out yesterday. Good behavior. I behaved extremely well, out of spite.`, when: EXPOSED },
+        { text: `§eQuill§r is thinner than you remember, with a gray jail pallor under the charm. He sees you and his smile goes flat.\n\n${Q}Well. The one who turned me in. Reyes lets me out by day now, on a leash she calls parole; nights I'm back in the cell. Good behavior. I behaved extremely well, out of spite.`, when: EXPOSED },
         { text: `${Q}I'd tell you to leave, but you're the only person in town who can sneak, fight, and doesn't owe Bram money. So. Business. No hugging.`, when: EXPOSED },
         `${Q}Raiders hit one of my wagons on the north road. They took one crate. One, out of twelve. You know why? Because it's the crate with money sewn into the lining. Somebody talked.`,
         `${Q}They're camped about eight hundred blocks northeast. Walk in, reach the crate, walk out. If they see you, they burn it; I've met these people. Crouch, stay behind things, and be a shadow with good manners.`,
@@ -427,7 +427,7 @@ const SMUGGLERS_RUN = {
         `${Q}Row three hundred blocks along the coast. The drowned come up after honey boats, don't ask me why, it's a whole thing. If they swarm you, sink four fast, inside three minutes, before they drag the boat under.`,
         `${Q}Then meet my buyer at the rock. Her name is Sal. One eye, two cutlasses, three husbands. Do not mention the husbands.`,
         { text: `${Q}Last time I sent someone to Sal they mentioned the husbands. He came back three days later wearing a barrel. Very well made barrel. Still.`, when: TRUSTED },
-        { text: `${Q}I would go myself, but the terms of my release say I stay within a day's walk of Reyes. She was very specific. She drew a map. It had a skull on it.`, when: EXPOSED },
+        { text: `${Q}I would go myself, but the terms of my parole say I stay within a day's walk of Reyes. She was very specific. She drew a map. It had a skull on it.`, when: EXPOSED },
       ],
       objectives: [
         { type: "collect", label: "Have 6 honey bottles (the contraband)", item: "minecraft:honey_bottle", count: 6 },
@@ -465,7 +465,7 @@ const SMUGGLERS_RUN = {
         `${Q}Inspector Pell. A man made entirely of forms. If he's still at the cove when the Choir comes, he'll get hurt, and then he'll fine me for it.`,
         `${Q}Go meet him. Answer his questions. If he asks about the barrels, the barrels are fish. Everything is fish. Then get rid of him.`,
         `${Q}How? Pell has one weakness: goats. A goat looked at him funny when he was six and he never recovered. Wren has a goat. Wren has many goats. Borrow one. Bring it back.`,
-        { text: `${Q}And yes, I know: if Pell finds the honey, I'm back in a cell. You'd know all about how that goes.`, when: EXPOSED },
+        { text: `${Q}And yes, I know: if Pell finds the honey, I'm back in that cell for good. You'd know all about how that goes.`, when: EXPOSED },
       ],
       objectives: [
         {
@@ -1085,7 +1085,7 @@ const SINGING_FORGE = {
         `${I}Four pieces. Smelt them later and you get scrap, and scrap is what I need. But first, dig.`,
         `${I}Build a portal: ten blocks of obsidian at least, and fire. Go through ready. Fire resistance if you can brew it. Gold on your boots, or the piglins will want a word.`,
         { text: `${I}Quill sold me two fire resistance potions for you, at a price he called 'friendly'. I called it something else. He laughed. Take them anyway; they're on the bench.`, when: TRUSTED },
-        { text: `${I}I tried to buy fire resistance potions from Quill. He's out, and sour, and he charged me double 'for the jail'. I paid. Don't tell him it worked on me.`, when: EXPOSED },
+        { text: `${I}I tried to buy fire resistance potions from Quill. He's out by day on Reyes's parole, and sour, and he charged me double 'for the jail'. I paid. Don't tell him it worked on me.`, when: EXPOSED },
         `${I}And don't fall in the lava. That's not advice. That's an order. Reyes isn't the only one in town who gives them.`,
       ],
       objectives: [
@@ -1119,7 +1119,7 @@ const SINGING_FORGE = {
       ],
       outro: [
         "Ida lays it all out: four scrap, six rods, and a brute's chipped tusk you don't remember pocketing. She says nothing for a while. Then she lights the forge.",
-        "For three days she works. Nobody sleeps near the forge. It sings in its sleep, the neighbors say: low, then high, then low. Sol comes by on the second night and stands outside for an hour with her eyes closed, saying star names under her breath.",
+        "For three days she works. Nobody sleeps near the forge. It sings in its sleep, the neighbors say: low, then high, then low. Sol comes by on the second night and stands outside for an hour with his eyes closed, saying star names under his breath.",
         `${I}It's done. Almost. It wants to sing. You can feel it in the handle. But it isn't true yet. Dunmore's next line: 'quenched where the souls burn'.`,
       ],
       reward: { levels: 5, crowns: 55 },
@@ -1156,7 +1156,7 @@ const SINGING_FORGE = {
         "On the third quench the blade sings a note so clear the soul fire bends toward it. Then everything that came out of the dark to listen is gone, and the night is very quiet.",
         `${I}Did you hear it? Not the blade. Under it. Something answered. Far off, deep down. Like a door opening very slowly in a big, empty house.`,
         `${I}I don't like that. But the blade is true. Look at it. Not a crack. Dunmore, you old goat. Five tries.`,
-        `${I}One more line: 'named true'. A blade that sings needs a name, or it sings whatever it likes. Ask around. Ask Sol; she names stars for a living. Ask Tobin. Then come back.`,
+        `${I}One more line: 'named true'. A blade that sings needs a name, or it sings whatever it likes. Ask around. Ask Sol; he names stars for a living. Ask Tobin. Then come back.`,
       ],
       reward: {
         levels: 4,

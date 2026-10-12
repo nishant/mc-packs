@@ -394,7 +394,7 @@ export const STORIES = [
           codex: {
             id: "long_night",
             title: "The Long Night",
-            text: "On the first night of the Lantern's pass, the Hollow sent everything it had against the town: forty winters of drowned, and the Gray Choir behind them. The lighthouse held until dawn. Pip kept the lamp lit. Not everyone who stood on the cliff road came home.",
+            text: "On the first night of the Lantern's pass, the Hollow sent everything it had against the town: forty winters of drowned, and the Gray Choir behind them. The lighthouse held until dawn. Pip kept the lamp lit. At first light Reyes counted off every name on the cliff road.",
           },
         },
         rep: [{ guild: "wardens", amount: 25 }],
@@ -894,7 +894,7 @@ export const STORIES = [
           codex: {
             id: "forty_winters",
             title: "Forty Winters",
-            text: "After Lantern Night the town planted a tree in the old graveyard for everyone the Long Storm and the Long Night took: Hal, Lily, Moss's brother, the nine on the cliff road, and even Ashgrave. Trees don't ask who deserved it. Forty winters from now the Lantern returns. The town means to remember this time.",
+            text: "After Lantern Night the town planted a tree in the old graveyard for everyone the Long Storm and the Long Night took: Hal, Lily, Moss's brother, those lost on the cliff road, and even Ashgrave. Trees don't ask who deserved it. Forty winters from now the Lantern returns. The town means to remember this time.",
           },
         },
         rep: [

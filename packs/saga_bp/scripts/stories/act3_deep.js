@@ -246,7 +246,7 @@ export const STORIES = [
           "The sun goes down red over the water. Tobin doesn't say anything for the whole of it. Once he lifts his hand, like he's waving to a boat that isn't there.",
           { text: `${T}Hear that? The bell. Tide's moving the clapper.\n\nHe almost smiles.\n\n${T}He'd have liked that. He hated quiet water. Said quiet water's just the sea holding its breath.`, when: RING },
           { text: `${T}Quiet. No bell. Good.\n\nHe looks at the flat dark sea a long time.\n\n${T}That bell killed him. I'm glad it's choking on Ida's band. Is that wrong? Don't answer.`, when: SILENCE },
-          `When you've caught three, he takes the last fish off your hook himself, the way you'd do it for a boy.\n\n${T}Hal taught me that knot. I was six. He slapped my hand every time I got it wrong. I'd give the rest of my years for one more slap.`,
+          `When you've caught three, he takes the last fish off your hook himself, the way you'd do it for a boy.\n\n${T}I taught Hal that knot. He was six. I slapped his hand every time he got it wrong. I'd give the rest of my years for one more wrong knot.`,
           `${T}Take his rod. And his compass: it always found the way home, which is more than he ever did. Been in my shed forty years, waiting for somebody worth it. Go on. And when you find whatever's under there, whatever he died fighting, you give it one from Hal.`,
         ],
         reward: {
@@ -440,7 +440,7 @@ export const STORIES = [
         npc: "bea",
         end: "elsie",
         intro: [
-          `§eBea§r drags you into the inn's kitchen by the elbow and shuts the door with her hip.\n\n${BE}Sit. Don't talk. Listen. I've been cooking in this kitchen eleven years and I know when a pot's been hiding something under the lid.`,
+          `§eBea§r drags you into the inn's kitchen by the elbow and shuts the door with her hip.\n\n${BE}Sit. Don't talk. Listen. I've been cooking in this kitchen twenty years and I know when a pot's been hiding something under the lid.`,
           `${BE}Last night the lamps went out in the storm. Pitch dark. And Elsie's apron was glowing. The hem. Little points of light stitched right in, like somebody sewed the stars down so they wouldn't run off.`,
           `${BE}Then the lamps came back and it was just an apron. She looked at me like I'd caught her with her hand in the till. Forty years she's run this inn. She hasn't aged a day of it. I asked my mother. She said the same.`,
           `${BE}You're the one everybody tells things to. Take her a honey bottle; nobody lies with honey on their tongue, I've proved it a hundred times. Then stay the night. Whatever she shows you, I want the whole recipe.`,
