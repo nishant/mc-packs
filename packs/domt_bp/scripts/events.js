@@ -304,24 +304,29 @@ export function spore(p, opts) {
 }
 
 // ---------------------------------------------------------------------------
-// The Rainbow: a rainbow name above your head for five minutes
+// The Rainbow (a rainbow name above your head) and Cursed Name (a silly one), for a while
 // ---------------------------------------------------------------------------
 
 const PROP_NAME = "domt:name"; // player: the name tag to put back
 const COLORS = ["§c", "§6", "§e", "§a", "§b", "§9", "§d"];
-/** @type {Set<string>} */
+/** @type {Set<string>} players whose name the deck is changing */
 const rainbows = new Set();
 
-/** @param {Player} p @param {{ test?: boolean }} opts */
+/**
+ * Changes the name above a player's head for a while, then puts it back: rainbow colors, or with
+ * `title`, that name in red.
+ * @param {Player} p @param {{ test?: boolean, minutes?: number, title?: string }} opts
+ */
 export function rainbowName(p, opts) {
   if (rainbows.has(p.id)) return false;
   const orig = p.nameTag;
   const plain = (orig || p.name).replace(/§./g, "");
+  const minutes = opts.minutes ?? 20;
   p.setDynamicProperty(PROP_NAME, orig);
   rainbows.add(p.id);
   let shift = 0;
   let last = "";
-  const until = system.currentTick + (opts.test ? 60 : 6000);
+  const until = system.currentTick + (opts.test ? 60 : minutes * 1200);
   const id = system.runInterval(() => {
     try {
       if (!online(p) || (last && p.nameTag !== last)) {
@@ -339,14 +344,14 @@ export function rainbowName(p, opts) {
         return;
       }
       shift++;
-      last = [...plain].map((ch, i) => `${COLORS[(i + shift) % COLORS.length]}${ch}`).join("");
-      p.nameTag = last;
+      last = opts.title ? `§c${opts.title}` : [...plain].map((ch, i) => `${COLORS[(i + shift) % COLORS.length]}${ch}`).join("");
+      if (p.nameTag !== last) p.nameTag = last;
     } catch {
       system.clearRun(id);
       rainbows.delete(p.id);
     }
   }, 5);
-  return "Your name shines in rainbow colors for five minutes.";
+  return opts.title ? `Everyone sees you as "${opts.title}" for ${minutes} minutes.` : `Your name shines in rainbow colors for ${minutes} minutes.`;
 }
 
 // A restart in the middle: put the name back when they join.

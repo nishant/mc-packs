@@ -1,28 +1,39 @@
-// The Deck of Many Things: 100 cards. 70 common, 20 uncommon, 9 rare, 1 legendary.
+// The Deck of Many Things: 132 cards (79 common, 36 uncommon, 15 rare, 2 legendary), plus 15 wild
+// cards that start disabled.
 // Each card is data (id, name, rarity, kind, the line on the card) and a small handler. A handler
 // returns false when it can't happen here (no safe spot, no mob near...), and the deck draws again;
 // a string is shown under the card's text.
-import { ItemStack, Player, system, world } from "@minecraft/server";
+import { EquipmentSlot, ItemStack, Player, system, WeatherType, world } from "@minecraft/server";
 import { arena, rainbowName, spore, wish } from "./events.js";
 import {
   addCrowns,
   attempt,
+  bar,
   between,
   blockAt,
+  clearFire,
+  compass,
   burst,
   crownsOf,
   effect,
+  enchant,
   ENCHANTS,
   farTeleport,
   give,
   giveStack,
+  inZone,
   pick,
+  prettyId,
   randomEnchanted,
   randomSpot,
   safeHop,
+  sightSpot,
   sound,
   spawnAround,
+  spotNear,
   standable,
+  strike,
+  UNTIL_DEATH,
   wait,
 } from "./helpers.js";
 
@@ -41,7 +52,8 @@ import {
  * @property {Rarity} rarity
  * @property {"good" | "bad" | "mixed"} kind
  * @property {string} text the line on the card (plain ASCII)
- * @property {string} expect what the test path checks afterwards: effect:<id>, item:<id>, spawn:<id>, move, far, dim, xp, levels-, crowns, crowns-, crowns?, reward, health, noeffects, hotbar, drop, name, time, rotate, blocks, none
+ * @property {string} expect what the test path checks afterwards: effect:<id>, item:<id>, spawn:<id>, hurt, fire, day, mended, worn, heldname, move, far, dim, xp, levels-, crowns, crowns-, crowns?, reward, health, noeffects, hotbar, drop, name, time, rotate, blocks, none
+ * @property {boolean} [wild] a wild card: off until an operator switches it on
  * @property {boolean} [blocks] changes blocks (off with "Block-changing cards" disabled; skipped in safe zones)
  * @property {(p: Player) => void} [prep] test path only: set the player up so the card has something to work on
  * @property {(ctx: Ctx) => boolean | string | void | Promise<boolean | string | void>} run
@@ -112,58 +124,176 @@ const fillHotbar = (p) => {
   p.selectedSlotIndex = 0;
 };
 
+/** Champion mobs the deck asks for: ones that always come for a player (Champions swaps any it doesn't make). */
+const CHAMP_MOBS = ["minecraft:zombie", "minecraft:husk", "minecraft:skeleton", "minecraft:stray", "minecraft:witch"];
+
+/** The deck's own champion, when the Champions pack isn't there. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at */
+function deckChampion(dim, at) {
+  const e = dim.spawnEntity("minecraft:vindicator", at);
+  e.nameTag = "§cThe Deck's Champion";
+  e.addTag("domt:boss");
+  effect(e, "minecraft:health_boost", 3600, 4);
+  effect(e, "minecraft:instant_health", 1, 4);
+  effect(e, "minecraft:resistance", 3600);
+  effect(e, "minecraft:strength", 3600);
+  return e;
+}
+
+/**
+ * Three seconds after a champion appears, checks it is still there. If something removed it before
+ * anyone could fight it, the deck sends its own near the player.
+ * @param {Player} p @param {import("@minecraft/server").Entity} champ
+ */
+function watchChampion(p, champ) {
+  system.runTimeout(() => {
+    try {
+      if (!p.isValid || champ.isValid) return;
+      const spot = sightSpot(p, 6, 10) ?? randomSpot(p, 6, 10);
+      if (!spot) return;
+      deckChampion(p.dimension, spot);
+      p.sendMessage(`§6[Deck] §7The champion slipped away, so the deck sends its own, ${Math.round(Math.hypot(spot.x - p.location.x, spot.z - p.location.z))} blocks to the ${compass(p.location, spot)}.`);
+    } catch (e) {
+      console.warn(`[domt] champion check: ${e}`);
+    }
+  }, 60);
+}
+
+/** The item in the player's hand. @param {Player} p */
+function held(p) {
+  const inv = p.getComponent("minecraft:inventory")?.container;
+  const slot = p.selectedSlotIndex;
+  return { inv, slot, item: inv?.getItem(slot) };
+}
+
+/** Test path: an iron sword in the first hotbar slot, in hand, `damage` points worn. @param {Player} p @param {number} [damage] */
+const testSword = (p, damage = 0) => {
+  const inv = p.getComponent("minecraft:inventory")?.container;
+  if (!inv) return;
+  const sword = new ItemStack("minecraft:iron_sword", 1);
+  const d = sword.getComponent("minecraft:durability");
+  if (d && damage) d.damage = damage;
+  inv.setItem(0, sword);
+  p.selectedSlotIndex = 0;
+};
+
+/** Test path: Resistance IV, so cards that hurt don't kill the test player. @param {Player} p */
+const toughen = (p) => effect(p, "minecraft:resistance", 30, 3);
+
+/** Test path: moves the player to a nearby spot with open sky (`h` blocks), for cards that need it. @param {Player} p @param {number} h */
+function toOpenSky(p, h) {
+  for (let i = 0; i < 60; i++) {
+    const spot = randomSpot(p, 1, 12, 1);
+    if (!spot) continue;
+    let clear = true;
+    for (let y = 1; y <= h && clear; y++) clear = !!blockAt(p.dimension, { x: spot.x, y: spot.y + y, z: spot.z })?.isAir;
+    if (clear) return void p.teleport(spot, { dimension: p.dimension, keepVelocity: false });
+  }
+}
+
+/** Is the player's spot (and `pad` blocks around it) inside a safe zone? @param {Player} p @param {number} pad */
+const zoned = (p, pad) => inZone(p.dimension.id, p.location.x, p.location.z, pad);
+
+/**
+ * Runs `tick(secondsLeft)` now and then once a second, `seconds` times, in the background, then
+ * `done` when the time is up. Stops early (without `done`) when the player leaves or `tick` returns false.
+ * @param {Player} p @param {number} seconds @param {(left: number) => boolean | void} tick @param {() => void} [done]
+ */
+function everySecond(p, seconds, tick, done) {
+  let left = seconds;
+  const step = () => {
+    if (!p.isValid) return false;
+    if (left <= 0) {
+      done?.();
+      return false;
+    }
+    const go = tick(left) !== false;
+    left--;
+    return go;
+  };
+  try {
+    if (!step()) return;
+  } catch (e) {
+    return void console.warn(`[domt] timer: ${e}`);
+  }
+  const id = system.runInterval(() => {
+    try {
+      if (!step()) system.clearRun(id);
+    } catch (e) {
+      system.clearRun(id);
+      console.warn(`[domt] timer: ${e}`);
+    }
+  }, 20);
+}
+
+/** Spawns mobs in the air above spots around the player. @param {Player} p @param {string} type @param {number} n @param {number} up @param {number} r */
+function spawnAbove(p, type, n, up, r) {
+  const dim = p.dimension;
+  const at = p.location;
+  /** @type {import("@minecraft/server").Entity[]} */
+  const out = [];
+  for (let i = 0; i < n * 3 && out.length < n; i++) {
+    const loc = { x: at.x + between(-r, r), y: at.y + up, z: at.z + between(-r, r) };
+    const b = blockAt(dim, loc);
+    if (!b || !b.isAir) continue;
+    attempt(() => out.push(dim.spawnEntity(type, loc)));
+  }
+  return out;
+}
+
+/** Names Cursed Name picks from. */
+const SILLY_NAMES = ["Sir Bonks-a-Lot", "Captain Soggy", "Lord Snackington", "Dirt Muncher", "The Wobbler", "Princess Pebble", "Baron von Oops", "Mister Noodles", "Duke of Mud", "Lil Creeper Hugger"];
+
 /** @type {Card[]} */
 export const CARDS = [
   // ---------------------------------------------------------------------------
-  // Common (70)
+  // Common
   // ---------------------------------------------------------------------------
-  buff("swift_feet", "Swift Feet", "common", "good", "Speed II for 3 minutes.", "speed", 180, 1),
-  buff("the_frog", "The Frog", "common", "good", "Jump Boost II for 3 minutes.", "jump_boost", 180, 1),
-  buff("owl_eyes", "Owl's Eyes", "common", "good", "Night Vision for 10 minutes.", "night_vision", 600),
-  buff("iron_skin", "Iron Skin", "common", "good", "Resistance for 3 minutes.", "resistance", 180),
-  buff("the_miner", "The Miner", "common", "good", "Haste II for 5 minutes.", "haste", 300, 1),
-  buff("the_fish", "The Fish", "common", "good", "Water Breathing for 10 minutes.", "water_breathing", 600),
-  buff("the_feather", "The Feather", "common", "good", "Slow Falling for 3 minutes.", "slow_falling", 180),
-  buff("ember_ward", "Ember Ward", "common", "good", "Fire Resistance for 5 minutes.", "fire_resistance", 300),
+  buff("swift_feet", "Swift Feet", "common", "good", "Speed II for 15 minutes.", "speed", 900, 1),
+  buff("the_frog", "The Frog", "common", "good", "Jump Boost II for 15 minutes.", "jump_boost", 900, 1),
+  buff("owl_eyes", "Owl's Eyes", "common", "good", "Night Vision for an hour.", "night_vision", 3600),
+  buff("iron_skin", "Iron Skin", "common", "good", "Resistance for 15 minutes.", "resistance", 900),
+  buff("the_miner", "The Miner", "common", "good", "Haste II for 20 minutes.", "haste", 1200, 1),
+  buff("the_fish", "The Fish", "common", "good", "Water Breathing for 30 minutes.", "water_breathing", 1800),
+  buff("the_feather", "The Feather", "common", "good", "Slow Falling for 15 minutes.", "slow_falling", 900),
+  buff("ember_ward", "Ember Ward", "common", "good", "Fire Resistance for 20 minutes.", "fire_resistance", 1200),
   {
     id: "the_healer",
     name: "The Healer",
     rarity: "common",
     kind: "good",
-    text: "Instant healing and Regeneration II for 30 seconds.",
+    text: "Instant healing and Regeneration II for 1 minute.",
     expect: "effect:regeneration",
     run: ({ player }) => {
       effect(player, "minecraft:instant_health", 1, 1);
-      effect(player, "minecraft:regeneration", 30, 1);
+      effect(player, "minecraft:regeneration", 60, 1);
       burst(player.dimension, "minecraft:heart_particle", player.location, 8);
     },
   },
-  buff("the_ox", "The Ox", "common", "good", "Strength for 3 minutes.", "strength", 180),
-  buff("golden_heart", "Golden Heart", "common", "good", "Absorption II for 3 minutes.", "absorption", 180, 1),
-  buff("village_hero", "Village Hero", "common", "good", "Hero of the Village for 10 minutes: villagers give discounts.", "village_hero", 600),
+  buff("the_ox", "The Ox", "common", "good", "Strength for 15 minutes.", "strength", 900),
+  buff("golden_heart", "Golden Heart", "common", "good", "Absorption II for 15 minutes.", "absorption", 900, 1),
+  buff("village_hero", "Village Hero", "common", "good", "Hero of the Village for 30 minutes: villagers give discounts.", "village_hero", 1800),
   buff("full_belly", "Full Belly", "common", "good", "Your hunger is filled.", "saturation", 2, 9),
-  buff("the_shadow", "The Shadow", "common", "mixed", "Invisibility for 3 minutes.", "invisibility", 180),
-  buff("the_vigor", "The Vigor", "common", "good", "Health Boost II for 5 minutes: four extra hearts.", "health_boost", 300, 1),
-  buff("heavy_boots", "Heavy Boots", "common", "bad", "Slowness for 1 minute.", "slowness", 60),
-  buff("sore_arms", "Sore Arms", "common", "bad", "Mining Fatigue for 1 minute.", "mining_fatigue", 60),
-  buff("weak_arms", "Weak Arms", "common", "bad", "Weakness for 1 minute.", "weakness", 60),
-  buff("famine", "Famine", "common", "bad", "Hunger for 30 seconds.", "hunger", 30),
-  buff("dizzy_spell", "Dizzy Spell", "common", "bad", "Nausea for 15 seconds.", "nausea", 15),
-  buff("the_blindfold", "The Blindfold", "common", "bad", "Blindness for 10 seconds.", "blindness", 10),
-  buff("the_dark", "The Dark", "common", "bad", "Darkness for 15 seconds.", "darkness", 15),
+  buff("the_shadow", "The Shadow", "common", "mixed", "Invisibility for 15 minutes.", "invisibility", 900),
+  buff("the_vigor", "The Vigor", "common", "good", "Health Boost II for 30 minutes: four extra hearts.", "health_boost", 1800, 1),
+  buff("heavy_boots", "Heavy Boots", "common", "bad", "Slowness for 15 minutes.", "slowness", 900),
+  buff("sore_arms", "Sore Arms", "common", "bad", "Mining Fatigue II for 10 minutes.", "mining_fatigue", 600, 1),
+  buff("weak_arms", "Weak Arms", "common", "bad", "Weakness for 15 minutes.", "weakness", 900),
+  buff("famine", "Famine", "common", "bad", "Hunger II for 3 minutes: your food bar drains fast.", "hunger", 180, 1),
+  buff("dizzy_spell", "Dizzy Spell", "common", "bad", "Nausea for 1 minute.", "nausea", 60),
+  buff("the_blindfold", "The Blindfold", "common", "bad", "Blindness for 1 minute.", "blindness", 60),
+  buff("the_dark", "The Dark", "common", "bad", "Darkness for 3 minutes.", "darkness", 180),
   {
     id: "up_up",
     name: "Up, Up",
     rarity: "common",
-    kind: "mixed",
-    text: "Levitation for 4 seconds, then a gentle Slow Falling down.",
+    kind: "bad",
+    text: "Levitation for 7 seconds. What goes up must come down.",
     expect: "effect:levitation",
     run: ({ player }) => {
-      effect(player, "minecraft:levitation", 4);
-      effect(player, "minecraft:slow_falling", 20);
+      effect(player, "minecraft:levitation", 7);
     },
   },
-  buff("sour_berry", "Sour Berry", "common", "bad", "Poison for 5 seconds (it never kills).", "poison", 5),
+  buff("sour_berry", "Sour Berry", "common", "bad", "Poison II for 30 seconds. It stops at half a heart.", "poison", 30, 1),
   {
     id: "hot_foot",
     name: "Hot Foot",
@@ -216,10 +346,10 @@ export const CARDS = [
       sound(player, "random.pop", 1.4);
     },
   },
-  gift("bakers_gift", "Baker's Gift", "common", "good", "8 bread.", [["bread", 8]]),
-  gift("the_feast", "The Feast", "common", "good", "6 steaks.", [["cooked_beef", 6]]),
-  gift("golden_carrots", "Golden Carrots", "common", "good", "4 golden carrots.", [["golden_carrot", 4]]),
-  gift("the_apple", "The Apple", "common", "good", "A golden apple.", [["golden_apple", 1]]),
+  gift("bakers_gift", "Baker's Gift", "common", "good", "16 bread.", [["bread", 16]]),
+  gift("the_feast", "The Feast", "common", "good", "12 steaks.", [["cooked_beef", 12]]),
+  gift("golden_carrots", "Golden Carrots", "common", "good", "8 golden carrots.", [["golden_carrot", 8]]),
+  gift("the_apple", "The Apple", "common", "good", "Two golden apples.", [["golden_apple", 2]]),
   {
     id: "the_cake",
     name: "The Cake",
@@ -233,22 +363,22 @@ export const CARDS = [
       sound(player, "random.levelup", 1.6, 0.6);
     },
   },
-  gift("the_torch", "The Torch", "common", "good", "32 torches.", [["torch", 32]]),
-  gift("the_quiver", "The Quiver", "common", "good", "24 arrows.", [["arrow", 24]]),
-  gift("lump_of_coal", "Lump of Coal", "common", "mixed", "8 coal. Were you naughty?", [["coal", 8]]),
-  gift("iron_ration", "Iron Ration", "common", "good", "6 iron ingots.", [["iron_ingot", 6]]),
-  gift("fools_gold", "Fool's Gold", "common", "good", "4 gold ingots.", [["gold_ingot", 4]]),
-  gift("merchants_purse", "Merchant's Purse", "common", "good", "3 emeralds.", [["emerald", 3]]),
-  gift("the_woodsman", "The Woodsman", "common", "good", "16 oak logs.", [["oak_log", 16]]),
-  gift("green_thumb", "Green Thumb", "common", "good", "16 bone meal.", [["bone_meal", 16]]),
+  gift("the_torch", "The Torch", "common", "good", "64 torches.", [["torch", 64]]),
+  gift("the_quiver", "The Quiver", "common", "good", "48 arrows.", [["arrow", 48]]),
+  gift("lump_of_coal", "Lump of Coal", "common", "mixed", "16 coal. Were you naughty?", [["coal", 16]]),
+  gift("iron_ration", "Iron Ration", "common", "good", "12 iron ingots.", [["iron_ingot", 12]]),
+  gift("fools_gold", "Fool's Gold", "common", "good", "8 gold ingots.", [["gold_ingot", 8]]),
+  gift("merchants_purse", "Merchant's Purse", "common", "good", "6 emeralds.", [["emerald", 6]]),
+  gift("the_woodsman", "The Woodsman", "common", "good", "32 oak logs.", [["oak_log", 32]]),
+  gift("green_thumb", "Green Thumb", "common", "good", "32 bone meal.", [["bone_meal", 32]]),
   gift("the_gardener", "The Gardener", "common", "good", "Seeds, a sapling and a few carrots and potatoes.", [
     ["wheat_seeds", 8],
     ["oak_sapling", 2],
     ["carrot", 4],
     ["potato", 4],
   ]),
-  gift("the_pearl", "The Pearl", "common", "good", "2 ender pearls.", [["ender_pearl", 2]]),
-  gift("honey_pot", "Honey Pot", "common", "good", "3 bottles of honey.", [["honey_bottle", 3]]),
+  gift("the_pearl", "The Pearl", "common", "good", "4 ender pearls.", [["ender_pearl", 4]]),
+  gift("honey_pot", "Honey Pot", "common", "good", "4 bottles of honey.", [["honey_bottle", 4]]),
   {
     id: "the_bouquet",
     name: "The Bouquet",
@@ -260,18 +390,18 @@ export const CARDS = [
       for (const f of ["poppy", "dandelion", "cornflower", "blue_orchid", "allium", "oxeye_daisy"].sort(() => Math.random() - 0.5).slice(0, 3)) give(player, S + f, 2);
     },
   },
-  gift("rotten_luck", "Rotten Luck", "common", "bad", "8 rotten flesh. Yum.", [["rotten_flesh", 8]]),
-  gift("pocket_dirt", "Pocket Dirt", "common", "bad", "16 dirt. Your pockets are full of it.", [["dirt", 16]]),
+  gift("rotten_luck", "Rotten Luck", "common", "bad", "16 rotten flesh. Yum.", [["rotten_flesh", 16]]),
+  gift("pocket_dirt", "Pocket Dirt", "common", "bad", "32 dirt. Your pockets are full of it.", [["dirt", 32]]),
   gift("snow_day", "Snow Day", "common", "good", "16 snowballs.", [["snowball", 16]]),
   gift("the_name", "The Name", "common", "good", "A name tag.", [["name_tag", 1]]),
   mobs("the_flock", "The Flock", "common", "good", "Three chickens come running.", "chicken", 3),
   mobs("stray_cat", "Stray Cat", "common", "good", "A stray cat finds you. Fish might win it over.", "cat", 1),
   mobs("bunny_hop", "Bunny Hop", "common", "good", "Four rabbits hop out of the deck.", "rabbit", 4),
-  mobs("the_grave", "The Grave", "common", "bad", "Two zombies climb out of the ground.", "zombie", 2, 5, 8),
-  mobs("creepy_crawlies", "Creepy Crawlies", "common", "bad", "Two spiders drop in.", "spider", 2, 5, 8),
+  mobs("the_grave", "The Grave", "common", "bad", "Three zombies climb out of the ground.", "zombie", 3, 5, 8),
+  mobs("creepy_crawlies", "Creepy Crawlies", "common", "bad", "Three spiders drop in.", "spider", 3, 5, 8),
   mobs("the_slime", "The Slime", "common", "bad", "A slime oozes out of the deck.", "slime", 1, 4, 7),
   mobs("the_hive", "The Hive", "common", "mixed", "Three bees buzz around. Be nice to them.", "bee", 3),
-  mobs("bone_rattle", "Bone Rattle", "common", "bad", "Two skeletons rattle up.", "skeleton", 2, 6, 9),
+  mobs("bone_rattle", "Bone Rattle", "common", "bad", "Three skeletons rattle up.", "skeleton", 3, 6, 9),
   mobs("frog_chorus", "Frog Chorus", "common", "good", "Three frogs, ready to sing.", "frog", 3),
   {
     id: "the_hop",
@@ -295,14 +425,15 @@ export const CARDS = [
     id: "the_sky",
     name: "The Sky",
     rarity: "common",
-    kind: "mixed",
-    text: "You are thrown 20 blocks into the sky, with Slow Falling.",
+    kind: "bad",
+    text: "You are thrown 14 to 22 blocks into the sky. Find water, or brace yourself.",
     expect: "move",
-    run: ({ player }) => {
+    run: ({ player, test }) => {
       const dim = player.dimension;
-      /** Open sky for 22 blocks above this spot? @param {import("@minecraft/server").Vector3} at */
+      const h = between(14, 22);
+      /** Open sky above this spot? @param {import("@minecraft/server").Vector3} at */
       const clear = (at) => {
-        for (let y = 1; y <= 22; y++) {
+        for (let y = 1; y <= h + 2; y++) {
           const b = blockAt(dim, { x: at.x, y: at.y + y, z: at.z });
           if (!b || !b.isAir) return false;
         }
@@ -314,9 +445,11 @@ export const CARDS = [
         at = spot && clear(spot) ? spot : at;
       }
       if (!clear(at)) return false;
-      effect(player, "minecraft:slow_falling", 30);
-      player.teleport({ x: at.x, y: at.y + 20, z: at.z }, { keepVelocity: false });
+      bar(player, "§cThe ground lets go of you...", 40);
       sound(player, "mob.enderdragon.flap");
+      const to = { x: at.x, y: at.y + h, z: at.z };
+      system.runTimeout(() => attempt(() => player.isValid && player.teleport(to, { dimension: dim, keepVelocity: false })), test ? 2 : 30);
+      return `${h} blocks up, and nothing to slow your fall.`;
     },
   },
   {
@@ -337,10 +470,10 @@ export const CARDS = [
     name: "The Spark",
     rarity: "common",
     kind: "good",
-    text: "50 experience points.",
+    text: "100 experience points.",
     expect: "xp",
     run: ({ player }) => {
-      player.addExperience(50);
+      player.addExperience(100);
       sound(player, "random.orb");
     },
   },
@@ -349,10 +482,10 @@ export const CARDS = [
     name: "Copper Purse",
     rarity: "common",
     kind: "good",
-    text: "5 Crowns.",
+    text: "10 Crowns.",
     expect: "crowns",
     run: ({ player }) => {
-      addCrowns(player, 5);
+      addCrowns(player, 10);
       return `You have ${crownsOf(player)} Crowns.`;
     },
   },
@@ -361,11 +494,11 @@ export const CARDS = [
     name: "The Taxman",
     rarity: "common",
     kind: "bad",
-    text: "The taxman takes 5 Crowns.",
+    text: "The taxman takes 10 Crowns.",
     expect: "crowns-",
     prep: (p) => void addCrowns(p, 10),
     run: ({ player }) => {
-      const took = -addCrowns(player, -5);
+      const took = -addCrowns(player, -10);
       return took ? `You have ${crownsOf(player)} Crowns.` : "You had nothing to take. The taxman leaves grumbling.";
     },
   },
@@ -374,12 +507,12 @@ export const CARDS = [
     name: "The Leech",
     rarity: "common",
     kind: "bad",
-    text: "You lose one experience level.",
+    text: "You lose three experience levels.",
     expect: "levels-",
     prep: (p) => void p.addLevels(3),
     run: ({ player }) => {
       if (player.level < 1) return false;
-      player.addLevels(-1);
+      player.addLevels(-Math.min(3, player.level));
       sound(player, "mob.silverfish.hit");
     },
   },
@@ -447,13 +580,95 @@ export const CARDS = [
     name: "The Rainbow",
     rarity: "common",
     kind: "good",
-    text: "Your name shines in rainbow colors for 5 minutes.",
+    text: "Your name shines in rainbow colors for 20 minutes.",
     expect: "name",
     run: ({ player, test }) => rainbowName(player, { test }),
   },
 
+  buff("golden_hour", "Golden Hour", "common", "good", "Regeneration for 5 minutes.", "regeneration", 300),
+  buff("withering", "Withering", "common", "bad", "Wither II for 10 seconds. It can kill.", "wither", 10, 1),
+  buff("the_ooze", "The Ooze", "common", "bad", "Oozing for 20 minutes: if you die, slimes burst out of you.", "oozing", 1200),
+  buff("the_albatross", "The Albatross", "common", "bad", "Slowness until you die (or drink milk).", "slowness", UNTIL_DEATH),
+  mobs("venom", "Venom", "common", "bad", "Three cave spiders skitter in. They bite with poison.", "cave_spider", 3, 4, 7),
+  {
+    id: "smite",
+    name: "Smite",
+    rarity: "common",
+    kind: "bad",
+    text: "Lightning strikes you. The fire it starts goes out; yours doesn't.",
+    expect: "fire",
+    prep: toughen,
+    run: ({ player }) => {
+      strike(player.dimension, player.location);
+    },
+  },
+  {
+    id: "the_kick",
+    name: "The Kick",
+    rarity: "common",
+    kind: "bad",
+    text: "Something kicks you, hard, into the air in a random direction.",
+    expect: "move",
+    run: ({ player }) => {
+      const a = Math.random() * Math.PI * 2;
+      player.applyKnockback({ x: Math.cos(a) * 2.6, z: Math.sin(a) * 2.6 }, 1.1);
+      sound(player, "mob.irongolem.throw");
+      burst(player.dimension, "minecraft:knockback_roar_particle", player.location, 2);
+    },
+  },
+  {
+    id: "the_magpie",
+    name: "The Magpie",
+    rarity: "common",
+    kind: "bad",
+    text: "A magpie snatches a stack from your pockets and drops it 8 to 16 blocks away. Go get it.",
+    expect: "drop",
+    prep: (p) => fillHotbar(p),
+    run: ({ player }) => {
+      const inv = player.getComponent("minecraft:inventory")?.container;
+      if (!inv) return false;
+      // Never enchanted, named or container items: the magpie wants shiny things, not your best sword.
+      const slots = [];
+      for (let i = 0; i < inv.size; i++) {
+        const it = inv.getItem(i);
+        if (!it || it.nameTag || /shulker_box|bundle/.test(it.typeId)) continue;
+        if (it.getComponent("minecraft:enchantable")?.getEnchantments().length) continue;
+        slots.push(i);
+      }
+      if (!slots.length) return false;
+      const slot = pick(slots);
+      const item = /** @type {ItemStack} */ (inv.getItem(slot));
+      const spot = randomSpot(player, 8, 16, 20);
+      if (!spot) return false;
+      inv.setItem(slot, undefined);
+      player.dimension.spawnItem(item, { x: spot.x, y: spot.y + 0.5, z: spot.z });
+      sound(player, "mob.parrot.fly");
+      return `It took ${item.amount} ${prettyId(item.typeId).toLowerCase()} to the ${compass(player.location, spot)}.`;
+    },
+  },
+  {
+    id: "hiss",
+    name: "Hiss",
+    rarity: "common",
+    kind: "bad",
+    text: "A creeper appears right behind you.",
+    expect: "spawn:creeper",
+    blocks: true,
+    run: ({ player }) => {
+      if (zoned(player, 8)) return false;
+      const dim = player.dimension;
+      const v = player.getViewDirection();
+      const len = Math.hypot(v.x, v.z) || 1;
+      const at = player.location;
+      const behind = spotNear(dim, at.x - (v.x / len) * 2.5, at.z - (v.z / len) * 2.5, at.y, 2) ?? randomSpot(player, 2, 4, 20);
+      if (!behind) return false;
+      dim.spawnEntity("minecraft:creeper", behind);
+      sound(player, "random.fuse", 1, 0.6);
+    },
+  },
+
   // ---------------------------------------------------------------------------
-  // Uncommon (20)
+  // Uncommon
   // ---------------------------------------------------------------------------
   {
     id: "the_merchant",
@@ -535,10 +750,10 @@ export const CARDS = [
     name: "The Sage",
     rarity: "uncommon",
     kind: "good",
-    text: "5 experience levels.",
+    text: "8 experience levels.",
     expect: "xp",
     run: ({ player }) => {
-      player.addLevels(5);
+      player.addLevels(8);
       sound(player, "random.levelup");
     },
   },
@@ -547,24 +762,24 @@ export const CARDS = [
     name: "The Mentor",
     rarity: "uncommon",
     kind: "good",
-    text: "250 XP in a random skill (with the Skills pack).",
+    text: "400 XP in a random skill (with the Skills pack).",
     expect: "none",
-    run: ({ player }) => `${skillXp(player, 250)} skill XP, if the Skills pack is installed.`,
+    run: ({ player }) => `${skillXp(player, 400)} skill XP, if the Skills pack is installed.`,
   },
   {
     id: "silver_purse",
     name: "Silver Purse",
     rarity: "uncommon",
     kind: "good",
-    text: "25 Crowns.",
+    text: "50 Crowns.",
     expect: "crowns",
     run: ({ player }) => {
-      addCrowns(player, 25);
+      addCrowns(player, 50);
       sound(player, "random.orb", 0.8);
       return `You have ${crownsOf(player)} Crowns.`;
     },
   },
-  gift("the_gem", "The Gem", "uncommon", "good", "2 diamonds.", [["diamond", 2]]),
+  gift("the_gem", "The Gem", "uncommon", "good", "3 diamonds.", [["diamond", 3]]),
   {
     id: "the_pack",
     name: "The Pack",
@@ -601,9 +816,10 @@ export const CARDS = [
     expect: "spawn:zombie",
     run: ({ player }) => {
       const friends = player.dimension.getPlayers({ location: player.location, maxDistance: 16 }).length - 1;
-      const n = 3 + Math.min(3, friends);
+      const n = 4 + Math.min(4, friends);
       spawnAround(player, "minecraft:zombie", n, 6, 9);
       spawnAround(player, "minecraft:skeleton", 2, 7, 10);
+      spawnAround(player, "minecraft:spider", 1, 6, 9);
       sound(player, "mob.zombie.say", 0.8);
     },
   },
@@ -613,12 +829,12 @@ export const CARDS = [
     name: "Night Terror",
     rarity: "uncommon",
     kind: "bad",
-    text: "Two phantoms swoop down from the sky.",
+    text: "Three phantoms swoop down from the sky.",
     expect: "spawn:phantom",
     run: ({ player }) => {
       const at = player.location;
       let n = 0;
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 3; i++) {
         const loc = { x: at.x + between(-6, 6), y: at.y + 12, z: at.z + between(-6, 6) };
         const b = blockAt(player.dimension, loc);
         if (!b || !b.isAir) continue;
@@ -636,13 +852,13 @@ export const CARDS = [
     name: "The Beacon",
     rarity: "uncommon",
     kind: "good",
-    text: "Haste II, Speed, Strength and Resistance for 5 minutes.",
+    text: "Haste II, Speed, Strength and Resistance for 20 minutes.",
     expect: "effect:haste",
     run: ({ player }) => {
-      effect(player, "minecraft:haste", 300, 1);
-      effect(player, "minecraft:speed", 300);
-      effect(player, "minecraft:strength", 300);
-      effect(player, "minecraft:resistance", 300);
+      effect(player, "minecraft:haste", 1200, 1);
+      effect(player, "minecraft:speed", 1200);
+      effect(player, "minecraft:strength", 1200);
+      effect(player, "minecraft:resistance", 1200);
       burst(player.dimension, "minecraft:villager_happy", player.location, 16);
       sound(player, "beacon.activate");
     },
@@ -652,13 +868,13 @@ export const CARDS = [
     name: "The Curse",
     rarity: "uncommon",
     kind: "bad",
-    text: "Slowness II, Weakness, Mining Fatigue and Hunger for 2 minutes.",
+    text: "Slowness II, Weakness, Mining Fatigue and Hunger for 10 minutes.",
     expect: "effect:weakness",
     run: ({ player }) => {
-      effect(player, "minecraft:slowness", 120, 1);
-      effect(player, "minecraft:weakness", 120);
-      effect(player, "minecraft:mining_fatigue", 120);
-      effect(player, "minecraft:hunger", 120);
+      effect(player, "minecraft:slowness", 600, 1);
+      effect(player, "minecraft:weakness", 600);
+      effect(player, "minecraft:mining_fatigue", 600);
+      effect(player, "minecraft:hunger", 600);
       burst(player.dimension, "minecraft:villager_angry", player.location, 12);
       sound(player, "mob.witch.ambient", 0.7);
     },
@@ -716,10 +932,202 @@ export const CARDS = [
     },
   },
   mobs("the_guardian", "The Guardian", "uncommon", "good", "An iron golem comes to protect you.", "iron_golem", 1, 3, 5),
-  mobs("the_patrol", "The Patrol", "uncommon", "bad", "A pillager patrol finds you.", "pillager", 3, 8, 12),
+  mobs("the_patrol", "The Patrol", "uncommon", "bad", "A pillager patrol of four finds you.", "pillager", 4, 8, 12),
+
+  buff("bad_omen", "Bad Omen", "uncommon", "bad", "Bad Omen for 100 minutes: walk into a village and a raid begins.", "bad_omen", 6000),
+  buff("nightshade", "Nightshade", "uncommon", "bad", "Fatal Poison for 15 seconds. Unlike plain poison, this one can kill.", "fatal_poison", 15),
+  buff("guardian_angel", "Guardian Angel", "uncommon", "good", "Resistance until you die (or drink milk).", "resistance", UNTIL_DEATH),
+  buff("sea_blessing", "Sea Blessing", "uncommon", "good", "Conduit Power for 30 minutes: breathe, see and mine fast under water.", "conduit_power", 1800),
+  mobs("vexed", "Vexed", "uncommon", "bad", "Three vexes fly through the walls at you.", "vex", 3, 4, 6),
+  mobs("gust", "Gust", "uncommon", "bad", "A breeze blows in and knocks you around.", "breeze", 1, 6, 9),
+  mobs("the_shulker", "The Shulker", "uncommon", "mixed", "A shulker shows up. Dodge its bullets, keep its shell.", "shulker", 1, 5, 8),
+  {
+    id: "hot_headed",
+    name: "Hot Headed",
+    rarity: "uncommon",
+    kind: "bad",
+    text: "Two blazes rise around you. Bring water.",
+    expect: "spawn:blaze",
+    blocks: true,
+    run: ({ player }) => {
+      if (zoned(player, 16)) return false;
+      if (!spawnAround(player, "minecraft:blaze", 2, 6, 10).length) return false;
+      sound(player, "mob.blaze.breathe");
+    },
+  },
+  {
+    id: "anvil_drop",
+    name: "Anvil Drop",
+    rarity: "uncommon",
+    kind: "bad",
+    text: "An anvil falls from the sky onto your head. Move! If you live, keep the anvil.",
+    expect: "hurt",
+    blocks: true,
+    prep: (p) => {
+      toOpenSky(p, 9);
+      toughen(p);
+    },
+    run: ({ player, test }) => {
+      const dim = player.dimension;
+      const x = Math.floor(player.location.x);
+      const y = Math.floor(player.location.y);
+      const z = Math.floor(player.location.z);
+      if (zoned(player, 2)) return false;
+      // It drops from up to 8 blocks above the head; a roof lower than 5 blocks up keeps it out.
+      let top = 1;
+      while (top < 8 && blockAt(dim, { x, y: y + top + 1, z })?.isAir) top++;
+      if (top < 5) return false;
+      bar(player, "§c§lLook up!", 40);
+      sound(player, "random.anvil_land", 0.6);
+      system.runTimeout(() => {
+        const b = blockAt(dim, { x, y: y + top, z });
+        if (!b || !b.isAir) return;
+        attempt(() => b.setType("minecraft:anvil"));
+        if (test)
+          system.runTimeout(() => {
+            for (let yy = y - 1; yy <= y + top; yy++) {
+              const a = blockAt(dim, { x, y: yy, z });
+              if (a && /anvil/.test(a.typeId)) attempt(() => a.setType("minecraft:air"));
+            }
+          }, 60);
+      }, test ? 1 : 25);
+    },
+  },
+  {
+    id: "reapers_touch",
+    name: "Reaper's Touch",
+    rarity: "uncommon",
+    kind: "bad",
+    text: "Your health drops to half a heart. Careful now.",
+    expect: "hurt",
+    run: ({ player }) => {
+      const hp = player.getComponent("minecraft:health");
+      if (!hp) return false;
+      hp.setCurrentValue(1);
+      sound(player, "mob.wither.ambient", 1.2, 0.5);
+      burst(player.dimension, "minecraft:soul_particle", player.location, 10);
+    },
+  },
+  {
+    id: "lit_fuse",
+    name: "Lit Fuse",
+    rarity: "uncommon",
+    kind: "bad",
+    text: "A fuse hisses at your feet. Run! It blows in 4 seconds (it breaks no blocks).",
+    expect: "hurt",
+    prep: toughen,
+    run: ({ player, test }) => {
+      const dim = player.dimension;
+      const at = { ...player.location };
+      everySecond(
+        player,
+        test ? 1 : 4,
+        (left) => {
+          sound(player, "random.fuse", 1, 1);
+          burst(dim, "minecraft:basic_smoke_particle", at, 8, 0.4);
+          bar(player, `§c§lRUN! §r§c${left}...`, 25);
+        },
+        () => void dim.createExplosion(at, 3, { breaksBlocks: false, causesFire: false }),
+      );
+    },
+  },
+  {
+    id: "the_storm",
+    name: "The Storm",
+    rarity: "uncommon",
+    kind: "bad",
+    text: "A thunderstorm rolls in for 10 minutes, for everyone.",
+    expect: "none",
+    run: ({ player, announce }) => {
+      world.getDimension("minecraft:overworld").setWeather(WeatherType.Thunder, 12000);
+      sound(player, "ambient.weather.thunder", 1, 0.6);
+      announce(`${player.name} drew The Storm! Thunder rolls across the realm.`);
+    },
+  },
+  {
+    id: "the_sun",
+    name: "The Sun",
+    rarity: "uncommon",
+    kind: "good",
+    text: "Morning comes at once, with clear skies, for everyone.",
+    expect: "day",
+    run: ({ player, announce }) => {
+      world.setTimeOfDay(1000);
+      world.getDimension("minecraft:overworld").setWeather(WeatherType.Clear, 12000);
+      sound(player, "random.levelup", 1.4, 0.6);
+      announce(`${player.name} drew The Sun! Morning breaks across the realm.`);
+    },
+  },
+  {
+    id: "the_mender",
+    name: "The Mender",
+    rarity: "uncommon",
+    kind: "good",
+    text: "Every worn tool, weapon and piece of armor you carry is repaired like new.",
+    expect: "mended",
+    prep: (p) => testSword(p, 120),
+    run: ({ player }) => {
+      let n = 0;
+      const inv = player.getComponent("minecraft:inventory")?.container;
+      if (inv)
+        for (let i = 0; i < inv.size; i++) {
+          const it = inv.getItem(i);
+          const d = it?.getComponent("minecraft:durability");
+          if (!it || !d || d.damage <= 0) continue;
+          d.damage = 0;
+          inv.setItem(i, it);
+          n++;
+        }
+      const eq = player.getComponent("minecraft:equippable");
+      if (eq)
+        for (const slot of [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, EquipmentSlot.Feet, EquipmentSlot.Offhand]) {
+          const it = eq.getEquipment(slot);
+          const d = it?.getComponent("minecraft:durability");
+          if (!it || !d || d.damage <= 0) continue;
+          d.damage = 0;
+          eq.setEquipment(slot, it);
+          n++;
+        }
+      if (!n) return false;
+      sound(player, "random.anvil_use", 1.2, 0.7);
+      return `${n} item${n === 1 ? "" : "s"} repaired.`;
+    },
+  },
+  {
+    id: "rust",
+    name: "Rust",
+    rarity: "uncommon",
+    kind: "bad",
+    text: "The item in your hand loses a third of its durability (it never breaks outright).",
+    expect: "worn",
+    prep: (p) => testSword(p),
+    run: ({ player }) => {
+      const { inv, slot, item } = held(player);
+      const d = item?.getComponent("minecraft:durability");
+      if (!inv || !item || !d) return false;
+      if (d.damage >= d.maxDurability - 1) return false;
+      d.damage = Math.min(d.maxDurability - 1, d.damage + Math.ceil(d.maxDurability / 3));
+      inv.setItem(slot, item);
+      sound(player, "random.break", 0.7, 0.6);
+    },
+  },
+  {
+    id: "glass_cannon",
+    name: "Glass Cannon",
+    rarity: "uncommon",
+    kind: "mixed",
+    text: "Strength II and Speed II for 15 minutes, but your health drops to two hearts.",
+    expect: "effect:strength",
+    run: ({ player }) => {
+      effect(player, "minecraft:strength", 900, 1);
+      effect(player, "minecraft:speed", 900, 1);
+      player.getComponent("minecraft:health")?.setCurrentValue(4);
+      sound(player, "random.glass", 1.2);
+    },
+  },
 
   // ---------------------------------------------------------------------------
-  // Rare (9)
+  // Rare
   // ---------------------------------------------------------------------------
   {
     id: "the_gate",
@@ -734,14 +1142,14 @@ export const CARDS = [
       const to = world.getDimension(from === "minecraft:nether" ? "minecraft:overworld" : "minecraft:nether");
       const at = player.location;
       const scale = from === "minecraft:nether" ? 8 : 1 / 8;
-      effect(player, "minecraft:fire_resistance", 120);
+      effect(player, "minecraft:fire_resistance", 300);
       const targets = [0, 1, 2, 3].map((i) => ({ x: at.x * scale + between(-16 - i * 24, 16 + i * 24), z: at.z * scale + between(-16 - i * 24, 16 + i * 24) }));
       const spot = await farTeleport(player, to, targets);
       if (!spot) return false;
       give(player, "minecraft:obsidian", 10);
       give(player, "minecraft:flint_and_steel", 1);
       announce(`${player.name} drew The Gate and fell into the ${to.id === "minecraft:nether" ? "Nether" : "Overworld"}!`);
-      return "Build a 4 by 5 obsidian frame and light it to go home. Fire Resistance helps for 2 minutes.";
+      return "Build a 4 by 5 obsidian frame and light it to go home. Fire Resistance helps for 5 minutes.";
     },
   },
   {
@@ -766,26 +1174,26 @@ export const CARDS = [
     text: "A champion monster comes for you.",
     expect: "spawn:any",
     run: async ({ player, announce }) => {
-      const spot = randomSpot(player, 8, 12);
-      if (!spot) return false;
       const dim = player.dimension;
+      // Where the player can see it: a champion in a cave below or behind a wall looks like nothing came.
+      const spot = sightSpot(player, 6, 10) ?? randomSpot(player, 6, 10);
+      if (!spot) return false;
       const tag = `realm:domt_champ_${Date.now().toString(36)}`;
-      send("realm:champion_spawn", { dim: dim.id, x: spot.x, y: spot.y, z: spot.z, name: "the Deck's Champion", tag });
-      await wait(10);
-      const found = dim.getEntities({ tags: [tag] });
-      if (!found.length) {
-        // No Champions pack: the deck sends its own.
-        const e = dim.spawnEntity("minecraft:vindicator", spot);
-        e.nameTag = "§cThe Deck's Champion";
-        e.addTag("domt:boss");
-        effect(e, "minecraft:health_boost", 3600, 4);
-        effect(e, "minecraft:instant_health", 1, 4);
-        effect(e, "minecraft:resistance", 3600);
-        effect(e, "minecraft:strength", 3600);
+      // Mobs that always come for a player, day or night (a spider is calm by day, a creeper just blows up).
+      send("realm:champion_spawn", { dim: dim.id, x: spot.x, y: spot.y, z: spot.z, mob: pick(CHAMP_MOBS), name: "the Deck's Champion", tag });
+      /** @type {import("@minecraft/server").Entity | undefined} */
+      let champ;
+      for (let i = 0; i < 6 && !champ; i++) {
+        await wait(5);
+        champ = dim.getEntities({ tags: [tag] }).find((e) => e.isValid);
       }
+      // No Champions pack (or it didn't answer): the deck sends its own. On Peaceful this throws, and the card fizzles.
+      if (!champ) champ = deckChampion(dim, spot);
       burst(dim, "minecraft:knockback_roar_particle", spot, 6);
       sound(player, "mob.evocation_illager.prepare_summon");
       announce(`${player.name} drew The Champion! A champion hunts them.`);
+      watchChampion(player, champ);
+      return `It is a ${prettyId(champ.typeId).toLowerCase()}, ${Math.round(Math.hypot(spot.x - player.location.x, spot.z - player.location.z))} blocks to the ${compass(player.location, spot)}.`;
     },
   },
   {
@@ -820,11 +1228,11 @@ export const CARDS = [
     name: "The Archmage",
     rarity: "rare",
     kind: "good",
-    text: "15 experience levels and 750 XP in a random skill.",
+    text: "20 experience levels and 1000 XP in a random skill.",
     expect: "xp",
     run: ({ player, announce }) => {
-      player.addLevels(15);
-      const skill = skillXp(player, 750);
+      player.addLevels(20);
+      const skill = skillXp(player, 1000);
       burst(player.dimension, "minecraft:enchanting_table_particle", player.location, 40, 1.5);
       sound(player, "random.levelup", 0.7);
       announce(`${player.name} drew The Archmage!`);
@@ -885,8 +1293,106 @@ export const CARDS = [
     },
   },
 
+  {
+    id: "the_horde",
+    name: "The Horde",
+    rarity: "rare",
+    kind: "bad",
+    text: "A horde closes in: zombies, husks, skeletons, spiders and a vindicator.",
+    expect: "spawn:zombie",
+    run: ({ player, announce }) => {
+      const n =
+        spawnAround(player, "minecraft:zombie", 5, 8, 14).length +
+        spawnAround(player, "minecraft:husk", 2, 8, 14).length +
+        spawnAround(player, "minecraft:skeleton", 3, 9, 14).length +
+        spawnAround(player, "minecraft:spider", 2, 8, 14).length +
+        spawnAround(player, "minecraft:vindicator", 1, 10, 14).length;
+      if (!n) return false;
+      sound(player, "mob.zombie.say", 0.6);
+      announce(`${player.name} drew The Horde! ${n} monsters close in on them.`);
+    },
+  },
+  {
+    id: "doom",
+    name: "Doom",
+    rarity: "rare",
+    kind: "bad",
+    text: "Lightning will strike wherever you stand, three times in the next minute.",
+    expect: "fire",
+    prep: toughen,
+    run: ({ player, test, announce }) => {
+      // A strike every `gap` seconds: two during the countdown and one at the end.
+      const gap = test ? 1 : 20;
+      const zap = () => {
+        strike(player.dimension, player.location);
+        sound(player, "ambient.weather.thunder", 1, 0.6);
+      };
+      everySecond(
+        player,
+        gap * 3,
+        (left) => {
+          const hit = left % gap === 0 && left < gap * 3;
+          if (hit) zap();
+          const more = Math.ceil((left - (hit ? 0.5 : 0)) / gap);
+          bar(player, `§4Doom: §c${more} more strike${more === 1 ? "" : "s"} §7(${left}s)`, 25);
+        },
+        zap,
+      );
+      announce(`${player.name} drew Doom! Stand clear of them.`);
+    },
+  },
+  mobs("the_evoker", "The Evoker", "rare", "mixed", "An evoker appears. Beat it for its Totem of Undying.", "evocation_illager", 1, 10, 14),
+  {
+    id: "the_reaper",
+    name: "The Reaper",
+    rarity: "rare",
+    kind: "bad",
+    text: "Your health drops to half a heart and three wither skeletons come for the rest.",
+    expect: "spawn:wither_skeleton",
+    run: ({ player, announce }) => {
+      if (!spawnAround(player, "minecraft:wither_skeleton", 3, 8, 12).length) return false;
+      player.getComponent("minecraft:health")?.setCurrentValue(1);
+      sound(player, "mob.wither.spawn", 1, 0.5);
+      burst(player.dimension, "minecraft:soul_particle", player.location, 20, 1.5);
+      announce(`${player.name} drew The Reaper!`);
+    },
+  },
+  {
+    id: "the_titan",
+    name: "The Titan",
+    rarity: "rare",
+    kind: "good",
+    text: "Full health, then Strength II, Resistance II and Health Boost III for 20 minutes.",
+    expect: "effect:health_boost",
+    run: ({ player, announce }) => {
+      effect(player, "minecraft:health_boost", 1200, 2);
+      effect(player, "minecraft:strength", 1200, 1);
+      effect(player, "minecraft:resistance", 1200, 1);
+      system.runTimeout(() => attempt(() => player.getComponent("minecraft:health")?.resetToMaxValue()), 2);
+      sound(player, "mob.irongolem.repair");
+      burst(player.dimension, "minecraft:villager_happy", player.location, 20);
+      announce(`${player.name} drew The Titan!`);
+    },
+  },
+  {
+    id: "mother_lode",
+    name: "Mother Lode",
+    rarity: "rare",
+    kind: "good",
+    text: "6 diamonds, 16 iron, 12 gold and 2 netherite scrap.",
+    expect: "item:diamond",
+    run: ({ player, announce }) => {
+      give(player, "minecraft:diamond", 6);
+      give(player, "minecraft:iron_ingot", 16);
+      give(player, "minecraft:gold_ingot", 12);
+      give(player, "minecraft:netherite_scrap", 2);
+      sound(player, "random.levelup", 0.8);
+      announce(`${player.name} drew the Mother Lode!`);
+    },
+  },
+
   // ---------------------------------------------------------------------------
-  // Legendary (1)
+  // Legendary
   // ---------------------------------------------------------------------------
   {
     id: "the_wish",
@@ -902,6 +1408,333 @@ export const CARDS = [
         attempt(() => player.dimension.spawnEntity("minecraft:fireworks_rocket", { x: at.x + between(-4, 4), y: at.y + 1, z: at.z + between(-4, 4) }));
       }
       return await wish(player, { test });
+    },
+  },
+  {
+    id: "the_fates",
+    name: "The Fates",
+    rarity: "legendary",
+    kind: "mixed",
+    text: "The Fates flip a coin: an hour of godlike power, or half a heart and a horde.",
+    expect: "none",
+    run: ({ player, announce }) => {
+      if (Math.random() < 0.5) {
+        for (const [id, amp] of /** @type {[string, number][]} */ ([["health_boost", 4], ["strength", 1], ["resistance", 1], ["regeneration", 0], ["speed", 0], ["fire_resistance", 0]])) effect(player, S + id, 3600, amp);
+        system.runTimeout(() => attempt(() => player.getComponent("minecraft:health")?.resetToMaxValue()), 2);
+        burst(player.dimension, "minecraft:totem_particle", player.location, 40, 1.5);
+        sound(player, "random.totem");
+        announce(`§d${player.name} drew The Fates, and the Fates smiled!`);
+        return "The Fates smile: Health Boost V, Strength II, Resistance II, Regeneration, Speed and Fire Resistance for an hour.";
+      }
+      player.getComponent("minecraft:health")?.setCurrentValue(1);
+      spawnAround(player, "minecraft:zombie", 4, 8, 14);
+      spawnAround(player, "minecraft:skeleton", 3, 9, 14);
+      spawnAround(player, "minecraft:vindicator", 2, 10, 14);
+      sound(player, "mob.wither.spawn", 1, 0.6);
+      announce(`§d${player.name} drew The Fates, and the Fates frowned...`);
+      return "The Fates frown: half a heart, and a horde on its way.";
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Wild cards: off until an operator switches them on (Cards on/off)
+  // ---------------------------------------------------------------------------
+  {
+    id: "the_swap",
+    name: "The Swap",
+    rarity: "uncommon",
+    kind: "mixed",
+    wild: true,
+    text: "You swap places with a random player, wherever they are.",
+    expect: "move",
+    run: ({ player }) => {
+      const others = world.getAllPlayers().filter((q) => q.id !== player.id && q.isValid);
+      if (!others.length) return false;
+      const other = pick(others);
+      const mine = { dim: player.dimension, at: { ...player.location } };
+      const theirs = { dim: other.dimension, at: { ...other.location } };
+      player.teleport(theirs.at, { dimension: theirs.dim, keepVelocity: false });
+      other.teleport(mine.at, { dimension: mine.dim, keepVelocity: false });
+      sound(player, "mob.endermen.portal");
+      sound(other, "mob.endermen.portal");
+      other.sendMessage(`§6[Deck] §7${player.name} drew The Swap: you traded places with them!`);
+      return `You traded places with ${other.name}.`;
+    },
+  },
+  {
+    id: "chaos_pockets",
+    name: "Chaos Pockets",
+    rarity: "common",
+    kind: "bad",
+    wild: true,
+    text: "Your whole inventory is shuffled, hotbar and all.",
+    expect: "hotbar",
+    prep: (p) => fillHotbar(p),
+    run: ({ player }) => {
+      const inv = player.getComponent("minecraft:inventory")?.container;
+      if (!inv) return false;
+      const items = [];
+      for (let i = 0; i < inv.size; i++) items.push(inv.getItem(i));
+      if (items.filter((x) => x).length < 2) return false;
+      for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+      }
+      // Make sure the hotbar changed at all.
+      if (items.slice(0, 9).every((it, i) => (it?.typeId ?? "") === (inv.getItem(i)?.typeId ?? ""))) items.push(...items.splice(0, 9));
+      items.forEach((it, i) => inv.setItem(i, it));
+      sound(player, "random.pop", 0.6);
+    },
+  },
+  {
+    id: "into_orbit",
+    name: "Into Orbit",
+    rarity: "uncommon",
+    kind: "bad",
+    wild: true,
+    text: "You are launched sky high. Here, have a water bucket. Good luck.",
+    expect: "effect:levitation",
+    run: ({ player, test }) => {
+      give(player, "minecraft:water_bucket", 1);
+      effect(player, "minecraft:levitation", test ? 1 : 3, 12);
+      sound(player, "firework.launch", 0.6);
+      burst(player.dimension, "minecraft:basic_flame_particle", player.location, 16, 0.6);
+    },
+  },
+  {
+    id: "gravity_flip",
+    name: "Gravity Flip",
+    rarity: "common",
+    kind: "bad",
+    wild: true,
+    text: "For 30 seconds, gravity flips every few seconds. Up you go, and down you come.",
+    expect: "effect:levitation",
+    run: ({ player, test }) => {
+      const pulse = () => {
+        effect(player, "minecraft:levitation", 1.5, 3);
+        sound(player, "mob.shulker.bullet.hit", 0.8);
+      };
+      pulse();
+      everySecond(player, test ? 3 : 30, (left) => {
+        if (left % 5 === 0 && left < 30) pulse();
+        bar(player, `§dGravity flips: §f${left}s`, 25);
+      });
+    },
+  },
+  {
+    id: "chicken_rain",
+    name: "Chicken Rain",
+    rarity: "common",
+    kind: "mixed",
+    wild: true,
+    text: "It's raining chickens! They fly off home after 3 minutes.",
+    expect: "spawn:chicken",
+    run: ({ player, test }) => {
+      const birds = spawnAbove(player, "minecraft:chicken", 16, 18, 8);
+      if (!birds.length) return false;
+      for (const b of birds) attempt(() => b.addTag("domt:temp"));
+      sound(player, "mob.chicken.say", 1.2);
+      system.runTimeout(() => {
+        for (const b of birds) attempt(() => b.isValid && b.remove());
+      }, test ? 200 : 3600);
+    },
+  },
+  {
+    id: "floor_is_lava",
+    name: "The Floor Is Lava",
+    rarity: "common",
+    kind: "bad",
+    wild: true,
+    text: "For 30 seconds, the floor is lava: touch the ground and you burn. Jump! Swim!",
+    expect: "fire",
+    run: ({ player, test }) => {
+      let tick = 0;
+      const id = system.runInterval(() => {
+        try {
+          if (!player.isValid || ++tick > (test ? 60 : 600) / 5) return system.clearRun(id);
+          if (player.isOnGround && !player.isInWater) player.setOnFire(2, true);
+        } catch {
+          system.clearRun(id);
+        }
+      }, 5);
+      everySecond(player, test ? 3 : 30, (left) => void bar(player, `§c§lThe floor is lava! §r§f${left}s`, 25), () => bar(player, "§aThe floor is just floor again.", 40));
+    },
+  },
+  {
+    id: "the_hex",
+    name: "The Hex",
+    rarity: "uncommon",
+    kind: "bad",
+    wild: true,
+    text: "The item in your hand gets a silly name and Curse of Vanishing: die with it and it's gone.",
+    expect: "heldname",
+    prep: (p) => testSword(p),
+    run: ({ player }) => {
+      const { inv, slot, item } = held(player);
+      if (!inv || !item || item.maxAmount > 1) return false;
+      const cursed = enchant(item, [["minecraft:vanishing", 1]]);
+      if (!cursed) return false;
+      const name = pick(["Wet Noodle", "Mister Pokey", "The Disappointment", "Soggy Biscuit", "Tickle Stick", "Old Faithless"]);
+      item.nameTag = `§d${name}`;
+      inv.setItem(slot, item);
+      sound(player, "mob.witch.ambient", 1.2);
+      burst(player.dimension, "minecraft:villager_angry", player.location, 6);
+      return `It is now called ${name}.`;
+    },
+  },
+  {
+    id: "cursed_name",
+    name: "Cursed Name",
+    rarity: "common",
+    kind: "bad",
+    wild: true,
+    text: "For 20 minutes, the name above your head is something silly.",
+    expect: "name",
+    run: ({ player, test }) => rainbowName(player, { test, title: pick(SILLY_NAMES) }),
+  },
+  {
+    id: "zoomies",
+    name: "Zoomies",
+    rarity: "common",
+    kind: "mixed",
+    wild: true,
+    text: "Speed V and Jump Boost III for 3 minutes. Good luck stopping.",
+    expect: "effect:speed",
+    run: ({ player }) => {
+      effect(player, "minecraft:speed", 180, 4);
+      effect(player, "minecraft:jump_boost", 180, 2);
+      sound(player, "mob.wolf.bark", 1.4);
+    },
+  },
+  {
+    id: "topsy_turvy",
+    name: "Topsy Turvy",
+    rarity: "common",
+    kind: "bad",
+    wild: true,
+    text: "For 20 seconds you keep spinning to face a new way.",
+    expect: "rotate",
+    run: ({ player, test }) => {
+      const spin = () => {
+        const r = player.getRotation();
+        player.setRotation({ x: between(-30, 30), y: ((r.y + between(90, 270) + 180) % 360) - 180 });
+        sound(player, "random.pop", 0.6);
+      };
+      spin();
+      everySecond(player, test ? 2 : 20, (left) => void (left % 2 === 0 && left < 20 && spin()));
+    },
+  },
+  {
+    id: "zero_g",
+    name: "Zero G",
+    rarity: "uncommon",
+    kind: "mixed",
+    wild: true,
+    text: "Every creature within 16 blocks floats up for a few seconds, then drops. Pets and named mobs are spared.",
+    expect: "none",
+    run: ({ player }) => {
+      const mobsNear = player.dimension
+        .getEntities({ location: player.location, maxDistance: 16, families: ["mob"], excludeTypes: ["minecraft:player"] })
+        .filter((e) => !e.nameTag && !e.getComponent("minecraft:tameable")?.isTamed && !e.getTags().some((t) => t.startsWith("realm") || t.startsWith("npc") || t.startsWith("domt")));
+      if (!mobsNear.length) return false;
+      for (const e of mobsNear) attempt(() => effect(e, "minecraft:levitation", 4, 2));
+      sound(player, "mob.shulker.bullet.hit", 0.7);
+      return `${mobsNear.length} creature${mobsNear.length === 1 ? "" : "s"} float up.`;
+    },
+  },
+  {
+    id: "creeper_party",
+    name: "Creeper Party",
+    rarity: "uncommon",
+    kind: "bad",
+    wild: true,
+    blocks: true,
+    text: "Four creepers come to the party. They break blocks (never in a safe zone).",
+    expect: "spawn:creeper",
+    run: ({ player }) => {
+      if (zoned(player, 12)) return false;
+      if (!spawnAround(player, "minecraft:creeper", 4, 5, 9).length) return false;
+      sound(player, "random.fuse", 0.8);
+    },
+  },
+  {
+    id: "the_ghast",
+    name: "The Ghast",
+    rarity: "rare",
+    kind: "bad",
+    wild: true,
+    blocks: true,
+    text: "A ghast drifts in from nowhere. Its fireballs break blocks (never in a safe zone).",
+    expect: "spawn:ghast",
+    run: ({ player }) => {
+      if (zoned(player, 32)) return false;
+      const g = spawnAbove(player, "minecraft:ghast", 1, 10, 16);
+      if (!g.length) return false;
+      sound(player, "mob.ghast.scream");
+    },
+  },
+  {
+    id: "the_warden",
+    name: "The Warden",
+    rarity: "rare",
+    kind: "bad",
+    wild: true,
+    text: "A warden rises out of the ground 10 to 14 blocks away. Be very quiet.",
+    expect: "spawn:warden",
+    run: ({ player, announce }) => {
+      if (!spawnAround(player, "minecraft:warden", 1, 10, 14).length) return false;
+      sound(player, "mob.warden.emerge");
+      announce(`${player.name} drew The Warden! Run.`);
+    },
+  },
+  {
+    id: "hot_potato",
+    name: "Hot Potato",
+    rarity: "uncommon",
+    kind: "bad",
+    wild: true,
+    text: "You get a Hot Potato. In 30 seconds it explodes on whoever has it. Pass it on!",
+    expect: "item:potato",
+    prep: toughen,
+    run: ({ player, test }) => {
+      const mark = `§8Deck of Many Things ${Date.now().toString(36)}`;
+      const power = test ? 0.5 : 1.3;
+      give(player, "minecraft:potato", 1, { name: "§c§lHot Potato", lore: ["§7Explodes in 30 seconds.", "§7Drop it near a friend!", mark] });
+      sound(player, "random.fuse");
+      const isIt = (/** @type {ItemStack | undefined} */ it) => !!it && it.typeId === "minecraft:potato" && it.getLore().includes(mark);
+      everySecond(
+        player,
+        test ? 2 : 30,
+        (left) => {
+          for (const q of world.getAllPlayers()) {
+            const inv = q.getComponent("minecraft:inventory")?.container;
+            if (!inv) continue;
+            for (let i = 0; i < inv.size; i++) if (isIt(inv.getItem(i))) bar(q, `§c§lHot Potato! §r§f${left}s`, 25);
+          }
+        },
+        () => {
+          // Whoever holds it (or wherever it lies) gets the bang. It breaks no blocks.
+          for (const q of world.getAllPlayers()) {
+            const inv = q.getComponent("minecraft:inventory")?.container;
+            if (!inv) continue;
+            for (let i = 0; i < inv.size; i++)
+              if (isIt(inv.getItem(i))) {
+                inv.setItem(i, undefined);
+                q.dimension.createExplosion(q.location, power, { breaksBlocks: false, causesFire: false });
+                world.sendMessage(`§6[Deck] §c${q.name} was holding the Hot Potato!`);
+                return;
+              }
+          }
+          for (const dim of ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"].map((d) => world.getDimension(d)))
+            for (const e of dim.getEntities({ type: "minecraft:item" })) {
+              if (!isIt(e.getComponent("minecraft:item")?.itemStack)) continue;
+              const at = e.location;
+              e.remove();
+              dim.createExplosion(at, power, { breaksBlocks: false, causesFire: false });
+              return;
+            }
+        },
+      );
     },
   },
 ];

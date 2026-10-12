@@ -3307,35 +3307,43 @@ Operators can change `enabled`, `durationMultiplier`, `rollingDishes`, `champion
 
 ## Deck of Many Things — `domt_bp`
 
-Draw a card from the Deck of Many Things for a random effect: 100 cards, from a loaf of bread or a dizzy spell to a sky arena, a champion on your heels, a trip to the Nether or, once in a hundred draws, a wish. Most cards are small and quick (70 common), some are a real treat or a real nuisance (20 uncommon), a few are big swings (9 rare) and one is legendary. Everyone draws, with a cooldown between draws, or, if an operator sets it up that way, only operators draw, for themselves or for any player.
+Draw a card from the Deck of Many Things for a random effect: 132 cards, from a stack of bread or an hour of night vision to a lightning strike, a sky arena, a champion on your heels, a trip to the Nether or, once in a hundred draws, a wish or the Fates' coin flip. The deck is dangerous: bad cards hurt, and a few can kill you if you don't move fast. Good cards are worth it, and their effects last a long time (15 minutes to an hour, some until you die). Most cards are common (79), some are a real treat or a real threat (36 uncommon), a few are big swings (15 rare) and two are legendary. 15 more **wild cards** (swap places with another player, the floor is lava, a warden...) wait switched off until an operator turns them on. Everyone draws, with a cooldown between draws, or, if an operator sets it up that way, only operators draw, for themselves or for any player.
 
 ### How to use
 
 1. Run `/realm:domt` and pick **Draw a card**. The deck shuffles, the card's name shows on screen in its rarity's color, and chat says what it does, like `[Deck] You drew The Merchant (Uncommon): A wandering trader appears with wares to sell.`
-2. Then the deck rests: you can draw again after 20 real minutes. **My draws** shows your last cards and when you can draw next.
-3. **The odds** lists every card and the chance of each rarity: Common 70%, Uncommon 20%, Rare 9%, Legendary 1% by default.
-4. If you draw **The Wish**, choose one of the three boons it offers. If you close the window, the wish waits: **Make your wish** is at the top of `/realm:domt` until you choose.
-5. **Operators:** `/realm:domt_draw <player>` draws for a player (no cooldown), and **Draw for a player** in the menu can pick the card too. **Cards on/off** (or `/realm:domt_effects`) switches each card on or off, a page per rarity. **Reset a cooldown** lets a player draw again at once. `/realm:config` → **Deck of Many Things** sets who draws (everyone with a cooldown, or operators only), the cooldown, the rarity weights, whether rare draws are announced, whether block-changing cards are allowed and how long The Spore lasts.
+2. Read the card and react: `Look up!`, `RUN!` or a countdown above the hotbar means you have a second or a few to get out of the way.
+3. Then the deck rests: you can draw again after 20 real minutes. **My draws** shows your last cards and when you can draw next.
+4. **The odds** lists every card and the chance of each rarity: Common 70%, Uncommon 20%, Rare 9%, Legendary 1% by default. Gray cards are switched off, and a purple `*` marks a wild card.
+5. If you draw **The Wish**, choose one of the three boons it offers. If you close the window, the wish waits: **Make your wish** is at the top of `/realm:domt` until you choose.
+6. **Operators:** `/realm:domt_draw <player>` draws for a player (no cooldown), and **Draw for a player** in the menu can pick the card too. **Cards on/off** (or `/realm:domt_effects`) switches each card on or off, a page per rarity, plus a **Wild cards** page and buttons to enable or disable every wild card at once. **Reset a cooldown** lets a player draw again at once. `/realm:config` → **Deck of Many Things** sets who draws (everyone with a cooldown, or operators only), the cooldown, the rarity weights, whether rare draws are announced, whether block-changing cards are allowed and how long The Spore lasts.
 
 ### What players see
 
-- **The draw:** three page turns with enchanting sparkles and `The deck shuffles...` above the hotbar, then the card's name as a title, in white (Common), green (Uncommon), aqua (Rare) or light purple (Legendary), with a sound and particles to match. Chat gives the card's line, and sometimes a second gray line with details (`You landed at 812, 71, -340.`).
-- **A card that can't happen where you are** (no safe spot to land, no creature to swap with, no wild ground for mushrooms) says `The Merchant crumbles to dust: it can't happen here. The deck draws again...` and another card is drawn, up to 5 times. If nothing works, your cooldown is given back.
-- **Rare and legendary draws** are told to everyone in chat (`announceRare`), like `[Deck] Alex drew The Gate and fell into the Nether!`.
-- **Teleports are always safe:** the deck lands you on a full block with two open blocks above, never in lava, water, fire or a wall, only in loaded chunks, and near your own height first (so a card drawn in a cave keeps you in caves). The far ones (The Comet, The Gate) hold you high in the air with Slow Falling and Resistance for a moment while the place loads (with a ticking area for a few seconds if it loads slowly), then land you; an ocean or lava sea makes them try up to 3 other places nearby, and if none is safe, you are put back and the deck draws again.
-- **Mobs** appear on safe spots around you, 3 to 12 blocks away. Wolves and the horse are already tamed to you.
+- **The draw:** three page turns with enchanting sparkles and `The deck shuffles...` above the hotbar, then the card's name as a title, in white (Common), green (Uncommon), aqua (Rare) or light purple (Legendary), with a sound and particles to match. Chat gives the card's line, and sometimes a second gray line with details (`You landed at 812, 71, -340.`, `It is a husk, 8 blocks to the west.`).
+- **A card that can't happen where you are** (no open sky for The Sky or Anvil Drop, no creature to swap with, no wild ground for mushrooms, a safe zone for a block-changing card) says `The Merchant crumbles to dust: it can't happen here. The deck draws again...` and another card is drawn, up to 5 times. If nothing works, your cooldown is given back.
+- **Rare and legendary draws** are told to everyone in chat (`announceRare`), like `[Deck] Alex drew The Gate and fell into the Nether!`. So are The Storm, The Sun and The Warden.
+- **Danger:** the bad cards are meant to hurt. The Sky throws you 14 to 22 blocks up with nothing to slow your fall (a second and a half after `The ground lets go of you...`): land in water, or take the fall damage. Up, Up floats you about 6 blocks up and lets you drop. Smite and Doom call lightning onto you (5 damage a strike, and it sets you on fire; any fire it lights on blocks is put out at once, so builds never burn). Anvil Drop drops an anvil from up to 8 blocks above your head about a second after `Look up!`: step aside, or take up to about 7 hearts of damage; if you live, the anvil is yours to mine. Lit Fuse explodes where you stood 4 seconds later (`RUN! 4...`), hard enough to kill anyone still standing on it, but it breaks no blocks. Reaper's Touch and The Reaper drop you to half a heart, Glass Cannon to two hearts, Withering and Nightshade can poison you to death, and Hiss puts a creeper right behind you. Poison II from Sour Berry stops at half a heart, as poison does.
+- **Teleports** that aren't meant to hurt (The Hop, The Wanderer, The Void, The Comet, The Gate) land you on a full block with two open blocks above, never in lava, water, fire or a wall, only in loaded chunks, and near your own height first (so a card drawn in a cave keeps you in caves). The far ones (The Comet, The Gate) hold you high in the air with Slow Falling and Resistance for a moment while the place loads (with a ticking area for a few seconds if it loads slowly), then land you; an ocean or lava sea makes them try up to 3 other places nearby, and if none is safe, you are put back and the deck draws again.
+- **Long effects:** status effects from good cards last 15 minutes to an hour (Night Vision an hour, Health Boost 30 minutes, Haste 20 minutes); bad ones 1 to 15 minutes (Blindness and Nausea 1 minute, Slowness and Weakness 15 minutes). Guardian Angel (Resistance) and The Albatross (Slowness) last until you die, or until you drink milk (6 hours at most).
+- **Mobs** appear on safe spots around you, 2 to 14 blocks away (Hiss puts its creeper right behind you). Wolves and the horse are already tamed to you.
 - **Skill XP** cards (The Mentor, The Archmage) send XP to a random skill through the [Skills](#skills--skills_bp) pack; without it, that part does nothing.
 - **Crowns** cards add to or take from the `crowns` scoreboard, never below 0, with or without the [Crowns](#crowns--crowns_bp) pack.
-- **The Rainbow** cycles your name above your head through rainbow colors for 5 minutes, then puts it back. If Nicknames or AFK change your name meanwhile, the rainbow stops and leaves theirs.
+- **The Rainbow** cycles your name above your head through rainbow colors for 20 minutes, then puts it back. If Nicknames or AFK change your name meanwhile, the rainbow stops and leaves theirs. The wild card Cursed Name works the same way with a silly red name (`Sir Bonks-a-Lot`, `Captain Soggy`...).
 - **The rare cards:**
-  - **The Gate:** to the Nether (near your Overworld position divided by 8), or out of it to the Overworld, on a safe spot, with 2 minutes of Fire Resistance, 10 obsidian and a flint and steel to build a portal home. Not in the End.
+  - **The Gate:** to the Nether (near your Overworld position divided by 8), or out of it to the Overworld, on a safe spot, with 5 minutes of Fire Resistance, 10 obsidian and a flint and steel to build a portal home. Not in the End.
   - **The Arena:** in the Overworld, a 15 by 15 platform appears about 24 blocks above you, or above the ground over your head (only where that space is completely empty), walled with invisible barriers, and you fight three husks, a vindicator and a pillager for up to 2 minutes. Win for an enchanted book and 15 Crowns. Win, lose or run out of time, you're sent back where you were and every arena block is removed. The arena's blocks can't be mined while it stands. If the server restarts mid-fight, the arena is removed within 10 minutes, its leftover mobs vanish within 10 seconds, and you're sent back when you join.
-  - **The Champion:** a champion monster appears 8 to 12 blocks away, from the [Champions](#champions--elite_bp) pack (`realm:champion_spawn`, named `the Deck's Champion`); without it, the deck sends its own: `The Deck's Champion`, a vindicator with extra health, Strength and Resistance.
+  - **The Champion:** a champion monster appears 6 to 10 blocks away, where you can see it (within 3 blocks of your height, nothing solid in between), and chat says what it is and which way (`It is a skeleton, 9 blocks to the north-east.`). With the [Champions](#champions--elite_bp) pack it's one of theirs (`realm:champion_spawn`, a zombie, husk, skeleton, stray or witch named `the Deck's Champion`); without it, or if no champion shows up within 1.5 seconds, the deck sends its own: `The Deck's Champion`, a vindicator with extra health, Strength and Resistance. If the champion is gone 3 seconds later without a fight, the deck sends its own instead (`The champion slipped away, so the deck sends its own...`).
   - **The Spore:** in the Overworld, wild grass and dirt within 9 blocks turns to mycelium, with a few red and brown mushrooms and two mooshrooms, for 60 minutes (`sporeMinutes`). It only changes the top block of open ground with nothing on it, and fizzles if it sees anything built or farmed within 13 blocks (planks, glass, bricks, farmland, paths, torches, fences, chests and the like). When time is up, every block it changed that is still mycelium or its mushroom goes back to what was there (and mycelium that spread around the field turns back to grass); anything a player built meanwhile stays. Bedrock scripts can't change biomes, so the grass color and mob spawning stay as they were.
   - **The Eclipse:** the time jumps to midnight for everyone.
-  - **The Archmage**, **The Knight**, **Second Chance** and **The Gamble:** see the card table.
-- **The Wish (legendary):** fireworks, a totem burst and a dragon's growl for everyone, then a choice of three boons drawn from eight: an enchanted netherite pickaxe (`Worldbreaker`) or sword (`Kingslayer`), an elytra with 64 rockets, 30 levels, 500 Crowns, an enchanted trident (`The Tide`) with a Heart of the Sea, a beacon with 9 iron blocks, or full diamond armor with Protection IV. Nothing is destroyed and nobody is hurt.
-- **Safe zones:** block-changing cards (The Arena and The Spore) never work inside a safe zone from the `realm:zones` protocol (Safe Zones, towns, land claims that share theirs); they fizzle there and the deck draws again. Operators can also disable block-changing cards altogether (`blockCards`).
+  - **The Horde:** 5 zombies, 2 husks, 3 skeletons, 2 spiders and a vindicator, 8 to 14 blocks around you.
+  - **Doom:** a countdown above your hotbar (`Doom: 3 more strikes (60s)`), and lightning strikes wherever you stand 20, 40 and 60 seconds after the draw.
+  - **The Evoker**, **The Reaper**, **The Titan**, **Mother Lode**, **The Archmage**, **The Knight**, **Second Chance** and **The Gamble:** see the card table.
+- **The legendary cards:**
+  - **The Wish:** fireworks, a totem burst and a dragon's growl for everyone, then a choice of three boons drawn from eight: an enchanted netherite pickaxe (`Worldbreaker`) or sword (`Kingslayer`), an elytra with 64 rockets, 30 levels, 500 Crowns, an enchanted trident (`The Tide`) with a Heart of the Sea, a beacon with 9 iron blocks, or full diamond armor with Protection IV. Nothing is destroyed and nobody is hurt.
+  - **The Fates:** a coin flip. Heads: full health, then Health Boost V, Strength II, Resistance II, Regeneration, Speed and Fire Resistance for an hour. Tails: half a heart, and 4 zombies, 3 skeletons and 2 vindicators on their way.
+- **Wild cards** (off until an operator switches them on): see their table. The Swap tells the other player who swapped with them; Hot Potato shows its countdown to whoever carries it and, at zero, explodes on whoever has it (or where it lies), hard enough to leave an unarmored player at half a heart, without breaking blocks; Chicken Rain's chickens are removed after 3 minutes; Zero G spares tamed and named mobs and other packs' characters.
+- **Safe zones:** block-changing cards (The Arena, The Spore, Anvil Drop, Hiss, Hot Headed, and the wild Creeper Party and The Ghast) never work inside a safe zone from the `realm:zones` protocol (Safe Zones, towns, land claims that share theirs), or close enough to one for a blast or a fireball to reach it; they fizzle there and the deck draws again. Operators can also disable block-changing cards altogether (`blockCards`). Explosions from Lit Fuse and Hot Potato never break blocks, and lightning's fire is put out, so those work anywhere.
 
 ### Commands
 
@@ -3343,7 +3351,7 @@ Draw a card from the Deck of Many Things for a random effect: 100 cards, from a 
 |---|---|---|
 | `/realm:domt` | Everyone | Opens the deck: **Draw a card** (once every 20 minutes, `cooldownMinutes`), **My draws**, **The odds**, and **Make your wish** when one is waiting; operators also get **Draw for a player**, **Cards on/off** and **Reset a cooldown** |
 | `/realm:domt_draw <player>` | Operators | Draws a random card for the players picked (`@a` works), with no cooldown |
-| `/realm:domt_effects` | Operators | Switches each of the 100 cards on or off, a page per rarity (saved in the world) |
+| `/realm:domt_effects` | Operators | Switches each of the 147 cards on or off, a page per rarity and a page of wild cards (saved in the world); the 15 wild cards start disabled |
 
 With **Who draws** set to **Operators only** (`mode` `operators`), only operators can draw, with no cooldown; everyone else can still see their draws and the odds.
 
@@ -3356,11 +3364,11 @@ With **Who draws** set to **Operators only** (`mode` `operators`), only operator
 | `weights.common` | `70` | How likely a common card is, relative to the other weights |
 | `weights.uncommon` | `20` | How likely an uncommon card is |
 | `weights.rare` | `9` | How likely a rare card is |
-| `weights.legendary` | `1` | How likely the legendary card is |
+| `weights.legendary` | `1` | How likely a legendary card is |
 | `announceRare` | `true` | Rare and legendary draws are told to everyone in chat |
-| `blockCards` | `true` | The Arena and The Spore, which place blocks for a while, can be drawn |
+| `blockCards` | `true` | Cards that place or break blocks (The Arena, The Spore, Anvil Drop, Hiss, Hot Headed, Creeper Party, The Ghast) can be drawn |
 | `sporeMinutes` | `60` | Minutes before The Spore's field turns back to grass |
-| `disabled` | `[]` | Card ids (from the table below) that start disabled; the operators' choices in `/realm:domt_effects` win over this list |
+| `disabled` | `[]` | Card ids (from the tables below) that start disabled, besides the wild cards, which always start disabled; the operators' choices in `/realm:domt_effects` win over both |
 | `historySize` | `20` | How many past draws each player's history keeps |
 
 A rarity whose cards are all disabled is skipped, and its weight shared out among the others. Operators can change `mode`, `cooldownMinutes`, the four weights, `announceRare`, `blockCards` and `sporeMinutes` in game with `/realm:config` (**Deck of Many Things**), and switch cards in `/realm:domt_effects`.
@@ -3369,7 +3377,7 @@ A rarity whose cards are all disabled is skipped, and its weight shared out amon
 
 | Key | Scope | Contents |
 |---|---|---|
-| `domt:off` | World | JSON `{ card id: true (disabled) or false (enabled) }`: the operators' choices that differ from `disabled` in `config.js` |
+| `domt:off` | World | JSON `{ card id: true (disabled) or false (enabled) }`: the operators' choices that differ from the default (`disabled` in `config.js`, and every wild card off) |
 | `domt:draws` | World | JSON `{ card id: times drawn }` |
 | `domt:tasks`, `domt:task:<id>` | World | Block changes waiting to be undone (an arena, a spore field): where, when, and what to put back |
 | `domt:cfg` | World | Settings changed in `/realm:config` |
@@ -3377,120 +3385,177 @@ A rarity whose cards are all disabled is skipped, and its weight shared out amon
 | `domt:history` | Player | JSON list of the last draws: `[time, card id, operator who drew it]` |
 | `domt:wish` | Player | The three boons The Wish offered, until one is chosen |
 | `domt:arena` | Player | Where to send the player back if the server restarts mid-arena |
-| `domt:name` | Player | The name to put back after The Rainbow, if the server restarts first |
+| `domt:name` | Player | The name to put back after The Rainbow or Cursed Name, if the server restarts first |
 
 ### How it works
 
 - A draw picks a rarity by the weights (only rarities with a card enabled), then a card of that rarity at random. A card whose handler can't work where you are says so, and the deck draws again without that card.
-- Block changes (The Arena, The Spore) are saved with the time to undo them and checked every 10 seconds, so a restart doesn't leave them behind. A block is only put back where the block the deck placed is still there.
+- Block changes (The Arena, The Spore) are saved with the time to undo them and checked every 10 seconds, so a restart doesn't leave them behind. A block is only put back where the block the deck placed is still there. Anvil Drop's anvil stays where it lands.
+- Countdowns (Doom, Lit Fuse, Anvil Drop, The Sky, The Floor Is Lava, Gravity Flip, Hot Potato) send `realm:actionbar` `{ player, ticks, from: "domt_bp" }` before each line above the hotbar. Timers run only while the server does: a restart ends them early (a Hot Potato then stays a plain potato).
 - Safe zones arrive as `realm:zones` `{ src, part, parts, zones }` script events; the pack keeps the latest list from each provider and asks for them with `realm:zones_ping` after loading. Every zone counts as the full square around its center, to be safe.
-- Other packs: The Champion sends `realm:champion_spawn` (with a tag starting `realm:domt_champ_`, and spawns its own if no champion appears), The Mentor and The Archmage send `realm:skill_xp` `{ player, skill, amount }`, and the Crowns cards use the `crowns` scoreboard.
-- **Testing:** an operator (or the server console) can run `/scriptevent realm:domt_test {"effect":"<card id>"}` to run one card's handler on themselves (several ids separated by commas work too), or `{"effect":"all","player":"<name>"}` for all 100 in a row on that player. Each card is checked for its main effect (an effect, an item, a mob, a move...) and the result goes to the content log as `[domt] TEST PASS ...` or `TEST FAIL ...`, ending with `TEST SUMMARY 100/100 passed`. After each card the test puts the player back, clears their effects and removes the mobs it made, so it isn't meant for a busy realm.
+- Other packs: The Champion sends `realm:champion_spawn` `{ dim, x, y, z, mob, name, tag }` (a tag starting `realm:domt_champ_`, `mob` one of zombie, husk, skeleton, stray or witch), looks for that tag for 1.5 seconds and spawns its own if no champion appears, and checks again 3 seconds later. The Mentor and The Archmage send `realm:skill_xp` `{ player, skill, amount }`, and the Crowns cards use the `crowns` scoreboard.
+- **Testing:** an operator (or the server console) can run `/scriptevent realm:domt_test {"effect":"<card id>"}` to run one card's handler on themselves (several ids separated by commas work too, wild cards included), or `{"effect":"all","player":"<name>"}` for all 147 in a row on that player (The Swap needs a second player online). Each card is checked for its main effect (an effect, an item, a mob, a move, lost health...) and the result goes to the content log as `[domt] TEST PASS ...` or `TEST FAIL ...`, ending with `TEST SUMMARY 147/147 passed`, and to a `realm:domt_tested` script event per card. Cards that hurt give the test player Resistance IV first, and timers are a few seconds long. After each card the test puts the player back, clears their effects, heals them and removes the mobs it made, so it isn't meant for a busy realm.
 
 ### The cards
 
+Every card here is enabled until an operator switches it off.
+
 | # | Card | Id | Rarity | Kind | What happens |
 |---|---|---|---|---|---|
-| 1 | Swift Feet | `swift_feet` | Common | good | Speed II for 3 minutes. |
-| 2 | The Frog | `the_frog` | Common | good | Jump Boost II for 3 minutes. |
-| 3 | Owl's Eyes | `owl_eyes` | Common | good | Night Vision for 10 minutes. |
-| 4 | Iron Skin | `iron_skin` | Common | good | Resistance for 3 minutes. |
-| 5 | The Miner | `the_miner` | Common | good | Haste II for 5 minutes. |
-| 6 | The Fish | `the_fish` | Common | good | Water Breathing for 10 minutes. |
-| 7 | The Feather | `the_feather` | Common | good | Slow Falling for 3 minutes. |
-| 8 | Ember Ward | `ember_ward` | Common | good | Fire Resistance for 5 minutes. |
-| 9 | The Healer | `the_healer` | Common | good | Instant healing and Regeneration II for 30 seconds. |
-| 10 | The Ox | `the_ox` | Common | good | Strength for 3 minutes. |
-| 11 | Golden Heart | `golden_heart` | Common | good | Absorption II for 3 minutes. |
-| 12 | Village Hero | `village_hero` | Common | good | Hero of the Village for 10 minutes: villagers give discounts. |
+| 1 | Swift Feet | `swift_feet` | Common | good | Speed II for 15 minutes. |
+| 2 | The Frog | `the_frog` | Common | good | Jump Boost II for 15 minutes. |
+| 3 | Owl's Eyes | `owl_eyes` | Common | good | Night Vision for an hour. |
+| 4 | Iron Skin | `iron_skin` | Common | good | Resistance for 15 minutes. |
+| 5 | The Miner | `the_miner` | Common | good | Haste II for 20 minutes. |
+| 6 | The Fish | `the_fish` | Common | good | Water Breathing for 30 minutes. |
+| 7 | The Feather | `the_feather` | Common | good | Slow Falling for 15 minutes. |
+| 8 | Ember Ward | `ember_ward` | Common | good | Fire Resistance for 20 minutes. |
+| 9 | The Healer | `the_healer` | Common | good | Instant healing and Regeneration II for 1 minute. |
+| 10 | The Ox | `the_ox` | Common | good | Strength for 15 minutes. |
+| 11 | Golden Heart | `golden_heart` | Common | good | Absorption II for 15 minutes. |
+| 12 | Village Hero | `village_hero` | Common | good | Hero of the Village for 30 minutes: villagers give discounts. |
 | 13 | Full Belly | `full_belly` | Common | good | Your hunger is filled. |
-| 14 | The Shadow | `the_shadow` | Common | mixed | Invisibility for 3 minutes. |
-| 15 | The Vigor | `the_vigor` | Common | good | Health Boost II for 5 minutes: four extra hearts. |
-| 16 | Heavy Boots | `heavy_boots` | Common | bad | Slowness for 1 minute. |
-| 17 | Sore Arms | `sore_arms` | Common | bad | Mining Fatigue for 1 minute. |
-| 18 | Weak Arms | `weak_arms` | Common | bad | Weakness for 1 minute. |
-| 19 | Famine | `famine` | Common | bad | Hunger for 30 seconds. |
-| 20 | Dizzy Spell | `dizzy_spell` | Common | bad | Nausea for 15 seconds. |
-| 21 | The Blindfold | `the_blindfold` | Common | bad | Blindness for 10 seconds. |
-| 22 | The Dark | `the_dark` | Common | bad | Darkness for 15 seconds. |
-| 23 | Up, Up | `up_up` | Common | mixed | Levitation for 4 seconds, then a gentle Slow Falling down. |
-| 24 | Sour Berry | `sour_berry` | Common | bad | Poison for 5 seconds (it never kills). |
+| 14 | The Shadow | `the_shadow` | Common | mixed | Invisibility for 15 minutes. |
+| 15 | The Vigor | `the_vigor` | Common | good | Health Boost II for 30 minutes: four extra hearts. |
+| 16 | Heavy Boots | `heavy_boots` | Common | bad | Slowness for 15 minutes. |
+| 17 | Sore Arms | `sore_arms` | Common | bad | Mining Fatigue II for 10 minutes. |
+| 18 | Weak Arms | `weak_arms` | Common | bad | Weakness for 15 minutes. |
+| 19 | Famine | `famine` | Common | bad | Hunger II for 3 minutes: your food bar drains fast. |
+| 20 | Dizzy Spell | `dizzy_spell` | Common | bad | Nausea for 1 minute. |
+| 21 | The Blindfold | `the_blindfold` | Common | bad | Blindness for 1 minute. |
+| 22 | The Dark | `the_dark` | Common | bad | Darkness for 3 minutes. |
+| 23 | Up, Up | `up_up` | Common | bad | Levitation for 7 seconds. What goes up must come down. |
+| 24 | Sour Berry | `sour_berry` | Common | bad | Poison II for 30 seconds. It stops at half a heart. |
 | 25 | Hot Foot | `hot_foot` | Common | bad | Your boots catch fire for a moment. |
 | 26 | Butterfingers | `butterfingers` | Common | bad | You drop what you are holding. |
 | 27 | The Juggler | `the_juggler` | Common | bad | Your hotbar is shuffled. |
-| 28 | Baker's Gift | `bakers_gift` | Common | good | 8 bread. |
-| 29 | The Feast | `the_feast` | Common | good | 6 steaks. |
-| 30 | Golden Carrots | `golden_carrots` | Common | good | 4 golden carrots. |
-| 31 | The Apple | `the_apple` | Common | good | A golden apple. |
+| 28 | Baker's Gift | `bakers_gift` | Common | good | 16 bread. |
+| 29 | The Feast | `the_feast` | Common | good | 12 steaks. |
+| 30 | Golden Carrots | `golden_carrots` | Common | good | 8 golden carrots. |
+| 31 | The Apple | `the_apple` | Common | good | Two golden apples. |
 | 32 | The Cake | `the_cake` | Common | good | A cake! Happy un-birthday. |
-| 33 | The Torch | `the_torch` | Common | good | 32 torches. |
-| 34 | The Quiver | `the_quiver` | Common | good | 24 arrows. |
-| 35 | Lump of Coal | `lump_of_coal` | Common | mixed | 8 coal. Were you naughty? |
-| 36 | Iron Ration | `iron_ration` | Common | good | 6 iron ingots. |
-| 37 | Fool's Gold | `fools_gold` | Common | good | 4 gold ingots. |
-| 38 | Merchant's Purse | `merchants_purse` | Common | good | 3 emeralds. |
-| 39 | The Woodsman | `the_woodsman` | Common | good | 16 oak logs. |
-| 40 | Green Thumb | `green_thumb` | Common | good | 16 bone meal. |
+| 33 | The Torch | `the_torch` | Common | good | 64 torches. |
+| 34 | The Quiver | `the_quiver` | Common | good | 48 arrows. |
+| 35 | Lump of Coal | `lump_of_coal` | Common | mixed | 16 coal. Were you naughty? |
+| 36 | Iron Ration | `iron_ration` | Common | good | 12 iron ingots. |
+| 37 | Fool's Gold | `fools_gold` | Common | good | 8 gold ingots. |
+| 38 | Merchant's Purse | `merchants_purse` | Common | good | 6 emeralds. |
+| 39 | The Woodsman | `the_woodsman` | Common | good | 32 oak logs. |
+| 40 | Green Thumb | `green_thumb` | Common | good | 32 bone meal. |
 | 41 | The Gardener | `the_gardener` | Common | good | Seeds, a sapling and a few carrots and potatoes. |
-| 42 | The Pearl | `the_pearl` | Common | good | 2 ender pearls. |
-| 43 | Honey Pot | `honey_pot` | Common | good | 3 bottles of honey. |
+| 42 | The Pearl | `the_pearl` | Common | good | 4 ender pearls. |
+| 43 | Honey Pot | `honey_pot` | Common | good | 4 bottles of honey. |
 | 44 | The Bouquet | `the_bouquet` | Common | good | A bunch of flowers. |
-| 45 | Rotten Luck | `rotten_luck` | Common | bad | 8 rotten flesh. Yum. |
-| 46 | Pocket Dirt | `pocket_dirt` | Common | bad | 16 dirt. Your pockets are full of it. |
+| 45 | Rotten Luck | `rotten_luck` | Common | bad | 16 rotten flesh. Yum. |
+| 46 | Pocket Dirt | `pocket_dirt` | Common | bad | 32 dirt. Your pockets are full of it. |
 | 47 | Snow Day | `snow_day` | Common | good | 16 snowballs. |
 | 48 | The Name | `the_name` | Common | good | A name tag. |
 | 49 | The Flock | `the_flock` | Common | good | Three chickens come running. |
 | 50 | Stray Cat | `stray_cat` | Common | good | A stray cat finds you. Fish might win it over. |
 | 51 | Bunny Hop | `bunny_hop` | Common | good | Four rabbits hop out of the deck. |
-| 52 | The Grave | `the_grave` | Common | bad | Two zombies climb out of the ground. |
-| 53 | Creepy Crawlies | `creepy_crawlies` | Common | bad | Two spiders drop in. |
+| 52 | The Grave | `the_grave` | Common | bad | Three zombies climb out of the ground. |
+| 53 | Creepy Crawlies | `creepy_crawlies` | Common | bad | Three spiders drop in. |
 | 54 | The Slime | `the_slime` | Common | bad | A slime oozes out of the deck. |
 | 55 | The Hive | `the_hive` | Common | mixed | Three bees buzz around. Be nice to them. |
-| 56 | Bone Rattle | `bone_rattle` | Common | bad | Two skeletons rattle up. |
+| 56 | Bone Rattle | `bone_rattle` | Common | bad | Three skeletons rattle up. |
 | 57 | Frog Chorus | `frog_chorus` | Common | good | Three frogs, ready to sing. |
 | 58 | The Hop | `the_hop` | Common | mixed | You blink 8 to 16 blocks away. |
 | 59 | The Wanderer | `the_wanderer` | Common | mixed | You are whisked up to 64 blocks in a random direction. |
-| 60 | The Sky | `the_sky` | Common | mixed | You are thrown 20 blocks into the sky, with Slow Falling. |
+| 60 | The Sky | `the_sky` | Common | bad | You are thrown 14 to 22 blocks into the sky. Find water, or brace yourself. |
 | 61 | The Spin | `the_spin` | Common | mixed | You spin around. Which way were you going? |
-| 62 | The Spark | `the_spark` | Common | good | 50 experience points. |
-| 63 | Copper Purse | `copper_purse` | Common | good | 5 Crowns. |
-| 64 | The Taxman | `the_taxman` | Common | bad | The taxman takes 5 Crowns. |
-| 65 | The Leech | `the_leech` | Common | bad | You lose one experience level. |
+| 62 | The Spark | `the_spark` | Common | good | 100 experience points. |
+| 63 | Copper Purse | `copper_purse` | Common | good | 10 Crowns. |
+| 64 | The Taxman | `the_taxman` | Common | bad | The taxman takes 10 Crowns. |
+| 65 | The Leech | `the_leech` | Common | bad | You lose three experience levels. |
 | 66 | The Bandage | `the_bandage` | Common | good | Your health is fully restored. |
 | 67 | Clean Slate | `clean_slate` | Common | mixed | Every effect on you is washed away, good and bad. |
 | 68 | The Fireworks | `the_fireworks` | Common | good | Fireworks! And three rockets to keep. |
 | 69 | Confetti | `confetti` | Common | good | A burst of confetti. Congratulations, on something! |
-| 70 | The Rainbow | `the_rainbow` | Common | good | Your name shines in rainbow colors for 5 minutes. |
-| 71 | The Merchant | `the_merchant` | Uncommon | good | A wandering trader appears with wares to sell. |
-| 72 | The Void | `the_void` | Uncommon | mixed | You swap places with a nearby creature. |
-| 73 | The Scholar | `the_scholar` | Uncommon | good | A random enchanted book. |
-| 74 | The Smith | `the_smith` | Uncommon | good | An enchanted iron tool or weapon. |
-| 75 | The Sage | `the_sage` | Uncommon | good | 5 experience levels. |
-| 76 | The Mentor | `the_mentor` | Uncommon | good | 250 XP in a random skill (with the Skills pack). |
-| 77 | Silver Purse | `silver_purse` | Uncommon | good | 25 Crowns. |
-| 78 | The Gem | `the_gem` | Uncommon | good | 2 diamonds. |
-| 79 | The Pack | `the_pack` | Uncommon | good | Two wolves, already loyal to you. |
-| 80 | The Steed | `the_steed` | Uncommon | good | A tamed horse, and a saddle for it. |
-| 81 | Ambush | `ambush` | Uncommon | bad | Monsters surround you! More of them when friends are near. |
-| 82 | The Witch | `the_witch` | Uncommon | bad | A witch arrives, cackling. |
-| 83 | Night Terror | `night_terror` | Uncommon | bad | Two phantoms swoop down from the sky. |
-| 84 | The Beacon | `the_beacon` | Uncommon | good | Haste II, Speed, Strength and Resistance for 5 minutes. |
-| 85 | The Curse | `the_curse` | Uncommon | bad | Slowness II, Weakness, Mining Fatigue and Hunger for 2 minutes. |
-| 86 | The Comet | `the_comet` | Uncommon | mixed | You streak across the sky and land 150 to 300 blocks away. |
-| 87 | Treasure | `treasure` | Uncommon | good | A handful of riches: iron, gold, lapis, redstone, emeralds or a diamond. |
-| 88 | The Shepherd | `the_shepherd` | Uncommon | good | Three sheep and a pair of shears. |
-| 89 | The Guardian | `the_guardian` | Uncommon | good | An iron golem comes to protect you. |
-| 90 | The Patrol | `the_patrol` | Uncommon | bad | A pillager patrol finds you. |
-| 91 | The Gate | `the_gate` | Rare | mixed | You are pulled into the Nether (or out of it), with obsidian and flint and steel to build a portal home. |
-| 92 | The Arena | `the_arena` | Rare | mixed | You are pulled into a sky arena. Win for an enchanted book and 15 Crowns. (block-changing) |
-| 93 | The Champion | `the_champion` | Rare | bad | A champion monster comes for you. |
-| 94 | The Spore | `the_spore` | Rare | mixed | The wild ground around you turns to mushroom fields for an hour, with two mooshrooms. (block-changing) |
-| 95 | The Eclipse | `the_eclipse` | Rare | mixed | Night falls at once, for everyone. |
-| 96 | The Archmage | `the_archmage` | Rare | good | 15 experience levels and 750 XP in a random skill. |
-| 97 | The Knight | `the_knight` | Rare | good | Full iron armor, enchanted. |
-| 98 | Second Chance | `second_chance` | Rare | good | A Totem of Undying and an enchanted golden apple. |
-| 99 | The Gamble | `the_gamble` | Rare | mixed | A coin flip: double your Crowns (up to 100 more), or lose half (up to 100). |
-| 100 | The Wish | `the_wish` | Legendary | good | The deck grants one wish: choose one of three powerful boons. |
+| 70 | The Rainbow | `the_rainbow` | Common | good | Your name shines in rainbow colors for 20 minutes. |
+| 71 | Golden Hour | `golden_hour` | Common | good | Regeneration for 5 minutes. |
+| 72 | Withering | `withering` | Common | bad | Wither II for 10 seconds. It can kill. |
+| 73 | The Ooze | `the_ooze` | Common | bad | Oozing for 20 minutes: if you die, slimes burst out of you. |
+| 74 | The Albatross | `the_albatross` | Common | bad | Slowness until you die (or drink milk). |
+| 75 | Venom | `venom` | Common | bad | Three cave spiders skitter in. They bite with poison. |
+| 76 | Smite | `smite` | Common | bad | Lightning strikes you. The fire it starts goes out; yours doesn't. |
+| 77 | The Kick | `the_kick` | Common | bad | Something kicks you, hard, into the air in a random direction. |
+| 78 | The Magpie | `the_magpie` | Common | bad | A magpie snatches a stack from your pockets and drops it 8 to 16 blocks away. Go get it. |
+| 79 | Hiss | `hiss` | Common | bad | A creeper appears right behind you. (block-changing) |
+| 80 | The Merchant | `the_merchant` | Uncommon | good | A wandering trader appears with wares to sell. |
+| 81 | The Void | `the_void` | Uncommon | mixed | You swap places with a nearby creature. |
+| 82 | The Scholar | `the_scholar` | Uncommon | good | A random enchanted book. |
+| 83 | The Smith | `the_smith` | Uncommon | good | An enchanted iron tool or weapon. |
+| 84 | The Sage | `the_sage` | Uncommon | good | 8 experience levels. |
+| 85 | The Mentor | `the_mentor` | Uncommon | good | 400 XP in a random skill (with the Skills pack). |
+| 86 | Silver Purse | `silver_purse` | Uncommon | good | 50 Crowns. |
+| 87 | The Gem | `the_gem` | Uncommon | good | 3 diamonds. |
+| 88 | The Pack | `the_pack` | Uncommon | good | Two wolves, already loyal to you. |
+| 89 | The Steed | `the_steed` | Uncommon | good | A tamed horse, and a saddle for it. |
+| 90 | Ambush | `ambush` | Uncommon | bad | Monsters surround you! More of them when friends are near. |
+| 91 | The Witch | `the_witch` | Uncommon | bad | A witch arrives, cackling. |
+| 92 | Night Terror | `night_terror` | Uncommon | bad | Three phantoms swoop down from the sky. |
+| 93 | The Beacon | `the_beacon` | Uncommon | good | Haste II, Speed, Strength and Resistance for 20 minutes. |
+| 94 | The Curse | `the_curse` | Uncommon | bad | Slowness II, Weakness, Mining Fatigue and Hunger for 10 minutes. |
+| 95 | The Comet | `the_comet` | Uncommon | mixed | You streak across the sky and land 150 to 300 blocks away. |
+| 96 | Treasure | `treasure` | Uncommon | good | A handful of riches: iron, gold, lapis, redstone, emeralds or a diamond. |
+| 97 | The Shepherd | `the_shepherd` | Uncommon | good | Three sheep and a pair of shears. |
+| 98 | The Guardian | `the_guardian` | Uncommon | good | An iron golem comes to protect you. |
+| 99 | The Patrol | `the_patrol` | Uncommon | bad | A pillager patrol of four finds you. |
+| 100 | Bad Omen | `bad_omen` | Uncommon | bad | Bad Omen for 100 minutes: walk into a village and a raid begins. |
+| 101 | Nightshade | `nightshade` | Uncommon | bad | Fatal Poison for 15 seconds. Unlike plain poison, this one can kill. |
+| 102 | Guardian Angel | `guardian_angel` | Uncommon | good | Resistance until you die (or drink milk). |
+| 103 | Sea Blessing | `sea_blessing` | Uncommon | good | Conduit Power for 30 minutes: breathe, see and mine fast under water. |
+| 104 | Vexed | `vexed` | Uncommon | bad | Three vexes fly through the walls at you. |
+| 105 | Gust | `gust` | Uncommon | bad | A breeze blows in and knocks you around. |
+| 106 | The Shulker | `the_shulker` | Uncommon | mixed | A shulker shows up. Dodge its bullets, keep its shell. |
+| 107 | Hot Headed | `hot_headed` | Uncommon | bad | Two blazes rise around you. Bring water. (block-changing) |
+| 108 | Anvil Drop | `anvil_drop` | Uncommon | bad | An anvil falls from the sky onto your head. Move! If you live, keep the anvil. (block-changing) |
+| 109 | Reaper's Touch | `reapers_touch` | Uncommon | bad | Your health drops to half a heart. Careful now. |
+| 110 | Lit Fuse | `lit_fuse` | Uncommon | bad | A fuse hisses at your feet. Run! It blows in 4 seconds (it breaks no blocks). |
+| 111 | The Storm | `the_storm` | Uncommon | bad | A thunderstorm rolls in for 10 minutes, for everyone. |
+| 112 | The Sun | `the_sun` | Uncommon | good | Morning comes at once, with clear skies, for everyone. |
+| 113 | The Mender | `the_mender` | Uncommon | good | Every worn tool, weapon and piece of armor you carry is repaired like new. |
+| 114 | Rust | `rust` | Uncommon | bad | The item in your hand loses a third of its durability (it never breaks outright). |
+| 115 | Glass Cannon | `glass_cannon` | Uncommon | mixed | Strength II and Speed II for 15 minutes, but your health drops to two hearts. |
+| 116 | The Gate | `the_gate` | Rare | mixed | You are pulled into the Nether (or out of it), with obsidian and flint and steel to build a portal home. |
+| 117 | The Arena | `the_arena` | Rare | mixed | You are pulled into a sky arena. Win for an enchanted book and 15 Crowns. (block-changing) |
+| 118 | The Champion | `the_champion` | Rare | bad | A champion monster comes for you. |
+| 119 | The Spore | `the_spore` | Rare | mixed | The wild ground around you turns to mushroom fields for an hour, with two mooshrooms. (block-changing) |
+| 120 | The Eclipse | `the_eclipse` | Rare | mixed | Night falls at once, for everyone. |
+| 121 | The Archmage | `the_archmage` | Rare | good | 20 experience levels and 1000 XP in a random skill. |
+| 122 | The Knight | `the_knight` | Rare | good | Full iron armor, enchanted. |
+| 123 | Second Chance | `second_chance` | Rare | good | A Totem of Undying and an enchanted golden apple. |
+| 124 | The Gamble | `the_gamble` | Rare | mixed | A coin flip: double your Crowns (up to 100 more), or lose half (up to 100). |
+| 125 | The Horde | `the_horde` | Rare | bad | A horde closes in: zombies, husks, skeletons, spiders and a vindicator. |
+| 126 | Doom | `doom` | Rare | bad | Lightning will strike wherever you stand, three times in the next minute. |
+| 127 | The Evoker | `the_evoker` | Rare | mixed | An evoker appears. Beat it for its Totem of Undying. |
+| 128 | The Reaper | `the_reaper` | Rare | bad | Your health drops to half a heart and three wither skeletons come for the rest. |
+| 129 | The Titan | `the_titan` | Rare | good | Full health, then Strength II, Resistance II and Health Boost III for 20 minutes. |
+| 130 | Mother Lode | `mother_lode` | Rare | good | 6 diamonds, 16 iron, 12 gold and 2 netherite scrap. |
+| 131 | The Wish | `the_wish` | Legendary | good | The deck grants one wish: choose one of three powerful boons. |
+| 132 | The Fates | `the_fates` | Legendary | mixed | The Fates flip a coin: an hour of godlike power, or half a heart and a horde. |
+
+### The wild cards
+
+These 15 cards are disabled until an operator switches them on (**Cards on/off** → **Wild cards**, or **Enable every wild card**). They push things further: other players get dragged in, inventories get scrambled, and a few can kill. They keep their rarity once enabled.
+
+| # | Card | Id | Rarity | Kind | What happens |
+|---|---|---|---|---|---|
+| 133 | Chaos Pockets | `chaos_pockets` | Common | bad | Your whole inventory is shuffled, hotbar and all. |
+| 134 | Gravity Flip | `gravity_flip` | Common | bad | For 30 seconds, gravity flips every few seconds. Up you go, and down you come. |
+| 135 | Chicken Rain | `chicken_rain` | Common | mixed | It's raining chickens! They fly off home after 3 minutes. |
+| 136 | The Floor Is Lava | `floor_is_lava` | Common | bad | For 30 seconds, the floor is lava: touch the ground and you burn. Jump! Swim! |
+| 137 | Cursed Name | `cursed_name` | Common | bad | For 20 minutes, the name above your head is something silly. |
+| 138 | Zoomies | `zoomies` | Common | mixed | Speed V and Jump Boost III for 3 minutes. Good luck stopping. |
+| 139 | Topsy Turvy | `topsy_turvy` | Common | bad | For 20 seconds you keep spinning to face a new way. |
+| 140 | The Swap | `the_swap` | Uncommon | mixed | You swap places with a random player, wherever they are. |
+| 141 | Into Orbit | `into_orbit` | Uncommon | bad | You are launched sky high. Here, have a water bucket. Good luck. |
+| 142 | The Hex | `the_hex` | Uncommon | bad | The item in your hand gets a silly name and Curse of Vanishing: die with it and it's gone. |
+| 143 | Zero G | `zero_g` | Uncommon | mixed | Every creature within 16 blocks floats up for a few seconds, then drops. Pets and named mobs are spared. |
+| 144 | Creeper Party | `creeper_party` | Uncommon | bad | Four creepers come to the party. They break blocks (never in a safe zone). (block-changing) |
+| 145 | Hot Potato | `hot_potato` | Uncommon | bad | You get a Hot Potato. In 30 seconds it explodes on whoever has it. Pass it on! |
+| 146 | The Ghast | `the_ghast` | Rare | bad | A ghast drifts in from nowhere. Its fireballs break blocks (never in a safe zone). (block-changing) |
+| 147 | The Warden | `the_warden` | Rare | bad | A warden rises out of the ground 10 to 14 blocks away. Be very quiet. |
 
 ---
 
