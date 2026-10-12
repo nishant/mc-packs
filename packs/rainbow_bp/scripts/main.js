@@ -3,7 +3,7 @@ import { CONFIG } from "./config.js";
 import { COLORS, SPREAD, antisolarAngle, arcAngle, arcDots, beamSegments, boldness, center, toward } from "./sky.js";
 import { get } from "./settings.js";
 
-// World property "rainbow:pot": JSON { id, x, z, y?, ang, by, ground?, until, expires, placed, missed?, found? }
+// World property "rainbow:pot": JSON { id, x, z, y?, low?, ang, by, ground?, until, expires, placed, missed?, found? }
 // for the current rainbow and its pot of gold (until / expires: Date.now() ms when the rainbow fades / the pot
 // can no longer be found; placed: its chest is in the world; missed: no safe spot for a chest, so the
 // finder gets the loot straight into their inventory; ang: the angle of the arc's plane, from the pot's foot
@@ -35,7 +35,7 @@ const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|waxed_|copper_block|quartz_block|purpur|lamp|cauldron|crafter|beehive|_head$|_skull$|pot$|terracotta|(iron|gold|diamond|emerald|lapis|redstone|coal|netherite|amethyst)_block|raw_/;
 const NATURAL_EXCEPTIONS = /^minecraft:(moss_carpet|torchflower|(white|orange|yellow|brown|red|light_gray)?_?terracotta)$/;
 
-/** @typedef {{ id: number, x: number, z: number, y?: number, ang?: number, by?: number, ground?: boolean, until: number, expires: number, placed: boolean, missed?: boolean, found?: string }} Pot */
+/** @typedef {{ id: number, x: number, z: number, y?: number, low?: number, ang?: number, by?: number, ground?: boolean, until: number, expires: number, placed: boolean, missed?: boolean, found?: string }} Pot */
 
 /** @type {Pot | undefined} */
 let pot;
@@ -78,6 +78,32 @@ function topAt(dim, x, z) {
   } catch {
     return undefined;
   }
+}
+
+const WATERY = /water|kelp|seagrass|bubble_column/;
+
+/**
+ * The surface at a column, water included: getTopmostBlock skips water (it answers the sea floor), so this climbs
+ * through the water (and kelp, seagrass) over it. `wet` says whether there was any, `floor` is the block under it.
+ * undefined while unloaded.
+ * @param {Dimension} dim @param {number} x @param {number} z @returns {{ y: number, wet: boolean, floor: number } | undefined}
+ */
+function surfaceAt(dim, x, z) {
+  const top = topAt(dim, x, z);
+  if (!top) return undefined;
+  let b = top;
+  let wet = !!top.isLiquid;
+  try {
+    for (let i = 0; i < 64; i++) {
+      const up = b.above();
+      if (!up || !(up.isLiquid || WATERY.test(up.typeId))) break;
+      b = up;
+      wet = true;
+    }
+  } catch {
+    // the top of the world, or unloaded above
+  }
+  return { y: b.location.y, wet, floor: top.location.y };
 }
 
 function savePot() {
@@ -210,15 +236,15 @@ function appear(player) {
     const d = rand(CONFIG.distance.min, CONFIG.distance.max);
     const x = Math.floor(player.location.x + Math.cos(angle) * d), z = Math.floor(player.location.z + Math.sin(angle) * d);
     if (fromSpawn(x, z) < get("avoidSpawn") || inZone(x, z)) continue;
-    const top = topAt(dim, x, z); // usually not loaded this far out; when it is, skip water now
-    if (top && top.isLiquid) continue;
+    const top = surfaceAt(dim, x, z); // usually not loaded this far out; when it is, skip water now
+    if (top?.wet) continue;
     const now = Date.now();
     // Replacing an earlier pot (an operator's /realm:rainbow_now, or one past its time): its chest goes if it's empty.
     if (pot) expire(pot);
     // The arc stands across this player's line of sight, so they see it side on. Its ground height is the
     // surface at its end when that's loaded, else this player's surface (corrected once the end loads).
     const here = topAt(dim, player.location.x, player.location.z);
-    const by = top ? top.location.y + 1 : Math.max(63, here ? here.location.y + 1 : Math.floor(player.location.y));
+    const by = top ? top.y + 1 : Math.max(63, here ? here.location.y + 1 : Math.floor(player.location.y));
     const ang = arcAngle(player.location, { x: x + 0.5, z: z + 0.5 }, Math.random() < 0.5);
     pot = { id: now, x, z, ang, by, ground: !!top, until: now + get("durationSeconds") * 1000, expires: now + Math.max(get("durationSeconds") / 60, get("potMinutes")) * 60000, placed: false };
     saw.clear();
@@ -249,9 +275,9 @@ system.runInterval(() => {
 /** Once the pot's chunk is loaded, the arc's ground height becomes the surface there (once). @param {Pot} p0 @param {Dimension} dim */
 function settleGround(p0, dim) {
   if (p0.ground) return;
-  const top = topAt(dim, p0.x, p0.z);
+  const top = surfaceAt(dim, p0.x, p0.z);
   if (!top) return;
-  p0.by = top.location.y + 1;
+  p0.by = top.y + 1;
   p0.ground = true;
   savePot();
 }
@@ -367,7 +393,7 @@ system.runInterval(() => {
         busy = true;
         system.runJob(placePot(p0));
       }
-      if (d <= FIND_DISTANCE && (typeof p0.y !== "number" || Math.abs(l.y - (p0.y + 1)) <= 4) && (p0.placed || p0.missed)) {
+      if (d <= FIND_DISTANCE && (typeof p0.y !== "number" || (l.y <= p0.y + 5 && l.y >= (p0.low ?? p0.y + 1) - 4)) && (p0.placed || p0.missed)) {
         if (player.getGameMode() === GameMode.Spectator) continue;
         find(p0, player);
         return;
@@ -384,6 +410,8 @@ system.runInterval(() => {
  * @param {Pot} p0 @returns {Generator<void, void, void>}
  */
 function* placePot(p0) {
+  // Part of the land not loaded (and ticking) yet: try again next second instead of giving up on a chest.
+  let unloaded = false;
   try {
     const dim = overworld();
     for (let i = 0; i < SPOT_TRIES; i++) {
@@ -393,12 +421,14 @@ function* placePot(p0) {
       if (fromSpawn(x, z) < get("avoidSpawn") || inZone(x, z)) continue; // never near spawn or in a safe zone
       let ground = topAt(dim, x, z);
       if (ground && PLANT.test(ground.typeId)) ground = ground.below();
+      if (!ground) unloaded = true;
       if (!ground || !GROUND.test(ground.typeId)) continue; // water, leaves, builds, unloaded
       const sy = ground.location.y;
       let safe = true;
       for (let dx = -SCAN; dx <= SCAN && safe; dx++) {
         for (let dz = -SCAN; dz <= SCAN && safe; dz++) {
           const top = topAt(dim, x + dx, z + dz);
+          if (!top) unloaded = true;
           if (!top || isBuilt(top.typeId)) safe = false;
           for (let y = sy - SCAN; y <= sy + SCAN && safe; y++) {
             let b;
@@ -407,6 +437,7 @@ function* placePot(p0) {
             } catch {
               b = undefined;
             }
+            if (!b && y >= -64 && y <= 319) unloaded = true;
             if (!b || isBuilt(b.typeId)) safe = false;
           }
           yield;
@@ -428,9 +459,11 @@ function* placePot(p0) {
     }
     // No safe spot: the pot of gold is still there to find, and its loot goes straight to the finder. Its height
     // is the surface at its end, so flying high over it doesn't count as reaching it.
-    if (pot === p0) {
-      const top = topAt(dim, p0.x, p0.z);
-      if (top) p0.y = top.location.y + 1;
+    if (pot === p0 && !unloaded) {
+      // On water, its surface: a swimmer or a boat there finds it.
+      const top = surfaceAt(dim, p0.x, p0.z);
+      if (top) p0.y = top.y + 1;
+      if (top?.wet) p0.low = top.floor + 1; // and anywhere down to the bottom
       p0.missed = true;
       savePot();
     }
