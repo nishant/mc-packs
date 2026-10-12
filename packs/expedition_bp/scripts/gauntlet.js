@@ -318,7 +318,13 @@ export async function restoreStash(p) {
         const it = box.getItem(k);
         if (!it) continue;
         box.setItem(k);
-        put(it, part * CART + k);
+        try {
+          put(it, part * CART + k);
+        } catch (e) {
+          console.warn(`[expedition] stash item: ${e}`);
+          p.dimension.spawnItem(it, p.location);
+          spilled++;
+        }
       }
     cart.remove();
   }

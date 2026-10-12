@@ -4294,6 +4294,7 @@ Operators can change `enabled`, `slots`, `maxParty`, `timeLimitMinutes`, `exitSe
 | `expedition:stash_<n>` | Structure (saved in the world) | A Fixed loadout player's own items while they're on a Gauntlet: two chest minecarts (tagged `realm:exp_stash`, `realm:exp_stash_<n>` and `realm:exp_stash_part_<0 or 1>`) holding slots 0 to 26 and 27 to 40 (inventory, then head, chest, legs, feet, offhand). Deleted once the items are back |
 | `expedition:stash` | Player | JSON `{ id, tag, placed?, at? }`: which stash holds the player's items (`id` empty: they carried nothing); `placed` once its carts were put down to give the items back, so they're never put down twice |
 | `expedition:return` | Player | JSON `{ d, x, y, z, run }`: where to send the player back to, while they're on a run (or until they rejoin after one) |
+| `expedition:buffs` | Player | JSON list of the effects a run gave the player (shrine blessing, boons), taken away when they leave the run, also after a restart |
 | `expedition:prog` | Player | JSON `{ u, b, c, r }`: the highest Nightmare tier unlocked, the highest level cleared, clears, the player's recent runs |
 | `expedition:rolls` | Player | JSON `{ <level>: [affix ids] }`: the affixes shown for each Nightmare level, kept until that run starts or they're rerolled (so reopening the menu doesn't reroll) |
 | `expedition:cfg` | World | Settings changed in `/realm:config` |
