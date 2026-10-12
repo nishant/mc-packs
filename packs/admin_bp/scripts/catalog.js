@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 148 commands in 60 packs */
+/** @type {Pack[]} 154 commands in 60 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -38,8 +38,14 @@ export const PACKS = [
     pack: "Easy Building",
     commands: [
       {"name":"realm:build","description":"Easy Building: pick a shape, its blocks and where it goes","permission":"any","params":[]},
+      {"name":"realm:build_book","description":"Get a Building Book: use it to open Easy Building","permission":"any","params":[]},
+      {"name":"realm:build_copy","description":"Copy the region you selected (or start selecting one)","permission":"any","params":[]},
+      {"name":"realm:build_cut","description":"Cut the region you selected: copy it and take it away","permission":"any","params":[]},
+      {"name":"realm:build_destroy","description":"Destroy mode on or off: breaking a block with a pickaxe, axe or shovel breaks your shape","permission":"any","params":[]},
+      {"name":"realm:build_finish","description":"Build your curve through the points you placed","permission":"any","params":[]},
       {"name":"realm:build_here","description":"Build your shape at the block you look at","permission":"any","params":[]},
       {"name":"realm:build_mode","description":"Build mode on or off: placing a block builds your shape","permission":"any","params":[]},
+      {"name":"realm:build_paste","description":"Paste your copy at the block you look at, turned to face your way","permission":"any","params":[]},
       {"name":"realm:build_redo","description":"Build again what you last undid","permission":"any","params":[]},
       {"name":"realm:build_undo","description":"Undo your last build (blocks come back)","permission":"any","params":[]},
     ],
