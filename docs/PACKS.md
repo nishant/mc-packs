@@ -3177,7 +3177,7 @@ Cook real dishes at a cooking pot (a cauldron over a lit campfire). Each dish is
 3. Pick a recipe to see its ingredients and effects, then **Cook 1 batch** or **Cook 3 batches**. The ingredients are taken, the pot bubbles for 3 seconds, and the dishes land in your inventory: `You cooked 2 Miner's Pasty.`
 4. Eat a dish like any food (when you're hungry). Chat says what you got: `Miner's Pasty: Haste I for 5m`. A rolling dish says what it rolled: `Mystery Stew: A rush of speed! (Speed II for 2m)`.
 5. Learn more recipes: tap Bea the Cook (or any NPC with the `chef` role) and pick **Kitchen**. She teaches each recipe for Crowns or for ingredients (`Learn: Warden's Ration` for `30 Crowns or 8 Cooked Beef`), and the rare ones for one of their rare ingredient plus Crowns. Story Questlines also teaches recipes, and recipe cards (paper named `Recipe Card: Lantern Cake`) dropped by champions teach theirs as soon as you open a pot, the Kitchen or `/realm:cooking`.
-6. Collect rare ingredients: defeat champions, catch a Storm Eel in a thunderstorm, harvest full beehives at night, and harvest crops during a Harvest Moon or after an aurora (see the table below). `/realm:cooking` → **Rare ingredients** lists them, what they're for and how many you carry.
+6. Collect rare ingredients: defeat champions, catch a Storm Eel in a thunderstorm, harvest full beehives at night, and harvest crops during a Harvest Moon or after an aurora or a meteor, and hunt monsters under a Blood Moon (see the table below). When one of those windows opens, chat says so: `Stardust settles on the fields. Ripe wheat harvested in the next 15 minutes may give Starwright Flour (Kitchen).` `/realm:cooking` → **Rare ingredients** lists them, what they're for and how many you carry.
 7. Run `/realm:cooking` for your recipes (**What can I cook?**, **My recipes**), the **Cookbook** of every recipe and how to learn it, and the rare ingredients. Disable the bubbling sounds in `/realm:prefs` → **Kitchen** → **Cooking sounds**.
 8. **Operators:** `/realm:cooking` also has **Teach or forget recipes** (one or all, for any online player) and **Give dishes and ingredients** (any dish, rare ingredient or recipe card). `/realm:config` → **Kitchen** sets the effect length multiplier, rolling dishes, the champion ingredient and recipe card chances, foraging and cooking anywhere.
 
@@ -3234,12 +3234,12 @@ The rare ingredients (each is a vanilla item with a custom name and `Rare ingred
 | `Storm Eel` | `minecraft:cod` | The Storm Eel of [Fishing 2.0](#fishing-20--fishing_bp) (thunderstorms; a cod named `Storm Eel` with its size line, like `42 cm`, counts), and Stormcaller champions | Storm Eel Pie |
 | `Frost Pepper` | `minecraft:light_blue_dye` | Frostbound champions; 4% from each stray you kill (`forage.frostPepper`) | Frost Pepper Soup |
 | `Glow Honey` | `minecraft:honeycomb` | 30% when you harvest a full beehive or bee nest with a bottle or shears at night (time 13000 to 23000, `forage.glowHoney`); only a harvest that empties the hive counts, so a tap a land claim stops gives nothing | Lantern Cake, Hearthkeeper's Feast |
-| `Starwright Flour` | `minecraft:sugar` | 10% from each ripe wheat you break within 10 minutes (`starMinutes`) of an aurora or a meteor (`forage.starwrightFlour`) | Starwright Bread |
-| `Ember Truffle` | `minecraft:magma_cream` | 3% from each ripe nether wart you break (`forage.emberTruffle`); champions that die in the Nether | Ember Truffle Risotto |
-| `Moon Salt` | `minecraft:quartz` | 5% from each hostile mob you kill during a Blood Moon (`forage.moonSalt`); Vampiric champions | Moon Salt Roast |
-| `Harvest Saffron` | `minecraft:orange_dye` | 8% from each ripe crop (wheat, carrots, potatoes, beetroot) you break during a Harvest Moon (`forage.harvestSaffron`) | Golden Harvest Loaf, Hearthkeeper's Feast |
+| `Starwright Flour` | `minecraft:sugar` | 25% from each ripe wheat you harvest within 15 minutes (`starMinutes`) of an aurora or a meteor, including one an operator calls down (`forage.starwrightFlour`) | Starwright Bread |
+| `Ember Truffle` | `minecraft:magma_cream` | 3% from each ripe nether wart you harvest (`forage.emberTruffle`); champions that die in the Nether | Ember Truffle Risotto |
+| `Moon Salt` | `minecraft:quartz` | 8% from each hostile mob you kill during a Blood Moon (`forage.moonSalt`); Vampiric champions | Moon Salt Roast |
+| `Harvest Saffron` | `minecraft:orange_dye` | 8% from each ripe crop (wheat, carrots, potatoes, beetroot) you harvest during a Harvest Moon (`forage.harvestSaffron`) | Golden Harvest Loaf, Hearthkeeper's Feast |
 
-Foraging (everything but champions) can be disabled with **Foraging** (`foragingEnabled`). Crops harvested by tapping with [Right-click Harvest](#right-click-harvest--harvest_bp) break no block, so they don't forage; break them to try your luck.
+Foraging (everything but champions) can be disabled with **Foraging** (`foragingEnabled`). Harvesting counts both ways: breaking a ripe crop, or tapping it with [Right-click Harvest](#right-click-harvest--harvest_bp). At the start of an aurora or meteor window, a Harvest Moon or a Blood Moon, chat names the ingredient it can bring: `Kitchen: ripe crops harvested tonight may give Harvest Saffron.`, `Kitchen: monsters slain tonight may drop Moon Salt.`
 
 ### Commands
 
@@ -3258,12 +3258,12 @@ Foraging (everything but champions) can be disabled with **Foraging** (`foraging
 | `recipeCardChance` | `10` | Percent chance that a champion's killer also gets a recipe card |
 | `foragingEnabled` | `true` | Rare ingredients from harvesting, beehives and hunting (the chances below). Champions drop them either way |
 | `forage.glowHoney` | `30` | Percent: Glow Honey from a full beehive or bee nest harvested at night |
-| `forage.starwrightFlour` | `10` | Percent: Starwright Flour from ripe wheat soon after an aurora or a meteor |
+| `forage.starwrightFlour` | `25` | Percent: Starwright Flour from ripe wheat soon after an aurora or a meteor |
 | `forage.harvestSaffron` | `8` | Percent: Harvest Saffron from a ripe crop during a Harvest Moon |
-| `forage.moonSalt` | `5` | Percent: Moon Salt from a hostile mob killed during a Blood Moon |
+| `forage.moonSalt` | `8` | Percent: Moon Salt from a hostile mob killed during a Blood Moon |
 | `forage.emberTruffle` | `3` | Percent: Ember Truffle from ripe nether wart |
 | `forage.frostPepper` | `4` | Percent: Frost Pepper from a stray |
-| `starMinutes` | `10` | After an aurora or a meteor, ripe wheat can give Starwright Flour for this many minutes |
+| `starMinutes` | `15` | After an aurora or a meteor, ripe wheat can give Starwright Flour for this many minutes |
 | `potFires` | `["minecraft:campfire", "minecraft:soul_campfire"]` | Blocks that make a cauldron on top of them a cooking pot (lit ones only) |
 | `cookAnywhere` | `false` | Players can cook from `/realm:cooking` anywhere, without a pot |
 | `cookSeconds` | `3` | How long one cooking takes, in seconds, for any number of batches |
@@ -3293,7 +3293,7 @@ Operators can change `enabled`, `durationMultiplier`, `rollingDishes`, `champion
 
 - **Pots:** `beforeEvents.playerInteractWithBlock` on a `minecraft:cauldron` whose block below is a lit `potFires` block (its `extinguished` state isn't set), with an empty hand or while sneaking, is canceled and opens the menu on the next tick (once per tap, `isFirstEvent`).
 - **Eating:** `afterEvents.itemCompleteUse` from a player with an item that is a dish (its type is the dish's `base`, its name without § codes is the dish's name, and its first lore line is that dish's gray line). The vanilla food points are the base item's.
-- **Foraging:** `afterEvents.playerBreakBlock` on ripe crops (`growth` 7) and nether wart (`age` 3); `afterEvents.entityDie` with a player as the damaging entity; full hives (`honey_level` 5) tapped with a glass bottle or shears, checked a tick later (the hive must have emptied). Scripts can't read the moon or the sky, so the pack remembers the last `realm:moon` (`{ state: "blood" | "harvest" | "normal" }` from [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp)) and `realm:sky_event` with `kind` `aurora` ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)) or `meteor` ([Meteor Strikes](#meteor-strikes--meteor_bp)).
+- **Foraging:** `afterEvents.playerBreakBlock` on ripe crops (`growth` 7) and nether wart (`age` 3), plus a first tap (`beforeEvents.playerInteractWithBlock`) on a ripe one that 3 ticks later is unripe or air (Right-click Harvest replanted or removed it); `afterEvents.entityDie` with a player as the damaging entity; full hives (`honey_level` 5) tapped with a glass bottle or shears, checked a tick later (the hive must have emptied). Scripts can't read the moon or the sky, so the pack remembers the last `realm:moon` (`{ state: "blood" | "harvest" | "normal" }` from [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp)) and `realm:sky_event` with `kind` `aurora` ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp)) or `meteor` ([Meteor Strikes](#meteor-strikes--meteor_bp)).
 - **Townsfolk:** on `realm:npc_talk` with the `chef` role the pack answers `realm:npc_offer` with **Kitchen** (`order` 15), and opens it on `realm:npc_choose`.
 - **Script events it listens to** (JSON; other packs and `/scriptevent` can send them):
   - `realm:champion_slain` `{ player?, helpers, name, trait, dim, ... }` from Champions: rare ingredients and recipe cards.
