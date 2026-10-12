@@ -118,6 +118,12 @@ function stateOf(player) {
 }
 
 const LIQUID = /^minecraft:(flowing_)?(water|lava)$/;
+/**
+ * Blocks Silk Touch doesn't simply drop as themselves (budding amethyst and infested blocks drop nothing,
+ * a double slab drops two slabs): these drop what the game drops for them instead. Doors and tall flowers
+ * too, so both halves drop one item.
+ */
+const NO_SILK = /^minecraft:(budding_amethyst|infested_.*|.*double_.*slab.*|chorus_plant|frosted_ice)$/;
 
 /**
  * Breaks these blocks: survival needs the right tool for each, drops land at your feet, the tool wears.
@@ -168,6 +174,8 @@ async function destroyCells(player, dim, spots, label) {
     /** @type {Map<string, number>} drops from ores and Silk Touch */
     const drops = new Map();
     let xp = 0, wrongTool = 0, kept = 0, toolGone = false;
+    /** @type {Set<string>} spots already broken (a door's other half counts) */
+    const done = new Set();
     let silk = 0, fortune = 0, unbreaking = 0;
     const readEnchants = () => {
       if (!tool) return;
@@ -257,6 +265,29 @@ async function destroyCells(player, dim, spots, label) {
         continue;
       }
       const was = block.permutation;
+      // A door or tall flower: its other half goes with it, so undo puts back both halves.
+      const half = was.getState("upper_block_bit");
+      /** @type {{ x: number, y: number, z: number, perm: import("@minecraft/server").BlockPermutation } | undefined} */
+      let other;
+      if (half !== undefined) {
+        try {
+          const o = dim.getBlock({ x: c.x, y: c.y + (half ? -1 : 1), z: c.z });
+          if (o?.typeId === id) other = { x: o.location.x, y: o.location.y, z: o.location.z, perm: o.permutation };
+        } catch {
+          other = undefined;
+        }
+      }
+      /** The other half, once it is gone too. */
+      const otherGone = () => {
+        if (!other || done.has(`${other.x},${other.y},${other.z}`)) return undefined;
+        try {
+          if (!dim.getBlock(other)?.isAir) return undefined;
+        } catch {
+          return undefined;
+        }
+        const cost = creative ? undefined : ctx.costOf(other.perm);
+        return { x: other.x, y: other.y, z: other.z, before: other.perm, after: air, ...(cost ? { cost } : {}) };
+      };
       if (!creative) {
         if (!kind || !suits(block.getTags(), kind)) {
           wrongTool++;
@@ -264,7 +295,7 @@ async function destroyCells(player, dim, spots, label) {
         }
         const ore = ORES[id];
         try {
-          if (silk > 0) {
+          if (silk > 0 && half === undefined && !NO_SILK.test(id)) {
             const item = block.getItemStack(1);
             block.setPermutation(air);
             if (item) drops.set(item.typeId, (drops.get(item.typeId) ?? 0) + 1);
@@ -289,8 +320,20 @@ async function destroyCells(player, dim, spots, label) {
         }
         placed.push({ x: c.x, y: c.y, z: c.z, before: was, after: air });
       }
+      done.add(`${c.x},${c.y},${c.z}`);
+      const gone = otherGone();
+      if (gone) {
+        placed.push(gone);
+        done.add(`${gone.x},${gone.y},${gone.z}`);
+      }
     }
-    if (tool && container && !toolGone) container.setItem(slot, tool);
+    if (tool && container && !toolGone) {
+      try {
+        container.setItem(slot, tool);
+      } catch {
+        // the player left
+      }
+    }
     await ctx.tick();
     gather();
     if (player.isValid) {

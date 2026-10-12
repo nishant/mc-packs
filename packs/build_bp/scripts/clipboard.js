@@ -720,7 +720,11 @@ system.runInterval(() => {
   }
 }, 10);
 
-world.afterEvents.playerLeave.subscribe(({ playerId }) => states.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  states.delete(playerId);
+  // Their copies' blocks are read again from the structures when they next paste.
+  for (const id of contents.keys()) if (id.startsWith(`build:p${playerId}_`)) contents.delete(id);
+});
 
 // ---------------------------------------------------------------------------
 // Survival cuts and undo: a cut pasted for free can't be undone too (that would make blocks)
@@ -728,7 +732,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => states.delete(playerId
 
 /** @param {Player} player @param {import("./undo.js").BuildRecord} rec @param {boolean} redo */
 function checkStep(player, rec, redo) {
-  if (redo || rec.kind !== "cut" || !rec.cut || ctx.isCreative(player)) return undefined;
+  if (redo || rec.kind !== "cut" || !rec.cut) return undefined;
   if (metaOf(player).used.includes(rec.cut)) return "Those cut blocks were already pasted for free. Undo that paste first.";
   return undefined;
 }
@@ -876,7 +880,7 @@ async function slotMenu(player, i) {
 async function askName(player, def) {
   const res = await ctx.show(player, new ModalFormData().title("Name the copy").textField(`Name (up to ${NAME_LEN} letters)`, "My house", { defaultValue: def }).submitButton("Save"));
   if (!res || res.canceled || !player.isValid) return undefined;
-  const name = String(ctx.inputs(res)[0] ?? "").replace(/[^\x20-\x7e]/g, "").trim().slice(0, NAME_LEN);
+  const name = String(ctx.inputs(res)[0] ?? "").replace(/\u00a7./g, "").replace(/[^\x20-\x7e]/g, "").trim().slice(0, NAME_LEN).trim();
   return name || def;
 }
 
