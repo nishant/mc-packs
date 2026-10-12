@@ -1,6 +1,6 @@
 // Weather Almanac: the almanac takes over the weather (doWeatherCycle off), /realm:weather_set starts a spell
-// now, a vanilla /weather change is put back within a second or two, the forecast form and realm:weather_plan
-// describe the spell, and the plan carries on after a restart with the same spell.
+// now (and everyone else online hears about it), a vanilla /weather change is put back within a second or two,
+// the forecast form and realm:weather_plan describe the spell, and the plan carries on after a restart.
 // node tools/test-bds/run.mjs --quiet --only weather_bp --scenario tools/test-bds/examples/weather-almanac.js --timeout 300
 export default async function (t) {
   const plans = [];
@@ -58,7 +58,13 @@ export default async function (t) {
   menu.answer("Set the weather");
   const set = await t.waitForm(p, { timeout: 100 });
   t.log(`set form "${set.title}" elements: ${JSON.stringify(set.elements).slice(0, 300)}`);
+  const other = await t.player("Farmer", { x: p.location.x + 10, z: p.location.z });
   set.answer({ Weather: "Rain", "real minutes": 10 });
   await t.waitMessage(p, /Rain for 10 minutes starting now/, { timeout: 60 });
   await t.waitUntil(() => plans.at(-1).now === "Rain", { timeout: 40, message: "the plan now says Rain" });
+  // Everyone else hears that an operator set the weather (the operator only gets their own answer).
+  await t.waitMessage(other, /An operator set the weather: Rain for 10 minutes/, { timeout: 60 });
+  t.check(!t.messages(p).some((m) => /An operator set the weather/.test(m.plain)), "the operator isn't told twice");
+  t.assert(t.cmd(p, "/realm:weather_set clear 5").ok, "/realm:weather_set clear 5 ran");
+  await t.waitMessage(other, /An operator set the weather: Clear skies for 5 minutes/, { timeout: 60 });
 }

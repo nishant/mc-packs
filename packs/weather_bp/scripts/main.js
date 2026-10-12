@@ -557,9 +557,10 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return { status: CustomCommandStatus.Failure, message: "Minutes must be 1 to 1440." };
       }
       const wasActive = active;
+      const by = origin.sourceEntity instanceof Player ? origin.sourceEntity.id : undefined;
       system.run(() => {
         try {
-          setWeatherNow(kind, minutes);
+          setWeatherNow(kind, minutes, by);
         } catch (e) {
           console.warn(`[weather] ${e}`);
         }
@@ -572,10 +573,22 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 
-/** Starts `kind` now for `minutes` real minutes; the plan carries on after it. @param {Kind} kind @param {number} minutes */
-function setWeatherNow(kind, minutes) {
+/**
+ * Starts `kind` now for `minutes` real minutes; the plan carries on after it. Everyone else online hears about it,
+ * since the sky changes for them too and the forecast they read is no longer what's coming.
+ * @param {Kind} kind @param {number} minutes @param {string} [byId] the operator, who gets their own answer
+ */
+function setWeatherNow(kind, minutes, byId) {
   if (active) startSpell(kind, minutes * MIN);
   else world.getDimension(OVERWORLD).setWeather(/** @type {WeatherType} */ (kind), minutes * 1200);
+  const line = `§7An operator set the weather: ${NAME[kind]} for ${minutes} minute${minutes === 1 ? "" : "s"}.${active ? " The forecast is updated." : ""}`;
+  for (const p of world.getAllPlayers()) {
+    try {
+      if (p.id !== byId) p.sendMessage(line);
+    } catch {
+      // a player mid-leave
+    }
+  }
 }
 
 /** @param {Kind} kind @param {number} minutes @param {boolean} wasActive */
@@ -613,7 +626,7 @@ async function setForm(player) {
   const kind = KINDS[Number(v[0])] ?? "Rain";
   const minutes = Math.max(1, Math.min(1440, Math.round(Number(v[1])) || 30));
   const wasActive = active;
-  setWeatherNow(kind, minutes);
+  setWeatherNow(kind, minutes, player.id);
   player.sendMessage(`§7${setMessage(kind, minutes, wasActive)}`);
 }
 
