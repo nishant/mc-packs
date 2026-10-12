@@ -164,6 +164,15 @@ const hash = (u, v, w) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 
+/** Thrown when a shape has more blocks than a build may place. */
+export class TooBig extends Error {
+  /** @param {number} n at least this many blocks */
+  constructor(n) {
+    super(`more than ${n} blocks`);
+    this.n = n;
+  }
+}
+
 /**
  * The cells of a shape.
  * @param {string} shape
@@ -171,15 +180,18 @@ const hash = (u, v, w) => {
  * @param {number} W @param {number} H @param {number} D the box it fills
  * @param {{ a: number[], b: number[] }} [points] two-point mode: the two placed blocks, in box cells
  * @param {boolean} [stairs] the main block is a stair: slopes use stair cells
+ * @param {number} [cap] stop (throw TooBig) once the shape has more cells than this, so a huge filled shape
+ *   isn't laid out cell by cell only to be refused
  * @returns {Map<string, Cell>}
  */
-export function cellsOf(shape, val, W, H, D, points, stairs = false) {
+export function cellsOf(shape, val, W, H, D, points, stairs = false, cap = Infinity) {
   /** @type {Map<string, Cell>} */
   const out = new Map();
   /** @param {number} u @param {number} v @param {number} w @param {Omit<Cell, "u" | "v" | "w">} c */
   const put = (u, v, w, c) => {
     if (u < 0 || v < 0 || w < 0 || u >= W || v >= H || w >= D) return;
     out.set(`${u},${v},${w}`, { u, v, w, ...c });
+    if (out.size > cap) throw new TooBig(out.size);
   };
   /** @param {number} u @param {number} v @param {number} w */
   const del = (u, v, w) => out.delete(`${u},${v},${w}`);

@@ -4450,15 +4450,16 @@ Sizes go up to 64 blocks (`maxSize`; radius up to half of it), and so does the d
 
 ### What players see
 
-- **What a build replaces** (Blocks and placing -> **Replace**): **Air and soft blocks** (the default: air plus water, lava, grass, ferns, flowers, snow layers, vines, fire...), **Air only**, or **Everything but chests and other protected blocks**. Containers, signs, banners, beds, spawners, portals, bedrock and the other `protectedBlocks` are never replaced. **Everything** is for creative players only (survival and adventure players too with `survivalReplaceAll`, default disabled), since it destroys blocks without drops. A spot that is already taken is skipped.
+- **What a build replaces** (Blocks and placing -> **Replace**): **Air and soft blocks** (the default: air plus water, lava, grass, ferns, flowers, snow layers, vines, fire...), **Air only**, or **Everything but chests and other protected blocks**. Containers, signs, banners, beds, spawners, portals, bedrock and the other `protectedBlocks` are never replaced. **Everything** is for creative players only (survival players too with `survivalReplaceAll`, default disabled), since it destroys blocks without drops. A spot that is already taken is skipped.
 - **Where it goes** (Blocks and placing): **Starts at the block, centered** (the default: the shape starts at the block and goes away from you, centered left to right), **Centered on the block** or **Corner at the block (goes away and right)**; **Move up or down** shifts it up to 16 blocks; **Turn it a quarter (sideways)** turns it so a wall runs away from you.
 - **Copies:** **Mirror left-right**, **Mirror front-back**, **Mirror both ways (4)**, **Turned around the block (4)** (stairs turn with them), and **Repeat in a row** (1 to 16 copies, a gap of 0 to 16 blocks, away from you, to the right or up). Copies that land on the same spot count once.
-- **The block you place marks the spot:** in build mode it is taken back (and returned to your hand in survival) and the shape is built there instead. In two-block mode the start block stays until the end block is placed. Doors, beds, tall flowers and the `forbiddenBlocks` always place normally.
-- **Survival and adventure** (`requireItems`, default enabled): every block comes from your inventory. A stair, log or slab costs its own item, farmland costs dirt, water is free. Short of blocks, it builds as much as you have, bottom first, and says what's missing: `Out of blocks: built 10 of 15. Still needed: 5 cobblestone.` (with `partialBuilds` disabled it builds nothing and says how many you need). Creative builds are free. Blocks with no item (fire, typed-in water...) can't be built in survival.
-- **Limits:** one build places at most 4096 blocks in survival (`maxBlocks`) and 32768 in creative (`maxBlocksCreative`), copies included; bigger ones are refused with the count. Big builds go up 400 blocks a tick (`blocksPerTick`), so a 30,000-block dome takes a few seconds. One build at a time per player.
-- **Undo** puts back exactly what each spot held before (a flower, water, air) and gives survival blocks back, but only where your block is still there: blocks someone mined or changed since stay as they are. Redo builds the same blocks again (and charges for them again in survival). Undo history lives in memory: a server restart forgets it.
+- **The block you place marks the spot:** in build mode it is taken back (and returned to your hand in survival) and the shape is built there instead. In two-block mode the start block stays until the end block is placed. Doors, beds, tall flowers, the `forbiddenBlocks` and a block added onto one already there (a slab that makes a double slab, a second snow layer, candle or sea pickle) always place normally.
+- **Survival** (`requireItems`, default enabled): every block comes from your inventory. A stair, log or slab costs its own item, farmland costs dirt, water is free. Short of blocks, it builds as much as you have, bottom first, and says what's missing: `Out of blocks: built 10 of 15. Still needed: 5 cobblestone.` (with `partialBuilds` disabled it builds nothing and says how many you need). Creative builds are free. Double slabs and blocks with no item of their own can't be built in survival.
+- **Limits:** one build places at most 4096 blocks in survival (`maxBlocks`) and 32768 in creative (`maxBlocksCreative`), copies included; bigger ones are refused with the count (a shape is only laid out until it passes the limit, so a huge one is refused quickly). Big builds go up 400 blocks a tick (`blocksPerTick`), so a 30,000-block dome takes a few seconds. One build at a time per player.
+- **Undo** puts back exactly what each spot held before (a flower, water, air) and gives survival blocks back, but only where your block is still there: blocks someone mined or changed since stay as they are. Redo builds the same blocks again (and charges for them again in survival). Undo history lives in memory: a server restart forgets it. Leave while a build or undo is still going and the blocks it owes you are given back when you next join.
 - **Land claims:** a build that would reach into another player's claim ([Land Claims](#land-claims--claims_bp)) is refused: `That would reach into Sam's claim. Build somewhere else, or make it smaller.` Your own claims and claims shared with you are fine. Operators can allow it (`inOthersClaims`).
 - **Safe zones:** inside a zone made with [Safe Zones](#safe-zones--zones_bp) (`/realm:zones`), only operators can use the tools (`safeZonesOperatorsOnly`, default enabled). Towns and claims don't count here.
+- **Not in adventure or spectator mode:** the tools build and undo nothing there (`The building tools don't work in adventure or spectator mode.`), since those modes can't place or break blocks.
 - **Your setup is remembered** (shape, every shape's own settings, blocks and placing); build mode itself starts off each time you join.
 
 ### Commands
@@ -4479,13 +4480,13 @@ All five only work while Easy Building is enabled (`enabled`, default enabled) a
 |---|---|---|
 | `enabled` | `true` | Easy Building for the whole realm. Disabled: `/realm:build` only says so and placing blocks builds nothing extra |
 | `operatorsOnly` | `false` | Only operators can use the building tools |
-| `maxBlocks` | `4096` | Most blocks one build may place in survival and adventure, copies and repeats included (64 to 16384 in game) |
+| `maxBlocks` | `4096` | Most blocks one build may place in survival, copies and repeats included (64 to 16384 in game) |
 | `maxBlocksCreative` | `32768` | Most blocks one build may place in creative (256 to 65536 in game) |
 | `maxSize` | `64` | Largest width, height, depth or length the menus offer, in blocks; a radius goes up to half of it (8 to 128 in game) |
 | `blocksPerTick` | `400` | Blocks placed per tick; bigger builds are spread over several ticks (50 to 2000 in game). Lower it if big builds make the realm stutter |
-| `requireItems` | `true` | In survival and adventure, every block a build places is taken from your inventory, and undo gives it back |
+| `requireItems` | `true` | In survival, every block a build places is taken from your inventory, and undo gives it back |
 | `partialBuilds` | `true` | Short of blocks in survival: build as much as you have. Disabled: build nothing and say what's missing |
-| `survivalReplaceAll` | `false` | Survival and adventure players may pick **Everything but chests and other protected blocks** (it destroys blocks without drops). Creative players always can |
+| `survivalReplaceAll` | `false` | Survival players may pick **Everything but chests and other protected blocks** (it destroys blocks without drops). Creative players always can |
 | `inOthersClaims` | `false` | Builds may reach into other players' land claims. Disabled: a build that would is refused |
 | `safeZonesOperatorsOnly` | `true` | Inside a safe zone made with Safe Zones, only operators can build with the tools |
 | `undoSteps` | `5` | Builds each player can undo and redo (1 to 20 in game). Kept in memory: a restart forgets them |
@@ -4501,6 +4502,7 @@ Operators can change every option but the three block lists in game with `/realm
 
 | Key | Scope | Contents |
 |---|---|---|
+| `build:owed` | World | JSON: blocks owed to players who left while their build or undo was still going (player id -> item id -> count), given back when they next join |
 | `build:plan` | Player | JSON: the chosen shape, each shape's own settings, the size mode, main and second block, replace mode, where it goes, copies and repeats |
 | `build:pref` | Player | Choices made in `/realm:prefs` |
 | `build:cfg` | World | Settings changed in `/realm:config` |

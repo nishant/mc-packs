@@ -5,7 +5,7 @@ export const CONFIG = {
   /** Only operators can use the building tools. */
   operatorsOnly: false,
 
-  /** Most blocks one build may place in survival and adventure (copies and repeats included). */
+  /** Most blocks one build may place in survival (copies and repeats included). */
   maxBlocks: 4096,
 
   /** Most blocks one build may place in creative. */
@@ -17,13 +17,13 @@ export const CONFIG = {
   /** Blocks placed per tick: bigger builds are spread over several ticks so the realm doesn't stall. */
   blocksPerTick: 400,
 
-  /** In survival and adventure, every block a build places is taken from your inventory (and given back by undo). */
+  /** In survival, every block a build places is taken from your inventory (and given back by undo). */
   requireItems: true,
 
   /** Short of blocks in survival: build as much as you have (true) or nothing (false). */
   partialBuilds: true,
 
-  /** Survival and adventure players may pick "Replace everything" (it destroys blocks without drops). Creative players always can. */
+  /** Survival players may pick "Replace everything" (it destroys blocks without drops). Creative players always can. */
   survivalReplaceAll: false,
 
   /** Builds may reach into other players' land claims (Land Claims). Off: a build that would is refused. */

@@ -13,11 +13,12 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
-import { PARAMS, SHAPES, boxOf, cellsOf, shapeOf, valueOf } from "./shapes.js";
+import { PARAMS, SHAPES, TooBig, boxOf, cellsOf, shapeOf, valueOf } from "./shapes.js";
 import { allZones } from "./zones.js";
 
 const PACK = "build_bp";
 const PLAN_PROP = "build:plan"; // player: JSON Plan
+const OWED_PROP = "build:owed"; // world: items owed to players who left mid-build (see refund)
 const TITLE = "Easy Building";
 const HINT_TICKS = 30;
 
@@ -77,6 +78,12 @@ const REPEAT_DIR_NAMES = ["Away from you", "To the right", "Up"];
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 /** @param {Player} player */
 const isCreative = (player) => player.getGameMode() === GameMode.Creative;
+/** Adventure and spectator players can't place or break blocks, so the tools don't either. @param {Player} player */
+const cantBuild = (player) => {
+  const mode = player.getGameMode();
+  return mode === GameMode.Adventure || mode === GameMode.Spectator;
+};
+const CANT_BUILD = "§eThe building tools don't work in adventure or spectator mode.";
 
 /** @param {string[]} globs */
 const matcher = (globs) => {
@@ -222,6 +229,21 @@ function blockOfItem(item) {
   return perm;
 }
 
+/** States that count blocks stacked into one spot, and their value for a single one. */
+const STACKS = { height: 0, cluster_count: 0, candles: 0, turtle_egg_count: "one_egg", growth: 0 };
+const STACKERS = /(snow_layer|sea_pickle|candle|turtle_egg|pink_petals|wildflowers|leaf_litter)$/;
+/** Was this block placed onto one already there (a double slab, a second candle...)? @param {BlockPermutation} perm */
+function stacked(perm) {
+  const id = perm.type.id;
+  if (id.includes("double_slab")) return true;
+  if (!STACKERS.test(id)) return false;
+  for (const [state, one] of Object.entries(STACKS)) {
+    const v = perm.getState(/** @type {any} */ (state));
+    if (v !== undefined && v !== one) return true;
+  }
+  return false;
+}
+
 /** @param {BlockPermutation} perm */
 const isStair = (perm) => perm.getState("weirdo_direction") !== undefined && perm.type.id.endsWith("_stairs");
 
@@ -233,6 +255,8 @@ function costOf(perm) {
   const id = perm.type.id;
   if (id === "minecraft:water") return null;
   if (id === "minecraft:farmland") return "minecraft:dirt";
+  // A double slab's item is one slab, but it breaks into two: building them for one each would make slabs.
+  if (id.includes("double_slab")) return undefined;
   try {
     return perm.getItemStack(1)?.typeId;
   } catch {
@@ -347,6 +371,47 @@ function giveItems(player, items) {
 }
 
 /**
+ * Items a build or undo owes a player who left before getting them, given back when they next join.
+ * World property `build:owed`: JSON { [playerId]: { [itemId]: count } }.
+ * @param {Player} player @param {string} pid the player's id (read before they could leave) @param {Map<string, number>} items
+ */
+function refund(player, pid, items) {
+  if (!items.size) return;
+  if (player.isValid) return giveItems(player, items);
+  try {
+    const raw = world.getDynamicProperty(OWED_PROP);
+    /** @type {Record<string, Record<string, number>>} */
+    const owed = typeof raw === "string" ? JSON.parse(raw) : {};
+    const mine = (owed[pid] ??= {});
+    for (const [id, n] of items) mine[id] = (mine[id] ?? 0) + n;
+    world.setDynamicProperty(OWED_PROP, JSON.stringify(owed));
+  } catch (e) {
+    console.warn(`[build] owed: ${e}`);
+  }
+}
+
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (!initialSpawn) return;
+  try {
+    const raw = world.getDynamicProperty(OWED_PROP);
+    if (typeof raw !== "string") return;
+    const owed = JSON.parse(raw);
+    const mine = owed?.[player.id];
+    if (!mine) return;
+    delete owed[player.id];
+    world.setDynamicProperty(OWED_PROP, Object.keys(owed).length ? JSON.stringify(owed) : undefined);
+    /** @type {Map<string, number>} */
+    const items = new Map();
+    for (const [id, n] of Object.entries(mine)) if (Number(n) > 0) items.set(id, Math.floor(Number(n)));
+    giveItems(player, items);
+    const total = [...items.values()].reduce((a, b) => a + b, 0);
+    player.sendMessage(`§aEasy Building:§r ${plural(total, "block")} from a build you left during ${total === 1 ? "was" : "were"} given back.`);
+  } catch (e) {
+    console.warn(`[build] owed: ${e}`);
+  }
+});
+
+/**
  * The blocks a build uses.
  * @typedef {{ main: () => BlockPermutation, base: BlockPermutation, second?: BlockPermutation, mix?: string[] }} Materials
  */
@@ -427,15 +492,22 @@ function frameOf(F, turn) {
 
 /** @typedef {{ du: number, dv: number, dw: number, c: import("./shapes.js").Cell }} Rel */
 
+/** Room over the cap while a shape is laid out (some shapes add cells and take a few away again). @param {number} cap */
+const slack = (cap) => (Number.isFinite(cap) ? Math.ceil(cap * 1.25) + 64 : cap);
+/** The most blocks one build of this player's may place. @param {Player} player @returns {number} */
+const limitOf = (player) => (isCreative(player) ? get("maxBlocksCreative") : get("maxBlocks"));
+
 /** @type {Map<string, { key: string, rel: Rel[], min: number[], max: number[] }>} preview boxes per player */
 const layoutCache = new Map();
 
 /**
  * The shape's cells relative to the block it is built at (du right, dv up, dw away), copies included.
+ * Throws TooBig past `cap` blocks (the most one build may place), before copies and repeats multiply it.
  * @param {Plan} plan @param {boolean} stairs @param {{ W: number, H: number, D: number, a: number[], b: number[] }} [pts]
+ * @param {number} [cap]
  * @returns {Rel[]}
  */
-function relCells(plan, stairs, pts) {
+function relCells(plan, stairs, pts, cap = Infinity) {
   const v = (/** @type {string} */ k) => val(plan, k);
   let W, H, D, au, av, aw;
   /** @type {Map<string, import("./shapes.js").Cell>} */
@@ -445,17 +517,18 @@ function relCells(plan, stairs, pts) {
     // Two blocks at the same height: the shape keeps the height from its settings.
     if (H === 1 && shapeOf(plan.shape).params.includes("height")) H = v("height");
     [au, av, aw] = pts.a;
-    cells = cellsOf(plan.shape, v, W, H, D, { a: pts.a, b: pts.b }, stairs);
+    cells = cellsOf(plan.shape, v, W, H, D, { a: pts.a, b: pts.b }, stairs, slack(cap));
   } else {
     ({ W, H, D } = boxOf(plan.shape, v));
     au = plan.anchor === "corner" ? 0 : Math.floor((W - 1) / 2);
     aw = plan.anchor === "center" ? Math.floor((D - 1) / 2) : 0;
     av = -Math.max(-32, Math.min(32, plan.up));
-    cells = cellsOf(plan.shape, v, W, H, D, undefined, stairs);
+    cells = cellsOf(plan.shape, v, W, H, D, undefined, stairs, slack(cap));
   }
   /** @type {Rel[]} */
   let rel = [...cells.values()].map((c) => ({ du: c.u - au, dv: c.v - av, dw: c.w - aw, c }));
   const n = Math.max(1, Math.min(16, Math.round(plan.repeat)));
+  if (cells.size * n > cap) throw new TooBig(cells.size * n);
   if (n > 1) {
     const gap = Math.max(0, Math.min(16, Math.round(plan.gap)));
     const all = [];
@@ -519,11 +592,12 @@ function pointsBox(A, B, fr) {
  * The world blocks of a build at T.
  * @param {Plan} plan @param {Materials} mats @param {{ x: number, y: number, z: number }} T
  * @param {{ R: number[], F: number[] }} fr @param {{ x: number, y: number, z: number }} [B] two-point mode: the end
+ * @param {number} [cap] see relCells
  * @returns {WorldCell[]}
  */
-function worldCells(plan, mats, T, fr, B) {
+function worldCells(plan, mats, T, fr, B, cap) {
   const stairs = isStair(mats.base);
-  const rel = relCells(plan, stairs, B ? pointsBox(T, B, fr) : undefined);
+  const rel = relCells(plan, stairs, B ? pointsBox(T, B, fr) : undefined, cap);
   const { R, F } = fr;
   /** @param {number[]} d */
   const wd = (d) => [d[0] * R[0] + d[1] * F[0], d[0] * R[1] + d[1] * F[1]];
@@ -662,8 +736,13 @@ function replaceMode(player, plan) {
  */
 async function build(player, dim, cells, label, opts) {
   const s = stateOf(player);
+  if (cantBuild(player)) {
+    player.sendMessage(CANT_BUILD);
+    return false;
+  }
+  const pid = player.id;
   const creative = isCreative(player);
-  const limit = creative ? get("maxBlocksCreative") : get("maxBlocks");
+  const limit = limitOf(player);
   if (!cells.length) {
     player.sendMessage("§eNothing to build: the shape has no blocks.");
     return false;
@@ -796,7 +875,7 @@ async function build(player, dim, cells, label, opts) {
     }
     // Anything paid for but not placed goes back.
     for (const [id, n] of [...paid]) if (n <= 0) paid.delete(id);
-    if (paid.size && player.isValid) giveItems(player, paid);
+    refund(player, pid, paid);
 
     if (placed.length) {
       s.undo.push({ dim: dim.id, label, cells: placed });
@@ -829,6 +908,7 @@ async function build(player, dim, cells, label, opts) {
 async function undo(player, redo) {
   const s = stateOf(player);
   if (s.busy) return player.sendMessage("§eWait for the build to finish.");
+  if (cantBuild(player)) return player.sendMessage(CANT_BUILD);
   const list = redo ? s.redo : s.undo;
   const rec = list.pop();
   if (!rec) return player.sendMessage(redo ? "§eNothing to redo." : "§eNothing to undo. Builds are forgotten when the server restarts.");
@@ -839,11 +919,12 @@ async function undo(player, redo) {
     if (!ok) s.redo.push(rec);
     return;
   }
+  const pid = player.id;
   s.busy = true;
   try {
     const perTick = Math.max(10, get("blocksPerTick"));
     /** @type {Map<string, number>} */
-    const refund = new Map();
+    const owed = new Map();
     let back = 0, gone = 0;
     for (let i = rec.cells.length - 1, n = 0; i >= 0; i--, n++) {
       if (n && n % perTick === 0) await tick();
@@ -865,13 +946,13 @@ async function undo(player, redo) {
         continue;
       }
       back++;
-      if (c.cost) refund.set(c.cost, (refund.get(c.cost) ?? 0) + 1);
+      if (c.cost) owed.set(c.cost, (owed.get(c.cost) ?? 0) + 1);
     }
-    if (player.isValid && refund.size) giveItems(player, refund);
+    refund(player, pid, owed);
     if (back) s.redo.push(rec);
     while (s.redo.length > Math.max(1, get("undoSteps"))) s.redo.shift();
     if (!player.isValid) return;
-    const given = [...refund.values()].reduce((a, b) => a + b, 0);
+    const given = [...owed.values()].reduce((a, b) => a + b, 0);
     note(player, `§aUndone: ${rec.label}§7 (${plural(back, "block")}${given ? `, ${given} given back` : ""})`);
     if (gone) player.sendMessage(`§7${plural(gone, "block")} had changed since and stayed as they are.`);
   } finally {
@@ -899,6 +980,10 @@ function lookTarget(player) {
   const b = hit.block.location;
   return { x: b.x + n[0], y: b.y + n[1], z: b.z + n[2] };
 }
+
+/** @param {Player} player @param {TooBig} e */
+const tooBig = (player, e) =>
+  `§eThat's more than ${e.n - 1} blocks; the most one build can place is ${limitOf(player)}${isCreative(player) ? "" : " in survival"}. Make it smaller.`;
 
 /**
  * Builds the player's shape at T (or between their start block and T).
@@ -931,7 +1016,14 @@ async function buildAt(player, T, placed) {
       return false;
     }
   }
-  const cells = worldCells(plan, mats, start, fr, end);
+  let cells;
+  try {
+    cells = worldCells(plan, mats, start, fr, end, limitOf(player));
+  } catch (e) {
+    if (!(e instanceof TooBig)) throw e;
+    player.sendMessage(tooBig(player, e));
+    return false;
+  }
   const label = twoPoint ? shapeOf(plan.shape).name : planLabel(plan);
   return build(player, player.dimension, cells, label, { mode: replaceMode(player, plan) });
 }
@@ -949,8 +1041,10 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
     return;
   }
   const perm = block.permutation;
-  // Two-block things (doors, beds, tall flowers) and forbidden blocks place normally.
-  if (isForbidden(perm.type.id) || perm.getState("upper_block_bit") !== undefined) return;
+  // Two-block things (doors, beds, tall flowers), forbidden blocks and blocks added onto one already there
+  // (a slab made double, a second snow layer, candle or sea pickle) place normally: taking those back
+  // would also take what was there before.
+  if (isForbidden(perm.type.id) || perm.getState("upper_block_bit") !== undefined || stacked(perm)) return;
   const T = { x: block.location.x, y: block.location.y, z: block.location.z };
   const dim = block.dimension;
   const survival = !isCreative(player);
@@ -1001,10 +1095,18 @@ function previewBox(player, plan, T) {
     return { min: { x: Math.min(a.x, T.x), y: Math.min(a.y, T.y), z: Math.min(a.z, T.z) }, max: { x: Math.max(a.x, T.x), y: Math.max(a.y, T.y) + flat, z: Math.max(a.z, T.z) } };
   }
   if (twoPoint) return { min: T, max: T };
-  const key = JSON.stringify(plan) + fr.R.join() + fr.F.join() + get("maxSize");
+  const cap = limitOf(player);
+  const key = JSON.stringify(plan) + fr.R.join() + fr.F.join() + get("maxSize") + cap;
   let cached = layoutCache.get(player.id);
   if (!cached || cached.key !== key) {
-    const rel = relCells(plan, false);
+    /** @type {Rel[]} */
+    let rel;
+    try {
+      rel = relCells(plan, false, undefined, cap);
+    } catch (e) {
+      if (!(e instanceof TooBig)) throw e;
+      rel = []; // too big to build: no outline (placing says why)
+    }
     const pts = rel.map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }));
     const b = pts.length ? boundsOf(pts) : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } };
     cached = { key, rel, min: [b.min.x, b.min.y, b.min.z], max: [b.max.x, b.max.y, b.max.z] };
@@ -1280,7 +1382,13 @@ async function buildHereMenu(player) {
   if (!T) return player.sendMessage(`§eLook at a block within ${get("reach")} blocks first.`);
   const mats = materialsOf(player, plan);
   if (typeof mats === "string") return player.sendMessage(`§e${mats}`);
-  const cells = worldCells(plan, mats, T, frameOf(facingOf(player), plan.turn));
+  let cells;
+  try {
+    cells = worldCells(plan, mats, T, frameOf(facingOf(player), plan.turn), undefined, limitOf(player));
+  } catch (e) {
+    if (!(e instanceof TooBig)) throw e;
+    return player.sendMessage(tooBig(player, e));
+  }
   const box = boundsOf(cells);
   const secs = Math.max(0, get("previewSeconds"));
   for (let t = 0; t < secs * 2; t++) {
