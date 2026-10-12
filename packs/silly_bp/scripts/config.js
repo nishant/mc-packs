@@ -17,7 +17,7 @@ export const CONFIG = {
   hyperJumpOdds: { big: 60, huge: 30, space: 10 },
 
   /** Hyper Jump: a puff of slow falling just above the ground stops the fall, so landings don't hurt. When false, a big jump can mean real fall damage (Feather Falling helps). */
-  hyperJumpSoftLanding: true,
+  hyperJumpSoftLanding: false,
 
   /** Hyper Jump: seconds between bounces. */
   hyperJumpCooldownSeconds: 4,

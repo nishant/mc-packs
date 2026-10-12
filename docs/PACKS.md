@@ -3593,7 +3593,7 @@ Fourteen silly "enchantments" for your gear. They only add particles, sounds and
 | Enchant | Goes on | What it does |
 |---|---|---|
 | Grunt Birthday (`grunt_birthday`) | Held item | Mobs you defeat pop like a party: a big burst of confetti, then one of five parties at random (fireworks, a little fanfare, a party horn, hearts, or a zap) |
-| Hyper Jump (`hyper_jump`) | Boots | Sneak and jump to launch. Each launch is a surprise (`hyperJumpOdds`): 60% a big jump (about 30 blocks up), 30% a huge one (about 50), and 10% the **Realm Space Program**: a `3`, `2`, `1`, `LIFTOFF!` countdown on screen, a harmless explosion, then a rocket burn with flames and smoke to about 150 blocks up, while players within 96 blocks read `[Space Program] <name> has left the atmosphere.` (or another line). You fall at full speed; just above the ground a puff of slow falling catches you with a little boing, so you don't get hurt (`hyperJumpSoftLanding`; without it a big jump is a deadly fall). Every 4 seconds (`hyperJumpCooldownSeconds`) |
+| Hyper Jump (`hyper_jump`) | Boots | Sneak and jump to launch. Each launch is a surprise (`hyperJumpOdds`): 60% a big jump (about 30 blocks up), 30% a huge one (about 50), and 10% the **Realm Space Program**: a `3`, `2`, `1`, `LIFTOFF!` countdown on screen, a harmless explosion, then a rocket burn with flames and smoke to about 150 blocks up, while players within 96 blocks read `[Space Program] <name> has left the atmosphere.` (or another line). You fall at full speed and land for real: wear Feather Falling or aim for water, because a big jump onto land is a deadly fall. Operators can switch on a soft landing (`hyperJumpSoftLanding`, off by default): a puff of slow falling just above the ground. Every 4 seconds (`hyperJumpCooldownSeconds`) |
 | Squeak (`squeak`) | Boots | Your footsteps squeak (now and then a different squeak) |
 | Bubbles (`bubbles`) | Any armor | You leave a trail of bubbles |
 | Rainbow Trail (`rainbow_trail`) | Boots | Rainbow-colored puffs follow your steps |
@@ -3637,7 +3637,7 @@ Use `Silly Book: Hyper Jump` (any enchant's name) instead of `Random` for a part
 | `hyperJumpOdds.big` | `60` | Weight of a big Hyper Jump (about 30 blocks up) |
 | `hyperJumpOdds.huge` | `30` | Weight of a huge Hyper Jump (about 50 blocks up) |
 | `hyperJumpOdds.space` | `10` | Weight of a Realm Space Program launch (about 150 blocks up). The three are weights: they needn't add up to 100 |
-| `hyperJumpSoftLanding` | `true` | A puff of slow falling just above the ground stops a Hyper Jump fall, so landings don't hurt. When `false`, you fall for real (Feather Falling helps; a big jump without it is deadly) |
+| `hyperJumpSoftLanding` | `false` | When `true`, a puff of slow falling just above the ground stops a Hyper Jump fall, so landings don't hurt. When `false` (the default), you fall for real (Feather Falling or water helps; a big jump onto land without them is deadly) |
 | `hyperJumpCooldownSeconds` | `4` | Seconds between Hyper Jumps |
 | `hatTrickCooldownSeconds` | `10` | Seconds between Hat Trick rabbits for one player |
 | `hatTrickRabbitSeconds` | `10` | Seconds before a Hat Trick rabbit vanishes |
