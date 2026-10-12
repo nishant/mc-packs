@@ -86,9 +86,18 @@ function relicOf(stack) {
 /** @param {string} id */
 const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 
-/** Shows a line above the hotbar, asking the Coordinates HUD to step aside first. @param {Player} player @param {string} text @param {number} [ticks] */
-function actionbar(player, text, ticks = 40) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks }));
+/** Tick until which another pack's note (or one of ours) holds a player's bar: the steady readouts wait. @type {Map<string, number>} */
+const barHeld = new Map();
+
+/**
+ * Shows a line above the hotbar, asking the Coordinates HUD to step aside first. A `steady` line (the Storm Meter and
+ * Lantern Shard readouts, redrawn every second) waits while another pack's note or one of ours shows.
+ * @param {Player} player @param {string} text @param {number} [ticks] @param {boolean} [steady]
+ */
+function actionbar(player, text, ticks = 40, steady = false) {
+  if (steady && (barHeld.get(player.id) ?? 0) > system.currentTick) return;
+  if (!steady) barHeld.set(player.id, system.currentTick + ticks);
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks, from: "relics_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 
@@ -376,6 +385,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   passiveNote.delete(playerId);
   lastUse.delete(playerId);
   smithWaits.delete(playerId);
+  barHeld.delete(playerId);
   for (const map of [cooldowns, lastAttack]) for (const key of [...map.keys()]) if (key.startsWith(`${playerId}:`)) map.delete(key);
 });
 
@@ -562,10 +572,10 @@ function passives(player) {
     if (has("vesna_charm") && player.getEffect("poison")) player.removeEffect("poison");
     if (has("choir_mask") && player.getEffect("darkness")) player.removeEffect("darkness");
     if (has("keeper_lamp") && dark()) keeperLamp(player);
-    if (has("storm_meter") && getFor(player, "meterReadout") === true) actionbar(player, `§bStorm Meter: ${stormReading(player)}`, 30);
+    if (has("storm_meter") && getFor(player, "meterReadout") === true) actionbar(player, `§bStorm Meter: ${stormReading(player)}`, 30, true);
     else if (c.hand === "lantern_shard" && system.currentTick % 60 < 20) {
       const pull = sealReading(player);
-      if (pull) actionbar(player, `§bLantern Shard: ${pull}`, 50);
+      if (pull) actionbar(player, `§bLantern Shard: ${pull}`, 50, true);
     }
   }
   release(player, wanted);
@@ -1212,7 +1222,7 @@ function placeSmith(player) {
 // Script events: gifts from other packs, the storm cell, townsfolk, seals
 // ---------------------------------------------------------------------------
 
-const HANDLED = new Set(["realm:relic_give", "realm:shard_give", "realm:storm_cell", "realm:npc_talk", "realm:npc_choose", "realm:npc_summoned", "realm:seals"]);
+const HANDLED = new Set(["realm:actionbar", "realm:relic_give", "realm:shard_give", "realm:storm_cell", "realm:npc_talk", "realm:npc_choose", "realm:npc_summoned", "realm:seals"]);
 
 /** A seal list from a message, or undefined if it isn't one. @param {unknown} list @returns {Seal[] | undefined} */
 function parseSeals(list) {
@@ -1239,6 +1249,13 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (!msg || typeof msg !== "object") return;
     try {
+      if (id === "realm:actionbar") {
+        // Another pack's note: the Storm Meter and Lantern Shard readouts wait while it shows (a steady line, like the HUD).
+        if (typeof msg.player !== "string" || msg.from === "relics_bp" || msg.background === true) return;
+        const until = system.currentTick + Math.min(Math.max(Number(msg.ticks) || 40, 0), 200);
+        if (until > (barHeld.get(msg.player) ?? 0)) barHeld.set(msg.player, until);
+        return;
+      }
       if (id === "realm:storm_cell") {
         if (typeof msg.dim === "string" && Number.isFinite(msg.x) && Number.isFinite(msg.z)) {
           const strength = Math.max(1, Math.min(10, Math.round(Number(msg.strength) || 1)));
