@@ -204,7 +204,18 @@ function edgePoints(s, px, pz) {
     return out;
   }
   const n = Math.max(16, Math.ceil((2 * Math.PI * s.r) / 1.5));
-  for (let i = 0; i < n; i++) {
+  // Only the arc that can come within DRAW_RANGE of the player: a big zone's edge has thousands of points.
+  const d = Math.hypot(px - s.x, pz - s.z), reach = DRAW_RANGE * Math.SQRT2;
+  const cos = d > 1e-6 ? (d * d + s.r * s.r - reach * reach) / (2 * d * s.r) : s.r > reach ? 2 : -1;
+  if (cos > 1) return out; // the edge is nowhere near
+  let from = 0, to = n - 1;
+  if (cos > -1) {
+    const mid = Math.atan2(pz - s.z, px - s.x), half = Math.acos(cos);
+    from = Math.floor(((mid - half) / (Math.PI * 2)) * n);
+    to = Math.min(from + n - 1, Math.ceil(((mid + half) / (Math.PI * 2)) * n));
+  }
+  for (let j = from; j <= to; j++) {
+    const i = ((j % n) + n) % n;
     const a = (i / n) * Math.PI * 2;
     const x = s.x + Math.cos(a) * s.r, z = s.z + Math.sin(a) * s.r;
     if (near(x, z)) out.push([x, z]);

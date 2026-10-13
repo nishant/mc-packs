@@ -178,7 +178,10 @@ function update(player, st) {
     return;
   }
 
-  if (!active) return;
+  if (!active) {
+    leave(player, st); // the rain is over: nothing of ours should still be playing
+    return;
+  }
   if (here && raining && here.location.y - feet.y > MAX_HEADROOM && !DRY_GROUND.test(here.typeId)) st.muffle = get("roof.muffleRain"); // deep underground: no rain to hear
   if (!here || DRY_GROUND.test(here.typeId) || here.location.y - feet.y > MAX_HEADROOM) {
     leave(player, st); // deserts, badlands and snow get no rain; caves get none of the haze
@@ -192,7 +195,12 @@ function update(player, st) {
   const nearGround = feet.y - here.location.y < 6;
   if (get("mist.enabled") && weather === WeatherType.Thunder && outdoors && nearGround) mist(player, st, feet, budget);
   if (get("drips.enabled")) drips(player, st, feet, raining, budget);
-  if (!raining) return;
+  if (!raining) {
+    // The rain ended: the game's rain stops at once, so the wind, the storm and the muffled rain stop too, rather
+    // than playing out their 10 and 20 s clips under a clear sky.
+    if (st.place !== "none") stopSounds(player, st);
+    return;
+  }
   const place = outdoors || underTree ? "out" : "in";
   st.muffle = place === "in" && get("roof.muffleRain");
   sounds(player, st, place, !outdoors && !underTree && above <= CONFIG.roof.maxHeadroom);
