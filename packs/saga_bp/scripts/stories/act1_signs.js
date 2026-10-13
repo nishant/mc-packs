@@ -82,6 +82,7 @@ export const STORIES = [
           { text: `${S}Your bell rings the tide in every evening now, and I count the stars by it, one per note. Three nights ago I ran out of notes before I ran out of stars.`, when: RING },
           `${S}Low in the east, under Oriel and left of the Net, there is a smudge. Faint as a thumbprint on glass. It was not there at midsummer. It is a little bigger every night.`,
           `${S}My spyglass cracked in the cold, and my eyes are old and full of wishes. I need young eyes and a clear lens. Go up to the lighthouse after dark and watch the east, out under the open sky. Then bring me a spyglass, and we'll see if we saw the same thing.`,
+          { text: `${S}And stay out a little longer than you think you need to. On a clear night the sky sometimes throws you something, if you're patient.`, when: { "pack:night_bp": "on" } },
         ],
         objectives: [
           {
@@ -92,6 +93,7 @@ export const STORIES = [
             seconds: 60,
             timeOfDay: [13000, 23000],
             outdoors: true,
+            sky: { kind: "shooting_star", on: "done" },
           },
           { type: "deliver", label: "Bring Sol a spyglass", npc: "sol", item: "minecraft:spyglass", count: 1 },
         ],
@@ -143,12 +145,25 @@ export const STORIES = [
               { title: "Falling", text: "It breaks. Burning pieces scatter across the sky, and one of them falls and falls and falls, toward the ground where you are standing now.", sound: "chime.amethyst_block", seconds: 5 },
             ],
           },
+          {
+            type: "event",
+            optional: true,
+            label: "Watch a meteor fall and reach it while it's fresh",
+            events: ["meteor"],
+            near: 48,
+            minutes: 15,
+            when: { "pack:meteor_bp": "on" },
+            set: { fresh: "meteor" },
+            bonus: { levels: 2, items: [{ item: "minecraft:amethyst_shard", amount: 8 }] },
+            hint: "Meteors fall now and then on their own, with a warning in chat a minute before. When one comes down, the tracker points to where it lands: get within 48 blocks of it in the next 15 minutes.",
+          },
         ],
         outro: [
           `§eSol§r holds one of the shards up to his lamp. Inside it, very faintly, a green spark drifts like a fish in a jar.\n\n${S}Oh. Oh, look at you. You're still warm.`,
           `${S}A bell that breaks a star. Slow, slow, quick.\n\nHe taps the rhythm on the table, then snatches his hand back as if the table were hot.\n\n${S}I know that rhythm. Every child in this town knows it. We skip rope to it. Nobody remembers where it came from.`,
           { text: `${S}The bell. Your bell. It was in the tower that night, wasn't it? Thank the stars you bound its mouth. Whatever it learned that night, it can't say it again.\n\n${S}Keep the shards. I only needed to see one. Go rest. You've been inside a memory that isn't yours, and they leave a chill.`, when: SILENCE },
           { text: `${S}The bell. Your bell. It was in the tower that night, wasn't it? You gave it a new voice. I hope it has forgotten the old one.\n\n${S}Keep the shards. I only needed to see one. Go rest. You've been inside a memory that isn't yours, and they leave a chill.`, when: RING },
+          { text: `${S}And you ran to a new one while it was still hot! Fenn would have been jealous. Rocks with good manners, he called them. That one had none at all.`, when: { fresh: "meteor" } },
         ],
         reward: {
           levels: 5,
