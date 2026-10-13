@@ -72,7 +72,8 @@ export function direction(i) {
   if (name.length === 1) return any([`toward ${n(name)}`, `straight toward ${n(name)}`, `with ${n(name)} before you`]);
   if (name.length === 2) {
     const [a, b] = any([name.split(""), name.split("").reverse()]);
-    return any([`between ${n(a)} and ${n(b)}`, `halfway between ${n(a)} and ${n(b)}`, `toward where ${n(a)} meets ${n(b)}`]);
+    // "toward where where the sun comes up meets ...": the names that start with "where" stand on their own there.
+    return any([`between ${n(a)} and ${n(b)}`, `halfway between ${n(a)} and ${n(b)}`, `toward where ${n(a)} meets ${n(b)}`.replace("where where", "where")]);
   }
   const main = name[0];
   const lean = name[2] === main ? name[1] : name[2];
