@@ -120,10 +120,10 @@ const hasPerk = (p, g) => get("perks.enabled") === true && rankOf(p, g) >= get("
 function addRep(p, g, amount, reason) {
   amount = Math.trunc(amount);
   if (!amount || !p.isValid) return;
-  const obj = repObjective(g);
-  const before = obj.getScore(p) ?? 0;
+  // repOf, not getScore: a player with no score anywhere yet has no scoreboard identity, and getScore throws.
+  const before = repOf(p, g);
   const after = Math.max(0, before + amount);
-  obj.setScore(p, after);
+  repObjective(g).setScore(p, after);
   if (reason && getFor(p, "repNotes") === true) {
     const sign = after - before >= 0 ? "+" : "";
     p.sendMessage(`§7${sign}${after - before} ${CONFIG.guilds[g].member}s rep (${reason})`);
