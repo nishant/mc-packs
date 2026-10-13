@@ -712,8 +712,9 @@ async function copyOrCut(player, cut) {
     }
     if (old?.cut) player.sendMessage("§7Your earlier cut was never pasted. Undo can still put it back where it was.");
     const what = `${ctx.plural(cells.length, "block")} (${size.x} x ${size.y} x ${size.z})`;
-    ctx.note(player, cut ? `§aCut ${what}§7 - paste it with /realm:build_paste` : `§aCopied ${what}§7 - paste it with /realm:build_paste`);
+    const text = ctx.noted(player, cut ? `§aCut ${what}§7 - paste it with /realm:build_paste` : `§aCopied ${what}§7 - paste it with /realm:build_paste`);
     if (cutId) player.sendMessage("§7In survival, a cut can be pasted once for free. After that, pasting it costs blocks like a copy.");
+    return text; // for the menu, which hides the line above the hotbar
   } finally {
     s.busy = false;
   }
@@ -774,7 +775,7 @@ async function pasteAt(player, T, ask) {
     const ghost = free ? surfaceOf(content).map(at) : guideMods(player, surfaceOf(content).map(at), T);
     for (let t = 0; t < secs * 2; t++) {
       if (!player.isValid) return;
-      drawGuide(player, ghost, "paste");
+      drawGuide(player, ghost, "paste", { preview: true, every: 10 });
       await new Promise((r) => system.runTimeout(() => r(undefined), 10));
     }
     const pay = !ctx.isCreative(player) && get("requireItems") === true && !free;
@@ -796,7 +797,8 @@ async function pasteAt(player, T, ask) {
       if (need.size > 8) lines.push(`...and ${need.size - 8} more kinds of blocks.`);
     } else lines.push("Free in creative.");
     const res = await ctx.show(player, new MessageFormData().title("Paste").body(lines.join("\n")).button1("Paste it").button2("Cancel"));
-    if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+    if (!res || !player.isValid) return;
+    if (res.canceled || res.selection !== 0) return false; // the menu it came from comes back
     if (ctx.stateOf(player).busy) return player.sendMessage("§eWait for the last build to finish.");
   }
   const ok = await ctx.build(player, player.dimension, cells, label, {
@@ -850,8 +852,8 @@ function setPasteMode(player, on) {
   if (st.paste) {
     st.selecting = false;
     ctx.setBuildMode(player, false);
-    ctx.note(player, "§aPaste mode on:§7 place a block to paste your copy there (sneak: just the block)");
-  } else ctx.note(player, "§7Paste mode off");
+  }
+  return ctx.noted(player, st.paste ? "§aPaste mode on:§7 place a block to paste your copy there (sneak: just the block)" : "§7Paste mode off");
 }
 
 // The selection outline and the paste preview, twice a second.
@@ -880,8 +882,8 @@ system.runInterval(() => {
         }
         const { at } = placement(slot, facingIndex(player), T);
         const free = !!slot.cut && !meta.used.includes(slot.cut);
-        if (free || !ctx.modsActive(player)) drawGuide(player, turnedSurface(c, slot, facingIndex(player)), "paste", { offset: T });
-        else drawGuide(player, guideMods(player, surfaceOf(c).map(at), T), "paste");
+        if (free || !ctx.modsActive(player)) drawGuide(player, turnedSurface(c, slot, facingIndex(player)), "paste", { offset: T, every: 10 });
+        else drawGuide(player, guideMods(player, surfaceOf(c).map(at), T), "paste", { every: 10 });
       }
     } catch (e) {
       console.warn(`[build] clipboard: ${e}`);
@@ -942,8 +944,25 @@ export async function pasteCommand(player) {
   if (T) await pasteAt(player, T, false);
 }
 
-/** /realm:build -> Copy, cut and paste @param {Player} player */
+const BACK = Symbol("back");
+
+/**
+ * /realm:build -> Copy, cut and paste. It stays open until its X (ctx.CLOSE: everything closes) or Back (undefined),
+ * or an action that needs the world (selecting with blocks, Paste here now).
+ * @param {Player} player
+ */
 export async function clipboardMenu(player) {
+  /** @type {unknown} */
+  let out;
+  while (player.isValid) {
+    out = await clipboardPage(player, typeof out === "string" ? out : "");
+    if (out === ctx.CLOSE || out === BACK) return out === BACK ? undefined : out;
+  }
+  return ctx.CLOSE;
+}
+
+/** The Copy, cut and paste page once; its action's answer. @param {Player} player @param {string} notice */
+async function clipboardPage(player, notice) {
   const st = stateOf(player);
   const meta = metaOf(player);
   const box = selBox(st);
@@ -951,6 +970,7 @@ export async function clipboardMenu(player) {
   const act = meta.slots[String(meta.act)] ? meta.act : 0;
   const active = meta.slots[String(act)];
   const body = [
+    notice ? `${notice}§r\n` : "",
     box
       ? `Selected: §b${box.size.x} x ${box.size.y} x ${box.size.z}§r from ${box.min.x} ${box.min.y} ${box.min.z}`
       : st.selecting
@@ -966,47 +986,60 @@ export async function clipboardMenu(player) {
     .join("\n");
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [
-    { text: st.selecting ? "Stop selecting" : "Select a region", run: () => (st.selecting ? ((st.selecting = false), ctx.note(player, "§7Stopped selecting")) : startSelecting(player)) },
+    { text: st.selecting ? "Stop selecting" : "Select a region", run: () => (st.selecting ? ((st.selecting = false), ctx.noted(player, "§7Stopped selecting")) : (startSelecting(player), ctx.CLOSE)) },
     { text: "Corner at the block you look at", run: () => menuCorner(player, lookBlock(player)) },
     { text: "Corner where you stand", run: () => menuCorner(player, { x: Math.floor(player.location.x), y: Math.floor(player.location.y), z: Math.floor(player.location.z) }) },
   ];
   if (box) {
-    actions.push({ text: "Copy", run: () => copyOrCut(player, false) });
-    actions.push({ text: "Cut (takes the blocks, no drops)", run: () => copyOrCut(player, true) });
-    actions.push({ text: "Clear the selection", run: () => ((st.sel = undefined), (st.selecting = false), ctx.note(player, "§7Selection cleared")) });
+    // Without a line back, it didn't (chat says why).
+    actions.push({ text: "Copy", run: async () => (await copyOrCut(player, false)) ?? "§eNothing was copied: chat says why." });
+    actions.push({ text: "Cut (takes the blocks, no drops)", run: async () => (await copyOrCut(player, true)) ?? "§eNothing was cut: chat says why." });
+    actions.push({ text: "Clear the selection", run: () => ((st.sel = undefined), (st.selecting = false), ctx.noted(player, "§7Selection cleared")) });
   }
   if (active) {
-    actions.push({ text: "Paste here now", run: () => {
-      const T = pasteTarget(player);
-      return T && pasteAt(player, T, true);
+    actions.push({ text: "Paste here now", run: async () => {
+      const T = ctx.lookTarget(player);
+      if (!T) return `§eLook at a block within ${ctx.reachOf(player)} blocks first (close this menu, look, and pick Paste here now again).`;
+      return (await pasteAt(player, T, true)) === false ? undefined : ctx.CLOSE;
     } });
     actions.push({ text: st.paste ? "Paste mode: §aOn" : "Paste mode: Off", run: () => setPasteMode(player) });
   }
   actions.push({ text: "Saved copies", run: () => slotsMenu(player) });
-  actions.push({ text: "Back", run: () => ctx.mainMenu(player) });
+  actions.push({ text: "Back", run: () => BACK });
   const form = new ActionFormData().title("Copy, cut and paste").body(body);
   for (const a of actions) form.button(a.text);
   const res = await ctx.show(player, form);
-  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  await actions[res.selection]?.run();
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return ctx.CLOSE;
+  return actions[res.selection]?.run();
 }
 
-/** @param {Player} player @param {Vec | undefined} p */
+/** A corner from the menu; why not, if it can't. @param {Player} player @param {Vec | undefined} p */
 function menuCorner(player, p) {
-  if (!p) return player.sendMessage(`§eLook at a block within ${ctx.reachOf(player)} blocks first.`);
+  if (!p) return `§eLook at a block within ${ctx.reachOf(player)} blocks first (close this menu, look, and pick it again).`;
   const st = stateOf(player);
   if (!st.selecting && !(st.sel?.a && !st.sel.c)) st.sel = undefined;
   st.selecting = true;
   addCorner(player, player.dimension.id, p);
 }
 
-/** @param {Player} player */
+/** The saved copies until Back (undefined) or X (ctx.CLOSE). @param {Player} player */
 async function slotsMenu(player) {
+  /** @type {unknown} */
+  let out;
+  while (player.isValid) {
+    out = await slotsPage(player, typeof out === "string" ? out : "");
+    if (out === ctx.CLOSE || out === BACK) return out === BACK ? undefined : out;
+  }
+  return ctx.CLOSE;
+}
+
+/** @param {Player} player @param {string} notice */
+async function slotsPage(player, notice) {
   const meta = metaOf(player);
   const count = Math.max(0, Math.min(19, get("clipboardSlots")));
   const act = meta.slots[String(meta.act)] ? meta.act : 0;
   const form = new ActionFormData().title("Saved copies").body(
-    `Saved copies stay after a restart. Pick one to paste from it, or save your Last copy into it.\nPasting from: ${meta.slots[String(act)] ? meta.slots[String(act)].n : "nothing yet"}`
+    `${notice ? `${notice}§r\n\n` : ""}Saved copies stay after a restart. Pick one to paste from it, or save your Last copy into it.\nPasting from: ${meta.slots[String(act)] ? meta.slots[String(act)].n : "nothing yet"}`
   );
   /** @type {number[]} */
   const order = [];
@@ -1015,10 +1048,11 @@ async function slotsMenu(player) {
     form.button(`${i === act && s ? "§a" : ""}${s ? slotLabel(s) : i === 0 ? "Last copy (empty)" : `${i}. (empty)`}`);
     order.push(i);
   }
+  form.button("Back");
   const res = await ctx.show(player, form);
-  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return ctx.CLOSE;
   const i = order[res.selection];
-  if (i !== undefined) await slotMenu(player, i);
+  return i === undefined ? BACK : slotMenu(player, i);
 }
 
 /** @param {Player} player @param {number} i */
@@ -1032,17 +1066,19 @@ async function slotMenu(player, i) {
     const m = metaOf(player);
     m.act = i;
     saveMeta(player, m);
-    ctx.note(player, `§aPasting from ${s.n}§7 - /realm:build_paste or paste mode`);
+    return ctx.noted(player, `§aPasting from ${s.n}§7 - /realm:build_paste or paste mode`);
   } });
   if (i > 0 && last) actions.push({ text: s ? "Replace it with Last copy" : "Save Last copy here", run: () => saveToSlot(player, i) });
   if (i > 0 && s) actions.push({ text: "Rename", run: () => renameSlot(player, i) });
   if (s) actions.push({ text: "Delete", run: () => deleteSlot(player, i) });
-  actions.push({ text: "Back", run: () => slotsMenu(player) });
+  actions.push({ text: "Back", run: () => undefined });
   const form = new ActionFormData().title(s ? s.n : i === 0 ? "Last copy" : `Copy ${i}`).body(s ? slotLabel(s) : "Empty. Copy something first, then save it here.");
   for (const a of actions) form.button(a.text);
   const res = await ctx.show(player, form);
-  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  await actions[res.selection]?.run();
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return ctx.CLOSE;
+  // Whatever it did, the list of saved copies comes back (with what it did at the top).
+  const out = await actions[res.selection]?.run();
+  return typeof out === "string" ? out : undefined;
 }
 
 /** @param {Player} player @param {string} def */

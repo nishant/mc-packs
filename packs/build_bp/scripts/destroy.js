@@ -463,7 +463,7 @@ system.runInterval(() => {
         cells = c.rel;
         offset = T;
       }
-      drawGuide(player, cells, "destroy", { offset });
+      drawGuide(player, cells, "destroy", { offset, every: 10 });
     } catch (e) {
       console.warn(`[build] destroy preview: ${e}`);
     }
@@ -485,25 +485,26 @@ export function toggleDestroy(player) {
   const st = stateOf(player);
   st.on = !st.on;
   st.start = undefined;
-  ctx.note(player, st.on ? "§cDestroy mode on:§7 breaking a block with a pickaxe, axe or shovel breaks your shape (sneak: just one)" : "§7Destroy mode off: blocks break one at a time");
+  return ctx.noted(player, st.on ? "§cDestroy mode on:§7 breaking a block with a pickaxe, axe or shovel breaks your shape (sneak: just one)" : "§7Destroy mode off: blocks break one at a time");
 }
 
-/** Destroy at the block you look at: outline, then confirm. @param {Player} player */
+/** Destroy at the block you look at: outline, then confirm. For the menu: why not, undefined if canceled, ctx.CLOSE otherwise. @param {Player} player */
 async function destroyHere(player) {
   const T = lookBlock(player);
-  if (!T) return player.sendMessage(`§eLook at a block within ${ctx.reachOf(player)} blocks first.`);
+  if (!T) return `§eLook at a block within ${ctx.reachOf(player)} blocks first (close this menu, look, and pick Destroy here now again).`;
   const st = stateOf(player);
   if (ctx.twoBlocks(player) && (!st.start || st.start.dim !== player.dimension.id)) {
     st.start = { dim: player.dimension.id, ...T };
-    return ctx.note(player, "§cStart set§7 - now look at the end block and pick Destroy here now again", 80);
+    ctx.note(player, "§cStart set§7 - now look at the end block and pick Destroy here now again", 80);
+    return ctx.CLOSE;
   }
   const spots = spotsAt(player, T);
   st.start = undefined;
-  if (typeof spots === "string") return player.sendMessage(`§e${spots}`);
+  if (typeof spots === "string") return `§e${spots}`;
   const secs = Math.max(0, get("previewSeconds"));
   for (let t = 0; t < secs * 2; t++) {
-    if (!player.isValid) return;
-    drawGuide(player, spots, "destroy");
+    if (!player.isValid) return ctx.CLOSE;
+    drawGuide(player, spots, "destroy", { preview: true, every: 10 });
     await new Promise((r) => system.runTimeout(() => r(undefined), 10));
   }
   const survival = !ctx.isCreative(player);
@@ -513,32 +514,54 @@ async function destroyHere(player) {
     "Chests, signs and other protected blocks stay.",
   ].join("\n");
   const res = await ctx.show(player, new MessageFormData().title("Destroy").body(body).button1("Break them").button2("Cancel"));
-  if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+  if (!res || !player.isValid) return ctx.CLOSE;
+  if (res.canceled || res.selection !== 0) return undefined;
   await destroyCells(player, player.dimension, spots, `Destroy: ${ctx.planLabel(ctx.planOf(player))}`);
+  return ctx.CLOSE;
 }
 
-/** /realm:build -> Destroy mode @param {Player} player */
+/**
+ * /realm:build -> Destroy mode. It stays open until its X (ctx.CLOSE: everything closes) or Back (undefined), or
+ * Destroy here now, which needs the world.
+ * @param {Player} player
+ */
 export async function destroyMenu(player) {
-  if (get("destroyMode") !== true) return player.sendMessage("§eDestroy mode is disabled on this realm. An operator can enable it in /realm:config (Easy Building).");
+  if (get("destroyMode") !== true) return "§eDestroy mode is disabled on this realm. An operator can enable it in /realm:config (Easy Building).";
+  /** @type {unknown} */
+  let out;
+  while (player.isValid) {
+    out = await destroyPage(player, typeof out === "string" ? out : "");
+    if (out === ctx.CLOSE || out === BACK) return out === BACK ? undefined : out;
+  }
+  return ctx.CLOSE;
+}
+
+const BACK = Symbol("back");
+
+/** The Destroy mode page once; its action's answer. @param {Player} player @param {string} notice */
+async function destroyPage(player, notice) {
   const st = stateOf(player);
   const survival = !ctx.isCreative(player);
   const body = [
+    notice ? `${notice}§r\n` : "",
     st.on ? "§cDestroy mode is on:§r breaking a block with a pickaxe, axe or shovel breaks your shape there. Sneak to break just one." : "Destroy mode is off.",
     "It breaks the shape you chose in /realm:build (same size and settings).",
     survival
       ? "Survival: each block needs the right tool, drops land at your feet (Fortune and Silk Touch count) and the tool wears out (Unbreaking counts). Undo puts the blocks back using blocks from your inventory."
       : "Creative: blocks break without drops; undo puts them back.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [
     { text: st.on ? "Destroy mode: §cOn" : "Destroy mode: Off", run: () => toggleDestroy(player) },
     { text: "Destroy here now", run: () => destroyHere(player) },
-    { text: "Back", run: () => ctx.mainMenu(player) },
+    { text: "Back", run: () => BACK },
   ];
-  if (st.start) actions.splice(2, 0, { text: "Forget the start block", run: () => ((st.start = undefined), ctx.note(player, "§7Start block forgotten")) });
+  if (st.start) actions.splice(2, 0, { text: "Forget the start block", run: () => ((st.start = undefined), ctx.noted(player, "§7Start block forgotten")) });
   const form = new ActionFormData().title("Destroy mode").body(body);
   for (const a of actions) form.button(a.text);
   const res = await ctx.show(player, form);
-  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  await actions[res.selection]?.run();
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return ctx.CLOSE;
+  return actions[res.selection]?.run();
 }

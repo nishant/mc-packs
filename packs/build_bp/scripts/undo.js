@@ -97,17 +97,18 @@ function pushRedo(player, h, rec) {
  * A step that puts blocks back for free (undo of a build, paste or cut; redo of destroy mode in survival) gives back what it cost.
  * A step that places blocks again (redo of a build; undo of destroy mode in survival) goes through build(): claims, costs, partial builds.
  * @param {Player} player @param {boolean} redo
+ * @returns {Promise<string | undefined>} what it did (also shown above the hotbar), or undefined if it didn't (chat says why)
  */
 export async function undo(player, redo) {
   const s = ctx.stateOf(player);
-  if (s.busy) return player.sendMessage("§eWait for the build to finish.");
-  if (ctx.cantBuild(player)) return player.sendMessage(ctx.CANT_BUILD);
+  if (s.busy) return void player.sendMessage("§eWait for the build to finish.");
+  if (ctx.cantBuild(player)) return void player.sendMessage(ctx.CANT_BUILD);
   const h = historyOf(player);
   const list = redo ? h.redo : h.undo;
   const rec = list[list.length - 1];
-  if (!rec) return player.sendMessage(redo ? "§eNothing to redo." : "§eNothing to undo.");
+  if (!rec) return void player.sendMessage(redo ? "§eNothing to redo." : "§eNothing to undo.");
   const why = stepHooks.check?.(player, rec, redo);
-  if (why) return player.sendMessage(`§e${why}`);
+  if (why) return void player.sendMessage(`§e${why}`);
   list.pop();
   delete rec.sid; // its saved copy is removed now; saved again wherever it goes next
   delete rec.len;
@@ -116,7 +117,7 @@ export async function undo(player, redo) {
   try {
     dim = world.getDimension(rec.dim);
   } catch {
-    return player.sendMessage("§eThat step was in a dimension that isn't there any more.");
+    return void player.sendMessage("§eThat step was in a dimension that isn't there any more.");
   }
   // A cut takes blocks away without drops and puts them back for free: neither way costs or gives items.
   const charge = rec.kind !== "cut" && redo !== !!rec.inv;
@@ -137,8 +138,9 @@ export async function undo(player, redo) {
     if (redo) remember(player, { ...paid, cells: placed }, true);
     else pushRedo(player, h, { ...rec, cells: placed.map((c) => ({ x: c.x, y: c.y, z: c.z, before: c.after, after: c.before, cost: c.cost })) });
     stepHooks.done?.(player, rec, redo);
-    if (!redo && player.isValid) ctx.note(player, `§aUndone: ${rec.label}§7 (${ctx.plural(placed.length, "block")} put back)`);
-    return;
+    const text = `§a${redo ? "Redone" : "Undone"}: ${rec.label}§7 (${ctx.plural(placed.length, "block")}${redo ? "" : " put back"})`;
+    if (!redo && player.isValid) ctx.note(player, text);
+    return text;
   }
   const pid = player.id;
   s.busy = true;
@@ -192,9 +194,11 @@ export async function undo(player, redo) {
     }
     if (!player.isValid) return;
     const given = [...owed.values()].reduce((a, b) => a + b, 0);
-    ctx.note(player, `§a${redo ? "Redone" : "Undone"}: ${rec.label}§7 (${ctx.plural(back, "block")}${given ? `, ${given} given back` : ""})`);
+    const text = `§a${redo ? "Redone" : "Undone"}: ${rec.label}§7 (${ctx.plural(back, "block")}${given ? `, ${given} given back` : ""})`;
+    ctx.note(player, text);
     if (gone) player.sendMessage(`§7${ctx.plural(gone, "block")} had changed since and stayed as they are.`);
     if (far) player.sendMessage(`§7${ctx.plural(far, "block")} too far away stayed as they are.`);
+    return back ? text : undefined;
   } finally {
     s.busy = false;
   }

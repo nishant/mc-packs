@@ -16,6 +16,15 @@ The story and the world now talk to each other.
 - Into the Deep: you can now clear the Sculk Depths expedition instead of hunting echo shards in an ancient city.
 - New side questline for Ida: The Listening Deep, four expedition chapters after Into the Deep, up to a Nightmare clear and the title Deep-Listener.
 
+## Steadier building guides
+
+Easy Building got a tune-up.
+
+- The block guide outlines no longer blink on a busy realm or a slow connection.
+- Looking along a diagonal, your shape no longer flips back and forth.
+- Holding the Building Book's use button while sneaking switches build mode once, not on and off again.
+- The Easy Building menus stay open: turn build mode on, then pick a shape, change settings, all in one go. Close them with the X when you're done.
+
 ## Easier admin menu
 
 For operators: the Realm Configuration menu is easier to read.
