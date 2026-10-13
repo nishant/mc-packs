@@ -20,6 +20,10 @@ let lastCheck = system.currentTick;
 /** Tick the announced cleanup runs at, while one is coming. @type {number | undefined} */
 let clearAt;
 let clearing = false;
+/** Whether the reminder shortly before an announced cleanup was sent. */
+let reminded = false;
+/** Seconds before the clearing when chat reminds everyone (only when the warning is longer). */
+const REMIND_SECONDS = 10;
 
 /** Where players died lately, so their dropped gear isn't cleared before they get back. @type {{ dim: string, x: number, y: number, z: number, tick: number }[]} */
 const deaths = [];
@@ -194,12 +198,17 @@ function announce(count) {
   if (seconds <= 0) return clearNow();
   world.sendMessage(`§eClearing ${items(count)} in ${seconds} s: pick up what you need`);
   clearAt = system.currentTick + seconds * 20;
+  reminded = seconds <= REMIND_SECONDS;
 }
 
 system.runInterval(() => {
   const now = system.currentTick;
   if (clearAt !== undefined) {
     if (now >= clearAt) clearNow();
+    else if (!reminded && clearAt - now <= REMIND_SECONDS * 20) {
+      reminded = true;
+      world.sendMessage(`§eClearing dropped items in ${Math.ceil((clearAt - now) / 20)} s: pick up what you need`);
+    }
     return;
   }
   if (clearing || get("enabled") !== true || now - lastCheck < get("checkSeconds") * 20) return;
