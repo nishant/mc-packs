@@ -116,10 +116,11 @@ function restore(r) {
     let b;
     try {
       b = dim.getBlock({ x, y, z });
+      if (b) void b.typeId; // throws when the chunk is loaded but not ticking
     } catch {
       b = undefined;
     }
-    if (!b) return false; // not loaded: later
+    if (!b) return false; // not loaded (or not ticking): later
     at.push(b);
   }
   const now = Date.now();
