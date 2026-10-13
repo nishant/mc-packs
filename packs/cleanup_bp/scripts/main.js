@@ -120,6 +120,12 @@ function keeps(entity, players, r2, deathPoints) {
   const stack = entity.getComponent("minecraft:item")?.itemStack;
   if (!stack) return true; // can't tell what it is
   if (stack.nameTag) return true;
+  // Lore marks an item another pack made or changed (a silly-enchanted tool, the Easy Building book).
+  try {
+    if (stack.getLore().length) return true;
+  } catch {
+    // no lore
+  }
   const id = stack.typeId;
   if (CONFIG.keepItems.some((k) => id === k || id.endsWith(k))) return true;
   try {
@@ -262,7 +268,7 @@ async function opMenu(player) {
   actions.push({ text: "Close", run: () => {} });
   const nearText = get("keepNearPlayers") === true ? `, items within ${get("nearPlayerRadius")} blocks of a player` : "";
   const dropped = get("keepDeathDropsMinutes") > 0 ? `, items where a player died in the last ${get("keepDeathDropsMinutes")} min` : "";
-  const body = `${status()}\n\n§rRenamed items, enchanted items, the rare items in keepItems${nearText}${dropped} are kept. Change the threshold and timing in /realm:config.`;
+  const body = `${status()}\n\n§rRenamed items, enchanted items, items with lore, the rare items in keepItems${nearText}${dropped} are kept. Change the threshold and timing in /realm:config.`;
   const form = new ActionFormData().title("§lLag Cleanup").body(body);
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
