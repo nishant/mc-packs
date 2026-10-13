@@ -25,6 +25,7 @@ const JOIN_DELAY = 200; // ticks after joining before the bonus note, so it isn'
 const BUY_MAX = 16; // lots one purchase can buy
 const DAY = 86400000;
 const OFFLINE_NAME = "commands.scoreboard.players.offlinePlayerName";
+const MAX_SCORE = 2147483647; // a score past this throws an integer overflow error
 
 /** @typedef {typeof CONFIG.sell[number]} SellEntry */
 /** @typedef {typeof CONFIG.buy[number]} BuyEntry */
@@ -57,6 +58,9 @@ function crownsOf(p) {
 function addCrowns(p, n) {
   objective().addScore(p, Math.floor(n));
 }
+
+/** How many more Crowns the player's score can hold. @param {Player} p */
+const roomFor = (p) => Math.max(0, MAX_SCORE - crownsOf(p));
 
 /** @param {Player} p @param {number} n @returns {boolean} false when the player has too few */
 function takeCrowns(p, n) {
@@ -304,8 +308,8 @@ async function mainMenu(player) {
   await actions[res.selection]?.run();
 }
 
-/** @param {unknown} v whole number typed in a text field, or NaN */
-const parseAmount = (v) => (typeof v === "string" && /^\s*-?\d+\s*$/.test(v) ? parseInt(v, 10) : NaN);
+/** @param {unknown} v whole number typed in a text field ("1,000" too), or NaN */
+const parseAmount = (v) => (typeof v === "string" && /^\s*-?\d[\d,]*\s*$/.test(v) ? parseInt(v.replace(/,/g, ""), 10) : NaN);
 
 /** @param {Player} player */
 async function payForm(player) {
@@ -358,6 +362,8 @@ function pay(sender, targets, amount) {
   if (!Number.isInteger(amount) || amount < 1) return sender.sendMessage("§cThe amount must be at least 1 Crown.");
   if (amount > CONFIG.maxPay) return sender.sendMessage(`§cYou can send at most ${crowns(CONFIG.maxPay)} at once.`);
   const have = crownsOf(sender);
+  if (have < amount) return sender.sendMessage(`§cYou have only ${crowns(have)}.`);
+  if (amount > roomFor(target)) return sender.sendMessage(`§c${target.name} can't hold that many more Crowns.`);
   if (!takeCrowns(sender, amount)) return sender.sendMessage(`§cYou have only ${crowns(have)}.`);
   addCrowns(target, amount);
   rememberName(target);
@@ -376,9 +382,13 @@ function give(op, targets, amount) {
   const done = [];
   for (const p of valid) {
     if (amount > 0) {
-      addCrowns(p, amount);
-      p.sendMessage(`§6+${crowns(amount)} §7(from an operator. Balance: ${fmt(crownsOf(p))})`);
-      done.push(`${p.name} +${fmt(amount)}`);
+      // A score can't go past MAX_SCORE: give what fits (the rest would throw and stop the whole list).
+      const add = Math.min(amount, roomFor(p));
+      if (add > 0) {
+        addCrowns(p, add);
+        p.sendMessage(`§6+${crowns(add)} §7(from an operator. Balance: ${fmt(crownsOf(p))})`);
+      }
+      done.push(`${p.name} +${fmt(add)}${add < amount ? " (the most a balance can hold)" : ""}`);
     } else {
       const take = Math.min(crownsOf(p), -amount);
       if (take > 0) {
