@@ -359,6 +359,9 @@ export async function farTeleport(p, dim, targets) {
     return await hoverAndLand(p, dim, targets, home);
   } finally {
     flying.delete(p.id);
+    // Still here (landed, or something threw on the way): never leave the property for a later respawn.
+    // A player who left keeps it, so the playerSpawn listener below puts them back when they join.
+    if (p.isValid) attempt(() => p.setDynamicProperty(PROP_FAR, undefined));
   }
 }
 
