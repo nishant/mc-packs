@@ -319,16 +319,15 @@ function settleGround(p0, dim) {
 }
 
 /**
- * For each player in the Overworld within MAX_SEE of it and not deep underground: every dot of the arc (while
- * the rainbow lasts) and of the beam (until the pot is found or expires), at its real spot when close or as a
- * stand-in on the same line of sight. Dots whose spot isn't loaded are skipped.
- * @param {Pot} p0 @param {boolean} even this second also redraws the dots at their real spots
- * @param {Player[]} [players] the players to draw it for (default: everyone in the Overworld)
+ * What draw() needs that is the same for every player, made once a second and shared by that second's draws.
+ * @type {{ sec: number, p0: Pot, size: number, a: import("./sky.js").Anchor, mid: import("./sky.js").Vec, beamY: number, loadedAt: (x: number, z: number) => boolean } | undefined}
  */
-function draw(p0, even, players) {
-  const dim = overworld();
-  const now = Date.now();
-  const sky = now < p0.until, beam = !p0.found && now < p0.expires;
+let frame;
+
+/** @param {Pot} p0 @param {Dimension} dim */
+function frameFor(p0, dim) {
+  const sec = Math.floor(system.currentTick / DRAW_TICKS);
+  if (frame && frame.sec === sec && frame.p0 === p0) return frame;
   try {
     settleGround(p0, dim);
   } catch {
@@ -339,7 +338,7 @@ function draw(p0, even, players) {
   const a = { x: p0.x, z: p0.z, y: p0.by ?? 64, ang: p0.ang ?? 0 };
   const mid = center(a, size);
   const beamY = typeof p0.y === "number" ? p0.y + (p0.placed ? 0.9 : 0) : a.y;
-  /** chunk "cx,cz" -> loaded, for this drawing @type {Map<string, boolean>} */
+  /** chunk "cx,cz" -> loaded, for this second @type {Map<string, boolean>} */
   const chunks = new Map();
   const loadedAt = (/** @type {number} */ x, /** @type {number} */ z) => {
     const key = `${Math.floor(x) >> 4},${Math.floor(z) >> 4}`;
@@ -354,6 +353,22 @@ function draw(p0, even, players) {
     }
     return ok;
   };
+  frame = { sec, p0, size, a, mid, beamY, loadedAt };
+  return frame;
+}
+
+/**
+ * For each player in the Overworld within MAX_SEE of it and not deep underground: every dot of the arc (while
+ * the rainbow lasts) and of the beam (until the pot is found or expires), at its real spot when close or as a
+ * stand-in on the same line of sight. Dots whose spot isn't loaded are skipped.
+ * @param {Pot} p0 @param {boolean} even this second also redraws the dots at their real spots
+ * @param {Player[]} [players] the players to draw it for (default: everyone in the Overworld)
+ */
+function draw(p0, even, players) {
+  const dim = overworld();
+  const now = Date.now();
+  const sky = now < p0.until, beam = !p0.found && now < p0.expires;
+  const { size, a, mid, beamY, loadedAt } = frameFor(p0, dim);
   const vars = molang();
   for (const player of players ?? dim.getPlayers()) {
     try {
