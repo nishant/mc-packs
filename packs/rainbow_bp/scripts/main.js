@@ -10,6 +10,11 @@ import { get } from "./settings.js";
 // toward the other one; by: the arc's ground height, a guess until ground is true, when it was read at the pot's
 // spot once its chunk loaded). Cleared once the pot expires.
 const PROP_POT = "rainbow:pot";
+// World property "rainbow:left": JSON [{ x, y, z }], pot chests that were still in the world when their pot expired
+// but couldn't be checked (no one near: their chunk wasn't loaded). Each is removed, if it's still an empty chest,
+// once a player comes near; one with items is left. At most MAX_LEFT.
+const PROP_LEFT = "rainbow:left";
+const MAX_LEFT = 20;
 const OVERWORLD = "minecraft:overworld";
 const BAND = "realm:sky_rainbow_band"; // particles from the Realm Skies resource pack
 const BEAM = "realm:sky_rainbow_beam";
@@ -41,6 +46,8 @@ const NATURAL_EXCEPTIONS = /^minecraft:(moss_carpet|torchflower|(white|orange|ye
 let pot;
 let loaded = false;
 let busy = false; // looking for the chest's spot
+/** Expired pots' chests still to check (see PROP_LEFT). @type {{ x: number, y: number, z: number }[]} */
+let left = [];
 /** @type {Set<string>} players who saw this rainbow (journal sent) */
 const saw = new Set();
 /** One map, made on first use: the stable API may refuse native objects while the world is still loading. @type {MolangVariableMap | undefined} */
@@ -129,6 +136,21 @@ function load() {
     if (!pot && saved && typeof saved.x === "number" && typeof saved.z === "number" && typeof saved.expires === "number") pot = saved;
   } catch {
     console.warn(`[rainbow] ${PROP_POT} is corrupt; ignoring it`);
+  }
+  try {
+    const raw2 = world.getDynamicProperty(PROP_LEFT);
+    const saved = typeof raw2 === "string" ? JSON.parse(raw2) : [];
+    if (Array.isArray(saved)) left = [...saved.filter((c) => c && [c.x, c.y, c.z].every(Number.isFinite)), ...left].slice(-MAX_LEFT);
+  } catch {
+    console.warn(`[rainbow] ${PROP_LEFT} is corrupt; ignoring it`);
+  }
+}
+
+function saveLeft() {
+  try {
+    world.setDynamicProperty(PROP_LEFT, left.length ? JSON.stringify(left) : undefined);
+  } catch (e) {
+    console.warn(`[rainbow] ${e}`);
   }
 }
 
@@ -378,8 +400,10 @@ function draw(p0, even) {
 // Every second: place the chest when someone gets close, see who reaches it first, expire it.
 system.runInterval(() => {
   load();
+  if (!loaded) return;
+  if (left.length) sweepLeft();
   const p0 = pot;
-  if (!p0 || !loaded) return;
+  if (!p0) return;
   try {
     if (Date.now() >= p0.expires) {
       expire(p0);
@@ -518,16 +542,40 @@ function find(p0, player) {
   world.sendMessage(`§6${player.name} found the pot of gold at the rainbow's end!`);
 }
 
+/**
+ * Removes the pot chest at x, y, z if it's still an empty chest (one with items is left).
+ * @param {number} x @param {number} y @param {number} z @returns {boolean} false when that spot isn't loaded
+ */
+function clearChest(x, y, z) {
+  try {
+    const block = overworld().getBlock({ x, y, z });
+    if (!block) return false;
+    const container = block.typeId === "minecraft:chest" ? block.getComponent("minecraft:inventory")?.container : undefined;
+    if (container && container.emptySlotsCount === container.size) block.setType("minecraft:air");
+    return true;
+  } catch {
+    return false; // unloaded
+  }
+}
+
+/** Expired pots' chests that weren't loaded then: checked once a player comes near (their chunk is loaded then). */
+function sweepLeft() {
+  try {
+    const players = overworld().getPlayers();
+    const before = left.length;
+    left = left.filter((c) => !players.some((p) => Math.hypot(p.location.x - (c.x + 0.5), p.location.z - (c.z + 0.5)) <= PLACE_DISTANCE) || !clearChest(c.x, c.y, c.z));
+    if (left.length !== before) saveLeft();
+  } catch (e) {
+    console.warn(`[rainbow] ${e}`);
+  }
+}
+
 /** The pot can't be found any more: an empty chest of ours is removed, one with items is left. @param {Pot} p0 */
 function expire(p0) {
-  if (p0.placed && typeof p0.y === "number") {
-    try {
-      const block = overworld().getBlock({ x: p0.x, y: p0.y, z: p0.z });
-      const container = block?.typeId === "minecraft:chest" ? block.getComponent("minecraft:inventory")?.container : undefined;
-      if (block && container && container.emptySlotsCount === container.size) block.setType("minecraft:air");
-    } catch {
-      // unloaded: the chest stays
-    }
+  if (p0.placed && typeof p0.y === "number" && !clearChest(p0.x, p0.y, p0.z)) {
+    // Unloaded: removed (if still empty) when a player next comes near.
+    left = [...left, { x: p0.x, y: p0.y, z: p0.z }].slice(-MAX_LEFT);
+    saveLeft();
   }
   if (pot === p0) {
     pot = undefined;
