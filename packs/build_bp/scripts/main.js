@@ -1536,7 +1536,9 @@ function guideFor(player, plan, T) {
         // following the look while it moves); the last one finished for the same start stays up until the next is ready.
         const from = `${baseKey}|${O.x},${O.y},${O.z}`;
         let hit = pointsCache.get(player.id);
-        if (!hit || (hit.key !== key && hit.done)) {
+        if (!hit || (hit.key !== key && (hit.done || hit.from !== from))) {
+          // A new plan, facing or start: the old layout is of no use any more.
+          if (hit?.job !== undefined) system.clearJob(hit.job);
           const last = hit && hit.from === from ? (hit.done ? hit.cells : hit.last) : undefined;
           /** @type {{ key: string, from: string, cells: Pos[] | undefined, last: Pos[] | undefined, done: boolean, job: number | undefined }} */
           const entry = (hit = { key, from, cells: undefined, last, done: false, job: undefined });
