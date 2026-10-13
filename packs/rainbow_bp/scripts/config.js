@@ -2,6 +2,12 @@ export const CONFIG = {
   /** Rainbows appear on their own after rain. `/realm:rainbow_now` works either way. */
   enabled: true,
 
+  /**
+   * Story Questlines can put up a rainbow (with its pot of gold) for a player at story moments: at most one
+   * every 30 real minutes, never while another rainbow or pot of gold is out. Needs `enabled` too.
+   */
+  storyEvents: true,
+
   /** Chance (0-1) of a rainbow when rain clears in the morning (time 0-3000) or evening (9000-12000). */
   chance: 0.7,
 

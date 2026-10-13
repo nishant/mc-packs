@@ -11,6 +11,7 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Weather Almanac runs the weather", help: "Disabled, the doWeatherCycle gamerule goes back to how it was and the game's own weather takes over" },
+  { key: "storyEvents", type: "bool", scope: "world", label: "Story events", help: "Story Questlines can ask for rain or a thunderstorm at story moments: it's planned in the forecast (at most one every 20 minutes)" },
   { key: "clear.minMinutes", type: "int", scope: "world", label: "Shortest clear spell (real minutes)", help: "Applies from the next spell", min: 1, max: 600, step: 1 },
   { key: "clear.maxMinutes", type: "int", scope: "world", label: "Longest clear spell (real minutes)", help: "Applies from the next spell", min: 1, max: 600, step: 1 },
   { key: "rain.minMinutes", type: "int", scope: "world", label: "Shortest rain (real minutes)", min: 1, max: 240, step: 1 },

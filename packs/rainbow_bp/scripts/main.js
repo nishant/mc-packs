@@ -14,6 +14,9 @@ const PROP_POT = "rainbow:pot";
 // but couldn't be checked (no one near: their chunk wasn't loaded). Each is removed, if it's still an empty chest,
 // once a player comes near; one with items is left. At most MAX_LEFT.
 const PROP_LEFT = "rainbow:left";
+// World property "rainbow:story": Date.now() ms of the last rainbow a story request put up (realm:sky_request).
+const PROP_STORY = "rainbow:story";
+const STORY_GAP = 30 * 60000; // at most one story rainbow per 30 real minutes
 const MAX_LEFT = 20;
 const OVERWORLD = "minecraft:overworld";
 const BAND = "realm:sky_rainbow_band"; // particles from the Realm Skies resource pack
@@ -669,10 +672,52 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Story requests: realm:sky_request { kind: "rainbow", player, from, dim?, reason? }
+// ---------------------------------------------------------------------------
+
+/** @param {unknown} v @param {number} max */
+const optText = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+
+/**
+ * A rainbow for that player, as after rain (its end 150-300 blocks away, out of safe zones and the spawn
+ * area, with its pot of gold). Ignored silently when the pack or its Story events setting is disabled, a
+ * rainbow or an unfound pot of gold is already out, the last story rainbow was under 30 minutes ago, the
+ * player isn't in the Overworld, or the message is malformed.
+ * @param {string} message
+ */
+function skyRequest(message) {
+  let req;
+  try {
+    req = JSON.parse(message);
+  } catch {
+    return;
+  }
+  if (!req || typeof req !== "object" || Array.isArray(req) || req.kind !== "rainbow") return;
+  if (typeof req.player !== "string" || !req.player || req.player.length > 64 || !optText(req.from, 64) || !optText(req.reason, 200)) return;
+  if (req.dim !== undefined && req.dim !== OVERWORLD) return;
+  if (!get("enabled") || get("storyEvents") !== true) return;
+  load();
+  const now = Date.now();
+  if (pot && now < pot.expires && (!pot.found || now < pot.until)) return; // one rainbow, one pot of gold at a time
+  const last = world.getDynamicProperty(PROP_STORY);
+  if (typeof last === "number" && now >= last && now - last < STORY_GAP) return;
+  const player = overworld().getPlayers().find((p) => p.id === req.player);
+  if (!player || player.getGameMode() === GameMode.Spectator) return;
+  if (appear(player)) world.setDynamicProperty(PROP_STORY, now);
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "rainbow_bp");
+    else if (id === "realm:sky_request") {
+      try {
+        skyRequest(message);
+      } catch (e) {
+        console.warn(`[rainbow] ${e}`);
+      }
+    }
     else if (id === "realm:zones") {
       try {
         onZones(JSON.parse(message));

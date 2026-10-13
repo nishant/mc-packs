@@ -9,6 +9,7 @@ const PROP_PLAN = "weather:plan";
 const PROP_WEATHER = "weather:weather"; // world: overworld weather at the last change; scripts can't read the current weather
 const PROP_CYCLE = "weather:cycle"; // world: doWeatherCycle as it was before the almanac took over; unset = not taken over
 const PROP_DAY = "weather:day"; // player: UTC day number of the last daily forecast in chat
+const PROP_STORY = "weather:story"; // world: Date.now() of the last story request honored (realm:sky_request)
 
 const OVERWORLD = "minecraft:overworld";
 const MIN = 60000;
@@ -218,7 +219,7 @@ function syncEnabled() {
 onChange((key) => {
   try {
     if (key === "enabled" || key === "*") syncEnabled();
-    if (key !== "enabled" && key !== "dailyForecast") replanAfterCurrent();
+    if (key !== "enabled" && key !== "dailyForecast" && key !== "storyEvents") replanAfterCurrent();
   } catch (e) {
     console.warn(`[weather] ${e}`);
   }
@@ -644,10 +645,69 @@ async function mainMenu(player) {
   await actions[res.selection]?.run();
 }
 
+// ---------------------------------------------------------------------------
+// Story requests: realm:sky_request { kind: "thunder" | "rain", minutes?, within?, dim?, from, player?, reason? }
+// ---------------------------------------------------------------------------
+
+const STORY_GAP = 20 * MIN; // at most one honored story request per 20 real minutes, realm-wide
+/** @type {Record<string, Kind>} */
+const FROM_STORY = { thunder: "Thunder", rain: "Rain" };
+
+/** @param {unknown} v @param {number} max */
+const optText = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+/** An optional number in min..max, or the default. NaN when it's there but not allowed. @param {unknown} v @param {number} min @param {number} max @param {number} def */
+const optNumber = (v, min, max, def) => (v === undefined ? def : typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? v : NaN);
+
+/**
+ * Plans `kind` into the almanac: it starts within `within` real minutes (when the current spell ends, if that's
+ * soon enough, else partway through the window) and lasts `minutes`; the plan carries on after it and the
+ * forecast shows it. Ignored silently when the almanac or its Story events setting is disabled, that weather
+ * (or thunder, for rain) is already here or planned to start within the window, a request was honored in the
+ * last 20 minutes, or the message is malformed.
+ * @param {string} message
+ */
+function skyRequest(message) {
+  let req;
+  try {
+    req = JSON.parse(message);
+  } catch {
+    return;
+  }
+  if (!req || typeof req !== "object" || Array.isArray(req)) return;
+  const kind = typeof req.kind === "string" ? FROM_STORY[req.kind] : undefined;
+  if (!kind || !optText(req.from, 64) || !optText(req.player, 64) || !optText(req.reason, 200)) return;
+  if (req.dim !== undefined && req.dim !== OVERWORLD) return;
+  const minutes = optNumber(req.minutes, 1, 120, 6);
+  const within = optNumber(req.within, 1, 60, 8);
+  if (Number.isNaN(minutes) || Number.isNaN(within)) return;
+  if (!active || get("storyEvents") !== true || !spells.length) return;
+  const now = Date.now();
+  const last = world.getDynamicProperty(PROP_STORY);
+  if (typeof last === "number" && now - last < STORY_GAP && now >= last) return;
+  const covers = (/** @type {Kind} */ w) => w === kind || (kind === "Rain" && w === "Thunder");
+  const cur = spells[0];
+  if (covers(cur.w) || covers(tracked)) return;
+  const windowEnd = now + within * MIN;
+  if (spells.some((s, i) => i > 0 && s.s <= windowEnd && covers(s.w))) return;
+  const start = cur.e <= windowEnd ? cur.e : Math.round(now + within * MIN * (0.5 + Math.random() * 0.5));
+  world.setDynamicProperty(PROP_STORY, now);
+  spells = [{ w: cur.w, s: cur.s, e: start }, { w: kind, s: start, e: start + Math.round(minutes * MIN) }];
+  extend(now);
+  savePlan();
+  broadcast();
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "weather_bp");
+    else if (id === "realm:sky_request") {
+      try {
+        skyRequest(message);
+      } catch (e) {
+        console.warn(`[weather] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

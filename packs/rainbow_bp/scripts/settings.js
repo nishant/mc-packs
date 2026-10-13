@@ -11,6 +11,7 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Rainbows after rain", help: "/realm:rainbow_now works either way" },
+  { key: "storyEvents", type: "bool", scope: "world", label: "Story events", help: "Story Questlines can put up a rainbow with its pot of gold at story moments (at most one every 30 minutes)" },
   { key: "chance", type: "float", scope: "world", label: "Chance of a rainbow", help: "0 to 1, when rain clears in the morning or evening", min: 0, max: 1, step: 0.05 },
   { key: "durationSeconds", type: "int", scope: "world", label: "Rainbow lasts (seconds)", min: 30, max: 600, step: 30 },
   { key: "potMinutes", type: "int", scope: "world", label: "Pot of gold can be found for (minutes)", min: 3, max: 60, step: 1 },

@@ -11,6 +11,7 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Meteors at night", help: "/realm:meteor_now works either way" },
+  { key: "storyEvents", type: "bool", scope: "world", label: "Story events", help: "Story Questlines can make a meteor fall at story moments (at most one every 10 minutes)" },
   { key: "chance", type: "float", scope: "world", label: "Chance of a meteor each night", help: "0 to 1, rolled once a night", min: 0, max: 1, step: 0.05 },
   { key: "warningSeconds", type: "int", scope: "world", label: "Warning before impact (seconds)", min: 10, max: 300, step: 10 },
   { key: "craters", type: "bool", scope: "world", label: "Craters", help: "A small crater in natural ground with a meteorite core (ancient debris). Disabled, a meteor is only the show" },
