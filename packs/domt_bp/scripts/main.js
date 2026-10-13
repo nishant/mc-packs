@@ -199,7 +199,11 @@ async function reveal(p, card) {
  * @param {Player} target @param {{ by?: Player, chosen?: Card }} [opts]
  */
 async function draw(target, opts = {}) {
-  if (drawing.has(target.id)) return;
+  if (drawing.has(target.id)) {
+    const other = opts.by && opts.by.id !== target.id;
+    (opts.by ?? target).sendMessage(`§7${other ? `${target.name} is` : "You are"} still drawing a card. Wait for it to finish.`);
+    return;
+  }
   drawing.add(target.id);
   try {
     /** @type {Set<string>} */
@@ -225,6 +229,7 @@ async function draw(target, opts = {}) {
         console.warn(`[domt] ${card.id}: ${e}`);
         result = false;
       }
+      if (!target.isValid) return; // left mid-card
       if (result === false) {
         target.sendMessage(`§6[Deck] §7${card.name} crumbles to dust: it can't happen here. The deck draws again...`);
         failed.add(card.id);
