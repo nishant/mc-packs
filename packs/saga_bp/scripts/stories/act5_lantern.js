@@ -236,7 +236,7 @@ export const STORIES = [
           `${MO}Well. Tomorrow night the sky falls, and Reyes wants every singer she can get on those rocks. So somebody has to go and call. I'd rather it was you. I'd rather it was nobody. It's you.`,
           `${MO}A binding answers blue fire. Carry a soul lantern to the Fen after dark, stand at the water's edge, and say her name over it. She'll rise. Don't expect her to be glad about it.`,
           { text: `${MO}She asked after Hollis once, before all this. If she asks again, tell her the truth: the dark has him. She'll know what it means. She's been in the dark a long time herself.`, when: { "g:hollis": "lost" } },
-          { text: `${MO}And if she asks after the chapel boy, tell her he's singing. She'll like that. She taught him the song, in a roundabout way.`, when: { "g:hollis": "!lost" } },
+          { text: `${MO}And if she asks after the chapel boy, tell her he's singing. She'll like that.`, when: { "g:hollis": "!lost" } },
         ],
         objectives: [
           { type: "collect", label: "Have a soul lantern to call her with", item: "minecraft:soul_lantern", count: 1 },
@@ -957,7 +957,7 @@ export const STORIES = [
           { text: `${MO}One tree for the lost. For Hal, for my brother, for Lily, for the two from the cliff road, for Ashgrave too, if you can stand it. Trees don't ask who deserved it. That's why I like them.`, when: { "g:allies": "2" } },
           { text: `${MO}One tree for the lost. For Hal, for my brother, for Lily, for the five from the cliff road, for Ashgrave too, if you can stand it. Trees don't ask who deserved it. That's why I like them.`, when: { "g:allies": "1" } },
           { text: `${MO}One tree for the lost. For Hal, for my brother, for Lily, for the nine on the cliff road, for Ashgrave too, if you can stand it. Trees don't ask who deserved it. That's why I like them.`, when: NO_ALLIES },
-          `${MO}Plant it anywhere in the yard you like. Then go find Tobin. He's got something to settle with that bell, and he won't do it without you.`,
+          `${MO}Wherever it goes, it goes today. Then go find Tobin. He's got something to settle with that bell, and he won't do it without you.`,
         ],
         objectives: [
           { type: "place", label: "Plant a sapling in the Old Graveyard for the lost", place: "graveyard", radius: 16, count: 1, blocks: SAPLINGS },

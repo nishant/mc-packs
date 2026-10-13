@@ -77,7 +77,7 @@ export const STORIES = [
         title: "A Smudge in the East",
         npc: "sol",
         intro: [
-          `§eSol§r is lying on his back in the grass with a cracked spyglass on his chest, as if the sky might hand her something if she holds still long enough.\n\n${S}Ah. You. The one who listens to bells. Lie down, the grass doesn't bite.`,
+          `§eSol§r is lying on his back in the grass with a cracked spyglass on his chest, as if the sky might hand him something if he holds still long enough.\n\n${S}Ah. You. The one who listens to bells. Lie down, the grass doesn't bite.`,
           { text: `${S}Since you quieted the bell, the nights are so still I can hear the stars turning. And three nights ago one of them turned wrong.`, when: SILENCE },
           { text: `${S}Your bell rings the tide in every evening now, and I count the stars by it, one per note. Three nights ago I ran out of notes before I ran out of stars.`, when: RING },
           `${S}Low in the east, under Oriel and left of the Net, there is a smudge. Faint as a thumbprint on glass. It was not there at midsummer. It is a little bigger every night.`,
