@@ -9,7 +9,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
-import { isProtected, zoneProviders, zonesAt } from "./zones.js";
+import { isProtected, protectedBox, zoneProviders, zonesAt } from "./zones.js";
 
 const PROP_ZONES = "guard:zones"; // world: JSON Zone[]
 
@@ -57,14 +57,6 @@ function saveZones(list) {
   world.setDynamicProperty(PROP_ZONES, list.length ? JSON.stringify(list) : undefined);
 }
 
-/**
- * @param {string} dim
- * @param {import("@minecraft/server").Vector3} p
- */
-function inAnyZone(dim, p) {
-  return !!zoneAt(dim, p) || (useSafeZones() && isProtected(dim, p.x + 0.5, p.z + 0.5));
-}
-
 /** Safe zones from other packs (Safe Zones, protected towns and claims: scripts/zones.js) count in zones mode. */
 const useSafeZones = () => get("safeZones") === true;
 
@@ -74,8 +66,12 @@ const useSafeZones = () => get("safeZones") === true;
  * @param {import("@minecraft/server").Vector3} p
  */
 function zoneAt(dim, p) {
-  for (const z of getZones()) {
-    if (z.dim !== dim) continue;
+  return zoneIn(getZones().filter((z) => z.dim === dim), p);
+}
+
+/** The first of these zones holding block `p`. @param {Zone[]} list @param {import("@minecraft/server").Vector3} p */
+function zoneIn(list, p) {
+  for (const z of list) {
     const dx = p.x + 0.5 - z.x;
     const dy = p.y + 0.5 - z.y;
     const dz = p.z + 0.5 - z.z;
@@ -102,7 +98,25 @@ world.beforeEvents.explosion.subscribe((event) => {
     }
     const dim = event.dimension.id;
     const blocks = event.getImpactedBlocks();
-    const kept = blocks.filter((b) => !inAnyZone(dim, b.location));
+    if (!blocks.length) return;
+    // Check the blocks only against the zones that reach the blast's box: with many zones, checking every block
+    // against every zone took 9-20 ms per creeper (100 zones and 60 safe zones).
+    const at = blocks.map((b) => b.location);
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (const l of at) {
+      x0 = Math.min(x0, l.x), y0 = Math.min(y0, l.y), z0 = Math.min(z0, l.z);
+      x1 = Math.max(x1, l.x), y1 = Math.max(y1, l.y), z1 = Math.max(z1, l.z);
+    }
+    const near = getZones().filter((z) => {
+      if (z.dim !== dim) return false;
+      const dx = Math.max(x0 + 0.5, Math.min(z.x, x1 + 0.5)) - z.x;
+      const dy = Math.max(y0 + 0.5, Math.min(z.y, y1 + 0.5)) - z.y;
+      const dz = Math.max(z0 + 0.5, Math.min(z.z, z1 + 0.5)) - z.z;
+      return dx * dx + dy * dy + dz * dz <= z.radius * z.radius;
+    });
+    const safe = useSafeZones() && protectedBox(dim, { x: x0, z: z0 }, { x: x1 + 1, z: z1 + 1 });
+    if (!near.length && !safe) return;
+    const kept = blocks.filter((_, i) => !(zoneIn(near, at[i]) || (safe && isProtected(dim, at[i].x + 0.5, at[i].z + 0.5))));
     if (kept.length !== blocks.length) event.setImpactedBlocks(kept);
   } catch (e) {
     console.warn(`[guard] ${e}`);
