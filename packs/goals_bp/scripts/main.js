@@ -421,27 +421,41 @@ async function addForm(player) {
     return;
   }
   const held = player.getComponent("minecraft:inventory")?.container?.getItem(player.selectedSlotIndex)?.typeId ?? "";
-  const form = new ModalFormData()
-    .title("§lAdd a goal")
-    .textField("Item id (the item you hold is filled in)", "cobblestone", { defaultValue: held.replace(/^minecraft:/, "") })
-    .textField(`Amount (1 to ${fmt(MAX_TARGET)})`, "10000")
-    .textField("Name (optional)", "Colosseum")
-    .submitButton("Add");
+  // A typo shows the form again with what was typed and what to fix, instead of starting over.
+  let typed = [held.replace(/^minecraft:/, ""), "", ""];
+  let error = "";
   for (let attempt = 0; attempt < 20; attempt++) {
     if (!player.isValid) return;
+    const form = new ModalFormData().title("§lAdd a goal");
+    if (error) form.label(`§c${error}`);
+    form
+      .textField("Item id (the item you hold is filled in)", "cobblestone", { defaultValue: typed[0] })
+      .textField(`Amount (1 to ${fmt(MAX_TARGET)})`, "10000", { defaultValue: typed[1] })
+      .textField("Name (optional)", "Colosseum", { defaultValue: typed[2] })
+      .submitButton("Add");
     const res = await form.show(player);
     if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy) {
       await new Promise((r) => system.runTimeout(() => r(undefined), 20));
       continue;
     }
     if (res.canceled || !res.formValues || !player.isValid) return;
-    const [rawItem, rawAmount, name] = res.formValues.map((v) => String(v ?? "").trim());
+    // Labels may or may not take a place in formValues: the text boxes are the strings, in order.
+    const [rawItem = "", rawAmount = "", name = ""] = res.formValues.filter((v) => typeof v === "string").map((v) => v.trim());
+    typed = [rawItem, rawAmount, name];
     const id = rawItem.toLowerCase().includes(":") ? rawItem.toLowerCase() : `minecraft:${rawItem.toLowerCase()}`;
     const amount = Number(rawAmount.replace(/[, ]/g, ""));
-    if (!rawItem || !ItemTypes.get(id)) return player.sendMessage(`§cUnknown item "${rawItem}".`);
-    if (!Number.isInteger(amount) || amount < 1 || amount > MAX_TARGET) return player.sendMessage(`§cThe amount must be 1 to ${fmt(MAX_TARGET)}.`);
-    addGoal(player, id, amount, name || undefined);
-    return;
+    let known = false;
+    try {
+      known = !!rawItem && !!ItemTypes.get(id);
+    } catch {
+      // not a valid id
+    }
+    if (!known) error = `Unknown item "${rawItem}". Use an item id like cobblestone or oak_log.`;
+    else if (!Number.isInteger(amount) || amount < 1 || amount > MAX_TARGET) error = `The amount must be a whole number from 1 to ${fmt(MAX_TARGET)}.`;
+    else {
+      addGoal(player, id, amount, name || undefined);
+      return;
+    }
   }
 }
 
