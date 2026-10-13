@@ -351,6 +351,23 @@ export function safeHop(p, minD, maxD) {
  */
 export async function farTeleport(p, dim, targets) {
   const home = { dim: p.dimension, at: { ...p.location } };
+  // Saved until they land: a player who leaves while held in the air (over the Nether roof, or high
+  // above the Overworld) is put back here when they join, instead of waking up up there.
+  p.setDynamicProperty(PROP_FAR, JSON.stringify({ dim: home.dim.id, x: home.at.x, y: home.at.y, z: home.at.z }));
+  flying.add(p.id);
+  try {
+    return await hoverAndLand(p, dim, targets, home);
+  } finally {
+    flying.delete(p.id);
+  }
+}
+
+/**
+ * farTeleport's work. @param {Player} p @param {Dimension} dim @param {{ x: number, z: number }[]} targets
+ * @param {{ dim: Dimension, at: import("@minecraft/server").Vector3 }} home
+ * @returns {Promise<import("@minecraft/server").Vector3 | undefined>}
+ */
+async function hoverAndLand(p, dim, targets, home) {
   const hoverY = dim.id === "minecraft:nether" ? 130 : dim.heightRange.max - 4;
   effect(p, "minecraft:slow_falling", 60);
   effect(p, "minecraft:resistance", 30, 4);
@@ -397,10 +414,34 @@ export async function farTeleport(p, dim, targets) {
   }
   if (!p.isValid) return undefined;
   p.teleport(landed ?? home.at, { dimension: landed ? dim : home.dim, keepVelocity: false });
+  p.setDynamicProperty(PROP_FAR, undefined);
   p.removeEffect("minecraft:slow_falling");
   p.removeEffect("minecraft:resistance");
   return landed;
 }
+
+const PROP_FAR = "domt:far"; // player: JSON { dim, x, y, z } where a far teleport (The Comet, The Gate) started, until it lands
+/** @type {Set<string>} players a far teleport is holding in the air right now */
+const flying = new Set();
+
+// Left (or the server restarted) while a far teleport held them in the air: back to where they drew the card.
+world.afterEvents.playerSpawn.subscribe(({ player }) => {
+  system.run(() => {
+    try {
+      if (!player.isValid || flying.has(player.id)) return;
+      const raw = player.getDynamicProperty(PROP_FAR);
+      if (typeof raw !== "string") return;
+      player.setDynamicProperty(PROP_FAR, undefined);
+      const back = JSON.parse(raw);
+      attempt(() => player.removeEffect("minecraft:slow_falling"));
+      attempt(() => player.removeEffect("minecraft:resistance"));
+      if (typeof back.x === "number" && typeof back.y === "number" && typeof back.z === "number")
+        player.teleport({ x: back.x, y: back.y, z: back.z }, { dimension: world.getDimension(back.dim), keepVelocity: false });
+    } catch (e) {
+      console.warn(`[domt] far teleport return: ${e}`);
+    }
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Spawning

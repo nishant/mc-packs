@@ -225,6 +225,7 @@ async function draw(target, opts = {}) {
         console.warn(`[domt] ${card.id}: ${e}`);
         result = false;
       }
+      if (!target.isValid) return; // left mid-card
       if (result === false) {
         target.sendMessage(`§6[Deck] §7${card.name} crumbles to dust: it can't happen here. The deck draws again...`);
         failed.add(card.id);
