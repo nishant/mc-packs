@@ -3,7 +3,7 @@
 import { world } from "@minecraft/server";
 import { STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
-import { npcName, send } from "./util.js";
+import { PACK, npcName, send } from "./util.js";
 
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {import("./types.js").Story} Story */
@@ -222,6 +222,37 @@ export function stateOf(saga, story) {
 }
 
 // ---------------------------------------------------------------------------
+// Installed packs (`pack:<folder>` flags)
+// ---------------------------------------------------------------------------
+
+/**
+ * The packs that answered the last `realm:help_ping` scan (main.js scans shortly after world load and every
+ * 10 minutes). `ready` is false until the first scan ends: until then every `pack:` flag reads "off".
+ * @type {{ set: Set<string>, ready: boolean }}
+ */
+export const installed = { set: new Set([PACK]), ready: false };
+
+/** @param {When | undefined} when */
+const readsPacks = (when) => !!when && Object.keys(when).some((k) => k.startsWith("pack:"));
+
+/** Chapters with an objective that only exists with (or without) some pack. @type {WeakMap<Chapter, boolean>} */
+const packGated = new WeakMap();
+
+/**
+ * Before the first scan has answered, a chapter whose objectives depend on `pack:` flags can't be finished
+ * (an objective hidden by "off" would otherwise let it end early). @param {Chapter} chapter
+ */
+function packsPending(chapter) {
+  if (installed.ready) return false;
+  let gated = packGated.get(chapter);
+  if (gated === undefined) packGated.set(chapter, (gated = chapter.objectives.some((o) => readsPacks(o.when))));
+  return gated;
+}
+
+/** Does a story need the scan before it offers a chapter (a chapter's `when` reads a `pack:` flag)? @param {Story} story */
+export const storyWaitsForPacks = (story) => !installed.ready && story.chapters.some((c) => readsPacks(c.when));
+
+// ---------------------------------------------------------------------------
 // Flags and requirements
 // ---------------------------------------------------------------------------
 
@@ -232,6 +263,7 @@ export function stateOf(saga, story) {
  */
 export function flagOf(saga, storyId, key) {
   if (key.startsWith("g:")) return saga.g?.[key.slice(2)];
+  if (key.startsWith("pack:")) return installed.ready && installed.set.has(key.slice(5)) ? "on" : "off";
   const dot = key.indexOf(".");
   if (dot > 0) return saga.s[key.slice(0, dot)]?.f?.[key.slice(dot + 1)];
   const colon = key.indexOf(":");
@@ -252,7 +284,7 @@ export function test(actual, want) {
 export const matches = (when, saga, storyId) => !when || Object.entries(when).every(([k, v]) => test(flagOf(saga, storyId, k), v));
 
 /** Sets a flag the way a choice's `set` names it. @param {Saga} saga @param {string} storyId @param {string} key @param {string} value */
-function setFlag(saga, storyId, key, value) {
+export function setFlag(saga, storyId, key, value) {
   if (key.startsWith("g:")) {
     saga.g ??= {};
     saga.g[key.slice(2)] = String(value);
@@ -399,27 +431,62 @@ export const objApplies = (e, obj, saga) => e.fav !== undefined || matches(obj.w
 /** @param {Entry} e @param {number} i */
 export const progressOf = (e, i) => e.st.o?.[i] ?? 0;
 
-/** Is objective i done (or not there for this player)? @param {Entry} e @param {number} i @param {Saga} saga */
+/** Has objective i reached its own target? @param {Entry} e @param {number} i */
+export const reached = (e, i) => progressOf(e, i) >= target(e.chapter.objectives[i]);
+
+/**
+ * The other members of objective i's "either" group (`or`) that are there for the player, or [] when it has none.
+ * @param {Entry} e @param {number} i @param {Saga} saga
+ */
+export function orMates(e, i, saga) {
+  const obj = e.chapter.objectives[i];
+  if (!obj.or || obj.optional) return [];
+  /** @type {number[]} */
+  const out = [];
+  e.chapter.objectives.forEach((o, k) => {
+    if (k !== i && o.or === obj.or && !o.optional && objApplies(e, o, saga)) out.push(k);
+  });
+  return out;
+}
+
+/**
+ * An objective's label as the log and tracker show it: "Optional: ...", or "Either: ..." / "Or: ..." in an
+ * "either" group with another member there for the player.
+ * @param {Entry} e @param {number} i @param {Saga} saga
+ */
+export function labelOf(e, i, saga) {
+  const obj = e.chapter.objectives[i];
+  if (obj.optional) return `Optional: ${obj.label}`;
+  const mates = orMates(e, i, saga);
+  if (mates.length) return `${mates.some((k) => k < i) ? "Or" : "Either"}: ${obj.label}`;
+  return obj.label;
+}
+
+/** Is objective i done (or not there for this player, or another member of its "either" group is done)? @param {Entry} e @param {number} i @param {Saga} saga */
 export function objDone(e, i, saga) {
   const obj = e.chapter.objectives[i];
   if (!objApplies(e, obj, saga)) return true;
-  return progressOf(e, i) >= target(obj);
+  if (reached(e, i)) return true;
+  return !!obj.or && orMates(e, i, saga).some((k) => reached(e, k));
 }
 
-/** @param {Entry} e @param {Saga} saga */
-export const chapterDone = (e, saga) => e.chapter.objectives.every((_, i) => objDone(e, i, saga));
+/** Every required objective is done (optional ones don't count). @param {Entry} e @param {Saga} saga */
+export const chapterDone = (e, saga) => !packsPending(e.chapter) && e.chapter.objectives.every((o, i) => o.optional || objDone(e, i, saga));
 
-/** The first unfinished objective (the "current step"), or -1. @param {Entry} e @param {Saga} saga */
-export const currentStep = (e, saga) => e.chapter.objectives.findIndex((_, i) => !objDone(e, i, saga));
+/** The first unfinished required objective (the "current step"), or -1. @param {Entry} e @param {Saga} saga */
+export const currentStep = (e, saga) => e.chapter.objectives.findIndex((o, i) => !o.optional && !objDone(e, i, saga));
 
 /**
  * Does objective i count now? Unfinished and there for the player, and in a `sequential` chapter
- * only the first unfinished one.
+ * only the first unfinished one (with the rest of its "either" group). Optional objectives always count.
  * @param {Entry} e @param {number} i @param {Saga} saga
  */
 export function active(e, i, saga) {
   if (objDone(e, i, saga)) return false;
-  return !e.chapter.sequential || currentStep(e, saga) === i;
+  const obj = e.chapter.objectives[i];
+  if (!e.chapter.sequential || obj.optional) return true;
+  const step = currentStep(e, saga);
+  return step === i || (!!obj.or && e.chapter.objectives[step]?.or === obj.or);
 }
 
 /** @type {Map<string, { v: number, list: Entry[] }>} */
