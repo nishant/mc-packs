@@ -1,5 +1,5 @@
 // Realm Configuration menu (admin_bp): walks the menu to a few commands (a slider, a player picker,
-// a confirmation, Everyone online, the setup checklist, a quick action, search) and checks that the
+// a confirmation, Everyone online, the setup checklist, a quick action, search, Recent, a command with its own menu) and checks that the
 // page a command was picked from comes back afterwards, that Cancel goes back too, and the tap
 // counts (button presses and form submits, the opening counted as one).
 // Run with: node tools/test-bds/run.mjs --quiet --only admin_bp,settings_bp,help_bp,weather_bp,crowns_bp,guard_bp,npc_bp,silly_bp --scenario tools/test-bds/examples/admin-menu.js --timeout 600
@@ -87,6 +87,17 @@ export default async function (t) {
   await ran;
   t.assert(page && title(page) === "Fun", "Fun comes back");
 
+  // 5b. Running the @a line again from Recent asks again too, then Recent comes back.
+  main = await tap(page, "Back");
+  page = await tap(main, "Recent");
+  t.assert(page && title(page) === "Recent", `Recent opened (got "${title(page)}")`);
+  ask = await tap(page, "realm:silly_give @a");
+  t.assert(ask && title(ask) === "Are you sure?" && /everyone online/i.test(ask.body), `rerunning @a from Recent asks first (got "${title(ask)}": ${ask?.body})`);
+  ran = t.waitMessage(p, /Ran \/realm:silly_give @a random 1/, { pack: "admin_bp", since: t.tick });
+  page = await tap(ask, "Yes");
+  await ran;
+  t.assert(page && title(page) === "Recent", `Recent comes back (got "${title(page)}")`);
+
   // 6. Setup checklist: townsfolk by name; each further one is two taps.
   main = await tap(page, "Back");
   taps = 1;
@@ -132,6 +143,29 @@ export default async function (t) {
   t.assert(page && /Nothing matches/.test(page.body), "no matches page");
   main = await tap(page, "Back");
   t.assert(title(main) === "Realm Configuration", "Back from search returns to the main menu");
+  await tap(main, null, 20);
+
+  // 8b. A command with its own menu (Realm Settings, which pings the packs twice first): that menu
+  // stays. The admin list may try to come back once; a real client answers UserBusy and it gives up.
+  t.formTimeout = 300; // keep Realm Settings open while we watch
+  main = await open();
+  form = await tap(await tap(main, "Utilities"), "realm:config", 150);
+  t.assert(form && form.pack === "settings_bp", `realm:config opened its own menu (got "${title(form)}" from ${form?.pack})`);
+  let retry = await t.waitForm(p, { timeout: 60 }).catch(() => undefined);
+  if (retry) {
+    t.assert(retry.pack === "admin_bp", `only the admin list may try to come back (got "${title(retry)}" from ${retry.pack})`);
+    retry.answer("busy");
+    retry = await t.waitForm(p, { timeout: 60 }).catch(() => undefined);
+    t.assert(!retry, `the admin list doesn't retry over Realm Settings (got "${title(retry)}" from ${retry?.pack})`);
+  }
+  t.assert(!form.answered, "Realm Settings is still open after 60 ticks");
+  form.answer(null);
+  const gone = await t.waitForm(p, { timeout: 60 }).catch(() => undefined);
+  t.assert(!gone || gone.pack !== "admin_bp", `closing Realm Settings doesn't bring the admin list back (got "${title(gone)}")`);
+  gone?.answer(null);
+  t.formTimeout = 100;
+  main = await open();
+  t.assert(title(main) === "Realm Configuration", "the menu opens again after a command's own menu");
   await tap(main, null, 20);
 
   // 9. The menu opens again after it was closed, and leaving with it open leaves no mess.

@@ -128,7 +128,11 @@ async function resume(player, back) {
   await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10) * 2 + 5); // Realm Settings pings twice before it opens
   if (!player.isValid || !isOp(player)) return;
   resumed.add(player.id);
-  return back();
+  try {
+    return await back();
+  } finally {
+    resumed.delete(player.id);
+  }
 }
 
 /** A list of buttons; picking one opens it. @param {Player} player @param {string} title @param {string} body @param {Entry[]} entries @param {(() => Promise<unknown>) | undefined} back */
