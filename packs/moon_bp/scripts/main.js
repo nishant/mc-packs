@@ -520,8 +520,12 @@ function spot(p) {
     const y = top.location.y;
     if (Math.abs(y - feet.y) > 16) continue; // cliffs and caves: the surface there is too far from the player
     const at = { x, y: y + 1, z };
-    if (dim.getPlayers({ location: { x: x + 0.5, y: y + 1, z: z + 0.5 }, maxDistance: CLEAR_RADIUS }).length) continue;
-    if (built(dim, { x, y, z })) continue;
+    try {
+      if (dim.getPlayers({ location: { x: x + 0.5, y: y + 1, z: z + 0.5 }, maxDistance: CLEAR_RADIUS }).length) continue;
+      if (built(dim, { x, y, z })) continue;
+    } catch {
+      continue; // the column around a high-flying player can be loaded at the top and not around the ground
+    }
     return at;
   }
   return undefined;
