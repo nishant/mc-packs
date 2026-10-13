@@ -16,6 +16,8 @@ const SLOTS = [
 const OK = 0;
 const WARN = 1;
 const CRITICAL = 2;
+/** Share of an item's durability it must be repaired above a level before that level warns again. */
+const REARM = 0.02;
 
 /** player id → slot key → { typeId, level } of the last check */
 const state = new Map();
@@ -59,12 +61,15 @@ function check(player) {
 
     const max = durability.maxDurability;
     const left = max - durability.damage;
-    const level = levelFor(left, max);
     const prev = seen.get(key);
+    const prevLevel = prev && prev.typeId === item.typeId ? prev.level : OK;
+    // A level only clears once the item is a little above it again (REARM of its durability), so a
+    // Mending tool hovering at the line (each ore's XP repairs a point or two) doesn't warn every few blocks.
+    const rearm = Math.ceil(max * REARM);
+    const level = Math.max(levelFor(left, max), Math.min(prevLevel, levelFor(left - rearm, max)));
     seen.set(key, { typeId: item.typeId, level });
 
     // Only notify when it gets worse; a new item or a repair resets.
-    const prevLevel = prev && prev.typeId === item.typeId ? prev.level : OK;
     if (level > prevLevel) notify(player, itemName(item), left, max, level);
   }
 }
