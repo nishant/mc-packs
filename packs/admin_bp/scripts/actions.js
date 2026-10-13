@@ -83,6 +83,7 @@ export const ACTIONS = [
     use: "realm:weather_set",
     form: () => new ModalFormData().title("Set the weather").dropdown("Weather", WEATHER.map((w) => w[0])).slider("For how many real minutes", 1, 120, { valueStep: 1, defaultValue: 10 }),
     read: (_p, [w, m]) => ({ weather: WEATHER[Number(w) || 0][0], minutes: Number(m) || 10 }),
+    confirm: (_p, v) => `Set the weather to ${v.weather} for ${v.minutes} minutes, for everyone?`,
     run(player, v) {
       const w = WEATHER.find((x) => x[0] === v.weather) ?? WEATHER[0];
       player.dimension.setWeather(w[1], Math.round(Number(v.minutes) * 1200));
@@ -95,6 +96,7 @@ export const ACTIONS = [
     help: "Day, noon, sunset, night, midnight or sunrise.",
     form: () => new ModalFormData().title("Set the time").dropdown("Time", TIMES.map((t) => t[0]), { defaultValueIndex: 0 }),
     read: (_p, [t]) => ({ time: TIMES[Number(t) || 0][0] }),
+    confirm: (_p, v) => `Set the time to ${v.time}, for everyone?`,
     run(_player, v) {
       const t = TIMES.find((x) => x[0] === v.time) ?? TIMES[0];
       world.setTimeOfDay(t[1]);
@@ -146,6 +148,7 @@ export const ACTIONS = [
       return f;
     },
     read: (me, [p]) => ({ player: pickName(me, p, true) }),
+    confirm: (_me, v) => (v.player === EVERYONE ? "Teleport everyone online to you?" : undefined),
     run(me, v) {
       const list = targets(v.player).filter((p) => p.id !== me.id);
       for (const p of list) p.teleport(me.location, { dimension: me.dimension });
@@ -169,6 +172,7 @@ export const ACTIONS = [
       if (!item || !ItemTypes.get(item)) return `There is no item "${item}".`;
       return { player: pickName(me, p, true), item, amount: Number(n) || 1 };
     },
+    confirm: (_me, v) => (v.player === EVERYONE ? `Give ${v.amount} ${v.item} to everyone online?` : undefined),
     run(_me, v) {
       if (!ItemTypes.get(String(v.item))) return `There is no item "${v.item}".`;
       const list = targets(v.player);
@@ -196,6 +200,7 @@ export const ACTIONS = [
       return f;
     },
     read: (me, [p]) => ({ player: pickName(me, p, true) }),
+    confirm: (_me, v) => (v.player === EVERYONE ? "Remove every potion effect from everyone online?" : undefined),
     run(_me, v) {
       let n = 0;
       const list = targets(v.player);
@@ -217,6 +222,7 @@ export const ACTIONS = [
       return f;
     },
     read: (me, [p]) => ({ player: pickName(me, p, true) }),
+    confirm: (_me, v) => (v.player === EVERYONE ? "Heal everyone online?" : undefined),
     run(_me, v) {
       const list = targets(v.player);
       for (const p of list) p.getComponent(EntityComponentTypes.Health)?.resetToMaxValue();
@@ -259,18 +265,27 @@ export const ACTIONS = [
       return f;
     },
     read: (_p, raw) => Object.fromEntries(RULES.map(([key], i) => [key, raw[i] === true])),
+    confirm(_me, v) {
+      const changes = ruleChanges(v).map(([, label, on]) => `${label}: ${on ? "Enabled" : "Disabled"}`);
+      return changes.length ? `Change the game rules for everyone?\n\n${changes.join("\n")}` : undefined;
+    },
     run(_me, v) {
       const rules = /** @type {any} */ (world.gameRules);
       const changed = [];
-      for (const [key, label] of RULES) {
-        if (typeof v[key] !== "boolean" || rules[key] === v[key]) continue;
-        rules[key] = v[key];
-        changed.push(`${label}: ${v[key] ? "Enabled" : "Disabled"}`);
+      for (const [key, label, on] of ruleChanges(v)) {
+        rules[key] = on;
+        changed.push(`${label}: ${on ? "Enabled" : "Disabled"}`);
       }
       return changed.length ? changed.join(", ") : "No game rule changed";
     },
   },
 ];
+
+/** The game rules `v` would change: [key, label, new value]. @param {Values} v @returns {[string, string, boolean][]} */
+function ruleChanges(v) {
+  const rules = /** @type {any} */ (world.gameRules);
+  return RULES.filter(([key]) => typeof v[key] === "boolean" && rules[key] !== v[key]).map(([key, label]) => [key, label, v[key] === true]);
+}
 
 /** Monsters near a player, without names (a named mob is somebody's). @param {Player} me @param {number} radius */
 function hostiles(me, radius) {

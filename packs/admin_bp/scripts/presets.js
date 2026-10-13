@@ -31,28 +31,44 @@ export const CATEGORIES = [
   { id: "utilities", title: "Utilities", packs: ["help_bp", "settings_bp", "admin_bp", "stash_bp", "find_bp", "cleanup_bp", "hud_bp", "mobhp_bp", "elytra_bp", "durability_bp", "refill_bp", "phantom_bp", "translucent_bp", "harvest_bp", "leaves_bp"] },
 ];
 
+/** The townsfolk by name (the Townsfolk pack's config.js); an id missing here shows as the id. */
+const TOWNSFOLK = {
+  mara: "Mara the Cartographer",
+  tobin: "Old Tobin the Fisherman",
+  reyes: "Warden Reyes",
+  elsie: "Elsie the Innkeeper",
+  bram: "Mayor Bram",
+  quill: "Quill the Trader",
+  ida: "Ida the Relicsmith",
+  sol: "Sol the Sky-reader",
+  hollis: "Brother Hollis the Chapel Keeper",
+  moss: "Moss the Gravedigger",
+  wren: "Wren the Stable Girl",
+  bea: "Bea the Cook",
+};
+
 /** @type {Record<string, Record<string, ParamPreset>>} by command, then parameter name */
 export const PARAMS = {
   "realm:admin_item": { player: { label: "Give it to", everyone: true } },
   "realm:caravan_spot": { name: { label: "Spot name (empty: Spot 1, Spot 2...)" } },
   "realm:champions_spawn": { "realm:champion_trait": { label: "Trait (leave out: random)" } },
   "realm:crowns_give": { player: { label: "Give Crowns to", everyone: true }, amount: { label: "Crowns (negative takes them)", kind: "text", default: 100 } },
-  "realm:crowns_pay": { player: { label: "Pay" }, amount: { label: "Crowns", kind: "slider", min: 1, max: 1000, step: 1, default: 10 } },
+  "realm:crowns_pay": { player: { label: "Pay" }, amount: { label: "Crowns (type the command for more than 1000)", kind: "slider", min: 1, max: 1000, step: 1, default: 10 } },
   "realm:domt_draw": { player: { label: "Draw a card for", everyone: true } },
   "realm:expedition_site": { x: { label: "X (default: where you stand)", kind: "posX" }, z: { label: "Z (default: where you stand)", kind: "posZ" } },
   "realm:farm_add": { name: { label: "Farm name", default: "farm" }, radius: { label: "Radius in chunks", kind: "slider", min: 1, max: 4, step: 1, default: 2 } },
   "realm:farm_remove": { name: { label: "Farm name" } },
   "realm:find": { item: { label: "Item to find (empty: the one in your hand)", kind: "item" } },
-  "realm:goals_add": { item: { label: "Item id", kind: "item" }, amount: { label: "Amount to collect", kind: "slider", min: 1, max: 10000, step: 1, default: 640 }, name: { label: "Goal name" } },
+  "realm:goals_add": { item: { label: "Item id", kind: "item" }, amount: { label: "Amount to collect (1 to 1,000,000)", kind: "text", default: 640 }, name: { label: "Goal name" } },
   "realm:guard_add": { name: { label: "Zone name (letters, digits, _ and -)", default: "home" }, radius: { label: "Radius (blocks)", kind: "slider", min: 8, max: 256, step: 8, default: 64 } },
   "realm:guard_remove": { name: { label: "Zone name" } },
   "realm:help": { "realm:help_topic": { label: "Feature (leave out: the menu)" } },
   "realm:maps_give": { player: { label: "Give a treasure map to", everyone: true } },
-  "realm:moon_set": { "realm:moon_state": { label: "Tonight's moon" } },
+  "realm:moon_set": { "realm:moon_state": { label: "Tonight's moon", names: { blood: "Blood Moon", harvest: "Harvest Moon", normal: "An ordinary night" } } },
   "realm:news_add": { text: { label: "Text to add to your news draft" } },
   "realm:news_body": { text: { label: "News body (then the editor opens)" } },
-  "realm:npc_add": { "realm:npc_id": { label: "Townsfolk to place where you stand" } },
-  "realm:npc_home": { "realm:npc_id": { label: "Townsfolk whose night home is here" } },
+  "realm:npc_add": { "realm:npc_id": { label: "Townsfolk to place where you stand", names: TOWNSFOLK } },
+  "realm:npc_home": { "realm:npc_id": { label: "Townsfolk whose night home is here", names: TOWNSFOLK } },
   "realm:party_chat": { message: { label: "Message to your party" } },
   "realm:party_invite": { player: { label: "Invite", kind: "player" } },
   "realm:relics_give": { player: { label: "Give a relic to", everyone: true }, "realm:relic_id": { label: "Relic" } },
@@ -60,16 +76,34 @@ export const PARAMS = {
   "realm:saga_reset": { player: { label: "Reset the stories of" } },
   "realm:silly_give": { player: { label: "Give Silly Books to", everyone: true }, "realm:silly_book": { label: "Book" }, amount: { label: "How many", kind: "slider", min: 1, max: 64, step: 1, default: 1 } },
   "realm:slots_give": { player: { label: "Give the Slot Machine to (leave out: you)", everyone: true } },
-  "realm:stats_sidebar": { "realm:sidebar_stat": { label: "Sidebar shows" } },
+  "realm:stats_sidebar": {
+    "realm:sidebar_stat": {
+      label: "Sidebar shows",
+      names: { playtime: "Playtime", deaths: "Deaths", mobkills: "Mob kills", pvpkills: "Player kills", mined: "Blocks mined", placed: "Blocks placed", travelled: "Distance traveled", flown: "Elytra distance", joins: "Times joined", cycle: "Rotate through the stats", off: "Hidden" },
+    },
+  },
   "realm:storm_cell": { force: { label: "Even without a thunderstorm", default: false } },
   "realm:titles_give": { player: { label: "Give a title to", kind: "player" }, title: { label: "Title (or trail:cloud, trail:leaves, trail:ember, trail:sparkle)" } },
   "realm:town_add": { name: { label: "Town name (centered where you stand)" } },
   "realm:town_spot": { "realm:town_project": { label: "Project to place here" } },
-  "realm:weather_set": { "realm:weather_kind": { label: "Weather" }, minutes: { label: "For how many real minutes", kind: "slider", min: 1, max: 120, step: 1, default: 10 } },
+  "realm:weather_set": { "realm:weather_kind": { label: "Weather" }, minutes: { label: "For how many real minutes (type the command for more than 120)", kind: "slider", min: 1, max: 120, step: 1, default: 10 } },
 };
 
-/** Commands that ask "Are you sure?" first, besides every *_remove and *_reset. */
-export const CONFIRM = new Set(["realm:meteor_now", "realm:tornado_spawn", "realm:caravan_call", "realm:crowns_give", "realm:domt_draw"]);
+/**
+ * Commands that ask "Are you sure?" first, besides every *_remove and *_reset and anything run for
+ * everyone online (@a): the ones that break blocks, or change the weather, the night or an event for everyone.
+ */
+export const CONFIRM = new Set([
+  "realm:meteor_now",
+  "realm:tornado_spawn",
+  "realm:caravan_call",
+  "realm:crowns_give",
+  "realm:domt_draw",
+  "realm:weather_set",
+  "realm:moon_set",
+  "realm:storm_cell",
+  "realm:fishing_tournament",
+]);
 
 /** @param {string} name */
 export const needsConfirm = (name) => CONFIRM.has(name) || /_(remove|reset)$|_remove_|_reset_/.test(name);
@@ -81,6 +115,7 @@ export const needsConfirm = (name) => CONFIRM.has(name) || /_(remove|reset)$|_re
  */
 export const SETUP = [
   { title: "Place the townsfolk", help: "Stand where each one should live and pick them. /realm:npc_list shows who is placed.", cmd: "realm:npc_add" },
+  { title: "Relicsmith", help: "Stand where the relicsmith should work (needs the Townsfolk pack).", cmd: "realm:relics_smith" },
   { title: "Story places", help: "Set, build or relocate the places the stories use. Places nobody set are picked and built on their own when a story needs them.", cmd: "realm:saga_places" },
   { title: "Add a town", help: "Stand at the center of the town and give it a name.", cmd: "realm:town_add", done: "towns" },
   { title: "Town project spots", help: "Stand where a project (well, lamps, dock...) should be built, facing the way it should face.", cmd: "realm:town_spot" },
