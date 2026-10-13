@@ -12,6 +12,7 @@ const BASE = CONFIG;
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Night sky show", help: "Shooting stars and the aurora on clear nights" },
   { key: "stars.enabled", type: "bool", scope: "world", label: "Shooting stars" },
+  { key: "storyEvents", type: "bool", scope: "world", label: "Story events", help: "Story Questlines can send a shooting star at story moments (at night under a clear sky)" },
   { key: "wish.enabled", type: "bool", scope: "world", label: "Wishes on shooting stars", help: "Sneak right after a shooting star, once a night" },
   { key: "aurora.enabled", type: "bool", scope: "world", label: "Aurora over snowy ground" },
   { key: "aurora.chance", type: "float", scope: "world", label: "Chance a night is an aurora night", min: 0, max: 1, step: 0.05 },

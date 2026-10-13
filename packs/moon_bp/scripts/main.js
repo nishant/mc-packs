@@ -25,6 +25,7 @@ const PROP_PENDING = "moon:pending"; // world: the state an operator chose for t
 const PROP_TICK = "moon:tick"; // world: JSON { was, set }: randomTickSpeed before a Harvest Moon raised it
 const PROP_SEEN = "moon:seen"; // player: moons already sent to the Journal, "blood,harvest"
 const PROP_SURVIVOR = "moon:survivor"; // player: true once they unlocked the survivor title
+const PROP_STORY = "moon:story"; // world: the in-game day of the last story request honored (realm:sky_request)
 const PROP_WEATHER = "moon:weather"; // world: overworld weather at the last change; scripts can't read the current weather
 
 const OVERWORLD = "minecraft:overworld";
@@ -767,10 +768,54 @@ async function mainMenu(player) {
   actions[res.selection]?.run();
 }
 
+// ---------------------------------------------------------------------------
+// Story requests: realm:sky_request { kind: "blood_moon" | "harvest_moon", from, player?, reason? }
+// ---------------------------------------------------------------------------
+
+/** @param {unknown} v @param {number} max */
+const optText = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+
+/**
+ * Tonight becomes that moon, exactly like /realm:moon_set (now if it's night, else at nightfall). Ignored
+ * silently when the pack or its Story events setting is disabled, tonight is already a Blood or Harvest Moon
+ * (or an operator already chose tonight's moon), a moon night ended earlier this daylight, a request was
+ * already honored this in-game day, or the message is malformed.
+ * @param {string} message
+ */
+function skyRequest(message) {
+  let req;
+  try {
+    req = JSON.parse(message);
+  } catch {
+    return;
+  }
+  if (!req || typeof req !== "object" || Array.isArray(req)) return;
+  const state = req.kind === "blood_moon" ? "blood" : req.kind === "harvest_moon" ? "harvest" : undefined;
+  if (!state || !optText(req.from, 64) || !optText(req.player, 64) || !optText(req.reason, 200)) return;
+  if (!ready || get("enabled") !== true || get("storyEvents") !== true) return;
+  const day = world.getDay();
+  if (world.getDynamicProperty(PROP_STORY) === day) return; // one honored request per in-game day
+  if (isNight(world.getTimeOfDay())) {
+    if (night?.a && night.d === day && night.s !== "normal") return; // already a moon tonight
+  } else {
+    if (isState(world.getDynamicProperty(PROP_PENDING))) return; // tonight's moon is already chosen
+    if (night && night.s !== "normal" && night.d >= day - 1) return; // a moon night just ended: not two in a row
+  }
+  world.setDynamicProperty(PROP_STORY, day);
+  setMoon(/** @type {State} */ (state));
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "moon_bp");
+    else if (id === "realm:sky_request") {
+      try {
+        skyRequest(message);
+      } catch (e) {
+        console.warn(`[moon] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

@@ -1,7 +1,7 @@
 // Expeditions with the packs it talks to (Champions, Crowns, Guilds, Journal, Relics, Quests, Bounties, Coordinates HUD,
 // Mob Health): a Hard Gauntlet's elite hall asks the Champions pack for one champion per wave (never one of each), the
 // boss is killed, and the rewards (Crowns, Warden reputation, the Journal page, a relic at relicChance 1, the quest)
-// arrive once each.
+// arrive once each. realm:quest_done carries the dungeon, level, tier, Nightmare number and the gauntlet flag.
 // node tools/test-bds/run.mjs --quiet --flat --only expedition_bp,elite_bp,crowns_bp,guilds_bp,journal_bp,relics_bp,quests_bp,bounty_bp,hud_bp,mobhp_bp --scenario tools/test-bds/examples/expedition-integrations.js --timeout 900
 const cfg = (t, key, value) => t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `t${key}`, pack: "expedition_bp", key, value }));
 export default async function (t) {
@@ -16,7 +16,9 @@ export default async function (t) {
   t.assert(t.cmd(p, `/realm:expedition_site ${sx} ${sz}`).ok, "site");
   await t.waitMessage(p, /site set/i, { timeout: 200 });
   const events = [];
+  const done = [];
   t.system.afterEvents.scriptEventReceive.subscribe((ev) => {
+    if (ev.id === "realm:quest_done") done.push(JSON.parse(ev.message));
     if (["realm:quest_done", "realm:rep_add", "realm:relic_give", "realm:champion_spawn"].includes(ev.id)) events.push(ev.id);
     if (ev.id === "realm:journal" && ev.message.includes("expedition_")) events.push(ev.id); // (the relic's own page comes from the Relics pack)
   });
@@ -73,6 +75,9 @@ export default async function (t) {
   const count = (id) => events.filter((x) => x === id).length;
   t.log(`events: ${JSON.stringify(Object.fromEntries(["realm:quest_done", "realm:rep_add", "realm:journal", "realm:relic_give", "realm:champion_spawn"].map((id) => [id, count(id)])))}`);
   for (const id of ["realm:quest_done", "realm:rep_add", "realm:journal"]) t.check(count(id) === 1, `${id} once (${count(id)})`);
+  const q = done[0] ?? {};
+  t.log(`quest_done: ${JSON.stringify(q)}`);
+  t.check(q.id === "expedition_crypt" && q.dungeon === "crypt" && q.level === 2 && q.tier === "hard" && q.nightmare === 0 && q.gauntlet === true, "quest_done has dungeon crypt, level 2, tier hard, nightmare 0, gauntlet true");
   t.check(count("realm:relic_give") <= 1, `realm:relic_give at most once (${count("realm:relic_give")}; the chance is capped at 50%)`);
   t.check(champWaves >= 2, `champion waves (${champWaves})`);
   const others = t.messages(p).filter((m) => m.pack !== "expedition_bp" && m.kind === "chat").map((m) => `${m.pack}: ${m.plain}`);

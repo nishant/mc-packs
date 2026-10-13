@@ -2141,6 +2141,8 @@ function finish(run) {
   let tiers = readJson(PROP_TIERS) ?? [];
   const blessed = run.affixes.includes("blessed");
   const crowns = Math.round(d.crowns * s.crowns * (blessed ? 1.25 : 1) * (run.cursed ? 1.25 : 1));
+  // realm:quest_done extras (Story Questlines reads them): the dungeon, its level, the tier's name and Nightmare number.
+  const doneFields = { dungeon: d.id, level: L, tier: L >= 3 ? "nightmare" : levelName(L).toLowerCase(), nightmare: tierOf(L), gauntlet: run.long === true };
   for (const [id] of run.members) {
     const p = online(id);
     if (!p) continue;
@@ -2149,7 +2151,7 @@ function finish(run) {
     p.playSound("random.totem", { volume: 0.6 });
     const mult = (hasFlag(run, id, "greed") ? 1.5 : 1) * (hasFlag(run, id, "midas") ? 2 : 1);
     payCrowns(p, Math.round(crowns * mult), `${run.long ? "Gauntlet" : "Expedition"}: ${d.name} ${levelShort(L)}`);
-    send("realm:quest_done", { player: p.id, pack: "expedition_bp", id: `expedition_${d.id}`, label: `Expedition: ${d.name} cleared`, kind: "expedition", guild: "wardens" });
+    send("realm:quest_done", { player: p.id, pack: "expedition_bp", id: `expedition_${d.id}`, label: `Expedition: ${d.name} cleared`, kind: "expedition", guild: "wardens", ...doneFields });
     if (CONFIG.rep > 0) send("realm:rep_add", { player: p.id, guild: "wardens", amount: Math.round(CONFIG.rep * (1 + 0.1 * s.t)), reason: `Expedition: ${d.name}` });
     send("realm:journal", { player: p.id, page: "places", entry: `expedition_${d.id}`, label: `Expedition: ${d.name}` });
     if (CONFIG.relics.length && Math.random() < Math.min(0.5, get("relicChance") + s.relic)) send("realm:relic_give", { player: p.id, relic: CONFIG.relics[Math.floor(Math.random() * CONFIG.relics.length)] });

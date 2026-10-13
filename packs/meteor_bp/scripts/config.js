@@ -2,6 +2,12 @@ export const CONFIG = {
   /** Meteors fall on their own at night. `/realm:meteor_now` works either way. */
   enabled: true,
 
+  /**
+   * Story Questlines can make a meteor fall at story moments (at most one every 10 real minutes, never
+   * while another is falling). Needs `enabled` too.
+   */
+  storyEvents: true,
+
   /** Chance (0-1) that a meteor falls during a night. Rolled once each night, at a random time. */
   chance: 0.33,
 

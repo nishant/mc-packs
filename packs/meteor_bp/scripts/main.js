@@ -10,6 +10,7 @@ import { escapeZones, protectedBox, zoneProviders, zonesAt } from "./zones.js";
 //                    state: "falling" (warned, not landed), "pending" (landed, crater not made yet: no one
 //                    was near), "made" (crater made), "none" (no safe spot for a crater near it), "burst" (blew
 //                    apart in the sky over a safe zone). burst: the safe zone's name while it falls toward one
+//                    (or "the sky" with sky: true for a story meteor asked to break apart in the sky)
 const PROP_NIGHT = "meteor:night";
 const PROP_IMPACTS = "meteor:impacts";
 const OVERWORLD = "minecraft:overworld";
@@ -45,7 +46,7 @@ const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|copper|waxed_|quartz|purpur|terracotta|_block$|bars|tinted|lamp|cauldron|crafter|target|bee_nest|beehive|_head$|_skull$|pot$/;
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
-/** @typedef {{ id: number, x: number, z: number, y?: number, state: "falling" | "pending" | "made" | "none" | "burst", found?: string, lands?: number, burst?: string, moved?: boolean }} Impact */
+/** @typedef {{ id: number, x: number, z: number, y?: number, state: "falling" | "pending" | "made" | "none" | "burst", found?: string, lands?: number, burst?: string, sky?: boolean, moved?: boolean }} Impact */
 /** @typedef {{ impact: Impact, landsAt: number, streaked: boolean, vel: Vector3, y: number }} Fall */
 
 /** @type {Fall | undefined} the meteor on its way down */
@@ -237,15 +238,16 @@ function topAt(dim, x, z) {
 
 /**
  * Warns everyone, then brings the meteor down at `aim` after warningSeconds (steered away from safe zones,
- * or set to burst over one).
- * @param {{ x: number, z: number }} aim
+ * or set to burst over one). `sky`: it breaks apart high over `aim` and breaks no blocks (a story request).
+ * @param {{ x: number, z: number }} aim @param {boolean} [sky]
  */
-function launch(aim) {
+function launch(aim, sky = false) {
   const seconds = get("warningSeconds");
-  const target = steer(aim.x, aim.z);
+  const target = sky ? { x: aim.x, z: aim.z, burst: "the sky" } : steer(aim.x, aim.z);
   /** @type {Impact} */
   const impact = { id: Date.now(), x: target.x, z: target.z, state: "falling", lands: Date.now() + seconds * 1000 };
   if (target.burst) impact.burst = target.burst;
+  if (sky) impact.sky = true;
   impacts().push(impact);
   saveImpacts();
   const angle = Math.random() * Math.PI * 2;
@@ -257,7 +259,8 @@ function launch(aim) {
     vel: { x: Math.cos(angle) * FALL_SPEED.side, y: -FALL_SPEED.down, z: Math.sin(angle) * FALL_SPEED.side },
     y: (top ? top.location.y + 1 : 64) + (impact.burst ? BURST_HEIGHT : 0), // refined at impact when the chunk is loaded
   };
-  if (impact.burst) world.sendMessage(`§6A meteor is falling toward ${impact.burst}, near ${target.x}, ${target.z}! The safe zone will stop it in the sky in ${seconds} seconds.`);
+  if (impact.sky) world.sendMessage(`§6A meteor is streaking across the sky! It will break apart high above ${target.x}, ${target.z} in ${seconds} seconds.`);
+  else if (impact.burst) world.sendMessage(`§6A meteor is falling toward ${impact.burst}, near ${target.x}, ${target.z}! The safe zone will stop it in the sky in ${seconds} seconds.`);
   else world.sendMessage(`§6A meteor is falling! It will land near ${target.x}, ${target.z} in ${seconds} seconds.`);
   system.sendScriptEvent("realm:sky_event", JSON.stringify({ kind: "meteor", dim: OVERWORLD, x: target.x, z: target.z, text: "A meteor is falling" }));
 }
@@ -375,7 +378,8 @@ function burst(f) {
       // a player mid-respawn
     }
   }
-  world.sendMessage(`§6The meteor burst in the sky over ${impact.burst}. The safe zone kept the ground safe.`);
+  if (impact.sky) world.sendMessage(`§6The meteor broke apart high in the sky near ${impact.x}, ${impact.z}.`);
+  else world.sendMessage(`§6The meteor burst in the sky over ${impact.burst}. The safe zone kept the ground safe.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -617,6 +621,7 @@ function describe() {
   const f = falling;
   if (f) {
     const s = Math.max(1, Math.ceil((f.landsAt - system.currentTick) / 20));
+    if (f.impact.sky) return `§6A meteor is streaking across the sky! It will break apart high above ${f.impact.x}, ${f.impact.z} in ${s} seconds.`;
     if (f.impact.burst) return `§6A meteor is falling toward ${f.impact.burst}, near ${f.impact.x}, ${f.impact.z}. The safe zone will stop it in the sky in ${s} seconds.`;
     return `§6A meteor is falling! It will land near ${f.impact.x}, ${f.impact.z} in ${s} seconds.`;
   }
@@ -628,6 +633,7 @@ function describe() {
 function describeImpact(i, latest = false) {
   const what = latest ? "The last meteor" : "A meteor";
   const where = `${i.x}, ${i.z}`;
+  if (i.state === "burst" && i.sky) return `${what} broke apart in the sky near ${where}.`;
   if (i.state === "burst") return `${what} burst in the sky over ${i.burst ?? "a safe zone"}, near ${where}.`;
   if (i.state === "none") return `${what} came down near ${where}, but burned up before it reached the ground.`;
   if (i.state === "falling") return `${what} is falling toward ${where}.`;
@@ -727,6 +733,7 @@ async function settingsForm(player) {
     .slider("Distance kept from world spawn (blocks)", 0, 1024, { valueStep: 16, defaultValue: shown.avoidSpawn })
     .toggle("Avoid safe zones and towns", { defaultValue: avoidZones(), tooltip: "No meteor is aimed into a safe zone, protected town or claim, and no crater is made in one" })
     .dropdown("A meteor that still comes down over a safe zone", ["Lands just outside it", "Bursts in the sky"], { defaultValueIndex: get("inZone") === "burst" ? 1 : 0 })
+    .toggle("Story events", { defaultValue: get("storyEvents") === true, tooltip: "Story Questlines can make a meteor fall at story moments (at most one every 10 minutes)" })
     .submitButton("Save");
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
@@ -739,6 +746,7 @@ async function settingsForm(player) {
     ["avoidSpawn", slid(v[4], "avoidSpawn", 0, 16)],
     ["avoidZones", v[5] === true],
     ["inZone", v[6] === 1 ? "burst" : "move"],
+    ["storyEvents", v[7] === true],
   ]);
   const problems = [];
   for (const [key, value] of changes) {
@@ -832,10 +840,56 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Story requests: realm:sky_request { kind: "meteor", x, z, dim?, burst?, from, player?, reason? }
+// ---------------------------------------------------------------------------
+
+const STORY_GAP_MS = 10 * 60 * 1000; // at most one story meteor per 10 real minutes
+const COORD_MAX = 29_999_000;
+let lastStory = 0;
+
+/** @param {unknown} v */
+const isCoord = (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= COORD_MAX;
+/** @param {unknown} v @param {number} max */
+const optText = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+
+/**
+ * A meteor falls at x, z after the usual warning (steered out of safe zones like any other). `burst: true`,
+ * or a target inside the spawn area, makes it break apart in the sky and break no blocks. Ignored silently
+ * when the pack or its Story events setting is disabled, a meteor is already falling, the last story meteor
+ * was under 10 minutes ago, or the message is malformed.
+ * @param {string} message
+ */
+function skyRequest(message) {
+  let req;
+  try {
+    req = JSON.parse(message);
+  } catch {
+    return;
+  }
+  if (!req || typeof req !== "object" || Array.isArray(req) || req.kind !== "meteor") return;
+  if (!optText(req.from, 64) || !optText(req.player, 64) || !optText(req.reason, 200)) return;
+  if (req.dim !== undefined && req.dim !== OVERWORLD) return;
+  if (!isCoord(req.x) || !isCoord(req.z)) return;
+  if (req.burst !== undefined && typeof req.burst !== "boolean") return;
+  if (get("enabled") !== true || get("storyEvents") !== true) return;
+  if (falling || (lastStory && Date.now() - lastStory < STORY_GAP_MS)) return;
+  const x = Math.floor(req.x), z = Math.floor(req.z);
+  lastStory = Date.now();
+  launch({ x, z }, req.burst === true || fromSpawn(x, z) < get("avoidSpawn"));
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "meteor_bp");
+    else if (id === "realm:sky_request") {
+      try {
+        skyRequest(message);
+      } catch (e) {
+        console.warn(`[meteor] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

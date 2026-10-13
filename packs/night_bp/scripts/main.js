@@ -296,10 +296,73 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Story requests: realm:sky_request { kind: "shooting_star", player, from, dim?, reason? }
+// ---------------------------------------------------------------------------
+
+const STORY_COOLDOWN = 60 * 20; // ticks: one story shooting star per player a minute
+const STORY_NEAR = 64; // other Overworld players this close see it too
+/** Tick of the last story shooting star, by the requested player's id. @type {Map<string, number>} */
+const storyStars = new Map();
+
+/** @param {unknown} v @param {number} max */
+const optText = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
+
+/**
+ * One shooting star for that player and every other Overworld player within 64 blocks who has the show
+ * enabled, with a chat line (and the usual wish window). Only at night under a clear sky. Ignored silently
+ * when the show, shooting stars or the Story events setting is disabled, the player isn't in the Overworld
+ * or turned the show off, their last story star was under a minute ago, or the message is malformed.
+ * @param {string} message
+ */
+function skyRequest(message) {
+  let req;
+  try {
+    req = JSON.parse(message);
+  } catch {
+    return;
+  }
+  if (!req || typeof req !== "object" || Array.isArray(req) || req.kind !== "shooting_star") return;
+  if (typeof req.player !== "string" || !req.player || req.player.length > 64 || !optText(req.from, 64) || !optText(req.reason, 200)) return;
+  if (req.dim !== undefined && req.dim !== OVERWORLD) return;
+  if (!get("enabled") || !get("stars.enabled") || get("storyEvents") !== true) return;
+  loadWeather();
+  const night = tonight();
+  if (night === undefined || weather !== WeatherType.Clear) return;
+  const now = system.currentTick;
+  const last = storyStars.get(req.player);
+  if (last !== undefined && now - last < STORY_COOLDOWN) return;
+  const dim = world.getDimension(OVERWORLD);
+  const all = dim.getPlayers();
+  const target = all.find((p) => p.id === req.player);
+  if (!target || getFor(target, "sky") !== true) return;
+  storyStars.set(req.player, now);
+  const at = target.location;
+  for (const p of all) {
+    try {
+      if (p !== target && (getFor(p, "sky") !== true || Math.hypot(p.location.x - at.x, p.location.z - at.z) > STORY_NEAR)) continue;
+      if (!star(p)) continue;
+      stateOf(p).lastStar = now;
+      journal(p, "shooting_star", "Shooting star");
+      const wish = get("wish.enabled") && p.getDynamicProperty(PROP_WISH) !== night;
+      p.sendMessage(wish ? "§bA shooting star crosses the sky! Sneak now to make a wish." : "§bA shooting star crosses the sky!");
+    } catch (e) {
+      console.warn(`[night] ${e}`);
+    }
+  }
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "night_bp");
+    else if (id === "realm:sky_request") {
+      try {
+        skyRequest(message);
+      } catch (e) {
+        console.warn(`[night] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );
