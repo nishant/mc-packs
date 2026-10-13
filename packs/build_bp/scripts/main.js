@@ -511,7 +511,7 @@ function materialsOf(player, plan, placed) {
 // ---------------------------------------------------------------------------
 
 const FACINGS = [[0, 1], [-1, 0], [0, -1], [1, 0]]; // yaw 0 (south), 90 (west), 180 (north), -90 (east)
-/** @type {Map<string, number>} the way each player faced last (an index into FACINGS) */
+/** @type {Map<string, { i: number, tick: number }>} the way each player faced last (an index into FACINGS) and when */
 const lastFacing = new Map();
 /**
  * The way a player faces, snapped to x or z. It keeps the last way until the look is 10 degrees past the diagonal,
@@ -520,10 +520,12 @@ const lastFacing = new Map();
  */
 function facingOf(player) {
   const yaw = player.getRotation().y;
+  const now = system.currentTick;
   const prev = lastFacing.get(player.id);
-  if (prev !== undefined && Math.abs(((((yaw - prev * 90) % 360) + 540) % 360) - 180) <= 55) return FACINGS[prev];
-  const i = (((Math.round(yaw / 90) % 4) + 4) % 4);
-  lastFacing.set(player.id, i);
+  // Only while the guide keeps asking (it does every few ticks): a build long after uses the plain way you face.
+  let i = prev && now - prev.tick <= 40 && Math.abs(((((yaw - prev.i * 90) % 360) + 540) % 360) - 180) <= 55 ? prev.i : -1;
+  if (i < 0) i = ((Math.round(yaw / 90) % 4) + 4) % 4;
+  lastFacing.set(player.id, { i, tick: now });
   return FACINGS[i];
 }
 /** Right and forward in the world. @param {number[]} F @param {boolean} turn */

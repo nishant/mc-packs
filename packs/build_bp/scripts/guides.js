@@ -146,16 +146,18 @@ const TICK_BUDGET = 600;
 const queue = new Map();
 
 /**
- * How long a server tick really takes lately, in milliseconds: the slowest recent one (50 when the server keeps up),
- * easing back by a millisecond a tick. Guide particles live in real time on the player's screen while the next
- * draw comes in server ticks, so on a busy realm each one has to last longer or the outline blinks.
+ * How long a server tick really takes lately, in milliseconds: a running average (50 when the server keeps up, at
+ * most 150), leaving out single stalls (a world save) so one hitch doesn't make guides trail behind for a minute.
+ * Guide particles live in real time on the player's screen while the next draw comes in server ticks, so on a busy
+ * realm each one has to last longer or the outline blinks.
  */
 let tickMs = 50;
 let lastTickAt = Date.now();
 
 system.runInterval(() => {
   const at = Date.now();
-  tickMs = Math.max(50, Math.min(1000, at - lastTickAt), tickMs - 1);
+  const dt = at - lastTickAt;
+  if (dt < 500) tickMs = Math.max(50, Math.min(150, tickMs + (dt - tickMs) / 10));
   lastTickAt = at;
   if (!queue.size) return;
   let left = TICK_BUDGET;

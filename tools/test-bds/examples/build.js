@@ -374,6 +374,7 @@ export default async function (t) {
   bookForm.answer(null);
   await t.wait(12);
   bk.stopUsingItem();
+  await t.wait(10); // a new press: uses within 16 ticks of the last one are one press held down
   bk.isSneaking = true;
   bk.useItemInSlot(0);
   m = await t.waitMessage(bk, /Build mode/, { kind: "actionbar" });

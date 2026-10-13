@@ -712,8 +712,9 @@ async function copyOrCut(player, cut) {
     }
     if (old?.cut) player.sendMessage("§7Your earlier cut was never pasted. Undo can still put it back where it was.");
     const what = `${ctx.plural(cells.length, "block")} (${size.x} x ${size.y} x ${size.z})`;
-    ctx.note(player, cut ? `§aCut ${what}§7 - paste it with /realm:build_paste` : `§aCopied ${what}§7 - paste it with /realm:build_paste`);
+    const text = ctx.noted(player, cut ? `§aCut ${what}§7 - paste it with /realm:build_paste` : `§aCopied ${what}§7 - paste it with /realm:build_paste`);
     if (cutId) player.sendMessage("§7In survival, a cut can be pasted once for free. After that, pasting it costs blocks like a copy.");
+    return text; // for the menu, which hides the line above the hotbar
   } finally {
     s.busy = false;
   }
@@ -990,8 +991,9 @@ async function clipboardPage(player, notice) {
     { text: "Corner where you stand", run: () => menuCorner(player, { x: Math.floor(player.location.x), y: Math.floor(player.location.y), z: Math.floor(player.location.z) }) },
   ];
   if (box) {
-    actions.push({ text: "Copy", run: () => copyOrCut(player, false) });
-    actions.push({ text: "Cut (takes the blocks, no drops)", run: () => copyOrCut(player, true) });
+    // Without a line back, it didn't (chat says why).
+    actions.push({ text: "Copy", run: async () => (await copyOrCut(player, false)) ?? "§eNothing was copied: chat says why." });
+    actions.push({ text: "Cut (takes the blocks, no drops)", run: async () => (await copyOrCut(player, true)) ?? "§eNothing was cut: chat says why." });
     actions.push({ text: "Clear the selection", run: () => ((st.sel = undefined), (st.selecting = false), ctx.noted(player, "§7Selection cleared")) });
   }
   if (active) {
@@ -1022,20 +1024,22 @@ function menuCorner(player, p) {
 
 /** The saved copies until Back (undefined) or X (ctx.CLOSE). @param {Player} player */
 async function slotsMenu(player) {
+  /** @type {unknown} */
+  let out;
   while (player.isValid) {
-    const out = await slotsPage(player);
+    out = await slotsPage(player, typeof out === "string" ? out : "");
     if (out === ctx.CLOSE || out === BACK) return out === BACK ? undefined : out;
   }
   return ctx.CLOSE;
 }
 
-/** @param {Player} player */
-async function slotsPage(player) {
+/** @param {Player} player @param {string} notice */
+async function slotsPage(player, notice) {
   const meta = metaOf(player);
   const count = Math.max(0, Math.min(19, get("clipboardSlots")));
   const act = meta.slots[String(meta.act)] ? meta.act : 0;
   const form = new ActionFormData().title("Saved copies").body(
-    `Saved copies stay after a restart. Pick one to paste from it, or save your Last copy into it.\nPasting from: ${meta.slots[String(act)] ? meta.slots[String(act)].n : "nothing yet"}`
+    `${notice ? `${notice}§r\n\n` : ""}Saved copies stay after a restart. Pick one to paste from it, or save your Last copy into it.\nPasting from: ${meta.slots[String(act)] ? meta.slots[String(act)].n : "nothing yet"}`
   );
   /** @type {number[]} */
   const order = [];
@@ -1062,7 +1066,7 @@ async function slotMenu(player, i) {
     const m = metaOf(player);
     m.act = i;
     saveMeta(player, m);
-    ctx.note(player, `§aPasting from ${s.n}§7 - /realm:build_paste or paste mode`);
+    return ctx.noted(player, `§aPasting from ${s.n}§7 - /realm:build_paste or paste mode`);
   } });
   if (i > 0 && last) actions.push({ text: s ? "Replace it with Last copy" : "Save Last copy here", run: () => saveToSlot(player, i) });
   if (i > 0 && s) actions.push({ text: "Rename", run: () => renameSlot(player, i) });
@@ -1072,9 +1076,9 @@ async function slotMenu(player, i) {
   for (const a of actions) form.button(a.text);
   const res = await ctx.show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return ctx.CLOSE;
-  // Whatever it did, the list of saved copies comes back.
-  await actions[res.selection]?.run();
-  return undefined;
+  // Whatever it did, the list of saved copies comes back (with what it did at the top).
+  const out = await actions[res.selection]?.run();
+  return typeof out === "string" ? out : undefined;
 }
 
 /** @param {Player} player @param {string} def */
