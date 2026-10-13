@@ -234,6 +234,7 @@ world.afterEvents.playerInteractWithEntity.subscribe(({ player, target }) => {
   system.runTimeout(() => {
     try {
       if (!player.isValid || !target.isValid) return;
+      if (mountOf(player)) riders.set(player.id, player);
       const owner = ownerOf(target);
       if (!owner || owner === player.id || get("othersCanRide") === true) return;
       const ride = target.getComponent("minecraft:rideable");
@@ -342,11 +343,23 @@ export function leap(p, d) {
   return true;
 }
 
+/** Players riding a tamed dolphin, steered every tick. Everyone else is looked at every 5 ticks, and at once when they tap a dolphin. @type {Map<string, Player>} */
+const riders = new Map();
+
 system.runInterval(() => {
   if (get("enabled") !== true) return;
-  for (const p of world.getAllPlayers()) {
-    const d = mountOf(p);
-    if (!d) continue;
+  for (const p of world.getAllPlayers()) if (!riders.has(p.id) && mountOf(p)) riders.set(p.id, p);
+}, 5);
+
+system.runInterval(() => {
+  if (!riders.size) return;
+  if (get("enabled") !== true) return void riders.clear();
+  for (const [id, p] of riders) {
+    const d = p.isValid ? mountOf(p) : undefined;
+    if (!d) {
+      riders.delete(id);
+      continue;
+    }
     try {
       steer(p, d);
       if (p.isJumping) leap(p, d);

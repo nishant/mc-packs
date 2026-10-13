@@ -211,14 +211,22 @@ function has(p, id) {
 /** @param {Player} p */
 const playing = (p) => get("enabled") === true && getFor(p, "effects") !== false;
 
+/** Players wearing Hyper Jump boots at the last refresh: the per-tick jump check only looks at them. @type {Player[]} */
+let jumpers = [];
+
 system.runInterval(() => {
+  /** @type {Player[]} */
+  const wearing = [];
   for (const p of world.getAllPlayers()) {
     try {
-      gear.set(p.id, readGear(p));
+      const g = readGear(p);
+      gear.set(p.id, g);
+      if (g.feet.has("hyper_jump")) wearing.push(p);
     } catch {
       gear.delete(p.id);
     }
   }
+  jumpers = wearing;
 }, 10);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -389,10 +397,11 @@ world.afterEvents.playerButtonInput.subscribe(
 const wasJumping = new Map();
 system.runInterval(() => {
   if (get("enabled") !== true) return;
-  for (const p of world.getAllPlayers()) {
+  for (const p of jumpers) {
     const g = gear.get(p.id);
     if (!g || !g.feet.has("hyper_jump")) continue;
     try {
+      if (!p.isValid) continue;
       const jumping = p.isJumping;
       const rising = jumping && !wasJumping.get(p.id);
       wasJumping.set(p.id, jumping);
