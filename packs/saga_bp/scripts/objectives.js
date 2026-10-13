@@ -1049,7 +1049,7 @@ export function endScene(pid, key, effect = false) {
 export function endScenesOf(pid) {
   for (const s of [...scenes.values()]) if (s.pid === pid) scenes.delete(sk(s.pid, s.key));
   removeActors({ owner: pid });
-  for (const k of [...tended.keys()]) if (k.includes(pid)) tended.delete(k);
+  for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
 }
 
 /** The far-away timer: true once the player has been away long enough for the scene to end. @param {SceneState} s @param {boolean} near */
@@ -2126,7 +2126,7 @@ export function playerGone(pid) {
   dreams.delete(pid);
   holdUntil.delete(pid);
   ownUntil.delete(pid);
-  for (const k of [...tended.keys()]) if (k.includes(pid)) tended.delete(k);
+  for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
 }
 
 /** Every dimension's story champions this pack spawned are removed at world load. */

@@ -463,6 +463,8 @@ async function showHint(player, e) {
  * @param {Player} player @param {Story} story
  */
 export async function chapterInfo(player, story) {
+  /** @type {[Entry, number] | undefined} a riddle picked from this page, asked once the page is gone */
+  let pending;
   await exclusive(player, async () => {
     while (player.isValid) {
       const saga = sagaOf(player);
@@ -480,7 +482,7 @@ export async function chapterInfo(player, story) {
       lines.push("", `§fCurrent step: §e${stepLine(player, e, saga)}§r`, "", ...objectiveLines(player, e, saga));
       if (chapterDone(e, saga)) lines.push("", `§6All done: go back to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}.`);
       const cost = hintCost(e);
-      /** @type {[string, () => Promise<unknown>, boolean?][]} label, action, and whether the action opens a form of its own once this page is gone */
+      /** @type {[string, () => Promise<unknown>][]} */
       const actions = [];
       actions.push([
         st.h ? "Read the hint again" : cost.levels + cost.crowns > 0 ? `Ask for a hint\n§8Costs ${cost.levels} level${cost.levels === 1 ? "" : "s"}, ${cost.crowns} Crowns` : "Ask for a hint\n§8Free",
@@ -489,24 +491,19 @@ export async function chapterInfo(player, story) {
       actions.push(["Hear the intro again", () => dialog(player, story.title, chapterHeader(saga, story, cur.index), pagesFor(cur.chapter.intro, saga, story.id, player.name), ["OK"])]);
       e.chapter.objectives.forEach((obj, i) => {
         if (obj.type === "answer" && !obj.npc && !(obj.place || obj.at || obj.offset) && !objDone(e, i, saga))
-          actions.push([`Answer: ${obj.label}`, () => answerFromLog(player, e, i), true]);
+          actions.push([`Answer: ${obj.label}`, async () => void (pending = [e, i])]);
       });
       const form = new ActionFormData().title(story.title).body(lines.join("\n"));
       for (const [label] of actions) form.button(label);
       form.button("OK");
       const res = await show(player, form);
       if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length) return;
-      const act = actions[res.selection];
-      await act[1]();
-      if (act[2]) return; // the riddle's form needs this page (and its busy mark) gone first
+      await actions[res.selection][1]();
+      if (pending) return; // the riddle's form is exclusive too, so this page (and its busy mark) goes first
     }
   });
-}
-
-/** An answer typed from the log (the form helper is exclusive too, so step out first). @param {Player} player @param {Entry} e @param {number} i */
-function answerFromLog(player, e, i) {
-  system.runTimeout(() => askAnswer(player, e, i).catch(() => {}), 2);
-  return Promise.resolve();
+  // Asked here, not scheduled, so a menu that opened this page comes back after the riddle.
+  if (pending) await askAnswer(player, ...pending);
 }
 
 /** The outro, the choice, the rewards. @param {Player} player @param {Story} story */
