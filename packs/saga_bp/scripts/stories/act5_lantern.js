@@ -382,6 +382,7 @@ export const STORIES = [
         id: "long_night",
         title: "The Long Night",
         npc: "reyes",
+        sky: [{ kind: "blood_moon" }],
         intro: [
           `The Lantern rises at dusk, a white wound across the sky, and the sea begins to sing.\n\n${R}Here they come. Every drowned thing in forty winters of water, and the Choir behind them. Positions!`,
           { text: `Quill's nine boats rock in the harbor, lanterns hooded, crossbows ready. Quill himself stands on the lighthouse steps in a coat far too good for fighting. He winks at you.`, when: { "g:quill": "trusted" } },
@@ -393,6 +394,7 @@ export const STORIES = [
           { text: `${R}You swore on the hill as a sword. End the threat. Tonight that's the whole order: whatever comes up that beach, it doesn't reach the stairs.`, when: { "wardens_oath.oath": "sword" } },
           `${R}Little Pip snuck out of the cellar again. He's up in the lantern room keeping the light going and he won't come down. Fine. Then nothing gets up those stairs. Nothing.`,
           `${R}Four waves, Sol says, one for each quarter of the night. Hold the lighthouse until dawn. If the light goes out, the Lantern passes over a dark town and the seals go hungry.`,
+          { text: `${R}And Sol says the moon may come up red tonight, as if the sky has picked a side. If it does, everything out there hits harder and keeps coming. Then we hit harder too.`, when: { "pack:moon_bp": "on" } },
         ],
         objectives: [
           {
@@ -454,9 +456,22 @@ export const STORIES = [
             night: true,
           },
           { type: "vigil", label: "Stand on the Lighthouse in the open until the sky turns gray", place: "lighthouse", radius: 24, seconds: 60, timeOfDay: [22000, 23900], outdoors: true },
+          {
+            type: "event",
+            optional: true,
+            label: "Keep the light burning under a Blood Moon",
+            events: ["blood_moon"],
+            place: "lighthouse",
+            radius: 32,
+            when: { "pack:moon_bp": "on" },
+            set: { moon: "red" },
+            bonus: { levels: 2, crowns: 40 },
+            hint: "A Blood Moon may rise on its own, or the night this chapter starts. Be at the Lighthouse while it lasts.",
+          },
         ],
         outro: [
           `The fourth wave breaks on the rocks at the gray end of the night. The last drowned stands in the surf, looks up at the lighthouse beam, and simply comes apart in the foam, rope and all.`,
+          { text: `Behind it the red goes out of the moon at last, like a coal dropped in the sea. Sol was right. The sky picked a side, and it still lost.`, when: { moon: "red" } },
           { text: `${R}We had everyone. Smugglers on the water, a witch on the rocks, a priest in the window. I've never seen anything like it. I never will again. Count off! ...Everyone answers. Everyone.`, when: { "g:allies": ">=3" } },
           { text: `${R}Two allies and forty-one fools, and we held. Count off! ...Two don't answer. Two out of all of that. I'll carry their names to Moss myself.`, when: { "g:allies": "2" } },
           { text: `${R}One ally. One. And we held anyway. Count off! ...Five don't answer. Five. I'll want their names on the chapel wall, Bram, not in a drawer.`, when: { "g:allies": "1" } },
@@ -770,6 +785,7 @@ export const STORIES = [
       // 10a. Dawn: Relight the Lantern -------------------------------------------------------
       {
         id: "dawn_relight",
+        sky: [{ kind: "rainbow" }],
         title: "Dawn",
         npc: "tobin",
         when: { "g:ending": "relight" },
@@ -798,9 +814,20 @@ export const STORIES = [
             ],
           },
           { type: "vigil", label: "Watch the first morning from the Lighthouse", place: "lighthouse", radius: 24, seconds: 60, timeOfDay: [0, 4000], outdoors: true },
+          {
+            type: "event",
+            optional: true,
+            label: "Catch a rainbow over the harbor",
+            events: ["rainbow"],
+            when: { "pack:rainbow_bp": "on" },
+            set: { bow: "seen" },
+            bonus: { levels: 1, crowns: 30 },
+            hint: "Rainbows come out after rain, and sometimes on a morning like this one. Be outside in the Overworld when one appears.",
+          },
         ],
         outro: [
           `§eTobin§r hears it all. He doesn't say anything for a long time. A gull lands on the post beside him and he doesn't shoo it.\n\n${T}Calling him home. That's Hal. Couldn't leave a man in the water if you paid him to. Forty winters I hated a ghost. Takes work. I think I'll stop now. I'm tired.`,
+          { text: `He squints up at the rainbow over the harbor.\n\n${T}Hal used to say a rainbow after a bad blow is the sea saying sorry. Never believed him. Might start.`, when: { bow: "seen" } },
           { text: `${M}I'm adding the Gate to the big map in the square. Huge black X. HERE BE NOTHING, ANYMORE.\n\n${S}And I am adding a star to mine. Small, new, just east of Deneb. I am naming it after you. Do not argue. It is done.`, when: { "last_map.map": "share" } },
           { text: `${M}The Gate goes in Fenn's book, not on any wall. Some places should stay hard to find.\n\n${S}I have begun a new chart. Forty winters from now someone will need it. I wrote your name in the corner, where the makers sign.`, when: { "last_map.map": "!share" } },
           { text: `${R}You went off alone at the start of all this and I wanted to arrest you for it. Look where it got us. Don't do it again. That's an order. Mostly.\n\n${BE}Sit! Eat! You went alone once; you'll eat alone never. Pass the bread. You're family now.`, when: { "act1_signs.act1:path": "alone" } },

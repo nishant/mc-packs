@@ -122,6 +122,7 @@ const PROLOGUE = [
           `${T}Bell rope. So it's the old bell, all right, and something down there is pulling on it.\n\nHe sets the net down.`,
           `${T}My grandmother said the bell only speaks in thunder. Next time a storm rolls in, go up to the lighthouse and keep watch. Stay out in the open, where the sky can see you.`,
           `${T}Two minutes of it, mind, not a heartbeat less. When it rings, mark where the sound comes from. And come back with all your fingers.`,
+          { text: `${T}Don't sit about waiting on the sky, either. The almanac knows when the next storm's due. Ask it.\n\n§7(/realm:weather_forecast shows when the next thunderstorm comes.)`, when: { "pack:weather_bp": "on" } },
         ],
         objectives: [{ type: "survive", label: "Keep watch outdoors at the lighthouse in a thunderstorm", place: "lighthouse", radius: 48, seconds: 120 }],
         outro: [
