@@ -144,13 +144,18 @@ function wrap(text, width) {
   return lines;
 }
 
+/** Block reads that found the land unloaded (or not ticking), so a spot search can tell "no spot" from "couldn't look". */
+let unloadedReads = 0;
+
 /** @param {Dimension} dim @param {number} x @param {number} y @param {number} z */
 function blockAt(dim, x, y, z) {
   try {
     const b = dim.getBlock({ x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) });
     if (b) void b.typeId; // throws when the chunk is loaded but not ticking
+    else unloadedReads++;
     return b;
   } catch {
+    unloadedReads++;
     return undefined; // unloaded or outside the world
   }
 }
@@ -164,6 +169,7 @@ function topAt(dim, x, z) {
     const up = b.above();
     return up && WATERY.test(up.typeId) ? up : b;
   } catch {
+    unloadedReads++;
     return undefined;
   }
 }
@@ -398,7 +404,7 @@ function step(player, hunt) {
   // Close to the planned spot, with its land loaded: find a landmark there and build the marker (or bury the chest).
   if (!hunt.near && !hunt.chest && !hunt.mark && !hunt.nomark && !jobs.has(key) && (retryAt.get(key) ?? 0) <= system.currentTick && flat(at, planned) <= get("revealDistance") && topAt(player.dimension, planned.x, planned.z)) {
     const dim = player.dimension;
-    jobs.set(key, { gen: settle(dim, hunt, final), player, hunt, done: (/** @type {any} */ r) => settled(player, hunt, final, r) });
+    jobs.set(key, { gen: settle(dim, hunt, final), player, hunt, missed: 0, done: (/** @type {any} */ r, /** @type {number} */ missed) => settled(player, hunt, final, r, missed) });
   }
 
   if (!final) {
@@ -486,7 +492,7 @@ system.runInterval(() => {
 // Burying the chest: a spot search spread over time (block reads are budgeted)
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, { gen: Generator<void, any, void>, player: Player, hunt: Hunt, done: (value: any) => void }>} key: player id/hunt id */
+/** @type {Map<string, { gen: Generator<void, any, void>, player: Player, hunt: Hunt, missed: number, done: (value: any, missed: number) => void }>} key: player id/hunt id */
 const jobs = new Map();
 
 /** Offsets to try around a spot: the spot itself, then rings outward. @param {number} radius */
@@ -569,16 +575,18 @@ system.runInterval(() => {
       budget--;
       /** @type {IteratorResult<void, Vector3 | undefined>} */
       let r;
+      const before = unloadedReads;
       try {
         r = job.gen.next();
       } catch (e) {
         console.warn(`[maps] search: ${e}`);
         r = { done: true, value: undefined };
       }
+      job.missed += unloadedReads - before;
       if (r.done) {
         jobs.delete(key);
         try {
-          job.done(r.value);
+          job.done(r.value, job.missed);
         } catch (e) {
           console.warn(`[maps] bury: ${e}`);
         }
@@ -753,9 +761,14 @@ function* settle(dim, hunt, final) {
 /**
  * The end of a leg is settled: build the marker and tell the player what the spot looks like, or bury the chest.
  * @param {Player} player @param {Hunt} hunt @param {boolean} final @param {{ kind?: string, info?: any, spot?: Vector3, retry?: boolean } | undefined} r
+ * @param {number} [missed] block reads of the search that found the land unloaded
  */
-function settled(player, hunt, final, r) {
+function settled(player, hunt, final, r, missed = 0) {
   const hunts = huntsOf(player);
+  // The player left while the land was searched (flew on, went home, changed dimension), so part of it unloaded:
+  // that is no reason to move the treasure or leave a bottle. Look again when they come back.
+  const left = () => player.dimension.id !== hunt.dim || flat(player.location, hunt.pts[hunt.leg]) > get("revealDistance");
+  if (!r?.retry && missed > 0 && !r?.spot && left()) r = { retry: true };
   if (r?.retry) {
     retryAt.set(`${player.id}/${hunt.id}`, system.currentTick + 100); // not loaded yet: look again in 5 seconds
     return;
@@ -766,6 +779,10 @@ function settled(player, hunt, final, r) {
     dim = world.getDimension(hunt.dim);
   } catch {
     dim = player.dimension;
+  }
+  if (r?.spot && !blockAt(dim, r.spot.x, r.spot.y, r.spot.z)) {
+    retryAt.set(`${player.id}/${hunt.id}`, system.currentTick + 100); // its land unloaded just now: look again later
+    return;
   }
   const kind = r?.kind ? r.kind.split(":")[0] : undefined;
   if (final) {
