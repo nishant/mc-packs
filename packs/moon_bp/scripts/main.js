@@ -324,7 +324,8 @@ function during(n) {
   if (n.s === "normal") return;
   const blood = n.s === "blood";
   const fogId = blood ? "realm:sky_blood_moon" : "realm:sky_harvest_moon";
-  const wave = blood && seconds % Math.max(5, Math.floor(Number(get("blood.spawnSeconds")) || 20)) === 0 && canSpawn();
+  const every = Math.max(5, Math.floor(Number(get("blood.spawnSeconds")) || 20));
+  const spawning = blood && canSpawn();
   for (const p of world.getAllPlayers()) {
     try {
       if (p.dimension.id !== OVERWORLD) {
@@ -340,11 +341,22 @@ function during(n) {
       // blizzard) stay in charge instead of being covered by ours.
       setFog(p, out && !wet ? fogId : "");
       if (out && (seconds + p.id.length) % MOTES_EVERY === 0) motes(p, blood ? "realm:sky_blood" : "realm:sky_harvest");
-      if (wave) spawnWave(p);
+      // Each player's waves come at a second of their own, so one second doesn't carry everyone's (25-30 ms with 8 players).
+      if (spawning && (seconds + waveSlot(p.id)) % every === 0) spawnWave(p);
     } catch (e) {
       console.warn(`[moon] ${e}`); // usually an unloaded chunk
     }
   }
+}
+
+/** Player id -> the offset of their waves, in seconds (players get different ones in turn). @type {Map<string, number>} */
+const waveSlots = new Map();
+let nextSlot = 0;
+/** @param {string} id */
+function waveSlot(id) {
+  let slot = waveSlots.get(id);
+  if (slot === undefined) waveSlots.set(id, (slot = nextSlot++ % 120));
+  return slot;
 }
 
 /** Nothing 2+ blocks over the player's head (leaves count as outdoors). @param {Player} p */
@@ -418,10 +430,19 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   removeFog(player); // a fog can survive a relog; the loop puts back what tonight calls for
   fogs.delete(player.id);
+  // Joining during a special moon: the dusk announcement went out before they came, so say what's going on.
+  if (!ready || !night?.a || night.s === "normal") return;
+  try {
+    if (night.s === "harvest") player.sendMessage("§6A Harvest Moon is up. §7Crops grow faster until dawn.");
+    else player.sendMessage(`§4A Blood Moon is up. §7More monsters roam until dawn.${night.alive.includes(player.id) ? "" : " You joined after dusk, so there's no survivor reward for you tonight."}`);
+  } catch (e) {
+    console.warn(`[moon] ${e}`);
+  }
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   fogs.delete(playerId);
+  waveSlots.delete(playerId);
   if (night?.a && night.alive.includes(playerId)) {
     night.alive = night.alive.filter((id) => id !== playerId);
     saveNight();
@@ -499,8 +520,12 @@ function spot(p) {
     const y = top.location.y;
     if (Math.abs(y - feet.y) > 16) continue; // cliffs and caves: the surface there is too far from the player
     const at = { x, y: y + 1, z };
-    if (dim.getPlayers({ location: { x: x + 0.5, y: y + 1, z: z + 0.5 }, maxDistance: CLEAR_RADIUS }).length) continue;
-    if (built(dim, { x, y, z })) continue;
+    try {
+      if (dim.getPlayers({ location: { x: x + 0.5, y: y + 1, z: z + 0.5 }, maxDistance: CLEAR_RADIUS }).length) continue;
+      if (built(dim, { x, y, z })) continue;
+    } catch {
+      continue; // the column around a high-flying player can be loaded at the top and not around the ground
+    }
     return at;
   }
   return undefined;

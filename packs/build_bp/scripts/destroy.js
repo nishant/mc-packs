@@ -440,6 +440,8 @@ system.runInterval(() => {
       if (!T) continue;
       /** @type {Vec[]} */
       let cells;
+      /** @type {Vec | undefined} */
+      let offset;
       if (ctx.twoBlocks(player)) {
         const got = st.start ? spotsAt(player, T) : [T];
         if (typeof got === "string") continue;
@@ -457,9 +459,11 @@ system.runInterval(() => {
           c = { key, rel: typeof got === "string" ? [] : got };
           relCache.set(pid, c);
         }
-        cells = c.rel.map((r) => ({ x: T.x + r.x, y: T.y + r.y, z: T.z + r.z }));
+        // The same list every time, moved to T: its outline is worked out once, not at every refresh.
+        cells = c.rel;
+        offset = T;
       }
-      drawGuide(player, cells, "destroy");
+      drawGuide(player, cells, "destroy", { offset });
     } catch (e) {
       console.warn(`[build] destroy preview: ${e}`);
     }

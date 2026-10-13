@@ -1040,12 +1040,16 @@ function sceneFor(player, e, i, kind) {
 export function endScene(pid, key, effect = false) {
   scenes.delete(sk(pid, key));
   removeActors({ owner: pid, key }, effect);
+  // The animals fed or tamed for it count again next time (the same daily favor on a later day, a reset chapter).
+  tended.delete(`${pid}|${key}`);
+  tended.delete(`tame|${pid}|${key}`);
 }
 
 /** Ends every scene of a player (they left, or their stories were reset). @param {string} pid */
 export function endScenesOf(pid) {
   for (const s of [...scenes.values()]) if (s.pid === pid) scenes.delete(sk(s.pid, s.key));
   removeActors({ owner: pid });
+  for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
 }
 
 /** The far-away timer: true once the player has been away long enough for the scene to end. @param {SceneState} s @param {boolean} near */
@@ -2122,7 +2126,7 @@ export function playerGone(pid) {
   dreams.delete(pid);
   holdUntil.delete(pid);
   ownUntil.delete(pid);
-  for (const k of [...tended.keys()]) if (k.includes(pid)) tended.delete(k);
+  for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
 }
 
 /** Every dimension's story champions this pack spawned are removed at world load. */

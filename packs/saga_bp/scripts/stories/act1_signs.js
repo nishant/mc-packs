@@ -77,7 +77,7 @@ export const STORIES = [
         title: "A Smudge in the East",
         npc: "sol",
         intro: [
-          `§eSol§r is lying on her back in the grass with a cracked spyglass on her chest, as if the sky might hand her something if she holds still long enough.\n\n${S}Ah. You. The one who listens to bells. Lie down, the grass doesn't bite.`,
+          `§eSol§r is lying on his back in the grass with a cracked spyglass on his chest, as if the sky might hand him something if he holds still long enough.\n\n${S}Ah. You. The one who listens to bells. Lie down, the grass doesn't bite.`,
           { text: `${S}Since you quieted the bell, the nights are so still I can hear the stars turning. And three nights ago one of them turned wrong.`, when: SILENCE },
           { text: `${S}Your bell rings the tide in every evening now, and I count the stars by it, one per note. Three nights ago I ran out of notes before I ran out of stars.`, when: RING },
           `${S}Low in the east, under Oriel and left of the Net, there is a smudge. Faint as a thumbprint on glass. It was not there at midsummer. It is a little bigger every night.`,
@@ -97,7 +97,7 @@ export const STORIES = [
         ],
         outro: [
           "From the lighthouse balcony the eastern sky looks ordinary at first. Then your eyes settle, and there it is: a faint green-white smear low over the sea, like breath on a cold window. It doesn't twinkle. It waits.",
-          `§eSol§r takes your spyglass with both hands and looks for a long time. When she lowers it her eyes are wet.\n\n${S}You saw it too. Then it's not my wishes. Something is coming home.`,
+          `§eSol§r takes your spyglass with both hands and looks for a long time. When he lowers it his eyes are wet.\n\n${S}You saw it too. Then it's not my wishes. Something is coming home.`,
           `${S}It is early. Forty years early, or exactly on time. I can't tell which yet, and that frightens me more than either answer.`,
           `${S}Here. I polished the lens and scratched the old star names on the barrel, so you'll know where to look. Keep it close. We'll need it again.`,
         ],
@@ -145,8 +145,8 @@ export const STORIES = [
           },
         ],
         outro: [
-          `§eSol§r holds one of the shards up to her lamp. Inside it, very faintly, a green spark drifts like a fish in a jar.\n\n${S}Oh. Oh, look at you. You're still warm.`,
-          `${S}A bell that breaks a star. Slow, slow, quick.\n\nShe taps the rhythm on the table, then snatches her hand back as if the table were hot.\n\n${S}I know that rhythm. Every child in this town knows it. We skip rope to it. Nobody remembers where it came from.`,
+          `§eSol§r holds one of the shards up to his lamp. Inside it, very faintly, a green spark drifts like a fish in a jar.\n\n${S}Oh. Oh, look at you. You're still warm.`,
+          `${S}A bell that breaks a star. Slow, slow, quick.\n\nHe taps the rhythm on the table, then snatches his hand back as if the table were hot.\n\n${S}I know that rhythm. Every child in this town knows it. We skip rope to it. Nobody remembers where it came from.`,
           { text: `${S}The bell. Your bell. It was in the tower that night, wasn't it? Thank the stars you bound its mouth. Whatever it learned that night, it can't say it again.\n\n${S}Keep the shards. I only needed to see one. Go rest. You've been inside a memory that isn't yours, and they leave a chill.`, when: SILENCE },
           { text: `${S}The bell. Your bell. It was in the tower that night, wasn't it? You gave it a new voice. I hope it has forgotten the old one.\n\n${S}Keep the shards. I only needed to see one. Go rest. You've been inside a memory that isn't yours, and they leave a chill.`, when: RING },
         ],
@@ -377,7 +377,7 @@ export const STORIES = [
           `${BE}Last night some loudmouth at the bar starts in on the Long Storm. Ghost stories, drowned men, the bell. And Elsie, who laughs at everything, who'd laugh at her own funeral if the food was good, puts down the tray and walks out. Didn't come back till dawn.`,
           { text: `${BE}And since you shut that harbor bell up, she says the nights are too quiet. Quiet makes a person remember things. I've seen her standing at the window at three in the morning, staring at the sea like it owes her rent.`, when: SILENCE },
           { text: `${BE}And every time that bell of yours rings the tide in, she stops whatever she's doing and listens. Hand on the counter, head tilted. Like she's waiting for a different note. One that never comes.`, when: RING },
-          `${BE}Thirty years I've cooked in this kitchen, and there's one thing she's never let me touch: the old trunk in the cellar. Lock rusted shut. This morning she asked me to bring it up. Tried to. The bottom fell clean out of it, rotten through.`,
+          `${BE}Twenty years I've cooked in this kitchen, and there's one thing she's never let me touch: the old trunk in the cellar. Lock rusted shut. This morning she asked me to bring it up. Tried to. The bottom fell clean out of it, rotten through.`,
           `${BE}So here's the recipe. She needs a good sturdy chest to put her things in. You bring her one, and you be there when she opens it. Don't push. Just be there. A pot boils faster when you stop staring at it.`,
         ],
         objectives: [
@@ -596,7 +596,7 @@ export const STORIES = [
         title: "The Sky-reader's Count",
         npc: "sol",
         intro: [
-          `§eSol§r has covered every wall of her room in chalk. Numbers, arcs, star names, crossings-out. She's standing on a chair to reach the ceiling.\n\n${S}Don't move. Don't breathe on anything. I'm almost there and I've been almost there for three days.`,
+          `§eSol§r has covered every wall of his room in chalk. Numbers, arcs, star names, crossings-out. He's standing on a chair to reach the ceiling.\n\n${S}Don't move. Don't breathe on anything. I'm almost there and I've been almost there for three days.`,
           `${S}The smudge has a tail now. A thin green tail. Comets have tails. Fenn would say that's obvious and I'd throw a shoe at him.`,
           { text: `${S}Elsie came up last night with bread and asked me how many nights. I told her I didn't know yet. She nodded and said, then count carefully, dear, as if she already had the answer and was only checking mine.`, when: { elsie: "rest" } },
           { text: `${S}Elsie came up last night. She didn't bring bread. She stood in the door, looked at the ceiling for a long time, and said: you've carried the four wrong. Then she left. She was right. How was she right?`, when: { elsie: "pressed" } },
@@ -624,10 +624,10 @@ export const STORIES = [
         ],
         outro: [
           `§eSol§r writes your numbers on the last clean patch of ceiling, then climbs down very slowly and sits on the floor.\n\n${S}It's a comet. It's coming back the way it came forty years ago, along the same road. The old songs called it the Lantern. I always thought that was poetry.`,
-          `${S}Sixty nights. In sixty nights the Lantern passes overhead, and whatever the Choir means to ring, they mean to ring it then.\n\nYou tell her about the dark between the stars. She listens with her hands over her mouth.\n\n${S}Then that's what the seals hold down. Something that listens, and waits.`,
+          `${S}Sixty nights. In sixty nights the Lantern passes overhead, and whatever the Choir means to ring, they mean to ring it then.\n\nYou tell him about the dark between the stars. He listens with his hands over his mouth.\n\n${S}Then that's what the seals hold down. Something that listens, and waits.`,
           { text: `${S}I'll tell the travelers who copy Mara's map in the square to look east. If the whole realm is watching the sky, it's harder for anyone to do something terrible under it.`, when: SHARE },
           { text: `${S}Mara's map is on her shelf, and the wild places are still wild. Good. If we need to hide something in the next sixty nights, we'll know where no one else will look.`, when: KEEP },
-          `${S}Forty years ago a star broke and this town decided to forget. This time we remember. This time we're counting.\n\nShe presses a folded chart into your hands: the Lantern's road across the sky, in her wild, beautiful hand.`,
+          `${S}Forty years ago a star broke and this town decided to forget. This time we remember. This time we're counting.\n\nHe presses a folded chart into your hands: the Lantern's road across the sky, in his wild, beautiful hand.`,
         ],
         reward: {
           levels: 10,

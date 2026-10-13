@@ -6,6 +6,21 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Audit fixes
+
+We went through every pack and fixed what we found.
+
+- Story: in Lantern Night, if you bound Vesna to the Fen, Moss now sends you to call her for the Long Night, and she counts as an ally. The finale and Elsie's council remember more of your side-story choices. A daily favor done again on a later day counts the animals you fed again, and the chapter message says which screen box the tracker is in.
+- Building: aiming a big two-block shape no longer makes the realm lag. A cut you leave in the middle of puts its blocks back. The start block comes back to your hand when you finish with /realm:build_here.
+- Expeditions: leaving from the menu asks first. A Nightmare Sigil comes back if an operator ends the run before you go in. Dying right after you leave (or just outside the dungeon) no longer costs you your items or your way home.
+- Deck of Many Things: leaving mid-Comet or mid-Gate no longer strands you in the sky. The Void and Zero G leave pets, named mobs and villagers alone. Butterfingers and The Magpie drop your things where you can see them.
+- World and weather: when an operator changes the weather, everyone gets a chat line saying what and for how long, and an ended tornado says it has died down. Wind and storm sounds stop when the rain ends. Empty pot-of-gold chests left behind vanish the next time someone walks by. Joining during a Blood Moon or Harvest Moon tells you it's up.
+- Treasure maps: flying past the end of a clue (or teleporting away) no longer moves the treasure or swaps the marker for a bottle.
+- Economy: type amounts like 1,000 when paying Crowns. Guild reputation counts from your first minute. Waystones don't charge for a trip they cancel, and you land beside the far waystone. Kitchen dishes still cooking when you log off are no longer lost, and a moon still up after a restart keeps dropping Moon Salt and Harvest Saffron.
+- Utilities: Lag Cleanup keeps items with lore (like silly-enchanted tools) and reminds everyone 10 seconds before it clears. The Elytra HUD and the Storm Meter no longer cover other messages above the hotbar. Removing your land claim asks first, and claims show your new name after a gamertag change.
+- Fixes: low durability warnings no longer repeat while a Mending tool hovers at the line. /realm:afk while you're AFK tells you so. Tropical fish count as peaceful mobs for Combat XP. Sol, Ida's master and Quill's parole now match in every story.
+- For operators: the Realm Configuration menu comes back to the list after a command and asks before anything that affects everyone. Townsfolk placed while flying land on the ground. News pasted in parts while chat was open keeps every part.
+
 ## Easy Building 2.0
 
 Building got a lot easier, and a few loose ends are tied up.

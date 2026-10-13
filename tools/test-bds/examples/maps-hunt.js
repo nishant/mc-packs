@@ -103,7 +103,29 @@ function solve(clue, from) {
     deg = (Math.atan2(va.x + vb.x, -(va.z + vb.z)) * 180) / Math.PI;
   } else deg = ANGLE[cs[0]];
   const v = vec(deg, d);
-  return { kind: "bearing", x: from.x + v.x, z: from.z + v.z, rough: d * 0.25 + 30 };
+  return { kind: "bearing", x: from.x + v.x, z: from.z + v.z, rough: d * 0.25 + 30, from, d, deg };
+}
+
+/**
+ * Where a heading can lead: the pack names one of 16 compass points (+-11.25 degrees) and rounds the distance to 50
+ * (+-25), so the spot lies on an arc up to 2 x d x tan(11.25) wide (275 blocks at 700 paces). The pack settles a leg
+ * only once the land 32 blocks around the planned spot is loaded and ticking, which with this scenario's ticking areas
+ * (4 chunks) means standing within about 50 blocks of it: walk the arc in steps of 45 blocks, middle first.
+ */
+function arcSpots(est) {
+  const out = [];
+  for (const dd of [est.d, est.d - 40, est.d + 40]) {
+    if (dd <= 0) continue;
+    const half = 11.25 + 3;
+    const step = Math.max(2, (45 / dd) * (180 / Math.PI));
+    const offs = [0];
+    for (let o = step; o <= half; o += step) offs.push(o, -o);
+    for (const o of offs) {
+      const v = vec(est.deg + o, dd);
+      out.push({ x: est.from.x + v.x, z: est.from.z + v.z });
+    }
+  }
+  return out.slice(1); // the first is the estimate itself
 }
 
 export default async function (t) {
@@ -115,33 +137,65 @@ export default async function (t) {
   /** Loads land (water too, unlike t.loadArea) and returns its top block. */
   async function load(x, z) {
     const name = `maps_${++areaN}`;
-    t.server(`/tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} 4 ${name} true`);
-    areas.push(name);
-    return t.waitUntil(() => {
+    const add = (n) => {
+      t.server(`/tickingarea add circle ${Math.floor(x)} 0 ${Math.floor(z)} 4 ${n} true`);
+      areas.push(n);
+    };
+    add(name);
+    const loaded = () => {
       const top = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
       return top && top.typeId && top.location.y < 319 ? top : undefined;
-    }, { timeout: 1200, message: `land at ${Math.round(x)}, ${Math.round(z)} did not load` });
+    };
+    try {
+      return await t.waitUntil(loaded, { timeout: 600, message: "" });
+    } catch {
+      // A busy server (several test servers on few cores) sometimes leaves new land unloaded for minutes: ask again.
+      t.server(`/tickingarea remove ${name}`);
+      add(`${name}b`);
+      return t.waitUntil(loaded, { timeout: 600, message: `land at ${Math.round(x)}, ${Math.round(z)} did not load` });
+    }
   }
+  /**
+   * Like a player traveling: the land where the player stands stays loaded until they have arrived somewhere else
+   * (unloading it first would cut short a search the pack is running there, which no player can do).
+   */
   async function goTo(x, z) {
-    clearAreas();
+    const old = areas;
+    areas = [];
+    if (old.length > 2) for (const a of old) t.server(`/tickingarea remove ${a}`); // after a scan: at most 10 areas
     const top = await load(x, z);
     p.teleport({ x: Math.floor(x) + 0.5, y: top.location.y + 1, z: Math.floor(z) + 0.5 });
+    if (old.length <= 2) for (const a of old) t.server(`/tickingarea remove ${a}`);
     await t.wait(20);
   }
-  /** Top blocks around (cx, cz), loading the land first. */
+  /** Where the player stood at each tick (the pack counts a clue from where the player was when it changed). */
+  const trail = new Map();
+  t.mc.system.runInterval(() => {
+    try {
+      trail.set(t.tick, { x: Math.round(p.location.x), z: Math.round(p.location.z) });
+      trail.delete(t.tick - 2000);
+    } catch {
+      // the player left
+    }
+  }, 1);
+  const posAt = (tick) => trail.get(tick) ?? trail.get(tick - 1) ?? { x: Math.round(p.location.x), z: Math.round(p.location.z) };
+  /** Top blocks around (cx, cz), loading the land first: the hit nearest (cx, cz). */
   async function scan(cx, cz, r, fn) {
     clearAreas();
     for (const ox of [-96, 0, 96]) for (const oz of [-96, 0, 96]) {
       try { await load(cx + ox, cz + oz); } catch (e) { t.log(`  part of the scan did not load: ${e.message ?? e}`); }
     }
     let n = 0;
+    let best, bestD = Infinity;
     for (let x = cx - r; x <= cx + r; x++) for (let z = cz - r; z <= cz + r; z++) {
+      const d = Math.hypot(x - cx, z - cz);
+      if (d >= bestD) continue;
       let top;
       try { top = dim.getTopmostBlock({ x, z }); if (top) void top.typeId; } catch { continue; }
-      if (top) { let hit; try { hit = fn(top); } catch { hit = undefined; } if (hit) return hit; }
+      if (top) { let hit; try { hit = fn(top); } catch { hit = undefined; } if (hit) [best, bestD] = [hit, d]; }
       if (++n % 3000 === 0) await t.wait(1);
     }
-    return undefined;
+    return best;
   }
   const typeBelow = (b, k = 1) => { try { return dim.getBlock({ x: b.location.x, y: b.location.y - k, z: b.location.z })?.typeId; } catch { return undefined; } };
 
@@ -163,7 +217,6 @@ export default async function (t) {
     const est = solve(clue, from);
     t.log(`leg ${leg}: [${est.kind}] "${clue}" -> ${Math.round(est.x)}, ${Math.round(est.z)} (from ${from.x}, ${from.z})`);
     const since = t.tick;
-    await goTo(est.x, est.z);
     const settledRe = /ink darkens|grows warm|ink shifts|washed up/i;
     const settledYet = async (ticks) => {
       for (let i = 0; i < ticks; i += 10) {
@@ -173,18 +226,56 @@ export default async function (t) {
       }
       return undefined;
     };
-    let near = await settledYet(est.rough ? 140 : 300);
-    // A heading is rough: look around like a player would.
+    /**
+     * Stands at (x, z) for `ticks` like a player holding the map: within 64 blocks of the planned spot the map line
+     * turns from "cold / cool / faintly warm" to Warmer / Colder / quiet / Very warm, so a player stays and looks around
+     * (the leg settles once the land 32 blocks around the planned spot is loaded, about 50 blocks away here, and a
+     * search that is cut short by leaving waits until the player comes back).
+     */
+    const visit = async (x, z, ticks) => {
+      try {
+        await goTo(x, z);
+      } catch (e) {
+        t.log(`  skipped a spot: ${e.message ?? e}`);
+        return undefined;
+      }
+      const arrived = t.tick;
+      const m = await settledYet(60);
+      if (m) return m;
+      const line = t.messages(p, { kind: "actionbar", pack: "maps_bp", since: arrived }).at(-1)?.plain ?? "";
+      if (/Very warm|Hot/.test(line)) return settledYet(600);
+      if (!/Warmer|Colder|quiet/.test(line)) return settledYet(Math.max(0, ticks - 60));
+      t.log(`  the map stirs at ${Math.round(x)}, ${Math.round(z)}: ${line}`);
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const q = await visitNear(x + Math.cos(a) * 35, z + Math.sin(a) * 35);
+        if (q) return q;
+      }
+      return settledYet(300);
+    };
+    const visitNear = async (x, z) => {
+      try {
+        await goTo(x, z);
+      } catch {
+        return undefined;
+      }
+      const arrived = t.tick;
+      const m = await settledYet(60);
+      if (m) return m;
+      const line = t.messages(p, { kind: "actionbar", pack: "maps_bp", since: arrived }).at(-1)?.plain ?? "";
+      return /Very warm|Hot/.test(line) ? settledYet(600) : undefined;
+    };
+    let near = await visit(est.x, est.z, est.rough ? 140 : 300);
+    // A heading is rough: walk along the arc it allows, like a player sweeping the area.
+    for (const s of est.kind === "bearing" && !near ? arcSpots(est) : []) {
+      near = await visit(s.x, s.z, 140);
+      if (near) break;
+    }
+    // Still nothing (or compass steps, which round to 10): look around like a player would.
     for (let ring = 1; !near && ring <= 4; ring++) {
       for (let k = 0; k < 8 && !near; k++) {
         const a = (k / 8) * Math.PI * 2;
-        try {
-          await goTo(est.x + Math.cos(a) * ring * 70, est.z + Math.sin(a) * ring * 70);
-        } catch (e) {
-          t.log(`  skipped a spot: ${e.message ?? e}`);
-          continue;
-        }
-        near = await settledYet(140);
+        near = await visit(est.x + Math.cos(a) * ring * 70, est.z + Math.sin(a) * ring * 70, 140);
       }
     }
     if (!near) near = await t.waitMessage(p, settledRe, { since, timeout: 400 });
@@ -198,7 +289,7 @@ export default async function (t) {
     if (/ink shifts/i.test(near.plain)) {
       // Water or a build where the treasure was: it moved, with a heading from where the player stood.
       clue = /"(.*)"/.exec(near.plain)[1];
-      from = { x: Math.round(p.location.x), z: Math.round(p.location.z) };
+      from = posAt(near.tick);
       leg--;
       continue;
     }
@@ -236,12 +327,19 @@ export default async function (t) {
     if (/bottle/i.test(near.plain)) {
       t.log("  no marker here (a bottle): walking close");
       const since3 = since;
-      for (let i = 0; i < 40 && !t.messages(p, { since: since3 }).some((m) => /You found/.test(m.plain)); i++) {
+      // The bottle lies within 30 blocks of the planned spot, and the leg settled within about 50 of it: spiral out
+      // from here (points about 18 blocks apart, out to 70).
+      const c = { x: p.location.x, z: p.location.z };
+      for (let i = 0; i < 50 && !t.messages(p, { since: since3 }).some((m) => /You found/.test(m.plain)); i++) {
         const a = i * 2.4;
-        await goTo(est.x + Math.cos(a) * i * 4, est.z + Math.sin(a) * i * 4);
+        try {
+          await goTo(c.x + Math.cos(a) * 10 * Math.sqrt(i), c.z + Math.sin(a) * 10 * Math.sqrt(i));
+        } catch (e) {
+          t.log(`  skipped a spot: ${e.message ?? e}`);
+        }
       }
       msg = await t.waitMessage(p, /You found/i, { since: since3, timeout: 60 });
-      from = { x: Math.round(p.location.x), z: Math.round(p.location.z) };
+      from = posAt(msg.tick);
     } else {
       const me = { x: Math.floor(p.location.x), z: Math.floor(p.location.z) };
       mark = await scan(me.x, me.z, 140, (top) => {
@@ -250,7 +348,8 @@ export default async function (t) {
         if (seen.has(key)) return undefined;
         const hit = (id === "minecraft:lantern" && b1 === "minecraft:mossy_cobblestone" && "cairn") ||
           (id === "minecraft:chiseled_stone_bricks" && b1 === "minecraft:mossy_stone_bricks" && "stone") ||
-          (id === "minecraft:oak_fence" && b1 === "minecraft:oak_fence" && typeBelow(top, 2) === "minecraft:oak_fence" && typeBelow(top, 3) === "minecraft:oak_fence" && "flag");
+          (id === "minecraft:oak_fence" && b1 === "minecraft:oak_fence" && typeBelow(top, 2) === "minecraft:oak_fence" && typeBelow(top, 3) === "minecraft:oak_fence" &&
+            /_wool$/.test(dim.getBlock({ x: top.location.x + 1, y: top.location.y, z: top.location.z })?.typeId ?? "") && "flag"); // villages have fence posts too
         return hit ? { x: top.location.x, z: top.location.z, y: top.location.y - 4, kind: hit } : undefined;
       });
       t.assert(mark, "found the marker the pack built");

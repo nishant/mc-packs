@@ -214,12 +214,14 @@ function end(t, quiet) {
     system.clearRun(loop);
     loop = undefined;
   }
-  if (quiet) return;
-  try {
-    dropStormGlass(t);
-  } catch (e) {
-    console.warn(`[tornado] Storm Glass: ${e}`);
+  if (!quiet) {
+    try {
+      dropStormGlass(t);
+    } catch (e) {
+      console.warn(`[tornado] Storm Glass: ${e}`);
+    }
   }
+  // Everyone who was warned gets the all-clear, also when an operator ends it: the horn just stops otherwise.
   for (const p of world.getAllPlayers()) if (t.warned.has(p.id)) p.sendMessage("§7The tornado has died down.");
 }
 

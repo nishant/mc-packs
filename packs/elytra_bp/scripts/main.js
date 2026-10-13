@@ -53,6 +53,26 @@ const HOLD_TICKS = Math.max(30, INTERVAL * 3);
 /** player id -> tick of the last realm:actionbar request */
 const heldAt = new Map();
 
+/** player id -> tick until which another pack's note above the hotbar (realm:actionbar) is left alone */
+const barHeld = new Map();
+
+// Other packs' notes (a durability warning, skill XP, mob health) stay readable: above the hotbar the HUD
+// skips its redraws while one lasts, and keeps asking steady lines to wait. A `background` steady line
+// (the Party HUD) waits for this HUD instead.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:actionbar") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string" || m.from === "elytra_bp" || m.background) return;
+      barHeld.set(m.player, system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0)));
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] }
+);
+
 const side = sideBoxes("elytra");
 /** player id -> whether the HUD showed in a side box last round, so landing takes it off right away */
 const inBox = new Set();
@@ -78,6 +98,7 @@ system.runInterval(() => {
         heldAt.set(player.id, now);
         system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HOLD_TICKS, from: "elytra_bp" }));
       }
+      if ((barHeld.get(player.id) ?? 0) > now) continue;
       player.onScreenDisplay.setActionBar(hud(player));
     } catch {
       // left or changed dimension meanwhile
@@ -87,6 +108,7 @@ system.runInterval(() => {
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   heldAt.delete(playerId);
+  barHeld.delete(playerId);
   inBox.delete(playerId);
 });
 

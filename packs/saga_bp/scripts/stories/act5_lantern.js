@@ -3,9 +3,12 @@
 // Keep every id (story, chapter, choice, flag) stable once published: progress is saved by them.
 //
 // Flags read: g:quill, g:vesna, g:hollis, g:mercy, g:iron, act3_deep.elsie, drowned_bell.bell, last_map.map,
-// act1_signs.act1:path, act4_seals.act4:promise (allow / refuse). Flags set: g:allies (one per ally chapter, so the
-// Long Night can scale), g:ending (relight / gift / crown, read by other stories after the finale),
-// and this story's own `horse` (ember / comet) and `gate` (sneak / fight).
+// act1_signs.act1:path, act4_seals.act4:promise (allow / refuse), and the side questlines' choices for callbacks:
+// hollis_faith.forgive, wardens_oath.oath, singing_forge.blade, smugglers_run.profits, mayors_burden.plaque,
+// graveyard_shift.stone, hearth_and_table.marty. Flags set: g:allies (one per ally chapter, so the Long Night can
+// scale; "no allies" is g:allies <= 0), g:fen ("called": a bound Vesna answered the call, so the Long Night skips the
+// task her song covers), g:ending (relight / gift / crown, read by other stories after the finale), and this story's
+// own `horse` (ember / comet), `gate` (sneak / fight) and `fen_call` (promised / ordered).
 /** @typedef {import("../types.js").Story} Story */
 /** @typedef {import("../types.js").When} When */
 /** @typedef {import("../types.js").Who} Who */
@@ -31,7 +34,7 @@ const DEEP = "§5A voice from below:§r ";
 /** @type {When} */ const NOT_RING = { "drowned_bell.bell": "!ring" };
 /** @type {When} */ const SILENCE = { "drowned_bell.bell": "silence" };
 /** @type {When} */ const NOT_SILENCE = { "drowned_bell.bell": "!silence" };
-/** @type {When} */ const NO_ALLIES = { "g:quill": "!trusted", "g:vesna": "!free", "g:hollis": "!saved" };
+/** @type {When} */ const NO_ALLIES = { "g:allies": "<=0" }; // no ally chapter was played (each adds 1)
 /** @type {When} */ const PROMISED = { "act4_seals.act4:promise": "allow" };
 /** @type {When} */ const REFUSED = { "act4_seals.act4:promise": "refuse" };
 /** @type {When} */ const EMBER = { horse: "ember" };
@@ -104,6 +107,7 @@ export const STORIES = [
         outro: [
           `§eWren§r is waiting at the meadow gate, bouncing on her toes.\n\n${W}You found them! All three! That one bit me last week but I think it was a love bite, and that one is scared of comets, which is fair, I am too, a little, but only a little.`,
           `Down the hill, Reyes's wardens are fletching arrows on the chapel steps, and Bea's kitchen chimney hasn't stopped smoking since noon. For the first time in forty winters the whole town is awake on purpose.`,
+          { text: `Through the inn's kitchen window you can see Marty, mustache long gone, peeling potatoes at a speed that suggests Bea is standing right behind him. She is.`, when: { "hearth_and_table.marty": "hired" } },
           `${W}The brown mare is going to lead the riders tonight, so she needs a real name. A brave one. Elsie says names are like lanterns, you hold them up and they show you the way. Pick one. Please. Quickly. She's eating the fence.`,
         ],
         choices: [
@@ -140,6 +144,8 @@ export const STORIES = [
           `${Q}Two problems. The powder is sealed in barrels at the cove, and my lads won't believe it's real until someone cracks them open in front of them. And somebody has to row the first boat round to the harbor so the rest can follow. Captains first. That's you.`,
           { text: `${Q}With the bell ringing true again, my lads can find the harbor in the dark by ear. Whatever else you did, you did that right.`, when: RING },
           { text: `${Q}Shame about the bell. A silent harbor is a hard harbor to find at night. We'll steer by your lantern instead, so try to keep it lit.`, when: NOT_RING },
+          { text: `${Q}And before you ask: yes, the lads know you gave the Choir's coin back to the farms. Half of them think you're soft. The other half have farms. They're rowing anyway.`, when: { "smugglers_run.profits": "return" } },
+          { text: `${Q}And before you ask: yes, the lads know you kept your half of the Choir's coin. They respect that. It's the only kind of reference they take.`, when: { "smugglers_run.profits": "keep" } },
         ],
         objectives: [
           { type: "interact", label: "Crack open 4 powder barrels at Smugglers' Cove", place: "sea_cave", blocks: ["minecraft:barrel"], count: 4, radius: 16 },
@@ -219,6 +225,72 @@ export const STORIES = [
         hint: "Hollow Fen is the stilt hut over the swamp; the tracker points there. Nether wart grows in Nether fortresses, and glass bottles are crafted from glass. Meet Vesna at the hut, then stay there between nightfall and dawn for a minute.",
       },
 
+      // 3b. Allies: Vesna, bound to the Fen (only if she was bound): she comes because she must ----
+      {
+        id: "fen_bound",
+        title: "The Witch Who Must Come",
+        npc: "moss",
+        when: { "g:vesna": "bound" },
+        intro: [
+          `§eMoss§r is standing at the graveyard gate with a soul lantern in each hand, which is not how he usually holds a conversation.\n\n${MO}You bound her. Vesna. Sank her name in the Fen with the Mother's heart, and she told you: when you call, she comes. She hasn't got a choice. You made sure of that.`,
+          `${MO}Well. Tomorrow night the sky falls, and Reyes wants every singer she can get on those rocks. So somebody has to go and call. I'd rather it was you. I'd rather it was nobody. It's you.`,
+          `${MO}A binding answers blue fire. Carry a soul lantern to the Fen after dark, stand at the water's edge, and say her name over it. She'll rise. Don't expect her to be glad about it.`,
+          { text: `${MO}She asked after Hollis once, before all this. If she asks again, tell her the truth: the dark has him. She'll know what it means. She's been in the dark a long time herself.`, when: { "g:hollis": "lost" } },
+          { text: `${MO}And if she asks after the chapel boy, tell her he's singing. She'll like that.`, when: { "g:hollis": "!lost" } },
+        ],
+        objectives: [
+          { type: "collect", label: "Have a soul lantern to call her with", item: "minecraft:soul_lantern", count: 1 },
+          { type: "vigil", label: "Call Vesna's name over the water at Hollow Fen after dark", place: "witch_hut", radius: 16, seconds: 30, timeOfDay: [13000, 23000] },
+          {
+            type: "meet",
+            label: "Face Vesna when she rises",
+            place: "witch_hut",
+            radius: 12,
+            who: { id: "vesna", name: "Vesna of the Fen", entity: "minecraft:witch" },
+            pages: [
+              `The black water goes flat as glass, and §eVesna§r rises out of it, dry as paper, her eyes the color of the Fen. She does not smile.\n\n${V}You called. I came. That's the arrangement. Say what you want, songbird, and say it plainly. I can't leave until you do.`,
+              `${V}The Lantern, the Herald, the drowned on your beach. Yes. I know the song for that. I'll sing it from your lighthouse rocks until the sky is empty or I am. Not because I owe you. Because the alternative is listening to him.`,
+              `${V}One thing, since you hold the leash. When this is over, and I've sung, think about what you'd want, if it were you in the water. I asked you that once. I'm asking again.`,
+            ],
+            choices: [
+              {
+                id: "loosen",
+                label: "Promise to loosen the binding when the night is won",
+                set: { fen_call: "promised" },
+                inc: { "g:mercy": 1 },
+                rep: [{ guild: "growers", amount: 10 }],
+                reply: [`${V}A promise from a hero. I've heard those before.\n\nShe looks at you a long moment, and something in her face unknots, just a little.\n\n${V}But not from you. All right. I'll hold you to it. Witches have long memories, and I'll have a very long time.`],
+              },
+              {
+                id: "weapon",
+                label: "A bound witch is a weapon. Sing, and that's all.",
+                set: { fen_call: "ordered" },
+                inc: { "g:iron": 1 },
+                rep: [{ guild: "wardens", amount: 10 }],
+                reply: [`${V}Plainly, then. Good. I'd rather be used by someone who admits it.\n\nShe turns toward the sea without another word, and the reeds lean after her as if they want to follow.`],
+              },
+            ],
+          },
+        ],
+        outro: [
+          `${MO}She came through the yard at dawn, wet to the knees, carrying her cauldron on her back like a snail. Didn't look at me. Didn't look at anything. Walked straight on down to the lighthouse rocks.`,
+          { text: `${MO}She said one thing as she passed. "The songbird promised." That's all. I'd keep that promise if I were you. I've seen what she does to people who don't.`, when: { fen_call: "promised" } },
+          { text: `${MO}She said one thing as she passed. "Tell the songbird I'm a sword now." I don't know if that was a complaint. With Vesna it's hard to tell.`, when: { fen_call: "ordered" } },
+          `${MO}Reyes has her on the rocks under the tower, with a fire and her pots. The wardens won't go near her. Good. Then nobody will be in the way of the song.`,
+        ],
+        choices: [
+          {
+            id: "called",
+            label: "She'll sing. That's what matters tonight.",
+            set: { "g:fen": "called" },
+            inc: { "g:allies": 1 },
+            reply: [`${MO}It is. I'll go and leave her some bread. Habit. Even a weapon eats.`],
+          },
+        ],
+        reward: { levels: 5, crowns: 80, items: [{ item: "minecraft:milk_bucket", amount: 2 }] },
+        hint: "Craft a soul lantern (a soul torch ringed with iron nuggets) and carry it. Hollow Fen is the stilt hut over the swamp; the tracker points there. Stand near the hut after dark for half a minute, then speak with Vesna when she rises.",
+      },
+
       // 4. Allies: Brother Hollis (only if he was saved) -------------------------------------
       {
         id: "chapel",
@@ -227,6 +299,8 @@ export const STORIES = [
         when: { "g:hollis": "saved" },
         intro: [
           `§eBrother Hollis§r is on his knees in the chapel, scrubbing salt stains out of the floor. He looks up, and for once his eyes are clear.\n\n${H}I slept last night. All night. No bells, no drowned man, no voice. I woke up and cried like a child. I hope you don't mind me telling you that.`,
+          { text: `${H}You told me once, in this chapel, that it wasn't me. My hands, but not me. I've said it every morning since, the way you told me to. This morning I believed it.`, when: { "hollis_faith.forgive": "mercy" } },
+          { text: `${H}You told me once, in this chapel, that I did wrong and I'd do better. I wrote it inside the cover of the Book of the Lost. Tomorrow night is the doing better.`, when: { "hollis_faith.forgive": "iron" } },
           `${H}You pulled me back when it would have been easier to let me go. I won't waste that. The Herald used my voice for months. Tomorrow night I mean to use it against him.`,
           `${H}The counter-song. If I sing it from this chapel while the Lantern passes, the drowned will hear it all the way down to the sea. The chapel sits on the listening stone, after all. For once, let the stone hear something kind.`,
           `${H}Light the candles for me, please. Then test me on the hymn, because I'm terrified I've forgotten it. And would you tell Moss I'm all right? He keeps leaving bread on the step like I'm a stray cat.`,
@@ -312,8 +386,11 @@ export const STORIES = [
           `The Lantern rises at dusk, a white wound across the sky, and the sea begins to sing.\n\n${R}Here they come. Every drowned thing in forty winters of water, and the Choir behind them. Positions!`,
           { text: `Quill's nine boats rock in the harbor, lanterns hooded, crossbows ready. Quill himself stands on the lighthouse steps in a coat far too good for fighting. He winks at you.`, when: { "g:quill": "trusted" } },
           { text: `On the rocks below the tower, Vesna has set her cauldron on a driftwood fire. Green steam rolls down over the surf. She is humming already, low, in a language older than the town.`, when: { "g:vesna": "free" } },
+          { text: `On the rocks below the tower, Vesna stands in the surf with her cauldron on a driftwood fire, bound and called, her eyes the color of the Fen. She does not look up at you. She begins to sing anyway, and the drowned nearest the shore stop walking.`, when: { "g:fen": "called" } },
           { text: `Far behind you, up the hill, a light burns in the chapel window. Faint on the wind you hear Brother Hollis begin the hymn, alone, unaccompanied, unafraid.`, when: { "g:hollis": "saved" } },
           { text: `There is no help coming. Behind the barricade, forty-one people hold their breath, and Reyes walks the line telling each of them their name, as if they might forget it.`, when: NO_ALLIES },
+          { text: `${R}You swore on the hill as a shield. Bring them home. Tonight that's the whole order: Pip, the recruits, the baker who can shoot. Bring them home.`, when: { "wardens_oath.oath": "shield" } },
+          { text: `${R}You swore on the hill as a sword. End the threat. Tonight that's the whole order: whatever comes up that beach, it doesn't reach the stairs.`, when: { "wardens_oath.oath": "sword" } },
           `${R}Little Pip snuck out of the cellar again. He's up in the lantern room keeping the light going and he won't come down. Fine. Then nothing gets up those stairs. Nothing.`,
           `${R}Four waves, Sol says, one for each quarter of the night. Hold the lighthouse until dawn. If the light goes out, the Lantern passes over a dark town and the seals go hungry.`,
         ],
@@ -359,7 +436,7 @@ export const STORIES = [
           {
             type: "defeat",
             label: "No witch's steam keeps the dark back: kill 10 spiders, creepers or phantoms near the Lighthouse",
-            when: { "g:vesna": "!free", "g:allies": ">=1" },
+            when: { "g:vesna": "!free", "g:fen": "!called", "g:allies": ">=1" },
             mobs: ["minecraft:spider", "minecraft:creeper", "minecraft:phantom", "minecraft:cave_spider"],
             count: 10,
             place: "lighthouse",
@@ -394,7 +471,7 @@ export const STORIES = [
           codex: {
             id: "long_night",
             title: "The Long Night",
-            text: "On the first night of the Lantern's pass, the Hollow sent everything it had against the town: forty winters of drowned, and the Gray Choir behind them. The lighthouse held until dawn. Pip kept the lamp lit. Not everyone who stood on the cliff road came home.",
+            text: "On the first night of the Lantern's pass, the Hollow sent everything it had against the town: forty winters of drowned, and the Gray Choir behind them. The lighthouse held until dawn. Pip kept the lamp lit. At first light Reyes counted off every name on the cliff road.",
           },
         },
         rep: [{ guild: "wardens", amount: 25 }],
@@ -504,6 +581,9 @@ export const STORIES = [
           `${E}Grief opened a door in him, and the Hollow climbed in. Forty winters it has worn him like a coat. Whatever comes up out of that Gate will have his face. It will not be him. Remember that when it begs.`,
           { text: `${E}And child, if Hollis is there. If what is left of Hollis is there. It will be the same with him. The Hollow does not let go of a voice it likes. Be quick. Be kind with your sword.`, when: { "g:hollis": "lost" } },
           { text: `${E}Hollis is singing in the chapel. Do you hear him, faint, even from here? Every note is one the Hollow cannot use. You saved that voice. Now go and use the quiet it buys you.`, when: { "g:hollis": "saved" } },
+          { text: `§eIda§r is on the inn steps behind Elsie, arms folded.\n\n${I}Starsong's humming. I can hear it from here. Dunmore said the fifth would sing. Let it sing at him.`, when: { "singing_forge.blade": "starsong" } },
+          { text: `§eIda§r is on the inn steps behind Elsie, arms folded.\n\n${I}Hal's Answer is humming. Tobin's brother never got to finish what he started on that tower. Let the blade finish it.`, when: { "singing_forge.blade": "hal" } },
+          { text: `§eIda§r is on the inn steps behind Elsie, arms folded.\n\n${I}Dunmore's humming at your hip. Old goat. He'd have wanted to be here for this. He is, I suppose.`, when: { "singing_forge.blade": "dunmore" } },
           { text: `${E}He will try to ring the broken note. He cannot use the harbor bell; you smothered it. So he will ring the only bell he has left: himself. When he sings, strike.`, when: SILENCE },
           { text: `${E}He will try to ring the broken note through the harbor bell, but you gave it a true voice and it will fight him. Listen for it. When it rings, strike.`, when: NOT_SILENCE },
           `${E}Three times he will rise, the old songs say: as the man, as the voice, and as the hunger. Three times you must put him down. Go. I will be waiting at the Sky Seal when it's done.`,
@@ -866,8 +946,18 @@ export const STORIES = [
           { text: `${MO}Wren wants a tree for Elsie too. I told her Elsie isn't dead, she's a star. Wren says that's worse, because you can't visit a star. Kid's got a point.`, when: { "g:ending": "gift" } },
           { text: `${MO}Don't mind the looks you're getting. The dead don't care what you wear on your head. That's the nice thing about the dead. Very open-minded crowd.`, when: { "g:ending": "crown" } },
           { text: `${MO}Hollis is by the chapel wall, where he can hear the singing on Sundays. I put his candle on the stone. It hasn't gone out once. I've stopped asking why.`, when: { "g:hollis": "lost" } },
-          `${MO}One tree for the lost. For Hal, for my brother, for Lily, for the nine on the cliff road, for Ashgrave too, if you can stand it. Trees don't ask who deserved it. That's why I like them.`,
-          `${MO}Plant it anywhere in the yard you like. Then go find Tobin. He's got something to settle with that bell, and he won't do it without you.`,
+          { text: `${MO}Vesna went home to the Fen this morning, on her own two feet, singing. Left a frog on my stump. I think it was a thank you. I'm choosing to think that.`, when: { "g:vesna": "free" } },
+          { text: `${MO}Vesna's back in her water. Sang till the sky went gray and then walked into the Fen without a word. You promised her something, she says. She says it every time I bring bread. Just so you know.`, when: { fen_call: "promised" } },
+          { text: `${MO}Vesna's back in her water. Sang till the sky went gray and then walked into the Fen without a word. I'll keep taking her bread. Somebody should.`, when: { fen_call: "ordered" } },
+          { text: `${MO}Bram was by at first light, reading the plaque under his goat out loud. FOR EVERYONE THE LONG STORM TOOK. He'd like to add a line for last night. I told him to get a bigger goat.`, when: { "mayors_burden.plaque": "lost" } },
+          { text: `${MO}Bram was by at first light, standing under his goat. COUNCILOR. SHE ATE THE BALLOTS. He says it's the only honest monument in town and he's not changing it. I agreed. Then I told him to get a bigger goat.`, when: { "mayors_burden.plaque": "goat" } },
+          { text: `${MO}Plant it where you like, but I'd put it by Alder's stone. His name's back on it, thanks to you. I read it every morning now. Crooked. He'd have hated that.`, when: { "graveyard_shift.stone": "carved" } },
+          { text: `${MO}Plant it where you like, but I'd put it by the stone with no name on the east fence. You know whose. So do I. That's still plenty.`, when: { "graveyard_shift.stone": "blank" } },
+          { text: `${MO}One tree for the lost. For Hal, for my brother, for Lily, for Ashgrave too, if you can stand it. Nobody from the cliff road; Reyes counted twice. Trees don't ask who deserved it. That's why I like them.`, when: { "g:allies": ">=3" } },
+          { text: `${MO}One tree for the lost. For Hal, for my brother, for Lily, for the two from the cliff road, for Ashgrave too, if you can stand it. Trees don't ask who deserved it. That's why I like them.`, when: { "g:allies": "2" } },
+          { text: `${MO}One tree for the lost. For Hal, for my brother, for Lily, for the five from the cliff road, for Ashgrave too, if you can stand it. Trees don't ask who deserved it. That's why I like them.`, when: { "g:allies": "1" } },
+          { text: `${MO}One tree for the lost. For Hal, for my brother, for Lily, for the nine on the cliff road, for Ashgrave too, if you can stand it. Trees don't ask who deserved it. That's why I like them.`, when: NO_ALLIES },
+          `${MO}Wherever it goes, it goes today. Then go find Tobin. He's got something to settle with that bell, and he won't do it without you.`,
         ],
         objectives: [
           { type: "place", label: "Plant a sapling in the Old Graveyard for the lost", place: "graveyard", radius: 16, count: 1, blocks: SAPLINGS },
@@ -894,7 +984,7 @@ export const STORIES = [
           codex: {
             id: "forty_winters",
             title: "Forty Winters",
-            text: "After Lantern Night the town planted a tree in the old graveyard for everyone the Long Storm and the Long Night took: Hal, Lily, Moss's brother, the nine on the cliff road, and even Ashgrave. Trees don't ask who deserved it. Forty winters from now the Lantern returns. The town means to remember this time.",
+            text: "After Lantern Night the town planted a tree in the old graveyard for everyone the Long Storm and the Long Night took: Hal, Lily, Moss's brother, those lost on the cliff road, and even Ashgrave. Trees don't ask who deserved it. Forty winters from now the Lantern returns. The town means to remember this time.",
           },
         },
         rep: [

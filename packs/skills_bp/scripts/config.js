@@ -125,7 +125,7 @@ export const CONFIG = {
     passiveXp: 2,
 
     /** Animals and other peaceful mobs: less XP. */
-    passive: ["cow", "pig", "sheep", "chicken", "rabbit", "horse", "donkey", "mule", "llama", "trader_llama", "cod", "salmon", "tropical_fish", "pufferfish", "squid", "glow_squid", "bat", "mooshroom", "goat", "camel", "armadillo", "sniffer", "frog", "tadpole", "turtle", "axolotl", "fox", "panda", "parrot", "ocelot", "cat", "wolf", "villager", "villager_v2", "wandering_trader", "allay", "strider", "dolphin", "polar_bear", "bee", "snow_golem", "iron_golem", "skeleton_horse", "zombie_horse"].map((m) => `minecraft:${m}`),
+    passive: ["cow", "pig", "sheep", "chicken", "rabbit", "horse", "donkey", "mule", "llama", "trader_llama", "cod", "salmon", "tropicalfish", "pufferfish", "squid", "glow_squid", "bat", "mooshroom", "goat", "camel", "armadillo", "sniffer", "frog", "tadpole", "turtle", "axolotl", "fox", "panda", "parrot", "ocelot", "cat", "wolf", "villager", "villager_v2", "wandering_trader", "allay", "strider", "dolphin", "polar_bear", "bee", "snow_golem", "iron_golem", "skeleton_horse", "zombie_horse"].map((m) => `minecraft:${m}`),
 
     /** Big mobs with their own XP instead of `xp`. @type {{ mob: string, xp: number }[]} */
     bosses: [

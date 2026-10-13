@@ -10,6 +10,11 @@ import { get } from "./settings.js";
 // toward the other one; by: the arc's ground height, a guess until ground is true, when it was read at the pot's
 // spot once its chunk loaded). Cleared once the pot expires.
 const PROP_POT = "rainbow:pot";
+// World property "rainbow:left": JSON [{ x, y, z }], pot chests that were still in the world when their pot expired
+// but couldn't be checked (no one near: their chunk wasn't loaded). Each is removed, if it's still an empty chest,
+// once a player comes near; one with items is left. At most MAX_LEFT.
+const PROP_LEFT = "rainbow:left";
+const MAX_LEFT = 20;
 const OVERWORLD = "minecraft:overworld";
 const BAND = "realm:sky_rainbow_band"; // particles from the Realm Skies resource pack
 const BEAM = "realm:sky_rainbow_beam";
@@ -41,6 +46,8 @@ const NATURAL_EXCEPTIONS = /^minecraft:(moss_carpet|torchflower|(white|orange|ye
 let pot;
 let loaded = false;
 let busy = false; // looking for the chest's spot
+/** Expired pots' chests still to check (see PROP_LEFT). @type {{ x: number, y: number, z: number }[]} */
+let left = [];
 /** @type {Set<string>} players who saw this rainbow (journal sent) */
 const saw = new Set();
 /** One map, made on first use: the stable API may refuse native objects while the world is still loading. @type {MolangVariableMap | undefined} */
@@ -129,6 +136,21 @@ function load() {
     if (!pot && saved && typeof saved.x === "number" && typeof saved.z === "number" && typeof saved.expires === "number") pot = saved;
   } catch {
     console.warn(`[rainbow] ${PROP_POT} is corrupt; ignoring it`);
+  }
+  try {
+    const raw2 = world.getDynamicProperty(PROP_LEFT);
+    const saved = typeof raw2 === "string" ? JSON.parse(raw2) : [];
+    if (Array.isArray(saved)) left = [...saved.filter((c) => c && [c.x, c.y, c.z].every(Number.isFinite)), ...left].slice(-MAX_LEFT);
+  } catch {
+    console.warn(`[rainbow] ${PROP_LEFT} is corrupt; ignoring it`);
+  }
+}
+
+function saveLeft() {
+  try {
+    world.setDynamicProperty(PROP_LEFT, left.length ? JSON.stringify(left) : undefined);
+  } catch (e) {
+    console.warn(`[rainbow] ${e}`);
   }
 }
 
@@ -262,15 +284,29 @@ function appear(player) {
 // each player gets their own stand-ins for the far parts, on their own lines of sight.
 // ---------------------------------------------------------------------------
 
-let cycle = 0;
+/** Player id -> the tick (0 to DRAW_TICKS - 1) of each second their rainbow is drawn on. @type {Map<string, number>} */
+const drawSlots = new Map();
+let nextSlot = 0;
+world.afterEvents.playerLeave.subscribe(({ playerId }) => drawSlots.delete(playerId));
+
+// Each player is drawn once a second, on a tick of their own: drawing everyone on the same tick took 55-80 ms
+// with 8 players.
 system.runInterval(() => {
-  cycle++;
   const p0 = pot;
   if (!p0) return;
   const now = Date.now();
   // The rainbow while it lasts; the beam as long as the pot can be found.
-  if (now < p0.until || (!p0.found && now < p0.expires)) draw(p0, cycle % 2 === 0);
-}, DRAW_TICKS);
+  if (!(now < p0.until || (!p0.found && now < p0.expires))) return;
+  const tick = system.currentTick;
+  const due = overworld()
+    .getPlayers()
+    .filter((p) => {
+      let slot = drawSlots.get(p.id);
+      if (slot === undefined) drawSlots.set(p.id, (slot = nextSlot++ % DRAW_TICKS));
+      return (tick + slot) % DRAW_TICKS === 0;
+    });
+  if (due.length) draw(p0, Math.floor(tick / DRAW_TICKS) % 2 === 0, due);
+});
 
 /** Once the pot's chunk is loaded, the arc's ground height becomes the surface there (once). @param {Pot} p0 @param {Dimension} dim */
 function settleGround(p0, dim) {
@@ -283,15 +319,15 @@ function settleGround(p0, dim) {
 }
 
 /**
- * For each player in the Overworld within MAX_SEE of it and not deep underground: every dot of the arc (while
- * the rainbow lasts) and of the beam (until the pot is found or expires), at its real spot when close or as a
- * stand-in on the same line of sight. Dots whose spot isn't loaded are skipped.
- * @param {Pot} p0 @param {boolean} even this second also redraws the dots at their real spots
+ * What draw() needs that is the same for every player, made once a second and shared by that second's draws.
+ * @type {{ sec: number, p0: Pot, size: number, a: import("./sky.js").Anchor, mid: import("./sky.js").Vec, beamY: number, loadedAt: (x: number, z: number) => boolean } | undefined}
  */
-function draw(p0, even) {
-  const dim = overworld();
-  const now = Date.now();
-  const sky = now < p0.until, beam = !p0.found && now < p0.expires;
+let frame;
+
+/** @param {Pot} p0 @param {Dimension} dim */
+function frameFor(p0, dim) {
+  const sec = Math.floor(system.currentTick / DRAW_TICKS);
+  if (frame && frame.sec === sec && frame.p0 === p0) return frame;
   try {
     settleGround(p0, dim);
   } catch {
@@ -302,7 +338,7 @@ function draw(p0, even) {
   const a = { x: p0.x, z: p0.z, y: p0.by ?? 64, ang: p0.ang ?? 0 };
   const mid = center(a, size);
   const beamY = typeof p0.y === "number" ? p0.y + (p0.placed ? 0.9 : 0) : a.y;
-  /** chunk "cx,cz" -> loaded, for this drawing @type {Map<string, boolean>} */
+  /** chunk "cx,cz" -> loaded, for this second @type {Map<string, boolean>} */
   const chunks = new Map();
   const loadedAt = (/** @type {number} */ x, /** @type {number} */ z) => {
     const key = `${Math.floor(x) >> 4},${Math.floor(z) >> 4}`;
@@ -317,8 +353,24 @@ function draw(p0, even) {
     }
     return ok;
   };
+  frame = { sec, p0, size, a, mid, beamY, loadedAt };
+  return frame;
+}
+
+/**
+ * For each player in the Overworld within MAX_SEE of it and not deep underground: every dot of the arc (while
+ * the rainbow lasts) and of the beam (until the pot is found or expires), at its real spot when close or as a
+ * stand-in on the same line of sight. Dots whose spot isn't loaded are skipped.
+ * @param {Pot} p0 @param {boolean} even this second also redraws the dots at their real spots
+ * @param {Player[]} [players] the players to draw it for (default: everyone in the Overworld)
+ */
+function draw(p0, even, players) {
+  const dim = overworld();
+  const now = Date.now();
+  const sky = now < p0.until, beam = !p0.found && now < p0.expires;
+  const { size, a, mid, beamY, loadedAt } = frameFor(p0, dim);
   const vars = molang();
-  for (const player of dim.getPlayers()) {
+  for (const player of players ?? dim.getPlayers()) {
     try {
       const l = player.location;
       if (Math.hypot(l.x - mid.x, l.z - mid.z) > MAX_SEE) continue;
@@ -378,8 +430,10 @@ function draw(p0, even) {
 // Every second: place the chest when someone gets close, see who reaches it first, expire it.
 system.runInterval(() => {
   load();
+  if (!loaded) return;
+  if (left.length) sweepLeft();
   const p0 = pot;
-  if (!p0 || !loaded) return;
+  if (!p0) return;
   try {
     if (Date.now() >= p0.expires) {
       expire(p0);
@@ -518,16 +572,40 @@ function find(p0, player) {
   world.sendMessage(`§6${player.name} found the pot of gold at the rainbow's end!`);
 }
 
+/**
+ * Removes the pot chest at x, y, z if it's still an empty chest (one with items is left).
+ * @param {number} x @param {number} y @param {number} z @returns {boolean} false when that spot isn't loaded
+ */
+function clearChest(x, y, z) {
+  try {
+    const block = overworld().getBlock({ x, y, z });
+    if (!block) return false;
+    const container = block.typeId === "minecraft:chest" ? block.getComponent("minecraft:inventory")?.container : undefined;
+    if (container && container.emptySlotsCount === container.size) block.setType("minecraft:air");
+    return true;
+  } catch {
+    return false; // unloaded
+  }
+}
+
+/** Expired pots' chests that weren't loaded then: checked once a player comes near (their chunk is loaded then). */
+function sweepLeft() {
+  try {
+    const players = overworld().getPlayers();
+    const before = left.length;
+    left = left.filter((c) => !players.some((p) => Math.hypot(p.location.x - (c.x + 0.5), p.location.z - (c.z + 0.5)) <= PLACE_DISTANCE) || !clearChest(c.x, c.y, c.z));
+    if (left.length !== before) saveLeft();
+  } catch (e) {
+    console.warn(`[rainbow] ${e}`);
+  }
+}
+
 /** The pot can't be found any more: an empty chest of ours is removed, one with items is left. @param {Pot} p0 */
 function expire(p0) {
-  if (p0.placed && typeof p0.y === "number") {
-    try {
-      const block = overworld().getBlock({ x: p0.x, y: p0.y, z: p0.z });
-      const container = block?.typeId === "minecraft:chest" ? block.getComponent("minecraft:inventory")?.container : undefined;
-      if (block && container && container.emptySlotsCount === container.size) block.setType("minecraft:air");
-    } catch {
-      // unloaded: the chest stays
-    }
+  if (p0.placed && typeof p0.y === "number" && !clearChest(p0.x, p0.y, p0.z)) {
+    // Unloaded: removed (if still empty) when a player next comes near.
+    left = [...left, { x: p0.x, y: p0.y, z: p0.z }].slice(-MAX_LEFT);
+    saveLeft();
   }
   if (pot === p0) {
     pot = undefined;

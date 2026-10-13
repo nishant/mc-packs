@@ -351,6 +351,9 @@ function busyElsewhere(p) {
   return false;
 }
 
+/** Villagers The Void never moves: they live in trading halls and farms. */
+const VILLAGERS = ["minecraft:villager_v2", "minecraft:villager"];
+
 /** Names Cursed Name picks from. */
 const SILLY_NAMES = ["Sir Bonks-a-Lot", "Captain Soggy", "Lord Snackington", "Dirt Muncher", "The Wobbler", "Princess Pebble", "Baron von Oops", "Mister Noodles", "Duke of Mud", "Lil Creeper Hugger"];
 
@@ -431,8 +434,9 @@ export const CARDS = [
       const item = inv.getItem(slot);
       if (!item) return false;
       inv.setItem(slot, undefined);
-      // A few blocks away, so it isn't picked straight back up.
-      const spot = randomSpot(player, 3, 5, 10) ?? player.location;
+      // A few blocks away, so it isn't picked straight back up, and where the player can see it: never
+      // in another cave below a mine tunnel or on the surface above it.
+      const spot = sightSpot(player, 3, 5, 20) ?? player.location;
       player.dimension.spawnItem(item, { x: spot.x, y: spot.y + 0.5, z: spot.z });
     },
   },
@@ -750,7 +754,8 @@ export const CARDS = [
       if (!slots.length) return false;
       const slot = pick(slots);
       const item = /** @type {ItemStack} */ (inv.getItem(slot));
-      const spot = randomSpot(player, 8, 16, 20);
+      // Somewhere the player can see it, so it can be fetched (not in another cave, nor on the surface over a mine).
+      const spot = sightSpot(player, 8, 16, 40);
       if (!spot) return false;
       inv.setItem(slot, undefined);
       player.dimension.spawnItem(item, { x: spot.x, y: spot.y + 0.5, z: spot.z });
@@ -809,6 +814,8 @@ export const CARDS = [
       const near = dim
         .getEntities({ location: at, maxDistance: 24, minDistance: 3, families: ["mob"], excludeTypes: ["minecraft:player"] })
         .filter((e) => !e.getTags().some((t) => t.startsWith("realm") || t.startsWith("npc") || t.startsWith("domt")))
+        // Never someone's pet, a named or leashed mob, a ridden horse or a villager (out of its trading hall).
+        .filter((e) => !e.nameTag && !VILLAGERS.includes(e.typeId) && !e.hasComponent("minecraft:is_tamed") && !e.getComponent("minecraft:tameable")?.isTamed && !e.getComponent("minecraft:leashable")?.isLeashed && !e.getComponent("minecraft:rideable")?.getRiders().length)
         .filter((e) => {
           const l = e.location;
           return standable(dim, Math.floor(l.x), Math.floor(l.y), Math.floor(l.z));
@@ -1748,10 +1755,11 @@ export const CARDS = [
     wild: true,
     text: "Every creature within 16 blocks floats up for a few seconds, then drops. Pets and named mobs are spared.",
     expect: "none",
+    prep: (p) => void spawnAround(p, "minecraft:pig", 1, 3, 6),
     run: ({ player }) => {
       const mobsNear = player.dimension
         .getEntities({ location: player.location, maxDistance: 16, families: ["mob"], excludeTypes: ["minecraft:player"] })
-        .filter((e) => !e.nameTag && !e.getComponent("minecraft:tameable")?.isTamed && !e.getTags().some((t) => t.startsWith("realm") || t.startsWith("npc") || t.startsWith("domt")));
+        .filter((e) => !e.nameTag && !e.hasComponent("minecraft:is_tamed") && !e.getComponent("minecraft:tameable")?.isTamed && !e.getTags().some((t) => t.startsWith("realm") || t.startsWith("npc") || t.startsWith("domt")));
       if (!mobsNear.length) return false;
       for (const e of mobsNear) attempt(() => effect(e, "minecraft:levitation", 4, 2));
       sound(player, "mob.shulker.bullet.hit", 0.7);

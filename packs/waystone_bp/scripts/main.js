@@ -1,4 +1,4 @@
-import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Player, SignSide, system, world } from "@minecraft/server";
+import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Player, ScriptEventSource, SignSide, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -301,7 +301,7 @@ function tapped(player, lodestone) {
   const w = waystoneAt(lodestone.dimension.id, lodestone.location);
   if (w) {
     discover(player, w);
-    if (channels.has(player.id)) return;
+    if (traveling(player)) return;
     travelMenu(player, w).catch((e) => console.warn(`[waystone] ${e}`));
     return;
   }
@@ -462,6 +462,14 @@ async function travelMenu(player, here) {
 /** @type {Map<string, Channel>} player id -> the trip they're waiting for */
 const channels = new Map();
 
+/** A trip already on its way: says so (a tap or the menu during the countdown would otherwise do nothing). @param {Player} player */
+function traveling(player) {
+  const ch = channels.get(player.id);
+  if (!ch) return false;
+  player.sendMessage(`§7You're already traveling to ${ch.to.n}. Stand still.`);
+  return true;
+}
+
 /** @param {Player} player @param {Waystone} to @param {number} cost */
 function begin(player, to, cost) {
   if (channels.has(player.id)) return;
@@ -564,17 +572,17 @@ function arrive(player, ch) {
     player.sendMessage(`§cThe waystone ${ch.to.n} is gone. Your trip is canceled.`);
     return;
   }
-  if (!charge(player, ch.cost)) {
-    player.sendMessage(`§cThat trip costs ${price(ch.cost)}. You have ${price(balance(player))}.`);
-    return;
-  }
   const dim = world.getDimension(to.d);
   // The far waystone's chunk is usually unloaded: land on top of the lodestone, then step beside it once it loads.
-  // When it is loaded and there's nowhere safe to stand, don't go at all.
+  // When it is loaded and there's nowhere safe to stand, don't go at all (checked before paying: nothing is charged).
   const loaded = !!blockAt(dim, to);
   const found = safeSpot(dim, to);
   if (loaded && !found) {
     player.sendMessage(`§cThere's no safe place to stand at ${to.n}: the waystone is walled in. Your trip is canceled.`);
+    return;
+  }
+  if (!charge(player, ch.cost)) {
+    player.sendMessage(`§cThat trip costs ${price(ch.cost)}. You have ${price(balance(player))}.`);
     return;
   }
   const spot = found ?? { x: to.x + 0.5, y: to.y + 1, z: to.z + 0.5 };
@@ -628,9 +636,12 @@ function settle(player, to, ch) {
     const under = blockAt(dim, { ...loc, y: loc.y - 1 });
     const stuck = blocked(feet) || blocked(head);
     const falling = gone && !!under && PASSABLE.test(under.typeId);
-    if (!stuck && !falling) return;
+    // Landed on top of the lodestone because its surroundings weren't loaded at the jump: step beside it now.
+    const onTop = !gone && Math.floor(loc.x) === to.x && Math.floor(loc.z) === to.z && Math.floor(loc.y) === to.y + 1;
+    if (!stuck && !falling && !onTop) return;
     const spot = safeSpot(dim, to);
     if (spot) {
+      if (onTop && !stuck && Math.floor(spot.x) === to.x && Math.floor(spot.z) === to.z) return; // on top is the only spot
       player.teleport(spot, { facingLocation: center(to) });
       return;
     }
@@ -650,7 +661,7 @@ function settle(player, to, ch) {
 /** @param {Player} player */
 async function listMenu(player) {
   if (get("travelAnywhere") === true) {
-    if (channels.has(player.id)) return;
+    if (traveling(player)) return;
     // At a waystone the trip is priced from it; anywhere else, from where the player stands.
     const near = waystones().find((w) => w.d === player.dimension.id && dist3(player.location, center(w)) <= CONFIG.discoverRadius + 0.5);
     await travelMenu(player, near);
@@ -920,6 +931,27 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Scenario tests (BDS harness): an empty-hand tap on a lodestone, which simulated players can't make.
+// Only from the server console or an operator.
+//   /scriptevent realm:waystone_test {"action":"tap","player"?:"<name>","x":..,"y":..,"z":..}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:waystone_test") return;
+    const src = ev.sourceEntity;
+    if (ev.sourceType !== ScriptEventSource.Server && !(src instanceof Player && isOp(src))) return;
+    try {
+      const m = JSON.parse(ev.message);
+      const player = typeof m?.player === "string" ? world.getAllPlayers().find((p) => p.name === m.player) : src instanceof Player ? src : undefined;
+      if (!player || m.action !== "tap") return;
+      const b = blockAt(player.dimension, { x: Number(m.x), y: Number(m.y), z: Number(m.z) });
+      if (b && b.typeId === LODESTONE) tapped(player, b);
+    } catch (e) {
+      console.warn(`[waystone] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

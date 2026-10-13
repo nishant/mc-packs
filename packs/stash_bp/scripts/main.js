@@ -64,7 +64,7 @@ function kept(item) {
  * @param {Player} player @param {string} text
  */
 function bar(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50 }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50, from: "stash_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 

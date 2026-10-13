@@ -530,6 +530,10 @@ const limitOf = (player) => (isCreative(player) ? get("maxBlocksCreative") : get
 const layoutCache = new Map();
 /** @type {Map<string, { key: string, rel: Rel[] | undefined, turned: Map<string, Pos[]>, busy: boolean, job: number | undefined }>} each player's shape relative to its start block (undefined: too big), turned to each facing; busy: still being laid out */
 const relCache = new Map();
+/** @type {Map<string, { key: string, from: string, cells: Pos[] | undefined, last: Pos[] | undefined, done: boolean, job: number | undefined }>} each player's two-block guide laid out for where they look (cells undefined: too big; last: the one shown meanwhile) */
+const pointsCache = new Map();
+/** Two-block guides over a box up to this many blocks are laid out at once; bigger ones over the next ticks. */
+const POINTS_NOW = 4096;
 /** Thrown while the guide's layout is still being worked out. */
 class Pending extends Error {}
 
@@ -851,6 +855,23 @@ const tick = () => new Promise((r) => system.run(() => r(undefined)));
 const AIR = () => /** @type {BlockPermutation} */ (permOf("minecraft:air"));
 
 /**
+ * Takes a block placed only to mark a spot out of the world again, if it is still there.
+ * @param {Dimension} dim @param {Pos} p @param {string} id
+ */
+function liftBlock(dim, p, id) {
+  try {
+    const b = dim.getBlock(p);
+    if (b && b.typeId === id) {
+      b.setPermutation(AIR());
+      return true;
+    }
+  } catch {
+    // unloaded
+  }
+  return false;
+}
+
+/**
  * Why a player may not change blocks in this box (safe zones, other players' claims), or undefined.
  * @param {Player} player @param {Dimension} dim
  * @param {{ x: number, y: number, z: number }} min @param {{ x: number, y: number, z: number }} max
@@ -1028,7 +1049,8 @@ async function build(player, dim, cells, label, opts) {
       }
       if (!block || bad) {
         if (c.cost) paid.set(c.cost, (paid.get(c.cost) ?? 0) + 1);
-        changed++;
+        if (block) changed++;
+        else unloaded++;
         continue;
       }
       const before = block.permutation;
@@ -1153,7 +1175,11 @@ async function buildAt(player, T, placed) {
     }
     start = { x: s.start.x, y: s.start.y, z: s.start.z };
     end = T;
+    const marker = s.start;
     s.start = undefined;
+    // A start block that was placed only marked the spot: it goes back into your hand now, whether the end
+    // was placed too or came from /realm:build_here.
+    if (marker.id && liftBlock(player.dimension, marker, marker.id) && marker.paid) giveItems(player, new Map([[marker.paid, 1]]));
     const size = get("maxSize");
     const span = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y), Math.abs(end.z - start.z)) + 1;
     if (span > size) {
@@ -1264,24 +1290,10 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
     note(player, "§bStart set§7 - now place the end block (sneak to place normally)", 80);
     return;
   }
-  // The placed blocks only mark the spot: they go back into your hand and the build starts there.
-  /** @type {Map<string, number>} */
-  const back = new Map();
-  /** @param {{ x: number, y: number, z: number }} p @param {string} id @param {string | undefined} paid */
-  const lift = (p, id, paid) => {
-    try {
-      const b = dim.getBlock(p);
-      if (b && b.typeId === id) {
-        b.setPermutation(AIR());
-        if (paid) back.set(paid, (back.get(paid) ?? 0) + 1);
-      }
-    } catch {
-      // unloaded
-    }
-  };
-  lift(T, perm.type.id, survival ? costOf(perm) ?? undefined : undefined);
-  if (twoPoint && s.start) lift(s.start, s.start.id, s.start.paid);
-  if (back.size) giveItems(player, back);
+  // The placed block only marks the spot: it goes back into your hand and the build starts there (a two-block
+  // shape's start block is taken back by buildAt, which also handles an end set with /realm:build_here).
+  const paid = survival ? costOf(perm) ?? undefined : undefined;
+  if (liftBlock(dim, T, perm.type.id) && paid) giveItems(player, new Map([[paid, 1]]));
   buildAt(player, T, perm).catch((e) => console.warn(`[build] ${e}`));
 });
 
@@ -1513,10 +1525,44 @@ function guideFor(player, plan, T) {
       guide = { cells: finishCells(plan, pos, pts[0] ?? T, cap, dim) };
     } else {
       const O = start ?? T;
-      const pos = moving
-        ? (start ? relCells(plan, false, pointsBox(start, T, fr), cap) : [{ du: 0, dv: 0, dw: 0 }]).map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }))
-        : relPos();
-      guide = moving ? { cells: withModsGuide(plan, pos.map((p) => ({ x: p.x + O.x, y: p.y + O.y, z: p.z + O.z })), O, cap, dim) } : { cells: pos };
+      // Two blocks farther apart than a shape may be: the build refuses it, so no guide is laid out for it either.
+      if (start && Math.max(Math.abs(T.x - start.x), Math.abs(T.y - start.y), Math.abs(T.z - start.z)) + 1 > get("maxSize")) throw new TooBig(cap + 1);
+      const box = start ? pointsBox(start, T, fr) : undefined;
+      /** The shape's world blocks between the two points (or the one spot before the start is set). @param {{ du: number, dv: number, dw: number }[]} rel */
+      const placeAt = (rel) => rel.map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0] + O.x, y: r.dv + O.y, z: r.du * fr.R[1] + r.dw * fr.F[1] + O.z }));
+      if (box && box.W * box.H * box.D > POINTS_NOW) {
+        // A big two-block shape changes with every look: laid out (and outlined) over the next ticks, so aiming
+        // doesn't stall the server for a second each time. A layout under way finishes first (so the guide keeps
+        // following the look while it moves); the last one finished for the same start stays up until the next is ready.
+        const from = `${baseKey}|${O.x},${O.y},${O.z}`;
+        let hit = pointsCache.get(player.id);
+        if (!hit || (hit.key !== key && (hit.done || hit.from !== from))) {
+          // A new plan, facing or start: the old layout is of no use any more.
+          if (hit?.job !== undefined) system.clearJob(hit.job);
+          const last = hit && hit.from === from ? (hit.done ? hit.cells : hit.last) : undefined;
+          /** @type {{ key: string, from: string, cells: Pos[] | undefined, last: Pos[] | undefined, done: boolean, job: number | undefined }} */
+          const entry = (hit = { key, from, cells: undefined, last, done: false, job: undefined });
+          pointsCache.set(player.id, entry);
+          entry.job = system.runJob(
+            (function* () {
+              try {
+                const cells = withModsGuide(plan, placeAt(yield* relCellsJob(plan, false, box, cap)), O, cap, dim);
+                yield* outlineJob(cells);
+                entry.cells = cells;
+              } catch (e) {
+                if (!(e instanceof TooBig)) console.warn(`[build] guide: ${e}`);
+              }
+              entry.done = true;
+              entry.job = undefined;
+            })()
+          );
+        }
+        if (!hit.done) return hit.from === from && hit.last ? { cells: hit.last } : undefined;
+        if (!hit.cells) throw new TooBig(cap + 1);
+        guide = { cells: hit.cells };
+      } else {
+        guide = moving ? { cells: withModsGuide(plan, placeAt(box ? relCells(plan, false, box, cap) : [{ du: 0, dv: 0, dw: 0 }]), O, cap, dim) } : { cells: relPos() };
+      }
     }
   } catch (e) {
     if (e instanceof Pending) return undefined; // not laid out yet: asked again at the next refresh
@@ -1604,6 +1650,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
     s.way = undefined;
   }
   layoutCache.delete(playerId);
+  const pj = pointsCache.get(playerId)?.job;
+  if (pj !== undefined) system.clearJob(pj);
+  pointsCache.delete(playerId);
   const job = relCache.get(playerId);
   if (job?.job !== undefined) system.clearJob(job.job);
   relCache.delete(playerId);

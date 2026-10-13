@@ -363,13 +363,17 @@ export default async function (t) {
   t.check(air.plain.includes(want), `the air corner is 4 blocks in front of the eyes (${want})`);
   // Corner 2 in the Nether starts over there.
   const neth = t.world.getDimension("nether");
-  await t.loadArea(0, 0, { dimension: neth, radius: 1, timeout: 100 }).catch(() => undefined);
+  await t.loadArea(0, 0, { dimension: neth, radius: 1, timeout: 400 }).catch(() => undefined);
   cre.teleport({ x: 0.5, y: 100, z: 0.5 }, { dimension: neth });
   await t.wait(20);
-  await t.waitUntil(() => neth.getBlock({ x: 0, y: 100, z: 0 }) !== undefined, { timeout: 200, message: "the Nether chunk loads" });
-  neth.runCommand("fill -3 97 -3 3 104 3 air");
+  // Both corners' chunks (x and z -1 lie in the next chunk over), or the fills below would silently do nothing and
+  // the players would stand on whatever the Nether has there.
+  await t.waitUntil(() => neth.getBlock({ x: -1, y: 100, z: -1 }) !== undefined && neth.getBlock({ x: 1, y: 100, z: 1 }) !== undefined, { timeout: 400, message: "the Nether chunks load" });
+  neth.runCommand("fill -3 96 -3 3 104 3 air");
+  neth.runCommand("fill -3 96 -3 3 96 3 netherrack"); // solid ground under corner 1 (y 97)
   neth.runCommand("fill -1 98 -1 1 98 1 bedrock");
   neth.runCommand("fill -1 99 -1 1 99 1 netherrack");
+  await t.waitUntil(() => neth.getBlock({ x: -1, y: 96, z: -1 })?.typeId === "minecraft:netherrack" && neth.getBlock({ x: 1, y: 98, z: 1 })?.typeId === "minecraft:bedrock" && neth.getBlock({ x: 1, y: 99, z: 1 })?.typeId === "minecraft:netherrack", { timeout: 100, message: "the Nether fills are in place" });
   since = t.tick;
   t.answerForm(cre, "Copy, cut and paste", "Corner where you stand");
   cre.teleport({ x: -0.5, y: 97, z: -0.5 }, { dimension: neth });
@@ -382,7 +386,8 @@ export default async function (t) {
   since = t.tick;
   t.answerForm(cre, "Copy, cut and paste", "Corner where you stand");
   t.cmd(cre, "/realm:build");
-  await t.waitMessage(cre, /Selected 3 x 4 x 3/, { kind: "actionbar", since });
+  const nsel = await t.waitMessage(cre, /Selected \d+ x \d+ x \d+/, { kind: "actionbar", since });
+  t.assert(/Selected 3 x 4 x 3/.test(nsel.plain), `the Nether box is 3 x 4 x 3 (${nsel.plain})`);
   await run(cre, "/realm:build_copy", /Copied 9 blocks/, { kind: "actionbar" });
   const NT = await aim(cre, 60, 60, 0);
   t.check(cre.dimension.id === "minecraft:overworld", "back in the overworld");

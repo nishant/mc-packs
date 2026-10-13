@@ -343,13 +343,25 @@ async function show(player, form) {
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 
+/**
+ * Ranked lists worked out this tick: getScores() reads every participant, so the ticker ranks all players from one
+ * read per stat a tick instead of one per player per stat.
+ * @type {Map<string, { tick: number, list: import("@minecraft/server").ScoreboardScoreInfo[] }>}
+ */
+const rankedCache = new Map();
+
 /** @param {string} id */
 function ranked(id) {
-  return objective(id)
+  const now = system.currentTick;
+  const cached = rankedCache.get(id);
+  if (cached && cached.tick === now) return cached.list;
+  const list = objective(id)
     .getScores()
     // Skip entity participants: v1.0.0 scores not migrated yet (the player hasn't rejoined), shown as "Player Offline".
     .filter((s) => s.score > 0 && s.participant.type !== ScoreboardIdentityType.Player)
     .sort((a, b) => b.score - a.score);
+  rankedCache.set(id, { tick: now, list });
+  return list;
 }
 
 /** @param {boolean} on */
