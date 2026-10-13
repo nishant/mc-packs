@@ -49,6 +49,67 @@ export const CONFIG = {
   respawnRange: 24,
 
   /**
+   * Hearth & Hearsay: each townsfolk remembers each player (affinity from talks, gifts, favors and stories),
+   * with discounts, heart stories, titles and keepsakes as it grows, and townsfolk pass on gossip. Disabled:
+   * nothing is gained or lost and nobody gossips; what players have earned stays.
+   */
+  affinity: true,
+
+  /** Affinity points for the first talk with each townsfolk every real (UTC) day. */
+  talkPoints: 5,
+
+  /** Affinity points for a gift, by how much that townsfolk likes it (one gift per townsfolk per real day). */
+  giftPoints: { loved: 40, liked: 20, neutral: 5, disliked: -15 },
+
+  /** Affinity points when you finish that townsfolk's daily favor (Story Questlines). */
+  favorPoints: 15,
+
+  /** Affinity points when you finish a story chapter that townsfolk gives or ends (Story Questlines). */
+  chapterPoints: 20,
+
+  /** Points where each level starts: Acquaintance, Friend, Close, Confidant (Stranger is 0). Points stop at 1000. */
+  levels: [100, 250, 500, 900],
+
+  /** Percent off at a Friend's shop (Quill's market, Bea's recipes, Elsie's beds, Mara's maps, Ida's forge; Tobin pays this much more). */
+  friendDiscount: 10,
+
+  /** Hollow-Crowned players (the dark ending) gain this share of affinity points below Friend. */
+  crownedGain: 0.75,
+
+  /** Extra percent off Quill gives a Hollow-Crowned player, at any level. */
+  crownedQuillBonus: 5,
+
+  /** Real days between two keepsakes from a townsfolk you are a Confidant of. */
+  keepsakeDays: 7,
+
+  /** Townsfolk write you a letter (Realm Mail) when you become Close. */
+  letters: true,
+
+  /** Chance, in percent, that a tap's greeting is gossip you haven't heard yet. 0 = no gossip. */
+  gossipChance: 25,
+
+  /** Gossip is forgotten after this many hours. */
+  gossipHours: 48,
+
+  /** Most pieces of gossip the town remembers at once; the oldest go first. */
+  gossipMax: 24,
+
+  /**
+   * Daily schedule: townsfolk with a lunch spot (`/realm:npc_post <id> noon`) go there from `lunchStart`,
+   * and those with an evening spot from `eveningStart` until night. Disabled: they stay at their post by day.
+   */
+  schedules: true,
+
+  /** Lunch starts at this time of day (ticks; 6000 = noon). */
+  lunchStart: 6000,
+
+  /** The evening starts at this time of day (9000 = mid-afternoon), until `nightStart`. */
+  eveningStart: 9000,
+
+  /** A townsfolk only moves to its lunch or evening spot when no player is within this many blocks of either spot. */
+  scheduleRange: 16,
+
+  /**
    * The townsfolk operators can place with `/realm:npc_add <id>`. Keep the ids: other packs and saved data use them.
    * @type {Townsfolk[]}
    */

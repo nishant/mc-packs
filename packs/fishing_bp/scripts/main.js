@@ -396,6 +396,7 @@ function caught(player, sp, size) {
   if (sp.rarity === "legendary" && get("announceLegendary") === true) {
     for (const p of world.getAllPlayers()) if (p.id !== player.id) p.sendMessage(`§6${player.name} caught a legendary ${sp.name} (${size} cm)!`);
   }
+  if (sp.rarity === "legendary") send("realm:gossip", { kind: "fish_legendary", player: player.id, name: player.name, place: sp.name }); // Townsfolk gossip
   send("realm:journal", { player: player.id, page: "fish", entry: sp.id, label: sp.name });
   send("realm:skill_xp", { player: player.id, skill: "fishing", amount: rarities.get(sp.rarity)?.xp ?? 0 });
 }
@@ -761,6 +762,27 @@ function inventoryOf(player) {
   return player.getComponent("minecraft:inventory")?.container;
 }
 
+// Townsfolk (Hearth & Hearsay): Tobin pays his friends more for their fish. realm:affinity gives the percent (`off`) with
+// tobin, on a level change and when the player joins; kept in memory only.
+/** @type {Map<string, number>} player id -> percent */
+const tobinOff = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:affinity") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string") return;
+      if (m.all && typeof m.all === "object") tobinOff.set(m.player, Number(m.off?.tobin) || 0);
+      else if (m.npc === "tobin") tobinOff.set(m.player, Number(m.off) || 0);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+/** @param {Player} player */
+const tobinOffOf = (player) => Math.max(0, Math.min(50, tobinOff.get(player.id) ?? 0));
+
 /** The player's fish that a fisher buys. @param {Player} player */
 function fishFor(player) {
   /** @type {{ slot: number, stack: ItemStack, sp: Species, size: number, price: number }[]} */
@@ -770,7 +792,7 @@ function fishFor(player) {
   for (let slot = 0; slot < inv.size; slot++) {
     const stack = inv.getItem(slot);
     const f = readFish(stack);
-    if (stack && f) out.push({ slot, stack, sp: f.sp, size: f.size, price: priceOf(f.sp, f.size) * stack.amount });
+    if (stack && f) out.push({ slot, stack, sp: f.sp, size: f.size, price: Math.round(priceOf(f.sp, f.size) * stack.amount * (1 + tobinOffOf(player) / 100)) });
   }
   return out;
 }

@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 154 commands in 60 packs */
+/** @type {Pack[]} 155 commands in 60 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -322,6 +322,7 @@ export const PACKS = [
       {"name":"realm:npc_add","description":"Townsfolk: place an NPC here, facing you (moves it if it is already placed)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"}]},
       {"name":"realm:npc_home","description":"Townsfolk: the NPC goes here at night (run it at their post to clear)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"}]},
       {"name":"realm:npc_list","description":"Townsfolk: every placed NPC with its coordinates and home","permission":"op","params":[]},
+      {"name":"realm:npc_post","description":"Townsfolk: the NPC spends lunch (noon) or the evening here (run it at their post to clear)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"},{"name":"realm:npc_slot","type":"Enum","optional":false,"enum":"realm:npc_slot"}]},
       {"name":"realm:npc_remove","description":"Townsfolk: remove the nearest townsfolk NPC within 5 blocks","permission":"op","params":[]},
       {"name":"realm:npc_who","description":"Townsfolk: who lives on the realm and where they are","permission":"any","params":[]},
     ],
@@ -465,7 +466,7 @@ export const PACKS = [
     pack: "Titles & Trails",
     commands: [
       {"name":"realm:titles","description":"Titles & Trails: choose the title under your name and the trail that follows you","permission":"any","params":[]},
-      {"name":"realm:titles_give","description":"Operators: give a player a title (or a trail: \"trail:cloud\", leaves, ember, sparkle)","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
+      {"name":"realm:titles_give","description":"Operators: give a player a title (or a trail: \"trail:cloud\", leaves, ember, sparkle, hearts)","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
     ],
   },
   {
@@ -531,6 +532,7 @@ export const ENUMS = {
   "realm:help_topic": [],
   "realm:moon_state": ["blood","harvest","normal"],
   "realm:npc_id": ["mara","tobin","reyes","elsie","bram","quill","ida","sol","hollis","moss","wren","bea"],
+  "realm:npc_slot": ["noon","evening"],
   "realm:relic_id": ["storm_staff","rain_charm","tide_boots","lantern_deep","storm_meter","compass_echoes","frost_band","sun_pendant","miners_lamp","wayfarer_boots","lantern_shard","choir_mask","hal_compass","vesna_charm","singing_blade","hollow_crown","keeper_lamp"],
   "realm:saga_place_name": ["lighthouse","sunken_bell","old_chapel","graveyard","observatory","sea_cave","choir_ring","witch_hut","old_mine","watchtower","meadow","starfall","seal_tide","seal_stone","seal_sky","hollow_gate"],
   "realm:sidebar_stat": ["playtime","deaths","mobkills","pvpkills","mined","placed","travelled","flown","joins","cycle","off"],

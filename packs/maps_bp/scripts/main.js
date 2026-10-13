@@ -978,9 +978,32 @@ function found(player, hunt, inChest) {
 // Menus
 // ---------------------------------------------------------------------------
 
+// Townsfolk (Hearth & Hearsay): Mara's friends pay less for a treasure map. realm:affinity gives the percent (`off`) with
+// mara, on a level change and when the player joins; kept in memory only.
+/** @type {Map<string, number>} player id -> percent */
+const maraOff = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:affinity") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string") return;
+      if (m.all && typeof m.all === "object") maraOff.set(m.player, Number(m.off?.mara) || 0);
+      else if (m.npc === "mara") maraOff.set(m.player, Number(m.off) || 0);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+/** @param {Player} player */
+const maraOffOf = (player) => Math.max(0, Math.min(50, maraOff.get(player.id) ?? 0));
+/** A price after the friend discount, rounded down (at least 1 when it isn't free). @param {Player} player @param {number} price */
+const maraOffPrice = (player, price) => (price > 0 ? Math.max(1, Math.floor((price * (100 - maraOffOf(player))) / 100)) : 0);
+
 /** @param {Player} player @param {string} title */
 async function buyMenu(player, title) {
-  const price = Math.max(0, get("price"));
+  const price = maraOffPrice(player, get("price"));
   const hunts = huntsOf(player);
   const max = Math.max(1, get("maxHunts"));
   const lo = get("minDistance");
@@ -1022,7 +1045,7 @@ async function buyMenu(player, title) {
 async function showHunts(player) {
   const hunts = huntsOf(player);
   if (!hunts.length) {
-    const price = Math.max(0, get("price"));
+    const price = maraOffPrice(player, get("price"));
     await show(player, new ActionFormData().title("§lTreasure Maps").body(`You have no treasure hunt. Buy a treasure map from a cartographer${price > 0 ? ` (${fmt(price)} Crowns)` : ""}.`).button("Close"));
     return;
   }
@@ -1090,7 +1113,8 @@ system.afterEvents.scriptEventReceive.subscribe(
       if (id === "realm:npc_talk") {
         if (!Array.isArray(msg.roles) || !msg.roles.includes(CONFIG.npcRole)) return;
         if (typeof msg.name === "string") lastNpc.set(msg.player, msg.name);
-        const price = Math.max(0, get("price"));
+        const buyer = online(msg.player);
+        const price = buyer ? maraOffPrice(buyer, get("price")) : Math.max(0, get("price"));
         send("realm:npc_offer", { req: msg.req, pack: PACK, key: "buy", label: price > 0 ? `Buy a treasure map (${fmt(price)} Crowns)` : "Take a treasure map", order: 20 });
         const player = online(msg.player);
         if (player && huntsOf(player).length) send("realm:npc_offer", { req: msg.req, pack: PACK, key: "hunt", label: "Your treasure hunt", order: 21 });

@@ -1057,9 +1057,32 @@ function pickRelic(player) {
   return pool[pool.length - 1];
 }
 
+// Townsfolk (Hearth & Hearsay): Ida's friends need fewer Relic Shards to forge. realm:affinity gives the percent (`off`) with
+// ida, on a level change and when the player joins; kept in memory only.
+/** @type {Map<string, number>} player id -> percent */
+const idaOff = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:affinity") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string") return;
+      if (m.all && typeof m.all === "object") idaOff.set(m.player, Number(m.off?.ida) || 0);
+      else if (m.npc === "ida") idaOff.set(m.player, Number(m.off) || 0);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+/** @param {Player} player */
+const idaOffOf = (player) => Math.max(0, Math.min(50, idaOff.get(player.id) ?? 0));
+/** A price after the friend discount, rounded down (at least 1 when it isn't free). @param {Player} player @param {number} price */
+const idaOffPrice = (player, price) => (price > 0 ? Math.max(1, Math.floor((price * (100 - idaOffOf(player))) / 100)) : 0);
+
 /** @param {Player} player */
 function forge(player) {
-  const cost = get("shardsPerForge");
+  const cost = Math.max(1, idaOffPrice(player, get("shardsPerForge")));
   const container = player.getComponent("minecraft:inventory")?.container;
   const have = countShards(container);
   if (!container || have < cost) {
@@ -1122,7 +1145,7 @@ async function showRelics(player, atSmith) {
     if (def) markFound(player, def);
   }
   const found = foundOf(player);
-  const cost = get("shardsPerForge");
+  const cost = Math.max(1, idaOffPrice(player, get("shardsPerForge")));
   const shards = countShards(player.getComponent("minecraft:inventory")?.container);
   const canForge = atSmith || get("forgeAnywhere") === true;
   const foundForgeable = forgeable.filter((r) => found.has(r.id));
@@ -1156,7 +1179,7 @@ async function showMenu(player) {
   const canForge = get("forgeAnywhere") === true;
   /** @type {{ label: string, run: () => unknown }[]} */
   const actions = [{ label: "Your relics\n§8What you've found and what each does", run: () => showRelics(player, false) }];
-  if (canForge) actions.push({ label: `Forge a relic\n§8${get("shardsPerForge")} Relic Shards`, run: () => forge(player) });
+  if (canForge) actions.push({ label: `Forge a relic\n§8${Math.max(1, idaOffPrice(player, get("shardsPerForge")))} Relic Shards`, run: () => forge(player) });
   if (op) {
     actions.push({ label: "Give a relic\n§8Operators", run: () => showGive(player) });
     actions.push({ label: "Place a relicsmith here\n§8Operators: needs the Townsfolk pack", run: () => placeSmith(player) });

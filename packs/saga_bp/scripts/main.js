@@ -7,7 +7,7 @@
 //   ui.js          offers, dialogues, hints, rewards, tracker, the story log menu
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { expireAdds, sweep, tendActors } from "./actors.js";
-import { entries, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
+import { calendar, entries, finished, flagOf, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
 import {
   beginRun,
   championSlain,
@@ -51,6 +51,7 @@ system.runInterval(() => {
     if (runs % 2 === 0) autoTick();
     if (runs % 60 === 0) expireAdds();
     if (runs % 5 === 0) for (const p of world.getAllPlayers()) sendSeals(p);
+    if (runs % 5 === 2) for (const p of world.getAllPlayers()) sendFlags(p);
     skyHousekeeping();
   } catch (e) {
     console.warn(`[saga] ${e}`);
@@ -97,6 +98,106 @@ function sendSeals(player, force = false) {
   if (!force && sealsSent.get(player.id) === json) return;
   sealsSent.set(player.id, json);
   send("realm:seals", { player: player.id, seals });
+}
+
+// ---------------------------------------------------------------------------
+// Townsfolk (Hearth & Hearsay): the story flags they react to, affinity and the calendar back
+// ---------------------------------------------------------------------------
+
+/** The flags `realm:npc_flags` sends: player-wide, other stories' (as `<story>.<flag>`) and `fin:<story>` = "1". */
+const NPC_FLAGS = {
+  g: ["ending", "hollis", "quill", "vesna", "fen", "allies", "mercy", "iron"],
+  story: [
+    "drowned_bell.bell",
+    "act1_signs.act1:path",
+    "act3_deep.elsie",
+    "act3_deep.keys",
+    "act4_seals.act4:promise",
+    "mayors_burden.plaque",
+    "hollis_faith.forgive",
+    "wardens_oath.oath",
+    "singing_forge.blade",
+    "smugglers_run.profits",
+    "hearth_and_table.marty",
+    "graveyard_shift.stone",
+    "lost_lambs.cat",
+    "inn_ghost.lily",
+    "edges_of_map.wonder",
+  ],
+  fin: [
+    "drowned_bell",
+    "last_map",
+    "act1_signs",
+    "act2_choir",
+    "act3_deep",
+    "act4_seals",
+    "act5_lantern",
+    "one_that_got_away",
+    "hatchlings",
+    "lost_lambs",
+    "edges_of_map",
+    "singing_forge",
+    "smugglers_run",
+    "hearth_and_table",
+    "listening_deep",
+    "graveyard_shift",
+    "mayors_burden",
+    "hollis_faith",
+  ],
+};
+/** What each player was last sent. @type {Map<string, string>} */
+const flagsSent = new Map();
+
+/** Sends `realm:npc_flags` for a player when the flags changed (on join within 5 seconds). Only set flags go. @param {Player} player */
+function sendFlags(player) {
+  const saga = sagaOf(player);
+  /** @type {Record<string, string>} */
+  const flags = {};
+  for (const k of NPC_FLAGS.g) {
+    const v = saga.g?.[k];
+    if (v !== undefined) flags[`g:${k}`] = v;
+  }
+  for (const k of NPC_FLAGS.story) {
+    const v = flagOf(saga, "", k);
+    if (v !== undefined) flags[k] = v;
+  }
+  for (const id of NPC_FLAGS.fin) {
+    const story = storyById.get(id);
+    if (story && finished(saga, story)) flags[`fin:${id}`] = "1";
+  }
+  const json = JSON.stringify(flags);
+  if (flagsSent.get(player.id) === json) return;
+  flagsSent.set(player.id, json);
+  send("realm:npc_flags", { player: player.id, flags });
+}
+
+/** realm:affinity from Townsfolk: `g:aff_<npc>` = the level (0-4), saved, for heart stories. @param {any} msg */
+function onAffinity(msg) {
+  const player = typeof msg.player === "string" ? online(msg.player) : undefined;
+  if (!player) return;
+  const saga = sagaOf(player);
+  /** @type {[string, unknown][]} */
+  const pairs = msg.all && typeof msg.all === "object" ? Object.entries(msg.all) : typeof msg.npc === "string" ? [[msg.npc, msg.level]] : [];
+  let changed = false;
+  for (const [npc, level] of pairs) {
+    if (!/^[a-z0-9_]{1,24}$/.test(npc) || typeof level !== "number" || !Number.isFinite(level)) continue;
+    const v = String(Math.max(0, Math.min(4, Math.floor(level))));
+    if ((saga.g ??= {})[`aff_${npc}`] === v) continue;
+    saga.g[`aff_${npc}`] = v;
+    changed = true;
+  }
+  if (!changed) return;
+  invalidate(player.id);
+  markDirty(player);
+}
+
+/** realm:calendar: the live `cal:` flags. @param {any} msg */
+function onCalendar(msg) {
+  if (typeof msg.day !== "number" || !Number.isFinite(msg.day)) return;
+  calendar.day = String(Math.floor(msg.day));
+  calendar.season = typeof msg.season === "string" ? msg.season.slice(0, 32) : undefined;
+  calendar.festival = typeof msg.festival === "string" && msg.festival ? msg.festival.slice(0, 32) : undefined;
+  for (const p of world.getAllPlayers()) invalidate(p.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +326,19 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (id === "realm:help_pong") {
       onPong(message);
+      return;
+    }
+    if (id === "realm:npc_flags_ping") {
+      flagsSent.clear(); // sent again within 5 seconds
+      return;
+    }
+    if (id === "realm:affinity" || id === "realm:calendar") {
+      try {
+        const msg = JSON.parse(message);
+        if (msg && typeof msg === "object") (id === "realm:affinity" ? onAffinity : onCalendar)(msg);
+      } catch {
+        // not ours to fix
+      }
       return;
     }
     if (
@@ -366,6 +480,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   sweepChampions();
   checkStories();
   system.runTimeout(scanPacks, 60);
+  system.runTimeout(() => send("realm:calendar_ping", {}), 80); // the calendar's live flags, if Townsfolk (or Realm Calendar) is here
   system.runTimeout(() => {
     for (const p of world.getAllPlayers()) sendSeals(p, true);
   }, 100);
@@ -382,6 +497,7 @@ world.beforeEvents.playerLeave.subscribe(({ player }) => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   playerGone(playerId);
   sealsSent.delete(playerId);
+  flagsSent.delete(playerId);
   forget(playerId);
   busy.delete(playerId);
 });

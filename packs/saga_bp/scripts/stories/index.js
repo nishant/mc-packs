@@ -8,10 +8,11 @@ import { STORIES as dark } from "./side_dark.js";
 import { STORIES as bright } from "./side_bright.js";
 import { STORIES as bold } from "./side_bold.js";
 import { STORIES as deep } from "./side_deep.js";
+import { STORIES as heart } from "./side_heart.js";
 
 /** @typedef {import("../types.js").Story} Story */
 
 /** @type {Story[]} */
-export const MORE_STORIES = [...act1, ...act2, ...act3, ...act4, ...act5, ...dark, ...bright, ...bold, ...deep];
+export const MORE_STORIES = [...act1, ...act2, ...act3, ...act4, ...act5, ...dark, ...bright, ...bold, ...deep, ...heart];
 
 export { FAVORS } from "./favors.js";

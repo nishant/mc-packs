@@ -115,6 +115,17 @@ function whens(at, sid, when) {
       if (v !== "on" && v !== "off") errors.push(`${at}: "${k}" must be "on" or "off" (or "!on" / "!off")`);
       continue;
     }
+    if (k.startsWith("g:aff_")) {
+      // Townsfolk affinity (realm:affinity): a level 0-4, set by npc_bp, never by a choice.
+      if (!NPC_NAMES[k.slice(6)]) errors.push(`${at}: "${k}": unknown NPC "${k.slice(6)}"`);
+      if (!/^(>=|<=|!)?[0-4]$/.test(String(when[k]))) errors.push(`${at}: "${k}" must be a level 0-4 (">=3")`);
+      continue;
+    }
+    if (k.startsWith("cal:")) {
+      // The Realm calendar (realm:calendar), live like pack: flags.
+      if (!["cal:day", "cal:season", "cal:festival"].includes(k)) errors.push(`${at}: "${k}": the calendar flags are cal:day, cal:season and cal:festival`);
+      continue;
+    }
     readKeys.push([canon(sid, k), at]);
   }
 }
@@ -192,6 +203,8 @@ for (const s of STORIES) {
   ids.add(s.id);
   if (!s.title || !s.short || !s.giver || !Array.isArray(s.chapters)) errors.push(`${at}: needs title, short, giver and chapters`);
   if ((s.short ?? "").length > 18) warnings.push(`${at}: short "${s.short}" is longer than 18 characters`);
+  if (s.kind !== undefined && !["main", "side", "heart"].includes(s.kind)) errors.push(`${at}: kind must be "main", "side" or "heart"`);
+  if (s.kind === "heart" && !s.requires?.flags?.[`g:aff_${s.giver}`]) errors.push(`${at}: a heart story needs requires.flags { "g:aff_${s.giver}": ">=3" }`);
   npcOk(at, s.giver);
   reqs(at, s.id, s.requires);
   const cids = new Set();

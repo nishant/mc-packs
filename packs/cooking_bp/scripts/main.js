@@ -1031,9 +1031,34 @@ async function kitchen(player, npcName) {
   }
 }
 
+// Townsfolk (Hearth & Hearsay): Bea's friends pay fewer Crowns for recipes. realm:affinity gives the percent off
+// with Bea (`off`), on a level change and when the player joins; kept in memory only.
+/** @type {Map<string, number>} player id -> percent off */
+const beaOff = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:affinity") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string") return;
+      if (m.all && typeof m.all === "object") beaOff.set(m.player, Number(m.off?.bea) || 0);
+      else if (m.npc === "bea") beaOff.set(m.player, Number(m.off) || 0);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+/** A recipe offer with Bea's friend price on its Crowns (rounded down). @template {{ crowns?: number }} O @param {Player} player @param {O} o @returns {O} */
+function beaPrice(player, o) {
+  const off = Math.max(0, Math.min(50, beaOff.get(player.id) ?? 0));
+  return off && o.crowns && o.crowns > 0 ? { ...o, crowns: Math.max(1, Math.floor((o.crowns * (100 - off)) / 100)) } : o;
+}
+
 /** Bea teaches one recipe for one of its offers. @param {Player} player @param {Dish} d @param {string} who */
 async function teach(player, d, who) {
-  const offers = d.learn ?? [];
+  const offers = (d.learn ?? []).map((o) => beaPrice(player, o));
   const form = new ActionFormData().title(d.name).body(`${who}: "${d.blurb}. I'll teach you."\n\n${howToLearn(d)}`);
   const can = offers.map((o) => crownsOf(player) >= (o.crowns ?? 0) && (!o.items || timesAffordable(player, o.items) >= 1));
   offers.forEach((o, i) => form.button(`${can[i] ? "" : "§8"}Pay ${offerText(o)}${can[i] ? "" : "\n§8You don't have it"}`));

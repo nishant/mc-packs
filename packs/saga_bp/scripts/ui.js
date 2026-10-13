@@ -195,7 +195,7 @@ function offerFor(player, story, npc) {
   const starter = chapter.npc ?? story.giver;
   const ender = chapter.end ?? starter;
   const { pos } = chapterNumber(saga, story, index);
-  const tag = story.kind === "main" ? "Main story" : "Story";
+  const tag = story.kind === "main" ? "Main story" : story.kind === "heart" ? "Heart story" : "Story";
   if (!st || !st.a || st.cur !== chapter.id) {
     if (starter !== npc || storyWaitsForPacks(story)) return undefined;
     if (!st?.dn.length && !requires(story.requires, saga, story.id, player).ok) return undefined;
@@ -486,7 +486,9 @@ export async function endChapter(player, story) {
     markDirty(player, true);
     const got = reward(player, chapter.reward, `Story: ${story.title}`, penalty);
     player.sendMessage(`§a[Story] Chapter complete: ${chapter.title}!${got ? ` §7Reward: ${got}` : ""}`);
-    send("realm:quest_done", { player: player.id, pack: PACK, id: `${story.id}:${chapter.id}`, label: `${story.title}: ${chapter.title}`, kind: "story" });
+    // npcs: who gave and who ended the chapter (Townsfolk adds affinity with each).
+    const npcs = [...new Set([chapter.npc ?? story.giver, chapter.end ?? chapter.npc ?? story.giver])];
+    send("realm:quest_done", { player: player.id, pack: PACK, id: `${story.id}:${chapter.id}`, label: `${story.title}: ${chapter.title}`, kind: "story", npcs });
     if (next) {
       const who = next.chapter.npc ?? story.giver;
       player.sendMessage(`§e[Story] Next: talk to ${npcName(who)} for "${next.chapter.title}".`);
@@ -494,6 +496,8 @@ export async function endChapter(player, story) {
       if (who === (chapter.end ?? chapter.npc ?? story.giver)) continueWith = story;
     } else {
       player.sendMessage(`§6[Story] Story complete: ${story.title}!`);
+      // Townsfolk gossip about a finished act of the main story.
+      if (story.kind === "main" && (story.act ?? 0) >= 1) send("realm:gossip", { kind: "act", player: player.id, name: player.name, place: story.title, n: story.act });
       player.playSound("random.levelup", { pitch: 0.7, volume: 1 });
       for (const s of ORDERED) {
         if (s.id === story.id || saga.s[s.id] || !s.requires?.stories?.includes(story.id)) continue;
@@ -576,7 +580,7 @@ async function favorEnd(player, npc) {
     markDirty(player, true);
     const got = reward(player, f.reward, `Favor: ${f.label}`);
     player.sendMessage(`§a[Story] Favor done: ${f.label}!${got ? ` §7Reward: ${got}` : ""} §7A new favor tomorrow.`);
-    send("realm:quest_done", { player: player.id, pack: PACK, id: `favor:${f.id}`, label: `Favor: ${f.label}`, kind: "favor" });
+    send("realm:quest_done", { player: player.id, pack: PACK, id: `favor:${f.id}`, label: `Favor: ${f.label}`, kind: "favor", npc });
   });
 }
 

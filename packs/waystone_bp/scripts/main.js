@@ -783,9 +783,32 @@ function findNpc(player, npc) {
   }
 }
 
+// Townsfolk (Hearth & Hearsay): Elsie's friends pay less for a bed. realm:affinity gives the percent (`off`) with
+// elsie, on a level change and when the player joins; kept in memory only.
+/** @type {Map<string, number>} player id -> percent */
+const elsieOff = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:affinity") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string") return;
+      if (m.all && typeof m.all === "object") elsieOff.set(m.player, Number(m.off?.elsie) || 0);
+      else if (m.npc === "elsie") elsieOff.set(m.player, Number(m.off) || 0);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+/** @param {Player} player */
+const elsieOffOf = (player) => Math.max(0, Math.min(50, elsieOff.get(player.id) ?? 0));
+/** A price after the friend discount, rounded down (at least 1 when it isn't free). @param {Player} player @param {number} price */
+const elsieOffPrice = (player, price) => (price > 0 ? Math.max(1, Math.floor((price * (100 - elsieOffOf(player))) / 100)) : 0);
+
 /** @param {Player} player @param {string} npc @param {string} title */
 async function bedMenu(player, npc, title) {
-  const cost = Math.max(0, get("bedPrice"));
+  const cost = elsieOffPrice(player, get("bedPrice"));
   const minutes = Math.max(0, get("wellRestedMinutes"));
   const perks = minutes ? ` You'll wake up Well Rested: 2 extra hearts for ${minutes} minutes.` : "";
   const body = `A warm bed for the night${cost ? ` is ${cost} Crowns` : " is on the house"}. You'll come back here if you fall on your travels, until you sleep in a bed of your own.${perks}${cost ? `\n\nYou have ${crownsOf(player)} Crowns.` : ""}`;
@@ -844,7 +867,8 @@ system.afterEvents.scriptEventReceive.subscribe(
       if (id === "realm:npc_talk") {
         if (!Array.isArray(msg.roles) || !msg.roles.includes(CONFIG.npcRole)) return;
         lastNpc.set(msg.player, { npc: String(msg.npc ?? ""), name: typeof msg.name === "string" ? msg.name : "§lThe Inn" });
-        const cost = Math.max(0, get("bedPrice"));
+        const host = online(msg.player);
+        const cost = host ? elsieOffPrice(host, get("bedPrice")) : Math.max(0, get("bedPrice"));
         send("realm:npc_offer", { req: msg.req, pack: PACK, key: "bed", label: cost ? `Rent a bed (${cost} Crowns)` : "Rent a bed", order: 20 });
         send("realm:npc_offer", { req: msg.req, pack: PACK, key: "news", label: "Hear the news", order: 21 });
         return;

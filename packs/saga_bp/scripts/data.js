@@ -232,6 +232,13 @@ export function stateOf(saga, story) {
  */
 export const installed = { set: new Set([PACK]), ready: false };
 
+/**
+ * The Realm calendar from the last `realm:calendar` (Townsfolk, later Realm Calendar): live `cal:day`,
+ * `cal:season` and `cal:festival` flags, never saved. Empty until the first broadcast.
+ * @type {{ day?: string, season?: string, festival?: string }}
+ */
+export const calendar = {};
+
 /** @param {When | undefined} when */
 const readsPacks = (when) => !!when && Object.keys(when).some((k) => k.startsWith("pack:"));
 
@@ -264,6 +271,7 @@ export const storyWaitsForPacks = (story) => !installed.ready && story.chapters.
 export function flagOf(saga, storyId, key) {
   if (key.startsWith("g:")) return saga.g?.[key.slice(2)];
   if (key.startsWith("pack:")) return installed.ready && installed.set.has(key.slice(5)) ? "on" : "off";
+  if (key.startsWith("cal:")) return key === "cal:day" ? calendar.day : key === "cal:season" ? calendar.season : key === "cal:festival" ? calendar.festival : undefined;
   const dot = key.indexOf(".");
   if (dot > 0) return saga.s[key.slice(0, dot)]?.f?.[key.slice(dot + 1)];
   const colon = key.indexOf(":");
@@ -299,6 +307,9 @@ export function setFlag(saga, storyId, key, value) {
   const s = saga.s[storyId];
   if (s) s.f[key] = String(value);
 }
+
+/** Townsfolk affinity levels, for `g:aff_<npc>` (0 Stranger ... 4 Confidant). */
+const AFF_LEVELS = ["Strangers", "Acquaintances", "Friends", "Close", "Confidants"];
 
 /** Reputation with a guild, from the Guilds pack's scoreboard (0 without it). @param {Player} player @param {string} guild */
 function repOf(player, guild) {
@@ -340,7 +351,13 @@ export function requires(req, saga, storyId, player) {
       why.push(`finish ${ch ? `"${ch.title}"` : "a chapter"} of ${s ? s.title : sid}`);
     }
   }
-  if (req.flags && !matches(req.flags, saga, storyId)) why.push("make different choices earlier in the story");
+  if (req.flags) {
+    // Townsfolk affinity (`g:aff_<npc>`, from realm:affinity): say whom to befriend, not "choices".
+    for (const [k, v] of Object.entries(req.flags)) {
+      if (k.startsWith("g:aff_") && !test(flagOf(saga, storyId, k), v)) why.push(`become ${AFF_LEVELS[Number(String(v).replace(/[^0-9]/g, "")) || 3] ?? "Close"} with ${npcName(k.slice(6))} (Townsfolk)`);
+    }
+    if (!Object.entries(req.flags).filter(([k]) => !k.startsWith("g:aff_")).every(([k, v]) => test(flagOf(saga, storyId, k), v))) why.push("make different choices earlier in the story");
+  }
   for (const [k, n] of Object.entries(req.minCount ?? {})) if (Number(flagOf(saga, storyId, k) ?? 0) < n) why.push("make different choices earlier in the story");
   for (const [guild, n] of Object.entries(req.rep ?? {})) {
     if (player && repOf(player, guild) < (n ?? 0)) why.push(`reach ${n} reputation with the ${guild.charAt(0).toUpperCase() + guild.slice(1)}`);

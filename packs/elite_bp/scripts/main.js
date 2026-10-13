@@ -755,6 +755,8 @@ function slain(info, killerEntity, hits) {
   if (killerId) msg.player = killerId;
   if (info.tag) msg.tag = info.tag;
   system.sendScriptEvent("realm:champion_slain", JSON.stringify(msg));
+  // Townsfolk gossip (Hearth & Hearsay): the town talks about who brought it down.
+  if (killerId) system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "champion", player: killerId, place: String(info.name).replace(/§./g, "") }));
 }
 
 // ---------------------------------------------------------------------------

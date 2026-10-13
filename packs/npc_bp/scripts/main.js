@@ -6,12 +6,14 @@ import {
   GameMode,
   Player,
   PlayerPermissionLevel,
+  ItemStack,
   WeatherType,
   system,
   world,
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { CALENDAR, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { get } from "./settings.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -21,6 +23,12 @@ import { get } from "./settings.js";
 //   realm:npc_talk  { req, player, npc, roles, name }   -> every pack
 //   realm:npc_offer { req, pack, key, label, order? }   <- packs with something for this NPC, within 4 ticks
 //   realm:npc_choose { player, npc, pack, key }         -> the pack whose button the player picked
+// Hearth & Hearsay (affinity, gifts, gossip, schedules, the Realm day counter) is further down; its protocol:
+//   realm:affinity { player, npc, level, pts, off } on a level change, { player, all, off } on join  -> consumers
+//   realm:gossip   { kind, player, name?, place?, n? }                                              <- producers
+//   realm:npc_flags { player, flags }                                                               <- saga_bp
+//   realm:calendar { day, season, festival?, ends?, doy, year, from }   at dawn, on join, on realm:calendar_ping
+//   realm:mail_send { to, from, subject, body }                                                     -> mail_bp
 
 const PROP_LIST = "npc:list"; // world: JSON Placed[], where each townsfolk lives
 const PROP_WEATHER = "npc:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -51,9 +59,10 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
 /**
  * Where one townsfolk lives. `eid` is the id of its entity (ids stay the same across loads), so any other
  * entity with its tags is a duplicate or a leftover.
- * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string, home?: Vector3 }} Placed
+ * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string, home?: Vector3, posts?: { noon?: Vector3, evening?: Vector3 } }} Placed
  */
-/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number }} State */
+/** @typedef {"work" | "lunch" | "evening" | "night"} Slot */
+/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, slot?: Slot }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
 const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
@@ -102,6 +111,9 @@ function idleDelay() {
 /** @param {unknown} v */
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 
+/** A saved { x, y, z }, or undefined. @param {any} v @returns {Vector3 | undefined} */
+const spotOrNot = (v) => (v && isNum(v.x) && isNum(v.y) && isNum(v.z) ? { x: v.x, y: v.y, z: v.z } : undefined);
+
 function load() {
   try {
     const raw = world.getDynamicProperty(PROP_LIST);
@@ -112,8 +124,11 @@ function load() {
       if (!r || typeof r.id !== "string" || typeof r.dim !== "string" || !isNum(r.x) || !isNum(r.y) || !isNum(r.z)) continue;
       if (out.some((o) => o.id === r.id)) continue;
       if (!folk.has(r.id)) console.warn(`[npc] "${r.id}" is no longer in config.js: its NPC is removed when its chunk loads`);
-      const home = r.home && isNum(r.home.x) && isNum(r.home.y) && isNum(r.home.z) ? { x: r.home.x, y: r.home.y, z: r.home.z } : undefined;
-      out.push({ id: r.id, dim: r.dim, x: r.x, y: r.y, z: r.z, yaw: isNum(r.yaw) ? r.yaw : 0, eid: typeof r.eid === "string" ? r.eid : undefined, home });
+      const home = spotOrNot(r.home);
+      const noon = spotOrNot(r.posts?.noon);
+      const evening = spotOrNot(r.posts?.evening);
+      const posts = noon || evening ? { ...(noon ? { noon } : {}), ...(evening ? { evening } : {}) } : undefined;
+      out.push({ id: r.id, dim: r.dim, x: r.x, y: r.y, z: r.z, yaw: isNum(r.yaw) ? r.yaw : 0, eid: typeof r.eid === "string" ? r.eid : undefined, home, posts });
     }
     list = out.filter((r) => folk.has(r.id));
   } catch (e) {
@@ -187,10 +202,63 @@ function situation(dim) {
   return "night";
 }
 
-/** Home at night (with the routine on), else its post. @param {Placed} rec @returns {Vector3} */
+/** Home at night (with the routine on), else the spot of its schedule slot (lunch, evening), else its post. @param {Placed} rec @returns {Vector3} */
 function anchorOf(rec) {
   if (rec.home && get("enabled") === true && get("nightRoutine") === true && isNight()) return rec.home;
+  const slot = stateOf(rec.id).slot ?? "work";
+  return spotOf(rec, slot === "night" ? "work" : slot); // home is handled above; a night slot by day is a few seconds after dawn
+}
+
+/** Where a slot puts this townsfolk (a slot without a spot is its post). @param {Placed} rec @param {Slot} slot @returns {Vector3} */
+function spotOf(rec, slot) {
+  const on = get("enabled") === true;
+  if (slot === "night" && rec.home && on && get("nightRoutine") === true) return rec.home;
+  if (on && get("schedules") === true) {
+    if (slot === "lunch" && rec.posts?.noon) return rec.posts.noon;
+    if (slot === "evening" && rec.posts?.evening) return rec.posts.evening;
+  }
   return { x: rec.x, y: rec.y, z: rec.z };
+}
+
+/** The slot the time of day asks for. @returns {Slot} */
+function slotNow() {
+  if (isNight()) return "night";
+  const t = world.getTimeOfDay();
+  if (t >= CONFIG.eveningStart && t < CONFIG.nightStart) return "evening";
+  if (t >= CONFIG.lunchStart && t < CONFIG.eveningStart) return "lunch";
+  return "work";
+}
+
+/**
+ * Every 10 s (the audit): townsfolk whose slot changed move to its spot, but only while no player is within
+ * `scheduleRange` blocks of where they are and where they go (nobody sees them vanish). Going home at night and
+ * back at dawn stays instant, as before. A restart puts everyone straight into the slot of the time.
+ */
+function scheduleTick() {
+  const want = slotNow();
+  const range = Math.max(0, Number(CONFIG.scheduleRange) || 0);
+  for (const rec of list) {
+    const st = stateOf(rec.id);
+    if (st.slot === undefined || st.slot === want) {
+      st.slot = want;
+      continue;
+    }
+    const from = spotOf(rec, st.slot);
+    const to = spotOf(rec, want);
+    // Same spot, or to or from home at night (the old routine, instant): just change the slot.
+    const homeMove = !!rec.home && get("nightRoutine") === true && (want === "night" || st.slot === "night");
+    if (dist(from, to) < 0.5 || homeMove) {
+      st.slot = want;
+      continue;
+    }
+    try {
+      const dim = world.getDimension(rec.dim);
+      const seen = range > 0 && (dim.getPlayers({ location: from, maxDistance: range }).length > 0 || dim.getPlayers({ location: to, maxDistance: range }).length > 0);
+      if (!seen) st.slot = want;
+    } catch (e) {
+      console.warn(`[npc] schedule ${rec.id}: ${e}`);
+    }
+  }
 }
 
 /** @param {Vector3} a @param {Vector3} b */
@@ -391,7 +459,9 @@ function behave(rec, t, entity, lively) {
     const [listener] = dim.getPlayers({ location: loc, maxDistance: CONFIG.idleRange, closest: 1, excludeGameModes: [GameMode.Spectator] });
     if (!listener) return;
     // Mostly idle chatter, sometimes a remark that fits the time and weather.
-    const line = Math.random() < 0.7 ? pick(t.idle) : pick(t.greetings[situation(rec.dim)] ?? []);
+    // Acquaintances (and up) of the nearest listener hear more of its chatter.
+    const idle = get("affinity") === true && levelWith(listener, t.id) >= 1 ? [...t.idle, ...(HEARTH[t.id]?.idle ?? [])] : t.idle;
+    const line = Math.random() < 0.7 ? pick(idle) : pick(t.greetings[situation(rec.dim)] ?? []);
     if (line) say(entity, t, fill(line, listener.name));
   }
 }
@@ -399,6 +469,13 @@ function behave(rec, t, entity, lively) {
 let loops = 0;
 function loop() {
   loops++;
+  if (loops % 2 === 0) {
+    try {
+      dayTick();
+    } catch (e) {
+      console.warn(`[npc] day: ${e}`);
+    }
+  }
   const lively = get("enabled") === true;
   for (const rec of list) {
     const t = folk.get(rec.id);
@@ -425,11 +502,40 @@ world.afterEvents.worldLoad.subscribe(() => {
     // keep Clear
   }
   load();
+  loadGossip();
+  loadDay();
   ready = true;
+  scheduleTick();
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
   system.runInterval(loop, LOOP_TICKS);
-  system.runInterval(auditAll, AUDIT_TICKS);
+  system.runInterval(() => {
+    try {
+      scheduleTick();
+    } catch (e) {
+      console.warn(`[npc] schedule: ${e}`);
+    }
+    auditAll();
+  }, AUDIT_TICKS);
+  // Other packs are loaded by now: the calendar, and each online player's affinity (after a /reload).
+  system.runTimeout(() => {
+    broadcastCalendar();
+    for (const p of world.getAllPlayers()) sendAffinity(p);
+    system.sendScriptEvent("realm:npc_flags_ping", "{}"); // Story Questlines sends every online player's flags again
+  }, 100);
+});
+
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (!initialSpawn) return;
+  system.runTimeout(() => {
+    try {
+      if (!player.isValid) return;
+      sendAffinity(player);
+      broadcastCalendar();
+    } catch (e) {
+      console.warn(`[npc] join: ${e}`);
+    }
+  }, 60);
 });
 
 // ---------------------------------------------------------------------------
@@ -447,6 +553,9 @@ let requests = 0;
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   busy.delete(playerId);
   lastTap.delete(playerId);
+  affCache.delete(playerId);
+  flagCache.delete(playerId);
+  heardCache.delete(playerId);
 });
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
@@ -462,9 +571,10 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
     if (player.isSneaking && creative && isOp(player)) return; // the game's NPC editor, to pick a skin
     ev.cancel = true;
     const id = idOf(target);
+    const gift = player.isSneaking; // sneak-tap: give the item in hand
     system.run(() => {
       if (!id || !player.isValid) return;
-      tapped(player, target, id).catch((e) => console.warn(`[npc] ${e}`));
+      tapped(player, target, id, gift).catch((e) => console.warn(`[npc] ${e}`));
     });
   } catch (e) {
     console.warn(`[npc] ${e}`);
@@ -486,8 +596,8 @@ async function show(player, form) {
   return undefined;
 }
 
-/** @param {Player} player @param {Entity} entity @param {string} id */
-async function tapped(player, entity, id) {
+/** @param {Player} player @param {Entity} entity @param {string} id @param {boolean} [gift] a sneak-tap: give what's in hand */
+async function tapped(player, entity, id, gift = false) {
   const now = system.currentTick;
   if (busy.has(player.id) || now - (lastTap.get(player.id) ?? -TAP_COOLDOWN) < TAP_COOLDOWN) return;
   lastTap.set(player.id, now);
@@ -500,19 +610,34 @@ async function tapped(player, entity, id) {
       const rec = placedOf(id);
       if (rec) turn(entity, stateOf(id), anchorOf(rec), yawTo(entity.location, player.location), true);
     }
+    // A sneak-tap holding something is a gift; with an empty hand it's an ordinary tap.
+    if (gift && get("affinity") === true && giftInHand(player)) {
+      giveGift(player, t, entity);
+      return;
+    }
     const req = `npc:${id}:${player.id}:${now}:${++requests}`;
     rounds.set(req, []);
     system.sendScriptEvent("realm:npc_talk", JSON.stringify({ req, player: player.id, npc: id, roles: t.roles, name: plainName(t) }));
+    talkedTo(player, t);
+    keepsake(player, t);
     await wait(OFFER_TICKS);
     const offers = rounds.get(req) ?? [];
     rounds.delete(req);
+    const hearth = get("affinity") === true;
+    const held = hearth ? giftInHand(player) : undefined;
+    if (held && !held.keep) offers.push({ pack: "npc_bp", key: "give", label: `Give ${itemName(held.item.typeId)}\n§8a gift, takes 1`, order: 0 });
+    if (hearth && levelWith(player, id) >= 1 && HEARTH[id]?.topics.length) offers.push({ pack: "npc_bp", key: "ask", label: "Ask about...", order: 90 });
     offers.push({ pack: "npc_bp", key: "who", label: "Who lives here?", order: 95 });
     offers.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
     if (!player.isValid) return;
 
-    const dimId = entity.isValid ? entity.dimension.id : player.dimension.id;
-    const greeting = fill(pick(t.greetings[situation(dimId)] ?? []) ?? "Hello, {player}.", player.name);
-    const form = new ActionFormData().title(plainName(t)).body(`§e${t.name}:§r "${greeting}"`);
+    const lines = [`§e${t.name}:§r "${greetingFor(player, t, entity)}"`];
+    if (hearth) {
+      const pts = affOf(player)[id]?.[0] ?? 0;
+      lines.push("", `§7You and ${t.name}: §d${levelText(pts)}`);
+      if (birthday(id)) lines.push(`§6It's ${t.name}'s birthday today: gifts count double.`);
+    }
+    const form = new ActionFormData().title(plainName(t)).body(lines.join("\n"));
     for (const o of offers) form.button(o.label);
     form.button("Goodbye");
     const res = await show(player, form);
@@ -521,7 +646,9 @@ async function tapped(player, entity, id) {
     if (!offer) return; // Goodbye
     if (offer.pack === "npc_bp") {
       busy.delete(player.id);
-      await whoLivesHere(player, t);
+      if (offer.key === "give") giveGift(player, t, entity);
+      else if (offer.key === "ask") await askAbout(player, t);
+      else await whoLivesHere(player, t);
       return;
     }
     system.sendScriptEvent("realm:npc_choose", JSON.stringify({ player: player.id, npc: id, pack: offer.pack, key: offer.key }));
@@ -549,6 +676,544 @@ system.afterEvents.scriptEventReceive.subscribe(
 );
 
 // ---------------------------------------------------------------------------
+// Hearth & Hearsay: affinity, gifts, flag reactions, gossip, the Realm day counter
+// ---------------------------------------------------------------------------
+
+const PROP_AFF = "npc:aff"; // player: JSON { <npc>: [pts, talkDay, giftDay, bits, keepsakeDay] }
+const PROP_FLAGS = "npc:flags"; // player: JSON, the story flags Story Questlines last sent (realm:npc_flags)
+const PROP_HEARD = "npc:heard"; // player: JSON number[], ids of the gossip this player has heard
+const PROP_GOSSIP = "npc:gossip"; // world: JSON { n: next id, e: Gossip[] }
+const PROP_DAY = "npc:day"; // world: JSON { d: Realm day, n: 1 once the night was seen (the next dawn counts) }
+const MAX_POINTS = 1000;
+const BIT_CLOSE = 1; // the Close letter and notice were sent
+const BIT_CONFIDANT = 2; // the Confidant title and trail were sent
+const PRIVATE_RANGE = 16; // a Confidant's warm words to a Hollow-Crowned player only when nobody else is this close
+const FLAG_LIMIT = 64; // most flags kept from realm:npc_flags
+const GOSSIP_KIND = /^[a-z][a-z0-9_]{0,23}$/;
+const GOSSIP_REPEAT_MS = 30 * 60000; // the same news about the same player within 30 minutes replaces the older one
+
+/** @typedef {[number, number, number, number, number]} Aff points, last talk day, last gift day, bits, last keepsake day (UTC days) */
+/** @typedef {{ i: number, k: string, p: string, n: string, pl?: string, x?: number, t: number, c?: number }} Gossip */
+/** @typedef {"loved" | "liked" | "neutral" | "disliked"} Tier */
+
+/** Today's real (UTC) day number: talks and gifts count once per real day, so sleeping can't farm them. */
+const utcDay = () => Math.floor(Date.now() / 86400000);
+
+/** @type {Map<string, Record<string, Aff>>} player id -> affinity */
+const affCache = new Map();
+/** @type {Map<string, Record<string, string>>} player id -> story flags */
+const flagCache = new Map();
+/** @type {Map<string, number[]>} player id -> gossip heard */
+const heardCache = new Map();
+
+/** @param {unknown} v @returns {Aff | undefined} */
+function affEntry(v) {
+  if (!Array.isArray(v)) return undefined;
+  const n = (/** @type {number} */ i) => (isNum(v[i]) ? Math.floor(v[i]) : 0);
+  return [Math.max(0, Math.min(MAX_POINTS, n(0))), n(1), n(2), n(3), n(4)];
+}
+
+/** @param {Player} player @returns {Record<string, Aff>} */
+function affOf(player) {
+  let aff = affCache.get(player.id);
+  if (aff) return aff;
+  aff = {};
+  try {
+    const raw = player.getDynamicProperty(PROP_AFF);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
+    for (const [id, v] of Object.entries(parsed && typeof parsed === "object" ? parsed : {})) {
+      const e = affEntry(v);
+      if (e && folk.has(id)) aff[id] = e;
+    }
+  } catch {
+    console.warn(`[npc] ${PROP_AFF} of ${player.name} is corrupt; starting over`);
+  }
+  affCache.set(player.id, aff);
+  return aff;
+}
+
+/** @param {Player} player */
+function saveAff(player) {
+  try {
+    if (player.isValid) player.setDynamicProperty(PROP_AFF, JSON.stringify(affOf(player)));
+  } catch (e) {
+    console.warn(`[npc] save affinity: ${e}`);
+  }
+}
+
+/** @param {Player} player @param {string} id @returns {Aff} */
+const affFor = (player, id) => (affOf(player)[id] ??= [0, 0, 0, 0, 0]);
+
+/** 0 Stranger, 1 Acquaintance, 2 Friend, 3 Close, 4 Confidant. @param {number} pts */
+function levelOf(pts) {
+  let lv = 0;
+  CONFIG.levels.forEach((need, i) => {
+    if (pts >= need) lv = i + 1;
+  });
+  return lv;
+}
+
+/** @param {Player} player @param {string} id */
+const levelWith = (player, id) => levelOf(affOf(player)[id]?.[0] ?? 0);
+
+/** @param {Player} player @returns {Record<string, string>} */
+function flagsOf(player) {
+  let f = flagCache.get(player.id);
+  if (f) return f;
+  f = {};
+  try {
+    const raw = player.getDynamicProperty(PROP_FLAGS);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === "object") for (const [k, v] of Object.entries(parsed)) if (typeof v === "string") f[k] = v;
+  } catch {
+    // start without flags: Story Questlines sends them again within seconds
+  }
+  flagCache.set(player.id, f);
+  return f;
+}
+
+/** Took the Hollow Crown (the dark ending of Lantern Night). @param {Player} player */
+const crowned = (player) => flagsOf(player)["g:ending"] === "crown";
+
+/** Is this townsfolk cold to the player? Not Hollis when he was saved: forgiving is his arc. @param {Player} player @param {string} id */
+const coldTo = (player, id) => crowned(player) && !(id === "hollis" && flagsOf(player)["g:hollis"] === "saved");
+
+/** Percent off (or extra paid, Tobin) at this townsfolk's shop. @param {Player} player @param {string} id */
+function offFor(player, id) {
+  let off = levelWith(player, id) >= 2 ? Math.max(0, Number(CONFIG.friendDiscount) || 0) : 0;
+  if (id === "quill" && crowned(player)) off += Math.max(0, Number(CONFIG.crownedQuillBonus) || 0);
+  return off;
+}
+
+/** realm:affinity for one townsfolk (a level change) or, without `id`, all of them (on join). @param {Player} player @param {string} [id] */
+function sendAffinity(player, id) {
+  try {
+    if (id) {
+      const pts = affOf(player)[id]?.[0] ?? 0;
+      system.sendScriptEvent("realm:affinity", JSON.stringify({ player: player.id, npc: id, level: levelOf(pts), pts, off: offFor(player, id) }));
+      return;
+    }
+    /** @type {Record<string, number>} */
+    const all = {};
+    /** @type {Record<string, number>} */
+    const off = {};
+    for (const t of CONFIG.townsfolk) {
+      all[t.id] = levelWith(player, t.id);
+      const o = offFor(player, t.id);
+      if (o) off[t.id] = o;
+    }
+    system.sendScriptEvent("realm:affinity", JSON.stringify({ player: player.id, all, off }));
+  } catch (e) {
+    console.warn(`[npc] affinity event: ${e}`);
+  }
+}
+
+/** A chat line from a townsfolk. @param {Player} player @param {Townsfolk} t @param {string} line @param {string} [after] */
+function chatFrom(player, t, line, after = "") {
+  player.sendMessage(`§e${t.name}:§r "${fill(line, player.name)}"${after ? ` ${after}` : ""}`);
+}
+
+/** "Friend (260/500)". @param {number} pts */
+function levelText(pts) {
+  const lv = levelOf(pts);
+  const next = CONFIG.levels[lv];
+  return `${LEVEL_NAMES[lv]} (${pts}${next !== undefined ? `/${next}` : ""})`;
+}
+
+/**
+ * Adds (or takes) affinity points. Returns the points actually added.
+ * @param {Player} player @param {string} id @param {number} amount @param {string} [why] shown after the change in chat
+ */
+function gain(player, id, amount, why) {
+  if (get("affinity") !== true || !player.isValid) return 0;
+  const t = folk.get(id);
+  if (!t || !amount) return 0;
+  const a = affFor(player, id);
+  const before = levelOf(a[0]);
+  let n = Math.round(amount);
+  // The town is cold to the Hollow-Crowned: slower to warm up below Friend. Quill likes them more.
+  if (n > 0 && before < 2 && coldTo(player, id) && id !== "quill") n = Math.max(1, Math.round(n * (Number(CONFIG.crownedGain) || 1)));
+  a[0] = Math.max(0, Math.min(MAX_POINTS, a[0] + n));
+  saveAff(player);
+  const after = levelOf(a[0]);
+  if (why && n) player.sendMessage(`§d${n > 0 ? "+" : ""}${n} with ${t.name} §7(${why}; ${levelText(a[0])})`);
+  if (after !== before) levelChanged(player, t, before, after);
+  return n;
+}
+
+/** @param {Player} player @param {Townsfolk} t @param {number} before @param {number} after */
+function levelChanged(player, t, before, after) {
+  sendAffinity(player, t.id);
+  if (after < before) {
+    player.sendMessage(`§7You and ${t.name} are ${LEVEL_NAMES[after]}s again.`);
+    return;
+  }
+  const h = HEARTH[t.id];
+  const line = h?.levelUp[after - 1];
+  if (line) chatFrom(player, t, line);
+  player.sendMessage(`§dYou and ${plainName(t)} are now ${after === 4 ? "Confidants" : `${LEVEL_NAMES[after]}s`}.${UNLOCK_TEXT[after] ? ` §7${UNLOCK_TEXT[after]}` : ""}`);
+  player.playSound("random.levelup", { pitch: 1.4, volume: 0.6 });
+  const a = affFor(player, t.id);
+  if (after >= 3 && !(a[3] & BIT_CLOSE)) {
+    a[3] |= BIT_CLOSE;
+    saveAff(player);
+    if (get("letters") === true && h?.letter) {
+      system.sendScriptEvent("realm:mail_send", JSON.stringify({ to: player.id, from: t.name, subject: h.letter.subject.slice(0, 40), body: fill(h.letter.body, player.name).slice(0, 600) }));
+    }
+  }
+  if (after >= 4 && !(a[3] & BIT_CONFIDANT)) {
+    a[3] |= BIT_CONFIDANT;
+    saveAff(player);
+    system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: `${t.name}'s Confidant`, from: "npc_bp" }));
+    system.sendScriptEvent("realm:trail_unlock", JSON.stringify({ player: player.id, trail: "hearts", from: "npc_bp" }));
+  }
+}
+
+/** What each level opens, for the chat line. */
+const UNLOCK_TEXT = [
+  "",
+  "They have more to say now: tap them and pick Ask about...",
+  `Friends get ${CONFIG.friendDiscount}% off where they sell (Tobin pays you ${CONFIG.friendDiscount}% more).`,
+  "They have a heart story for you (Story Questlines): see their menu.",
+  "A title, a trail and now and then a keepsake.",
+];
+
+/** First talk of the real day. @param {Player} player @param {Townsfolk} t */
+function talkedTo(player, t) {
+  if (get("affinity") !== true) return;
+  const a = affFor(player, t.id);
+  const day = utcDay();
+  if (a[1] === day) return;
+  a[1] = day;
+  gain(player, t.id, CONFIG.talkPoints);
+  saveAff(player);
+}
+
+/** A Confidant's keepsake, once every `keepsakeDays` real days, on a talk. @param {Player} player @param {Townsfolk} t */
+function keepsake(player, t) {
+  const k = HEARTH[t.id]?.keepsake;
+  if (get("affinity") !== true || !k || levelWith(player, t.id) < 4) return;
+  const a = affFor(player, t.id);
+  const day = utcDay();
+  if (a[4] && day - a[4] < Math.max(1, CONFIG.keepsakeDays)) return;
+  try {
+    const item = new ItemStack(k.item, k.amount);
+    item.nameTag = `§r§d${k.name}`;
+    item.setLore(k.lore.map((l) => `§r§7${l}`));
+    const left = player.getComponent("minecraft:inventory")?.container?.addItem(item);
+    if (left) player.dimension.spawnItem(left, player.location);
+  } catch (e) {
+    console.warn(`[npc] keepsake ${t.id}: ${e}`);
+    return;
+  }
+  a[4] = day;
+  saveAff(player);
+  chatFrom(player, t, k.line, `§7(${k.name})`);
+}
+
+/** "minecraft:cooked_salmon" -> "Cooked Salmon". @param {string} id */
+const itemName = (id) =>
+  id
+    .replace(/^minecraft:/, "")
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+/** The item in the player's hand, if it can be a gift (not a named or lore item: relics and quest items stay). @param {Player} player */
+function giftInHand(player) {
+  try {
+    const inv = player.getComponent("minecraft:inventory")?.container;
+    const slot = player.selectedSlotIndex;
+    const item = inv?.getItem(slot);
+    if (!inv || !item) return undefined;
+    return { inv, slot, item, keep: !!item.nameTag || item.getLore().length > 0 };
+  } catch {
+    return undefined;
+  }
+}
+
+/** @param {string} id @param {string} typeId @returns {Tier} */
+function tierOf(id, typeId) {
+  const g = HEARTH[id]?.gifts;
+  if (g?.loved.includes(typeId)) return "loved";
+  if (g?.liked.includes(typeId)) return "liked";
+  if (g?.disliked.includes(typeId)) return "disliked";
+  return "neutral";
+}
+
+/** Is today this townsfolk's birthday (a day of the Realm Year)? @param {string} id */
+const birthday = (id) => HEARTH[id]?.birthday === calendarNow().doy;
+
+/** Gives the held item (1 of it). @param {Player} player @param {Townsfolk} t @param {Entity | undefined} entity */
+function giveGift(player, t, entity) {
+  if (get("affinity") !== true) return;
+  const held = giftInHand(player);
+  if (!held) return player.sendMessage(`§7Hold the item you want to give ${t.name}.`);
+  if (held.keep) return chatFrom(player, t, "That one has a name. Keep it, it's yours.");
+  const a = affFor(player, t.id);
+  const day = utcDay();
+  if (a[2] === day) return chatFrom(player, t, "You already gave me something today. Come back tomorrow.");
+  const tier = tierOf(t.id, held.item.typeId);
+  let pts = Number(CONFIG.giftPoints[tier]) || 0;
+  const bday = birthday(t.id);
+  if (bday && pts > 0) pts *= 2;
+  const left = held.item.amount - 1;
+  if (left > 0) {
+    held.item.amount = left;
+    held.inv.setItem(held.slot, held.item);
+  } else held.inv.setItem(held.slot, undefined);
+  a[2] = day;
+  const lines = HEARTH[t.id]?.giftLines[tier] ?? [];
+  const line = pick(lines) ?? "Thank you.";
+  const got = gain(player, t.id, pts);
+  saveAff(player);
+  const a2 = affFor(player, t.id);
+  chatFrom(player, t, line, `§7(${itemName(held.item.typeId)}: ${got >= 0 ? "+" : ""}${got}${bday ? ", birthday x2" : ""}; ${levelText(a2[0])})`);
+  if (entity?.isValid) say(entity, t, fill(line, player.name));
+  player.playSound(tier === "disliked" ? "note.bass" : "random.pop", { pitch: tier === "loved" ? 1.4 : 1, volume: 0.7 });
+}
+
+/** @param {Player} player */
+function heardOf(player) {
+  let h = heardCache.get(player.id);
+  if (h) return h;
+  h = [];
+  try {
+    const raw = player.getDynamicProperty(PROP_HEARD);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) h = parsed.filter(isNum);
+  } catch {
+    // start fresh
+  }
+  heardCache.set(player.id, h);
+  return h;
+}
+
+/** @type {Gossip[]} */
+let gossip = [];
+let gossipNext = 1;
+
+function loadGossip() {
+  try {
+    const raw = world.getDynamicProperty(PROP_GOSSIP);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : undefined;
+    gossipNext = isNum(parsed?.n) ? parsed.n : 1;
+    gossip = (Array.isArray(parsed?.e) ? parsed.e : []).filter(
+      (/** @type {any} */ g) => g && isNum(g.i) && typeof g.k === "string" && typeof g.p === "string" && typeof g.n === "string" && isNum(g.t),
+    );
+  } catch {
+    gossip = [];
+  }
+}
+
+function saveGossip() {
+  try {
+    world.setDynamicProperty(PROP_GOSSIP, JSON.stringify({ n: gossipNext, e: gossip }));
+  } catch (e) {
+    console.warn(`[npc] save gossip: ${e}`);
+  }
+}
+
+const gossipAlive = () => {
+  const cutoff = Date.now() - Math.max(1, Number(CONFIG.gossipHours) || 48) * 3600000;
+  return gossip.filter((g) => g.t >= cutoff);
+};
+
+/** realm:gossip from another pack: one piece of news about a player. @param {any} msg */
+function hearGossip(msg) {
+  if (!msg || typeof msg.kind !== "string" || !GOSSIP_KIND.test(msg.kind) || typeof msg.player !== "string" || !msg.player) return;
+  const subject = world.getAllPlayers().find((p) => p.id === msg.player || p.name === msg.player);
+  const name = typeof msg.name === "string" && msg.name.trim() ? msg.name.trim().slice(0, 32) : subject?.name;
+  if (!name) return;
+  const pid = subject?.id ?? msg.player;
+  const now = Date.now();
+  /** @type {Gossip} */
+  const g = { i: gossipNext++, k: msg.kind, p: pid.slice(0, 40), n: name, t: now };
+  if (typeof msg.place === "string" && msg.place.trim()) g.pl = msg.place.trim().replace(/§./g, "").slice(0, 48);
+  if (isNum(msg.n)) g.x = Math.round(msg.n);
+  if (subject && crowned(subject)) g.c = 1;
+  gossip = gossipAlive().filter((o) => !(o.k === g.k && o.p === g.p && now - o.t < GOSSIP_REPEAT_MS));
+  gossip.push(g);
+  gossip = gossip.slice(-Math.max(1, Number(CONFIG.gossipMax) || 24));
+  saveGossip();
+}
+
+/** Fills a gossip template. @param {string} text @param {Gossip} g @param {string} listener */
+function fillGossip(text, g, listener) {
+  const name = g.c ? "the Crowned" : g.n;
+  const out = text
+    .split("{name}")
+    .join(name)
+    .split("{place}")
+    .join(g.pl ?? "out there")
+    .split("{n}")
+    .join(String(g.x ?? ""))
+    .split("{player}")
+    .join(listener);
+  return out.replace(/(^|[.!?]\s+)the Crowned/g, "$1The Crowned");
+}
+
+/**
+ * Sometimes (`gossipChance`) a tap's greeting is the newest news this player hasn't heard: about someone else,
+ * or praise for themselves. @param {Player} player @param {Townsfolk} t @returns {string | undefined}
+ */
+function gossipLine(player, t) {
+  const chance = Math.max(0, Math.min(100, Number(get("gossipChance")) || 0));
+  if (get("affinity") !== true || Math.random() * 100 >= chance) return undefined;
+  const alive = gossipAlive();
+  const heard = heardOf(player);
+  const g = alive.filter((x) => !heard.includes(x.i)).sort((a, b) => b.i - a.i)[0];
+  if (!g) return undefined;
+  const self = g.p === player.id;
+  const pool = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? GOSSIP.other)];
+  const pair = pick(pool);
+  if (!pair) return undefined;
+  const kept = heard.filter((i) => alive.some((x) => x.i === i));
+  kept.push(g.i);
+  heardCache.set(player.id, kept);
+  try {
+    player.setDynamicProperty(PROP_HEARD, JSON.stringify(kept));
+  } catch {
+    // heard again later, no harm
+  }
+  return fillGossip(self ? pair[1] : pair[0], g, player.name);
+}
+
+/** A line keyed by the player's story flags, if one fits this townsfolk. @param {Player} player @param {string} id */
+function reactionLine(player, id) {
+  const f = flagsOf(player);
+  const fits = REACTIONS.filter((r) => r.lines[id] && Object.entries(r.when).every(([k, v]) => flagHolds(f[k], v))).map((r) => /** @type {string} */ (r.lines[id]));
+  return pick(fits);
+}
+
+/** `!x` not x, `>=n` / `<=n` numbers, else exact (as in Story Questlines). @param {string | undefined} actual @param {string} want */
+function flagHolds(actual, want) {
+  if (want.startsWith(">=")) return Number(actual ?? 0) >= Number(want.slice(2));
+  if (want.startsWith("<=")) return Number(actual ?? 0) <= Number(want.slice(2));
+  if (want.startsWith("!")) return actual !== want.slice(1);
+  return actual === want;
+}
+
+/**
+ * The menu's greeting: for the Hollow-Crowned a cold one (a Confidant's warm one when nobody else is near), else
+ * sometimes gossip, sometimes a line about what the player did in the stories, else the time and the weather.
+ * @param {Player} player @param {Townsfolk} t @param {Entity} entity
+ */
+function greetingFor(player, t, entity) {
+  const dimId = entity.isValid ? entity.dimension.id : player.dimension.id;
+  const h = HEARTH[t.id];
+  if (get("affinity") === true && h && coldTo(player, t.id)) {
+    let alone = true;
+    try {
+      alone = !entity.dimension.getPlayers({ location: entity.location, maxDistance: PRIVATE_RANGE }).some((p) => p.id !== player.id);
+    } catch {
+      alone = false;
+    }
+    const set = levelWith(player, t.id) >= 4 && alone ? h.warm : h.cold;
+    const line = pick(set);
+    if (line) return fill(line, player.name);
+  }
+  const news = gossipLine(player, t);
+  if (news) return news;
+  if (get("affinity") === true && Math.random() < 0.35) {
+    const r = reactionLine(player, t.id);
+    if (r) return fill(r, player.name);
+  }
+  return fill(pick(t.greetings[situation(dimId)] ?? []) ?? "Hello, {player}.", player.name);
+}
+
+/** "Ask about..." (Acquaintance and up). @param {Player} player @param {Townsfolk} t */
+async function askAbout(player, t) {
+  const topics = HEARTH[t.id]?.topics ?? [];
+  while (player.isValid) {
+    const form = new ActionFormData().title(`Ask ${t.name} about...`).body(`§e${t.name}:§r "What do you want to know?"`);
+    for (const tp of topics) form.button(tp.label);
+    form.button("Never mind");
+    const res = await show(player, form);
+    if (!res || res.canceled || res.selection === undefined || res.selection >= topics.length) return;
+    const tp = topics[res.selection];
+    const back = await show(player, new ActionFormData().title(tp.label).body(`§e${t.name}:§r ${fill(tp.text, player.name)}`).button("Ask something else").button("Goodbye"));
+    if (!back || back.canceled || back.selection !== 0) return;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The Realm day counter and the calendar (Realm Calendar takes this over later)
+// ---------------------------------------------------------------------------
+
+let calDay = 1;
+let nightSeen = false;
+/** Another pack (Realm Calendar) broadcasts the calendar: npc_bp listens instead. @type {{ from: string, day: number, until: number } | undefined} */
+let calOwner;
+const OWNER_TIMEOUT_MS = 2 * 3600000;
+
+function loadDay() {
+  try {
+    const raw = world.getDynamicProperty(PROP_DAY);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : undefined;
+    if (isNum(parsed?.d) && parsed.d >= 1) calDay = Math.floor(parsed.d);
+    nightSeen = parsed?.n === 1;
+  } catch {
+    // day 1
+  }
+}
+
+function saveDay() {
+  try {
+    world.setDynamicProperty(PROP_DAY, JSON.stringify({ d: calDay, n: nightSeen ? 1 : 0 }));
+  } catch (e) {
+    console.warn(`[npc] save day: ${e}`);
+  }
+}
+
+/** The calendar on a Realm day: day of the year (1-96), year, season and festival. @param {number} day */
+function calendarOf(day) {
+  const len = CALENDAR.seasons.length * CALENDAR.seasonDays;
+  const doy = ((day - 1) % len) + 1;
+  const year = Math.floor((day - 1) / len) + 1;
+  const s = CALENDAR.seasons[Math.min(CALENDAR.seasons.length - 1, Math.floor((doy - 1) / CALENDAR.seasonDays))];
+  const f = doy >= s.festival[0] && doy <= s.festival[1] ? s : undefined;
+  return { day, doy, year, season: s.id, festival: f ? f.festivalId : undefined, ends: f ? day + (f.festival[1] - doy) : undefined };
+}
+
+/** Today's calendar (Realm Calendar's day while it broadcasts). */
+function calendarNow() {
+  const owned = calOwner && Date.now() < calOwner.until;
+  return calendarOf(owned && calOwner ? calOwner.day : calDay);
+}
+
+/** realm:calendar for every pack (unless Realm Calendar owns it). */
+function broadcastCalendar() {
+  if (calOwner && Date.now() < calOwner.until) return;
+  const c = calendarOf(calDay);
+  try {
+    system.sendScriptEvent("realm:calendar", JSON.stringify({ ...c, from: "npc_bp" }));
+  } catch (e) {
+    console.warn(`[npc] calendar: ${e}`);
+  }
+}
+
+/**
+ * Twice a second (the loop): +1 at each dawn seen. The night must have been seen first (time of day 12000 or
+ * later), so `/time set` back to the morning never counts and the counter never goes back; sleeping through
+ * the night, or setting the time from night to morning, counts as a dawn.
+ */
+function dayTick() {
+  const t = world.getTimeOfDay();
+  if (t >= 12000) {
+    if (!nightSeen) {
+      nightSeen = true;
+      saveDay();
+    }
+  } else if (nightSeen && t < 6000) {
+    nightSeen = false;
+    calDay++;
+    saveDay();
+    broadcastCalendar();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Where everyone is
 // ---------------------------------------------------------------------------
 
@@ -562,10 +1227,15 @@ function whereabouts(player) {
       const entity = entityOf(r);
       const at = entity && entity.dimension.id === r.dim ? entity.location : anchorOf(r);
       const roles = t.roles.length ? ` §8(${t.roles.join(", ")})` : "";
-      if (r.dim !== player.dimension.id) return { d: Infinity, text: `${displayName(t)}§f - in ${dimName(r.dim)}${roles}` };
+      // Where they are in their day, and how well you know them.
+      const anchor = anchorOf(r);
+      const same = (/** @type {Vector3 | undefined} */ v) => !!v && dist(v, anchor) < 0.5;
+      const doing = r.home && same(r.home) && isNight() ? " §7at home" : same(r.posts?.noon) ? " §7at lunch" : same(r.posts?.evening) ? " §7at their evening spot" : "";
+      const heart = get("affinity") === true ? ` §d${LEVEL_NAMES[levelWith(player, t.id)]}` : "";
+      if (r.dim !== player.dimension.id) return { d: Infinity, text: `${displayName(t)}§f - in ${dimName(r.dim)}${doing}${heart}${roles}` };
       const d = Math.round(Math.hypot(at.x - here.x, at.z - here.z));
       const where = d < 4 ? "right here" : `${d}m ${compass(at.x - here.x, at.z - here.z)}`;
-      return { d, text: `${displayName(t)}§f - ${where}${roles}` };
+      return { d, text: `${displayName(t)}§f - ${where}${doing}${heart}${roles}` };
     })
     .sort((a, b) => a.d - b.d)
     .map((x) => x.text);
@@ -625,9 +1295,10 @@ function addNpc(player, id) {
   let rec = placedOf(id);
   let note = "";
   if (rec) {
-    if (rec.home && rec.dim !== dim.id) {
+    if ((rec.home || rec.posts) && rec.dim !== dim.id) {
       rec.home = undefined;
-      note = " §7Their home was in another dimension, so it was cleared.";
+      rec.posts = undefined;
+      note = " §7Their home and lunch or evening spots were in another dimension, so they were cleared.";
     }
     Object.assign(rec, { dim: dim.id, x: at.x, y: at.y, z: at.z, yaw });
   } else {
@@ -693,11 +1364,36 @@ function setHome(player, id) {
   player.sendMessage(`§a${plainName(t)} now goes home to ${coords(at)} at night.${off}${far}`);
 }
 
+/** A lunch (`noon`) or evening spot where the operator stands; at the post it clears it. @param {Player} player @param {string} id @param {string} slot */
+function setPost(player, id, slot) {
+  const t = folk.get(id);
+  const rec = placedOf(id);
+  if (slot !== "noon" && slot !== "evening") return player.sendMessage("§cPick noon or evening.");
+  if (!t || !rec) return player.sendMessage(`§c${t ? plainName(t) : id} isn't placed yet: /realm:npc_add ${id} first.`);
+  if (player.dimension.id !== rec.dim) return player.sendMessage(`§cThat spot must be in the same dimension as their post (${dimName(rec.dim)}).`);
+  const what = slot === "noon" ? "lunch" : "evening";
+  const when = slot === "noon" ? `${CONFIG.lunchStart} to ${CONFIG.eveningStart}` : `${CONFIG.eveningStart} to ${CONFIG.nightStart}`;
+  const at = standingSpot(player);
+  const posts = { ...(rec.posts ?? {}) };
+  if (dist(at, rec) <= 2) {
+    delete posts[slot];
+    rec.posts = posts.noon || posts.evening ? posts : undefined;
+    save();
+    return player.sendMessage(`§a${plainName(t)} no longer has a ${what} spot: they stay at their post then.`);
+  }
+  posts[slot] = { x: at.x, y: at.y, z: at.z };
+  rec.posts = posts;
+  save();
+  const far = dist(at, rec) > 96 ? " §eTip: a spot close to the post (under 96 blocks) loads together with it, so they keep their skin when they move." : "";
+  const off = get("schedules") === true ? "" : " §7(Daily schedule is disabled in /realm:config.)";
+  player.sendMessage(`§a${plainName(t)} now spends ${what} (time ${when}) at ${coords(at)}, moving when nobody is within ${CONFIG.scheduleRange} blocks.${off}${far}`);
+}
+
 /** @param {Player} player */
 function listForOps(player) {
   const lines = list.map((r) => {
     const t = folk.get(r.id);
-    const home = r.home ? ` §7home ${coords(r.home)}` : "";
+    const home = `${r.home ? ` §7home ${coords(r.home)}` : ""}${r.posts?.noon ? ` §7lunch ${coords(r.posts.noon)}` : ""}${r.posts?.evening ? ` §7evening ${coords(r.posts.evening)}` : ""}`;
     const state = entityOf(r) ? "§a(loaded)" : "§8(not loaded)";
     return `§e${r.id}§f ${t ? plainName(t) : ""}: ${coords(r)} in ${dimName(r.dim)}${home} ${state}`;
   });
@@ -726,6 +1422,8 @@ async function menu(player) {
   if (op) {
     actions.push(["Add or move a townsfolk here\n§8Operators", () => pickAndRun(player, "Add or move here", "They stand where you are, facing you.", (id) => addNpc(player, id))]);
     actions.push(["Set a home here\n§8Operators", () => pickAndRun(player, "Set home", "They come here at night. Pick one standing at its post to clear its home.", (id) => setHome(player, id), true)]);
+    actions.push(["Set a lunch spot here\n§8Operators", () => pickAndRun(player, "Set lunch spot", "They come here at lunch. Pick one standing at its post to clear it.", (id) => setPost(player, id, "noon"), true)]);
+    actions.push(["Set an evening spot here\n§8Operators", () => pickAndRun(player, "Set evening spot", "They come here in the evening. Pick one standing at its post to clear it.", (id) => setPost(player, id, "evening"), true)]);
     actions.push(["Remove the nearest townsfolk\n§8Operators", () => removeNpc(player)]);
     actions.push(["List with coordinates\n§8Operators", () => listForOps(player)]);
   }
@@ -782,6 +1480,7 @@ function withPlayer(origin, fn) {
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerEnum("realm:npc_id", CONFIG.townsfolk.map((t) => t.id));
+  customCommandRegistry.registerEnum("realm:npc_slot", ["noon", "evening"]);
   const idParam = [{ name: "realm:npc_id", type: CustomCommandParamType.Enum }];
 
   customCommandRegistry.registerCommand(
@@ -820,7 +1519,100 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
     (origin, /** @type {string} */ id) => withPlayer(origin, (p) => setHome(p, id)),
   );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:npc_post",
+      description: "Townsfolk: the NPC spends lunch (noon) or the evening here (run it at their post to clear)",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [...idParam, { name: "realm:npc_slot", type: CustomCommandParamType.Enum }],
+    },
+    (origin, /** @type {string} */ id, /** @type {string} */ slot) => withPlayer(origin, (p) => setPost(p, id, slot)),
+  );
 });
+
+// Hearth & Hearsay events from other packs.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:gossip" && id !== "realm:npc_flags" && id !== "realm:quest_done" && id !== "realm:calendar" && id !== "realm:calendar_ping") return;
+    if (id === "realm:calendar_ping") {
+      if (ready) broadcastCalendar();
+      return;
+    }
+    /** @type {any} */
+    let msg;
+    try {
+      msg = JSON.parse(message);
+    } catch {
+      return;
+    }
+    if (!msg || typeof msg !== "object") return;
+    try {
+      if (id === "realm:gossip") {
+        if (ready && get("affinity") === true) hearGossip(msg);
+      } else if (id === "realm:npc_flags") storyFlags(msg);
+      else if (id === "realm:quest_done") questDone(msg);
+      else if (id === "realm:calendar" && msg.from !== "npc_bp" && isNum(msg.day) && msg.day >= 1) {
+        // Realm Calendar (or another pack) owns the calendar now: listen, and stop broadcasting while it does.
+        calOwner = { from: String(msg.from ?? "?").slice(0, 40), day: Math.floor(msg.day), until: Date.now() + OWNER_TIMEOUT_MS };
+      }
+    } catch (e) {
+      console.warn(`[npc] ${id}: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+/** realm:npc_flags { player, flags } from Story Questlines: the story flags the townsfolk react to. @param {any} msg */
+function storyFlags(msg) {
+  if (typeof msg.player !== "string" || !msg.flags || typeof msg.flags !== "object") return;
+  const player = world.getAllPlayers().find((p) => p.id === msg.player);
+  if (!player) return;
+  /** @type {Record<string, string>} */
+  const f = {};
+  for (const [k, v] of Object.entries(msg.flags).slice(0, FLAG_LIMIT)) if (typeof v === "string" || typeof v === "number") f[k.slice(0, 60)] = String(v).slice(0, 40);
+  const wasCrowned = crowned(player);
+  flagCache.set(player.id, f);
+  try {
+    player.setDynamicProperty(PROP_FLAGS, JSON.stringify(f));
+  } catch (e) {
+    console.warn(`[npc] save flags: ${e}`);
+  }
+  if (crowned(player) !== wasCrowned) sendAffinity(player); // Quill's price changes
+}
+
+/** realm:quest_done: a daily favor (+favorPoints with its townsfolk) or a story chapter (+chapterPoints with who gave and ended it). @param {any} msg */
+function questDone(msg) {
+  if (msg.pack !== "saga_bp" || typeof msg.player !== "string") return;
+  const player = world.getAllPlayers().find((p) => p.id === msg.player);
+  if (!player) return;
+  if (msg.kind === "favor" && typeof msg.npc === "string" && folk.has(msg.npc)) gain(player, msg.npc, CONFIG.favorPoints, "daily favor");
+  else if (msg.kind === "story" && Array.isArray(msg.npcs)) {
+    for (const npc of new Set(msg.npcs.filter((/** @type {unknown} */ n) => typeof n === "string" && folk.has(n)))) gain(player, npc, CONFIG.chapterPoints, "story chapter");
+  }
+}
+
+// realm:npc_debug { player, action: "tap", npc, sneak? } (operators and test scenarios; /scriptevent needs operator
+// rights): a tap on that townsfolk by that player (id or name), as if they tapped it (sneak: a gift). Simulated
+// players' taps fire no interact events, so the test scenarios tap this way.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message, sourceEntity }) => {
+    if (id !== "realm:npc_debug" || !ready) return;
+    if (sourceEntity instanceof Player && sourceEntity.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || m.action !== "tap" || typeof m.npc !== "string" || typeof m.player !== "string") return;
+      const player = world.getAllPlayers().find((p) => p.id === m.player || p.name === m.player);
+      const rec = placedOf(m.npc);
+      const entity = rec ? entityOf(rec) : undefined;
+      if (!player || !entity) return;
+      tapped(player, entity, m.npc, m.sneak === true).catch((e) => console.warn(`[npc] ${e}`));
+    } catch (e) {
+      console.warn(`[npc] debug: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // realm:npc_summon { id, player }: another pack (Relics' relicsmith) places a townsfolk at an operator,
 // exactly like /realm:npc_add run by that player. Answers realm:npc_summoned { id, player, ok, error? }.

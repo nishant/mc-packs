@@ -1,0 +1,475 @@
+# RPG design: five features (October 2026)
+
+The plan for making the Realm feel like one RPG. Not published (like `STORY_BIBLE.md`). Built in this
+order, one PR each: **0 groundwork + 2 Hearth & Hearsay**, **1 Wanderers**, **3 Atlas**, **4 Realm Calendar**,
+**5 Callings & Relic Ascension**. Numbers here are starting values: tune them, and make the important
+ones `config.js` options (with Realm Settings entries where players or operators would want them).
+Where this file and the code disagree after shipping, the code and `docs/PACKS.md` are the truth;
+update the "As shipped" notes at the end of each section.
+
+Facts the design rests on (from the repo, October 2026):
+- 12 townsfolk (`minecraft:npc`, npc_bp) stand at a post, teleport back past 1.5 blocks, greet by time
+  and weather; no affinity, gifts, gossip, schedules or flag reactions. Skins can't be set by script.
+- Saga: 22 stories, 157 chapters, 48 favors (fixed templates, FNV-hash pick), 28 objective types,
+  16 fixed places. Offers come only through `realm:npc_talk`; saga's `onTalk` (main.js:140) does not
+  check `msg.npc`, but `NPC_NAMES` and `check-stories` know only the 12. Actors are per player, in
+  memory, swept at load. All flags are per player in `saga:p` (30,000-char `SAVE_LIMIT`). There is no
+  `g:heart`: the main story uses `g:mercy` / `g:iron` counters, plus `g:hollis`, `g:quill`, `g:ending`,
+  `g:allies`, `g:vesna`, `g:fen`. `pack:<folder>` flags are live (from `realm:help_ping`), never saved.
+- Mail (mail_bp) sends and reads no script events. No pack sends `realm:trail_unlock`.
+  `realm:dish_give` / `realm:ingredient_give` exist in cooking_bp but are unused.
+- Economy: casual play earns about 50-150 Crowns/h; market top item 25 (saddle); caravan weekly for 40 min;
+  guild Master items 300-500; bounties cap about 280/day; relic forge 8 shards; champions drop 1-3 shards.
+- Quirks: `entityDie` never fires for `minecraft:npc` (only `entityRemove`, which also fires on unload);
+  check ids against `@minecraft/vanilla-data`; weather can't be read (each pack keeps `<pack>:weather`);
+  `scoreboard.getScore` throws for brand-new players; `getBlockBelow` skips water without
+  `includeLiquidBlocks`. `player.spawnParticle` is stable (per-player particles; used 21 times).
+
+---
+
+## 0. Groundwork (ships with 2)
+
+Small protocol pieces every later feature uses. Document each in "How the packs work together".
+
+| Piece | Where | Shape |
+|---|---|---|
+| `realm:mail_send` | mail_bp listens | `{to, from, subject (<=40), body (<=600)}`; `to` a player name or id from the roster; `from` any display name (system letters show it as sender). Letters from scripts skip the send cooldown. |
+| `realm:gossip` | npc_bp listens; producers send one line each | `{kind, player, name?, place?, n?}`; kinds: `champion`, `fish_legendary`, `expedition`, `act`, `guild_master`, `town_project`, `blood_moon`, `meteor`, `wander_chain`, `siege` (more allowed) |
+| `realm:npc_flags` | saga sends, npc_bp listens | `{player, flags:{...}}`, a whitelist of about 25 story flags, sent on join and on change |
+| `realm:affinity` | npc_bp sends | `{player, npc, level, pts}` on a level change; on join one message `{player, all:{mara:2,...}}` |
+| External flags in saga | saga | `g:aff_<npc>` (saved, from `realm:affinity`), `cal:day`, `cal:season`, `cal:festival` (live, from `realm:calendar`, like `pack:`) |
+| `realm:calendar` + Realm day counter | npc_bp, for now | Put the counter in **npc_bp** now (`npc:day`, +1 at every dawn seen, time of day crossing into 0-1000 or a jump from night to morning; monotonic, immune to `/time set` rewinds) and broadcast `realm:calendar {day, season, festival?, ends?}` at dawn and on join. calendar_bp (idea 4) later takes over the broadcast and npc_bp only listens. Season and festival math is in section 4. |
+
+**As shipped (0, October 2026):**
+- `realm:affinity` also carries `off`, the percent off at that townsfolk's shop (Friend: `friendDiscount` 10, plus 5
+  with Quill for the Hollow-Crowned), so consumers never redo the math; the join message is `{player, all, off}`.
+- `realm:calendar` is `{day, doy, year, season, festival?, ends?, from: "npc_bp"}` (`ends` = the festival's last
+  absolute day). Also sent 5 s after world load and on `realm:calendar_ping` (saga pings at load). When npc_bp hears
+  `realm:calendar` from another `from`, it stops broadcasting for 2 hours (renewed by each message) and uses that
+  day for birthdays: calendar_bp only has to broadcast. Counter: "night seen" = time of day >= 12000, dawn = < 6000
+  after that; saved as `npc:day` `{d, n}`.
+- `realm:npc_flags` carries only set flags: `g:` ending/hollis/quill/vesna/fen/allies/mercy/iron, 15 story flags, and
+  `fin:<story>` = "1" for 18 stories (41 keys max). Sent every 5 s when changed; `realm:npc_flags_ping` (npc_bp at
+  load) makes saga resend.
+- `realm:quest_done` from saga now has `npcs` (chapter giver and ender) for stories and `npc` for favors.
+- `realm:mail_send` letters have an empty writer id: no Reply, no Sent copy; still refused into a full unread inbox.
+- Extra: `realm:npc_debug {player, action:"tap", npc, sneak?}` (operator/script only): simulated players' taps fire
+  no interact events, so BDS scenarios tap through it (`tools/test-bds/examples/npc-hearth.js`).
+
+---
+
+## 2. Hearth & Hearsay: living townsfolk (`npc_bp` UPGRADE + saga content)
+
+**Pitch:** The townsfolk remember you. Gift Tobin a salmon he loves and he opens up; befriend Quill and
+his prices drop; do something big and by morning Bea is telling everyone.
+
+**Affinity** per NPC per player, 0-1000 points. Levels: Stranger 0, Acquaintance 100, Friend 250,
+Close 500, Confidant 900.
+- Talk +5 (once per NPC per real UTC day, not Realm day, so sleeping can't farm it; same for gifts).
+- Gift (sneak-tap or a `Give <item>` button at the top of the form when holding an item; takes 1):
+  loved +40, liked +20, neutral +5, disliked -15; 1 gift per NPC per day. Birthday (a Realm Year day per
+  NPC, section 4): gifts x2.
+- Their daily favor done +15 (`realm:quest_done` kind `favor`, from that npc); a story chapter they
+  give or end +20.
+- No decay.
+- Pace: about 60/day takes one NPC to Confidant in about 15 days.
+
+**Unlocks:**
+- Acquaintance: 4 more idle lines and an "Ask about..." button (3 topics each).
+- Friend: 10% discount where they sell (consumers cache `realm:affinity`):
+  - Quill's market (crowns_bp buy prices)
+  - Bea's recipes (cooking_bp)
+  - Elsie's bed, 10 -> 9 (waystone_bp)
+  - Mara's map, 50 -> 45 (maps_bp)
+  - Ida's forge, 8 -> 7 shards (relics_bp)
+  - Tobin's fisher, +10% paid (fishing_bp)
+- Close: their heart story (saga `kind: "heart"`, 3 chapters, `requires.flags {"g:aff_<npc>": ">=3"}`).
+- Confidant: title `<Name>'s Confidant` (`realm:title_unlock`), a trail (`realm:trail_unlock`, the first
+  sender; titles_bp may need new trail kinds), a weekly keepsake item with lore.
+
+**Schedules** (no pathfinding):
+
+| Slot | Ticks | Where |
+|---|---|---|
+| work | 0-6000 | post |
+| lunch | 6000-9000 | `noon` post |
+| evening | 9000-13000 | `evening` post |
+| night | 13000-23000 | existing home |
+
+- Teleport only when no player is within 16 blocks of either spot.
+- A slot without a post stays at the post (backward compatible).
+- `/realm:npc_post <id> <noon|evening>` (operators). "Who lives here?" shows where each NPC is now and
+  your heart level with them.
+
+**Reactions:** greeting pools keyed by whitelisted flags from `realm:npc_flags` (`g:ending`, `g:hollis`,
+`g:quill`, `g:vesna`, `g:allies`, `act3_deep.elsie`, `act4_seals.act4:promise`,
+`mayors_burden.plaque`...).
+
+**The Hollow-Crowned** (`g:ending = crown`):
+- The town is cold forever: greetings come from a cold set for all 12, and gossip calls the player
+  "the Crowned".
+- Affinity gains x0.75 below Friend.
+- Each heart story has a Crown chapter (`when {"g:ending":"crown"}`) where that NPC confronts what the
+  player did.
+- At Confidant, that NPC uses a private warm set when no other player is within 16 blocks.
+- Exceptions:
+  - Hollis (if `g:hollis = saved`) is never cold: forgiveness is his arc.
+  - Wren is warm but scared.
+  - Quill likes them more (+5% prices in their favor).
+
+**Gossip:**
+- World ring buffer `npc:gossip`: 24 entries, 48 h life, about 4 KB.
+- On a tap, a 25% chance the greeting is a templated line about the newest entry this player hasn't
+  heard (about another player, or praise for themselves).
+- Producers to wire now (one line each): elite_bp (champion), fishing_bp (legendary), expedition_bp
+  (N5+ clear), saga (act finished), guilds_bp (Master rank), town_bp (project done), moon_bp
+  (Blood Moon survived), meteor_bp (meteor found).
+
+**Data:**
+
+| Key | Shape |
+|---|---|
+| player `npc:aff` | `{mara:[pts, talkDay, giftDay, bits], ...}` |
+| world `npc:gossip` | ring buffer above |
+| `npc:list` entries | gain `posts:{noon, evening}` |
+| player `npc:flags` | cached whitelist |
+| world `npc:day` | Realm day counter |
+
+No new per-tick loop: schedules ride the existing 200-tick audit.
+
+**Content (v1):**
+- Gift tables per NPC: 3 loved, 6 liked, 3 disliked.
+- 2 reaction lines per gift tier.
+- 4 level-up lines + 4 idle lines per NPC.
+- 36 "Ask about" topics.
+- About 150 flag-keyed reaction lines.
+- About 54 gossip templates (9 kinds x 2 generic + 3 kinds x 12 voices).
+- 12 heart stories x 3 chapters, each with a Crown variant where needed.
+- 12 keepsakes.
+- 12 birthdays.
+
+Voices are in `STORY_BIBLE.md` section 4.
+
+Example heart story (Tobin, "The Gull's Last Voyage"): patch the Gull (deliver 24 spruce planks,
+interact at the lighthouse), row past the sunken bell (`ride` boat 300) and keep a dusk vigil there,
+scatter Hal's ash-salt at the graveyard (`use` bone meal). Reward: 5 levels, 60 Crowns, "Hal's Old Rod"
+(lore), a codex entry.
+
+**As shipped (2, October 2026):**
+- Content: 3/6/3 gift tables, 2 lines per tier, 4 level-up and 4 extra idle lines, 3 topics, 2 cold + 2 warm
+  greetings, a keepsake, a birthday and a Close letter per NPC (`npc_bp/scripts/hearth.js`); 141 flag reactions;
+  22 generic gossip pairs (10 kinds + `other`) and 36 voiced (champion, act, blood_moon x 12). Each template is a
+  pair [about someone else, about you].
+- `npc:aff` entries are `[pts, talkDay, giftDay, bits, keepsakeDay]` (bits: 1 Close letter sent, 2 Confidant title
+  and trail sent). Gifts: sneak-tap or the `Give <item>` button; named or lore items are refused (relics, quest items).
+- Confidant trail: one new trail `hearts` in titles_bp (vanilla `minecraft:heart_particle`, no sky_rp change) for
+  every Confidant; title `<Name>'s Confidant` with the NPC's short name ("Old Tobin's Confidant").
+- Heart stories (`saga_bp/scripts/stories/side_heart.js`): 3 chapters + a 4th Crown chapter placed first
+  (`when g:ending=crown`), so a player crowned midway gets it next. Spoiler gates on top of `g:aff_<npc> >=3`: Tobin
+  needs The Drowned Bell, Mara the Last Map, Ida and Sol Act I, Bram, Quill and Hollis Act II (Hollis also
+  `g:hollis != lost`), Elsie Act III; Reyes, Moss, Wren, Bea none. Titles: The Gull's Last Voyage, Fenn's Unfinished
+  Survey, The Warden's Helmet, Old Words, The Locked Drawer, Mother's Teapot, Dunmore's Pick, Adela's Star, Every
+  Candle Lit, The Unvisited Grave, Clover's Foal (Wren's mare is Clover: Biscuit is a cow in Lost Lambs), The Last
+  Ship's Supper. Tobin's sets `g:gull = sailed` at the end: section 5's Hal's Compass +3 can read it (or Tobin at
+  Confidant via `realm:affinity` level 4).
+- Schedules: only lunch/evening moves wait for the 16-block rule; going home at night and back at dawn stays
+  instant, as before. `/realm:npc_post <id> <noon|evening>` plus two menu buttons. Slots live in memory; a restart
+  puts NPCs straight into the slot of the time.
+- Gossip: the same kind about the same player within 30 min replaces the older one; the subject's Crowned state is
+  stored with the entry. Producers wired: elite_bp, fishing_bp, expedition_bp (Nightmare >= 5), saga (act >= 1),
+  guilds_bp (top rank), town_bp (top contributor), moon_bp (each Blood Moon survivor), meteor_bp (first finder).
+
+---
+
+## 1. Wanderers of the Wilds (`wander_bp` NEW + `saga_bp` UPGRADE)
+
+**Pitch:** Out past the town lamps you'll meet people: a footsore pilgrim, a hermit on a peak, a ghost at a
+ruin, a dwarf-ish miner deep underground, a rival adventurer, and a few who aren't what they seem.
+
+**Split of work:**
+- `wander_bp` decides who appears where and when, owns the entities, and draws their talk form (a copy
+  of npc_bp's offer collection: `realm:npc_talk` with `npc:"w_<id>"`, `roles:["wanderer","w_<id>"]`,
+  `OFFER_TICKS` 4, at most 16 offers, labels cut to 80 characters).
+- `saga_bp` runs every quest as story `kind: "wander"` and builds camps as instanced places.
+
+**Scheduler** (every 1200 ticks, per online player):
+- Eligible: survival or adventure, not `afk`, not `realm_expedition`, Overworld or Nether.
+- Distance: 300 or more from spawn; 160 or more from every town, claim and safe zone (`realm:zones`);
+  256 or more from a live wanderer.
+- Roll 7% per eligible minute (`rollChance`): x1.5 within 128 blocks of an Atlas site or saga ruin,
+  x1.25 at night for ghosts and hostiles.
+- Cooldown 8 min after an encounter, 20 min after declining.
+- Expected: about 2-2.5 encounters per hour exploring.
+- Placement: 24-40 blocks ahead along the view; solid ground with 2 air above; light 7 or more
+  (ghosts excepted); 12 tries, then skip.
+
+**Caps:** 1 live encounter per player; 5 transient realm-wide (at most 2 hostile); 8 camps; at most
+13 wanderer entities in total.
+
+**Archetypes** (first match wins):
+
+| Archetype | Context | Entity |
+|---|---|---|
+| deep miner | below y 0, no sky | `minecraft:npc` |
+| ghost | night, within 64 of a ruin (a saga graveyard/observatory/watchtower, an Atlas site, or 6+ mossy cobblestone/cracked stone bricks in a 9x9x5 sample) | `minecraft:allay` |
+| pilgrim | within 200 of old_chapel/observatory/starfall, day | `minecraft:npc` |
+| rival (Rook) | within 300 of a bounty champion or a treasure-map leg | `minecraft:npc` |
+| hermit | y 100+, or taiga/snow | `minecraft:npc` |
+| storm-chaser | thunder (its own `wander:weather`) | `minecraft:npc` |
+| Nether exile | Nether | `minecraft:npc` |
+| traveler | otherwise | `minecraft:npc` |
+
+**Despawn:**
+- A transient wanderer lives 15 min untouched, or 30 min once a one-off is accepted, or until its owner
+  has been 96+ blocks away for 60 s.
+- `entityRemove` marks it gone in `wander:live` (never respawned).
+- Sweep tagged `realm:npc_owner:wander_bp` entities not in `wander:live` at load and on `entityLoad`.
+- Invulnerable (allays get resistance 4).
+- A camp NPC respawns at its camp when a player with that chain active is within 48 blocks.
+
+**Identity:**
+- 8 named Recurring Wanderers with hand-written chains of 3-5 chapters (Pell the Pilgrim, Anwen the
+  Starwright surveyor's ghost, Brannoch Deepdelve the deep miner, Rook the rival, plus 4 more).
+- Procedural Strangers for one-offs: 40 first names x 20 epithets, 8 archetypes, 24 templates with
+  randomized params.
+
+**Camps:**
+- Prefabs `camp_road`, `camp_peak`, `camp_deep` and `camp_ruin`, 7x7, under 120 blocks each, built by
+  saga's place code with a terrain snapshot.
+- Each has a lodestone with a `Waystone: <Name>'s Camp` sign. Check whether waystone_bp discovers
+  pre-built signs; if not, add a small `realm:waystone_register` event.
+- A chapter's `camp: {prefab, near}` creates or moves `camp:<wid>`.
+- A moved camp is restored once no active player needs it, or after 7 real days unvisited; a letter
+  follows via `realm:mail_send`.
+
+**Hostile wanderers:**
+- No hostiles until both prologue stories are done; never in expeditions, AFK, below 50% health, or
+  within 160 blocks of a town/claim/zone.
+- At least 30 min between hostiles per player.
+- `hostileShare` 0.2 (0-0.5, operator setting).
+- Party scaling: +1 add per extra party member within 32 blocks, up to +3.
+- The turn: wander_bp removes the NPC and saga spawns the hostile form at that spot, tagged
+  `realm:saga:wh_<id>` (saga's own champion spawning for illagers), then a `defeat` runs there.
+
+| Type | Disguise | Reveal and fight | Appears |
+|---|---|---|---|
+| Choir Spy | pilgrim/traveler | attacks 20 s after the talk or when accused; vindicator "Choir Spy" + 2 pillagers | only after Act II |
+| Toll Man | traveler at a crossing | "Toll's 20 Crowns": pay (choice `cost`) or he and 2 pillagers fight (no banners) | day |
+| Drowned Sailor | lost sailor by water at night | a drowned champion (`vampiric`) + 2 drowned rise | after `drowned_bell` |
+| Hollow-touched Hermit | hermit, y 100+ | witch champion + 3 vexes | after Act III |
+| Rook, turned | rival | vindicator champion (`shielded`), once per player, a chapter of Rook's chain | if you beat him to 3 bounties and `g:iron >= 4` |
+
+- Every hostile has one tell in its lines.
+- A "Something's off..." button shows when the player wears the Gray Choir Mask, has Reyes at Friend+,
+  or has `g:iron >= 3`:
+  - Accusing a hostile reveals it early with Slowness II for 5 s, +10 Wardens rep, `g:iron` +1.
+  - Accusing a friendly wanderer: they leave, no reward, `wander:accused` +1 (Rook and Pell mention it).
+- Hostile rewards: 40-60 Crowns, 1-2 Relic Shards, 25 Wardens rep, champion Combat XP, gossip.
+
+**Rewards (economy):**
+
+| Content | Levels | Crowns | Other |
+|---|---|---|---|
+| one-off | 1-3 | 10-30 | 10 rep (guild by archetype), 20-60 skill XP |
+| chain chapter | 2-5 | 30-60 | 30 rep |
+| chain finale | 8 | 100-150 | title, 15% relic roll, codex |
+
+Target total from wanderers: about 50 Crowns/h.
+
+**Saga engine work:**
+1. A `WANDERERS` table of `w_*` ids that saga and check-stories accept as givers, `npc` and `end`.
+2. Instanced places (`camp:<wid>`, ignore `MAX_MOVES`), a chapter `camp:` field, and the
+   `realm:place_ready {name, dim,x,y,z, state}` event.
+3. Template params for one-offs (`params:{item:[...], count:[a,b]}` with `{item}`/`{count}`/`{name}`
+   substitution, seeded per encounter), stored in `saga:p.wv` (only the active one, plus a counter).
+4. Location `at: "wanderer"` (the spot from `realm:wander_spawn {player, wid, archetype, tpl?, dim,x,y,z}`).
+5. `cost:{crowns}` on a choice.
+6. `realm:wander_hide {wid, player, seconds}` while an escort actor copy exists.
+7. `realm:quest_done {kind:"wander", guild}`.
+8. A Journal "people" page (journal_bp: a new page "Wanderers" with the named wanderers, a reward
+   10 levels / 200 Crowns / title `Friend of the Road`).
+
+**Integrations:**
+- Rook races bounty champions: kill within 300 s or the bounty pays half; needs a small bounty_bp
+  hook, or keep it in saga as an optional bonus.
+- Rook appears on treasure-map legs (`event.quest {pack:"maps_bp"}`).
+- Brannoch's chain ends with the champion Old Gnasher (spider, `frostbound`).
+- Per-player `!` particles over a wanderer who has an offer.
+
+**Example (Pell, 4 chapters):**
+1. Deliver 3 leather + 1 string; a choice walk/map.
+2. Escort him to old_chapel (walk) or reach it (map); the outro reads `g:hollis`.
+3. The camp moves to the observatory with a letter; a midnight vigil, with a shooting-star sky request.
+4. `answer` "What does the stone listen for?" Reward: title `Pilgrim's Friend`, a codex entry.
+
+---
+
+## 3. Atlas of the Realm (`atlas_bp` NEW)
+
+**Pitch:** Every stretch of land has a name and a banner when you cross into it; wayside shrines, Choir
+cairns, wrecks, hermit huts and 60 Starwright tablets fill the miles between story places.
+
+**Regions:**
+- 512x512 cells on a grid from world spawn.
+- The name is a deterministic hash of cell + seed + a biome guess (the Journal's block rules):
+  24 adjectives (Gray, Lantern, Drowned, Brine, Hollow, Ember, Saltmarsh...) x 30 nouns by biome group
+  (Reach, Downs, Fen, Spires, Barrens, Shallows, Deeps, Wolds...).
+- Entering a region shows a banner through the title protocol (`realm:title`):
+  `§6The Gray Downs` / `§7Region 3 - 0 of 2 sites`.
+
+**POIs:**
+- 2-4 per cell at hashed positions; validated lazily (8 nudges, else skipped for good).
+- Built permanently (no snapshot) when a player first comes within 64 blocks, block by block in
+  `runJob` (200 per yield).
+- 16+ blocks from saga places; never within 128 of a town/claim/zone (`realm:zones`,
+  `realm:claims_check`); only in loaded chunks.
+
+| Kind | Interaction | First-find reward |
+|---|---|---|
+| Wayside Shrine | blessing 10 min (Luck/Speed/Regeneration by biome), daily | 10 Crowns, 30 Exploration XP |
+| Starwright Tablet | read form; text gated by act | 8 Crowns, codex |
+| Choir Cairn | break the bell: 3 Choir mobs | 15 Crowns, 10 Wardens rep |
+| Abandoned Camp | loot barrel, rolled once per player | 10 Crowns + loot |
+| Hermit Hut | wanderer home (`realm:poi`) | - |
+| Sunken Wreck | chest, drowned | 15 Crowns |
+| Fallen Watch Post | defend 60 s (3 waves) | 15 Crowns, 10 rep |
+| Fossil Dig | mine 12 bone blocks | 12 Crowns, Mining XP |
+| Starglass Pool | near past meteor impacts | Starwright Flour (`realm:ingredient_give`) |
+| Fenn's Survey Marker | Mara lore | codex |
+
+**Tablets:**
+- 60 in 5 tiers of 12. Text is gated by act progress from saga
+  (`realm:saga_progress {player, act}`), revealing `STORY_BIBLE.md` section 2 in order.
+- Finishing an act upgrades every tablet already found (a "reread the world" moment).
+
+**Data:**
+
+| Key | Shape |
+|---|---|
+| player `atlas:p` | `{r: cells, p: POIs, t: 60-bit mask, b: blessing day}` |
+| world `atlas:built:<n>` | built POIs, split |
+| `atlas:cfg` | `cellSize` 512, `poiPerCell` [2,4], `buildRange` 64, `avoidRadius` 128 |
+
+**Events:**
+- Sent: `realm:quest_done {kind:"explore", guild:"wayfarers", id:"atlas:<kind>:<poi>"}`,
+  `realm:journal {page:"places"}`, `realm:skill_xp`, `realm:poi {kind, dim,x,z, name}`, `realm:gossip`,
+  `realm:title_unlock` (Surveyor at 10 regions, more milestones), `realm:trail_unlock` (at 25 sites).
+- Read: `realm:saga_progress`, `realm:zones`, `realm:sky_event` (meteor).
+
+**Command:** `/realm:atlas` (regions found, sites by kind, tablets x/60, codex).
+
+**Cost per player:** every 40 ticks, cell math and a 9-cell POI distance check (no block reads);
+at most 1 build at a time.
+
+---
+
+## 4. Realm Calendar: festivals and Choir sieges (`calendar_bp` NEW)
+
+**Realm Year:**
+- 96 Realm days (the dawn counter, `cal:day`; calendar_bp takes over npc_bp's counter and broadcast:
+  read npc_bp's last day once through an event, then own it).
+- 4 seasons of 24 days, each with a 4-day festival:
+
+| Season | Days | Festival | Festival days |
+|---|---|---|---|
+| Thaw | 1-24 | Hatchling Tide (defend turtle nests at night) | 10-13 |
+| High Sun | 25-48 | Midsummer Regatta (boat race, 8 checkpoints, best-time board) | 34-37 |
+| Harvest | 49-72 | Lantern Fair (pumpkin carve-off with a player vote, lantern float, ghost tales) | 58-61 |
+| Long Dark | 73-96 | Starwright's Long Night (gift week: affinity gifts x2, shooting star request each night, siege truce) | 82-85 |
+
+- About 13-20 real minutes per Realm day, so a festival comes about every 5-8 hours of play and lasts
+  55-80 min.
+
+**Festivals:**
+- Limits are per festival, not per day: each daily activity counts at most 3 times, Ribbons are capped
+  at 15, Crowns at 250.
+- Festival Ribbons: a named paper item with lore.
+- A caravan Ribbon stall during the festival (`realm:caravan_extra {stock}` or calendar_bp's own
+  vendor); cosmetics only: hats, titles, trails, recipe cards.
+- Festival chapters are saga stories `kind: "festival"` gated on `cal:festival`, 4 per festival
+  (16 total).
+- Daily activities run in calendar_bp (12 total) and report `realm:quest_done {pack:"calendar_bp"}`.
+- The regatta's checkpoint race is calendar_bp's own (no saga race type).
+
+**Sieges:**
+- Requirements: at least 2 non-AFK players online (or 1 who has finished Act II), night, at least
+  5 Realm days since the last siege; then 35% per eligible night. The Lantern Fair doubles the chance;
+  the Long Night blocks sieges.
+- Target: a town from `realm:zones src:"town"` (skip towns town_bp keeps safe from world events, and
+  towns with calendar_bp's own `sieges` switch off), else the lighthouse place, else world spawn.
+- 3 min warning, then 3 Ritual Circles 48-96 blocks out: a 3x3 gray concrete prefab with a bell and
+  4 candles, snapshot-restored afterward, avoiding claims and safe zones.
+- Each circle: a Choir Singer (named vindicator) + 4-6 pillagers (no banners, so no Bad Omen); one
+  reinforcement wave at 6:00; at most 24 mobs tagged `realm:siege`, removed at the end.
+- A bell needs 5 hits. Timer 12 min in a side box (`left1`).
+- Participants: hit a siege mob or bell, or within 96 blocks for 3+ min.
+- Held: 60 Crowns, 20 Wardens rep, Combat XP; the town is Heartened for 24 h (town_bp: deliveries count
+  x1.25, via `realm:town_state {town, mood, until}`).
+- Failed: 15 Crowns; the town is Shaken for 24 h (gossip, Hollis's line).
+- Nothing ever breaks a block.
+- Atlas Choir Cairns broken realm-wide: -1 siege mob per 3 cairns (cap -6).
+
+**Events:**
+- `realm:calendar {day, season, festival?, ends?}`
+- `realm:siege {state, town, result?}`
+- `realm:sky_event {kind:"siege"}` (inn news, Journal)
+- `realm:gossip`
+- `realm:quest_done {kind:"siege", guild:"wardens"}`
+
+**Commands:** `/realm:calendar` (menu: season, day, next festival, siege history, towns), operator
+`/realm:calendar_siege`, `/realm:calendar_set <day>`.
+
+NPC birthdays (section 2) use this calendar.
+
+---
+
+## 5. Callings and Relic Ascension (`skills_bp` + `relics_bp` UPGRADE)
+
+**Callings:**
+- At total skill level 75, the saga chapter *The Calling* (Hollis at the chapel; Moss if
+  `g:hollis = lost`) lets the player choose one of 6. skills_bp owns the data; saga gates the chapter
+  on a flag from skills_bp (a `realm:calling` event or a `pack:`-style live flag).
+
+| Calling | Skills | Guild | Active (Calling Sigil item) | Passive choices |
+|---|---|---|---|---|
+| Delver | Mining + Combat | Miners | Echo Sense: ores glow within 8 blocks (per-player particles), 90 s | Deep Lungs / Ore Hound / Stonehide |
+| Warden | Combat + Exploration | Wardens | Rally Cry: party Strength I 10 s, 120 s | Champion's Bane (+15% vs `realm:champion`) / Bulwark / Second Wind |
+| Pathfinder | Exploration + Fishing | Wayfarers | Trailblaze: Speed II 20 s, 90 s | Waystone -25% / Map Sense (reveal 96 -> 128) / Seafarer |
+| Hearthkeeper | Farming + Fishing | Growers | Hearth Song: party Regeneration I 8 s, 120 s | Dishes +25% / Green Thumb / Lucky Line |
+| Woodwright | Woodcutting + Farming | Growers | Timberline: Haste II 15 s, 60 s | Sapling Return / Bark Armor / Builder's Eye |
+| Stormcaller | Combat + Exploration | Wardens | Static: hits in rain slow foes 3 s, 100 s | Rod Reader (+1 Storm Glass) / Weathered / Eye of the Storm |
+
+- Talent points: 1 at unlock + 1 per 10 combined levels of the two skills above 50 combined, up to 10.
+- Tree: 3 tiers x 3 talents, ranks 1-2 (15 ranks total), so 10 of 15 forces choices. Tier 2 needs
+  3 points in tier 1; the tier 3 capstone (1 of 3) needs 7.
+- Switching:
+  - The first choice is free.
+  - Moving talent points within the same Calling costs 50 Crowns.
+  - Switching Calling costs 100, 200, 300, 400, 500 Crowns (cap 500), at least 3 Realm days apart.
+  - Switches happen at the priest role (Hollis) or Moss.
+- Effects use stable APIs only: `addEffect`; `spawnItem` on break; `entityHurt` -> `applyDamage` with
+  a re-entry guard; discounts go out via `realm:calling {player, calling, talents}` (waystone_bp,
+  maps_bp, cooking_bp, build_bp, fishing_bp, storm_bp cache it).
+- Effect amplifiers don't stack with guild perks: the higher one wins.
+- Guilds' rank-5 titles become `Miners' Guildmaster` and so on, ending the "Master Miner" clash
+  with Skills.
+
+**Relic Ascension at Ida** (relicsmith):
+
+| Stage | Shards/Essence | Storm Glass | Crowns | Effect |
+|---|---|---|---|---|
+| +1 Awakened | 6 | 1 | 60 | -20% cooldown or +25% range/duration |
+| +2 Ascended | 12 | 3 | 150 | -35% / +50%, adds a lore line |
+| +3 Starlit | 20 | 5 | 400 | -50% / +75%, a unique bonus, gold name |
+
+- Duplicate relics break into 4 Relic Essence (`relics:essence`).
+- Story relics stop at +1 until a story or affinity condition (Hal's Compass +3 needs Tobin at
+  Confidant or the Gull heart story).
+- Stored as item property `relic:asc`.
+- Sets (checked every 20 ticks, armor + hotbar):
+  - Storm (Storm Staff + Storm Meter + Rain Charm): lightning immunity, +1 Storm Glass per rod.
+  - Tide (Tide Boots + Hal's Compass + Compass of Echoes): Dolphin's Grace.
+  - Deep (Miner's Lamp + Lantern of the Deep + Lantern Shard): Night Vision below y 0, quiet sneaking.
+  - Sun (Sun Pendant + Frost Band + Wayfarer Boots): fire and freeze resistance at dawn and dusk.
+- Sink: about 646 shards and 10,370 Crowns for all 17 relics at +3.
+- Expedition leaderboards show each player's Calling.

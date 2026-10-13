@@ -2154,6 +2154,7 @@ function finish(run) {
     send("realm:quest_done", { player: p.id, pack: "expedition_bp", id: `expedition_${d.id}`, label: `Expedition: ${d.name} cleared`, kind: "expedition", guild: "wardens", ...doneFields });
     if (CONFIG.rep > 0) send("realm:rep_add", { player: p.id, guild: "wardens", amount: Math.round(CONFIG.rep * (1 + 0.1 * s.t)), reason: `Expedition: ${d.name}` });
     send("realm:journal", { player: p.id, page: "places", entry: `expedition_${d.id}`, label: `Expedition: ${d.name}` });
+    if (doneFields.nightmare >= 5) send("realm:gossip", { kind: "expedition", player: p.id, name: p.name, place: d.name, n: doneFields.nightmare }); // Townsfolk gossip
     if (CONFIG.relics.length && Math.random() < Math.min(0.5, get("relicChance") + s.relic)) send("realm:relic_give", { player: p.id, relic: CONFIG.relics[Math.floor(Math.random() * CONFIG.relics.length)] });
     // Progress: clearing Hard unlocks Nightmare 1, clearing tier N unlocks N + 1.
     const prog = progressOf(p);
