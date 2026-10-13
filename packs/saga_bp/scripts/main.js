@@ -7,8 +7,25 @@
 //   ui.js          offers, dialogues, hints, rewards, tracker, the story log menu
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { expireAdds, sweep, tendActors } from "./actors.js";
-import { entries, flush, flushAll, forget, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
-import { beginRun, championSlain, championTags, endScenesOf, holdUntil, loadWeather, open, playerGone, resolveAnswer, sweepChampions, talked, tickPlayer } from "./objectives.js";
+import { entries, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
+import {
+  beginRun,
+  championSlain,
+  championTags,
+  endScenesOf,
+  holdUntil,
+  loadWeather,
+  moonState,
+  open,
+  playerGone,
+  questDone,
+  resolveAnswer,
+  skyEvent,
+  skyHousekeeping,
+  sweepChampions,
+  talked,
+  tickPlayer,
+} from "./objectives.js";
 import { autoTick, listPlaces, placeLabel, placesMenu, placesOf, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
@@ -18,6 +35,8 @@ import { PACK, busy, online, send } from "./util.js";
 const LOOP_TICKS = 20; // the player loop runs once a second
 const TRACKER_RUNS = 2; // the tracker every 2 runs
 const SAVE_RUNS = 5; // unsaved progress is written every 5 seconds
+const PACK_SCAN_TICKS = 40; // installed packs: answers to realm:help_ping are collected for 2 seconds
+const PACK_SCAN_EVERY = 12000; // ...every 10 minutes
 
 // ---------------------------------------------------------------------------
 // The player loop
@@ -32,6 +51,7 @@ system.runInterval(() => {
     if (runs % 2 === 0) autoTick();
     if (runs % 60 === 0) expireAdds();
     if (runs % 5 === 0) for (const p of world.getAllPlayers()) sendSeals(p);
+    skyHousekeeping();
   } catch (e) {
     console.warn(`[saga] ${e}`);
   }
@@ -78,6 +98,39 @@ function sendSeals(player, force = false) {
   sealsSent.set(player.id, json);
   send("realm:seals", { player: player.id, seals });
 }
+
+// ---------------------------------------------------------------------------
+// Installed packs, for `pack:<folder>` flags: the same ping /realm:help uses
+// ---------------------------------------------------------------------------
+
+/** The answers of the scan in progress. @type {Set<string> | undefined} */
+let scanAnswers;
+
+/** Asks every pack to answer realm:help_ping; after 2 seconds the answers are the installed packs. */
+function scanPacks() {
+  const answers = new Set([PACK]);
+  scanAnswers = answers;
+  try {
+    system.sendScriptEvent("realm:help_ping", "");
+  } catch (e) {
+    console.warn(`[saga] help_ping: ${e}`);
+  }
+  system.runTimeout(() => {
+    if (scanAnswers !== answers) return;
+    scanAnswers = undefined;
+    installed.set = answers;
+    installed.ready = true;
+  }, PACK_SCAN_TICKS);
+}
+
+/** realm:help_pong: a pack's folder name (any time: a pack that answers someone else's ping counts at once). @param {string} folder */
+function onPong(folder) {
+  if (!/^[a-z0-9_]{1,40}$/.test(folder)) return;
+  scanAnswers?.add(folder);
+  installed.set.add(folder);
+}
+
+system.runInterval(scanPacks, PACK_SCAN_EVERY);
 
 // ---------------------------------------------------------------------------
 // Townsfolk: offers, talk and deliver objectives
@@ -170,7 +223,21 @@ system.afterEvents.scriptEventReceive.subscribe(
       for (const p of world.getAllPlayers()) sendSeals(p, true);
       return;
     }
-    if (id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:champion_slain" && id !== "realm:actionbar" && id !== "realm:saga_debug") return;
+    if (id === "realm:help_pong") {
+      onPong(message);
+      return;
+    }
+    if (
+      id !== "realm:npc_talk" &&
+      id !== "realm:npc_choose" &&
+      id !== "realm:champion_slain" &&
+      id !== "realm:actionbar" &&
+      id !== "realm:saga_debug" &&
+      id !== "realm:sky_event" &&
+      id !== "realm:moon" &&
+      id !== "realm:quest_done"
+    )
+      return;
     /** @type {any} */
     let msg;
     try {
@@ -183,6 +250,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       if (id === "realm:actionbar") {
         if (msg.from !== PACK && typeof msg.player === "string" && typeof msg.ticks === "number" && msg.ticks > 0) holdUntil.set(msg.player, system.currentTick + Math.min(200, msg.ticks));
       } else if (id === "realm:npc_talk") onTalk(msg);
+      else if (id === "realm:sky_event") {
+        if (get("enabled") === true) skyEvent(msg);
+      } else if (id === "realm:moon") moonState(msg);
+      else if (id === "realm:quest_done") {
+        if (get("enabled") === true) questDone(msg);
+      }
       else if (id === "realm:npc_choose") onChoose(msg);
       else if (id === "realm:saga_debug") {
         if (!(sourceEntity instanceof Player) || sourceEntity.commandPermissionLevel >= CommandPermissionLevel.GameDirectors) onDebug(msg);
@@ -292,6 +365,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   sweep();
   sweepChampions();
   checkStories();
+  system.runTimeout(scanPacks, 60);
   system.runTimeout(() => {
     for (const p of world.getAllPlayers()) sendSeals(p, true);
   }, 100);

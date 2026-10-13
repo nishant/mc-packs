@@ -2,6 +2,12 @@ export const CONFIG = {
   /** Full moons can rise as a Blood Moon or a Harvest Moon. Disabled, every night is normal. */
   enabled: true,
 
+  /**
+   * Story Questlines can make tonight a Blood Moon or a Harvest Moon at story moments (at most once per
+   * in-game day, never two moon nights in a row). Needs `enabled` too.
+   */
+  storyEvents: true,
+
   /** Chance (0-1) that a full moon is a Blood Moon. */
   bloodChance: 0.34,
 

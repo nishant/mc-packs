@@ -375,6 +375,18 @@ they differ (October 2026):
   `vesna_bargain` all of Act II (not a chapter of them); `star_kittens` is given by `wren` only.
 - **The Herald** (Act V) is one `sequential` chapter: its phases are `defeat` objectives that count
   one at a time.
+- **World events and expeditions (October 2026):** every hook is optional or one way of two and gated on
+  `pack:`: shooting stars after the vigils of *A Smudge in the East* and *Polaris*; optional fresh meteor in
+  *Fallen Light* (`act1_signs.fresh`); *Echoes in Crystal* is an `or` of the echo shards or a Sculk Depths
+  clear (`act3_deep.shards` = `city` / `depths`; the stealth stays required); a burst meteor over the gate on
+  accepting *The Gate Opens*; a Blood Moon asked for by *The Long Night* (optional step, `act5_lantern.moon`
+  = `red`) and a rainbow by *Dawn* (relight; `act5_lantern.bow`); Weather Almanac hints in *The Storm Vigil*,
+  *Rain on the Water* and *A Champion's Heart*; optional Harvest Saffron for Bea (`hearth_and_table.saffron`),
+  Blood Moon nights in *Until Dawn* and *The Long Watch* (`graveyard_shift.red`, `wardens_oath.red`), a sky
+  wonder for Mara in *Frogs in Three Voices* (`edges_of_map.wonder`) and a pot of gold for Quill in
+  *The Inspector Calls* (`smugglers_run.pot`). The new side questline is `listening_deep`
+  (`stories/side_deep.js`, 5 chapters: `roots`, `cold_store` / `cold_store_letters` by `g:ending`,
+  `gauntlet`, `last_listen`).
 - **Story champions** whose mob the Champions pack can't make (the elder guardian, pillagers,
   vindicators, evokers, guardians, the phantom) are spawned by Story Questlines itself, never sent
   as `realm:champion_spawn`.
@@ -399,6 +411,7 @@ main story (`requires`), so they unlock as the world opens. Target length per qu
 | `singing_forge` | The Forge That Sings | `ida` | Act I | dangerous, epic | Ida's masterwork: Nether trip for netherite scrap and blaze rods (`reach` Nether, `collect`), bastion danger, quench the blade in a soul-fire spring (`interact`), name it (a choice of three names). Reward: a relic. |
 | `hearth_and_table` | Hearth and Table | `bea` | none | cozy, happy, funny, sad | The culinary questline: Bea's tryouts (bring ingredients), cook for the wardens, a feast for a funeral (sad), rare champion ingredients ("Champion's Heart", "Storm Eel"), the Starwright recipe from Elsie, and a cook-off against Quill's "imported" chef. Integrates the Cooking pack's dishes when installed (rewards and deliveries of named dishes). |
 | `hollis_faith` | Lamp in the Window | `hollis` | Act II, `g:hollis=saved` | sad, happy, cozy | Hollis rebuilds his faith and the chapel: repair windows (`place` glass), a wedding in the chapel (funny), keep a lamp lit for the sailors, forgive himself. |
+| `listening_deep` | The Listening Deep | `ida` | `act3_deep`, `pack:expedition_bp` on | exploration, dangerous, eerie | Expeditions as story: the Lantern of the Deep hums toward the expedition site (clear the Sculk Depths: an echo of the Hollow's roots reaching every deep place), the Starwrights' cold store under the ice (Frost Hollow, Normal or harder; told by Elsie, or by Wren reading her letters after the gift ending), Reyes's Long Stair (a Gauntlet, or any dungeon on Hard), one last listen (any dungeon on a Nightmare tier: the deep goes quiet for a while; title `Deep-Listener`). Never resolves the Hollow. |
 | `vesna_bargain` | The Witch's Bargain | `moss` (meets `vesna`) | Act II ch. 7 | creepy, mystery, dangerous | Vesna's own past: a curse on the Fen, potions to brew (deliver), a bog spirit (stealth), choice: free Vesna or bind her. Sets `g:vesna`. |
 
 ## 9. The data format
@@ -445,6 +458,13 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
 - `when` (pages, objectives, chapters, choices, rep): every key must match. A value starting with `>=`
   or `<=` compares numbers (`{ "g:iron": ">=5" }`, `{ "g:allies": "<=0" }`; an unset counter is 0). A value
   `"!x"` means "not x" (an unset flag passes).
+- Installed packs: `pack:<folder>` is `"on"` when that pack is installed (it answered `realm:help_ping`;
+  the engine asks shortly after the world loads and every 10 minutes) and `"off"` otherwise
+  (`{ "pack:expedition_bp": "on" }`). Use it on every page, objective, chapter or story that mentions
+  another pack, so the text never promises something that isn't there. It is checked live, never saved:
+  a gated objective appears once the pack answers. A `when` needs every key, so "any of these packs" is
+  separate objectives. `on` means installed, not enabled: a pack switched off in its own settings still
+  answers, so its world events may never come; that's why they are only ever optional.
 
 ### Chapter
 
@@ -464,8 +484,19 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
   rep: [Rep, ...],
   hint: "Sol's spyglass works best from the lighthouse balcony.", // shown by "Ask for a hint"
   sequential: true,    // optional: objectives count one at a time, in order (a boss's phases)
+  sky: [SkyRequest, ...],      // optional: world events asked for when the chapter is accepted
 }
 ```
+
+A SkyRequest is `{ kind, place?, burst?, minutes?, within?, on? }`: Story Questlines sends
+`realm:sky_request` `{ kind, from: "saga_bp", player, dim, x, z, reason: "<story>:<chapter>", ... }` (x, z:
+the place's spot, else the player's) and the pack that owns the event decides: `meteor` (Meteor Strikes;
+`burst: true` breaks it apart high above the spot, no blocks broken), `blood_moon` / `harvest_moon`
+(Blood Moon & Harvest Moon: tonight), `thunder` / `rain` (Weather Almanac: planned to start within
+`within` minutes for `minutes`), `shooting_star` (Aurora & Shooting Stars: night, clear sky) and
+`rainbow` (Rainbows). Any of them can be skipped (pack missing, its **Story events** setting disabled,
+a rate limit, daytime), so the text around one must read fine whether it happens or not. Each request
+is sent once per player.
 
 A Page is a string or `{ text, when }`. A Choice is `{ id, label, set?, inc?, rep?, reply?, requires? }`.
 A Rep is `{ guild, amount, when? }` (guild `miners`, `growers`, `wardens` or `wayfarers`), sent to the
@@ -475,7 +506,19 @@ Guilds pack.
 
 Every objective has `type` and `label` (what the log shows; write it as an instruction:
 "Sneak into the Gray Ring unseen"). Optional on every objective: `when` (flags), `hint` (overrides the
-chapter hint for this step), `secret: true` (no tracker arrow until a hint is bought).
+chapter hint for this step), `secret: true` (no tracker arrow until a hint is bought), `set: { flag: value }`
+(flags set when it's done, like a choice's), `sky: SkyRequest` (sent when it starts counting, or with
+`on: "done"` when it's done).
+
+- `optional: true`: the chapter can be finished without it; the log shows `Optional: <label>`. Done before
+  the turn-in, it gives its `bonus` (a Reward, given right away) and sets its `set` flags; unfinished, it
+  just ends at the turn-in. Every chapter needs at least one objective that isn't optional.
+- `or: "<group>"`: required objectives with the same group are alternatives (`Either: A` / `Or: B`): the
+  first one done finishes the group and ends the others. Give each a `set` so the outro knows which way
+  the player went. A group needs at least two members (a member hidden by `when`, such as one gated on
+  `pack:`, leaves the other showing plainly).
+- **Never block a chapter on a random world event**: a meteor, moon, rainbow, storm or tornado appears
+  only in an `optional` objective or as one side of an `or` next to an ordinary way.
 
 Locations: `place` (a place name from section 5), `at: { dim?, x, z }` (fixed coordinates, avoid),
 or `offset: { x, z }` (from world spawn). `mark` names an offset spot on the tracker. `radius` in
@@ -510,11 +553,17 @@ blocks.
 | `wear` | `items`, `slot` ("head" / "chest" / "legs" / "feet") | Wear something |
 | `use` | `item`, `count`, location? | Use an item (right click) somewhere |
 | `wait` | `minutes` (real) or `days` (in-game) | Wait; the story continues later |
+| `event` | `events?: string[]` (`meteor`, `rainbow`, `storm_cell`, `tornado`, `aurora`, `blood_moon`, `harvest_moon`), `quest?: { pack, id?, minLevel?, tier?, gauntlet? }`, `near?`, `minutes?`, `count`, location? | A world event or another pack's finished quest. `events`: from `realm:sky_event` (and `realm:moon`); with `near`, the player must get within `near` blocks of the event's spot within `minutes` (default 15, at most 60; meteor, rainbow, storm cell and tornado only); without it, moons and the aurora count if the player is in the Overworld (and at the place, if given) at any moment while they last, the others only when announced (60 s to be at the place). `quest`: a `realm:quest_done` for this player from `pack`, `id` exact or ending in `*`; for Expeditions `tier` means that tier or harder (`easy` < `normal` < `hard` < `nightmare`), `minLevel` a level and `gauntlet: true` a Gauntlet |
 
 Mob and item ids are vanilla `minecraft:` ids. Champions: `champion: { tag: "realm:saga:<id>", mob,
 name, trait?, warn?, health?, adds?: { mobs, count } }` (tag must start with `realm:`; `trait` is a
 Champions pack trait, `stormcaller`, `frostbound`, `vampiric`, `splitting` or `shielded`, and only
 applies when the Champions pack makes the mob).
+
+Weather: while a `survive` (thunder unless it says otherwise) or a `vigil` with `weather: "thunder"` or
+`"rain"` is counting and the player waits at its place in the Overworld in the wrong weather, the engine
+asks the Weather Almanac for that weather (`realm:sky_request`, 6 minutes, starting within 8), at most once
+per player and objective every 30 minutes. Gate any line about it on `pack:weather_bp`.
 
 ### Reward
 

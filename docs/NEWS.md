@@ -6,6 +6,16 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## The story meets the sky
+
+The story and the world now talk to each other.
+
+- At big story moments the real thing happens: a meteor breaks apart over the Hollow Gate, the Long Night brings a Blood Moon, and the hopeful dawn brings a rainbow with a pot of gold. Sol's night watches end with a shooting star.
+- Waiting on a storm for a story step? The Weather Almanac now plans one within about 8 minutes. Check /realm:weather_forecast.
+- New optional story bonuses for Blood Moons, Harvest Moons, fresh meteors, sky wonders and pots of gold. They never hold a chapter up.
+- Into the Deep: you can now clear the Sculk Depths expedition instead of hunting echo shards in an ancient city.
+- New side questline for Ida: The Listening Deep, four expedition chapters after Into the Deep, up to a Nightmare clear and the title Deep-Listener.
+
 ## Steadier building guides
 
 Easy Building got a tune-up.

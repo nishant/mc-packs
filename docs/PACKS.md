@@ -2130,7 +2130,7 @@ Operators can change `enabled`, `everyDays`, `offsetDays`, `hourUtc`, `stayMinut
 
 ## Story Questlines — `saga_bp`
 
-An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (about 40 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
+An RPG quest engine told by the realm's townsfolk: 22 stories and 157 chapters (about 40 to 45 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. With the world-event packs installed, the sky joins in (a meteor over the Hollow Gate, a Blood Moon for the Long Night, a rainbow at dawn), and Expeditions get a questline of their own. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
 
 ### How to use
 
@@ -2175,6 +2175,10 @@ An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (
   - **Wear:** wear the named item (a helmet, a mask).
   - **Use:** use an item (eat, drink, right-click), sometimes at a place.
   - **Wait:** some real minutes or in-game days pass (`2 days left`); it counts while you're away too (in-game days only while the realm runs).
+  - **World events and expeditions** (when those packs are installed): be in the Overworld, or at a place, while a [Blood Moon or Harvest Moon](#blood-moon--harvest-moon--moon_bp) or the [aurora](#aurora--shooting-stars--night_bp) is up; reach a fresh [meteor](#meteor-strikes--meteor_bp), a [rainbow's](#rainbows--the-pot-of-gold--rainbow_bp) pot of gold, a [storm cell](#storm-chasing--storm_bp) or a [tornado](#tornadoes--tornado_bp) in time (chat: `[Story] A meteor is falling: get within 48 blocks of where it lands (120 ~ -340) in the next 15 min.`; the tracker points there with the time left); or clear an [expedition](#expeditions--expedition_bp) (a dungeon, a tier or harder, a Gauntlet).
+- **Optional steps** (`Optional: ...` in the log) never hold a chapter up: do one before reporting back for a bonus right away (`[Story] Bonus for "...": 2 levels`); report back without it and it just ends. Random world events only ever appear as optional steps, or as one way of two.
+- **Either/or steps** (`Either: ...` / `Or: ...`): doing one finishes both, and the story remembers which way you went. A way that needs a pack the realm doesn't have isn't shown.
+- **The story and the sky:** at some story moments the story asks other packs for the real thing (a meteor over the Hollow Gate, a Blood Moon for the Long Night, a rainbow at dawn, a shooting star, the storm a step is waiting for). Each pack can say no (its **Story events** setting, its own limits, daytime), and the story reads the same either way.
 - **Progress notes:** chat says `[Story] Defeat 12 drowned: done.` and the next step for each objective; for counts of 4 or more, a note shows each quarter where the tracker shows.
 - **The tracker** (every 2 seconds): `Drowned Bell: Lighthouse NE 240m`, `here` once you're in range, `in the Nether`, a countdown for timed steps, `report to Old Tobin NE 40m` when the chapter is done, the wisp or the person you're escorting, or `Lighthouse isn't set yet`. With several stories going, it follows the chapter you accepted last. It waits while another pack's note is showing in the same place (above the hotbar, or in its box if you put another pack's readout there too).
 - **Hints:** **Ask for a hint** on a chapter's page shows the chapter's hint, each step's hint, and the exact coordinates of every place in the unfinished steps (and where the NPC you need stands, when loaded), and shows the tracker arrow for secret steps. It costs 25% of the chapter's levels and Crowns (`hintPenalty`, asked for once per chapter; items, relics and titles are kept).
@@ -2186,7 +2190,7 @@ An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (
 
 ### The stories
 
-21 stories and 152 chapters: about 40 hours if you play everything. A story opens when the stories under **Opens after** are finished, so most side stories appear as the main story goes on; the ones marked `-` are open from the start. Chapters with branches are counted once each; a player plays most, but not all, of them.
+22 stories and 157 chapters: about 40 to 45 hours if you play everything. A story opens when the stories under **Opens after** are finished, so most side stories appear as the main story goes on; the ones marked `-` are open from the start. Chapters with branches are counted once each; a player plays most, but not all, of them.
 
 | Story | Kind | Told by | Opens after | Chapters | Feel |
 |---|---|---|---|---|---|
@@ -2211,8 +2215,26 @@ An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (
 | **The Mayor's Burden** | Side | Mayor Bram | The Gray Choir | 5 | sad, funny, mystery |
 | **Edges of the Map** | Side | Mara the Cartographer | The Cartographer's Last Map | 7 | exploration, happy, dangerous |
 | **The Forge That Sings** | Side | Ida the Relicsmith | Signs in the Sky | 5 | dangerous, epic, mystery |
+| **The Listening Deep** | Side | Ida the Relicsmith | Into the Deep, with [Expeditions](#expeditions--expedition_bp) installed | 5 | exploration, dangerous, eerie |
 
 The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, one a day each.
+
+**World events and expeditions in the stories** (only with those packs installed; every one of these is optional or one way of two, and the text reads the same without them):
+
+| Where | What happens |
+|---|---|
+| *A Smudge in the East* (act 1), *Polaris* (The Star Kittens) | When the night vigil ends, a shooting star crosses the sky ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp); night, clear sky) |
+| *Fallen Light* (act 1) | Optional: watch a [meteor](#meteor-strikes--meteor_bp) fall and get within 48 blocks of it within 15 minutes: 2 levels and 8 amethyst shards |
+| *Echoes in Crystal* (act 3) | Either bring Ida 4 echo shards from an ancient city, or clear the Sculk Depths [expedition](#expeditions--expedition_bp) (any difficulty); Ida tunes her lamp either way |
+| *The Gate Opens* (act 4) | A real meteor comes down over the Hollow Gate and breaks apart high above it (no blocks broken) |
+| *The Long Night* (act 5) | Tonight becomes a [Blood Moon](#blood-moon--harvest-moon--moon_bp). Optional: keep the light burning under it: 2 levels, 40 Crowns |
+| *Dawn*, the relit Lantern (act 5) | A [rainbow](#rainbows--the-pot-of-gold--rainbow_bp) with its pot of gold. Optional: catch it over the harbor: 1 level, 30 Crowns |
+| *The Storm Vigil* (The Drowned Bell), *Rain on the Water* (The One That Got Away), *A Champion's Heart* (Hearth and Table) | The [Weather Almanac](#weather-almanac--weather_bp) plans the thunderstorm or rain the step waits for, within about 8 minutes; the hint points to `/realm:weather_forecast` |
+| *A Champion's Heart* (Hearth and Table) | Optional, with the [Kitchen](#kitchen--cooking_bp) and Blood Moon & Harvest Moon: bring Bea Harvest Saffron (it drops from ripe crops under a Harvest Moon): 1 level, 30 Crowns, 4 golden carrots |
+| *Until Dawn* (Graveyard Shift), *The Long Watch* (The Wardens' Oath) | Optional: be at the graveyard, or hold the watchtower, under a Blood Moon: 2 levels, 30 Crowns each |
+| *Frogs in Three Voices* (Edges of the Map) | Optional, with Aurora & Shooting Stars: chart a sky wonder (the northern lights, or within 64 blocks of a rainbow's end, a tornado or a storm cell): 40 Crowns, 2 empty maps, a Codex page |
+| *The Inspector Calls* (Smuggler's Run) | Optional: find a pot of gold at a rainbow's end: Quill pays 50 Crowns to keep it out of the inspector's sight |
+| **The Listening Deep** | Four expedition chapters for Ida, Elsie and Reyes after act 3 (the second told two ways): clear the Sculk Depths; Frost Hollow on Normal or harder (told by Elsie, or by Wren with Elsie's letters after the Keeper's Gift ending); a Gauntlet (or any dungeon on Hard); and any dungeon on a Nightmare tier. Rewards up to 10 levels, 200 Crowns, 4 diamonds and 4 echo shards, and the title **Deep-Listener** at the end |
 
 Hearth and Table's *A Champion's Heart* asks for Champion's Hearts, which champions drop only with the [Kitchen](#kitchen--cooking_bp) pack installed; it has no plain-food way around that.
 
@@ -2274,6 +2296,9 @@ Operators can change every option but `offerOrder` in game with `/realm:config`.
 - **Seals:** for the Relics pack's Lantern Shard, the pack sends `realm:seals` `{ player, seals: [{ name, dim, x, z }] }` with the seal places that are set and whose Act IV relight chapter that player hasn't finished, when it changes (checked every 5 seconds), at load and in reply to `realm:seals_ping`.
 - **Finishing a chapter** gives the reward (levels and Crowns cut by `hintPenalty` after a hint) and sends `realm:quest_done` `{ player, pack: "saga_bp", id: "<story>:<chapter>", label, kind: "story" }` (`kind: "favor"` for favors), `realm:rep_add` for the choice's and chapter's reputation, `realm:relic_give`, `realm:title_unlock` and `realm:journal` (page `story`). Crowns go straight onto the `crowns` scoreboard.
 - **The tracker** shows in a [Side HUD](#side-hud--hud_rp) box by default (`right4`), with the side boxes protocol (`scripts/side.js`, see [How the packs work together](#how-the-packs-work-together)): each update shows for 50 ticks, a progress note for its own length. In a box it skips its update while another pack's readout is in the same box. Above the hotbar it listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds), and sends its own with `from: "saga_bp"`; its own progress notes make it wait in either place.
+- **Installed packs:** the pack sends `realm:help_ping` 3 seconds after the world loads and every 10 minutes and keeps the folders that answer `realm:help_pong` (late answers count at once); `pack:<folder>` in a `when` is `on` for those. Until the first answers are in, a chapter with a step gated on a pack can't be finished and a story gated on one isn't offered, so nothing is skipped by mistake.
+- **World events:** it listens to `realm:sky_event` (kinds `meteor`, `rainbow`, `storm_cell`, `tornado` with x, z; `aurora`, `blood_moon`, `harvest_moon`) and `realm:moon` (a moon lasts until `normal`, dawn, or 20 minutes), and to `realm:quest_done` for `event` steps with `quest` (Expeditions' `dungeon`, `level`, `tier`, `nightmare`, `gauntlet`). Events are kept in memory only.
+- **Asking for events:** a chapter's `sky` (on accept) or a step's `sky` (when it starts or is done) sends `realm:sky_request` `{ kind, from: "saga_bp", player, dim, x, z, reason: "<story>:<chapter>" }` once per player (saved as `st.x["s<i>"]`); a `survive` or a thunder or rain `vigil` that a player waits at in the wrong weather sends `{ kind: "thunder" or "rain", minutes: 6, within: 8 }` at most once per player and step every 30 minutes. The receiving packs decide (see their `storyEvents` options).
 - **Testing hook:** `/scriptevent realm:saga_debug {"player":"<name>","action":"state"}` prints a player's saved progress to the content log; `"action":"finish","story":"<id>"` marks a whole story finished; `"action":"places"` sends the player every saved place as JSON; `"action":"jump","story":"<id>","chapter":"<id>"` marks every chapter before that one finished; both take `"flags":{...}` to set (a `g:` key is player-wide); `"action":"answer","text":"..."` answers the player's open riddle. Script events need operator rights.
 
 ---
@@ -4329,7 +4354,7 @@ Runs themselves are kept in memory: a restart ends a run in progress (its player
 - **Fixed loadout:** as each player is taken in, a 1 by 2 pocket in the box's corner (always solid rock outside every room) is opened, two chest minecarts are spawned in it and filled with the player's 41 slots (copies with every component), and `world.structureManager.createFromWorld` saves the pocket with its entities (no blocks) as a world structure. Only once that structure exists are the player's slots emptied (the same tick, so nothing can change in between); the carts are emptied and removed either way, and the pocket is sealed again. Coming back, the structure is placed (entities only) at the player's feet, the carts' items go back slot by slot, the carts and the structure are removed. A player sent home far away can stand in chunks that aren't loaded yet for a moment, and a structure placed there puts nothing down, so the stash and parcels wait until the spot under the player is loaded (tried every 2 seconds for a minute, then again when they next spawn); carts that were marked as put down but never appeared are put down again from the structure, which is only deleted once everything is handed over. Kit gear is found by its lore line.
 - **The `realm_expedition` tag** is on every player while they're in a running expedition, for other packs (the Deck of Many Things' The Swap leaves them out).
 - **Party members** are players with the same `realm_party:<code>` tag as the leader ([Parties](#parties--party_bp)), online, in the same dimension and within `partyRadius`.
-- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens" }`, `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Champions are asked of the Champions pack with `realm:champion_spawn` `{ dim, x, y, z, mob, tag: "realm:exp_ch_<run>" }`; if none with that tag appears within 3 ticks (the pack isn't installed), the pack makes its own. Crowns go straight into the `crowns` scoreboard.
+- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens", dungeon, level, tier, nightmare, gauntlet }` (`tier` is `easy`, `normal`, `hard` or `nightmare`, `nightmare` the Nightmare number or 0, `gauntlet` true for a Gauntlet; [Story Questlines](#story-questlines--saga_bp) reads them), `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Champions are asked of the Champions pack with `realm:champion_spawn` `{ dim, x, y, z, mob, tag: "realm:exp_ch_<run>" }`; if none with that tag appears within 3 ticks (the pack isn't installed), the pack makes its own. Crowns go straight into the `crowns` scoreboard.
 - **For tests:** the script event `realm:expedition_debug` (`{ room?, skip?, slot? }`) is answered with `realm:expedition_state` (`{ part, parts, data }`): the state of the first run (or the run in `slot`: members, Gauntlet, loadout, boons) and one room's layout, shape, size, doors and puzzle, used by the BDS scenarios that play whole runs; `skip: true` counts the current room (not the boss) as cleared. Script events need operator rights.
 
 ---
@@ -4776,6 +4801,7 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | The almanac runs the overworld weather: it sets the `doWeatherCycle` gamerule to false and plays its plan. Disabled, it puts the gamerule back how it was before and the game's weather takes over |
+| `storyEvents` | `true` | Story Questlines can ask for rain or a thunderstorm when a story step needs one (`realm:sky_request` kinds `rain`, `thunder`): it's planned to start within 8 minutes for 6 minutes and shows in the forecast, then the plan carries on. Not when that weather is already here or planned that soon; at most one every 20 minutes |
 | `horizonHours` | `3` | How far ahead the plan reaches, in real hours. The forecast shows this far |
 | `clear.minMinutes` | `20` | Shortest clear spell, in real minutes |
 | `clear.maxMinutes` | `60` | Longest clear spell, in real minutes |
@@ -4789,7 +4815,7 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 | `dailyForecast` | `true` | A one-line forecast in chat the first time each player joins on a UTC day |
 | `npcRole` | `skymage` | The [Townsfolk](#townsfolk--npc_bp) role that offers **Forecast** when tapped. Empty = no offer |
 
-Operators can change `enabled`, every `.minMinutes` and `.maxMinutes`, `thunderAfterClear`, `thunderAfterRain`, `rainAfterThunder` and `dailyForecast` in game with `/realm:config` when Realm Settings is installed; length and chance changes apply from the next spell (the one on now keeps its length). Each player can switch the daily chat line for themselves with **Daily forecast in chat** in `/realm:prefs`, which follows `dailyForecast` until they choose. `horizonHours` and `npcRole` stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, every `.minMinutes` and `.maxMinutes`, `thunderAfterClear`, `thunderAfterRain`, `rainAfterThunder` and `dailyForecast` in game with `/realm:config` when Realm Settings is installed; length and chance changes apply from the next spell (the one on now keeps its length). Each player can switch the daily chat line for themselves with **Daily forecast in chat** in `/realm:prefs`, which follows `dailyForecast` until they choose. `horizonHours` and `npcRole` stay in `config.js`.
 
 ### Saved data
 
@@ -5097,6 +5123,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Rainbows appear on their own after rain (`/realm:rainbow_now` works either way) |
+| `storyEvents` | `true` | Story Questlines can put up a rainbow with its pot of gold at story moments (`realm:sky_request` kind `rainbow`; the hopeful Dawn ending asks for one), any time from sunrise to dusk (0 to 12000). Never while a rainbow or an unfound pot is out; at most one every 30 minutes |
 | `chance` | `0.7` | Chance (0-1) of a rainbow when rain clears in the morning (time 0-3000) or the evening (9000-12000) |
 | `durationSeconds` | `150` | Seconds a rainbow stays in the sky |
 | `distance.min` | `150` | Closest its end is to the chosen player, in blocks |
@@ -5109,7 +5136,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 | `relics` | `["sun_pendant", "rain_charm"]` | Relic ids the pot of gold can give, one picked at random |
 | `loot` | gold ingots, gold nuggets, dyes, golden apple, emeralds | What goes in the chest: each entry's `item`, put in with its `chance` (0-1), a random amount from `min` to `max` |
 
-Operators can change `enabled`, `chance`, `durationSeconds`, `potMinutes`, `crowns`, `relicChance`, `avoidSpawn` and `size` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `chance`, `durationSeconds`, `potMinutes`, `crowns`, `relicChance`, `avoidSpawn` and `size` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
 
 ### Saved data
 
@@ -5164,6 +5191,7 @@ Clear nights in the Overworld get a sky show. Every so often a shooting star str
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | The night sky show: shooting stars and the aurora on clear nights |
+| `storyEvents` | `true` | Story Questlines can send a shooting star at story moments (`realm:sky_request` kind `shooting_star`): the player and everyone in the Overworld within 64 blocks with the show on see it, at night under a clear sky, with the usual wish. Needs `stars.enabled`; at most one a minute per player |
 | `aurora.enabled` | `true` | Northern lights over snowy ground on aurora nights |
 | `aurora.chance` | `0.4` | Chance (0-1) that a night is an aurora night, rolled once each night |
 | `aurora.segments` | `9` | Ribbon segments in the curtain, side by side |
@@ -5178,7 +5206,7 @@ Clear nights in the Overworld get a sky show. Every so often a shooting star str
 | `wish.effect` | `"village_hero"` | The effect a wish gives, level I (Bedrock has no Luck effect) |
 | `defaultOn` | `true` | The show for players who never ran `/realm:night` |
 
-Operators can change `enabled`, `stars.enabled`, `wish.enabled`, `aurora.enabled`, `aurora.chance`, `wish.windowSeconds` and `defaultOn` in game with `/realm:config` when Realm Settings is installed. Each player can switch the show for themselves with **Night sky show (aurora and shooting stars)** in `/realm:prefs` (the same switch as `/realm:night`), which follows `defaultOn` until they choose. The other numbers stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `stars.enabled`, `wish.enabled`, `aurora.enabled`, `aurora.chance`, `wish.windowSeconds` and `defaultOn` in game with `/realm:config` when Realm Settings is installed. Each player can switch the show for themselves with **Night sky show (aurora and shooting stars)** in `/realm:prefs` (the same switch as `/realm:night`), which follows `defaultOn` until they choose. The other numbers stay in `config.js`.
 
 ### Saved data
 
@@ -5238,6 +5266,7 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Meteors fall on their own at night (`/realm:meteor_now` works either way) |
+| `storyEvents` | `true` | Story Questlines can make a meteor fall at story moments (`realm:sky_request` kind `meteor`): over The Gate Opens in Act IV it breaks apart high in the sky and breaks no blocks. At most one every 10 minutes, never while another is falling |
 | `chance` | `0.33` | Chance (0-1) of a meteor each night, rolled once a night |
 | `distance.min` | `200` | Closest it lands to the chosen player, in blocks |
 | `distance.max` | `600` | Farthest it lands from the chosen player, in blocks |
@@ -5256,7 +5285,7 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | `smokeSeconds` | `120` | Seconds the crater smokes after it's made |
 | `foundDistance` | `12` | Players this close to the crater have found it |
 
-Operators can change `enabled`, `chance`, `warningSeconds`, `craters`, `avoidSpawn`, `avoidZones` and `inZone` in game with **Meteor settings** in `/realm:meteor`, or with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `chance`, `warningSeconds`, `craters`, `avoidSpawn`, `avoidZones` and `inZone` in game with **Meteor settings** in `/realm:meteor`, or with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
 
 ### Saved data
 
@@ -5315,6 +5344,7 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Full moons can rise as a Blood Moon or a Harvest Moon. Disabled, every night is ordinary (and one in progress ends) |
+| `storyEvents` | `true` | Story Questlines can make tonight a Blood Moon or a Harvest Moon at story moments (`realm:sky_request`; The Long Night in Act V asks for a Blood Moon), like `/realm:moon_set`: now if it's night, else at nightfall. At most once an in-game day, never two moon nights in a row, and never over a moon an operator already chose |
 | `bloodChance` | `0.34` | Chance (0–1) that a full moon is a Blood Moon |
 | `harvestChance` | `0.34` | Chance (0–1) that a full moon that isn't a Blood Moon is a Harvest Moon |
 | `duskTime` | `12000` | The night starts at this time of day (ticks; 12000 is sunset) |
@@ -5334,7 +5364,7 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 | `blood.title` | `Blood Moon Survivor` | The title unlocked the first time a player survives one. Empty = none |
 | `harvest.tickSpeed` | `3` | The `randomTickSpeed` gamerule during a Harvest Moon. If it's already that high or higher, it isn't changed |
 
-Operators can change `enabled`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.creepersInZones`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.creepersInZones`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
 
 ### Saved data
 
@@ -5865,6 +5895,8 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Town Projects → world event packs | Each town with **Protect from world events** Enabled (the default) is a safe zone: Town Projects sends it as `realm:zones` (`src: "town"`, radius `townRadius`) and answers `realm:zones_ping`. Packs whose world events break or place blocks (meteor craters, tornadoes, storms) skip block changes inside it; the event itself still happens |
 | Translucent Tools Switch → Translucent Tools (Realm Resources) | The Switch sets each player's `realm:solid_tools` property from **Translucent tools** in `/realm:prefs`; Translucent Tools draws that player's held tools solid when it's on. Either pack works alone: without the Switch every tool is see-through, without Translucent Tools the setting changes nothing |
 | Kitchen ↔ Townsfolk, Story Questlines | Bea the Cook (role `chef`) offers the **Kitchen** through `realm:npc_talk`. Story Questlines' Hearth and Table teaches its story recipes (Lantern Cake, Starwright Bread) with `realm:recipe_learn` when you accept the chapter that asks for them, and delivers dishes by their item and exact name (`minecraft:rabbit_stew` named `Harbor Chowder`). Each chapter that asks for a dish also has an "old way" with plain food, for realms without the Kitchen. `realm:dish_give` and `realm:ingredient_give` are there for stories to give dishes and rare ingredients; no shipped story uses them yet |
+| Story Questlines → Meteor Strikes, Blood Moon & Harvest Moon, Weather Almanac, Aurora & Shooting Stars, Rainbows | At story moments the story sends `realm:sky_request` `{ kind, from, player, dim, x, z, reason }`: a meteor that breaks apart over the Hollow Gate (`meteor`, `burst`), a Blood Moon for the Long Night (`blood_moon`), a shooting star (`shooting_star`), a rainbow at the hopeful Dawn (`rainbow`), and the rain or thunderstorm a step waits for (`rain`, `thunder`, planned in the almanac's forecast). Each pack honors it only while its `storyEvents` setting is enabled and its own limits allow; the story reads the same either way |
+| World events, Expeditions → Story Questlines | Story steps listen to `realm:sky_event` and `realm:moon` (a Blood Moon in the graveyard, a pot of gold, a fresh meteor...) and to Expeditions' `realm:quest_done` (`dungeon`, `tier`, `nightmare`, `gauntlet`): Act III's *Echoes in Crystal* can be done by clearing the Sculk Depths, and *The Listening Deep* is a side questline of expeditions. Random events only ever make optional steps or one way of two; a step that needs a pack the realm doesn't have isn't shown (the story asks which packs are installed with `realm:help_ping`) |
 | Champions, Fishing 2.0, Blood Moon, Aurora, Meteor Strikes → Kitchen | Champions drop rare ingredients and recipe cards (`realm:champion_slain`); Fishing 2.0's Storm Eel is the Storm Eel ingredient; a Blood or Harvest Moon (`realm:moon`) and an aurora or meteor (`realm:sky_event`) make Moon Salt, Harvest Saffron and Starwright Flour possible. Each pack works without the others |
 | Weather Almanac ↔ Rain Extras | Rain Extras' fog, mist, drips and sounds follow the Almanac's planned rain and thunder like any other weather |
 | Safe Zones, Town Projects, Land Claims → world-event packs | The safe zones protocol (below): Meteor Strikes, Storm Chasing, Tornadoes, Blood Moon, Creeper Guard's `zones` mode, Rainbows (no rainbow end or pot of gold chest in a zone), Treasure Maps (no landmark marker or buried chest in a zone) and the Deck of Many Things leave the blocks in every safe zone alone, whichever pack it comes from. Regional Weather, Rain Extras, Aurora & Shooting Stars and the Weather Almanac change no blocks, so zones don't affect them |

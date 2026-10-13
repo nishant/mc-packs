@@ -7,6 +7,7 @@ import {
   active,
   applyChoice,
   chapterDone,
+  currentStep,
   entries,
   giveRep,
   invalidate,
@@ -15,10 +16,12 @@ import {
   objApplies,
   objDone,
   objKey,
+  orMates,
   pagesFor,
   progressOf,
   requires,
   sagaOf,
+  setFlag,
   target,
 } from "./data.js";
 import { featureSpot, locate, placeSpot, placesOf } from "./places.js";
@@ -32,6 +35,8 @@ import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclus
 /** @typedef {import("./data.js").Saga} Saga */
 /** @typedef {import("./types.js").Objective} Objective */
 /** @typedef {import("./types.js").Scene} VisionScene */
+/** @typedef {import("./types.js").Reward} Reward */
+/** @typedef {import("./types.js").SkyRequest} SkyRequest */
 /** @typedef {import("./places.js").Loc} Loc */
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -165,16 +170,18 @@ export function bump(player, e, i, n, absolute = false) {
   if (after === 0 || after >= need) delete x[`t${i}`];
   markDirty(player);
   if (after >= need) {
-    player.sendMessage(`§a[Story] ${obj.label}: done.`);
+    player.sendMessage(`§a[Story] ${obj.optional ? "Optional: " : ""}${obj.label}: done.`);
     player.playSound("random.orb", { pitch: 1.2, volume: 0.6 });
     const saga = sagaOf(player);
+    finishObj(player, e, i, saga);
+    if (obj.optional) return true; // the chapter's own steps didn't move
     if (chapterDone(e, saga)) {
       const to = npcName(reportTo(e));
       if (e.fav) player.sendMessage(`§6[Story] Favor done: go back to ${to} for your reward.`);
       else player.sendMessage(`§6[Story] ${e.story.title}: "${e.chapter.title}" is done. Go back to ${to} to hear what happens.`);
       player.playSound("random.levelup", { pitch: 1.3, volume: 0.6 });
     } else {
-      const next = e.chapter.objectives.findIndex((_, k) => !objDone(e, k, saga));
+      const next = currentStep(e, saga);
       if (next >= 0) player.sendMessage(`§e[Story] Next: ${e.chapter.objectives[next].label}`);
     }
   } else if (need >= 4 && obj.type !== "collect" && obj.type !== "deliver") {
@@ -183,6 +190,25 @@ export function bump(player, e, i, n, absolute = false) {
     if (Math.floor(before / step) !== Math.floor(after / step)) note(player, `§b${e.story.short}: §f${obj.label} ${after}/${need}${obj.type === "survive" || obj.type === "vigil" ? " s" : obj.type === "ride" ? " blocks" : ""}`);
   }
   return true;
+}
+
+/**
+ * What an objective does once it is done: the rest of its "either" group ends, its flags are set, an
+ * optional objective's bonus is given, and a sky request made "on done" is sent.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Saga} saga
+ */
+function finishObj(player, e, i, saga) {
+  const obj = e.chapter.objectives[i];
+  for (const k of orMates(e, i, saga)) endScene(player.id, objKey(e, k));
+  if (obj.set && Object.keys(obj.set).length) {
+    for (const [k, v] of Object.entries(obj.set)) setFlag(saga, e.story.id, k, v);
+    invalidate(player.id);
+  }
+  if (obj.bonus) {
+    const got = reward(player, obj.bonus, `Story: ${e.story.title}`);
+    player.sendMessage(`§a[Story] Bonus for "${obj.label}"${got ? `: §7${got}` : "!"}`);
+  }
+  if (obj.sky && obj.sky.on === "done") askSky(player, obj.sky, `${e.story.id}:${e.chapter.id}`);
 }
 
 /** Unfinished objectives of the player, by type (rebuilt when their chapters change). @type {WeakMap<Entry[], Map<string, { e: Entry, i: number, obj: Objective }[]>>} */
@@ -403,6 +429,76 @@ export function giveItem(player, item, amount, name, lore) {
     }
   }
   return dropped;
+}
+
+// ---------------------------------------------------------------------------
+// Rewards
+// ---------------------------------------------------------------------------
+
+/**
+ * Gives a reward (levels and Crowns cut by `penalty` after a hint); returns what this pack gave itself.
+ * @param {Player} player @param {Reward | undefined} r @param {string} source @param {number} [penalty]
+ */
+export function reward(player, r, source, penalty = 0) {
+  if (!r) return "";
+  /** @type {string[]} */
+  const given = [];
+  const keep = 1 - Math.max(0, Math.min(1, penalty));
+  const levels = Math.round((r.levels ?? 0) * keep);
+  const crowns = Math.round((r.crowns ?? 0) * keep);
+  try {
+    if (levels > 0) {
+      player.addLevels(levels);
+      given.push(`${levels} level${levels === 1 ? "" : "s"}`);
+    }
+  } catch (e) {
+    console.warn(`[saga] levels: ${e}`);
+  }
+  for (const it of r.items ?? []) {
+    try {
+      const dropped = giveItem(player, it.item, it.amount, it.name, it.lore);
+      given.push(`${it.amount} ${it.name ? `"${plain(it.name)}"` : itemName(it.item)}${dropped ? " (some dropped at your feet: your inventory is full)" : ""}`);
+    } catch (e) {
+      console.warn(`[saga] reward ${it.item}: ${e}`);
+    }
+  }
+  if (crowns > 0 && addCrowns(player, crowns)) player.sendMessage(`§6+${crowns} Crowns §7(${source})`);
+  const cut = penalty > 0 && ((r.levels ?? 0) > levels || (r.crowns ?? 0) > crowns);
+  // These belong to other packs, which tell the player themselves (nothing happens without them).
+  if (r.relic) send("realm:relic_give", { player: player.id, relic: r.relic });
+  if (r.title) send("realm:title_unlock", { player: player.id, title: r.title, from: PACK });
+  if (r.journal) send("realm:journal", { player: player.id, page: "story", entry: r.journal.entry, label: r.journal.label });
+  if (r.codex) {
+    const saga = sagaOf(player);
+    saga.cx ??= [];
+    if (!saga.cx.includes(r.codex.id)) {
+      saga.cx.push(r.codex.id);
+      markDirty(player);
+      player.sendMessage(`§d[Codex] New entry: ${r.codex.title} §7(read it in /realm:saga, Codex)`);
+    }
+  }
+  return given.join(", ") + (cut ? " (less for the hint)" : "");
+}
+
+function crownsObjective() {
+  try {
+    return world.scoreboard.getObjective("crowns") ?? world.scoreboard.addObjective("crowns", "Crowns");
+  } catch {
+    return world.scoreboard.getObjective("crowns"); // another pack added it this tick
+  }
+}
+
+/** @param {Player} p @param {number} n */
+function addCrowns(p, n) {
+  try {
+    const obj = crownsObjective();
+    if (!obj) return false;
+    obj.addScore(p, Math.floor(n));
+    return true;
+  } catch (e) {
+    console.warn(`[saga] crowns: ${e}`);
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -993,7 +1089,8 @@ export function talked(player, npc) {
     if (got > 0) {
       player.sendMessage(`§e[Story] You give ${npcName(npc)} ${got} ${name} (${progressOf(e, i) + got}/${target(obj)}).`);
       bump(player, e, i, got);
-    } else {
+    } else if (!obj.optional) {
+      // An optional delivery isn't nagged about: the player may never bring it.
       const kitchen = obj.name && KITCHEN[plain(obj.name).trim().toLowerCase()] ? " It must be the real thing, from the Kitchen (a renamed item won't do)." : "";
       player.sendMessage(`§7[Story] ${npcName(npc)} still needs ${need} ${name}.${obj.name ? kitchen : " Renamed items are never taken."}`);
     }
@@ -1878,6 +1975,211 @@ function answerTick(player, e, i, obj) {
 }
 
 // ---------------------------------------------------------------------------
+// World events: sky events and other packs' quests for `event` objectives, and the story's requests
+// to the world-event packs (realm:sky_request)
+// ---------------------------------------------------------------------------
+
+/** Sky event kinds (realm:sky_event): what the story says, where a `near` chase goes, and which last the night. @type {Record<string, { text: string, spot?: string, night?: boolean }>} */
+const SKY = {
+  meteor: { text: "A meteor is falling", spot: "where it lands" },
+  rainbow: { text: "A rainbow is out", spot: "its pot of gold" },
+  storm_cell: { text: "A storm cell is forming", spot: "the storm" },
+  tornado: { text: "A tornado touched down", spot: "the tornado" },
+  blood_moon: { text: "A Blood Moon rises", night: true },
+  harvest_moon: { text: "A Harvest Moon rises", night: true },
+  aurora: { text: "Northern lights are out", night: true },
+};
+const SKY_MEMORY_MS = 3600000; // an event is forgotten an hour after it ended (the longest chase)
+const NIGHT_MAX_MS = 1200000; // a night event ends at dawn, or after 20 real minutes at most
+const PLACE_GRACE_MS = 60000; // an instant event counts at a place for a minute after it is announced
+const WEATHER_ASK_MS = 1800000; // weather help: once per player and objective per 30 minutes
+
+/** @typedef {{ id: number, kind: string, dim: string, x?: number, z?: number, at: number, end?: number }} SkyEvent */
+/** Sky events seen since the world loaded (not saved: a restart forgets them). @type {SkyEvent[]} */
+const skyEvents = [];
+let skyIds = 0;
+/** "pid|objective key|event id": events that already counted. @type {Set<string>} */
+const skyCounted = new Set();
+/** "pid|objective key" -> when weather help was last asked for. @type {Map<string, number>} */
+const weatherAsked = new Map();
+
+/** How long a `near` chase lasts (ms). @param {Objective} obj */
+const chaseMs = (obj) => Math.max(1, Math.min(60, obj.minutes ?? 15)) * 60000;
+
+/** @param {SkyEvent} ev */
+const hasSpot = (ev) => ev.x !== undefined && ev.z !== undefined;
+
+/**
+ * Does a sky event count for an event objective now? With `near` (and a spot): the player is that close
+ * within the chase time. Otherwise the player is in the event's dimension (and at the objective's place, if
+ * any) when it is announced, or while it lasts (moons and auroras: the night; others at a place: a minute).
+ * @param {Player} player @param {Objective} obj @param {SkyEvent} ev @param {boolean} announced @param {number} now
+ */
+function skyCounts(player, obj, ev, announced, now) {
+  if (!obj.events?.includes(/** @type {any} */ (ev.kind)) || player.dimension.id !== ev.dim) return false;
+  if (obj.near && hasSpot(ev)) return now - ev.at <= chaseMs(obj) && across(player.location, /** @type {{ x: number, z: number }} */ (ev)) <= obj.near;
+  if (SKY[ev.kind]?.night) {
+    if (ev.end !== undefined) return false;
+  } else if (!announced && !(locate(obj) !== undefined && now - ev.at <= PLACE_GRACE_MS)) return false;
+  return playerIn(player, obj);
+}
+
+/** Counts the sky events an event objective hasn't counted yet. @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {boolean} [announced] */
+function skyCheck(player, e, i, obj, announced = false) {
+  const now = Date.now();
+  const base = `${player.id}|${objKey(e, i)}|`;
+  for (const ev of skyEvents) {
+    if (skyCounted.has(base + ev.id) || !skyCounts(player, obj, ev, announced && ev === skyEvents[skyEvents.length - 1], now)) continue;
+    skyCounted.add(base + ev.id);
+    if (!bump(player, e, i, 1)) return;
+  }
+}
+
+/** A new sky event: it counts at once for players where it happens, and `near` objectives start a chase. @param {string} kind @param {string} dim @param {number | undefined} x @param {number | undefined} z */
+function addSky(kind, dim, x, z) {
+  /** @type {SkyEvent} */
+  const ev = { id: ++skyIds, kind, dim, at: Date.now() };
+  if (x !== undefined && z !== undefined) {
+    ev.x = Math.floor(x);
+    ev.z = Math.floor(z);
+  }
+  skyEvents.push(ev);
+  if (skyEvents.length > 100) forgetSky();
+  for (const player of world.getAllPlayers()) {
+    if (!counting(player)) continue;
+    for (const { e, i, obj } of open(player, "event")) {
+      if (!obj.events?.includes(/** @type {any} */ (kind))) continue;
+      skyCheck(player, e, i, obj, true);
+      if (obj.near && hasSpot(ev) && !skyCounted.has(`${player.id}|${objKey(e, i)}|${ev.id}`) && player.dimension.id === dim)
+        player.sendMessage(`§e[Story] ${SKY[kind]?.text ?? "Something is happening"}: get within ${obj.near} blocks of ${SKY[kind]?.spot ?? "it"} (${ev.x} ~ ${ev.z}) in the next ${Math.round(chaseMs(obj) / 60000)} min. §7(${obj.label})`);
+    }
+  }
+}
+
+/** realm:sky_event `{ kind, dim, x?, z? }` from the world-event packs. @param {any} msg */
+export function skyEvent(msg) {
+  if (typeof msg.kind !== "string" || !SKY[msg.kind]) return;
+  const dim = typeof msg.dim === "string" ? (msg.dim.includes(":") ? msg.dim : `minecraft:${msg.dim}`) : OVERWORLD;
+  // A moon already announced by realm:moon (moon_bp sends both) is the same moon.
+  if (SKY[msg.kind].night && skyEvents.some((ev) => ev.kind === msg.kind && ev.end === undefined)) return;
+  addSky(msg.kind, dim, typeof msg.x === "number" ? msg.x : undefined, typeof msg.z === "number" ? msg.z : undefined);
+}
+
+/** realm:moon `{ state }`: a blood or harvest moon starts; "normal" ends it. @param {any} msg */
+export function moonState(msg) {
+  const now = Date.now();
+  if (msg.state === "normal") {
+    for (const ev of skyEvents) if ((ev.kind === "blood_moon" || ev.kind === "harvest_moon") && ev.end === undefined) ev.end = now;
+    return;
+  }
+  const kind = msg.state === "blood" ? "blood_moon" : msg.state === "harvest" ? "harvest_moon" : undefined;
+  if (kind && !skyEvents.some((ev) => ev.kind === kind && ev.end === undefined)) addSky(kind, OVERWORLD, undefined, undefined);
+}
+
+/** Night events end at dawn; old events are forgotten. Every second, from main.js. */
+export function skyHousekeeping() {
+  if (!skyEvents.length) return;
+  const now = Date.now();
+  // Daylight, for the sky's night events: moon_bp starts its moon at dusk (12000), before isNight() does.
+  const t = world.getTimeOfDay();
+  const day = t >= 23000 || t < 12000;
+  for (const ev of skyEvents) if (SKY[ev.kind]?.night && ev.end === undefined && ((day && now - ev.at > 30000) || now - ev.at > NIGHT_MAX_MS)) ev.end = now;
+  while (skyEvents.length && now - (skyEvents[0].end ?? (SKY[skyEvents[0].kind]?.night ? now : skyEvents[0].at)) > SKY_MEMORY_MS) forgetSky();
+}
+
+/** Forgets the oldest sky event, and which objectives it counted for. */
+function forgetSky() {
+  const ev = skyEvents.shift();
+  if (!ev) return;
+  const gone = `|${ev.id}`;
+  for (const k of [...skyCounted]) if (k.endsWith(gone)) skyCounted.delete(k);
+}
+
+/**
+ * The sky event a `near` objective is chasing now (the newest one in time that hasn't counted), for the tracker
+ * and the log, or undefined.
+ * @param {string} pid @param {Entry} e @param {number} i
+ * @returns {{ dim: string, x: number, z: number, text: string, spot: string, near: number, left: number } | undefined}
+ */
+export function skyFocus(pid, e, i) {
+  const obj = e.chapter.objectives[i];
+  if (obj.type !== "event" || !obj.near || !obj.events?.length) return undefined;
+  const now = Date.now();
+  const base = `${pid}|${objKey(e, i)}|`;
+  for (let k = skyEvents.length - 1; k >= 0; k--) {
+    const ev = skyEvents[k];
+    if (!hasSpot(ev) || !obj.events.includes(/** @type {any} */ (ev.kind)) || skyCounted.has(base + ev.id)) continue;
+    const left = (chaseMs(obj) - (now - ev.at)) / 1000;
+    if (left <= 0) continue;
+    return { dim: ev.dim, x: /** @type {number} */ (ev.x), z: /** @type {number} */ (ev.z), text: SKY[ev.kind]?.text ?? ev.kind, spot: SKY[ev.kind]?.spot ?? "it", near: obj.near, left };
+  }
+  return undefined;
+}
+
+const TIERS = ["easy", "normal", "hard", "nightmare"];
+
+/** Does a realm:quest_done message match an event objective's `quest`? @param {Objective["quest"]} q @param {any} msg */
+export function questMatches(q, msg) {
+  if (!q || q.pack !== msg.pack) return false;
+  if (q.id !== undefined) {
+    const id = String(q.id);
+    if (id.endsWith("*") ? !String(msg.id).startsWith(id.slice(0, -1)) : msg.id !== id) return false;
+  }
+  if (q.minLevel !== undefined && !(Number(msg.level) >= q.minLevel)) return false;
+  if (q.tier !== undefined && TIERS.indexOf(msg.tier) < TIERS.indexOf(q.tier)) return false;
+  if (q.gauntlet !== undefined && (msg.gauntlet === true) !== q.gauntlet) return false;
+  return true;
+}
+
+/** realm:quest_done from any pack (Expeditions sends one for every party member: no sharing here). @param {any} msg */
+export function questDone(msg) {
+  if (typeof msg.player !== "string" || typeof msg.pack !== "string" || typeof msg.id !== "string") return;
+  const player = online(msg.player);
+  if (player) advance(player, "event", (obj) => (questMatches(obj.quest, msg) ? 1 : 0));
+}
+
+/**
+ * Asks a world-event pack for something (realm:sky_request). Fire and forget: the pack decides.
+ * @param {Player} player @param {SkyRequest} req @param {string} reason "<story>:<chapter>"
+ */
+export function askSky(player, req, reason) {
+  if (!req || typeof req.kind !== "string") return;
+  let at = { dim: player.dimension.id, x: Math.floor(player.location.x), z: Math.floor(player.location.z) };
+  const loc = req.place ? locate({ place: req.place }) : undefined;
+  if (loc && typeof loc !== "string") at = { dim: loc.dim, x: Math.floor(loc.x), z: Math.floor(loc.z) };
+  /** @type {Record<string, unknown>} */
+  const msg = { kind: req.kind, from: PACK, player: player.id, ...at, reason };
+  if (req.burst) msg.burst = true;
+  if (typeof req.minutes === "number") msg.minutes = req.minutes;
+  if (typeof req.within === "number") msg.within = req.within;
+  send("realm:sky_request", msg);
+}
+
+/** An objective's sky request "on start": once, the first time it counts (saved, so a rejoin doesn't ask again). @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
+function skyOnStart(player, e, i, obj) {
+  const x = (e.st.x ??= {});
+  if (x[`s${i}`]) return;
+  x[`s${i}`] = 1;
+  markDirty(player);
+  askSky(player, /** @type {SkyRequest} */ (obj.sky), `${e.story.id}:${e.chapter.id}`);
+}
+
+/**
+ * Weather help: a survive or vigil objective that needs thunder or rain, with the player at its place in other
+ * weather, asks the Weather Almanac for it (at most every 30 minutes per player and objective).
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
+function weatherHelp(player, e, i, obj) {
+  const want = obj.weather ?? (obj.type === "survive" ? "thunder" : undefined);
+  if ((want !== "thunder" && want !== "rain") || player.dimension.id !== OVERWORLD || weatherOk(obj, OVERWORLD) || !playerIn(player, obj)) return;
+  const k = `${player.id}|${objKey(e, i)}`;
+  const now = Date.now();
+  if (now - (weatherAsked.get(k) ?? -Infinity) < WEATHER_ASK_MS) return;
+  weatherAsked.set(k, now);
+  askSky(player, { kind: want, minutes: 6, within: 8 }, `${e.story.id}:${e.chapter.id}`);
+}
+
+// ---------------------------------------------------------------------------
 // The per-second loop
 // ---------------------------------------------------------------------------
 
@@ -1906,6 +2208,7 @@ export function tickPlayer(player, list) {
           player.sendMessage(`§c[Story] Too slow! "${obj.label}" starts over.`);
           player.playSound("note.bass", { pitch: 0.6 });
         }
+        if (obj.sky && obj.sky.on !== "done" && counts) skyOnStart(player, e, i, obj);
         switch (obj.type) {
           case "reach": {
             if (!counts) break;
@@ -1924,6 +2227,7 @@ export function tickPlayer(player, list) {
             if (counts && (obj.item || obj.name)) bump(player, e, i, countItem(player, obj.item, obj.name), true);
             break;
           case "survive": {
+            if (counts) weatherHelp(player, e, i, obj);
             if (!counts || survived.has(player.id) || !weatherOk(obj, dim) || !outdoors(player) || !playerIn(player, obj)) break;
             const key = objKey(e, i);
             survived.add(player.id);
@@ -1932,6 +2236,7 @@ export function tickPlayer(player, list) {
             break;
           }
           case "vigil": {
+            if (counts) weatherHelp(player, e, i, obj);
             if (!counts || !playerIn(player, obj) || !weatherOk(obj, dim)) break;
             if (obj.timeOfDay) {
               const t = world.getTimeOfDay();
@@ -2025,6 +2330,9 @@ export function tickPlayer(player, list) {
             break;
           case "answer":
             if (counts) answerTick(player, e, i, obj);
+            break;
+          case "event":
+            if (counts && obj.events?.length) skyCheck(player, e, i, obj);
             break;
         }
       } catch (err) {
@@ -2143,7 +2451,7 @@ export function sweepChampions() {
 /** For the operators' "complete the current step" tool. @param {Player} player @param {Entry} e */
 export function completeStep(player, e) {
   const saga = sagaOf(player);
-  const i = e.chapter.objectives.findIndex((_, k) => !objDone(e, k, saga));
+  const i = currentStep(e, saga);
   if (i < 0) return false;
   const obj = e.chapter.objectives[i];
   bump(player, e, i, target(obj), true);

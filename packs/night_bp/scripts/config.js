@@ -2,6 +2,12 @@ export const CONFIG = {
   /** The night sky show: shooting stars and the aurora on clear nights in the Overworld. */
   enabled: true,
 
+  /**
+   * Story Questlines can send a shooting star to a player at story moments (at night under a clear sky; at
+   * most one a minute per player). Needs `enabled` and `stars.enabled` too.
+   */
+  storyEvents: true,
+
   aurora: {
     /** Northern lights over snowy ground on aurora nights. */
     enabled: true,

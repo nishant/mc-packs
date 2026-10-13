@@ -11,6 +11,7 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Blood Moons and Harvest Moons", help: "Disabled, every night is normal" },
+  { key: "storyEvents", type: "bool", scope: "world", label: "Story events", help: "Story Questlines can make tonight a Blood Moon or a Harvest Moon at story moments (at most once a day)" },
   { key: "bloodChance", type: "float", scope: "world", label: "Blood Moon chance (each full moon)", min: 0, max: 1, step: 0.01 },
   { key: "harvestChance", type: "float", scope: "world", label: "Harvest Moon chance (full moons that aren't Blood Moons)", min: 0, max: 1, step: 0.01 },
   { key: "avoidSpawn", type: "int", scope: "world", label: "No extra monsters this close to world spawn (blocks)", min: 0, max: 512, step: 8 },

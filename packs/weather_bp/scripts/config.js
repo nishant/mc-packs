@@ -5,6 +5,12 @@ export const CONFIG = {
    */
   enabled: true,
 
+  /**
+   * Story Questlines can ask for rain or a thunderstorm at story moments: the almanac plans it to start within
+   * a few minutes (at most one request every 20 real minutes) and the forecast shows it. Needs `enabled` too.
+   */
+  storyEvents: true,
+
   /** How far ahead the plan reaches, in real hours. The forecast shows this far. */
   horizonHours: 3,
 

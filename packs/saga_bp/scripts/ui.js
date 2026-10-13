@@ -5,6 +5,7 @@ import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import {
   ORDERED,
+  active,
   applyChoice,
   chapterApplies,
   chapterDone,
@@ -21,6 +22,7 @@ import {
   forget,
   giveRep,
   invalidate,
+  labelOf,
   markDirty,
   objApplies,
   objDone,
@@ -31,14 +33,15 @@ import {
   sagaOf,
   stateOf,
   storyById,
+  storyWaitsForPacks,
   target,
   today,
 } from "./data.js";
-import { askAnswer, completeStep, counting, endScene, endScenesOf, giveItem, holdUntil, ownUntil, radiusOf, reportTo, sceneFocus, showLine, side, timeText, weather } from "./objectives.js";
+import { askAnswer, askSky, completeStep, counting, endScene, endScenesOf, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, timeText, weather } from "./objectives.js";
 import { ensurePlace, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { SLOTS, SLOT_NAMES, isSlot } from "./side.js";
-import { PACK, across, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
+import { PACK, across, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -47,7 +50,6 @@ import { PACK, across, compass, coords, dialog, dimName, exclusive, isOp, itemNa
 /** @typedef {import("./types.js").Story} Story */
 /** @typedef {import("./types.js").Chapter} Chapter */
 /** @typedef {import("./types.js").Objective} Objective */
-/** @typedef {import("./types.js").Reward} Reward */
 /** @typedef {import("./places.js").Loc} Loc */
 
 const HINT_MS = 600000; // operator notes about unset places: at most every 10 minutes per place
@@ -113,9 +115,11 @@ function objectiveLines(player, e, saga) {
     if (!objApplies(e, obj, saga)) return;
     const n = progressOf(e, i);
     const need = target(obj);
-    if (n >= need) return out.push(`§a[Done] ${obj.label}§r`);
-    if (e.chapter.sequential && step !== i) return out.push(`§8- ${i > step ? "(later) " : ""}${obj.label}§r`);
-    let line = `§e- ${obj.label}§r`;
+    if (n >= need) return out.push(`§a[Done] ${obj.optional ? "Optional: " : ""}${obj.label}§r`);
+    if (objDone(e, i, saga)) return; // another way of its "either" group was taken
+    const label = labelOf(e, i, saga);
+    if (!active(e, i, saga)) return out.push(`§8- ${i > step ? "(later) " : ""}${label}§r`);
+    let line = `§e- ${label}§r`;
     if (need > 1) line += ` §f${n}/${need}${obj.type === "survive" || obj.type === "vigil" ? " s" : obj.type === "ride" ? " blocks" : ""}`;
     const t = timeText(e, i);
     if (t) line += ` §c${t}`;
@@ -124,6 +128,8 @@ function objectiveLines(player, e, saga) {
     if (typeof loc === "string") line += `\n  §7(${placeLabel(loc)} isn't set yet: an operator sets it in /realm:saga_places)`;
     else if (loc && hidden(e, obj)) line += " §7(find it yourself, or ask for a hint)";
     else if (loc) line += ` §7(${loc.label} ${bearing(player, loc, radiusOf(obj))})`;
+    const sky = skyFocus(player.id, e, i);
+    if (sky) line += `\n  §e${sky.text}: get within ${sky.near} blocks of ${sky.spot} (${bearing(player, sky, sky.near)}), ${clock(sky.left)} left.`;
     if ((obj.type === "survive" || obj.type === "vigil") && obj.weather !== "any" && (obj.weather || obj.type === "survive")) {
       const want = obj.weather ?? "thunder";
       if ((want === "thunder" && weather !== "Thunder") || (want === "rain" && weather === "Clear")) line += `\n  §7Wait for ${want === "thunder" ? "a thunderstorm" : "rain"}.`;
@@ -138,79 +144,8 @@ function stepLine(player, e, saga) {
   if (chapterDone(e, saga)) return `§6Report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
   const i = currentStep(e, saga);
   if (i < 0) return "";
-  const obj = e.chapter.objectives[i];
   const t = timeText(e, i);
-  return `${obj.label}${t ? ` (${t})` : ""}`;
-}
-
-// ---------------------------------------------------------------------------
-// Rewards
-// ---------------------------------------------------------------------------
-
-/**
- * Gives a reward (levels and Crowns cut by `penalty` after a hint); returns what this pack gave itself.
- * @param {Player} player @param {Reward | undefined} r @param {string} source @param {number} [penalty]
- */
-export function reward(player, r, source, penalty = 0) {
-  if (!r) return "";
-  /** @type {string[]} */
-  const given = [];
-  const keep = 1 - Math.max(0, Math.min(1, penalty));
-  const levels = Math.round((r.levels ?? 0) * keep);
-  const crowns = Math.round((r.crowns ?? 0) * keep);
-  try {
-    if (levels > 0) {
-      player.addLevels(levels);
-      given.push(`${levels} level${levels === 1 ? "" : "s"}`);
-    }
-  } catch (e) {
-    console.warn(`[saga] levels: ${e}`);
-  }
-  for (const it of r.items ?? []) {
-    try {
-      const dropped = giveItem(player, it.item, it.amount, it.name, it.lore);
-      given.push(`${it.amount} ${it.name ? `"${plain(it.name)}"` : itemName(it.item)}${dropped ? " (some dropped at your feet: your inventory is full)" : ""}`);
-    } catch (e) {
-      console.warn(`[saga] reward ${it.item}: ${e}`);
-    }
-  }
-  if (crowns > 0 && addCrowns(player, crowns)) player.sendMessage(`§6+${crowns} Crowns §7(${source})`);
-  const cut = penalty > 0 && ((r.levels ?? 0) > levels || (r.crowns ?? 0) > crowns);
-  // These belong to other packs, which tell the player themselves (nothing happens without them).
-  if (r.relic) send("realm:relic_give", { player: player.id, relic: r.relic });
-  if (r.title) send("realm:title_unlock", { player: player.id, title: r.title, from: PACK });
-  if (r.journal) send("realm:journal", { player: player.id, page: "story", entry: r.journal.entry, label: r.journal.label });
-  if (r.codex) {
-    const saga = sagaOf(player);
-    saga.cx ??= [];
-    if (!saga.cx.includes(r.codex.id)) {
-      saga.cx.push(r.codex.id);
-      markDirty(player);
-      player.sendMessage(`§d[Codex] New entry: ${r.codex.title} §7(read it in /realm:saga, Codex)`);
-    }
-  }
-  return given.join(", ") + (cut ? " (less for the hint)" : "");
-}
-
-function crownsObjective() {
-  try {
-    return world.scoreboard.getObjective("crowns") ?? world.scoreboard.addObjective("crowns", "Crowns");
-  } catch {
-    return world.scoreboard.getObjective("crowns"); // another pack added it this tick
-  }
-}
-
-/** @param {Player} p @param {number} n */
-function addCrowns(p, n) {
-  try {
-    const obj = crownsObjective();
-    if (!obj) return false;
-    obj.addScore(p, Math.floor(n));
-    return true;
-  } catch (e) {
-    console.warn(`[saga] crowns: ${e}`);
-    return false;
-  }
+  return `${labelOf(e, i, saga)}${t ? ` (${t})` : ""}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +197,7 @@ function offerFor(player, story, npc) {
   const { pos } = chapterNumber(saga, story, index);
   const tag = story.kind === "main" ? "Main story" : "Story";
   if (!st || !st.a || st.cur !== chapter.id) {
-    if (starter !== npc) return undefined;
+    if (starter !== npc || storyWaitsForPacks(story)) return undefined;
     if (!st?.dn.length && !requires(story.requires, saga, story.id, player).ok) return undefined;
     return { key: `start:${story.id}`, label: `${tag}: ${story.title}${pos > 1 ? `\n§8Chapter ${pos}: ${chapter.title}` : "\n§8New story"}` };
   }
@@ -353,7 +288,7 @@ export async function startChapter(player, story) {
     const saga = sagaOf(player);
     const st = stateOf(saga, story);
     const cur = currentChapter(saga, story);
-    if (!cur || (st.a && st.cur === cur.chapter.id)) return;
+    if (!cur || (st.a && st.cur === cur.chapter.id) || storyWaitsForPacks(story)) return;
     if (!st.dn.length) {
       const req = requires(story.requires, saga, story.id, player);
       if (!req.ok) {
@@ -387,6 +322,8 @@ export async function startChapter(player, story) {
     player.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
     // Recipes the chapter asks you to cook; the Kitchen pack tells the player (nothing happens without it).
     for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: player.id, recipe });
+    // Sky events the chapter asks for (meteor, moon, weather...): the world-event packs decide (nothing happens without them).
+    for (const req of chapter.sky ?? []) askSky(player, req, `${story.id}:${chapter.id}`);
     if (e) {
       const missing = missingPlaces(e, saga); // picks unset places first, so the lines below can point at them
       for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));
@@ -664,16 +601,28 @@ export function tidyFavors(player) {
 
 /** The tracker line for one entry, or undefined when there's nothing to point at. @param {Player} player @param {Entry} e @param {Saga} saga */
 function trackLine(player, e, saga) {
+  // A sky event to chase comes first: it doesn't last.
+  for (let i = 0; i < e.chapter.objectives.length; i++) {
+    const sky = active(e, i, saga) ? skyFocus(player.id, e, i) : undefined;
+    if (sky) return `§e${sky.text}: §fget within ${sky.near} blocks ${bearing(player, sky, sky.near)} §c${clock(sky.left)} left`;
+  }
   if (chapterDone(e, saga)) return `§6report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
+  // Optional objectives only when nothing required has anything to show.
+  return pointAt(player, e, saga, false) ?? pointAt(player, e, saga, true);
+}
+
+/** The tracker's pick among the required (or the optional) objectives that count now. @param {Player} player @param {Entry} e @param {Saga} saga @param {boolean} optional */
+function pointAt(player, e, saga, optional) {
   /** @type {string | undefined} */
   let best;
   let bestD = Infinity;
   /** @type {string | undefined} */
   let timed;
   e.chapter.objectives.forEach((obj, i) => {
-    if (objDone(e, i, saga) || (e.chapter.sequential && currentStep(e, saga) !== i)) return;
+    if (!!obj.optional !== optional || !active(e, i, saga)) return;
+    const label = labelOf(e, i, saga);
     const t = timeText(e, i);
-    if (t && !timed) timed = `§f${obj.label} §c${t}`;
+    if (t && !timed) timed = `§f${label} §c${t}`;
     const focus = sceneFocus(player.id, e, i);
     /** @type {Loc | string | undefined} */
     let loc = focus ?? locate(obj);
@@ -681,11 +630,11 @@ function trackLine(player, e, saga) {
     if (!focus && obj.type === "escort" && obj.from) loc = locate(obj.from, obj.who?.name ?? "the start");
     if (!focus && obj.type === "lead") loc = locate(obj.spawnAt, obj.name ? plain(obj.name) : itemName(obj.mob ?? "")) ?? locate(obj.to, "the pen");
     if (obj.npc && (obj.type === "talk" || obj.type === "deliver" || obj.type === "answer")) {
-      if (bestD === Infinity && !best) best = `§f${obj.label}${towardNpc(player, obj.npc)}`;
+      if (bestD === Infinity && !best) best = `§f${label}${towardNpc(player, obj.npc)}`;
       return;
     }
     if (loc === undefined) {
-      if (!best) best = `§f${obj.label}`;
+      if (!best) best = `§f${label}`;
       return;
     }
     if (typeof loc === "string") {
@@ -693,7 +642,7 @@ function trackLine(player, e, saga) {
       return;
     }
     if (hidden(e, obj) && !focus) {
-      if (bestD === Infinity) best = `§f${obj.label} §7(hint available)`;
+      if (bestD === Infinity) best = `§f${label} §7(hint available)`;
       return;
     }
     const d = loc.dim === player.dimension.id ? across(player.location, loc) : 1e9;

@@ -819,10 +819,12 @@ export const STORIES = [
         title: "The Gate Opens",
         npc: "reyes",
         end: "elsie",
+        sky: [{ kind: "meteor", place: "hollow_gate", burst: true }],
         intro: [
           "The night after Elsie's question, the sky splits. A meteor tears across the Lantern's tail and comes down far beyond the edge of town, with a sound like the biggest door in the world slamming shut. Or open.",
           `${R}It hit the old black arch past the wastes. The Hollow Gate, Mara calls it. My scouts say the ground there is still hot, and it's singing. Not the Choir. The ground.`,
           `${R}Go and look. Not alone, if I had my way, but I never get my way with you. Take what you need from the armory. The Choir will be there already. They always are.`,
+          { text: `${R}And Sol's up on the lighthouse swearing there's more of it still coming, right down the same track. If the sky lights up over the arch again, that's why. Don't stand under it.`, when: { "pack:meteor_bp": "on" } },
           { text: `${R}Quill's people saw Choir boats heading upriver an hour before the meteor. They knew where it would fall. Your smuggler earned his keep tonight. Don't tell him I said so.`, when: { "g:quill": "trusted" } },
           { text: `${R}And we're half blind. Quill used to tell us where the Choir's boats ran. Now he's in a cell and they run where they like. I'm not saying it was the wrong call. I'm saying it has a price.`, when: { "g:quill": "exposed" } },
           { text: `${R}Bram's ringing the square bell to call everyone in. Since you told the town the truth about the Long Storm, they come when he rings. Nobody's pretending anymore. It helps.`, when: { "act2_choir.mayor": "truth" } },
