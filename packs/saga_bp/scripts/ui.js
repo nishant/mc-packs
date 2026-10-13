@@ -37,6 +37,7 @@ import {
 import { askAnswer, completeStep, counting, endScene, endScenesOf, giveItem, holdUntil, ownUntil, radiusOf, reportTo, sceneFocus, showLine, side, timeText, weather } from "./objectives.js";
 import { ensurePlace, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
+import { SLOTS, SLOT_NAMES, isSlot } from "./side.js";
 import { PACK, across, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
@@ -395,7 +396,10 @@ export async function startChapter(player, story) {
       }
       travelTips(player, e);
     }
-    player.sendMessage("§7The tracker above your hotbar points the way. /realm:saga shows your progress, and a hint if you're stuck.");
+    // Where the tracker shows for this player: a Side HUD box (the default, bottom right) or above the hotbar.
+    const where = getFor(player, "trackerAt");
+    const spot = isSlot(where) ? `in the ${SLOT_NAMES[SLOTS.indexOf(where)].replace(/ \(.*\)$/, "")} box at the ${where.startsWith("left") ? "left" : where.startsWith("right") ? "right" : "middle"} of your screen` : "above your hotbar";
+    player.sendMessage(`§7The tracker ${spot} points the way. /realm:saga shows your progress, and a hint if you're stuck.`);
     player.playSound("random.orb", { pitch: 0.8, volume: 0.7 });
     if (choice?.reply?.length) await dialog(player, story.title, "", pagesFor(choice.reply, saga, story.id, player.name), ["OK"]);
   });
@@ -459,6 +463,8 @@ async function showHint(player, e) {
  * @param {Player} player @param {Story} story
  */
 export async function chapterInfo(player, story) {
+  /** @type {[Entry, number] | undefined} a riddle picked from this page, asked once the page is gone */
+  let pending;
   await exclusive(player, async () => {
     while (player.isValid) {
       const saga = sagaOf(player);
@@ -485,7 +491,7 @@ export async function chapterInfo(player, story) {
       actions.push(["Hear the intro again", () => dialog(player, story.title, chapterHeader(saga, story, cur.index), pagesFor(cur.chapter.intro, saga, story.id, player.name), ["OK"])]);
       e.chapter.objectives.forEach((obj, i) => {
         if (obj.type === "answer" && !obj.npc && !(obj.place || obj.at || obj.offset) && !objDone(e, i, saga))
-          actions.push([`Answer: ${obj.label}`, () => answerFromLog(player, e, i)]);
+          actions.push([`Answer: ${obj.label}`, async () => void (pending = [e, i])]);
       });
       const form = new ActionFormData().title(story.title).body(lines.join("\n"));
       for (const [label] of actions) form.button(label);
@@ -493,14 +499,11 @@ export async function chapterInfo(player, story) {
       const res = await show(player, form);
       if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length) return;
       await actions[res.selection][1]();
+      if (pending) return; // the riddle's form is exclusive too, so this page (and its busy mark) goes first
     }
   });
-}
-
-/** An answer typed from the log (the form helper is exclusive too, so step out first). @param {Player} player @param {Entry} e @param {number} i */
-function answerFromLog(player, e, i) {
-  system.runTimeout(() => askAnswer(player, e, i).catch(() => {}), 2);
-  return Promise.resolve();
+  // Asked here, not scheduled, so a menu that opened this page comes back after the riddle.
+  if (pending) await askAnswer(player, ...pending);
 }
 
 /** The outro, the choice, the rewards. @param {Player} player @param {Story} story */
@@ -953,22 +956,28 @@ async function opTools(player) {
   if (res.selection === 1) {
     const target = await pickPlayer(player, "Finish a step");
     if (!target) return;
+    const name = target.name;
     const list = entries(target);
-    if (!list.length) return player.sendMessage(`§7[Story] ${target.name} isn't working on any chapter.`);
-    const form = new ActionFormData().title("Finish a step").body(`${target.name}'s chapters: pick one to finish its current step.`);
+    if (!list.length) return player.sendMessage(`§7[Story] ${name} isn't working on any chapter.`);
+    const form = new ActionFormData().title("Finish a step").body(`${name}'s chapters: pick one to finish its current step.`);
     for (const e of list) form.button(`${e.story.title}\n§8${plain(stepLine(target, e, sagaOf(target))).slice(0, 60)}`);
     form.button("Back");
     const r = await show(player, form);
     if (!r || r.canceled || r.selection === undefined || r.selection >= list.length) return;
+    // They may have left while the menu was open.
+    if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
     const ok = completeStep(target, list[r.selection]);
-    player.sendMessage(ok ? `§a[Story] Finished ${target.name}'s current step in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
+    player.sendMessage(ok ? `§a[Story] Finished ${name}'s current step in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
     return;
   }
   if (res.selection === 2) {
     const target = await pickPlayer(player, "Reset stories");
     if (!target) return;
-    const sure = await show(player, new ActionFormData().title("Reset stories?").body(`Start all of ${target.name}'s stories over? Rewards already given are kept.`).button("Reset").button("Cancel"));
-    if (sure && !sure.canceled && sure.selection === 0) resetPlayer(target, player);
+    const name = target.name;
+    const sure = await show(player, new ActionFormData().title("Reset stories?").body(`Start all of ${name}'s stories over? Rewards already given are kept.`).button("Reset").button("Cancel"));
+    if (!sure || sure.canceled || sure.selection !== 0) return;
+    if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
+    resetPlayer(target, player);
   }
 }
 
