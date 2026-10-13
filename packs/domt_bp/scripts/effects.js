@@ -351,6 +351,9 @@ function busyElsewhere(p) {
   return false;
 }
 
+/** Villagers The Void never moves: they live in trading halls and farms. */
+const VILLAGERS = ["minecraft:villager_v2", "minecraft:villager"];
+
 /** Names Cursed Name picks from. */
 const SILLY_NAMES = ["Sir Bonks-a-Lot", "Captain Soggy", "Lord Snackington", "Dirt Muncher", "The Wobbler", "Princess Pebble", "Baron von Oops", "Mister Noodles", "Duke of Mud", "Lil Creeper Hugger"];
 
@@ -811,6 +814,8 @@ export const CARDS = [
       const near = dim
         .getEntities({ location: at, maxDistance: 24, minDistance: 3, families: ["mob"], excludeTypes: ["minecraft:player"] })
         .filter((e) => !e.getTags().some((t) => t.startsWith("realm") || t.startsWith("npc") || t.startsWith("domt")))
+        // Never someone's pet, a named or leashed mob, a ridden horse or a villager (out of its trading hall).
+        .filter((e) => !e.nameTag && !VILLAGERS.includes(e.typeId) && !e.hasComponent("minecraft:is_tamed") && !e.getComponent("minecraft:tameable")?.isTamed && !e.getComponent("minecraft:leashable")?.isLeashed && !e.getComponent("minecraft:rideable")?.getRiders().length)
         .filter((e) => {
           const l = e.location;
           return standable(dim, Math.floor(l.x), Math.floor(l.y), Math.floor(l.z));
