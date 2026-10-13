@@ -593,6 +593,22 @@ const playerOf = (origin) => {
 
 /** @param {Vector3} loc block-centered x/z, feet height */
 const centered = (loc) => ({ x: Math.floor(loc.x) + 0.5, y: Math.round(loc.y * 100) / 100, z: Math.floor(loc.z) + 0.5 });
+/**
+ * Where the player stands, or the ground under them when they're in the air (flying, jumping): an NPC placed in
+ * the air falls and is put back every half second, bobbing forever. @param {Player} player
+ */
+function standingSpot(player) {
+  const at = centered(player.location);
+  if (player.isOnGround) return at;
+  try {
+    const floor = player.dimension.getBlockBelow(at, { maxDistance: 64, includeLiquidBlocks: true });
+    if (floor && !floor.isLiquid) return { x: at.x, y: floor.location.y + 1, z: at.z };
+    // over water or lava: keep the spot rather than put the NPC on the sea floor
+  } catch {
+    // below the world or not loaded: keep the spot
+  }
+  return at;
+}
 /** @param {Vector3} p */
 const coords = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
 
@@ -603,7 +619,7 @@ function addNpc(player, id) {
     player.sendMessage(`§cNo townsfolk "${id}" in config.js.`);
     return `no townsfolk "${id}"`;
   }
-  const at = centered(player.location);
+  const at = standingSpot(player);
   const yaw = wrap(player.getRotation().y + 180); // facing the operator who placed it
   const dim = player.dimension;
   let rec = placedOf(id);
@@ -664,7 +680,7 @@ function setHome(player, id) {
   const rec = placedOf(id);
   if (!t || !rec) return player.sendMessage(`§c${t ? plainName(t) : id} isn't placed yet: /realm:npc_add ${id} first.`);
   if (player.dimension.id !== rec.dim) return player.sendMessage(`§cA home must be in the same dimension as their post (${dimName(rec.dim)}).`);
-  const at = centered(player.location);
+  const at = standingSpot(player);
   if (dist(at, rec) <= 2) {
     rec.home = undefined;
     save();
