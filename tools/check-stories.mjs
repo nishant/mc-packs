@@ -1,7 +1,9 @@
 // Checks the Story Questlines content (packs/saga_bp/scripts/stories.js and stories/*.js) for what
 // the engine relies on: known objective types and their fields, places, NPC ids, unique ids, champion
-// tags, requirements. Flags read in a `when` or `requires.flags` that nothing sets are warnings.
+// tags, requirements, optional objectives, "either" groups, event objectives, sky requests and `pack:`
+// flags. Flags read in a `when` or `requires.flags` that nothing sets are warnings.
 // Runs as part of `npm run check`.
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -14,6 +16,13 @@ const { FAVORS } = await import(pathToFileURL(join(scripts, "stories", "index.js
 const errors = [];
 /** @type {string[]} */
 const warnings = [];
+
+/** Sky event kinds an event objective counts (realm:sky_event), and those with a spot a `near` chase can go to. */
+const SKY_KINDS = new Set(["meteor", "blood_moon", "harvest_moon", "rainbow", "storm_cell", "tornado", "aurora"]);
+const SPOT_KINDS = new Set(["meteor", "rainbow", "storm_cell", "tornado"]);
+/** What a story may ask the world-event packs for (realm:sky_request). */
+const REQUEST_KINDS = new Set(["meteor", "blood_moon", "harvest_moon", "thunder", "rain", "shooting_star", "rainbow"]);
+const TIERS = new Set(["easy", "normal", "hard", "nightmare"]);
 
 const has = (/** @type {any} */ o) => !!(o && (o.place || o.at || o.offset));
 const where = (/** @type {any} */ o) => has(o);
@@ -47,7 +56,25 @@ const TYPES = {
   wear: (o) => (!o.items?.length ? "needs items" : !["head", "chest", "legs", "feet"].includes(o.slot) ? "needs slot head/chest/legs/feet" : undefined),
   use: (o) => (o.item ? undefined : "needs item"),
   wait: (o) => (o.minutes || o.days ? undefined : "needs minutes or days"),
+  event: (o) => {
+    if (!o.events?.length && !o.quest) return "needs events or quest";
+    for (const k of o.events ?? []) if (!SKY_KINDS.has(k)) return `unknown sky event "${k}" (${[...SKY_KINDS].join(", ")})`;
+    if (o.quest) {
+      if (typeof o.quest.pack !== "string" || !o.quest.pack) return "quest needs pack";
+      if (!existsSync(join(root, "packs", o.quest.pack))) return `quest pack "${o.quest.pack}" isn't a folder in packs/`;
+      if (o.quest.id !== undefined && (typeof o.quest.id !== "string" || o.quest.id.indexOf("*") !== o.quest.id.length - 1 && o.quest.id.includes("*"))) return "quest id must be text, with * only at the end";
+      if (o.quest.minLevel !== undefined && typeof o.quest.minLevel !== "number") return "quest minLevel must be a number";
+      if (o.quest.tier !== undefined && !TIERS.has(o.quest.tier)) return `quest tier must be one of ${[...TIERS].join(", ")}`;
+      if (o.quest.gauntlet !== undefined && typeof o.quest.gauntlet !== "boolean") return "quest gauntlet must be true or false";
+    }
+    if (o.near !== undefined && (typeof o.near !== "number" || o.near <= 0)) return "near must be a number of blocks";
+    if (o.near !== undefined && !(o.events ?? []).some((/** @type {string} */ k) => SPOT_KINDS.has(k))) return `near needs one of ${[...SPOT_KINDS].join(", ")} in events`;
+    return undefined;
+  },
 };
+
+/** Folders in packs/, for `pack:<folder>` flags and quest packs. */
+const packFolder = (/** @type {string} */ f) => /^[a-z0-9_]+$/.test(f) && existsSync(join(root, "packs", f));
 
 const storyIds = new Set(STORIES.map((/** @type {any} */ s) => s.id));
 /** Flags something sets, as "g:<name>" or "<story>.<flag>". */
@@ -57,7 +84,7 @@ const readKeys = [];
 
 /** Canonical flag key as story `sid` names it. @param {string} sid @param {string} key */
 function canon(sid, key) {
-  if (key.startsWith("g:")) return key;
+  if (key.startsWith("g:") || key.startsWith("pack:")) return key;
   const dot = key.indexOf(".");
   if (dot > 0 && storyIds.has(key.slice(0, dot))) return key;
   return `${sid}.${key}`;
@@ -80,7 +107,26 @@ function choicesOf(at, sid, choices) {
 
 /** @param {string} at @param {string} sid @param {any} when */
 function whens(at, sid, when) {
-  for (const k of Object.keys(when ?? {})) readKeys.push([canon(sid, k), at]);
+  for (const k of Object.keys(when ?? {})) {
+    if (k.startsWith("pack:")) {
+      // Installed packs: "on" or "off", set by the realm:help_ping scan, never by a choice.
+      if (!packFolder(k.slice(5))) errors.push(`${at}: "${k}": no folder "${k.slice(5)}" in packs/`);
+      const v = String(when[k]).replace(/^!/, "");
+      if (v !== "on" && v !== "off") errors.push(`${at}: "${k}" must be "on" or "off" (or "!on" / "!off")`);
+      continue;
+    }
+    readKeys.push([canon(sid, k), at]);
+  }
+}
+
+/** @param {string} at @param {any} req */
+function skyOk(at, req) {
+  if (!req || typeof req !== "object") return errors.push(`${at}: a sky request must be { kind, ... }`);
+  if (!REQUEST_KINDS.has(req.kind)) errors.push(`${at}: unknown sky request kind "${req.kind}" (${[...REQUEST_KINDS].join(", ")})`);
+  placeOk(at, req);
+  if (req.on !== undefined && req.on !== "start" && req.on !== "done") errors.push(`${at}: sky on must be "start" or "done"`);
+  if (req.burst !== undefined && req.kind !== "meteor") errors.push(`${at}: burst is for a meteor`);
+  if ((req.minutes !== undefined || req.within !== undefined) && req.kind !== "thunder" && req.kind !== "rain") errors.push(`${at}: minutes and within are for thunder or rain`);
 }
 
 /** @param {string} at @param {string} sid @param {any} req */
@@ -127,6 +173,15 @@ function objective(at, sid, o) {
   whens(at, sid, o.when);
   if (o.choices) choicesOf(at, sid, o.choices);
   if (o.pages) pages(at, sid, o.pages);
+  for (const k of Object.keys(o.set ?? {})) setKeys.add(canon(sid, k));
+  if (o.set !== undefined && (typeof o.set !== "object" || Object.values(o.set).some((v) => typeof v !== "string"))) errors.push(`${at}: set must map flags to text`);
+  if (o.bonus && !o.optional) errors.push(`${at}: bonus is only for an optional objective`);
+  if (o.optional && o.or) errors.push(`${at}: an optional objective can't be in an "either" group (or)`);
+  if (o.or !== undefined && (typeof o.or !== "string" || !o.or)) errors.push(`${at}: or must be a group id`);
+  if (o.sky) {
+    if (Array.isArray(o.sky)) errors.push(`${at}: an objective's sky is one request, not a list`);
+    else skyOk(at, o.sky);
+  }
   for (const c of o.clues ?? []) if (typeof c.dx !== "number" || typeof c.dz !== "number") errors.push(`${at}: a clue needs dx and dz`);
 }
 
@@ -156,6 +211,15 @@ for (const s of STORIES) {
     choicesOf(`${cat} choices`, s.id, c.choices);
     for (const r of c.rep ?? []) whens(`${cat} rep`, s.id, r.when);
     (c.objectives ?? []).forEach((/** @type {any} */ o, /** @type {number} */ i) => objective(`${cat} objective ${i + 1}`, s.id, o));
+    if (c.objectives?.length && c.objectives.every((/** @type {any} */ o) => o.optional)) errors.push(`${cat}: needs at least one objective that isn't optional`);
+    /** @type {Map<string, number>} */
+    const groups = new Map();
+    for (const o of c.objectives ?? []) if (o.or && !o.optional) groups.set(o.or, (groups.get(o.or) ?? 0) + 1);
+    for (const [g, n] of groups) if (n < 2) errors.push(`${cat}: "either" group "${g}" needs at least 2 objectives (has ${n})`);
+    if (c.sky !== undefined) {
+      if (!Array.isArray(c.sky)) errors.push(`${cat}: a chapter's sky is a list of requests`);
+      else c.sky.forEach((/** @type {any} */ r, /** @type {number} */ k) => skyOk(`${cat} sky ${k + 1}`, r));
+    }
   }
 }
 
@@ -167,6 +231,7 @@ for (const f of FAVORS) {
   if (!f.label || !f.objective || !Array.isArray(f.lines) || f.lines.length < 2) errors.push(`${at}: needs label, objective and lines [intro, thanks]`);
   npcOk(at, f.npc);
   if (f.objective) objective(at, `fv:${f.npc}`, f.objective);
+  if (f.objective?.optional || f.objective?.or) errors.push(`${at}: a favor's only objective can't be optional or in an "either" group`);
 }
 
 for (const [key, at] of readKeys) {
@@ -212,7 +277,10 @@ if (vanilla) {
   };
   for (const s of STORIES)
     for (const c of s.chapters) {
-      c.objectives.forEach((/** @type {any} */ o, /** @type {number} */ i) => ids(o, `${s.id}/${c.id} objective ${i + 1}`));
+      c.objectives.forEach((/** @type {any} */ o, /** @type {number} */ i) => {
+        ids(o, `${s.id}/${c.id} objective ${i + 1}`);
+        rewardIds(o.bonus, `${s.id}/${c.id} objective ${i + 1} bonus`);
+      });
       rewardIds(c.reward, `${s.id}/${c.id}`);
     }
   for (const f of FAVORS) {
@@ -293,6 +361,7 @@ if (vanilla) {
       for (const o of c.objectives) {
         read(s.id, o.when);
         scan(s.id, o.choices);
+        if (o.set) scan(s.id, [{ set: o.set }]);
       }
     }
   }
@@ -330,11 +399,12 @@ if (vanilla) {
   for (const story of STORIES) {
     const sid = story.id;
     // Flags other stories set: every value (or none); counters 0 to the number of stories that add to them.
-    const ext = [...(reads.get(sid) ?? [])].filter((k) => !k.startsWith(`${sid}.`) && [...(setBy.get(k) ?? [])].some((x) => x !== sid));
+    // Installed packs: each `pack:` flag read is "off" or "on".
+    const ext = [...(reads.get(sid) ?? [])].filter((k) => k.startsWith("pack:") || (!k.startsWith(`${sid}.`) && [...(setBy.get(k) ?? [])].some((x) => x !== sid)));
     /** @type {Record<string, string>[]} */
     let combos = [{}];
     for (const k of ext) {
-      const vals = counters.has(k) ? Array.from({ length: Math.min(6, [...(setBy.get(k) ?? [])].filter((x) => x !== sid).length) + 1 }, (_, i) => (i ? String(i) : undefined)) : [undefined, ...(values.get(k) ?? [])];
+      const vals = k.startsWith("pack:") ? ["off", "on"] : counters.has(k) ? Array.from({ length: Math.min(6, [...(setBy.get(k) ?? [])].filter((x) => x !== sid).length) + 1 }, (_, i) => (i ? String(i) : undefined)) : [undefined, ...(values.get(k) ?? [])];
       combos = combos.flatMap((c) => vals.map((v) => (v === undefined ? c : { ...c, [k]: v })));
     }
     /** @type {Set<string> | undefined} */
@@ -367,11 +437,21 @@ if (vanilla) {
               if (o.pages && !shows(o.pages, S, sid)) found.add(`${at} objective ${i + 1}: no page shows for some players`);
               const cs = (o.choices ?? []).filter((/** @type {any} */ c) => allowed(c.requires, S, sid, dn));
               if (o.choices?.length && !cs.length) found.add(`${at} objective ${i + 1}: every choice is locked for some players`);
-              return cs.length ? cs.map((/** @type {any} */ c) => pick(S, sid, c)) : [S];
+              const after = cs.length ? cs.map((/** @type {any} */ c) => pick(S, sid, c)) : [S];
+              // An optional objective's flags: done or not. An "either" member's: one way of the group is taken (below).
+              return o.set && o.optional ? after.flatMap((A) => [A, pick(A, sid, o)]) : after;
             });
           });
+          /** @type {Map<string, any[]>} */
+          const eithers = new Map();
+          for (const o of ch.objectives) if (o.or && !o.optional) eithers.set(o.or, [...(eithers.get(o.or) ?? []), o]);
+          for (const members of eithers.values())
+            states = states.flatMap((S) => {
+              const here = members.filter((o) => holds(o.when, S, sid));
+              return here.length ? here.map((o) => (o.set ? pick(S, sid, o) : S)) : [S];
+            });
           for (const S of states) {
-            if (!ch.objectives.some((/** @type {any} */ o) => holds(o.when, S, sid))) found.add(`${at}: no objective applies for some players (flags ${JSON.stringify(S)})`);
+            if (!ch.objectives.some((/** @type {any} */ o) => !o.optional && holds(o.when, S, sid))) found.add(`${at}: no required objective applies for some players (flags ${JSON.stringify(S)})`);
             if (!shows(ch.outro, S, sid)) found.add(`${at}: no outro page shows for some players`);
             const outs = (ch.choices ?? []).filter((/** @type {any} */ c) => allowed(c.requires, S, sid, dn));
             if (ch.choices?.length && !outs.length) found.add(`${at}: every ending choice is locked for some players`);

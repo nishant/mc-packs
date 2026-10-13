@@ -3,9 +3,10 @@
 // of every field. Keep this file free of code: it is shared by the engine and every story file.
 
 /**
- * Flag conditions: every key must match. Keys: a story's own flag, `g:<name>` (player-wide) or
- * `<storyId>.<flag>` (another story's). Values: an exact value, `"!x"` (anything but x) or
- * `">=n"` (a number at least n, for counters such as `g:mercy`).
+ * Flag conditions: every key must match. Keys: a story's own flag, `g:<name>` (player-wide),
+ * `<storyId>.<flag>` (another story's) or `pack:<folder>` (`"on"` while that pack is installed: it
+ * answered the `realm:help_ping` scan; `"off"` otherwise). Values: an exact value, `"!x"` (anything
+ * but x) or `">=n"` (a number at least n, for counters such as `g:mercy`).
  * @typedef {Record<string, string>} When
  */
 
@@ -74,10 +75,42 @@
  */
 
 /**
+ * Sky event kinds an `event` objective counts (`realm:sky_event`, from the world-event packs).
+ * @typedef {"meteor" | "blood_moon" | "harvest_moon" | "rainbow" | "storm_cell" | "tornado" | "aurora"} SkyKind
+ */
+
+/**
+ * A finished quest from another pack (`realm:quest_done`) that counts for an `event` objective.
+ * @typedef {object} QuestMatch
+ * @property {string} pack the pack folder that sends it (`"expedition_bp"`)
+ * @property {string} [id] the quest id, exact or ending in `*` for a prefix (`"expedition_crypt"`, `"expedition_*"`)
+ * @property {number} [minLevel] Expeditions: at least this level
+ * @property {"easy" | "normal" | "hard" | "nightmare"} [tier] Expeditions: this tier or a harder one
+ * @property {boolean} [gauntlet] Expeditions: true = a gauntlet run only, false = never a gauntlet run
+ */
+
+/**
+ * Something the story asks a world-event pack for (`realm:sky_request`). The pack decides whether to
+ * honor it (its own switches and rate limits). x and z: the place's, else the player's.
+ * @typedef {object} SkyRequest
+ * @property {"meteor" | "blood_moon" | "harvest_moon" | "thunder" | "rain" | "shooting_star" | "rainbow"} kind
+ * @property {string} [place]
+ * @property {boolean} [burst] meteor: it breaks apart in the sky and breaks no blocks
+ * @property {number} [minutes] thunder/rain: how long
+ * @property {number} [within] thunder/rain: starts within this many real minutes
+ * @property {"start" | "done"} [on] objective requests: when it starts counting (default) or when it is done
+ */
+
+/**
  * One thing to do in a chapter. See docs/STORY_BIBLE.md section 9 for each type's fields.
  * @typedef {object} Objective
- * @property {"talk" | "reach" | "deliver" | "collect" | "defeat" | "interact" | "survive" | "vigil" | "mine" | "fish" | "meet" | "inspect" | "stealth" | "escort" | "lead" | "defend" | "follow" | "answer" | "place" | "tend" | "tame" | "ride" | "sleep" | "vision" | "wear" | "use" | "wait"} type
+ * @property {"talk" | "reach" | "deliver" | "collect" | "defeat" | "interact" | "survive" | "vigil" | "mine" | "fish" | "meet" | "inspect" | "stealth" | "escort" | "lead" | "defend" | "follow" | "answer" | "place" | "tend" | "tame" | "ride" | "sleep" | "vision" | "wear" | "use" | "wait" | "event"} type
  * @property {string} label
+ * @property {boolean} [optional] doesn't count toward finishing the chapter; done before the turn-in, it gives `bonus` and sets `set`
+ * @property {Reward} [bonus] optional: the reward when it is done
+ * @property {Record<string, string>} [set] flags set when it is done (`g:` for player-wide), like a choice's
+ * @property {string} [or] required objectives with the same id form an "either" group: one of them is enough
+ * @property {SkyRequest} [sky] asked for when it starts counting (or, with `on: "done"`, when it is done)
  * @property {When} [when] the objective only exists when this matches
  * @property {string} [hint] overrides the chapter's hint for this step
  * @property {boolean} [secret] no tracker arrow until a hint is bought
@@ -131,8 +164,11 @@
  * @property {boolean} [dark] vision: darkness during it
  * @property {Scene[]} [vision] sleep: the dream
  * @property {"head" | "chest" | "legs" | "feet"} [slot] wear
- * @property {number} [minutes] wait: real minutes
+ * @property {number} [minutes] wait: real minutes; event: how long a `near` chase lasts (default 15)
  * @property {number} [days] wait: in-game days
+ * @property {SkyKind[]} [events] event: the sky events that count
+ * @property {QuestMatch} [quest] event: the finished quest that counts
+ * @property {number} [near] event: come within this many blocks of where a sky event happens (meteor, rainbow, storm cell, tornado)
  */
 
 /**
@@ -175,6 +211,7 @@
  * @property {Rep[]} [rep] reputation given when the chapter is finished
  * @property {string} [hint] what "Ask for a hint" says (the hint also reveals exact coordinates)
  * @property {boolean} [sequential] objectives count one at a time, in order (a boss's phases); by default they all count at once
+ * @property {SkyRequest[]} [sky] asked for when the chapter is accepted
  */
 
 /**
