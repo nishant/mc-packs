@@ -70,6 +70,13 @@ function getIndex() {
   return index;
 }
 
+/**
+ * Each entry as written ("<key>":{...}). Entries are replaced, never changed, when a container is read again,
+ * so a save only serializes the ones that are new since the last one.
+ * @type {WeakMap<Entry, string>}
+ */
+const saved = new WeakMap();
+
 function save() {
   const idx = getIndex();
   // Forget the containers seen longest ago when over the limit.
@@ -82,7 +89,8 @@ function save() {
   let cur = [];
   let len = 2;
   for (const [k, v] of idx) {
-    const s = `${JSON.stringify(k)}:${JSON.stringify(v)}`;
+    let s = saved.get(v);
+    if (s === undefined) saved.set(v, (s = `${JSON.stringify(k)}:${JSON.stringify(v)}`));
     if (cur.length && len + s.length + 1 > SHARD_CHARS) {
       shards.push(`{${cur.join(",")}}`);
       cur = [];
