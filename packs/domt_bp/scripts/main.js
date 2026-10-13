@@ -199,7 +199,11 @@ async function reveal(p, card) {
  * @param {Player} target @param {{ by?: Player, chosen?: Card }} [opts]
  */
 async function draw(target, opts = {}) {
-  if (drawing.has(target.id)) return;
+  if (drawing.has(target.id)) {
+    const other = opts.by && opts.by.id !== target.id;
+    (opts.by ?? target).sendMessage(`§7${other ? `${target.name} is` : "You are"} still drawing a card. Wait for it to finish.`);
+    return;
+  }
   drawing.add(target.id);
   try {
     /** @type {Set<string>} */
