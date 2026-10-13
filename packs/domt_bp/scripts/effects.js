@@ -1755,6 +1755,7 @@ export const CARDS = [
     wild: true,
     text: "Every creature within 16 blocks floats up for a few seconds, then drops. Pets and named mobs are spared.",
     expect: "none",
+    prep: (p) => void spawnAround(p, "minecraft:pig", 1, 3, 6),
     run: ({ player }) => {
       const mobsNear = player.dimension
         .getEntities({ location: player.location, maxDistance: 16, families: ["mob"], excludeTypes: ["minecraft:player"] })
