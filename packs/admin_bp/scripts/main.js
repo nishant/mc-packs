@@ -13,7 +13,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { ACTIONS } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
-import { CATEGORIES, PARAMS, SETUP, needsConfirm } from "./presets.js";
+import { CATEGORIES, LINE, NAMES, OPS_MARK, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
 import { get } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
 
@@ -42,8 +42,13 @@ const ALL = PACKS.flatMap((p) => p.commands.map((c) => ({ ...c, folder: p.folder
 const isOp = (p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 /** @param {unknown} s */
 const plain = (s) => String(s ?? "").replace(/§./g, "");
-/** @param {string} s @param {number} n */
-const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 3).trimEnd()}...` : s);
+/** A button line cut to what fits (LINE pixels), so Bedrock doesn't cut it somewhere worse. @param {string} s @param {number} [room] */
+const fit = (s, room = LINE) => {
+  if (textWidth(s) <= room) return s;
+  let out = s;
+  while (out && textWidth(`${out}...`) > room) out = out.slice(0, -1);
+  return `${out.trimEnd().replace(/[,;:(]$/, "")}...`;
+};
 /** @param {unknown} e */
 const errText = (e) => plain(e instanceof Error ? e.message : String(e)).split("\n")[0].slice(0, 200) || "unknown error";
 
@@ -234,12 +239,12 @@ const onlineNames = (me) => [me.name, ...world.getAllPlayers().filter((p) => p.i
  * @param {Player} player @param {Cmd} cmd @param {string} [note]
  */
 function paramForm(player, cmd, note) {
-  const form = new ModalFormData().title(`/${cmd.name}`);
+  const form = new ModalFormData().title(nameOf(cmd));
   /** @type {boolean[]} */
   const isInput = [];
   /** @type {{ count: number, read: (v: any[]) => string | { error: string } }[]} */
   const readers = [];
-  form.label(`${cmd.description}${note ? `\n\n§7${note}` : ""}`);
+  form.label(`§7/${cmd.name}§r\n${cmd.description}${note ? `\n\n§7${note}` : ""}`);
   isInput.push(false);
   const loc = player.location;
 
@@ -324,8 +329,8 @@ function paramForm(player, cmd, note) {
  */
 async function openCommand(player, cmd, note, back) {
   if (!cmd.params.length) {
-    if (needsConfirm(cmd.name) && !(await confirm(player, `Run /${cmd.name}?\n\n${cmd.description}`))) return back?.();
-    exec(player, cmd.name, `/${cmd.name}`);
+    if (needsConfirm(cmd.name) && !(await confirm(player, `${nameOf(cmd)}: run /${cmd.name}?\n\n${cmd.description}`))) return back?.();
+    exec(player, cmd.name, nameOf(cmd));
     return resume(player, back);
   }
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -347,14 +352,14 @@ async function openCommand(player, cmd, note, back) {
     const gap = args.findIndex((a) => a === "");
     if (!error && gap >= 0) error = `${paramLabel(cmd.params[gap])}: fill it in too, or clear the options after it.`;
     if (error) {
-      const again = await show(player, new MessageFormData().title(`/${cmd.name}`).body(`§c${error}`).button1("Try again").button2("Cancel"));
+      const again = await show(player, new MessageFormData().title(nameOf(cmd)).body(`§c${error}`).button1("Try again").button2("Cancel"));
       if (again?.selection !== 0) return back?.();
       continue;
     }
     const line = [cmd.name, ...args].join(" ");
     const everyone = args.includes("@a");
-    if ((needsConfirm(cmd.name) || everyone) && !(await confirm(player, `Run /${line}?${everyone ? "\n\nThis is for everyone online." : ""}\n\n${cmd.description}`))) return back?.();
-    exec(player, line, `/${line}`);
+    if ((needsConfirm(cmd.name) || everyone) && !(await confirm(player, `${nameOf(cmd)}: run /${line}?${everyone ? "\n\nThis is for everyone online." : ""}\n\n${cmd.description}`))) return back?.();
+    exec(player, line, nameOf(cmd));
     return resume(player, back);
   }
   return back?.();
@@ -407,7 +412,7 @@ async function runAction(player, action, values, back) {
 
 /**
  * What a command does, without its pack's name in front ("Merchant Caravan: bring the caravan now"):
- * a category page names the packs already, and a button line holds about 52 characters.
+ * the hint of a command presets.js doesn't name yet.
  * @param {Cmd} c
  */
 function whatItDoes(c) {
@@ -418,8 +423,14 @@ function whatItDoes(c) {
   return m[2].charAt(0).toUpperCase() + m[2].slice(1);
 }
 
+/** A command's name for what it does ("Find Container"); the command name for one presets.js doesn't know. @param {Cmd} c */
+const nameOf = (c) => NAMES[c.name]?.[0] ?? `/${c.name}`;
+
 /** @param {Cmd} c */
-const cmdLabel = (c) => `/${c.name}${c.permission === "any" ? "" : " §8(ops)"}\n§8${clip(whatItDoes(c), 52)}`;
+const cmdLabel = (c) => {
+  const mark = c.permission === "any" ? "" : OPS_MARK;
+  return `${fit(nameOf(c), LINE - textWidth(mark))}${mark}\n§8${fit(NAMES[c.name]?.[1] ?? whatItDoes(c))}`;
+};
 
 /** The buttons of a list of commands; each comes back to `back` (the list) once it has run. @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
 const cmdEntries = (player, cmds, back) => cmds.map((c) => /** @type {Entry} */ ({ label: cmdLabel(c), open: () => openCommand(player, c, undefined, back) }));
@@ -428,15 +439,13 @@ const cmdEntries = (player, cmds, back) => cmds.map((c) => /** @type {Entry} */ 
 async function mainMenu(player) {
   const cmds = await available(player);
   const home = () => mainMenu(player);
-  /** @type {Entry[]} */
-  const entries = [];
-  const settings = cmds.find((c) => c.name === "realm:config");
-  if (settings) entries.push({ label: "Realm Settings\n§8Every pack's settings (/realm:config)", open: async () => exec(player, "realm:config", "Realm Settings") });
-  entries.push({ label: "Search commands\n§8By name or what they do", open: () => searchPage(player, cmds, home) });
   const rec = recents(player);
-  entries.push({ label: `Recent (${rec.length})\n§8Repeat one of your last commands`, open: () => recentPage(player, home) });
-  entries.push({ label: "Server setup checklist\n§8One-time jobs across the packs", open: () => setupPage(player, cmds, home) });
-  entries.push({ label: "Quick actions\n§8Time, weather, game mode, teleport, give...", open: () => actionsPage(player, home) });
+  /** @type {Entry[]} */
+  const entries = [
+    { label: `Recent (${rec.length})\n§8Repeat one of your last commands`, open: () => recentPage(player, home) },
+    { label: "Search Commands\n§8By name or what they do", open: () => searchPage(player, cmds, home) },
+    { label: "Quick Actions\n§8Time, weather, teleport, give...", open: () => actionsPage(player, home) },
+  ];
 
   const placed = new Set();
   for (const cat of CATEGORIES) {
@@ -446,6 +455,9 @@ async function mainMenu(player) {
   }
   const other = cmds.filter((c) => !placed.has(c.name));
   if (other.length) entries.push({ label: `Other\n§8${other.length} command${other.length === 1 ? "" : "s"}`, open: () => categoryPage(player, "Other", other, home) });
+
+  entries.push({ label: "Server Setup Checklist\n§8One-time jobs across the packs", open: () => setupPage(player, cmds, home) });
+  if (cmds.some((c) => c.name === "realm:config")) entries.push({ label: "Realm Settings\n§8Every pack's settings", open: async () => exec(player, "realm:config", "Realm Settings") });
 
   const packCount = new Set(cmds.map((c) => c.folder)).size;
   await list(player, `§l${TITLE}`, `${cmds.length} commands from ${packCount} packs, in one place. Pick a category, search, or repeat a recent one. Options come with preset choices; commands that have their own menu open it.`, entries, undefined);
@@ -461,7 +473,7 @@ async function categoryPage(player, title, cmds, back) {
 
 /** @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
 async function searchPage(player, cmds, back) {
-  const res = await show(player, new ModalFormData().title("Search commands").textField("Search for", "weather, npc, give...", { defaultValue: "" }).submitButton("Search"));
+  const res = await show(player, new ModalFormData().title("Search Commands").textField("Search for", "weather, npc, give...", { defaultValue: "" }).submitButton("Search"));
   if (!res) return back();
   const q = String(inputsOf(res.formValues ?? [], [true])[0] ?? "").trim().toLowerCase();
   return resultsPage(player, cmds, q, back);
@@ -471,18 +483,18 @@ async function searchPage(player, cmds, back) {
 async function resultsPage(player, cmds, q, back) {
   const words = q.split(/\s+/).filter(Boolean);
   const hit = (/** @type {string} */ s) => words.every((w) => s.toLowerCase().includes(w));
-  const found = cmds.filter((c) => hit(`${c.name} ${c.description} ${c.pack}`));
-  const actions = ACTIONS.filter((a) => hit(`${a.title} ${a.help}`));
+  const found = cmds.filter((c) => hit(`${c.name} ${c.description} ${c.pack} ${(NAMES[c.name] ?? []).join(" ")}`));
+  const actions = ACTIONS.filter((a) => hit(`${a.title} ${a.hint} ${a.help}`));
   const again = () => resultsPage(player, cmds, q, back);
   const search = () => searchPage(player, cmds, back);
   /** @type {Entry[]} */
   const entries = [
-    ...actions.map((a) => ({ label: `${a.title}\n§8Quick action`, open: () => openAction(player, a, again) })),
+    ...actions.map((a) => ({ label: `${fit(a.title)}\n§8${fit(`Quick action: ${a.hint}`)}`, open: () => openAction(player, a, again) })),
     ...cmdEntries(player, found, again),
   ];
-  if (!entries.length) return list(player, "Search commands", `Nothing matches "${q}".`, [{ label: "Search again", open: search }], back);
+  if (!entries.length) return list(player, "Search Commands", `Nothing matches "${q}".`, [{ label: "Search again", open: search }], back);
   entries.push({ label: "Search again\n§8Another word", open: search });
-  await list(player, "Search commands", `${entries.length - 1} match${entries.length === 2 ? "" : "es"} for "${q}".`, entries, back);
+  await list(player, "Search Commands", `${entries.length - 1} match${entries.length === 2 ? "" : "es"} for "${q}".`, entries, back);
 }
 
 /** @param {Player} player @param {() => Promise<unknown>} back */
@@ -492,7 +504,7 @@ async function recentPage(player, back) {
   const again = () => recentPage(player, back);
   /** @type {Entry[]} */
   const entries = rec.map((e) => ({
-    label: `${clip(e.t, 40)}\n§8${e.a ? "Quick action" : "Tap to run it again"}`,
+    label: `${fit(e.t)}\n§8${e.a ? "Quick action" : fit(`/${e.l ?? ""}`)}`,
     open: async () => {
       if (e.a) {
         const action = ACTIONS.find((a) => a.id === e.a);
@@ -528,12 +540,12 @@ async function setupPage(player, cmds, back) {
     if (!cmd) continue;
     const n = item.done ? count[item.done] : undefined;
     const mark = n === undefined ? "§8[ ]§r" : n > 0 ? "§2[x]§r" : "§c[ ]§r";
-    const extra = n === undefined ? "" : item.done === "towns" ? ` §8(${n} protected)` : ` §8(${n} set)`;
-    entries.push({ label: `${mark} ${item.title}${extra}\n§8${clip(item.help, 52)}`, open: () => openCommand(player, cmd, item.help, again) });
+    const extra = n === undefined ? "" : ` §8(${n})`;
+    entries.push({ label: `${mark} ${item.title}${extra}\n§8${fit(item.hint)}`, open: () => openCommand(player, cmd, item.help, again) });
   }
   await list(
     player,
-    "Server setup checklist",
+    "Server Setup Checklist",
     "One-time jobs across the packs. Tap one to do it. §2[x]§r means its pack says it's done; the others can't be checked from here, so it's up to you.",
     entries,
     back
@@ -543,8 +555,8 @@ async function setupPage(player, cmds, back) {
 /** @param {Player} player @param {() => Promise<unknown>} back */
 async function actionsPage(player, back) {
   const again = () => actionsPage(player, back);
-  const entries = ACTIONS.map((a) => /** @type {Entry} */ ({ label: `${a.title}\n§8${clip(a.help, 52)}`, open: () => openAction(player, a, again) }));
-  await list(player, "Quick actions", "Vanilla things you would otherwise type as commands. They work without cheats.", entries, back);
+  const entries = ACTIONS.map((a) => /** @type {Entry} */ ({ label: `${a.title}\n§8${fit(a.hint)}`, open: () => openAction(player, a, again) }));
+  await list(player, "Quick Actions", "Vanilla things you would otherwise type as commands. They work without cheats.", entries, back);
 }
 
 /** @type {Set<string>} players with the menu open */

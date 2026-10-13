@@ -9,6 +9,7 @@ import { ModalFormData } from "@minecraft/server-ui";
  * @typedef {object} Action
  * @property {string} id
  * @property {string} title
+ * @property {string} hint the button's second line (must fit in presets.js LINE)
  * @property {string} help
  * @property {(player: Player) => ModalFormData | undefined} [form] no form: runs right away
  * @property {(player: Player, raw: (string | number | boolean | undefined)[]) => Values | string} [read] form answers → values, or why they're wrong
@@ -78,7 +79,8 @@ const heldItemId = (p) => p.getComponent(EntityComponentTypes.Inventory)?.contai
 export const ACTIONS = [
   {
     id: "weather",
-    title: "Set the weather",
+    title: "Set Weather",
+    hint: "Clear, rain or thunder",
     help: "Clear, rain or thunder. With the Weather Almanac installed this runs /realm:weather_set, because the almanac plans the weather and would undo a plain change.",
     use: "realm:weather_set",
     form: () => new ModalFormData().title("Set the weather").dropdown("Weather", WEATHER.map((w) => w[0])).slider("For how many real minutes", 1, 120, { valueStep: 1, defaultValue: 10 }),
@@ -92,7 +94,8 @@ export const ACTIONS = [
   },
   {
     id: "time",
-    title: "Set the time",
+    title: "Set Time",
+    hint: "Day, noon, night, sunrise...",
     help: "Day, noon, sunset, night, midnight or sunrise.",
     form: () => new ModalFormData().title("Set the time").dropdown("Time", TIMES.map((t) => t[0]), { defaultValueIndex: 0 }),
     read: (_p, [t]) => ({ time: TIMES[Number(t) || 0][0] }),
@@ -105,7 +108,8 @@ export const ACTIONS = [
   },
   {
     id: "gamemode",
-    title: "Game mode for a player",
+    title: "Game Mode",
+    hint: "Survival, creative...",
     help: "Survival, creative, adventure or spectator.",
     form(me) {
       const f = new ModalFormData().title("Game mode for a player");
@@ -123,7 +127,8 @@ export const ACTIONS = [
   },
   {
     id: "tp_to",
-    title: "Teleport me to a player",
+    title: "Teleport to a Player",
+    hint: "Go to where they are",
     help: "Go to where they are, in their dimension.",
     form(me) {
       const f = new ModalFormData().title("Teleport me to a player");
@@ -140,7 +145,8 @@ export const ACTIONS = [
   },
   {
     id: "tp_here",
-    title: "Teleport a player to me",
+    title: "Bring a Player Here",
+    hint: "To where you stand",
     help: "Bring them to where you stand.",
     form(me) {
       const f = new ModalFormData().title("Teleport a player to me");
@@ -157,7 +163,8 @@ export const ACTIONS = [
   },
   {
     id: "give",
-    title: "Give an item",
+    title: "Give an Item",
+    hint: "Any item, any amount",
     help: "Any item id and an amount, to a player or everyone online.",
     form(me) {
       const f = new ModalFormData().title("Give an item");
@@ -192,7 +199,8 @@ export const ACTIONS = [
   },
   {
     id: "effects",
-    title: "Clear effects",
+    title: "Clear Effects",
+    hint: "Every potion effect",
     help: "Removes every potion effect from a player or everyone online.",
     form(me) {
       const f = new ModalFormData().title("Clear effects");
@@ -214,7 +222,8 @@ export const ACTIONS = [
   },
   {
     id: "heal",
-    title: "Heal a player",
+    title: "Heal a Player",
+    hint: "Full health",
     help: "Full health for a player or everyone online.",
     form(me) {
       const f = new ModalFormData().title("Heal a player");
@@ -231,7 +240,8 @@ export const ACTIONS = [
   },
   {
     id: "spawn",
-    title: "Set world spawn here",
+    title: "Set World Spawn Here",
+    hint: "Where new players appear",
     help: "New players and players without a bed appear where you stand (Overworld only).",
     confirm: (me) => `Move the world spawn to ${Math.floor(me.location.x)}, ${Math.floor(me.location.y)}, ${Math.floor(me.location.z)}?`,
     run(me) {
@@ -243,7 +253,8 @@ export const ACTIONS = [
   },
   {
     id: "hostiles",
-    title: "Remove hostile mobs nearby",
+    title: "Remove Hostile Mobs",
+    hint: "Monsters nearby, no drops",
     help: "Only monsters (zombies, creepers, skeletons...) within the radius. Named mobs are kept. They vanish without drops.",
     form: () => new ModalFormData().title("Remove hostile mobs nearby").slider("Radius (blocks)", 8, 128, { valueStep: 8, defaultValue: 32 }),
     read: (_p, [r]) => ({ radius: Number(r) || 32 }),
@@ -256,7 +267,8 @@ export const ACTIONS = [
   },
   {
     id: "rules",
-    title: "Game rules",
+    title: "Game Rules",
+    hint: "Day cycle, keep inventory...",
     help: "Day and night cycle, keep inventory, mob spawning, mob griefing.",
     form() {
       const f = new ModalFormData().title("Game rules");
