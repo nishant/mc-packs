@@ -913,7 +913,7 @@ const EDGES_OF_MAP = {
               text: "Mara has started a new margin on her maps, for the sky: northern lights, rainbows, twisters, storms that walk on their own. Her note at the top: 'Fenn charted every hill and never once looked up. The sky moves, so the sky gets a date, not a place. First entry by my partner. Proof that the edges of the map go up as well as out.'",
             },
           },
-          hint: "Northern lights come on some clear nights; just be outside in the Overworld while they last. For a rainbow, a tornado or a storm cell, the tracker points to it when one appears: get within 64 blocks of it while it lasts.",
+          hint: "Northern lights show over snowy lands on some clear nights: be out in the snow at night (anyone seeing them counts for everyone in the Overworld while they last). For a rainbow, a tornado or a storm cell, the tracker points to it when one appears: get within 64 blocks of it while it lasts.",
         },
       ],
       outro: [

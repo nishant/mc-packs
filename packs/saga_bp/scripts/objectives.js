@@ -1089,7 +1089,8 @@ export function talked(player, npc) {
     if (got > 0) {
       player.sendMessage(`§e[Story] You give ${npcName(npc)} ${got} ${name} (${progressOf(e, i) + got}/${target(obj)}).`);
       bump(player, e, i, got);
-    } else {
+    } else if (!obj.optional) {
+      // An optional delivery isn't nagged about: the player may never bring it.
       const kitchen = obj.name && KITCHEN[plain(obj.name).trim().toLowerCase()] ? " It must be the real thing, from the Kitchen (a renamed item won't do)." : "";
       player.sendMessage(`§7[Story] ${npcName(npc)} still needs ${need} ${name}.${obj.name ? kitchen : " Renamed items are never taken."}`);
     }
@@ -2079,7 +2080,9 @@ export function moonState(msg) {
 export function skyHousekeeping() {
   if (!skyEvents.length) return;
   const now = Date.now();
-  const day = !isNight();
+  // Daylight, for the sky's night events: moon_bp starts its moon at dusk (12000), before isNight() does.
+  const t = world.getTimeOfDay();
+  const day = t >= 23000 || t < 12000;
   for (const ev of skyEvents) if (SKY[ev.kind]?.night && ev.end === undefined && ((day && now - ev.at > 30000) || now - ev.at > NIGHT_MAX_MS)) ev.end = now;
   while (skyEvents.length && now - (skyEvents[0].end ?? (SKY[skyEvents[0].kind]?.night ? now : skyEvents[0].at)) > SKY_MEMORY_MS) forgetSky();
 }

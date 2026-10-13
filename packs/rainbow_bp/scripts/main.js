@@ -697,6 +697,7 @@ function skyRequest(message) {
   if (typeof req.player !== "string" || !req.player || req.player.length > 64 || !optText(req.from, 64) || !optText(req.reason, 200)) return;
   if (req.dim !== undefined && req.dim !== OVERWORLD) return;
   if (!get("enabled") || get("storyEvents") !== true) return;
+  if (world.getTimeOfDay() > 12000) return; // rainbows are a daytime thing, even in a story
   load();
   const now = Date.now();
   if (pot && now < pot.expires && (!pot.found || now < pot.until)) return; // one rainbow, one pot of gold at a time

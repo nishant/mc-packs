@@ -411,7 +411,7 @@ main story (`requires`), so they unlock as the world opens. Target length per qu
 | `singing_forge` | The Forge That Sings | `ida` | Act I | dangerous, epic | Ida's masterwork: Nether trip for netherite scrap and blaze rods (`reach` Nether, `collect`), bastion danger, quench the blade in a soul-fire spring (`interact`), name it (a choice of three names). Reward: a relic. |
 | `hearth_and_table` | Hearth and Table | `bea` | none | cozy, happy, funny, sad | The culinary questline: Bea's tryouts (bring ingredients), cook for the wardens, a feast for a funeral (sad), rare champion ingredients ("Champion's Heart", "Storm Eel"), the Starwright recipe from Elsie, and a cook-off against Quill's "imported" chef. Integrates the Cooking pack's dishes when installed (rewards and deliveries of named dishes). |
 | `hollis_faith` | Lamp in the Window | `hollis` | Act II, `g:hollis=saved` | sad, happy, cozy | Hollis rebuilds his faith and the chapel: repair windows (`place` glass), a wedding in the chapel (funny), keep a lamp lit for the sailors, forgive himself. |
-| `listening_deep` | The Listening Deep | `ida` | `act3_deep`, `pack:expedition_bp` on | exploration, dangerous, eerie | Expeditions as story: the Lantern of the Deep hums toward the expedition site (clear the Sculk Depths: an echo of the Hollow's roots reaching every deep place), the Starwrights' cold store under the ice (Frost Hollow, Normal or harder; told by Elsie, or by Wren reading her letters after the gift ending), Reyes's Long Stair (a Gauntlet), one last listen (any dungeon on a Nightmare tier: the deep goes quiet for a while; title `Deep-Listener`). Never resolves the Hollow. |
+| `listening_deep` | The Listening Deep | `ida` | `act3_deep`, `pack:expedition_bp` on | exploration, dangerous, eerie | Expeditions as story: the Lantern of the Deep hums toward the expedition site (clear the Sculk Depths: an echo of the Hollow's roots reaching every deep place), the Starwrights' cold store under the ice (Frost Hollow, Normal or harder; told by Elsie, or by Wren reading her letters after the gift ending), Reyes's Long Stair (a Gauntlet, or any dungeon on Hard), one last listen (any dungeon on a Nightmare tier: the deep goes quiet for a while; title `Deep-Listener`). Never resolves the Hollow. |
 | `vesna_bargain` | The Witch's Bargain | `moss` (meets `vesna`) | Act II ch. 7 | creepy, mystery, dangerous | Vesna's own past: a curse on the Fen, potions to brew (deliver), a bog spirit (stealth), choice: free Vesna or bind her. Sets `g:vesna`. |
 
 ## 9. The data format
@@ -463,7 +463,8 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
   (`{ "pack:expedition_bp": "on" }`). Use it on every page, objective, chapter or story that mentions
   another pack, so the text never promises something that isn't there. It is checked live, never saved:
   a gated objective appears once the pack answers. A `when` needs every key, so "any of these packs" is
-  separate objectives.
+  separate objectives. `on` means installed, not enabled: a pack switched off in its own settings still
+  answers, so its world events may never come; that's why they are only ever optional.
 
 ### Chapter
 

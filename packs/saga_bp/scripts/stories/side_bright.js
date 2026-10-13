@@ -924,7 +924,7 @@ const HEARTH_AND_TABLE = {
         `${BE}Twenty years I've fed this town. And Quill ships in some fancy-trousers chef with a mustache you could moor a boat to. Fine. He wants a cook-off, he'll get one. He'll tell his grandchildren about it. Through tears.`,
         `${BE}I need what nobody else has. A Champion's Heart: those big ugly champion beasts that roam about drop one when they fall, and it makes a stew that could wake the dead. Two, if you can.`,
         `${BE}And Storm Eel. Old sailor's secret: any fish pulled out of the water in a thunderstorm tastes of lightning. Get out there in the next storm and fish. Wear something rubber. That's a joke. Mostly.`,
-        { text: `${BE}Don't stand there waiting for clouds. The almanac says there's a storm coming. Look it up. Then be at the lighthouse when it does.\n\n§7(/realm:weather_forecast shows when the next thunderstorm comes.)`, when: { "pack:weather_bp": "on" } },
+        { text: `${BE}Don't stand there waiting for clouds. The almanac will tell you when the next storm's due. Look it up. Then be at the lighthouse when it comes.\n\n§7(/realm:weather_forecast shows when the next thunderstorm comes.)`, when: { "pack:weather_bp": "on" } },
         { text: `${BE}Oh, and if you're out on a Harvest Moon night, pick me some Harvest Saffron off the ripe crops. A harvest festival dish with harvest saffron in it. Marcel's mustache will fall right off.`, when: { "pack:cooking_bp": "on", "pack:moon_bp": "on" } },
       ],
       objectives: [

@@ -467,7 +467,8 @@ export function objDone(e, i, saga) {
   const obj = e.chapter.objectives[i];
   if (!objApplies(e, obj, saga)) return true;
   if (reached(e, i)) return true;
-  return !!obj.or && orMates(e, i, saga).some((k) => reached(e, k));
+  // A member that was reached stays done even if its `when` stopped holding since (a pack missed one scan).
+  return !!obj.or && !obj.optional && e.chapter.objectives.some((o, k) => k !== i && o.or === obj.or && !o.optional && reached(e, k));
 }
 
 /** Every required objective is done (optional ones don't count). @param {Entry} e @param {Saga} saga */

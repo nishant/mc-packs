@@ -2234,7 +2234,7 @@ The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, o
 | *Until Dawn* (Graveyard Shift), *The Long Watch* (The Wardens' Oath) | Optional: be at the graveyard, or hold the watchtower, under a Blood Moon: 2 levels, 30 Crowns each |
 | *Frogs in Three Voices* (Edges of the Map) | Optional, with Aurora & Shooting Stars: chart a sky wonder (the northern lights, or within 64 blocks of a rainbow's end, a tornado or a storm cell): 40 Crowns, 2 empty maps, a Codex page |
 | *The Inspector Calls* (Smuggler's Run) | Optional: find a pot of gold at a rainbow's end: Quill pays 50 Crowns to keep it out of the inspector's sight |
-| **The Listening Deep** | Four expedition chapters for Ida, Elsie and Reyes after act 3 (the second told two ways): clear the Sculk Depths; Frost Hollow on Normal or harder (told by Elsie, or by Wren with Elsie's letters after the Keeper's Gift ending); a Gauntlet; and any dungeon on a Nightmare tier. Rewards up to 10 levels, 200 Crowns, 4 diamonds and 4 echo shards, and the title **Deep-Listener** at the end |
+| **The Listening Deep** | Four expedition chapters for Ida, Elsie and Reyes after act 3 (the second told two ways): clear the Sculk Depths; Frost Hollow on Normal or harder (told by Elsie, or by Wren with Elsie's letters after the Keeper's Gift ending); a Gauntlet (or any dungeon on Hard); and any dungeon on a Nightmare tier. Rewards up to 10 levels, 200 Crowns, 4 diamonds and 4 echo shards, and the title **Deep-Listener** at the end |
 
 Hearth and Table's *A Champion's Heart* asks for Champion's Hearts, which champions drop only with the [Kitchen](#kitchen--cooking_bp) pack installed; it has no plain-food way around that.
 
@@ -5123,7 +5123,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Rainbows appear on their own after rain (`/realm:rainbow_now` works either way) |
-| `storyEvents` | `true` | Story Questlines can put up a rainbow with its pot of gold at story moments (`realm:sky_request` kind `rainbow`; the hopeful Dawn ending asks for one), at any time of day. Never while a rainbow or an unfound pot is out; at most one every 30 minutes |
+| `storyEvents` | `true` | Story Questlines can put up a rainbow with its pot of gold at story moments (`realm:sky_request` kind `rainbow`; the hopeful Dawn ending asks for one), any time from sunrise to dusk (0 to 12000). Never while a rainbow or an unfound pot is out; at most one every 30 minutes |
 | `chance` | `0.7` | Chance (0-1) of a rainbow when rain clears in the morning (time 0-3000) or the evening (9000-12000) |
 | `durationSeconds` | `150` | Seconds a rainbow stays in the sky |
 | `distance.min` | `150` | Closest its end is to the chosen player, in blocks |

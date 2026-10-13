@@ -51,7 +51,7 @@ export const STORIES = [
           { text: `${I}You put my band on the bell. Quiet harbor. Good. But quiet is when you hear the small things. This is a small thing that will not stay small.`, when: SILENCE },
           { text: `${I}You rang the bell with my clapper. Since then this shard hums in tune with it, every tide. Same note. That is not a coincidence. I do not believe in those.`, when: RING },
           `${I}Echo shards lie in the chests of the ancient cities, deep under the mountains, where the stone turns to sculk. Warden country. Do not fight it. Do not wake it. Sneak, or die.`,
-          { text: `${I}Or. Expedition parties go down into the Sculk Depths. Old miners won't. They say the sculk down there grows one way only, downward, toward something that listens. Walls full of echo. Clear it and bring the hum back on you. That will do.`, when: { "pack:expedition_bp": "on" } },
+          { text: `${I}Or. Expedition parties go down into the Sculk Depths. Old miners won't. They say the sculk down there grows one way only, toward the noise, toward something that listens. Walls full of echo. Clear it and bring the hum back on you. That will do.`, when: { "pack:expedition_bp": "on" } },
           { text: `${I}One more thing. Quill sent word through the back door: the Choir has diggers at the Abandoned Mine, hunting echoes. Learn to be quiet on them first. They forgive less than sculk does.`, when: { "g:quill": "trusted" } },
           { text: `${I}One more thing. Quill bought himself a softer cot from Reyes with one secret: the Choir has diggers at the Abandoned Mine, hunting echoes. Practice your quiet on them first.`, when: { "g:quill": "exposed" } },
         ],

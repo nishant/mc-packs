@@ -86,6 +86,7 @@ const LISTENING_DEEP = {
           type: "event",
           label: "Clear Frost Hollow on Normal or harder",
           quest: { pack: "expedition_bp", id: "expedition_frost_hollow", tier: "normal" },
+          set: { cold: "elsie" },
           hint: `${START} Pick Frost Hollow at Normal, Hard or any Nightmare tier (Easy doesn't count).`,
         },
       ],
@@ -114,7 +115,8 @@ const LISTENING_DEEP = {
       title: "The Hollow Under the Ice",
       npc: "wren",
       end: "wren",
-      when: GIFT,
+      // Not for a player who already cleared it for Elsie before the gift ending.
+      when: { "g:ending": "gift", cold: "!elsie" },
       intro: [
         `§eWren§r is behind the inn's counter on a stool, so she can see over it. She has a stack of yellow letters tied with string.\n\n${W}Ida said you'd come! These were in Elsie's room, under the floorboard with the squeak, I always knew that squeak was hiding something!`,
         `${W}They're in old writing but Sol helped me read some. She wrote about a cold store. "A hollow under the ice, where nothing moves and nothing sings." They hid stuff there. Lamp-oil and songbooks and their NAMES, why would you hide a name?`,
@@ -156,14 +158,22 @@ const LISTENING_DEEP = {
         `${R}The expedition folk run something they call a Gauntlet. Room after room, no stopping, a breather every few halls. I want someone to run one and tell me if it's training or a death wish.`,
         { text: `${R}You swore as a shield. Then run it like one: get everybody in your party out the other side.`, when: { "wardens_oath.oath": "shield" } },
         { text: `${R}You swore as a sword. Then run it like one: nothing in there gets a second swing.`, when: { "wardens_oath.oath": "sword" } },
-        `${R}Any dungeon. Any difficulty. Just finish it. That's an order. Mostly.`,
+        `${R}Any dungeon. Any difficulty. Just finish it. That's an order. Mostly. And if the expedition folk have the Gauntlet shut, a plain run on Hard tells me nearly as much.`,
       ],
       objectives: [
         {
           type: "event",
+          or: "run",
           label: "Finish a Gauntlet (any dungeon, any difficulty)",
           quest: { pack: "expedition_bp", gauntlet: true },
           hint: "Run /realm:expedition_gauntlet (or tap Start a Gauntlet in /realm:expedition), pick any dungeon and difficulty, and beat its boss at the end.",
+        },
+        {
+          type: "event",
+          or: "run",
+          label: "Clear any expedition on Hard or harder",
+          quest: { pack: "expedition_bp", id: "expedition_*", tier: "hard" },
+          hint: "Pick any dungeon in /realm:expedition at Hard or a Nightmare tier and beat its boss.",
         },
       ],
       outro: [
@@ -179,6 +189,7 @@ const LISTENING_DEEP = {
     // 4 ---------------------------------------------------------------------------------------------
     {
       id: "last_listen",
+      sequential: true, // the listening comes after the Nightmare run
       title: "One Last Listen",
       npc: "ida",
       intro: [

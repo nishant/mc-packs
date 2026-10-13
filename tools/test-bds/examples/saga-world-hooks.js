@@ -8,7 +8,7 @@
 //    (realm:sky_event) rises while the player stands in the graveyard, and gives its bonus levels.
 // 3. The Three Seals, "The Gate Opens": accepting it sends a burst meteor request at the Hollow Gate.
 // 4. The Long Night: accepting it sends a Blood Moon request.
-// 5. The Listening Deep (needs Act III and expedition_bp): offered by Ida; "Down the Long Stair" needs a Gauntlet
+// 5. The Listening Deep (needs Act III and expedition_bp): offered by Ida; "Down the Long Stair" needs a Gauntlet (or a Hard clear)
 //    (a plain clear doesn't count), "One Last Listen" a Nightmare clear (Hard doesn't count), then the title.
 export default async function (t) {
   const sys = t.system;
@@ -121,9 +121,16 @@ export default async function (t) {
   r = await accept(p, "moss", "graveyard_shift", "Until Dawn");
   t.check(r.lines.some((l) => /Optional: Be in the graveyard under a Blood Moon/.test(l)), `the optional Blood Moon objective is listed: ${JSON.stringify(r.lines)}`);
   const levels0 = p.level;
+  // The moon rises at dusk (12000, as moon_bp does) while the player is away; they get there 40 s later.
+  const yard = { x: p.location.x, y: p.location.y, z: p.location.z };
+  p.teleport({ x: yard.x + 120, y: yard.y + 2, z: yard.z });
+  t.server("/time set 12000");
   since = t.tick;
   event("realm:sky_event", { kind: "blood_moon", dim: OW, text: "A Blood Moon rises" });
-  await t.waitMessage(p, /Optional: Be in the graveyard under a Blood Moon: done/, { since, timeout: 100 });
+  await t.seconds(40);
+  t.check(!t.messages(p, { since }).some((m) => /under a Blood Moon: done/.test(m.plain)), "not done while away from the graveyard");
+  p.teleport(yard);
+  await t.waitMessage(p, /Optional: Be in the graveyard under a Blood Moon: done/, { since, timeout: 200 });
   await t.waitMessage(p, /Bonus for "Be in the graveyard under a Blood Moon": 2 levels/, { since, timeout: 60 });
   t.check(p.level >= levels0 + 2, `bonus levels given (${levels0} -> ${p.level})`);
   event("realm:moon", { state: "normal" });
@@ -165,9 +172,9 @@ export default async function (t) {
   await t.wait(5);
   r = await accept(p, "reyes", "listening_deep", "Down the Long Stair");
   since = t.tick;
-  quest(p, { id: "expedition_crypt", dungeon: "crypt", level: 2, tier: "hard", nightmare: 0, gauntlet: false });
+  quest(p, { id: "expedition_crypt", dungeon: "crypt", level: 1, tier: "normal", nightmare: 0, gauntlet: false });
   await t.seconds(2);
-  t.check(!t.messages(p, { since }).some((m) => /Finish a Gauntlet.*: done/.test(m.plain)), "a plain clear isn't a Gauntlet");
+  t.check(!t.messages(p, { since }).some((m) => /Finish a Gauntlet.*: done/.test(m.plain)), "a plain Normal clear is neither a Gauntlet nor the Hard way");
   quest(p, { id: "expedition_spider_nest", dungeon: "spider_nest", level: 0, tier: "easy", nightmare: 0, gauntlet: true });
   await t.waitMessage(p, /Finish a Gauntlet \(any dungeon, any difficulty\): done/, { since, timeout: 100 });
   let outro = await report(p, "reyes", "listening_deep", "Down the Long Stair");
