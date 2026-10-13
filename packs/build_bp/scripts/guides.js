@@ -119,6 +119,10 @@ function thin(list, max) {
 
 /** @type {Map<string, number>} last tick each player's guide of each kind was drawn */
 const lastDrawn = new Map();
+/** @type {Map<string, number>} until which tick a preview (Build, Paste or Destroy here now) owns a player's guide of that kind */
+const previews = new Map();
+/** Seconds each guide particle outlives the next draw of the same one, for network delay. */
+const OVERLAP = 0.2;
 
 /** How often this player's guides refresh, in ticks (1 to 20). @param {Player} player */
 export function guideRate(player) {
@@ -141,7 +145,18 @@ const TICK_BUDGET = 600;
  */
 const queue = new Map();
 
+/**
+ * How long a server tick really takes lately, in milliseconds: the slowest recent one (50 when the server keeps up),
+ * easing back by a millisecond a tick. Guide particles live in real time on the player's screen while the next
+ * draw comes in server ticks, so on a busy realm each one has to last longer or the outline blinks.
+ */
+let tickMs = 50;
+let lastTickAt = Date.now();
+
 system.runInterval(() => {
+  const at = Date.now();
+  tickMs = Math.max(50, Math.min(1000, at - lastTickAt), tickMs - 1);
+  lastTickAt = at;
   if (!queue.size) return;
   let left = TICK_BUDGET;
   for (const [slot, f] of [...queue]) {
@@ -175,9 +190,12 @@ system.runInterval(() => {
  * @param {Player} player
  * @param {Pos[]} cells block positions (keep passing the same array while it doesn't change: its outline is cached)
  * @param {GuideKind} [kind] "build" (the player's color), "destroy" (red), "paste" (light blue ghost), "mark" (gold)
- * @param {{ offset?: Pos, force?: boolean, mods?: { m: import("./modifiers.js").Mods, center: Pos } }} [opts] offset: added to
- *   every cell (so a cached relative list can move); force: draw now even if one was drawn less than `guideRate` ticks
- *   ago; mods: also outline the modifier copies (worked out face by face, so the cells stay the shape alone)
+ * @param {{ offset?: Pos, force?: boolean, every?: number, preview?: boolean, mods?: { m: import("./modifiers.js").Mods, center: Pos } }} [opts]
+ *   offset: added to every cell (so a cached relative list can move); force: draw now even if one was drawn less than
+ *   `guideRate` ticks ago; every: how many ticks apart the caller calls (when not every tick), so each particle lasts
+ *   until the next draw; preview: a "here now" preview, which the steady guide of the same kind leaves alone while it
+ *   lasts (two lists in one slot would cut each other short); mods: also outline the modifier copies (worked out face
+ *   by face, so the cells stay the shape alone)
  */
 export function drawGuide(player, cells, kind = "build", opts = {}) {
   if (!player?.isValid || !cells?.length) return false;
@@ -186,12 +204,16 @@ export function drawGuide(player, cells, kind = "build", opts = {}) {
   const rate = guideRate(player);
   const now = system.currentTick;
   const slot = `${player.id}|${kind}`;
+  if (opts.preview) previews.set(slot, now + 25);
+  else if ((previews.get(slot) ?? -1) >= now) return false;
   const gap = now - (lastDrawn.get(slot) ?? -999);
   if (!opts.force && gap < rate) return false;
   lastDrawn.set(slot, now);
-  // Each particle lasts until the same one is drawn again: the refresh, or how long callers that draw less often waited.
-  const every = Math.max(rate, gap <= 20 ? gap : rate);
-  const life = every / 20 + 0.1;
+  // Each particle lasts until the same one is drawn again, plus a margin: the refresh (for a caller that runs every
+  // few ticks, the first of its calls at least that far apart), or how long a forced caller waited. In real time:
+  // a lagging server stretches the ticks.
+  const every = opts.every ? Math.ceil(rate / opts.every) * opts.every : Math.max(rate, gap <= 20 ? gap : rate);
+  const life = (every * tickMs) / 1000 + OVERLAP;
   const o = outlineOf(cells);
   const dx = opts.offset?.x ?? 0, dy = opts.offset?.y ?? 0, dz = opts.offset?.z ?? 0;
   const budget = Math.max(20, Math.round(Number(get("guideMax")) || 400));
@@ -289,5 +311,6 @@ export function drawBox(player, min, max, particle, budget = 240) {
 /** Forget a player who left. @param {string} playerId */
 export function forgetGuides(playerId) {
   for (const k of [...lastDrawn.keys()]) if (k.startsWith(`${playerId}|`)) lastDrawn.delete(k);
+  for (const k of [...previews.keys()]) if (k.startsWith(`${playerId}|`)) previews.delete(k);
   for (const k of [...queue.keys()]) if (k.startsWith(`${playerId}|`)) queue.delete(k);
 }

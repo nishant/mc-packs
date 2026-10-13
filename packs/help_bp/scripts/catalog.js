@@ -2341,11 +2341,11 @@ export const PACKS = [
     "summary": "Build a whole wall, floor, tower, dome, roof, curve or bridge in one go, like the Effortless Building add-on: pick a shape and its size in a menu, then place one block and the shape appears there, made of the block you placed. Mirror, radial and array modifiers copy every build around a center, a palette spreads your blocks in patterns, Air Build builds in midair, copy, cut and paste move whole regions (with 19 saved copies), destroy mode breaks a shape with your tool, and block guides outline exactly where it will go. Survival builds use blocks from your inventory, and undo (which survives a restart) gives them back. Everything is in §e/realm:build§r, or in the §lBuilding Book§r.",
     "steps": [
       {
-        "text": "Run §e/realm:build§r (or use the §lBuilding Book§r) and pick §lChoose a shape§r, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap §lUse this shape§r. That turns §lbuild mode§r on.",
+        "text": "Run §e/realm:build§r (or use the §lBuilding Book§r) and pick §lChoose a shape§r, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap §lUse this shape§r. That turns §lbuild mode§r on and brings the menu back, with what you picked at the top. The menus stay open while you switch things on or off, save settings or go §lBack§r; close them with the §lX§r when you're done. Only a step that needs you to look at the world closes them for you: §lBuild here now§r, §lPaste here now§r, §lDestroy here now§r, §lSelect a region§r and finishing a curve. Closing a settings form (or §lCancel§r) goes back to the menu it came from.",
         "ops": false
       },
       {
-        "text": "Hold a block and place it as usual: the shape is built where the block went, made of that block. Facing matters: a wall runs across your view, depth goes away from you, and stairs, slopes and roofs climb away from you. Sneak while placing to place just one block.",
+        "text": "Hold a block and place it as usual: the shape is built where the block went, made of that block. Facing matters: a wall runs across your view, depth goes away from you, and stairs, slopes and roofs climb away from you. Looking along a diagonal, the shape keeps the way you faced until you turn 10 degrees past it, so it doesn't flip back and forth. Sneak while placing to place just one block.",
         "ops": false
       },
       {
