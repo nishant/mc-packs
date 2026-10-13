@@ -6,6 +6,14 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Easier admin menu
+
+For operators: the Realm Configuration menu is easier to read.
+
+- Every command has a name for what it does, like Find Container or Set Weather, with a short hint under it that fits on the button. The command itself and its full description show when you open it.
+- The main menu goes Recent, Search Commands, Quick Actions, then the categories, with Server Setup Checklist and Realm Settings at the bottom.
+- The menu now counts and lists /realm:help (Realm Help) too.
+
 ## Audit fixes
 
 We went through every pack and fixed what we found.

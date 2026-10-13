@@ -19,6 +19,8 @@ const waiting = new Set();
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id === "realm:help_pong") for (const answers of waiting) answers.add(message);
+    // Other packs ping too (the Realm Configuration menu lists /realm:help only while it's installed).
+    else if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", SELF);
   },
   { namespaces: ["realm"] }
 );

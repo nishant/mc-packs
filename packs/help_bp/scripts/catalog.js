@@ -78,14 +78,14 @@ export const PACKS = [
     "folder": "admin_bp",
     "topic": "admin",
     "name": "Realm Configuration",
-    "summary": "Every operator carries a §lRealm Configuration§r item (a nether star with a gold name). Using it opens an admin menu that runs §levery realm command§r from one place: pick a category, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. The commands still work as typed; this is for when you'd rather not type them while playing. It isn't settings: settings are one button away, at the top.",
+    "summary": "Every operator carries a §lRealm Configuration§r item (a nether star with a gold name). Using it opens an admin menu that runs §levery realm command§r from one place: pick a category, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. The commands still work as typed; this is for when you'd rather not type them while playing. It isn't settings: settings are one button away, at the bottom.",
     "steps": [
       {
         "text": "§lOperators:§r you get the §eRealm Configuration§r item when you join or respawn without one (and within 30 seconds of becoming an operator). It stays through death and can't be dropped or put in a chest. Lost it anyway? Run §e/realm:admin_item§r. §e/realm:admin§r opens the same menu.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r use the item (right-click or long press, like eating). The menu starts with §lRealm Settings§r (opens §e/realm:config§r), §lSearch commands§r, §lRecent§r, §lServer setup checklist§r and §lQuick actions§r, then the categories: §lWorld & weather§r, §lStory & townsfolk§r, §lTowns & places§r, §lEconomy§r, §lEvents & news§r, §lPlayers§r, §lDungeons & loot§r, §lFun§r, §lUtilities§r (and §lOther§r for a pack the menu doesn't know yet). Each lists its commands with what they do; §e(ops)§r marks operator commands.",
+        "text": "§lOperators:§r use the item (right-click or long press, like eating). The menu starts with §lRecent§r, §lSearch Commands§r and §lQuick Actions§r, then the categories: §lWorld & Weather§r, §lStory & Townsfolk§r, §lTowns & Places§r, §lEconomy§r, §lPlayers§r, §lDungeons & Loot§r, §lFun§r, §lUtilities§r, §lEvents & News§r (and §lOther§r for a pack the menu doesn't know yet), and ends with §lServer Setup Checklist§r and §lRealm Settings§r (opens §e/realm:config§r). Each category lists its commands by what they do (§eFind Container§r, §eCoordinates HUD§r, §eSet Weather§r...) with a short hint under each name; §e(ops)§r marks operator commands. The command itself and its full description show at the top of its options form.",
         "ops": true
       },
       {
@@ -97,15 +97,15 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lRecent§r keeps your last 8 commands with their options (§erecentSize§r): tap one to run it again. §lSearch commands§r finds commands and quick actions by any word of their name or description; the results end with §lSearch again§r.",
+        "text": "§lOperators:§r §lRecent§r keeps your last 8 commands with their options (§erecentSize§r), each with the exact command under it: tap one to run it again. §lSearch Commands§r finds commands and quick actions by any word of their name, hint, command or description; the results end with §lSearch again§r.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects or teleport for everyone online ask §lAre you sure?§r first.",
+        "text": "§lOperators:§r §lQuick Actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects or teleport for everyone online ask §lAre you sure?§r first.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the townsfolk§r, so either one does it. Safe zones and towns show §e[x]§r with how many exist; the others can't be checked from here.",
+        "text": "§lOperators:§r §lServer Setup Checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the townsfolk§r, so either one does it. §lSafe Zones§r and §lAdd a Town§r show §e[x]§r with how many exist; the others can't be checked from here.",
         "ops": true
       }
     ],

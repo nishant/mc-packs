@@ -172,6 +172,37 @@ for (const p of packs)
     for (const prm of c.params)
       if (prm.enum && !enums[prm.enum]) problems.push(`${p.folder}: ${c.name} uses enum "${prm.enum}", which no pack registers`);
 
+// Every command's menu button needs a readable name and hint from presets.js, short enough that Bedrock
+// doesn't cut it off; so do the setup checklist and the quick actions.
+const presets = await import(pathToFileURL(join(root, "packs", SELF, "scripts", "presets.js")).href);
+const fits = (/** @type {string} */ where, /** @type {string} */ text, room = presets.LINE) => {
+  if (!text) problems.push(`${where}: empty`);
+  else if (presets.textWidth(text) > room) problems.push(`${where}: "${text}" is ${presets.textWidth(text)} pixels wide, more than a button line holds (${room}); shorten it`);
+};
+const allNames = new Set(packs.flatMap((p) => p.commands.map((c) => c.name)));
+for (const p of packs)
+  for (const c of p.commands) {
+    const n = presets.NAMES[c.name];
+    if (!n) {
+      problems.push(`${p.folder}: ${c.name} has no button name: add it to NAMES in packs/${SELF}/scripts/presets.js`);
+      continue;
+    }
+    fits(`NAMES ${c.name} name`, n[0], presets.LINE - (c.permission === "any" ? 0 : presets.textWidth(presets.OPS_MARK)));
+    fits(`NAMES ${c.name} hint`, n[1]);
+  }
+for (const name of Object.keys(presets.NAMES)) if (!allNames.has(name)) problems.push(`presets.js NAMES: ${name} isn't a registered command any more`);
+for (const item of presets.SETUP) {
+  fits(`SETUP ${item.cmd} title`, `[x] ${item.title} (99)`);
+  fits(`SETUP ${item.cmd} hint`, item.hint);
+}
+const actionsSrc = readFileSync(join(root, "packs", SELF, "scripts", "actions.js"), "utf8");
+for (const m of actionsSrc.matchAll(/^ {4}title: "([^"]*)",\n {4}hint: "([^"]*)",$/gm)) {
+  fits(`quick action "${m[1]}" title`, m[1]);
+  fits(`quick action "${m[1]}" hint`, m[2]);
+}
+if ([...actionsSrc.matchAll(/^ {4}title: /gm)].length !== [...actionsSrc.matchAll(/^ {4}title: "[^"]*",\n {4}hint: /gm)].length)
+  problems.push("actions.js: every quick action needs a hint right after its title");
+
 if (problems.length) {
   console.error(`Realm Configuration catalog problems:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
   process.exit(1);
