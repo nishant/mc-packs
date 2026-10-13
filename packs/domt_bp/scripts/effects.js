@@ -431,8 +431,9 @@ export const CARDS = [
       const item = inv.getItem(slot);
       if (!item) return false;
       inv.setItem(slot, undefined);
-      // A few blocks away, so it isn't picked straight back up.
-      const spot = randomSpot(player, 3, 5, 10) ?? player.location;
+      // A few blocks away, so it isn't picked straight back up, and where the player can see it: never
+      // in another cave below a mine tunnel or on the surface above it.
+      const spot = sightSpot(player, 3, 5, 20) ?? player.location;
       player.dimension.spawnItem(item, { x: spot.x, y: spot.y + 0.5, z: spot.z });
     },
   },
@@ -750,7 +751,8 @@ export const CARDS = [
       if (!slots.length) return false;
       const slot = pick(slots);
       const item = /** @type {ItemStack} */ (inv.getItem(slot));
-      const spot = randomSpot(player, 8, 16, 20);
+      // Somewhere the player can see it, so it can be fetched (not in another cave, nor on the surface over a mine).
+      const spot = sightSpot(player, 8, 16, 40);
       if (!spot) return false;
       inv.setItem(slot, undefined);
       player.dimension.spawnItem(item, { x: spot.x, y: spot.y + 0.5, z: spot.z });
