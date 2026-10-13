@@ -105,8 +105,8 @@ through reputation, using the Guilds pack.
 | `elsie` | Elsie the Innkeeper | Secretly the last Starwright, centuries old | Warm, motherly, deflects with food; slips into old words |
 | `bram` | Mayor Bram | Son of the mayor who buried the truth; ashamed when he learns | Pompous, kind, nervous, grows into courage |
 | `quill` | Quill the Trader | Smuggler; was recruited by the Choir, plays both sides | Charming, evasive, always bargaining |
-| `ida` | Ida the Relicsmith | Apprentice of the smith who forged the first relics | Blunt, few words, loves her craft |
-| `sol` | Sol the Sky-reader | Astronomer; the first to see the Lantern returning | Dreamy, poetic, speaks in star names |
+| `ida` | Ida the Relicsmith | Apprentice of Dunmore, the smith who forged the first relics | Blunt, few words, loves her craft |
+| `sol` | Sol the Sky-reader | Astronomer (he; Adela's widower, see *The Star Kittens*); the first to see the Lantern returning | Dreamy, poetic, speaks in star names |
 
 ### New townsfolk (added to `npc_bp` by the engine work; same shape as the others)
 
@@ -115,7 +115,7 @@ through reputation, using the Guilds pack.
 | `hollis` | Brother Hollis | the Chapel Keeper | `priest`, `questgiver` | Young, gentle, sleepless; the Herald whispers to him | Soft, polite, doubting, sudden cold lines when the Herald slips through |
 | `moss` | Moss | the Gravedigger | `gravedigger`, `questgiver` | Keeps the old graveyard; sees what others won't; morbid jokes, kind | Dry gallows humor, talks to the dead, unafraid |
 | `wren` | Wren | the Stable Girl | `stablehand`, `questgiver` | A 12-year-old who loves every animal; Elsie's ward | Excited, run-on sentences, names everything |
-| `bea` | Bea | the Cook | `chef`, `questgiver` | Runs the inn's kitchen; ex-ship's cook; the culinary questline | Loud, bossy, generous, cooking metaphors for everything |
+| `bea` | Bea | the Cook | `chef`, `questgiver` | Runs the inn's kitchen (twenty years, after twenty as a ship's cook); the culinary questline | Loud, bossy, generous, cooking metaphors for everything |
 
 Greetings and idle lines for the new four follow the existing pattern (2 per time of day and
 weather, 4 idle lines).
@@ -343,9 +343,26 @@ they differ (October 2026):
   Hal's Rod.
 - **Act IV** orders the seals with its own flags `first`, `second` and `now` (not `act4:first`);
   the promise is `act4:promise` (`allow` / `refuse`), read as `act4_seals.act4:promise`.
-- **Act V** has 13 chapters: the allies are four chapters (`smugglers`, `fen`, `chapel`, and
-  `alone` for a player with no allies), and Dawn is three chapters, one per ending
-  (`dawn_relight`, `dawn_gift`, `dawn_crown`). It sets `g:allies` and `g:ending`.
+- **Act V** has 14 chapters: the allies are five chapters (`smugglers` for a trusted Quill, `fen` for a
+  freed Vesna, `fen_bound`, *The Witch Who Must Come*, for a bound one, whom Moss sends the player to
+  call with a soul lantern at the Fen after dark, with a mercy or iron choice in her dialogue and the
+  story flag `fen_call`, `chapel` for a saved Hollis, and `alone` for a player with no allies), and
+  Dawn is three chapters, one per ending (`dawn_relight`, `dawn_gift`, `dawn_crown`). Each ally
+  chapter adds 1 to `g:allies`; "no allies" everywhere in the act is `g:allies` `<=0`, and the Long
+  Night's extra tasks appear per missing ally (the witch's task is skipped when `g:vesna` is `free`
+  or `g:fen` is `called`). Reyes's count-off and the dead Moss names in *Forty Winters* follow
+  `g:allies` (0, 2, 5 or 9 lost). It sets `g:allies`, `g:fen` and `g:ending`.
+- **The Keeper's Gift** needs `act4_seals.act4:promise` = `allow` as well as *A Room at the Inn*.
+- **Side-quest choices the main story reads:** `act3_deep.keys` (Act IV council: Ida's miners or
+  Sol's wayfarers are waiting), `hollis_faith.forgive` (*A Lamp for the Lost*), `wardens_oath.oath`
+  (*The Long Night*), `singing_forge.blade` (*The Herald*), `smugglers_run.profits` (*Quill's Last
+  Run*), `hearth_and_table.marty` (*Rally the Town*), `mayors_burden.plaque`, `graveyard_shift.stone`
+  and `g:vesna` / `fen_call` (*Forty Winters*). *Elsie's Apron* has a third last line for a player
+  with fewer than three mercy and three iron choices.
+- **Facts the text settles:** Sol is a man (Adela's widower); Ida's master was Dunmore; Hal was
+  Tobin's younger brother; the Gull is Hal's boat, which Tobin still keeps (the sailors' boat that sank
+  with Barnaby Pike's crew was the Petrel); Bea has cooked at the inn twenty years; an exposed Quill
+  stays in the cells until Lantern Night, out by day on Reyes's parole.
 - **Story relics:** `choir_mask` (Act II, *The Gray Ring Burns*), `lantern_shard` (Act III,
   *Three Keys*), `hal_compass` (Act III, *Tobin's Silence*), `keeper_lamp` and `hollow_crown`
   (Act V, the gift and crown Dawns), `singing_blade` (*The Forge That Sings*), `vesna_charm`
@@ -426,7 +443,8 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
   (`"drowned_bell.bell": "ring"`).
 - Counters: `inc: { "g:mercy": 1 }` on a choice adds to a numeric player-wide flag.
 - `when` (pages, objectives, chapters, choices, rep): every key must match. A value starting with `>=`
-  compares numbers (`{ "g:iron": ">=5" }`). A value `"!x"` means "not x".
+  or `<=` compares numbers (`{ "g:iron": ">=5" }`, `{ "g:allies": "<=0" }`; an unset counter is 0). A value
+  `"!x"` means "not x" (an unset flag passes).
 
 ### Chapter
 

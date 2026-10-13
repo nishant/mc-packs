@@ -756,7 +756,7 @@ ${W}Is it today? Is it the fish day? Everyone's going to the pier. Bea's bringin
         `§eTobin§r turns the spikes over and over in his old hands. Then he laughs, the big helpless kind, until he has to sit down on a crate.\n\n${T}This big. I told them. THIS big. Six hundred times!`,
         `${BE}Well? Where's the FISH? I've got the pan hot! I've got butter! I've got LEMONS, do you know how hard lemons are to come by?\n\n${T}You're not cooking a legend, Bea. Make chowder like a normal person.`,
         { text: `The harbor bell rings out over the water, all on its own, one long happy note. Tobin looks out at it and nods, as if someone had said something only he could hear.`, when: RING },
-        `${T}For you. My brother's old rod. Kept it forty years in case someone came along who deserved it. Go on. Catch something worth lying about.`,
+        `${T}For you. My brother's sea rod, the one he fought Gnasher with. Kept it forty years in case someone came along who deserved it. Go on. Catch something worth lying about.`,
       ],
       reward: {
         levels: 5,

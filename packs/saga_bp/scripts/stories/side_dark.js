@@ -496,7 +496,7 @@ const GRAVEYARD_SHIFT = {
       ],
       outro: [
         `${T}Barnaby Pike. Still alive, then. Pity. He owes me a net.\n\nTobin tries to scowl and gives up halfway.`,
-        `${T}He digs that grave every year on the night the Gull went down. Our old boat. Five went out, three came back. Barnaby says the grave's for him. It's not. It's for the two who never got one.`,
+        `${T}He digs that grave every year on the night the Petrel went down. Our old crew's boat. Five went out, three came back. Barnaby says the grave's for him. It's not. It's for the two who never got one.`,
         { text: `${T}Did he sing "The Bell Below" the whole way? He always does. Now the real bell's quiet, that's the only place it still rings. In Barnaby's terrible voice.`, when: SILENCE },
         { text: `${T}Did he sing "The Bell Below" the whole way? And did the real bell answer him from the harbor? It does now, you know. Gives me the shivers. Good shivers.`, when: RING },
         `${T}Tell Moss thanks for minding him. And tell him to come down to the docks for a drink sometime. He spends too long with folk who don't talk back.`,
@@ -1163,7 +1163,7 @@ const HOLLIS_FAITH = {
       ],
       reward: {
         levels: 5,
-        crowns: 100,
+        crowns: 60,
         title: "Lamplighter",
         items: [{ item: "minecraft:lantern", amount: 1, name: "Hollis's Window Lamp", lore: ["It burned every night", "until the boats came home."] }],
         journal: { entry: "hollis_faith", label: "Lamp in the Window" },
