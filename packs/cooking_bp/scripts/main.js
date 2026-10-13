@@ -8,6 +8,7 @@ const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
 const PROP_STATS = "cooking:stats"; // player: JSON { c: servings cooked, e: dishes eaten }
 const PROP_PENDING = "cooking:pending"; // world: JSON { [player id]: [recipe id] } learned while offline
+const PROP_OWED = "cooking:owed"; // world: JSON { [player id]: { [dish id]: batches } } cooked after the cook left, where the pot's area was unloaded
 const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
 const PROP_STAR = "cooking:star"; // world: ms of the last aurora or meteor (realm:sky_event)
 const MINUTE = 60000;
@@ -443,6 +444,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   system.runTimeout(() => {
     try {
       if (player.isValid) applyPending(player);
+      if (player.isValid) applyOwed(player);
     } catch (e) {
       console.warn(`[cooking] pending: ${e}`);
     }
@@ -471,6 +473,7 @@ function cook(player, d, times, pot) {
   if (n < 1) return `Missing: ${missingText(player, d.needs)}`;
   if (!takeNeeds(player, d.needs, n)) return "Your ingredients moved. Try again.";
   cooking.add(player.id);
+  const pid = player.id;
   const ticks = Math.max(1, Math.round(CONFIG.cookSeconds * 20));
   const top = { x: pot.loc.x + 0.5, y: pot.loc.y + 1.1, z: pot.loc.z + 0.5 };
   let t = 0;
@@ -485,19 +488,26 @@ function cook(player, d, times, pot) {
     }
     if (t < ticks) return;
     system.clearRun(run);
-    cooking.delete(player.id);
-    finish(player, d, n, pot, top);
+    cooking.delete(pid);
+    finish(player, pid, d, n, pot, top);
   }, 5);
   return undefined;
 }
 
-/** @param {Player} player @param {Dish} d @param {number} n @param {Pot} pot @param {Vector3} top */
-function finish(player, d, n, pot, top) {
+/** @param {Player} player @param {string} pid the player's id @param {Dish} d @param {number} n @param {Pot} pot @param {Vector3} top */
+function finish(player, pid, d, n, pot, top) {
   try {
     world.getDimension(pot.dim).spawnParticle("minecraft:villager_happy", top);
   } catch {
     // unloaded
   }
+  // The cook left and nobody is near the pot: nowhere to drop the dishes, so they wait for the next join.
+  if (!player.isValid && !isLoaded(pot)) return owe(pid, d, n);
+  deliver(player, d, n, pot);
+}
+
+/** Gives `n` batches of `d` (and what it gives back); drops them at the pot if the player is gone. @param {Player} player @param {Dish} d @param {number} n @param {Pot} [pot] */
+function deliver(player, d, n, pot) {
   giveItems(player, dishStack(d, 1), n * d.yield, pot);
   for (const [id, k] of d.returns ?? []) giveItems(player, new ItemStack(id, 1), k * n, pot);
   if (!player.isValid) return;
@@ -505,6 +515,39 @@ function finish(player, d, n, pot, top) {
   player.sendMessage(`§aYou cooked ${n * d.yield} ${d.name}.`);
   addStat(player, "c", n * d.yield);
   if (CONFIG.skillXp > 0) send("realm:skill_xp", { player: player.id, skill: "farming", amount: CONFIG.skillXp * n * d.yield });
+}
+
+/** @param {Pot} pot */
+function isLoaded(pot) {
+  try {
+    return !!world.getDimension(pot.dim).getBlock(pot.loc);
+  } catch {
+    return false;
+  }
+}
+
+/** @param {string} pid @param {Dish} d @param {number} n batches */
+function owe(pid, d, n) {
+  const all = loadJson(world, PROP_OWED);
+  const map = all && typeof all === "object" ? all : {};
+  const mine = map[pid] && typeof map[pid] === "object" ? map[pid] : {};
+  mine[d.id] = (Number(mine[d.id]) || 0) + n;
+  map[pid] = mine;
+  saveJson(world, PROP_OWED, map);
+}
+
+/** Dishes that finished cooking after the player left. @param {Player} player */
+function applyOwed(player) {
+  const all = loadJson(world, PROP_OWED);
+  if (!all || typeof all !== "object" || !all[player.id] || typeof all[player.id] !== "object") return;
+  const mine = all[player.id];
+  delete all[player.id];
+  saveJson(world, PROP_OWED, Object.keys(all).length ? all : undefined);
+  for (const [id, n] of Object.entries(mine)) {
+    const d = dishById.get(id);
+    const batches = Math.floor(Number(n));
+    if (d && batches > 0) deliver(player, d, batches);
+  }
 }
 
 /** Is this cauldron a cooking pot (a lit campfire under it)? @param {import("@minecraft/server").Block} block */
