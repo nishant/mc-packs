@@ -526,12 +526,13 @@ try {
       writeWav(x, wav);
       execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-ac", "1", "-ar", String(SR), "-c:a", "libvorbis", "-q:a", "3", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", ogg]);
       const m = summary(ogg);
+      // Measure and layer the decoded clip, as the game plays it and as the branch above (no recordings) does, so the
+      // volumes come out the same with or without tools/gen-rain/sources/.
+      const raw = execFileSync("ffmpeg", ["-v", "error", "-i", ogg, "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
+      const decoded = Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
       if (e.level !== undefined) volumes.set(f.name, toVolume(e.level - m.lufs));
-      if (e.thunder) {
-        const raw = execFileSync("ffmpeg", ["-v", "error", "-i", ogg, "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
-        volumes.set(f.name, toVolume(e.thunder[e.files.indexOf(f)] - thunderBand(Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4)))));
-      }
-      made.set(f.name, x);
+      if (e.thunder) volumes.set(f.name, toVolume(e.thunder[e.files.indexOf(f)] - thunderBand(decoded)));
+      made.set(f.name, decoded);
       rows.push({ file: f.name, seconds: (x.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: reduction.toFixed(1), kb: (statSync(ogg).size / 1024).toFixed(1) });
     }
     if (e.layered !== undefined) {
