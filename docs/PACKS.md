@@ -2130,7 +2130,7 @@ Operators can change `enabled`, `everyDays`, `offsetDays`, `hourUtc`, `stayMinut
 
 ## Story Questlines — `saga_bp`
 
-An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (about 40 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
+An RPG quest engine told by the realm's townsfolk: 22 stories and 157 chapters (about 40 to 45 hours). A five-act main story, **The Lantern and the Hollow**, that starts with two prologue stories (**The Drowned Bell** and **The Cartographer's Last Map**), plus side questlines that open up as the world does, and a **daily favor** from each questgiver. With the world-event packs installed, the sky joins in (a meteor over the Hollow Gate, a Blood Moon for the Long Night, a rainbow at dawn), and Expeditions get a questline of their own. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, **Ask for a hint** helps when you're stuck, and `/realm:saga` is your story log, with a **Codex** of every secret you've uncovered. Needs the [Townsfolk](#townsfolk--npc_bp) pack: the stories are told through its NPCs.
 
 ### How to use
 
@@ -2190,7 +2190,7 @@ An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (
 
 ### The stories
 
-21 stories and 152 chapters: about 40 hours if you play everything. A story opens when the stories under **Opens after** are finished, so most side stories appear as the main story goes on; the ones marked `-` are open from the start. Chapters with branches are counted once each; a player plays most, but not all, of them.
+22 stories and 157 chapters: about 40 to 45 hours if you play everything. A story opens when the stories under **Opens after** are finished, so most side stories appear as the main story goes on; the ones marked `-` are open from the start. Chapters with branches are counted once each; a player plays most, but not all, of them.
 
 | Story | Kind | Told by | Opens after | Chapters | Feel |
 |---|---|---|---|---|---|
@@ -2215,8 +2215,26 @@ An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (
 | **The Mayor's Burden** | Side | Mayor Bram | The Gray Choir | 5 | sad, funny, mystery |
 | **Edges of the Map** | Side | Mara the Cartographer | The Cartographer's Last Map | 7 | exploration, happy, dangerous |
 | **The Forge That Sings** | Side | Ida the Relicsmith | Signs in the Sky | 5 | dangerous, epic, mystery |
+| **The Listening Deep** | Side | Ida the Relicsmith | Into the Deep, with [Expeditions](#expeditions--expedition_bp) installed | 5 | exploration, dangerous, eerie |
 
 The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, one a day each.
+
+**World events and expeditions in the stories** (only with those packs installed; every one of these is optional or one way of two, and the text reads the same without them):
+
+| Where | What happens |
+|---|---|
+| *A Smudge in the East* (act 1), *Polaris* (The Star Kittens) | When the night vigil ends, a shooting star crosses the sky ([Aurora & Shooting Stars](#aurora--shooting-stars--night_bp); night, clear sky) |
+| *Fallen Light* (act 1) | Optional: watch a [meteor](#meteor-strikes--meteor_bp) fall and get within 48 blocks of it within 15 minutes: 2 levels and 8 amethyst shards |
+| *Echoes in Crystal* (act 3) | Either bring Ida 4 echo shards from an ancient city, or clear the Sculk Depths [expedition](#expeditions--expedition_bp) (any difficulty); Ida tunes her lamp either way |
+| *The Gate Opens* (act 4) | A real meteor comes down over the Hollow Gate and breaks apart high above it (no blocks broken) |
+| *The Long Night* (act 5) | Tonight becomes a [Blood Moon](#blood-moon--harvest-moon--moon_bp). Optional: keep the light burning under it: 2 levels, 40 Crowns |
+| *Dawn*, the relit Lantern (act 5) | A [rainbow](#rainbows--the-pot-of-gold--rainbow_bp) with its pot of gold. Optional: catch it over the harbor: 1 level, 30 Crowns |
+| *The Storm Vigil* (The Drowned Bell), *Rain on the Water* (The One That Got Away), *A Champion's Heart* (Hearth and Table) | The [Weather Almanac](#weather-almanac--weather_bp) plans the thunderstorm or rain the step waits for, within about 8 minutes; the hint points to `/realm:weather_forecast` |
+| *A Champion's Heart* (Hearth and Table) | Optional, with the [Kitchen](#kitchen--cooking_bp) and Blood Moon & Harvest Moon: bring Bea Harvest Saffron (it drops from ripe crops under a Harvest Moon): 1 level, 30 Crowns, 4 golden carrots |
+| *Until Dawn* (Graveyard Shift), *The Long Watch* (The Wardens' Oath) | Optional: be at the graveyard, or hold the watchtower, under a Blood Moon: 2 levels, 30 Crowns each |
+| *Frogs in Three Voices* (Edges of the Map) | Optional, with Aurora & Shooting Stars: chart a sky wonder (the northern lights, or within 64 blocks of a rainbow's end, a tornado or a storm cell): 40 Crowns, 2 empty maps, a Codex page |
+| *The Inspector Calls* (Smuggler's Run) | Optional: find a pot of gold at a rainbow's end: Quill pays 50 Crowns to keep it out of the inspector's sight |
+| **The Listening Deep** | Four expedition chapters for Ida, Elsie and Reyes after act 3 (the second told two ways): clear the Sculk Depths; Frost Hollow on Normal or harder (told by Elsie, or by Wren with Elsie's letters after the Keeper's Gift ending); a Gauntlet; and any dungeon on a Nightmare tier. Rewards up to 10 levels, 200 Crowns, 4 diamonds and 4 echo shards, and the title **Deep-Listener** at the end |
 
 Hearth and Table's *A Champion's Heart* asks for Champion's Hearts, which champions drop only with the [Kitchen](#kitchen--cooking_bp) pack installed; it has no plain-food way around that.
 

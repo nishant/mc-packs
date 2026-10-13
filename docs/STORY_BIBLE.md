@@ -375,6 +375,18 @@ they differ (October 2026):
   `vesna_bargain` all of Act II (not a chapter of them); `star_kittens` is given by `wren` only.
 - **The Herald** (Act V) is one `sequential` chapter: its phases are `defeat` objectives that count
   one at a time.
+- **World events and expeditions (October 2026):** every hook is optional or one way of two and gated on
+  `pack:`: shooting stars after the vigils of *A Smudge in the East* and *Polaris*; optional fresh meteor in
+  *Fallen Light* (`act1_signs.fresh`); *Echoes in Crystal* is an `or` of the echo shards or a Sculk Depths
+  clear (`act3_deep.shards` = `city` / `depths`; the stealth stays required); a burst meteor over the gate on
+  accepting *The Gate Opens*; a Blood Moon asked for by *The Long Night* (optional step, `act5_lantern.moon`
+  = `red`) and a rainbow by *Dawn* (relight; `act5_lantern.bow`); Weather Almanac hints in *The Storm Vigil*,
+  *Rain on the Water* and *A Champion's Heart*; optional Harvest Saffron for Bea (`hearth_and_table.saffron`),
+  Blood Moon nights in *Until Dawn* and *The Long Watch* (`graveyard_shift.red`, `wardens_oath.red`), a sky
+  wonder for Mara in *Frogs in Three Voices* (`edges_of_map.wonder`) and a pot of gold for Quill in
+  *The Inspector Calls* (`smugglers_run.pot`). The new side questline is `listening_deep`
+  (`stories/side_deep.js`, 5 chapters: `roots`, `cold_store` / `cold_store_letters` by `g:ending`,
+  `gauntlet`, `last_listen`).
 - **Story champions** whose mob the Champions pack can't make (the elder guardian, pillagers,
   vindicators, evokers, guardians, the phantom) are spawned by Story Questlines itself, never sent
   as `realm:champion_spawn`.
@@ -399,6 +411,7 @@ main story (`requires`), so they unlock as the world opens. Target length per qu
 | `singing_forge` | The Forge That Sings | `ida` | Act I | dangerous, epic | Ida's masterwork: Nether trip for netherite scrap and blaze rods (`reach` Nether, `collect`), bastion danger, quench the blade in a soul-fire spring (`interact`), name it (a choice of three names). Reward: a relic. |
 | `hearth_and_table` | Hearth and Table | `bea` | none | cozy, happy, funny, sad | The culinary questline: Bea's tryouts (bring ingredients), cook for the wardens, a feast for a funeral (sad), rare champion ingredients ("Champion's Heart", "Storm Eel"), the Starwright recipe from Elsie, and a cook-off against Quill's "imported" chef. Integrates the Cooking pack's dishes when installed (rewards and deliveries of named dishes). |
 | `hollis_faith` | Lamp in the Window | `hollis` | Act II, `g:hollis=saved` | sad, happy, cozy | Hollis rebuilds his faith and the chapel: repair windows (`place` glass), a wedding in the chapel (funny), keep a lamp lit for the sailors, forgive himself. |
+| `listening_deep` | The Listening Deep | `ida` | `act3_deep`, `pack:expedition_bp` on | exploration, dangerous, eerie | Expeditions as story: the Lantern of the Deep hums toward the expedition site (clear the Sculk Depths: an echo of the Hollow's roots reaching every deep place), the Starwrights' cold store under the ice (Frost Hollow, Normal or harder; told by Elsie, or by Wren reading her letters after the gift ending), Reyes's Long Stair (a Gauntlet), one last listen (any dungeon on a Nightmare tier: the deep goes quiet for a while; title `Deep-Listener`). Never resolves the Hollow. |
 | `vesna_bargain` | The Witch's Bargain | `moss` (meets `vesna`) | Act II ch. 7 | creepy, mystery, dangerous | Vesna's own past: a curse on the Fen, potions to brew (deliver), a bog spirit (stealth), choice: free Vesna or bind her. Sets `g:vesna`. |
 
 ## 9. The data format
