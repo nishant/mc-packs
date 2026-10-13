@@ -1046,7 +1046,7 @@ export const PACKS = [
     "folder": "npc_bp",
     "topic": "npc",
     "name": "Townsfolk",
-    "summary": "Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. They turn to face you as you walk up, mutter to themselves now and then, go home at night and come back at dawn, and greet you depending on the time of day and the weather. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from Crowns, the stories of Story Questlines or Sol's forecast from the Weather Almanac. The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.",
+    "summary": "Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. They turn to face you as you walk up, mutter to themselves now and then, keep a daily routine (a lunch spot, an evening spot, home at night), and greet you depending on the time of day and the weather. They also remember you (Hearth & Hearsay): talk to them, bring gifts and help them, and each one warms up from Stranger to Confidant, with more to say, friend prices, a heart story, a title and keepsakes. They pass on gossip about what players did, and react to the choices you made in the stories. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from Crowns, the stories of Story Questlines or Sol's forecast from the Weather Almanac. The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.",
     "steps": [
       {
         "text": "Run §e/realm:npc§r and pick §lWho lives here?§r (or run §e/realm:npc_who§r for the list in chat) to see who lives on the realm and where: each townsfolk with the distance and direction from you, like §eMara the Cartographer - 240m NE (cartographer)§r.",
@@ -1061,11 +1061,23 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "At night, townsfolk with a home go there; they're back at their post at dawn.",
+        "text": "§lGet to know them.§r The menu says how well you know each one (§eYou and Old Tobin: Friend (260/500)§r). Your first talk with a townsfolk each real day adds affinity. To give a gift, hold the item and sneak-tap them, or tap them and pick §lGive <item>§r at the top of the menu (it takes 1; one gift per townsfolk per real day). Each one loves, likes and dislikes different things: Tobin loves salmon, Hollis can't bear a bell. Finishing their daily favor or a story chapter they give or end adds more.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:npc§r has every tool as a button: §lAdd or move a townsfolk here§r, §lSet a home here§r, §lRemove the nearest townsfolk§r and §lList with coordinates§r. Or stand where an NPC should live, face the way it should look back, and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r, §ehollis§r, §emoss§r, §ewren§r, §ebea§r). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). Set where it sleeps with §e/realm:npc_home <id>§r (run it at its post to clear the home), list everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. §e/realm:config§r -> §lTownsfolk§r switches the turning, idle lines and night routine.",
+        "text": "§lWhat it opens:§r at Acquaintance, more idle chatter and an §lAsk about...§r button; at Friend, 10% off where they sell (Quill's market, Bea's recipes, Elsie's beds, Mara's treasure maps, Ida's relic forge needs fewer shards, and Tobin pays 10% more for fish); at Close, a letter in your Realm Mail and their heart story in Story Questlines; at Confidant, the title §e<Name>'s Confidant§r, the §eHearts§r trail and a keepsake every week.",
+        "ops": false
+      },
+      {
+        "text": "§lGossip:§r now and then a greeting is news about another player (§eSam put down Grimtooth. Clean work.§r), or about you.",
+        "ops": false
+      },
+      {
+        "text": "During the day, townsfolk with a lunch or evening spot go there; at night, those with a home go home. They're back at their post in the morning.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:npc§r has every tool as a button: §lAdd or move a townsfolk here§r, §lSet a home here§r, §lRemove the nearest townsfolk§r and §lList with coordinates§r. Or stand where an NPC should live, face the way it should look back, and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r, §ehollis§r, §emoss§r, §ewren§r, §ebea§r). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). Set where it sleeps with §e/realm:npc_home <id>§r (run it at its post to clear the home), where it spends lunch or the evening with §e/realm:npc_post <id> <noon|evening>§r (same: at its post to clear), list everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. §e/realm:config§r -> §lTownsfolk§r switches the turning, idle lines, night routine, daily schedule, Hearth & Hearsay, gossip and letters.",
         "ops": true
       }
     ],
@@ -1074,7 +1086,7 @@ export const PACKS = [
         "usage": "/realm:npc",
         "ops": false,
         "who": "Everyone",
-        "text": "The townsfolk menu: §lWho lives here?§r, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Remove the nearest townsfolk, List with coordinates"
+        "text": "The townsfolk menu: §lWho lives here?§r, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Set a lunch spot here, Set an evening spot here, Remove the nearest townsfolk, List with coordinates"
       },
       {
         "usage": "/realm:npc_who",
@@ -1101,10 +1113,16 @@ export const PACKS = [
         "text": "Where that townsfolk goes at night (time 13000 to 23000, §enightStart§r/§enightEnd§r); in the same dimension as its post (on the ground under you if you're flying). Run it within 2 blocks of the post to clear the home"
       },
       {
+        "usage": "/realm:npc_post <id> <noon\\|evening>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Where that townsfolk spends lunch (from time 6000, §elunchStart§r) or the evening (from 9000, §eeveningStart§r, until night), where you stand; same dimension as its post. Run it within 2 blocks of the post to clear that spot"
+      },
+      {
         "usage": "/realm:npc_list",
         "ops": false,
         "who": "Operators",
-        "text": "Every placed townsfolk with its coordinates, dimension, home and whether it's loaded, and the ids not placed yet"
+        "text": "Every placed townsfolk with its coordinates, dimension, home, lunch and evening spots and whether it's loaded, and the ids not placed yet"
       }
     ]
   },
@@ -1236,7 +1254,7 @@ export const PACKS = [
     "folder": "saga_bp",
     "topic": "saga",
     "name": "Story Questlines",
-    "summary": "An RPG quest engine told by the realm's townsfolk: 22 stories and 157 chapters (about 40 to 45 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, and a §ldaily favor§r from each questgiver. With the world-event packs installed, the sky joins in (a meteor over the Hollow Gate, a Blood Moon for the Long Night, a rainbow at dawn), and Expeditions get a questline of their own. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
+    "summary": "An RPG quest engine told by the realm's townsfolk: 34 stories and 205 chapters (about 50 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, a §lheart story§r for each townsfolk you become Close with, and a §ldaily favor§r from each questgiver. With the world-event packs installed, the sky joins in (a meteor over the Hollow Gate, a Blood Moon for the Long Night, a rainbow at dawn), and Expeditions get a questline of their own. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
     "steps": [
       {
         "text": "Tap a townsfolk with a story button: §eMain story: The Drowned Bell§r (Old Tobin) or §eMain story: The Cartographer's Last Map§r (Mara) to begin. Read the pages with §lNext§r, then pick §lAccept§r (or §lNot now§r: you can come back any time). Some intros end with a choice instead of Accept.",
@@ -1256,6 +1274,10 @@ export const PACKS = [
       },
       {
         "text": "Finished stories open new ones: chat names them, and §lAvailable§r in §e/realm:saga§r lists what you can start and what's still locked.",
+        "ops": false
+      },
+      {
+        "text": "§lHeart stories:§r once you're Close with a townsfolk (Townsfolk: talk, gifts, favors), their menu offers their heart story, three chapters about their own life (Tobin sails his brother's boat once more, Wren's horse has a foal...).",
         "ops": false
       },
       {
@@ -1612,7 +1634,7 @@ export const PACKS = [
         "usage": "/realm:titles_give <player> <title>",
         "ops": true,
         "who": "Ops",
-        "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r or §etrail:sparkle§r. Works for offline players this pack has seen"
+        "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r or §etrail:hearts§r. Works for offline players this pack has seen"
       }
     ]
   },

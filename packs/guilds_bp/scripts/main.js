@@ -148,6 +148,8 @@ function rankedUp(p, g, from, to, rep) {
     const title = `${RANKS[r - 1].name} ${CONFIG.guilds[g].member}`;
     system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: p.id, title, from: "guilds_bp" }));
   }
+  // Townsfolk gossip (Hearth & Hearsay) about a new Master (the top rank).
+  if (to === RANKS.length - 1 && from < to) system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "guild_master", player: p.id, name: p.name, place: guildName(g) }));
   if (CONFIG.announceRanks.includes(to + 1)) {
     for (const other of world.getAllPlayers()) if (other.id !== p.id) other.sendMessage(`§6${p.name} reached ${rank} in the ${guildName(g)}!`);
   }

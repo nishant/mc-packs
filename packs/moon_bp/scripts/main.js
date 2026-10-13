@@ -188,6 +188,7 @@ function rewardSurvivors(alive) {
       if (levels) p.addLevels(levels);
       if (crowns && addCrowns(p, crowns)) p.sendMessage(`§6+${crowns} Crowns §7(Blood Moon survived)`);
       p.playSound("random.levelup", { volume: 0.8 });
+      system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "blood_moon", player: p.id, name: p.name })); // Townsfolk gossip
       if (title && p.getDynamicProperty(PROP_SURVIVOR) !== true) {
         p.setDynamicProperty(PROP_SURVIVOR, true);
         system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: p.id, title, from: "moon_bp" }));

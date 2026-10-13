@@ -313,7 +313,8 @@ async function readLetter(player, l) {
   if (!l.r) save((l = { ...l, r: 1 }));
   const body = [`§7From:§r ${l.fn}`, `§7Sent:§r ${ago(l.at)} (${stamp(l.at)})`, "", `${l.b}§r`].join("\n");
   await menu(player, `§l${l.s}`, body, [
-    { text: "Reply", run: () => write(player, { to: l.f, subject: (l.s.startsWith("Re: ") ? l.s : `Re: ${l.s}`).slice(0, Math.min(BOX, CONFIG.subjectLength)) }) },
+    // A letter from a pack (a townsfolk, the realm) has no writer to reply to.
+    ...(l.f ? [{ text: "Reply", run: () => write(player, { to: l.f, subject: (l.s.startsWith("Re: ") ? l.s : `Re: ${l.s}`).slice(0, Math.min(BOX, CONFIG.subjectLength)) }) }] : []),
     {
       text: "§cDelete",
       run: () => {
@@ -425,6 +426,47 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// realm:mail_send { to, from, subject, body }: a letter from another pack (a townsfolk, the realm). `to` is a
+// player id or name from the roster, `from` any display name. No send cooldown and no Sent copy; it isn't
+// delivered when the recipient's inbox is full of unread letters (the oldest read ones make room first).
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:mail_send") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.to !== "string" || typeof m.from !== "string") return;
+      const want = m.to.toLowerCase();
+      const to = members().find((x) => x.i === m.to) ?? members().find((x) => x.n.toLowerCase() === want);
+      if (!to) return console.warn(`[mail] mail_send: no player "${m.to}" in the roster`);
+      const from = clean(m.from, 32, false).text.replace(/§./g, "") || "The realm";
+      const subject = clean(m.subject, Math.min(BOX, CONFIG.subjectLength), false).text || "(no subject)";
+      const body = clean(m.body, CONFIG.bodyLength, true).text;
+      if (!body) return;
+      if (letters().size >= MAX_LETTERS) return console.warn("[mail] mail_send: the realm's mail is full");
+      const inbox = inboxOf(to.i);
+      const limit = get("inboxLimit");
+      const read = inbox.filter((l) => l.r).reverse();
+      if (inbox.length - read.length >= limit) return console.warn(`[mail] mail_send: ${to.n}'s inbox is full of unread letters`);
+      for (let n = inbox.length; n >= limit; n--) {
+        const old = /** @type {Letter} */ (read.shift());
+        save({ ...old, di: 1 });
+      }
+      const next = world.getDynamicProperty(PROP_NEXT);
+      const lid = typeof next === "number" ? next : 1;
+      world.setDynamicProperty(PROP_NEXT, lid + 1);
+      save({ id: lid, f: "", fn: from, t: to.i, tn: to.n, s: subject, b: body, at: Date.now(), r: 0, di: 0, ds: 1 });
+      const reader = online(to.i);
+      if (reader) {
+        reader.sendMessage(`§eNew letter from ${from}: "${subject}§r§e". Read it with /realm:mail`);
+        reader.playSound("random.orb", { pitch: 0.9, volume: 0.8 });
+      }
+    } catch (e) {
+      console.warn(`[mail] mail_send: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

@@ -363,6 +363,8 @@ function finishProject(t, p, pr) {
   }
   /** @type {[string, string, string]} */
   const quest = [`town_${t.id}_${p.id}`, `Town project: ${p.name} (${t.n})`, guildFor(p)];
+  // Townsfolk gossip (Hearth & Hearsay) about the top contributor.
+  if (ranked[0]) send("realm:gossip", { kind: "town_project", player: ranked[0][0], name: ranked[0][1], place: `${p.name} in ${t.n}` });
   ranked.forEach(([id], i) => {
     const crowns = CONFIG.topCrowns[i] ?? 0;
     const pl = online(id);

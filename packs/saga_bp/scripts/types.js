@@ -5,7 +5,8 @@
 /**
  * Flag conditions: every key must match. Keys: a story's own flag, `g:<name>` (player-wide),
  * `<storyId>.<flag>` (another story's) or `pack:<folder>` (`"on"` while that pack is installed: it
- * answered the `realm:help_ping` scan; `"off"` otherwise). Values: an exact value, `"!x"` (anything
+ * answered the `realm:help_ping` scan; `"off"` otherwise). Set by other packs: `g:aff_<npc>` (Townsfolk
+ * affinity level, 0 Stranger to 4 Confidant, saved) and the live `cal:day`, `cal:season`, `cal:festival`. Values: an exact value, `"!x"` (anything
  * but x) or `">=n"` (a number at least n, for counters such as `g:mercy`).
  * @typedef {Record<string, string>} When
  */
@@ -220,7 +221,7 @@
  * @property {string} title
  * @property {string} short the tracker's name for it
  * @property {string} giver the NPC id who starts it
- * @property {"main" | "side"} [kind] default "side"
+ * @property {"main" | "side" | "heart"} [kind] default "side"; "heart": a townsfolk's heart story, for players Close with them (`g:aff_<npc>`)
  * @property {number} [act] main story act
  * @property {string[]} [tones]
  * @property {string} [summary] the log's line before the story starts

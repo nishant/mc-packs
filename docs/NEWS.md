@@ -6,6 +6,19 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## The townsfolk remember you
+
+Hearth & Hearsay: the twelve townsfolk now get to know you.
+
+- Talk to them every day, bring gifts (sneak-tap holding something) and help with their favors and stories. Each one goes from Stranger to Confidant.
+- Everyone loves, likes and hates different things. Tobin loves salmon. Hollis can't bear a bell.
+- Friends get 10% off: Quill's market, Bea's recipes, Elsie's beds, Mara's maps and Ida's forge. Tobin pays his friends more for fish.
+- Become Close and they write you a letter, and tell you their heart story: 12 new stories, one each.
+- Confidants get a title, the new Hearts trail and a keepsake every week.
+- Gossip! Slay a champion or land a legendary fish and the town will talk about it.
+- The townsfolk remember your story choices, and say so. And if you took the Hollow Crown, they remember that too.
+- Townsfolk can now have a lunch spot and an evening spot. The realm also counts its days now: each dawn is a new Realm day.
+
 ## The story meets the sky
 
 The story and the world now talk to each other.

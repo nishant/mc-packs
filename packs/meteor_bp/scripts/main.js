@@ -423,6 +423,7 @@ function checkFound() {
         impact.found = player.name;
         saveImpacts();
         world.sendMessage(`§6${player.name} found the meteor crater!`);
+        system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "meteor", player: player.id, name: player.name })); // Townsfolk gossip
       }
     }
   }

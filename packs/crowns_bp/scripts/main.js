@@ -535,17 +535,44 @@ async function sellMenu(player) {
   return true;
 }
 
+// Townsfolk (Hearth & Hearsay): Quill's friends pay less. realm:affinity gives the percent off with Quill (`off`),
+// on a level change and when the player joins; kept in memory only.
+/** @type {Map<string, number>} player id -> percent off */
+const quillOff = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:affinity") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string") return;
+      if (m.all && typeof m.all === "object") quillOff.set(m.player, Number(m.off?.quill) || 0);
+      else if (m.npc === "quill") quillOff.set(m.player, Number(m.off) || 0);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+/** A market price after Quill's friendship discount (rounded down). @param {Player} player @param {number} price */
+function buyPrice(player, price) {
+  const base = Math.max(0, Math.floor(price));
+  const off = Math.max(0, Math.min(50, quillOff.get(player.id) ?? 0));
+  return off && base > 0 ? Math.max(1, Math.floor((base * (100 - off)) / 100)) : base;
+}
+
 /** @param {Player} player @returns {Promise<boolean>} true to go back to the market menu */
 async function buyMenu(player) {
   const balance = crownsOf(player);
-  const form = new ActionFormData().title("§lBuy").body(`You have §6${crowns(balance)}§r. What do you want to buy?`);
-  for (const e of CONFIG.buy) form.button(`${e.amount > 1 ? `${e.amount} ` : ""}${entryName(e)}\n§8${crowns(e.price)}${balance < e.price ? " (not enough)" : ""}`);
+  const off = Math.max(0, Math.min(50, quillOff.get(player.id) ?? 0));
+  const form = new ActionFormData().title("§lBuy").body(`You have §6${crowns(balance)}§r. What do you want to buy?${off ? `\n§dQuill's friend price: ${off}% off.` : ""}`);
+  for (const e of CONFIG.buy) form.button(`${e.amount > 1 ? `${e.amount} ` : ""}${entryName(e)}\n§8${crowns(buyPrice(player, e.price))}${balance < buyPrice(player, e.price) ? " (not enough)" : ""}`);
   form.button("Back");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined) return false;
   const e = CONFIG.buy[res.selection];
   if (!e) return true;
-  const price = Math.max(0, Math.floor(e.price));
+  const price = buyPrice(player, e.price);
   const most = price > 0 ? Math.min(BUY_MAX, Math.floor(crownsOf(player) / price)) : BUY_MAX;
   if (most < 1) {
     player.sendMessage(`§cYou need ${crowns(price)} for ${entryName(e)}; you have ${crowns(crownsOf(player))}.`);
