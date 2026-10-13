@@ -39,6 +39,31 @@ const side = sideBoxes("mobhp");
 /** The box mob health uses when "Above the mob" can't be used (players, named mobs). */
 const FALLBACK_SLOT = "right1";
 
+/**
+ * attacker id -> the readout of their last hit this tick. A sweep or a blast can hurt many mobs at once: only
+ * the last one shows anyway, so it is drawn once, right after, instead of once per mob.
+ * @type {Map<string, { player: Player, draw: () => void }>}
+ */
+const pending = new Map();
+
+/** @param {Player} player @param {() => void} draw */
+function later(player, draw) {
+  if (!pending.size) system.run(drawPending);
+  pending.set(player.id, { player, draw });
+}
+
+function drawPending() {
+  const all = [...pending.values()];
+  pending.clear();
+  for (const { player, draw } of all) {
+    try {
+      if (player.isValid) draw();
+    } catch (e) {
+      console.warn(`[mobhp] ${e}`);
+    }
+  }
+}
+
 world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
   const attacker = damageSource.damagingEntity;
   if (!(attacker instanceof Player) || attacker.id === hurtEntity.id) return;
@@ -61,12 +86,16 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
     }
     if (where === "hotbar") {
       const text = { rawtext: [{ text: "§f" }, nameOf(hurtEntity), { text: `  ${numbers}` }] };
-      // Ask the Coordinates HUD, if installed, to leave this on screen for a moment.
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: attacker.id, ticks: CONFIG.holdTicks, from: "mobhp_bp" }));
-      attacker.onScreenDisplay.setActionBar(text);
+      later(attacker, () => {
+        // Ask the Coordinates HUD, if installed, to leave this on screen for a moment.
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: attacker.id, ticks: CONFIG.holdTicks, from: "mobhp_bp" }));
+        attacker.onScreenDisplay.setActionBar(text);
+      });
       return;
     }
-    side.show(attacker, isSlot(where) ? where : FALLBACK_SLOT, `§f${plainName(hurtEntity)}  ${numbers}`, CONFIG.holdTicks);
+    const slot = isSlot(where) ? where : FALLBACK_SLOT;
+    const text = `§f${plainName(hurtEntity)}  ${numbers}`;
+    later(attacker, () => side.show(attacker, slot, text, CONFIG.holdTicks));
   } catch (e) {
     console.warn(`[mobhp] ${e}`);
   }

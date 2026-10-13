@@ -20,6 +20,10 @@ let lastCheck = system.currentTick;
 /** Tick the announced cleanup runs at, while one is coming. @type {number | undefined} */
 let clearAt;
 let clearing = false;
+/** Whether the reminder shortly before an announced cleanup was sent. */
+let reminded = false;
+/** Seconds before the clearing when chat reminds everyone (only when the warning is longer). */
+const REMIND_SECONDS = 10;
 
 /** Where players died lately, so their dropped gear isn't cleared before they get back. @type {{ dim: string, x: number, y: number, z: number, tick: number }[]} */
 const deaths = [];
@@ -120,6 +124,12 @@ function keeps(entity, players, r2, deathPoints) {
   const stack = entity.getComponent("minecraft:item")?.itemStack;
   if (!stack) return true; // can't tell what it is
   if (stack.nameTag) return true;
+  // Lore marks an item another pack made or changed (a silly-enchanted tool, the Easy Building book).
+  try {
+    if (stack.getLore().length) return true;
+  } catch {
+    // no lore
+  }
   const id = stack.typeId;
   if (CONFIG.keepItems.some((k) => id === k || id.endsWith(k))) return true;
   try {
@@ -159,7 +169,7 @@ function* clearJob(by) {
         if (i % 50 === 49) yield;
       }
     }
-    const extra = kept ? ` §7(${kept} kept: renamed, rare, enchanted, or near a player or a recent death)` : "";
+    const extra = kept ? ` §7(${kept} kept: renamed, rare, enchanted, with lore, or near a player or a recent death)` : "";
     world.sendMessage(by ? `§e${by} cleared ${items(removed)}.${extra}` : `§eCleared ${items(removed)}.${extra}`);
   } catch (e) {
     console.warn(`[cleanup] ${e}`);
@@ -188,12 +198,17 @@ function announce(count) {
   if (seconds <= 0) return clearNow();
   world.sendMessage(`§eClearing ${items(count)} in ${seconds} s: pick up what you need`);
   clearAt = system.currentTick + seconds * 20;
+  reminded = seconds <= REMIND_SECONDS;
 }
 
 system.runInterval(() => {
   const now = system.currentTick;
   if (clearAt !== undefined) {
     if (now >= clearAt) clearNow();
+    else if (!reminded && clearAt - now <= REMIND_SECONDS * 20) {
+      reminded = true;
+      world.sendMessage(`§eClearing dropped items in ${Math.ceil((clearAt - now) / 20)} s: pick up what you need`);
+    }
     return;
   }
   if (clearing || get("enabled") !== true || now - lastCheck < get("checkSeconds") * 20) return;
@@ -262,7 +277,7 @@ async function opMenu(player) {
   actions.push({ text: "Close", run: () => {} });
   const nearText = get("keepNearPlayers") === true ? `, items within ${get("nearPlayerRadius")} blocks of a player` : "";
   const dropped = get("keepDeathDropsMinutes") > 0 ? `, items where a player died in the last ${get("keepDeathDropsMinutes")} min` : "";
-  const body = `${status()}\n\n§rRenamed items, enchanted items, the rare items in keepItems${nearText}${dropped} are kept. Change the threshold and timing in /realm:config.`;
+  const body = `${status()}\n\n§rRenamed items, enchanted items, items with lore, the rare items in keepItems${nearText}${dropped} are kept. Change the threshold and timing in /realm:config.`;
   const form = new ActionFormData().title("§lLag Cleanup").body(body);
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
