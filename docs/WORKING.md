@@ -22,7 +22,7 @@ Over the last 20 PRs, `docs/PACKS.md` changed in 19, a manifest in 16, the help 
 4. `npm run check 2>&1 | tail -30` (it stops at the first failing step, so rerun after each fix) and `npm run build 2>&1 | tail -3`.
 5. Game behavior: `node tools/test-bds/run.mjs --quiet --only <packs> --scenario <file>`.
 6. **Review before the first publish, not after.** #30 shipped 25 packs and #31 then fixed 46; #32 published 47 versions and #33 republished 25 the same day. One integration pass before publishing saves a whole publish cycle.
-7. PR to the default branch, **`ccr-a6a7a26a-bw0003`** (not `master`), merged with a merge commit; then the hosting steps in CLAUDE.md.
+7. PR to the default branch, **`master`**, merged with a merge commit; then the hosting steps in CLAUDE.md.
 8. In hosting, check only what changed: `node tools/check-site.mjs realm` after a publish takes seconds, while a full run loads about 1,100 pages (436 with a 3D build engine rendered on the CPU). A full run is only for site changes (`site/assets/`, header, footer, hub, catalog, templates); it uses every CPU core (`--jobs N`). To wait for a background run, wait on its task; don't loop on `pgrep -f "<name>"`, which matches the loop's own command line and never ends.
 
 ## Big features: subagents and worktrees
