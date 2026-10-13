@@ -231,21 +231,35 @@ function broadcastTip() {
  * @param {Player} player
  */
 async function editNews(player) {
-  const news = getNews();
-  const draft = getDraft(player);
-  const parts = splitBody(escapeNewlines(draft || news.body));
-  const form = new ModalFormData()
-    .title("Edit Realm news")
-    .textField("Title", DEFAULTS.news.title, { defaultValue: news.title });
-  if (draft) form.label(`§eShowing your unsaved draft (${draft.length} characters), not the saved news.`);
-  form.label(`§7Minecraft's text boxes take ${BODY_PART} characters each, so the body is split over ${parts.length} boxes that are joined in order, with nothing added between them. Type \\n for a new line and § for colors. All boxes empty = no news.`);
-  parts.forEach((part, i) => form.textField(`Body, part ${i + 1}`, i === 0 ? "What's new..." : "", { defaultValue: part }));
-  form.toggle("Pop up for everyone on their next join", { defaultValue: true });
-  if (draft) form.toggle("Discard the draft instead (the saved news stays as it is)", { defaultValue: false });
-  form.submitButton("Save");
-  const res = await show(player, form);
+  // Built again before every try: while chat is still open after /realm:news_body, /realm:news_add may grow the
+  // draft, and a form built before that would show (and save) only the first part.
+  let draft = "";
+  /** @type {import("@minecraft/server-ui").ModalFormResponse | undefined} */
+  let res;
+  for (let attempt = 1; attempt <= 20 && player.isValid; attempt++) {
+    const news = getNews();
+    draft = getDraft(player);
+    const parts = splitBody(escapeNewlines(draft || news.body));
+    const form = new ModalFormData()
+      .title("Edit Realm news")
+      .textField("Title", DEFAULTS.news.title, { defaultValue: news.title });
+    if (draft) form.label(`§eShowing your unsaved draft (${draft.length} characters), not the saved news.`);
+    form.label(`§7Minecraft's text boxes take ${BODY_PART} characters each, so the body is split over ${parts.length} boxes that are joined in order, with nothing added between them. Type \\n for a new line and § for colors. All boxes empty = no news.`);
+    parts.forEach((part, i) => form.textField(`Body, part ${i + 1}`, i === 0 ? "What's new..." : "", { defaultValue: part }));
+    form.toggle("Pop up for everyone on their next join", { defaultValue: true });
+    if (draft) form.toggle("Discard the draft instead (the saved news stays as it is)", { defaultValue: false });
+    form.submitButton("Save");
+    res = await show(player, form, 1);
+    if (res) break;
+  }
   if (!res) {
-    if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
+    if (player.isValid) {
+      player.sendMessage(
+        draft
+          ? `§7Your draft is kept (${draft.length} characters).§r §b/realm:news_add§r adds more, §b/realm:news_edit§r opens it once chat is closed.`
+          : "§eCouldn't open the editor. Close chat or your inventory and try again."
+      );
+    }
     return;
   }
   if (res.canceled || !res.formValues) {
