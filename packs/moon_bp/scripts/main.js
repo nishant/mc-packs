@@ -418,6 +418,14 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   removeFog(player); // a fog can survive a relog; the loop puts back what tonight calls for
   fogs.delete(player.id);
+  // Joining during a special moon: the dusk announcement went out before they came, so say what's going on.
+  if (!ready || !night?.a || night.s === "normal") return;
+  try {
+    if (night.s === "harvest") player.sendMessage("§6A Harvest Moon is up. §7Crops grow faster until dawn.");
+    else player.sendMessage(`§4A Blood Moon is up. §7More monsters roam until dawn.${night.alive.includes(player.id) ? "" : " You joined after dusk, so there's no survivor reward for you tonight."}`);
+  } catch (e) {
+    console.warn(`[moon] ${e}`);
+  }
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
