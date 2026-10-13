@@ -445,6 +445,12 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
 - `when` (pages, objectives, chapters, choices, rep): every key must match. A value starting with `>=`
   or `<=` compares numbers (`{ "g:iron": ">=5" }`, `{ "g:allies": "<=0" }`; an unset counter is 0). A value
   `"!x"` means "not x" (an unset flag passes).
+- Installed packs: `pack:<folder>` is `"on"` when that pack is installed (it answered `realm:help_ping`;
+  the engine asks shortly after the world loads and every 10 minutes) and `"off"` otherwise
+  (`{ "pack:expedition_bp": "on" }`). Use it on every page, objective, chapter or story that mentions
+  another pack, so the text never promises something that isn't there. It is checked live, never saved:
+  a gated objective appears once the pack answers. A `when` needs every key, so "any of these packs" is
+  separate objectives.
 
 ### Chapter
 
@@ -464,8 +470,19 @@ rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 *
   rep: [Rep, ...],
   hint: "Sol's spyglass works best from the lighthouse balcony.", // shown by "Ask for a hint"
   sequential: true,    // optional: objectives count one at a time, in order (a boss's phases)
+  sky: [SkyRequest, ...],      // optional: world events asked for when the chapter is accepted
 }
 ```
+
+A SkyRequest is `{ kind, place?, burst?, minutes?, within?, on? }`: Story Questlines sends
+`realm:sky_request` `{ kind, from: "saga_bp", player, dim, x, z, reason: "<story>:<chapter>", ... }` (x, z:
+the place's spot, else the player's) and the pack that owns the event decides: `meteor` (Meteor Strikes;
+`burst: true` breaks it apart high above the spot, no blocks broken), `blood_moon` / `harvest_moon`
+(Blood Moon & Harvest Moon: tonight), `thunder` / `rain` (Weather Almanac: planned to start within
+`within` minutes for `minutes`), `shooting_star` (Aurora & Shooting Stars: night, clear sky) and
+`rainbow` (Rainbows). Any of them can be skipped (pack missing, its **Story events** setting disabled,
+a rate limit, daytime), so the text around one must read fine whether it happens or not. Each request
+is sent once per player.
 
 A Page is a string or `{ text, when }`. A Choice is `{ id, label, set?, inc?, rep?, reply?, requires? }`.
 A Rep is `{ guild, amount, when? }` (guild `miners`, `growers`, `wardens` or `wayfarers`), sent to the
@@ -475,7 +492,19 @@ Guilds pack.
 
 Every objective has `type` and `label` (what the log shows; write it as an instruction:
 "Sneak into the Gray Ring unseen"). Optional on every objective: `when` (flags), `hint` (overrides the
-chapter hint for this step), `secret: true` (no tracker arrow until a hint is bought).
+chapter hint for this step), `secret: true` (no tracker arrow until a hint is bought), `set: { flag: value }`
+(flags set when it's done, like a choice's), `sky: SkyRequest` (sent when it starts counting, or with
+`on: "done"` when it's done).
+
+- `optional: true`: the chapter can be finished without it; the log shows `Optional: <label>`. Done before
+  the turn-in, it gives its `bonus` (a Reward, given right away) and sets its `set` flags; unfinished, it
+  just ends at the turn-in. Every chapter needs at least one objective that isn't optional.
+- `or: "<group>"`: required objectives with the same group are alternatives (`Either: A` / `Or: B`): the
+  first one done finishes the group and ends the others. Give each a `set` so the outro knows which way
+  the player went. A group needs at least two members (a member hidden by `when`, such as one gated on
+  `pack:`, leaves the other showing plainly).
+- **Never block a chapter on a random world event**: a meteor, moon, rainbow, storm or tornado appears
+  only in an `optional` objective or as one side of an `or` next to an ordinary way.
 
 Locations: `place` (a place name from section 5), `at: { dim?, x, z }` (fixed coordinates, avoid),
 or `offset: { x, z }` (from world spawn). `mark` names an offset spot on the tracker. `radius` in
@@ -510,11 +539,17 @@ blocks.
 | `wear` | `items`, `slot` ("head" / "chest" / "legs" / "feet") | Wear something |
 | `use` | `item`, `count`, location? | Use an item (right click) somewhere |
 | `wait` | `minutes` (real) or `days` (in-game) | Wait; the story continues later |
+| `event` | `events?: string[]` (`meteor`, `rainbow`, `storm_cell`, `tornado`, `aurora`, `blood_moon`, `harvest_moon`), `quest?: { pack, id?, minLevel?, tier?, gauntlet? }`, `near?`, `minutes?`, `count`, location? | A world event or another pack's finished quest. `events`: from `realm:sky_event` (and `realm:moon`); with `near`, the player must get within `near` blocks of the event's spot within `minutes` (default 15, at most 60; meteor, rainbow, storm cell and tornado only); without it, moons and the aurora count if the player is in the Overworld (and at the place, if given) at any moment while they last, the others only when announced (60 s to be at the place). `quest`: a `realm:quest_done` for this player from `pack`, `id` exact or ending in `*`; for Expeditions `tier` means that tier or harder (`easy` < `normal` < `hard` < `nightmare`), `minLevel` a level and `gauntlet: true` a Gauntlet |
 
 Mob and item ids are vanilla `minecraft:` ids. Champions: `champion: { tag: "realm:saga:<id>", mob,
 name, trait?, warn?, health?, adds?: { mobs, count } }` (tag must start with `realm:`; `trait` is a
 Champions pack trait, `stormcaller`, `frostbound`, `vampiric`, `splitting` or `shielded`, and only
 applies when the Champions pack makes the mob).
+
+Weather: while a `survive` (thunder unless it says otherwise) or a `vigil` with `weather: "thunder"` or
+`"rain"` is counting and the player waits at its place in the Overworld in the wrong weather, the engine
+asks the Weather Almanac for that weather (`realm:sky_request`, 6 minutes, starting within 8), at most once
+per player and objective every 30 minutes. Gate any line about it on `pack:weather_bp`.
 
 ### Reward
 
