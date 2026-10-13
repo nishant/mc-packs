@@ -309,7 +309,7 @@ async function mainMenu(player) {
 }
 
 /** @param {unknown} v whole number typed in a text field ("1,000" too), or NaN */
-const parseAmount = (v) => (typeof v === "string" && /^\s*-?\d[\d,]*\s*$/.test(v) ? parseInt(v.replace(/,/g, ""), 10) : NaN);
+const parseAmount = (v) => (typeof v === "string" && /^\s*-?(\d{1,3}(,\d{3})+|\d+)\s*$/.test(v) ? parseInt(v.replace(/,/g, ""), 10) : NaN);
 
 /** @param {Player} player */
 async function payForm(player) {
