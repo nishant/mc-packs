@@ -8,10 +8,11 @@ const PACK = "cooking_bp";
 const PROP_KNOWN = "cooking:known"; // player: JSON [recipe id] learned (basics aren't saved)
 const PROP_STATS = "cooking:stats"; // player: JSON { c: servings cooked, e: dishes eaten }
 const PROP_PENDING = "cooking:pending"; // world: JSON { [player id]: [recipe id] } learned while offline
-const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms } the moon from realm:moon
+const PROP_MOON = "cooking:moon"; // world: JSON { s: "blood" | "harvest", t: ms, a: game tick } the moon from realm:moon
 const PROP_STAR = "cooking:star"; // world: ms of the last aurora or meteor (realm:sky_event)
 const MINUTE = 60000;
-const MOON_MAX_MS = 20 * MINUTE; // a moon night lasts about 10 minutes; forget a moon that never set
+const MOON_MAX_MS = 20 * MINUTE; // a moon night lasts about 10 minutes; forget a moon that never set (saved before game ticks were)
+const MOON_MAX_TICKS = 24000; // the same in game time, which stands still while the realm is closed
 const CARD_PREFIX = "Recipe Card: ";
 const CROPS = new Set(["minecraft:wheat", "minecraft:carrots", "minecraft:potatoes", "minecraft:beetroot"]);
 const HIVES = new Set(["minecraft:beehive", "minecraft:bee_nest"]);
@@ -658,7 +659,10 @@ function onChampion(msg) {
 /** @param {"blood" | "harvest"} state */
 function moonIs(state) {
   const m = loadJson(world, PROP_MOON);
-  return !!m && m.s === state && Date.now() - Number(m.t) < MOON_MAX_MS;
+  if (!m || m.s !== state) return false;
+  // Game time, so a moon still up after a restart (the realm closed mid-night) keeps its window.
+  if (Number.isFinite(m.a)) return Math.abs(world.getAbsoluteTime() - m.a) < MOON_MAX_TICKS;
+  return Date.now() - Number(m.t) < MOON_MAX_MS;
 }
 function starNight() {
   const t = Number(world.getDynamicProperty(PROP_STAR) ?? 0);
@@ -1114,7 +1118,7 @@ system.afterEvents.scriptEventReceive.subscribe(
         case "realm:moon":
           if (msg.state === "blood" || msg.state === "harvest") {
             const was = moonIs(msg.state);
-            saveJson(world, PROP_MOON, { s: msg.state, t: Date.now() });
+            saveJson(world, PROP_MOON, { s: msg.state, t: Date.now(), a: world.getAbsoluteTime() });
             if (!was && foraging()) {
               if (msg.state === "harvest" && CONFIG.forage.harvestSaffron > 0) world.sendMessage("§6Kitchen: §7ripe crops harvested tonight may give §fHarvest Saffron§7.");
               if (msg.state === "blood" && CONFIG.forage.moonSalt > 0) world.sendMessage("§6Kitchen: §7monsters slain tonight may drop §fMoon Salt§7.");
