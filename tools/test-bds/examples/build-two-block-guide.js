@@ -2,6 +2,9 @@
 // may be, it isn't laid out at all (it used to be: about 9 seconds per look for a sphere 100 blocks away, and the
 // watchdog shut the server down); aimed within reach, a 51 x 64 x 50 sphere is laid out over the next ticks instead of
 // stalling the server for over a second at every look. The build itself is unchanged.
+// Only the stall (tick length) and the build are checked here, not that the big guide is drawn: guide particles go
+// through player.spawnParticle, which the harness shim doesn't relay, and the layout cache is private to the pack
+// (no test hook). Check the guide by eye in game after changing guideFor's layout job.
 // Run with: node tools/test-bds/run.mjs --quiet --flat --only build_bp --scenario tools/test-bds/examples/build-two-block-guide.js --timeout 600
 export default async function (t) {
   const { ItemStack } = t.mc;

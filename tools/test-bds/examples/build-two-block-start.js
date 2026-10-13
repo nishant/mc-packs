@@ -69,6 +69,7 @@ export default async function (t) {
   const left = count("minecraft:cobblestone", 0, Y, 0, 0, Y + 2, 7);
   t.check(left === 0, `nothing of the wall is left after undo, the start block included (${left} left)`);
   const back = items(sur, "minecraft:cobblestone");
-  // 40, or 41 when the simulated player's placement didn't use up the start block it placed.
-  t.check(back === 40 || back === 41, `all 40 cobblestone are back (${back})`);
+  // The start block is given back once and the wall in full: one more than after placing the start (a simulated
+  // placement may not use up the block it placed, so the count after the start is the baseline, not 39).
+  t.check(back === afterStart + 1, `every cobblestone is back, the start block once (${back}, expected ${afterStart + 1})`);
 }
