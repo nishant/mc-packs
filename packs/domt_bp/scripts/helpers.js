@@ -498,7 +498,15 @@ export function addCrowns(p, n) {
   const have = crownsOf(p);
   const change = Math.max(-have, Math.floor(n));
   if (change) crownsObjective().addScore(p, change);
-  else if (crownsObjective().getScore(p) === undefined) crownsObjective().addScore(p, 0);
+  else {
+    let has = false;
+    try {
+      has = crownsObjective().getScore(p) !== undefined;
+    } catch {
+      // a player with no score on any objective yet: getScore throws "Failed to resolve identity"
+    }
+    if (!has) crownsObjective().addScore(p, 0);
+  }
   return change;
 }
 
