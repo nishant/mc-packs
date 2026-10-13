@@ -1,6 +1,6 @@
 # Working on the packs (for Claude sessions)
 
-How changes are actually made here, learned from PRs #14-#33 and hosting #45-#63. `CLAUDE.md` has the rules; this file has the order of work, the traps and how to keep a session cheap. Read the part you need, not the whole file.
+How changes are actually made here, learned from PRs #14-#38 and hosting #45-#68. `CLAUDE.md` has the rules; this file has the order of work, the traps and how to keep a session cheap. Read the part you need, not the whole file.
 
 ## Flows
 
@@ -37,10 +37,27 @@ Over the last 20 PRs, `docs/PACKS.md` changed in 19, a manifest in 16, the help 
 - `weatherChange` reports `dimension` as `"overworld"`, without the `minecraft:` prefix other events use. Accept both (four packs were fixed one by one).
 - Check every entity, block and item id against `@minecraft/vanilla-data` (installed with `@minecraft/server`), e.g. `node -e "import('@minecraft/vanilla-data').then(v=>console.log(v.MinecraftEntityTypes.EvocationIllager))"`. Evokers are `minecraft:evocation_illager` and oak gates `minecraft:fence_gate`; wrong guesses broke story Act II and Skills XP. `check-stories` checks story ids, but nothing checks the other packs.
 - A tool whose stdout is JSON prints its progress to stderr (`bundle.mjs --list --json`).
+- `scoreboard.getScore(player)` throws `Failed to resolve identity` for a player with no score on any objective (a brand-new player). Read scores through a try/catch helper (`crownsOf`, `repOf`); Guilds lost every new player's rep to this.
+- A tamed mob loses `minecraft:tameable`, so `getComponent("minecraft:tameable")?.isTamed` never matches a pet; use `minecraft:is_tamed`.
+- Dynamic properties are per pack: a property one pack writes is invisible to every other pack (and to the test pack). Packs may only share state through tags, scoreboards and script events.
+- `entityDie` never fires for `minecraft:npc` on BDS 1.26 (only `entityRemove`, which also fires on chunk unload).
+- `getBlockBelow` skips water unless `includeLiquidBlocks: true`; an operator flying over the sea gets the sea floor.
+
+## Audit pass (PR #38: every pack once; what mattered)
+
+One audit agent per group, in its own worktree, with a findings cap and the rule that it edits only its packs; one reviewer per diff (diff only, findings cap); one integration review of the merged tree; a baseline suite run before and after. Groups that worked: `saga_bp` engine and `saga_bp` story content apart, `expedition_bp`, `build_bp`, `admin_bp`+`settings_bp`+`help_bp` (the menu pass), the Realm Configuration categories (`admin_bp/scripts/presets.js`, world and utilities split in two), the six resource packs with their generators. The bar for a change and the checklist are in the PR; the short version:
+
+- Bugs with a trigger: a player leaves, dies, changes dimension or is in another chunk mid-operation (forms, timers, teleports, jobs); `isValid` after every await; `UserBusy` retried, `UserClosed` stops; command parameters at their limits; saved data under 32 KB with append-only lists bounded; ids against `@minecraft/vanilla-data`.
+- Performance only when measured (`Date.now()` in a scratch copy, 8-10 simulated players): the wins were per-player work done for everyone on one tick (rainbow, blood moon, stats ticker), outlines or layouts recomputed per look or per refresh (zones, build guides), and list scans per block (creeper guard). Nothing under 1 ms a tick was worth a change.
+- QoL that counts: a confirmation before anything irreversible or realm-wide, a reply where a command did nothing silently, the admin list coming back after a command.
+- Every behavior fix got a scenario that fails before and passes after (41 new ones in `tools/test-bds/examples/`, named `<pack>-<topic>.js`, run command in the header). Three scenarios need a hook copy of a pack (`maps-cleanup`, `maps-leave`, `rainbow-race`, `title-hold`, `maps-hunt`): the header says how to make it.
+- Harness limits met: simulated players load no chunks (removing a ticking area before teleporting looks like the player leaving); their empty-hand taps and `interactWithBlock` on containers fire no interact events; a rejoin gives a new `player.id`, so per-id saved data can't be tested across a leave; `spawnParticle` isn't relayed. Two parallel runs on 4 cores make timing-sensitive scenarios flaky: give them `--timeout` headroom and `since` on waits.
+
+Open items (not fixed, with why; see the PR body for the full list): `realm:actionbar` sent without `from` by about 17 packs (harmless until a listener needs it); steady action bar lines that listen hold each other off (first drawn wins); Quick Stack ignores Land Claims and Chest Finder shows locked chests (needs a cross-pack signal); `rain_rp` sounds have no `--check` (needs ffmpeg); `hud_rp` reuses `translucent_rp`'s icon; the `platypus.js` scenario is timing-sensitive under load.
 
 ## Keeping a session cheap
 
-One big feature session cost about $177 at API rates: 572M tokens, of which 561M (98%) were cache reads and only 320K output. The cost is the context being re-read on every turn, not the writing. So:
+One big feature session cost about $177 at API rates: 572M tokens, of which 561M (98%) were cache reads and only 320K output. The cost is the context being re-read on every turn, not the writing. The audit session hit the account's rate limit three times by running 9-19 agents at once; three at a time, committing after every fix, was sustainable. So:
 
 - **Keep the main conversation small.** Delegate any wide read (an audit, a review, a search across packs) to a subagent that returns a short report. Its reads die with it; the lead's are re-read on every later turn.
 - **Read sections, never whole files.** Find them with `grep -n '^## ' docs/PACKS.md` or `grep -n`, then `sed -n a,bp`.
