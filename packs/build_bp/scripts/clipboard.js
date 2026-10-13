@@ -122,8 +122,8 @@ const turnWords = (v, k) =>
 const SIDE_KEY = /^(wall_connection_type_|minecraft:connection_|pale_moss_carpet_side_)(north|south|east|west)$/;
 const WORD_KEY = /direction|facing|face|orientation/;
 
-/** @type {Map<BlockPermutation, (BlockPermutation | undefined)[]>} */
-const turnCache = new Map();
+/** @type {WeakMap<BlockPermutation, (BlockPermutation | undefined)[]>} a copy's blocks die with its content; so do their turns */
+const turnCache = new WeakMap();
 /**
  * A block turned k quarter turns (south -> west first).
  * @param {BlockPermutation} perm @param {number} k
@@ -229,6 +229,120 @@ function contentOf(id, slot) {
   return p;
 }
 
+// A cut abandoned when its player left puts its blocks back; the ones whose spot wasn't loaded any more are kept in a
+// structure (`build:r...`, listed with its corner in the world property) and put back once that spot is loaded.
+const LOST_PROP = "build:cutback"; // world: JSON { [structure id]: { d: dimension id, x, y, z } }
+let lostPending = true; // checked once after a restart
+
+/** @returns {Record<string, { d: string, x: number, y: number, z: number }>} */
+function lostOf() {
+  try {
+    const raw = world.getDynamicProperty(LOST_PROP);
+    const o = typeof raw === "string" ? JSON.parse(raw) : {};
+    return o && typeof o === "object" ? o : {};
+  } catch {
+    return {};
+  }
+}
+/** @param {Record<string, unknown>} o */
+function saveLost(o) {
+  world.setDynamicProperty(LOST_PROP, Object.keys(o).length ? JSON.stringify(o) : undefined);
+}
+
+/** @param {Dimension} dim @param {Vec} min @param {Vec} size @param {import("./undo.js").Placed[]} lost */
+function keepLost(dim, min, size, lost) {
+  const id = `build:r${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+  try {
+    const st = world.structureManager.createEmpty(id, size, StructureSaveMode.World);
+    for (const c of lost) st.setBlockPermutation({ x: c.x - min.x, y: c.y - min.y, z: c.z - min.z }, c.before);
+    st.saveToWorld();
+    const o = lostOf();
+    o[id] = { d: dim.id, x: min.x, y: min.y, z: min.z };
+    saveLost(o);
+    lostPending = true;
+  } catch (e) {
+    console.warn(`[build] keep cut: ${e}`);
+  }
+}
+
+let restoring = false;
+/** Puts back the blocks of one kept cut whose corners are loaded (a few hundred a tick). */
+function restoreLost() {
+  if (!lostPending || restoring) return;
+  const o = lostOf();
+  const ids = Object.keys(o);
+  if (!ids.length) lostPending = false;
+  const sm = world.structureManager;
+  for (const id of ids) {
+    const at = o[id];
+    const st = sm.get(id);
+    if (!st) {
+      delete o[id];
+      saveLost(o);
+      continue;
+    }
+    /** @type {Dimension} */
+    let dim;
+    try {
+      dim = world.getDimension(at.d);
+    } catch {
+      continue;
+    }
+    const size = st.size;
+    /** @param {Vec} p */
+    const loaded = (p) => {
+      try {
+        return !!dim.getBlock(p);
+      } catch {
+        return false;
+      }
+    };
+    if (!loaded(at) || !loaded({ x: at.x + size.x - 1, y: at.y + size.y - 1, z: at.z + size.z - 1 })) continue;
+    restoring = true;
+    system.runJob(
+      (function* () {
+        try {
+          let left = 0;
+          for (let y = 0; y < size.y; y++)
+            for (let x = 0; x < size.x; x++)
+              for (let z = 0; z < size.z; z++) {
+                const loc = { x, y, z };
+                const perm = st.getBlockPermutation(loc);
+                if (!perm || perm.type.id === "minecraft:air") continue;
+                let block;
+                try {
+                  block = dim.getBlock({ x: at.x + x, y: at.y + y, z: at.z + z });
+                } catch {
+                  block = undefined;
+                }
+                if (!block) {
+                  left++;
+                  continue;
+                }
+                // Filled since (built over): it stays as it is.
+                if (block.isAir) block.setPermutation(perm);
+                st.setBlockPermutation(loc);
+                yield;
+              }
+          if (left) st.saveToWorld();
+          else {
+            sm.delete(id);
+            const now = lostOf();
+            delete now[id];
+            saveLost(now);
+          }
+        } catch (e) {
+          console.warn(`[build] put back cut: ${e}`);
+        } finally {
+          restoring = false;
+        }
+      })()
+    );
+    return;
+  }
+}
+system.runInterval(restoreLost, 100);
+
 /** The outside blocks of a copy (for the paste preview). @param {Content} c */
 function surfaceOf(c) {
   if (c.surface) return c.surface;
@@ -239,6 +353,22 @@ function surfaceOf(c) {
       !set.has(`${b.x},${b.y - 1},${b.z}`) || !set.has(`${b.x},${b.y},${b.z + 1}`) || !set.has(`${b.x},${b.y},${b.z - 1}`)
   );
   return c.surface;
+}
+
+/** @type {WeakMap<object, Map<number, Vec[]>>} each copy's surface turned to each facing, placed at 0 0 0 */
+const turnedSurfaces = new WeakMap();
+
+/**
+ * A copy's surface turned the way the player faces, relative to the spot they look at: the same list every time
+ * (so the paste preview's outline is worked out once, not twice a second), moved there with the guide's offset.
+ * @param {Content} c @param {Slot} slot @param {number} facing
+ */
+function turnedSurface(c, slot, facing) {
+  let byFacing = turnedSurfaces.get(c);
+  if (!byFacing) turnedSurfaces.set(c, (byFacing = new Map()));
+  let list = byFacing.get(facing);
+  if (!list) byFacing.set(facing, (list = surfaceOf(c).map(placement(slot, facing, { x: 0, y: 0, z: 0 }).at)));
+  return list;
 }
 
 /**
@@ -433,14 +563,25 @@ async function copyOrCut(player, cut) {
       // there was none
     }
     contents.delete(id);
+    // Last copy is empty until the new copy is complete: a player who leaves meanwhile doesn't keep a stale slot
+    // (the old size and facing) over the new structure.
+    delete meta.slots["0"];
+    saveMeta(player, meta);
     let structure;
     try {
       structure = sm.createFromWorld(id, dim, min, max, { includeEntities: false, saveMode: StructureSaveMode.World });
     } catch (e) {
-      delete meta.slots["0"];
-      saveMeta(player, meta);
       return player.sendMessage(`§eCouldn't copy that region (${String(e).slice(0, 120)}). Is all of it loaded?`);
     }
+    /** The player left before the copy was complete: no copy is kept. */
+    const abandon = () => {
+      try {
+        sm.delete(id);
+      } catch {
+        // gone
+      }
+      contents.delete(id);
+    };
     // What can't be pasted (forbidden blocks), or isn't cut (protected blocks, water and lava), is left out.
     /** @type {Map<string, BlockPermutation>} */
     const same = new Map();
@@ -450,7 +591,10 @@ async function copyOrCut(player, cut) {
     for (let y = 0; y < size.y; y++)
       for (let x = 0; x < size.x; x++)
         for (let z = 0; z < size.z; z++) {
-          if (++n % 4096 === 0) await ctx.tick();
+          if (++n % 4096 === 0) {
+            await ctx.tick();
+            if (!player.isValid) return abandon();
+          }
           const loc = { x, y, z };
           const perm = structure.getBlockPermutation(loc);
           if (!perm || perm.type.id === "minecraft:air") continue;
@@ -466,7 +610,7 @@ async function copyOrCut(player, cut) {
           if (!shared) same.set(key, (shared = perm));
           cells.push({ x, y, z, perm: shared });
         }
-    if (!player.isValid) return;
+    if (!player.isValid) return abandon();
     const creative = ctx.isCreative(player);
     if (cut && !cells.length) {
       sm.delete(id);
@@ -489,8 +633,31 @@ async function copyOrCut(player, cut) {
       const air = ctx.AIR();
       /** @type {Set<ClipCell>} */
       const kept = new Set();
+      /**
+       * The player left mid-cut: what was taken out goes back where it was (what hangs on others last), and nothing is
+       * kept as a copy. A spot that isn't loaded any more is kept in a structure and put back once it loads again.
+       */
+      const abandonCut = () => {
+        /** @type {import("./undo.js").Placed[]} */
+        const lost = [];
+        for (let i = removed.length - 1; i >= 0; i--) {
+          const c = removed[i];
+          try {
+            const block = dim.getBlock(c);
+            if (block?.isAir) block.setPermutation(c.before);
+            else lost.push(c);
+          } catch {
+            lost.push(c);
+          }
+        }
+        if (lost.length) keepLost(dim, min, size, lost);
+        abandon();
+      };
       for (let i = 0; i < order.length; i++) {
-        if (i && i % perTick === 0) await ctx.tick();
+        if (i && i % perTick === 0) {
+          await ctx.tick();
+          if (!player.isValid) return abandonCut();
+        }
         const c = order[i];
         const at = { x: min.x + c.x, y: min.y + c.y, z: min.z + c.z };
         let block;
@@ -520,6 +687,7 @@ async function copyOrCut(player, cut) {
       if (kept.size) cells.splice(0, cells.length, ...cells.filter((c) => !kept.has(c)));
       // A cut gives no drops: anything that popped off goes too.
       await ctx.tick();
+      if (!player.isValid) return abandonCut();
       for (const e of itemsIn(dim, min, max)) {
         if (before.has(e.id)) continue;
         try {
@@ -712,7 +880,8 @@ system.runInterval(() => {
         }
         const { at } = placement(slot, facingIndex(player), T);
         const free = !!slot.cut && !meta.used.includes(slot.cut);
-        drawGuide(player, free ? surfaceOf(c).map(at) : guideMods(player, surfaceOf(c).map(at), T), "paste");
+        if (free || !ctx.modsActive(player)) drawGuide(player, turnedSurface(c, slot, facingIndex(player)), "paste", { offset: T });
+        else drawGuide(player, guideMods(player, surfaceOf(c).map(at), T), "paste");
       }
     } catch (e) {
       console.warn(`[build] clipboard: ${e}`);

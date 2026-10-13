@@ -52,6 +52,8 @@ function historyOf(player) {
     try {
       load(player, h);
     } catch (e) {
+      // A player who already left: read their saved steps when they come back, not never.
+      if (!player.isValid) h.loaded = false;
       console.warn(`[build] undo load: ${e}`);
     }
   }

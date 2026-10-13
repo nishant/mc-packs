@@ -68,6 +68,10 @@ export default async function (t) {
   };
 
   await t.loadArea(0, 0, { radius: 4 });
+  // The superflat grass spawns cows, pigs and sheep: one caught in a /fill dies there and its drops would be gathered to
+  // the player's feet with the real drops (or lie by the creative wall). No spawns, and none left around.
+  t.server("/gamerule domobspawning false");
+  t.server("/kill @e[type=!player,type=!item]");
   const sur = await t.player("Sur", { x: 0, z: 0, gameMode: "survival" });
   // A 3 x 3 x 1 wall, the default size (Wall 5 x 3 x 1 changed to 3 wide).
   t.answerForm(sur, "Choose a shape", 1, { Width: 3, Height: 3, Thickness: 1, Size: 0 });
@@ -274,6 +278,7 @@ export default async function (t) {
   await t.waitMessage(cre, /build mode is on/i);
   t.cmd(cre, "/realm:build_mode");
   await run(cre, "/realm:build_destroy", /Destroy mode on/, { kind: "actionbar" });
+  t.server("/kill @e[type=!player,type=!item]");
   t.server("/fill 25 -60 6 55 -30 9 stone");
   t.server("/fill -15 -60 26 15 -30 29 stone");
   const sur2 = sur;
@@ -291,7 +296,7 @@ export default async function (t) {
   const creDrops = dim.getEntities({ type: "minecraft:item", location: { x: 40, y: Y + 15, z: 7 }, maxDistance: 25 }).map((e) => `${e.getComponent("item").itemStack.typeId} at ${Math.floor(e.location.x)} ${Math.floor(e.location.z)}`);
   t.check(creDrops.length === 0, `creative: no drops (${creDrops.join(", ")})`);
   t.check(count("minecraft:stone", -15, Y, 26, 15, Y + 30, 29) === 0, "survival wall gone too");
-  const survDrops = allItemsNear(sur2.location, 6).reduce((n, s) => n + s.amount, 0) + items(sur2, "minecraft:cobblestone");
+  const survDrops = allItemsNear(sur2.location, 6).filter((s) => s.typeId === "minecraft:cobblestone").reduce((n, s) => n + s.amount, 0) + items(sur2, "minecraft:cobblestone");
   t.log("survival drops at the feet:", survDrops);
   t.check(survDrops === 31 * 31 * 4, `every broken stone dropped one cobblestone at the feet (${survDrops} of ${31 * 31 * 4})`);
   pickUp(sur2, 10);
