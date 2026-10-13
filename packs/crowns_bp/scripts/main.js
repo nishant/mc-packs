@@ -152,8 +152,10 @@ function welcome(player) {
     const start = Math.max(0, Math.floor(Number(get("startBalance")) || 0));
     obj.addScore(player, start); // also gives a new player a score of 0, so they show up
     if (start > 0) player.sendMessage(`§6+${crowns(start)} §7(Starting balance. See yours with /realm:crowns)`);
-  } else if (obj.getScore(player) === undefined) {
-    obj.addScore(player, 0);
+  } else {
+    let score;
+    try { score = obj.getScore(player); } catch { score = undefined; } // throws for a player with no score on any objective
+    if (score === undefined) obj.addScore(player, 0);
   }
   rememberName(player);
   dailyBonus(player);
