@@ -601,8 +601,9 @@ function standingSpot(player) {
   const at = centered(player.location);
   if (player.isOnGround) return at;
   try {
-    const floor = player.dimension.getBlockBelow(at, { maxDistance: 64 });
-    if (floor) return { x: at.x, y: floor.location.y + 1, z: at.z };
+    const floor = player.dimension.getBlockBelow(at, { maxDistance: 64, includeLiquidBlocks: true });
+    if (floor && !floor.isLiquid) return { x: at.x, y: floor.location.y + 1, z: at.z };
+    // over water or lava: keep the spot rather than put the NPC on the sea floor
   } catch {
     // below the world or not loaded: keep the spot
   }
