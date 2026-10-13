@@ -6,6 +6,15 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Steadier building guides
+
+Easy Building got a tune-up.
+
+- The block guide outlines no longer blink on a busy realm or a slow connection.
+- Looking along a diagonal, your shape no longer flips back and forth.
+- Holding the Building Book's use button while sneaking switches build mode once, not on and off again.
+- The Easy Building menus stay open: turn build mode on, then pick a shape, change settings, all in one go. Close them with the X when you're done.
+
 ## Easier admin menu
 
 For operators: the Realm Configuration menu is easier to read.

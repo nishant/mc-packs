@@ -197,6 +197,9 @@ function planLabel(plan) {
   return `${s.name} ${W} x ${H} x ${D}`;
 }
 
+/** A note above the hotbar that a menu also shows at its top (the menu hides the hotbar). @param {Player} player @param {string} text */
+const noted = (player, text) => (note(player, text), text);
+
 /** A note above the hotbar; `realm:actionbar` first, so the HUD and other lines wait. @param {Player} player @param {string} text */
 function note(player, text, ticks = 60) {
   system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks, from: PACK }));
@@ -508,10 +511,22 @@ function materialsOf(player, plan, placed) {
 // ---------------------------------------------------------------------------
 
 const FACINGS = [[0, 1], [-1, 0], [0, -1], [1, 0]]; // yaw 0 (south), 90 (west), 180 (north), -90 (east)
-/** The way a player faces, snapped to x or z. @param {Player} player @returns {number[]} */
+/** @type {Map<string, { i: number, tick: number }>} the way each player faced last (an index into FACINGS) and when */
+const lastFacing = new Map();
+/**
+ * The way a player faces, snapped to x or z. It keeps the last way until the look is 10 degrees past the diagonal,
+ * so looking along a diagonal doesn't flip the guide (and the build) back and forth.
+ * @param {Player} player @returns {number[]}
+ */
 function facingOf(player) {
   const yaw = player.getRotation().y;
-  return FACINGS[(((Math.round(yaw / 90) % 4) + 4) % 4)];
+  const now = system.currentTick;
+  const prev = lastFacing.get(player.id);
+  // Only while the guide keeps asking (it does every few ticks): a build long after uses the plain way you face.
+  let i = prev && now - prev.tick <= 40 && Math.abs(((((yaw - prev.i * 90) % 360) + 540) % 360) - 180) <= 55 ? prev.i : -1;
+  if (i < 0) i = ((Math.round(yaw / 90) % 4) + 4) % 4;
+  lastFacing.set(player.id, { i, tick: now });
+  return FACINGS[i];
 }
 /** Right and forward in the world. @param {number[]} F @param {boolean} turn */
 function frameOf(F, turn) {
@@ -1388,11 +1403,17 @@ async function handBroken(player, dim, copies, id) {
 // The Building Book and Air Build: using an item in the air
 // ---------------------------------------------------------------------------
 
+/** Uses of the Building Book closer together than this (in ticks) are one press held down. */
+const BOOK_REPEAT = 16;
+
 /** Opens the menu (or, sneaking, turns build mode on or off) with the Building Book. @param {Player} player */
 function useBook(player) {
   const s = stateOf(player);
-  if (system.currentTick - s.bookAt < 8) return;
+  // Every use counts, acted on or not: holding the button (or a long press) repeats it every 12 ticks or so, and
+  // that must not switch build mode on and off again. A new press comes after a pause.
+  const last = s.bookAt;
   s.bookAt = system.currentTick;
+  if (system.currentTick - last < BOOK_REPEAT) return;
   const why = refusal(player);
   if (why) return player.sendMessage(`§e${why}`);
   if (player.isSneaking) toggleMode(player);
@@ -1444,7 +1465,10 @@ async function airUse(player, perm) {
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
   if (ev.itemStack?.typeId !== BOOK || isSelecting(ev.player)) return;
   ev.cancel = true; // every repeat while the button is held too, so the block is never used
-  if (!ev.isFirstEvent) return;
+  if (!ev.isFirstEvent) {
+    stateOf(ev.player).bookAt = system.currentTick; // still held: not a new press
+    return;
+  }
   const player = ev.player;
   system.run(() => {
     if (player.isValid) useBook(player);
@@ -1491,6 +1515,21 @@ function guideFor(player, plan, T) {
     const pos = hit.turned.get(fk);
     if (pos) return pos;
     if (!hit.busy && !hit.rel) throw new TooBig(cap + 1);
+    if (hit.job === undefined && (hit.rel ? hit.rel.length : roughSize(plan)) <= POINTS_NOW) {
+      // A small shape is laid out (or turned to a new facing) at once, so its guide never skips a refresh.
+      if (hit.busy) {
+        try {
+          hit.rel = relCells(plan, false, undefined, cap);
+        } catch (e) {
+          if (!(e instanceof TooBig)) throw e;
+        }
+        hit.busy = false;
+      }
+      if (!hit.rel) throw new TooBig(cap + 1);
+      const list = hit.rel.map((r) => ({ x: r.du * fr.R[0] + r.dw * fr.F[0], y: r.dv, z: r.du * fr.R[1] + r.dw * fr.F[1] }));
+      hit.turned.set(fk, list);
+      return list;
+    }
     if (hit.job === undefined) {
       // Laid out (and outlined) over the next ticks, so a big shape doesn't stall one; no guide until then.
       const entry = hit;
@@ -1574,6 +1613,12 @@ function guideFor(player, plan, T) {
   return guide;
 }
 
+/** About how many blocks a plan lays out (its box, repeats and copies): small ones are laid out at once. @param {Plan} plan */
+function roughSize(plan) {
+  const { W, H, D } = boxOf(plan.shape, (k) => val(plan, k));
+  return W * H * D * Math.max(1, plan.repeat) * (plan.copies === "none" ? 1 : 4);
+}
+
 /** The guide's modifier copies (like finishCells, without sorting). @param {Plan} plan @param {Pos[]} cells @param {Pos} T @param {number} cap @param {string} dim */
 function withModsGuide(plan, cells, T, cap, dim) {
   if (!modsOn(plan.mods)) return cells;
@@ -1650,6 +1695,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
     s.way = undefined;
   }
   layoutCache.delete(playerId);
+  lastFacing.delete(playerId);
   const pj = pointsCache.get(playerId)?.job;
   if (pj !== undefined) system.clearJob(pj);
   pointsCache.delete(playerId);
@@ -1682,22 +1728,42 @@ async function show(player, form) {
 /** The answers of a modal form, inputs only (labels and headers give undefined). @param {any} res */
 const inputs = (res) => (res?.formValues ?? []).filter((/** @type {unknown} */ v) => v !== undefined);
 
+/**
+ * What a menu action gives back: CLOSE when it needs the world (a preview, a build, picking corners) or the player
+ * closed a menu under it, so the menus stay closed; a string is shown at the top of the menu it comes back to;
+ * anything else just brings that menu back. Menus close only with their X (or an action that needs the world).
+ */
+const CLOSE = Symbol("close");
+
 /** @param {Player} player */
 async function mainMenu(player) {
-  const why = refusal(player);
-  if (why) return player.sendMessage(`§e${why}`);
+  /** @type {unknown} */
+  let out;
+  while (player.isValid) {
+    const why = refusal(player);
+    if (why) return player.sendMessage(`§e${why}`);
+    out = await mainPage(player, typeof out === "string" ? out : "");
+    if (out === CLOSE) return;
+  }
+}
+
+/** The main page of /realm:build once; its action's answer. @param {Player} player @param {string} notice */
+async function mainPage(player, notice) {
   const s = stateOf(player);
   const plan = planOf(player);
   const blocks = plan.src === "typed" ? nice(plan.block) : plan.src === "mix" ? `your palette (${paletteLabel(plan.palette)})` : "the block you place";
   const second = plan.second === "typed" && plan.secondBlock ? nice(plan.secondBlock) : plan.second === "none" ? "none" : "the hotbar slot right of your hand";
   const body = [
+    notice ? `${notice}§r\n` : "",
     `Shape: §b${planLabel(plan)}§r`,
     `Blocks: ${blocks}; second block: ${second}`,
     `Replace: ${REPLACE_NAMES[REPLACE.indexOf(plan.replace)]}`,
     `Modifiers: ${modsLabel(plan.mods)}${needsCenter(plan.mods) ? `, around ${plan.mods.center ? `${plan.mods.center.x} ${plan.mods.center.y} ${plan.mods.center.z}` : "the block each build starts at"}` : ""}`,
     s.on ? "§aBuild mode is on:§r placing a block builds the shape there. Sneak to place just one." : "Build mode is off: turn it on to build by placing a block, or use Build here now.",
     isCreative(player) || get("requireItems") !== true ? "Building is free in creative." : "Builds use blocks from your inventory; undo gives them back.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [
     { text: s.on ? "Build mode: §aOn" : "Build mode: Off", run: () => toggleMode(player) },
@@ -1713,47 +1779,58 @@ async function mainMenu(player) {
   ];
   if (s.way?.pts.length) {
     const n = s.way.pts.length;
-    if (n >= 2) actions.unshift({ text: `Finish the curve (${plural(n, "point")})`, run: () => finishCurve(player) });
-    actions.push({ text: "Forget the curve points", run: () => ((s.way = undefined), layoutCache.delete(player.id), note(player, "§7Curve points forgotten")) });
+    if (n >= 2) actions.unshift({ text: `Finish the curve (${plural(n, "point")})`, run: async () => (await finishCurve(player), CLOSE) });
+    actions.push({ text: "Forget the curve points", run: () => ((s.way = undefined), layoutCache.delete(player.id), noted(player, "§7Curve points forgotten")) });
   }
   if (!hasBook(player)) actions.push({ text: "Get a Building Book", run: () => giveBook(player) });
-  if (s.start) actions.push({ text: "Forget the start block", run: () => ((s.start = undefined), note(player, "§7Start block forgotten")) });
+  if (s.start) actions.push({ text: "Forget the start block", run: () => ((s.start = undefined), noted(player, "§7Start block forgotten")) });
   const undoLabel = lastLabel(player, false), redoLabel = lastLabel(player, true);
-  if (undoLabel) actions.push({ text: `Undo: ${undoLabel}`, run: () => undo(player, false) });
-  if (redoLabel) actions.push({ text: `Redo: ${redoLabel}`, run: () => undo(player, true) });
+  /** Undo or redo, and say what happened here (above the hotbar it's hidden by the menu). @param {boolean} redo */
+  const step = async (redo) => (await undo(player, redo)) ?? `§eNothing was ${redo ? "redone" : "undone"}: chat says why.`;
+  if (undoLabel) actions.push({ text: `Undo: ${undoLabel}`, run: () => step(false) });
+  if (redoLabel) actions.push({ text: `Redo: ${redoLabel}`, run: () => step(true) });
   const form = new ActionFormData().title(TITLE).body(body);
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  await actions[res.selection]?.run();
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return CLOSE;
+  return actions[res.selection]?.run();
 }
 
-/** @param {Player} player */
+/** Build mode on or off; what it is now. @param {Player} player */
 function toggleMode(player) {
   const s = stateOf(player);
   s.on = !s.on;
   s.start = undefined;
-  note(player, s.on ? `§aBuild mode on:§7 placing a block builds a ${planLabel(planOf(player))}` : "§7Build mode off: blocks place one at a time");
+  return noted(player, s.on ? `§aBuild mode on:§7 placing a block builds a ${planLabel(planOf(player))}` : "§7Build mode off: blocks place one at a time");
 }
 
-/** @param {Player} player */
+/** The list of shapes; picking one opens its settings, and Cancel there comes back here. @param {Player} player */
 async function chooseShape(player) {
-  const form = new ActionFormData().title("Choose a shape");
-  let group = "";
-  for (const s of SHAPES) {
-    if (s.group !== group) {
-      group = s.group;
-      form.header(group);
+  while (player.isValid) {
+    const form = new ActionFormData().title("Choose a shape");
+    let group = "";
+    for (const s of SHAPES) {
+      if (s.group !== group) {
+        group = s.group;
+        form.header(group);
+      }
+      form.button(`${s.name}\n§8${s.about.length > 48 ? `${s.about.slice(0, 45)}...` : s.about}`);
     }
-    form.button(`${s.name}\n§8${s.about.length > 48 ? `${s.about.slice(0, 45)}...` : s.about}`);
+    form.button("Back");
+    const res = await show(player, form);
+    if (!res || res.canceled || res.selection === undefined || !player.isValid) return CLOSE;
+    const shape = SHAPES[res.selection];
+    if (!shape) return undefined;
+    const out = await shapeForm(player, shape.id);
+    if (out !== undefined) return out;
   }
-  const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  const shape = SHAPES[res.selection];
-  if (shape) await shapeForm(player, shape.id);
+  return CLOSE;
 }
 
-/** The settings of one shape; saving picks it and turns build mode on. @param {Player} player @param {string} id */
+/**
+ * The settings of one shape; saving picks it and turns build mode on. What it did, or undefined if canceled.
+ * @param {Player} player @param {string} id
+ */
 async function shapeForm(player, id) {
   const plan = planOf(player);
   const shape = shapeOf(id);
@@ -1774,7 +1851,7 @@ async function shapeForm(player, id) {
   }
   form.submitButton("Use this shape");
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid) return undefined;
   const values = inputs(res);
   /** @type {import("./shapes.js").Values} */
   const chosen = { ...(plan.values[id] ?? {}) };
@@ -1794,13 +1871,20 @@ async function shapeForm(player, id) {
   s.start = undefined;
   if (!shape.way) s.way = undefined;
   const twoPoint = plan.size === "points";
-  player.sendMessage(
+  return said(
+    player,
     shape.way
       ? `§a${shape.name}:§r build mode is on. Place a block at each point (or look and use /realm:build_here), then finish with /realm:build_finish or in /realm:build.`
       : twoPoint
-      ? `§a${shape.name}:§r place the start block, then the end block, and it fills the space between. Or look at a spot and use /realm:build_here twice.`
-      : `§a${planLabel(plan)}:§r build mode is on. Place a block and it builds there, or look at a spot and use /realm:build_here. Sneak to place just one block.`
+        ? `§a${shape.name}:§r build mode is on. Place the start block, then the end block, and it fills the space between. Or look at a spot and use /realm:build_here twice.`
+        : `§a${planLabel(plan)}:§r build mode is on. Place a block and it builds there, or look at a spot and use /realm:build_here. Sneak to place just one block.`
   );
+}
+
+/** Says it in chat too (kept there after the menu closes) and gives it back for the top of the menu. @param {Player} player @param {string} text */
+function said(player, text) {
+  player.sendMessage(text);
+  return text;
 }
 
 /** Blocks, replace mode, where it goes, copies. @param {Player} player */
@@ -1825,7 +1909,7 @@ async function placingForm(player) {
     .dropdown("Repeat toward", REPEAT_DIR_NAMES, { defaultValueIndex: REPEAT_DIR.indexOf(plan.repeatDir) })
     .submitButton("Save");
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid) return undefined;
   const v = inputs(res);
   const next = { ...plan };
   next.src = /** @type {Plan["src"]} */ (SRC[Number(v[0])] ?? "hand");
@@ -1848,12 +1932,9 @@ async function placingForm(player) {
     const p = id && permOf(id);
     if (p && isForbidden(p.type.id)) problems.push(`${nice(p.type.id)} can't be built with the tools`);
   }
-  if (problems.length) {
-    player.sendMessage(`§eNot saved: ${problems.join("; ")}. Block ids look like minecraft:stone_bricks.`);
-    return;
-  }
+  if (problems.length) return said(player, `§eNot saved: ${problems.join("; ")}. Block ids look like minecraft:stone_bricks.`);
   savePlan(player, next);
-  player.sendMessage(`§aSaved.§r ${planLabel(next)}, replacing ${REPLACE_NAMES[REPLACE.indexOf(next.replace)].toLowerCase()}.`);
+  return said(player, `§aSaved.§r ${planLabel(next)}, replacing ${REPLACE_NAMES[REPLACE.indexOf(next.replace)].toLowerCase()}.`);
 }
 
 /** Mirror, radial and array, and their center. @param {Player} player */
@@ -1881,7 +1962,7 @@ async function modifiersForm(player) {
     .slider("Array copies", 1, 16, { defaultValue: m.count, valueStep: 1 })
     .submitButton("Save");
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid) return undefined;
   const v = inputs(res);
   /** @type {any} */
   const next = { ...m };
@@ -1894,7 +1975,7 @@ async function modifiersForm(player) {
         return undefined;
       }
     })();
-    if (!hit) return player.sendMessage(`§eNot saved: look at a block within ${reachOf(player)} blocks to center on it.`);
+    if (!hit) return said(player, `§eNot saved: look at a block within ${reachOf(player)} blocks to center on it.`);
     next.center = { dim: player.dimension.id, ...hit.block.location };
   } else if (pick === 2) {
     const l = player.location;
@@ -1908,9 +1989,7 @@ async function modifiersForm(player) {
   savePlan(player, plan);
   const cc = plan.mods.center;
   const hand = get("handModifiers") === true && getFor(player, "modsByHand") === true ? " Blocks you place and break by hand get copies too." : "";
-  player.sendMessage(
-    `§aModifiers:§r ${modsLabel(plan.mods)}${needsCenter(plan.mods) ? ` around ${cc ? `${cc.x} ${cc.y} ${cc.z}` : "the block each build starts at"}` : ""}.${hand}`
-  );
+  return said(player, `§aModifiers:§r ${modsLabel(plan.mods)}${needsCenter(plan.mods) ? ` around ${cc ? `${cc.x} ${cc.y} ${cc.z}` : "the block each build starts at"}` : ""}.${hand}`);
 }
 
 /** Where the palette's blocks come from and how they are spread. @param {Player} player */
@@ -1931,13 +2010,13 @@ async function paletteForm(player) {
     .slider("Pattern size (blocks)", 1, 16, { defaultValue: pal.scale, valueStep: 1 })
     .submitButton("Save");
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid) return undefined;
   const v = inputs(res);
   plan.palette = normalizePalette({ from: FROM[Number(v[1])], pattern: PATTERNS[Number(v[2])], dir: DIRS[Number(v[3])], scale: Number(v[4]) });
   if (v[0]) plan.src = "mix";
   else if (plan.src === "mix") plan.src = "hand";
   savePlan(player, plan);
-  player.sendMessage(`§aPalette:§r ${paletteLabel(plan.palette)}${plan.src === "mix" ? ", in use" : ", not in use (builds use the block you place)"}.`);
+  return said(player, `§aPalette:§r ${paletteLabel(plan.palette)}${plan.src === "mix" ? ", in use" : ", not in use (builds use the block you place)"}.`);
 }
 
 /** The player's own guide, reach and Air Build choices (the same as in /realm:prefs). @param {Player} player */
@@ -1963,7 +2042,7 @@ async function guidesForm(player) {
   if (hand) form.toggle("Modifiers copy blocks I place and break by hand", { defaultValue: getFor(player, "modsByHand") === true });
   form.toggle("Build mode line above the hotbar", { defaultValue: getFor(player, "hint") === true }).submitButton("Save");
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid) return undefined;
   const v = inputs(res);
   let i = 0;
   setFor(player, "guideStyle", STYLES[Number(v[i++])] ?? "outline");
@@ -1977,7 +2056,7 @@ async function guidesForm(player) {
   if (hand) setFor(player, "modsByHand", !!v[i++]);
   setFor(player, "hint", !!v[i++]);
   layoutCache.delete(player.id);
-  player.sendMessage(`§aSaved.§r Guides: ${STYLE_NAMES[STYLES.indexOf(String(getFor(player, "guideStyle")))] ?? "Outline"}; reach ${reachOf(player)}${airOn(player) ? `; Air Build on, ${getFor(player, "airDistance")} blocks away` : ""}.`);
+  return said(player, `§aSaved.§r Guides: ${STYLE_NAMES[STYLES.indexOf(String(getFor(player, "guideStyle")))] ?? "Outline"}; reach ${reachOf(player)}${airOn(player) ? `; Air Build on, ${getFor(player, "airDistance")} blocks away` : ""}.`);
 }
 
 /** Does the player carry a Building Book? @param {Player} player */
@@ -1988,42 +2067,46 @@ function hasBook(player) {
   return false;
 }
 
-/** Gives the player a Building Book (one at a time). @param {Player} player */
+/** Gives the player a Building Book (one at a time); what happened. @param {Player} player */
 function giveBook(player) {
-  if (hasBook(player)) return player.sendMessage("§eYou already have a Building Book. Use it to open Easy Building; sneak and use it to turn build mode on or off.");
+  if (hasBook(player)) return "§eYou already have a Building Book. Use it to open Easy Building; sneak and use it to turn build mode on or off.";
   let book;
   try {
     book = new ItemStack(BOOK, 1);
   } catch {
-    return player.sendMessage("§eThe Building Book isn't available on this realm.");
+    return "§eThe Building Book isn't available on this realm.";
   }
   book.setLore(["Use: open Easy Building", "Sneak and use: build mode on or off"]);
   const rest = containerOf(player)?.addItem(book);
   if (rest) player.dimension.spawnItem(rest, player.location);
-  player.sendMessage("§aHere's a Building Book.§r Use it to open Easy Building; sneak and use it to turn build mode on or off.");
+  return "§aHere's a Building Book.§r Use it to open Easy Building; sneak and use it to turn build mode on or off.";
 }
 
-/** Outline at the block you look at for a few seconds, then confirm with the cost. @param {Player} player */
+/**
+ * Outline at the block you look at for a few seconds, then confirm with the cost. For the menu: why it can't (a
+ * string), undefined when canceled (the menu comes back), CLOSE otherwise.
+ * @param {Player} player
+ */
 async function buildHereMenu(player) {
   const plan = planOf(player);
-  if ((plan.size === "points" && shapeOf(plan.shape).points) || shapeOf(plan.shape).way) return buildHere(player);
+  if ((plan.size === "points" && shapeOf(plan.shape).points) || shapeOf(plan.shape).way) return buildHere(player).then(() => CLOSE);
   const T = lookTarget(player);
-  if (!T) return player.sendMessage(`§eLook at a block within ${reachOf(player)} blocks first.`);
+  if (!T) return `§eLook at a block within ${reachOf(player)} blocks first (close this menu, look, and pick Build here now again).`;
   const mats = materialsOf(player, plan);
-  if (typeof mats === "string") return player.sendMessage(`§e${mats}`);
+  if (typeof mats === "string") return `§e${mats}`;
   let cells;
   try {
     cells = await worldCells(plan, mats, T, frameOf(facingOf(player), plan.turn), undefined, limitOf(player), player.dimension.id);
   } catch (e) {
     if (!(e instanceof TooBig)) throw e;
-    return player.sendMessage(tooBig(player, e));
+    return tooBig(player, e);
   }
   // The guide over the real blocks for a few seconds (drawn every `guideRate` ticks, each lasting until the next).
   const secs = Math.max(0, get("previewSeconds"));
   const rate = guideRate(player);
   for (let t = 0; t < secs * 20; t += rate) {
-    if (!player.isValid) return;
-    drawGuide(player, cells, "build", { force: true });
+    if (!player.isValid) return CLOSE;
+    drawGuide(player, cells, "build", { force: true, preview: true });
     await new Promise((r) => system.runTimeout(() => r(undefined), rate));
   }
   /** @type {Map<string, number>} */
@@ -2043,9 +2126,11 @@ async function buildHereMenu(player) {
     }
   } else lines.push("Free in creative.");
   const res = await show(player, new MessageFormData().title(TITLE).body(lines.join("\n")).button1("Build it").button2("Cancel"));
-  if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
-  if (stateOf(player).busy) return player.sendMessage("§eWait for the last build to finish.");
+  if (!res || !player.isValid) return CLOSE;
+  if (res.canceled || res.selection !== 0) return undefined;
+  if (stateOf(player).busy) return "§eWait for the last build to finish.";
   await build(player, player.dimension, cells, planLabel(plan), { mode: replaceMode(player, plan) });
+  return CLOSE;
 }
 
 /** /realm:build_here: builds at the block you look at, no questions. @param {Player} player */
@@ -2131,7 +2216,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
   command(r, "realm:build_undo", "Undo your last build (blocks come back)", (p) => undo(p, false));
   command(r, "realm:build_redo", "Build again what you last undid", (p) => undo(p, true));
   command(r, "realm:build_finish", "Build your curve through the points you placed", finishCurve);
-  command(r, "realm:build_book", "Get a Building Book: use it to open Easy Building", giveBook);
+  command(r, "realm:build_book", "Get a Building Book: use it to open Easy Building", (p) => p.sendMessage(giveBook(p)));
   command(r, "realm:build_copy", "Copy the region you selected (or start selecting one)", copyCommand);
   command(r, "realm:build_cut", "Cut the region you selected: copy it and take it away", cutCommand);
   command(r, "realm:build_paste", "Paste your copy at the block you look at, turned to face your way", pasteCommand);
@@ -2194,7 +2279,7 @@ function setBuildMode(player, on) {
 const ctx = {
   isOp, isCreative, cantBuild, CANT_BUILD, note, show, inputs, permOf, nice, plural, containerOf, countItems, giveItems, refund,
   build, areaRefusal, isProtectedBlock, isForbidden, isSoft, stacked, costOf, facingOf, frameOf, FACINGS, lookTarget, planOf,
-  replaceMode, limitOf, stateOf, refusal, tick, AIR, boundsOf, drawBox: drawSelection, shapeAt, modsActive, withMods, airDistance, reachOf, twoBlocks, planLabel, mainMenu, setBuildMode, TooBig, tooBig,
+  replaceMode, limitOf, stateOf, refusal, tick, AIR, boundsOf, drawBox: drawSelection, shapeAt, modsActive, withMods, airDistance, reachOf, twoBlocks, planLabel, CLOSE, noted, setBuildMode, TooBig, tooBig,
 };
 /** @typedef {typeof ctx} Ctx */
 setupUndo(ctx);
