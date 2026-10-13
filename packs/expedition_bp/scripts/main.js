@@ -1062,12 +1062,19 @@ function useSigil(p, line) {
   return undefined;
 }
 
-/** A run called off before anyone went in gives its sigil back to the leader. @param {Run} run */
+/**
+ * A run called off before anyone went in gives its sigil back to the leader (when they're offline, as soon as they
+ * next spawn). @param {Run} run
+ */
 function refundSigil(run) {
   const it = run.sigilItem;
   run.sigilItem = undefined;
-  const p = it && online(run.leaderId);
-  if (!it || !p) return;
+  if (!it) return;
+  const p = online(run.leaderId);
+  if (!p) {
+    dropped.set(run.leaderId, [...(dropped.get(run.leaderId) ?? []), it]);
+    return;
+  }
   try {
     const rest = p.getComponent("minecraft:inventory")?.container?.addItem(it);
     if (rest) p.dimension.spawnItem(rest, p.location);
@@ -1690,6 +1697,10 @@ function dropBuffs(p) {
  * @param {Player} p @param {any} ret
  */
 function teleportBack(p, ret) {
+  // Dead (killed just before the fade ended): a teleport would only move the body and the spot would be lost.
+  // It stays, and playerSpawn sends them back when they respawn.
+  const hp = p.getComponent("minecraft:health");
+  if (hp && hp.currentValue <= 0) return;
   let dim;
   try {
     dim = ret && typeof ret.d === "string" ? world.getDimension(ret.d) : undefined;
@@ -1816,6 +1827,7 @@ async function endRun(run, why) {
   if (wasActive) recordFail(run, [...run.members.values()].map((m) => m.name));
   if (run.phase === "finishing") packSpoils(run, [...run.members.keys()]);
   run.phase = "resetting";
+  refundSigil(run); // still held while gathering or building (an operator's reset): nobody went in
   if (why) tell(run, why);
   for (const id of [...run.members.keys()]) {
     const p = online(id);
@@ -3281,11 +3293,15 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
         finish(run);
         return;
       }
-      if (!(deadEntity instanceof Player) || !run.members.has(id)) continue;
+      if (!(deadEntity instanceof Player)) continue;
+      const member = run.members.has(id);
+      // One who just left this run and died in it before the fade sent them home: their drops are kept the same way.
+      if (!member && returnSpot(deadEntity)?.run !== run.id) continue;
       const m = run.members.get(id);
       const where = deadEntity.location;
-      tell(run, `§c${m?.name ?? "A member"} fell and is out of the expedition.`);
-      if (get("returnItemsOnDeath") === true) {
+      if (member) tell(run, `§c${m?.name ?? "A member"} fell and is out of the expedition.`);
+      // Only a death in the dungeon: one just teleported out of it dies among their own things (and other people's).
+      if (get("returnItemsOnDeath") === true && deadEntity.dimension.id === OVERWORLD && inBox(run.o, run.size, run.top, where, 2)) {
         // The drops appear this tick: collect them before anyone else can, and give them back on respawn.
         system.runTimeout(() => {
           try {
@@ -3305,7 +3321,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
         }, 1);
       }
       dropBuffs(deadEntity);
-      dropMember(run, id); // their return spot stays: playerSpawn sends them back
+      if (member) dropMember(run, id); // their return spot stays: playerSpawn sends them back
       return;
     }
     // Dungeon mobs: champions may drop a sigil, Explosive Death bursts.
@@ -3612,7 +3628,20 @@ async function runMenu(player, run) {
   if (!res || res.canceled || res.selection === undefined) return;
   const sel = res.selection - (pick ? 1 : 0);
   if (sel === -1) return offerBoon(run, player);
-  if (sel === 0) leave(player);
+  if (sel !== 0) return;
+  // Mid-run, leaving can't be undone (and alone, it fails the run): the button sits next to Close, so ask first.
+  if (run.phase === "active" && runOf(player.id) === run) {
+    const sure = await show(
+      player,
+      new MessageFormData()
+        .title("§lLeave the expedition?")
+        .body(run.members.size > 1 ? "You'll be sent back to where you started and can't rejoin this run. The others go on without you." : "You'll be sent back to where you started, and the run counts as failed.")
+        .button1("Leave")
+        .button2("Stay"),
+    );
+    if (!sure || sure.canceled || sure.selection !== 0 || runOf(player.id) !== run) return;
+  }
+  leave(player);
 }
 
 /** @param {Player} player */
@@ -3667,7 +3696,7 @@ function describe(d, L, affixes, g) {
       ? `§6A long run:§r ${rooms} rooms with a sanctuary after every ${get("boonEvery")}, where each of you picks one of three boons (effects, gear, wolves, more Crowns...). One more wave and monster each fight, tougher champions and boss; more Crowns and treasure.`
       : "",
     g ? `§6Fixed loadout: ${g.loadout ? "§aon" : "§7off"}§r. ${g.loadout ? "Your own items are stored safely while you run with a starter kit, and given back exactly when you return." : "You bring your own gear."}` : "",
-    `${g ? rooms : `${s.roomsMin} to ${s.roomsMax}`} rooms, ${lo === hi ? lo : `${lo} to ${hi}`} minutes. ${s.waves} waves a fight, about ${s.mobs + Math.floor(s.t / 6)} to ${s.mobs + 1 + Math.floor(s.t / 6)} monsters each${s.elites ? `, ${s.elites} elite` : ""}${s.champChance ? `, ${Math.round(s.champChance * 100)}% chance of a champion` : ""}.`,
+    `${g ? rooms : `${s.roomsMin} to ${s.roomsMax}`} rooms, ${lo === hi ? lo : `${lo} to ${hi}`} minutes. ${s.waves} waves a fight, about ${s.mobs} to ${s.mobs + 1} monsters each${s.elites ? `, ${s.elites} elite` : ""}${s.champChance ? `, ${Math.round(s.champChance * 100)}% chance of a champion` : ""}.`,
     s.t >= 1
       ? `Monsters: ${[s.healthBoost >= 0 ? `+${(s.healthBoost + 1) * 4} health` : "", s.resistance >= 0 ? `Resistance ${s.resistance + 1}` : "", s.strength >= 0 ? `Strength ${s.strength + 1}` : "", s.speed >= 0 ? `Speed ${s.speed + 1}` : "", s.armor ? `${ARMOR[s.armor]} armor` : ""].filter((x) => x).join(", ")}.`
       : "",
@@ -3902,7 +3931,21 @@ async function opMenu(player) {
   const res = await show(player, form);
   if (!res || res.canceled) return;
   if (res.selection === 0) setSite(player, undefined, undefined);
-  else if (res.selection === 1) await opReset(player);
+  else if (res.selection === 1) {
+    // Ending someone's run can't be undone: say whose it is and ask first (nothing to ask when only a box waits for its reset).
+    if (runs.size) {
+      const sure = await show(
+        player,
+        new MessageFormData()
+          .title("§lEnd every expedition?")
+          .body(`In progress: ${[...runs.values()].map(statusLine).join("; ")}.\n\nEveryone is sent back to where they started and the run counts as failed. The dungeon is filled in.`)
+          .button1("End and reset")
+          .button2("Back"),
+      );
+      if (!sure || sure.canceled || sure.selection !== 0) return;
+    }
+    await opReset(player);
+  }
   else if (res.selection === 2) await opSigil(player);
   else if (res.selection === 3) {
     const prog = progressOf(player);
