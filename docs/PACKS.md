@@ -4329,7 +4329,7 @@ Runs themselves are kept in memory: a restart ends a run in progress (its player
 - **Fixed loadout:** as each player is taken in, a 1 by 2 pocket in the box's corner (always solid rock outside every room) is opened, two chest minecarts are spawned in it and filled with the player's 41 slots (copies with every component), and `world.structureManager.createFromWorld` saves the pocket with its entities (no blocks) as a world structure. Only once that structure exists are the player's slots emptied (the same tick, so nothing can change in between); the carts are emptied and removed either way, and the pocket is sealed again. Coming back, the structure is placed (entities only) at the player's feet, the carts' items go back slot by slot, the carts and the structure are removed. A player sent home far away can stand in chunks that aren't loaded yet for a moment, and a structure placed there puts nothing down, so the stash and parcels wait until the spot under the player is loaded (tried every 2 seconds for a minute, then again when they next spawn); carts that were marked as put down but never appeared are put down again from the structure, which is only deleted once everything is handed over. Kit gear is found by its lore line.
 - **The `realm_expedition` tag** is on every player while they're in a running expedition, for other packs (the Deck of Many Things' The Swap leaves them out).
 - **Party members** are players with the same `realm_party:<code>` tag as the leader ([Parties](#parties--party_bp)), online, in the same dimension and within `partyRadius`.
-- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens" }`, `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Champions are asked of the Champions pack with `realm:champion_spawn` `{ dim, x, y, z, mob, tag: "realm:exp_ch_<run>" }`; if none with that tag appears within 3 ticks (the pack isn't installed), the pack makes its own. Crowns go straight into the `crowns` scoreboard.
+- **Messages sent:** `realm:quest_done` `{ player, pack: "expedition_bp", id: "expedition_<dungeon>", label, kind: "expedition", guild: "wardens", dungeon, level, tier, nightmare, gauntlet }` (`tier` is `easy`, `normal`, `hard` or `nightmare`, `nightmare` the Nightmare number or 0, `gauntlet` true for a Gauntlet; [Story Questlines](#story-questlines--saga_bp) reads them), `realm:rep_add` `{ guild: "wardens" }`, `realm:journal` `{ page: "places", entry: "expedition_<dungeon>" }` and, by chance, `realm:relic_give`, for each player who finishes. Champions are asked of the Champions pack with `realm:champion_spawn` `{ dim, x, y, z, mob, tag: "realm:exp_ch_<run>" }`; if none with that tag appears within 3 ticks (the pack isn't installed), the pack makes its own. Crowns go straight into the `crowns` scoreboard.
 - **For tests:** the script event `realm:expedition_debug` (`{ room?, skip?, slot? }`) is answered with `realm:expedition_state` (`{ part, parts, data }`): the state of the first run (or the run in `slot`: members, Gauntlet, loadout, boons) and one room's layout, shape, size, doors and puzzle, used by the BDS scenarios that play whole runs; `skip: true` counts the current room (not the boss) as cleared. Script events need operator rights.
 
 ---
@@ -4776,6 +4776,7 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | The almanac runs the overworld weather: it sets the `doWeatherCycle` gamerule to false and plays its plan. Disabled, it puts the gamerule back how it was before and the game's weather takes over |
+| `storyEvents` | `true` | Story Questlines can ask for rain or a thunderstorm when a story step needs one (`realm:sky_request` kinds `rain`, `thunder`): it's planned to start within 8 minutes for 6 minutes and shows in the forecast, then the plan carries on. Not when that weather is already here or planned that soon; at most one every 20 minutes |
 | `horizonHours` | `3` | How far ahead the plan reaches, in real hours. The forecast shows this far |
 | `clear.minMinutes` | `20` | Shortest clear spell, in real minutes |
 | `clear.maxMinutes` | `60` | Longest clear spell, in real minutes |
@@ -4789,7 +4790,7 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 | `dailyForecast` | `true` | A one-line forecast in chat the first time each player joins on a UTC day |
 | `npcRole` | `skymage` | The [Townsfolk](#townsfolk--npc_bp) role that offers **Forecast** when tapped. Empty = no offer |
 
-Operators can change `enabled`, every `.minMinutes` and `.maxMinutes`, `thunderAfterClear`, `thunderAfterRain`, `rainAfterThunder` and `dailyForecast` in game with `/realm:config` when Realm Settings is installed; length and chance changes apply from the next spell (the one on now keeps its length). Each player can switch the daily chat line for themselves with **Daily forecast in chat** in `/realm:prefs`, which follows `dailyForecast` until they choose. `horizonHours` and `npcRole` stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, every `.minMinutes` and `.maxMinutes`, `thunderAfterClear`, `thunderAfterRain`, `rainAfterThunder` and `dailyForecast` in game with `/realm:config` when Realm Settings is installed; length and chance changes apply from the next spell (the one on now keeps its length). Each player can switch the daily chat line for themselves with **Daily forecast in chat** in `/realm:prefs`, which follows `dailyForecast` until they choose. `horizonHours` and `npcRole` stay in `config.js`.
 
 ### Saved data
 
@@ -5097,6 +5098,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Rainbows appear on their own after rain (`/realm:rainbow_now` works either way) |
+| `storyEvents` | `true` | Story Questlines can put up a rainbow with its pot of gold at story moments (`realm:sky_request` kind `rainbow`; the hopeful Dawn ending asks for one), at any time of day. Never while a rainbow or an unfound pot is out; at most one every 30 minutes |
 | `chance` | `0.7` | Chance (0-1) of a rainbow when rain clears in the morning (time 0-3000) or the evening (9000-12000) |
 | `durationSeconds` | `150` | Seconds a rainbow stays in the sky |
 | `distance.min` | `150` | Closest its end is to the chosen player, in blocks |
@@ -5109,7 +5111,7 @@ When rain clears in the morning or the evening, a big rainbow often arches acros
 | `relics` | `["sun_pendant", "rain_charm"]` | Relic ids the pot of gold can give, one picked at random |
 | `loot` | gold ingots, gold nuggets, dyes, golden apple, emeralds | What goes in the chest: each entry's `item`, put in with its `chance` (0-1), a random amount from `min` to `max` |
 
-Operators can change `enabled`, `chance`, `durationSeconds`, `potMinutes`, `crowns`, `relicChance`, `avoidSpawn` and `size` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `chance`, `durationSeconds`, `potMinutes`, `crowns`, `relicChance`, `avoidSpawn` and `size` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
 
 ### Saved data
 
@@ -5164,6 +5166,7 @@ Clear nights in the Overworld get a sky show. Every so often a shooting star str
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | The night sky show: shooting stars and the aurora on clear nights |
+| `storyEvents` | `true` | Story Questlines can send a shooting star at story moments (`realm:sky_request` kind `shooting_star`): the player and everyone in the Overworld within 64 blocks with the show on see it, at night under a clear sky, with the usual wish. Needs `stars.enabled`; at most one a minute per player |
 | `aurora.enabled` | `true` | Northern lights over snowy ground on aurora nights |
 | `aurora.chance` | `0.4` | Chance (0-1) that a night is an aurora night, rolled once each night |
 | `aurora.segments` | `9` | Ribbon segments in the curtain, side by side |
@@ -5178,7 +5181,7 @@ Clear nights in the Overworld get a sky show. Every so often a shooting star str
 | `wish.effect` | `"village_hero"` | The effect a wish gives, level I (Bedrock has no Luck effect) |
 | `defaultOn` | `true` | The show for players who never ran `/realm:night` |
 
-Operators can change `enabled`, `stars.enabled`, `wish.enabled`, `aurora.enabled`, `aurora.chance`, `wish.windowSeconds` and `defaultOn` in game with `/realm:config` when Realm Settings is installed. Each player can switch the show for themselves with **Night sky show (aurora and shooting stars)** in `/realm:prefs` (the same switch as `/realm:night`), which follows `defaultOn` until they choose. The other numbers stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `stars.enabled`, `wish.enabled`, `aurora.enabled`, `aurora.chance`, `wish.windowSeconds` and `defaultOn` in game with `/realm:config` when Realm Settings is installed. Each player can switch the show for themselves with **Night sky show (aurora and shooting stars)** in `/realm:prefs` (the same switch as `/realm:night`), which follows `defaultOn` until they choose. The other numbers stay in `config.js`.
 
 ### Saved data
 
@@ -5238,6 +5241,7 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Meteors fall on their own at night (`/realm:meteor_now` works either way) |
+| `storyEvents` | `true` | Story Questlines can make a meteor fall at story moments (`realm:sky_request` kind `meteor`): over The Gate Opens in Act IV it breaks apart high in the sky and breaks no blocks. At most one every 10 minutes, never while another is falling |
 | `chance` | `0.33` | Chance (0-1) of a meteor each night, rolled once a night |
 | `distance.min` | `200` | Closest it lands to the chosen player, in blocks |
 | `distance.max` | `600` | Farthest it lands from the chosen player, in blocks |
@@ -5256,7 +5260,7 @@ Some nights a meteor falls. Chat gives a minute's warning and the coordinates, t
 | `smokeSeconds` | `120` | Seconds the crater smokes after it's made |
 | `foundDistance` | `12` | Players this close to the crater have found it |
 
-Operators can change `enabled`, `chance`, `warningSeconds`, `craters`, `avoidSpawn`, `avoidZones` and `inZone` in game with **Meteor settings** in `/realm:meteor`, or with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `chance`, `warningSeconds`, `craters`, `avoidSpawn`, `avoidZones` and `inZone` in game with **Meteor settings** in `/realm:meteor`, or with `/realm:config` when Realm Settings is installed. The other numbers stay in `config.js`.
 
 ### Saved data
 
@@ -5315,6 +5319,7 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 | Option | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Full moons can rise as a Blood Moon or a Harvest Moon. Disabled, every night is ordinary (and one in progress ends) |
+| `storyEvents` | `true` | Story Questlines can make tonight a Blood Moon or a Harvest Moon at story moments (`realm:sky_request`; The Long Night in Act V asks for a Blood Moon), like `/realm:moon_set`: now if it's night, else at nightfall. At most once an in-game day, never two moon nights in a row, and never over a moon an operator already chose |
 | `bloodChance` | `0.34` | Chance (0–1) that a full moon is a Blood Moon |
 | `harvestChance` | `0.34` | Chance (0–1) that a full moon that isn't a Blood Moon is a Harvest Moon |
 | `duskTime` | `12000` | The night starts at this time of day (ticks; 12000 is sunset) |
@@ -5334,7 +5339,7 @@ Some full moons are special. About one in three rises as a **Blood Moon**: a red
 | `blood.title` | `Blood Moon Survivor` | The title unlocked the first time a player survives one. Empty = none |
 | `harvest.tickSpeed` | `3` | The `randomTickSpeed` gamerule during a Harvest Moon. If it's already that high or higher, it isn't changed |
 
-Operators can change `enabled`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.creepersInZones`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
+Operators can change `enabled`, `storyEvents`, `bloodChance`, `harvestChance`, `avoidSpawn`, `blood.spawnSeconds`, `blood.maxExtraPerPlayer`, `blood.creepersInZones`, `blood.rewardLevels`, `blood.rewardCrowns` and `harvest.tickSpeed` in game with `/realm:config` when Realm Settings is installed. The other options stay in `config.js`.
 
 ### Saved data
 
