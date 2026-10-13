@@ -152,6 +152,12 @@ export default async function (t) {
   await t.wait(30);
   t.check(!sky.some((e) => e.kind === "rainbow"), "no rainbow while Story events is disabled (or for an unknown player)");
   await cfg("rainbow_bp", "storyEvents", true);
+  t.server("/time set 13000");
+  const night0 = t.tick;
+  ask({ kind: "rainbow", player: p.id });
+  await t.wait(20);
+  t.check(!sky.some((e) => e.kind === "rainbow" && e.tick >= night0), "no story rainbow at night");
+  t.server("/time set 1000");
   since = t.tick;
   ask({ kind: "rainbow", player: p.id });
   const rb = await t.waitUntil(() => sky.find((e) => e.kind === "rainbow" && e.tick >= since), { timeout: 40, message: "realm:sky_event rainbow" });
