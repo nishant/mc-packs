@@ -89,23 +89,23 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators:§r pick a command. Without options it runs right away (a menu command such as §e/realm:meteor§r opens its own menu). With options, a form asks for them: lists for choices (§emara§r, §ethunder§r, §estorm_staff§r...), a list of online players (with §lEveryone online (@a)§r where a command can take several, and a box for an offline name where it makes sense), sliders for amounts and radii, a switch for true or false, and your current position already filled in for coordinates. Leave an optional choice on §e(leave out)§r or its box empty to skip it. Press §lRun§r.",
+        "text": "§lOperators:§r pick a command. Without options it runs right away (a menu command such as §e/realm:meteor§r opens its own menu). With options, a form asks for them: lists for choices (§emara§r, §ethunder§r, §estorm_staff§r...), a list of online players (with §lEveryone online (@a)§r where a command can take several, and a box for an offline name where it makes sense), sliders for amounts and radii, a switch for true or false, and your current position already filled in for coordinates. Leave an optional choice on §e(leave out)§r or its box empty to skip it. Press §lRun§r. After it runs, the list you picked it from comes back, so the next command is two taps away (a command that opened its own menu keeps it). Closing the options form, or §lCancel§r, goes back to the list too.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r chat says §e[Realm Configuration] Ran /realm:...§r with the exact command, or that it didn't run. Commands that remove or reset something, and a few with big effects (§e/realm:meteor_now§r, §e/realm:tornado_spawn§r, §e/realm:caravan_call§r, §e/realm:crowns_give§r, §e/realm:domt_draw§r), ask §lAre you sure?§r first.",
+        "text": "§lOperators:§r chat says §e[Realm Configuration] Ran /realm:...§r with the exact command, or that it didn't run. Every §e*_remove§r and §e*_reset§r command, anything run for §lEveryone online (@a)§r, and §e/realm:meteor_now§r, §e/realm:tornado_spawn§r, §e/realm:caravan_call§r, §e/realm:crowns_give§r, §e/realm:domt_draw§r, §e/realm:weather_set§r, §e/realm:moon_set§r, §e/realm:storm_cell§r and §e/realm:fishing_tournament§r ask §lAre you sure?§r first.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lRecent§r keeps your last 8 commands with their options (§erecentSize§r): tap one to run it again. §lSearch commands§r finds commands and quick actions by any word of their name or description.",
+        "text": "§lOperators:§r §lRecent§r keeps your last 8 commands with their options (§erecentSize§r): tap one to run it again. §lSearch commands§r finds commands and quick actions by any word of their name or description; the results end with §lSearch again§r.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats.",
+        "text": "§lOperators:§r §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects or teleport for everyone online ask §lAre you sure?§r first.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. Safe zones and towns show §e[x]§r with how many exist; the others can't be checked from here.",
+        "text": "§lOperators:§r §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the townsfolk§r, so either one does it. Safe zones and towns show §e[x]§r with how many exist; the others can't be checked from here.",
         "ops": true
       }
     ],
@@ -222,7 +222,7 @@ export const PACKS = [
         "usage": "/realm:afk",
         "ops": false,
         "who": "Everyone",
-        "text": "Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back. With announcements off (§eannounce§r, or yours in §e/realm:prefs§r), only you get a confirmation"
+        "text": "Marks you AFK right away. Anything you do in the next 3 seconds (closing chat, the camera settling) is ignored. After that, move to come back. With announcements off (§eannounce§r, or yours in §e/realm:prefs§r), only you get a confirmation. Run it again while you're AFK and it answers §eYou're already AFK. Move to come back.§r"
       }
     ]
   },
@@ -322,7 +322,7 @@ export const PACKS = [
         "usage": "/realm:news_edit",
         "ops": true,
         "who": "Ops",
-        "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If you have a draft from §e/realm:news_body§r or §e/realm:news_add§r, it shows the draft instead of the saved news, with a toggle to discard it. §lSave§r saves the news and clears the draft; closing the editor keeps the draft. If chat stays open for about 20 s, it says it couldn't open"
+        "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If you have a draft from §e/realm:news_body§r or §e/realm:news_add§r, it shows the draft instead of the saved news, with a toggle to discard it. §lSave§r saves the news and clears the draft; closing the editor keeps the draft. Parts added with §e/realm:news_add§r while the editor waits for chat to close are included. If chat stays open for about 20 s, it says it couldn't open (with a draft: that the draft is kept)"
       },
       {
         "usage": "/realm:news_body \"<text>\"",
@@ -574,7 +574,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). The same menu stops sharing, shows its borders or removes the claim.",
+        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). The same menu stops sharing, shows its borders or removes the claim (it asks first).",
         "ops": false
       },
       {
@@ -982,18 +982,18 @@ export const PACKS = [
     "folder": "cleanup_bp",
     "topic": "cleanup",
     "name": "Lag Cleanup",
-    "summary": "When too many dropped items pile up (a broken farm, a big explosion), the realm warns everyone and clears them 30 seconds later, so the server doesn't lag. Renamed, enchanted and rare items, items right next to a player and a player's death drops are kept.",
+    "summary": "When too many dropped items pile up (a broken farm, a big explosion), the realm warns everyone and clears them 30 seconds later, so the server doesn't lag. Renamed, enchanted and rare items, items with lore (like silly-enchanted tools), items right next to a player and a player's death drops are kept.",
     "steps": [
       {
-        "text": "Nothing to set up. If more than 500 dropped items (§ethreshold§r) lie around, chat says §eClearing 612 dropped items in 30 s: pick up what you need§r. Pick up anything you want to keep.",
+        "text": "Nothing to set up. If more than 500 dropped items (§ethreshold§r) lie around, chat says §eClearing 612 dropped items in 30 s: pick up what you need§r. Pick up anything you want to keep. 10 seconds before, chat reminds everyone: §eClearing dropped items in 10 s: pick up what you need§r.",
         "ops": false
       },
       {
-        "text": "30 seconds later they're removed, and chat says §eCleared 580 dropped items. (32 kept: renamed, rare, enchanted, or near a player or a recent death)§r.",
+        "text": "30 seconds later they're removed, and chat says §eCleared 580 dropped items. (32 kept: renamed, rare, enchanted, with lore, or near a player or a recent death)§r.",
         "ops": false
       },
       {
-        "text": "Items renamed on an anvil, enchanted items, shulker boxes, elytra, nether stars, totems, enchanted books and the other items in §ekeepItems§r, items within 4 blocks of a player (§enearPlayerRadius§r), and items within 8 blocks of where a player died in the last 5 minutes (§ekeepDeathDropsMinutes§r) are never cleared.",
+        "text": "Items renamed on an anvil, enchanted items, items with lore, shulker boxes, elytra, nether stars, totems, enchanted books and the other items in §ekeepItems§r, items within 4 blocks of a player (§enearPlayerRadius§r), and items within 8 blocks of where a player died in the last 5 minutes (§ekeepDeathDropsMinutes§r) are never cleared.",
         "ops": false
       },
       {
@@ -1086,7 +1086,7 @@ export const PACKS = [
         "usage": "/realm:npc_add <id>",
         "ops": false,
         "who": "Operators",
-        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed)"
+        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed); if you're flying, on the ground under you"
       },
       {
         "usage": "/realm:npc_remove",
@@ -1098,7 +1098,7 @@ export const PACKS = [
         "usage": "/realm:npc_home <id>",
         "ops": false,
         "who": "Operators",
-        "text": "Where that townsfolk goes at night (time 13000 to 23000, §enightStart§r/§enightEnd§r); in the same dimension as its post. Run it within 2 blocks of the post to clear the home"
+        "text": "Where that townsfolk goes at night (time 13000 to 23000, §enightStart§r/§enightEnd§r); in the same dimension as its post (on the ground under you if you're flying). Run it within 2 blocks of the post to clear the home"
       },
       {
         "usage": "/realm:npc_list",
@@ -1164,7 +1164,7 @@ export const PACKS = [
         "usage": "/realm:crowns_give <player> <amount>",
         "ops": false,
         "who": "Operators",
-        "text": "Gives Crowns to the players picked (§e@a§r works); a negative amount takes them, down to 0"
+        "text": "Gives Crowns to the players picked (§e@a§r works); a negative amount takes them, down to 0. A balance tops out at 2,147,483,647, so a give stops there (the reply says §e(the most a balance can hold)§r)"
       }
     ]
   },
@@ -1236,7 +1236,7 @@ export const PACKS = [
     "folder": "saga_bp",
     "topic": "saga",
     "name": "Story Questlines",
-    "summary": "An RPG quest engine told by the realm's townsfolk: 21 stories and 151 chapters (about 40 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, and a §ldaily favor§r from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
+    "summary": "An RPG quest engine told by the realm's townsfolk: 21 stories and 152 chapters (about 40 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, and a §ldaily favor§r from each questgiver. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
     "steps": [
       {
         "text": "Tap a townsfolk with a story button: §eMain story: The Drowned Bell§r (Old Tobin) or §eMain story: The Cartographer's Last Map§r (Mara) to begin. Read the pages with §lNext§r, then pick §lAccept§r (or §lNot now§r: you can come back any time). Some intros end with a choice instead of Accept.",
@@ -1639,7 +1639,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Holding the Storm Meter shows the nearest storm cell above the hotbar. Don't want that? Disable §lStorm Meter readout§r in §e/realm:prefs§r.",
+        "text": "Holding the Storm Meter shows the nearest storm cell above the hotbar. It waits while another pack's note shows there (skill XP, mob health, a sort result). Don't want that? Disable §lStorm Meter readout§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
@@ -1876,7 +1876,7 @@ export const PACKS = [
         "usage": "/realm:domt_draw <player>",
         "ops": false,
         "who": "Operators",
-        "text": "Draws a random card for the players picked (§e@a§r works), with no cooldown"
+        "text": "Draws a random card for the players picked (§e@a§r works), with no cooldown. If a player's last card is still running, it says so (§eAlex is still drawing a card. Wait for it to finish.§r)"
       },
       {
         "usage": "/realm:domt_effects",
@@ -2085,7 +2085,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Within 96 blocks of where the clue points, chat says §eThe map's ink darkens:§r and names the landmark, for example §eA pole flying a red flag stands at the edge of the birch wood.§r Look for it.",
+        "text": "Close to where the clue points (within 96 blocks, once the land around that spot is loaded: about 50 blocks on a Realm's usual simulation distance), chat says §eThe map's ink darkens:§r and names the landmark, for example §eA pole flying a red flag stands at the edge of the birch wood.§r Look for it.",
         "ops": false
       },
       {
@@ -2221,7 +2221,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "To give up, run §e/realm:expedition_leave§r (or §lLeave the expedition§r in §e/realm:expedition§r). If you die you're out of the run, you respawn as usual and are sent back to where you started, and the items you dropped are given back.",
+        "text": "To give up, run §e/realm:expedition_leave§r (or §lLeave the expedition§r in §e/realm:expedition§r, which asks first). If you die you're out of the run, you respawn as usual and are sent back to where you started, and the items you dropped are given back (also if you die in the moment after leaving, before you're sent back).",
         "ops": false
       },
       {
@@ -2229,7 +2229,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r stand somewhere far from spawn and from anyone's builds and mines, and run §e/realm:expedition_site§r once (or §e/realm:expedition_site <x> <z>§r, or §lOperator tools§r -> §lSet the site where I stand§r). Dungeons are built deep underground around that spot (up to 120 by 120 blocks, y -41 to -8), and the site is refused if it's within 124 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. §e/realm:expedition_reset§r ends a run in progress and fills the dungeon back in. §lOperator tools§r also has §lCreate a Nightmare Sigil§r (any dungeon, tier and affixes) and §lUnlock every tier for me§r. §e/realm:config§r -> §lExpeditions§r sets the party size, the time limit, the time at the treasure, the highest tier, building, the reroll cost, the Gauntlet's length and boons, and more.",
+        "text": "§lOperators:§r stand somewhere far from spawn and from anyone's builds and mines, and run §e/realm:expedition_site§r once (or §e/realm:expedition_site <x> <z>§r, or §lOperator tools§r -> §lSet the site where I stand§r). Dungeons are built deep underground around that spot (up to 120 by 120 blocks, y -41 to -8), and the site is refused if it's within 124 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. §e/realm:expedition_reset§r ends a run in progress and fills the dungeon back in (§lOperator tools§r -> §lEnd every expedition and reset§r does the same after asking, with the runs in progress listed). §lOperator tools§r also has §lCreate a Nightmare Sigil§r (any dungeon, tier and affixes) and §lUnlock every tier for me§r. §e/realm:config§r -> §lExpeditions§r sets the party size, the time limit, the time at the treasure, the highest tier, building, the reroll cost, the Gauntlet's length and boons, and more.",
         "ops": true
       }
     ],
@@ -2537,7 +2537,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:weather§r opens a menu with §lForecast§r and §lSet the weather§r (pick clear, rain or a thunderstorm and 5 to 240 real minutes). §e/realm:weather_set <clear|rain|thunder> <minutes>§r does the same from chat: it starts that weather now for that many real minutes, and the plan carries on after it. Vanilla §e/weather§r doesn't stick while the almanac runs: it's put back within a second. §e/realm:config§r -> §lWeather Almanac§r sets how long each kind of weather lasts and how likely thunder is, or disables the almanac to give the weather back to the game.",
+        "text": "§lOperators:§r §e/realm:weather§r opens a menu with §lForecast§r and §lSet the weather§r (pick clear, rain or a thunderstorm and 5 to 240 real minutes). §e/realm:weather_set <clear|rain|thunder> <minutes>§r does the same from chat: it starts that weather now for that many real minutes, and the plan carries on after it. Everyone else online gets a chat line: §eAn operator set the weather: Rain for 10 minutes. The forecast is updated.§r Vanilla §e/weather§r doesn't stick while the almanac runs: it's put back within a second. §e/realm:config§r -> §lWeather Almanac§r sets how long each kind of weather lasts and how likely thunder is, or disables the almanac to give the weather back to the game.",
         "ops": true
       }
     ],
@@ -2558,7 +2558,7 @@ export const PACKS = [
         "usage": "/realm:weather_set <clear\\|rain\\|thunder> <minutes>",
         "ops": false,
         "who": "Operators",
-        "text": "Starts that weather now for 1 to 1440 real minutes; the plan carries on after it. With the almanac disabled it just sets the weather, and the game's weather cycle takes over after"
+        "text": "Starts that weather now for 1 to 1440 real minutes; the plan carries on after it. With the almanac disabled it just sets the weather, and the game's weather cycle takes over after. Everyone else online is told in chat"
       }
     ]
   },
@@ -2690,7 +2690,7 @@ export const PACKS = [
         "usage": "/realm:tornado",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens the Tornadoes menu: §lWhere is the tornado?§r; operators also §lSpawn one§r (40 blocks in front of you) and §lEnd the tornado§r (no Storm Glass)"
+        "text": "Opens the Tornadoes menu: §lWhere is the tornado?§r; operators also §lSpawn one§r (40 blocks in front of you) and §lEnd the tornado§r (no Storm Glass; warned players get the all-clear)"
       },
       {
         "usage": "/realm:tornado_info",
@@ -2748,7 +2748,7 @@ export const PACKS = [
         "usage": "/realm:rainbow_now",
         "ops": false,
         "who": "Operators",
-        "text": "A rainbow now, in any weather and at any time, for §edurationSeconds§r (150), with its pot of gold 150-300 blocks from you. An earlier pot is replaced: its chest stays if it still holds anything, an empty one is removed"
+        "text": "A rainbow now, in any weather and at any time, for §edurationSeconds§r (150), with its pot of gold 150-300 blocks from you. An earlier pot is replaced: its chest stays if it still holds anything, an empty one is removed (when no one is near it, the next time a player comes close)"
       }
     ]
   },
