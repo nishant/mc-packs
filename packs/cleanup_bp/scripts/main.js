@@ -169,7 +169,7 @@ function* clearJob(by) {
         if (i % 50 === 49) yield;
       }
     }
-    const extra = kept ? ` §7(${kept} kept: renamed, rare, enchanted, or near a player or a recent death)` : "";
+    const extra = kept ? ` §7(${kept} kept: renamed, rare, enchanted, with lore, or near a player or a recent death)` : "";
     world.sendMessage(by ? `§e${by} cleared ${items(removed)}.${extra}` : `§eCleared ${items(removed)}.${extra}`);
   } catch (e) {
     console.warn(`[cleanup] ${e}`);
