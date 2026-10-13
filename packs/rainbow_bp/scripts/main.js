@@ -284,15 +284,29 @@ function appear(player) {
 // each player gets their own stand-ins for the far parts, on their own lines of sight.
 // ---------------------------------------------------------------------------
 
-let cycle = 0;
+/** Player id -> the tick (0 to DRAW_TICKS - 1) of each second their rainbow is drawn on. @type {Map<string, number>} */
+const drawSlots = new Map();
+let nextSlot = 0;
+world.afterEvents.playerLeave.subscribe(({ playerId }) => drawSlots.delete(playerId));
+
+// Each player is drawn once a second, on a tick of their own: drawing everyone on the same tick took 55-80 ms
+// with 8 players.
 system.runInterval(() => {
-  cycle++;
   const p0 = pot;
   if (!p0) return;
   const now = Date.now();
   // The rainbow while it lasts; the beam as long as the pot can be found.
-  if (now < p0.until || (!p0.found && now < p0.expires)) draw(p0, cycle % 2 === 0);
-}, DRAW_TICKS);
+  if (!(now < p0.until || (!p0.found && now < p0.expires))) return;
+  const tick = system.currentTick;
+  const due = overworld()
+    .getPlayers()
+    .filter((p) => {
+      let slot = drawSlots.get(p.id);
+      if (slot === undefined) drawSlots.set(p.id, (slot = nextSlot++ % DRAW_TICKS));
+      return (tick + slot) % DRAW_TICKS === 0;
+    });
+  if (due.length) draw(p0, Math.floor(tick / DRAW_TICKS) % 2 === 0, due);
+});
 
 /** Once the pot's chunk is loaded, the arc's ground height becomes the surface there (once). @param {Pot} p0 @param {Dimension} dim */
 function settleGround(p0, dim) {
@@ -309,8 +323,9 @@ function settleGround(p0, dim) {
  * the rainbow lasts) and of the beam (until the pot is found or expires), at its real spot when close or as a
  * stand-in on the same line of sight. Dots whose spot isn't loaded are skipped.
  * @param {Pot} p0 @param {boolean} even this second also redraws the dots at their real spots
+ * @param {Player[]} [players] the players to draw it for (default: everyone in the Overworld)
  */
-function draw(p0, even) {
+function draw(p0, even, players) {
   const dim = overworld();
   const now = Date.now();
   const sky = now < p0.until, beam = !p0.found && now < p0.expires;
@@ -340,7 +355,7 @@ function draw(p0, even) {
     return ok;
   };
   const vars = molang();
-  for (const player of dim.getPlayers()) {
+  for (const player of players ?? dim.getPlayers()) {
     try {
       const l = player.location;
       if (Math.hypot(l.x - mid.x, l.z - mid.z) > MAX_SEE) continue;
