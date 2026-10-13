@@ -1758,7 +1758,7 @@ export const CARDS = [
     run: ({ player }) => {
       const mobsNear = player.dimension
         .getEntities({ location: player.location, maxDistance: 16, families: ["mob"], excludeTypes: ["minecraft:player"] })
-        .filter((e) => !e.nameTag && !e.getComponent("minecraft:tameable")?.isTamed && !e.getTags().some((t) => t.startsWith("realm") || t.startsWith("npc") || t.startsWith("domt")));
+        .filter((e) => !e.nameTag && !e.hasComponent("minecraft:is_tamed") && !e.getComponent("minecraft:tameable")?.isTamed && !e.getTags().some((t) => t.startsWith("realm") || t.startsWith("npc") || t.startsWith("domt")));
       if (!mobsNear.length) return false;
       for (const e of mobsNear) attempt(() => effect(e, "minecraft:levitation", 4, 2));
       sound(player, "mob.shulker.bullet.hit", 0.7);

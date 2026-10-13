@@ -1,5 +1,6 @@
 // Deck of Many Things, The Void: the player swaps places with a plain nearby creature, never with a
-// tamed wolf, a named or leashed mob, a tamed horse or a villager, even when those are nearer. About 1 minute:
+// tamed wolf, a named or leashed mob, a tamed horse or a villager, even when those are nearer. Then the
+// wild Zero G floats the plain mobs but spares the tamed wolf and horse and the named cow. About 1 minute:
 //   node tools/test-bds/run.mjs --quiet --timeout 600 --only domt_bp --scenario tools/test-bds/examples/domt-void.js
 export default async function (t) {
   t.server("/time set noon");
@@ -41,4 +42,19 @@ export default async function (t) {
   t.check(/with a pig/.test(msg.plain), `swapped with the plain pig: ${msg.plain}`);
   for (const { e, from } of spared) t.check(e.isValid && Math.hypot(e.location.x - from.x, e.location.z - from.z) < 2, `${e.typeId} stayed where it was`);
   t.check(Math.hypot(p.location.x - pigAt.x, p.location.z - pigAt.z) < 2, "the player is where the pig was");
+
+  // Zero G (a wild card): pets and named mobs stay on the ground.
+  const fw = t.waitForm(p);
+  t.cmd(p, "/realm:domt_effects");
+  (await fw).answer("Enable every wild card");
+  await t.wait(20);
+  const since2 = t.tick;
+  const f2 = t.waitForm(p);
+  t.cmd(p, "/realm:domt");
+  (await f2).answer("Draw for a player");
+  (await t.waitForm(p)).answer({ Card: "Zero G" });
+  t.log((await t.waitMessage(p, /float up|crumbles/, { since: since2, timeout: 300 })).plain);
+  await t.wait(5);
+  for (const e of [wolf, named, horse]) t.check(!e.getEffect("minecraft:levitation"), `${e.typeId} does not float`);
+  t.check(!!plain.getEffect("minecraft:levitation"), "the plain pig floats");
 }
