@@ -229,6 +229,120 @@ function contentOf(id, slot) {
   return p;
 }
 
+// A cut abandoned when its player left puts its blocks back; the ones whose spot wasn't loaded any more are kept in a
+// structure (`build:r...`, listed with its corner in the world property) and put back once that spot is loaded.
+const LOST_PROP = "build:cutback"; // world: JSON { [structure id]: { d: dimension id, x, y, z } }
+let lostPending = true; // checked once after a restart
+
+/** @returns {Record<string, { d: string, x: number, y: number, z: number }>} */
+function lostOf() {
+  try {
+    const raw = world.getDynamicProperty(LOST_PROP);
+    const o = typeof raw === "string" ? JSON.parse(raw) : {};
+    return o && typeof o === "object" ? o : {};
+  } catch {
+    return {};
+  }
+}
+/** @param {Record<string, unknown>} o */
+function saveLost(o) {
+  world.setDynamicProperty(LOST_PROP, Object.keys(o).length ? JSON.stringify(o) : undefined);
+}
+
+/** @param {Dimension} dim @param {Vec} min @param {Vec} size @param {import("./undo.js").Placed[]} lost */
+function keepLost(dim, min, size, lost) {
+  const id = `build:r${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+  try {
+    const st = world.structureManager.createEmpty(id, size, StructureSaveMode.World);
+    for (const c of lost) st.setBlockPermutation({ x: c.x - min.x, y: c.y - min.y, z: c.z - min.z }, c.before);
+    st.saveToWorld();
+    const o = lostOf();
+    o[id] = { d: dim.id, x: min.x, y: min.y, z: min.z };
+    saveLost(o);
+    lostPending = true;
+  } catch (e) {
+    console.warn(`[build] keep cut: ${e}`);
+  }
+}
+
+let restoring = false;
+/** Puts back the blocks of one kept cut whose corners are loaded (a few hundred a tick). */
+function restoreLost() {
+  if (!lostPending || restoring) return;
+  const o = lostOf();
+  const ids = Object.keys(o);
+  if (!ids.length) lostPending = false;
+  const sm = world.structureManager;
+  for (const id of ids) {
+    const at = o[id];
+    const st = sm.get(id);
+    if (!st) {
+      delete o[id];
+      saveLost(o);
+      continue;
+    }
+    /** @type {Dimension} */
+    let dim;
+    try {
+      dim = world.getDimension(at.d);
+    } catch {
+      continue;
+    }
+    const size = st.size;
+    /** @param {Vec} p */
+    const loaded = (p) => {
+      try {
+        return !!dim.getBlock(p);
+      } catch {
+        return false;
+      }
+    };
+    if (!loaded(at) || !loaded({ x: at.x + size.x - 1, y: at.y + size.y - 1, z: at.z + size.z - 1 })) continue;
+    restoring = true;
+    system.runJob(
+      (function* () {
+        try {
+          let left = 0;
+          for (let y = 0; y < size.y; y++)
+            for (let x = 0; x < size.x; x++)
+              for (let z = 0; z < size.z; z++) {
+                const loc = { x, y, z };
+                const perm = st.getBlockPermutation(loc);
+                if (!perm || perm.type.id === "minecraft:air") continue;
+                let block;
+                try {
+                  block = dim.getBlock({ x: at.x + x, y: at.y + y, z: at.z + z });
+                } catch {
+                  block = undefined;
+                }
+                if (!block) {
+                  left++;
+                  continue;
+                }
+                // Filled since (built over): it stays as it is.
+                if (block.isAir) block.setPermutation(perm);
+                st.setBlockPermutation(loc);
+                yield;
+              }
+          if (left) st.saveToWorld();
+          else {
+            sm.delete(id);
+            const now = lostOf();
+            delete now[id];
+            saveLost(now);
+          }
+        } catch (e) {
+          console.warn(`[build] put back cut: ${e}`);
+        } finally {
+          restoring = false;
+        }
+      })()
+    );
+    return;
+  }
+}
+system.runInterval(restoreLost, 100);
+
 /** The outside blocks of a copy (for the paste preview). @param {Content} c */
 function surfaceOf(c) {
   if (c.surface) return c.surface;
@@ -521,7 +635,7 @@ async function copyOrCut(player, cut) {
       const kept = new Set();
       /**
        * The player left mid-cut: what was taken out goes back where it was (what hangs on others last), and nothing is
-       * kept as a copy. A spot that isn't loaded any more stays undoable in this session.
+       * kept as a copy. A spot that isn't loaded any more is kept in a structure and put back once it loads again.
        */
       const abandonCut = () => {
         /** @type {import("./undo.js").Placed[]} */
@@ -536,7 +650,7 @@ async function copyOrCut(player, cut) {
             lost.push(c);
           }
         }
-        if (lost.length) remember(player, { dim: dim.id, label: `Cut ${size.x} x ${size.y} x ${size.z}`, kind: "cut", cells: lost, slot: 0 });
+        if (lost.length) keepLost(dim, min, size, lost);
         abandon();
       };
       for (let i = 0; i < order.length; i++) {
