@@ -9,7 +9,9 @@ const PROP_CELL = "storm:cell"; // world: JSON of the current storm cell, so it 
 const PROP_RODS = "storm:rods"; // world: JSON [[dim, x, y, z, charged 0|1], ...] lightning rods players placed
 const OVERWORLD = "minecraft:overworld";
 const DIMS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
-const ROD = "minecraft:lightning_rod";
+// Lightning rods oxidize (exposed, weathered, oxidized) and can be waxed: every variant is still the same rod.
+/** @param {string} id */
+const isRod = (id) => /^minecraft:(waxed_)?((exposed|weathered|oxidized)_)?lightning_rod$/.test(id);
 const SPARK = "realm:sky_spark"; // from the Realm Skies resource pack; without it nothing shows
 const BOLT = "minecraft:lightning_bolt";
 const ROD_REACH = 3; // a bolt this close to a rod (blocks) charges it
@@ -262,7 +264,7 @@ function strike(c) {
       block = undefined;
     }
     if (block) {
-      if (block.typeId !== ROD) forgetRod(rod);
+      if (!isRod(block.typeId)) forgetRod(rod);
       else if (bolt(dim, { x: rod[1] + 0.5, y: rod[2] + 1, z: rod[3] + 0.5 })) charge(rod);
       return;
     }
@@ -337,7 +339,7 @@ function charge(rod) {
 
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
-    if (block.typeId !== ROD) return;
+    if (!isRod(block.typeId)) return;
     const d = DIMS.indexOf(block.dimension.id);
     if (d < 0) return;
     const { x, y, z } = block.location;
@@ -353,7 +355,7 @@ world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
 
 world.afterEvents.playerBreakBlock.subscribe(({ block, brokenBlockPermutation }) => {
   try {
-    if (brokenBlockPermutation.type.id !== ROD) return;
+    if (!isRod(brokenBlockPermutation.type.id)) return;
     const rod = rodAt(block.dimension.id, block.location);
     if (rod) forgetRod(rod);
   } catch (e) {
@@ -394,7 +396,7 @@ function collect(player, rod) {
   } catch {
     block = undefined;
   }
-  if (!block || block.typeId !== ROD) {
+  if (!block || !isRod(block.typeId)) {
     if (block) forgetRod(rod);
     return;
   }
@@ -412,7 +414,7 @@ function collect(player, rod) {
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, isFirstEvent, itemStack } = event;
-  if (!isFirstEvent || block.typeId !== ROD) return;
+  if (!isFirstEvent || !isRod(block.typeId)) return;
   const rod = rodAt(block.dimension.id, block.location);
   if (!rod) return;
   if (rod[4]) {
@@ -452,7 +454,7 @@ system.runInterval(() => {
       const dim = world.getDimension(dimId);
       const block = dim.getBlock({ x: rod[1], y: rod[2], z: rod[3] });
       if (!block) continue; // unloaded
-      if (block.typeId !== ROD) {
+      if (!isRod(block.typeId)) {
         gone.push(rod);
         continue;
       }
