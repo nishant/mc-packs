@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 162 commands in 63 packs */
+/** @type {Pack[]} 165 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -261,6 +261,15 @@ export const PACKS = [
     pack: "Realm Mail",
     commands: [
       {"name":"realm:mail","description":"Realm Mail: read your inbox and write letters to any player, even offline ones","permission":"any","params":[]},
+    ],
+  },
+  {
+    folder: "map_bp",
+    pack: "Minimap",
+    commands: [
+      {"name":"realm:map","description":"Minimap: get Mara's Field Map, pick a destination for your compass strip, mark spots","permission":"any","params":[]},
+      {"name":"realm:map_clear","description":"Clear your destination (the strip follows your story again)","permission":"any","params":[]},
+      {"name":"realm:map_mark","description":"Mark the spot where you stand, to pick it as a destination later","permission":"any","params":[{"name":"name","type":"String","optional":true}]},
     ],
   },
   {

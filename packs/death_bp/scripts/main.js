@@ -6,6 +6,8 @@ import { get, getFor } from "./settings.js";
 // dimension id, the block they died in, whether the respawn message was sent and whether
 // /realm:death_back was used for it. World property "death:areas": JSON list of the temporary ticking
 // areas /realm:death_back added and hasn't removed yet, so a restart can clean them up.
+// For the Minimap: realm:death_point { player, dim, x, z } after a death and on realm:death_point_ping { player? }
+// ({ player } alone: no death point).
 
 const LAST_PROP = "death:last";
 const AREAS_PROP = "death:areas";
@@ -113,6 +115,7 @@ world.afterEvents.entityDie.subscribe(
         told: false,
         used: false,
       });
+      sendPoint(deadEntity);
     } catch (e) {
       console.warn(`[death] ${e}`);
     }
@@ -494,9 +497,24 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 });
 
+/** The death point for the Minimap (map_bp). @param {Player} player */
+function sendPoint(player) {
+  const p = lastDeath(player);
+  system.sendScriptEvent("realm:death_point", JSON.stringify(p ? { player: player.id, dim: p.d, x: p.x, z: p.z } : { player: player.id }));
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
+    if (id === "realm:death_point_ping") {
+      try {
+        const m = JSON.parse(message);
+        for (const p of world.getAllPlayers()) if (!m?.player || m.player === p.id) sendPoint(p);
+      } catch {
+        // not ours
+      }
+      return;
+    }
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "death_bp");
   },
   { namespaces: ["realm"] }

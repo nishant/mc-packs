@@ -30,7 +30,7 @@ import {
 import { autoTick, campUpkeep, listPlaces, placeLabel, placesMenu, placesOf, placesReadyAll, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
-import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, track, wanderAuto } from "./ui.js";
+import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, online, send } from "./util.js";
 
@@ -71,11 +71,14 @@ system.runInterval(() => {
       wanderHousekeeping(player);
       wanderAuto(player);
       const list = entries(player);
-      if (!list.length) continue;
+      if (!list.length) {
+        if (tracking) sendTrack(player, undefined);
+        continue;
+      }
       const saga = sagaOf(player);
       if (runs % 5 === 0) for (const e of list) for (const name of missingPlaces(e, saga)) hintOps(player, name, e.story);
       tickPlayer(player, list);
-      if (tracking && getFor(player, "tracker") === true && !busy.has(player.id)) track(player, list);
+      if (tracking) track(player, list, getFor(player, "tracker") === true && !busy.has(player.id));
     } catch (e) {
       console.warn(`[saga] ${e}`);
     }
@@ -397,6 +400,15 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (id === "realm:place_ping") {
       placesReadyAll();
+      return;
+    }
+    if (id === "realm:track_ping") {
+      try {
+        const msg = JSON.parse(message);
+        resendTracks(typeof msg?.player === "string" ? msg.player : undefined);
+      } catch {
+        // not ours
+      }
       return;
     }
     if (id === "realm:wander_spawn" || id === "realm:wander_turn" || id === "realm:wander_gone") {

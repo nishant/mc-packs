@@ -3,12 +3,13 @@
 // Packs never import each other, so every pack that shows a readout keeps a copy of this file as
 // scripts/side.js (node tools/sync-side.mjs keeps the copies the same).
 //
-// Slots: Right 1-4 and Left 1-4 (top to bottom), and Middle (just under the crosshair). The only text the
-// server can send the HUD besides the action bar is the title and the subtitle, so every slot travels in
-// one subtitle:
+// Slots: Right 1-4 and Left 1-4 (top to bottom), and Middle (just under the crosshair), which players pick for
+// a pack's readout; then two that only the minimap (map_bp) writes: Top (the compass strip at the top center)
+// and Radar (above the left boxes). The only text the server can send the HUD besides the action bar is the
+// title and the subtitle, so every slot travels in one subtitle:
 //
 //   title    = MARK                                     ("§s§2§r": color codes only, invisible on its own)
-//   subtitle = MARK + seg(right1) + ... + seg(middle)    (in SLOTS order)
+//   subtitle = MARK + seg(right1) + ... + seg(radar)     (in ALL_SLOTS order: 11 segments, 1769 bytes)
 //   seg      = sep (1 byte: " " or "\n") + text + "~" * (0..2) + "§r" * n    exactly SEG_BYTES UTF-8 bytes
 //   empty    = " " + "§r" * 53
 //
@@ -21,7 +22,8 @@
 // and redraws the whole title; the others update their picture and redraw only when they drew in the
 // last 2 ticks or later (so a write that crossed theirs isn't lost). When a readout runs out, the pack that
 // wrote it redraws (or clears the title with "§s§0§r" when nothing is left). A pack holds one slot per
-// player: writing another slot moves its readout there.
+// player: writing another slot moves its readout there. A pack that shows two readouts at once (the minimap's
+// compass and radar) writes the second as a part: `from` is then "<pack>/<part>", which holds a slot of its own.
 //
 // Real titles (a card name, FIGHT!, a level-up) share the channel, so the title protocol keeps them readable:
 //   realm:title {player, ticks, from}     sent right before any other title or subtitle
@@ -32,9 +34,11 @@ import { Player, system, world } from "@minecraft/server";
 
 export const MARK = "§s§2§r";
 const CLEAR = "§s§0§r";
-/** Slot order in the subtitle. Must match hud_rp/ui/hud_screen.json. */
+/** The slots players pick from, in subtitle order. */
 export const SLOTS = ["right1", "right2", "right3", "right4", "left1", "left2", "left3", "left4", "middle"];
-/** How each slot reads in menus. */
+/** Every slot in subtitle order: the nine, then the minimap's compass strip and radar. Must match hud_rp/ui/hud_screen.json. */
+export const ALL_SLOTS = [...SLOTS, "top", "radar"];
+/** How each of SLOTS reads in menus. */
 export const SLOT_NAMES = ["Right 1 (top)", "Right 2", "Right 3", "Right 4 (bottom)", "Left 1 (top)", "Left 2", "Left 3", "Left 4 (bottom)", "Middle of the screen"];
 const SEG_BYTES = 160;
 /** Bytes of readout text a slot holds (the separator takes one). */
@@ -46,8 +50,10 @@ const SWEEP_TICKS = 4;
 /** A title drawn this close before another pack's write may have crossed it on the way. */
 const CROSS_TICKS = 2;
 
-/** @param {unknown} where @returns {where is string} */
+/** A slot players may pick. @param {unknown} where @returns {where is string} */
 export const isSlot = (where) => typeof where === "string" && SLOTS.includes(where);
+/** Any slot in the subtitle. @param {unknown} where @returns {where is string} */
+const isAnySlot = (where) => typeof where === "string" && ALL_SLOTS.includes(where);
 
 /** UTF-8 bytes of one code point. @param {string} ch */
 const bytesOf = (ch) => {
@@ -91,7 +97,7 @@ export function segment(text, sep) {
 export function compose(texts) {
   let out = MARK;
   let first = true;
-  for (const slot of SLOTS) {
+  for (const slot of ALL_SLOTS) {
     const text = texts[slot] ?? "";
     if (!text) out += segment("", " ");
     else {
@@ -110,6 +116,8 @@ const drewAt = new Map();
 /** player id -> whether the last title this pack drew had something in it. @type {Map<string, boolean>} */
 const drewSome = new Map();
 let me = "";
+/** Is this readout this pack's (itself or one of its parts)? @param {string} from */
+const mine = (from) => !!me && (from === me || from.startsWith(`${me}/`));
 /** player id -> pack -> tick its real title ends (the title protocol). @type {Map<string, Map<string, number>>} */
 const holds = new Map();
 
@@ -148,7 +156,7 @@ function apply(playerId, from, slot, text, until) {
   let slots = picture.get(playerId);
   if (!slots) picture.set(playerId, (slots = new Map()));
   for (const [s, e] of slots) if (e.from === from) slots.delete(s);
-  if (text && isSlot(slot)) slots.set(slot, { from, text, until });
+  if (text && isAnySlot(slot)) slots.set(slot, { from, text, until });
   if (!slots.size) picture.delete(playerId);
 }
 
@@ -160,7 +168,7 @@ function prune(playerId, now) {
   for (const [s, e] of slots) {
     if (e.until > now) continue;
     slots.delete(s);
-    if (e.from === me) ours = true;
+    if (mine(e.from)) ours = true;
   }
   if (!slots.size) picture.delete(playerId);
   return ours;
@@ -206,29 +214,36 @@ export function sideBoxes(from) {
   return {
     /**
      * Shows `text` in `slot` for `ticks`; write again to keep it. Plain text with § codes, "\n" for a second line.
-     * @param {Player} player @param {string} slot one of SLOTS @param {string} text @param {number} ticks
+     * @param {Player} player @param {string} slot one of ALL_SLOTS @param {string} text @param {number} ticks
+     * @param {string} [part] a second readout of this pack (it holds its own slot) @param {boolean} [now] false: don't draw yet (call redraw)
      */
-    show(player, slot, text, ticks) {
-      if (!isSlot(slot)) return;
+    show(player, slot, text, ticks, part = "", now = true) {
+      if (!isAnySlot(slot)) return;
+      const from = part ? `${me}/${part}` : me;
       const t = clean(text);
       const span = Math.min(Math.max(Math.round(ticks), 1), MAX_TICKS);
-      const now = system.currentTick;
-      apply(player.id, me, slot, t, now + span);
-      system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from: me, slot, text: t, ticks: span, tick: now }));
-      draw(player);
+      const tick = system.currentTick;
+      apply(player.id, from, slot, t, tick + span);
+      system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from, slot, text: t, ticks: span, tick }));
+      if (now) draw(player);
     },
-    /** Takes this pack's readout off the player's screen now. @param {Player} player */
-    clear(player) {
-      const had = [...(picture.get(player.id)?.values() ?? [])].some((e) => e.from === me);
+    /** Takes this pack's readout (or one part's) off the player's screen. @param {Player} player @param {string} [part] @param {boolean} [now] false: don't draw yet */
+    clear(player, part = "", now = true) {
+      const from = part ? `${me}/${part}` : me;
+      const had = [...(picture.get(player.id)?.values() ?? [])].some((e) => e.from === from);
       if (!had) return;
-      apply(player.id, me, "", "", 0);
-      system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from: me, slot: "", text: "", ticks: 0, tick: system.currentTick }));
+      apply(player.id, from, "", "", 0);
+      system.sendScriptEvent("realm:side", JSON.stringify({ player: player.id, from, slot: "", text: "", ticks: 0, tick: system.currentTick }));
+      if (now) draw(player);
+    },
+    /** Draws the title now, after show or clear with `now` false. @param {Player} player */
+    redraw(player) {
       draw(player);
     },
     /** Is another pack's readout in this slot for the player right now? @param {Player} player @param {string} slot */
     taken(player, slot) {
       const e = picture.get(player.id)?.get(slot);
-      return !!e && e.from !== me && e.until > system.currentTick;
+      return !!e && !mine(e.from) && e.until > system.currentTick;
     },
     /** Is a real title holding the player's boxes back (the title protocol)? @param {Player} player */
     held(player) {
@@ -251,7 +266,7 @@ system.afterEvents.scriptEventReceive.subscribe(
       try {
         const m = JSON.parse(message);
         // Our own holdTitle already applied it (and the clock moved since).
-        if (m && typeof m.player === "string" && typeof m.from === "string" && m.from !== me) hold(m.player, m.from, Math.max(Number(m.ticks) || 0, 0));
+        if (m && typeof m.player === "string" && typeof m.from === "string" && !mine(m.from)) hold(m.player, m.from, Math.max(Number(m.ticks) || 0, 0));
       } catch {
         // not ours
       }
@@ -260,7 +275,7 @@ system.afterEvents.scriptEventReceive.subscribe(
     if (id !== "realm:side" || !me) return;
     try {
       const m = JSON.parse(message);
-      if (!m || typeof m.player !== "string" || typeof m.from !== "string" || m.from === me || typeof m.slot !== "string") return;
+      if (!m || typeof m.player !== "string" || typeof m.from !== "string" || mine(m.from) || typeof m.slot !== "string") return;
       const ticks = Math.min(Math.max(Number(m.ticks) || 0, 0), MAX_TICKS);
       const sent = typeof m.tick === "number" ? m.tick : system.currentTick;
       apply(m.player, m.from, m.slot, typeof m.text === "string" ? clean(m.text) : "", system.currentTick + ticks);
@@ -286,7 +301,7 @@ system.runInterval(() => {
     if (byPack.size) continue;
     holds.delete(playerId);
     prune(playerId, now);
-    if (![...(picture.get(playerId)?.values() ?? [])].some((e) => e.from === me)) continue;
+    if (![...(picture.get(playerId)?.values() ?? [])].some((e) => mine(e.from))) continue;
     const p = playerById(playerId);
     if (p) draw(p);
   }

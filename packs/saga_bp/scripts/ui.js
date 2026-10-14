@@ -795,14 +795,38 @@ async function hostileTalk(player, wid) {
 // The tracker
 // ---------------------------------------------------------------------------
 
+/**
+ * Where the tracker line just computed points, for the Minimap (realm:track): a spot, or a townsfolk by id.
+ * @typedef {{ label: string, dim?: string, x?: number, z?: number, npc?: string }} Pointed
+ */
+/** @type {Pointed | undefined} */
+let pointed;
+
+/** A townsfolk (or a Recurring Wanderer's camp) as a tracker target. @param {Player} player @param {string} npc @param {string} label @returns {Pointed} */
+function npcTarget(player, npc, label) {
+  const at = npcAt(player.dimension, npc);
+  if (at) return { label, npc, dim: player.dimension.id, x: at.x, z: at.z };
+  const w = wandererOf(npc);
+  const camp = w ? placesOf()[campName(w.id)] : undefined;
+  return camp ? { label, npc, dim: camp.dim, x: camp.x, z: camp.z } : { label, npc };
+}
+
 /** The tracker line for one entry, or undefined when there's nothing to point at. @param {Player} player @param {Entry} e @param {Saga} saga */
 function trackLine(player, e, saga) {
+  pointed = undefined;
   // A sky event to chase comes first: it doesn't last.
   for (let i = 0; i < e.chapter.objectives.length; i++) {
     const sky = active(e, i, saga) ? skyFocus(player.id, e, i) : undefined;
-    if (sky) return `§e${sky.text}: §fget within ${sky.near} blocks ${bearing(player, sky, sky.near)} §c${clock(sky.left)} left`;
+    if (sky) {
+      pointed = { label: sky.text, dim: sky.dim, x: sky.x, z: sky.z };
+      return `§e${sky.text}: §fget within ${sky.near} blocks ${bearing(player, sky, sky.near)} §c${clock(sky.left)} left`;
+    }
   }
-  if (chapterDone(e, saga)) return e.wv && (/** @type {any} */ (e.st).g || /** @type {any} */ (e.st).tn) ? undefined : `§6report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
+  if (chapterDone(e, saga)) {
+    if (e.wv && (/** @type {any} */ (e.st).g || /** @type {any} */ (e.st).tn)) return undefined;
+    pointed = npcTarget(player, reportTo(e), `Report to ${npcName(reportTo(e))}`);
+    return `§6report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
+  }
   // Optional objectives only when nothing required has anything to show.
   return pointAt(player, e, saga, false) ?? pointAt(player, e, saga, true);
 }
@@ -814,6 +838,8 @@ function pointAt(player, e, saga, optional) {
   let bestD = Infinity;
   /** @type {string | undefined} */
   let timed;
+  /** @type {Pointed | undefined} */
+  let bestAt;
   e.chapter.objectives.forEach((obj, i) => {
     if (!!obj.optional !== optional || !active(e, i, saga)) return;
     const label = labelOf(e, i, saga);
@@ -826,7 +852,10 @@ function pointAt(player, e, saga, optional) {
     if (!focus && obj.type === "escort" && obj.from) loc = locate(obj.from, obj.who?.name ?? "the start");
     if (!focus && obj.type === "lead") loc = locate(obj.spawnAt, obj.name ? plain(obj.name) : itemName(obj.mob ?? "")) ?? locate(obj.to, "the pen");
     if (obj.npc && (obj.type === "talk" || obj.type === "deliver" || obj.type === "answer")) {
-      if (bestD === Infinity && !best) best = `§f${label}${towardNpc(player, obj.npc)}`;
+      if (bestD === Infinity && !best) {
+        best = `§f${label}${towardNpc(player, obj.npc)}`;
+        bestAt = npcTarget(player, obj.npc, label);
+      }
       return;
     }
     if (loc === undefined) {
@@ -845,26 +874,68 @@ function pointAt(player, e, saga, optional) {
     if (d < bestD) {
       bestD = d;
       best = `§f${loc.label} ${bearing(player, loc, radiusOf(obj))}${loc.pending ? "" : ""}`;
+      bestAt = { label: loc.label, dim: loc.dim, x: loc.x, z: loc.z };
     }
   });
+  pointed = bestAt;
   return timed ?? best;
 }
 
-/** The tracker: where to go for the latest chapter with something to show. @param {Player} player @param {Entry[]} list */
-export function track(player, list) {
+/** What realm:track last sent for each player (JSON). @type {Map<string, string>} */
+const trackSent = new Map();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => trackSent.delete(playerId));
+
+/**
+ * The tracker's target for the Minimap (map_bp), when it changed: realm:track { player, label, dim?, x?, z?, npc? },
+ * or { player } for none.
+ * @param {Player} player @param {Pointed | undefined} target
+ */
+export function sendTrack(player, target) {
+  /** @type {Record<string, unknown>} */
+  const msg = { player: player.id };
+  if (target) {
+    msg.label = plain(target.label).slice(0, 60);
+    if (target.dim && Number.isFinite(target.x) && Number.isFinite(target.z)) Object.assign(msg, { dim: target.dim, x: Math.floor(/** @type {number} */ (target.x)), z: Math.floor(/** @type {number} */ (target.z)) });
+    if (target.npc) msg.npc = target.npc;
+  }
+  const json = JSON.stringify(msg);
+  if (trackSent.get(player.id) === json) return;
+  trackSent.set(player.id, json);
+  send("realm:track", msg);
+}
+
+/** realm:track_ping { player? }: every target sent so far again. @param {string | undefined} playerId */
+export function resendTracks(playerId) {
+  for (const [id, json] of trackSent) if (!playerId || id === playerId) system.sendScriptEvent("realm:track", json);
+}
+
+/**
+ * The tracker: where to go for the latest chapter with something to show. The target goes to the Minimap every
+ * time (realm:track, when it changed); the line shows when `shown` (the player's tracker is on).
+ * @param {Player} player @param {Entry[]} list @param {boolean} [shown]
+ */
+export function track(player, list, shown = true) {
+  const saga = sagaOf(player);
+  const sorted = [...list].sort((a, b) => (b.st.t ?? 0) - (a.st.t ?? 0));
+  /** @type {string | undefined} */
+  let line;
+  /** @type {Pointed | undefined} */
+  let target;
+  for (const e of sorted) {
+    const text = trackLine(player, e, saga);
+    if (!text) continue;
+    line = `§b${e.story.short}: ${text}`;
+    target = pointed ? { ...pointed, label: `${e.story.short}: ${pointed.label}` } : undefined;
+    break;
+  }
+  sendTrack(player, target);
+  if (!shown || !line) return;
   // Our own note is showing, or (above the hotbar) another pack's (a quest, a bounty, mob health): don't write over it.
   if (system.currentTick < (ownUntil.get(player.id) ?? 0)) return;
   // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or our Side HUD box (realm:side).
   const where = getFor(player, "trackerAt");
   if (where === "hotbar" ? system.currentTick < (holdUntil.get(player.id) ?? 0) : side.taken(player, where)) return;
-  const saga = sagaOf(player);
-  const sorted = [...list].sort((a, b) => (b.st.t ?? 0) - (a.st.t ?? 0));
-  for (const e of sorted) {
-    const text = trackLine(player, e, saga);
-    if (!text) continue;
-    showLine(player, `§b${e.story.short}: ${text}`, 50);
-    return;
-  }
+  showLine(player, line, 50);
 }
 
 // ---------------------------------------------------------------------------

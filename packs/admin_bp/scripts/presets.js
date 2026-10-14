@@ -27,7 +27,7 @@ export const CATEGORIES = [
   { id: "players", title: "Players", packs: ["stats_bp", "titles_bp", "nick_bp", "party_bp", "skills_bp", "mail_bp", "afk_bp", "death_bp"] },
   { id: "dungeons", title: "Dungeons & Loot", packs: ["expedition_bp", "elite_bp", "relics_bp", "maps_bp"] },
   { id: "fun", title: "Fun", packs: ["domt_bp", "silly_bp", "dolphin_bp", "cooking_bp", "chairs_bp", "platypus_bp"] },
-  { id: "utilities", title: "Utilities", packs: ["help_bp", "settings_bp", "admin_bp", "stash_bp", "find_bp", "cleanup_bp", "hud_bp", "mobhp_bp", "elytra_bp", "durability_bp", "refill_bp", "phantom_bp", "translucent_bp", "harvest_bp", "leaves_bp"] },
+  { id: "utilities", title: "Utilities", packs: ["help_bp", "settings_bp", "admin_bp", "stash_bp", "find_bp", "cleanup_bp", "hud_bp", "map_bp", "mobhp_bp", "elytra_bp", "durability_bp", "refill_bp", "phantom_bp", "translucent_bp", "harvest_bp", "leaves_bp"] },
   { id: "events", title: "Events & News", packs: ["fishing_bp", "goals_bp", "news_bp", "welcome_bp"] },
 ];
 
@@ -119,6 +119,9 @@ export const NAMES = {
   "realm:guilds": ["Guilds", "Rank, reputation, shops"],
   "realm:help": ["Realm Help", "Every feature and command"],
   "realm:hud": ["Coordinates HUD", "Position, facing and time"],
+  "realm:map": ["Minimap Menu", "Field map, destinations, spots"],
+  "realm:map_clear": ["Clear Destination", "The strip follows the story"],
+  "realm:map_mark": ["Mark This Spot", "Pick it as a destination later"],
   "realm:journal": ["Field Journal", "Everything you've found"],
   "realm:mail": ["Realm Mail", "Your inbox, write letters"],
   "realm:maps": ["Treasure Maps", "Your hunts, give maps"],
@@ -242,6 +245,7 @@ export const PARAMS = {
   "realm:expedition_site": { x: { label: "X (default: where you stand)", kind: "posX" }, z: { label: "Z (default: where you stand)", kind: "posZ" } },
   "realm:farm_add": { name: { label: "Farm name", default: "farm" }, radius: { label: "Radius in chunks", kind: "slider", min: 1, max: 4, step: 1, default: 2 } },
   "realm:farm_remove": { name: { label: "Farm name" } },
+  "realm:map_mark": { name: { label: "Spot name (empty: Spot 1, Spot 2...)" } },
   "realm:find": { item: { label: "Item to find (empty: the one in your hand)", kind: "item" } },
   "realm:goals_add": { item: { label: "Item id", kind: "item" }, amount: { label: "Amount to collect (1 to 1,000,000)", kind: "text", default: 640 }, name: { label: "Goal name" } },
   "realm:guard_add": { name: { label: "Zone name (letters, digits, _ and -)", default: "home" }, radius: { label: "Radius (blocks)", kind: "slider", min: 8, max: 256, step: 8, default: 64 } },

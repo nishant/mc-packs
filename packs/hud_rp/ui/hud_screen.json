@@ -196,10 +196,7 @@
       "default",
       "default"
     ],
-    "max_size": [
-      200,
-      60
-    ],
+    "max_size": "$slot_max",
     "anchor_from": "center",
     "anchor_to": "center",
     "text_alignment": "$slot_align",
@@ -227,7 +224,7 @@
   "realm_slot_box": {
     "type": "image",
     "texture": "textures/ui/Black",
-    "alpha": 0.55,
+    "alpha": "$slot_alpha",
     "anchor_from": "$slot_anchor",
     "anchor_to": "$slot_anchor",
     "size": [
@@ -248,6 +245,11 @@
     ],
     "$slot_anchor|default": "top_right",
     "$slot_align|default": "right",
+    "$slot_max|default": [
+      200,
+      60
+    ],
+    "$slot_alpha|default": 0.55,
     "$skip|default": "%.10s",
     "$slot_empty|default": "§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
     "controls": [
@@ -382,6 +384,64 @@
                 "$skip": "%.1290s",
                 "$slot_anchor": "top_middle",
                 "$slot_align": "center"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "realm_side_top": {
+          "type": "panel",
+          "size": [
+            "100%",
+            "100%c"
+          ],
+          "anchor_from": "top_middle",
+          "anchor_to": "top_middle",
+          "offset": [
+            0,
+            2
+          ],
+          "controls": [
+            {
+              "realm_top@hud.realm_slot": {
+                "$skip": "%.1450s",
+                "$slot_anchor": "top_middle",
+                "$slot_align": "center",
+                "$slot_max": [
+                  420,
+                  30
+                ],
+                "$slot_alpha": 0.3
+              }
+            }
+          ]
+        }
+      },
+      {
+        "realm_side_radar": {
+          "type": "panel",
+          "size": [
+            "50%",
+            "100%c"
+          ],
+          "anchor_from": "left_middle",
+          "anchor_to": "bottom_left",
+          "offset": [
+            1,
+            -26
+          ],
+          "controls": [
+            {
+              "realm_radar@hud.realm_slot": {
+                "$skip": "%.1610s",
+                "$slot_anchor": "bottom_left",
+                "$slot_align": "left",
+                "$slot_max": [
+                  120,
+                  120
+                ],
+                "$slot_alpha": 0.0
               }
             }
           ]

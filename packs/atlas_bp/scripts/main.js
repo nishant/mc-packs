@@ -14,6 +14,10 @@
 //   realm:sky_event          <- meteors: a Starglass Pool may form near where one fell
 //   realm:calendar           <- the Realm day (shrine blessings are once a Realm day)
 //   realm:atlas_debug        { player, action, ... } (operators / scripts) -> realm:atlas_state
+//   realm:atlas_region       { player, name }                         -> the region a player is in (Minimap), on entering one
+//   realm:atlas_sites        { player, part, parts, sites: [[label, x, z, region]] } -> every site a player found (Minimap)
+//   realm:atlas_site         { player, site: [label, x, z, region] }  -> one more found site
+//   realm:atlas_ping         { player? }                              <- send the region and sites again
 // See "Atlas of the Realm" in docs/PACKS.md.
 import { BlockPermutation, CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
@@ -513,6 +517,7 @@ function enterCell(player, cx, cz, joined) {
     savePdata(player);
   }
   const name = regionName(cx, cz, c.g);
+  send("realm:atlas_region", { player: player.id, name });
   if ((isNew || !joined) && get("banners") === true && getFor(player, "banner") === true && (isNew || system.currentTick - (lastBanner.get(player.id) ?? -1e9) > 400)) {
     lastBanner.set(player.id, system.currentTick);
     const total = sitesIn(cx, cz);
@@ -925,6 +930,42 @@ function found(player, rec) {
   if (kind === "wreck" && !fightAt(key)) startFight(player, rec, "wreck");
   savePdata(player);
   milestones(player, d);
+  send("realm:atlas_site", { player: player.id, site: siteEntry(rec) });
+}
+
+/** A found site for the Minimap: [label, x, z, region]. @param {Rec} rec */
+const siteEntry = (rec) => [KIND_NAMES[kindOf(rec)], rec.x, rec.z, regionOf(rec)];
+
+/** The region a player is in and every site they found (realm:atlas_ping), the sites in parts under 2048 characters. @param {Player} player */
+function sendMapData(player) {
+  const ck = lastCell.get(player.id);
+  if (ck) {
+    const [cx, cz] = ck.split(",").map(Number);
+    const c = cells.get(ck);
+    if (c) send("realm:atlas_region", { player: player.id, name: regionName(cx, cz, c.g) });
+  }
+  const items = [];
+  for (const key of pdata(player).p) {
+    const rec = built.get(key);
+    if (rec && rec.s !== 0) items.push(siteEntry(rec));
+  }
+  /** @type {unknown[][]} */
+  const parts = [];
+  let cur = [];
+  let len = 0;
+  for (const it of items) {
+    const n = JSON.stringify(it).length + 1;
+    if (cur.length && len + n > 1800) {
+      parts.push(cur);
+      cur = [];
+      len = 0;
+    }
+    cur.push(it);
+    len += n;
+  }
+  if (cur.length) parts.push(cur);
+  if (!parts.length) return send("realm:atlas_sites", { player: player.id, part: 1, parts: 0, sites: [] });
+  parts.forEach((p, i) => send("realm:atlas_sites", { player: player.id, part: i + 1, parts: parts.length, sites: p }));
 }
 
 /** When each site was last tidied for a player still to finish it. @type {Map<string, number>} */
@@ -1764,7 +1805,7 @@ function debug(msg) {
 // Script events
 // ---------------------------------------------------------------------------
 
-const EVENTS = new Set(["realm:saga_progress", "realm:place_ready", "realm:sky_event", "realm:calendar", "realm:claims_check_result", "realm:atlas_debug"]);
+const EVENTS = new Set(["realm:saga_progress", "realm:place_ready", "realm:sky_event", "realm:calendar", "realm:claims_check_result", "realm:atlas_debug", "realm:atlas_ping"]);
 
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message, sourceEntity }) => {
@@ -1783,7 +1824,9 @@ system.afterEvents.scriptEventReceive.subscribe(
     if (!msg || typeof msg !== "object") return;
     try {
       if (id === "realm:saga_progress") onProgress(msg);
-      else if (id === "realm:place_ready") {
+      else if (id === "realm:atlas_ping") {
+        for (const p of world.getAllPlayers()) if (!msg.player || msg.player === p.id) sendMapData(p);
+      } else if (id === "realm:place_ready") {
         if (typeof msg.name !== "string" || typeof msg.dim !== "string" || !Number.isFinite(msg.x) || !Number.isFinite(msg.z)) return;
         if (msg.state === "removed") places.delete(msg.name);
         else if (places.size < 200) places.set(msg.name, { dim: msg.dim, x: msg.x, z: msg.z });

@@ -6,6 +6,17 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## A minimap
+
+A compass strip now runs across the top of your screen.
+
+- It shows which way you face, the region you're in, and icons: yellow for townsfolk, green for wanderers, blue for your party, red for mobs close by, tents for camps and diamonds for sites you found.
+- Pick a destination with /realm:map: a townsfolk, a waystone, a camp, a site, where you died, a party mate or a spot you marked (/realm:map_mark). A gold star points the way and it says Arrived when you get there.
+- No destination? The star follows your story's next step.
+- Want more? Turn on the Radar in /realm:prefs -> Minimap: a small map of what's around you.
+- /realm:map also gives Mara's Field Map. Hold it in your other hand to see the land.
+- Hostile strangers in disguise never show up on it. Watch out.
+
 ## Wanderers now walk
 
 The people you meet out on the road don't stand frozen anymore.

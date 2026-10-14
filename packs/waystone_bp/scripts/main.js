@@ -183,6 +183,7 @@ function removeWaystone(w, why) {
   list = waystones().filter((x) => x.i !== w.i);
   saveList();
   console.warn(`[waystone] removed "${w.n}" at ${w.x} ${w.y} ${w.z}: ${why}`);
+  for (const p of world.getAllPlayers()) if (knownCache.get(p.id)?.has(w.i)) sendKnown(p);
   for (const [id, ch] of channels) {
     if (ch.to.i !== w.i) continue;
     channels.delete(id);
@@ -224,8 +225,51 @@ function discover(player, w) {
   player.sendMessage(`§bWaystone discovered: §f${w.n}§b. §7Tap any waystone you know to travel here.`);
   player.playSound("random.orb", { pitch: 0.7 });
   send("realm:journal", { player: player.id, page: "places", entry: `waystone_${slug(w.n)}`, label: `Waystone: ${w.n}` });
+  sendKnown(player);
   return true;
 }
+
+/**
+ * The waystones a player knows, for the Minimap (map_bp): realm:waystones_known { player, part, parts, list: [{ i, n, dim, x, z }] },
+ * sent on a discovery, a removal and on realm:waystones_known_ping { player? }; parts stay under 2048 characters.
+ * @param {Player} player
+ */
+function sendKnown(player) {
+  const known = knownOf(player);
+  const items = waystones()
+    .filter((w) => known.has(w.i))
+    .map((w) => ({ i: w.i, n: w.n, dim: w.d, x: w.x, z: w.z }));
+  /** @type {object[][]} */
+  const parts = [];
+  let cur = [];
+  let len = 0;
+  for (const it of items) {
+    const n = JSON.stringify(it).length + 1;
+    if (cur.length && len + n > 1800) {
+      parts.push(cur);
+      cur = [];
+      len = 0;
+    }
+    cur.push(it);
+    len += n;
+  }
+  if (cur.length) parts.push(cur);
+  if (!parts.length) return send("realm:waystones_known", { player: player.id, part: 1, parts: 0, list: [] });
+  parts.forEach((p, i) => send("realm:waystones_known", { player: player.id, part: i + 1, parts: parts.length, list: p }));
+}
+
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:waystones_known_ping") return;
+    try {
+      const m = JSON.parse(message);
+      for (const p of world.getAllPlayers()) if (!m?.player || m.player === p.id) sendKnown(p);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] }
+);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   knownCache.delete(playerId);

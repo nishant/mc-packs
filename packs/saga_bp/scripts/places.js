@@ -117,7 +117,10 @@ export function placeReady(name, state) {
     Object.assign(msg, { dim: rec.dim, x: Math.floor(at.x), z: Math.floor(at.z) });
     if (at.y !== undefined) msg.y = Math.floor(at.y);
   }
-  if (isCamp(name)) msg.wid = name.slice(5);
+  if (isCamp(name)) {
+    msg.wid = name.slice(5);
+    msg.label = placeLabel(name); // "Pell's Camp", for the Minimap
+  }
   send("realm:place_ready", msg);
 }
 
