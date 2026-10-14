@@ -57,7 +57,8 @@ const OFFER_TICKS = 4;
 const MAX_OFFERS = 16;
 const TAP_COOLDOWN = 10;
 const MOVE_DISTANCE = 1.5;
-const RIVAL_MS = 20 * 60000; // Rook comes after a bounty or a treasure map finished this recently
+const RIVAL_MS = 20 * 60000; // with nothing live to race: Rook comes after a bounty or a treasure map finished this recently
+const RIVAL_NEAR = 300; // Rook comes within this many blocks of a live bounty target or the player's own last map leg
 const TURN_MS = { spy: 20000, sailor: 10000, hermit: 10000 }; // a disguise drops this long after the first talk
 const PLACE_MIN = 24, PLACE_MAX = 40, PLACE_TRIES = 12;
 const RUIN_PLACES = new Set(["graveyard", "observatory", "watchtower"]);
@@ -151,6 +152,12 @@ const states = new Map();
 const sites = new Map();
 /** Camps' wanderers hidden while a story copy walks with someone: wid -> until (ms). @type {Map<string, number>} */
 const hidden = new Map();
+/** Bounty Board's live champion targets (realm:bounty_targets): id -> spot. @type {Map<string, { dim: string, x: number, z: number }>} */
+let bountyTargets = new Map();
+/** realm:bounty_targets parts still coming in. @type {Map<string, { dim: string, x: number, z: number }> | undefined} */
+let bountyIncoming;
+/** Treasure Maps' last legs (realm:map_leg with `final`), per player: hunt id -> spot. @type {Map<string, Map<string, { dim: string, x: number, z: number }>>} */
+const finalLegs = new Map();
 /** Who has something waiting at which wanderer, from the last talk: "<entity id>|<player id>". @type {Map<string, boolean>} */
 const hasOffer = new Map();
 /** Camp wanderers with nobody near, since (ms). @type {Map<string, number>} */
@@ -349,7 +356,7 @@ function underSky(player) {
 
 /**
  * Who this player would meet here (first match wins): a deep miner below y 0 with no sky, a ghost at night near
- * ruins, a pilgrim near a holy place by day, Rook after a bounty or a treasure map, a hermit up high or in cold
+ * ruins, a pilgrim near a holy place by day, Rook near a live bounty target or a last map leg, a hermit up high or in cold
  * country, a storm-chaser in thunder, an exile in the Nether, else a traveler.
  * @param {Player} player @returns {Archetype}
  */
@@ -361,10 +368,52 @@ function archetypeFor(player) {
   if (p.y < 0 && !underSky(player)) return "miner";
   if (night && (siteNear(dim, p, 64, (n) => RUIN_PLACES.has(n) || n.startsWith("poi:")) || ruinsAround(player))) return "ghost";
   if (!night && siteNear(dim, p, 200, (n) => PILGRIM_PLACES.has(n))) return "pilgrim";
-  if (Date.now() - (pdata(player).q ?? 0) < RIVAL_MS) return "rival";
+  if (rivalNear(player)) return "rival";
   if (p.y >= 100 || coldAround(player)) return "hermit";
   if (weather === "Thunder") return "storm";
   return "traveler";
+}
+
+/**
+ * Rook is about: the player is within RIVAL_NEAR of a live bounty target or of their own treasure map's last leg. With
+ * neither live anywhere (no Bounty Board or Treasure Maps, or nothing posted), he comes after a finished bounty or map.
+ * @param {Player} player
+ */
+function rivalNear(player) {
+  const dim = player.dimension.id;
+  const p = player.location;
+  for (const t of bountyTargets.values()) if (t.dim === dim && across(t, p) <= RIVAL_NEAR) return true;
+  const legs = finalLegs.get(player.id);
+  for (const l of legs?.values() ?? []) if (l.dim === dim && across(l, p) <= RIVAL_NEAR) return true;
+  if (bountyTargets.size || legs?.size) return false;
+  return Date.now() - (pdata(player).q ?? 0) < RIVAL_MS;
+}
+
+/** realm:bounty_targets { targets, part, parts }: the list, in parts. @param {any} msg */
+function onTargets(msg) {
+  if (!Array.isArray(msg.targets)) return;
+  const part = Number(msg.part) || 1;
+  const parts = Number(msg.parts) || 1;
+  if (part === 1 || !bountyIncoming) bountyIncoming = new Map();
+  for (const t of msg.targets.slice(0, 32))
+    if (t && typeof t.id === "string" && typeof t.dim === "string" && Number.isFinite(t.x) && Number.isFinite(t.z)) bountyIncoming.set(t.id, { dim: t.dim, x: t.x, z: t.z });
+  if (part >= parts) {
+    bountyTargets = bountyIncoming;
+    bountyIncoming = undefined;
+  }
+}
+
+/** realm:map_leg { player, hunt, dim, x, z, final } or { player, hunt, gone }: only last legs are kept. @param {any} msg */
+function onLeg(msg) {
+  if (typeof msg.player !== "string" || typeof msg.hunt !== "string") return;
+  let legs = finalLegs.get(msg.player);
+  if (msg.gone || msg.final !== true || typeof msg.dim !== "string" || !Number.isFinite(msg.x) || !Number.isFinite(msg.z)) {
+    legs?.delete(msg.hunt);
+    if (legs && !legs.size) finalLegs.delete(msg.player);
+    return;
+  }
+  if (!legs) finalLegs.set(msg.player, (legs = new Map()));
+  if (legs.size < 16 || legs.has(msg.hunt)) legs.set(msg.hunt, { dim: msg.dim, x: msg.x, z: msg.z });
 }
 
 /** Water within 6 blocks of a spot (a lost sailor stands by it). @param {Dimension} dim @param {Vector3} at */
@@ -1160,6 +1209,8 @@ system.afterEvents.scriptEventReceive.subscribe(
       id !== "realm:place_ready" &&
       id !== "realm:poi" &&
       id !== "realm:quest_done" &&
+      id !== "realm:bounty_targets" &&
+      id !== "realm:map_leg" &&
       id !== "realm:wander_debug"
     )
       return;
@@ -1183,6 +1234,8 @@ system.afterEvents.scriptEventReceive.subscribe(
         if (typeof msg.wid === "string" && NAMED_BY_ID.has(msg.wid)) hidden.set(msg.wid, Date.now() + Math.max(1, Math.min(60, Number(msg.seconds) || 10)) * 1000);
       } else if (id === "realm:place_ready") onPlace(msg);
       else if (id === "realm:poi") onPoi(msg);
+      else if (id === "realm:bounty_targets") onTargets(msg);
+      else if (id === "realm:map_leg") onLeg(msg);
       else if (id === "realm:quest_done") {
         // Rook follows bounty hunters and treasure seekers.
         if ((msg.pack === "bounty_bp" || msg.pack === "maps_bp") && typeof msg.player === "string") {
@@ -1366,6 +1419,8 @@ world.afterEvents.worldLoad.subscribe(() => {
   system.runTimeout(() => {
     send("realm:place_ping", {});
     send("realm:wander_ping", {});
+    send("realm:bounty_targets_ping", {});
+    send("realm:map_leg_ping", {});
   }, 100);
 });
 
@@ -1399,6 +1454,7 @@ system.runInterval(() => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pcache.delete(playerId);
   states.delete(playerId);
+  finalLegs.delete(playerId);
   busy.delete(playerId);
   lastTap.delete(playerId);
   for (const k of [...hasOffer.keys()]) if (k.endsWith(`|${playerId}`)) hasOffer.delete(k);

@@ -12,6 +12,9 @@ export const ACTOR = "saga:actor";
 /** Hostile story mobs (ambushes, waves, wrong answers, champion adds): real fights, cleaned up later. */
 export const ADD = "saga:add";
 const LONG = 20000000; // effect ticks: as long as the game allows
+const VILLAGER = "minecraft:villager_v2";
+/** What a story character turns into: lightning makes a villager a witch, a zombie's fatal hit a zombie villager. */
+const TURNED = /^minecraft:(witch|zombie_villager|zombie_villager_v2)$/;
 
 /**
  * @typedef {object} Actor
@@ -23,6 +26,12 @@ const LONG = 20000000; // effect ticks: as long as the game allows
  * @property {Vector3} [anchor] kept here (teleported back when it strays)
  * @property {string} dim
  * @property {number} born tick
+ * @property {string} type what was spawned
+ * @property {SpawnOpts} opts how (to spawn it again the same way)
+ */
+/**
+ * @typedef {{ owner: string, key: string, role: Actor["role"], name?: string, invul?: boolean, anchor?: boolean, frozen?: boolean, fireproof?: boolean, look?: string }} SpawnOpts
+ * `look`: villagers only, the vanilla event that dresses them for a job (`minecraft:become_cleric`).
  */
 
 /** By entity id. @type {Map<string, Actor>} */
@@ -33,21 +42,49 @@ export const ownerTag = (owner) => `saga:o:${hash(owner).toString(36)}`;
 /** @param {string} key */
 export const keyTag = (key) => `saga:k:${hash(key).toString(36)}`;
 
+/** Names of the characters spawned since the world loaded: what a turned one (a witch, a zombie villager) still wears. @type {Set<string>} */
+const names = new Set();
+/** Villagers whose look isn't confirmed yet: entity id -> the vanilla event (it lands a tick later). @type {Map<string, string>} */
+const dressing = new Map();
+
+/** @param {Entity} ent @param {string} look */
+function dress(ent, look) {
+  try {
+    ent.triggerEvent(look);
+  } catch (e) {
+    console.warn(`[saga] look ${look}: ${e}`);
+  }
+}
+/** Dressed as they should be? The event's job is a type family ("become_sheperd" sets "shepherd"). @param {Entity} ent @param {string} look */
+const dressed = (ent, look) => ent.matches({ families: [look.replace("minecraft:become_", "").replace("sheperd", "shepherd")] });
+
 /**
  * Spawns a story character or mob for a player's scene. Named, so it never despawns on its own.
- * Invulnerable characters can't be hurt, don't wander and can't hurt anyone.
- * @param {Dimension} dim @param {string} type @param {Vector3} at
- * @param {{ owner: string, key: string, role: Actor["role"], name?: string, invul?: boolean, anchor?: boolean, frozen?: boolean, fireproof?: boolean }} o
+ * Invulnerable characters can't be hurt, don't wander and can't hurt anyone. A villager comes as a village's
+ * newcomer (no job yet, a random skin, the biome's clothes; the default spawn would pick a random job that a later
+ * look can't replace), then takes its `look` (a grown-up, unskilled one without).
+ * @param {Dimension} dim @param {string} type @param {Vector3} at @param {SpawnOpts} o
  * @returns {Entity | undefined}
  */
 export function spawnActor(dim, type, at, o) {
   try {
-    const ent = dim.spawnEntity(/** @type {any} */ (type), at);
+    const villager = type === VILLAGER;
+    const ent = dim.spawnEntity(/** @type {any} */ (type), at, villager ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
+    if (villager) {
+      // Also grows up a baby (1 in 20 spawn as one). tendActors checks it took.
+      const look = o.look || "minecraft:become_unskilled";
+      dress(ent, look);
+      dressing.set(ent.id, look);
+    }
     ent.addTag(o.role === "add" ? ADD : ACTOR);
     ent.addTag(ownerTag(o.owner));
     ent.addTag(keyTag(o.key));
-    if (o.name) ent.nameTag = o.name;
-    else if (o.role !== "add") ent.nameTag = " ";
+    if (o.name) {
+      ent.nameTag = o.name;
+      names.delete(o.name);
+      names.add(o.name);
+      if (names.size > 200) names.delete(/** @type {string} */ (names.values().next().value));
+    } else if (o.role !== "add") ent.nameTag = " ";
     if (o.invul) {
       ent.addEffect("resistance", LONG, { amplifier: 4, showParticles: false });
       ent.addEffect("weakness", LONG, { amplifier: 250, showParticles: false });
@@ -57,7 +94,7 @@ export function spawnActor(dim, type, at, o) {
       ent.addEffect("fire_resistance", LONG, { amplifier: 0, showParticles: false });
       ent.addEffect("water_breathing", LONG, { amplifier: 0, showParticles: false });
     }
-    actors.set(ent.id, { ent, owner: o.owner, key: o.key, role: o.role, invul: !!o.invul, anchor: o.anchor ? { ...at } : undefined, dim: dim.id, born: system.currentTick });
+    actors.set(ent.id, { ent, owner: o.owner, key: o.key, role: o.role, invul: !!o.invul, anchor: o.anchor ? { ...at } : undefined, dim: dim.id, born: system.currentTick, type, opts: o });
     return ent;
   } catch (e) {
     console.warn(`[saga] spawn ${type}: ${e}`);
@@ -117,7 +154,13 @@ export function tendActors() {
     try {
       if (!a.ent.isValid) {
         actors.delete(id); // unloaded or dead: the scene spawns a new one when needed
+        dressing.delete(id);
         continue;
+      }
+      const look = dressing.get(id);
+      if (look) {
+        if (dressed(a.ent, look)) dressing.delete(id);
+        else dress(a.ent, look);
       }
       if (a.anchor && dist3(a.ent.location, a.anchor) > 2) a.ent.teleport(a.anchor);
       if (a.invul) {
@@ -129,6 +172,48 @@ export function tendActors() {
     }
   }
 }
+
+/** A story character was lost to something other than a fight's death (a zombie's fatal hit that turned it): the scene's own handler. @type {(a: Actor) => void} */
+let onLost = () => {};
+/** @param {(a: Actor) => void} fn */
+export const setLostHandler = (fn) => {
+  onLost = fn;
+};
+
+// A story villager struck by lightning becomes a witch, one killed by a zombie a zombie villager: the new mob keeps
+// the name tag but none of our tags, so it would stay in the world for good. It is removed; a witch's character is
+// spawned again where it stood (lightning isn't the player's fault), a zombie villager's counts as hurt.
+world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
+  try {
+    if (cause !== "Transformed" || !TURNED.test(entity.typeId)) return;
+    const name = entity.nameTag;
+    if (!name || !names.has(name)) return;
+    system.run(() => {
+      try {
+        if (!entity.isValid) return;
+        const at = entity.location;
+        const dim = entity.dimension;
+        const witch = entity.typeId === "minecraft:witch";
+        poof(entity);
+        entity.remove();
+        for (const [id, a] of [...actors]) {
+          if (a.opts.name !== name || a.ent.isValid || a.dim !== dim.id) continue;
+          actors.delete(id);
+          dressing.delete(id);
+          // The scene may have spawned its character again meanwhile (it looks once a second): then only the witch goes.
+          const again = [...actors.values()].some((b) => b.owner === a.owner && b.key === a.key && b.role === a.role && b.ent.isValid);
+          if (witch && !again) spawnActor(dim, a.type, at, a.opts);
+          else if (!witch) onLost(a);
+          return;
+        }
+      } catch {
+        // gone
+      }
+    });
+  } catch {
+    // ignore
+  }
+});
 
 // An actor or story mob nobody knows (left over from before a restart, or its chunk unloaded and the
 // scene moved on) is removed when it loads.

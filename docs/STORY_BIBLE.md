@@ -142,7 +142,7 @@ sets up their camp (place `camp:<id>`), where they wait for the rest.
 | `pell` | Pell the Pilgrim | pilgrim | The Drowned Bell | Gentle, self-mocking, talks about his teacher; walks to the holy places and wonders what the stones listen for |
 | `anwen` | Anwen, the Surveyor's Ghost | ghost (allay) | Signs in the Sky | Drifting, precise, forgetful; a sky surveyor who measured the Lantern's road and marked "three places on a line". She knows nothing past her own death: no Hollow, no Elsie |
 | `brannoch` | Brannoch Deepdelve | deep miner | - | Booming, jokey, fond of the rock; fifty years under the stone |
-| `rook` | Rook the Rival | rival | - | Swaggering bounty hunter who hates to lose; father left him debts. Turns on a player who mocked him and has `g:iron` 4+ |
+| `rook` | Rook the Rival | rival | - | Swaggering bounty hunter who hates to lose; father left him debts. Races you to bounty champions and treasure chests (`g:rook_won` counts your wins, `rook_lost` remembers a loss). Turns on a player who mocked him, really beat him three times and has `g:iron` 4+ |
 | `marigold` | Marigold of the Heights | hermit | - | Dry, kind, eccentric; tea, flowers and a goat named Nettle |
 | `tamsin` | Tamsin Galeward | storm-chaser | - | Exuberant, reckless, loves thunder |
 | `vesk` | Vesk the Exile | Nether exile | - | Haunted, halting; sent to the Nether for a crime he didn't commit (nothing to do with the Choir) |
@@ -551,7 +551,7 @@ blocks.
 | `reach` | location, `radius`, or `dim` ("minecraft:nether" / "minecraft:the_end"), `belowY`, `aboveY` | Go somewhere, to a dimension, deep or high |
 | `deliver` | `npc`, `item` and/or `name` (an item's custom name, for quest items), `count` | Bring items to an NPC (taken on talk) |
 | `collect` | `item` and/or `name`, `count` | Have items in your inventory |
-| `defeat` | `mobs?`, `count`, location?, `night?`, `within?` (seconds, timed: progress resets if not done in time), `champion?` | Defeat mobs, or a champion at a place |
+| `defeat` | `mobs?`, `count`, location?, `night?`, `within?` (seconds, timed: progress resets if not done in time), `champion?`, or `bounty: true` (Bounty Board champion targets; with `race`, below) | Defeat mobs, or a champion at a place |
 | `interact` | location, `blocks`, `count`, `radius` | Tap or hit blocks near a place |
 | `survive` | location?, `seconds`, `weather?` ("thunder" default, "rain", "any"), `radius` | Stay outdoors in weather |
 | `vigil` | location, `seconds`, `timeOfDay?: [from, to]` (ticks; 18000 = midnight), `outdoors?`, `sneaking?`, `weather?` (no default), `radius` | Stay at a place at a time of day |
@@ -560,7 +560,7 @@ blocks.
 | `meet` | `who: { id, name, entity }`, location, `pages`, `choices?` | A story character appears at the place; talk to them there |
 | `inspect` | location, `clues: [{ dx, dy?, dz, text }]` (at most 30) | Find clues around a place (faint particles); tap near each to read it |
 | `stealth` | location, `radius`, `guards: { mob, count, name? }`, `goal: { dx, dz }`, `detect` (blocks), `detectSneak`, `onSpotted?: "reset" \| "ambush"`, `disguise?: { slot, item }` | Reach the goal spot without a guard seeing you |
-| `escort` | `who: { id, name, entity }`, `from` (location object), `to` (location object), `radius`, `ambush?: { mobs, count, every }` | Lead a character safely; they follow you |
+| `escort` | `who: { id, name, entity, look?, invul? }`, `from` (location object), `to` (location object), `radius`, `ambush?: { mobs, count, every }` | Lead a character safely; they walk behind you along your path |
 | `lead` | `mob`, `name?`, `spawnAt?` (location object), `to` (location object), `count?` | Bring an animal on a lead |
 | `defend` | location, `radius`, `waves: [{ mobs, count }]`, `ward?: { id, name, entity }` | Hold a place against waves; protect the ward |
 | `follow` | `from`, `to` (location objects), `wisp?: string` (what it is called), `stray` | Follow a moving light to where it leads |
@@ -575,6 +575,17 @@ blocks.
 | `use` | `item`, `count`, location? | Use an item (right click) somewhere |
 | `wait` | `minutes` (real) or `days` (in-game) | Wait; the story continues later |
 | `event` | `events?: string[]` (`meteor`, `rainbow`, `storm_cell`, `tornado`, `aurora`, `blood_moon`, `harvest_moon`), `quest?: { pack, id?, minLevel?, tier?, gauntlet? }`, `near?`, `minutes?`, `count`, location? | A world event or another pack's finished quest. `events`: from `realm:sky_event` (and `realm:moon`); with `near`, the player must get within `near` blocks of the event's spot within `minutes` (default 15, at most 60; meteor, rainbow, storm cell and tornado only); without it, moons and the aurora count if the player is in the Overworld (and at the place, if given) at any moment while they last, the others only when announced (60 s to be at the place). `quest`: a `realm:quest_done` for this player from `pack`, `id` exact or ending in `*`; for Expeditions `tier` means that tier or harder (`easy` < `normal` < `hard` < `nightmare`), `minLevel` a level and `gauntlet: true` a Gauntlet |
+
+Characters (`who`, `ward`): people are `minecraft:villager_v2` (they walk; an NPC can't), with `look` the vanilla
+event that dresses them for a job (`minecraft:become_cleric`, `minecraft:become_fisherman`...; unskilled without).
+`invul: true` on an escort: they can't be hurt (and so never run back). Nobody trades with a story character.
+
+Races (Rook): `race: <seconds>` on a `defeat` with `bounty: true` (gate it on `pack:bounty_bp`) or on an `event`
+with `quest: { pack: "maps_bp" }` (gate it on `pack:maps_bp`). A race starts when the player comes within
+`radius` (default 300) of a live bounty target, or of their own treasure map's last clue, not raced yet;
+finished in time it counts one (`count` races to win), too late the bounty or the chest pays less. `rival` is
+who they race (for the messages), `lose: { flag: value }` is set on every race lost (tease with it), and
+`tally: "g:<counter>"` goes up by one with every race won (`g:rook_won`, read like `g:iron`). No `within`.
 
 Mob and item ids are vanilla `minecraft:` ids. Champions: `champion: { tag: "realm:saga:<id>", mob,
 name, trait?, warn?, health?, adds?: { mobs, count } }` (tag must start with `realm:`; `trait` is a

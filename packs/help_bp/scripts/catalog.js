@@ -101,7 +101,11 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lQuick Actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects or teleport for everyone online ask §lAre you sure?§r first.",
+        "text": "§lOperators:§r §lQuick Actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (a title and an optional subtitle in the middle of the screen, 1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects, teleport or a title for everyone online ask §lAre you sure?§r first.",
+        "ops": true
+      },
+      {
+        "text": "§lOperators: use §e/realm:admin_title§r (or Show a Title) instead of §e/title§r.§r The Minimap's compass strip, the story tracker and the other Side HUD boxes share the title channel with real titles, so they draw over a plain §e/title§r within a second or two. §e/realm:admin_title \"Market Day\" \"In the square\" 8§r tells every pack with a box first (the title protocol), so the boxes step aside until it has faded and then come back.",
         "ops": true
       },
       {
@@ -121,6 +125,12 @@ export const PACKS = [
         "ops": true,
         "who": "Ops",
         "text": "Gives you the Realm Configuration item if you don't carry one, or checks the named operators and gives them one. Players who aren't operators are refused"
+      },
+      {
+        "usage": "/realm:admin_title <title> [subtitle] [seconds] [player]",
+        "ops": true,
+        "who": "Ops",
+        "text": "Shows a title (quote text with spaces; §e\"\"§r for no subtitle) for 1 to 25 seconds (default 5) to everyone online, or to the players named. Use it instead of §e/title§r: the Minimap compass and the other side boxes step aside for it and come back when it fades"
       }
     ]
   },
@@ -802,7 +812,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with, the largest mob range anyone may pick (default 32, §emobRadiusMax§r) and whether players outside your party show as white dots (§lShow players outside your party§r, disabled by default, §eshowOthers§r).",
+        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with, the largest mob range anyone may pick (default 32, §emobRadiusMax§r) and whether players outside your party show as white dots (§lShow players outside your party§r, disabled by default, §eshowOthers§r). To show everyone a title, use §e/realm:admin_title \"Text\" \"Subtitle\" 5§r instead of §e/title§r: the strip draws over a plain §e/title§r within about 1.5 seconds.",
         "ops": true
       }
     ],
@@ -1611,6 +1621,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lRacing Rook§r (Story Questlines' Rook the Rival, chapter \"Three Bounties\"): within 300 blocks of a champion target, chat says §e[Story] Rook is after Gerald the Unexploded too! Get there first: you have 5:00.§r Defeat it in time and you win the race (and the full 100 Crowns). Too slow and Rook got there first: the target is still yours to defeat, but the bounty pays you half (§e+50 Crowns (Bounty: Gerald the Unexploded, Rook got there first)§r). Helpers are paid as always. The board shows §eRacing Rook for it: 3:12 left§r while you race.",
+        "ops": false
+      },
+      {
         "text": "Don't want the cull progress notes? Disable §lBounty progress notes§r in §e/realm:prefs§r.",
         "ops": false
       },
@@ -2372,6 +2386,10 @@ export const PACKS = [
       },
       {
         "text": "Lost the map, or the clue? Run §e/realm:maps§r (or §e/realm:maps_hunts§r) for your hunt's clue, a new copy of the map, or to give the hunt up.",
+        "ops": false
+      },
+      {
+        "text": "§lRacing Rook§r (Story Questlines' Rook the Rival, chapter \"The Map Room\", optional): within 300 blocks of your last clue's spot, chat says §e[Story] Rook is after your treasure too! Get there first: you have 5:00.§r Find the chest in time to win the race. Too slow and Rook got there first: the chest and its loot are still yours, but he takes his cut of the coins (§eRook got here first: he left you the chest, but took his cut of the coins.§r, half the Crowns, §erivalShare§r).",
         "ops": false
       },
       {

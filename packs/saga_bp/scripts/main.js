@@ -10,8 +10,14 @@ import { expireAdds, sweep, tendActors } from "./actors.js";
 import { calendar, entries, finished, flagOf, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
 import {
   beginRun,
+  bountySlain,
   bump,
   championSlain,
+  expireRaces,
+  isBountyTag,
+  onBountyTargets,
+  onMapLeg,
+  racesForget,
   isChampionTag,
   endScenesOf,
   holdUntil,
@@ -314,7 +320,8 @@ function onChoose(msg) {
  * realm:saga_debug (operators and test scenarios; /scriptevent needs operator rights):
  * `{ player, action: "answer", text }` answers the player's first open riddle, `{ player, action: "finish", story, flags? }`
  * marks a whole story finished, `{ player, action: "places" }` tells the player every saved place, `{ player, action: "state" }`
- * prints their saved progress to the content log, `{ player, action: "wander_finish" }` finishes their stranger's one-off.
+ * prints their saved progress to the content log, `{ player, action: "wander_finish" }` finishes their stranger's one-off,
+ * `{ player, action: "race_expire" }` ends their running races now (lost, unless the target falls first).
  * @param {any} msg
  */
 function onDebug(msg) {
@@ -358,6 +365,8 @@ function onDebug(msg) {
     // Every step of the player's stranger's one-off (or fight) done.
     const e = entries(player).find((x) => x.wv);
     if (e) e.chapter.objectives.forEach((o, i) => bump(player, e, i, 1e9));
+  } else if (msg.action === "race_expire") {
+    expireRaces(player);
   } else if (msg.action === "places") {
     player.sendMessage(`[saga places] ${JSON.stringify(placesOf())}`);
   } else if (msg.action === "state") {
@@ -420,6 +429,15 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
       return;
     }
+    if (id === "realm:bounty_targets" || id === "realm:map_leg") {
+      try {
+        const msg = JSON.parse(message);
+        if (msg && typeof msg === "object") (id === "realm:bounty_targets" ? onBountyTargets : onMapLeg)(msg);
+      } catch {
+        // not ours to fix
+      }
+      return;
+    }
     if (id === "realm:affinity" || id === "realm:calendar" || id === "realm:calling") {
       try {
         const msg = JSON.parse(message);
@@ -461,10 +479,13 @@ system.afterEvents.scriptEventReceive.subscribe(
       else if (id === "realm:npc_choose") onChoose(msg);
       else if (id === "realm:saga_debug") {
         if (!(sourceEntity instanceof Player) || sourceEntity.commandPermissionLevel >= CommandPermissionLevel.GameDirectors) onDebug(msg);
-      } else if (typeof msg.tag === "string" && isChampionTag(msg.tag)) {
+      } else if (typeof msg.tag === "string" && (isChampionTag(msg.tag) || isBountyTag(msg.tag))) {
         const ids = [msg.player, ...(Array.isArray(msg.helpers) ? msg.helpers : [])].filter((x) => typeof x === "string");
         const at = [msg.x, msg.y, msg.z].every((n) => typeof n === "number") ? { x: msg.x, y: msg.y, z: msg.z } : undefined;
-        championSlain(msg.tag, ids, at, typeof msg.dim === "string" ? msg.dim : undefined);
+        if (isBountyTag(msg.tag)) {
+          // A Bounty Board target with no player to thank (lava, a fall) ends no race.
+          if (get("enabled") === true && typeof msg.player === "string") bountySlain(msg.tag, ids, at, typeof msg.dim === "string" ? msg.dim : undefined);
+        } else championSlain(msg.tag, ids, at, typeof msg.dim === "string" ? msg.dim : undefined);
       }
     } catch (e) {
       console.warn(`[saga] ${id}: ${e}`);
@@ -574,6 +595,11 @@ world.afterEvents.worldLoad.subscribe(() => {
     for (const p of world.getAllPlayers()) sendSeals(p, true);
   }, 100);
   system.runTimeout(placesReadyAll, 110); // places (and wanderers' camps) for the wanderer pack
+  system.runTimeout(() => {
+    // Rook's races: today's bounty targets and every treasure hunt's leg.
+    send("realm:bounty_targets_ping", {});
+    send("realm:map_leg_ping", {});
+  }, 120);
 });
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
@@ -601,6 +627,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   flagsSent.delete(playerId);
   progressSent.delete(playerId);
   wanderForget(playerId);
+  racesForget(playerId);
   forget(playerId);
   busy.delete(playerId);
 });

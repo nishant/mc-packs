@@ -486,7 +486,7 @@ const GRAVEYARD_SHIFT = {
         {
           type: "escort",
           label: "Walk Barnaby Pike home to the lighthouse",
-          who: { id: "barnaby", name: "Barnaby Pike", entity: "minecraft:villager_v2" },
+          who: { id: "barnaby", name: "Barnaby Pike", entity: "minecraft:villager_v2", look: "minecraft:become_fisherman" },
           from: { place: "graveyard" },
           to: { place: "lighthouse", radius: 10 },
           radius: 12,

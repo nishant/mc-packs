@@ -6,6 +6,17 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Rook races you, and Pell walks with you
+
+Rook the Rival doesn't just talk about bounties anymore.
+
+- Get within 300 blocks of a bounty champion and Rook may turn up on the road. On his chapter "Three Bounties", he races you to it: 5 minutes from when you get close.
+- Win the race and the bounty pays in full. Lose it and Rook got there first: finish it anyway for half the Crowns.
+- With a treasure map, he races you to the chest too. Too slow and he takes half the coins (the loot stays yours).
+- Beat him three times for real, and he may not take it well.
+- Walking Pell to the Old Chapel? He's a cleric now and walks behind you step by step, facing where he goes. Nobody can hurt him.
+- Operators: /realm:admin_title "Text" "Subtitle" 5 shows a title the minimap and side boxes step aside for. Use it instead of /title.
+
 ## A minimap
 
 A compass strip now runs across the top of your screen.

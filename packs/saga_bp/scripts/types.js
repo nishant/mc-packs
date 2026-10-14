@@ -49,8 +49,10 @@
  */
 
 /**
- * A story character the engine spawns for a scene (not a townsfolk).
- * @typedef {{ id: string, name: string, entity: string }} Who
+ * A story character the engine spawns for a scene (not a townsfolk). A `minecraft:villager_v2` spawns as a
+ * village's newcomer (no job, the biome's clothes); `look` is the vanilla event that dresses them for a job
+ * (`minecraft:become_cleric`). `invul`: an escorted character who can't be hurt (and so never runs back).
+ * @typedef {{ id: string, name: string, entity: string, look?: string, invul?: boolean }} Who
  */
 
 /** @typedef {{ mobs: string[], count: number }} MobGroup */
@@ -134,6 +136,13 @@
  * @property {boolean} [night] defeat: only at night
  * @property {number} [within] seconds to finish once started, or progress resets (timed)
  * @property {Champion} [champion]
+ * @property {boolean} [bounty] defeat: a Bounty Board champion target (any of the day's; nothing is spawned)
+ * @property {number} [race] a race against a rival: defeat with `bounty` (a target within `radius`, default 300, of
+ *   the player starts it) or event with `quest: { pack: "maps_bp" }` (the player's own last map leg within `radius`);
+ *   done in time it counts, too late the bounty or the chest pays less and `lose` is set. Seconds.
+ * @property {string} [rival] race: who you race, for the messages ("Rook")
+ * @property {Record<string, string>} [lose] race: flags set when a race is lost (`g:` for player-wide)
+ * @property {string} [tally] race: a player-wide counter (`g:rook_won`) that goes up by one with every race won
  * @property {string[]} [blocks]
  * @property {string[]} [items]
  * @property {"thunder" | "rain" | "any"} [weather] survive/vigil

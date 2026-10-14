@@ -10,7 +10,7 @@ import {
   world,
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
-import { ACTIONS } from "./actions.js";
+import { ACTIONS, TITLE_MAX_SECONDS, showTitle } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
 import { CATEGORIES, LINE, NAMES, OPS_MARK, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
@@ -695,6 +695,34 @@ const originPlayer = (origin) => {
 };
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:admin_title",
+      description: "Show a title (and subtitle) that the Minimap compass and the side boxes leave alone: use it instead of /title. Default everyone online, 5 seconds",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "title", type: CustomCommandParamType.String }],
+      optionalParameters: [
+        { name: "subtitle", type: CustomCommandParamType.String },
+        { name: "seconds", type: CustomCommandParamType.Integer },
+        { name: "player", type: CustomCommandParamType.PlayerSelector },
+      ],
+    },
+    (origin, /** @type {string} */ title, /** @type {string | undefined} */ subtitle, /** @type {number | undefined} */ seconds, /** @type {Player[] | undefined} */ targets) => {
+      const player = originPlayer(origin);
+      if (player && !isOp(player)) return { status: CustomCommandStatus.Failure, message: "Realm Configuration is for operators." };
+      if (!String(title ?? "").trim()) return { status: CustomCommandStatus.Failure, message: "Give the title's text (in quotes if it has spaces)." };
+      if (seconds !== undefined && (seconds < 1 || seconds > TITLE_MAX_SECONDS)) return { status: CustomCommandStatus.Failure, message: `Seconds: 1 to ${TITLE_MAX_SECONDS}.` };
+      if (targets && !targets.length) return { status: CustomCommandStatus.Failure, message: "No player matches." };
+      system.run(() => {
+        const list = targets ?? world.getAllPlayers();
+        const n = showTitle(list, title, subtitle ?? "", seconds ?? 5);
+        player?.sendMessage(`§7[${TITLE}] Title shown to ${n} player${n === 1 ? "" : "s"} for ${seconds ?? 5} s.`);
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
   customCommandRegistry.registerCommand(
     {
       name: "realm:admin",

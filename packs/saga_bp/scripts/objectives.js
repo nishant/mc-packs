@@ -2,7 +2,7 @@
 // (story characters, guards, escorts, wisps, defenses, visions, riddles).
 import { EquipmentSlot, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
-import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, spawnActor } from "./actors.js";
+import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor } from "./actors.js";
 import {
   active,
   applyChoice,
@@ -47,6 +47,14 @@ const LONG = 20000000;
 export const CHAMPION_TAG = "saga:champion"; // champions this pack spawned itself (no Champions pack)
 const PLACED_MEMORY = 2000;
 const FAST_TICKS = 5;
+const ESCORT_TICKS = 2; // an escorted character takes a short step this often
+const ESCORT_STEP = 0.42; // blocks per step at walking pace (about 4 a second, a player's walk)
+const ESCORT_HURRY = 0.6; // ...when the player is 5+ blocks ahead
+const ESCORT_RUN = 1; // ...and 8+ ahead (they catch up with a sprinting player)
+const ESCORT_GAP = 2.5; // they stop this close behind the player
+const RACE_RADIUS = 300; // a race starts this close (blocks) to a bounty target or the last map leg
+const RACED_MAX = 12; // targets and hunts remembered per race objective (each is raced once)
+const BOUNTY_TAG = "realm:bounty:"; // + bounty id: a Bounty Board champion target
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -855,7 +863,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     const where = at;
     const d = dim;
     /** @param {Objective} obj */
-    const amountFor = (obj) => (!obj.champion && (!obj.mobs?.length || obj.mobs.includes(type)) && (!obj.night || night) && inArea(obj, where, d) ? 1 : 0);
+    const amountFor = (obj) => (!obj.champion && !obj.bounty && (!obj.mobs?.length || obj.mobs.includes(type)) && (!obj.night || night) && inArea(obj, where, d) ? 1 : 0);
     share(killer, advance(killer, "defeat", amountFor), "defeat", amountFor, new Set([killer.id]));
   } catch (e) {
     console.warn(`[saga] ${e}`);
@@ -1059,6 +1067,10 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
       if (a.owner === player.id && a.role === "meet") system.run(() => meetTap(player, a.key));
       return;
     }
+    if (!a && target.hasTag(ACTOR)) {
+      ev.cancel = true; // a leftover not yet removed (it goes when its chunk loads)
+      return;
+    }
     if (!tamedBefore.has(target.id)) {
       const before = isTamed(target);
       tamedBefore.set(target.id, before);
@@ -1228,7 +1240,7 @@ function meetTick(player, e, i, obj) {
   if (!a || !a.ent.isValid) {
     const at = standSpot(obj, loc, obj.who.id);
     if (!at) return;
-    const ent = spawnActor(world.getDimension(loc.dim), obj.who.entity, at, { owner: player.id, key: s.key, role: "meet", name: `§e${obj.who.name}`, invul: true, anchor: true });
+    const ent = spawnActor(world.getDimension(loc.dim), obj.who.entity, at, { owner: player.id, key: s.key, role: "meet", name: `§e${obj.who.name}`, invul: true, anchor: true, look: obj.who.look });
     if (!ent) return;
     [a] = actorsOf(player.id, s.key, "meet");
     player.sendMessage(`§e[Story] ${obj.who.name} is here. Walk up to them to talk.`);
@@ -1613,13 +1625,18 @@ function escortTick(player, e, i, obj) {
     at = y === undefined ? undefined : { x: p.x + 2, y, z: p.z };
   }
   if (!at) return;
-  const ent = spawnActor(dim, obj.who.entity, at, { owner: player.id, key: s.key, role: "escort", name: `§e${obj.who.name}`, frozen: true });
+  const ent = spawnActor(dim, obj.who.entity, at, { owner: player.id, key: s.key, role: "escort", name: `§e${obj.who.name}`, frozen: true, invul: !!obj.who.invul, look: obj.who.look });
   if (!ent) return;
   s.state = "wait";
   player.sendMessage(`§e[Story] ${obj.who.name} is waiting for you. Walk up to them and they will follow.`);
 }
 
-/** The escorted character follows the player's own path (always somewhere a body fits). @param {SceneState} s @param {Player} player */
+/**
+ * The escorted character walks the player's own path (always somewhere a body fits): every ESCORT_TICKS a short step
+ * along the trail toward the player, faster when they fall behind, facing the way they go. Crumbs are dropped only
+ * on the ground, so they don't float after a jump.
+ * @param {SceneState} s @param {Player} player
+ */
 function escortFast(s, player) {
   if (s.state !== "go") return;
   const [a] = actorsOf(s.pid, s.key, "escort");
@@ -1627,7 +1644,9 @@ function escortFast(s, player) {
   const crumbs = s.data.crumbs;
   const p = player.location;
   const last = crumbs[crumbs.length - 1];
-  if (!last || dist3(last, p) >= 1) {
+  // On the ground, swimming or riding; a crumb 3 blocks back is dropped anyway (a long fall, a jump over a gap).
+  const gap = last ? dist3(last, p) : Infinity;
+  if (gap >= 1 && (gap >= 3 || player.isOnGround || player.isInWater || !!player.getComponent("minecraft:riding")?.entityRidingOn)) {
     crumbs.push({ x: p.x, y: p.y, z: p.z });
     if (crumbs.length > 80) {
       crumbs.shift();
@@ -1636,16 +1655,33 @@ function escortFast(s, player) {
   }
   const al = a.ent.location;
   const dp = dist3(al, p);
-  if (dp > 32 || dp <= 2.5 || !crumbs.length) return; // left behind (they wait), or close enough
-  let j = crumbs.length - 1;
-  while (j > 0 && dist3(crumbs[j], p) < 2.5) j--;
-  let ptr = Math.min(s.data.ptr, j);
-  ptr = Math.min(j, Math.max(ptr + 2, j - 8));
+  if (dp > 32 || dp <= ESCORT_GAP || !crumbs.length) return; // left behind (they wait), or close enough
+  let budget = dp > 8 ? ESCORT_RUN : dp > 5 ? ESCORT_HURRY : ESCORT_STEP;
+  let ptr = Math.min(s.data.ptr ?? 0, crumbs.length - 1);
+  // Far behind (the player ran ahead): skip to at most 12 crumbs back, as before.
+  ptr = Math.max(ptr, crumbs.length - 13);
+  let pos = { x: al.x, y: al.y, z: al.z };
+  while (budget > 0.01 && ptr < crumbs.length) {
+    const c = crumbs[ptr];
+    if (dist3(c, p) < ESCORT_GAP) break; // don't walk into the player
+    const d = dist3(pos, c);
+    if (d <= budget) {
+      pos = { x: c.x, y: c.y, z: c.z };
+      budget -= d;
+      ptr++;
+    } else {
+      const k = budget / d;
+      pos = { x: pos.x + (c.x - pos.x) * k, y: pos.y + (c.y - pos.y) * k, z: pos.z + (c.z - pos.z) * k };
+      budget = 0;
+    }
+  }
   s.data.ptr = ptr;
-  const c = crumbs[ptr];
-  const yaw = (Math.atan2(-(c.x - al.x), c.z - al.z) * 180) / Math.PI;
+  const dx = pos.x - al.x;
+  const dz = pos.z - al.z;
+  if (Math.abs(dx) + Math.abs(dz) + Math.abs(pos.y - al.y) < 0.02) return;
+  const yaw = Math.abs(dx) + Math.abs(dz) > 0.01 ? (Math.atan2(-dx, dz) * 180) / Math.PI : a.ent.getRotation().y;
   try {
-    a.ent.teleport(c, { rotation: { x: 0, y: yaw } });
+    a.ent.teleport(pos, { rotation: { x: 0, y: yaw } });
   } catch {
     // unloaded
   }
@@ -1744,7 +1780,7 @@ function defendTick(player, e, i, obj) {
       // A ward that is a hostile mob (Vesna is a witch) would attack the player it needs, and no wave
       // mob goes for it anyway: it can't be hurt, and what it throws is removed.
       const hostile = HOSTILE_WARDS.has(obj.ward.entity);
-      spawnActor(dim, obj.ward.entity, at, { owner: player.id, key: s.key, role: "ward", name: `§e${obj.ward.name}`, frozen: true, anchor: true, invul: hostile });
+      spawnActor(dim, obj.ward.entity, at, { owner: player.id, key: s.key, role: "ward", name: `§e${obj.ward.name}`, frozen: true, anchor: true, invul: hostile, look: obj.ward.look });
     }
     player.sendMessage(`§c[Story] Hold ${loc.label}!${obj.ward ? ` Keep ${obj.ward.name} alive.` : ""} ${waves.length} wave${waves.length === 1 ? "" : "s"} are coming.`);
     return;
@@ -2179,7 +2215,244 @@ export function questMatches(q, msg) {
 export function questDone(msg) {
   if (typeof msg.player !== "string" || typeof msg.pack !== "string" || typeof msg.id !== "string") return;
   const player = online(msg.player);
-  if (player) advance(player, "event", (obj) => (questMatches(obj.quest, msg) ? 1 : 0));
+  if (!player) return;
+  // A treasure found during a race to it: won or lost (races count only through this).
+  if (msg.pack === "maps_bp" && counting(player))
+    for (const { e, i, obj } of open(player, "event")) {
+      const r = obj.race ? raceX(e)[`r${i}`] : undefined;
+      if (r && msg.id === `treasure_${r.k}`) raceOver(player, e, i, obj, Date.now() <= r.u);
+    }
+  advance(player, "event", (obj) => (!obj.race && questMatches(obj.quest, msg) ? 1 : 0));
+}
+
+// ---------------------------------------------------------------------------
+// Races against a rival (Rook): to a Bounty Board champion target, or to the player's own treasure chest
+// ---------------------------------------------------------------------------
+//   realm:bounty_targets { targets: [{ id, name, dim, x, z }], part, parts }   <- bounty_bp: today's live targets
+//   realm:map_leg        { player, hunt, dim, x, z, leg, legs, final } | { player, hunt, gone } <- maps_bp
+//   realm:bounty_rival   { id, player, until }                              -> bounty_bp: a race started (until: ms)
+//   realm:map_rival      { player, hunt, until }                            -> maps_bp: a race to that chest started
+
+/** Live bounty targets by id. @type {Map<string, { id: string, name: string, dim: string, x: number, z: number }>} */
+let bountyTargets = new Map();
+/** realm:bounty_targets parts still coming in. @type {typeof bountyTargets | undefined} */
+let bountyIncoming;
+/** Each player's treasure hunts on their last leg: player id -> hunt id -> spot. @type {Map<string, Map<string, { dim: string, x: number, z: number }>>} */
+const lastLegs = new Map();
+/** Has Bounty Board's list come since the world loaded? Until then a target missing from it may just not be heard yet. */
+let targetsHeard = false;
+/** Hunts that ended ("<player>|<hunt>", from `gone`): a race to one of them is off. @type {Set<string>} */
+const huntsEnded = new Set();
+
+/** realm:bounty_targets: the list of today's live targets (in parts). @param {any} msg */
+export function onBountyTargets(msg) {
+  if (!Array.isArray(msg.targets)) return;
+  const part = Number(msg.part) || 1;
+  if (part === 1 || !bountyIncoming) bountyIncoming = new Map();
+  for (const t of msg.targets.slice(0, 32))
+    if (t && typeof t.id === "string" && typeof t.dim === "string" && Number.isFinite(t.x) && Number.isFinite(t.z))
+      bountyIncoming.set(t.id, { id: t.id.slice(0, 32), name: typeof t.name === "string" ? plain(t.name).slice(0, 40) : "the bounty target", dim: t.dim, x: t.x, z: t.z });
+  if (part >= (Number(msg.parts) || 1)) {
+    bountyTargets = bountyIncoming;
+    bountyIncoming = undefined;
+    targetsHeard = true;
+  }
+}
+
+/** realm:map_leg: a hunt's current leg (only last legs are kept), or the hunt ended. @param {any} msg */
+export function onMapLeg(msg) {
+  if (typeof msg.player !== "string" || typeof msg.hunt !== "string") return;
+  let legs = lastLegs.get(msg.player);
+  if (msg.gone || msg.final !== true || typeof msg.dim !== "string" || !Number.isFinite(msg.x) || !Number.isFinite(msg.z)) {
+    legs?.delete(msg.hunt);
+    if (legs && !legs.size) lastLegs.delete(msg.player);
+    if (msg.gone) {
+      if (huntsEnded.size > 200) huntsEnded.delete(/** @type {string} */ (huntsEnded.values().next().value));
+      huntsEnded.add(`${msg.player}|${msg.hunt}`);
+    }
+    return;
+  }
+  if (!legs) lastLegs.set(msg.player, (legs = new Map()));
+  if (legs.size < 16 || legs.has(msg.hunt)) legs.set(msg.hunt, { dim: msg.dim, x: msg.x, z: msg.z });
+}
+
+/** @param {string} pid */
+export function racesForget(pid) {
+  lastLegs.delete(pid);
+}
+
+/**
+ * A race's state, in the chapter's extras (gone with the chapter): "r<i>" the race on { k: target or hunt id,
+ * u: ends (ms), n: what it's for }, "rd<i>" the ids raced already. @param {Entry} e @returns {Record<string, any>}
+ */
+const raceX = (e) => /** @type {Record<string, any>} */ ((e.st.x ??= {}));
+
+/** Is it a map race (else a bounty race)? @param {Objective} obj */
+const mapRace = (obj) => obj.type === "event";
+
+/**
+ * Once a second for a race objective: start a race when the player comes within `radius` of a live bounty target
+ * (or their last map leg) not raced yet; a race whose time ran out is lost; one whose target went (claimed by
+ * someone else, the hunt given up) is off.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
+function raceTick(player, e, i, obj) {
+  if (!obj.race) return;
+  const x = raceX(e);
+  const now = Date.now();
+  const map = mapRace(obj);
+  const r = x[`r${i}`];
+  if (r) {
+    // Off when its target went (claimed by someone else, the hunt given up); a list not heard yet since a restart
+    // (or a rejoin) proves nothing, so only what the other pack said counts.
+    if (map ? huntsEnded.has(`${player.id}|${r.k}`) : targetsHeard && !bountyTargets.has(r.k)) {
+      delete x[`r${i}`];
+      markDirty(player);
+      player.sendMessage(`§7[Story] The race is off: ${map ? "that treasure hunt is over" : `someone else claimed ${r.n}`}.`);
+      return;
+    }
+    if (now > r.u) raceOver(player, e, i, obj, false);
+    return;
+  }
+  /** @type {string[]} */
+  const raced = x[`rd${i}`] ?? [];
+  const dim = player.dimension.id;
+  const p = player.location;
+  const radius = obj.radius ?? RACE_RADIUS;
+  const pool = map
+    ? [...(lastLegs.get(player.id) ?? new Map())].map(([k, l]) => ({ k, n: "your treasure", ...l }))
+    : [...bountyTargets.values()].map((t) => ({ k: t.id, n: t.name, dim: t.dim, x: t.x, z: t.z }));
+  let best;
+  let bestD = Infinity;
+  for (const c of pool) {
+    if (c.dim !== dim || raced.includes(c.k)) continue;
+    const d = across(p, c);
+    if (d <= radius && d < bestD) {
+      best = c;
+      bestD = d;
+    }
+  }
+  if (!best) return;
+  const until = now + obj.race * 1000;
+  x[`r${i}`] = { k: best.k, u: until, n: best.n };
+  x[`rd${i}`] = [...raced, best.k].slice(-RACED_MAX);
+  markDirty(player);
+  if (map) send("realm:map_rival", { player: player.id, hunt: best.k, until });
+  else send("realm:bounty_rival", { id: best.k, player: player.id, until });
+  const rival = obj.rival ?? "A rival";
+  player.sendMessage(`§e[Story] ${rival} is after ${best.n} too! Get there first: you have ${clock(obj.race)}. §7(${obj.label})`);
+  player.playSound("note.pling", { pitch: 1.4, volume: 0.7 });
+}
+
+/**
+ * A race ends: won (the target fell, or the treasure was found, in time) counts one and adds to `tally`; lost sets
+ * `lose`. Either way that target is never raced again by this objective.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {boolean} won
+ */
+function raceOver(player, e, i, obj, won) {
+  const x = raceX(e);
+  const r = x[`r${i}`];
+  if (!r) return;
+  delete x[`r${i}`];
+  const rival = obj.rival ?? "Your rival";
+  const saga = sagaOf(player);
+  markDirty(player);
+  if (won) {
+    if (obj.tally?.startsWith("g:")) {
+      saga.g ??= {};
+      const k = obj.tally.slice(2);
+      saga.g[k] = String(Number(saga.g[k] ?? 0) + 1);
+    }
+    invalidate(player.id);
+    player.sendMessage(`§a[Story] You beat ${rival} to ${r.n}!`);
+    player.playSound("random.levelup", { pitch: 1.5, volume: 0.6 });
+    bump(player, e, i, 1);
+    return;
+  }
+  for (const [k, v] of Object.entries(obj.lose ?? {})) setFlag(saga, e.story.id, k, v);
+  invalidate(player.id);
+  player.sendMessage(
+    mapRace(obj)
+      ? `§c[Story] ${rival} got to your treasure first! The chest is still yours, but he takes his cut of the coins. Beat him to the next one.`
+      : `§c[Story] ${rival} got to ${r.n} first! Finish it anyway for part of the bounty, or beat him to the next one.`,
+  );
+  player.playSound("note.bass", { pitch: 0.6 });
+}
+
+/**
+ * realm:champion_slain for a Bounty Board target: races on it end (the killer, the helpers and players within 32
+ * blocks), and plain `bounty` defeats count.
+ * @param {string} tag @param {string[]} ids @param {Vector3 | undefined} at @param {string | undefined} dim
+ */
+export function bountySlain(tag, ids, at, dim) {
+  const id = tag.slice(BOUNTY_TAG.length);
+  /** @type {Set<string>} */
+  const credited = new Set(ids);
+  if (at && dim) for (const p of world.getAllPlayers()) if (p.dimension.id === dim && dist3(p.location, at) <= 32) credited.add(p.id);
+  const now = Date.now();
+  for (const pid of credited) {
+    const p = online(pid);
+    if (!p || !counting(p)) continue;
+    for (const { e, i, obj } of open(p, "defeat")) {
+      if (!obj.bounty) continue;
+      if (!obj.race) {
+        bump(p, e, i, 1);
+        continue;
+      }
+      const r = raceX(e)[`r${i}`];
+      if (r && r.k === id) raceOver(p, e, i, obj, now <= r.u);
+    }
+  }
+}
+
+/**
+ * Debug and test scenarios: every race this player is running ends now (its time is up), and the other pack hears it,
+ * so a lost race can be tested without waiting five minutes. @param {Player} player
+ */
+export function expireRaces(player) {
+  const now = Date.now() - 1;
+  for (const e of entries(player))
+    e.chapter.objectives.forEach((obj, i) => {
+      const r = obj.race ? raceX(e)[`r${i}`] : undefined;
+      if (!r) return;
+      r.u = now;
+      if (mapRace(obj)) send("realm:map_rival", { player: player.id, hunt: r.k, until: now });
+      else send("realm:bounty_rival", { id: r.k, player: player.id, until: now });
+    });
+}
+
+/** Is this a Bounty Board target's tag? @param {string} tag */
+export const isBountyTag = (tag) => tag.startsWith(BOUNTY_TAG);
+
+/**
+ * Where a bounty race points the tracker: its target while it runs, else the nearest live target not raced yet (the
+ * board shows where they were seen anyway). A treasure race never points: the clues lead there.
+ * @param {string} pid @param {Entry} e @param {number} i
+ */
+function raceFocus(pid, e, i) {
+  const obj = e.chapter.objectives[i];
+  if (!obj.race || mapRace(obj)) return undefined;
+  const x = raceX(e);
+  const r = x[`r${i}`];
+  if (r) {
+    const t = bountyTargets.get(r.k);
+    return t ? { dim: t.dim, x: t.x, z: t.z, label: r.n } : undefined;
+  }
+  const p = online(pid);
+  if (!p) return undefined;
+  /** @type {string[]} */
+  const raced = x[`rd${i}`] ?? [];
+  let best;
+  let bestD = Infinity;
+  for (const t of bountyTargets.values()) {
+    if (t.dim !== p.dimension.id || raced.includes(t.id)) continue;
+    const d = across(p.location, t);
+    if (d < bestD) {
+      best = t;
+      bestD = d;
+    }
+  }
+  return best ? { dim: best.dim, x: best.x, z: best.z, label: best.name } : undefined;
 }
 
 /**
@@ -2347,6 +2620,7 @@ export function tickPlayer(player, list) {
             break;
           case "defeat":
             if (obj.champion && counts) championNear(player, obj);
+            else if (obj.race && counts) raceTick(player, e, i, obj);
             break;
           case "meet":
             meetTick(player, e, i, obj);
@@ -2377,6 +2651,7 @@ export function tickPlayer(player, list) {
             break;
           case "event":
             if (counts && obj.events?.length) skyCheck(player, e, i, obj);
+            else if (counts && obj.race) raceTick(player, e, i, obj);
             break;
         }
       } catch (err) {
@@ -2404,12 +2679,11 @@ export function beginRun() {
 function fast() {
   if (!scenes.size) return;
   for (const s of scenes.values()) {
-    if (s.kind !== "stealth" && s.kind !== "escort" && s.kind !== "follow") continue;
+    if (s.kind !== "stealth" && s.kind !== "follow") continue;
     const player = online(s.pid);
     if (!player) continue;
     try {
       if (s.kind === "stealth") stealthFast(s, player);
-      else if (s.kind === "escort") escortFast(s, player);
       else followFast(s, player);
     } catch (err) {
       console.warn(`[saga] ${s.kind}: ${err}`);
@@ -2418,12 +2692,38 @@ function fast() {
 }
 system.runInterval(fast, FAST_TICKS);
 
+/** Escorts walking (every ESCORT_TICKS; one scene per player at most, so a few at once). */
+function escorts() {
+  if (!scenes.size) return;
+  for (const s of scenes.values()) {
+    if (s.kind !== "escort" || s.state !== "go") continue;
+    const player = online(s.pid);
+    if (!player) continue;
+    try {
+      escortFast(s, player);
+    } catch (err) {
+      console.warn(`[saga] escort: ${err}`);
+    }
+  }
+}
+system.runInterval(escorts, ESCORT_TICKS);
+
+// A character a zombie turned into a zombie villager (its death event may not come): the scene counts it as hurt.
+setLostHandler((a) => {
+  const s = scenes.get(sk(a.owner, a.key));
+  if (!s) return;
+  if (a.role === "escort") escortFail(s);
+  else if (a.role === "ward") defendFail(s, `${s.e.chapter.objectives[s.i].ward?.name ?? "The one you were guarding"} fell.`);
+});
+
 /**
  * Where the tracker should point for a scene (an escort's character, a wisp, a stealth goal), or
  * undefined to use the objective's own location.
  * @param {string} pid @param {Entry} e @param {number} i @returns {{ dim: string, x: number, y?: number, z: number, label: string } | undefined}
  */
 export function sceneFocus(pid, e, i) {
+  const race = raceFocus(pid, e, i);
+  if (race) return race;
   const s = scenes.get(sk(pid, objKey(e, i)));
   if (!s) return undefined;
   const obj = e.chapter.objectives[i];
@@ -2448,6 +2748,8 @@ export function timeLeft(e, i) {
   const obj = e.chapter.objectives[i];
   const x = e.st.x;
   if (obj.within && x?.[`t${i}`]) return obj.within - (Date.now() - x[`t${i}`]) / 1000;
+  const race = obj.race && x ? /** @type {Record<string, any>} */ (x)[`r${i}`] : undefined;
+  if (race) return Math.max(0, (race.u - Date.now()) / 1000);
   if (obj.type === "wait" && x?.[String(i)] !== undefined) {
     if (obj.days) return ((obj.days * 24000 - (world.getAbsoluteTime() - x[String(i)])) / 20) * 1;
     return ((obj.minutes ?? 1) * 60000 - (Date.now() - x[String(i)])) / 1000;

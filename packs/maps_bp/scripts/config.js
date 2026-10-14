@@ -68,6 +68,12 @@ export const CONFIG = {
   /** ...up to this many. */
   crownsMax: 90,
 
+  /**
+   * Racing Rook to the chest (Story Questlines sends `realm:map_rival` when the race starts): found after the race's
+   * time ran out, Rook got there first and took his cut, so the treasure's Crowns are this share (0.5 = half).
+   */
+  rivalShare: 0.5,
+
   /** Wayfarers guild reputation for finding a treasure (sent to the Guilds pack). */
   reputation: 10,
 

@@ -16,8 +16,9 @@ import { get, getFor } from "./settings.js";
 /** @typedef {import("@minecraft/server").ScoreboardObjective} ScoreboardObjective */
 /** @typedef {{ d: string, x: number, y: number, z: number }} Board a registered lectern */
 /**
- * A champion target: spot (x, z) and last seen (lx, lz), spawned (s), done, claimed by (by).
- * @typedef {{ id: string, t: "c", name: string, trait: string, mob: string, dim: string, x: number, z: number, lx: number, lz: number, s: number, done: number, by?: string }} Hunt
+ * A champion target: spot (x, z) and last seen (lx, lz), spawned (s), done, claimed by (by), and the races against
+ * Rook (rv: player id -> when their race ends, ms; Story Questlines' `realm:bounty_rival`).
+ * @typedef {{ id: string, t: "c", name: string, trait: string, mob: string, dim: string, x: number, z: number, lx: number, lz: number, s: number, done: number, by?: string, rv?: Record<string, number> }} Hunt
  */
 /**
  * A cull bounty: progress (p) and each player's kills (who), for everyone together.
@@ -34,6 +35,8 @@ const LECTERN = "minecraft:lectern";
 const OVERWORLD = "minecraft:overworld";
 const DAY_MS = 86400000;
 const TRAITS = ["stormcaller", "frostbound", "vampiric", "splitting", "shielded"];
+const MAX_RIVALS = 16; // races remembered per target
+const TARGETS_PER_PART = 8; // realm:bounty_targets: targets per message (each well under 2048 characters)
 
 const rand = (/** @type {number} */ a, /** @type {number} */ b) => a + Math.random() * (b - a);
 /** @template T @param {T[]} list @returns {T} */
@@ -488,6 +491,58 @@ function checkBoards() {
   if (keep.length !== list.length) saveBoards(keep);
 }
 
+// ---------------------------------------------------------------------------
+// Live targets for other packs: realm:bounty_targets (Wanderers and Story Questlines race them)
+// ---------------------------------------------------------------------------
+
+/** What was sent last (undefined: send at the next check). @type {string | undefined} */
+let targetsSent;
+
+/** Today's live champion targets, where they were last seen. */
+function liveTargets() {
+  const d = day();
+  if (d.d !== today() || get("enabled") !== true) return [];
+  return d.list.filter((b) => b.t === "c" && !b.done).map((b) => {
+    const h = /** @type {Hunt} */ (b);
+    return { id: h.id, name: h.name, dim: h.dim, x: h.lx, z: h.lz };
+  });
+}
+
+/**
+ * Sends `realm:bounty_targets` { targets: [{ id, name, dim, x, z }], part, parts } when the list changed (a new
+ * day, a claim, a target that moved), and after a ping. Lists longer than TARGETS_PER_PART go in parts.
+ */
+function syncTargets() {
+  if (!ready) return;
+  const list = liveTargets();
+  const json = JSON.stringify(list);
+  if (json === targetsSent) return;
+  targetsSent = json;
+  const parts = Math.max(1, Math.ceil(list.length / TARGETS_PER_PART));
+  for (let i = 0; i < parts; i++)
+    system.sendScriptEvent("realm:bounty_targets", JSON.stringify({ targets: list.slice(i * TARGETS_PER_PART, (i + 1) * TARGETS_PER_PART), part: i + 1, parts }));
+}
+
+/**
+ * realm:bounty_rival { id, player, until }: a race against Rook on that target started for that player (Story
+ * Questlines); `until` is when it ends (ms since 1970). Killed by them after it, the bounty pays `rivalShare`. A
+ * second message for the same player and target can only bring the end closer.
+ * @param {any} m
+ */
+function onRival(m) {
+  if (typeof m.id !== "string" || typeof m.player !== "string" || typeof m.until !== "number" || !Number.isFinite(m.until)) return;
+  const d = day();
+  const h = /** @type {Hunt | undefined} */ (d.list.find((b) => b.t === "c" && b.id === m.id));
+  if (!h || h.done || d.d !== today()) return;
+  const rv = (h.rv ??= {});
+  // A second message for the same race may end it sooner, never later.
+  const old = rv[m.player];
+  rv[m.player] = typeof old === "number" ? Math.min(old, Math.floor(m.until)) : Math.floor(m.until);
+  const ids = Object.keys(rv);
+  for (const id of ids.slice(0, Math.max(0, ids.length - MAX_RIVALS))) delete rv[id];
+  dirty = true;
+}
+
 let seconds = 0;
 system.runInterval(() => {
   seconds += 2;
@@ -510,6 +565,7 @@ system.runInterval(() => {
       checkBoards();
     }
     if (dirty) saveDay();
+    syncTargets();
   } catch (e) {
     console.warn(`[bounty] ${e}`);
   }
@@ -550,7 +606,11 @@ function claim(h, killerId, helperIds) {
   saveDay();
 
   const why = `Bounty: ${h.name}`;
-  pay(killerId, get("rewards.champion"), why);
+  // Lost a race to Rook (the race's time ran out before the kill): the killer gets a share of the reward.
+  const until = h.rv?.[killerId];
+  const lost = typeof until === "number" && Date.now() > until;
+  const share = Math.max(0, Math.min(1, Number(get("rewards.rivalShare"))));
+  pay(killerId, lost ? get("rewards.champion") * share : get("rewards.champion"), lost ? `${why}, Rook got there first` : why);
   // Reputation goes through the finished quest only (Guilds gives it to the Wardens), so it isn't
   // counted twice. Helpers finished nothing, so they get a little reputation directly.
   system.sendScriptEvent("realm:quest_done", JSON.stringify({ player: killerId, pack: "bounty_bp", id: h.id, label: why, kind: "bounty" }));
@@ -607,7 +667,11 @@ system.afterEvents.scriptEventReceive.subscribe(
       if (message === "elite_bp") eliteSeen = true;
       return;
     }
-    if (id !== "realm:champion_slain" && id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
+    if (id === "realm:bounty_targets_ping") {
+      targetsSent = undefined; // sent again within 2 seconds
+      return;
+    }
+    if (id !== "realm:champion_slain" && id !== "realm:npc_talk" && id !== "realm:npc_choose" && id !== "realm:bounty_rival") return;
     let m;
     try {
       m = JSON.parse(message);
@@ -616,7 +680,8 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (!m || typeof m !== "object") return;
     try {
-      if (id === "realm:champion_slain") {
+      if (id === "realm:bounty_rival") onRival(m);
+      else if (id === "realm:champion_slain") {
         if (typeof m.tag !== "string" || !m.tag.startsWith(TAG)) return;
         const d = day();
         const h = d.list.find((b) => b.t === "c" && TAG + b.id === m.tag);
@@ -687,7 +752,13 @@ async function showBoard(player, board) {
         }
         let where = `last seen near ${b.lx}, ${b.lz}`;
         if (from.dim === b.dim) where += ` (${direction(from, { x: b.lx, z: b.lz })} of ${from.word}, ${about(Math.hypot(b.lx - from.x, b.lz - from.z))})`;
-        parts.push(`§c${b.name}§r - ${where}\n§7Reward: ${fmt(get("rewards.champion"))} Crowns to whoever defeats it, ${fmt(get("rewards.helper"))} to each helper`);
+        const until = b.rv?.[player.id];
+        let race = "";
+        if (typeof until === "number") {
+          const left = Math.ceil((until - Date.now()) / 1000);
+          race = left > 0 ? `\n§eRacing Rook for it: ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left` : "\n§7Rook got there first: your reward for it is cut";
+        }
+        parts.push(`§c${b.name}§r - ${where}\n§7Reward: ${fmt(get("rewards.champion"))} Crowns to whoever defeats it, ${fmt(get("rewards.helper"))} to each helper${race}`);
       } else if (b.done) parts.push(`§a[Done] §7${b.label}`);
       else {
         const mine = b.who[player.id] ?? 0;

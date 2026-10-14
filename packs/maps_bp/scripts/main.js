@@ -40,7 +40,7 @@ const TREE_TOP = /leaves|_log$|_wood$|mushroom_block|vine/;
 /**
  * @typedef {{ id: string, dim: string, pts: XZ[], leg: number, clue: string, place?: string, chest?: Vector3, tries: number, t: number,
  *   v?: number, from?: XZ, fromName?: string, used?: string[], feats?: string[], near?: string, mark?: Vector3, style?: string, nomark?: boolean, regen?: boolean,
- *   markUndo?: string, chestUndo?: string }} Hunt
+ *   markUndo?: string, chestUndo?: string, rv?: number }} Hunt
  * pts: the planned end of each leg (the last is the treasure), leg: the leg being followed (0-based), clue: its riddle,
  * chest: where the chest was buried, tries: chest spots that failed. Version 2 (v: 2): from/fromName: where the leg
  * starts and what the clue calls it, used: far clue kinds this hunt has used, feats: landmark kinds used, near: the
@@ -48,6 +48,7 @@ const TREE_TOP = /leaves|_log$|_wood$|mushroom_block|vine/;
  * ground block), style: that marker's kind, nomark: no marker could stand there (the clue is found by coming close),
  * regen: an older map whose clue is rewritten the next time its holder is online. place: older maps only.
  * markUndo / chestUndo: the cleanup records (scripts/cleanup.js) of the blocks the marker and the chest placed.
+ * rv: a race against Rook to the chest ends then (ms since 1970; Story Questlines' realm:map_rival).
  */
 
 // Warmer / Colder in a Side HUD box (scripts/side.js, the side boxes protocol).
@@ -244,7 +245,69 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   for (const key of [...jobs.keys()]) if (key.startsWith(`${playerId}/`)) jobs.delete(key);
   for (const key of [...lastDistance.keys()]) if (key.startsWith(`${playerId}/`)) lastDistance.delete(key);
   for (const key of [...retryAt.keys()]) if (key.startsWith(`${playerId}/`)) retryAt.delete(key);
+  legsSent.delete(playerId);
 });
+
+// ---------------------------------------------------------------------------
+// Where each hunt's current leg is, for other packs: realm:map_leg (Wanderers and Story Questlines race to it)
+// ---------------------------------------------------------------------------
+
+/** Per player: hunt id -> what was sent for it. @type {Map<string, Map<string, string>>} */
+const legsSent = new Map();
+
+/**
+ * Sends `realm:map_leg` { player, hunt, dim, x, z, leg, legs, final } when a hunt's current leg changed (a new clue,
+ * its marker or chest placed, the treasure moved), and { player, hunt, gone: true } when the hunt ended (found or
+ * given up). x, z: the chest once buried, else the marker, else the leg's planned end. Checked every second.
+ * @param {Player} player @param {Hunt[]} hunts
+ */
+function syncLegs(player, hunts) {
+  let sent = legsSent.get(player.id);
+  if (!sent) {
+    if (!hunts.length) return;
+    legsSent.set(player.id, (sent = new Map()));
+  }
+  const now = new Set();
+  for (const h of hunts) {
+    now.add(h.id);
+    const at = h.chest ?? h.mark ?? h.pts[h.leg];
+    if (!at) continue;
+    const msg = { player: player.id, hunt: h.id, dim: h.dim, x: Math.round(at.x), z: Math.round(at.z), leg: h.leg + 1, legs: h.pts.length, final: h.leg >= h.pts.length - 1 };
+    const json = JSON.stringify(msg);
+    if (sent.get(h.id) === json) continue;
+    sent.set(h.id, json);
+    send("realm:map_leg", msg);
+  }
+  for (const id of [...sent.keys()]) {
+    if (now.has(id)) continue;
+    sent.delete(id);
+    send("realm:map_leg", { player: player.id, hunt: id, gone: true });
+  }
+  if (!sent.size) legsSent.delete(player.id);
+}
+
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id === "realm:map_leg_ping") {
+      legsSent.clear(); // every hunt's leg again within a second
+      return;
+    }
+    if (id !== "realm:map_rival") return;
+    try {
+      // realm:map_rival { player, hunt, until }: a race against Rook to this hunt's chest ends at `until` (ms).
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string" || typeof m.hunt !== "string" || typeof m.until !== "number" || !Number.isFinite(m.until)) return;
+      const p = online(m.player);
+      const hunt = p ? huntsOf(p).find((h) => h.id === m.hunt) : undefined;
+      if (!p || !hunt) return;
+      hunt.rv = typeof hunt.rv === "number" ? Math.min(hunt.rv, Math.floor(m.until)) : Math.floor(m.until); // never later
+      saveHunts(p, huntsOf(p));
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 /** @param {Player} player @returns {Hunt[]} */
 function huntsOf(player) {
@@ -375,6 +438,7 @@ system.runInterval(() => {
   for (const player of world.getAllPlayers()) {
     try {
       const hunts = huntsOf(player);
+      syncLegs(player, hunts);
       if (!hunts.length || player.dimension.id !== OVERWORLD) continue;
       for (const hunt of [...hunts]) step(player, hunt);
     } catch (e) {
@@ -961,7 +1025,12 @@ function found(player, hunt, inChest) {
     }
   }
   const lo = Math.max(0, get("crownsMin"));
-  const crowns = randInt(lo, Math.max(lo, get("crownsMax")));
+  let crowns = randInt(lo, Math.max(lo, get("crownsMax")));
+  if (typeof hunt.rv === "number" && Date.now() > hunt.rv) {
+    // Lost the race: Rook got to the chest first and took his cut.
+    crowns = Math.floor(crowns * Math.max(0, Math.min(1, Number(CONFIG.rivalShare))));
+    player.sendMessage("§7Rook got here first: he left you the chest, but took his cut of the coins.");
+  }
   if (crowns > 0 && addCrowns(player, crowns)) player.sendMessage(`§6+${crowns} Crowns §7(Treasure map)`);
   player.playSound("random.levelup");
   send("realm:quest_done", { player: player.id, pack: PACK, id: `treasure_${hunt.id}`, label: "Treasure map", kind: "treasure" });
