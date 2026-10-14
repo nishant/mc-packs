@@ -4,7 +4,7 @@
     "name": "Storm Chasing",
     "description": "Thunderstorms bring a drifting storm cell full of lightning to hunt down, and struck lightning rods give Storm Glass. /realm:storm",
     "uuid": "6540ee31-3904-4ab5-a977-d106937548d6",
-    "version": [1, 1, 2],
+    "version": [1, 1, 3],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

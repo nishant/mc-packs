@@ -421,7 +421,8 @@ function collect(player, rod) {
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, isFirstEvent, itemStack } = event;
-  if (!isFirstEvent || !isRod(block.typeId)) return;
+  // Another pack already refused this tap (Land Claims: a rod in someone else's claim): its glass stays there.
+  if (event.cancel || !isFirstEvent || !isRod(block.typeId)) return;
   const rod = rodAt(block.dimension.id, block.location);
   if (!rod) return;
   if (rod[4]) {
