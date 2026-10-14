@@ -547,6 +547,8 @@ async function mainMenu(player) {
   for (const a of actions) f.button(a.text);
   const res = await show(player, f);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  // Every button after the first is an operator's: checked again, as the player may have been de-opped meanwhile.
+  if (res.selection > 0 && !isOp(player)) return player.sendMessage("§cOnly operators can do that.");
   actions[res.selection]?.run();
 }
 

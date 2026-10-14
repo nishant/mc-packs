@@ -48,6 +48,8 @@ const wait = (ticks) => new Promise((r) => system.runTimeout(() => r(undefined),
 const utcDay = () => Math.floor(Date.now() / DAY);
 /** @param {Player} p */
 const isOp = (p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/** Checked again once a form comes back: a player de-opped while it was open can't use it. @param {Player} p */
+const stillOp = (p) => isOp(p) || (p.sendMessage("§cOnly operators can do that."), false);
 
 /** @param {Player} player @param {string} text @param {number} [ticks] */
 function actionbar(player, text, ticks = 40) {
@@ -686,12 +688,12 @@ async function opMenu(p) {
     `Machines: ${machines().length}`,
   ].join("\n");
   await choose(p, new ActionFormData().title("§lSlots: operator tools").body(body), [
-    { label: "Make the block I look at a machine", run: () => placeMachine(p) },
-    { label: "Remove the machine I look at", run: () => removeMachine(p) },
-    { label: "Give me a Slot Machine item", run: () => giveItem(p) },
-    { label: "Give a player a Slot Machine item", run: () => givePlayerMenu(p) },
+    { label: "Make the block I look at a machine", run: () => stillOp(p) && placeMachine(p) },
+    { label: "Remove the machine I look at", run: () => stillOp(p) && removeMachine(p) },
+    { label: "Give me a Slot Machine item", run: () => stillOp(p) && giveItem(p) },
+    { label: "Give a player a Slot Machine item", run: () => stillOp(p) && givePlayerMenu(p) },
     { label: "Limits and stakes\n§8/realm:config > Slot Machine", run: () => p.sendMessage("§7Daily loss limits, the currencies and the pause between spins are in /realm:config > Slot Machine. Stakes and the pay table are in config.js.") },
-    { label: "Lift a player's self-block", run: () => liftMenu(p) },
+    { label: "Lift a player's self-block", run: () => stillOp(p) && liftMenu(p) },
     { label: "Back", run: () => menu(p) },
   ]);
 }
@@ -701,7 +703,7 @@ async function givePlayerMenu(op) {
   const players = world.getAllPlayers();
   const form = new ModalFormData().title("§lGive a Slot Machine").dropdown("Player", players.map((x) => x.name), { defaultValueIndex: 0 }).submitButton("Give");
   const res = await show(op, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !op.isValid || !stillOp(op)) return;
   const target = players[Number(res.formValues[0])];
   if (!target?.isValid) return op.sendMessage("§cThat player left.");
   giveItem(target);
@@ -716,7 +718,7 @@ async function liftMenu(op) {
   for (const x of blocked) form.button(`${x.name}\n§8${blockText(blockOf(x))}`);
   form.button("Back");
   const res = await show(op, form);
-  if (!res || res.canceled || res.selection === undefined || res.selection >= blocked.length) return;
+  if (!res || res.canceled || res.selection === undefined || res.selection >= blocked.length || !op.isValid || !stillOp(op)) return;
   const target = blocked[res.selection];
   if (!target.isValid) return;
   target.setDynamicProperty(PROP_BLOCK, undefined);

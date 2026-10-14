@@ -140,7 +140,7 @@ For whoever builds the packs from this repo:
 
 - **Every command starts with `/realm:`**, e.g. `/realm:welcome`, `/realm:stats`. Type `/realm` to see all of them in autocomplete, or run `/realm:help` for a page that explains each one, with usage.
 - All packs share the `realm` namespace because Bedrock requires **one command namespace per add-on**. A bundle is one add-on, so if packs used different namespaces, only the first pack's commands would register and the rest would show as "unknown command". `npm run check` and the bundler both enforce this.
-- **Everyone** commands work for all players. **Ops** commands (permission level `GameDirectors`) only work for, and are only shown to, operators.
+- **Everyone** commands work for all players. **Ops** commands (permission level `GameDirectors`) only work for, and are only shown to, operators. Every pack counts a player as an operator by that same permission level, and operators' menus and forms check it again when a button is picked or a form is sent, so a player de-opped while one is open gets `Only operators can do that.` (or a line naming the action) and nothing changes.
 
 ### Two ways to configure
 

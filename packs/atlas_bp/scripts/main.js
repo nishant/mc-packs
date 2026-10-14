@@ -1727,9 +1727,10 @@ async function opSites(player) {
   for (const { r, d } of list) form.button(`${KIND_NAMES[kindOf(r)]}${r.s === 2 ? " (unfinished)" : ""}\n§8${r.x} ${r.y} ${r.z}, ${Math.round(d)} blocks`);
   form.button("Back");
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined) return;
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
   const pick = list[res.selection];
   if (!pick) return menu(player);
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can teleport to sites."); // de-opped while the form was open
   try {
     player.teleport({ x: pick.r.x + 0.5, y: pick.r.y + 2, z: pick.r.z + PREFABS[kindOf(pick.r)].r + 2.5 }, { dimension: world.getDimension(OVERWORLD) });
   } catch (e) {

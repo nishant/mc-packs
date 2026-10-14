@@ -1719,7 +1719,8 @@ async function showGive(player) {
     .dropdown("Player", players.map((p) => p.name), { defaultValueIndex: Math.max(0, players.findIndex((p) => p.id === player.id)) })
     .dropdown("Relic", CONFIG.relics.map((r) => `${r.name}${r.story ? " (story)" : ""}`));
   const res = await showForm(player, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOperator(player)) return player.sendMessage("§cOnly operators can give relics."); // de-opped while the form was open
   const target = players[Number(res.formValues[0])];
   const def = CONFIG.relics[Number(res.formValues[1])];
   if (!target?.isValid || !def) return;

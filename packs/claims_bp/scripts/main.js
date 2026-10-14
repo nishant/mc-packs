@@ -450,6 +450,9 @@ async function allClaims(player) {
           {
             text: "§cRemove it",
             run: () => {
+              // Checked again: the player may have been de-opped, or the claim removed, while the menu was open.
+              if (!isOp(player)) return player.sendMessage("§cOnly operators can remove other players' claims.");
+              if (!claims().has(c.id)) return player.sendMessage("§7That claim is already gone.");
               removeClaim(c.id);
               player.sendMessage(`§aRemoved ${c.n}'s claim ${span(c)}.`);
             },

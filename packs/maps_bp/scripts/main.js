@@ -1243,6 +1243,7 @@ async function giveMapForm(player) {
   const players = world.getAllPlayers().sort((a, b) => a.name.localeCompare(b.name));
   const res = await show(player, new ModalFormData().title("§lGive a treasure map").dropdown("Player", players.map((p) => p.name)).submitButton("Give"));
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can give treasure maps."); // de-opped while the form was open
   const target = players[Number(res.formValues[0])];
   if (target) giveMaps(player, [target]);
 }
