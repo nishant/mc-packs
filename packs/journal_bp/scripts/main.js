@@ -33,8 +33,17 @@ const pages = new Map(
   ]),
 );
 
+/** Mobs whose id isn't their name in the game (entries keep the id; only the name shown changes). */
+const MOB_NAMES = /** @type {Record<string, string>} */ ({
+  villager_v2: "Villager",
+  zombie_villager_v2: "Zombie Villager",
+  evocation_illager: "Evoker",
+  zombie_pigman: "Zombified Piglin",
+});
+
 /** "minecraft:cave_spider" -> "Cave Spider". @param {string} id */
 const prettyId = (id) =>
+  MOB_NAMES[id.replace(/^[a-z0-9_.-]+:/, "")] ??
   id
     .replace(/^[a-z0-9_.-]+:/, "")
     .split("_")
