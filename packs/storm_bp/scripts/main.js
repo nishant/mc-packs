@@ -281,7 +281,14 @@ function strike(c) {
   // Safe zones (scripts/zones.js): no strike in or next to one, so no fire can start there.
   if (get("avoidZones") === true && protectedBox(OVERWORLD, { x: x - SCAN, z: z - SCAN }, { x: x + SCAN, z: z + SCAN })) return;
   if (nearBuild(dim, x, z)) return;
-  bolt(dim, { x: Math.floor(x) + 0.5, y: top.location.y + 1, z: Math.floor(z) + 0.5 });
+  // getTopmostBlock skips water (it answers the bed of a lake or the sea): the bolt strikes the water's surface.
+  let y = top.location.y;
+  try {
+    for (let b = top.above(), i = 0; b && i < 64 && (b.isLiquid || /water|kelp|seagrass|bubble_column/.test(b.typeId)); b = b.above(), i++) y = b.location.y;
+  } catch {
+    // the top of the world, or unloaded above
+  }
+  bolt(dim, { x: Math.floor(x) + 0.5, y: y + 1, z: Math.floor(z) + 0.5 });
 }
 
 // ---------------------------------------------------------------------------
