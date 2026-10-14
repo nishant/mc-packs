@@ -105,10 +105,10 @@ export const coords = (p) => (p.y === undefined ? `${Math.floor(p.x)} ~ ${Math.f
 /**
  * The first open spot to stand at x/z: near `yHint` (scanning a few blocks up and down) or on the
  * surface. Undefined when the column isn't loaded (and, with `strict`, when there is no open spot near
- * `yHint`: otherwise `yHint` itself).
- * @param {Dimension} dim @param {number} x @param {number} z @param {number} [yHint] @param {boolean} [strict]
+ * `yHint`: otherwise `yHint` itself). The surface over a lake or the sea is the water's, unless `bed`.
+ * @param {Dimension} dim @param {number} x @param {number} z @param {number} [yHint] @param {boolean} [strict] @param {boolean} [bed]
  */
-export function groundAt(dim, x, z, yHint, strict = false) {
+export function groundAt(dim, x, z, yHint, strict = false, bed = false) {
   const bx = Math.floor(x);
   const bz = Math.floor(z);
   try {
@@ -125,7 +125,13 @@ export function groundAt(dim, x, z, yHint, strict = false) {
       }
       return strict ? undefined : y0;
     }
-    const top = dim.getTopmostBlock({ x: bx, z: bz });
+    let top = dim.getTopmostBlock({ x: bx, z: bz });
+    // getTopmostBlock skips water (it answers a lake or sea bed): over water, the water's surface instead.
+    for (let i = 0; top && !bed && i < 64; i++) {
+      const up = top.above();
+      if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+      top = up;
+    }
     return top ? top.location.y + 1 : undefined;
   } catch {
     return undefined;

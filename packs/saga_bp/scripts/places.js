@@ -492,7 +492,7 @@ function search(name, rec, relaxed) {
           else if (site.reason === "not loaded") {
             unloaded++;
             continue;
-          } else if (relaxed && prefabInfo(pfOf(name))?.site !== "deep") y = PREFABS[name]?.y ?? groundAt(dim, x, z); // underground and sky places keep their height
+          } else if (relaxed && site.reason !== "water" && site.reason !== "lava" && prefabInfo(pfOf(name))?.site !== "deep") y = PREFABS[name]?.y ?? groundAt(dim, x, z, undefined, false, prefabInfo(pfOf(name))?.site === "water"); // underground and sky places keep their height; land places never on a lake or sea bed
         } catch {
           unloaded++;
           continue;
