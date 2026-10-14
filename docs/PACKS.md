@@ -936,6 +936,7 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
 - `/realm:stash` only takes from your main inventory (slots 9–35): never the hotbar, armor or offhand. It also leaves you your gear (anything with durability: tools, weapons, armor, elytra; `stashGear`), named items (`stashNamedItems`) and everything in `keepItems`: shulker boxes, bundles, the totem of undying, filled maps, compasses and clocks. A container that holds the item gets matching stacks topped up first, then its empty slots, nearest container first.
 - **What receives stashes:** chests, trapped chests, copper chests and barrels (`stashTypes`). Placed shulker boxes don't: they're a kit you pick up and carry, so they only get the menu and sorting.
 - Double chests (copper ones too) count once. Ender chests never receive anything. Containers in chunks that aren't loaded are never touched. Another player having the chest open is fine.
+- Containers you can't open get nothing: someone else's locked container, and any container in someone else's [Land Claims](#land-claims--claims_bp) claim, so nothing lands where you couldn't take it back. When those are the only ones around, the bar says `Nothing to stash: the containers nearby aren't yours to open`.
 - Each player can sort or stash once per second (`cooldownTicks`). A menu button pressed sooner says `Too fast. Try again in a moment.`
 
 #### Chest locks
@@ -946,7 +947,7 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
 - Explosions never break a locked container; the blast still hurts as usual.
 - Each player can have up to 50 locked containers (`maxLocks`); a double chest counts once.
 - Breaking a locked container (you can, as its owner) removes its lock. Breaking one half of a locked double chest leaves the other half locked, and it still counts once toward `maxLocks`.
-- **What a lock can't stop:** a hopper (or hopper minecart) that was already under it before it was locked, a copper golem that takes from a locked copper chest, and pistons. Chest Finder still points to a locked chest that holds what you search for; it can't open it.
+- **What a lock can't stop:** a hopper (or hopper minecart) that was already under it before it was locked, a copper golem that takes from a locked copper chest, and pistons. [Chest Finder](#chest-finder--find_bp) doesn't list a locked container for anyone who can't open it.
 - Locks only show in the sneak-tap menu, so a player who chose `Sort it right away` or `Nothing (opens as usual)` for the sneak-tap in `/realm:prefs` locks nothing until they switch back to `Open the menu`. Their own locks still hold.
 
 ### Commands
@@ -990,10 +991,11 @@ Operators can change `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `
 
 - **Menu:** `world.beforeEvents.playerInteractWithBlock` cancels the tap when the player is sneaking, the hand is empty or holds an item with a `minecraft:durability` component, and the block is a listed container or an ender chest. On the next tick an `ActionFormData` from `@minecraft/server-ui` shows the menu; a player can have one open at a time. The chosen action re-reads the block, so a container broken while the menu was open is left alone.
 - **Sort:** stacks are merged by changing the amount of the slot that stays (`ContainerSlot.amount`) and ordered with `swapItems`. Both are native moves, so no item is ever copied or re-created and nothing about it can be lost.
-- **Stash:** one `dimension.getBlocks` query finds the `stashTypes` containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
+- **Stash:** one `dimension.getBlocks` query finds the `stashTypes` containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. The pack then asks the other packs which of them the player may not open (`realm:access_check`, below) and leaves those out. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.
 - When both halves of a double chest report the whole 54 slots, the second half is recognized (same kind of chest, same contents, same facing, side by side; in a row of identical chests, counted from the row's end) and skipped. Copper chests of different stages count as the same kind.
 - If `transferItem` ever hands a leftover back instead of leaving it in the slot, the pack puts it back, so nothing is lost.
 - **Locks:** every lock is read into memory once and kept in step as it changes. `beforeEvents.playerInteractWithBlock` cancels opening someone else's locked container, and tapping a block with a hopper or chest in hand when the spot it would go is next to one (the stable API has no "before place" event, and placing starts with that tap). `beforeEvents.playerBreakBlock` cancels breaking it, and `beforeEvents.explosion` takes locked blocks out of the blast. A double chest's other half is found the same way as for stashing. A lock left where its block is gone some other way (a piston, a command) is removed when something is placed there.
+- **Access checks:** packs that keep players out of blocks answer `realm:access_check` `{ id, player, spots: [[dim, x, y, z], ...] }` (at most 40 spots a message) with `realm:access_check_result` `{ id, from, closed: [i, ...] }`, the indexes of the spots that player may not open. This pack answers for someone else's locked container (none while `locks` is disabled), Land Claims for someone else's claim. Every check is answered, so an asker learns who answers: it waits for each pack that has answered before (2 seconds at most), or 5 ticks while none has; it says hello 3 seconds after the world loads. Quick stack asks; so does [Chest Finder](#chest-finder--find_bp).
 - Messages above the hotbar send `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) leaves them on screen for a moment.
 
 ---
@@ -1015,6 +1017,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 - Results in your dimension are sorted by distance; containers in other dimensions are listed after them, without a distance.
 - Copper chests count, in every stage, waxed or not, and the result names the exact one (`Waxed Oxidized Copper Chest`), which helps tell them apart.
 - A double chest (copper ones too) is listed once. A broken container disappears from the results. One that was removed some other way (an explosion, say) disappears the next time a search finds its spot loaded and empty.
+- Containers you can't open aren't listed: someone else's locked container ([Quick Stack & Sort](#quick-stack--sort--stash_bp)) and any container in someone else's [Land Claims](#land-claims--claims_bp) claim. Their owners (and the players they're shared with) still find them. When only such containers hold the item, chat says `Only containers you can't open (locked, or in someone else's claim) have "diamond".`
 - Only containers and their contents are remembered, never who opened them.
 
 ### Commands
@@ -1045,7 +1048,7 @@ Operators can change `liveScanRadius`, `maxResults` and `highlightSeconds` in ga
 ### How it works
 
 - **Remembering:** on `world.afterEvents.playerInteractWithBlock` with a listed container, its contents are counted per item id right away, again 10 seconds later, after the player has put things in or taken them out, and once more after a minute, for long sorting sessions. `playerBreakBlock` removes the entry. Empty containers aren't kept. A save serializes only the entries that changed since the last one.
-- **Searching:** one `dimension.getBlocks` query finds the containers within `liveScanRadius`, which are read a few per tick with `system.runJob`, then the whole index is matched in one pass and sorted by distance.
+- **Searching:** one `dimension.getBlocks` query finds the containers within `liveScanRadius`, which are read a few per tick with `system.runJob`, then the whole index is matched in one pass and sorted by distance. The nearest matches (twice `maxResults`) are checked with Quick Stack & Sort and Land Claims over `realm:access_check` (see Quick Stack & Sort's **How it works**), and the ones the player may not open are dropped. Without either pack installed, the search waits 5 ticks at most for an answer.
 - **Double chests:** when both halves report the whole 54 slots, both are stored under the half with the smaller coordinates. Copper chests of different stages count as the same kind of chest. The halves are told apart from a neighboring double chest with the same contents by their facing and, in a row of identical chests, by counting from the row's end.
 
 ---
@@ -1072,6 +1075,7 @@ Claim the land around your base so other players can't break, place or open anyt
 - **Explosions** break no blocks inside a claim (`protectExplosions`), whatever caused them; the damage is unchanged, and the part of the blast outside the claim breaks blocks as usual.
 - **World events** (`protectWorldEvents`, default enabled): every claim is a safe zone, so no meteor crater, storm cell lightning or other world event changes blocks in it, and [Safe Zones](#safe-zones--zones_bp) lists it under **Towns and claims** as `Sam's claim`.
 - **Operators** can't build in other players' claims unless **Operators can build in any claim** is enabled (`operatorsBypass`), so a realm where everyone is an operator still gets protection. They can always remove a claim.
+- **Containers in a claim** are also kept from other players' [Quick Stack & Sort](#quick-stack--sort--stash_bp) (`/realm:stash` puts nothing in them) and [Chest Finder](#chest-finder--find_bp) (`/realm:find` doesn't list them).
 - **What a claim doesn't stop:** mobs, hurting animals or pets, fire spreading, lava or water flowing in, pistons pushing blocks in from outside, hoppers or minecarts pulling items across the border, and hits: punching an armor stand to break it, or punching the item out of an item frame, isn't stopped (only tapping them is).
 
 ### Commands
@@ -1111,6 +1115,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `pro
 - `beforeEvents.explosion` takes the blocks inside claims out of the blast without canceling it.
 - The pack is the `claims` provider of the safe zones protocol: while claims are enabled and `protectWorldEvents` is on, it sends every claim as a square zone (`realm:zones`) whenever claims change, when the world starts and when asked (`realm:zones_ping`); otherwise it sends an empty list.
 - Other packs ask before changing blocks in a box (Easy Building): `realm:claims_check` `{ id, player, dim, x1, z1, x2, z2 }` is answered with `realm:claims_check_result` `{ id, claims: [{ n, x1, z1, x2, z2 }] }`, the owner's name and corners of up to 10 claims in that box the player may not build in (none while claims are disabled; shared players, and operators with `operatorsBypass`, may build). It is always answered, so the asker also learns that Land Claims is installed.
+- Quick Stack & Sort and Chest Finder ask which containers a player may not open: `realm:access_check` `{ id, player, spots: [[dim, x, y, z], ...] }` is answered with `realm:access_check_result` `{ id, from: "claims_bp", closed: [i, ...] }`, the spots in a claim that player may not open (the same rule as tapping a chest there; none while claims are disabled). See Quick Stack & Sort's **How it works**.
 - Once a second, each player's claim is looked up to say when they walk in or out of one. Messages above the hotbar send `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) leaves them on screen.
 
 ---
@@ -4397,7 +4402,7 @@ Tame a dolphin with raw fish, then ride it through the sea: it swims where you l
 - A tamed dolphin that dies tells its owner: `Splash died.`
 - **For operators and tests:** with cheats on, `/scriptevent realm:dolphin_feed` (run by an operator holding raw cod or salmon) feeds the nearest dolphin within 5 blocks exactly as a tap would.
 
-**Compatibility note:** this pack carries a copy of the vanilla dolphin's behavior file (`entities/dolphin.json`, from Minecraft 1.26.50) with one addition: a `realm:dolphin_tamed` group (a seat for one player, `minecraft:rideable`; `minecraft:is_tamed`; `minecraft:persistent`), added by the event `realm:dolphin_tame` and removed by `realm:dolphin_release`. Wild dolphins behave exactly as in vanilla: treasure leading, playing with items, swimming with players for Dolphin's Grace, breathing air, drying out on land. All components are stable ones, so no experiments are needed on the Realm. Two things to know: another behavior pack that also changes the dolphin wins or loses depending on pack order (only the top one's file is used), and if a future Minecraft update changes the vanilla dolphin, this copy keeps the old behavior until it is refreshed from the newest vanilla file.
+**Compatibility note:** this pack carries a copy of the vanilla dolphin's behavior file (`entities/dolphin.json`, from Minecraft 1.26.50: Mojang's bedrock-samples `behavior_pack/entities/dolphin.json`, still the newest in 1.26.50.4) with one addition: a `realm:dolphin_tamed` group (a seat for one player, `minecraft:rideable`; `minecraft:is_tamed`; `minecraft:persistent`), added by the event `realm:dolphin_tame` and removed by `realm:dolphin_release`. Wild dolphins behave exactly as in vanilla: treasure leading, playing with items, swimming with players for Dolphin's Grace, breathing air, drying out on land. All components are stable ones, so no experiments are needed on the Realm. Two things to know: another behavior pack that also changes the dolphin wins or loses depending on pack order (only the top one's file is used), and if a future Minecraft update changes the vanilla dolphin, this copy keeps the old behavior until it is refreshed from the newest vanilla file.
 
 ### Commands
 
@@ -6375,9 +6380,9 @@ Player preference, in `/realm:prefs` (**Translucent Tools**): **Translucent tool
 
 ### How it works
 
-- A resource pack can't read scripts, but it can read an entity property the server syncs to clients. This pack adds one to the player: its `entities/player.json` is a copy of vanilla's player behavior file (`minecraft:player`, format 1.26.30, the newest one Bedrock Dedicated Server 1.26.52 ships, identical to Mojang's bedrock-samples 1.26.50.4 file) with only `"properties": { "realm:solid_tools": { "type": "bool", "default": false, "client_sync": true } }` added. It is the only pack here that defines `minecraft:player`.
+- A resource pack can't read scripts, but it can read an entity property the server syncs to clients. This pack adds one to the player: its `entities/player.json` is a copy of vanilla's player behavior file (`minecraft:player`, format 1.26.30, identical to Mojang's bedrock-samples 1.26.50.4 file, the newest one; Bedrock Dedicated Server 1.26.52 no longer ships entity behavior files) with only `"properties": { "realm:solid_tools": { "type": "bool", "default": false, "client_sync": true } }` added. It is the only pack here that defines `minecraft:player`.
 - The script sets the property with `player.setProperty("realm:solid_tools", !translucent)` when a player spawns, when the world loads, when the player changes the preference and when an operator changes the default. Translucent Tools' attachables read `query.property('realm:solid_tools')` on the entity holding the item and switch texture and material.
-- **When Mojang updates the player:** a behavior pack's `minecraft:player` replaces vanilla's, so after a Minecraft update that changes the player file, copy the new one (from the newest `behavior_packs/vanilla_*` of Bedrock Dedicated Server, or bedrock-samples `behavior_pack/entities/player.json`) into `entities/player.json`, put the `properties` block back and bump the version. Until then players keep the older behavior (exhaustion, raid omen and so on).
+- **When Mojang updates the player:** a behavior pack's `minecraft:player` replaces vanilla's, so after a Minecraft update that changes the player file, copy the new one (Mojang's bedrock-samples `behavior_pack/entities/player.json`, or the newest `behavior_packs/vanilla_*` of a Bedrock Dedicated Server that still ships entity files) into `entities/player.json`, put the `properties` block back and bump the version. Until then players keep the older behavior (exhaustion, raid omen and so on).
 
 ---
 

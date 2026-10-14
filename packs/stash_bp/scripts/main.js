@@ -298,19 +298,40 @@ function* findTargets(player) {
   return targets.sort((a, b) => a.dist - b.dist);
 }
 
-/** @param {Player} player */
-function* stash(player) {
+/**
+ * Runs a generator as a job (a few steps per tick) and resolves with what it returns.
+ * @template T @param {Generator<void, T, void>} gen @returns {Promise<T>}
+ */
+function job(gen) {
+  return new Promise((resolve, reject) => {
+    system.runJob(
+      (function* () {
+        try {
+          resolve(yield* gen);
+        } catch (e) {
+          reject(e);
+        }
+      })()
+    );
+  });
+}
+
+/** Quick stack: find the containers, leave out the ones other packs keep this player out of, then move. @param {Player} player */
+async function stash(player) {
   try {
-    yield* quickStack(player);
+    const found = await job(findTargets(player));
+    if (!player.isValid) return;
+    // Land Claims: a chest in someone else's claim gets nothing (the player couldn't open it to take it back).
+    const closed = await closedSpots(player.id, found.map((t) => [t.block.dimension.id, t.block.x, t.block.y, t.block.z]));
+    if (!player.isValid) return;
+    quickStack(player, found.filter((_, i) => !closed.has(i)), closed.size);
   } catch (e) {
     console.warn(`[stash] ${e}`);
   }
 }
 
-/** @param {Player} player */
-function* quickStack(player) {
-  const targets = yield* findTargets(player);
-  if (!player.isValid) return;
+/** @param {Player} player @param {Target[]} targets nearest first @param {number} skipped containers left out: someone else's claim */
+function quickStack(player, targets, skipped) {
   const inv = player.getComponent("minecraft:inventory")?.container;
   if (!inv) return;
 
@@ -351,7 +372,9 @@ function* quickStack(player) {
       ? `§aStashed ${moved} item${moved === 1 ? "" : "s"} into ${received.size} ${noun}${received.size === 1 ? "" : "s"}`
       : targets.length
         ? "§7Nothing to stash: no nearby container holds the same items"
-        : "§7No containers nearby"
+        : skipped
+          ? "§7Nothing to stash: the containers nearby aren't yours to open"
+          : "§7No containers nearby"
   );
   if (moved) player.playSound("random.pop", { pitch: 0.8 });
 }
@@ -687,7 +710,7 @@ async function openMenu(player, dimension, at) {
   }
   actions.push({
     text: `Quick stack my inventory\n§8Into storage within ${CONFIG.stashRadius} blocks`,
-    run: (p) => system.runJob(stash(p)),
+    run: (p) => void stash(p),
   });
   actions.push({
     text: `Sort my inventory\n§8${getFor(player, "sortHotbar") ? "Hotbar included" : "The hotbar stays as it is"}`,
@@ -883,7 +906,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
-    (origin) => playerCommand(origin, (player) => system.runJob(stash(player)))
+    (origin) => playerCommand(origin, (player) => void stash(player))
   );
 
   customCommandRegistry.registerCommand(
@@ -912,10 +935,112 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Access checks: which containers a player may not open, asked across packs
+// ---------------------------------------------------------------------------
+//   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }  (at most 40 spots per message)
+//   realm:access_check_result { id, from, closed: [i, ...] }                 (indexes into that message's spots)
+// Every pack that keeps players out of blocks answers every check, with nothing closed too, so an asker learns
+// who answers: this pack (someone else's locked container) and Land Claims (someone else's claim).
+
+const ACCESS_CHUNK = 40;
+/** Packs that have answered an access check: an ask waits for each of them. @type {Set<string>} */
+const accessResponders = new Set();
+/** @type {Map<string, { got: Set<string>, offset: number, closed: Set<number>, check: () => void }>} */
+const accessAsks = new Map();
+let accessNext = 1;
+
+/**
+ * The indexes of these spots the player may not open, as the packs that answer access checks say. Waits until
+ * every pack that has answered before answers (2 s at most), or 5 ticks when none has yet.
+ * @param {string} playerId @param {[string, number, number, number][]} spots
+ * @returns {Promise<Set<number>>}
+ */
+function closedSpots(playerId, spots) {
+  return new Promise((resolve) => {
+    /** @type {Set<number>} */
+    const closed = new Set();
+    if (!spots.length) return resolve(closed);
+    const waitFor = [...accessResponders];
+    /** @type {string[]} */
+    const ids = [];
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      for (const id of ids) accessAsks.delete(id);
+      resolve(closed);
+    };
+    const check = () => {
+      if (waitFor.length && ids.every((id) => waitFor.every((r) => accessAsks.get(id)?.got.has(r)))) finish();
+    };
+    for (let offset = 0; offset < spots.length; offset += ACCESS_CHUNK) {
+      const id = `stash${accessNext++}`;
+      ids.push(id);
+      accessAsks.set(id, { got: new Set(), offset, closed, check });
+      system.sendScriptEvent("realm:access_check", JSON.stringify({ id, player: playerId, spots: spots.slice(offset, offset + ACCESS_CHUNK) }));
+    }
+    system.runTimeout(finish, waitFor.length ? 40 : 5);
+  });
+}
+
+/** @param {string} message a realm:access_check_result */
+function accessResult(message) {
+  const m = JSON.parse(message);
+  if (!m || typeof m.from !== "string") return;
+  const from = m.from.slice(0, 32);
+  accessResponders.add(from);
+  const ask = accessAsks.get(String(m.id));
+  if (!ask) return;
+  ask.got.add(from);
+  if (Array.isArray(m.closed)) for (const i of m.closed) if (Number.isInteger(i) && i >= 0 && i < ACCESS_CHUNK) ask.closed.add(ask.offset + i);
+  ask.check();
+}
+
+/** Answers a realm:access_check: someone else's locked container (while chest locks are enabled). @param {string} message */
+function answerAccess(message) {
+  const q = JSON.parse(message);
+  if (!q || typeof q !== "object") return;
+  const pid = String(q.player ?? "");
+  /** @type {number[]} */
+  const closed = [];
+  if (locksOn() && locks().size && Array.isArray(q.spots)) {
+    q.spots.slice(0, ACCESS_CHUNK).forEach((/** @type {unknown} */ s, /** @type {number} */ i) => {
+      if (!Array.isArray(s) || typeof s[0] !== "string") return;
+      const [dim, x, y, z] = [String(s[0]), Number(s[1]), Number(s[2]), Number(s[3])];
+      if (![x, y, z].every(Number.isInteger)) return;
+      let lock = locks().get(lockKey(dim, { x, y, z }));
+      if (!lock) {
+        try {
+          const b = world.getDimension(dim).getBlock({ x, y, z });
+          if (b) lock = lockAt(b); // the half of a double chest added next to a locked one
+        } catch {
+          // unloaded or no such dimension: the saved locks are all there is
+        }
+      }
+      if (lock && lock.o !== pid && !lock.s.some((w) => w.i === pid)) closed.push(i);
+    });
+  }
+  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "stash_bp", closed }));
+}
+
+// Learn early who answers access checks, so the first quick stack doesn't wait.
+world.afterEvents.worldLoad.subscribe(() =>
+  system.runTimeout(() => system.sendScriptEvent("realm:access_check", JSON.stringify({ id: "hello", player: "", spots: [] })), 60)
+);
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stash_bp");
+    else if (id === "realm:access_check" || id === "realm:access_check_result") {
+      try {
+        if (id === "realm:access_check") answerAccess(message);
+        else accessResult(message);
+      } catch (e) {
+        console.warn(`[stash] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );
