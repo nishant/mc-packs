@@ -126,7 +126,8 @@ function hold(playerId, from, ticks) {
   let byPack = holds.get(playerId);
   if (!byPack) holds.set(playerId, (byPack = new Map()));
   if (ticks > 0) byPack.set(from, system.currentTick + Math.min(ticks, MAX_HOLD));
-  else byPack.delete(from);
+  // Ended early: let it run out now, so the sweep draws the boxes again.
+  else if (byPack.has(from)) byPack.set(from, system.currentTick);
   if (!byPack.size) holds.delete(playerId);
   // The real title replaced whatever we drew.
   drewSome.set(playerId, false);

@@ -361,10 +361,34 @@ function nearSpawn(x, z) {
 /** The surface block at (x, z), or undefined where it isn't loaded. @param {Dimension} dim @param {number} x @param {number} z */
 function surfaceAt(dim, x, z) {
   try {
-    return dim.getTopmostBlock({ x, z });
+    const top = dim.getTopmostBlock({ x, z });
+    // A column that isn't ticking can return a block that throws as soon as it's read: treat it as unloaded.
+    if (top) void top.typeId;
+    return top;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The y of the water's surface over a column's topmost block, or undefined when it's dry. getTopmostBlock skips
+ * water (it answers with a lake or sea bed), so climb through the water (and kelp, seagrass) above it.
+ * @param {import("@minecraft/server").Block} top
+ */
+function waterOver(top) {
+  let b = top;
+  let wet = false;
+  try {
+    for (let i = 0; i < 64; i++) {
+      const up = b.above();
+      if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+      b = up;
+      wet = true;
+    }
+  } catch {
+    // the top of the world, or unloaded above
+  }
+  return wet ? b.location.y : undefined;
 }
 
 /** The loaded target for a bounty, if any. @param {Hunt} h */
@@ -450,7 +474,10 @@ function tend(h, players) {
     }
     return;
   }
-  if (top.isLiquid || top.typeId === "minecraft:water") mob = "minecraft:drowned";
+  // Over a lake or the sea: a drowned, in the water (not a land mob on the bed).
+  const water = top.isLiquid ? top.location.y : waterOver(top);
+  if (water !== undefined) mob = "minecraft:drowned";
+  const y = water ?? top.location.y + 1;
   st.tries = 0;
   st.askedAt = now;
   h.lx = x;
@@ -458,7 +485,7 @@ function tend(h, players) {
   dirty = true;
   system.sendScriptEvent(
     "realm:champion_spawn",
-    JSON.stringify({ dim: h.dim, x: x + 0.5, y: top.y + 1, z: z + 0.5, mob, trait: h.trait, name: h.name, tag: TAG + h.id }),
+    JSON.stringify({ dim: h.dim, x: x + 0.5, y, z: z + 0.5, mob, trait: h.trait, name: h.name, tag: TAG + h.id }),
   );
 }
 
@@ -652,8 +679,8 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       dirty = true;
       if (b.p >= b.count) finishCull(b, killer);
       else if (getFor(killer, "notes") === true) {
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: killer.id, ticks: 40, from: "bounty_bp" }));
         killer.onScreenDisplay.setActionBar(`§eBounty: ${b.label} §f${b.p}/${b.count}`);
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: killer.id, ticks: 40 }));
       }
     }
   } catch (e) {

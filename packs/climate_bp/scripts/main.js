@@ -286,7 +286,7 @@ function enter(player, st, cond) {
   if (now - (st.noted[cond] ?? -NOTICE_EVERY) >= NOTICE_EVERY) {
     st.noted[cond] = now;
     try {
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 60 }));
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 60, from: "climate_bp" }));
       player.onScreenDisplay.setActionBar(kind.note);
     } catch (e) {
       console.warn(`[climate] ${e}`);

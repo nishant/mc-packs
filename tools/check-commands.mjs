@@ -11,7 +11,8 @@ const problems = [];
 const seen = new Map();
 
 for (const folder of packs) {
-  const { commands, enums } = registeredNames(join(root, "packs", folder));
+  const { commands, enums, unresolved } = registeredNames(join(root, "packs", folder));
+  if (unresolved) problems.push(`${folder}: ${unresolved} registerCommand call${unresolved === 1 ? "" : "s"} whose name can't be read (use a string literal, or a helper called with one)`);
   for (const name of [...commands, ...enums]) {
     if (namespaceOf(name) !== COMMAND_NAMESPACE) problems.push(`${folder}: "${name}" must use the "${COMMAND_NAMESPACE}:" namespace`);
     if (seen.has(name)) problems.push(`${folder}: "${name}" is also registered by ${seen.get(name)}`);

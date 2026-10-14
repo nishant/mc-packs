@@ -468,6 +468,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   struckAt.delete(playerId);
   meterLast.delete(playerId);
   affinity.delete(playerId);
+  idaOff.delete(playerId);
   storyFlags.delete(playerId);
   smithWaits.delete(playerId);
   barHeld.delete(playerId);
@@ -578,7 +579,10 @@ function sky(player) {
     const feet = player.location;
     const top = player.dimension.getTopmostBlock({ x: Math.floor(feet.x), z: Math.floor(feet.z) });
     if (!top) return undefined;
-    return { open: top.location.y - Math.floor(feet.y) < 2, dry: DRY_GROUND.test(top.typeId) };
+    // getTopmostBlock skips water: a sandy lake or sea bed under the player is no desert (rain falls on the water).
+    const up = top.above();
+    const wet = !!up && (up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId));
+    return { open: top.location.y - Math.floor(feet.y) < 2, dry: !wet && DRY_GROUND.test(top.typeId) };
   } catch {
     return undefined; // unloaded
   }

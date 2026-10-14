@@ -212,7 +212,11 @@ function underStorm(player) {
   const feet = player.location;
   try {
     const top = player.dimension.getTopmostBlock({ x: Math.floor(feet.x), z: Math.floor(feet.z) });
-    if (!top || DRY_GROUND.test(top.typeId)) return false;
+    if (!top) return false;
+    // getTopmostBlock skips water: a sandy lake or sea bed is no desert (the storm falls on the water).
+    const up = top.above();
+    const wet = !!up && (up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId));
+    if (!wet && DRY_GROUND.test(top.typeId)) return false;
     return top.location.y - Math.floor(feet.y) < 2; // 0 or 1: grass or a fence at your side; 2+: a roof
   } catch {
     return false;
@@ -510,7 +514,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:titles_give",
-      description: 'Operators: give a player a title (or a trail: "trail:cloud", leaves, ember, sparkle, hearts, glyphs)',
+      description: 'Operators: give a player a title (or a trail: "trail:cloud", leaves, ember, sparkle, hearts, glyphs, confetti, notes)',
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
       mandatoryParameters: [

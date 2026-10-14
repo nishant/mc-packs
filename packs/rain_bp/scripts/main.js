@@ -35,6 +35,7 @@ const MAX_SPOTS = 8; // drip spots remembered per player
 const RESCAN_DISTANCE = 4; // forget a player's drip spots once they move this far (blocks)
 const MAX_HEADROOM = 24; // deeper underground than this, there's no rain to see
 const DRY_GROUND = /sand|terracotta|snow|ice/; // deserts and badlands get no rain; snowy places get snow
+const WATERY = /water|kelp|seagrass|bubble_column/;
 const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }];
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -169,9 +170,10 @@ function update(player, st) {
   const budget = { lookups: CONFIG.drips.lookupsPerSecond };
   const feet = player.location;
   const here = active ? topmost(player.dimension, feet.x, feet.z, budget) : undefined;
+  const dry = !!here && dryGround(here, feet);
   // No storm fog where it doesn't rain (sand, terracotta, snow, ice): it would cover Realistic Rain's snow fog, and
   // each step's push would land on top of Regional Weather's sandstorm or blizzard fog there.
-  const fog = off || (here && DRY_GROUND.test(here.typeId)) ? 0 : storm.level;
+  const fog = off || dry ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
   if (off || !overworld) {
     leave(player, st); // no haze in the Nether or the End: it would replace their own volumetric fog
@@ -182,8 +184,8 @@ function update(player, st) {
     leave(player, st); // the rain is over: nothing of ours should still be playing
     return;
   }
-  if (here && raining && here.location.y - feet.y > MAX_HEADROOM && !DRY_GROUND.test(here.typeId)) st.muffle = get("roof.muffleRain"); // deep underground: no rain to hear
-  if (!here || DRY_GROUND.test(here.typeId) || here.location.y - feet.y > MAX_HEADROOM) {
+  if (here && raining && here.location.y - feet.y > MAX_HEADROOM && !dry) st.muffle = get("roof.muffleRain"); // deep underground: no rain to hear
+  if (!here || dry || here.location.y - feet.y > MAX_HEADROOM) {
     leave(player, st); // deserts, badlands and snow get no rain; caves get none of the haze
     return;
   }
@@ -210,6 +212,22 @@ function update(player, st) {
 function leave(player, st) {
   if (st.haze) setHaze(player, st, 0);
   if (st.place !== "none") stopSounds(player, st);
+}
+
+/**
+ * Ground where it doesn't rain: sand, terracotta, snow or ice on top. getTopmostBlock skips water, so the sand under
+ * a sea, a river or a pool is a seabed, where it rains: one more lookup, only for such ground below the feet.
+ * @param {import("@minecraft/server").Block} here @param {Vector3} feet
+ */
+function dryGround(here, feet) {
+  if (!DRY_GROUND.test(here.typeId)) return false;
+  if (here.location.y >= Math.floor(feet.y)) return true;
+  try {
+    const up = here.above();
+    return !up || !(up.isLiquid || WATERY.test(up.typeId));
+  } catch {
+    return true;
+  }
 }
 
 /** Highest block in a column, or undefined when out of budget or unloaded. @param {Dimension} dimension @param {{ lookups: number }} budget */

@@ -32,7 +32,7 @@ const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel
 const shortDim = (/** @type {string} */ id) => id.replace(/^minecraft:/, "").replaceAll("_", " ");
 /** @param {Player} player @param {string} text */
 function bar(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "zones_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 
@@ -455,7 +455,13 @@ function teleport(player, z) {
   let y = z.y;
   if (y === undefined) {
     try {
-      const top = dim.getTopmostBlock({ x: z.x, z: z.z });
+      let top = dim.getTopmostBlock({ x: z.x, z: z.z });
+      // getTopmostBlock skips water (it answers a lake or sea bed): over water, the water's surface instead.
+      for (let i = 0; top && i < 64; i++) {
+        const up = top.above();
+        if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+        top = up;
+      }
       y = top ? top.location.y + 1 : undefined;
     } catch {
       y = undefined;

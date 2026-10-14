@@ -47,7 +47,7 @@ const riders = (seat) => seat.getComponent("minecraft:rideable")?.getRiders() ??
 
 /** A note above the hotbar; `realm:actionbar` first, so the Coordinates HUD and other bar writers wait. @param {Player} player @param {string} text */
 function note(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "chairs_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 

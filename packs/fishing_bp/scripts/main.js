@@ -1108,7 +1108,10 @@ system.afterEvents.scriptEventReceive.subscribe(
   { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
-world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  callingBonus.delete(playerId);
+  tobinOff.delete(playerId); // Townsfolk sends it again when the player joins
+});
 /** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 

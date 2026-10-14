@@ -99,7 +99,7 @@ const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 
 /** A note above the hotbar; `realm:actionbar` first, so the Coordinates HUD and other bar writers wait. @param {Player} player @param {string} text */
 function note(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "mail_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 
@@ -310,7 +310,9 @@ function send(player, to, subject, body, shortened) {
 
 /** @param {Player} player @param {Letter} l */
 async function readLetter(player, l) {
-  if (!l.r) save((l = { ...l, r: 1 }));
+  // Mark the saved letter read, not the inbox's copy: the writer may have removed it from Sent meanwhile.
+  const saved = letters().get(l.id);
+  if (saved && !saved.r) save((l = { ...saved, r: 1 }));
   const body = [`§7From:§r ${l.fn}`, `§7Sent:§r ${ago(l.at)} (${stamp(l.at)})`, "", `${l.b}§r`].join("\n");
   await menu(player, `§l${l.s}`, body, [
     // A letter from a pack (a townsfolk, the realm) has no writer to reply to.

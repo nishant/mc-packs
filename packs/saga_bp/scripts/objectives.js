@@ -363,12 +363,24 @@ function kitchenOk(stack, key) {
   return stack.typeId === k.item && lore.includes(k.rare ? "§6Rare dish" : "§8Kitchen dish");
 }
 
+/**
+ * A name as typed at an anvil, for comparing: no color codes, any case, single spaces, and a phone keyboard's curly
+ * apostrophe or quotes the same as straight ones ("Lily\u2019s Marble" is "lily's marble"). @param {string} s
+ */
+const nameKey = (s) =>
+  plain(s)
+    .replace(/[\u2018\u2019\u02bc\u0060\u00b4]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 /** Does a stack match an item and/or a custom name (either may be left out)? @param {ItemStack | undefined} stack @param {string | undefined} item @param {string} [name] */
 function same(stack, item, name) {
   if (!stack || (item !== undefined && stack.typeId !== item)) return false;
   if (name === undefined) return true;
-  const key = plain(name).trim().toLowerCase();
-  return plain(stack.nameTag ?? "").trim().toLowerCase() === key && kitchenOk(stack, key);
+  const key = nameKey(name);
+  return nameKey(stack.nameTag ?? "") === key && kitchenOk(stack, key);
 }
 
 /** @param {Player} player @param {string | undefined} item @param {string} [name] */
@@ -1002,6 +1014,19 @@ world.afterEvents.entityHitBlock.subscribe(({ damagingEntity, hitBlock }) => {
 /** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number }>} */
 const hooks = new Map();
 
+/** Did an item appear at a player's head (dropped, not caught)? @param {Dimension} dim @param {Vector3} at */
+function droppedAt(dim, at) {
+  for (const p of dim.getPlayers({ location: at, maxDistance: 3 })) {
+    try {
+      const head = p.getHeadLocation();
+      if (Math.hypot(head.x - at.x, head.y - at.y, head.z - at.z) < 1.2) return true;
+    } catch {
+      // gone
+    }
+  }
+  return false;
+}
+
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
@@ -1016,6 +1041,9 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
     for (const [id, h] of hooks) {
       if (h.dim !== entity.dimension.id) continue;
       if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
+      // An item dropped from the inventory appears at a player's head, not at the hook: fish dropped next to a hook
+      // close by (fishing off a dock) aren't a catch.
+      if (droppedAt(entity.dimension, at)) return;
       hooks.delete(id);
       const type = stack.typeId;
       const amount = stack.amount;
@@ -1790,10 +1818,21 @@ function defendTick(player, e, i, obj) {
   if (away) {
     s.data.awaySince ??= now;
     if (now - s.data.awaySince > 600) return defendFail(s, "You left.");
-  } else delete s.data.awaySince;
+    // The fight waits for the player: no wave comes or counts meanwhile, and mobs that unload with their chunk
+    // (the player ran off) aren't beaten.
+    s.data.left = true;
+    return;
+  }
+  delete s.data.awaySince;
+  const left = !!s.data.left;
+  delete s.data.left;
+  let lost = 0;
   s.data.mobs = s.data.mobs.filter((/** @type {Entity} */ m) => {
     try {
-      if (!m.isValid) return false;
+      if (!m.isValid) {
+        if (left) lost++;
+        return false;
+      }
       if (across(m.location, loc) > r * 4) {
         removeActor(m.id);
         return false;
@@ -1803,6 +1842,12 @@ function defendTick(player, e, i, obj) {
       return false;
     }
   });
+  const cur = waves[s.data.wave];
+  if (lost && s.data.spawned && cur) {
+    // Gone with their chunk while the player was away: they come back.
+    player.sendMessage(`§c[Story] The attackers regroup at ${loc.label}!`);
+    s.data.mobs.push(...spawnGroup(player, dim, center, { mobs: cur.mobs, count: lost }, s.key, Math.max(6, r * 0.7), Math.max(8, r)));
+  }
   if (s.data.mobs.length) return;
   if (s.data.spawned) {
     // A wave is cleared.

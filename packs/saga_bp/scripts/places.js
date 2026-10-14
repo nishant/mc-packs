@@ -311,10 +311,13 @@ function snapshot(name, dim, box) {
   /** @type {[string, number, number, number][]} */
   const out = [];
   const sm = world.structureManager;
+  // Named for this build: the snapshot of an earlier spot is deleted a moment after it is put back (restore), and
+  // must not take this one with it.
+  const stamp = Date.now().toString(36);
   let k = 0;
   for (let x = box.min.x; x <= box.max.x; x += TILE)
     for (let z = box.min.z; z <= box.max.z; z += TILE) {
-      const id = `saga:place_${sid(name)}_${k++}`;
+      const id = `saga:place_${sid(name)}_${stamp}_${k++}`;
       try {
         if (sm.get(id)) sm.delete(id);
       } catch {
@@ -407,10 +410,12 @@ export async function buildAt(name, dim, origin, facing, extra) {
   building.add(name);
   try {
     const old = placesOf()[name];
-    if (old?.b && old.s && (old.x !== o.x || old.y !== o.y || old.z !== o.z || old.dim !== dim.id || (old.f ?? 0) !== facing)) restore(old);
-    let snap;
+    const same = !!old?.b && !!old.s?.length && old.x === o.x && old.y === o.y && old.z === o.z && old.dim === dim.id && (old.f ?? 0) === facing;
+    if (old?.b && old.s && !same) restore(old);
+    // Built again on the same spot: the terrain from before the first build stays the one to put back.
+    let snap = same ? old?.s : undefined;
     try {
-      snap = snapshot(name, dim, box);
+      snap ??= snapshot(name, dim, box);
     } catch (e) {
       return `the terrain couldn't be saved (${e})`;
     }
@@ -487,7 +492,7 @@ function search(name, rec, relaxed) {
           else if (site.reason === "not loaded") {
             unloaded++;
             continue;
-          } else if (relaxed && prefabInfo(pfOf(name))?.site !== "deep") y = PREFABS[name]?.y ?? groundAt(dim, x, z); // underground and sky places keep their height
+          } else if (relaxed && site.reason !== "water" && site.reason !== "lava" && prefabInfo(pfOf(name))?.site !== "deep") y = PREFABS[name]?.y ?? groundAt(dim, x, z, undefined, false, prefabInfo(pfOf(name))?.site === "water"); // underground and sky places keep their height; land places never on a lake or sea bed
         } catch {
           unloaded++;
           continue;

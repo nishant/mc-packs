@@ -3,7 +3,7 @@
 // Each card is data (id, name, rarity, kind, the line on the card) and a small handler. A handler
 // returns false when it can't happen here (no safe spot, no mob near...), and the deck draws again;
 // a string is shown under the card's text.
-import { EquipmentSlot, ItemStack, Player, system, WeatherType, world } from "@minecraft/server";
+import { EquipmentSlot, ItemLockMode, ItemStack, Player, system, WeatherType, world } from "@minecraft/server";
 import { arena, inDeckArena, rainbowName, spore, wish } from "./events.js";
 import {
   addCrowns,
@@ -432,7 +432,8 @@ export const CARDS = [
       if (!inv) return false;
       const slot = player.selectedSlotIndex;
       const item = inv.getItem(slot);
-      if (!item) return false;
+      // A locked item (the Realm Configuration item, another pack's tool) stays: it can't be dropped.
+      if (!item || item.lockMode !== ItemLockMode.none) return false;
       inv.setItem(slot, undefined);
       // A few blocks away, so it isn't picked straight back up, and where the player can see it: never
       // in another cave below a mine tunnel or on the surface above it.
@@ -451,13 +452,16 @@ export const CARDS = [
     run: ({ player }) => {
       const inv = player.getComponent("minecraft:inventory")?.container;
       if (!inv) return false;
-      const items = [];
-      for (let i = 0; i < 9; i++) items.push(inv.getItem(i));
+      // An item locked in its slot stays where it is; the rest are shuffled.
+      /** @type {number[]} */
+      const slots = [];
+      for (let i = 0; i < 9; i++) if (inv.getItem(i)?.lockMode !== ItemLockMode.slot) slots.push(i);
+      const items = slots.map((i) => inv.getItem(i));
       if (items.filter((x) => x).length < 2) return false;
       const before = items.map((x) => x?.typeId ?? "").join();
       let shuffled = items;
       for (let t = 0; t < 5 && shuffled.map((x) => x?.typeId ?? "").join() === before; t++) shuffled = [...items].sort(() => Math.random() - 0.5);
-      shuffled.forEach((it, i) => inv.setItem(i, it));
+      shuffled.forEach((it, k) => inv.setItem(slots[k], it));
       sound(player, "random.pop", 1.4);
     },
   },
@@ -747,7 +751,7 @@ export const CARDS = [
       const slots = [];
       for (let i = 0; i < inv.size; i++) {
         const it = inv.getItem(i);
-        if (!it || it.nameTag || /shulker_box|bundle/.test(it.typeId)) continue;
+        if (!it || it.nameTag || it.lockMode !== ItemLockMode.none || /shulker_box|bundle/.test(it.typeId)) continue;
         if (it.getComponent("minecraft:enchantable")?.getEnchantments().length) continue;
         slots.push(i);
       }
@@ -1598,16 +1602,20 @@ export const CARDS = [
     run: ({ player }) => {
       const inv = player.getComponent("minecraft:inventory")?.container;
       if (!inv) return false;
-      const items = [];
-      for (let i = 0; i < inv.size; i++) items.push(inv.getItem(i));
+      // An item locked in its slot stays where it is; the rest are shuffled.
+      /** @type {number[]} */
+      const slots = [];
+      for (let i = 0; i < inv.size; i++) if (inv.getItem(i)?.lockMode !== ItemLockMode.slot) slots.push(i);
+      const items = slots.map((i) => inv.getItem(i));
       if (items.filter((x) => x).length < 2) return false;
       for (let i = items.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
       }
       // Make sure the hotbar changed at all.
-      if (items.slice(0, 9).every((it, i) => (it?.typeId ?? "") === (inv.getItem(i)?.typeId ?? ""))) items.push(...items.splice(0, 9));
-      items.forEach((it, i) => inv.setItem(i, it));
+      const hot = slots.filter((s) => s < 9).length;
+      if (items.slice(0, hot).every((it, k) => (it?.typeId ?? "") === (inv.getItem(slots[k])?.typeId ?? ""))) items.push(...items.splice(0, hot));
+      items.forEach((it, k) => inv.setItem(slots[k], it));
       sound(player, "random.pop", 0.6);
     },
   },
@@ -1694,7 +1702,7 @@ export const CARDS = [
     prep: (p) => testSword(p),
     run: ({ player }) => {
       const { inv, slot, item } = held(player);
-      if (!inv || !item || item.maxAmount > 1) return false;
+      if (!inv || !item || item.maxAmount > 1 || item.lockMode !== ItemLockMode.none) return false;
       const cursed = enchant(item, [["minecraft:vanishing", 1]]);
       if (!cursed) return false;
       const name = pick(["Wet Noodle", "Mister Pokey", "The Disappointment", "Soggy Biscuit", "Tickle Stick", "Old Faithless"]);

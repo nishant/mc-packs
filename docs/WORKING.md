@@ -42,6 +42,7 @@ Over the last 20 PRs, `docs/PACKS.md` changed in 19, a manifest in 16, the help 
 - Dynamic properties are per pack: a property one pack writes is invisible to every other pack (and to the test pack). Packs may only share state through tags, scoreboards and script events.
 - `entityDie` never fires for `minecraft:npc` on BDS 1.26 (only `entityRemove`, which also fires on chunk unload).
 - `getBlockBelow` skips water unless `includeLiquidBlocks: true`; an operator flying over the sea gets the sea floor.
+- `getTopmostBlock` skips water: with water over stone it returns the stone (checked on BDS 1.26), so a lake or sea bed looks like dry ground. Look at the block above it before putting anything on the "surface" (`waterOver()` in calendar_bp, `dryGround()` in rain_bp).
 - `getTopmostBlock` on a column that isn't ticking can return a block (at y 319) that throws `LocationInUnloadedChunkError` as soon as you read it (`isLiquid`, `typeId`): wrap the reads too, not only the call (wander_bp's spot finder).
 
 ## Audit pass (PR #38: every pack once; what mattered)
@@ -54,7 +55,7 @@ One audit agent per group, in its own worktree, with a findings cap and the rule
 - Every behavior fix got a scenario that fails before and passes after (40 new ones in `tools/test-bds/examples/`, named `<pack>-<topic>.js`, run command in the header). Five scenarios need a hook copy of a pack (`maps-cleanup`, `maps-leave`, `rainbow-race`, `title-hold`, `maps-hunt`): the header says how to make it.
 - Harness limits met: simulated players load no chunks (removing a ticking area before teleporting looks like the player leaving); their empty-hand taps and `interactWithBlock` on containers fire no interact events; a rejoin gives a new `player.id`, so per-id saved data can't be tested across a leave; `spawnParticle` isn't relayed. Two parallel runs on 4 cores make timing-sensitive scenarios flaky: give them `--timeout` headroom and `since` on waits.
 
-Open items (not fixed, with why; see the PR body for the full list): `realm:actionbar` sent without `from` by about 17 packs (harmless until a listener needs it); steady action bar lines that listen hold each other off (first drawn wins); Quick Stack ignores Land Claims and Chest Finder shows locked chests (needs a cross-pack signal); `rain_rp` sounds have no `--check` (needs ffmpeg); `hud_rp` reuses `translucent_rp`'s icon; the `platypus.js` scenario is timing-sensitive under load.
+Open items (not fixed, with why; see the PR body for the full list): steady action bar lines that listen hold each other off (first drawn wins; a fix needs a priority field in five packs); `rain_rp` sounds have no `--check` (needs ffmpeg); `hud_rp` reuses `translucent_rp`'s icon; the `platypus.js` and `wander-walk.js` scenarios are timing-sensitive under load. Fixed in the October review: `realm:actionbar` without `from` (every pack sends it now), Quick Stack and Chest Finder against claims and locks (`realm:access_check`).
 
 ## Keeping a session cheap
 

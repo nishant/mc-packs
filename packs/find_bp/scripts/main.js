@@ -374,22 +374,48 @@ function rowText(h, player) {
   return `${title(h.entry.b)} - ${items}${more}\n§8${where} - seen ${ago(Date.now() - h.entry.at)}`;
 }
 
+/**
+ * Runs a generator as a job (a few steps per tick) and resolves with what it returns.
+ * @template T @param {Generator<void, T, void>} gen @returns {Promise<T>}
+ */
+function job(gen) {
+  return new Promise((resolve, reject) => {
+    system.runJob(
+      (function* () {
+        try {
+          resolve(yield* gen);
+        } catch (e) {
+          reject(e);
+        }
+      })()
+    );
+  });
+}
+
 /** @param {Player} player @param {string} query */
-function* search(player, query) {
+async function search(player, query) {
   const q = normalize(query);
-  yield* liveScan(player);
+  await job(liveScan(player));
   if (!player.isValid) return;
   const maxResults = get("maxResults");
-  const hits = stillThere(matches(player, q).slice(0, maxResults * 2)).slice(0, maxResults);
+  const found = stillThere(matches(player, q).slice(0, maxResults * 2));
+  // Containers this player can't open (someone else's lock or claim) aren't shown to them.
+  const closed = await closedSpots(player.id, found.map((h) => [`minecraft:${h.dim}`, h.x, h.y, h.z]));
+  if (!player.isValid) return;
+  const hits = found.filter((_, i) => !closed.has(i)).slice(0, maxResults);
   if (!hits.length) {
-    player.sendMessage(`§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${get("liveScanRadius")} blocks.`);
+    player.sendMessage(
+      closed.size
+        ? `§7Only containers you can't open (locked, or in someone else's claim) have "${q}".`
+        : `§7No remembered container has "${q}". Containers are remembered once someone opens them, or when you search within ${get("liveScanRadius")} blocks.`
+    );
     return;
   }
   const form = new ActionFormData()
     .title(`Find: ${q}`)
     .body(`${hits.length === maxResults ? `The nearest ${hits.length}` : hits.length} container${hits.length === 1 ? "" : "s"}, nearest first. Tap one to mark it.`);
   for (const h of hits) form.button(rowText(h, player));
-  system.run(() => pick(player, form, hits).catch((e) => console.warn(`[find] ${e}`)));
+  await pick(player, form, hits);
 }
 
 /** @param {Player} player @param {ActionFormData} form @param {Hit[]} hits */
@@ -467,26 +493,90 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       if (!query) {
         return { status: CustomCommandStatus.Failure, message: "Hold the item, or name it: /realm:find iron" };
       }
-      system.run(() =>
-        system.runJob(
-          (function* () {
-            try {
-              yield* search(player, query);
-            } catch (e) {
-              console.warn(`[find] ${e}`);
-            }
-          })()
-        )
-      );
+      system.run(() => search(player, query).catch((e) => console.warn(`[find] ${e}`)));
       return { status: CustomCommandStatus.Success };
     }
   );
 });
 
+// ---------------------------------------------------------------------------
+// Access checks: which containers a player may not open, asked across packs
+// ---------------------------------------------------------------------------
+//   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }  (at most 40 spots per message)
+//   realm:access_check_result { id, from, closed: [i, ...] }                 (indexes into that message's spots)
+// Answered by every pack that keeps players out of blocks: Quick Stack & Sort (someone else's locked container) and
+// Land Claims (someone else's claim). This pack only asks.
+
+const ACCESS_CHUNK = 40;
+/** Packs that have answered an access check: an ask waits for each of them. @type {Set<string>} */
+const accessResponders = new Set();
+/** @type {Map<string, { got: Set<string>, offset: number, closed: Set<number>, check: () => void }>} */
+const accessAsks = new Map();
+let accessNext = 1;
+
+/**
+ * The indexes of these spots the player may not open, as the packs that answer access checks say. Waits until
+ * every pack that has answered before answers (2 s at most), or 5 ticks when none has yet.
+ * @param {string} playerId @param {[string, number, number, number][]} spots
+ * @returns {Promise<Set<number>>}
+ */
+function closedSpots(playerId, spots) {
+  return new Promise((resolve) => {
+    /** @type {Set<number>} */
+    const closed = new Set();
+    if (!spots.length) return resolve(closed);
+    const waitFor = [...accessResponders];
+    /** @type {string[]} */
+    const ids = [];
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      for (const id of ids) accessAsks.delete(id);
+      resolve(closed);
+    };
+    const check = () => {
+      if (waitFor.length && ids.every((id) => waitFor.every((r) => accessAsks.get(id)?.got.has(r)))) finish();
+    };
+    for (let offset = 0; offset < spots.length; offset += ACCESS_CHUNK) {
+      const id = `find${accessNext++}`;
+      ids.push(id);
+      accessAsks.set(id, { got: new Set(), offset, closed, check });
+      system.sendScriptEvent("realm:access_check", JSON.stringify({ id, player: playerId, spots: spots.slice(offset, offset + ACCESS_CHUNK) }));
+    }
+    system.runTimeout(finish, waitFor.length ? 40 : 5);
+  });
+}
+
+/** @param {string} message a realm:access_check_result */
+function accessResult(message) {
+  const m = JSON.parse(message);
+  if (!m || typeof m.from !== "string") return;
+  const from = m.from.slice(0, 32);
+  accessResponders.add(from);
+  const ask = accessAsks.get(String(m.id));
+  if (!ask) return;
+  ask.got.add(from);
+  if (Array.isArray(m.closed)) for (const i of m.closed) if (Number.isInteger(i) && i >= 0 && i < ACCESS_CHUNK) ask.closed.add(ask.offset + i);
+  ask.check();
+}
+
+// Learn early who answers access checks, so the first search doesn't wait.
+world.afterEvents.worldLoad.subscribe(() =>
+  system.runTimeout(() => system.sendScriptEvent("realm:access_check", JSON.stringify({ id: "hello", player: "", spots: [] })), 60)
+);
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "find_bp");
+    else if (id === "realm:access_check_result") {
+      try {
+        accessResult(message);
+      } catch (e) {
+        console.warn(`[find] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

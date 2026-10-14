@@ -67,7 +67,7 @@ function harvest(player, block, crop) {
   } else {
     block.setType("minecraft:air");
     // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
-    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "harvest_bp" }));
     player.onScreenDisplay.setActionBar("§7No seed to replant it");
   }
   block.dimension.playSound(crop.sound, center);

@@ -217,7 +217,7 @@ function chat(player, text) {
   const code = partyOf(player.id);
   if (!code) return player.sendMessage("§cYou're not in a party. Start one with /realm:party");
   const msg = text.replace(/§/g, "").trim().slice(0, get("chatMaxLength"));
-  if (!msg) return;
+  if (!msg) return player.sendMessage('§cType a message: /realm:party_chat "see you there"');
   tell(code, `§d[Party] ${player.name}: §f${msg}`);
 }
 

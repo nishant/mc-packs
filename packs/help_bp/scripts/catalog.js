@@ -138,7 +138,7 @@ export const PACKS = [
     "folder": "welcome_bp",
     "topic": "welcome",
     "name": "Welcome Message",
-    "summary": "Shows a popup when a player joins the Realm. Operators can edit the popup in-game.",
+    "summary": "Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. Operators can edit the popup in-game.",
     "steps": [
       {
         "text": "Join the realm. The welcome popup appears after about 2 seconds; tap its button (§eLet's go!§r by default) to close it.",
@@ -1000,7 +1000,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r place a chest or barrel for the donations, look at it, run §e/realm:goals§r and tap §eAdd a goal§r: the item you hold is filled in; type the amount and, if you like, a name. Or run §e/realm:goals_add <item> <amount> [name]§r, for example §e/realm:goals_add cobblestone 10000 Colosseum§r. The menu's §eSettings§r button points to §e/realm:config§r -> Community Goals. In a goal's page, §lMark finished§r stops donations early, §lLink to the block I'm looking at§r moves the goal to another container (one that no other open goal collects into), and §lRemove this goal§r deletes it (the items stay in its chest).",
+        "text": "§lOperators:§r place a chest or barrel for the donations, look at it, run §e/realm:goals§r and tap §eAdd a goal§r: the item you hold is filled in; type the amount and, if you like, a name. Or run §e/realm:goals_add <item> <amount> [name]§r, for example §e/realm:goals_add cobblestone 10000 Colosseum§r. The menu's §eSettings§r button points to §e/realm:config§r -> Community Goals. In a goal's page, §lMark finished§r stops donations early, §lLink to the block I'm looking at§r moves the goal to another container (one that no other open goal collects into), and §lRemove this goal§r deletes it (the items stay in its chest). After each, the menu comes back: the goals list, or the goal's page after linking.",
         "ops": true
       }
     ],
@@ -1170,7 +1170,7 @@ export const PACKS = [
         "usage": "/realm:npc_remove",
         "ops": false,
         "who": "Operators",
-        "text": "Removes the nearest townsfolk within 5 blocks (§eremoveRange§r) and forgets its spot"
+        "text": "Removes the nearest townsfolk within 5 blocks (default 5, §eremoveRange§r) and forgets its spot, after a §lRemove§r / §lCancel§r confirmation (the skin picked for it is lost)"
       },
       {
         "usage": "/realm:npc_home <id>",
@@ -2777,7 +2777,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lTowns and claims§r lists the protected areas other packs share (towns with §lProtect from world events§r, claims while §lProtect claims from world events§r is on), read only, with their source; §lShow outline§r works for them too. §lShow nearby outlines§r traces every zone whose edge is within 64 blocks of you.",
+        "text": "§lTowns and claims§r lists the protected areas other packs share (towns with §lProtect from world events§r, claims while §lProtect claims from world events§r is on), read only, with their source; §lShow outline§r works for them too, and operators get §lTeleport (operator)§r to the center's surface (the top of the water over a lake or the sea). §lShow nearby outlines§r traces every zone whose edge is within 64 blocks of you.",
         "ops": false
       },
       {

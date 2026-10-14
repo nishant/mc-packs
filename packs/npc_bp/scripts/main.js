@@ -397,7 +397,8 @@ function auditAll() {
   }
 }
 
-// An NPC that dies anyway (/kill) is spawned again at once, if anyone is around.
+// An NPC that dies anyway (/kill) is spawned again at the next missing check, if anyone is around. (BDS 1.26 never
+// sends entityDie for minecraft:npc, so there the ordinary missing check, about 6 seconds, brings it back.)
 world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
   try {
     if (deadEntity.typeId !== NPC_TYPE) return;
@@ -1380,12 +1381,23 @@ function addNpc(player, id) {
   return undefined;
 }
 
-/** @param {Player} player */
-function removeNpc(player) {
+/** Removes the nearest townsfolk, after a confirmation (its skin can't be put back). @param {Player} player */
+async function removeNpc(player) {
   const [entity] = player.dimension.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG], location: player.location, maxDistance: CONFIG.removeRange, closest: 1 });
   if (!entity) return player.sendMessage(`§cNo townsfolk within ${CONFIG.removeRange} blocks.`);
   const id = idOf(entity);
   const t = id ? folk.get(id) : undefined;
+  const who = t ? plainName(t) : "that NPC";
+  const res = await show(
+    player,
+    new ActionFormData()
+      .title("Remove townsfolk?")
+      .body(`Remove ${who}, ${Math.round(dist(entity.location, player.location))} blocks from you? Their post, home and lunch and evening spots are forgotten, and the skin picked for them is lost: /realm:npc_add ${id ?? "<id>"} places them again with the default skin.`)
+      .button("Remove")
+      .button("Cancel"),
+  );
+  if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+  if (!entity.isValid) return player.sendMessage(`§c${who} isn't loaded any more: nothing was removed.`);
   const before = list.length;
   list = list.filter((r) => r.id !== id);
   if (list.length !== before) save();

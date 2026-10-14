@@ -33,8 +33,17 @@ const pages = new Map(
   ]),
 );
 
+/** Mobs whose id isn't their name in the game (entries keep the id; only the name shown changes). */
+const MOB_NAMES = /** @type {Record<string, string>} */ ({
+  villager_v2: "Villager",
+  zombie_villager_v2: "Zombie Villager",
+  evocation_illager: "Evoker",
+  zombie_pigman: "Zombified Piglin",
+});
+
 /** "minecraft:cave_spider" -> "Cave Spider". @param {string} id */
 const prettyId = (id) =>
+  MOB_NAMES[id.replace(/^[a-z0-9_.-]+:/, "")] ??
   id
     .replace(/^[a-z0-9_.-]+:/, "")
     .split("_")
@@ -317,9 +326,23 @@ function explore(player) {
       break;
     }
   }
-  if (overworld && nearSurface && top && top.typeId === "minecraft:water") {
-    const deep = blockAt(dim, { x, y: top.location.y - 8, z });
-    if (deep && deep.typeId === "minecraft:water") addEntry(player, "places", "ocean");
+  // The ocean: deep water at the player's height. getTopmostBlock skips water (it answers the sea bed), so
+  // climb from the bed to the water's surface.
+  if (overworld && top) {
+    let s = top;
+    try {
+      for (let i = 0; i < 64; i++) {
+        const up = s.above();
+        if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+        s = up;
+      }
+      const surface = s.location.y;
+      const near = surface - y >= -3 && surface - y <= 16;
+      const deep = blockAt(dim, { x, y: surface - 8, z });
+      if (s !== top && near && /water/.test(s.typeId) && deep && /water|kelp|seagrass|bubble_column/.test(deep.typeId)) addEntry(player, "places", "ocean");
+    } catch {
+      // unloaded above
+    }
   }
 
   // Weather you're out in (or at least not deep underground for).
