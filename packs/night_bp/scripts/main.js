@@ -304,6 +304,7 @@ const STORY_COOLDOWN = 60 * 20; // ticks: one story shooting star per player a m
 const STORY_NEAR = 64; // other Overworld players this close see it too
 /** Tick of the last story shooting star, by the requested player's id. @type {Map<string, number>} */
 const storyStars = new Map();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => storyStars.delete(playerId));
 
 /** @param {unknown} v @param {number} max */
 const optText = (v, max) => v === undefined || (typeof v === "string" && v.length <= max);
