@@ -38,7 +38,7 @@ export const FAVORS = [
     id: "mara_survey_north",
     npc: "mara",
     label: "A Marker to the North",
-    objective: { type: "reach", label: "Stand on Mara's survey marker, 350 blocks north", offset: { x: 0, z: -350 }, mark: "Survey marker", radius: 20 },
+    objective: { type: "reach", label: "Stand on Mara's survey marker, {far:0,-350} blocks north", offset: { x: 0, z: -350 }, mark: "Survey marker", radius: 20 },
     reward: { levels: 2, crowns: 30, items: [{ item: "minecraft:bread", amount: 4 }] },
     lines: [
       "There's a blank patch north of town the size of my hand. I refuse to have a blank patch the size of my hand. Go stand in it so I can draw it.",
@@ -71,7 +71,7 @@ export const FAVORS = [
     id: "mara_survey_southwest",
     npc: "mara",
     label: "Check a Bearing",
-    objective: { type: "reach", label: "Find Mara's old bearing stake, 350 blocks south-west", offset: { x: -250, z: 250 }, mark: "Bearing stake", radius: 20 },
+    objective: { type: "reach", label: "Find Mara's old bearing stake, {far:-250,250} blocks south-west", offset: { x: -250, z: 250 }, mark: "Bearing stake", radius: 20 },
     reward: { levels: 2, crowns: 35 },
     lines: [
       "Fenn drew a stake south-west of town, and my numbers say it should be twenty blocks east of where he put it. One of us is wrong. I'd like it to be him.",
@@ -268,7 +268,7 @@ export const FAVORS = [
     id: "quill_package",
     npc: "quill",
     label: "A Small Package",
-    objective: { type: "reach", label: "Find Quill's drop spot, 450 blocks east", offset: { x: 450, z: 60 }, mark: "Quill's drop spot", radius: 16 },
+    objective: { type: "reach", label: "Find Quill's drop spot, {far:450,60} blocks east", offset: { x: 450, z: 60 }, mark: "Quill's drop spot", radius: 16 },
     reward: { levels: 2, crowns: 40 },
     lines: [
       "A friend of mine left a little something under a rock out east. Nothing illegal. Nothing very illegal. Just go stand there so my friend knows it arrived, would you?",

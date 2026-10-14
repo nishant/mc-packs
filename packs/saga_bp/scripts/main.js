@@ -35,7 +35,9 @@ import {
 } from "./objectives.js";
 import { autoTick, campUpkeep, listPlaces, placeLabel, placesMenu, placesOf, placesReadyAll, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
+import { initFar } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
+import { FAVORS, WANDERERS, WANDER_TEMPLATES } from "./stories/index.js";
 import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, online, send } from "./util.js";
@@ -583,6 +585,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // ---------------------------------------------------------------------------
 
 world.afterEvents.worldLoad.subscribe(() => {
+  initFar(STORIES, FAVORS, WANDERERS, WANDER_TEMPLATES);
   loadWeather();
   // Story characters and champions don't outlive a restart: scenes spawn new ones when needed.
   sweep();

@@ -81,13 +81,13 @@ const WARDENS_OATH = {
       id: "outpost",
       title: "The Outpost on the Ridge",
       intro: [
-        `${R}A trader came in this morning with two arrows in his cart and none in himself, by pure luck. Pillagers. They've put up an outpost on a ridge to the southwest, about eight hundred blocks out.`,
+        `${R}A trader came in this morning with two arrows in his cart and none in himself, by pure luck. Pillagers. They've put up an outpost on a ridge to the southwest, about {far:-640,520} blocks out.`,
         `${R}An outpost that close means raids by the next moon. I'm not waiting for the next moon.`,
         `${R}Their sergeant is a nasty piece of work called Vell. Crossbow, good aim, worse temper. Hold the yard against his garrison until he comes down to see what the noise is. Then put him down.`,
         `${R}Take a horse if you have one. Take food either way. And if they're flying a banner, I want it for my wall.`,
       ],
       objectives: [
-        { type: "reach", label: "Ride to the pillager outpost (about 830 blocks southwest)", offset: OUTPOST, mark: "Pillager outpost", radius: 32 },
+        { type: "reach", label: "Ride to the pillager outpost (about {far:-640,520} blocks southwest)", offset: OUTPOST, mark: "Pillager outpost", radius: 32 },
         {
           type: "defend",
           label: "Fight off the outpost's garrison",
@@ -125,7 +125,7 @@ const WARDENS_OATH = {
       ],
       reward: { levels: 4, crowns: 45, items: [{ item: "minecraft:iron_ingot", amount: 6 }] },
       rep: [{ guild: "wardens", amount: 10 }],
-      hint: "The outpost is about 830 blocks southwest of spawn; the tracker points the way, and a horse saves you an hour of walking. Bring a shield, food and arrows: the garrison fights in two waves, then Vell comes down with three more crossbows.",
+      hint: "The outpost is about {far:-640,520} blocks southwest of spawn; the tracker points the way, and a horse saves you an hour of walking. Bring a shield, food and arrows: the garrison fights in two waves, then Vell comes down with three more crossbows.",
     },
     {
       id: "long_watch",
@@ -182,7 +182,7 @@ const WARDENS_OATH = {
       title: "Embers on the Road",
       intro: [
         `§eReyes§r has not slept. Her map is covered in new red marks.\n\n${R}Orrin's mother came by. She brought me bread. His bread; she said he'd left a batch rising. I didn't know what to say to her, so I said I would make it count.`,
-        `${R}The raiders who hit the tower burned a farm on their way out, about four hundred blocks northeast. Nobody hurt there, thank the stars. But they left in a hurry, and people in a hurry leave things behind.`,
+        `${R}The raiders who hit the tower burned a farm on their way out, about {far:260,-310} blocks northeast. Nobody hurt there, thank the stars. But they left in a hurry, and people in a hurry leave things behind.`,
         `${R}Search the farm. Find out who leads them. Then find where they went. Do not engage. I mean that one all the way.`,
       ],
       objectives: [
@@ -213,7 +213,7 @@ const WARDENS_OATH = {
         codex: { id: "red_hand", title: "The Red Hand", text: "Captain Marrow, a raider who marks his raids with red handprints and keeps a tally of everyone he kills in a neat little book. Reyes fought him once, years ago. He is the one who sent the raiders to the Ruined Watchtower." },
       },
       rep: [{ guild: "wardens", amount: 5 }],
-      hint: "The burned farm is about 400 blocks northeast of spawn. Clues glow faintly: tap near each one. Then the embers lead about 360 blocks further northeast; stay close, or they stop and wait for you.",
+      hint: "The burned farm is about {far:260,-310} blocks northeast of spawn. Clues glow faintly: tap near each one. Then the embers lead about {leg:260,-310,520,-560} blocks further northeast; stay close, or they stop and wait for you.",
     },
     {
       id: "red_hand",
@@ -253,7 +253,7 @@ const WARDENS_OATH = {
       ],
       reward: { levels: 5, crowns: 60, items: [{ item: "minecraft:golden_apple", amount: 1 }] },
       rep: [{ guild: "wardens", amount: 15 }],
-      hint: "The raider camp is about 750 blocks northeast of spawn, where the ember trail ended. Marrow only comes at night. At half health he calls five more raiders: fight with your back to a wall and keep a golden apple ready.",
+      hint: "The raider camp is about {far:520,-560} blocks northeast of spawn, where the ember trail ended. Marrow only comes at night. At half health he calls five more raiders: fight with your back to a wall and keep a golden apple ready.",
     },
     {
       id: "orrins_stone",
@@ -356,7 +356,7 @@ const SMUGGLERS_RUN = {
         { text: `§eQuill§r is thinner than you remember, with a gray jail pallor under the charm. He sees you and his smile goes flat.\n\n${Q}Well. The one who turned me in. Reyes lets me out by day now, on a leash she calls parole; nights I'm back in the cell. Good behavior. I behaved extremely well, out of spite.`, when: EXPOSED },
         { text: `${Q}I'd tell you to leave, but you're the only person in town who can sneak, fight, and doesn't owe Bram money. So. Business. No hugging.`, when: EXPOSED },
         `${Q}Raiders hit one of my wagons on the north road. They took one crate. One, out of twelve. You know why? Because it's the crate with money sewn into the lining. Somebody talked.`,
-        `${Q}They're camped about eight hundred blocks northeast. Walk in, reach the crate, walk out. If they see you, they burn it; I've met these people. Crouch, stay behind things, and be a shadow with good manners.`,
+        `${Q}They're camped about {far:560,-640} blocks northeast. Walk in, reach the crate, walk out. If they see you, they burn it; I've met these people. Crouch, stay behind things, and be a shadow with good manners.`,
         `${Q}Then lie low for a night. Sleep somewhere. Anywhere. Thieves who brag at the inn on the same night get caught. I would know. I'm usually the one who sells them out.`,
       ],
       objectives: [
@@ -389,13 +389,13 @@ const SMUGGLERS_RUN = {
       ],
       reward: { levels: 3, crowns: 35 },
       rep: [{ guild: "wayfarers", amount: 5 }],
-      hint: "The raider camp is about 850 blocks northeast of spawn (a horse helps). Crouch for the last stretch: guards see you from 14 blocks walking but only 5 sneaking. Come in from behind cover. If you're spotted, you start over at the edge. Then sleep in any bed.",
+      hint: "The raider camp is about {far:560,-640} blocks northeast of spawn (a horse helps). Crouch for the last stretch: guards see you from 14 blocks walking but only 5 sneaking. Come in from behind cover. If you're spotted, you start over at the edge. Then sleep in any bed.",
     },
     {
       id: "borrowed_map",
       title: "The Borrowed Map",
       intro: [
-        `${Q}The coin was going somewhere. The raiders were paid to carry it to an illager lodge out west, about nine hundred blocks. The illagers keep a map room there, and the Choir pays them to keep it.`,
+        `${Q}The coin was going somewhere. The raiders were paid to carry it to an illager lodge out west, about {far:-820,-480} blocks. The illagers keep a map room there, and the Choir pays them to keep it.`,
         `${Q}I need that map. Not to steal. To borrow. You'll copy it in your head and leave it where it was, and nobody will ever know. That's the difference between stealing and borrowing.`,
         `${Q}Now, illagers. Clever folk, terrible eyes. Wear a carved pumpkin on your head and to them you're a short, round fellow with a lovely complexion. They'll only notice you if you walk right into them.`,
         { text: `${Q}Yes, I know how it sounds. Consider it a small fee for the jail. You owe me one ridiculous hat. Wear it.`, when: EXPOSED },
@@ -429,7 +429,7 @@ const SMUGGLERS_RUN = {
         codex: { id: "choir_coast", title: "The Choir's Coast Map", text: "A map kept in an illager lodge for the Gray Choir. Every cove on the coast is marked with a small gray bell. The Choir pays outsiders to carry its coin and keep its secrets, and it knows more about Quill's business than Quill would like." },
       },
       rep: [{ guild: "wayfarers", amount: 5 }],
-      hint: "The illager lodge is about 950 blocks west-northwest of spawn; ride a horse. Carve a pumpkin with shears and wear it. With it on, the keepers only see you from 4 blocks: walk wide around them to the map room. If they spot you, they attack.",
+      hint: "The illager lodge is about {far:-820,-480} blocks west-northwest of spawn; ride a horse. Carve a pumpkin with shears and wear it. With it on, the keepers only see you from 4 blocks: walk wide around them to the map room. If they spot you, they attack.",
     },
     {
       id: "honey_run",
@@ -468,7 +468,7 @@ const SMUGGLERS_RUN = {
       ],
       reward: { levels: 4, crowns: 45, items: [{ item: "minecraft:honeycomb", amount: 6, name: "Hush Money", lore: ["Sticky.", "Don't ask."] }] },
       rep: [{ guild: "wayfarers", amount: 10 }],
-      hint: "Any honey bottles count: use glass bottles on a full beehive. Ride any boat 300 blocks in total. Drowned are thickest at night in deep water; the three minutes start with the first one. Drowned Rock is about 870 blocks south-southeast of spawn: row along the coast and walk the last stretch if you have to.",
+      hint: "Any honey bottles count: use glass bottles on a full beehive. Ride any boat 300 blocks in total. Drowned are thickest at night in deep water; the three minutes start with the first one. Drowned Rock is about {far:420,760} blocks south-southeast of spawn: row along the coast and walk the last stretch if you have to.",
     },
     {
       id: "inspector",
@@ -839,7 +839,7 @@ const EDGES_OF_MAP = {
         `${M}So. Five far stations, one in each direction, each in a different kind of land. Then the deep sea. Then, and I want you to hear me say this calmly: the End.`,
         { text: `${M}Your map in the square has travelers asking me what's past the edges. I'm tired of saying 'nobody knows'. I'm a cartographer. Knowing is the job.`, when: SHARED },
         { text: `${M}We kept Fenn's wild corners wild, and I don't regret it. But keeping a place wild isn't the same as never seeing it. I want to see them. Then I'll decide what goes on paper.`, when: KEPT },
-        `${M}Lesson one, because people got lost on my last job: these stations are a thousand blocks out and more. Don't walk. Tame a horse and learn to ride it. The tracker points the way the whole time.`,
+        `${M}Lesson one, because people got lost on my last job: these stations are {far:1300,60} blocks out and more. Don't walk. Tame a horse and learn to ride it. The tracker points the way the whole time.`,
       ],
       objectives: [
         { type: "tame", label: "Tame a horse, donkey or mule", mobs: ["minecraft:horse", "minecraft:donkey", "minecraft:mule"], count: 1 },
@@ -860,16 +860,16 @@ const EDGES_OF_MAP = {
       id: "sand_snow",
       title: "Sand and Snow",
       intro: [
-        `${M}East station first: about thirteen hundred blocks due east. If the land is honest there's desert out there. If it isn't, keep your eyes open on the way; deserts are big and hard to miss.`,
+        `${M}East station first: about {far:1300,60} blocks due east. If the land is honest there's desert out there. If it isn't, keep your eyes open on the way; deserts are big and hard to miss.`,
         `${M}Bring four pieces of cactus as proof. Cactus is the desert's handshake: prickly, but sincere.`,
-        `${M}Then north station, about thirteen hundred blocks due north. Snow country, I'd bet. Bring sixteen snowballs; a shovel on snow gets them fast. They'll keep. Your pack is colder than you think.`,
-        `${M}That's well over two thousand blocks of riding. Take your horse, food, and a bed: if night catches you out there, sleep in it. Cartographers who ride at night end up in ravines.`,
+        `${M}Then north station, about {far:-80,-1350} blocks due north. Snow country, I'd bet. Bring sixteen snowballs; a shovel on snow gets them fast. They'll keep. Your pack is colder than you think.`,
+        `${M}That's a long day of riding. Take your horse, food, and a bed: if night catches you out there, sleep in it. Cartographers who ride at night end up in ravines.`,
         { text: `${M}And keep an eye out for the little places on the way: a shrine, an old camp, a stone with writing on it. Stop at one. Fenn always said the roadside tells you more than the road.`, when: { "pack:atlas_bp": "on" } },
       ],
       objectives: [
-        { type: "reach", label: "Survey the east station (about 1,300 blocks east)", offset: EAST, mark: "East station", radius: 40 },
+        { type: "reach", label: "Survey the east station (about {far:1300,60} blocks east)", offset: EAST, mark: "East station", radius: 40 },
         { type: "collect", label: "Have 4 cactus (deserts and badlands)", item: "minecraft:cactus", count: 4 },
-        { type: "reach", label: "Survey the north station (about 1,350 blocks north)", offset: NORTH, mark: "North station", radius: 40 },
+        { type: "reach", label: "Survey the north station (about {far:-80,-1350} blocks north)", offset: NORTH, mark: "North station", radius: 40 },
         { type: "collect", label: "Have 16 snowballs (snowy lands)", item: "minecraft:snowball", count: 16 },
         {
           type: "event",
@@ -898,13 +898,13 @@ const EDGES_OF_MAP = {
       ],
       reward: { levels: 4, crowns: 45 },
       rep: [{ guild: "wayfarers", amount: 10 }],
-      hint: "East station: about 1,300 blocks east of spawn. North station: about 1,350 blocks north. The tracker points to each; on a horse each trip takes a few minutes, and a boat is faster along rivers. The cactus and snowballs can come from anywhere: cactus grows in deserts and badlands, and a shovel on snow gives snowballs.",
+      hint: "East station: about {far:1300,60} blocks east of spawn. North station: about {far:-80,-1350} blocks north. The tracker points to each; on a horse each trip takes a few minutes, and a boat is faster along rivers. The cactus and snowballs can come from anywhere: cactus grows in deserts and badlands, and a shovel on snow gives snowballs.",
     },
     {
       id: "night_sounds",
       title: "Frogs in Three Voices",
       intro: [
-        `${M}Southwest station, about fifteen hundred blocks out. Mangrove swamp, if my guess is right: roots like a cage, mud like a grudge, frogs who judge you.`,
+        `${M}Southwest station, about {far:-1100,1050} blocks out. Mangrove swamp, if my guess is right: roots like a cage, mud like a grudge, frogs who judge you.`,
         `${M}I want four mangrove propagules, the little sprouts that hang under the leaves. And twelve sweet berries from any spruce forest on the way. Those are for me, not the map. I get hungry when I draw.`,
         `${M}And camp a night out there. Really camp. Sit out in the open after midnight and listen. Fenn wrote down the night sound of every land he slept in. I want to know if any of them have changed.`,
         `${M}Take a boat as well as the horse. Swamps are half water, and a horse in a swamp is just a very tall, very unhappy swimmer.`,
@@ -912,7 +912,7 @@ const EDGES_OF_MAP = {
         { text: `${M}Oh! And if the sky does anything strange while you're out, chase it. Northern lights, a rainbow's end, a twister, a storm with its own weather. Fenn never got to chart the sky. I want to beat him at something.`, when: { "pack:night_bp": "on" } },
       ],
       objectives: [
-        { type: "vigil", label: "Camp at the southwest station after midnight (90 seconds outdoors, about 1,500 blocks out)", offset: SOUTHWEST, mark: "Southwest station", radius: 40, seconds: 90, timeOfDay: [18000, 22500], outdoors: true },
+        { type: "vigil", label: "Camp at the southwest station after midnight (90 seconds outdoors, about {far:-1100,1050} blocks out)", offset: SOUTHWEST, mark: "Southwest station", radius: 40, seconds: 90, timeOfDay: [18000, 22500], outdoors: true },
         { type: "collect", label: "Have 4 mangrove propagules (mangrove swamps)", item: "minecraft:mangrove_propagule", count: 4 },
         { type: "collect", label: "Have 12 sweet berries (spruce forests)", item: "minecraft:sweet_berries", count: 12 },
         {
@@ -943,18 +943,18 @@ const EDGES_OF_MAP = {
       ],
       reward: { levels: 4, crowns: 40, items: [{ item: "minecraft:oak_boat", amount: 1 }] },
       rep: [{ guild: "wayfarers", amount: 5 }],
-      hint: "The southwest station is about 1,500 blocks from spawn, on the tracker. Ride there and bring a boat for the swamp. Arrive before midnight, then stay within 40 blocks of the station, in the open, for 90 seconds. Propagules hang under mangrove leaves; sweet berries grow on bushes in taiga.",
+      hint: "The southwest station is about {far:-1100,1050} blocks from spawn, on the tracker. Ride there and bring a boat for the swamp. Arrive before midnight, then stay within 40 blocks of the station, in the open, for 90 seconds. Propagules hang under mangrove leaves; sweet berries grow on bushes in taiga.",
     },
     {
       id: "lost_village",
       title: "The Village Nobody Mapped",
       intro: [
-        `${M}Fenn's map has a question mark about sixteen hundred blocks southeast. Beside it, in pencil: 'People? Ask before drawing.' I have never in my life seen that man ask before drawing.`,
+        `${M}Fenn's map has a question mark about {far:1150,1150} blocks southeast. Beside it, in pencil: 'People? Ask before drawing.' I have never in my life seen that man ask before drawing.`,
         `${M}Jungle out that way, I think. Bring ten cocoa beans; they grow on the trunks of the big jungle trees. Then go to the station and see who's there.`,
         `${M}Be polite. Be patient. If they don't want visitors, don't argue. Fenn had a rule: you can draw a road to people, but you can't draw them into wanting one.`,
       ],
       objectives: [
-        { type: "reach", label: "Survey the southeast station (about 1,600 blocks southeast)", offset: SOUTHEAST, mark: "Southeast station", radius: 40 },
+        { type: "reach", label: "Survey the southeast station (about {far:1150,1150} blocks southeast)", offset: SOUTHEAST, mark: "Southeast station", radius: 40 },
         { type: "collect", label: "Have 10 cocoa beans (jungles)", item: "minecraft:cocoa_beans", count: 10 },
         {
           type: "meet",
@@ -1000,19 +1000,19 @@ const EDGES_OF_MAP = {
         codex: { id: "fenn_ama", title: "Fenn and the Hidden Village", text: "Fifty years ago a lost young Aldous Fenn stumbled into a village far to the southeast. The villagers fed him. He mapped it, then burned the map in Elder Ama's fire: 'Some places are only safe if nobody knows the way.' He marked the spot on his own map with a single question mark." },
       },
       rep: [{ guild: "wayfarers", amount: 5 }],
-      hint: "The southeast station is about 1,600 blocks from spawn; ride, or follow a river by boat. Cocoa beans grow on jungle tree trunks (break the pods). Elder Ama appears at the station when you get close: talk to her there.",
+      hint: "The southeast station is about {far:1150,1150} blocks from spawn; ride, or follow a river by boat. Cocoa beans grow on jungle tree trunks (break the pods). Elder Ama appears at the station when you get close: talk to her there.",
     },
     {
       id: "mouth",
       title: "The Mouth",
       intro: [
-        `${M}West station is about fourteen hundred blocks out, and in front of it is a ravine Fenn called the Mouth. Long, deep, and full of things that like the dark.`,
+        `${M}West station is about {far:-1400,-120} blocks out, and in front of it is a ravine Fenn called the Mouth. Long, deep, and full of things that like the dark.`,
         `${M}Fenn crossed it on a rope. I'd rather you didn't. Build a bridge: twenty-four planks, any wood, good and solid. Travelers after you will thank you, and so will your knees.`,
         `${M}And the Mouth breathes at night. Things climb out of it. Fenn wrote 'six an hour, at least'. Clear some, so the bridge stays a bridge and doesn't become a buffet.`,
         { text: `${M}Fenn's notes say that on a still night you could hear the harbor bell from the west station, before the Long Storm drowned it. You made it ring again. Listen for it out there. Tell me if it carries.`, when: RUNG },
       ],
       objectives: [
-        { type: "reach", label: "Reach the west station (about 1,400 blocks west)", offset: WEST, mark: "West station", radius: 40 },
+        { type: "reach", label: "Reach the west station (about {far:-1400,-120} blocks west)", offset: WEST, mark: "West station", radius: 40 },
         { type: "place", label: "Build a bridge at the west station (24 planks)", blocks: PLANKS, count: 24, offset: WEST, mark: "West station", radius: 30 },
         { type: "defeat", label: "At night, defeat 6 monsters near the west station", mobs: NIGHT_MOBS, count: 6, night: true, offset: WEST, mark: "West station", radius: 64 },
       ],
@@ -1024,7 +1024,7 @@ const EDGES_OF_MAP = {
       ],
       reward: { levels: 4, crowns: 45, items: [{ item: "minecraft:torch", amount: 32 }] },
       rep: [{ guild: "wayfarers", amount: 10 }],
-      hint: "The west station is about 1,400 blocks west of spawn; ride. Place 24 planks of any wood within 30 blocks of it (a bridge over the ravine, or anywhere close), then defeat 6 monsters within 64 blocks at night. Torches behind you keep the count honest.",
+      hint: "The west station is about {far:-1400,-120} blocks west of spawn; ride. Place 24 planks of any wood within 30 blocks of it (a bridge over the ravine, or anywhere close), then defeat 6 monsters within 64 blocks at night. Torches behind you keep the count honest.",
     },
     {
       id: "deep",

@@ -175,7 +175,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "miners", amount: 10 }],
-        hint: "The Starfall Crater is far from town (600 to 1200 blocks); the tracker points the way, and a horse or boat helps. Amethyst grows on the crater's crystal blocks: mine the clusters for shards. Then stand at the glowing middle to touch it.",
+        hint: "The Starfall Crater is far from town ({band:starfall} blocks); the tracker points the way, and a horse or boat helps. Amethyst grows on the crater's crystal blocks: mine the clusters for shards. Then stand at the glowing middle to touch it.",
       },
 
       // 2b -----------------------------------------------------------------------------------------
@@ -378,7 +378,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "wayfarers", amount: 10 }],
-        hint: "The Stargazer's Ruin is on the highest ground near town, 300 to 700 blocks out; the tracker points the way. At the ruin, stand near the lodestone. Fenn mapped the land because it changes. What did he map that never changes, yet moves across the sky every night?",
+        hint: "The Stargazer's Ruin is on the highest ground near town, {band:observatory} blocks out; the tracker points the way. At the ruin, stand near the lodestone. Fenn mapped the land because it changes. What did he map that never changes, yet moves across the sky every night?",
       },
 
       // 6 ------------------------------------------------------------------------------------------
@@ -509,7 +509,7 @@ export const STORIES = [
             text: "At the Gray Ring, a cult in gray hoods meets around a cracked bell. Their leader, the Cantor, says that forty winters ago a faithful man rang the broken note and broke the sky, and that on the Lantern night they will finish his song. Their creed: Nothing lost, nothing missed. They believe Hollis will learn the rhythm and ring it for them.",
           },
         },
-        hint: "Go to the Old Chapel at night; the pale light waits there and leads toward the Gray Ring (400 to 900 blocks out). Keep up with it. At the stones, sneak: the watchers only spot a sneaking player who is almost on top of them.",
+        hint: "Go to the Old Chapel at night; the pale light waits there and leads toward the Gray Ring ({band:choir_ring} blocks out). Keep up with it. At the stones, sneak: the watchers only spot a sneaking player who is almost on top of them.",
       },
 
       // 8 ------------------------------------------------------------------------------------------

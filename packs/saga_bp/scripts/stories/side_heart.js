@@ -168,7 +168,7 @@ const MARA = {
       objectives: [
         { type: "deliver", label: "Bring Mara 8 paper", npc: "mara", item: "minecraft:paper", count: 8 },
         { type: "deliver", label: "Bring Mara a compass", npc: "mara", item: "minecraft:compass", count: 1 },
-        { type: "reach", label: "Stand in Fenn's blank corner (about 750 blocks southwest)", offset: { x: -560, z: 500 }, mark: "Fenn's blank corner", radius: 24 },
+        { type: "reach", label: "Stand in Fenn's blank corner (about {far:-560,500} blocks southwest)", offset: { x: -560, z: 500 }, mark: "Fenn's blank corner", radius: 24 },
       ],
       outro: [
         `${M}A meadow? Just a meadow? With a pond and a crooked oak?\n\nShe laughs, and then she has to sit down.`,

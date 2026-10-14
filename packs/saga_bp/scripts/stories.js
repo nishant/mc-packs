@@ -263,14 +263,14 @@ const PROLOGUE = [
         id: "far",
         title: "Three Pins",
         intro: [
-          `${M}The three pins are far out: about 1,100 blocks northeast, 1,100 blocks west, and 1,200 blocks south of the world spawn. Visit them in any order.`,
+          `${M}The three pins are far out: about {far:900,-700} blocks northeast, {far:-1100,-200} blocks west, and {far:150,1200} blocks south of the world spawn. Visit them in any order.`,
           `${M}The tracker above your hotbar shows the nearest pin you haven't stood on yet, with its direction and distance. Get within 24 blocks of a pin and it counts.`,
           `${M}That's a long way on foot. Take a horse, a boat along the coast, or elytra if you have them, plus food and a bed. Fenn always said a rushed map is a wrong map.`,
         ],
         objectives: [
-          { type: "reach", label: "Stand on the first pin (about 1,100 blocks northeast)", offset: { x: 900, z: -700 }, mark: "First pin", radius: 24 },
-          { type: "reach", label: "Stand on the second pin (about 1,100 blocks west)", offset: { x: -1100, z: -200 }, mark: "Second pin", radius: 24 },
-          { type: "reach", label: "Stand on the third pin (about 1,200 blocks south)", offset: { x: 150, z: 1200 }, mark: "Third pin", radius: 24 },
+          { type: "reach", label: "Stand on the first pin (about {far:900,-700} blocks northeast)", offset: { x: 900, z: -700 }, mark: "First pin", radius: 24 },
+          { type: "reach", label: "Stand on the second pin (about {far:-1100,-200} blocks west)", offset: { x: -1100, z: -200 }, mark: "Second pin", radius: 24 },
+          { type: "reach", label: "Stand on the third pin (about {far:150,1200} blocks south)", offset: { x: 150, z: 1200 }, mark: "Third pin", radius: 24 },
         ],
         outro: [
           `§eMara§r spreads your sketches beside Fenn's map and goes very still.\n\n${M}Look. Draw a line from each pin through the next one... they cross here. Near home. He was pointing back the whole time.`,

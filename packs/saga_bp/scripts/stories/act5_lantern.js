@@ -582,7 +582,7 @@ export const STORIES = [
           { guild: "wayfarers", amount: 15, when: { gate: "sneak" } },
           { guild: "wardens", amount: 15, when: { gate: "fight" } },
         ],
-        hint: "The Hollow Gate is far out (800 to 1500 blocks); the tracker points the way, and a horse or elytra helps. Sneaking: hold sneak and stay out of the singers' sight until you reach the middle of the pit. Fighting: stay at the arch until all three waves are down.",
+        hint: "The Hollow Gate is far out ({band:hollow_gate} blocks); the tracker points the way, and a horse or elytra helps. Sneaking: hold sneak and stay out of the singers' sight until you reach the middle of the pit. Fighting: stay at the arch until all three waves are down.",
       },
 
       // 8. The Herald ------------------------------------------------------------------------
