@@ -20,11 +20,19 @@
  * @property {Record<string, GossipPair[]>} [gossip] voiced gossip by kind, used along with the generic templates
  */
 
+/** Festival greetings (Realm Calendar's `realm:calendar`), sometimes said while a festival runs. */
+export const FESTIVAL_LINES = {
+  hatchling_tide: ["The hatchlings are out, {player}! Mind your feet on the beach.", "Hatchling Tide! Every turtle in the realm is in a hurry tonight.", "Keep the zombies off the little ones tonight, {player}. They're so small."],
+  midsummer_regatta: ["Regatta's on, {player}! Got a boat? Got a fast boat?", "Midsummer already. The water's warm and everyone's showing off.", "You racing this year, {player}? I've got a few Crowns on you. Don't tell Quill."],
+  lantern_fair: ["Lantern Fair, {player}! Have you carved your pumpkin yet?", "Ghost stories by the fire tonight. Bring a blanket and a brave face.", "The lanterns go out over the water after dark. Every year. It never gets old."],
+  long_night: ["Happy Long Night, {player}. Gifts count double this week, you know.", "The Choir keeps the truce tonight. Even they have something like manners.", "Look up tonight, {player}. The stars fall on the Long Night. Make a wish."],
+};
+
 export const LEVEL_NAMES = ["Stranger", "Acquaintance", "Friend", "Close", "Confidant"];
 
 /**
  * The Realm Year: 4 seasons of 24 Realm days, each with a 4-day festival (docs/RPG_DESIGN.md section 4).
- * Realm Calendar takes this over later; until then Townsfolk counts the days and broadcasts `realm:calendar`.
+ * Realm Calendar (calendar_bp) keeps the same table: while it broadcasts `realm:calendar`, Townsfolk only listens.
  */
 export const CALENDAR = {
   seasonDays: 24,
@@ -359,6 +367,8 @@ export const HEARTH = {
       champion: [["{name} faced {place} and came home. I lit a candle for them. Several.", "You faced {place} and came home. I lit a candle for you, {player}. Several."]],
       act: [["{name} goes where I'm too afraid to. I pray for them. It's what I can do.", "You go where I'm too afraid to, {player}. I pray for you every night."]],
       blood_moon: [["{name} was out under the red moon. I sat up with every candle lit.", "You stayed out under the red moon. I sat up with every candle lit, {player}."]],
+      siege: [["{name} silenced the Choir's bells. I heard them stop, one by one. I cried a little. Good tears.", "You silenced the bells, {player}. I heard them stop, one by one. Thank you."]],
+      siege_lost: [["I heard the Choir singing all night through the chapel walls. I knew the words. I don't know how I knew the words.", "I heard them singing all night, {player}. I knew the words. Please don't tell anyone that."]],
     },
   },
 
@@ -516,6 +526,18 @@ export const GOSSIP = {
   siege: [
     ["{name} stood at the circles when the Choir came. The bells went quiet.", "You stood at the circles when the Choir came, {player}. Thank you."],
     ["When the Choir sang at {place}, {name} was there to stop them.", "You stopped the Choir at {place}. The whole town heard the bells go quiet."],
+  ],
+  siege_lost: [
+    ["The Choir finished their song at {place}. {name} fought them all night, they say. Nobody's sleeping well.", "You fought the Choir at {place}, {player}. They finished their song anyway. It isn't your fault."],
+    ["{place} is shaken. The Choir sang until morning. {name} was out there with the rest.", "Rest, {player}. The Choir sang at {place} until morning, but you were out there. People saw."],
+  ],
+  regatta: [
+    ["{name} won the Midsummer Regatta! {place}, and barely wet.", "The regatta's yours, {player}! {place}. Tobin is pretending he isn't impressed."],
+    ["Did you see {name} on the water? Won the regatta in {place}.", "{place}, {player}! The fastest boat on the water this summer."],
+  ],
+  carve_off: [
+    ["{name}'s pumpkin won the carve-off. {n} votes. The face on it, though!", "Your pumpkin won the carve-off, {player}! {n} votes. Bram wants it for the town hall."],
+    ["The best pumpkin at the Lantern Fair? {name}'s. Everyone says so. Well, {n} people do.", "{n} votes for your pumpkin, {player}! The best face at the Lantern Fair."],
   ],
   atlas: [
     ["{name} has been out past every road. '{place}', people call them now.", "'{place}', they're calling you now, {player}. Mara wants to see your notes."],

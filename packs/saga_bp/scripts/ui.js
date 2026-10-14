@@ -204,7 +204,7 @@ function offerFor(player, story, npc) {
   const starter = chapter.npc ?? story.giver;
   const ender = chapter.end ?? starter;
   const { pos } = chapterNumber(saga, story, index);
-  const tag = story.kind === "main" ? "Main story" : story.kind === "heart" ? "Heart story" : story.kind === "wander" ? "Wanderer" : "Story";
+  const tag = story.kind === "main" ? "Main story" : story.kind === "heart" ? "Heart story" : story.kind === "wander" ? "Wanderer" : story.kind === "festival" ? "Festival" : "Story";
   if (!st || !st.a || st.cur !== chapter.id) {
     if (starter !== npc || storyWaitsForPacks(story)) return undefined;
     if (!st?.dn.length && !requires(story.requires, saga, story.id, player).ok) return undefined;

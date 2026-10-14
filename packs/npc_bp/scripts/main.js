@@ -13,7 +13,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { CALENDAR, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
+import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { get } from "./settings.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -636,6 +636,7 @@ async function tapped(player, entity, id, gift = false) {
       const pts = affOf(player)[id]?.[0] ?? 0;
       lines.push("", `§7You and ${t.name}: §d${levelText(pts)}`);
       if (birthday(id)) lines.push(`§6It's ${t.name}'s birthday today: gifts count double.`);
+      else if (longNight()) lines.push("§dStarwright's Long Night: gifts count double.");
     }
     const form = new ActionFormData().title(plainName(t)).body(lines.join("\n"));
     for (const o of offers) form.button(o.label);
@@ -943,6 +944,8 @@ function tierOf(id, typeId) {
 
 /** Is today this townsfolk's birthday (a day of the Realm Year)? @param {string} id */
 const birthday = (id) => HEARTH[id]?.birthday === calendarNow().doy;
+/** Starwright's Long Night (Realm Calendar): every gift counts double. */
+const longNight = () => calendarNow().festival === "long_night";
 
 /** Gives the held item (1 of it). @param {Player} player @param {Townsfolk} t @param {Entity | undefined} entity */
 function giveGift(player, t, entity) {
@@ -956,7 +959,8 @@ function giveGift(player, t, entity) {
   const tier = tierOf(t.id, held.item.typeId);
   let pts = Number(CONFIG.giftPoints[tier]) || 0;
   const bday = birthday(t.id);
-  if (bday && pts > 0) pts *= 2;
+  const lnight = !bday && longNight();
+  if ((bday || lnight) && pts > 0) pts *= 2;
   const left = held.item.amount - 1;
   if (left > 0) {
     held.item.amount = left;
@@ -968,7 +972,9 @@ function giveGift(player, t, entity) {
   const got = gain(player, t.id, pts);
   saveAff(player);
   const a2 = affFor(player, t.id);
-  chatFrom(player, t, line, `§7(${itemName(held.item.typeId)}: ${got >= 0 ? "+" : ""}${got}${bday ? ", birthday x2" : ""}; ${levelText(a2[0])})`);
+  chatFrom(player, t, line, `§7(${itemName(held.item.typeId)}: ${got >= 0 ? "+" : ""}${got}${bday ? ", birthday x2" : lnight ? ", Long Night x2" : ""}; ${levelText(a2[0])})`);
+  // Realm Calendar's Gift Round (the Long Night) counts gifts to different townsfolk.
+  system.sendScriptEvent("realm:npc_gift", JSON.stringify({ player: player.id, npc: t.id, tier }));
   if (entity?.isValid) say(entity, t, fill(line, player.name));
   player.playSound(tier === "disliked" ? "note.bass" : "random.pop", { pitch: tier === "loved" ? 1.4 : 1, volume: 0.7 });
 }
@@ -1115,6 +1121,10 @@ function greetingFor(player, t, entity) {
   }
   const news = gossipLine(player, t);
   if (news) return news;
+  const fest = calendarNow().festival;
+  /** @type {Record<string, string[]>} */
+  const festLines = FESTIVAL_LINES;
+  if (fest && festLines[fest] && Math.random() < 0.3) return fill(pick(festLines[fest]) ?? "Hello, {player}.", player.name);
   if (get("affinity") === true && Math.random() < 0.35) {
     const r = reactionLine(player, t.id);
     if (r) return fill(r, player.name);
@@ -1143,7 +1153,7 @@ async function askAbout(player, t) {
 
 let calDay = 1;
 let nightSeen = false;
-/** Another pack (Realm Calendar) broadcasts the calendar: npc_bp listens instead. @type {{ from: string, day: number, until: number } | undefined} */
+/** Another pack (Realm Calendar) broadcasts the calendar: npc_bp listens instead. @type {{ from: string, day: number, festival?: string, until: number } | undefined} */
 let calOwner;
 const OWNER_TIMEOUT_MS = 2 * 3600000;
 
@@ -1178,13 +1188,13 @@ function calendarOf(day) {
 
 /** Today's calendar (Realm Calendar's day while it broadcasts). */
 function calendarNow() {
-  const owned = calOwner && Date.now() < calOwner.until;
-  return calendarOf(owned && calOwner ? calOwner.day : calDay);
+  if (calOwner && Date.now() < calOwner.until) return { ...calendarOf(calOwner.day), festival: calOwner.festival };
+  return calendarOf(calDay);
 }
 
-/** realm:calendar for every pack (unless Realm Calendar owns it). */
-function broadcastCalendar() {
-  if (calOwner && Date.now() < calOwner.until) return;
+/** realm:calendar for every pack (unless Realm Calendar owns it, or `own`: its handoff asks for this count). */
+function broadcastCalendar(own = false) {
+  if (!own && calOwner && Date.now() < calOwner.until) return;
   const c = calendarOf(calDay);
   try {
     system.sendScriptEvent("realm:calendar", JSON.stringify({ ...c, from: "npc_bp" }));
@@ -1536,7 +1546,8 @@ system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id !== "realm:gossip" && id !== "realm:npc_flags" && id !== "realm:quest_done" && id !== "realm:calendar" && id !== "realm:calendar_ping") return;
     if (id === "realm:calendar_ping") {
-      if (ready) broadcastCalendar();
+      // { own: true }: Realm Calendar taking over (or back) asks for this pack's own count, even while it listens.
+      if (ready) broadcastCalendar(message.includes('"own":true'));
       return;
     }
     /** @type {any} */
@@ -1554,7 +1565,7 @@ system.afterEvents.scriptEventReceive.subscribe(
       else if (id === "realm:quest_done") questDone(msg);
       else if (id === "realm:calendar" && msg.from !== "npc_bp" && isNum(msg.day) && msg.day >= 1) {
         // Realm Calendar (or another pack) owns the calendar now: listen, and stop broadcasting while it does.
-        calOwner = { from: String(msg.from ?? "?").slice(0, 40), day: Math.floor(msg.day), until: Date.now() + OWNER_TIMEOUT_MS };
+        calOwner = { from: String(msg.from ?? "?").slice(0, 40), day: Math.floor(msg.day), festival: typeof msg.festival === "string" && msg.festival ? msg.festival.slice(0, 32) : undefined, until: Date.now() + OWNER_TIMEOUT_MS };
       }
     } catch (e) {
       console.warn(`[npc] ${id}: ${e}`);

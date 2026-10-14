@@ -6,6 +6,17 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Realm Calendar
+
+The realm keeps a calendar now: seasons, festivals, and a Choir that comes for the towns.
+
+- Every dawn is a new Realm day, and 96 of them make a year of four seasons. /realm:calendar shows the day and the next festival.
+- Four festivals, four days each: guard turtle hatchlings at the Hatchling Tide, race boats at the Midsummer Regatta, carve pumpkins for the realm's vote at the Lantern Fair, and give gifts under falling stars on Starwright's Long Night (gifts to the townsfolk count double).
+- Festival activities pay Festival Ribbons. Spend them at Quill's ribbon stall on titles, hats, recipe cards and two new trails.
+- The townsfolk have 16 festival chapters, four each festival.
+- Some nights the Gray Choir besieges a town: three Ritual Circles rise around it. Beat each circle's Choir Singer and ring its bell 5 times before 12 minutes are up. Hold the town and it's Heartened for a day (deliveries count extra); lose and it's Shaken. Nothing breaks a block.
+- Each 3 Choir Cairns silenced in the Atlas make the Choir smaller.
+
 ## Atlas of the Realm
 
 Every stretch of land has a name now, and there's something to find between the towns.

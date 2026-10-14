@@ -214,7 +214,12 @@ for (const s of STORIES) {
   ids.add(s.id);
   if (!s.title || !s.short || !s.giver || !Array.isArray(s.chapters)) errors.push(`${at}: needs title, short, giver and chapters`);
   if ((s.short ?? "").length > 18) warnings.push(`${at}: short "${s.short}" is longer than 18 characters`);
-  if (s.kind !== undefined && !["main", "side", "heart", "wander"].includes(s.kind)) errors.push(`${at}: kind must be "main", "side", "heart" or "wander"`);
+  if (s.kind !== undefined && !["main", "side", "heart", "wander", "festival"].includes(s.kind)) errors.push(`${at}: kind must be "main", "side", "heart", "wander" or "festival"`);
+  if (s.kind === "festival") {
+    const f = s.requires?.flags?.["cal:festival"];
+    if (!["hatchling_tide", "midsummer_regatta", "lantern_fair", "long_night"].includes(f)) errors.push(`${at}: a festival story needs requires.flags { "cal:festival": "<hatchling_tide | midsummer_regatta | lantern_fair | long_night>" }`);
+    if (s.chapters?.length !== 1) errors.push(`${at}: a festival story has one chapter (requirements are only checked before the first)`);
+  }
   if (s.kind === "wander") {
     if (!s.giver?.startsWith("w_") || !WANDERER_IDS.has(s.giver.slice(2))) errors.push(`${at}: a wanderer's chain needs a giver "w_<id>" from WANDERERS`);
     if (!s.chapters?.[0]?.camp) errors.push(`${at}: a wanderer's chain needs a camp on its first chapter (where they wait)`);

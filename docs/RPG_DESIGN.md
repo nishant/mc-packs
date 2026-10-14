@@ -490,6 +490,45 @@ at most 1 build at a time.
 
 NPC birthdays (section 2) use this calendar.
 
+**As shipped (4, October 2026):**
+- Counter handoff: on its first run calendar_bp sends `realm:calendar_ping {own:true}` (npc_bp answers that one with its
+  own count even while listening), takes the day, then owns `cal:day` `{d, n}` and broadcasts `realm:calendar
+  {day, doy, year, season, festival?, ends?, from:"calendar_bp"}` at dawn, 2 s after load (before npc_bp's 5 s), on
+  join, on ping and every 5 min (npc_bp's 2 h listen window). With `festivals` off the broadcast names no festival.
+  npc_bp keeps counting in parallel and now also takes `festival` from the owner's message. `/realm:calendar_set <day>`
+  is the day of the current year (1-96); setting it back pulls the siege gap back with it.
+- Towns: town_bp sends `realm:town_list {part, parts, towns:[{id,n,dim,x,y,z,safe}]}` (with its zones, and on
+  `realm:town_list_ping`), since `realm:zones src:"town"` only lists protected towns. `spareSafeTowns` (default on) skips
+  protected towns, and new towns start protected, so operators disable Protect for towns that should face the Choir
+  (or disable `spareSafeTowns`: circles then step outside the zone with `escapeZones`). Per-town switch in
+  `/realm:calendar` -> Sieges (`cal:towns`). `realm:town_state {town, name, mood, until}` (ms); town_bp keeps it in
+  memory, pings `realm:town_state_ping` at load, counts deliveries x1.25 when Heartened and shows the mood.
+- Sieges: one roll per night once a target has a player within 192 blocks. Circles: up to 10 tries per circle 48-96
+  out (open flat natural ground, nothing over it, outside zones/claims, loaded); none placed = "scattered" (no result,
+  no gap reset). Ground saved with `structureManager.createFromWorld` before the first change, restored block by block
+  where the block is still air, liquid or a circle block; pending restores (`cal:restore`) survive restarts and their
+  boxes can't be broken or blown up. A bell counts only after its Singer dies; a silenced circle's Choir leaves.
+  **Pillagers despawn instantly 32+ blocks from (simulated) players and randomly from real ones**, so each circle keeps
+  a count of Chanters left (`p`, minus deaths) and respawns the missing ones while a player is within 40 blocks; all
+  are named (`Choir Singer`, `Choir Chanter`). A restart mid-siege ends it "scattered" (no mood). Participants: a hit
+  on a Choir mob or bell, or 3 min within 96 blocks (not AFK). Held: 60 Crowns, `realm:rep_add` 10 + quest_done
+  `{kind:"siege", guild:"wardens"}` (Guilds' `other` 10), 80 Combat XP; gossip `siege` / `siege_lost` (new kind, plus
+  Hollis voiced lines for both). Cairns: distinct `atlas:cairn:*` keys, up to 18 kept.
+- Festivals: 12 activities (Nest Watch, Turtle Feeding, Tide Swim; Regatta, High Dive, Midsummer Picnic; Carve-off,
+  Lantern Float, Ghost Tales; Starwatch, Gift Round, Candle Vigil), each `realm:quest_done {pack:"calendar_bp",
+  id:"cal:<activity>", kind:"festival", guild}`. Gift Round needs a new npc_bp event `realm:npc_gift {player, npc,
+  tier}`. Long Night shooting stars: one `realm:sky_request` per player per night (night_bp already honored story
+  requests, so night_bp is unchanged). Long Night double gifts don't stack with a birthday. Regatta course: an
+  operator's (within 32 blocks of its start) or one from where the racer is; board = this year's 10 best + realm
+  record; winner title `Regatta Champion`, carve-off winner `Pumpkin Champion` (+ gossip `regatta`, `carve_off`).
+- Ribbon stall: calendar_bp's own vendor (an npc offer at role `merchant`, and in `/realm:calendar`), no caravan change.
+  Stock: 4 titles, 4 hats (named helmets/pumpkin), 4 recipe cards (`realm:recipe_learn`), 2 new titles_bp trails
+  (`confetti` totem particle, `notes` note particle); titles, trails and cards bought are remembered (not sold twice).
+- Story: saga `kind:"festival"` (one chapter each, check-stories enforces it and the `cal:festival` gate; the log says
+  "come back during the Lantern Fair (Harvest, days 58-61)"). 16 chapters (`stories/festivals.js`), givers: all 12
+  townsfolk (Elsie, Moss, Bram, Wren twice). 12 of them pair the activity (`event` on calendar_bp's quest_done, gated on
+  `pack:calendar_bp`) with an ordinary `or` way or make it optional. Not repeatable from year to year in v1.
+
 ---
 
 ## 5. Callings and Relic Ascension (`skills_bp` + `relics_bp` UPGRADE)

@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 158 commands in 62 packs */
+/** @type {Pack[]} 161 commands in 63 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -55,6 +55,15 @@ export const PACKS = [
       {"name":"realm:build_paste","description":"Paste your copy at the block you look at, turned to face your way","permission":"any","params":[]},
       {"name":"realm:build_redo","description":"Build again what you last undid","permission":"any","params":[]},
       {"name":"realm:build_undo","description":"Undo your last build (blocks come back)","permission":"any","params":[]},
+    ],
+  },
+  {
+    folder: "calendar_bp",
+    pack: "Realm Calendar",
+    commands: [
+      {"name":"realm:calendar","description":"Realm Calendar: the day and season, the festival and its activities, the ribbon stall, sieges","permission":"any","params":[]},
+      {"name":"realm:calendar_set","description":"Realm Calendar: set the day of the Realm Year (1-96)","permission":"op","params":[{"name":"day","type":"Integer","optional":false}]},
+      {"name":"realm:calendar_siege","description":"Realm Calendar: start a Choir siege now at the nearest town (or end the one running)","permission":"op","params":[]},
     ],
   },
   {

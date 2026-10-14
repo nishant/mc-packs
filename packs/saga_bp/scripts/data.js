@@ -431,6 +431,9 @@ export function setFlag(saga, storyId, key, value) {
   if (s) s.f[key] = String(value);
 }
 
+/** The Realm Calendar's festivals, for "come back during ..." (`cal:festival`). */
+const FESTIVAL_NAMES = { hatchling_tide: "the Hatchling Tide (Thaw, Realm days 10-13)", midsummer_regatta: "the Midsummer Regatta (High Sun, days 34-37)", lantern_fair: "the Lantern Fair (Harvest, days 58-61)", long_night: "Starwright's Long Night (Long Dark, days 82-85)" };
+
 /** Townsfolk affinity levels, for `g:aff_<npc>` (0 Stranger ... 4 Confidant). */
 const AFF_LEVELS = ["Strangers", "Acquaintances", "Friends", "Close", "Confidants"];
 
@@ -478,8 +481,11 @@ export function requires(req, saga, storyId, player) {
     // Townsfolk affinity (`g:aff_<npc>`, from realm:affinity): say whom to befriend, not "choices".
     for (const [k, v] of Object.entries(req.flags)) {
       if (k.startsWith("g:aff_") && !test(flagOf(saga, storyId, k), v)) why.push(`become ${AFF_LEVELS[Number(String(v).replace(/[^0-9]/g, "")) || 3] ?? "Close"} with ${npcName(k.slice(6))} (Townsfolk)`);
+      /** @type {Record<string, string>} */
+      const fest = FESTIVAL_NAMES;
+      if (k === "cal:festival" && !test(flagOf(saga, storyId, k), v)) why.push(`come back during ${fest[v] ?? "its festival"} (Realm Calendar)`);
     }
-    if (!Object.entries(req.flags).filter(([k]) => !k.startsWith("g:aff_")).every(([k, v]) => test(flagOf(saga, storyId, k), v))) why.push("make different choices earlier in the story");
+    if (!Object.entries(req.flags).filter(([k]) => !k.startsWith("g:aff_") && k !== "cal:festival").every(([k, v]) => test(flagOf(saga, storyId, k), v))) why.push("make different choices earlier in the story");
   }
   for (const [k, n] of Object.entries(req.minCount ?? {})) if (Number(flagOf(saga, storyId, k) ?? 0) < n) why.push("make different choices earlier in the story");
   for (const [guild, n] of Object.entries(req.rep ?? {})) {

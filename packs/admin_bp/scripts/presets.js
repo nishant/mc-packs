@@ -21,7 +21,7 @@
 /** Menu categories, in the order the main menu shows them (after Recent, Search and Quick Actions). A pack not listed here lands in "Other". */
 export const CATEGORIES = [
   { id: "world", title: "World & Weather", packs: ["weather_bp", "climate_bp", "storm_bp", "tornado_bp", "rainbow_bp", "night_bp", "meteor_bp", "moon_bp", "rain_bp", "zones_bp", "guard_bp"] },
-  { id: "story", title: "Story & Townsfolk", packs: ["saga_bp", "npc_bp", "wander_bp", "atlas_bp", "journal_bp", "quests_bp", "milestones_bp"] },
+  { id: "story", title: "Story & Townsfolk", packs: ["saga_bp", "npc_bp", "wander_bp", "atlas_bp", "calendar_bp", "journal_bp", "quests_bp", "milestones_bp"] },
   { id: "towns", title: "Towns & Places", packs: ["town_bp", "build_bp", "waystone_bp", "caravan_bp", "claims_bp", "farm_bp"] },
   { id: "economy", title: "Economy", packs: ["crowns_bp", "bounty_bp", "guilds_bp", "slots_bp"] },
   { id: "players", title: "Players", packs: ["stats_bp", "titles_bp", "nick_bp", "party_bp", "skills_bp", "mail_bp", "afk_bp", "death_bp"] },
@@ -171,6 +171,9 @@ export const NAMES = {
   "realm:saga_reset": ["Reset Player Story", "Stories, choices, progress"],
   "realm:wander": ["Wanderers Menu", "Who's on the road, camps"],
   "realm:atlas": ["Atlas of the Realm", "Regions, sites, tablets"],
+  "realm:calendar": ["Realm Calendar", "Day, festival, ribbons, sieges"],
+  "realm:calendar_siege": ["Choir Siege", "Start one now, or end it"],
+  "realm:calendar_set": ["Set Realm Day", "Day of the year, 1-96"],
   "realm:wander_clear": ["Send Wanderers Away", "Everyone on the road leaves"],
   "realm:silly": ["Silly Enchants", "On the item in your hand"],
   "realm:silly_give": ["Give Silly Books", "To players"],
@@ -266,6 +269,7 @@ export const PARAMS = {
   "realm:storm_cell": { force: { label: "Even without a thunderstorm", default: false } },
   "realm:titles_give": { player: { label: "Give a title to", kind: "player" }, title: { label: "Title (or trail:cloud, trail:leaves, trail:ember, trail:sparkle)" } },
   "realm:town_add": { name: { label: "Town name (centered where you stand)" } },
+  "realm:calendar_set": { day: { label: "Day of the Realm Year (festivals: 10, 34, 58, 82)", kind: "slider", min: 1, max: 96, step: 1, default: 1 } },
   "realm:town_spot": { "realm:town_project": { label: "Project to place here" } },
   "realm:weather_set": { "realm:weather_kind": { label: "Weather" }, minutes: { label: "For how many real minutes (type the command for more than 120)", kind: "slider", min: 1, max: 120, step: 1, default: 10 } },
 };
@@ -285,6 +289,7 @@ export const CONFIRM = new Set([
   "realm:storm_cell",
   "realm:fishing_tournament",
   "realm:wander_clear",
+  "realm:calendar_set",
 ]);
 
 /** @param {string} name */

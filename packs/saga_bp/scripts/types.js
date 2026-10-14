@@ -226,7 +226,7 @@
  * @property {string} title
  * @property {string} short the tracker's name for it
  * @property {string} giver the NPC id who starts it
- * @property {"main" | "side" | "heart" | "wander"} [kind] default "side"; "heart": a townsfolk's heart story, for players Close with them (`g:aff_<npc>`); "wander": a Recurring Wanderer's chain (giver `w_<id>`)
+ * @property {"main" | "side" | "heart" | "wander" | "festival"} [kind] default "side"; "heart": a townsfolk's heart story, for players Close with them (`g:aff_<npc>`); "wander": a Recurring Wanderer's chain (giver `w_<id>`); "festival": one chapter offered only while its festival runs (`requires.flags["cal:festival"]`, Realm Calendar), finishable after
  * @property {number} [act] main story act
  * @property {string[]} [tones]
  * @property {string} [summary] the log's line before the story starts
