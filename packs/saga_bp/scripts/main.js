@@ -6,7 +6,7 @@
 //   places.js      story places, building their prefabs (prefabs.js), snapshots, the places menu
 //   ui.js          offers, dialogues, hints, rewards, tracker, the story log menu
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
-import { expireAdds, sweep, tendActors } from "./actors.js";
+import { ageAdds, expireAdds, sweep, tendActors } from "./actors.js";
 import { calendar, entries, finished, flagOf, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
 import {
   beginRun,
@@ -14,6 +14,7 @@ import {
   bump,
   championSlain,
   expireRaces,
+  ageDefenses,
   isBountyTag,
   onBountyTargets,
   onMapLeg,
@@ -324,7 +325,9 @@ function onChoose(msg) {
  * `{ player, action: "answer", text }` answers the player's first open riddle, `{ player, action: "finish", story, flags? }`
  * marks a whole story finished, `{ player, action: "places" }` tells the player every saved place, `{ player, action: "state" }`
  * prints their saved progress to the content log, `{ player, action: "wander_finish" }` finishes their stranger's one-off,
- * `{ player, action: "race_expire" }` ends their running races now (lost, unless the target falls first).
+ * `{ player, action: "race_expire" }` ends their running races now (lost, unless the target falls first),
+ * `{ player, action: "age_adds", seconds? }` makes every story monster and the player's running defenses `seconds` (600)
+ * older, and runs the 10-minute story monster expiry 2 seconds later.
  * @param {any} msg
  */
 function onDebug(msg) {
@@ -370,6 +373,11 @@ function onDebug(msg) {
     if (e) e.chapter.objectives.forEach((o, i) => bump(player, e, i, 1e9));
   } else if (msg.action === "race_expire") {
     expireRaces(player);
+  } else if (msg.action === "age_adds") {
+    const ticks = Math.max(0, Math.floor(Number(msg.seconds ?? 600) * 20)) || 0;
+    ageAdds(ticks);
+    ageDefenses(player.id, ticks);
+    system.runTimeout(expireAdds, 40);
   } else if (msg.action === "places") {
     player.sendMessage(`[saga places] ${JSON.stringify(placesOf())}`);
   } else if (msg.action === "state") {

@@ -9,7 +9,11 @@ import { get, getFor } from "./settings.js";
 const PROP_DATA = "journal:data";
 const PROP_WEATHER = "journal:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 const OVERWORLD = "minecraft:overworld";
-const EXTRAS_PER_PAGE = 40; // entries other packs send that aren't in config.js, kept per page
+// Entries other packs send that aren't in config.js ("Also found"), kept per page: past it, the page's oldest goes.
+// Worst case one costs about 180 characters saved (a 40-character id in the page's list, then its "page:id" key and a
+// 40-character label that may need escaping), so a full page is at most about 18,000; the whole journal is kept under
+// SAVE_LIMIT by dropping the oldest of the page with the most of them.
+const EXTRAS_PER_PAGE = 100;
 const ENTRY_ID = /^[a-z0-9_:.-]{1,40}$/;
 const LABEL_MAX = 40;
 const SAVE_LIMIT = 30000; // a string property holds at most about 32,000 characters
@@ -133,6 +137,30 @@ function progressOf(data, page) {
   return { found, total: page.entries.length };
 }
 
+/** Entries on a page that aren't in config.js. @param {string} pageId @param {string[]} ids */
+const extrasOf = (pageId, ids) => {
+  const known = pages.get(pageId)?.labels;
+  return ids.filter((id) => !known?.has(id));
+};
+
+/** Drops the oldest entry that isn't in config.js from a page (and its saved label). @param {Data} data @param {string} pageId @param {string} keep never this "page:entry" */
+function dropOldest(data, pageId, keep) {
+  const ids = data.e[pageId] ?? [];
+  const id = extrasOf(pageId, ids).find((x) => `${pageId}:${x}` !== keep);
+  if (id === undefined) return false;
+  ids.splice(ids.indexOf(id), 1);
+  delete data.l[`${pageId}:${id}`];
+  return true;
+}
+
+/** Drops the oldest "Also found" entry of the page with the most of them; false when there's none. @param {Data} data @param {string} keep */
+function dropOldestAnywhere(data, keep) {
+  const [pageId] = Object.entries(data.e)
+    .map(([id, ids]) => /** @type {const} */ ([id, extrasOf(id, ids).filter((x) => `${id}:${x}` !== keep).length]))
+    .sort((a, b) => b[1] - a[1])[0] ?? [];
+  return pageId !== undefined && dropOldest(data, pageId, keep);
+}
+
 /** @type {Set<string>} players told where to read the journal this session */
 const firstNote = new Set();
 
@@ -150,12 +178,18 @@ function addEntry(player, pageId, entry, label) {
   const known = p.labels.has(entry);
   const key = `${pageId}:${entry}`;
   if (!known) {
-    const extras = list.filter((id) => !p.labels.has(id)).length;
-    if (extras >= EXTRAS_PER_PAGE) return false;
-    const text = String(label || "").replace(/§./g, "").trim().slice(0, LABEL_MAX);
+    // A full page makes room: its oldest "Also found" entry goes, so the newest finds always show.
+    for (let n = extrasOf(pageId, list).length; n >= EXTRAS_PER_PAGE && dropOldest(data, pageId, key); n--);
+    const text = String(label || "")
+      .replace(/§./g, "")
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .trim()
+      .slice(0, LABEL_MAX);
     if (text && text !== prettyId(entry)) data.l[key] = text; // the name from the id needs no saving
   }
   list.push(entry);
+  // Too big to save: the oldest "Also found" entries go, from the page with the most, until it fits.
+  while (JSON.stringify(data).length > SAVE_LIMIT && dropOldestAnywhere(data, key));
   if (!save(player, data)) {
     if (known) {
       // Full of other packs' entries: their saved names go (they show from their ids), real entries stay.
@@ -581,8 +615,8 @@ async function showPage(player, page) {
         .join("\n"),
     );
   }
-  const extras = [...have].filter((id) => !p.labels.has(id)).map((id) => data.l[`${page.id}:${id}`] ?? prettyId(id));
-  if (extras.length) lines.push(`${page.entries.length ? "§7Also found: " : "§f"}${extras.join(page.entries.length ? ", " : "\n")}`);
+  const extras = extrasOf(page.id, [...have]).map((id) => data.l[`${page.id}:${id}`] ?? prettyId(id));
+  if (extras.length) lines.push(`${page.entries.length ? `§7Also found (${extras.length}): ` : "§f"}${extras.join(page.entries.length ? ", " : "\n")}`);
   if (!page.entries.length && !extras.length) lines.push("§7Nothing here yet.");
   const form = new ActionFormData().title(`§l${page.label}`).body(lines.join("\n\n")).button("Back").button("Close");
   const res = await show(player, form);
