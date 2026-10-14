@@ -36,6 +36,11 @@ export const CONFIG = {
      * contributors get theirs from the finished quest (`realm:quest_done`), so it isn't counted twice.
      */
     helperRep: 5,
+    /**
+     * The share of `champion` the killer gets after losing a race to Rook (Story Questlines sends
+     * `realm:bounty_rival` when a race starts; killed after its time ran out, the bounty pays this share).
+     */
+    rivalShare: 0.5,
   },
 
   /** First names for champion targets: `Gerald the Unexploded`. */

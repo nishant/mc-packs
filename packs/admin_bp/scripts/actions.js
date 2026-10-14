@@ -1,7 +1,7 @@
 // Quick actions: the vanilla things operators would otherwise type (/time, /gamemode, /tp, /give...).
 // They use the script API directly, so they work without cheats. Each one asks with a form, then runs
 // with the plain values it got (player names, not dropdown positions), so Recent can repeat it.
-import { EntityComponentTypes, GameMode, ItemStack, ItemTypes, Player, WeatherType, world } from "@minecraft/server";
+import { EntityComponentTypes, GameMode, ItemStack, ItemTypes, Player, WeatherType, system, world } from "@minecraft/server";
 import { ModalFormData } from "@minecraft/server-ui";
 
 /**
@@ -71,6 +71,32 @@ const pickName = (me, i, everyone = false) => {
   const names = everyone ? [...playerNames(me), EVERYONE] : playerNames(me);
   return names[Number(i) || 0] ?? me.name;
 };
+
+export const TITLE_MAX_SECONDS = 25; // fade in + stay + fade out stays under the title protocol's 600 ticks
+const TITLE_FADE_IN = 10;
+const TITLE_FADE_OUT = 20;
+
+/**
+ * A title (and subtitle) on these players' screens that the side boxes (Minimap compass, story tracker, Mob Health...)
+ * leave alone: each player's `realm:title` request (the title protocol) goes out first, so every pack with a box
+ * steps aside until it has faded. A plain /title is drawn over within about a second and a half.
+ * @param {Player[]} players @param {string} title @param {string} subtitle @param {number} seconds
+ * @returns {number} how many players got it
+ */
+export function showTitle(players, title, subtitle, seconds) {
+  const stay = Math.round(Math.max(1, Math.min(TITLE_MAX_SECONDS, Number(seconds) || 5)) * 20);
+  const ticks = TITLE_FADE_IN + stay + TITLE_FADE_OUT;
+  const text = String(title).slice(0, 100);
+  const sub = String(subtitle ?? "").slice(0, 100);
+  let n = 0;
+  for (const p of players) {
+    if (!p.isValid) continue;
+    system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks, from: "admin_bp" }));
+    p.onScreenDisplay.setTitle(text, { fadeInDuration: TITLE_FADE_IN, stayDuration: stay, fadeOutDuration: TITLE_FADE_OUT, ...(sub ? { subtitle: sub } : {}) });
+    n++;
+  }
+  return n;
+}
 
 /** @param {Player} p */
 const heldItemId = (p) => p.getComponent(EntityComponentTypes.Inventory)?.container?.getItem(p.selectedSlotIndex)?.typeId;
@@ -236,6 +262,29 @@ export const ACTIONS = [
       const list = targets(v.player);
       for (const p of list) p.getComponent(EntityComponentTypes.Health)?.resetToMaxValue();
       return list.length ? `Healed ${list.map((p) => p.name).join(", ")}` : `${v.player} isn't online.`;
+    },
+  },
+  {
+    id: "title",
+    title: "Show a Title",
+    hint: "Big text the HUD won't cover",
+    help: "A title (and a subtitle) in the middle of the screen, for everyone online or one player. Use this instead of /title: the Minimap's compass and the other side boxes step aside for it, while they draw over a plain /title within a second or two. Same as /realm:admin_title.",
+    form(me) {
+      const f = new ModalFormData().title("Show a title").textField("Title", "Welcome to the Realm!", { defaultValue: "" }).textField("Subtitle (optional)", "Smaller text under it", { defaultValue: "" });
+      f.slider("Seconds on screen", 1, TITLE_MAX_SECONDS, { valueStep: 1, defaultValue: 5 });
+      const names = [EVERYONE, ...playerNames(me)];
+      return f.dropdown("Show it to", names, { defaultValueIndex: 0 });
+    },
+    read(me, raw) {
+      const [t, sub, sec, who] = raw.filter((v) => v !== undefined);
+      if (!String(t ?? "").trim()) return "Type the title's text.";
+      const names = [EVERYONE, ...playerNames(me)];
+      return { title: String(t).trim(), subtitle: String(sub ?? "").trim(), seconds: Number(sec) || 5, player: names[Number(who) || 0] ?? EVERYONE };
+    },
+    confirm: (_me, v) => (v.player === EVERYONE ? `Show "${v.title}" to everyone online?` : undefined),
+    run(_me, v) {
+      const n = showTitle(targets(v.player), String(v.title), String(v.subtitle ?? ""), Number(v.seconds));
+      return n ? `Title shown to ${v.player === EVERYONE ? `everyone online (${n})` : v.player} for ${v.seconds} s` : `${v.player} isn't online`;
     },
   },
   {

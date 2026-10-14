@@ -207,6 +207,25 @@ function objective(at, sid, o) {
   if (o.pages) pages(at, sid, o.pages);
   for (const k of Object.keys(o.set ?? {})) setKeys.add(canon(sid, k));
   if (o.set !== undefined && (typeof o.set !== "object" || Object.values(o.set).some((v) => typeof v !== "string"))) errors.push(`${at}: set must map flags to text`);
+  // Races against a rival (Rook): a bounty defeat or a treasure map event.
+  if (o.race !== undefined) {
+    if (typeof o.race !== "number" || o.race <= 0) errors.push(`${at}: race must be a number of seconds`);
+    if (!((o.type === "defeat" && o.bounty) || (o.type === "event" && o.quest?.pack === "maps_bp" && !o.events?.length))) errors.push(`${at}: race is for a defeat with bounty: true or an event with quest { pack: "maps_bp" }`);
+    if (o.within !== undefined) errors.push(`${at}: a race has its own clock: no within`);
+  } else if (o.lose || o.tally || o.rival) errors.push(`${at}: lose, tally and rival are for a race`);
+  if (o.bounty !== undefined && (o.type !== "defeat" || o.bounty !== true || o.champion || o.mobs)) errors.push(`${at}: bounty is true on a defeat without champion or mobs`);
+  if (o.bounty && o.when?.["pack:bounty_bp"] !== "on") errors.push(`${at}: a bounty objective needs when { "pack:bounty_bp": "on" }`);
+  for (const k of Object.keys(o.lose ?? {})) setKeys.add(canon(sid, k));
+  if (o.lose !== undefined && (typeof o.lose !== "object" || Object.values(o.lose).some((v) => typeof v !== "string"))) errors.push(`${at}: lose must map flags to text`);
+  if (o.tally !== undefined) {
+    if (typeof o.tally !== "string" || !/^g:\w+$/.test(o.tally)) errors.push(`${at}: tally must be a player-wide counter (g:<name>)`);
+    else setKeys.add(o.tally);
+  }
+  if (o.rival !== undefined && (typeof o.rival !== "string" || !o.rival)) errors.push(`${at}: rival must be a name`);
+  for (const w of [o.who, o.ward]) {
+    if (w?.look !== undefined && (w.entity !== "minecraft:villager_v2" || !/^minecraft:become_\w+$/.test(w.look))) errors.push(`${at}: look is for a minecraft:villager_v2 (minecraft:become_<job>)`);
+    if (w?.invul !== undefined && typeof w.invul !== "boolean") errors.push(`${at}: invul must be true or false`);
+  }
   if (o.bonus && !o.optional) errors.push(`${at}: bonus is only for an optional objective`);
   if (o.optional && o.or) errors.push(`${at}: an optional objective can't be in an "either" group (or)`);
   if (o.or !== undefined && (typeof o.or !== "string" || !o.or)) errors.push(`${at}: or must be a group id`);
@@ -472,6 +491,8 @@ if (vanilla) {
         read(s.id, o.when);
         scan(s.id, o.choices);
         if (o.set) scan(s.id, [{ set: o.set }]);
+        if (o.lose) scan(s.id, [{ set: o.lose }]);
+        if (o.tally) scan(s.id, [{ inc: { [o.tally]: 1 } }]);
       }
     }
   }
@@ -549,7 +570,9 @@ if (vanilla) {
               if (o.choices?.length && !cs.length) found.add(`${at} objective ${i + 1}: every choice is locked for some players`);
               const after = cs.length ? cs.map((/** @type {any} */ c) => pick(S, sid, c)) : [S];
               // An optional objective's flags: done or not. An "either" member's: one way of the group is taken (below).
-              return o.set && o.optional ? after.flatMap((A) => [A, pick(A, sid, o)]) : after;
+              const done = o.set && o.optional ? after.flatMap((A) => [A, pick(A, sid, o)]) : after;
+              // A race may be lost on the way (its `lose` flags), or not.
+              return o.lose ? done.flatMap((A) => [A, pick(A, sid, { set: o.lose })]) : done;
             });
           });
           /** @type {Map<string, any[]>} */

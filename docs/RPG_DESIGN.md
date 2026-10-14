@@ -364,6 +364,43 @@ Target total from wanderers: about 50 Crowns/h.
 - Cost: about 0.35 ms per tether pass over 13 walkers on the test server (0.035 ms a tick on average).
   Scenario: `tools/test-bds/examples/wander-walk.js`.
 
+**As shipped (follow-up: Rook's races, walking escorts, operator titles; October 2026):**
+- Broadcasts, so wander_bp and saga can see where Rook should be: bounty_bp `realm:bounty_targets` `{ targets: [{ id,
+  name, dim, x, z }], part, parts }` (today's unclaimed champion targets at their last-seen spot; on change, checked
+  every 2 s, and on `realm:bounty_targets_ping`); maps_bp `realm:map_leg` `{ player, hunt, dim, x, z, leg, legs,
+  final }` (chest, else marker, else planned spot; `{ gone }` at the end; on change, checked every second, and on
+  `realm:map_leg_ping`). Both kept in memory by the listeners and pinged for after a load.
+- Rook: archetype `rival` within 300 of a live target or the player's own last leg (no change to the roll chance,
+  cooldowns, caps or named share, so he can't come more often than any other wanderer); the 20-minute after-a-quest
+  rule is the fallback only while nothing is live anywhere.
+- The race is a saga objective, not a new type: `race: 300` on a `defeat` with `bounty: true` (counts Bounty Board
+  targets by their `realm:bounty:<id>` tag through `realm:champion_slain`; never spawns anything, excluded from plain
+  kill counting) or on an `event` with `quest: { pack: "maps_bp" }` (the treasure's `realm:quest_done`). The clock
+  starts when the player first comes within `radius` (300) of a target not raced yet, not at accept (a target can be
+  1,200 blocks out). Saga sends `realm:bounty_rival { id, player, until }` / `realm:map_rival { player, hunt, until }`
+  (`until` in ms; a second message may only shorten it, never extend). Lost: bounty_bp pays the killer
+  `rewards.rivalShare` (0.5) of 100, maps_bp pays `rivalShare` (0.5) of the chest's Crowns (loot unchanged); helpers
+  unchanged; the bounty itself is never blocked. Win: progress +1 and `tally` `g:rook_won` +1; loss sets `lose`
+  (`rook_lost`, teased in later intros and outros). Each target or hunt is raced once per objective (12 remembered).
+  The tracker points at a bounty target (the board shows it anyway), never at a treasure.
+- Content: Rook ch. 2 is "Beat Rook to 3 bounty champions" (or the Brushwood Brute, unchanged); ch. 3's optional
+  objective is the chest race (bonus 30); ch. 4 "Rook, Turned" now needs `g:rook_won >= 3` besides spite and
+  `g:iron >= 4`. Exploits checked: the penalty only lowers pay (nothing to farm); wins need real daily targets or a
+  bought map; party mates who kill a target Rook "won" get full pay (accepted: the rule is per racer).
+- Escorts: saga's spawnActor copies wander_bp's trick for `minecraft:villager_v2` (spawn with
+  `minecraft:spawn_from_village`, then `who.look`, re-triggered once a second until the family matches). Pell's
+  escort (and the `WANDERERS` table) is a villager now, cleric, `invul: true` (NPCs were unhurtable; keeping it).
+  Barnaby Pike got `minecraft:become_fisherman`; Pip already was a villager. No other escort or follow actor was an
+  NPC. Movement: every 2 ticks a 0.42-block step along the crumbs (0.6 / 1 when 5 / 8 blocks behind), facing the
+  way; crumbs only on the ground. Every interaction with a `saga:actor` is canceled (also leftovers not in memory).
+  Lightning: the named witch is removed and the character respawned where it stood; a zombie villager counts as
+  hurt. Leftovers after a restart go with the existing load sweep. Measured in the scenario: 0 steps over 1.3
+  blocks, 95% of steps facing the way.
+- `/realm:admin_title <title> [subtitle] [seconds] [player]` (ops, 1-25 s, default everyone online, 5 s) and the
+  quick action **Show a Title** send `realm:title` per target right before `setTitle`.
+- Scenarios: `rook-race.js`, `rook-map-race.js` (needs a one-leg maps copy, see its header), `saga-escort.js`,
+  `admin-title.js`. A `realm:saga_debug { action: "race_expire" }` ends running races for tests.
+
 ---
 
 ## 3. Atlas of the Realm (`atlas_bp` NEW)

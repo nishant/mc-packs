@@ -8,14 +8,14 @@
 
 /** @type {Wanderer[]} */
 export const WANDERERS = [
-  { id: "pell", name: "Pell the Pilgrim", short: "Pell", archetype: "pilgrim", guild: "wayfarers", entity: "minecraft:npc", camp: "camp_road" },
+  { id: "pell", name: "Pell the Pilgrim", short: "Pell", archetype: "pilgrim", guild: "wayfarers", entity: "minecraft:villager_v2", camp: "camp_road" },
   { id: "anwen", name: "Anwen, the Surveyor's Ghost", short: "Anwen", archetype: "ghost", guild: "wayfarers", entity: "minecraft:allay", camp: "camp_ruin" },
-  { id: "brannoch", name: "Brannoch Deepdelve", short: "Brannoch", archetype: "miner", guild: "miners", entity: "minecraft:npc", camp: "camp_deep" },
-  { id: "rook", name: "Rook the Rival", short: "Rook", archetype: "rival", guild: "wardens", entity: "minecraft:npc", camp: "camp_road" },
-  { id: "marigold", name: "Marigold of the Heights", short: "Marigold", archetype: "hermit", guild: "growers", entity: "minecraft:npc", camp: "camp_peak" },
-  { id: "tamsin", name: "Tamsin Galeward", short: "Tamsin", archetype: "storm", guild: "wayfarers", entity: "minecraft:npc", camp: "camp_peak" },
-  { id: "vesk", name: "Vesk the Exile", short: "Vesk", archetype: "exile", guild: "miners", entity: "minecraft:npc", camp: "camp_ruin" },
-  { id: "hob", name: "Hob Fairweather", short: "Hob", archetype: "traveler", guild: "growers", entity: "minecraft:npc", camp: "camp_road" },
+  { id: "brannoch", name: "Brannoch Deepdelve", short: "Brannoch", archetype: "miner", guild: "miners", entity: "minecraft:villager_v2", camp: "camp_deep" },
+  { id: "rook", name: "Rook the Rival", short: "Rook", archetype: "rival", guild: "wardens", entity: "minecraft:villager_v2", camp: "camp_road" },
+  { id: "marigold", name: "Marigold of the Heights", short: "Marigold", archetype: "hermit", guild: "growers", entity: "minecraft:villager_v2", camp: "camp_peak" },
+  { id: "tamsin", name: "Tamsin Galeward", short: "Tamsin", archetype: "storm", guild: "wayfarers", entity: "minecraft:villager_v2", camp: "camp_peak" },
+  { id: "vesk", name: "Vesk the Exile", short: "Vesk", archetype: "exile", guild: "miners", entity: "minecraft:villager_v2", camp: "camp_ruin" },
+  { id: "hob", name: "Hob Fairweather", short: "Hob", archetype: "traveler", guild: "growers", entity: "minecraft:villager_v2", camp: "camp_road" },
 ];
 
 
@@ -87,7 +87,7 @@ const PELL = {
         { text: `${PE}Go on ahead. Light a candle in the chapel window and I'll find my way by it.`, when: { way: "map" } },
       ],
       objectives: [
-        { type: "escort", label: "Walk Pell to the Old Chapel", who: { id: "pell", name: "Pell the Pilgrim", entity: "minecraft:npc" }, from: { place: "camp:pell" }, to: { place: "old_chapel", radius: 8 }, radius: 8, when: { way: "walk" } },
+        { type: "escort", label: "Walk Pell to the Old Chapel", who: { id: "pell", name: "Pell the Pilgrim", entity: "minecraft:villager_v2", look: "minecraft:become_cleric", invul: true }, from: { place: "camp:pell" }, to: { place: "old_chapel", radius: 8 }, radius: 8, when: { way: "walk" } },
         { type: "reach", label: "Go ahead to the Old Chapel", place: "old_chapel", radius: 12, when: { way: "map" } },
         { type: "interact", label: "Light a candle in the Old Chapel", place: "old_chapel", blocks: CANDLES, count: 1, radius: 10, when: { way: "map" } },
       ],
@@ -364,15 +364,17 @@ const ROOK = {
       id: "bounties",
       title: "Three Bounties",
       intro: [
-        `${RO}Real hunters take real bounties. I'm after the next three on the board. Beat me to them, if you can.`,
+        `${RO}Real hunters take real bounties. The champions on the board: the moment you get close to one, I'll be on its trail too. Five minutes, from then. Beat me to three of them, if you can.`,
+        { text: `${RO}And if I get there first? I put my arrow in it. Kill it after that and the board pays you half. Hunter's rules.`, when: { "pack:bounty_bp": "on" } },
         { text: `${RO}No board out here? Then there's a brute I've been tracking. First one to bring it down wins.`, when: { "pack:bounty_bp": "off" } },
       ],
       objectives: [
-        { type: "event", label: "Finish 3 bounties before Rook", quest: { pack: "bounty_bp" }, count: 3, or: "race", set: { beat: "yes" }, when: { "pack:bounty_bp": "on" } },
+        { type: "defeat", label: "Beat Rook to 3 bounty champions", bounty: true, race: 300, rival: "Rook", count: 3, or: "race", set: { beat: "yes" }, tally: "g:rook_won", lose: { rook_lost: "yes" }, when: { "pack:bounty_bp": "on" } },
         { type: "defeat", label: "Beat Rook to the Brushwood Brute", or: "race", set: { beat: "yes" }, champion: { tag: "realm:saga:rook_brute", mob: "minecraft:zombie", name: "Brushwood Brute", health: 40, warn: "Branches crack. The Brushwood Brute comes out of the trees!" } },
       ],
       outro: [
         `Rook arrives just in time to see you finish.\n\n${RO}No. No, no, no. I had that one. I HAD it.`,
+        { text: `${RO}Mind you, I've beaten you to one or two. Don't think I've forgotten. I've got them written down.`, when: { rook_lost: "yes" } },
         `He kicks a stone. Then he sits down heavily on it.\n\n${RO}All right. You beat me. What now? Going to rub it in?`,
       ],
       choices: [
@@ -381,7 +383,7 @@ const ROOK = {
       ],
       reward: { levels: 3, crowns: 45 },
       rep: [{ guild: "wardens", amount: 10 }],
-      hint: "With the Bounty Board, any three bounties you finish count. Otherwise the Brushwood Brute comes near you once you start: a big zombie with extra health.",
+      hint: "With the Bounty Board: go after the champion targets on the board. Within 300 blocks of one, Rook is on its trail too: defeat it within 5 minutes to win that race (helpers count). Too slow and the bounty pays you half; the next target is a new race. Or bring down the Brushwood Brute: it comes near you once you start, a big zombie with extra health.",
     },
     {
       id: "map",
@@ -391,6 +393,7 @@ const ROOK = {
         `${RO}I found an old map. Says there's a cache in the Ruined Watchtower: a hunter's stash, from the old days. I'm moving camp there. You coming?`,
         { text: `${RO}Don't think I've forgotten you laughing at me. I haven't.`, when: { spite: "yes" } },
         { text: `${RO}You bought me a drink. So you get first look. Don't make it weird.`, when: { spite: "no" } },
+        { text: `${RO}Got a treasure map? Then I'll race you to the chest, too. Last clue to coins in five minutes, or I take my cut.`, when: { "pack:maps_bp": "on" } },
       ],
       objectives: [
         { type: "inspect", label: "Search the Ruined Watchtower for the hunter's cache", place: "watchtower", clues: [
@@ -398,22 +401,22 @@ const ROOK = {
           { dx: 0, dz: 1, text: "Scratched into the ladder: a wolf's head, the old hunters' sign." },
           { dx: -3, dz: 2, text: "A loose stone. Behind it, a pouch of old Crowns and a broken arrowhead." },
         ] },
-        { type: "event", label: "Optional: finish a treasure map", quest: { pack: "maps_bp" }, count: 1, optional: true, bonus: { crowns: 30 }, when: { "pack:maps_bp": "on" } },
+        { type: "event", label: "Optional: beat Rook to a treasure chest", quest: { pack: "maps_bp" }, race: 300, rival: "Rook", count: 1, optional: true, bonus: { crowns: 30 }, tally: "g:rook_won", lose: { rook_lost: "yes" }, when: { "pack:maps_bp": "on" } },
       ],
       outro: [
         `${RO}A pouch of Crowns and a broken arrowhead. Fifty years of legend for that.\n\nHe turns the arrowhead over in his fingers.`,
         `${RO}The old hunters' sign. My father had one of these. Come back to camp. I've got something to settle.`,
       ],
       reward: { levels: 3, crowns: 50 },
-      hint: "The Ruined Watchtower is a story place: the tracker points to it, and Rook's camp is next to it now. Faint green sparkles mark where to look.",
+      hint: "The Ruined Watchtower is a story place: the tracker points to it, and Rook's camp is next to it now. Faint green sparkles mark where to look. The race is optional: within 300 blocks of your treasure map's last clue, find the chest within 5 minutes; too slow and the chest pays half its Crowns.",
     },
     {
       id: "turned",
       title: "Rook, Turned",
-      when: { spite: "yes", "g:iron": ">=4" },
+      when: { spite: "yes", "g:iron": ">=4", "g:rook_won": ">=3" },
       intro: [
         `Rook is standing when you come, spear in hand, and he isn't grinning.\n\n${RO}You laughed. Everyone always laughs. My father laughed, the day he left me at the board with his debts.`,
-        `${RO}No more wagers. No more races. Let's see who's the better hunter, properly.`,
+        `${RO}Three races. Three times you got there first, and laughed. No more wagers. No more races. Let's see who's the better hunter, properly.`,
       ],
       objectives: [
         { type: "defeat", label: "Defeat Rook", place: "camp:rook", radius: 40, champion: { tag: "realm:saga:rook_turned", mob: "minecraft:vindicator", name: "Rook, Turned", trait: "shielded", health: 50, warn: "Rook comes at you, and his friends come out of the trees with him!", adds: { mobs: ["minecraft:pillager"], count: 2 } } },
@@ -435,6 +438,7 @@ const ROOK = {
         `${RO}Here's the thing. Something's been creeping round my camp at night. A lot of somethings. I could handle it alone. Probably.`,
         { text: `${RO}But you bought me a drink. So I thought: partners. Just this once.`, when: { spite: "no" } },
         { text: `${RO}You still owe me for the laughing. Stand with me tonight and we're square.`, when: { spite: "yes" } },
+        { text: `${RO}And don't look so worried. I'm the one who beat you to a bounty, remember? You're in good hands.`, when: { rook_lost: "yes" } },
       ],
       objectives: [{ type: "defend", label: "Hold Rook's camp against the night", place: "camp:rook", radius: 16, waves: [{ mobs: ["minecraft:zombie", "minecraft:skeleton"], count: 4 }, { mobs: ["minecraft:zombie", "minecraft:spider", "minecraft:skeleton"], count: 6 }] }],
       outro: [

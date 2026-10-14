@@ -52,6 +52,7 @@ export const OPS_MARK = " §8(ops)";
  */
 export const NAMES = {
   "realm:admin_item": ["Get Admin Menu Item", "For you or other operators"],
+  "realm:admin_title": ["Show a Title", "Big text the HUD won't cover"],
   "realm:afk": ["Go AFK", "Move to come back"],
   "realm:bounty": ["Bounty Board Menu", "Today's bounties and boards"],
   "realm:bounty_board": ["Make Bounty Board", "From the lectern you look at"],
@@ -237,6 +238,12 @@ const TOWNSFOLK = {
 /** @type {Record<string, Record<string, ParamPreset>>} by command, then parameter name */
 export const PARAMS = {
   "realm:admin_item": { player: { label: "Give it to", everyone: true } },
+  "realm:admin_title": {
+    title: { label: "Title" },
+    subtitle: { label: "Subtitle (optional)" },
+    seconds: { label: "Seconds on screen", kind: "slider", min: 1, max: 25, step: 1, default: 5 },
+    player: { label: "Show it to", everyone: true },
+  },
   "realm:caravan_spot": { name: { label: "Spot name (empty: Spot 1, Spot 2...)" } },
   "realm:champions_spawn": { "realm:champion_trait": { label: "Trait (leave out: random)" } },
   "realm:crowns_give": { player: { label: "Give Crowns to", everyone: true }, amount: { label: "Crowns (negative takes them)", kind: "text", default: 100 } },

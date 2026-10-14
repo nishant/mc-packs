@@ -19,6 +19,7 @@ const OPTIONS = [
   { key: "spawnDistance", type: "int", scope: "world", label: "Target appears within (blocks)", help: "A target appears when a player comes this close to its spot", min: 16, max: 128, step: 8 },
   { key: "rewards.champion", type: "int", scope: "world", label: "Crowns for a champion target", min: 0, max: 10000, step: 5 },
   { key: "rewards.helper", type: "int", scope: "world", label: "Crowns for each helper", min: 0, max: 10000, step: 5 },
+  { key: "rewards.rivalShare", type: "float", scope: "world", label: "Share of the reward after losing a race to Rook", help: "0.5 = half. Only the killer who lost a story race (Story Questlines) gets less", min: 0, max: 1, step: 0.05 },
   { key: "rewards.cull", type: "int", scope: "world", label: "Crowns for a cull bounty (each)", min: 0, max: 10000, step: 5 },
   { key: "notes", type: "bool", scope: "player", default: true, label: "Bounty progress notes", help: "A note above the hotbar when a kill counts toward a cull bounty" },
 ];
