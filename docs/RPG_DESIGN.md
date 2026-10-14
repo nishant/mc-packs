@@ -395,6 +395,41 @@ cairns, wrecks, hermit huts and 60 Starwright tablets fill the miles between sto
 **Cost per player:** every 40 ticks, cell math and a 9-cell POI distance check (no block reads);
 at most 1 build at a time.
 
+**As shipped (3, October 2026):**
+- Grid: centered on world spawn as first seen (`atlas:origin` also holds a random salt: no seed API), Overworld only.
+  The biome guess is made once per cell, by its first visitor (5 top blocks), and saved realm-wide, so everyone sees
+  the same name; region numbers are the realm's discovery order. Banner after crossing 8 blocks in; a known region at
+  most every 20 s. Player pref **Region banners**.
+- Slots: one per quadrant (40-block margin), kind preference hashed (tablet 24, shrine 16, camp 12, survey 11,
+  cairn 10, fossil 10, watch 9, hermit 8); deep water (6+) at the slot makes a wreck; within 300 of a recorded meteor
+  impact half the land slots become pools. Center + 8 nudges of 16 blocks; unloaded ground waits (no nudge used up);
+  zones/claims/places near a slot make it wait 10 min (not skipped), so removing a zone later fills the region in.
+  Distances: 128 from zones and every claim (`realm:claims_check` with `player: ""`), 48 from story places/camps
+  (16 was too close for 64-wide prefabs), 160 from spawn. Saved "being built" first, finished after a restart.
+- Interactions: tap or hit the heart block (shrine, tablet, survey, pool, watch bell), open the container (camp
+  barrel, wreck chest: loot goes to the inventory, rolled per player), break the cairn bell / 12 fossil bones (their
+  drops are removed, and they come back for the next player: no bell or bone farm). "First find" is proximity (10
+  blocks): pays the shrine (10 Crowns + 30 XP) and hermit; the others pay on use. Every find 10 Exploration XP.
+- Bedrock has no Luck effect: shrines give Regeneration (plains, forest), Speed (high, dry) or Hero of the Village
+  (wet, sea), once per Realm day (`realm:calendar`, else the world day).
+- Tablets: a new tablet site gives the lowest-numbered tablet the player hasn't read, so everyone reads 1-60 in order;
+  tier n+1 needs `act >= n`. Worn text = first 6 words + "after <Act>". Without saga_bp installed every tablet reads in
+  full. `realm:saga_progress` is sent by saga every 5 s on change (and join, and on `realm:saga_progress_ping`); the
+  reread message counts tablets that just became readable. Codex is atlas's own (/realm:atlas), not saga's.
+- quest_done: `{ player, pack: "atlas_bp", id: "atlas:<kind>:<cx,cz,slot>", label, kind: "explore", guild }`,
+  guild wardens (cairn, watch), miners (fossil), wayfarers (rest); 10 rep each (Guilds' `other`). **Cairn:**
+  sent when its 3 keepers (2 pillagers + vindicator, named `Choir Bellkeeper`, no banners) are all dead, not on the
+  bell break itself (a lost fight sends nothing; the bell comes back). Calendar: count `atlas:cairn:*`.
+- realm:poi `{kind, dim, x, z, name}` for hermit, shrine, tablet, cairn, watch, camp only (wander_bp caps at 400 and
+  keeps them in memory): on build and re-sent 6 s after every load, 10 a tick, at most 380.
+- Gossip kinds `atlas` (milestone, place = title) and `atlas_site` (cairn silenced / post held) with lines in npc_bp.
+  Trail `glyphs` (vanilla `minecraft:enchanting_table_particle`) added to titles_bp. Milestone titles: Surveyor,
+  Pathfinder, Atlas-Maker (10/25/50 regions); Wayfarer of Stones, Wayfinder, Keeper of the Atlas (10/25/60 sites);
+  Tablet Reader, Starwright Scholar (12/60 tablets).
+- Story tie-in: optional step in Edges of the Map *Sand and Snow* (`quest: { pack: "atlas_bp", id: "atlas:*" }`,
+  `edges_of_map.waymark`), 20 Crowns and a codex page.
+- Content v1: 10 prefabs, 60 tablets (5 x 12), 10 Fenn notes, 24 adjectives x 30 nouns (6 groups x 5).
+
 ---
 
 ## 4. Realm Calendar: festivals and Choir sieges (`calendar_bp` NEW)

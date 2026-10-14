@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Atlas of the Realm",
+    "description": "Named regions with banners, and wayside sites out in the wilds: shrines, Starwright tablets, Choir cairns, camps, wrecks. /realm:atlas",
+    "uuid": "33dc1611-7485-403f-ab51-309f1e8e55ea",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "a975f0d5-cda7-4a3d-b5e9-ac6beb6d8db3",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}
