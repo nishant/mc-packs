@@ -400,11 +400,13 @@ function collect(player, rod) {
   }
   rod[4] = 0;
   saveRods();
-  const n = Math.max(1, Math.round(between(CONFIG.glassMin, CONFIG.glassMax)));
+  // Rod Reader (a Stormcaller talent, Skills) and the Storm set (Relics) each add one more.
+  const extra = Math.min(2, callingValue(player, "rodGlass")) + (stormSet.has(player.id) ? 1 : 0);
+  const n = Math.max(1, Math.round(between(CONFIG.glassMin, CONFIG.glassMax))) + extra;
   const container = player.getComponent("minecraft:inventory")?.container;
   const rest = container ? container.addItem(stormGlass(n)) : stormGlass(n);
   if (rest) player.dimension.spawnItem(rest, player.location);
-  player.sendMessage(`§bYou collect ${n} Storm Glass from the lightning rod.${rest ? " §7It dropped at your feet: your inventory is full." : ""}`);
+  player.sendMessage(`§bYou collect ${n} Storm Glass from the lightning rod${extra ? ` (${extra} more from your Calling and relics)` : ""}.${rest ? " §7It dropped at your feet: your inventory is full." : ""}`);
   player.playSound("random.orb", { pitch: 1.5 });
 }
 
@@ -601,6 +603,46 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Callings (Skills): realm:calling carries each player's talent numbers (`bonus`: rodGlass: Rod Reader's extra Storm Glass). Kept in memory; Skills
+// sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
+/** @type {Map<string, Record<string, number>>} */
+const callingBonus = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:calling") return;
+    try {
+      const m = JSON.parse(message);
+      if (m && typeof m.player === "string" && m.bonus && typeof m.bonus === "object") callingBonus.set(m.player, m.bonus);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
+// Relics: players with the Storm set (realm:relic_sets) get one more Storm Glass from a rod.
+/** @type {Set<string>} */
+const stormSet = new Set();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:relic_sets") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.player !== "string" || !Array.isArray(m.sets)) return;
+      if (m.sets.includes("storm")) stormSet.add(m.player);
+      else stormSet.delete(m.player);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:relic_sets_ping", "{}"), 150));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => stormSet.delete(playerId));
+/** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
+const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

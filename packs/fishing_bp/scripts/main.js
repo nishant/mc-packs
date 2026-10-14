@@ -268,9 +268,12 @@ function eligible(item, dim, at) {
   );
 }
 
-/** A weighted pick by rarity. @param {Species[]} list */
-function pick(list) {
-  const weightOf = (/** @type {Species} */ sp) => Math.max(0, rarities.get(sp.rarity)?.weight ?? 0);
+/** Rarities Lucky Line (a Hearthkeeper talent, Skills) makes bite more often. */
+const LUCKY = new Set(["rare", "epic", "legendary"]);
+
+/** A weighted pick by rarity; `lucky` percent more weight for rare, epic and legendary fish. @param {Species[]} list @param {number} [lucky] */
+function pick(list, lucky = 0) {
+  const weightOf = (/** @type {Species} */ sp) => Math.max(0, rarities.get(sp.rarity)?.weight ?? 0) * (lucky > 0 && LUCKY.has(sp.rarity) ? 1 + lucky / 100 : 1);
   const total = list.reduce((n, sp) => n + weightOf(sp), 0);
   if (total <= 0) return list[0];
   let roll = Math.random() * total;
@@ -493,7 +496,7 @@ function replace(entity, owner, hookAt) {
   const dim = entity.dimension;
   const list = eligible(stack.typeId, dim, hookAt);
   if (!list.length) return; // no species for this item here: the vanilla fish stays
-  const sp = pick(list);
+  const sp = pick(list, Math.min(200, callingValue(owner, "luckyLine")));
   const size = rollSize(sp);
   // A player who doesn't want measured fish (or only notable ones) keeps the vanilla fish: it stacks. The catch still counts.
   const plain = getFor(owner, "measure") !== true || (getFor(owner, "notableOnly") === true && !notable(owner, sp, size));
@@ -1087,6 +1090,27 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Callings (Skills): realm:calling carries each player's talent numbers (`bonus`: luckyLine: Hearthkeeper's percent more rare fish). Kept in memory; Skills
+// sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
+/** @type {Map<string, Record<string, number>>} */
+const callingBonus = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:calling") return;
+    try {
+      const m = JSON.parse(message);
+      if (m && typeof m.player === "string" && m.bonus && typeof m.bonus === "object") callingBonus.set(m.player, m.bonus);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
+/** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
+const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

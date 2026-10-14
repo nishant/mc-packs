@@ -38,6 +38,46 @@ export const CONFIG = {
   /** The Singing Blade, Keeper's Lamp and Lantern Shard: how far their ring, light and pull reach (blocks). */
   auraRange: 6,
 
+  /** Relic Ascension at a relicsmith: +1 Awakened, +2 Ascended, +3 Starlit. */
+  ascension: {
+    /** Relics can be ascended (and duplicates broken into Relic Essence) at the relicsmith. Disabled: stages already made still work. */
+    enabled: true,
+
+    /** What each stage costs, in order (+1, +2, +3): Relic Shards or Relic Essence (any mix, Essence first), Storm Glass and Crowns. */
+    costs: [
+      { shards: 6, glass: 1, crowns: 60 },
+      { shards: 12, glass: 3, crowns: 150 },
+      { shards: 20, glass: 5, crowns: 400 },
+    ],
+
+    /** Relic Essence a duplicate relic breaks into. */
+    essencePerBreak: 4,
+
+    /** Story relics stop at +1 until this affinity level (Townsfolk: 4 = Confidant) with their townsfolk, or their story flag (`storyGates`). */
+    gateLevel: 4,
+
+    /** Tell everyone in chat when a relic becomes Starlit (+3). */
+    announceStarlit: true,
+  },
+
+  /** Relic sets (all three relics in the hotbar, off hand or worn) give their bonus. */
+  setsEnabled: true,
+
+  /**
+   * What lets each story relic go past +1: `npc` at `ascension.gateLevel` (from realm:affinity) or the story flag `flag`
+   * = `value` (from Story Questlines' realm:npc_flags; "" for none). `text` is what the forge says it needs.
+   * @type {{ relic: string, npc: string, flag: string, value: string, text: string }[]}
+   */
+  storyGates: [
+    { relic: "hal_compass", npc: "tobin", flag: "g:gull", value: "sailed", text: "Old Tobin as a Confidant, or The Gull's Last Voyage sailed" },
+    { relic: "lantern_shard", npc: "mara", flag: "fin:act4_seals", value: "1", text: "Mara as a Confidant, or The Three Seals finished" },
+    { relic: "choir_mask", npc: "reyes", flag: "fin:act5_lantern", value: "1", text: "Warden Reyes as a Confidant, or Lantern Night finished" },
+    { relic: "vesna_charm", npc: "moss", flag: "g:vesna", value: "free", text: "Moss as a Confidant, or Vesna set free" },
+    { relic: "singing_blade", npc: "ida", flag: "", value: "", text: "Ida as a Confidant" },
+    { relic: "hollow_crown", npc: "quill", flag: "", value: "", text: "Quill as a Confidant" },
+    { relic: "keeper_lamp", npc: "elsie", flag: "", value: "", text: "Elsie as a Confidant" },
+  ],
+
   /**
    * The relics. `id` is fixed (saved on items and in players' records; other packs ask for relics by it).
    * `item` is a vanilla item that doesn't stack (relics carry data, which only unstackable items can);

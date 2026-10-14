@@ -6,7 +6,8 @@
  * Flag conditions: every key must match. Keys: a story's own flag, `g:<name>` (player-wide),
  * `<storyId>.<flag>` (another story's) or `pack:<folder>` (`"on"` while that pack is installed: it
  * answered the `realm:help_ping` scan; `"off"` otherwise). Set by other packs: `g:aff_<npc>` (Townsfolk
- * affinity level, 0 Stranger to 4 Confidant, saved) and the live `cal:day`, `cal:season`, `cal:festival`. Values: an exact value, `"!x"` (anything
+ * affinity level, 0 Stranger to 4 Confidant, saved), `g:calling_ready` ("1") and `g:calling` (the Calling id or
+ * "none"; Skills' realm:calling, saved) and the live `cal:day`, `cal:season`, `cal:festival`. Values: an exact value, `"!x"` (anything
  * but x) or `">=n"` (a number at least n, for counters such as `g:mercy`).
  * @typedef {Record<string, string>} When
  */

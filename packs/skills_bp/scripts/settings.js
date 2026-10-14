@@ -22,6 +22,11 @@ const OPTIONS = [
   { key: "xpBase", type: "int", scope: "world", label: "XP curve base", restart: true },
   { key: "xpExponent", type: "float", scope: "world", label: "XP curve exponent", restart: true },
   { key: "xpNotes", type: "bool", scope: "player", base: "xpNotes", label: "Skill XP notes", help: "A note above the hotbar as you gain XP" },
+  { key: "callings.enabled", type: "bool", scope: "world", label: "Callings", help: "Disabled: Calling Sigils and talents do nothing; choices are kept" },
+  { key: "callings.unlockTotal", type: "int", scope: "world", label: "Total skill level for a Calling", help: "All six skill levels added up", min: 6, max: 300, step: 1 },
+  { key: "callings.respecCost", type: "int", scope: "world", label: "Reset talents cost (Crowns)", min: 0, max: 1000, step: 10 },
+  { key: "callings.switchDays", type: "int", scope: "world", label: "Realm days between Calling choices", min: 0, max: 30, step: 1 },
+  { key: "callings.chooseAnywhere", type: "bool", scope: "world", label: "Choose a Calling anywhere", help: "Disabled: only at Brother Hollis (or Moss) when the Townsfolk pack is here" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

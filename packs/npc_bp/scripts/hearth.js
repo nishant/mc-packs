@@ -295,6 +295,7 @@ export const HEARTH = {
       champion: [["{name}. {place}. Dead. Good.", "{place}. You did that. Good."]],
       act: [["{name} is asking the right questions. Dunmore would like them.", "You ask good questions, {player}. Dunmore asked good questions."]],
       blood_moon: [["{name} stood out under the red moon. Steel holds in fire. So do some people.", "Red moon. You held. Like good steel."]],
+      relic_starlit: [["{name}'s {place}. Starlit. My work. Their shards. Good.", "Your {place}. Starlit. Best thing I've made. Don't drop it."]],
     },
   },
 
@@ -369,6 +370,7 @@ export const HEARTH = {
       blood_moon: [["{name} was out under the red moon. I sat up with every candle lit.", "You stayed out under the red moon. I sat up with every candle lit, {player}."]],
       siege: [["{name} silenced the Choir's bells. I heard them stop, one by one. I cried a little. Good tears.", "You silenced the bells, {player}. I heard them stop, one by one. Thank you."]],
       siege_lost: [["I heard the Choir singing all night through the chapel walls. I knew the words. I don't know how I knew the words.", "I heard them singing all night, {player}. I knew the words. Please don't tell anyone that."]],
+      calling: [["I wrote {name} into the chapel book. A {place}. My hand shook, but the ink took.", "Your name is in the chapel book now, {player}. A {place}. I read it every night."]],
     },
   },
 
@@ -405,6 +407,7 @@ export const HEARTH = {
       champion: [["{name} sent {place} my way. Saves me the trouble of waiting.", "You sent {place} my way. Thanks. Saves me the waiting."]],
       act: [["{name} keeps poking at old graves. I like them. They're the only one who asks first.", "You keep poking at old graves, {player}. At least you knock."]],
       blood_moon: [["{name} walked a red moon night. The yard was busy. Nobody stayed down.", "Red moon night, and you walked it. The yard was very busy. Nobody stayed down."]],
+      calling: [["{name} is a {place} now. Half the old {place}s are in my north row. Good company.", "A {place}, {player}. Half the old ones are in my north row. No hurry to visit."]],
     },
   },
 
@@ -546,6 +549,14 @@ export const GOSSIP = {
   atlas_site: [
     ["{name} fought off a whole crowd at a {place} out in the wilds. Alone, they say.", "A {place}, out in the wilds? Alone? You'll give Reyes gray hairs, {player}."],
     ["They say {name} held a {place} against all comers.", "You held a {place} against all comers? Sit down. Eat something, {player}."],
+  ],
+  calling: [
+    ["{name} took up a Calling: a {place}, like the settlers. The old ways are coming back.", "A {place}, {player}! Like the first settlers. It suits you."],
+    ["Have you heard? {name} is a {place} now. The chapel book has a new name in it.", "The chapel book has your name in it now. A {place}. Well done, {player}."],
+  ],
+  relic_starlit: [
+    ["{name}'s {place} is Starlit. Ida hasn't stopped smiling. Ida doesn't smile.", "Your {place} is Starlit, {player}! Ida hasn't stopped smiling. That's new."],
+    ["They say {name}'s {place} glows gold now. Ida worked it for days.", "A Starlit {place}! Gold right through. Let me see it, {player}."],
   ],
   other: [
     ["{name} has been busy. Everyone's talking about it.", "Everyone's talking about you, {player}. Good things, I think."],

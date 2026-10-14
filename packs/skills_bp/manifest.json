@@ -2,9 +2,9 @@
   "format_version": 2,
   "header": {
     "name": "Skills",
-    "description": "Six skills that level up from 1 to 50 as you mine, chop, farm, fish, fight and explore, with small perks along the way. /realm:skills",
+    "description": "Six skills that level up from 1 to 50 as you mine, chop, farm, fish, fight and explore, with small perks along the way, and at a total level of 75 a Calling: one of six paths with a Calling Sigil and a talent tree. /realm:skills",
     "uuid": "b8c1711d-eb89-49e7-bd7c-89b2f324c021",
-    "version": [1, 0, 4],
+    "version": [1, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

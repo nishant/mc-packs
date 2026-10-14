@@ -1,7 +1,7 @@
 const ORES = ["coal", "iron", "copper", "gold", "redstone", "lapis", "diamond", "emerald"].flatMap((o) => [`minecraft:${o}_ore`, `minecraft:deepslate_${o}_ore`]);
 
 export const CONFIG = {
-  /** The four guilds: the name players see and the word their titles use ("Master Miner"). Keep the keys: reputation is saved by them. */
+  /** The four guilds: the name players see (also in the top title, "Miners' Guildmaster") and the word the other titles use ("Expert Miner"). Keep the keys: reputation is saved by them. */
   guilds: {
     miners: { name: "Miners' Guild", member: "Miner" },
     growers: { name: "Growers' Guild", member: "Grower" },
@@ -18,8 +18,11 @@ export const CONFIG = {
     { name: "Master", rep: 1500 },
   ],
 
-  /** Ranks (1 = the first) that unlock a title, sent to the Titles pack: "Expert Miner", "Master Miner". */
+  /** Ranks (1 = the first) that unlock a title, sent to the Titles pack: "Expert Miner", and for the top rank `topTitle`. */
   titleRanks: [4, 5],
+
+  /** The top rank's title: `{guild}` is the guild's name ("Miners' Guildmaster"), so it never clashes with Skills' "Master Miner". Empty: "<rank> <member>" like the others. */
+  topTitle: "{guild}master",
 
   /** Rank (1 = the first) each guild's perk needs. 3 = Journeyman. */
   perkRank: 3,

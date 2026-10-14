@@ -6,6 +6,19 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Callings and Relic Ascension
+
+Seasoned adventurers can take up a Calling now, and Ida can wake the power in your relics.
+
+- When your six skill levels add up to 75, Brother Hollis shows you the chapel book: choose one of six Callings (Delver, Warden, Pathfinder, Hearthkeeper, Woodwright, Stormcaller). The first choice is free.
+- Each Calling gives a Calling Sigil with an ability (ores that glow, a rally cry, a burst of speed, a healing song, Haste II, static in the rain) and a talent tree: up to 10 points, three tiers, one capstone. See /realm:skills_calling.
+- Reset your talents for 50 Crowns, or switch Calling at Hollis for 100 Crowns and up, at least 3 Realm days apart.
+- Some talents work in other packs: cheaper waystones, treasure spots from farther away, longer dish effects, rarer fish, bigger builds, more Storm Glass.
+- At Ida's forge, ascend a relic to +1, +2 and +3 Starlit with Relic Shards, Storm Glass and Crowns: shorter cooldowns, longer reach, and a unique bonus with a gold name. Story relics go past +1 once a story or a friendship allows it.
+- Two of the same relic? Ida breaks one into 4 Relic Essence, which counts like shards.
+- Carry all three relics of a set for a bonus: Storm (lightning can't hurt you), Tide, Deep or Sun.
+- The guilds' top title is now Miners' Guildmaster (and so on), so it no longer reads like the Skills title Master Miner.
+
 ## Realm Calendar
 
 The realm keeps a calendar now: seasons, festivals, and a Choir that comes for the towns.

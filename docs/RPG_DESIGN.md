@@ -581,3 +581,44 @@ NPC birthdays (section 2) use this calendar.
   - Sun (Sun Pendant + Frost Band + Wayfarer Boots): fire and freeze resistance at dawn and dusk.
 - Sink: about 646 shards and 10,370 Crowns for all 17 relics at +3.
 - Expedition leaderboards show each player's Calling.
+
+**As shipped (5, October 2026):**
+- Talent points: 1 + 1 per **5** combined levels of the two skills above 50 (`callings.pointsEvery`), up to 10. With 1 per 10
+  the most was 6 and the 7-point capstone could never open. Tiers 1 and 2 have two ranks, the capstone one (one of three):
+  15 ranks, 13 spendable, 10 points. The table's three "passive choices" are each Calling's capstones; tiers 1 and 2 are
+  new (an XP talent, a perk-chance or guard talent, the active's duration and cooldown, a held effect or damage talent).
+- Code: skills_bp `scripts/calling.js` (one player property `skills:calling` `{ c, t, n, d, w, cd }`; the Sigil's cooldown
+  is saved there, so leaving doesn't reset it). Sigil: `minecraft:music_disc_ward` with item property `skills:sigil`, kept
+  on death, canceled out of jukeboxes, works with the holder's own Calling. Static needs rain (no cooldown spent without);
+  rain is tracked like the other packs (`skills:weather`).
+- `realm:calling { player, name, calling, label, talents, bonus, ready, from }`: `bonus` carries the numbers consumers use
+  (`waystoneOff` 25, `mapReveal` 128, `dishPct` 25, `luckyLine` 50, `buildEye` 25, `rodGlass` 1) so none redoes the
+  tree; `realm:calling_ping` (debounced to once a second). Consumers: waystone_bp, maps_bp (at most 160), cooking_bp,
+  fishing_bp (Lucky Line: +50% weight on rare/epic/legendary), build_bp (survival `maxBlocks`), storm_bp, expedition_bp
+  (leaderboards, names saved in `expedition:callings`, 300 max).
+- Saga: `g:calling_ready` and `g:calling` (id or `none`) saved from realm:calling (check-stories knows both). *The Calling*
+  (`stories/calling.js`): one story, two chapters by `g:hollis` (Hollis's *The Chapel Book*, Moss's *The Gravedigger's
+  Book*), an `event` on `skills:calling:*` or (chosen before accepting) a talk; the outro answers `g:calling`; `g:called`
+  keeps the other chapter from opening later. The choice itself is in skills_bp's menu, offered at roles `priest` (or
+  `gravedigger` when npc_flags says `g:hollis = lost`); without npc_bp (no `help_pong`) it works anywhere, and
+  `callings.chooseAnywhere` allows that too. Respec works anywhere; switching only at Hollis/Moss. The switching gap is
+  measured in `realm:calendar` days (game days without a calendar).
+- Damage talents take the bonus off health directly (no new hit); a bonus that would leave under 1 health sets 1 and
+  finishes with one guarded `applyDamage` 11 ticks later (a weaker hit inside the invulnerability frames did nothing), so
+  the kill counts. Guards refund after the hit, at most 60% from all talents. Guild perks and skill perks now skip an
+  effect the player has stronger or longer (higher wins).
+- Relics: ascension kinds per relic (`cd` for the five with cooldowns, `boost` for Frost Band, Keeper's Lamp, Choir Mask,
+  Fen Charm, `linger` 10/20/30 s for the other passives), a +2 flavor line, 17 Starlit bonuses (PACKS.md table). Costs per
+  the design table, Essence spent before shards, Ida's friend discount on shards; the relic is found again by
+  `relic:serial` after the confirm form. Relic Essence is `minecraft:echo_shard` named `Relic Essence` (lore-checked,
+  like shards). Story gates: Hal's Compass Tobin or `g:gull` (added to saga's npc_flags), Lantern Shard Mara or
+  `fin:act4_seals`, Choir Mask Reyes or `fin:act5_lantern`, Fen Charm Moss or `g:vesna = free`, Singing Blade Ida, Hollow
+  Crown Quill, Keeper's Lamp Elsie (Confidant).
+- Sets: Bedrock has no Dolphin's Grace, so Tide gives Conduit Power in water; Deep's "quiet sneaking" is vanilla already
+  (sneaking doesn't trip sculk), so it removes Darkness below y 0. Storm also refunds the fire a bolt starts. Sets go out as
+  `realm:relic_sets { player, sets }` (+ `_ping`); storm_bp adds 1 glass for `storm` (and Rod Reader's 1, at most 3 extra
+  together).
+- Gossip kinds `calling` and `relic_starlit` with generic lines plus Hollis, Moss (calling) and Ida (Starlit) voices.
+  Guilds' top title is `topTitle` "{guild}master"; every reached title is re-sent 11 s after join.
+- Tests: `tools/test-bds/examples/skills-calling.js`, `relics-ascension.js`. A simulated player gets a new id on restart,
+  so the Calling's persistence across a restart can't be tested there (relic stages are, through a chest).

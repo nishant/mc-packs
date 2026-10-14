@@ -11,6 +11,9 @@ const root = join(import.meta.dirname, "..");
 const scripts = join(root, "packs", "saga_bp", "scripts");
 const { STORIES, PLACES, NPC_NAMES } = await import(pathToFileURL(join(scripts, "stories.js")).href);
 const { FAVORS, WANDERERS, WANDER_TEMPLATES, HOSTILES } = await import(pathToFileURL(join(scripts, "stories", "index.js")).href);
+/** The Skills pack's Callings, for `g:calling` (realm:calling). */
+const { CONFIG: SKILLS_CONFIG } = await import(pathToFileURL(join(root, "packs", "skills_bp", "scripts", "config.js")).href);
+const callingIds = SKILLS_CONFIG.callings.list.map((/** @type {any} */ c) => c.id);
 /** Recurring Wanderers: `w_<id>` is an NPC id for stories, `camp:<id>` a place. */
 const WANDERER_IDS = new Set(WANDERERS.map((/** @type {any} */ w) => w.id));
 const ARCHETYPES = new Set(["miner", "ghost", "pilgrim", "rival", "hermit", "storm", "exile", "traveler"]);
@@ -130,6 +133,13 @@ function whens(at, sid, when) {
     if (k === "g:w_accused") {
       // Wanderers of the Wilds: friendly wanderers this player accused, counted from realm:wander_gone, never by a choice.
       if (!/^(>=|<=)?[0-9]+$/.test(String(when[k]))) errors.push(`${at}: "${k}" is a count (">=1")`);
+      continue;
+    }
+    if (k === "g:calling_ready" || k === "g:calling") {
+      // Callings (realm:calling from Skills): "1" once the player can choose one; the Calling id or "none". Never set by a choice.
+      const v = String(when[k]).replace(/^!/, "");
+      const ids = ["none", ...callingIds];
+      if (k === "g:calling_ready" ? v !== "1" : !ids.includes(v)) errors.push(`${at}: "${k}" must be ${k === "g:calling_ready" ? '"1"' : `one of ${ids.join(", ")}`}`);
       continue;
     }
     if (k.startsWith("cal:")) {

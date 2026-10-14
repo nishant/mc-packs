@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 161 commands in 63 packs */
+/** @type {Pack[]} 162 commands in 63 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -439,6 +439,7 @@ export const PACKS = [
     pack: "Skills",
     commands: [
       {"name":"realm:skills","description":"Skills: your levels, XP and perks in Mining, Woodcutting, Farming, Fishing, Combat and Exploration","permission":"any","params":[]},
+      {"name":"realm:skills_calling","description":"Skills: your Calling (from a total skill level of 75): choose one, spend talent points, get the Calling Sigil","permission":"any","params":[]},
     ],
   },
   {

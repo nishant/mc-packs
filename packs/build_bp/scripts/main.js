@@ -539,7 +539,7 @@ function frameOf(F, turn) {
 /** Room over the cap while a shape is laid out (some shapes add cells and take a few away again). @param {number} cap */
 const slack = (cap) => (Number.isFinite(cap) ? Math.ceil(cap * 1.25) + 64 : cap);
 /** The most blocks one build of this player's may place. @param {Player} player @returns {number} */
-const limitOf = (player) => (isCreative(player) ? get("maxBlocksCreative") : get("maxBlocks"));
+const limitOf = (player) => (isCreative(player) ? get("maxBlocksCreative") : Math.floor(get("maxBlocks") * (1 + Math.min(100, callingValue(player, "buildEye")) / 100)));
 
 /** @type {Map<string, { key: string, guide: { cells: Pos[], offset?: Pos } | undefined }>} guide cells per player */
 const layoutCache = new Map();
@@ -2140,6 +2140,27 @@ async function buildHere(player) {
   if (!T) return player.sendMessage(`§eLook at a block within ${reachOf(player)} blocks first${get("airBuild") === true ? ", or turn on Air Build (/realm:build -> Guides, reach and Air Build)" : ""}.`);
   await buildAt(player, T);
 }
+
+// Callings (Skills): realm:calling carries each player's talent numbers (`bonus`: buildEye: Builder's Eye's percent more blocks). Kept in memory; Skills
+// sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
+/** @type {Map<string, Record<string, number>>} */
+const callingBonus = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:calling") return;
+    try {
+      const m = JSON.parse(message);
+      if (m && typeof m.player === "string" && m.bonus && typeof m.bonus === "object") callingBonus.set(m.player, m.bonus);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
+/** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
+const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // ---------------------------------------------------------------------------
 // Commands and script events

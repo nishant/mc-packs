@@ -1650,7 +1650,7 @@ export const PACKS = [
     "folder": "skills_bp",
     "topic": "skills",
     "name": "Skills",
-    "summary": "Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and Exploration. Each goes from level 1 to 50 with XP from what you already do (mining ores, chopping trees, harvesting grown crops, fishing, defeating mobs and exploring new land), and every 10 levels unlocks a small perk such as a chance of a double ore drop or a short burst of Speed. Playing near a party mate gives 10% more XP, and level 50 in a skill unlocks a title such as §eMaster Miner§r.",
+    "summary": "Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and Exploration. Each goes from level 1 to 50 with XP from what you already do (mining ores, chopping trees, harvesting grown crops, fishing, defeating mobs and exploring new land), and every 10 levels unlocks a small perk such as a chance of a double ore drop or a short burst of Speed. Playing near a party mate gives 10% more XP, and level 50 in a skill unlocks a title such as §eMaster Miner§r. Once your six levels add up to 75 you choose a §lCalling§r, one of six paths (Delver, Warden, Pathfinder, Hearthkeeper, Woodwright, Stormcaller): a Calling Sigil with an active ability and a talent tree of nine talents to spend up to 10 points in.",
     "steps": [
       {
         "text": "Play: XP counts by itself. Mine stone and ores, chop logs, harvest fully grown crops, catch things with a fishing rod, defeat mobs and travel to places you have never been. A note above the hotbar shows what you gained, for example §e+5 Mining XP (level 3: 40/104)§r.",
@@ -1677,7 +1677,23 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lSkills§r switches skills, perks and creative-mode XP, and sets the XP multiplier and the party bonus. XP per block, mob and catch, and the perks, are in §econfig.js§r. Each skill's XP is a scoreboard (§eskill_mining§r, §eskill_woodcutting§r, §eskill_farming§r, §eskill_fishing§r, §eskill_combat§r, §eskill_exploration§r), so §e/scoreboard§r can show or change it.",
+        "text": "When your six skill levels add up to 75 (default, §ecallings.unlockTotal§r), chat says you can choose a Calling. Tap Brother Hollis at the chapel (Townsfolk; Moss at the graveyard if the story lost Hollis) and pick §lChoose a Calling§r, read each Calling's page and pick §lBecome a ...§r. The first choice is free, and you get the §lCalling Sigil§r (a named music disc). §e/realm:skills_calling§r (or §lCalling§r in §e/realm:skills§r) shows every Calling anywhere; the Story Questlines chapter *The Calling* goes with it.",
+        "ops": false
+      },
+      {
+        "text": "Use the Sigil (tap with it in your hand) for your Calling's ability, for example Hearth Song: Regeneration for you and party mates near you. It then needs its cooldown (§eHearth Song: ready in 74s§r).",
+        "ops": false
+      },
+      {
+        "text": "Spend talent points in §e/realm:skills_calling§r -> §lTalents§r: tap a talent and §lSpend§r. You have 1 point, plus 1 for every 5 combined levels of your Calling's two skills above 50, up to 10. Tier 2 opens with 3 points in tier 1, and one tier 3 capstone (of three) with 7.",
+        "ops": false
+      },
+      {
+        "text": "Changed your mind? §lReset talents§r takes every point back for 50 Crowns (§ecallings.respecCost§r). Switching to another Calling, at Hollis or Moss, costs 100 Crowns, then 200, 300, 400 and 500 (§ecallings.switchCosts§r), at least 3 Realm days apart (§ecallings.switchDays§r), and the talent points start over.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lSkills§r switches skills, perks and creative-mode XP, and sets the XP multiplier and the party bonus; Callings, the level they need, the reset cost, the days between choices and whether Callings can be chosen anywhere. XP per block, mob and catch, and the perks, are in §econfig.js§r. Each skill's XP is a scoreboard (§eskill_mining§r, §eskill_woodcutting§r, §eskill_farming§r, §eskill_fishing§r, §eskill_combat§r, §eskill_exploration§r), so §e/scoreboard§r can show or change it.",
         "ops": true
       }
     ],
@@ -1687,6 +1703,12 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Shows your six skills (levels 1 to 50, default §emaxLevel§r) with progress bars; tap one for its XP, how to gain it and its perks, unlocked and to come"
+      },
+      {
+        "usage": "/realm:skills_calling",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Your Calling (from a total skill level of 75, §ecallings.unlockTotal§r): the six Callings, your talents (spend points), reset (50 Crowns, §ecallings.respecCost§r), a new Calling Sigil; choosing and switching only at Brother Hollis or Moss (default, §ecallings.chooseAnywhere§r)"
       }
     ]
   },
@@ -1800,7 +1822,7 @@ export const PACKS = [
     "folder": "relics_bp",
     "topic": "relics",
     "name": "Relics",
-    "summary": "Seventeen rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Ten come from adventures in other packs (champions, bounties, treasure maps, caravans) or are forged from 8 Relic Shards at a relicsmith; seven more are story relics, earned only in the Story Questlines. Relics never break and stay with you when you die.",
+    "summary": "Seventeen rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Ten come from adventures in other packs (champions, bounties, treasure maps, caravans) or are forged from 8 Relic Shards at a relicsmith; seven more are story relics, earned only in the Story Questlines. Relics never break and stay with you when you die. Ida can §lascend§r a relic three times (+1 Awakened, +2 Ascended, +3 Starlit: a shorter cooldown or a longer reach, then a unique bonus and a gold name) for Relic Shards, Storm Glass and Crowns, and breaks a duplicate into Relic Essence. Carry all three relics of a §lset§r (Storm, Tide, Deep or Sun) for a set bonus.",
     "steps": [
       {
         "text": "Find relics: other packs hand them out as rewards, and champions drop §lRelic Shards§r (purple amethyst shards named §eRelic Shard§r). Getting one says §eYou received a relic: Storm Staff (Legendary). Use in a thunderstorm: lightning strikes what you look at.§r in chat.",
@@ -1816,6 +1838,18 @@ export const PACKS = [
       },
       {
         "text": "Run §e/realm:relics§r for the menu: §lYour relics§r (also §e/realm:relics_list§r) lists the relics you've found, what each does and how many are left to find.",
+        "ops": false
+      },
+      {
+        "text": "§lAscend§r a relic at Ida: §lRelic forge§r -> §lAscend a relic§r, pick a relic you carry and §lAscend§r. +1 takes 6 Relic Shards, 1 Storm Glass and 60 Crowns; +2 takes 12, 3 and 150; +3 takes 20, 5 and 400 (§eascension.costs§r). Story relics stop at +1 until a story or a friendship allows more (Hal's Compass: Old Tobin as a Confidant, or *The Gull's Last Voyage* sailed).",
+        "ops": false
+      },
+      {
+        "text": "Got the same relic twice? §lBreak a duplicate§r in the forge turns your lower copy into 4 §lRelic Essence§r (§eascension.essencePerBreak§r), which counts like Relic Shards for ascension and is spent first.",
+        "ops": false
+      },
+      {
+        "text": "Carry a whole §lset§r in your hotbar, off hand or armor: Storm Staff + Storm Meter + Rain Charm, Tide Boots + Hal's Compass + Compass of Echoes, Miner's Lamp + Lantern of the Deep + Lantern Shard, or Sun Pendant + Frost Band + Wayfarer Boots. The bar above the hotbar names the bonus when it starts; §lYour relics§r lists the sets.",
         "ops": false
       },
       {
@@ -2405,7 +2439,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§e/realm:expedition§r -> §lLeaderboards§r shows the fastest clears of each dungeon at each difficulty, the §lHighest tiers§r players have cleared, the §lRecent runs§r and the best §lGauntlets§r; §lMy progress§r shows what you've unlocked, your best and your own recent runs.",
+        "text": "§e/realm:expedition§r -> §lLeaderboards§r shows the fastest clears of each dungeon at each difficulty, the §lHighest tiers§r players have cleared, the §lRecent runs§r and the best §lGauntlets§r, each player with their Skills Calling (§eAnn (Delver), Bo§r); §lMy progress§r shows what you've unlocked, your best and your own recent runs.",
         "ops": false
       },
       {

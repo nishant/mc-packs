@@ -412,6 +412,13 @@ function costTo(fromDim, from, to) {
   return Math.max(Math.max(0, get("minCost")), Math.ceil((d / 100) * Math.max(0, get("costPer100"))));
 }
 
+/** A trip's cost after the Pathfinder's Waystone Friend talent (Skills: `bonus.waystoneOff` percent off, rounded down). @param {Player} player @param {number | undefined} cost */
+function pathfinderPrice(player, cost) {
+  if (cost === undefined || cost <= 0) return cost;
+  const off = Math.min(90, callingValue(player, "waystoneOff"));
+  return off > 0 ? Math.max(1, Math.floor((cost * (100 - off)) / 100)) : cost;
+}
+
 /** The player's discovered waystones they can travel to from here, nearest first. @param {Player} player @param {Waystone | undefined} here */
 function destinations(player, here) {
   const known = knownOf(player);
@@ -419,7 +426,7 @@ function destinations(player, here) {
   const from = here ? center(here) : player.location;
   return waystones()
     .filter((w) => known.has(w.i) && w.i !== here?.i)
-    .map((w) => ({ w, cost: costTo(dim, from, w), d: w.d === dim ? dist3(from, center(w)) : Infinity }))
+    .map((w) => ({ w, cost: pathfinderPrice(player, costTo(dim, from, w)), d: w.d === dim ? dist3(from, center(w)) : Infinity }))
     .sort((a, b) => a.d - b.d || a.w.n.localeCompare(b.w.n));
 }
 
@@ -976,6 +983,27 @@ system.afterEvents.scriptEventReceive.subscribe(
   },
   { namespaces: ["realm"] },
 );
+
+// Callings (Skills): realm:calling carries each player's talent numbers (`bonus`: waystoneOff: Pathfinder's percent off). Kept in memory; Skills
+// sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
+/** @type {Map<string, Record<string, number>>} */
+const callingBonus = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:calling") return;
+    try {
+      const m = JSON.parse(message);
+      if (m && typeof m.player === "string" && m.bonus && typeof m.bonus === "object") callingBonus.set(m.player, m.bonus);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
+/** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
+const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

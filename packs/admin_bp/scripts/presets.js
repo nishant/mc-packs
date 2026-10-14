@@ -179,6 +179,7 @@ export const NAMES = {
   "realm:silly_give": ["Give Silly Books", "To players"],
   "realm:sit": ["Sit Down", "Sneak to stand up"],
   "realm:skills": ["Skills", "Levels, XP and perks"],
+  "realm:skills_calling": ["Calling", "Sigil, talents, switching"],
   "realm:slots": ["Slot Machine", "Spin, stats, pay table"],
   "realm:slots_give": ["Give Slot Machine", "The machine item"],
   "realm:slots_spin": ["Spin Slots", "Open the machine and spin"],
