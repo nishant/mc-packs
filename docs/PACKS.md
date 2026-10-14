@@ -3659,7 +3659,7 @@ Operators can change `enabled`, `rewards` and `notes` in game with `/realm:confi
 
 | Key | Scope | Contents |
 |---|---|---|
-| `journal:data` | Player | JSON `{ e, l, r, lo, hi, far }`: entry ids found per page, labels of entries that aren't in `config.js` (up to 40 such entries per page; a label is only saved when it differs from the name made from the id), pages already rewarded, deepest and highest y, farthest from spawn. Kept under 30,000 characters: past that, entries that aren't in `config.js` are refused, and saved labels are dropped to make room for ones that are |
+| `journal:data` | Player | JSON `{ e, l, r, lo, hi, far }`: entry ids found per page, labels of entries that aren't in `config.js` (a label is only saved when it differs from the name made from the id), pages already rewarded, deepest and highest y, farthest from spawn. A page keeps up to 100 entries that aren't in `config.js` (its "Also found", with the count shown); a new one past that drops the page's oldest. Kept under 30,000 characters (one such entry takes at most about 180): past that, the oldest "Also found" entries of the page with the most of them are dropped until it fits, so the newest finds are always saved |
 | `journal:pref` | Player | The player's own **New journal entry notes** choice |
 | `journal:weather` | World | The overworld weather at the last change; the stable Script API can't read it |
 | `journal:cfg` | World | Settings changed in `/realm:config` |
@@ -3669,7 +3669,7 @@ Operators can change `enabled`, `rewards` and `notes` in game with `/realm:confi
 - **Mobs:** `afterEvents.entityDie` with a player as the damaging entity. Things that aren't mobs (armor stands, townsfolk NPCs, end crystals, boats, minecarts, paintings, item frames, leash knots) never make an entry.
 - **Places, rain and thunder:** every 2 seconds each player's dimension, height and distance from world spawn are checked, plus one `getTopmostBlock` and two `getBlock` lookups for biomes (one more over deep water). Weather comes from `weatherChange` and is saved as `journal:weather`.
 - **Fish:** a fishing hook belongs to the nearest player when it appears. A catch is an item that appears within 2 blocks of the hook while it's reeled in (the hook goes within 4 ticks of the item appearing), from a hook that was in water and out for at least 1.5 seconds, the same check as [Skills](#skills--skills_bp). An item that appears at a player's head (dropped, not caught) never counts, so dropping a fish next to your hook doesn't add it.
-- **Other packs** add entries with `realm:journal` `{ player, page, entry, label }` (pages `mobs`, `places`, `fish`, `weather`, `relics`, `story`, `wanderers`). The pack also listens to `realm:sky_event` (only kinds on the Weather page) and `realm:moon` (`blood`, `harvest`: everyone in the overworld).
+- **Other packs** add entries with `realm:journal` `{ player, page, entry, label }` (pages `mobs`, `places`, `fish`, `weather`, `relics`, `story`, `wanderers`). Those that aren't in `config.js` show under `Also found (N)`: up to 100 per page, the newest kept (the oldest goes to make room, also when the journal nears its save limit). The pack also listens to `realm:sky_event` (only kinds on the Weather page) and `realm:moon` (`blood`, `harvest`: everyone in the overworld).
 - Finishing a page adds the levels, adds Crowns to the `crowns` scoreboard and sends `realm:title_unlock` `{ player, title, from: "journal_bp" }`.
 
 ---
