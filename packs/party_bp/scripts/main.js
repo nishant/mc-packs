@@ -267,7 +267,9 @@ system.afterEvents.scriptEventReceive.subscribe(
     try {
       const m = JSON.parse(message);
       if (!m || typeof m.player !== "string" || m.from === "party_bp") return;
-      barHeld.set(m.player, system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0)));
+      // The longest hold wins: a short request doesn't cut a long note short.
+      const until = system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0));
+      barHeld.set(m.player, Math.max(barHeld.get(m.player) ?? 0, until));
     } catch {
       // not ours
     }
@@ -327,7 +329,10 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   }
 });
 
-world.afterEvents.playerLeave.subscribe(({ playerId }) => invites.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  invites.delete(playerId);
+  barHeld.delete(playerId);
+});
 
 // ---------------------------------------------------------------------------
 // Menus
