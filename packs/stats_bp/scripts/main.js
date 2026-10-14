@@ -42,12 +42,30 @@ function add(player, id, n = 1) {
   }
 }
 
+/**
+ * A player's score on a stat, 0 if they have none. getScore throws "Failed to resolve identity" for a name
+ * with no score on any objective yet (stats_bp added while they were online).
+ * @param {string} id @param {string} name
+ */
+function scoreOf(id, name) {
+  try {
+    return objective(id).getScore(name) ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Moves scores stored on the player entity (pack v1.0.0) to their name. @param {Player} player */
 function migrateEntityScores(player) {
   if (!player.scoreboardIdentity) return; // a new player has no entity scores to move
   for (const stat of STATS) {
     const obj = objective(stat.id);
-    const old = obj.getScore(player);
+    let old;
+    try {
+      old = obj.getScore(player);
+    } catch {
+      continue; // no score on this one
+    }
     if (old === undefined) continue;
     obj.addScore(player.name, old);
     obj.removeParticipant(player);
@@ -222,7 +240,7 @@ function tickerText(player, t) {
   const full = getFor(player, "tickerStyle") === "full";
   /** @param {Stat} stat */
   const one = (stat) => {
-    const score = objective(stat.id).getScore(player.name) ?? 0;
+    const score = scoreOf(stat.id, player.name);
     if (!full) return `${lc}${stat.short} ${vc}${fmt(stat, score)}`;
     const list = ranked(stat.id);
     const rank = list.findIndex((s) => s.participant.displayName === player.name) + 1;
@@ -458,7 +476,7 @@ async function optionsForm(player, title, options, forPlayer) {
 async function myStats(player) {
   const lines = STATS.map((stat) => {
     const list = ranked(stat.id);
-    const score = objective(stat.id).getScore(player.name) ?? 0;
+    const score = scoreOf(stat.id, player.name);
     const rank = list.findIndex((s) => s.participant.displayName === player.name) + 1;
     return `§7${stat.label}:§r ${fmt(stat, score)}${rank > 0 ? ` §8(#${rank} of ${list.length})` : ""}`;
   });
