@@ -826,6 +826,8 @@ const HEARTH_AND_TABLE = {
           id: "kitchen",
           label: "The new kitchen",
           set: KITCHEN,
+          // Its dishes come only from the Kitchen pack: without it, the old way is the only way.
+          requires: { flags: { "pack:cooking_bp": "on" } },
           reply: [`${BE}Good! Then I want Warden's Rations, four of them, cooked proper. They keep a warden on her feet all night. Name on every one, so Reyes knows who to thank.`],
         },
         {

@@ -2404,7 +2404,7 @@ The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, o
 | *The Inspector Calls* (Smuggler's Run) | Optional: find a pot of gold at a rainbow's end: Quill pays 50 Crowns to keep it out of the inspector's sight |
 | **The Listening Deep** | Four expedition chapters for Ida, Elsie and Reyes after act 3 (the second told two ways): clear the Sculk Depths; Frost Hollow on Normal or harder (told by Elsie, or by Wren with Elsie's letters after the Keeper's Gift ending); a Gauntlet (or any dungeon on Hard); and any dungeon on a Nightmare tier. Rewards up to 10 levels, 200 Crowns, 4 diamonds and 4 echo shards, and the title **Deep-Listener** at the end |
 
-Hearth and Table's *A Champion's Heart* asks for Champion's Hearts, which champions drop only with the [Kitchen](#kitchen--cooking_bp) pack installed; it has no plain-food way around that.
+Hearth and Table's *A Champion's Heart* asks for Champion's Hearts, which champions drop only with the [Kitchen](#kitchen--cooking_bp) pack installed; it has no plain-food way around that. Without the Kitchen, Bea's *Tryouts* offers only **The old way** (plain food instead of the Kitchen's dishes).
 
 ### Commands
 
