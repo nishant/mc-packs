@@ -345,7 +345,7 @@ Operators can change `giveToOperators`, `removeFromOthers`, `checkSeconds` and `
 
 ## Welcome Message — `welcome_bp`
 
-Shows a popup when a player joins the Realm. Operators can edit the popup in-game.
+Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. Operators can edit the popup in-game.
 
 ### How to use
 
@@ -384,7 +384,7 @@ These are defaults. Once an op saves with `/realm:welcome_edit`, the saved value
 | Option | Default | In-game? | Description |
 |---|---|---|---|
 | `title` | `§l§6Welcome to the Realm!` | ✅ | Popup title |
-| `body` | Greeting + 3 rules + a pointer to `/realm:help` + online count | ✅ | Popup body. Supports placeholders and formatting |
+| `body` | Greeting with the online count, then gold headings: **The Story** (how to start *The Lantern and the Hollow* with Old Tobin or Mara, `/realm:saga`), **Adventure**, **Life in Town**, **Sky and Seasons** (the main packs, with `/realm:expedition`, `/realm:bounty`, `/realm:skills`, `/realm:crowns`, `/realm:claim`, `/realm:calendar`), **Handy** (`/realm:help`, `/realm:prefs`, `/realm:party`) and **Rules** (3 rules) | ✅ | Popup body. Supports placeholders and formatting |
 | `button` | `§lLet's go!` | ✅ | Close button text |
 | `showOnce` | `false` | ✅ | `true` = only once per player, shown again after each edit (unless the edit turns that off). `false` = every join |
 | `chat` | `false` | ✅ | Also post the title + body in that player's chat |
