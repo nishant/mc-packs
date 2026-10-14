@@ -62,7 +62,12 @@ if (check) {
   }
   const [x, y, z] = manifest.header.version;
   if (committed && committed.join(".") === manifest.header.version.join(".")) {
-    writeFileSync(manifestPath, raw.replace(`"version": [${x}, ${y}, ${z}]`, `"version": [${x}, ${y}, ${z + 1}]`));
+    const bumped = raw.replace(`"version": [${x}, ${y}, ${z}]`, `"version": [${x}, ${y}, ${z + 1}]`);
+    if (bumped === raw) {
+      console.error("couldn't find the header version in packs/news_bp/manifest.json to bump it: bump it by hand");
+      process.exit(1);
+    }
+    writeFileSync(manifestPath, bumped);
     console.log(`wrote news_bp/scripts/release.js ("${title}"); news_bp is now ${x}.${y}.${z + 1}`);
   } else console.log(`wrote news_bp/scripts/release.js ("${title}")`);
 }

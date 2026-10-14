@@ -204,10 +204,14 @@ function checkSleep() {
   const names = awake.length && awake.length <= 3 ? ` §7- awake: ${awake.map((p) => p.name).join(", ")}` : "";
   const status = `§eZzz ${sleeping.length}/${needed} sleeping${names}${afkCount ? ` §7(${afkCount} AFK ignored)` : ""}`;
   for (const p of all) {
-    if (p.dimension.id !== "minecraft:overworld") continue;
-    p.onScreenDisplay.setActionBar(status);
-    // Ask the Coordinates HUD, if installed, to leave the status on screen until the next check.
-    system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: CHECK_TICKS * 2 }));
+    try {
+      if (p.dimension.id !== "minecraft:overworld") continue;
+      // The action bar protocol: other bar writers (the Coordinates HUD...) leave the status alone until the next check.
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: CHECK_TICKS * 2, from: "afk_bp" }));
+      p.onScreenDisplay.setActionBar(status);
+    } catch {
+      // left meanwhile: the night still gets its count
+    }
   }
 
   if (sleeping.length < needed) {
