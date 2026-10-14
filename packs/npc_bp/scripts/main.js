@@ -397,7 +397,8 @@ function auditAll() {
   }
 }
 
-// An NPC that dies anyway (/kill) is spawned again at once, if anyone is around.
+// An NPC that dies anyway (/kill) is spawned again at the next missing check, if anyone is around. (BDS 1.26 never
+// sends entityDie for minecraft:npc, so there the ordinary missing check, about 6 seconds, brings it back.)
 world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
   try {
     if (deadEntity.typeId !== NPC_TYPE) return;
