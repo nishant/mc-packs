@@ -55,6 +55,13 @@ export const CONFIG = {
   /** How close (blocks) a player must come to a picked place before its building is built there. */
   buildRange: 64,
 
+  /**
+   * Brings far story spots closer: spots and auto-picked places more than 300 blocks from world spawn keep
+   * their direction, but only this share of their distance past 300 blocks counts. 0.5: a spot written
+   * 1,200 blocks out is at 750. 1 = the distances as written. Story text shows the scaled distances.
+   */
+  farScale: 0.5,
+
   /** Seconds a story character (a ghost, a guard, an escort) waits for its player to come back before it is removed. It comes back when needed. */
   actorTimeoutSeconds: 300,
 

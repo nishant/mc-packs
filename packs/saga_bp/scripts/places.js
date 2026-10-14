@@ -5,6 +5,7 @@ import { Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData } from "@minecraft/server-ui";
 import { CAMPS, PREFABS, buildSteps, footprint, prefabInfo, rotate, siteOk } from "./prefabs.js";
 import { get } from "./settings.js";
+import { farDist, farOffset, refresh as refreshFar, setPlaceDist } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
 import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, num, send, show, wait } from "./util.js";
@@ -79,8 +80,16 @@ export function setPlace(name, rec) {
   else delete next[name];
   world.setDynamicProperty(PROP_PLACES, JSON.stringify(next));
   places = next;
+  if (!isCamp(name) && (old?.x !== rec?.x || old?.z !== rec?.z)) refreshFar();
   if (!old || !rec || old.x !== rec.x || old.y !== rec.y || old.z !== rec.z || old.dim !== rec.dim || !!old.b !== !!rec.b || !!old.p !== !!rec.p) placeReady(name, old?.b && rec?.b ? "moved" : undefined);
 }
+
+setPlaceDist((name) => {
+  const p = placesOf()[name];
+  if (!p || p.dim !== OVERWORLD) return undefined;
+  const s = spawnXZ();
+  return Math.hypot(p.x - s.x, p.z - s.z);
+});
 
 /** Is this an instanced wanderer's camp? @param {string} name */
 export const isCamp = (name) => name.startsWith("camp:");
@@ -199,7 +208,8 @@ export function locate(w, label) {
   if (w.at) return { dim: w.at.dim ?? OVERWORLD, x: w.at.x, z: w.at.z, label: w.mark ?? label ?? "the spot" };
   if (w.offset) {
     const s = spawnXZ();
-    return { dim: OVERWORLD, x: s.x + w.offset.x, z: s.z + w.offset.z, label: w.mark ?? label ?? "the spot" };
+    const o = farOffset(w.offset);
+    return { dim: OVERWORLD, x: s.x + o.x, z: s.z + o.z, label: w.mark ?? label ?? "the spot" };
   }
   return undefined;
 }
@@ -217,8 +227,8 @@ export function placesIn(obj) {
 function pickSpot(name, near) {
   const info = infoOf(name);
   const s = spawnXZ();
-  const lo = Math.max(16, Math.min(info.minDist, info.maxDist));
-  const hi = Math.max(lo + 1, info.maxDist);
+  const lo = Math.max(16, Math.round(farDist(Math.min(info.minDist, info.maxDist))));
+  const hi = Math.max(lo + 1, Math.round(farDist(info.maxDist)));
   const others = Object.entries(placesOf()).filter(([n]) => n !== name).map(([, p]) => p);
   let best = { x: s.x + lo, z: s.z };
   for (let i = 0; i < 40; i++) {
@@ -845,7 +855,7 @@ async function placePage(player, name) {
       `Status: ${statusOf(rec)}§r`,
       rec ? `Where: ${coords(rec)} in the ${dimName(rec.dim)}${rec.b ? `, ${FACINGS[rec.f ?? 0]}` : ""}` : "Where: nowhere yet",
       `Used by: ${users.length ? users.join(", ") : "no story"}`,
-      PREFABS[name] ? `Building: ${info.size.x} x ${info.size.y} x ${info.size.z}; picked spots: ${info.site}, ${num(info.minDist)}-${num(info.maxDist)} blocks from world spawn` : "No building: set the spot by hand.",
+      PREFABS[name] ? `Building: ${info.size.x} x ${info.size.y} x ${info.size.z}; picked spots: ${info.site}, ${num(Math.round(farDist(info.minDist)))}-${num(Math.round(farDist(info.maxDist)))} blocks from world spawn` : "No building: set the spot by hand.",
     ];
     /** @type {[string, () => Promise<unknown> | unknown][]} */
     const actions = [];

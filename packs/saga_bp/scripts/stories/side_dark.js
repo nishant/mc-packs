@@ -721,7 +721,7 @@ const VESNA_BARGAIN = {
           text: "Cut into a stilt post at Hollow Fen: 'V. PROMISED. FORTY WINTERS.' and, newer, 'NOT YET.' Vesna admits she made a promise long ago to something that lives in the Fen's water, and that it gave her forty winters. Now they are up, the Fen is dying, and she cannot leave its water.",
         },
       },
-      hint: "Hollow Fen is far out of town (500 to 1000 blocks); the tracker points the way, and a horse or boat helps. Tap near the faint particles around the hut, then speak to Vesna on her steps.",
+      hint: "Hollow Fen is far out of town ({band:witch_hut} blocks); the tracker points the way, and a horse or boat helps. Tap near the faint particles around the hut, then speak to Vesna on her steps.",
     },
     {
       id: "draught",

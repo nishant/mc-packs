@@ -6,6 +6,16 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Shorter roads
+
+The far story spots came closer to town.
+
+- The Cartographer's three pins are now about 700 to 750 blocks out instead of 1,100 to 1,200.
+- The Edges of the Map stations, the pillager outpost, the illager lodge, Drowned Rock and the raider camps moved in too. Anything within 300 blocks of spawn stays put.
+- Story text and hints say the new distances, and the tracker points to the new spots.
+- New treasure maps lead 400 to 1,000 blocks instead of 800 to 2,000.
+- Operators: /realm:config -> Story Questlines -> Distance of far story spots (0.5 now, 1 for the old distances).
+
 ## Rook races you, and Pell walks with you
 
 Rook the Rival doesn't just talk about bounties anymore.

@@ -20,10 +20,10 @@ export const CONFIG = {
   maxHunts: 1,
 
   /** The treasure is at least this many blocks (straight line) from where the map was bought. */
-  minDistance: 800,
+  minDistance: 400,
 
   /** ...and at most this many. */
-  maxDistance: 2000,
+  maxDistance: 1000,
 
   /** Fewest legs (clues) a hunt has; each leg but the last ends at a marker (a cairn, a flag or a standing stone) that holds the next clue. */
   legsMin: 2,

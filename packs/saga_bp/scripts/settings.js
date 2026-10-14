@@ -22,6 +22,7 @@ const OPTIONS = [
   { key: "championRetrySeconds", type: "int", scope: "world", label: "Seconds before a story champion comes again", min: 30, max: 1800, step: 30 },
   { key: "hintPenalty", type: "float", scope: "world", label: "Reward cost of a hint (share)", help: "0 = free hints; 0.25 = a hinted chapter pays 25% fewer levels and Crowns", min: 0, max: 1, step: 0.05 },
   { key: "autoPlaces", type: "bool", scope: "world", label: "Pick and build story places", help: "Unset places are picked by the pack and built when a player comes close" },
+  { key: "farScale", type: "float", scope: "world", label: "Distance of far story spots (share past 300 blocks)", help: "0.5 = a spot 1,200 blocks out is at 750; 1 = as the stories wrote them. Places already set don't move", min: 0.25, max: 1, step: 0.05 },
   { key: "buildRange", type: "int", scope: "world", label: "Build a picked place within (blocks)", min: 32, max: 128, step: 8 },
   { key: "actorTimeoutSeconds", type: "int", scope: "world", label: "Story characters wait for their player (seconds)", min: 60, max: 1800, step: 30 },
   { key: "favors", type: "bool", scope: "world", label: "Daily favors", help: "Questgivers offer a short job each real day" },

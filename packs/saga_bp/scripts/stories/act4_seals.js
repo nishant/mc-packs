@@ -884,7 +884,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "wardens", amount: 20 }],
-        hint: "The Hollow Gate is far out, 800 to 1500 blocks from spawn; the tracker points the way, and a horse, boat or elytra helps. Clues are around the arch: look for faint particles and tap near them. The Choir comes in numbers, so bring a shield.",
+        hint: "The Hollow Gate is far out, {band:hollow_gate} blocks from spawn; the tracker points the way, and a horse, boat or elytra helps. Clues are around the arch: look for faint particles and tap near them. The Choir comes in numbers, so bring a shield.",
       },
     ],
   },
