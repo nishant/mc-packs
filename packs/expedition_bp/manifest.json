@@ -4,7 +4,7 @@
     "name": "Expeditions",
     "description": "Dungeon runs for you and your party: 8 dungeons from Easy to Nightmare tier 20, with affixes, waves, puzzles, trap halls, shafts, rooms of many shapes, a boss, treasure and sigils, and long Gauntlet runs with boons. /realm:expedition",
     "uuid": "6b3b08c0-7abc-41b2-91e1-6c6ea26d158a",
-    "version": [2, 3, 2],
+    "version": [2, 3, 3],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

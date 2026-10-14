@@ -3287,6 +3287,50 @@ function runOfMob(e) {
   return undefined;
 }
 
+/** Members who died in a dungeon this tick, whose drops are collected next tick. @type {{ id: string, where: Vector3, o: Vector3 }[]} */
+const deaths = [];
+
+/**
+ * Collects what members who died in a dungeon dropped and keeps it in a parcel for them. Players who died in the
+ * same tick (a party wiped out by one blast) are handled together: each item goes to the nearest of them, so nobody
+ * gets the others' things.
+ */
+function collectDeathDrops() {
+  const list = deaths.splice(0);
+  /** @type {Map<string, ItemStack[]>} */
+  const got = new Map();
+  /** @type {Set<string>} */
+  const seen = new Set();
+  for (const d of list) {
+    try {
+      for (const e of overworld().getEntities({ type: "minecraft:item", location: d.where, maxDistance: 6 })) {
+        if (seen.has(e.id)) continue;
+        seen.add(e.id);
+        const stack = e.getComponent("minecraft:item")?.itemStack;
+        if (!stack) continue;
+        const at = e.location;
+        let owner = d;
+        for (const o of list) if (Math.hypot(o.where.x - at.x, o.where.y - at.y, o.where.z - at.z) < Math.hypot(owner.where.x - at.x, owner.where.y - at.y, owner.where.z - at.z)) owner = o;
+        got.set(owner.id, [...(got.get(owner.id) ?? []), stack]);
+        e.remove();
+      }
+    } catch (e) {
+      console.warn(`[expedition] collect drops: ${e}`);
+    }
+  }
+  for (const d of list) {
+    const items = got.get(d.id);
+    if (!items?.length) continue;
+    try {
+      // Kept in a parcel, so a restart before they respawn loses nothing.
+      if (parcelUp(d.o, "dropped", new Map([[d.id, items]])).length) dropped.set(d.id, [...(dropped.get(d.id) ?? []), ...items]);
+    } catch (e) {
+      console.warn(`[expedition] keep drops: ${e}`);
+      dropped.set(d.id, [...(dropped.get(d.id) ?? []), ...items]);
+    }
+  }
+}
+
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   try {
     const id = deadEntity.id;
@@ -3307,22 +3351,8 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       // Only a death in the dungeon: one just teleported out of it dies among their own things (and other people's).
       if (get("returnItemsOnDeath") === true && deadEntity.dimension.id === OVERWORLD && inBox(run.o, run.size, run.top, where, 2)) {
         // The drops appear this tick: collect them before anyone else can, and give them back on respawn.
-        system.runTimeout(() => {
-          try {
-            /** @type {ItemStack[]} */
-            const items = [];
-            for (const e of overworld().getEntities({ type: "minecraft:item", location: where, maxDistance: 6 })) {
-              const stack = e.getComponent("minecraft:item")?.itemStack;
-              if (!stack) continue;
-              items.push(stack);
-              e.remove();
-            }
-            // Kept in a parcel, so a restart before they respawn loses nothing.
-            if (items.length && parcelUp(run.o, "dropped", new Map([[id, items]])).length) dropped.set(id, [...(dropped.get(id) ?? []), ...items]);
-          } catch (e) {
-            console.warn(`[expedition] collect drops: ${e}`);
-          }
-        }, 1);
+        deaths.push({ id, where: { ...where }, o: run.o });
+        if (deaths.length === 1) system.runTimeout(collectDeathDrops, 1);
       }
       dropBuffs(deadEntity);
       if (member) dropMember(run, id); // their return spot stays: playerSpawn sends them back
