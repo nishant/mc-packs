@@ -6,6 +6,16 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Wanderers now walk
+
+The people you meet out on the road don't stand frozen anymore.
+
+- Pilgrims, hermits, miners, storm-chasers, exiles and the Recurring Wanderers are villagers now, dressed for who they are: Pell as a cleric, Brannoch as an armorer, Hob as a toolsmith, and so on, in the clothes of the biome you meet them in.
+- Travelers on the road are wandering traders (no llamas). Ghosts still float.
+- They stroll around where they appeared or around their camp, and stop to listen while you talk.
+- Tapping one still opens their talk menu, never a trade screen. Real villagers and traders trade as always.
+- Zombies, lightning and lava can't hurt them.
+
 ## Callings and Relic Ascension
 
 Seasoned adventurers can take up a Calling now, and Ida can wake the power in your relics.

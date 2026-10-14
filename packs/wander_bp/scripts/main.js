@@ -16,7 +16,7 @@
 import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, GameMode, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, NAMED, NAMED_GREETINGS } from "./lines.js";
+import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOKS, NAMED, NAMED_GREETINGS, SAILOR_LOOK } from "./lines.js";
 import { get, getFor } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
 
@@ -40,7 +40,19 @@ const OVERWORLD = "minecraft:overworld";
 const NETHER = "minecraft:nether";
 const DIMENSIONS = [OVERWORLD, NETHER, "minecraft:the_end"];
 
-const LOOP_TICKS = 20; // upkeep: keep in place, face the player, timers, camps, sparkles
+const LOOP_TICKS = 20; // upkeep: timers, camps, sparkles, keep ghosts in place
+const TETHER_TICKS = 10; // walkers: back home past TETHER_MAX, out of water, lava or a hole; protection re-applied
+const TETHER_MAX = 12;
+const HOLE_DROP = 3; // this far below home...
+const HOLE_CHECKS = 6; // ...for this many checks in a row (3 s): stuck in a hole
+const RESPAWNS = 5; // a wanderer on the road whose entity vanished nearby comes back this often at most
+const LONG = 20000000;
+const VILLAGER = "minecraft:villager_v2";
+const TRADER = "minecraft:wandering_trader";
+const GHOST = "minecraft:allay";
+const OLD_NPC = "minecraft:npc"; // before wanderers walked: a leftover on the road is adopted and pinned like a ghost
+const TYPES = [VILLAGER, TRADER, GHOST, OLD_NPC];
+const WALKERS = new Set([VILLAGER, TRADER]);
 const OFFER_TICKS = 4;
 const MAX_OFFERS = 16;
 const TAP_COOLDOWN = 10;
@@ -66,6 +78,8 @@ const PILGRIM_PLACES = new Set(["old_chapel", "observatory", "starfall"]);
  * @property {number} b born (ms)
  * @property {number} [a] a job was accepted (ms)
  * @property {string} [e] entity id
+ * @property {string} [t] entity type (none: saved before wanderers walked)
+ * @property {number} [r] times the entity was spawned again after it vanished nearby
  * @property {number} [tt] first talk (ms)
  * @property {number} [ta] a disguise drops at (ms)
  * @property {number} [far] the player has been far since (ms)
@@ -206,11 +220,15 @@ async function show(player, form) {
   }
   return undefined;
 }
-/** @param {Entity} ent */
-function poof(ent) {
+/** Removes one of our entities, dropping what a villager picked up (bread, carrots, seeds). @param {Entity} ent */
+function removeEnt(ent) {
   try {
-    const l = ent.location;
-    ent.dimension.spawnParticle("minecraft:knockback_roar_particle", { x: l.x, y: l.y + 1, z: l.z });
+    const inv = ent.typeId === VILLAGER ? ent.getComponent("minecraft:inventory")?.container : undefined;
+    if (inv && inv.emptySlotsCount < inv.size)
+      for (let i = 0; i < inv.size; i++) {
+        const item = inv.getItem(i);
+        if (item) ent.dimension.spawnItem(item, ent.location);
+      }
   } catch {
     // unloaded
   }
@@ -219,6 +237,16 @@ function poof(ent) {
   } catch {
     // gone already
   }
+}
+/** @param {Entity} ent */
+function poof(ent) {
+  try {
+    const l = ent.location;
+    ent.dimension.spawnParticle("minecraft:knockback_roar_particle", { x: l.x, y: l.y + 1, z: l.z });
+  } catch {
+    // unloaded
+  }
+  removeEnt(ent);
 }
 
 /** World spawn x/z. */
@@ -489,7 +517,8 @@ function roll(player, opts = {}) {
   /** @type {Live} */
   const rec = { w: wid, n: name, ar: named ? named.archetype : ar, o: player.id, d: player.dimension.id, x: spot.x, y: spot.y, z: spot.z, b: now };
   if (hostile) rec.h = hostile;
-  const ent = spawnWanderer(player.dimension, rec, named?.entity ?? (ar === "ghost" && !hostile ? "minecraft:allay" : "minecraft:npc"), false);
+  rec.t = typeFor(rec);
+  const ent = spawnWanderer(player.dimension, rec, rec.t, false, lookFor(rec));
   if (!ent) return "couldn't spawn";
   live[wid] = rec;
   saveLive();
@@ -507,19 +536,54 @@ function compass(dx, dz) {
   return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.floor(deg / 45) % 8];
 }
 
-/**
- * Spawns a wanderer's entity: an NPC (an allay for ghosts), named, tagged, can't be hurt (NPCs never can; allays
- * get Resistance V), never despawns. @param {Dimension} dim @param {{ w: string, n: string, x: number, y: number, z: number, e?: string }} rec @param {string} type @param {boolean} camp
- */
-function spawnWanderer(dim, rec, type, camp) {
+/** What a wanderer is: a Recurring Wanderer's own entity; a ghost an allay; a traveler a wandering trader (a drowned sailor in disguise excepted); else a villager. @param {{ w: string, ar: Archetype, h?: string }} rec */
+function typeFor(rec) {
+  const n = NAMED_BY_ID.get(rec.w);
+  if (n) return n.entity;
+  if (rec.ar === "ghost" && !rec.h) return GHOST;
+  if (rec.ar === "traveler" && rec.h !== "sailor") return TRADER;
+  return VILLAGER;
+}
+
+/** The villager event that sets their profession look. @param {{ w: string, ar?: Archetype, h?: string }} rec */
+function lookFor(rec) {
+  if (rec.h === "sailor") return SAILOR_LOOK;
+  const ar = NAMED_BY_ID.get(rec.w)?.archetype ?? rec.ar ?? "traveler";
+  return LOOKS[ar] ?? "";
+}
+
+/** Can't be hurt (Resistance V stops every damage but /kill and the void), burn, drown or suffocate; re-applied when gone (a trader's milk at dawn clears it). @param {Entity} ent */
+function protect(ent) {
   try {
-    const ent = dim.spawnEntity(/** @type {any} */ (type), { x: rec.x, y: rec.y, z: rec.z });
+    if (!ent.getEffect("resistance")) {
+      ent.addEffect("resistance", LONG, { amplifier: 4, showParticles: false });
+      ent.addEffect("fire_resistance", LONG, { amplifier: 0, showParticles: false });
+      ent.addEffect("water_breathing", LONG, { amplifier: 0, showParticles: false });
+    }
+    const h = ent.getComponent("minecraft:health");
+    if (h && h.currentValue < h.effectiveMax) h.resetToMaxValue();
+  } catch {
+    // unloaded
+  }
+}
+
+/**
+ * Spawns a wanderer's entity: a villager in their profession's look (a wandering trader for travelers, an allay for
+ * ghosts), named, tagged, can't be hurt, never despawns (named; a trader that despawns anyway is spawned again).
+ * @param {Dimension} dim @param {{ w: string, n: string, x: number, y: number, z: number, e?: string }} rec @param {string} type @param {boolean} camp @param {string} look
+ */
+function spawnWanderer(dim, rec, type, camp, look) {
+  try {
+    // A villager starts as a village's newcomer (no job yet, a random skin, the biome's clothes), then takes their look.
+    const ent = dim.spawnEntity(/** @type {any} */ (type), { x: rec.x, y: rec.y, z: rec.z }, type === VILLAGER ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
     for (const tag of [OWNER_TAG, NPC_TAG, ID_TAG + `w_${rec.w}`, (camp ? CAMP_TAG : ROAD_TAG) + rec.w]) ent.addTag(tag);
     ent.nameTag = `${NAMED_BY_ID.has(rec.w) ? "§6" : "§e"}${rec.n}`;
-    if (type !== "minecraft:npc") {
-      ent.addEffect("resistance", 20000000, { amplifier: 4, showParticles: false });
-      ent.addEffect("fire_resistance", 20000000, { amplifier: 0, showParticles: false });
+    if (type === VILLAGER) {
+      // Also grows up a baby (1 in 20 spawn as one). The event applies a tick later; `tether` checks it took.
+      dress(ent, look || "minecraft:become_unskilled");
+      dressing.set(ent.id, look || "minecraft:become_unskilled");
     }
+    if (type !== OLD_NPC) protect(ent);
     if (camp) camps[rec.w].e = ent.id;
     else rec.e = ent.id;
     return ent;
@@ -571,7 +635,7 @@ function turn(rec, accused) {
 // Upkeep, every second
 // ---------------------------------------------------------------------------
 
-/** Keeps an entity on its spot (and turned toward someone near). @param {Entity} ent @param {{ x: number, y: number, z: number }} at @param {Player | undefined} face */
+/** Keeps a ghost (or a leftover NPC) on its spot, turned toward someone near. @param {Entity} ent @param {{ x: number, y: number, z: number }} at @param {Player | undefined} face */
 function keep(ent, at, face) {
   try {
     const l = ent.location;
@@ -596,15 +660,92 @@ function sparkle(p, ent) {
   }
 }
 
+/**
+ * A wanderer on the road whose entity vanished (a wandering trader's own despawn timer, a lightning strike that made
+ * a witch of them): spawned again on their spot while their player is near and the spot is loaded, at most
+ * RESPAWNS times. A copy that was only unloaded is removed when it loads again (`audit`). @param {Live} rec
+ */
+function again(rec) {
+  if ((rec.r ?? 0) >= RESPAWNS) return undefined;
+  const p = online(rec.o);
+  if (!p || p.dimension.id !== rec.d || across(p.location, rec) > CONFIG.leaveDistance) return undefined;
+  const dim = world.getDimension(rec.d);
+  if (!blockAt(dim, rec) || entityCount() >= CONFIG.maxEntities) return undefined;
+  rec.r = (rec.r ?? 0) + 1;
+  const old = rec.e;
+  const ent = spawnWanderer(dim, rec, rec.t ?? typeFor(rec), false, lookFor(rec));
+  saveLive();
+  if (ent && old) for (const [k, v] of [...hasOffer]) if (k.startsWith(`${old}|`)) hasOffer.set(`${ent.id}${k.slice(old.length)}`, v);
+  return ent;
+}
+
+/** Villagers whose look isn't confirmed yet: entity id -> the vanilla event. @type {Map<string, string>} */
+const dressing = new Map();
+/** @param {Entity} ent @param {string} look */
+function dress(ent, look) {
+  try {
+    ent.triggerEvent(look);
+  } catch (e) {
+    console.warn(`[wander] look ${look}: ${e}`);
+  }
+}
+/** Dressed as they should be? The event's job is a type family ("become_sheperd" sets "shepherd"). @param {Entity} ent @param {string} look */
+const dressed = (ent, look) => ent.matches({ families: [look.replace("minecraft:become_", "").replace("sheperd", "shepherd")] });
+
+/** Checks in a row each walker has been down a hole. @type {Map<string, number>} */
+const lowFor = new Map();
+
+/** Walkers (villagers, traders) stroll with the vanilla AI; past TETHER_MAX from home, in water or lava or stuck down a hole, they're put back. @param {Entity} ent @param {{ x: number, y: number, z: number }} home */
+function tether(ent, home) {
+  try {
+    const look = dressing.get(ent.id);
+    if (look) {
+      if (dressed(ent, look)) dressing.delete(ent.id);
+      else dress(ent, look);
+    }
+    const l = ent.location;
+    let back = dist3(l, home) > TETHER_MAX || ent.isInWater;
+    if (!back) back = !!blockAt(ent.dimension, l)?.typeId.includes("lava");
+    if (!back && l.y < home.y - HOLE_DROP) {
+      const n = (lowFor.get(ent.id) ?? 0) + 1;
+      lowFor.set(ent.id, n);
+      back = n >= HOLE_CHECKS;
+    } else lowFor.delete(ent.id);
+    if (back) {
+      lowFor.delete(ent.id);
+      ent.teleport(home);
+      ent.clearVelocity();
+    }
+    protect(ent);
+  } catch {
+    // unloaded
+  }
+}
+
+function tetherAll() {
+  if (!ready) return;
+  for (const rec of Object.values(live)) {
+    const ent = entityById(rec.e);
+    if (ent && WALKERS.has(ent.typeId)) tether(ent, rec);
+    else if (ent && ent.typeId === GHOST) protect(ent);
+  }
+  for (const c of Object.values(camps)) {
+    const ent = entityById(c.e);
+    if (ent && WALKERS.has(ent.typeId)) tether(ent, c);
+    else if (ent && ent.typeId === GHOST) protect(ent);
+  }
+}
+
 function upkeep() {
   if (!ready) return;
   const now = Date.now();
   const enabled = get("enabled") === true;
   // On the road
   for (const rec of Object.values(live)) {
-    const ent = entityById(rec.e);
+    let ent = entityById(rec.e);
+    if (!ent && enabled) ent = again(rec);
     if (!ent) {
-      leave(rec.w, "gone"); // unloaded or removed: never brought back
+      leave(rec.w, "gone"); // unloaded, or removed far from their player: never brought back
       continue;
     }
     const p = online(rec.o);
@@ -626,7 +767,7 @@ function upkeep() {
       turn(rec, false);
       continue;
     }
-    keep(ent, rec, p && !far && across(p.location, rec) <= 8 ? p : undefined);
+    if (!WALKERS.has(ent.typeId)) keep(ent, rec, p && !far && across(p.location, rec) <= 8 ? p : undefined);
     if (p && !far && hasOffer.get(`${ent.id}|${p.id}`) && across(p.location, rec) <= 32) sparkle(p, ent);
   }
   // At camps: there while someone on that chain is near, gone otherwise (and while an escort's copy walks).
@@ -642,13 +783,13 @@ function upkeep() {
         if (hide || now - since > 30000) {
           delete c.e;
           saveCamps();
-          ent.remove();
+          removeEnt(ent);
         }
         continue;
       }
       campIdle.delete(wid);
       const [near] = needers.sort((a, b) => across(a.location, c) - across(b.location, c));
-      keep(ent, c, across(near.location, c) <= 8 ? near : undefined);
+      if (!WALKERS.has(ent.typeId)) keep(ent, c, across(near.location, c) <= 8 ? near : undefined);
       for (const p of needers) if (states.get(p.id)?.ch[wid] === "o" || hasOffer.get(`${ent.id}|${p.id}`)) sparkle(p, ent);
       continue;
     }
@@ -657,16 +798,16 @@ function upkeep() {
     if (!blockAt(dim, c)) continue;
     if (entityCount() >= CONFIG.maxEntities) continue;
     // One may be standing there already (a chunk that loaded before its entity was seen): adopt it.
-    const found = dim.getEntities({ tags: [CAMP_TAG + wid], location: c, maxDistance: 8 });
+    const found = dim.getEntities({ tags: [CAMP_TAG + wid], location: c, maxDistance: TETHER_MAX + 4 });
     if (found.length) {
       c.e = found[0].id;
-      for (const extra of found.slice(1)) extra.remove();
+      for (const extra of found.slice(1)) removeEnt(extra);
       saveCamps();
       continue;
     }
     const n = NAMED_BY_ID.get(wid);
     if (!n) continue;
-    spawnWanderer(dim, { w: wid, n: n.name, x: c.x, y: c.y, z: c.z }, n.entity, true);
+    spawnWanderer(dim, { w: wid, n: n.name, x: c.x, y: c.y, z: c.z }, n.entity, true, lookFor({ w: wid }));
     saveCamps();
   }
 }
@@ -726,6 +867,13 @@ async function tapped(player, ent) {
   if (!who) return;
   const { wid, rec, name } = who;
   busy.add(player.id);
+  // A walker stands still while you talk (30 s at most).
+  const walker = WALKERS.has(ent.typeId);
+  try {
+    if (walker) ent.addEffect("slowness", 600, { amplifier: 255, showParticles: false });
+  } catch {
+    // unloaded
+  }
   try {
     const mine = !rec || rec.o === player.id;
     // A disguise's clock starts at the first talk with the player it came for.
@@ -771,6 +919,11 @@ async function tapped(player, ent) {
     }
   } finally {
     busy.delete(player.id);
+    try {
+      if (walker && ent.isValid) ent.removeEffect("slowness");
+    } catch {
+      // unloaded
+    }
   }
 }
 
@@ -808,7 +961,7 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
   const { player, target } = ev;
   try {
     if (!target.hasTag(OWNER_TAG)) return;
-    ev.cancel = true; // no NPC editor, and no allay taking your items
+    ev.cancel = true; // no trading, no allay taking your items, no name tag or lead, no NPC editor
     system.run(() => {
       if (player.isValid && target.isValid) tapped(player, target).catch((e) => console.warn(`[wander] ${e}`));
     });
@@ -817,17 +970,67 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
   }
 });
 
+/**
+ * One of our entities is gone (removed, unloaded, or, for a villager, killed somehow: `entityDie` fires for them,
+ * never for NPCs). A camp's wanderer comes back when someone on the chain is near; one on the road is spawned again
+ * by the next upkeep if their player is near, else they've left (`again`). @param {string} id
+ */
+function lost(id) {
+  lowFor.delete(id);
+  dressing.delete(id);
+  for (const c of Object.values(camps)) if (c.e === id) delete c.e;
+}
+
 world.afterEvents.entityRemove.subscribe(
   ({ removedEntityId }) => {
     try {
-      for (const rec of Object.values(live)) if (rec.e === removedEntityId) leave(rec.w, "gone");
-      for (const c of Object.values(camps)) if (c.e === removedEntityId) delete c.e;
+      lost(removedEntityId);
     } catch (e) {
       console.warn(`[wander] ${e}`);
     }
   },
-  { entityTypes: ["minecraft:npc", "minecraft:allay"] },
+  { entityTypes: TYPES },
 );
+
+world.afterEvents.entityDie.subscribe(
+  ({ deadEntity }) => {
+    try {
+      lost(deadEntity.id);
+    } catch (e) {
+      console.warn(`[wander] ${e}`);
+    }
+  },
+  { entityTypes: [VILLAGER, TRADER, GHOST] },
+);
+
+/** Our names as name tags ("§6Pell the Pilgrim"), for what a wanderer turned into (it keeps the name, not the tags). */
+function ourNames() {
+  const out = new Set(NAMED.map((n) => `§6${n.name}`));
+  for (const rec of Object.values(live)) out.add(`${NAMED_BY_ID.has(rec.w) ? "§6" : "§e"}${rec.n}`);
+  return out;
+}
+
+// A trader's two llamas, and a wanderer struck by lightning (a witch) or by a zombie (a zombie villager, which the
+// protection should prevent): removed; the wanderer is spawned again (`again`) or comes back to their camp.
+world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
+  try {
+    if (cause === "Event" && entity.typeId === "minecraft:trader_llama") {
+      system.run(() => {
+        try {
+          if (entity.isValid && entity.getComponent("minecraft:leashable")?.leashHolder?.hasTag(OWNER_TAG)) entity.remove();
+        } catch {
+          // gone
+        }
+      });
+    } else if (cause === "Transformed" && /witch|zombie_villager/.test(entity.typeId) && entity.nameTag && ourNames().has(entity.nameTag)) {
+      system.run(() => {
+        if (entity.isValid) poof(entity);
+      });
+    }
+  } catch (e) {
+    console.warn(`[wander] ${e}`);
+  }
+});
 
 /** Removes an entity of ours that belongs to no wanderer on the road and no camp (after a restart, a lost save). @param {Entity} ent */
 function audit(ent) {
@@ -848,12 +1051,12 @@ function audit(ent) {
       }
     }
   }
-  ent.remove();
+  removeEnt(ent);
 }
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
-    if (entity.typeId === "minecraft:npc" || entity.typeId === "minecraft:allay") audit(entity);
+    if (TYPES.includes(entity.typeId)) audit(entity);
   } catch (e) {
     console.warn(`[wander] ${e}`);
   }
@@ -923,14 +1126,14 @@ function onPlace(msg) {
         const ent = entityById(old.e);
         delete camps[msg.wid];
         saveCamps();
-        if (ent) ent.remove();
+        if (ent) removeEnt(ent);
       }
       return;
     }
     const c = { d: msg.dim, x: Math.floor(msg.x) + 0.5, y: Math.floor(msg.y), z: Math.floor(msg.z) + 0.5 };
     if (old && old.d === c.d && dist3(old, c) < 1) return;
     const ent = entityById(old?.e);
-    if (ent) ent.remove();
+    if (ent) removeEnt(ent);
     camps[msg.wid] = c;
     saveCamps();
     return;
@@ -1173,6 +1376,14 @@ system.runInterval(() => {
     console.warn(`[wander] ${e}`);
   }
 }, LOOP_TICKS);
+
+system.runInterval(() => {
+  try {
+    tetherAll();
+  } catch (e) {
+    console.warn(`[wander] ${e}`);
+  }
+}, TETHER_TICKS);
 
 system.runInterval(() => {
   if (!ready || get("enabled") !== true) return;

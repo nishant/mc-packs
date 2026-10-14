@@ -3,20 +3,37 @@
 
 /**
  * @typedef {"miner" | "ghost" | "pilgrim" | "rival" | "hermit" | "storm" | "exile" | "traveler"} Archetype
- * @typedef {{ id: string, name: string, archetype: Archetype, entity: string }} Named
+ * @typedef {{ id: string, name: string, archetype: Archetype, entity: string }} Named `entity`: what stands at their camp and on the road
  */
 
 /** @type {Named[]} */
 export const NAMED = [
-  { id: "pell", name: "Pell the Pilgrim", archetype: "pilgrim", entity: "minecraft:npc" },
+  { id: "pell", name: "Pell the Pilgrim", archetype: "pilgrim", entity: "minecraft:villager_v2" },
   { id: "anwen", name: "Anwen, the Surveyor's Ghost", archetype: "ghost", entity: "minecraft:allay" },
-  { id: "brannoch", name: "Brannoch Deepdelve", archetype: "miner", entity: "minecraft:npc" },
-  { id: "rook", name: "Rook the Rival", archetype: "rival", entity: "minecraft:npc" },
-  { id: "marigold", name: "Marigold of the Heights", archetype: "hermit", entity: "minecraft:npc" },
-  { id: "tamsin", name: "Tamsin Galeward", archetype: "storm", entity: "minecraft:npc" },
-  { id: "vesk", name: "Vesk the Exile", archetype: "exile", entity: "minecraft:npc" },
-  { id: "hob", name: "Hob Fairweather", archetype: "traveler", entity: "minecraft:npc" },
+  { id: "brannoch", name: "Brannoch Deepdelve", archetype: "miner", entity: "minecraft:villager_v2" },
+  { id: "rook", name: "Rook the Rival", archetype: "rival", entity: "minecraft:villager_v2" },
+  { id: "marigold", name: "Marigold of the Heights", archetype: "hermit", entity: "minecraft:villager_v2" },
+  { id: "tamsin", name: "Tamsin Galeward", archetype: "storm", entity: "minecraft:villager_v2" },
+  { id: "vesk", name: "Vesk the Exile", archetype: "exile", entity: "minecraft:villager_v2" },
+  { id: "hob", name: "Hob Fairweather", archetype: "traveler", entity: "minecraft:villager_v2" },
 ];
+
+/**
+ * The villager look (profession) of each kind, as the vanilla `villager_v2` event that sets it; the biome sets the
+ * clothes. Strangers who are travelers are wandering traders instead, ghosts allays, and a drowned sailor in
+ * disguise is a fisherman whatever the kind. @type {Record<Archetype, string>}
+ */
+export const LOOKS = {
+  pilgrim: "minecraft:become_cleric",
+  miner: "minecraft:become_armorer",
+  hermit: "minecraft:become_sheperd", // sic: the vanilla event's spelling
+  storm: "minecraft:become_cartographer",
+  exile: "minecraft:become_leatherworker",
+  rival: "minecraft:become_weaponsmith",
+  traveler: "minecraft:become_toolsmith", // Hob the tinker
+  ghost: "",
+};
+export const SAILOR_LOOK = "minecraft:become_fisherman";
 
 /** 40 first names for Strangers. */
 export const FIRST_NAMES = [
