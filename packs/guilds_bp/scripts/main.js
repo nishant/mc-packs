@@ -378,8 +378,8 @@ function count(p, key, n, per, g) {
 
 /** A short note above the hotbar (the Coordinates HUD steps aside for it). @param {Player} p @param {string} text */
 function perkNote(p, text) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 50, from: "guilds_bp" }));
   p.onScreenDisplay.setActionBar(text);
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: p.id, ticks: 50 }));
 }
 
 const ores = new Set(CONFIG.ores);

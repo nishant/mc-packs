@@ -127,7 +127,8 @@ function direction(from, to) {
 
 /**
  * The player behind some damage: the player themselves (arrows and tridents already name the
- * shooter), or the owner of a tamed wolf or other pet that did it.
+ * shooter), or the owner of a pet that still has `minecraft:tameable` (a tamed wolf loses it, so its
+ * hits name nobody: verified on BDS 1.26).
  * @param {Entity | undefined} e @returns {string | undefined} the player's id
  */
 function playerBehind(e) {

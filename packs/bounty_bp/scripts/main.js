@@ -361,7 +361,10 @@ function nearSpawn(x, z) {
 /** The surface block at (x, z), or undefined where it isn't loaded. @param {Dimension} dim @param {number} x @param {number} z */
 function surfaceAt(dim, x, z) {
   try {
-    return dim.getTopmostBlock({ x, z });
+    const top = dim.getTopmostBlock({ x, z });
+    // A column that isn't ticking can return a block that throws as soon as it's read: treat it as unloaded.
+    if (top) void top.typeId;
+    return top;
   } catch {
     return undefined;
   }
@@ -652,8 +655,8 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       dirty = true;
       if (b.p >= b.count) finishCull(b, killer);
       else if (getFor(killer, "notes") === true) {
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: killer.id, ticks: 40, from: "bounty_bp" }));
         killer.onScreenDisplay.setActionBar(`§eBounty: ${b.label} §f${b.p}/${b.count}`);
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: killer.id, ticks: 40 }));
       }
     }
   } catch (e) {
