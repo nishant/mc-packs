@@ -1002,6 +1002,19 @@ world.afterEvents.entityHitBlock.subscribe(({ damagingEntity, hitBlock }) => {
 /** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number }>} */
 const hooks = new Map();
 
+/** Did an item appear at a player's head (dropped, not caught)? @param {Dimension} dim @param {Vector3} at */
+function droppedAt(dim, at) {
+  for (const p of dim.getPlayers({ location: at, maxDistance: 3 })) {
+    try {
+      const head = p.getHeadLocation();
+      if (Math.hypot(head.x - at.x, head.y - at.y, head.z - at.z) < 1.2) return true;
+    } catch {
+      // gone
+    }
+  }
+  return false;
+}
+
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
@@ -1016,6 +1029,9 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
     for (const [id, h] of hooks) {
       if (h.dim !== entity.dimension.id) continue;
       if (Math.abs(h.at.x - at.x) > 3 || Math.abs(h.at.y - at.y) > 3 || Math.abs(h.at.z - at.z) > 3) continue;
+      // An item dropped from the inventory appears at a player's head, not at the hook: fish dropped next to a hook
+      // close by (fishing off a dock) aren't a catch.
+      if (droppedAt(entity.dimension, at)) return;
       hooks.delete(id);
       const type = stack.typeId;
       const amount = stack.amount;
