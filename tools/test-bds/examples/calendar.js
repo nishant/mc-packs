@@ -153,6 +153,7 @@ export default async function (t) {
   await t.waitUntil(() => of("realm:town_list", (m) => m.parts > 0).length > 0, { timeout: 100, message: "realm:town_list" });
   const town = of("realm:town_list", (m) => m.parts > 0).at(-1).towns[0];
   t.check(town.safe === true, "a new town is kept safe from world events");
+  sys.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "spare1", pack: "calendar_bp", key: "spareSafeTowns", value: true }));
   dbg({ action: "setday", doy: 40 });
   await t.wait(20);
   dbg({ action: "siege", player: p.id, warn: 1 });
@@ -161,6 +162,7 @@ export default async function (t) {
   t.check(!st.siege || st.siege.town !== town.id, `no siege at the safe town (${st.siege?.town})`);
   dbg({ action: "end" });
   await t.wait(10);
+  sys.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "spare2", pack: "calendar_bp", key: "spareSafeTowns", value: false }));
   sys.sendScriptEvent("realm:town_test", JSON.stringify({ action: "protect", town: town.id, on: false }));
   await t.waitUntil(() => of("realm:town_list", (m) => m.parts > 0 && m.towns[0]?.safe === false).length > 0, { timeout: 100, message: "town no longer safe" });
 

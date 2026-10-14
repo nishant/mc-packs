@@ -498,9 +498,9 @@ NPC birthdays (section 2) use this calendar.
   npc_bp keeps counting in parallel and now also takes `festival` from the owner's message. `/realm:calendar_set <day>`
   is the day of the current year (1-96); setting it back pulls the siege gap back with it.
 - Towns: town_bp sends `realm:town_list {part, parts, towns:[{id,n,dim,x,y,z,safe}]}` (with its zones, and on
-  `realm:town_list_ping`), since `realm:zones src:"town"` only lists protected towns. `spareSafeTowns` (default on) skips
-  protected towns, and new towns start protected, so operators disable Protect for towns that should face the Choir
-  (or disable `spareSafeTowns`: circles then step outside the zone with `escapeZones`). Per-town switch in
+  `realm:town_list_ping`), since `realm:zones src:"town"` only lists protected towns. `spareSafeTowns` (default off, per
+  the owner: sieges reach player towns) lets every town be besieged; circles step outside a protected town's zone with
+  `escapeZones`. Enabled, protected towns are spared. Per-town switch in
   `/realm:calendar` -> Sieges (`cal:towns`). `realm:town_state {town, name, mood, until}` (ms); town_bp keeps it in
   memory, pings `realm:town_state_ping` at load, counts deliveries x1.25 when Heartened and shows the mood.
 - Sieges: one roll per night once a target has a player within 192 blocks. Circles: up to 10 tries per circle 48-96

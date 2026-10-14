@@ -51,8 +51,8 @@ export const CONFIG = {
   warnMinutes: 3,
   siegeMinutes: 12,
 
-  /** Towns Town Projects keeps safe from world events ("Protect from world events") are never besieged. Disabled, they can be: the circles then rise just outside the town's safe zone. */
-  spareSafeTowns: true,
+  /** Enabled, towns Town Projects keeps safe from world events ("Protect from world events") are never besieged. Disabled (the default), every town can be: sieges break no blocks, and the circles rise just outside the town's safe zone. */
+  spareSafeTowns: false,
 
   /** Hits a circle's bell needs, once its Choir Singer is down. */
   bellHits: 5,
