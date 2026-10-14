@@ -438,6 +438,8 @@ async function zoneMenu(player, id) {
           {
             text: "§cRemove it",
             run: () => {
+              // Checked again: the player may have been de-opped, or the zone changed hands, while the menu was open.
+              if (!canEdit(player, z)) return player.sendMessage("§cThat safe zone isn't yours to remove.");
               saveZones(zones().filter((x) => x.id !== z.id));
               player.sendMessage(`§aSafe zone ${z.name} removed.`);
             },
@@ -451,6 +453,7 @@ async function zoneMenu(player, id) {
 
 /** @param {Player} player @param {{ dim: string, x: number, z: number, y?: number }} z */
 function teleport(player, z) {
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can teleport to safe zones."); // de-opped while the menu was open
   const dim = world.getDimension(z.dim);
   let y = z.y;
   if (y === undefined) {

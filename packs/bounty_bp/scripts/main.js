@@ -3,7 +3,6 @@ import {
   CustomCommandStatus,
   GameMode,
   Player,
-  PlayerPermissionLevel,
   system,
   world,
 } from "@minecraft/server";
@@ -201,7 +200,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
   const board = boardAt(block.dimension.id, block.location);
   if (!board) return;
   try {
-    if (player.isSneaking && player.playerPermissionLevel === PlayerPermissionLevel.Operator && player.getGameMode() === GameMode.Creative) return;
+    if (player.isSneaking && isOp(player) && player.getGameMode() === GameMode.Creative) return;
   } catch {
     // fall through: open the board
   }
@@ -808,6 +807,8 @@ async function showBoard(player, board) {
 
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/** @param {Player} player */
+const stillOp = (player) => isOp(player) || (player.sendMessage("§cOnly operators can do that."), false);
 
 /**
  * Shows a form, retrying while the player still has chat or another screen open.
@@ -838,8 +839,9 @@ async function mainMenu(player) {
     } catch {
       lectern = undefined;
     }
-    if (lectern && boardAt(lectern.dimension.id, lectern.location)) actions.push({ text: "Make this board a lectern again\n§8Operators: the board you're looking at", run: () => unregister(player) });
-    else if (lectern) actions.push({ text: "Make this lectern a bounty board\n§8Operators: the lectern you're looking at", run: () => register(player) });
+    // Checked again when picked: the player may have been de-opped while the menu was open.
+    if (lectern && boardAt(lectern.dimension.id, lectern.location)) actions.push({ text: "Make this board a lectern again\n§8Operators: the board you're looking at", run: () => stillOp(player) && unregister(player) });
+    else if (lectern) actions.push({ text: "Make this lectern a bounty board\n§8Operators: the lectern you're looking at", run: () => stillOp(player) && register(player) });
     else lines.push("§7Operators: look at a lectern when you open this menu to make it a bounty board.");
     if (boards().length) actions.push({ text: "Remove a bounty board\n§8Operators", run: () => removeBoardMenu(player) });
   }
@@ -866,7 +868,7 @@ async function removeBoardMenu(player) {
   const pick = list[res.selection];
   if (!pick) return mainMenu(player);
   const sure = await show(player, new MessageFormData().title("§lRemove bounty board?").body(`Make the bounty board at ${pick.x}, ${pick.y}, ${pick.z} an ordinary lectern again?`).button1("§cRemove it").button2("Keep it"));
-  if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
+  if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid || !stillOp(player)) return;
   saveBoards(boards().filter((b) => !(b.d === pick.d && b.x === pick.x && b.y === pick.y && b.z === pick.z)));
   player.sendMessage("§aBounty board removed. §7The lectern is an ordinary lectern again.");
 }

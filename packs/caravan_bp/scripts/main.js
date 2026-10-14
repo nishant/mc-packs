@@ -7,7 +7,6 @@ import {
   GameMode,
   ItemStack,
   Player,
-  PlayerPermissionLevel,
   system,
   world,
 } from "@minecraft/server";
@@ -93,7 +92,9 @@ const wait = (ticks) => new Promise((r) => system.runTimeout(() => r(undefined),
 /** @param {string} id */
 const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 /** @param {Player} player */
-const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors || player.playerPermissionLevel === PlayerPermissionLevel.Operator;
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/** Checked again once a form comes back: a player de-opped while it was open can't use it. @param {Player} player */
+const stillOp = (player) => isOp(player) || (player.sendMessage("§cOnly operators can do that."), false);
 /** @param {Vector3} a @param {Vector3} b */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 /** 12345 -> "12,345". @param {number} n */
@@ -894,9 +895,9 @@ async function mainMenu(player) {
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [{ text: "Caravan info\n§8When it comes, or where it is", run: () => infoPage(player) }];
   if (isOp(player)) {
-    actions.push({ text: "Add an arrival spot here\n§8Operators", run: () => addSpotForm(player) });
-    if (spots.length) actions.push({ text: "Remove an arrival spot\n§8Operators", run: () => removeSpotMenu(player) });
-    if (!visit) actions.push({ text: "Bring the caravan now\n§8Operators", run: () => call(player) });
+    actions.push({ text: "Add an arrival spot here\n§8Operators", run: () => stillOp(player) && addSpotForm(player) });
+    if (spots.length) actions.push({ text: "Remove an arrival spot\n§8Operators", run: () => stillOp(player) && removeSpotMenu(player) });
+    if (!visit) actions.push({ text: "Bring the caravan now\n§8Operators", run: () => stillOp(player) && call(player) });
   }
   const form = new ActionFormData().title("§lMerchant Caravan").body(statusLines(player).join("\n\n"));
   for (const a of actions) form.button(a.text);
@@ -915,7 +916,7 @@ async function infoPage(player) {
 /** @param {Player} player */
 async function addSpotForm(player) {
   const res = await show(player, new ModalFormData().title("§lAdd an arrival spot").textField("Name (optional)", "Market Square").submitButton("Add spot"));
-  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!res || res.canceled || !res.formValues || !player.isValid || !stillOp(player)) return;
   const name = res.formValues.find((v) => typeof v === "string");
   addSpot(player, typeof name === "string" ? name : undefined);
 }
@@ -934,6 +935,7 @@ async function removeSpotMenu(player) {
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
   const pick = list[res.selection];
   if (!pick) return mainMenu(player);
+  if (!stillOp(player)) return;
   if (!spots.includes(pick)) return player.sendMessage("§7That spot is already gone.");
   spots = spots.filter((s) => s !== pick);
   saveSpots();

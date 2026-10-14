@@ -1947,6 +1947,7 @@ async function siegeMenu(player) {
 
 /** @param {Player} player @param {string} townId */
 async function toggleTown(player, townId) {
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the menu was open
   const sw = townSwitches();
   if (sw[townId] === 0) delete sw[townId];
   else sw[townId] = 0;
@@ -1955,11 +1956,13 @@ async function toggleTown(player, townId) {
   await siegeMenu(player);
 }
 
+const NOT_OP = "§cOnly operators can do that.";
+
 /** @param {Player} player */
 async function opMenu(player) {
   const c = meta.course;
   await menu(player, "Realm Calendar: operators", `Day ${today().doy} of the year. Regatta course: ${c ? `starts at ${Math.round(c.x)}, ${Math.round(c.z)}` : "none (each race starts where the racer is)"}.`, [
-    { text: "Set the regatta course here\n§8the start, facing the way you face", run: () => setCourse(player) },
+    { text: "Set the regatta course here\n§8the start, facing the way you face", run: () => (isOp(player) ? setCourse(player) : player.sendMessage(NOT_OP)) },
     { text: "Start a siege\n§8/realm:calendar_siege", run: () => siegeCommand(player) },
     { text: "Back", run: () => mainMenu(player) },
   ]);
@@ -1985,13 +1988,17 @@ async function siegeCommand(player) {
   if (!isOp(player)) return player.sendMessage("§cOnly operators can call a siege.");
   if (siege) {
     const res = await show(player, new MessageFormData().title("Choir siege").body(`The Choir is at ${siege.town.n}. End the siege now? Nobody is rewarded, the town's mood doesn't change, and the circles are put back.`).button1("End it").button2("Keep it"));
-    if (res && !res.canceled && res.selection === 0 && siege) endSiege("scattered");
+    if (res && !res.canceled && res.selection === 0 && siege && player.isValid) {
+      if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
+      endSiege("scattered");
+    }
     return;
   }
   const target = pickTarget([player], true);
   if (!target) return player.sendMessage("§7[Calendar] No town, lighthouse or spawn to besiege.");
   const res = await show(player, new MessageFormData().title("Choir siege").body(`Start a Choir siege at ${target.n} now? Everyone in the Overworld is warned, and the circles rise in ${int("warnMinutes")} minutes. It skips the night, the player count and the days since the last one.`).button1("Start it").button2("Cancel"));
-  if (!res || res.canceled || res.selection !== 0 || siege) return;
+  if (!res || res.canceled || res.selection !== 0 || siege || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
   startSiege(target);
 }
 

@@ -281,14 +281,22 @@ async function show(player, form) {
   return undefined;
 }
 
-/** @param {Player} player @param {string} title @param {string} body @param {{ text: string, run: () => unknown }[]} actions */
+/**
+ * Buttons with what each does. An `op` action checks again that the player is an operator when picked: they may
+ * have been de-opped while the menu was open.
+ * @param {Player} player @param {string} title @param {string} body @param {{ text: string, run: () => unknown, op?: boolean }[]} actions
+ */
 async function menu(player, title, body, actions) {
   const form = new ActionFormData().title(title).body(body);
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  await actions[res.selection]?.run();
+  const a = actions[res.selection];
+  if (a?.op && !isOp(player)) return player.sendMessage(NOT_OP);
+  await a?.run();
 }
+
+const NOT_OP = "§cOnly operators can do that.";
 
 /** Operators: name and radius of a new zone around them. @param {Player} player */
 async function addForm(player) {
@@ -299,6 +307,7 @@ async function addForm(player) {
     .submitButton("Add zone");
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
   const v = res.formValues.filter((x) => x !== undefined);
   const out = addZone(player, String(v[0] ?? "").trim(), Math.round(Number(v[1])), false);
   player.sendMessage(out.ok ? out.message : `§c${out.message}`);
@@ -313,6 +322,7 @@ async function removeMenu(player) {
     list.length ? "Pick a zone to remove." : "No zones.",
     list.map((z) => ({
       text: `${z.name}\n§8${shortId(z.dim)} ${Math.floor(z.x)}, ${Math.floor(z.z)}, radius ${z.radius}`,
+      op: true,
       run: () => {
         saveZones(getZones().filter((x) => x.name !== z.name));
         player.sendMessage(`Zone "${z.name}" removed.`);
@@ -323,11 +333,11 @@ async function removeMenu(player) {
 
 /** /realm:guard @param {Player} player */
 async function mainMenu(player) {
-  /** @type {{ text: string, run: () => unknown }[]} */
+  /** @type {{ text: string, run: () => unknown, op?: boolean }[]} */
   const actions = [{ text: "Status\n§8Mode, blast sources and zones", run: () => player.sendMessage(statusText(player)) }];
   if (isOp(player)) {
-    actions.push({ text: "Protect this spot (operator)\n§8A zone around you", run: () => addForm(player) });
-    if (getZones().length) actions.push({ text: "Remove a zone (operator)", run: () => removeMenu(player) });
+    actions.push({ text: "Protect this spot (operator)\n§8A zone around you", op: true, run: () => addForm(player) });
+    if (getZones().length) actions.push({ text: "Remove a zone (operator)", op: true, run: () => removeMenu(player) });
   }
   if (zoneProviders().has("zones")) {
     actions.push({ text: "Safe zones\n§8Protect places from every world event", run: () => system.sendScriptEvent("realm:zones_open", JSON.stringify({ player: player.id, action: "menu" })) });

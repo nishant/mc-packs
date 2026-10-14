@@ -352,7 +352,8 @@ async function drawFor(p) {
     .dropdown("Card", ["A random card", ...cards.map((c) => `${RARITY_COLOR[c.rarity]}${c.name}`)], { defaultValueIndex: 0 })
     .submitButton("Draw");
   const res = await show(p, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !p.isValid) return;
+  if (!isOp(p)) return void p.sendMessage(NOT_OP); // de-opped while the form was open
   const [pi, ci] = res.formValues.filter((v) => typeof v === "number");
   const target = players[Number(pi)];
   if (!target?.isValid) return void p.sendMessage("§cThat player left.");
@@ -361,12 +362,15 @@ async function drawFor(p) {
   return true;
 }
 
+const NOT_OP = "§cOnly operators can do that.";
+
 /** Operators: clear a player's cooldown. @param {Player} p */
 async function resetCooldown(p) {
   const players = world.getAllPlayers();
   const form = new ModalFormData().title("§lReset a cooldown").dropdown("Player", players.map((q) => `${q.name}${waitLeft(q) ? ` (${duration(waitLeft(q))})` : " (ready)"}`)).submitButton("Reset");
   const res = await show(p, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !p.isValid) return;
+  if (!isOp(p)) return void p.sendMessage(NOT_OP); // de-opped while the form was open
   const target = players[Number(res.formValues.find((v) => typeof v === "number"))];
   if (!target?.isValid) return;
   target.setDynamicProperty(PROP_NEXT, undefined);
@@ -391,7 +395,8 @@ async function cardsMenu(p) {
     form.button("Back to the defaults\n§8config.js, wild cards off");
     form.button("Back");
     const res = await show(p, form);
-    if (!res || res.canceled || res.selection === undefined) return;
+    if (!res || res.canceled || res.selection === undefined || !p.isValid) return;
+    if (!isOp(p)) return void p.sendMessage(NOT_OP); // de-opped while the form was open
     const n = RARITIES.length;
     if (res.selection < n) {
       await rarityPages(p, RARITIES[res.selection]);
@@ -427,7 +432,8 @@ async function rarityPages(p, r) {
     for (const c of slice) form.toggle(`${c.name} §8(${r === "wild" ? `${RARITY_NAME[c.rarity]}, ` : ""}${c.kind}) §7${c.text}`, { defaultValue: !switchedOff(c, map) });
     form.submitButton(page + 1 < pages ? "Save, next page" : "Save");
     const res = await show(p, form);
-    if (!res || res.canceled || !res.formValues) return;
+    if (!res || res.canceled || !res.formValues || !p.isValid) return;
+    if (!isOp(p)) return void p.sendMessage(NOT_OP); // de-opped while the form was open
     const values = res.formValues.filter((v) => typeof v === "boolean");
     const next = { ...offMap() };
     slice.forEach((c, i) => {

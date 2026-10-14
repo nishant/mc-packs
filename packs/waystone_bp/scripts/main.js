@@ -326,7 +326,8 @@ function signName(lodestone) {
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
-  if (!ev.isFirstEvent || ev.itemStack || ev.block.typeId !== LODESTONE) return;
+  // ev.cancel: another pack refused the tap (e.g. a land claim)
+  if (ev.cancel || !ev.isFirstEvent || ev.itemStack || ev.block.typeId !== LODESTONE) return;
   const { player, block } = ev;
   const dimension = block.dimension;
   const at = { ...block.location };
@@ -762,6 +763,7 @@ async function removeMenu(player) {
   if (!pick) return mainMenu(player);
   const sure = await show(player, new MessageFormData().title("§lRemove waystone?").body(`Remove the waystone ${pick.n} (${pick.x}, ${pick.y}, ${pick.z})? Everyone who discovered it loses it.`).button1("§cRemove it").button2("Keep it"));
   if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can remove waystones."); // de-opped while the forms were open
   if (!byId(pick.i)) return player.sendMessage("§7That waystone is already gone.");
   removeWaystone(pick, `removed by ${player.name}`);
   player.sendMessage(`§7Removed the waystone ${pick.n}. The lodestone and sign stay: break them if you want them gone.`);
