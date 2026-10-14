@@ -102,15 +102,33 @@ export async function show(player, form) {
 /** Block-rounded coordinates "12 64 -300". @param {{ x: number, y?: number, z: number }} p */
 export const coords = (p) => (p.y === undefined ? `${Math.floor(p.x)} ~ ${Math.floor(p.z)}` : `${Math.floor(p.x)} ${Math.floor(p.y)} ${Math.floor(p.z)}`);
 
+/** Water, or something only found in it (kelp, seagrass, a bubble column). @param {import("@minecraft/server").Block} b */
+const wet = (b) => /water|kelp|seagrass|bubble_column/.test(b.typeId);
+
+/** Lava (open to walk into, never a spot to stand). @param {import("@minecraft/server").Block} b */
+const lava = (b) => b.typeId.includes("lava");
+
 /**
  * The first open spot to stand at x/z: near `yHint` (scanning a few blocks up and down) or on the
  * surface. Undefined when the column isn't loaded (and, with `strict`, when there is no open spot near
- * `yHint`: otherwise `yHint` itself). The surface over a lake or the sea is the water's, unless `bed`.
+ * `yHint`: otherwise `yHint` itself). Over a lake or the sea the spot is the water's surface (the air just
+ * above it), never the bed under it, unless `bed` (sea creatures, places built on the bottom).
  * @param {Dimension} dim @param {number} x @param {number} z @param {number} [yHint] @param {boolean} [strict] @param {boolean} [bed]
  */
 export function groundAt(dim, x, z, yHint, strict = false, bed = false) {
   const bx = Math.floor(x);
   const bz = Math.floor(z);
+  /** The air over the water at `y` (undefined: no open air over it, an underwater cave). @param {number} y */
+  const surface = (y) => {
+    for (let i = 0; i < 64; i++, y++) {
+      const b = dim.getBlock({ x: bx, y, z: bz });
+      const up = dim.getBlock({ x: bx, y: y + 1, z: bz });
+      if (!b || !up) return undefined;
+      if (wet(b)) continue;
+      return open(b) && open(up) && !lava(b) && !wet(up) ? y : undefined;
+    }
+    return undefined;
+  };
   try {
     if (yHint !== undefined) {
       const y0 = Math.floor(yHint);
@@ -120,16 +138,33 @@ export function groundAt(dim, x, z, yHint, strict = false, bed = false) {
           const head = dim.getBlock({ x: bx, y: y + 1, z: bz });
           const below = dim.getBlock({ x: bx, y: y - 1, z: bz });
           if (!feet || !head || !below) return undefined;
-          if (open(feet) && open(head) && !open(below)) return y;
+          if (!open(feet) || !open(head) || lava(feet) || lava(head)) continue;
+          if (bed) {
+            if (!open(below)) return y;
+            continue;
+          }
+          // Water counts as open, so a bed under it looks like ground: rise to the surface instead.
+          if (wet(feet) || wet(head)) {
+            if (open(below)) continue;
+            const s = surface(y);
+            if (s !== undefined) return s;
+            continue;
+          }
+          if (!open(below) || wet(below)) return y; // on the ground, or on the water's surface
         }
       }
-      return strict ? undefined : y0;
+      if (strict) return undefined;
+      if (!bed) {
+        const b = dim.getBlock({ x: bx, y: y0, z: bz });
+        if (b && wet(b)) return surface(y0) ?? y0;
+      }
+      return y0;
     }
     let top = dim.getTopmostBlock({ x: bx, z: bz });
     // getTopmostBlock skips water (it answers a lake or sea bed): over water, the water's surface instead.
     for (let i = 0; top && !bed && i < 64; i++) {
       const up = top.above();
-      if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+      if (!up || !(up.isLiquid || wet(up))) break;
       top = up;
     }
     return top ? top.location.y + 1 : undefined;

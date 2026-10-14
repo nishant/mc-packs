@@ -27,6 +27,8 @@ const PLAN_PROP = "build:plan"; // player: JSON Plan
 const OWED_PROP = "build:owed"; // world: items owed to players who left mid-build (see refund)
 const TITLE = "Easy Building";
 const HINT_TICKS = 30;
+/** The build mode line's rank among steady lines (`steady` in its `realm:actionbar`): a higher one keeps the bar, a lower one waits for it. */
+const STEADY = 30;
 
 /**
  * What a player has set up: the shape, its settings (each shape remembers its own) and how it is placed.
@@ -1678,7 +1680,7 @@ system.runInterval(() => {
             : twoPoint
               ? `§bBuild: §f${shape.name}§7 - place the start block (sneak: just one block)`
               : `§bBuild: §f${planLabel(plan)}§7 - place a block (sneak: just one)`;
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HINT_TICKS, from: PACK }));
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HINT_TICKS, from: PACK, steady: STEADY }));
         player.onScreenDisplay.setActionBar(text);
       }
     } catch (e) {
@@ -2186,10 +2188,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       return;
     }
     if (id === "realm:actionbar") {
-      // Another pack's note: the build mode line waits while it shows (a steady line, like the HUD).
+      // Another pack's note: the build mode line waits while it shows (a steady line, like the HUD). A lower steady
+      // line (`steady` below ours, or equal from a pack named after ours) waits for this one instead.
       try {
         const req = JSON.parse(message);
         if (!req || typeof req.player !== "string" || req.from === PACK || req.background === true) return;
+        if (Number.isFinite(req.steady) && (req.steady < STEADY || (req.steady === STEADY && String(req.from) > PACK))) return;
         const s = states.get(req.player);
         if (s) s.paused = Math.max(s.paused, system.currentTick + Math.min(Math.max(Number(req.ticks) || 40, 0), 200));
       } catch {

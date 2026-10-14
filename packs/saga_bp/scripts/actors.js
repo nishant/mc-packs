@@ -238,7 +238,12 @@ export function sweep() {
   }
 }
 
-/** Story mobs that outlived their scene: removed after 10 minutes. */
+/** Test hook (realm:saga_debug `age_adds`): every story mob as if spawned `ticks` earlier. @param {number} ticks */
+export function ageAdds(ticks) {
+  for (const a of actors.values()) if (a.role === "add") a.born -= ticks;
+}
+
+/** Story mobs that outlived their scene: removed after 10 minutes (a defense keeps its wave's fresh while it's fought). */
 export function expireAdds() {
   const now = system.currentTick;
   for (const [id, a] of [...actors]) if (a.role === "add" && now - a.born > 12000) removeActor(id);
