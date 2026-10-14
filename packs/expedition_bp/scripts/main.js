@@ -67,6 +67,7 @@ const PROP_TIERS = "expedition:tiers"; // world: JSON TierEntry[], the highest l
 const PROP_HISTORY = "expedition:history"; // world: JSON HistoryEntry[], newest first
 const PROP_RETURN = "expedition:return"; // player: JSON { d, x, y, z, run } where to send them back
 const PROP_PROG = "expedition:prog"; // player: JSON Progress
+const PROP_CALLINGS = "expedition:callings"; // world: JSON { [playerName]: Calling name } from Skills' realm:calling, for the leaderboards
 const PROP_ROLLS = "expedition:rolls"; // player: JSON { [levelKey]: string[] } the affixes shown for each level
 const PROP_GAUNTLETS = "expedition:gauntlets"; // world: JSON GauntletEntry[], the best Gauntlet clears
 const PROP_BUFFS = "expedition:buffs"; // player: JSON string[], the effects a run gave them (shrine, boons), taken away when they leave
@@ -3828,13 +3829,13 @@ async function leaderboards(player) {
       .filter((e) => e.L !== undefined && best[e.k]?.length)
       .sort((a, b) => (b.L ?? 0) - (a.L ?? 0));
     const body = keys.length
-      ? keys.map(({ k, L }) => `§l${levelName(L ?? 0)}§r\n${best[k].slice(0, L !== undefined && L >= 3 ? 3 : 5).map((b, i) => `${i + 1}. ${clock(b.t)}  ${b.n}${b.a?.length ? ` §8(${b.a.map((a) => affixOf(a)?.name).join(", ")})§r` : ""}`).join("\n")}`).join("\n\n")
+      ? keys.map(({ k, L }) => `§l${levelName(L ?? 0)}§r\n${best[k].slice(0, L !== undefined && L >= 3 ? 3 : 5).map((b, i) => `${i + 1}. ${clock(b.t)}  ${who(b.n)}${b.a?.length ? ` §8(${b.a.map((a) => affixOf(a)?.name).join(", ")})§r` : ""}`).join("\n")}`).join("\n\n")
       : "§7No clears yet.";
     await show(player, new ActionFormData().title(`§l${d.name}`).body(body).button("Close"));
   } else if (res.selection === n) {
     /** @type {TierEntry[]} */
     const tiers = readJson(PROP_TIERS) ?? [];
-    const body = tiers.length ? tiers.map((e, i) => `${i + 1}. ${e.n}: ${levelName(e.l)} §8(${dungeonById(e.d)?.name ?? e.d})§r`).join("\n") : "§7Nobody has cleared a run yet.";
+    const body = tiers.length ? tiers.map((e, i) => `${i + 1}. ${who(e.n)}: ${levelName(e.l)} §8(${dungeonById(e.d)?.name ?? e.d})§r`).join("\n") : "§7Nobody has cleared a run yet.";
     await show(player, new ActionFormData().title("§lHighest tiers").body(body).button("Close"));
   } else if (res.selection === n + 1) {
     /** @type {HistoryEntry[]} */
@@ -3844,7 +3845,7 @@ async function leaderboards(player) {
     /** @type {GauntletEntry[]} */
     const board = readJson(PROP_GAUNTLETS) ?? [];
     const body = board.length
-      ? board.map((e, i) => `${i + 1}. ${levelName(e.l)} ${dungeonById(e.d)?.name ?? e.d} in ${clock(e.t)}: ${e.n} §8(${e.r} rooms${e.k ? ", fixed loadout" : ""})§r`).join("\n")
+      ? board.map((e, i) => `${i + 1}. ${levelName(e.l)} ${dungeonById(e.d)?.name ?? e.d} in ${clock(e.t)}: ${who(e.n)} §8(${e.r} rooms${e.k ? ", fixed loadout" : ""})§r`).join("\n")
       : "§7Nobody has cleared a Gauntlet yet.";
     await show(player, new ActionFormData().title("§lGauntlets").body(`The hardest Gauntlets cleared, then the fastest.\n\n${body}`).button("Close"));
   }
@@ -3853,7 +3854,49 @@ async function leaderboards(player) {
 /** @param {HistoryEntry[]} hist */
 function historyText(hist) {
   if (!hist.length) return "§7No runs yet.";
-  return hist.map((h) => `${h.ok ? "§a" : "§c"}${h.ok ? "Cleared" : "Failed"}§r ${h.g ? "§6Gauntlet§r " : ""}${dungeonById(h.d)?.name ?? h.d} ${levelShort(h.l)} in ${clock(h.t)}: ${h.n}`).join("\n");
+  return hist.map((h) => `${h.ok ? "§a" : "§c"}${h.ok ? "Cleared" : "Failed"}§r ${h.g ? "§6Gauntlet§r " : ""}${dungeonById(h.d)?.name ?? h.d} ${levelShort(h.l)} in ${clock(h.t)}: ${who(h.n)}`).join("\n");
+}
+
+// Callings (Skills): each player's Calling, by name, so the leaderboards can show it (`Ann (Delver), Bo`). Saved,
+// since the boards list players who are offline; at most CALLINGS_MAX names, the oldest go first.
+const CALLINGS_MAX = 300;
+/** @type {Record<string, string> | undefined} */
+let callingNames;
+/** @returns {Record<string, string>} */
+function callingsByName() {
+  if (!callingNames) {
+    const saved = readJson(PROP_CALLINGS);
+    callingNames = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  }
+  return /** @type {Record<string, string>} */ (callingNames);
+}
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:calling") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.name !== "string" || !m.name || m.name.length > 40) return;
+      const label = typeof m.label === "string" ? m.label.slice(0, 24) : "";
+      const all = callingsByName();
+      if ((all[m.name] ?? "") === label) return;
+      delete all[m.name];
+      if (label) all[m.name] = label;
+      const names = Object.keys(all);
+      for (let i = 0; i < names.length - CALLINGS_MAX; i++) delete all[names[i]];
+      writeJson(PROP_CALLINGS, all);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+/** "Ann, Bo" -> "Ann §7(Delver)§r, Bo": names on a board with their Calling. @param {string} names */
+function who(names) {
+  const all = callingsByName();
+  return String(names ?? "")
+    .split(", ")
+    .map((n) => (all[n] ? `${n} §7(${all[n]})§r` : n))
+    .join(", ");
 }
 
 /** @param {Player} player */

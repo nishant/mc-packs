@@ -16,6 +16,8 @@ const OPTIONS = [
   { key: "autoRepair", type: "bool", scope: "world", label: "Relics never wear out", help: "Durability is restored while a relic is held or worn" },
   { key: "staffHitsPlayers", type: "bool", scope: "world", label: "Storm Staff can strike players" },
   { key: "avoidSpawn", type: "int", scope: "world", label: "Storm Staff: no lightning this close to spawn", help: "Blocks from world spawn; 0 = anywhere. Fires a bolt starts are put out either way", min: 0, max: 256, step: 8 },
+  { key: "ascension.enabled", type: "bool", scope: "world", label: "Relic Ascension", help: "Ascend relics and break duplicates at the relicsmith; stages already made still work" },
+  { key: "setsEnabled", type: "bool", scope: "world", label: "Relic set bonuses", help: "All three relics of a set carried give its bonus" },
   { key: "meterReadout", type: "bool", scope: "player", default: true, label: "Storm Meter readout", help: "Holding the Storm Meter shows the nearest storm cell above the hotbar" },
 ];
 

@@ -115,7 +115,7 @@ function sendSeals(player, force = false) {
 
 /** The flags `realm:npc_flags` sends: player-wide, other stories' (as `<story>.<flag>`) and `fin:<story>` = "1". */
 const NPC_FLAGS = {
-  g: ["ending", "hollis", "quill", "vesna", "fen", "allies", "mercy", "iron"],
+  g: ["ending", "hollis", "quill", "vesna", "fen", "allies", "mercy", "iron", "gull"],
   story: [
     "drowned_bell.bell",
     "act1_signs.act1:path",
@@ -211,6 +211,30 @@ function onAffinity(msg) {
     const v = String(Math.max(0, Math.min(4, Math.floor(level))));
     if ((saga.g ??= {})[`aff_${npc}`] === v) continue;
     saga.g[`aff_${npc}`] = v;
+    changed = true;
+  }
+  if (!changed) return;
+  invalidate(player.id);
+  markDirty(player);
+}
+
+/**
+ * realm:calling from Skills: `g:calling_ready` = "1" once the player's skills add up to the Calling level (saved, it
+ * never goes back), `g:calling` = the Calling id or "none" (saved), for *The Calling*. @param {any} msg
+ */
+function onCalling(msg) {
+  const player = typeof msg.player === "string" ? online(msg.player) : undefined;
+  if (!player) return;
+  const saga = sagaOf(player);
+  saga.g ??= {};
+  let changed = false;
+  if (msg.ready === true && saga.g.calling_ready !== "1") {
+    saga.g.calling_ready = "1";
+    changed = true;
+  }
+  const calling = typeof msg.calling === "string" && /^[a-z_]{1,24}$/.test(msg.calling) ? msg.calling : "none";
+  if (saga.g.calling !== calling && (calling !== "none" || saga.g.calling !== undefined || msg.ready === true)) {
+    saga.g.calling = calling;
     changed = true;
   }
   if (!changed) return;
@@ -384,10 +408,10 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
       return;
     }
-    if (id === "realm:affinity" || id === "realm:calendar") {
+    if (id === "realm:affinity" || id === "realm:calendar" || id === "realm:calling") {
       try {
         const msg = JSON.parse(message);
-        if (msg && typeof msg === "object") (id === "realm:affinity" ? onAffinity : onCalendar)(msg);
+        if (msg && typeof msg === "object") (id === "realm:affinity" ? onAffinity : id === "realm:calling" ? onCalling : onCalendar)(msg);
       } catch {
         // not ours to fix
       }
@@ -533,6 +557,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   checkStories();
   system.runTimeout(scanPacks, 60);
   system.runTimeout(() => send("realm:calendar_ping", {}), 80); // the calendar's live flags, if Townsfolk (or Realm Calendar) is here
+  system.runTimeout(() => send("realm:calling_ping", {}), 90); // Callings (Skills), for The Calling
   system.runTimeout(() => {
     for (const p of world.getAllPlayers()) sendSeals(p, true);
   }, 100);

@@ -402,7 +402,7 @@ function step(player, hunt) {
   const planned = hunt.pts[hunt.leg];
 
   // Close to the planned spot, with its land loaded: find a landmark there and build the marker (or bury the chest).
-  if (!hunt.near && !hunt.chest && !hunt.mark && !hunt.nomark && !jobs.has(key) && (retryAt.get(key) ?? 0) <= system.currentTick && flat(at, planned) <= get("revealDistance") && topAt(player.dimension, planned.x, planned.z)) {
+  if (!hunt.near && !hunt.chest && !hunt.mark && !hunt.nomark && !jobs.has(key) && (retryAt.get(key) ?? 0) <= system.currentTick && flat(at, planned) <= revealFor(player) && topAt(player.dimension, planned.x, planned.z)) {
     const dim = player.dimension;
     jobs.set(key, { gen: settle(dim, hunt, final), player, hunt, missed: 0, done: (/** @type {any} */ r, /** @type {number} */ missed) => settled(player, hunt, final, r, missed) });
   }
@@ -767,7 +767,7 @@ function settled(player, hunt, final, r, missed = 0) {
   const hunts = huntsOf(player);
   // The player left while the land was searched (flew on, went home, changed dimension), so part of it unloaded:
   // that is no reason to move the treasure or leave a bottle. Look again when they come back.
-  const left = () => player.dimension.id !== hunt.dim || flat(player.location, hunt.pts[hunt.leg]) > get("revealDistance");
+  const left = () => player.dimension.id !== hunt.dim || flat(player.location, hunt.pts[hunt.leg]) > revealFor(player);
   if (!r?.retry && missed > 0 && !r?.spot && left()) r = { retry: true };
   if (r?.retry) {
     retryAt.set(`${player.id}/${hunt.id}`, system.currentTick + 100); // not loaded yet: look again in 5 seconds
@@ -1252,6 +1252,29 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Callings (Skills): realm:calling carries each player's talent numbers (`bonus`: mapReveal: Map Sense's reveal distance). Kept in memory; Skills
+// sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
+/** @type {Map<string, Record<string, number>>} */
+const callingBonus = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:calling") return;
+    try {
+      const m = JSON.parse(message);
+      if (m && typeof m.player === "string" && m.bonus && typeof m.bonus === "object") callingBonus.set(m.player, m.bonus);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
+/** How near a planned spot must be to build it: `revealDistance`, or farther with the Pathfinder's Map Sense (at most 160). @param {Player} player */
+const revealFor = (player) => Math.max(get("revealDistance"), Math.min(160, callingValue(player, "mapReveal")));
+/** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
+const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

@@ -10,7 +10,7 @@ import {
   system,
   world,
 } from "@minecraft/server";
-import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 
@@ -40,6 +40,50 @@ const ATTACK_MEMORY_MS = 10000; // the Choir Mask and Fen Charm stop protecting 
 const PROP_DEATH = "relics:death"; // player: JSON { dim, x, y, z } where the player last died (Hal's Compass)
 const NIGHT = { from: 13000, to: 23000 }; // time of day
 const HOSTILE_FAMILY = "monster"; // what the Singing Blade and Keeper's Lamp slow
+
+// Relic Ascension (docs/RPG_DESIGN.md section 5): the stage lives on the item, `relic:asc` 1-3 (missing = 0).
+const ITEM_ASC = "relic:asc";
+const ESSENCE_ITEM = "minecraft:echo_shard";
+const ESSENCE_NAME = "§r§bRelic Essence";
+const ESSENCE_LORE = "§7From a broken relic: ascends relics";
+const GLASS_ITEM = "minecraft:prismarine_crystals"; // Storm Glass, the shared item (Storm Chasing makes it)
+const GLASS_LORE = "§7Charged by a lightning strike";
+const STAGES = ["", "Awakened", "Ascended", "Starlit"];
+const CD_MULT = [1, 0.8, 0.65, 0.5]; // cooldown relics: -20 / -35 / -50%
+const BOOST = [1, 1.25, 1.5, 1.75]; // range and duration relics: +25 / +50 / +75%
+const LINGER = [0, 10, 20, 30]; // passive relics: seconds they keep working after their condition ends
+/**
+ * What ascension does for each relic: `cd` shortens its cooldown, `boost` stretches a range, a duration or a
+ * protection (`what`), `linger` keeps a passive working a while after its condition ends. `flavor` is the +2 lore
+ * line, `star` the +3 (Starlit) bonus.
+ * @type {Record<string, { kind: "cd" | "boost" | "linger", what?: string, flavor: string, star: string }>}
+ */
+const ASC = {
+  storm_staff: { kind: "cd", flavor: "The shaft hums before every storm.", star: "Answers in any rain, not only in thunder" },
+  rain_charm: { kind: "linger", flavor: "It smells of wet stone, always.", star: "Also works while you swim" },
+  tide_boots: { kind: "linger", flavor: "Salt never dries out of the seams.", star: "Water Breathing while you swim" },
+  lantern_deep: { kind: "linger", flavor: "The glass is warm in the dark.", star: "Works below y 30, not only y 0" },
+  storm_meter: { kind: "linger", flavor: "The lens fogs when lightning is near.", star: "Says if the cell is closing in or moving away" },
+  compass_echoes: { kind: "cd", flavor: "It hums the name of what it finds.", star: "Also tells the champion's health" },
+  frost_band: { kind: "boost", what: "slow duration", flavor: "Frost forms on it in summer.", star: "Slowness II instead of I" },
+  sun_pendant: { kind: "cd", flavor: "It is never cold to the touch.", star: "Also Regeneration I while the fire burns out" },
+  miners_lamp: { kind: "linger", flavor: "Dunmore's mark is scratched inside.", star: "Haste II below y 0" },
+  wayfarer_boots: { kind: "linger", flavor: "The soles never wear through.", star: "Works under cover too, not only outdoors" },
+  lantern_shard: { kind: "linger", flavor: "A little starlight is caught inside.", star: "Night Vision anywhere, dark or not" },
+  choir_mask: { kind: "boost", what: "protection", flavor: "It no longer hums. Mostly.", star: "Choir enemies can't hurt you while you sneak" },
+  hal_compass: { kind: "cd", flavor: "The needle shivers toward the sea.", star: "Each use also gives Speed I for 15s" },
+  vesna_charm: { kind: "boost", what: "protection after a fight", flavor: "Fen water still beads on it.", star: "Wither can't take hold either" },
+  singing_blade: { kind: "cd", flavor: "It sings a little when drawn.", star: "The note also gives Weakness I" },
+  hollow_crown: { kind: "linger", flavor: "The hollow inside is darker now.", star: "Works from dusk to dawn" },
+  keeper_lamp: { kind: "boost", what: "ring range", flavor: "Its flame leans toward the lost.", star: "Monsters in the ring get Weakness I too" },
+};
+/** Relic sets: all three in the hotbar, off hand or worn. */
+const SETS = [
+  { id: "storm", name: "Storm", relics: ["storm_staff", "storm_meter", "rain_charm"], text: "Lightning can't hurt you, and charged lightning rods give 1 more Storm Glass (Storm Chasing)" },
+  { id: "tide", name: "Tide", relics: ["tide_boots", "hal_compass", "compass_echoes"], text: "Conduit Power in water" },
+  { id: "deep", name: "Deep", relics: ["miners_lamp", "lantern_deep", "lantern_shard"], text: "Night Vision below y 0, and no Darkness there" },
+  { id: "sun", name: "Sun", relics: ["sun_pendant", "frost_band", "wayfarer_boots"], text: "Fire Resistance at dawn and dusk, and freezing can't hurt you then" },
+];
 
 /** @typedef {typeof CONFIG.relics[number]} Relic */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -81,6 +125,28 @@ function relicOf(stack) {
   } catch {
     return undefined;
   }
+}
+
+/** A relic item's ascension stage, 0-3. @param {ItemStack | undefined} stack */
+function ascOf(stack) {
+  try {
+    const n = stack?.getDynamicProperty(ITEM_ASC);
+    return typeof n === "number" ? Math.max(0, Math.min(3, Math.floor(n))) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** A relic's cooldown in seconds at a stage. @param {Relic} def @param {number} asc */
+const cooldownAt = (def, asc) => (ASC[def.id]?.kind === "cd" ? Math.round(def.cooldown * CD_MULT[asc] * 10) / 10 : def.cooldown);
+
+/** What a stage does, for lore and menus. @param {Relic} def @param {number} asc */
+function stageText(def, asc) {
+  const a = ASC[def.id];
+  if (!a || asc <= 0) return "";
+  if (a.kind === "cd") return `${Math.round((1 - CD_MULT[asc]) * 100)}% shorter cooldown`;
+  if (a.kind === "boost") return `+${Math.round((BOOST[asc] - 1) * 100)}% ${a.what ?? "range"}`;
+  return `Keeps working ${LINGER[asc]}s after its condition ends`;
 }
 
 /** @param {string} id */
@@ -159,6 +225,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     }
   }
   system.runTimeout(() => system.sendScriptEvent("realm:seals_ping", "{}"), 100);
+  system.runTimeout(() => system.sendScriptEvent("realm:npc_flags_ping", "{}"), 110); // story flags for the story relic gates
 });
 
 // The weather may have changed while the pack wasn't running (installed mid-storm, say), and scripts can't read
@@ -202,20 +269,34 @@ function nextSerial() {
   return n;
 }
 
-/** A relic's lore lines: rarity, ability, cooldown. @param {Relic} def */
-function loreFor(def) {
+/** A relic's lore lines: rarity and stage, ability, cooldown, then what its stage adds. @param {Relic} def @param {number} [asc] */
+function loreFor(def, asc = 0) {
   const rarity = RARITY[def.rarity] ?? RARITY.common;
-  const lore = [`${rarity.color}${rarity.label} relic`, ...wrap(def.ability).map((l) => `§7${l}`)];
-  if (def.cooldown > 0) lore.push(`§8Cooldown: ${def.cooldown}s`);
+  const lore = [`${rarity.color}${rarity.label} relic${asc ? ` +${asc} ${STAGES[asc]}` : ""}`, ...wrap(def.ability).map((l) => `§7${l}`)];
+  if (def.cooldown > 0) lore.push(`§8Cooldown: ${cooldownAt(def, asc)}s`);
+  if (asc >= 1) lore.push(...wrap(stageText(def, asc)).map((l) => `§b${l}`));
+  if (asc >= 2) lore.push(...wrap(ASC[def.id]?.flavor ?? "").map((l) => `§3${l}`));
+  if (asc >= 3) lore.push(...wrap(`Starlit: ${ASC[def.id]?.star ?? ""}`).map((l) => `§6${l}`));
   return lore;
 }
 
-/** Brings an older relic's lore up to date (an ability that changed). Returns true if it changed. @param {ItemStack} stack @param {Relic} def */
+/** A relic's name: its rarity color, then gold once Starlit. @param {Relic} def @param {number} asc */
+function nameFor(def, asc) {
+  const rarity = RARITY[def.rarity] ?? RARITY.common;
+  return `§r${asc >= 3 ? "§6" : rarity.color}${def.name}${asc ? ` +${asc}` : ""}`;
+}
+
+/** Brings a relic's name and lore up to date (its stage, an ability that changed). Returns true if it changed. @param {ItemStack} stack @param {Relic} def */
 function freshen(stack, def) {
   try {
-    const want = loreFor(def);
-    if (stack.getLore().join("\n") === want.join("\n")) return false;
+    const asc = ascOf(stack);
+    const want = loreFor(def, asc);
+    const name = nameFor(def, asc);
+    // A name from an anvil (no leading reset code) is the player's: only the lore follows the stage then.
+    const ours = !stack.nameTag || stack.nameTag.startsWith("§r");
+    if (stack.getLore().join("\n") === want.join("\n") && (!ours || stack.nameTag === name)) return false;
     stack.setLore(want);
+    if (ours) stack.nameTag = name;
     return true;
   } catch {
     return false;
@@ -236,8 +317,7 @@ function makeRelic(def) {
     console.warn(`[relics] ${def.item} isn't an item; using ${FALLBACK_ITEM} for ${def.id}`);
     stack = new ItemStack(FALLBACK_ITEM, 1);
   }
-  const rarity = RARITY[def.rarity] ?? RARITY.common;
-  stack.nameTag = `§r${rarity.color}${def.name}`;
+  stack.nameTag = nameFor(def, 0);
   stack.setLore(loreFor(def));
   stack.setDynamicProperty(ITEM_ID, def.id);
   stack.setDynamicProperty(ITEM_SERIAL, nextSerial());
@@ -384,9 +464,14 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   kept.delete(playerId);
   passiveNote.delete(playerId);
   lastUse.delete(playerId);
+  setsSent.delete(playerId);
+  struckAt.delete(playerId);
+  meterLast.delete(playerId);
+  affinity.delete(playerId);
+  storyFlags.delete(playerId);
   smithWaits.delete(playerId);
   barHeld.delete(playerId);
-  for (const map of [cooldowns, lastAttack]) for (const key of [...map.keys()]) if (key.startsWith(`${playerId}:`)) map.delete(key);
+  for (const map of [cooldowns, lastAttack, lastOn]) for (const key of [...map.keys()]) if (key.startsWith(`${playerId}:`)) map.delete(key);
 });
 
 // ---------------------------------------------------------------------------
@@ -402,9 +487,10 @@ function waitFor(player, def) {
   return Math.max(0, Math.ceil((at - Date.now()) / 1000));
 }
 
-/** @param {Player} player @param {Relic} def */
-function startCooldown(player, def) {
-  if (def.cooldown > 0) cooldowns.set(`${player.id}:${def.id}`, Date.now() + def.cooldown * 1000);
+/** @param {Player} player @param {Relic} def @param {number} [asc] the relic's stage: cooldown relics wait less */
+function startCooldown(player, def, asc = 0) {
+  const s = cooldownAt(def, asc);
+  if (s > 0) cooldowns.set(`${player.id}:${def.id}`, Date.now() + s * 1000);
 }
 
 /** True if ready; otherwise says how long to wait. @param {Player} player @param {Relic} def */
@@ -424,9 +510,35 @@ function ready(player, def) {
 const EFFECT = { duration: 210, refreshBelow: 30 }; // 210/30: Regeneration still heals at its usual pace
 const NIGHT_VISION = { duration: 400, refreshBelow: 240 }; // night vision flickers in its last 10 s
 
-/** What each player carries: relic ids in their hand, anywhere in the hotbar or off hand, and worn. @type {Map<string, { hand?: string, carry: Set<string>, head?: string, feet?: string }>} */
+/**
+ * What each player carries: relic ids in their hand, anywhere in the hotbar or off hand, and worn, with stages (`asc`:
+ * the highest of each id in the hotbar or off hand; `handAsc`, `headAsc`, `feetAsc` for those slots).
+ * @typedef {{ hand?: string, handAsc: number, carry: Set<string>, asc: Map<string, number>, head?: string, headAsc: number, feet?: string, feetAsc: number }} Carried
+ */
+/** @type {Map<string, Carried>} */
 const carried = new Map();
-/** Effects this pack is keeping on each player. @type {Map<string, Set<string>>} */
+/** Tick each passive relic's condition last held, "playerId:relicId" (for lingering). @type {Map<string, number>} */
+const lastOn = new Map();
+/** The sets each player has together, last sent (realm:relic_sets). @type {Map<string, string>} */
+const setsSent = new Map();
+/** Tick a player was last struck by lightning (the Storm set also puts out the fire it starts). @type {Map<string, number>} */
+const struckAt = new Map();
+/** Storm Meter: the cell distance last read per player, for the Starlit trend. @type {Map<string, number>} */
+const meterLast = new Map();
+
+/** A relic's stage where it works for this player. @param {Carried | undefined} c @param {string} id */
+function ascFor(c, id) {
+  if (!c) return 0;
+  const where = relics.get(id)?.where;
+  if (where === "hand") return c.hand === id ? c.handAsc : c.asc.get(id) ?? 0;
+  if (where === "head") return c.head === id ? c.headAsc : c.asc.get(id) ?? 0;
+  if (where === "feet") return c.feet === id ? c.feetAsc : c.asc.get(id) ?? 0;
+  return c.asc.get(id) ?? 0;
+}
+
+/** Is the relic anywhere it's read (hotbar, off hand, head, feet)? For sets and lingering. @param {Carried} c @param {string} id */
+const anywhere = (c, id) => c.carry.has(id) || c.head === id || c.feet === id;
+/** Effects this pack is keeping on each player: type -> amplifier. @type {Map<string, Map<string, number>>} */
 const kept = new Map();
 /** Tick of the last "not ready" note per player for passive relics, so it isn't shown every second. @type {Map<string, number>} */
 const passiveNote = new Map();
@@ -436,26 +548,27 @@ function effectTiming(type) {
   return type === "night_vision" ? NIGHT_VISION : EFFECT;
 }
 
-/** @param {Player} player @param {string} type */
-function keep(player, type) {
+/** @param {Player} player @param {string} type @param {number} [amp] */
+function keep(player, type, amp = 0) {
   const t = effectTiming(type);
   const e = player.getEffect(type);
-  if (!e || (e.amplifier === 0 && e.duration < t.refreshBelow)) player.addEffect(type, t.duration, { amplifier: 0, showParticles: false });
-  let set = kept.get(player.id);
-  if (!set) kept.set(player.id, (set = new Set()));
-  set.add(type);
+  if (!e || e.amplifier < amp || (e.amplifier === amp && e.duration < t.refreshBelow)) player.addEffect(type, t.duration, { amplifier: amp, showParticles: false });
+  let map = kept.get(player.id);
+  if (!map) kept.set(player.id, (map = new Map()));
+  map.set(type, amp);
 }
 
-/** Removes the effects this pack kept on the player that aren't wanted now. @param {Player} player @param {Set<string>} wanted */
+/** Removes the effects this pack kept on the player that aren't wanted now. @param {Player} player @param {Map<string, number>} wanted */
 function release(player, wanted) {
-  const set = kept.get(player.id);
-  if (!set) return;
-  for (const type of [...set]) {
-    if (wanted.has(type)) continue;
-    set.delete(type);
+  const map = kept.get(player.id);
+  if (!map) return;
+  for (const [type, amp] of [...map]) {
+    if (wanted.has(type) && (wanted.get(type) ?? 0) >= amp) continue;
+    map.delete(type);
+    if (wanted.has(type)) continue; // a lower level is still wanted: keep() tops it up when this one runs out
     const e = player.getEffect(type);
-    // Only ours: level I and no longer than we give. A potion's longer effect stays.
-    if (e && e.amplifier === 0 && e.duration <= effectTiming(type).duration) player.removeEffect(type);
+    // Only ours: the level we gave and no longer than we give. A potion's longer or stronger effect stays.
+    if (e && e.amplifier === amp && e.duration <= effectTiming(type).duration) player.removeEffect(type);
   }
 }
 
@@ -485,11 +598,13 @@ function mend(stack) {
 
 /** @param {Player} player */
 function scanCarried(player) {
-  /** @type {{ hand?: string, carry: Set<string>, head?: string, feet?: string }} */
-  const c = { carry: new Set() };
+  /** @type {Carried} */
+  const c = { carry: new Set(), asc: new Map(), handAsc: 0, headAsc: 0, feetAsc: 0 };
   const repair = get("autoRepair") === true;
   const container = player.getComponent("minecraft:inventory")?.container;
   const equip = player.getComponent("minecraft:equippable");
+  /** @param {Relic} def @param {ItemStack} stack */
+  const noteAsc = (def, stack) => c.asc.set(def.id, Math.max(c.asc.get(def.id) ?? 0, ascOf(stack)));
   if (container) {
     const selected = player.selectedSlotIndex;
     for (let slot = 0; slot < 9; slot++) {
@@ -498,9 +613,11 @@ function scanCarried(player) {
       if (!def || !stack) continue;
       markFound(player, def);
       c.carry.add(def.id);
+      noteAsc(def, stack);
       let changed = freshen(stack, def);
       if (slot === selected) {
         c.hand = def.id;
+        c.handAsc = ascOf(stack);
         if (repair && mend(stack)) changed = true;
       }
       if (changed) container.setItem(slot, stack);
@@ -512,8 +629,16 @@ function scanCarried(player) {
       const def = relicOf(stack);
       if (!def || !stack) continue;
       markFound(player, def);
-      if (key === "offhand") c.carry.add(def.id);
-      else c[key] = def.id;
+      if (key === "offhand") {
+        c.carry.add(def.id);
+        noteAsc(def, stack);
+      } else if (key === "head") {
+        c.head = def.id;
+        c.headAsc = ascOf(stack);
+      } else {
+        c.feet = def.id;
+        c.feetAsc = ascOf(stack);
+      }
       const fresh = freshen(stack, def);
       if ((repair && key !== "offhand" && mend(stack)) || fresh) equip.setEquipment(slot, stack);
     }
@@ -522,13 +647,38 @@ function scanCarried(player) {
   return c;
 }
 
+/** Dawn and dusk (the Sun set), by time of day. */
+const dawnOrDusk = () => {
+  const t = world.getTimeOfDay();
+  return t >= 23000 || t < 1000 || (t >= 11500 && t < 13500);
+};
+
+/** The sets a player has all three relics of. @param {Carried} c */
+const setsOf = (c) => (get("setsEnabled") === true ? SETS.filter((set) => set.relics.every((id) => anywhere(c, id))).map((set) => set.id) : []);
+
+/** Tells other packs (Storm Chasing) which sets a player has, when that changed. @param {Player} player @param {string[]} sets @param {boolean} [force] */
+function sendSets(player, sets, force = false) {
+  const json = sets.join(",");
+  const before = setsSent.get(player.id);
+  if (!force && before === json) return;
+  setsSent.set(player.id, json);
+  system.sendScriptEvent("realm:relic_sets", JSON.stringify({ player: player.id, sets, from: "relics_bp" }));
+  if (before === undefined || force) return;
+  const had = new Set(before ? before.split(",") : []);
+  const fresh = SETS.find((set) => sets.includes(set.id) && !had.has(set.id));
+  if (fresh) actionbar(player, `§d${fresh.name} set: §f${fresh.text}`, 80);
+}
+
 /** @param {Player} player */
 function passives(player) {
   const c = scanCarried(player);
-  /** @type {Set<string>} */
-  const wanted = new Set();
+  /** @type {Map<string, number>} effect -> amplifier */
+  const wanted = new Map();
+  const want = (/** @type {string} */ type, amp = 0) => wanted.set(type, Math.max(wanted.get(type) ?? 0, amp));
+  const sets = setsOf(c);
   if (get("enabled") === true) {
     const y = player.location.y;
+    const now = system.currentTick;
     const overworld = player.dimension.id === OVERWORLD;
     const has = (/** @type {string} */ id) => {
       const where = relics.get(id)?.where;
@@ -537,6 +687,23 @@ function passives(player) {
       if (where === "feet") return c.feet === id;
       return c.carry.has(id);
     };
+    /**
+     * A passive relic is working: where it works and its condition holds, or (ascended, `linger`) still carried and
+     * its condition held in the last few seconds.
+     * @param {string} id @param {() => boolean} cond
+     */
+    const lit = (id, cond) => {
+      const key = `${player.id}:${id}`;
+      if (has(id) && cond()) {
+        lastOn.set(key, now);
+        return true;
+      }
+      const a = ascFor(c, id);
+      if (ASC[id]?.kind !== "linger" || a <= 0 || !anywhere(c, id)) return false;
+      const at = lastOn.get(key);
+      return at !== undefined && now - at <= LINGER[a] * 20;
+    };
+    const star = (/** @type {string} */ id) => ascFor(c, id) >= 3;
     /** @type {ReturnType<typeof sky> | null} null = not looked up yet */
     let above = null;
     const look = () => (above === null ? (above = sky(player)) : above);
@@ -545,47 +712,59 @@ function passives(player) {
       const s = raining ? look() : undefined;
       return !!s && s.open && !s.dry;
     };
-    if (has("rain_charm") && inRain()) wanted.add("regeneration");
-    if (has("tide_boots") && inRain()) {
-      wanted.add("jump_boost"); // Bedrock has no Dolphin's Grace effect
-      wanted.add("speed");
+    if (lit("rain_charm", () => inRain() || (star("rain_charm") && player.isInWater))) want("regeneration");
+    if (lit("tide_boots", inRain)) {
+      want("jump_boost"); // Bedrock has no Dolphin's Grace effect
+      want("speed");
     }
-    if (has("lantern_deep") && y < 0) wanted.add("night_vision");
-    if (has("miners_lamp") && y < 30) wanted.add("haste");
-    if (has("wayfarer_boots") && overworld && player.isSprinting && look()?.open) wanted.add("speed");
+    if (has("tide_boots") && star("tide_boots") && player.isInWater) want("water_breathing");
+    if (lit("lantern_deep", () => y < (star("lantern_deep") ? 30 : 0))) want("night_vision");
+    if (lit("miners_lamp", () => y < 30)) want("haste", star("miners_lamp") && y < 0 ? 1 : 0);
+    if (lit("wayfarer_boots", () => overworld && player.isSprinting && (star("wayfarer_boots") || look()?.open === true))) want("speed");
     // "In the dark": at night in the Overworld, under cover deep down, or anywhere in the Nether or the End.
     // (The stable API can't read light levels.)
     const dark = () => isNight(player) || !overworld || (y < 50 && look()?.open === false);
-    if (has("lantern_shard") && dark()) wanted.add("night_vision");
-    if (has("hollow_crown") && isNight(player)) {
-      wanted.add("night_vision");
-      wanted.add("strength");
+    if (lit("lantern_shard", () => star("lantern_shard") || dark())) want("night_vision");
+    if (lit("hollow_crown", () => isNight(player) || (star("hollow_crown") && overworld && (world.getTimeOfDay() >= 12000 || world.getTimeOfDay() < 1000)))) {
+      want("night_vision");
+      want("strength");
     }
-    for (const type of wanted) {
+    // Sets
+    if (sets.includes("tide") && player.isInWater) want("conduit_power");
+    if (sets.includes("deep") && y < 0) {
+      want("night_vision");
+      if (player.getEffect("darkness")) player.removeEffect("darkness");
+    }
+    if (sets.includes("sun") && overworld && dawnOrDusk()) want("fire_resistance");
+    for (const [type, amp] of wanted) {
       try {
-        keep(player, type);
+        keep(player, type, amp);
       } catch (e) {
-        console.warn(`[relics] ${type}: ${e}`); // one bad effect id must not stop the others
+        console.warn(`[relics] ${type}: ${e}`);
       }
     }
     if (has("sun_pendant") && player.getComponent("minecraft:onfire")) sunPendant(player);
     if (has("vesna_charm") && player.getEffect("poison")) player.removeEffect("poison");
+    if (has("vesna_charm") && star("vesna_charm") && player.getEffect("wither")) player.removeEffect("wither");
     if (has("choir_mask") && player.getEffect("darkness")) player.removeEffect("darkness");
-    if (has("keeper_lamp") && dark()) keeperLamp(player);
-    if (has("storm_meter") && getFor(player, "meterReadout") === true) actionbar(player, `§bStorm Meter: ${stormReading(player)}`, 30, true);
+    if (lit("keeper_lamp", dark)) keeperLamp(player, ascFor(c, "keeper_lamp"));
+    const meter = lit("storm_meter", () => true);
+    if (meter && getFor(player, "meterReadout") === true) actionbar(player, `§bStorm Meter: ${stormReading(player, star("storm_meter"))}`, 30, true);
     else if (c.hand === "lantern_shard" && system.currentTick % 60 < 20) {
       const pull = sealReading(player);
       if (pull) actionbar(player, `§bLantern Shard: ${pull}`, 50, true);
     }
   }
   release(player, wanted);
+  sendSets(player, sets);
 }
 
-/** Keeper's Lamp: a ring of light at your feet, and monsters inside it slow down. @param {Player} player */
-function keeperLamp(player) {
+/** Keeper's Lamp: a ring of light at your feet, and monsters inside it slow down. @param {Player} player @param {number} asc */
+function keeperLamp(player, asc) {
   const dim = player.dimension;
   const l = player.location;
-  const r = Math.min(4, CONFIG.auraRange);
+  const range = CONFIG.auraRange * BOOST[asc];
+  const r = Math.min(4 * BOOST[asc], range);
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2 + (system.currentTick / 20) * 0.3;
     try {
@@ -594,9 +773,10 @@ function keeperLamp(player) {
       // unloaded
     }
   }
-  for (const mob of dim.getEntities({ location: l, maxDistance: CONFIG.auraRange, families: [HOSTILE_FAMILY] })) {
+  for (const mob of dim.getEntities({ location: l, maxDistance: range, families: [HOSTILE_FAMILY] })) {
     try {
       if (!mob.getEffect("slowness")) mob.addEffect("slowness", 30, { amplifier: 0 });
+      if (asc >= 3 && !mob.getEffect("weakness")) mob.addEffect("weakness", 30, { amplifier: 0 });
     } catch {
       // not a mob that takes effects
     }
@@ -649,8 +829,10 @@ function sunPendant(player) {
     }
     return;
   }
+  const asc = ascFor(carried.get(player.id), def.id);
   player.addEffect("fire_resistance", 200, { amplifier: 0, showParticles: true });
-  startCooldown(player, def);
+  if (asc >= 3 && !player.getEffect("regeneration")) player.addEffect("regeneration", 200, { amplifier: 0, showParticles: true });
+  startCooldown(player, def, asc);
   actionbar(player, `§6${def.name}: Fire Resistance for 10s`);
   player.playSound("random.fizz", { volume: 0.6 });
 }
@@ -679,15 +861,31 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource, damage }) =>
     if (hurtEntity instanceof Player) {
       const c = carried.get(hurtEntity.id);
       if (!c) return;
+      const sets = setsOf(c);
+      // Storm set: lightning can't hurt you, nor the fire it starts on you.
+      if (sets.includes("storm") && (cause === EntityDamageCause.lightning || (FIRE.has(cause) && system.currentTick - (struckAt.get(hurtEntity.id) ?? -1000) < 100))) {
+        if (cause === EntityDamageCause.lightning) struckAt.set(hurtEntity.id, system.currentTick);
+        refund(hurtEntity, damage);
+        hurtEntity.extinguishFire(false);
+        return;
+      }
+      // Sun set: freezing can't hurt you at dawn and dusk.
+      if (sets.includes("sun") && cause === EntityDamageCause.freezing && dawnOrDusk()) {
+        refund(hurtEntity, damage);
+        return;
+      }
       if (FIRE.has(cause)) {
         if (c.carry.has("sun_pendant")) sunPendant(hurtEntity);
         return;
       }
       if (!attacker?.isValid) return;
-      // Gray Choir Mask: Choir enemies only do half damage, unless you've been fighting them.
-      if (c.head === "choir_mask" && attacker.hasTag(CHOIR_TAG) && !attackedLately(hurtEntity, "choir")) refund(hurtEntity, damage / 2);
-      // Fen Charm: witches (their potions too) can't hurt you, unless you've been fighting one.
-      else if (c.carry.has("vesna_charm") && attacker.typeId === WITCH && !attackedLately(hurtEntity, "witch")) refund(hurtEntity, damage);
+      // Gray Choir Mask: Choir enemies only do half damage (more once ascended; none while you sneak, Starlit), unless you've been fighting them.
+      if (c.head === "choir_mask" && attacker.hasTag(CHOIR_TAG) && !attackedLately(hurtEntity, "choir")) {
+        const a = c.headAsc;
+        refund(hurtEntity, a >= 3 && hurtEntity.isSneaking ? damage : Math.min(1, 0.5 * BOOST[a]) * damage);
+      }
+      // Fen Charm: witches (their potions too) can't hurt you, unless you've been fighting one (then, ascended, still less).
+      else if (c.carry.has("vesna_charm") && attacker.typeId === WITCH) refund(hurtEntity, attackedLately(hurtEntity, "witch") ? (BOOST[ascFor(c, "vesna_charm")] - 1) * damage : damage);
       return;
     }
     if (!(attacker instanceof Player)) return;
@@ -696,19 +894,22 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource, damage }) =>
     if (cause !== EntityDamageCause.entityAttack) return;
     const c = carried.get(attacker.id);
     if (!c) return;
-    // Frost Band: melee hits slow what they hit.
-    if (c.carry.has("frost_band")) hurtEntity.addEffect("slowness", 60, { amplifier: 0 });
-    if (c.hand === "singing_blade") singingBlade(attacker, hurtEntity);
+    // Frost Band: melee hits slow what they hit (longer once ascended; Slowness II when Starlit).
+    if (c.carry.has("frost_band")) {
+      const a = ascFor(c, "frost_band");
+      hurtEntity.addEffect("slowness", Math.round(60 * BOOST[a]), { amplifier: a >= 3 ? 1 : 0 });
+    }
+    if (c.hand === "singing_blade") singingBlade(attacker, hurtEntity, c.handAsc);
   } catch (e) {
     console.warn(`[relics] ${e}`);
   }
 });
 
-/** The Singing Blade's note: monsters near what you hit (and it) slow down for 2 s. @param {Player} player @param {import("@minecraft/server").Entity} target */
-function singingBlade(player, target) {
+/** The Singing Blade's note: monsters near what you hit (and it) slow down for 2 s. @param {Player} player @param {import("@minecraft/server").Entity} target @param {number} asc */
+function singingBlade(player, target, asc) {
   const def = relics.get("singing_blade");
   if (!def || waitFor(player, def) > 0) return; // a short silent cooldown between notes
-  startCooldown(player, def);
+  startCooldown(player, def, asc);
   const at = target.location;
   player.dimension.playSound("note.bell", at, { pitch: 0.8 + Math.random() * 0.8, volume: 1 });
   const mobs = player.dimension.getEntities({ location: at, maxDistance: CONFIG.auraRange, families: [HOSTILE_FAMILY] });
@@ -716,6 +917,7 @@ function singingBlade(player, target) {
   for (const mob of mobs) {
     try {
       mob.addEffect("slowness", 40, { amplifier: 1 });
+      if (asc >= 3) mob.addEffect("weakness", 60, { amplifier: 0 });
     } catch {
       // not a mob that takes effects
     }
@@ -730,9 +932,12 @@ function singingBlade(player, target) {
 // Fen Charm: poison never takes hold.
 world.beforeEvents.effectAdd.subscribe((ev) => {
   try {
-    if (ev.effectType !== "poison" && ev.effectType !== "minecraft:poison") return;
-    const id = ev.entity.id;
-    if (carried.get(id)?.carry.has("vesna_charm") && get("enabled") === true) ev.cancel = true;
+    const type = ev.effectType.replace(/^minecraft:/, "");
+    if (type !== "poison" && type !== "wither") return;
+    const c = carried.get(ev.entity.id);
+    if (!c?.carry.has("vesna_charm") || get("enabled") !== true) return;
+    // Fen Charm: no Poison; Starlit, no Wither either.
+    if (type === "poison" || ascFor(c, "vesna_charm") >= 3) ev.cancel = true;
   } catch {
     // not a player we know
   }
@@ -770,13 +975,22 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
 /** @type {{ dim: string, x: number, z: number, strength: number, tick: number } | undefined} */
 let cell;
 
-/** "Cell: 340m NE, strength 7/10", or "No storm cell". @param {Player} player */
-function stormReading(player) {
-  if (!cell || system.currentTick - cell.tick > STORM_FRESH_TICKS || cell.dim !== player.dimension.id) return "§7No storm cell";
+/** "Cell: 340m NE, strength 7/10" (Starlit: ", closing in"), or "No storm cell". @param {Player} player @param {boolean} [trend] */
+function stormReading(player, trend = false) {
+  if (!cell || system.currentTick - cell.tick > STORM_FRESH_TICKS || cell.dim !== player.dimension.id) {
+    meterLast.delete(player.id);
+    return "§7No storm cell";
+  }
   const dx = cell.x - player.location.x;
   const dz = cell.z - player.location.z;
   const dist = Math.round(Math.hypot(dx, dz));
-  return `§fCell: ${dist}m ${direction(dx, dz)}, strength ${cell.strength}/10`;
+  let way = "";
+  if (trend) {
+    const before = meterLast.get(player.id);
+    meterLast.set(player.id, dist);
+    if (before !== undefined && Math.abs(before - dist) >= 1) way = before > dist ? ", §aclosing in" : ", §7moving away";
+  }
+  return `§fCell: ${dist}m ${direction(dx, dz)}, strength ${cell.strength}/10${way}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -816,9 +1030,10 @@ function staffTarget(player) {
   return { at };
 }
 
-/** @param {Player} player @param {Relic} def */
-function stormStaff(player, def) {
-  if (!stormy(player)) {
+/** @param {Player} player @param {Relic} def @param {number} asc */
+function stormStaff(player, def, asc) {
+  // Starlit: any rain will do.
+  if (!stormy(player) && !(asc >= 3 && player.dimension.id === OVERWORLD && weather !== WeatherType.Clear)) {
     actionbar(player, `§7${def.name}: it only answers in a thunderstorm`);
     player.playSound("random.click", { pitch: 0.6, volume: 0.5 });
     return;
@@ -839,8 +1054,8 @@ function stormStaff(player, def) {
     console.warn(`[relics] storm staff: ${e}`);
     return;
   }
-  startCooldown(player, def);
-  actionbar(player, `§b${def.name}: lightning! §7Ready again in ${def.cooldown}s`);
+  startCooldown(player, def, asc);
+  actionbar(player, `§b${def.name}: lightning! §7Ready again in ${cooldownAt(def, asc)}s`);
   // Lightning sets fire where it lands; put it out so the staff can't burn anyone's build.
   for (const delay of FIRE_CHECKS) system.runTimeout(() => putOutFire(dimension, at), delay);
 }
@@ -875,10 +1090,10 @@ function putOutFire(dimension, at) {
   }
 }
 
-/** @param {Player} player @param {Relic} def */
-function compass(player, def) {
+/** @param {Player} player @param {Relic} def @param {number} asc */
+function compass(player, def, asc) {
   if (!ready(player, def)) return;
-  startCooldown(player, def);
+  startCooldown(player, def, asc);
   const [champion] = player.dimension.getEntities({ tags: ["realm:champion"], location: player.location, maxDistance: CONFIG.compassRange, closest: 1 });
   if (!champion) {
     player.sendMessage(`§7${def.name}: no champion within ${CONFIG.compassRange} blocks.`);
@@ -887,7 +1102,12 @@ function compass(player, def) {
   const dx = champion.location.x - player.location.x;
   const dz = champion.location.z - player.location.z;
   const name = champion.nameTag || champion.typeId.replace(/^minecraft:/, "").replace(/_/g, " ");
-  player.sendMessage(`§d${def.name}: §fa champion (${name}§f) is ${Math.round(Math.hypot(dx, dz))}m ${direction(dx, dz)}.`);
+  let health = "";
+  if (asc >= 3) {
+    const h = champion.getComponent("minecraft:health");
+    if (h) health = ` It has ${Math.ceil(h.currentValue)} of ${Math.ceil(h.effectiveMax)} health.`;
+  }
+  player.sendMessage(`§d${def.name}: §fa champion (${name}§f) is ${Math.round(Math.hypot(dx, dz))}m ${direction(dx, dz)}.${health}`);
   player.playSound("block.bell.hit", { pitch: 1.6, volume: 0.6 });
 }
 
@@ -902,10 +1122,14 @@ function way(player, spot) {
   return d < 4 ? `right here (y ${spot.y})` : `${d}m ${direction(dx, dz)} (y ${spot.y})`;
 }
 
-/** Hal's Compass: the way to your last death point and your home (bed or respawn point, else world spawn). @param {Player} player @param {Relic} def */
-function halCompass(player, def) {
+/** Hal's Compass: the way to your last death point and your home (bed or respawn point, else world spawn). @param {Player} player @param {Relic} def @param {number} asc */
+function halCompass(player, def, asc) {
   if (!ready(player, def)) return;
-  startCooldown(player, def);
+  startCooldown(player, def, asc);
+  if (asc >= 3) {
+    const e = player.getEffect("speed");
+    if (!e || (e.amplifier === 0 && e.duration < 300)) player.addEffect("speed", 300, { amplifier: 0, showParticles: false });
+  }
   /** @type {{ dim: string, x: number, y: number, z: number } | undefined} */
   let death;
   try {
@@ -924,16 +1148,16 @@ function halCompass(player, def) {
   player.playSound("block.bell.hit", { pitch: 1.2, volume: 0.5 });
 }
 
-/** Runs a used relic's power once per tap. @param {Player} player @param {Relic} def */
-function useRelic(player, def) {
+/** Runs a used relic's power once per tap. @param {Player} player @param {Relic} def @param {number} asc the used item's stage */
+function useRelic(player, def, asc) {
   const now = system.currentTick;
   if (now - (lastUse.get(player.id) ?? -100) < USE_DEBOUNCE) return;
   lastUse.set(player.id, now);
   markFound(player, def);
   if (get("enabled") !== true) return;
-  if (def.id === "storm_staff") stormStaff(player, def);
-  else if (def.id === "compass_echoes") compass(player, def);
-  else if (def.id === "hal_compass") halCompass(player, def);
+  if (def.id === "storm_staff") stormStaff(player, def, asc);
+  else if (def.id === "compass_echoes") compass(player, def, asc);
+  else if (def.id === "hal_compass") halCompass(player, def, asc);
 }
 
 /** Relics whose use is their power. */
@@ -948,9 +1172,10 @@ world.beforeEvents.itemUse.subscribe((ev) => {
     if (!def || !USED.has(def.id)) return;
     if (def.id === "storm_staff") ev.cancel = true;
     const player = ev.source;
+    const asc = ascOf(ev.itemStack);
     system.run(() => {
       try {
-        if (player.isValid) useRelic(player, def);
+        if (player.isValid) useRelic(player, def, asc);
       } catch (e) {
         console.warn(`[relics] ${e}`);
       }
@@ -975,9 +1200,10 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
     if (!USED.has(def.id)) return;
     if (def.id === "storm_staff") ev.cancel = true;
     if (!ev.isFirstEvent) return;
+    const asc = ascOf(ev.itemStack);
     system.run(() => {
       try {
-        if (player.isValid) useRelic(player, def);
+        if (player.isValid) useRelic(player, def, asc);
       } catch (e) {
         console.warn(`[relics] ${e}`);
       }
@@ -991,7 +1217,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
 world.afterEvents.itemStartUse.subscribe(({ source, itemStack }) => {
   try {
     const def = relicOf(itemStack);
-    if (def?.id === "storm_staff" && source.isValid) useRelic(source, def);
+    if (def?.id === "storm_staff" && source.isValid) useRelic(source, def, ascOf(itemStack));
   } catch (e) {
     console.warn(`[relics] ${e}`);
   }
@@ -1061,14 +1287,29 @@ function pickRelic(player) {
 // ida, on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent */
 const idaOff = new Map();
+/** Affinity levels (0-4) with each townsfolk, and Story Questlines' flags (realm:npc_flags), per player: the story relic gates. @type {Map<string, Record<string, number>>} */
+const affinity = new Map();
+/** @type {Map<string, Record<string, string>>} */
+const storyFlags = new Map();
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
-    if (id !== "realm:affinity") return;
+    if (id !== "realm:affinity" && id !== "realm:npc_flags") return;
     try {
       const m = JSON.parse(message);
-      if (!m || typeof m.player !== "string") return;
-      if (m.all && typeof m.all === "object") idaOff.set(m.player, Number(m.off?.ida) || 0);
-      else if (m.npc === "ida") idaOff.set(m.player, Number(m.off) || 0);
+      if (!m || typeof m.player !== "string" || m.player.length > 64) return;
+      if (id === "realm:npc_flags") {
+        if (m.flags && typeof m.flags === "object") storyFlags.set(m.player, m.flags);
+        return;
+      }
+      const levels = affinity.get(m.player) ?? {};
+      if (m.all && typeof m.all === "object") {
+        idaOff.set(m.player, Number(m.off?.ida) || 0);
+        for (const [npc, level] of Object.entries(m.all)) if (typeof level === "number") levels[npc] = level;
+      } else if (typeof m.npc === "string") {
+        if (m.npc === "ida") idaOff.set(m.player, Number(m.off) || 0);
+        if (typeof m.level === "number") levels[m.npc] = m.level;
+      }
+      affinity.set(m.player, levels);
     } catch {
       // not ours
     }
@@ -1094,6 +1335,256 @@ function forge(player) {
   takeShards(container, cost);
   player.playSound("random.anvil_use", { volume: 0.8 });
   giveRelic(player, def, "The forge roars! You made");
+}
+
+// ---------------------------------------------------------------------------
+// Relic Ascension at the relicsmith, Relic Essence from duplicates
+// ---------------------------------------------------------------------------
+
+/** @param {ItemStack | undefined} stack @param {string} item @param {string} lore */
+function isTagged(stack, item, lore) {
+  if (!stack || stack.typeId !== item) return false;
+  try {
+    return stack.getLore()[0] === lore;
+  } catch {
+    return false;
+  }
+}
+const isEssence = (/** @type {ItemStack | undefined} */ s) => isTagged(s, ESSENCE_ITEM, ESSENCE_LORE);
+const isGlass = (/** @type {ItemStack | undefined} */ s) => isTagged(s, GLASS_ITEM, GLASS_LORE);
+
+/** @param {Container | undefined} container @param {(s: ItemStack | undefined) => boolean} test */
+function countOf(container, test) {
+  let n = 0;
+  if (container) for (let i = 0; i < container.size; i++) {
+    const stack = container.getItem(i);
+    if (stack && test(stack)) n += stack.amount;
+  }
+  return n;
+}
+
+/** Removes `n` matching items (only after countOf said there are enough). @param {Container} container @param {(s: ItemStack | undefined) => boolean} test @param {number} n */
+function takeOf(container, test, n) {
+  let left = n;
+  for (let i = 0; i < container.size && left > 0; i++) {
+    const stack = container.getItem(i);
+    if (!stack || !test(stack)) continue;
+    if (stack.amount <= left) {
+      left -= stack.amount;
+      container.setItem(i, undefined);
+    } else {
+      stack.amount -= left;
+      left = 0;
+      container.setItem(i, stack);
+    }
+  }
+}
+
+/** @param {number} amount */
+function makeEssence(amount) {
+  const stack = new ItemStack(ESSENCE_ITEM, amount);
+  stack.nameTag = ESSENCE_NAME;
+  stack.setLore([ESSENCE_LORE]);
+  return stack;
+}
+
+function crownsObjective() {
+  try {
+    return world.scoreboard.getObjective("crowns") ?? world.scoreboard.addObjective("crowns", "Crowns");
+  } catch {
+    return world.scoreboard.getObjective("crowns");
+  }
+}
+
+/** @param {Player} player */
+function crownsOf(player) {
+  try {
+    return crownsObjective()?.getScore(player) ?? 0;
+  } catch {
+    return 0; // no score anywhere yet
+  }
+}
+
+/**
+ * Every relic on the player with where it is: inventory slots and armor/off hand, each with its serial (so a choice
+ * made in a menu finds the same item after the form, wherever it moved).
+ * @param {Player} player @returns {{ def: Relic, stack: ItemStack, asc: number, serial: number, put: (s: ItemStack | undefined) => void }[]}
+ */
+function relicStacks(player) {
+  /** @type {{ def: Relic, stack: ItemStack, asc: number, serial: number, put: (s: ItemStack | undefined) => void }[]} */
+  const out = [];
+  const container = player.getComponent("minecraft:inventory")?.container;
+  if (container) for (let i = 0; i < container.size; i++) {
+    const stack = container.getItem(i);
+    const def = relicOf(stack);
+    if (!def || !stack) continue;
+    const serial = Number(stack.getDynamicProperty(ITEM_SERIAL)) || 0;
+    out.push({ def, stack, asc: ascOf(stack), serial, put: (s) => container.setItem(i, s) });
+  }
+  const equip = player.getComponent("minecraft:equippable");
+  if (equip) for (const slot of [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, EquipmentSlot.Feet, EquipmentSlot.Offhand]) {
+    const stack = equip.getEquipment(slot);
+    const def = relicOf(stack);
+    if (!def || !stack) continue;
+    const serial = Number(stack.getDynamicProperty(ITEM_SERIAL)) || 0;
+    out.push({ def, stack, asc: ascOf(stack), serial, put: (s) => equip.setEquipment(slot, s) });
+  }
+  return out;
+}
+
+/** What the next stage of a relic costs (Ida's friends need fewer shards). @param {Player} player @param {number} asc the stage now */
+function costOf(player, asc) {
+  const c = CONFIG.ascension.costs[asc] ?? CONFIG.ascension.costs[CONFIG.ascension.costs.length - 1];
+  return { shards: Math.max(1, idaOffPrice(player, Math.max(1, Math.floor(c.shards)))), glass: Math.max(0, Math.floor(c.glass)), crowns: Math.max(0, Math.floor(c.crowns)) };
+}
+
+/** Why a story relic can't go past +1 yet, or undefined. @param {Player} player @param {Relic} def @param {number} asc the stage now */
+function gateOf(player, def, asc) {
+  if (!def.story || asc < 1) return undefined;
+  const gate = CONFIG.storyGates.find((g) => g.relic === def.id);
+  if (!gate) return undefined;
+  if ((affinity.get(player.id)?.[gate.npc] ?? 0) >= CONFIG.ascension.gateLevel) return undefined;
+  if (gate.flag && storyFlags.get(player.id)?.[gate.flag] === gate.value) return undefined;
+  return gate.text;
+}
+
+/** Materials the player has: essence and shards (together), Storm Glass, Crowns. @param {Player} player */
+function materials(player) {
+  const container = player.getComponent("minecraft:inventory")?.container;
+  const essence = countOf(container, isEssence);
+  const shards = countShards(container);
+  return { container, essence, shards, glass: countOf(container, isGlass), crowns: crownsOf(player) };
+}
+
+/** Ascends the relic with this serial by one stage, taking the cost once. Returns why not, or undefined. @param {Player} player @param {number} serial */
+function ascend(player, serial) {
+  if (get("ascension.enabled") !== true) return "Ascension is closed on this realm.";
+  const r = relicStacks(player).find((x) => x.serial === serial && serial > 0);
+  if (!r) return "That relic isn't on you anymore.";
+  if (r.asc >= 3) return `${r.def.name} is already Starlit.`;
+  const gate = gateOf(player, r.def, r.asc);
+  if (gate) return `${r.def.name} can't go past +1 yet: it needs ${gate}.`;
+  const cost = costOf(player, r.asc);
+  const m = materials(player);
+  if (!m.container) return "No inventory.";
+  if (m.essence + m.shards < cost.shards) return `You need ${cost.shards} Relic Shards or Relic Essence (you have ${m.essence + m.shards}).`;
+  if (m.glass < cost.glass) return `You need ${cost.glass} Storm Glass (you have ${m.glass}).`;
+  if (m.crowns < cost.crowns) return `You need ${cost.crowns} Crowns (you have ${m.crowns}).`;
+  // Everything is there: take it all in this tick (nothing can move in between), Crowns first since only that can fail.
+  try {
+    if (cost.crowns) crownsObjective()?.addScore(player, -cost.crowns);
+  } catch {
+    return "The Crowns couldn't be taken.";
+  }
+  const fromEssence = Math.min(m.essence, cost.shards);
+  if (fromEssence) takeOf(m.container, isEssence, fromEssence);
+  if (cost.shards - fromEssence) takeShards(m.container, cost.shards - fromEssence);
+  if (cost.glass) takeOf(m.container, isGlass, cost.glass);
+  const asc = r.asc + 1;
+  r.stack.setDynamicProperty(ITEM_ASC, asc);
+  freshen(r.stack, r.def);
+  r.put(r.stack);
+  player.playSound(asc >= 3 ? "random.totem" : "random.anvil_use", { volume: 0.8 });
+  player.sendMessage(`§d${r.def.name} is now +${asc} ${STAGES[asc]}: §f${stageText(r.def, asc)}.${asc >= 3 ? ` §6Starlit: ${ASC[r.def.id]?.star}.` : ""}`);
+  if (asc >= 3) {
+    system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "relic_starlit", player: player.id, name: player.name, place: r.def.name }));
+    if (CONFIG.ascension.announceStarlit) for (const p of world.getAllPlayers()) if (p.id !== player.id) p.sendMessage(`§6${player.name}'s ${r.def.name} is Starlit!`);
+  }
+  return undefined;
+}
+
+/** Breaks the lowest-stage copy of a relic the player carries two of into Relic Essence. Returns why not, or undefined. @param {Player} player @param {string} id */
+function breakDuplicate(player, id) {
+  if (get("ascension.enabled") !== true) return "Ascension is closed on this realm.";
+  const copies = relicStacks(player).filter((x) => x.def.id === id);
+  if (copies.length < 2) return "You need two of the same relic to break one.";
+  const low = copies.reduce((a, b) => (b.asc < a.asc ? b : a));
+  low.put(undefined);
+  const n = Math.max(1, Math.floor(CONFIG.ascension.essencePerBreak));
+  const dropped = giveItem(player, makeEssence(n));
+  player.playSound("random.break", { volume: 0.8 });
+  player.sendMessage(`§dIda breaks your spare ${low.def.name}${low.asc ? ` +${low.asc}` : ""} into ${n} Relic Essence.${dropped ? " §7It dropped at your feet: your inventory is full." : ""}`);
+  return undefined;
+}
+
+/** @param {Player} player @param {string} title @param {string} body @param {string} yes */
+async function confirmForm(player, title, body, yes) {
+  const res = await showForm(player, new MessageFormData().title(title).body(body).button1(yes).button2("Cancel"));
+  return !!res && !res.canceled && res.selection === 0;
+}
+
+/** The ascension list: each relic on the player and its next stage. @param {Player} player */
+async function showAscend(player) {
+  const list = relicStacks(player)
+    .filter((r) => r.asc < 3 && r.serial > 0)
+    .sort((a, b) => b.asc - a.asc || a.def.name.localeCompare(b.def.name));
+  const m = materials(player);
+  const body = [
+    "Ida can wake the power in a relic: +1 Awakened, +2 Ascended, +3 Starlit. Each stage costs Relic Shards (or Relic Essence), Storm Glass and Crowns.",
+    `§7You have ${m.shards} Relic Shards, ${m.essence} Relic Essence, ${m.glass} Storm Glass and ${m.crowns} Crowns.`,
+  ];
+  if (!list.length) body.push("§7No relic on you can go further.");
+  const form = new ActionFormData().title("§lAscend a relic").body(body.join("\n\n"));
+  for (const r of list) {
+    const c = costOf(player, r.asc);
+    const gate = gateOf(player, r.def, r.asc);
+    form.button(`${nameFor(r.def, r.asc)} §r-> +${r.asc + 1}\n§8${gate ? "needs a story or a friend" : `${c.shards} shards, ${c.glass} glass, ${c.crowns} Crowns`}`);
+  }
+  form.button("Back");
+  const res = await showForm(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const r = list[res.selection];
+  if (!r) return showRelics(player, true);
+  const next = r.asc + 1;
+  const c = costOf(player, r.asc);
+  const gate = gateOf(player, r.def, r.asc);
+  const lines = [`§l${r.def.name}§r: +${r.asc} -> +${next} ${STAGES[next]}`, `§b${stageText(r.def, next)}`];
+  if (next === 2) lines.push(`§3Adds a line: ${ASC[r.def.id]?.flavor ?? ""}`);
+  if (next === 3) lines.push(`§6Starlit: ${ASC[r.def.id]?.star ?? ""}, and a gold name`);
+  if (gate) {
+    lines.push("", `§cA story relic stops at +1 until: ${gate}.`);
+    await showForm(player, new ActionFormData().title("§lAscend a relic").body(lines.join("\n")).button("Back"));
+    return showAscend(player);
+  }
+  lines.push("", `Cost: ${c.shards} Relic Shards or Essence (Essence first), ${c.glass} Storm Glass, ${c.crowns} Crowns.`, `§7You have ${m.shards + m.essence}, ${m.glass} and ${m.crowns}.`);
+  if (!(await confirmForm(player, "§lAscend a relic", lines.join("\n"), "Ascend")) || !player.isValid) return showAscend(player);
+  const why = ascend(player, r.serial);
+  if (why) player.sendMessage(`§c${why}`);
+  return showAscend(player);
+}
+
+/** Duplicates on the player, to break into Relic Essence. @param {Player} player */
+async function showBreak(player) {
+  /** @type {Map<string, { def: Relic, asc: number[] }>} */
+  const groups = new Map();
+  for (const r of relicStacks(player)) {
+    const g = groups.get(r.def.id) ?? { def: r.def, asc: [] };
+    g.asc.push(r.asc);
+    groups.set(r.def.id, g);
+  }
+  const dupes = [...groups.values()].filter((g) => g.asc.length >= 2);
+  const n = Math.max(1, Math.floor(CONFIG.ascension.essencePerBreak));
+  const form = new ActionFormData()
+    .title("§lBreak a duplicate")
+    .body(`Carry two of the same relic and Ida breaks the lower one into ${n} Relic Essence, which counts like Relic Shards for ascension.${dupes.length ? "" : "\n\n§7You don't carry two of any relic."}`);
+  for (const g of dupes) form.button(`${g.def.name} x${g.asc.length}\n§8Breaks a +${Math.min(...g.asc)} copy into ${n} Essence`);
+  form.button("Back");
+  const res = await showForm(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const g = dupes[res.selection];
+  if (!g) return showRelics(player, true);
+  const low = Math.min(...g.asc);
+  const ok = await confirmForm(player, "§lBreak a duplicate", `Break one ${g.def.name}${low ? ` +${low}` : ""} (your lowest copy) into ${n} Relic Essence? It's gone for good.${low ? "\n\n§cIts stage is lost too." : ""}`, "Break it");
+  if (ok && player.isValid) {
+    const why = breakDuplicate(player, g.def.id);
+    if (why) player.sendMessage(`§c${why}`);
+  }
+  return showBreak(player);
+}
+
+/** The relic sets, for the list. @param {Set<string>} on */
+function setLines(on) {
+  return SETS.map((set) => `§d${set.name} set§r (${set.relics.map((id) => `${on.has(id) ? "§a" : "§7"}${relics.get(id)?.name ?? id}§r`).join(", ")}): §7${set.text}`).join("\n");
 }
 
 /** Relic ids anywhere on the player: inventory, armor and off hand. @param {Player} player */
@@ -1130,10 +1621,12 @@ async function showForm(player, form) {
 /** @param {Player} player */
 const isOperator = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 
-/** One relic's lines in the list. @param {Relic} def @param {Set<string>} on */
-function relicLines(def, on) {
+/** One relic's lines in the list. @param {Relic} def @param {Set<string>} on @param {number} [asc] the highest stage of it on the player */
+function relicLines(def, on, asc = 0) {
   const rarity = RARITY[def.rarity] ?? RARITY.common;
-  return `${rarity.color}${def.name} §7(${rarity.label})${on.has(def.id) ? "" : " §8- not with you"}§r\n§f${def.ability}${def.cooldown > 0 && def.id !== "singing_blade" ? ` §7(cooldown ${def.cooldown}s)` : ""}\n§8${WHERE[def.where] ?? ""}`;
+  const cd = cooldownAt(def, asc);
+  const stage = asc ? `\n§b+${asc} ${STAGES[asc]}: ${stageText(def, asc)}${asc >= 3 ? `. §6${ASC[def.id]?.star ?? ""}` : ""}` : "";
+  return `${asc >= 3 ? "§6" : rarity.color}${def.name}${asc ? ` +${asc}` : ""} §7(${rarity.label})${on.has(def.id) ? "" : " §8- not with you"}§r\n§f${def.ability}${cd > 0 && def.id !== "singing_blade" ? ` §7(cooldown ${cd}s)` : ""}${stage}\n§8${WHERE[def.where] ?? ""}`;
 }
 
 /** The relics you've found (with the forge when opened at a relicsmith). @param {Player} player @param {boolean} atSmith opened from a relicsmith */
@@ -1148,28 +1641,43 @@ async function showRelics(player, atSmith) {
   const cost = Math.max(1, idaOffPrice(player, get("shardsPerForge")));
   const shards = countShards(player.getComponent("minecraft:inventory")?.container);
   const canForge = atSmith || get("forgeAnywhere") === true;
+  /** @type {Map<string, number>} the highest stage of each relic on the player */
+  const best = new Map();
+  for (const r of relicStacks(player)) best.set(r.def.id, Math.max(best.get(r.def.id) ?? 0, r.asc));
   const foundForgeable = forgeable.filter((r) => found.has(r.id));
   const foundStory = storyRelics.filter((r) => found.has(r.id));
   /** @type {string[]} */
   const lines = [`Relics found: ${foundForgeable.length} of ${forgeable.length}`];
-  for (const def of foundForgeable) lines.push(relicLines(def, on));
+  for (const def of foundForgeable) lines.push(relicLines(def, on, best.get(def.id)));
   /** @type {Record<string, number>} */
   const missing = {};
   for (const def of forgeable) if (!found.has(def.id)) missing[def.rarity] = (missing[def.rarity] ?? 0) + 1;
   const rest = Object.entries(missing).map(([r, n]) => `${n} ${RARITY[/** @type {keyof RARITY} */ (r)]?.label.toLowerCase() ?? r}`);
   if (rest.length) lines.push(`§7Still to find: ${rest.join(", ")}`);
   lines.push(`§fStory relics: ${foundStory.length} of ${storyRelics.length}§7 (rewards from the story, never forged)`);
-  for (const def of foundStory) lines.push(relicLines(def, on));
+  for (const def of foundStory) lines.push(relicLines(def, on, best.get(def.id)));
+  if (get("setsEnabled") === true) lines.push(`§fRelic sets§7 (all three in your hotbar, off hand or worn):\n${setLines(on)}`);
   lines.push(
     canForge
       ? `§fYou have ${shards} Relic Shard${shards === 1 ? "" : "s"}. Forging a relic takes ${cost}.`
       : `§7Bring ${cost} Relic Shards to a relicsmith to forge a relic. You have ${shards}.`,
   );
   const form = new ActionFormData().title(atSmith ? "§lRelic forge" : "§lYour relics").body(lines.join("\n\n"));
-  if (canForge) form.button(`Forge a relic\n§8${cost} Relic Shards`);
+  /** @type {(() => unknown)[]} */
+  const actions = [];
+  if (canForge) {
+    form.button(`Forge a relic\n§8${cost} Relic Shards`);
+    actions.push(() => forge(player));
+    if (get("ascension.enabled") === true) {
+      form.button("Ascend a relic\n§8+1 Awakened, +2 Ascended, +3 Starlit");
+      actions.push(() => showAscend(player));
+      form.button(`Break a duplicate\n§8Into ${Math.max(1, Math.floor(CONFIG.ascension.essencePerBreak))} Relic Essence`);
+      actions.push(() => showBreak(player));
+    }
+  }
   form.button("Close");
   const res = await showForm(player, form);
-  if (res && !res.canceled && canForge && res.selection === 0) forge(player);
+  if (res && !res.canceled && res.selection !== undefined) await actions[res.selection]?.();
 }
 
 /** The /realm:relics menu: every action the player may use. @param {Player} player */
@@ -1245,7 +1753,7 @@ function placeSmith(player) {
 // Script events: gifts from other packs, the storm cell, townsfolk, seals
 // ---------------------------------------------------------------------------
 
-const HANDLED = new Set(["realm:actionbar", "realm:relic_give", "realm:shard_give", "realm:storm_cell", "realm:npc_talk", "realm:npc_choose", "realm:npc_summoned", "realm:seals"]);
+const HANDLED = new Set(["realm:actionbar", "realm:relic_give", "realm:shard_give", "realm:storm_cell", "realm:npc_talk", "realm:npc_choose", "realm:npc_summoned", "realm:seals", "realm:relic_sets_ping"]);
 
 /** A seal list from a message, or undefined if it isn't one. @param {unknown} list @returns {Seal[] | undefined} */
 function parseSeals(list) {
@@ -1272,6 +1780,13 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (!msg || typeof msg !== "object") return;
     try {
+      if (id === "realm:relic_sets_ping") {
+        for (const p of world.getAllPlayers()) {
+          const c = carried.get(p.id);
+          if (c) sendSets(p, setsOf(c), true);
+        }
+        return;
+      }
       if (id === "realm:actionbar") {
         // Another pack's note: the Storm Meter and Lantern Shard readouts wait while it shows (a steady line, like the HUD).
         if (typeof msg.player !== "string" || msg.from === "relics_bp" || msg.background === true) return;

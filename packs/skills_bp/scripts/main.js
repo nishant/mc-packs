@@ -2,6 +2,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemS
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import * as calling from "./calling.js";
 
 // Six skills, each with its XP in a scoreboard (skill_mining, ...), so other packs, /scoreboard and
 // sidebars can read them. The level is worked out from the XP with the curve in config.js, so the
@@ -115,6 +116,12 @@ function perkOf(player, skill, kind) {
 /** Rolls a perk's chance. @param {Perk | undefined} p */
 const lucky = (p) => !!p && typeof p.chance === "number" && Math.random() < p.chance;
 
+/** Rolls a chance perk: the skill perk's chance (while perks are on) plus the player's Calling talents for it. @param {Player} player @param {Skill} skill @param {string} kind */
+function luckyFor(player, skill, kind) {
+  const chance = (perkOf(player, skill, kind)?.chance ?? 0) + calling.chanceFor(player, kind);
+  return chance > 0 && Math.random() < chance;
+}
+
 /** @param {number | undefined} c */
 const pct = (c) => `${Math.round((c ?? 0) * 100)}%`;
 
@@ -150,11 +157,8 @@ function describe(skill, p) {
 
 /** Gives a short effect, quietly. @param {Player} player @param {string} effect @param {number | undefined} seconds */
 function effect(player, effect, seconds) {
-  try {
-    player.addEffect(effect, Math.max(1, Math.round((seconds ?? 5) * 20)), { amplifier: 0, showParticles: false });
-  } catch (e) {
-    console.warn(`[skills] effect ${effect}: ${e}`);
-  }
+  // The higher one wins: a perk never shortens or weakens what the player already has (a Calling, a guild perk, a potion).
+  calling.boost(player, effect, Math.max(1, Math.round((seconds ?? 5) * 20)), 0);
 }
 
 /** Items this pack spawned: never a fishing catch. @type {Set<string>} */
@@ -236,6 +240,7 @@ function award(player, skill, base, opts = {}) {
   if (!opts.fromPack && get("partyBonus") > 0 && mateNear(player)) amount *= 1 + get("partyBonus") / 100;
   const bonus = get("perksEnabled") === true ? perkAt(skill, level, "bonusXp") : undefined;
   if (bonus) amount *= 1 + (bonus.percent ?? 0) / 100;
+  amount *= 1 + calling.xpPct(player, skill) / 100;
   const whole = roundRandom(amount);
   if (whole <= 0) return 0;
   const after = Math.min(MAX_SCORE, before + whole);
@@ -261,6 +266,7 @@ function levelUp(player, skill, from, to) {
     const perks = fresh.length ? ` §aNew perk: ${fresh.map((p) => describe(skill, p)).join(", ")}.` : "";
     player.sendMessage(`§6${NAMES[skill]} is now level ${to}!${perks} §7See /realm:skills`);
     if (to >= MAX_LEVEL && from < MAX_LEVEL) mastered(player, skill, true);
+    calling.onLevelUp(player, to - from);
   } catch (e) {
     console.warn(`[skills] level up: ${e}`);
   }
@@ -456,8 +462,8 @@ function oreStreak(player) {
 /** A grown crop was harvested at `at`. @param {Player} player @param {NonNullable<ReturnType<typeof crops.get>>} crop @param {Dimension} dimension @param {Vector3} at */
 function harvested(player, crop, dimension, at) {
   if (!award(player, "farming", crop.xp)) return;
-  if (lucky(perkOf(player, "farming", "extraCrop"))) drop(dimension, center(at), crop.drop);
-  if (crop.seeds && lucky(perkOf(player, "farming", "seeds"))) drop(dimension, center(at), crop.seeds);
+  if (luckyFor(player, "farming", "extraCrop")) drop(dimension, center(at), crop.drop);
+  if (crop.seeds && luckyFor(player, "farming", "seeds")) drop(dimension, center(at), crop.seeds);
 }
 
 world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermutation, itemStackBeforeBreak }) => {
@@ -480,11 +486,13 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
       if (mine.drop && silkTouch(itemStackBeforeBreak)) return;
       if (!award(player, "mining", mine.xp) || !mine.drop) return;
       oreStreak(player);
-      if (lucky(perkOf(player, "mining", "doubleOre"))) drop(block.dimension, at, mine.drop, mine.amount ?? 1);
+      if (luckyFor(player, "mining", "doubleOre")) drop(block.dimension, at, mine.drop, mine.amount ?? 1);
+      calling.onOre(player, at, id);
     } else if (logs.has(id)) {
       if (!award(player, "woodcutting", CONFIG.woodcutting.xp)) return;
-      if (lucky(perkOf(player, "woodcutting", "extraLog"))) drop(block.dimension, at, id);
-      if (lucky(perkOf(player, "woodcutting", "apple"))) drop(block.dimension, at, "minecraft:apple");
+      if (luckyFor(player, "woodcutting", "extraLog")) drop(block.dimension, at, id);
+      if (luckyFor(player, "woodcutting", "apple")) drop(block.dimension, at, "minecraft:apple");
+      calling.onLog(player, block.dimension, at, id, drop);
     } else if (crop && ripe(brokenBlockPermutation)) {
       harvested(player, crop, block.dimension, block.location);
     }
@@ -539,6 +547,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     if (lucky(strength)) effect(killer, "strength", strength?.seconds);
     const regen = perkOf(killer, "combat", "regen");
     if (lucky(regen)) effect(killer, "regeneration", regen?.seconds);
+    calling.onKill(killer);
   } catch (e) {
     console.warn(`[skills] ${e}`);
   }
@@ -615,7 +624,7 @@ function caught(player, item) {
   const fish = fishItems.has(item);
   const xp = fish ? CONFIG.fishing.fishXp : treasure.has(item) ? CONFIG.fishing.treasureXp : CONFIG.fishing.junkXp;
   if (!award(player, "fishing", xp)) return;
-  if (fish && lucky(perkOf(player, "fishing", "secondCatch"))) {
+  if (fish && luckyFor(player, "fishing", "secondCatch")) {
     drop(player.dimension, player.location, item);
     noteExtra(player, "Second catch!");
   }
@@ -789,6 +798,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   streaks.delete(playerId);
   partyCache.delete(playerId);
   pending.delete(playerId);
+  calling.forget(playerId);
 });
 
 let seconds = 0;
@@ -910,11 +920,14 @@ async function showSkills(player) {
   if (get("partyBonus") > 0) notes.push(`§7+${get("partyBonus")}% XP while a party mate is within ${get("partyRange")} blocks.`);
   const form = new ActionFormData().title("§lSkills").body(notes.join("\n"));
   SKILLS.forEach((s, i) => form.button(`§l${NAMES[s]}§r  Level ${levels[i]}\n${progressText(xpOf(player, s)).replace(/ XP to level \d+$/, "")}`));
+  const callings = get("callings.enabled") === true;
+  if (callings) form.button(calling.menuLabel(player));
   form.button("Close");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
   const skill = SKILLS[res.selection];
   if (skill) await showSkill(player, skill);
+  else if (callings && res.selection === SKILLS.length) await calling.showMenu(player, false);
 }
 
 /** @param {Player} player @param {Skill} skill */
@@ -949,7 +962,23 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       return { status: CustomCommandStatus.Success };
     },
   );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:skills_calling",
+      description: "Skills: your Calling (from a total skill level of 75): choose one, spend talent points, get the Calling Sigil",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => calling.showMenu(player, false).catch((e) => console.warn(`[skills] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    },
+  );
 });
+
+calling.init({ levelFor, active, names: NAMES, skills: SKILLS });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

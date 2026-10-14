@@ -2293,6 +2293,8 @@ An RPG quest engine told by the realm's townsfolk: 42 stories and 234 chapters (
 
 **Festival chapters** (`kind: "festival"`, `stories/festivals.js`) are 16 one-chapter stories, 4 for each festival of the [Realm Calendar](#realm-calendar--calendar_bp), offered only while it runs (`requires.flags` `cal:festival`, the live flag from `realm:calendar`); one taken can be finished after the festival. Each pairs the festival's activity (an `event` objective on Realm Calendar's `realm:quest_done`, such as `cal:nest_watch`) with an ordinary way to do the same, or makes it optional, so none waits on the calendar. Hatchling Tide: Wren's *The Littlest Ones*, Tobin's *What the Tide Brings*, Moss's *The Night Shift*, Elsie's *Tide Supper*. Midsummer Regatta: Mara's *Mara's Course*, Quill's *A Sure Thing*, Reyes's *Water Safety*, Bea's *The Midsummer Picnic*. Lantern Fair: Bram's *The Judge's Dilemma*, Ida's *Lanterns Like Stars*, Hollis's *Candles for the Unremembered*, Moss's *A Proper Ghost Story*. Long Night: Sol's *The Falling Stars*, Elsie's *The Gift Table*, Bram's *The Long Night Speech*, Wren's *A Present for Clover*. Outside its festival the log lists one as `come back during the Lantern Fair (Harvest, days 58-61)`.
 
+**The Calling** (`stories/calling.js`) is one chapter that opens when your six [Skills](#skills--skills_bp) levels add up to 75 (`g:calling_ready`, saved from Skills' `realm:calling`; needs `pack:skills_bp`): Brother Hollis shows you the chapel book of the six old Callings (*The Chapel Book*), or, if the story lost Hollis (`g:hollis` = `lost`), Moss hands it over (*The Gravedigger's Book*). You choose in Skills (**Choose a Calling** in their menu): its `realm:quest_done` (`skills:calling:*`) counts, or, if you chose before accepting, telling them does. Their outro answers the Calling you picked (`g:calling`), and the reward is 3 levels, 40 Crowns and the Codex entry *The Six Callings*.
+
 The daily favors come on top: 48 short jobs, 4 for each of the 12 questgivers, one a day each.
 
 **Wanderers' chains** (`kind: "wander"`, in `stories/wanderers.js`) are told by the Recurring Wanderers of [Wanderers of the Wilds](#wanderers-of-the-wilds--wander_bp), whom you meet out in the wilds: Pell walks to the Old Chapel (escort him, or go ahead and light a candle) and keeps a midnight vigil at the Stargazer's Ruin; Anwen's ghost has you climb, keep watch and follow her light to her old survey marks; Brannoch's last seam ends with **Old Gnasher**, a frostbound spider champion at the Abandoned Mine; Rook races you (ten monsters in four minutes, three bounties or the Brushwood Brute) and, if you rubbed it in and have made four or more hard choices (`g:iron`), turns on you at his camp (a vindicator champion), else stands with you through a night's defense; Marigold wants a goat and a garden at the top of the world; Tamsin catches lightning on a rod in a thunderstorm; Vesk, met in the Nether, sets up camp by the Ruined Watchtower and gets his name back; Hob mends pots, gets a donkey and a riddle for Quill. Each chapter pays 2 to 4 levels and 30 to 50 Crowns, each finale 8 levels, 100 to 140 Crowns, a title (`Pilgrim's Friend`, `Keeper of the Survey`, `Gnasher's Bane`, `Rook's Better` or `Rook's Rival`, `Highland Gardener`, `Galeward's Second`, `Homeward Friend`, `Teller of Tales`), a Codex entry and a 15% chance of a relic; reputation goes to that wanderer's guild. Pell and Rook remember if you've accused friendly travelers (`g:w_accused`). **Strangers' requests** (24, in `stories/wander_oneoffs.js`) and the four **hostile wanderers** are listed in that pack's section.
@@ -2350,7 +2352,7 @@ Hearth and Table's *A Champion's Heart* asks for Champion's Hearts, which champi
 
 Operators can change every option but `offerOrder` in game with `/realm:config`. Each player can switch the tracker for themselves with **Story tracker** in `/realm:prefs`, which follows `tracker` until they choose, and move it with **Where my story tracker shows** (follows `trackerAt`).
 
-**The stories** are data: the prologue in `scripts/stories.js` (with `NPC_NAMES` and `PLACES`), the acts, side questlines and favors in `scripts/stories/*.js`, typed by `scripts/types.js`. A story is `{ id, title, short, giver, kind, act?, tones, summary, requires?, chapters }` (`kind`: `main`, `side`, `heart` or `wander`; a heart story must require `g:aff_<giver>`; a wanderer's chain is told by `w_<id>` from `WANDERERS` and its first chapter has a `camp`); a chapter `{ id, title, npc?, end?, when?, sequential?, intro, introChoices?, teach?, camp?, objectives, outro, choices?, reward, rep?, hint }` (`teach`: [Kitchen](#kitchen--cooking_bp) recipes sent with `realm:recipe_learn` when the chapter is accepted; `camp: { prefab, near }`: accepting it builds or moves the giver's camp, near `"wanderer"` or a place); a choice may have `cost: { crowns }` (shown on the button and taken when picked; without enough Crowns nothing is chosen and the form can be opened again); a reward may add `skill: { skill, amount }` ([Skills](#skills--skills_bp) XP with `realm:skill_xp`) and `relicRoll: { chance, relics }`; Strangers' one-offs are templates `{ id, label, archetypes, guild, params?, requires?, intro, objectives, outro, reward, hint }` whose text and objectives use `{name}`, `{item}`, `{count}`, `npc: "{npc}"` and `at: "wanderer"`, and hostiles `{ id, label, title, intro, toll?, reveal, champion, adds, outro, reward }`; flags are a story's own, `g:<name>` (player-wide, also counters with `inc`), `<story>.<flag>`, or set by other packs (`pack:<folder>`, `g:aff_<npc>`, `g:w_accused`, `cal:day`, `cal:season`, `cal:festival`), matched exactly, with `!x` (not x, also unset), `>=n` or `<=n` (an unset counter counts as 0). `requires` checks finished stories and chapters, flags, counters (`minCount`) and guild reputation. Each objective type and its fields are listed in `types.js`; the place prefabs are in `scripts/prefabs.js`. `npm run check` runs `tools/check-stories.mjs`, which fails on unknown objective types, missing fields, unknown places or NPCs, duplicate ids, bad champion tags, item, block and mob ids this Minecraft version doesn't have (from `@minecraft/vanilla-data`), an interact objective whose blocks aren't within reach in its place's building, a wanderer's chain without a camp, a template with a placeholder it has no param for (each template is checked with its first params), a camp prefab of 120 blocks or more, and Kitchen dish names out of step with the Cooking pack; it walks every story through every combination of choices (and of the flags other stories set) and fails when a reachable chapter has no objective, no intro or outro page, or only locked choices, when a story requires a chapter some endings skip, or when stories require each other; and it warns about flags that are read but never set and pages over 450 characters. Keep every `id`: progress is saved by story, chapter and choice id.
+**The stories** are data: the prologue in `scripts/stories.js` (with `NPC_NAMES` and `PLACES`), the acts, side questlines and favors in `scripts/stories/*.js`, typed by `scripts/types.js`. A story is `{ id, title, short, giver, kind, act?, tones, summary, requires?, chapters }` (`kind`: `main`, `side`, `heart` or `wander`; a heart story must require `g:aff_<giver>`; a wanderer's chain is told by `w_<id>` from `WANDERERS` and its first chapter has a `camp`); a chapter `{ id, title, npc?, end?, when?, sequential?, intro, introChoices?, teach?, camp?, objectives, outro, choices?, reward, rep?, hint }` (`teach`: [Kitchen](#kitchen--cooking_bp) recipes sent with `realm:recipe_learn` when the chapter is accepted; `camp: { prefab, near }`: accepting it builds or moves the giver's camp, near `"wanderer"` or a place); a choice may have `cost: { crowns }` (shown on the button and taken when picked; without enough Crowns nothing is chosen and the form can be opened again); a reward may add `skill: { skill, amount }` ([Skills](#skills--skills_bp) XP with `realm:skill_xp`) and `relicRoll: { chance, relics }`; Strangers' one-offs are templates `{ id, label, archetypes, guild, params?, requires?, intro, objectives, outro, reward, hint }` whose text and objectives use `{name}`, `{item}`, `{count}`, `npc: "{npc}"` and `at: "wanderer"`, and hostiles `{ id, label, title, intro, toll?, reveal, champion, adds, outro, reward }`; flags are a story's own, `g:<name>` (player-wide, also counters with `inc`), `<story>.<flag>`, or set by other packs (`pack:<folder>`, `g:aff_<npc>`, `g:w_accused`, `g:calling_ready`, `g:calling`, `cal:day`, `cal:season`, `cal:festival`), matched exactly, with `!x` (not x, also unset), `>=n` or `<=n` (an unset counter counts as 0). `requires` checks finished stories and chapters, flags, counters (`minCount`) and guild reputation. Each objective type and its fields are listed in `types.js`; the place prefabs are in `scripts/prefabs.js`. `npm run check` runs `tools/check-stories.mjs`, which fails on unknown objective types, missing fields, unknown places or NPCs, duplicate ids, bad champion tags, item, block and mob ids this Minecraft version doesn't have (from `@minecraft/vanilla-data`), an interact objective whose blocks aren't within reach in its place's building, a wanderer's chain without a camp, a template with a placeholder it has no param for (each template is checked with its first params), a camp prefab of 120 blocks or more, and Kitchen dish names out of step with the Cooking pack; it walks every story through every combination of choices (and of the flags other stories set) and fails when a reachable chapter has no objective, no intro or outro page, or only locked choices, when a story requires a chapter some endings skip, or when stories require each other; and it warns about flags that are read but never set and pages over 450 characters. Keep every `id`: progress is saved by story, chapter and choice id.
 
 ### Saved data
 
@@ -2376,7 +2378,7 @@ Operators can change every option but `offerOrder` in game with `/realm:config`.
 - **Seals:** for the Relics pack's Lantern Shard, the pack sends `realm:seals` `{ player, seals: [{ name, dim, x, z }] }` with the seal places that are set and whose Act IV relight chapter that player hasn't finished, when it changes (checked every 5 seconds), at load and in reply to `realm:seals_ping`.
 - **Finishing a chapter** gives the reward (levels and Crowns cut by `hintPenalty` after a hint) and sends `realm:quest_done` `{ player, pack: "saga_bp", id: "<story>:<chapter>", label, kind: "story", npcs }` (`npcs`: who gave and who ended it; `kind: "favor"` with `npc` for favors; Townsfolk adds affinity for both), `realm:gossip` `{ kind: "act", player, name, place, n }` when an act of the main story is finished, `realm:rep_add` for the choice's and chapter's reputation, `realm:relic_give`, `realm:title_unlock` and `realm:journal` (page `story`). Crowns go straight onto the `crowns` scoreboard.
 - **The tracker** shows in a [Side HUD](#side-hud--hud_rp) box by default (`right4`), with the side boxes protocol (`scripts/side.js`, see [How the packs work together](#how-the-packs-work-together)): each update shows for 50 ticks, a progress note for its own length. In a box it skips its update while another pack's readout is in the same box. Above the hotbar it listens to other packs' `realm:actionbar` and skips its update while their note holds the bar (up to 10 seconds), and sends its own with `from: "saga_bp"`; its own progress notes make it wait in either place.
-- **Townsfolk (Hearth & Hearsay):** every 5 seconds the pack checks each player's story flags and sends `realm:npc_flags` `{ player, flags }` when they changed (and on join): `g:ending`, `g:hollis`, `g:quill`, `g:vesna`, `g:fen`, `g:allies`, `g:mercy`, `g:iron`, 15 story flags (`drowned_bell.bell`, `act1_signs.act1:path`, `act3_deep.elsie`, `act3_deep.keys`, `act4_seals.act4:promise`, `mayors_burden.plaque`, `hollis_faith.forgive`, `wardens_oath.oath`, `singing_forge.blade`, `smugglers_run.profits`, `hearth_and_table.marty`, `graveyard_shift.stone`, `lost_lambs.cat`, `inn_ghost.lily`, `edges_of_map.wonder`) and `fin:<story>` = `1` for 18 finished stories; only flags that are set go, and `realm:npc_flags_ping` sends them all again. It saves `realm:affinity` levels as `g:aff_<npc>` (`0` Stranger to `4` Confidant), so heart stories and any `when` can read them; a locked heart story says `become Close with Old Tobin (Townsfolk)`. It keeps `realm:calendar` as the live flags `cal:day`, `cal:season` and `cal:festival` (never saved, like `pack:`; asked for with `realm:calendar_ping` 4 seconds after the world loads).
+- **Townsfolk (Hearth & Hearsay):** every 5 seconds the pack checks each player's story flags and sends `realm:npc_flags` `{ player, flags }` when they changed (and on join): `g:ending`, `g:hollis`, `g:quill`, `g:vesna`, `g:fen`, `g:allies`, `g:mercy`, `g:iron`, `g:gull` (also read by [Relics](#relics--relics_bp) for Hal's Compass), 15 story flags (`drowned_bell.bell`, `act1_signs.act1:path`, `act3_deep.elsie`, `act3_deep.keys`, `act4_seals.act4:promise`, `mayors_burden.plaque`, `hollis_faith.forgive`, `wardens_oath.oath`, `singing_forge.blade`, `smugglers_run.profits`, `hearth_and_table.marty`, `graveyard_shift.stone`, `lost_lambs.cat`, `inn_ghost.lily`, `edges_of_map.wonder`) and `fin:<story>` = `1` for 18 finished stories; only flags that are set go, and `realm:npc_flags_ping` sends them all again. It saves `realm:affinity` levels as `g:aff_<npc>` (`0` Stranger to `4` Confidant), so heart stories and any `when` can read them; a locked heart story says `become Close with Old Tobin (Townsfolk)`. It keeps `realm:calendar` as the live flags `cal:day`, `cal:season` and `cal:festival` (never saved, like `pack:`; asked for with `realm:calendar_ping` 4 seconds after the world loads). From [Skills](#skills--skills_bp)' `realm:calling` it saves `g:calling_ready` (`1` once `ready`) and `g:calling` (the Calling id, or `none`), asking with `realm:calling_ping` 4.5 seconds after the world loads.
 - **Atlas of the Realm:** in the same 5-second check the pack sends `realm:saga_progress` `{ player, act }` when it changed (and on join): how many main acts the player has finished in order (0 to 5); `realm:saga_progress_ping` sends it again for everyone. Atlas reads it for its Starwright tablets.
 - **Wanderers of the Wilds** (the events in [How the packs work together](#how-the-packs-work-together)): `realm:wander_spawn` from the wanderer pack makes the player's encounter (a Stranger's template is picked then, seeded by the encounter id); `realm:npc_talk` with `npc: "w_<wid>"` gets the chain's offers, the request (`wvstart:`, `wvinfo:`, `wvend:` plus the encounter id) or a disguise's talk (`wvh:`); `realm:wander_turn` (or refusing the toll) starts a fight: the champion (`realm:saga:wh_<wid>`, a Choir spy's `realm:saga:whc_<wid>` with the `saga:choir` tag) where it stood, its adds at once (plus one per party mate within 32 blocks, up to 3; illagers never wear a banner); `realm:wander_gone` ends an offer, lets an accepted request finish without them (or ends it, when a step still needs them) and, for an accusation, adds 1 to `g:w_accused`. Every 5 seconds the pack sends each player's `realm:wander_state` when it changed (and on `realm:wander_ping`); it sends `realm:wander_done` when a request is accepted, paid, given up or a fight starts, or a camp is set up; `realm:wander_hide` every 10 seconds while a Recurring Wanderer is the one you escort; `realm:place_ready` whenever a place (or camp) is picked, built, moved or removed, 5 seconds after the world loads and on `realm:place_ping`. A request done pays its reward and sends `realm:quest_done` `{ kind: "wander", guild }` (the guild of the Stranger's kind; Wardens for a fight, plus `realm:rep_add` 15 and `realm:gossip` kind `wander_hostile`); a chain's chapters send `kind: "story"` with the wanderer's `guild`, the first one a `realm:journal` entry on the **Wanderers** page, the last one `realm:gossip` kind `wander_chain`.
 - **Installed packs:** the pack sends `realm:help_ping` 3 seconds after the world loads and every 10 minutes and keeps the folders that answer `realm:help_pong` (late answers count at once); `pack:<folder>` in a `when` is `on` for those. Until the first answers are in, a chapter with a step gated on a pack can't be finished and a story gated on one isn't offered, so nothing is skipped by mistake.
@@ -2722,7 +2724,8 @@ Four guilds you rise through by playing: the Miners, the Growers, the Wardens (c
   | Wayfarers | Sprinting 200 blocks gives Speed I for 20 seconds |
 
   A perk that starts says so above the hotbar (`Miners' Guild: Haste I for 30s`).
-- **Titles:** reaching Expert and Master (`titleRanks`) unlocks `Expert Miner` / `Master Miner`, `Expert Grower`, `Expert Warden`, `Expert Wayfarer` and so on, which players pick in the Titles pack.
+- **Titles:** reaching Expert and Master (`titleRanks`) unlocks `Expert Miner`, `Expert Grower`, `Expert Warden` and `Expert Wayfarer`, and at Master `Miners' Guildmaster`, `Growers' Guildmaster`, `Wardens' Guildmaster` and `Wayfarers' Guildmaster` (`topTitle`), so the top title never reads like [Skills](#skills--skills_bp)' `Master Miner`. Players pick them in the Titles pack. Each title your ranks unlock is sent again 11 seconds after you join, so a Master from before this change gets the Guildmaster title too (and keeps the old `Master Miner`).
+- **Perk effects never stack:** a perk's Haste, Strength or Speed I is skipped while you already have a stronger or longer one (a [Skills](#skills--skills_bp) Calling's Haste II, a potion): the higher one wins.
 - **Reputation earned while offline** (a bounty paid out after you left) is added when you next join: `+25 Wardens rep (while you were away)`.
 - **The shops** (`shops`), one item per rank in each guild by default:
 
@@ -2746,12 +2749,13 @@ Four guilds you rise through by playing: the Miners, the Growers, the Wardens (c
 
 | Option | Default | Description |
 |---|---|---|
-| `guilds.miners.name`, `guilds.miners.member` | `"Miners' Guild"`, `"Miner"` | The guild's name, and the word its titles and scoreboard use (`Master Miner`, `Miners Rep`) |
+| `guilds.miners.name`, `guilds.miners.member` | `"Miners' Guild"`, `"Miner"` | The guild's name (also in the top title, `Miners' Guildmaster`), and the word the other titles and the scoreboard use (`Expert Miner`, `Miners Rep`) |
 | `guilds.growers.name`, `guilds.growers.member` | `"Growers' Guild"`, `"Grower"` | The same for the Growers |
 | `guilds.wardens.name`, `guilds.wardens.member` | `"Wardens' Guild"`, `"Warden"` | The same for the Wardens |
 | `guilds.wayfarers.name`, `guilds.wayfarers.member` | `"Wayfarers' Guild"`, `"Wayfarer"` | The same for the Wayfarers |
 | `ranks` | Initiate 0, Member 100, Journeyman 300, Expert 700, Master 1500 | The ranks, `{ name, rep }`, lowest first; the first needs 0 |
 | `titleRanks` | `[4, 5]` | Ranks (1 = the first) that unlock a title (`realm:title_unlock`) |
+| `topTitle` | `"{guild}master"` | The top rank's title, `{guild}` being the guild's name (`Miners' Guildmaster`). Empty: `<rank> <member>` like the others (`Master Miner`) |
 | `perkRank` | `3` | Rank each guild's perk needs (3 = Journeyman) |
 | `announceRanks` | `[4, 5]` | Reaching these ranks is announced to everyone |
 | `questRep.mine`, `questRep.kill`, `questRep.harvest`, `questRep.place`, `questRep.travel`, `questRep.eat`, `questRep.fish` | `10` each | Reputation for a finished daily quest of that kind |
@@ -2803,7 +2807,7 @@ Operators can change `passive.enabled`, `passive.oresPerRep`, `passive.cropsPerR
 
 - Reputation is a scoreboard per guild, so any pack, `/scoreboard` or a sidebar can read it. Shops spend the `crowns` scoreboard directly, with or without the [Crowns](#crowns--crowns_bp) pack.
 - It listens for `realm:quest_done` `{ player, kind?, guild?, label }`, `realm:rep_add` `{ player, guild, amount, reason }` and `realm:champion_slain` `{ player?, helpers }`. For a player who isn't online, the reputation waits in `guilds:pending`.
-- Rank-ups send `realm:title_unlock` `{ player, title, from: "guilds_bp" }` for the ranks in `titleRanks`.
+- Rank-ups send `realm:title_unlock` `{ player, title, from: "guilds_bp" }` for the ranks in `titleRanks`, and again for every rank reached 11 seconds after a player joins (Titles & Trails ignores ones it has).
 - Plain play uses `afterEvents.playerBreakBlock` (ores and grown crops; a placed ore or melon is remembered, the last 5,000, so breaking it again earns nothing), a tap on a grown crop that resets it 3 ticks later (the [Right-click Harvest](#right-click-harvest--harvest_bp) pack), `afterEvents.entityDie` with a player as the killer, and the distance moved each second. Sprinting is read from the player's `isSprinting`.
 - Perk notes above the hotbar also send `realm:actionbar` (50 ticks), so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside.
 - The **Guild hall** is an offer in the [Townsfolk](#townsfolk--npc_bp) offer round: it answers `realm:npc_talk` for NPCs with the `guildmaster` role and opens on `realm:npc_choose`.
@@ -3009,7 +3013,7 @@ Operators can change `enabled`, `chance`, `bloodMoonMultiplier`, `maxAlive`, `ni
 
 ## Skills — `skills_bp`
 
-Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and Exploration. Each goes from level 1 to 50 with XP from what you already do (mining ores, chopping trees, harvesting grown crops, fishing, defeating mobs and exploring new land), and every 10 levels unlocks a small perk such as a chance of a double ore drop or a short burst of Speed. Playing near a party mate gives 10% more XP, and level 50 in a skill unlocks a title such as `Master Miner`.
+Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and Exploration. Each goes from level 1 to 50 with XP from what you already do (mining ores, chopping trees, harvesting grown crops, fishing, defeating mobs and exploring new land), and every 10 levels unlocks a small perk such as a chance of a double ore drop or a short burst of Speed. Playing near a party mate gives 10% more XP, and level 50 in a skill unlocks a title such as `Master Miner`. Once your six levels add up to 75 you choose a **Calling**, one of six paths (Delver, Warden, Pathfinder, Hearthkeeper, Woodwright, Stormcaller): a Calling Sigil with an active ability and a talent tree of nine talents to spend up to 10 points in.
 
 ### How to use
 
@@ -3019,7 +3023,11 @@ Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and E
 4. Play near a friend in a party ([Parties](#parties--party_bp), `/realm:party`): while a party mate is within 64 blocks in the same dimension, you gain 10% more XP.
 5. Reach level 50 to unlock a title for the [Titles & Trails](#titles--trails--titles_bp) pack: `Master Miner`, `Master Woodcutter`, `Master Farmer`, `Master Angler`, `Master Warrior` or `Master Explorer`.
 6. Don't want the XP notes? Disable **Skill XP notes** in `/realm:prefs`.
-7. **Operators:** `/realm:config` → **Skills** switches skills, perks and creative-mode XP, and sets the XP multiplier and the party bonus. XP per block, mob and catch, and the perks, are in `config.js`. Each skill's XP is a scoreboard (`skill_mining`, `skill_woodcutting`, `skill_farming`, `skill_fishing`, `skill_combat`, `skill_exploration`), so `/scoreboard` can show or change it.
+7. When your six skill levels add up to 75 (default, `callings.unlockTotal`), chat says you can choose a Calling. Tap Brother Hollis at the chapel ([Townsfolk](#townsfolk--npc_bp); Moss at the graveyard if the story lost Hollis) and pick **Choose a Calling**, read each Calling's page and pick **Become a ...**. The first choice is free, and you get the **Calling Sigil** (a named music disc). `/realm:skills_calling` (or **Calling** in `/realm:skills`) shows every Calling anywhere; the [Story Questlines](#story-questlines--saga_bp) chapter *The Calling* goes with it.
+8. Use the Sigil (tap with it in your hand) for your Calling's ability, for example Hearth Song: Regeneration for you and party mates near you. It then needs its cooldown (`Hearth Song: ready in 74s`).
+9. Spend talent points in `/realm:skills_calling` → **Talents**: tap a talent and **Spend**. You have 1 point, plus 1 for every 5 combined levels of your Calling's two skills above 50, up to 10. Tier 2 opens with 3 points in tier 1, and one tier 3 capstone (of three) with 7.
+10. Changed your mind? **Reset talents** takes every point back for 50 Crowns (`callings.respecCost`). Switching to another Calling, at Hollis or Moss, costs 100 Crowns, then 200, 300, 400 and 500 (`callings.switchCosts`), at least 3 Realm days apart (`callings.switchDays`), and the talent points start over.
+11. **Operators:** `/realm:config` → **Skills** switches skills, perks and creative-mode XP, and sets the XP multiplier and the party bonus; Callings, the level they need, the reset cost, the days between choices and whether Callings can be chosen anywhere. XP per block, mob and catch, and the perks, are in `config.js`. Each skill's XP is a scoreboard (`skill_mining`, `skill_woodcutting`, `skill_farming`, `skill_fishing`, `skill_combat`, `skill_exploration`), so `/scoreboard` can show or change it.
 
 ### What players see
 
@@ -3053,11 +3061,44 @@ Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and E
 - **The menu** (`/realm:skills`) shows `Total level: 47 of 300`, then a button per skill with its level and bar. A skill's page shows `Level 12 of 50`, the bar with `340/831 XP to level 13`, its total XP, how to gain XP, the chunks you have explored (Exploration), and every perk.
 - **Creative mode** gains no XP and gets no perks (`skipCreative`), and neither does spectator mode.
 
+#### Callings
+
+- **Unlock:** your six skill levels added up reach 75 (`callings.unlockTotal`; the menu shows `Total level: 47 of 300`). Chat says `Your skills reach a total level of 75: you can choose a Calling.` and the [Story Questlines](#story-questlines--saga_bp) offer *The Calling* at Brother Hollis (Moss when the story lost Hollis).
+- **Where you choose:** at Brother Hollis (the `priest` role) or, for players whose story lost him, Moss (the `gravedigger` role): **Choose a Calling** (then **Your Calling**) in their menu. Away from them `/realm:skills_calling` shows the Callings and your tree but not the choice or a switch, unless operators allow it anywhere (`callings.chooseAnywhere`) or the Townsfolk pack isn't installed.
+- **The six Callings** (`callings.list`). The Calling's two skills give its talent points; the Sigil's ability has a cooldown:
+
+  | Calling | Skills | Guild | Calling Sigil | Tier 3 capstones (one of three) |
+  |---|---|---|---|---|
+  | Delver | Mining + Combat | Miners | Echo Sense: ores within 8 blocks glow (green sparkles only you see) for 10 s; 90 s | Deep Lungs (Water Breathing and Night Vision underwater), Ore Hound (mining an ore shows the same ore within 6 blocks for 4 s), Stonehide (20% less damage underground) |
+  | Warden | Combat + Exploration | Wardens | Rally Cry: Strength I for you and party mates within 16 blocks for 10 s; 120 s | Champion's Bane (15% more damage to champions), Bulwark (15% less damage from monsters), Second Wind (below 30% health: Regeneration II for 6 s, every 2 minutes) |
+  | Pathfinder | Exploration + Fishing | Wayfarers | Trailblaze: Speed II for 20 s; 90 s | Waystone Friend (waystone trips 25% cheaper), Map Sense (treasure map spots show from 128 blocks, not 96), Seafarer (Conduit Power in water) |
+  | Hearthkeeper | Farming + Fishing | Growers | Hearth Song: Regeneration I for you and party mates within 16 blocks for 8 s; 120 s | Hearty Dishes (Kitchen dishes' effects last 25% longer), Green Thumb (+10% chance of an extra crop and of seeds), Lucky Line (rare, epic and legendary fish bite 50% more often) |
+  | Woodwright | Woodcutting + Farming | Growers | Timberline: Haste II for 15 s; 60 s | Sapling Return (30% chance of the tree's sapling from each log), Bark Armor (12% less damage from everything), Builder's Eye (survival builds may place 25% more blocks) |
+  | Stormcaller | Combat + Exploration | Wardens | Static: for 20 s your hits in the rain slow foes (Slowness II, 3 s); needs rain over your head; 100 s | Rod Reader (+1 Storm Glass from each charged lightning rod), Weathered (20% less damage in the rain), Eye of the Storm (Strength I in a thunderstorm) |
+
+- **Tiers 1 and 2** (two ranks each; rank 2 doubles about):
+
+  | Calling | Tier 1 | Tier 2 |
+  |---|---|---|
+  | Delver | Prospector (+10/20% Mining XP), Rich Veins (+4/8% double ore chance), Long Echo (Echo Sense +50/100% longer) | Tunnel Rat (Haste I/II underground: below y 40 under cover), Deep Brawler (+8/15% damage underground), Quick Echo (cooldown -20/35%) |
+  | Warden | Drillmaster (+10/20% Combat XP), Sharp Eye (+5/10% damage to monsters), Loud Voice (Rally Cry +50/100% longer) | Iron Skin (-15/30% projectile damage), Battle Rhythm (10/20% chance of Strength I for 5 s after a kill), Ready Again (cooldown -20/35%) |
+  | Pathfinder | Long Strides (+10/20% Exploration XP), Light Feet (-30/60% fall damage), Long Trail (Trailblaze +50/100% longer) | Angler's Path (+10/20% Fishing XP), Fleet (Speed I/II while you sprint), Fresh Legs (cooldown -20/35%) |
+  | Hearthkeeper | Good Soil (+10/20% Farming XP), Full Nets (+4/8% second fish chance), Long Song (Hearth Song +50/100% longer) | Bountiful (+4/8% extra crop chance), Warm Hearth (-20/40% fire and lava damage), Calm Waters (cooldown -20/35%) |
+  | Woodwright | Timber (+10/20% Woodcutting XP), Heartwood (+4/8% extra log chance), Long Day (Timberline +50/100% longer) | Orchard (+4/8% apple chance), Seedkeeper (+5/10% extra seeds chance), Steady Hands (cooldown -20/35%) |
+  | Stormcaller | Storm Study (+10/20% Exploration XP), Charged Blows (+8/15% damage in the rain), Long Static (Static +50/100% longer) | Grounded (-50/100% lightning damage), Storm Legs (Speed I/II in the rain), Quick Charge (cooldown -20/35%) |
+
+- **Talent points:** `callings.pointsBase` (1) at unlock, plus 1 for every `callings.pointsEvery` (5) combined levels of the Calling's two skills above `callings.pointsFrom` (50), up to `callings.maxPoints` (10): 10 points at 95 combined. Tier 2 needs `callings.tier2Points` (3) points in tier 1; a capstone needs `callings.tier3Points` (7) in tiers 1 and 2, and only one capstone (one rank) can be taken. Spending is free; the menu asks before each point. Talents and the Sigil don't work in creative or spectator mode.
+- **Talent effects:** chance talents add to the skill perks' chances (they work even before the perk's level); XP talents add to the XP (after the multiplier and perks). Damage taken is given back right after the hit (the stable API can't cancel damage), at most 60% of a hit from all talents together. Damage talents take the bonus straight off the target's health; a bonus that would leave it under 1 health finishes it with one real hit half a second later, so the kill counts for you. Held effects (Haste, Speed, Water Breathing, Conduit Power, Strength) are topped up every second while their condition holds and removed when it ends. **Effects never stack:** a talent, the Sigil or a skill perk never weakens or shortens an effect you already have stronger (a guild perk, a potion); the higher one wins.
+- **The Calling Sigil** (`minecraft:music_disc_ward` named `Calling Sigil`) works for whoever holds it, with their own Calling and cooldown (saved, so leaving doesn't reset it), never goes in a jukebox and stays with you when you die. Lost it? **Get a Calling Sigil** in the menu. The Sigil's ability says what it did above the hotbar: `Hearth Song: you and 2 party mates. Ready again in 120s`.
+- **Reset and switch:** **Reset talents** costs 50 Crowns (`callings.respecCost`). A switch costs `callings.switchCosts` (100, 200, 300, 400, then 500 every time) and needs `callings.switchDays` (3) Realm days since your last choice (the [Realm Calendar](#realm-calendar--calendar_bp) day, else game days): `Switch in 2 Realm days`. The first choice is free and doesn't count.
+- **Elsewhere:** every choice sends `realm:quest_done` (10 reputation with the Calling's guild in [Guilds](#guilds--reputation--guilds_bp)) and town gossip (`calling`); [Expeditions](#expeditions--expedition_bp) leaderboards show each player's Calling (`Ann (Delver)`).
+
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:skills` | Everyone | Shows your six skills (levels 1 to 50, default `maxLevel`) with progress bars; tap one for its XP, how to gain it and its perks, unlocked and to come |
+| `/realm:skills_calling` | Everyone | Your Calling (from a total skill level of 75, `callings.unlockTotal`): the six Callings, your talents (spend points), reset (50 Crowns, `callings.respecCost`), a new Calling Sigil; choosing and switching only at Brother Hollis or Moss (default, `callings.chooseAnywhere`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -3107,10 +3148,24 @@ Six skills grow as you play: Mining, Woodcutting, Farming, Fishing, Combat and E
 | `perks.fishing` | (table above) | Fishing perks |
 | `perks.combat` | (table above) | Combat perks |
 | `perks.exploration` | (table above) | Exploration perks |
+| `callings.enabled` | `true` | Callings work: the menu, the Sigil and every talent. Disabled: nothing a Calling gives works; choices are kept |
+| `callings.unlockTotal` | `75` | The total of all six skill levels a player needs to choose a Calling (6 to 300) |
+| `callings.pointsBase` | `1` | Talent points at unlock |
+| `callings.pointsEvery` | `5` | One more point for every this many combined levels of the Calling's two skills above `callings.pointsFrom` |
+| `callings.pointsFrom` | `50` | Where those extra points start (combined level of the two skills) |
+| `callings.maxPoints` | `10` | The most talent points a player can have |
+| `callings.tier2Points` | `3` | Points in tier 1 a tier 2 talent needs |
+| `callings.tier3Points` | `7` | Points in tiers 1 and 2 a capstone needs |
+| `callings.respecCost` | `50` | Crowns to take back every talent point (0 to 1,000 in game) |
+| `callings.switchCosts` | `[100, 200, 300, 400, 500]` | Crowns for each switch, in order; the last repeats. The first choice is free |
+| `callings.switchDays` | `3` | Realm days at least between two Calling choices (0 to 30 in game) |
+| `callings.chooseAnywhere` | `false` | Players choose and switch from the menu anywhere, not only at Brother Hollis (or Moss). Without the Townsfolk pack they always can |
+| `callings.partyRange` | `16` | How near party mates must be for Rally Cry and Hearth Song, in blocks |
+| `callings.list` | the six above | `{ id, name, skills, guild, blurb, active, talents }` per Calling. `active`: `{ name, kind, seconds, cooldown, radius?, text }` (`kind` echo, rally, trail, song, timber or static). Each talent `{ id, name, tier, kind, v, text, ... }`: `v` the value per rank (two for tiers 1 and 2, one for tier 3); kinds `xp` (`skill`), `chance` (`perks`), `dur`, `cd`, `dmg` (`vs` champion, monster, under, rain), `guard` (`from` any, fall, fire, projectile, monster, lightning, under, rain), `hold` (`effects`, `cond` under, water, sprint, rain, thunder, `amp`), `lowhp` (`cooldown`), `kill` (`effect`, `seconds`), `sapling`, `orehound` and `ext` (`key`, read by another pack). Keep the ids: choices are saved by them |
 
 Perk kinds: `doubleOre` (`chance`), `haste` (`streak`, `seconds`), `extraLog`, `apple`, `extraCrop`, `seeds`, `secondCatch` (`chance`), `strength`, `regen` (`chance`, `seconds`), `speed` (`seconds`) and `bonusXp` (`percent`, any skill).
 
-Operators can change `enabled`, `skipCreative`, `xpMultiplier`, `partyBonus`, `partyRange`, `perksEnabled`, `announceMaster` and `xpNotes` in game with `/realm:config`; `maxLevel`, `xpBase` and `xpExponent` show there but only change in `config.js` (they move everyone's levels). Each player can switch the XP notes for themselves with **Skill XP notes** in `/realm:prefs`, which follows `xpNotes` until they choose. Everything else stays in `config.js`.
+Operators can change `enabled`, `skipCreative`, `xpMultiplier`, `partyBonus`, `partyRange`, `perksEnabled`, `announceMaster`, `xpNotes`, `callings.enabled`, `callings.unlockTotal`, `callings.respecCost`, `callings.switchDays` and `callings.chooseAnywhere` in game with `/realm:config`; `maxLevel`, `xpBase` and `xpExponent` show there but only change in `config.js` (they move everyone's levels). Each player can switch the XP notes for themselves with **Skill XP notes** in `/realm:prefs`, which follows `xpNotes` until they choose. Everything else stays in `config.js`.
 
 ### Saved data
 
@@ -3120,6 +3175,9 @@ Operators can change `enabled`, `skipCreative`, `xpMultiplier`, `partyBonus`, `p
 | `skills:map0`, `skills:map1`, ... | Player | Explored chunks: 21-character records (dimension, area x and z, a 64-bit map of the area's 8 x 8 chunks), up to 1,000 per property, least recently visited first |
 | `skills:placed0`, `skills:placed1`, ... | World | Blocks placed (or moved by a piston) lately, the last 10,000: `<dimension letter>x,y,z` separated by `;`, 1,200 per property, saved every 30 seconds (planted crops are not kept) |
 | `skills:pref` | Player | JSON of the player's own `xpNotes` choice from `/realm:prefs` |
+| `skills:calling` | Player | JSON `{ c, t, n, d, w, cd }`: the Calling id (`""` none), talent ranks by id, switches made, the Realm day and game day of the last choice, and when the Sigil is ready again (`Date.now()` ms) |
+| `skills:sigil` | Item | `1` on a Calling Sigil |
+| `skills:weather` | World | The Overworld weather at the last change, for the rain talents (the stable API can't read it) |
 | `skills:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
@@ -3131,6 +3189,7 @@ Operators can change `enabled`, `skipCreative`, `xpMultiplier`, `partyBonus`, `p
 - **Party bonus:** the pack looks for another online player with the same `realm_party:` tag in range (at most once a second per player). XP from other packs gets no party bonus.
 - **Other packs** can give XP with the script event `realm:skill_xp` `{ player, skill, amount }` (`player` is the player id, `skill` one of `mining`, `woodcutting`, `farming`, `fishing`, `combat`, `exploration`, `amount` up to 100,000); it is multiplied by `xpMultiplier` and the skill's `bonusXp` perk.
 - **Level 50** sends `realm:title_unlock` `{ player, title, from: "skills_bp" }`, again each time the player joins (Titles & Trails ignores titles a player already has).
+- **Callings** (`scripts/calling.js`) send `realm:calling` `{ player, name, calling, label, talents, bonus, ready, from: "skills_bp" }` when a player joins, when it changes (a choice, a point, a reset, a level that crosses the unlock) and on `realm:calling_ping` (answered at most once a second): `calling` is the id (`""` none), `talents` the ranks by id, `bonus` the numbers other packs use (`waystoneOff` 25, `mapReveal` 128, `dishPct` 25, `luckyLine` 50, `buildEye` 25, `rodGlass` 1) and `ready` whether the total level reaches `callings.unlockTotal`. Choosing sends `realm:quest_done` `{ pack: "skills_bp", id: "skills:calling:<id>", kind: "calling", guild }` and `realm:gossip` `{ kind: "calling", place: <Calling> }`. The offer at Hollis or Moss answers `realm:npc_talk` (roles `priest`, or `gravedigger` for players whose `g:hollis` is `lost` in Story Questlines' `realm:npc_flags`) and opens on `realm:npc_choose`. The pack sends `realm:help_ping`, `realm:calendar_ping` and `realm:npc_flags_ping` 6 seconds after the world loads (the Townsfolk pack's answer decides where Callings are chosen). Ore glow uses `Dimension.getBlocks` with the ore ids from `mining.blocks` and per-player `spawnParticle`; weather comes from `weatherChange`.
 
 ---
 
@@ -3273,7 +3332,7 @@ Operators can change `enabled`, `trails`, `trailTicks`, `trailBudget` and `annou
 
 ## Relics — `relics_bp`
 
-Seventeen rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Ten come from adventures in other packs (champions, bounties, treasure maps, caravans) or are forged from 8 Relic Shards at a relicsmith; seven more are story relics, earned only in the [Story Questlines](#story-questlines--saga_bp). Relics never break and stay with you when you die.
+Seventeen rare relics, each a named item with a power of its own: a staff that calls lightning in a thunderstorm, boots that speed you through the rain, a lamp that helps you mine, a pendant that saves you from fire. Ten come from adventures in other packs (champions, bounties, treasure maps, caravans) or are forged from 8 Relic Shards at a relicsmith; seven more are story relics, earned only in the [Story Questlines](#story-questlines--saga_bp). Relics never break and stay with you when you die. Ida can **ascend** a relic three times (+1 Awakened, +2 Ascended, +3 Starlit: a shorter cooldown or a longer reach, then a unique bonus and a gold name) for Relic Shards, Storm Glass and Crowns, and breaks a duplicate into Relic Essence. Carry all three relics of a **set** (Storm, Tide, Deep or Sun) for a set bonus.
 
 ### How to use
 
@@ -3281,8 +3340,11 @@ Seventeen rare relics, each a named item with a power of its own: a staff that c
 2. Keep a relic where it works: some in your main hand, some anywhere in your hotbar or off hand, helmets and boots worn. Its lore says what it does; **Your relics** in `/realm:relics` says where it works.
 3. Bring 8 Relic Shards to a relicsmith (Ida the Relicsmith, from the [Townsfolk](#townsfolk--npc_bp) pack): tap her and pick **Relic forge**, then **Forge a relic**. You get a random relic you haven't had yet; rarer ones are less likely. Story relics are never forged.
 4. Run `/realm:relics` for the menu: **Your relics** (also `/realm:relics_list`) lists the relics you've found, what each does and how many are left to find.
-5. Holding the Storm Meter shows the nearest storm cell above the hotbar. It waits while another pack's note shows there (skill XP, mob health, a sort result). Don't want that? Disable **Storm Meter readout** in `/realm:prefs`.
-6. **Operators:** the `/realm:relics` menu also has **Give a relic** (pick a player and a relic; or `/realm:relics_give <player> <relic>`) and **Place a relicsmith here** (or `/realm:relics_smith`), which asks the Townsfolk pack to place Ida where you stand. `/realm:config` → **Relics** enables or disables the abilities, sets the shards a forge takes, lets players forge anywhere, and sets whether relics wear out, whether the Storm Staff can strike players and how close to spawn it may strike.
+5. **Ascend** a relic at Ida: **Relic forge** → **Ascend a relic**, pick a relic you carry and **Ascend**. +1 takes 6 Relic Shards, 1 Storm Glass and 60 Crowns; +2 takes 12, 3 and 150; +3 takes 20, 5 and 400 (`ascension.costs`). Story relics stop at +1 until a story or a friendship allows more (Hal's Compass: Old Tobin as a Confidant, or *The Gull's Last Voyage* sailed).
+6. Got the same relic twice? **Break a duplicate** in the forge turns your lower copy into 4 **Relic Essence** (`ascension.essencePerBreak`), which counts like Relic Shards for ascension and is spent first.
+7. Carry a whole **set** in your hotbar, off hand or armor: Storm Staff + Storm Meter + Rain Charm, Tide Boots + Hal's Compass + Compass of Echoes, Miner's Lamp + Lantern of the Deep + Lantern Shard, or Sun Pendant + Frost Band + Wayfarer Boots. The bar above the hotbar names the bonus when it starts; **Your relics** lists the sets.
+8. Holding the Storm Meter shows the nearest storm cell above the hotbar. It waits while another pack's note shows there (skill XP, mob health, a sort result). Don't want that? Disable **Storm Meter readout** in `/realm:prefs`.
+9. **Operators:** the `/realm:relics` menu also has **Give a relic** (pick a player and a relic; or `/realm:relics_give <player> <relic>`) and **Place a relicsmith here** (or `/realm:relics_smith`), which asks the Townsfolk pack to place Ida where you stand. `/realm:config` → **Relics** enables or disables the abilities, sets the shards a forge takes, lets players forge anywhere, and sets whether relics wear out, whether the Storm Staff can strike players and how close to spawn it may strike.
 
 ### What players see
 
@@ -3322,7 +3384,49 @@ Seventeen rare relics, each a named item with a power of its own: a staff that c
 - **Place a relicsmith here** (operators) asks the [Townsfolk](#townsfolk--npc_bp) pack to place Ida the Relicsmith (`relicsmithId`) at your spot, facing your way, like `/realm:npc_add ida`: `The relicsmith is here.` Without the Townsfolk pack it says `No answer from the Townsfolk pack, so no relicsmith was placed.` and that the pack is needed. A relicsmith is any townsfolk with the `relicsmith` role (`npcRole`).
 - **Gifts for players who are offline** (from another pack) wait and are handed over 5 seconds after they next join.
 - The first time you get each relic, the [Field Journal](#field-journal--journal_bp) records it on its Relics page.
-- **Ida's friends:** a player who is a Friend of Ida ([Townsfolk](#townsfolk--npc_bp)) needs 10% fewer Relic Shards to forge (8 to 7 by default, rounded down, at least 1), from `realm:affinity`.
+- **Ida's friends:** a player who is a Friend of Ida ([Townsfolk](#townsfolk--npc_bp)) needs 10% fewer Relic Shards to forge (8 to 7 by default, rounded down, at least 1) and to ascend, from `realm:affinity`.
+
+#### Relic Ascension
+
+- **At the relicsmith** (`ascension.enabled`): **Ascend a relic** lists the relics you carry below +3 with the next stage's cost (`needs a story or a friend` for a gated story relic); picking one shows what the stage adds, the cost and what you have, and **Ascend** takes it all at once, only if everything is there: Relic Essence first, then Relic Shards, Storm Glass (`minecraft:prismarine_crystals` with the lore `Charged by a lightning strike`, from [Storm Chasing](#storm-chasing--storm_bp), tornadoes or the caravan) and Crowns. Chat says `Storm Staff is now +1 Awakened: 20% shorter cooldown.`
+- **Costs** (`ascension.costs`): +1 Awakened 6 shards or essence, 1 Storm Glass, 60 Crowns; +2 Ascended 12, 3, 150; +3 Starlit 20, 5, 400. All 17 relics at +3 take 646 shards, 153 Storm Glass and 10,370 Crowns.
+- **What a stage does:** relics with a cooldown (Storm Staff, Compass of Echoes, Sun Pendant, Hal's Compass, the Singing Blade) wait 20%, 35% and 50% less; the Frost Band's slow lasts, the Keeper's Lamp's ring reaches, and the Gray Choir Mask and Fen Charm protect 25%, 50% and 75% more (the mask: 62%, 75%, then 87% of Choir damage back; the charm: that much of a witch's damage back even after you hit one); the other passive relics keep working 10, 20 and 30 seconds after their condition ends (out of the rain, back above y 0, morning). +2 adds a lore line; +3 adds a unique bonus and a gold name (`Storm Staff +3`):
+
+  | Relic | Starlit (+3) bonus |
+  |---|---|
+  | Storm Staff | Answers in any rain, not only in thunder |
+  | Rain Charm | Also works while you swim |
+  | Tide Boots | Water Breathing while you swim |
+  | Lantern of the Deep | Works below y 30, not only y 0 |
+  | Storm Meter | Says if the cell is closing in or moving away |
+  | Compass of Echoes | Also tells the champion's health |
+  | Frost Band | Slowness II instead of I |
+  | Sun Pendant | Also Regeneration I while the fire burns out |
+  | Miner's Lamp | Haste II below y 0 |
+  | Wayfarer Boots | Works under cover too, not only outdoors |
+  | Lantern Shard | Night Vision anywhere, dark or not |
+  | Gray Choir Mask | Choir enemies can't hurt you while you sneak |
+  | Hal's Compass | Each use also gives Speed I for 15 s |
+  | Fen Charm | Wither can't take hold either |
+  | The Singing Blade | The note also gives Weakness I |
+  | The Hollow Crown | Works from dusk to dawn |
+  | Keeper's Lamp | Monsters in the ring get Weakness I too |
+
+- **Story relics** stop at +1 until (`storyGates`, the townsfolk at `ascension.gateLevel` 4, Confidant, from `realm:affinity`, or the story flag from Story Questlines' `realm:npc_flags`): Hal's Compass, Old Tobin or *The Gull's Last Voyage* sailed (`g:gull`); Lantern Shard, Mara or *The Three Seals* finished; Gray Choir Mask, Warden Reyes or *Lantern Night* finished; Fen Charm, Moss or Vesna set free (`g:vesna` = `free`); the Singing Blade, Ida; the Hollow Crown, Quill; Keeper's Lamp, Elsie.
+- **Starlit** news: chat tells everyone (`announceStarlit`) and the town gossips (`relic_starlit`).
+- **Break a duplicate:** with two or more of the same relic on you, the forge breaks the copy with the lowest stage into 4 Relic Essence (`ascension.essencePerBreak`): `minecraft:echo_shard` named `Relic Essence` with the lore `From a broken relic: ascends relics`. The menu asks first and warns when the copy had a stage.
+- A relic renamed on an anvil keeps your name; only its lore follows the stage.
+
+#### Relic sets
+
+Checked every second over your hotbar, off hand and armor (`setsEnabled`); the bar says `Storm set: ...` when one starts:
+
+| Set | Relics | Bonus |
+|---|---|---|
+| Storm | Storm Staff, Storm Meter, Rain Charm | Lightning can't hurt you (nor the fire it starts on you), and a charged lightning rod gives 1 more Storm Glass ([Storm Chasing](#storm-chasing--storm_bp)) |
+| Tide | Tide Boots, Hal's Compass, Compass of Echoes | Conduit Power in water (Bedrock has no Dolphin's Grace effect) |
+| Deep | Miner's Lamp, Lantern of the Deep, Lantern Shard | Night Vision below y 0, and no Darkness there (sneaking is already silent to sculk in the game) |
+| Sun | Sun Pendant, Frost Band, Wayfarer Boots | Fire Resistance at dawn and dusk (time 23000-1000 and 11500-13500), and freezing can't hurt you then |
 
 ### Commands
 
@@ -3352,17 +3456,25 @@ Seventeen rare relics, each a named item with a power of its own: a staff that c
 | `staffHitsPlayers` | `false` | The Storm Staff can strike players |
 | `avoidSpawn` | `24` | No Storm Staff lightning within this many blocks of world spawn (0 = anywhere; 0-256 in game). Fires a bolt starts are put out either way |
 | `compassRange` | `128` | How far the Compass of Echoes looks for a champion (blocks) |
-| `auraRange` | `6` | How far the Singing Blade's note and the Keeper's Lamp's slowing reach (blocks); the lamp's ring of light is drawn at up to 4 |
+| `auraRange` | `6` | How far the Singing Blade's note and the Keeper's Lamp's slowing reach (blocks); the lamp's ring of light is drawn at up to 4 (both farther once the lamp is ascended) |
+| `ascension.enabled` | `true` | Relics can be ascended and duplicates broken at the relicsmith. Disabled: stages already made still work |
+| `ascension.costs` | `[{ shards: 6, glass: 1, crowns: 60 }, { shards: 12, glass: 3, crowns: 150 }, { shards: 20, glass: 5, crowns: 400 }]` | What +1, +2 and +3 cost: Relic Shards or Essence, Storm Glass and Crowns |
+| `ascension.essencePerBreak` | `4` | Relic Essence a duplicate breaks into |
+| `ascension.gateLevel` | `4` | The affinity level (Townsfolk: 4 = Confidant) with a story relic's townsfolk that lets it past +1 |
+| `ascension.announceStarlit` | `true` | Tell everyone in chat when a relic becomes Starlit |
+| `setsEnabled` | `true` | Relic sets give their bonus |
+| `storyGates` | the seven above | `{ relic, npc, flag, value, text }`: what lets a story relic past +1, the townsfolk at `ascension.gateLevel` or the story flag `flag` = `value` (`""` for none); `text` is what the forge shows |
 | `relics` | the 17 above | `{ id, name, item, rarity, where, cooldown, ability, story? }` per relic. `id` is saved on items, so keep it. `item` must be an item that doesn't stack (relics carry data, which only those can); a stacking one is replaced with a brush. `where` is `hand`, `carry` (hotbar or off hand), `head` or `feet`. `cooldown` in seconds. `ability` is the lore text. `story: true` relics are never forged. The powers belong to the ids, so a new id would only be a keepsake |
 
-Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair`, `staffHitsPlayers` and `avoidSpawn` in game with `/realm:config`. Each player can switch the Storm Meter's readout with **Storm Meter readout** in `/realm:prefs`. The rest stays in `config.js`.
+Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair`, `staffHitsPlayers`, `avoidSpawn`, `ascension.enabled` and `setsEnabled` in game with `/realm:config`. Each player can switch the Storm Meter's readout with **Storm Meter readout** in `/realm:prefs`. The rest stays in `config.js`.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `relic:id` | Item | The relic's id, on the relic item itself |
-| `relic:serial` | Item | A number unique to each relic made on this realm |
+| `relic:serial` | Item | A number unique to each relic made on this realm (the ascension menu finds the relic you picked by it) |
+| `relic:asc` | Item | The relic's ascension stage, 1 to 3 (none = 0) |
 | `relics:found` | Player | JSON array of the relic ids the player has had |
 | `relics:death` | Player | JSON `{ dim, x, y, z }`: where the player last died, for Hal's Compass |
 | `relics:pref` | Player | The player's own **Storm Meter readout** choice |
@@ -3371,7 +3483,7 @@ Operators can change `enabled`, `shardsPerForge`, `forgeAnywhere`, `autoRepair`,
 | `relics:weather` | World | The Overworld weather at the last change (`Clear`, `Rain` or `Thunder`); the stable Script API can't read it |
 | `relics:cfg` | World | Settings changed in `/realm:config` |
 
-Cooldowns are kept in memory, so a restart makes every relic ready again.
+Cooldowns are kept in memory, so a restart makes every relic ready again. Stages live on the items and sets are worked out from what you carry, so both survive restarts.
 
 ### How it works
 
@@ -3387,6 +3499,7 @@ Cooldowns are kept in memory, so a restart makes every relic ready again.
 - **The relicsmith:** **Place a relicsmith here** sends `realm:npc_summon` `{ id: "ida", player }` to the [Townsfolk](#townsfolk--npc_bp) pack and waits 1 second for `realm:npc_summoned` `{ id, player, ok, error? }`.
 - Other packs give relics and shards with the script events `realm:relic_give` `{ player, relic }` (story relics included: Story Questlines rewards them by id) and `realm:shard_give` `{ player, amount }` (at most 640). A Relic Shard is `minecraft:amethyst_shard` named `Relic Shard` whose first lore line is `Bring 8 to a relicsmith`; that lore line is how the forge counts them. Townsfolk with the `relicsmith` role get the **Relic forge** offer in answer to `realm:npc_talk`, and `realm:npc_choose` opens the forge.
 - The first time a player has a relic (given, forged, or seen in their hotbar or armor, for one traded to them), the pack sends `realm:journal` `{ page: "relics" }`.
+- **Sets** go out as `realm:relic_sets` `{ player, sets, from: "relics_bp" }` (`sets`: `storm`, `tide`, `deep`, `sun`) when a player's sets change (and once on join), and again for everyone on `realm:relic_sets_ping`; [Storm Chasing](#storm-chasing--storm_bp) reads it. The story relic gates keep every `realm:affinity` level and each player's `realm:npc_flags` in memory (`realm:npc_flags_ping` 5.5 seconds after the world loads). The +3 news is `realm:gossip` `{ kind: "relic_starlit", place: <relic> }`. Lingering passives remember when each condition last held, in memory.
 
 ---
 
@@ -3532,7 +3645,8 @@ The species:
 | Moon Puffer | Pufferfish | Rare | 10-35 | night |
 | Glacier Puffer | Pufferfish | Rare | 15-45 | frozen water |
 | Stormblower | Pufferfish | Epic | 30-70 | thunderstorms |
-- **Tobin's friends:** a player who is a Friend of Old Tobin ([Townsfolk](#townsfolk--npc_bp)) gets 10% more Crowns for fish sold to a fisher, from `realm:affinity`. A legendary catch is also town gossip (`realm:gossip`).
+- **Tobin's friends:** a player who is a Friend of Old Tobin ([Townsfolk](#townsfolk--npc_bp)) gets 10% more Crowns for fish sold to a fisher, from `realm:affinity`.
+- **Lucky Line:** a Hearthkeeper with the Lucky Line talent ([Skills](#skills--skills_bp) Callings, `bonus.luckyLine` in `realm:calling`) gets 50% more weight on rare, epic and legendary species when a fish is picked. A legendary catch is also town gossip (`realm:gossip`).
 
 ### Commands
 
@@ -3673,6 +3787,7 @@ The rare ingredients (each is a vanilla item with a custom name and `Rare ingred
 
 Foraging (everything but champions) can be disabled with **Foraging** (`foragingEnabled`). Harvesting counts both ways: breaking a ripe crop, or tapping it with [Right-click Harvest](#right-click-harvest--harvest_bp). At the start of an aurora or meteor window, a Harvest Moon or a Blood Moon, chat names the ingredient it can bring: `Kitchen: ripe crops harvested tonight may give Harvest Saffron.`, `Kitchen: monsters slain tonight may drop Moon Salt.`
 - **Bea's friends:** a player who is a Friend of Bea ([Townsfolk](#townsfolk--npc_bp)) pays 10% fewer Crowns to learn a recipe (rounded down), from `realm:affinity`.
+- **Hearty Dishes:** a Hearthkeeper with the Hearty Dishes talent ([Skills](#skills--skills_bp) Callings, `bonus.dishPct` in `realm:calling`) gets dish effects 25% longer, on top of `durationMultiplier` (not the effects that never scale).
 
 ### Commands
 
@@ -4351,6 +4466,7 @@ Buy a treasure map from Mara the Cartographer and puzzle your way across the lan
 
 **Treasure chests and markers never touch builds.** A chest only replaces natural ground (grass, dirt, sand, gravel, clay, stone, snow, natural terracotta and the like), with natural ground above it; a marker only stands on natural ground and only replaces air, grass, flowers and snow layers. Before burying a chest, the pack checks the 9 x 9 columns around the spot, from 4 blocks over the ground to 4 below (5 x 5 top blocks for a marker), and skips the spot if it finds anything a player likely made: planks, glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpet, concrete, glazed terracotta, terracotta in colors the badlands don't have, bricks, tiles, slabs, stairs, crafted wood, metal and other crafted blocks, heads, crafting tables, furnaces, rails, farmland, paths, cobblestone and more. Neither goes within 64 blocks of world spawn (`avoidSpawn`), inside or touching a safe zone, town or land claim (the safe zones protocol, from [Safe Zones](#safe-zones--zones_bp), [Town Projects](#town-projects--town_bp) and [Land Claims](#land-claims--claims_bp)), or where it can't read the columns.
 - **Mara's friends:** a player who is a Friend of Mara ([Townsfolk](#townsfolk--npc_bp)) pays 10% less for a treasure map (50 to 45 Crowns by default, rounded down), from `realm:affinity`.
+- **Map Sense:** a Pathfinder with the Map Sense talent ([Skills](#skills--skills_bp) Callings, `bonus.mapReveal` in `realm:calling`) has the spot built from 128 blocks away instead of `revealDistance` (at most 160).
 
 ### Commands
 
@@ -4444,6 +4560,7 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
   - **Rent a bed** (10 [Crowns](#crowns--crowns_bp), `bedPrice`): your respawn point becomes the innkeeper's spot, until you sleep in a bed of your own, and you're Well Rested: Health Boost I (2 extra hearts) for 60 minutes (`wellRestedMinutes`), plus a moment of Saturation and Regeneration to fill them, all without particles. Chat says `-10 Crowns (A bed at the inn)` and `You rest at the inn. Well Rested: 2 extra hearts for 60 minutes.` Beds can only be rented in the Overworld. Dying ends Well Rested, like any effect.
   - **Hear the news:** the latest 6 (`newsKept`) sky events other packs announced, newest first, like `3h ago: A tornado tore across the land (240m NE of here)` or the event's own text: tornadoes, rainbows, meteors, blood and harvest moons, auroras, storms, caravans and fishing tournaments. Nothing yet: `Nothing new lately. Quiet times, and I'm not complaining.`
 - **Elsie's friends:** a player who is a Friend of Elsie ([Townsfolk](#townsfolk--npc_bp)) pays 10% less for a bed (10 to 9 Crowns by default, rounded down), from `realm:affinity`.
+- **Waystone Friend:** a Pathfinder with the Waystone Friend talent ([Skills](#skills--skills_bp) Callings, `bonus.waystoneOff` in `realm:calling`) pays 25% less for trips (rounded down, at least 1 when the trip isn't free).
 
 ### Commands
 
@@ -4517,7 +4634,7 @@ Dungeon runs for you and your [party](#parties--party_bp), in the spirit of Diab
 6. **Gauntlet:** run `/realm:expedition_gauntlet` (or **Start a Gauntlet** in `/realm:expedition`), pick a dungeon and a difficulty you've unlocked. The preview has a **Fixed loadout** switch (Disabled by default, `loadoutDefault`): enabled, everyone's own inventory, armor and offhand are stored away when the run starts and they get a starter kit instead; it all comes back exactly when they return. Every 5 rooms (`boonEvery`) is a **sanctuary**: a form shows each player three boons, and the bars rise once everyone has picked (or a minute after the first pick). Closed it by mistake? Press the button on the altar, or open `/realm:expedition` → **Choose your boon**.
 7. **Nightmare Sigils** dropped by bosses and champions open one exact run: use the sigil (right-click) or pick it under **Use a Nightmare Sigil** in `/realm:expedition`. It works even before you've unlocked its tier, and it's used up when the run starts (a run called off before anyone goes in, say because the site isn't safe, gives it back).
 8. To give up, run `/realm:expedition_leave` (or **Leave the expedition** in `/realm:expedition`, which asks first). If you die you're out of the run, you respawn as usual and are sent back to where you started, and the items you dropped are given back (also if you die in the moment after leaving, before you're sent back).
-9. `/realm:expedition` → **Leaderboards** shows the fastest clears of each dungeon at each difficulty, the **Highest tiers** players have cleared, the **Recent runs** and the best **Gauntlets**; **My progress** shows what you've unlocked, your best and your own recent runs.
+9. `/realm:expedition` → **Leaderboards** shows the fastest clears of each dungeon at each difficulty, the **Highest tiers** players have cleared, the **Recent runs** and the best **Gauntlets**, each player with their [Skills](#skills--skills_bp) Calling (`Ann (Delver), Bo`); **My progress** shows what you've unlocked, your best and your own recent runs.
 10. **Operators:** stand somewhere far from spawn and from anyone's builds and mines, and run `/realm:expedition_site` once (or `/realm:expedition_site <x> <z>`, or **Operator tools** → **Set the site where I stand**). Dungeons are built deep underground around that spot (up to 120 by 120 blocks, y -41 to -8), and the site is refused if it's within 124 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. `/realm:expedition_reset` ends a run in progress and fills the dungeon back in (**Operator tools** → **End every expedition and reset** does the same after asking, with the runs in progress listed). **Operator tools** also has **Create a Nightmare Sigil** (any dungeon, tier and affixes) and **Unlock every tier for me**. `/realm:config` → **Expeditions** sets the party size, the time limit, the time at the treasure, the highest tier, building, the reroll cost, the Gauntlet's length and boons, and more.
 
 ### What players see
@@ -4722,6 +4839,7 @@ Operators can change `enabled`, `slots`, `maxParty`, `timeLimitMinutes`, `exitSe
 | `expedition:best_v2` | World | `1` once that copy was made |
 | `expedition:tiers` | World | JSON `[{ id, n, l, d, at }]`: the highest level each player cleared (the Highest tiers board) |
 | `expedition:history` | World | JSON `[{ d, l, ok, t, n, at, a, g }]`: the latest runs, cleared or failed, newest first (`g`: a Gauntlet's room count) |
+| `expedition:callings` | World | JSON `{ <player name>: <Calling> }` from Skills' `realm:calling`, for the leaderboards (at most 300 names, the oldest dropped first) |
 | `expedition:gauntlets` | World | JSON `[{ d, l, t, n, at, r, k }]`: the best Gauntlet clears, hardest then fastest (`r` rooms, `k` 1 with Fixed loadout) |
 | `expedition:stash_next` | World | The next stash number |
 | `expedition:parcels:<player id>` | World | JSON list `{ id, tag, k, c, placed?, at? }` of parcels waiting for that player (`k`: `spoils` treasure left in the chests, `dropped` items dropped dying; `c`: its carts); `placed` once its carts were put down to hand it over, so it's never put down twice |
@@ -5005,7 +5123,7 @@ All of them only work while Easy Building is enabled (`enabled`, default enabled
 |---|---|---|
 | `enabled` | `true` | Easy Building for the whole realm. Disabled: `/realm:build` only says so and placing blocks builds nothing extra |
 | `operatorsOnly` | `false` | Only operators can use the building tools |
-| `maxBlocks` | `4096` | Most blocks one build may place in survival, copies, repeats and modifiers included (64 to 16384 in game) |
+| `maxBlocks` | `4096` | Most blocks one build may place in survival, copies, repeats and modifiers included (64 to 16384 in game); 25% more for a Woodwright with Builder's Eye ([Skills](#skills--skills_bp) Callings, `bonus.buildEye` in `realm:calling`) |
 | `maxBlocksCreative` | `32768` | Most blocks one build may place in creative (256 to 65536 in game) |
 | `maxSize` | `64` | Largest width, height, depth or length the menus offer, in blocks; a radius goes up to half of it (8 to 128 in game) |
 | `blocksPerTick` | `400` | Blocks placed per tick; bigger builds are spread over several ticks (50 to 2000 in game). Lower it if big builds make the realm stutter |
@@ -5341,7 +5459,8 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 - **Wind:** each cell drifts at its own speed (`minSpeed` to `maxSpeed`) in a direction that turns a few degrees a second (`turnPerSecond`), so it wanders.
 - **Lightning** lands at a random spot within 30 blocks of the cell (`strikeRadius`), only where the world is loaded (around players). To keep builds from catching fire, a strike is skipped within 64 blocks of world spawn (`avoidSpawn`) and anywhere a check of the 9 x 9 columns around the spot (the surface and 4 blocks under it) finds a player-made block: planks, glass, chests, barrels, signs, beds, torches, lanterns, doors, fences, wool, carpet, concrete, glazed terracotta, polished, cut and chiseled stone, copper blocks, paths, farmland, crafting tables, furnaces, bricks, slabs, stairs, rails, redstone parts and the like.
 - **Lightning rods:** the pack remembers rods players place (up to 200, `maxRods`). Half the time (`rodChance`) a strike goes to an uncharged rod within the cell's reach instead, even near spawn (a struck rod doesn't start fires). Any lightning within 3 blocks of a remembered rod charges it: a blue spark and a beacon hum, then a spark every 2 seconds while someone is within 48 blocks. Tapping a charged rod (with anything in hand) collects `You collect 2 Storm Glass from the lightning rod.` Tapping an uncharged one with an empty hand says `This lightning rod isn't charged. A lightning strike charges it.` The sparks come from [Realm Skies](#realm-skies--sky_rp); without it, the rods still charge.
-- **Storm Glass** is prismarine crystals named `Storm Glass` with the lore `Charged by a lightning strike`. Other packs may buy or use it.
+- **Storm Glass** is prismarine crystals named `Storm Glass` with the lore `Charged by a lightning strike`. Other packs may buy or use it ([Relics](#relics--relics_bp) ascension takes it).
+- **More glass:** a Stormcaller with Rod Reader ([Skills](#skills--skills_bp) Callings, `bonus.rodGlass` in `realm:calling`) and a player carrying the [Relics](#relics--relics_bp) Storm set (`realm:relic_sets`) each get 1 more from every charged rod (`You collect 4 Storm Glass from the lightning rod (2 more from your Calling and relics).`). The pack asks with `realm:calling_ping` and `realm:relic_sets_ping` 7 seconds after the world loads.
 - **Read the storm** without a clock in your hand says `Hold a clock to read the storm.`; with no cell (or outside the overworld), `No storm cell.`
 
 ### Commands
@@ -5375,7 +5494,7 @@ Thunderstorms get a storm cell: a heart of the storm that drifts with the wind, 
 | `rodChance` | `0.5` | Chance a strike goes to an uncharged lightning rod near the cell, when there is one |
 | `maxRods` | `200` | Lightning rods remembered; past this the oldest are forgotten |
 | `glassMin` | `1` | Fewest Storm Glass from a charged rod |
-| `glassMax` | `2` | Most Storm Glass from a charged rod |
+| `glassMax` | `2` | Most Storm Glass from a charged rod (before the Rod Reader and Storm set extras) |
 | `journalRadius` | `64` | Players this close to the cell get the Field Journal's Storm cell entry |
 | `commandMinDistance` | `48` | `/realm:storm_cell` puts the cell at least this far from the operator |
 | `commandMaxDistance` | `96` | ...and at most this far |
@@ -6289,6 +6408,9 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Skills, Bounty Board, Story Questlines, Expeditions ← Parties | Party mates carry the tag `realm_party:<code>`. Skills gives 10% more XP near a mate; bounties and story objectives count for mates within 64 blocks; Expeditions takes the party in together |
 | Titles & Trails → Nicknames | The title a player wears is the tag `realm_title:<text>`; Nicknames shows it in gray under the name. Guilds, Skills, Field Journal, Blood Moon and Story Questlines unlock titles with `realm:title_unlock` |
 | Relics ← Champions, Story Questlines, Treasure Maps, Rainbows, Expeditions | Champions drop Relic Shards; the others may give a relic with `realm:relic_give` (the seven story relics come only from Story Questlines). Relics' Storm Meter reads Storm Chasing's cell (`realm:storm_cell`), and the Storm Staff answers near one too. The Lantern Shard points at the seals Story Questlines reports with `realm:seals`; the Gray Choir Mask reads its `saga:choir` tag. **Place a relicsmith here** asks Townsfolk with `realm:npc_summon` |
+| Skills (Callings) → Waystones & Inns, Treasure Maps, Kitchen, Fishing 2.0, Easy Building, Storm Chasing, Expeditions | `realm:calling` `{ player, name, calling, label, talents, bonus, ready }` carries each player's Calling and the talent numbers the others use (`bonus`): Waystone Friend 25% off trips, Map Sense spots built from 128 blocks (not 96), Hearty Dishes 25% longer dish effects, Lucky Line 50% more rare fish, Builder's Eye 25% more blocks per survival build, Rod Reader 1 more Storm Glass per rod. Expeditions shows each player's Calling on its leaderboards. Each keeps it in memory (Expeditions saves the names) and asks with `realm:calling_ping` at load |
+| Skills (Callings) ↔ Story Questlines, Townsfolk, Guilds | Story Questlines saves `realm:calling`'s `ready` and `calling` as `g:calling_ready` and `g:calling`, which open *The Calling* at Brother Hollis (Moss when `g:hollis` is `lost`, from `realm:npc_flags`, which Skills also reads to pick who offers **Choose a Calling**). The choice sends `realm:quest_done` (`skills:calling:<id>`, kind `calling`, the Calling's guild: 10 reputation) and `realm:gossip` (`calling`). Calling effects and guild perks never stack: the higher wins |
+| Relics → Storm Chasing, Townsfolk; Townsfolk, Story Questlines → Relics | Relic sets go out as `realm:relic_sets` `{ player, sets }`: Storm Chasing gives the Storm set 1 more Storm Glass per rod. Ascension reads `realm:affinity` levels and Story Questlines' `realm:npc_flags` (`g:gull`, `g:vesna`, `fin:act4_seals`, `fin:act5_lantern`) to let story relics past +1, and a Starlit relic is town gossip (`relic_starlit`) |
 | Field Journal ← many packs | Weather, sky, fishing, relic, story and place discoveries arrive as `realm:journal` and `realm:sky_event`, so the Journal fills in as you meet them |
 | Weather Almanac ↔ AFK smart sleep, weather packs | The Almanac owns the weather (`doWeatherCycle` off) and puts it back if anything else changes it, so operators should use `/realm:weather_set` rather than `/weather`; sleeping through rain (or Smart Sleep) ends that spell, as in vanilla. Storm Chasing, Tornadoes, Rainbows, Regional Weather, Aurora, Meteors and Rain Extras all follow whatever the weather is |
 | Sky packs → Realm Skies (Realm Resources) | Tornadoes, Rainbows, Aurora & Shooting Stars, Meteor Strikes, Regional Weather, Blood & Harvest Moon, Storm Chasing (the rod spark) and Titles & Trails draw with Realm Skies' particles and fogs. Without it the events still happen, unseen |
@@ -6327,7 +6449,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 **The Hearth & Hearsay events** (Townsfolk and the packs around it; JSON script events, each under 2048 characters):
 
 - **`realm:affinity`** (Townsfolk sends) `{ player, npc, level, pts, off }` on every level change (level `0` Stranger, `1` Acquaintance, `2` Friend, `3` Close, `4` Confidant; `off` the percent off at that townsfolk's shop), and `{ player, all: { <npc>: level }, off: { <npc>: percent } }` when a player joins and 5 seconds after the world loads. Consumers keep it in memory.
-- **`realm:gossip`** (any pack sends, Townsfolk listens) `{ kind, player, name?, place?, n? }`: one piece of news about a player (`player` an id or name, `name` the name to say, `place` what or where, `n` a number). Kinds with lines: `champion`, `fish_legendary`, `expedition`, `act`, `guild_master`, `town_project`, `blood_moon`, `meteor`, `wander_chain` (Story Questlines: a wanderer's chain finished, `place` the wanderer), `siege`, `atlas` (an Atlas milestone, `place` the title), `atlas_site` (a cairn silenced or a watch post held); any other lowercase kind gets general lines (`wander_hostile`: an ambush beaten).
+- **`realm:gossip`** (any pack sends, Townsfolk listens) `{ kind, player, name?, place?, n? }`: one piece of news about a player (`player` an id or name, `name` the name to say, `place` what or where, `n` a number). Kinds with lines: `champion`, `fish_legendary`, `expedition`, `act`, `guild_master`, `town_project`, `blood_moon`, `meteor`, `wander_chain` (Story Questlines: a wanderer's chain finished, `place` the wanderer), `siege`, `atlas` (an Atlas milestone, `place` the title), `atlas_site` (a cairn silenced or a watch post held), `calling` (Skills: a new Calling, `place` its name), `relic_starlit` (Relics: a relic at +3, `place` its name); any other lowercase kind gets general lines (`wander_hostile`: an ambush beaten).
 - **`realm:npc_flags`** (Story Questlines sends) `{ player, flags }`: the story flags the townsfolk react to, only the set ones, on join and on change; `realm:npc_flags_ping` asks for all of them again.
 - **`realm:calendar`** `{ day, doy, year, season, festival?, ends?, from }`: the Realm day (`day`, counted up at every dawn, never back), its day of the 96-day Realm Year (`doy`), the season (`thaw`, `high_sun`, `harvest`, `long_dark`), the festival while one runs (`hatchling_tide`, `midsummer_regatta`, `lantern_fair`, `long_night`) and its last day (`ends`). [Realm Calendar](#realm-calendar--calendar_bp) sends it at every dawn, when a player joins, on `realm:calendar_ping` and every 5 minutes (`from: "calendar_bp"`; no `festival` while its festivals are switched off). Without it Townsfolk sends it; while Realm Calendar does, Townsfolk only listens (its first day is Townsfolk's, asked with `realm:calendar_ping` `{ own: true }`).
 - **`realm:npc_gift`** (Townsfolk sends) `{ player, npc, tier }`: a gift given to a townsfolk (`tier` `loved`, `liked`, `neutral` or `disliked`).
@@ -6344,6 +6466,11 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 - **`realm:place_ready`** (Story Questlines sends) `{ name, state, dim, x, y?, z, wid? }`: where a story place or camp is: `picked`, `built`, `set`, `moved`, `removed`; a built camp's x, y, z is where its wanderer stands. On every change, 5 seconds after the world loads and on `realm:place_ping`.
 - **`realm:poi`** `{ kind, dim, x, z, name }` ([Atlas of the Realm](#atlas-of-the-realm--atlas_bp) sends): a built site (hermit hut, shrine, tablet, cairn, watch post, camp), when built and after every world load; the wanderer pack counts each like a story place (anchors for ghosts and the site bonus).
 - **`realm:saga_progress`** `{ player, act }` (Story Questlines sends): the main acts a player has finished in order (0 to 5), on join, on change and on `realm:saga_progress_ping`. Atlas of the Realm reads it for the Starwright tablets.
+
+**The Callings and relic events** ([Skills](#skills--skills_bp), [Relics](#relics--relics_bp) and the packs around them; JSON script events, each under 2048 characters):
+
+- **`realm:calling`** (Skills sends) `{ player, name, calling, label, talents, bonus, ready, from: "skills_bp" }`: a player's Calling id (`""` none) and name, talent ranks by id, the numbers other packs use (`bonus`: `waystoneOff`, `mapReveal`, `dishPct`, `luckyLine`, `buildEye`, `rodGlass`; only the player's own) and whether their total skill level reaches the Calling level. Sent on join, on any change and for everyone on **`realm:calling_ping`** `{}` (answered at most once a second). Consumers keep it in memory.
+- **`realm:relic_sets`** (Relics sends) `{ player, sets, from: "relics_bp" }`: the relic sets a player carries whole (`storm`, `tide`, `deep`, `sun`), on change and once on join; **`realm:relic_sets_ping`** `{}` sends everyone's again.
 
 **The Realm Calendar events** ([Realm Calendar](#realm-calendar--calendar_bp) and the packs around it; JSON script events, each under 2048 characters):
 

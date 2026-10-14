@@ -110,6 +110,16 @@ const PERK_TEXT = {
   wayfarers: () => `Speed I for ${CONFIG.perks.wayfarers.speedSeconds}s after sprinting ${CONFIG.perks.wayfarers.sprintBlocks} blocks`,
 };
 
+/**
+ * A perk's level I effect, unless the player already has it stronger (a Calling's Haste II from Skills, a potion): the
+ * higher one wins, effects never stack. @param {Player} p @param {string} type @param {number} ticks
+ */
+function perkEffect(p, type, ticks) {
+  const cur = p.getEffect(type);
+  if (cur && (cur.amplifier > 0 || cur.duration >= ticks)) return;
+  p.addEffect(type, ticks, { amplifier: 0 });
+}
+
 /** Does this player have the guild's perk right now? @param {Player} p @param {Guild} g */
 const hasPerk = (p, g) => get("perks.enabled") === true && rankOf(p, g) >= get("perkRank");
 
@@ -133,6 +143,23 @@ function addRep(p, g, amount, reason) {
   if (to > from) rankedUp(p, g, from, to, after);
 }
 
+/**
+ * The title a rank (1 = the first) unlocks, or "" when it unlocks none: "Expert Miner", and for the top rank
+ * `topTitle` ("Miners' Guildmaster"), so it never reads like Skills' "Master Miner".
+ * @param {Guild} g @param {number} r
+ */
+function titleFor(g, r) {
+  if (!CONFIG.titleRanks.includes(r) || !RANKS[r - 1]) return "";
+  if (r === RANKS.length && CONFIG.topTitle) return CONFIG.topTitle.split("{guild}").join(guildName(g));
+  return `${RANKS[r - 1].name} ${CONFIG.guilds[g].member}`;
+}
+
+/** Sends the rank's title to Titles & Trails (it ignores titles a player already has). @param {Player} p @param {Guild} g @param {number} r */
+function unlockTitle(p, g, r) {
+  const title = titleFor(g, r);
+  if (title) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: p.id, title, from: "guilds_bp" }));
+}
+
 /** @param {Player} p @param {Guild} g @param {number} from @param {number} to @param {number} rep */
 function rankedUp(p, g, from, to, rep) {
   const rank = RANKS[to].name;
@@ -143,11 +170,7 @@ function rankedUp(p, g, from, to, rep) {
   if (stock.length) lines.push(`§eNew in the guild shop: ${stock.map((s) => `${s.amount} ${itemName(s.item)}`).join(", ")} §7(/realm:guilds)`);
   p.sendMessage(lines.join("\n"));
   p.playSound("random.levelup", { pitch: 1.2, volume: 0.9 });
-  for (let r = from + 2; r <= to + 1; r++) {
-    if (!CONFIG.titleRanks.includes(r)) continue;
-    const title = `${RANKS[r - 1].name} ${CONFIG.guilds[g].member}`;
-    system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: p.id, title, from: "guilds_bp" }));
-  }
+  for (let r = from + 2; r <= to + 1; r++) unlockTitle(p, g, r);
   // Townsfolk gossip (Hearth & Hearsay) about a new Master (the top rank).
   if (to === RANKS.length - 1 && from < to) system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "guild_master", player: p.id, name: p.name, place: guildName(g) }));
   if (CONFIG.announceRanks.includes(to + 1)) {
@@ -194,6 +217,16 @@ function giveRep(playerId, g, amount, reason) {
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
+  // Titles earned before (or under another name, like the old "Master Miner" for the top rank): sent again a little
+  // after joining, so Titles & Trails has every one the player's ranks unlock.
+  system.runTimeout(() => {
+    try {
+      if (!player.isValid) return;
+      for (const g of GUILDS) for (let r = 1; r <= rankIndex(repOf(player, g)) + 1; r++) unlockTitle(player, g, r);
+    } catch (e) {
+      console.warn(`[guilds] titles: ${e}`);
+    }
+  }, 220);
   try {
     const all = pending();
     const mine = all[player.id];
@@ -249,7 +282,7 @@ function championSlain(m) {
     if (get("passive.enabled") === true && CONFIG.passive.championRep > 0) giveRep(id, "wardens", CONFIG.passive.championRep, name);
     const p = online(id);
     if (p && hasPerk(p, "wardens")) {
-      p.addEffect("strength", CONFIG.perks.wardens.strengthSeconds * 20, { amplifier: 0 });
+      perkEffect(p, "strength", CONFIG.perks.wardens.strengthSeconds * 20);
       perkNote(p, `§cWardens' Guild: Strength I for ${CONFIG.perks.wardens.strengthSeconds}s`);
     }
   }
@@ -412,7 +445,7 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
         l.mined.push(now);
         if (l.mined.length >= m.ores) {
           l.mined = [];
-          player.addEffect("haste", m.hasteSeconds * 20, { amplifier: 0 });
+          perkEffect(player, "haste", m.hasteSeconds * 20);
           perkNote(player, `§eMiners' Guild: Haste I for ${m.hasteSeconds}s`);
         }
       }
@@ -512,7 +545,7 @@ system.runInterval(() => {
         if (l.sprint >= w.sprintBlocks) {
           l.sprint = 0;
           l.speedUntil = system.currentTick + w.speedSeconds * 20;
-          p.addEffect("speed", w.speedSeconds * 20, { amplifier: 0 });
+          perkEffect(p, "speed", w.speedSeconds * 20);
           perkNote(p, `§bWayfarers' Guild: Speed I for ${w.speedSeconds}s`);
         }
       }

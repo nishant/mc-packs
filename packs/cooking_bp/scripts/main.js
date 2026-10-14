@@ -567,7 +567,8 @@ function isPot(block) {
  * @param {Player} player @param {Fx[]} list @returns {string[]} what was given, for chat
  */
 function applyFx(player, list) {
-  const mult = Math.max(0.05, Number(get("durationMultiplier")) || 1);
+  // Hearthkeeper's Hearty Dishes (Skills): `bonus.dishPct` percent longer, on top of the realm's multiplier.
+  const mult = Math.max(0.05, Number(get("durationMultiplier")) || 1) * (1 + Math.min(100, callingValue(player, "dishPct")) / 100);
   const out = [];
   for (const [id, amp, secs] of list) {
     const scaled = FIXED_EFFECTS.includes(id) ? secs : secs * mult;
@@ -1257,6 +1258,27 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Callings (Skills): realm:calling carries each player's talent numbers (`bonus`: dishPct: Hearthkeeper's longer dish effects). Kept in memory; Skills
+// sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
+/** @type {Map<string, Record<string, number>>} */
+const callingBonus = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:calling") return;
+    try {
+      const m = JSON.parse(message);
+      if (m && typeof m.player === "string" && m.bonus && typeof m.bonus === "object") callingBonus.set(m.player, m.bonus);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] },
+);
+world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
+/** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
+const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
