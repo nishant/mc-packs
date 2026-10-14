@@ -959,6 +959,7 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
   try {
     const t = ev.target.typeId;
     if (t !== "minecraft:villager_v2" && t !== "minecraft:villager" && t !== "minecraft:wandering_trader") return;
+    if (ev.target.hasTag("realm:npc")) return; // a wanderer dressed as a villager talks to you anyway (its pack opens its menu)
     if (carried.get(ev.player.id)?.head !== "hollow_crown" || get("enabled") !== true) return;
     ev.cancel = true;
     const player = ev.player;

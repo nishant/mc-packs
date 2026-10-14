@@ -1345,7 +1345,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Walk up and tap them. Their menu shows what they say and their offers: a Recurring Wanderer's chain (§eWanderer: Hob's Tall Tales§r), a Stranger's §eRequest: Hungry on the Road§r, or a report when you're done. Green sparkles over someone (only you see them) mean they have something for you.",
+        "text": "Walk up and tap them: they stroll around the spot where they appeared (or their camp) and stand still while you talk. Tapping one never opens a trade screen. Their menu shows what they say and their offers: a Recurring Wanderer's chain (§eWanderer: Hob's Tall Tales§r), a Stranger's §eRequest: Hungry on the Road§r, or a report when you're done. Green sparkles over someone (only you see them) mean they have something for you.",
         "ops": false
       },
       {

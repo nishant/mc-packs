@@ -336,6 +336,34 @@ Target total from wanderers: about 50 Crowns/h.
   Marigold 3, Tamsin 3, Vesk 3, Hob 3), 24 Stranger templates over the 8 archetypes, 4 hostiles, 40 first names x
   20 epithets, greetings per archetype, per wanderer and per hostile (wander_bp `scripts/lines.js`).
 
+**As shipped (walking, wander_bp 1.1.0, October 2026):**
+- Entities: `minecraft:villager_v2` for everyone but ghosts (`minecraft:allay`, still pinned to their spot) and
+  Strangers who are travelers (`minecraft:wandering_trader`; its two `trader_llama`s are removed as they spawn,
+  `entitySpawn` cause `Event`). Townsfolk stay `minecraft:npc`. A villager spawns with `spawnEvent:
+  "minecraft:spawn_from_village"` (unskilled or nitwit, random skin, the biome's clothes; the default
+  `entity_spawned` picks a random job that a later `become_<job>` can't replace), then `triggerEvent` of the
+  look: pilgrim cleric, miner armorer, hermit shepherd (`become_sheperd`, sic), storm cartographer, exile
+  leatherworker, rival weaponsmith, Hob toolsmith, a drowned sailor in disguise fisherman. The event lands a tick
+  later; the tether loop checks the type family and triggers it again until it took. Verified on BDS 1.26.52.
+- Tether every 10 ticks per walker: back to the spot (road) or the camp past 12 blocks, in water or lava, or 3+
+  blocks below it for 3 s; vanilla stroll AI otherwise. Resistance V, Fire Resistance, Water Breathing re-applied
+  when missing (traders drink milk at dawn), health reset to full. Zombie conversion needs a fatal hit, so none.
+  Lightning still makes a witch (the damage sensor ignores resistance): the witch keeps the name tag, not our
+  tags, so a `Transformed` witch or zombie villager with one of our names is removed and the wanderer comes back.
+- A road wanderer whose entity vanished (trader despawn timer, lightning, `/kill`) is spawned again on its spot
+  while its player is within `leaveDistance` and the spot is loaded, 5 times at most (`r`); else it has left
+  (`gone`) as before. A stale copy that only unloaded is removed by `audit` when it loads. `entityDie` (villagers
+  fire it) and `entityRemove` cover all four types. Villagers' picked-up items drop when they're removed.
+- Taps: our `beforeEvents.playerInteractWithEntity` cancels only entities tagged `realm:npc_owner:wander_bp`
+  (no trade, lead or name tag); relics_bp's Hollow Crown handler now skips `realm:npc` so it doesn't also say
+  "shrinks away". The walker gets Slowness 255 while the menu is open. Simulated players' taps fire no interact
+  events, so "a real villager still trades" is checked by code, not by the scenario.
+- Not done: saga's escort copy of Pell (`stories/wanderers.js`) is still `minecraft:npc`; switch it with the
+  next saga change. Villagers far from towns can still claim a vanilla village's bed or job site if one is within
+  their tether; nothing is moved for it.
+- Cost: about 0.35 ms per tether pass over 13 walkers on the test server (0.035 ms a tick on average).
+  Scenario: `tools/test-bds/examples/wander-walk.js`.
+
 ---
 
 ## 3. Atlas of the Realm (`atlas_bp` NEW)
