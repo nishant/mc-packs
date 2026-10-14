@@ -51,8 +51,8 @@ const isOp = (p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirec
 
 /** @param {Player} player @param {string} text @param {number} [ticks] */
 function actionbar(player, text, ticks = 40) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks, from: "slots_bp" }));
   player.onScreenDisplay.setActionBar(text);
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks }));
 }
 
 /** @template T @param {Player | import("@minecraft/server").World} holder @param {string} key @param {T} fallback @returns {T} */
