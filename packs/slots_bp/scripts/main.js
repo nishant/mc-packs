@@ -640,6 +640,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return; // another pack refused the tap (e.g. a land claim)
   const { block, player } = ev;
   if (!machineAt(block.dimension.id, block.location)) return;
   if (player.isSneaking && player.getGameMode() === "Creative") return;

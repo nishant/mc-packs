@@ -800,6 +800,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 // Cooking pots (tap a cauldron over a lit campfire) and beehives (Glow Honey at night). A hive needs
 // no isFirstEvent check: harvesting empties it, so a repeat sees honey_level 0.
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return; // another pack refused the tap (e.g. a land claim)
   const { block, player, itemStack, isFirstEvent } = ev;
   let type;
   try {

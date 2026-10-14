@@ -326,7 +326,8 @@ function signName(lodestone) {
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
-  if (!ev.isFirstEvent || ev.itemStack || ev.block.typeId !== LODESTONE) return;
+  // ev.cancel: another pack refused the tap (e.g. a land claim)
+  if (ev.cancel || !ev.isFirstEvent || ev.itemStack || ev.block.typeId !== LODESTONE) return;
   const { player, block } = ev;
   const dimension = block.dimension;
   const at = { ...block.location };
