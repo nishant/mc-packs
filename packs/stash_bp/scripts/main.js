@@ -840,7 +840,7 @@ async function showHelp(player) {
           ...(CONFIG.keepItems.some((id) => /map|compass|clock/.test(id)) ? ["what you find your way with (maps, compasses, clocks)"] : []),
         ],
         "and"
-      )}. Double chests count once; ${CONFIG.stashTypes.some((id) => id.endsWith("shulker_box")) ? "" : "placed shulker boxes and "}ender chests never receive anything; containers in unloaded chunks are never touched.`,
+      )}. Double chests count once; ${CONFIG.stashTypes.some((id) => id.endsWith("shulker_box")) ? "" : "placed shulker boxes and "}ender chests never receive anything; containers in unloaded chunks are never touched, and neither are the ones you can't open (someone else's lock or land claim).`,
     ].join("\n")
   );
 
