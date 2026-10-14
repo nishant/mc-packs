@@ -156,14 +156,17 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   event.cancel = true;
   const dim = block.dimension;
   const at = { x, y, z };
-  closedTo(player.id, dim.id, at)
-    .then((closed) => {
-      if (closed || !player.isValid || isRiding(player)) return;
-      const b = dim.getBlock(at);
-      const again = b && seatFor(b);
-      if (again) sit(player, dim, { x: x + 0.5, y: y + CONFIG.seatHeight, z: z + 0.5 }, again.yaw, true);
-    })
-    .catch((e) => console.warn(`[chairs] ${e}`));
+  // Asked on the next tick, outside this read-only event; the seat comes once the answer allows it.
+  system.run(() =>
+    closedTo(player.id, dim.id, at)
+      .then((closed) => {
+        if (closed || !player.isValid || isRiding(player)) return;
+        const b = dim.getBlock(at);
+        const again = b && seatFor(b);
+        if (again) sit(player, dim, { x: x + 0.5, y: y + CONFIG.seatHeight, z: z + 0.5 }, again.yaw, true);
+      })
+      .catch((e) => console.warn(`[chairs] ${e}`))
+  );
 });
 
 // Breaking the block under a seat stands its rider up straight away.

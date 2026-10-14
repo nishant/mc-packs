@@ -1973,7 +1973,7 @@ Seats are entities and are cleaned up; any left over from before a restart are r
 ### How it works
 
 - `world.beforeEvents.playerInteractWithBlock` cancels the tap when it is the first event of the press, the hand is empty, the player isn't sneaking or already riding, the block can be sat on, the two blocks above are air and the seat is within `maxReach`.
-- A tap another pack already canceled (a land claim loaded before this pack) does nothing. Otherwise the pack first asks the protection packs whether the player may use that block (`realm:access_check`, see Quick Stack & Sort's **How it works**), because in the Realm Bundle this pack's tap handler runs before Land Claims' and never sees its cancel. With Land Claims installed the answer comes a tick or two later; without any protection pack the seat waits 5 ticks at most (a hello 3 seconds after the world loads learns who answers).
+- A tap another pack already canceled (a land claim loaded before this pack) does nothing. Otherwise, on the next tick, the pack asks the protection packs whether the player may use that block (`realm:access_check`, see Quick Stack & Sort's **How it works**), because in the Realm Bundle this pack's tap handler runs before Land Claims' and never sees its cancel. With Land Claims installed the answer comes a tick or two later; without any protection pack the seat waits 5 ticks at most (a hello 3 seconds after the world loads learns who answers).
 - Once the answer allows it, the pack spawns `realm:seat` in the block, turns the player to face away from a stair's back (its `weirdo_direction` state; slabs keep your facing) and adds them as its rider.
 - Every `cleanupTicks`, seats without a rider, and block seats whose stair or slab is gone, are removed.
 
