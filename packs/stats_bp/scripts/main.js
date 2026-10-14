@@ -352,11 +352,12 @@ system.afterEvents.scriptEventReceive.subscribe(
 world.afterEvents.worldLoad.subscribe(() => system.sendScriptEvent("realm:hud_ping", "{}"));
 
 onChange((key, player) => {
+  // First, so a sidebar that fails to apply can't leave the ticker on its old settings.
+  if (player) tickerPrefs.delete(player.id);
+  else tickerPrefs.clear();
   if (key === "*" || key === "sidebar" || key.startsWith("sidebarShows.")) {
     if (!player) applySidebar();
   }
-  if (player) tickerPrefs.delete(player.id);
-  else tickerPrefs.clear();
   // A changed ticker setting shows on the next second, from the first chosen stat.
   for (const p of player ? [player] : world.getAllPlayers()) {
     const t = tickers.get(p.id);

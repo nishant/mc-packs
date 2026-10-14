@@ -6566,7 +6566,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 
 **The access check** (Quick Stack & Sort and Chest Finder ask; Land Claims and Quick Stack & Sort's chest locks answer; JSON script events, each under 2048 characters):
 
-- **`realm:access_check`** `{ id, player, spots: [[dim, x, y, z], ...] }`: which of these containers (at most 40 a message) may this player not open? Every protection pack answers, even when nothing is closed, with **`realm:access_check_result`** `{ id, from, closed: [i, ...] }`, the indexes of the closed spots in that message. An asker waits for every pack that has answered before (2 seconds at most), or 5 ticks if none has yet; each asker sends a hello (`id: "hello"`, no spots) 3 seconds after the world loads so it learns who answers.
+- **`realm:access_check`** `{ id, player, spots: [[dim, x, y, z], ...] }`: which of these containers (at most 40 a message; `dim` is the full dimension id, like `minecraft:overworld`, and x, y, z are block coordinates) may this player not open? Every protection pack answers, even when nothing is closed, with **`realm:access_check_result`** `{ id, from, closed: [i, ...] }`, the indexes of the closed spots in that message. An asker waits for every pack that has answered before (2 seconds at most), or 5 ticks if none has yet; each asker sends a hello (`id: "hello"`, no spots) 3 seconds after the world loads so it learns who answers.
 
 **The Hearth & Hearsay events** (Townsfolk and the packs around it; JSON script events, each under 2048 characters):
 
