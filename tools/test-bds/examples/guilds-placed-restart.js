@@ -23,11 +23,15 @@ export default async function (t) {
     inv.setItem(0, new ItemStack("minecraft:pumpkin", 64));
     p.selectedSlotIndex = 0;
     for (let i = 0; i < N; i++) {
-      p.teleport({ x: X0 + i + 0.5, y: Y, z: Z - 1.5 }, { dimension: dim });
-      await t.wait(2);
-      p.useItemInSlotOnBlock(0, { x: X0 + i, y: Y - 1, z: Z }, t.mc.Direction.Up);
-      await t.wait(2);
-      p.stopInteracting();
+      const at = { x: X0 + i, y: Y, z: Z };
+      // A simulated player places at most one block every few ticks: try again until it's there.
+      for (let k = 0; k < 5 && dim.getBlock(at)?.typeId !== "minecraft:pumpkin"; k++) {
+        p.teleport({ x: X0 + i + 0.5, y: Y, z: Z - 1.5 }, { dimension: dim });
+        await t.wait(3);
+        p.useItemInSlotOnBlock(0, { x: X0 + i, y: Y - 1, z: Z }, t.mc.Direction.Up);
+        await t.wait(5);
+        p.stopInteracting();
+      }
     }
     t.assert(pumpkins() === N, `the player placed ${N} pumpkins (${pumpkins()})`);
     p.disconnect();
@@ -56,11 +60,14 @@ export default async function (t) {
   p.selectedSlotIndex = 0;
   for (const e of dim.getEntities({ type: "minecraft:item" })) e.remove();
   for (let i = 0; i < N; i++) {
-    p.teleport({ x: X0 + i + 0.5, y: Y, z: Z - 1.5 }, { dimension: dim });
-    await t.wait(2);
-    p.breakBlock({ x: X0 + i, y: Y, z: Z });
-    await t.wait(8);
-    p.stopBreakingBlock?.();
+    const at = { x: X0 + i, y: Y, z: Z };
+    for (let k = 0; k < 5 && dim.getBlock(at)?.typeId === "minecraft:pumpkin"; k++) {
+      p.teleport({ x: X0 + i + 0.5, y: Y, z: Z - 1.5 }, { dimension: dim });
+      await t.wait(3);
+      p.breakBlock(at);
+      await t.wait(10);
+      p.stopBreakingBlock?.();
+    }
   }
   await t.wait(10);
   t.assert(pumpkins() === 0, `every pumpkin was broken (${pumpkins()} left)`);
