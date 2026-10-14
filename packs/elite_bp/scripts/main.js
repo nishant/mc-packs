@@ -601,7 +601,18 @@ function storm(champ) {
   const z = Math.floor(target.location.z + Math.sin(angle) * r);
   const top = dim.getTopmostBlock({ x, z });
   if (!top) return;
-  const at = { x: x + 0.5, y: top.y + 1, z: z + 0.5 };
+  // getTopmostBlock skips water (it answers a lake or sea bed): over water, strike the water's surface.
+  let surf = top;
+  try {
+    for (let i = 0; i < 64; i++) {
+      const up = surf.above();
+      if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+      surf = up;
+    }
+  } catch {
+    // unloaded above
+  }
+  const at = { x: x + 0.5, y: surf.y + 1, z: z + 0.5 };
   const spawn = world.getDefaultSpawnLocation();
   const nearSpawn = Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn;
   if (nearSpawn || nearBuilt(dim, x, z)) {
@@ -610,7 +621,7 @@ function storm(champ) {
     return;
   }
   dim.spawnEntity("minecraft:lightning_bolt", at);
-  const fireAt = { x, y: top.y + 1, z };
+  const fireAt = { x, y: surf.y + 1, z };
   system.runTimeout(() => putOutFire(dim, fireAt), 2);
   system.runTimeout(() => putOutFire(dim, fireAt), 20);
 }

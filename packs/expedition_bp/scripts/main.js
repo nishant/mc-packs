@@ -866,7 +866,16 @@ function surface(o, size, top) {
   const z = o.z + Math.floor(size / 2);
   try {
     const t = overworld().getTopmostBlock({ x, z });
-    if (t && t.y > o.y + top + 1) return { x: x + 0.5, y: t.y + 1, z: z + 0.5 };
+    if (t && t.y > o.y + top + 1) {
+      // getTopmostBlock skips water (it answers a lake or sea bed): over water, the water's surface instead.
+      let s = t;
+      for (let i = 0; i < 64; i++) {
+        const up = s.above();
+        if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+        s = up;
+      }
+      return { x: x + 0.5, y: s.y + 1, z: z + 0.5 };
+    }
   } catch {
     // unloaded
   }
