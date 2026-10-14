@@ -570,6 +570,29 @@ const trackOf = (p) => {
   return t;
 };
 
+/**
+ * The water surface over a column's topmost block, or undefined when it's dry. getTopmostBlock skips water (it
+ * answers the bed under it), so this climbs through the water (and kelp, seagrass) above it.
+ * @param {import("@minecraft/server").Block | undefined} top @returns {number | undefined}
+ */
+function waterOver(top) {
+  if (!top) return undefined;
+  if (/water/.test(top.typeId)) return top.y; // a lily pad, or water reported after all
+  let b = top;
+  let wet = false;
+  try {
+    for (let i = 0; i < 64; i++) {
+      const up = b.above();
+      if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+      b = up;
+      wet = true;
+    }
+  } catch {
+    // the top of the world, or unloaded above
+  }
+  return wet ? b.y : undefined;
+}
+
 /** Is there open sky above the player? @param {Player} p */
 function openSky(p) {
   try {
@@ -941,7 +964,7 @@ function nestTick() {
         const at = { x: w.x + Math.cos(a) * d, z: w.z + Math.sin(a) * d };
         try {
           const top = dim.getTopmostBlock(at);
-          const water = top && (top.typeId === "minecraft:water" || top.typeId === "minecraft:flowing_water");
+          const water = waterOver(top) !== undefined; // a drowned on the bed under it
           const type = water ? "minecraft:drowned" : Math.random() < 0.3 ? "minecraft:husk" : "minecraft:zombie";
           const e = dim.spawnEntity(type, { x: at.x, y: (top?.y ?? w.y) + 1, z: at.z });
           e.addTag(FX_TAG);
@@ -1011,9 +1034,9 @@ function course(dim, s) {
     for (const f of [1, 0.8, 0.6, 1.2]) {
       const q = { x: cx + Math.cos(a) * R * f, z: cz + Math.sin(a) * R * f };
       try {
-        const top = dim.getTopmostBlock(q);
-        if (top && top.typeId.includes("water")) {
-          pt = { x: q.x, y: top.y + 1, z: q.z };
+        const surface = waterOver(dim.getTopmostBlock(q));
+        if (surface !== undefined) {
+          pt = { x: q.x, y: surface + 1, z: q.z };
           break;
         }
       } catch {
@@ -1433,7 +1456,7 @@ function spawnChoir(dim, c, i, type, singer) {
   const at = { x: c.x + 0.5 + Math.cos(a) * d, z: c.z + 0.5 + Math.sin(a) * d };
   try {
     const top = dim.getTopmostBlock(at);
-    const y = top && !top.isLiquid && Math.abs(top.y - c.y) < 5 ? top.y + 1 : c.y;
+    const y = top && waterOver(top) === undefined && Math.abs(top.y - c.y) < 5 ? top.y + 1 : c.y;
     const e = dim.spawnEntity(/** @type {any} */ (type), { x: at.x, y, z: at.z });
     e.addTag(SIEGE_TAG);
     e.addTag(`realm:siege_${siege.id}`);
@@ -1949,7 +1972,7 @@ function setCourse(player) {
   const cps = course(player.dimension, meta.course);
   const wet = cps.filter((p) => {
     try {
-      return !!player.dimension.getTopmostBlock(p)?.typeId.includes("water");
+      return waterOver(player.dimension.getTopmostBlock(p)) !== undefined;
     } catch {
       return false;
     }
@@ -2314,6 +2337,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   track.delete(playerId);
   races.delete(playerId);
   lastBell.delete(playerId);
+  barHeld.delete(playerId);
+  acts.delete(playerId);
   const w = nests.get(playerId);
   if (w) endNest(w, false, undefined, "");
 });
