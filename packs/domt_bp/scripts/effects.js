@@ -1602,16 +1602,20 @@ export const CARDS = [
     run: ({ player }) => {
       const inv = player.getComponent("minecraft:inventory")?.container;
       if (!inv) return false;
-      const items = [];
-      for (let i = 0; i < inv.size; i++) items.push(inv.getItem(i));
+      // An item locked in its slot stays where it is; the rest are shuffled.
+      /** @type {number[]} */
+      const slots = [];
+      for (let i = 0; i < inv.size; i++) if (inv.getItem(i)?.lockMode !== ItemLockMode.slot) slots.push(i);
+      const items = slots.map((i) => inv.getItem(i));
       if (items.filter((x) => x).length < 2) return false;
       for (let i = items.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
       }
       // Make sure the hotbar changed at all.
-      if (items.slice(0, 9).every((it, i) => (it?.typeId ?? "") === (inv.getItem(i)?.typeId ?? ""))) items.push(...items.splice(0, 9));
-      items.forEach((it, i) => inv.setItem(i, it));
+      const hot = slots.filter((s) => s < 9).length;
+      if (items.slice(0, hot).every((it, k) => (it?.typeId ?? "") === (inv.getItem(slots[k])?.typeId ?? ""))) items.push(...items.splice(0, hot));
+      items.forEach((it, k) => inv.setItem(slots[k], it));
       sound(player, "random.pop", 0.6);
     },
   },
