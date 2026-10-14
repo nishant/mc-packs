@@ -14,23 +14,35 @@
 // target level in game whatever the file's level. Vanilla reference (bedrock-samples 1.26.50.4, decoded): rain -15.1 LUFS
 // at volume 0.02, thunder -17.3 LUFS, lightning impact -12.6 LUFS.
 // Needs ffmpeg with libvorbis (and libmp3lame for --audition) on PATH. The recordings aren't committed (10 minutes each):
-// without them in tools/gen-rain/sources/, the clips cut from them are kept as committed and only the rest is remade.
-// Not part of npm run check (outputs are committed).
+// without them in tools/gen-rain/sources/, the clips cut from them are kept as committed and only the rest is remade
+// (and if a cut's recipe changed, it stops: that clip needs the recordings).
+// Ogg Vorbis isn't byte-for-byte the same across ffmpeg versions, so --check (part of npm run check) doesn't re-encode.
+// The generator also writes sounds-lock.json: for each clip, a recipe hash (its event's settings, the encoder and
+// limiter settings, and the samples before loudness matching: a synthesized clip's own samples, or for a cut its
+// recording's sha256, times, and the fades and filters run over a test signal), the .ogg's sha256 and its volume.
+// --check, without ffmpeg, recomputes every recipe and compares the clip list, each recipe and .ogg hash, and
+// sound_definitions.json, sounds.json and CREDITS.txt exactly. With ffmpeg on PATH it also decodes the clips and
+// re-measures their volumes (within 0.25 dB); without, it says it skipped that.
 //
-//   node tools/gen-rain/sounds.mjs                              write the sounds and their definitions
+//   node tools/gen-rain/sounds.mjs                              write the sounds, their definitions and sounds-lock.json
+//   node tools/gen-rain/sounds.mjs --check                      fail if a committed sound or definition differs or is missing
 //   node tools/gen-rain/sounds.mjs --audition docs/media/rain   also write listening clips at in-game relative levels:
 //                                                             rain.mp3 (Realistic Rain) and extras.mp3 (Rain Extras)
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { promisify } from "node:util";
 
 const root = join(import.meta.dirname, "..", "..");
 const pack = join(root, "packs", "rain_rp");
 const outDir = join(pack, "sounds", "realistic_rain");
 const SR = 44100;
+const execFileAsync = promisify(execFile);
 const TAU = Math.PI * 2;
+const lockFile = join(import.meta.dirname, "sounds-lock.json");
+const check = process.argv.includes("--check");
 const auditionArg = process.argv.indexOf("--audition");
 const audition = auditionArg > 0 ? process.argv[auditionArg + 1] : undefined;
 
@@ -104,7 +116,11 @@ function sweepLP(/** @type {Float64Array} */ x, /** @type {(t: number) => number
   return x;
 }
 
-const white = (/** @type {() => number} */ rnd, /** @type {number} */ n) => Float64Array.from({ length: n }, () => rnd() * 2 - 1);
+function white(/** @type {() => number} */ rnd, /** @type {number} */ n) {
+  const out = new Float64Array(n);
+  for (let i = 0; i < n; i++) out[i] = rnd() * 2 - 1;
+  return out;
+}
 
 /** Pink noise (Paul Kellet's filter). */
 function pink(/** @type {() => number} */ rnd, /** @type {number} */ n) {
@@ -252,22 +268,24 @@ function source(/** @type {string} */ id) {
   return file;
 }
 
-/**
- * `seconds` of a recording from `start`, mono 44.1 kHz, with only sub-bass below 25 Hz removed and fades, or undefined
- * when the recording isn't there (the committed clip is kept).
- */
-function excerpt(/** @type {string} */ id, /** @type {number} */ start, /** @type {number} */ seconds, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut) {
-  const x = decodeRange(id, start, seconds);
-  return x && fades(x, fadeIn, fadeOut, true);
-}
-
-/** Mono samples of a recording from `start` for `seconds`, with the 25 Hz high-pass every excerpt gets. */
+/** Mono 44.1 kHz samples of a recording from `start` for `seconds`, or undefined when the recording isn't there. */
 function decodeRange(/** @type {string} */ id, /** @type {number} */ start, /** @type {number} */ seconds) {
   const file = source(id);
   if (!file) return undefined;
   const raw = execFileSync("ffmpeg", ["-v", "error", "-ss", String(Math.max(0, start)), "-t", String(seconds), "-i", file, "-ac", "1", "-ar", String(SR), "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
-  return biquad(Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4)), "hp", 25);
+  return Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
 }
+
+/** An audio file's samples, decoded by ffmpeg (mono, as the game plays it). */
+function decodeFile(/** @type {string} */ file) {
+  return toSamples(execFileSync("ffmpeg", ["-v", "error", "-i", file, "-f", "f32le", "-"], { maxBuffer: 1 << 28 }));
+}
+/** The same, run in the background. */
+async function decodeFileAsync(/** @type {string} */ file) {
+  const { stdout } = await execFileAsync("ffmpeg", ["-v", "error", "-i", file, "-f", "f32le", "-"], { encoding: "buffer", maxBuffer: 1 << 28 });
+  return toSamples(stdout);
+}
+const toSamples = (/** @type {Buffer} */ raw) => Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
 
 /** The same, heard through walls: low-passed. */
 const muffled = (/** @type {Float64Array | undefined} */ x) => x && biquad(biquad(x, "lp", 450), "lp", 600);
@@ -333,7 +351,15 @@ function writeWav(x, file) {
 function summary(/** @type {string} */ file) {
   const res = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-af", "ebur128=peak=true", "-f", "null", "-"], { encoding: "utf8" });
   if (res.error || res.status !== 0) throw new Error(`ffmpeg failed on ${file}: ${res.error ?? res.stderr}`);
-  const tail = res.stderr.slice(res.stderr.lastIndexOf("Summary:"));
+  return parseSummary(res.stderr, file);
+}
+/** The same, run in the background (--check runs several at once). */
+async function summaryAsync(/** @type {string} */ file) {
+  const { stderr } = await execFileAsync("ffmpeg", ["-hide_banner", "-nostats", "-i", file, "-af", "ebur128=peak=true", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 24 });
+  return parseSummary(stderr, file);
+}
+function parseSummary(/** @type {string} */ stderr, /** @type {string} */ file) {
+  const tail = stderr.slice(stderr.lastIndexOf("Summary:"));
   const lufs = Number(tail.match(/I:\s+(-?[\d.]+) LUFS/)?.[1]);
   const peakDb = Number(tail.match(/Peak:\s+(-?[\d.]+) dBFS/)?.[1]);
   if (!Number.isFinite(lufs) || !Number.isFinite(peakDb)) throw new Error(`no loudness reading for ${file}`);
@@ -352,9 +378,25 @@ const VANILLA_RAIN_LAYERED = -41.3;
 /** Seconds each rain clip fades in over (see the rain event). */
 const RAIN_FADE_IN = 0.8;
 
-/** Excerpts of a recording as an event's files: `${name}1`, `${name}2`, ... from each [start, seconds]. */
-const cuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {number[][]} */ list, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut, post = (/** @type {Float64Array | undefined} */ x) => x) =>
-  list.map(([start, seconds], i) => ({ name: `${name}${i + 1}`, make: () => post(excerpt(id, start, seconds, fadeIn, fadeOut)) }));
+/**
+ * Excerpts of a recording as an event's files: `${name}1`, `${name}2`, ... from each [start, seconds]. Each excerpt has
+ * only sub-bass below 25 Hz removed, fades, then `post`. `make` is undefined when the recording isn't there (the
+ * committed clip is kept); `recipe` is what goes into the clip's recipe hash: the cut, and the same steps run over a
+ * test signal, so a change to the fades or filters shows without the recording.
+ */
+const cuts = (/** @type {string} */ name, /** @type {string} */ id, /** @type {number[][]} */ list, /** @type {number} */ fadeIn, /** @type {number} */ fadeOut, post = (/** @type {Float64Array} */ x) => x) =>
+  list.map(([start, seconds], i) => {
+    const shape = (/** @type {Float64Array} */ x) => post(fades(biquad(x, "hp", 25), fadeIn, fadeOut, true));
+    return {
+      name: `${name}${i + 1}`,
+      recording: id,
+      make: () => {
+        const x = decodeRange(id, start, seconds);
+        return x && shape(x);
+      },
+      recipe: () => [JSON.stringify({ recording: RECORDINGS[id].sha256, start, seconds }), pcmHash(shape(scale(white(mulberry32(i + 1), Math.round(seconds * SR)), 0.3)))],
+    };
+  });
 
 /**
  * Each event: its files, the file loudness to normalize to (as loud as the peaks allow) and the level it should play at
@@ -376,6 +418,24 @@ const THUNDER_LEVELS = {
   roll: [-18.87, -19.19, -20.89, -18.85, -19.08, -21.81].map((db) => db - 1.5),
   strike: [-18.44, -15.39, -17.67, -15.33].map((db) => db - 1.5),
 };
+
+/** How each clip is encoded, after the gain-and-limit passes (NORMALIZE) bring it to its event's target loudness. */
+const ENCODE = ["-ac", "1", "-ar", String(SR), "-c:a", "libvorbis", "-q:a", "3", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact"];
+const NORMALIZE = { passes: 5, within: 0.2 };
+
+/** sha256 of samples, rounded to 32-bit floats. @param {Float64Array} x */
+function pcmHash(x) {
+  const f = Float32Array.from(x);
+  return createHash("sha256").update(new Uint8Array(f.buffer)).digest("hex");
+}
+
+/** A synthesized file: its samples (made once; `make` hands out a copy, since normalizing works in place) are its recipe. */
+function synth(/** @type {() => Float64Array} */ fn) {
+  /** @type {Float64Array | undefined} */
+  let x;
+  const get = () => (x ??= fn());
+  return { make: () => Float64Array.from(get()), recipe: () => ["synthesized", pcmHash(get())] };
+}
 
 const EVENTS = [
   {
@@ -408,15 +468,15 @@ const EVENTS = [
   },
   {
     event: "realm.storm.wind", target: -20, ceiling: -3, level: -34,
-    files: [0, 1, 2].map((i) => ({ name: `wind${i + 1}`, make: () => wind(4100 + i, 10) })),
+    files: [0, 1, 2].map((i) => ({ name: `wind${i + 1}`, ...synth(() => wind(4100 + i, 10)) })),
   },
   {
     event: "realm.storm.wind_inside", target: -26, ceiling: -3, level: -41,
-    files: [0, 1].map((i) => ({ name: `wind_inside${i + 1}`, make: () => wind(4200 + i, 10, true) })),
+    files: [0, 1].map((i) => ({ name: `wind_inside${i + 1}`, ...synth(() => wind(4200 + i, 10, true)) })),
   },
   {
     event: "realm.rain.roof", subtitle: "subtitles.weather.rain", target: -22, ceiling: -3, level: -37,
-    files: [0, 1, 2, 3].map((i) => ({ name: `roof${i + 1}`, make: () => roof(5100 + i, 3.6) })),
+    files: [0, 1, 2, 3].map((i) => ({ name: `roof${i + 1}`, ...synth(() => roof(5100 + i, 3.6)) })),
   },
 ];
 
@@ -454,6 +514,117 @@ const SOUNDS_JSON = {
   },
 };
 
+/** What every clip's recipe shares: the encoder, the loudness passes and the limiter (run over a test signal). */
+const PIPELINE = (() => {
+  const probe = scale(pink(mulberry32(3), SR), 4);
+  limit(probe, Math.pow(10, -1 / 20));
+  return JSON.stringify({ SR, ENCODE, NORMALIZE, limiter: pcmHash(probe) });
+})();
+
+/** A clip's recipe hash: everything that decides its .ogg, from its event's settings down to its samples. */
+function recipeOf(/** @type {typeof EVENTS[number]} */ e, /** @type {typeof EVENTS[number]["files"][number]} */ f) {
+  const i = e.files.indexOf(f);
+  const settings = { event: e.event, target: e.target, ceiling: e.ceiling, level: e.level, layered: e.layered, thunder: e.thunder?.[i] };
+  return createHash("sha256").update([PIPELINE, JSON.stringify(settings), ...f.recipe()].join("\n")).digest("hex");
+}
+
+/** sounds-lock.json as committed, or an empty one. @returns {{ files: Record<string, { recipe: string, ogg: string, volume: number }> }} */
+function readLock() {
+  return existsSync(lockFile) ? JSON.parse(readFileSync(lockFile, "utf8")) : { files: {} };
+}
+const sha256File = (/** @type {string} */ file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+const toVolume = (/** @type {number} */ db) => Math.round(Math.min(1, Math.pow(10, db / 20)) * 1000) / 1000;
+
+/**
+ * Every clip's definition volume, from the decoded clips (`decoded`, as the game plays them) and the integrated loudness
+ * of the .ogg files (`lufsOf`, for events set by `level`). The generator and --check both use this.
+ * @param {Map<string, Float64Array>} decoded @param {(name: string) => number} lufsOf @param {string} [tmpDir] for the layered rain @returns {Map<string, number>}
+ */
+function measureVolumes(decoded, lufsOf, tmpDir, log = false) {
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  for (const e of EVENTS) {
+    e.files.forEach((f, i) => {
+      if (e.level !== undefined) out.set(f.name, toVolume(e.level - lufsOf(f.name)));
+      if (e.thunder) out.set(f.name, toVolume(e.thunder[i] - thunderBand(/** @type {Float64Array} */ (decoded.get(f.name)))));
+    });
+    if (e.layered !== undefined) {
+      const wav = join(/** @type {string} */ (tmpDir), "layered.wav");
+      writeWav(layered(e.files.map((f) => /** @type {Float64Array} */ (decoded.get(f.name)))), wav);
+      const { lufs } = summary(wav);
+      for (const f of e.files) out.set(f.name, toVolume(e.layered - lufs));
+      if (log) console.log(`${e.event}: layered ${lufs.toFixed(1)} LUFS at volume 1 → volume ${out.get(e.files[0].name)} for ${e.layered.toFixed(1)} LUFS`);
+    }
+  }
+  return out;
+}
+
+const hasFfmpeg = () => {
+  const res = spawnSync("ffmpeg", ["-hide_banner", "-version"], { encoding: "utf8" });
+  return !res.error && res.status === 0;
+};
+
+/** --check: compares the committed sounds, definitions and lock against what the generator would write. */
+async function runCheck() {
+  const problems = [];
+  const lock = readLock();
+  const expected = EVENTS.flatMap((e) => e.files.map((f) => ({ e, f })));
+  const names = new Set(expected.map(({ f }) => f.name));
+  const onDisk = existsSync(outDir) ? readdirSync(outDir) : [];
+  for (const file of onDisk) if (!names.has(file.replace(/\.ogg$/, "")) || !file.endsWith(".ogg")) problems.push(`sounds/realistic_rain/${file} isn't made by the generator`);
+  for (const name of Object.keys(lock.files)) if (!names.has(name)) problems.push(`sounds-lock.json lists ${name}, which the generator doesn't make`);
+  for (const { e, f } of expected) {
+    const ogg = join(outDir, `${f.name}.ogg`), entry = lock.files[f.name];
+    if (!existsSync(ogg)) problems.push(`sounds/realistic_rain/${f.name}.ogg is missing`);
+    if (!entry) {
+      problems.push(`sounds-lock.json has no entry for ${f.name}`);
+      continue;
+    }
+    if (entry.recipe !== recipeOf(e, f)) problems.push(`${f.name}: the generator's recipe changed since it was made`);
+    if (existsSync(ogg) && sha256File(ogg) !== entry.ogg) problems.push(`sounds/realistic_rain/${f.name}.ogg isn't the clip the generator made (sha256 differs)`);
+  }
+  const lockVolumes = new Map(Object.entries(lock.files).map(([name, v]) => [name, v.volume]));
+  /** @type {[string, string][]} */
+  const texts = [
+    [join(pack, "sounds", "sound_definitions.json"), definitions(lockVolumes)],
+    [join(pack, "sounds.json"), JSON.stringify(SOUNDS_JSON, null, 2) + "\n"],
+    [join(pack, "CREDITS.txt"), credits()],
+  ];
+  for (const [file, want] of texts) {
+    if (!existsSync(file)) problems.push(`${relative(pack, file)} is missing`);
+    else if (readFileSync(file, "utf8") !== want) problems.push(`${relative(pack, file)} differs from what the generator writes`);
+  }
+  let measured = "";
+  if (!problems.length) {
+    if (!hasFfmpeg()) measured = "; ffmpeg isn't on PATH, so the clips' volumes weren't re-measured";
+    else {
+      const tmp = mkdtempSync(join(tmpdir(), "gen-rain-check-"));
+      try {
+        // Only what measureVolumes reads: the decoded thunder and rain clips, the loudness of the rest; all at once.
+        const ogg = (/** @type {string} */ name) => join(outDir, `${name}.ogg`);
+        const decode = expected.filter(({ e }) => e.thunder || e.layered !== undefined).map(({ f }) => f.name);
+        const measure = expected.filter(({ e }) => e.level !== undefined).map(({ f }) => f.name);
+        const [samples, lufs] = await Promise.all([Promise.all(decode.map((n) => decodeFileAsync(ogg(n)))), Promise.all(measure.map((n) => summaryAsync(ogg(n))))]);
+        const decoded = new Map(decode.map((n, i) => [n, samples[i]]));
+        const lufsOf = new Map(measure.map((n, i) => [n, lufs[i].lufs]));
+        const volumes = measureVolumes(decoded, (name) => /** @type {number} */ (lufsOf.get(name)), tmp);
+        for (const [name, v] of volumes) {
+          const want = /** @type {number} */ (lockVolumes.get(name));
+          if (Math.abs(v - want) > 0.001 && Math.abs(20 * Math.log10(v / want)) > 0.25) problems.push(`${name}: measures at volume ${v}, the definition has ${want}`);
+        }
+        measured = ", volumes re-measured";
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    }
+  }
+  if (problems.length) {
+    console.error(`rain sounds out of date (run node tools/gen-rain/sounds.mjs; cuts from the recordings need tools/gen-rain/sources/):\n  ${problems.join("\n  ")}`);
+    process.exit(1);
+  }
+  console.log(`rain sounds match tools/gen-rain/sounds.mjs (${expected.length} clips, definitions, sounds.json, CREDITS.txt${measured}).`);
+}
+
 /**
  * Listening clips for the docs and the site, each a scene the game could play: rain stacked the way the game stacks it
  * (a clip every 2-4 ticks), plus what the scene adds at its definition and Rain Extras volumes. In game a strike is
@@ -486,73 +657,82 @@ const AUDITION = {
   },
 };
 
-mkdirSync(outDir, { recursive: true });
-const tmp = mkdtempSync(join(tmpdir(), "gen-rain-"));
-const rows = [];
 /** @type {Map<string, number>} file → definition volume */
-const volumes = new Map();
-const toVolume = (/** @type {number} */ db) => Math.round(Math.min(1, Math.pow(10, db / 20)) * 1000) / 1000;
+let volumes = new Map();
 /** @type {Map<string, Float64Array>} final samples, for the audition */
 const made = new Map();
-const keep = new Set(EVENTS.flatMap((e) => e.files.map((f) => `${f.name}.ogg`)));
-try {
-  for (const e of EVENTS) {
-    for (const f of e.files) {
-      const x = f.make();
-      const ogg = join(outDir, `${f.name}.ogg`);
-      if (!x) {
-        // Cut from a recording that isn't in tools/gen-rain/sources/: keep the committed clip as it is.
-        if (!existsSync(ogg)) throw new Error(`${f.name}.ogg needs the recordings in tools/gen-rain/sources/ (see recordings.json)`);
-        const raw = execFileSync("ffmpeg", ["-v", "error", "-i", ogg, "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
-        const kept = Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
-        const m = summary(ogg);
-        if (e.level !== undefined) volumes.set(f.name, toVolume(e.level - m.lufs));
-        if (e.thunder) volumes.set(f.name, toVolume(e.thunder[e.files.indexOf(f)] - thunderBand(kept)));
-        made.set(f.name, kept);
-        rows.push({ file: f.name, seconds: (kept.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: "kept", kb: (statSync(ogg).size / 1024).toFixed(1) });
-        continue;
-      }
-      const wav = join(tmp, `${f.name}.wav`);
-      const ceil = Math.pow(10, e.ceiling / 20);
-      // Gain to the target, limit peaks, and repeat: limiting lowers the loudness a little each time.
-      let reduction = 0;
-      for (let pass = 0; pass < 5; pass++) {
+
+if (check) await runCheck();
+else generate();
+
+function generate() {
+  mkdirSync(outDir, { recursive: true });
+  const tmp = mkdtempSync(join(tmpdir(), "gen-rain-"));
+  const rows = [];
+  /** @type {Map<string, number>} file → integrated loudness of its .ogg */
+  const loudness = new Map();
+  const before = readLock();
+  /** @type {Record<string, { recipe: string, ogg: string, volume: number }>} */
+  const lock = {};
+  const keep = new Set(EVENTS.flatMap((e) => e.files.map((f) => `${f.name}.ogg`)));
+  // A clip cut from a recording that isn't in tools/gen-rain/sources/ is kept as committed, so it has to have been cut
+  // the way the generator now says (a first run, before there was a lock, takes them as they are). Stop before writing.
+  const stale = EVENTS.flatMap((e) => e.files.filter((f) => "recording" in f && !source(f.recording) && existsSync(lockFile) && before.files[f.name]?.recipe !== recipeOf(e, f)));
+  if (stale.length) throw new Error(`the cut or processing of ${stale.map((f) => f.name).join(", ")} changed, so they need the recordings in tools/gen-rain/sources/ (see recordings.json)`);
+  try {
+    for (const e of EVENTS) {
+      for (const f of e.files) {
+        const recipe = recipeOf(e, f);
+        const x = f.make();
+        const ogg = join(outDir, `${f.name}.ogg`);
+        if (!x) {
+          // Cut from a recording that isn't in tools/gen-rain/sources/: keep the committed clip as it is (checked above).
+          if (!existsSync(ogg)) throw new Error(`${f.name}.ogg needs the recordings in tools/gen-rain/sources/ (see recordings.json)`);
+          const kept = decodeFile(ogg);
+          const m = summary(ogg);
+          loudness.set(f.name, m.lufs);
+          made.set(f.name, kept);
+          lock[f.name] = { recipe, ogg: sha256File(ogg), volume: 0 };
+          rows.push({ file: f.name, seconds: (kept.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: "kept", kb: (statSync(ogg).size / 1024).toFixed(1) });
+          continue;
+        }
+        const wav = join(tmp, `${f.name}.wav`);
+        const ceil = Math.pow(10, e.ceiling / 20);
+        // Gain to the target, limit peaks, and repeat: limiting lowers the loudness a little each time.
+        let reduction = 0;
+        for (let pass = 0; pass < NORMALIZE.passes; pass++) {
+          writeWav(x, wav);
+          const { lufs } = summary(wav);
+          if (pass > 0 && Math.abs(e.target - lufs) < NORMALIZE.within) break;
+          scale(x, Math.pow(10, (e.target - lufs) / 20));
+          reduction = Math.max(reduction, limit(x, ceil));
+        }
         writeWav(x, wav);
-        const { lufs } = summary(wav);
-        if (pass > 0 && Math.abs(e.target - lufs) < 0.2) break;
-        scale(x, Math.pow(10, (e.target - lufs) / 20));
-        reduction = Math.max(reduction, limit(x, ceil));
+        execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, ...ENCODE, ogg]);
+        const m = summary(ogg);
+        // Measure and layer the decoded clip, as the game plays it and as the branch above (no recordings) does, so the
+        // volumes come out the same with or without tools/gen-rain/sources/.
+        loudness.set(f.name, m.lufs);
+        made.set(f.name, decodeFile(ogg));
+        lock[f.name] = { recipe, ogg: sha256File(ogg), volume: 0 };
+        rows.push({ file: f.name, seconds: (x.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: reduction.toFixed(1), kb: (statSync(ogg).size / 1024).toFixed(1) });
       }
-      writeWav(x, wav);
-      execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", wav, "-ac", "1", "-ar", String(SR), "-c:a", "libvorbis", "-q:a", "3", "-map_metadata", "-1", "-fflags", "+bitexact", "-flags:a", "+bitexact", ogg]);
-      const m = summary(ogg);
-      // Measure and layer the decoded clip, as the game plays it and as the branch above (no recordings) does, so the
-      // volumes come out the same with or without tools/gen-rain/sources/.
-      const raw = execFileSync("ffmpeg", ["-v", "error", "-i", ogg, "-f", "f32le", "-"], { maxBuffer: 1 << 28 });
-      const decoded = Float64Array.from(new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4));
-      if (e.level !== undefined) volumes.set(f.name, toVolume(e.level - m.lufs));
-      if (e.thunder) volumes.set(f.name, toVolume(e.thunder[e.files.indexOf(f)] - thunderBand(decoded)));
-      made.set(f.name, decoded);
-      rows.push({ file: f.name, seconds: (x.length / SR).toFixed(2), lufs: m.lufs.toFixed(1), truePeak: m.peak.toFixed(1), limitedDb: reduction.toFixed(1), kb: (statSync(ogg).size / 1024).toFixed(1) });
     }
-    if (e.layered !== undefined) {
-      const wav = join(tmp, "layered.wav");
-      writeWav(layered(e.files.map((f) => /** @type {Float64Array} */ (made.get(f.name)))), wav);
-      const { lufs } = summary(wav);
-      for (const f of e.files) volumes.set(f.name, toVolume(e.layered - lufs));
-      console.log(`${e.event}: layered ${lufs.toFixed(1)} LUFS at volume 1 → volume ${volumes.get(e.files[0].name)} for ${e.layered.toFixed(1)} LUFS`);
-    }
+    volumes = measureVolumes(made, (name) => /** @type {number} */ (loudness.get(name)), tmp, true);
+    for (const [name, v] of volumes) lock[name].volume = v;
+    for (const name of readdirSync(outDir)) if (!keep.has(name)) rmSync(join(outDir, name)); // retired files
+    writeFileSync(join(pack, "sounds", "sound_definitions.json"), definitions(volumes));
+    writeFileSync(join(pack, "sounds.json"), JSON.stringify(SOUNDS_JSON, null, 2) + "\n");
+    writeFileSync(join(pack, "CREDITS.txt"), credits());
+    const why = "Written by sounds.mjs, read by sounds.mjs --check (npm run check): each clip's recipe hash (what decides its sound), the sha256 of its .ogg and its definition volume. Don't edit it: rerun the generator.";
+    writeFileSync(lockFile, JSON.stringify({ why, files: lock }, null, 2) + "\n");
+    if (audition) writeAudition(audition, tmp);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
-  for (const name of readdirSync(outDir)) if (!keep.has(name)) rmSync(join(outDir, name)); // retired files
-  writeFileSync(join(pack, "sounds", "sound_definitions.json"), definitions(volumes));
-  writeFileSync(join(pack, "sounds.json"), JSON.stringify(SOUNDS_JSON, null, 2) + "\n");
-  writeFileSync(join(pack, "CREDITS.txt"), credits());
-  if (audition) writeAudition(audition, tmp);
-} finally {
-  rmSync(tmp, { recursive: true, force: true });
+  console.table(rows);
+  console.log(`total ${(rows.reduce((s, r) => s + Number(r.kb), 0) / 1024).toFixed(2)} MB of sounds; wrote sounds/sound_definitions.json, sounds.json and tools/gen-rain/sounds-lock.json`);
 }
-console.table(rows);
-console.log(`total ${(rows.reduce((s, r) => s + Number(r.kb), 0) / 1024).toFixed(2)} MB of sounds; wrote sounds/sound_definitions.json and sounds.json`);
 
 // ---------------------------------------------------------------------------
 // Audition: roughly what a player hears, at in-game relative levels
