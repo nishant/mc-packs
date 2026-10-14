@@ -1790,10 +1790,21 @@ function defendTick(player, e, i, obj) {
   if (away) {
     s.data.awaySince ??= now;
     if (now - s.data.awaySince > 600) return defendFail(s, "You left.");
-  } else delete s.data.awaySince;
+    // The fight waits for the player: no wave comes or counts meanwhile, and mobs that unload with their chunk
+    // (the player ran off) aren't beaten.
+    s.data.left = true;
+    return;
+  }
+  delete s.data.awaySince;
+  const left = !!s.data.left;
+  delete s.data.left;
+  let lost = 0;
   s.data.mobs = s.data.mobs.filter((/** @type {Entity} */ m) => {
     try {
-      if (!m.isValid) return false;
+      if (!m.isValid) {
+        if (left) lost++;
+        return false;
+      }
       if (across(m.location, loc) > r * 4) {
         removeActor(m.id);
         return false;
@@ -1803,6 +1814,12 @@ function defendTick(player, e, i, obj) {
       return false;
     }
   });
+  const cur = waves[s.data.wave];
+  if (lost && s.data.spawned && cur) {
+    // Gone with their chunk while the player was away: they come back.
+    player.sendMessage(`§c[Story] The attackers regroup at ${loc.label}!`);
+    s.data.mobs.push(...spawnGroup(player, dim, center, { mobs: cur.mobs, count: lost }, s.key, Math.max(6, r * 0.7), Math.max(8, r)));
+  }
   if (s.data.mobs.length) return;
   if (s.data.spawned) {
     // A wave is cleared.
