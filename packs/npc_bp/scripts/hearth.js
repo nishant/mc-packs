@@ -517,6 +517,14 @@ export const GOSSIP = {
     ["{name} stood at the circles when the Choir came. The bells went quiet.", "You stood at the circles when the Choir came, {player}. Thank you."],
     ["When the Choir sang at {place}, {name} was there to stop them.", "You stopped the Choir at {place}. The whole town heard the bells go quiet."],
   ],
+  atlas: [
+    ["{name} has been out past every road. '{place}', people call them now.", "'{place}', they're calling you now, {player}. Mara wants to see your notes."],
+    ["Mara says {name} has walked more of the realm than Fenn ever did. '{place}', she calls them.", "Mara says you've walked more of the realm than Fenn ever did, {player}. '{place}'. It suits you."],
+  ],
+  atlas_site: [
+    ["{name} fought off a whole crowd at a {place} out in the wilds. Alone, they say.", "A {place}, out in the wilds? Alone? You'll give Reyes gray hairs, {player}."],
+    ["They say {name} held a {place} against all comers.", "You held a {place} against all comers? Sit down. Eat something, {player}."],
+  ],
   other: [
     ["{name} has been busy. Everyone's talking about it.", "Everyone's talking about you, {player}. Good things, I think."],
     ["Have you heard the news about {name}? The town hasn't stopped talking.", "The town hasn't stopped talking about you, {player}."],

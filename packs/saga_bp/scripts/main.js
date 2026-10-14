@@ -53,7 +53,10 @@ system.runInterval(() => {
     if (runs % 2 === 0) autoTick();
     if (runs % 60 === 0) expireAdds();
     if (runs % 5 === 0) for (const p of world.getAllPlayers()) sendSeals(p);
-    if (runs % 5 === 2) for (const p of world.getAllPlayers()) sendFlags(p);
+    if (runs % 5 === 2) for (const p of world.getAllPlayers()) {
+      sendFlags(p);
+      sendProgress(p);
+    }
     if (runs % 5 === 3) for (const p of world.getAllPlayers()) sendWanderState(p);
     if (runs % 60 === 30) campUpkeep(Number(get("campDays")) || 7);
     skyHousekeeping();
@@ -175,6 +178,24 @@ function sendFlags(player) {
   if (flagsSent.get(player.id) === json) return;
   flagsSent.set(player.id, json);
   send("realm:npc_flags", { player: player.id, flags });
+}
+
+/** Main acts a player has finished, last sent (realm:saga_progress, for Atlas of the Realm's tablets). @type {Map<string, number>} */
+const progressSent = new Map();
+const MAIN_ACTS = ["act1_signs", "act2_choir", "act3_deep", "act4_seals", "act5_lantern"];
+
+/** Sends `realm:saga_progress` { player, act } (0-5: main acts finished, in order) when it changed. @param {Player} player */
+function sendProgress(player) {
+  const saga = sagaOf(player);
+  let act = 0;
+  for (const id of MAIN_ACTS) {
+    const story = storyById.get(id);
+    if (!story || !finished(saga, story)) break;
+    act++;
+  }
+  if (progressSent.get(player.id) === act) return;
+  progressSent.set(player.id, act);
+  send("realm:saga_progress", { player: player.id, act });
 }
 
 /** realm:affinity from Townsfolk: `g:aff_<npc>` = the level (0-4), saved, for heart stories. @param {any} msg */
@@ -340,6 +361,10 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (id === "realm:npc_flags_ping") {
       flagsSent.clear(); // sent again within 5 seconds
+      return;
+    }
+    if (id === "realm:saga_progress_ping") {
+      progressSent.clear(); // sent again within 5 seconds
       return;
     }
     if (id === "realm:wander_ping") {
@@ -537,6 +562,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   playerGone(playerId);
   sealsSent.delete(playerId);
   flagsSent.delete(playerId);
+  progressSent.delete(playerId);
   wanderForget(playerId);
   forget(playerId);
   busy.delete(playerId);

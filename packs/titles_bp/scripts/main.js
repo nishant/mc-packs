@@ -25,6 +25,7 @@ const TRAILS = /** @type {Record<string, { name: string, particle: string, y: nu
   ember: { name: "Embers", particle: "realm:trail_ember", y: 0.2, behind: 0.6 },
   sparkle: { name: "Sparkles", particle: "realm:trail_sparkle", y: 0.9, behind: 0.6 },
   hearts: { name: "Hearts", particle: "minecraft:heart_particle", y: 2.1, behind: 0.4 }, // Townsfolk: a Confidant's trail (vanilla particle)
+  glyphs: { name: "Starwright glyphs", particle: "minecraft:enchanting_table_particle", y: 1.4, behind: 0.5 }, // Atlas of the Realm: 25 sites found (vanilla particle)
 });
 const STAT_TEXT = /** @type {Record<string, (have: number, need: number) => string>} */ ({
   distance: (have, need) => `${fmt(have)}/${fmt(need)} blocks traveled`,
@@ -507,7 +508,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:titles_give",
-      description: 'Operators: give a player a title (or a trail: "trail:cloud", leaves, ember, sparkle, hearts)',
+      description: 'Operators: give a player a title (or a trail: "trail:cloud", leaves, ember, sparkle, hearts, glyphs)',
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
       mandatoryParameters: [

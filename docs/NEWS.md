@@ -6,6 +6,16 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Atlas of the Realm
+
+Every stretch of land has a name now, and there's something to find between the towns.
+
+- Cross into a new region and its name comes up on screen: The Gray Downs, The Brine Shallows... with how many of its sites you've found.
+- Out in the wilds, away from towns and claims, the realm builds wayside sites as you come near: shrines that bless you once a day, Choir cairns with a bell to break, abandoned camps, hermit huts, sunken wrecks, watch posts to hold, fossil digs, starglass pools and Fenn's old survey markers.
+- 60 Starwright tablets tell the oldest story in the world, one at a time. Some are too worn to read until you've seen more of the main story. Finish an act and the ones you found read differently.
+- Every first find pays Crowns, skill XP and guild reputation. Titles for 10, 25 and 50 regions and more, and a new Starwright glyphs trail at 25 sites.
+- /realm:atlas shows your regions, sites, tablets and which way the nearest site is. Rather not see the banner? Disable Region banners in /realm:prefs.
+
 ## Wanderers of the Wilds
 
 Out past the town lamps, you'll meet people on the road now.

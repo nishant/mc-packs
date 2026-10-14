@@ -1389,6 +1389,50 @@ export const PACKS = [
     ]
   },
   {
+    "folder": "atlas_bp",
+    "topic": "atlas",
+    "name": "Atlas of the Realm",
+    "summary": "Every stretch of land has a name now. The Overworld is cut into §lregions§r of 512 by 512 blocks on a grid centered on world spawn, and crossing into one shows its name, like §eThe Gray Downs§r, with how many of its sites you've found. Out in the miles between the story places stand §lsites§r the pack builds the first time someone comes near: wayside shrines that bless you, 60 §lStarwright tablets§r that tell the world's oldest secret a little at a time (and read differently as the main story goes on), Gray Choir cairns, abandoned camps, hermit huts, sunken wrecks, fallen watch posts, fossil digs, starglass pools and Aldous Fenn's old survey markers. Finding them pays Crowns, skill XP and guild reputation, and fills a codex.",
+    "steps": [
+      {
+        "text": "Go exploring in the Overworld. When you cross into another region, a banner shows its name and §eRegion 3 - 0 of 2 sites§r; a region you've never been to also says so in chat. Each region has 2 to 4 sites, never near world spawn, a town, a land claim or a safe zone.",
+        "ops": false
+      },
+      {
+        "text": "A site appears when you first come within 64 blocks of its spot (§ebuildRange§r), and you find it by walking up to it (within 10 blocks, §efindRange§r). Chat says what it is and what to do there.",
+        "ops": false
+      },
+      {
+        "text": "Use it: tap a §lWayside Shrine§r's carved stone for its blessing (10 minutes, once a Realm day), tap a §lStarwright Tablet§r to read it, break a §lChoir Cairn§r's bell and beat its three keepers, open an §lAbandoned Camp§r's barrel or a §lSunken Wreck§r's sea chest, ring a §lFallen Watch Post§r's bell and hold the post for 60 seconds, mine the 12 bones of a §lFossil Dig§r, tap the amethyst stone by a §lStarglass Pool§r, or tap one of §lFenn's Survey Markers§r to read his note. Each pays its reward once per player.",
+        "ops": false
+      },
+      {
+        "text": "§e/realm:atlas§r shows the regions and sites you've found, your Starwright tablets (read them again there), Fenn's notes, whether your shrine blessing is ready, and which way the nearest site you haven't found is.",
+        "ops": false
+      },
+      {
+        "text": "Tablets come in order: the first one you read is tablet 1, the next tablet 2, and so on to 60. Some are worn and only a few words make sense until you've seen more of the main story (Story Questlines); when you finish an act, chat tells you how many of yours read in full now.",
+        "ops": false
+      },
+      {
+        "text": "Don't want the banner? Disable §lRegion banners§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:atlas§r also has §lSites Near Here§r (the nearest 20, with a teleport). Settings are in §e/realm:config§r (§lAtlas of the Realm§r).",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:atlas",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Regions and sites you've found (by kind), your Starwright tablets and Fenn's notes to reread, your shrine blessing, the way to the nearest site you haven't found; for operators also §lSites Near Here§r (teleport)"
+      }
+    ]
+  },
+  {
     "folder": "guilds_bp",
     "topic": "guilds",
     "name": "Guilds & Reputation",
@@ -1692,7 +1736,7 @@ export const PACKS = [
         "usage": "/realm:titles_give <player> <title>",
         "ops": true,
         "who": "Ops",
-        "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r or §etrail:hearts§r. Works for offline players this pack has seen"
+        "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r, §etrail:hearts§r or §etrail:glyphs§r. Works for offline players this pack has seen"
       }
     ]
   },
