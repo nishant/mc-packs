@@ -143,8 +143,9 @@ function impacts() {
     impactsCache = [];
   }
   // Read once per script start, when nothing is falling yet: a meteor still falling when the world (or
-  // the scripts) stopped has landed by now.
-  for (const i of /** @type {Impact[]} */ (impactsCache)) if (i.state === "falling") i.state = "pending";
+  // the scripts) stopped has landed by now. One that was going to burst in the sky (over a safe zone, or a story
+  // meteor asked to break apart) burst: it never makes a crater.
+  for (const i of /** @type {Impact[]} */ (impactsCache)) if (i.state === "falling") i.state = i.burst ? "burst" : "pending";
   return /** @type {Impact[]} */ (impactsCache);
 }
 

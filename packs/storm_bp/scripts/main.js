@@ -427,7 +427,7 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   } else if (!itemStack) {
     system.run(() => {
       try {
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "storm_bp" }));
         player.onScreenDisplay.setActionBar("§7This lightning rod isn't charged. A lightning strike charges it.");
       } catch (e) {
         console.warn(`[storm] ${e}`);
