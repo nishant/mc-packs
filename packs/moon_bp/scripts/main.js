@@ -520,6 +520,13 @@ function spot(p) {
     }
     if (!top || top.isAir || top.isLiquid || BAD_GROUND.test(top.typeId)) continue;
     const y = top.location.y;
+    try {
+      // getTopmostBlock skips water: this is the bed of a lake or the sea, no place for a monster to appear.
+      const up = top.above();
+      if (up && (up.isLiquid || BAD_GROUND.test(up.typeId))) continue;
+    } catch {
+      continue;
+    }
     if (Math.abs(y - feet.y) > 16) continue; // cliffs and caves: the surface there is too far from the player
     const at = { x, y: y + 1, z };
     try {
