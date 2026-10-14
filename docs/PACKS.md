@@ -2028,7 +2028,7 @@ Twelve named townsfolk that operators place around town: Mara the Cartographer, 
 | `/realm:npc` | Everyone | The townsfolk menu: **Who lives here?**, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Set a lunch spot here, Set an evening spot here, Remove the nearest townsfolk, List with coordinates |
 | `/realm:npc_who` | Everyone | Lists the townsfolk on the realm in chat with their distance and direction from you, and their roles |
 | `/realm:npc_add <id>` | Operators | Places that townsfolk where you stand, facing you (moves it there if it's already placed); if you're flying, on the ground under you |
-| `/realm:npc_remove` | Operators | Removes the nearest townsfolk within 5 blocks (`removeRange`) and forgets its spot |
+| `/realm:npc_remove` | Operators | Removes the nearest townsfolk within 5 blocks (default 5, `removeRange`) and forgets its spot, after a **Remove** / **Cancel** confirmation (the skin picked for it is lost) |
 | `/realm:npc_home <id>` | Operators | Where that townsfolk goes at night (time 13000 to 23000, `nightStart`/`nightEnd`); in the same dimension as its post (on the ground under you if you're flying). Run it within 2 blocks of the post to clear the home |
 | `/realm:npc_post <id> <noon\|evening>` | Operators | Where that townsfolk spends lunch (from time 6000, `lunchStart`) or the evening (from 9000, `eveningStart`, until night), where you stand; same dimension as its post. Run it within 2 blocks of the post to clear that spot |
 | `/realm:npc_list` | Operators | Every placed townsfolk with its coordinates, dimension, home, lunch and evening spots and whether it's loaded, and the ids not placed yet |
