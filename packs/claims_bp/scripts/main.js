@@ -10,7 +10,7 @@ import {
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
-import { provideZones } from "./zones.js";
+import { allZones, provideZones } from "./zones.js";
 
 // One world property per claim: "claims:c:<id>" → JSON Claim. A claim is a square, top to bottom of
 // its dimension, centered on x, z and reaching r blocks each way.
@@ -342,6 +342,29 @@ function cannotClaim(player, r) {
         ? "That would overlap your own claim. Move further away."
         : `That would overlap ${c.n}'s claim (${span(c)}). Move further away.`;
     }
+  }
+  if (!isOp(player)) {
+    const zone = zoneIn(player.dimension.id, x, z, r);
+    if (zone) return `That would overlap ${zone}. Only operators can claim land there. Move further away.`;
+  }
+  return undefined;
+}
+
+/**
+ * A safe zone or town (from the safe zones protocol, scripts/zones.js) that a claim of radius r centered on
+ * block x, z would reach into, as "the safe zone Spawn" / "the town Riverside"; undefined when none does.
+ * @param {string} dim @param {number} x @param {number} z @param {number} r
+ */
+function zoneIn(dim, x, z, r) {
+  // Zones are matched on block centers: the claim's blocks run from x - r to x + r.
+  const x0 = x - r + 0.5, x1 = x + r + 0.5, z0 = z - r + 0.5, z1 = z + r + 0.5;
+  for (const zone of allZones()) {
+    if (zone.src === "claims" || zone.dim !== dim) continue;
+    const hit =
+      zone.shape === "square"
+        ? zone.x + zone.r >= x0 && zone.x - zone.r <= x1 && zone.z + zone.r >= z0 && zone.z - zone.r <= z1
+        : (Math.max(x0, Math.min(zone.x, x1)) - zone.x) ** 2 + (Math.max(z0, Math.min(zone.z, z1)) - zone.z) ** 2 <= zone.r * zone.r;
+    if (hit) return zone.src === "zones" ? `the safe zone ${zone.name}` : zone.src === "town" ? `the town ${zone.name}` : zone.name;
   }
   return undefined;
 }
