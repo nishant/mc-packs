@@ -23,12 +23,13 @@ import {
   sagaOf,
   setFlag,
   target,
+  WANDER_CHAMPION,
 } from "./data.js";
 import { featureSpot, locate, placeSpot, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { holdTitle, isSlot, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
-import { FAVORS } from "./stories/index.js";
+import { FAVORS, WANDERERS } from "./stories/index.js";
 import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
@@ -177,7 +178,10 @@ export function bump(player, e, i, n, absolute = false) {
     if (obj.optional) return true; // the chapter's own steps didn't move
     if (chapterDone(e, saga)) {
       const to = npcName(reportTo(e));
-      if (e.fav) player.sendMessage(`§6[Story] Favor done: go back to ${to} for your reward.`);
+      const wv = /** @type {any} */ (e.st);
+      if (e.wv && (wv.g || wv.tn)) player.sendMessage(`§6[Story] ${e.chapter.title}: done.`);
+      else if (e.wv) player.sendMessage(`§6[Story] Job done: go back to ${to} for your reward.`);
+      else if (e.fav) player.sendMessage(`§6[Story] Favor done: go back to ${to} for your reward.`);
       else player.sendMessage(`§6[Story] ${e.story.title}: "${e.chapter.title}" is done. Go back to ${to} to hear what happens.`);
       player.playSound("random.levelup", { pitch: 1.3, volume: 0.6 });
     } else {
@@ -261,7 +265,7 @@ export function advance(player, type, amountFor, only) {
 }
 
 /** Party mates (Parties pack) close enough to share progress. @param {Player} player */
-function mates(player) {
+export function mates(player) {
   if (get("partyShare") !== true) return [];
   const tag = player.getTags().find((t) => t.startsWith("realm_party:"));
   if (!tag) return [];
@@ -466,6 +470,8 @@ export function reward(player, r, source, penalty = 0) {
   const cut = penalty > 0 && ((r.levels ?? 0) > levels || (r.crowns ?? 0) > crowns);
   // These belong to other packs, which tell the player themselves (nothing happens without them).
   if (r.relic) send("realm:relic_give", { player: player.id, relic: r.relic });
+  if (r.relicRoll?.relics.length && Math.random() < r.relicRoll.chance) send("realm:relic_give", { player: player.id, relic: r.relicRoll.relics[Math.floor(Math.random() * r.relicRoll.relics.length)] });
+  if (r.skill && r.skill.amount > 0) send("realm:skill_xp", { player: player.id, skill: r.skill.skill, amount: Math.round(r.skill.amount * keep) });
   if (r.title) send("realm:title_unlock", { player: player.id, title: r.title, from: PACK });
   if (r.journal) send("realm:journal", { player: player.id, page: "story", entry: r.journal.entry, label: r.journal.label });
   if (r.codex) {
@@ -486,6 +492,22 @@ function crownsObjective() {
   } catch {
     return world.scoreboard.getObjective("crowns"); // another pack added it this tick
   }
+}
+
+/** A player's Crowns (0 for a brand-new player with no score yet). @param {Player} p */
+export function crownsOf(p) {
+  try {
+    return crownsObjective()?.getScore(p) ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Takes Crowns if the player has them. @param {Player} p @param {number} n */
+export function takeCrowns(p, n) {
+  if (n <= 0) return true;
+  if (crownsOf(p) < n) return false;
+  return addCrowns(p, -n);
 }
 
 /** @param {Player} p @param {number} n */
@@ -551,8 +573,13 @@ export function outdoors(player) {
 // Champions (Champions pack, or our own fallback)
 // ---------------------------------------------------------------------------
 
+/** Recurring Wanderers' ids (an escort of one hides the wanderer pack's own copy). */
+const WANDERER_IDS = new Set(WANDERERS.map((w) => w.id));
+
 /** Champion tag -> time (ms) it may be asked for again. @type {Map<string, number>} */
 const championNext = new Map();
+/** Is this tag a story champion's (a story's, a favor's, or a wanderer encounter's)? @param {string} tag */
+export const isChampionTag = (tag) => championTags.has(tag) || WANDER_CHAMPION.test(tag);
 /** Champion tags the stories use. */
 export const championTags = new Set(
   [...STORIES.flatMap((s) => s.chapters.flatMap((c) => c.objectives.map((o) => o.champion?.tag ?? ""))), ...FAVORS.map((f) => f.objective?.champion?.tag ?? "")].filter(Boolean),
@@ -583,6 +610,16 @@ function championAlive(tag, dim) {
     return dim.getEntities({ tags: [tag] }).length > 0;
   } catch {
     return false;
+  }
+}
+
+/** Illagers the story spawns never carry a banner (killing a captain would give Bad Omen). @param {Entity} ent */
+export function noBanner(ent) {
+  if (ent.typeId !== "minecraft:pillager" && ent.typeId !== "minecraft:vindicator") return;
+  try {
+    ent.runCommand("replaceitem entity @s slot.armor.head 0 air");
+  } catch {
+    // nothing worn
   }
 }
 
@@ -662,7 +699,8 @@ function championNear(player, obj) {
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
       mob.addTag(champ.tag);
-      if (CHOIR.has(champ.tag)) mob.addTag("saga:choir");
+      if (CHOIR.has(champ.tag) || champ.tag.startsWith("realm:saga:whc_")) mob.addTag("saga:choir");
+      noBanner(mob);
       const boost = champ.health ? Math.max(0, Math.min(30, Math.ceil(champ.health / 4) - 1)) : 4;
       mob.addEffect("health_boost", LONG, { amplifier: boost, showParticles: false });
       mob.addEffect("resistance", LONG, { amplifier: 1, showParticles: false });
@@ -770,7 +808,8 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
     }
     spot ??= { x: at.x, y: y0, z: at.z };
     const ent = spawnActor(dim, type, spot, { owner: player.id, key, role: "add" });
-    if (ent && CHOIR.has(key)) ent.addTag("saga:choir");
+    if (ent && (CHOIR.has(key) || key.startsWith("realm:saga:whc_"))) ent.addTag("saga:choir");
+    if (ent) noBanner(ent);
     if (ent) out.push(ent);
   }
   return out;
@@ -806,7 +845,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     }
     const killer = damageSource.damagingEntity;
     if (tags.includes(CHAMPION_TAG)) {
-      const tag = tags.find((t) => championTags.has(t));
+      const tag = tags.find((t) => isChampionTag(t));
       if (tag) championSlain(tag, killer instanceof Player ? [killer.id] : [], at, dim);
       return;
     }
@@ -1514,6 +1553,11 @@ function spotted(s, player, gd, sp, obj) {
 function escortTick(player, e, i, obj) {
   const s = sceneFor(player, e, i, "escort");
   if (!obj.who) return;
+  // A Recurring Wanderer escorted from their camp: the wanderer pack hides its own copy while ours walks.
+  if (WANDERER_IDS.has(obj.who.id) && actorsOf(player.id, s.key, "escort").length && system.currentTick >= (s.data.hideAt ?? 0)) {
+    s.data.hideAt = system.currentTick + 200;
+    send("realm:wander_hide", { wid: obj.who.id, player: player.id, seconds: 15 });
+  }
   const now = system.currentTick;
   const to = locate(obj.to, "the destination");
   const [a] = actorsOf(player.id, s.key, "escort");

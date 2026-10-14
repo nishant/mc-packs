@@ -6,6 +6,17 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Wanderers of the Wilds
+
+Out past the town lamps, you'll meet people on the road now.
+
+- Go exploring, 300 blocks from spawn and away from towns and claims, and someone turns up about twice an hour. Walk up and tap them.
+- Eight Recurring Wanderers: Pell the Pilgrim, a surveyor's ghost, a deep miner, a rival bounty hunter, a hermit, a storm-chaser, a Nether exile and a tinker. Each has a short questline and sets up a camp where they wait for you, with a waystone sign.
+- Strangers ask for small favors: food, firewood, a shrine, a guard for their fire. Their names and requests change every time.
+- Not everyone is friendly. After the prologue, watch for a toll man with no road, a sailor far from the sea, and worse. Each one gives itself away if you listen. Warden Reyes's friends get a "Something's off..." button.
+- The Field Journal has a new Wanderers page, with the title Friend of the Road.
+- /realm:wander shows the wanderers you know and their camps. Rather not meet anyone? Disable Meet wanderers in /realm:prefs.
+
 ## The townsfolk remember you
 
 Hearth & Hearsay: the twelve townsfolk now get to know you.

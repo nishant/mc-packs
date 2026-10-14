@@ -2,8 +2,8 @@
 // current, and the list of chapters a player is working on. Imports only util.js and the stories.
 import { world } from "@minecraft/server";
 import { STORIES } from "./stories.js";
-import { FAVORS } from "./stories/index.js";
-import { PACK, npcName, send } from "./util.js";
+import { FAVORS, HOSTILES, WANDER_TEMPLATES } from "./stories/index.js";
+import { PACK, hash, itemName, npcName, send, strangerNames } from "./util.js";
 
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {import("./types.js").Story} Story */
@@ -15,6 +15,8 @@ import { PACK, npcName, send } from "./util.js";
 /** @typedef {import("./types.js").When} When */
 /** @typedef {import("./types.js").Favor} Favor */
 /** @typedef {import("./types.js").Reward} Reward */
+/** @typedef {import("./types.js").WanderTemplate} WanderTemplate */
+/** @typedef {import("./types.js").HostileWanderer} HostileWanderer */
 
 /**
  * One story's saved state. Kept compact: a finished story drops its progress (`a`, `cur`, `o`, `t`,
@@ -41,11 +43,35 @@ import { PACK, npcName, send } from "./util.js";
  * @property {Record<string, string>} [g] player-wide flags and counters (keys without the "g:")
  * @property {string[]} [cx] codex entry ids, in the order found
  * @property {Record<string, FavorState>} [fv] daily favors by NPC id
+ * @property {WanderState} [wv] the player's live wanderer encounter (a Stranger's one-off, or a hostile's fight)
+ * @property {number} [wn] Strangers' one-offs finished
+ */
+/**
+ * A wanderer encounter (Wanderers of the Wilds): who, where they were met, the one-off picked for it and,
+ * once accepted, its progress (the same fields as a favor's).
+ * @typedef {object} WanderState
+ * @property {string} w the encounter id (`realm:wander_spawn` wid); the NPC is `w_<w>`
+ * @property {string} ar archetype
+ * @property {string} nm the stranger's name
+ * @property {string} [hk] hostile kind: the encounter is a disguise
+ * @property {{ d: string, x: number, y: number, z: number }} at where they stood
+ * @property {number} m when they were met (ms)
+ * @property {string} [tp] the template picked (`h:<kind>` for a hostile's fight)
+ * @property {{ item?: string, count?: number }} [p] its params
+ * @property {number} [a] 1 = accepted
+ * @property {number[]} [o]
+ * @property {Record<string, number>} [x]
+ * @property {number} [t]
+ * @property {number} [h]
+ * @property {number} [c]
+ * @property {number} [g] 1 = the wanderer left (an accepted one-off finishes without them)
+ * @property {number} [tn] 1 = a hostile turned: the fight is on
  */
 /**
  * A chapter the player is working on. Daily favors are entries too, with a made-up story whose id
  * starts with "fv:" and `fav` set to the NPC id.
- * @typedef {{ story: Story, chapter: Chapter, index: number, st: StoryState | FavorState, fav?: string }} Entry
+ * Wanderer one-offs are entries too: story id "wv:<template>", `fav` the stranger's NPC id and `wv` the encounter id.
+ * @typedef {{ story: Story, chapter: Chapter, index: number, st: StoryState | FavorState | WanderState, fav?: string, wv?: string }} Entry
  */
 
 export const PROP_PLAYER = "saga:p";
@@ -119,6 +145,102 @@ export function favorOfDay(playerId, npc, day) {
 export const favorById = (id) => FAVORS.find((f) => f.id === id);
 
 // ---------------------------------------------------------------------------
+// Wanderers of the Wilds: one-offs built from templates, per encounter
+// ---------------------------------------------------------------------------
+
+export const templateById = new Map(WANDER_TEMPLATES.map((t) => [t.id, t]));
+export const hostileById = new Map(HOSTILES.map((h) => [h.id, h]));
+/** Champion tags of hostile wanderers and stranger fights: per encounter, so two at once never share one. */
+export const WANDER_CHAMPION = /^realm:saga:wh(c)?_[a-z0-9]{1,16}$/;
+
+/**
+ * Fills a template's placeholders: `{name}`, `{item}`, `{count}` in text; whole values "{item}" (the id),
+ * "{count}" (the number), "{npc}" (the stranger's NPC id) and `at: "wanderer"` (where they stood).
+ * @param {any} v @param {{ name: string, item?: string, count?: number, npc: string, at: { dim: string, x: number, z: number } }} c @returns {any}
+ */
+export function fill(v, c) {
+  if (typeof v === "string") {
+    if (v === "{item}") return c.item ?? "minecraft:stick";
+    if (v === "{count}") return c.count ?? 1;
+    if (v === "{npc}") return c.npc;
+    return v.split("{name}").join(c.name).split("{item}").join(c.item ? itemName(c.item) : "").split("{count}").join(String(c.count ?? 1));
+  }
+  if (Array.isArray(v)) return v.map((x) => fill(x, c));
+  if (v && typeof v === "object") {
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const [k, x] of Object.entries(v)) out[k] = k === "at" && x === "wanderer" ? { ...c.at } : k === "requires" ? x : fill(x, c);
+    if (v.at === "wanderer" && !v.mark) out.mark = `where you met ${c.name}`;
+    return out;
+  }
+  return v;
+}
+
+/** Built shapes, by encounter and template. @type {Map<string, { story: Story, chapter: Chapter }>} */
+const wanderShapes = new Map();
+
+/**
+ * The made-up story and chapter of a wanderer encounter's one-off (or a hostile's fight), or undefined when
+ * its template is gone.
+ * @param {WanderState} wv @returns {{ story: Story, chapter: Chapter } | undefined}
+ */
+export function wanderShape(wv) {
+  if (!wv.tp) return undefined;
+  const key = `${wv.w}|${wv.tp}|${wv.p?.item ?? ""}|${wv.p?.count ?? ""}`;
+  const npc = `w_${wv.w}`;
+  strangerNames.set(npc, wv.nm);
+  const hit = wanderShapes.get(key);
+  if (hit) return hit;
+  const ctx = { name: wv.nm, item: wv.p?.item, count: wv.p?.count, npc, at: { dim: wv.at.d, x: Math.floor(wv.at.x), z: Math.floor(wv.at.z) } };
+  /** @type {Chapter | undefined} */
+  let chapter;
+  if (wv.tp.startsWith("h:")) {
+    const h = hostileById.get(/** @type {any} */ (wv.tp.slice(2)));
+    if (!h) return undefined;
+    const tag = `realm:saga:${h.id === "spy" ? "whc" : "wh"}_${wv.w.replace(/[^a-z0-9]/g, "").slice(0, 16)}`;
+    chapter = {
+      id: `h_${h.id}`,
+      title: h.title,
+      npc,
+      intro: [h.reveal],
+      objectives: [{ type: "defeat", label: `Defeat ${h.champion.name}`, champion: { ...h.champion, tag }, at: ctx.at, mark: "where it turned", radius: 48 }],
+      outro: fill(h.outro, ctx),
+      reward: h.reward,
+      hint: `${h.champion.name} is where ${wv.nm} stood. Fight it there, or come back: it waits.`,
+    };
+  } else {
+    const t = templateById.get(wv.tp);
+    if (!t) return undefined;
+    chapter = { id: t.id, title: fill(t.label, ctx), npc, intro: fill(t.intro, ctx), objectives: fill(t.objectives, ctx), outro: fill(t.outro, ctx), reward: t.reward, hint: fill(t.hint, ctx) };
+  }
+  /** @type {Story} */
+  const story = { id: `wv:${wv.tp}`, title: chapter.title, short: wv.hk ? "Ambush" : "Stranger", giver: npc, kind: "wander", chapters: [chapter] };
+  const shape = { story, chapter };
+  if (wanderShapes.size > 64) wanderShapes.clear();
+  wanderShapes.set(key, shape);
+  return shape;
+}
+
+/**
+ * Picks a stranger's one-off for this encounter: a template for their archetype whose requirements hold,
+ * and its params, seeded by the encounter id (the same pick every time).
+ * @param {Saga} saga @param {WanderState} wv @param {Player} player @returns {{ tp: string, p: { item?: string, count?: number } } | undefined}
+ */
+export function pickTemplate(saga, wv, player) {
+  const list = WANDER_TEMPLATES.filter((t) => t.archetypes.includes(wv.ar) && requires(t.requires, saga, "", player).ok);
+  if (!list.length) return undefined;
+  const t = list[hash(`${wv.w}|t`) % list.length];
+  /** @type {{ item?: string, count?: number }} */
+  const p = {};
+  if (t.params?.item?.length) p.item = t.params.item[hash(`${wv.w}|i`) % t.params.item.length];
+  if (t.params?.count) {
+    const [a, b] = t.params.count;
+    p.count = a + (hash(`${wv.w}|c`) % (Math.max(a, b) - a + 1));
+  }
+  return { tp: t.id, p };
+}
+
+// ---------------------------------------------------------------------------
 // Saved progress (cached per player, saved a few seconds after a change)
 // ---------------------------------------------------------------------------
 
@@ -162,6 +284,7 @@ export function sagaOf(player) {
       if (saga.g !== undefined && !isObj(saga.g)) delete saga.g;
       if (saga.cx !== undefined && !Array.isArray(saga.cx)) delete saga.cx;
       if (saga.fv !== undefined && !isObj(saga.fv)) delete saga.fv;
+      if (saga.wv !== undefined && (!isObj(saga.wv) || typeof saga.wv.w !== "string" || !isObj(saga.wv.at))) delete saga.wv;
     }
   } catch {
     console.warn(`[saga] ${PROP_PLAYER} of ${player.name} is corrupt; starting over`);
@@ -550,6 +673,18 @@ export function entries(player) {
     const { story, chapter } = favorShape(f);
     fs.o ??= [];
     list.push({ story, chapter, index: 0, st: fs, fav: npc });
+  }
+  const wv = saga.wv;
+  if (wv?.a && !wv.c) {
+    const shape = wanderShape(wv);
+    if (!shape) {
+      // Its template vanished under this player: forget the encounter.
+      delete saga.wv;
+      markDirty(player);
+    } else {
+      wv.o ??= [];
+      list.push({ story: shape.story, chapter: shape.chapter, index: 0, st: wv, fav: `w_${wv.w}`, wv: wv.w });
+    }
   }
   entryCache.set(player.id, { v, list });
   return list;

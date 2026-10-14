@@ -10,8 +10,9 @@ import { expireAdds, sweep, tendActors } from "./actors.js";
 import { calendar, entries, finished, flagOf, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
 import {
   beginRun,
+  bump,
   championSlain,
-  championTags,
+  isChampionTag,
   endScenesOf,
   holdUntil,
   loadWeather,
@@ -26,10 +27,11 @@ import {
   talked,
   tickPlayer,
 } from "./objectives.js";
-import { autoTick, listPlaces, placeLabel, placesMenu, placesOf, setHere } from "./places.js";
+import { autoTick, campUpkeep, listPlaces, placeLabel, placesMenu, placesOf, placesReadyAll, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
-import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, track } from "./ui.js";
+import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, track, wanderAuto } from "./ui.js";
+import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, online, send } from "./util.js";
 
 const LOOP_TICKS = 20; // the player loop runs once a second
@@ -52,6 +54,8 @@ system.runInterval(() => {
     if (runs % 60 === 0) expireAdds();
     if (runs % 5 === 0) for (const p of world.getAllPlayers()) sendSeals(p);
     if (runs % 5 === 2) for (const p of world.getAllPlayers()) sendFlags(p);
+    if (runs % 5 === 3) for (const p of world.getAllPlayers()) sendWanderState(p);
+    if (runs % 60 === 30) campUpkeep(Number(get("campDays")) || 7);
     skyHousekeeping();
   } catch (e) {
     console.warn(`[saga] ${e}`);
@@ -61,6 +65,8 @@ system.runInterval(() => {
   const tracking = runs % TRACKER_RUNS === 0;
   for (const player of world.getAllPlayers()) {
     try {
+      wanderHousekeeping(player);
+      wanderAuto(player);
       const list = entries(player);
       if (!list.length) continue;
       const saga = sagaOf(player);
@@ -260,7 +266,7 @@ function onChoose(msg) {
  * realm:saga_debug (operators and test scenarios; /scriptevent needs operator rights):
  * `{ player, action: "answer", text }` answers the player's first open riddle, `{ player, action: "finish", story, flags? }`
  * marks a whole story finished, `{ player, action: "places" }` tells the player every saved place, `{ player, action: "state" }`
- * prints their saved progress to the content log.
+ * prints their saved progress to the content log, `{ player, action: "wander_finish" }` finishes their stranger's one-off.
  * @param {any} msg
  */
 function onDebug(msg) {
@@ -300,6 +306,10 @@ function onDebug(msg) {
     debugFlags(player, st, msg.flags);
     invalidate(player.id);
     markDirty(player, true);
+  } else if (msg.action === "wander_finish") {
+    // Every step of the player's stranger's one-off (or fight) done.
+    const e = entries(player).find((x) => x.wv);
+    if (e) e.chapter.objectives.forEach((o, i) => bump(player, e, i, 1e9));
   } else if (msg.action === "places") {
     player.sendMessage(`[saga places] ${JSON.stringify(placesOf())}`);
   } else if (msg.action === "state") {
@@ -330,6 +340,23 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (id === "realm:npc_flags_ping") {
       flagsSent.clear(); // sent again within 5 seconds
+      return;
+    }
+    if (id === "realm:wander_ping") {
+      wanderPing(); // sent again within 5 seconds
+      return;
+    }
+    if (id === "realm:place_ping") {
+      placesReadyAll();
+      return;
+    }
+    if (id === "realm:wander_spawn" || id === "realm:wander_turn" || id === "realm:wander_gone") {
+      try {
+        const msg = JSON.parse(message);
+        if (msg && typeof msg === "object" && get("enabled") === true) (id === "realm:wander_spawn" ? onWanderSpawn : id === "realm:wander_turn" ? onWanderTurn : onWanderGone)(msg);
+      } catch (e) {
+        console.warn(`[saga] ${id}: ${e}`);
+      }
       return;
     }
     if (id === "realm:affinity" || id === "realm:calendar") {
@@ -373,7 +400,7 @@ system.afterEvents.scriptEventReceive.subscribe(
       else if (id === "realm:npc_choose") onChoose(msg);
       else if (id === "realm:saga_debug") {
         if (!(sourceEntity instanceof Player) || sourceEntity.commandPermissionLevel >= CommandPermissionLevel.GameDirectors) onDebug(msg);
-      } else if (typeof msg.tag === "string" && championTags.has(msg.tag)) {
+      } else if (typeof msg.tag === "string" && isChampionTag(msg.tag)) {
         const ids = [msg.player, ...(Array.isArray(msg.helpers) ? msg.helpers : [])].filter((x) => typeof x === "string");
         const at = [msg.x, msg.y, msg.z].every((n) => typeof n === "number") ? { x: msg.x, y: msg.y, z: msg.z } : undefined;
         championSlain(msg.tag, ids, at, typeof msg.dim === "string" ? msg.dim : undefined);
@@ -484,6 +511,18 @@ world.afterEvents.worldLoad.subscribe(() => {
   system.runTimeout(() => {
     for (const p of world.getAllPlayers()) sendSeals(p, true);
   }, 100);
+  system.runTimeout(placesReadyAll, 110); // places (and wanderers' camps) for the wanderer pack
+});
+
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (!initialSpawn) return;
+  system.run(() => {
+    try {
+      if (player.isValid) wanderJoined(player);
+    } catch (e) {
+      console.warn(`[saga] ${e}`);
+    }
+  });
 });
 
 world.beforeEvents.playerLeave.subscribe(({ player }) => {
@@ -498,6 +537,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   playerGone(playerId);
   sealsSent.delete(playerId);
   flagsSent.delete(playerId);
+  wanderForget(playerId);
   forget(playerId);
   busy.delete(playerId);
 });
@@ -513,7 +553,7 @@ function checkStories() {
       if (chapterIds.has(c.id)) console.warn(`[saga] ${s.id} has chapter id "${c.id}" twice`);
       chapterIds.add(c.id);
       for (const o of c.objectives) {
-        if (o.place && !PLACES[o.place]) console.warn(`[saga] ${s.id}/${c.id} uses place "${o.place}", which isn't in PLACES`);
+        if (o.place && !PLACES[o.place] && !o.place.startsWith("camp:")) console.warn(`[saga] ${s.id}/${c.id} uses place "${o.place}", which isn't in PLACES`);
         if (o.champion && !/^realm:[\w:.-]{1,60}$/.test(o.champion.tag)) console.warn(`[saga] ${s.id}/${c.id}: champion tag "${o.champion.tag}" must start with "realm:"`);
       }
     }

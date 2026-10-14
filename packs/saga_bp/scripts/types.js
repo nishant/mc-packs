@@ -34,6 +34,7 @@
  */
 
 /** @typedef {{ dim?: string, x: number, z: number }} At */
+/** A chapter's camp: Wanderers of the Wilds. `near`: "wanderer" (where the player met them) or a place name. @typedef {{ prefab: "camp_road" | "camp_peak" | "camp_deep" | "camp_ruin", near: string }} Camp */
 /** @typedef {{ x: number, z: number }} Offset */
 
 /**
@@ -179,6 +180,8 @@
  * @property {number} [crowns] paid on the `crowns` scoreboard
  * @property {string} [relic] a relic id for the Relics pack (`realm:relic_give`)
  * @property {string} [title] a title for the Titles pack (`realm:title_unlock`)
+ * @property {{ skill: "mining" | "woodcutting" | "farming" | "fishing" | "combat" | "exploration", amount: number }} [skill] skill XP for the Skills pack (`realm:skill_xp`)
+ * @property {{ chance: number, relics: string[] }} [relicRoll] a chance (0-1) of one of these relics (`realm:relic_give`)
  * @property {{ entry: string, label: string }} [journal] a `story` page entry for the Journal pack
  * @property {{ id: string, title: string, text: string }} [codex] a lore entry for the story log's Codex
  */
@@ -193,6 +196,7 @@
  * @property {Rep[]} [rep]
  * @property {Page[]} [reply]
  * @property {Requires} [requires] only offered when this holds
+ * @property {{ crowns: number }} [cost] Crowns taken when picked; shown on the button, and refused (the form stays) without enough
  */
 
 /**
@@ -213,6 +217,7 @@
  * @property {string} [hint] what "Ask for a hint" says (the hint also reveals exact coordinates)
  * @property {boolean} [sequential] objectives count one at a time, in order (a boss's phases); by default they all count at once
  * @property {SkyRequest[]} [sky] asked for when the chapter is accepted
+ * @property {Camp} [camp] Wanderers: accepting the chapter builds (or moves) the giver's camp, place `camp:<wanderer>`
  */
 
 /**
@@ -221,7 +226,7 @@
  * @property {string} title
  * @property {string} short the tracker's name for it
  * @property {string} giver the NPC id who starts it
- * @property {"main" | "side" | "heart"} [kind] default "side"; "heart": a townsfolk's heart story, for players Close with them (`g:aff_<npc>`)
+ * @property {"main" | "side" | "heart" | "wander"} [kind] default "side"; "heart": a townsfolk's heart story, for players Close with them (`g:aff_<npc>`); "wander": a Recurring Wanderer's chain (giver `w_<id>`)
  * @property {number} [act] main story act
  * @property {string[]} [tones]
  * @property {string} [summary] the log's line before the story starts
@@ -238,6 +243,52 @@
  * @property {Objective} objective
  * @property {Reward} reward
  * @property {[string, string]} lines intro and thanks, spoken by the NPC
+ */
+
+/**
+ * A Recurring Wanderer (stories/wanderers.js): `w_<id>` is their NPC id for stories.
+ * @typedef {object} Wanderer
+ * @property {string} id
+ * @property {string} name
+ * @property {string} short
+ * @property {"miner" | "ghost" | "pilgrim" | "rival" | "hermit" | "storm" | "exile" | "traveler"} archetype
+ * @property {Guild} guild
+ * @property {string} entity
+ * @property {Camp["prefab"]} camp the prefab of their camp when nothing else says
+ */
+
+/**
+ * A one-off for a passing Stranger (stories/wander_oneoffs.js). Text and objectives may use `{name}` (the
+ * stranger), `{item}` (the item param's name; an objective's `item: "{item}"` is its id), `{count}` (an
+ * objective's `count: "{count}"` is the number), `npc: "{npc}"` (the stranger) and `at: "wanderer"` (where
+ * you met them). Params are seeded per encounter.
+ * @typedef {object} WanderTemplate
+ * @property {string} id
+ * @property {string} label the offer and the log's title
+ * @property {string[]} archetypes who may ask it
+ * @property {Guild} guild reputation for it (`realm:quest_done` kind `wander`)
+ * @property {{ item?: string[], count?: [number, number] }} [params]
+ * @property {Requires} [requires]
+ * @property {Page[]} intro
+ * @property {any[]} objectives Objectives, with the placeholders above
+ * @property {Page[]} outro
+ * @property {Reward} reward
+ * @property {string} hint
+ */
+
+/**
+ * A hostile wanderer: its disguise (talk) and its fight (an auto-accepted one-off at the spot where it turned).
+ * @typedef {object} HostileWanderer
+ * @property {"spy" | "toll" | "sailor" | "hermit"} id
+ * @property {string} label the disguise's offer
+ * @property {string} title the fight's title in the log
+ * @property {Page[]} intro the disguise talking: carries the tell
+ * @property {{ crowns: number }} [toll] a toll to pay instead of fighting
+ * @property {string} reveal chat line when the disguise drops
+ * @property {Champion} champion its true form (tag filled in per encounter)
+ * @property {MobGroup} adds who fights beside it from the start (plus one per party mate, up to 3)
+ * @property {Page[]} outro after the fight
+ * @property {Reward} reward
  */
 
 export {};

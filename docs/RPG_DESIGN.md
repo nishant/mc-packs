@@ -302,6 +302,40 @@ Target total from wanderers: about 50 Crowns/h.
 3. The camp moves to the observatory with a letter; a midnight vigil, with a shooting-star sky request.
 4. `answer` "What does the stone listen for?" Reward: title `Pilgrim's Friend`, a codex entry.
 
+**As shipped (1, October 2026):**
+- Protocol: more events than listed, so neither pack guesses. `realm:wander_spawn` also carries `name` (and no
+  `tpl`: saga picks the Stranger's template, seeded by the wid); wander_bp also sends `realm:wander_turn`
+  (a disguise dropped, with `accused`) and `realm:wander_gone` (`why`: timeout, far, gone, accused); saga sends
+  `realm:wander_state { player, ch, h, s, q }` (per wanderer `n`/`o`/`a`/`d`, the hostile kinds allowed, the
+  "Something's off" switch, a one-off running) every 5 s on change and on `realm:wander_ping`, and
+  `realm:wander_done { player, wid, how: accepted | left | turn | camp }`. `realm:place_ready` goes out for every
+  place (camps and story places, the anchors), states picked/built/set/moved/removed, also on `realm:place_ping`.
+  wander_bp spawns nobody until saga's first `wander_state` (no saga, no wanderers).
+- Stable API limits: light can't be read, so above ground the spot needs open sky (underground: a floor near the
+  player's height); biomes can't be read, so "taiga/snow" is snow, ice, podzol or spruce around the player.
+- Rival: Rook comes within 20 minutes after a `realm:quest_done` from bounty_bp or maps_bp (champion and map-leg
+  positions aren't broadcast). The bounty race (kill within 300 s or half pay) is not built: Rook's chapter 2 is
+  "finish 3 bounties" (with Bounty Board) or a story champion, either way. `realm:poi` is accepted as an anchor.
+- Camps: one spot per wanderer, shared; a chapter that moves it mails the other players on the chain. The camp is
+  taken down when its last player finishes the chain, or after `campDays` (7) unvisited; a player still on the
+  chain who meets the wanderer again gets it back where they are. No `realm:waystone_register`: waystone_bp makes
+  a waystone from the pre-built `Waystone:` sign on the first lodestone tap. Vesk's camp is by the watchtower (the
+  Overworld). The escort copy: saga sends `realm:wander_hide` (15 s, renewed every 10 s).
+- Hostiles: four spawn kinds (spy, toll, sailor, hermit) plus Rook's turned chapter (when the player picked
+  "Rub it in", which adds `g:iron`, and has `g:iron` 4+). The spy drops its disguise 20 s after the first talk,
+  sailor and hermit 10 s; the toll man on Refuse (or not enough Crowns). Accusing: hostile slowed (Slowness II
+  5 s), +10 Wardens, `g:iron` +1; friendly: they leave, `g:w_accused` +1 (Pell and Rook mention it).
+  Fights pay 40-60 Crowns, 1-2 Relic Shards, Wardens 25 (quest_done 10 + rep_add 15), 50-60 Combat XP, gossip
+  kind `wander_hostile`. Party adds use saga's party mates (Parties tag, `partyShare`) within 32 blocks.
+- quest_done: Strangers' requests and fights `kind: "wander"` with `guild`; chain chapters `kind: "story"` with the
+  wanderer's `guild` (Guilds gives story 30 to that guild instead of sharing it).
+- Journal "Wanderers" page entries come when a chain's first chapter is finished (meeting all 8).
+- "!" particles: `minecraft:villager_happy` sparkles, per player, while the last talk (or a fresh meeting) had
+  an offer or the chain has something waiting.
+- Content v1: 8 chains, 29 chapters (Pell 4, Anwen 4, Brannoch 4 ending with Old Gnasher, Rook 3 + one of 2,
+  Marigold 3, Tamsin 3, Vesk 3, Hob 3), 24 Stranger templates over the 8 archetypes, 4 hostiles, 40 first names x
+  20 epithets, greetings per archetype, per wanderer and per hostile (wander_bp `scripts/lines.js`).
+
 ---
 
 ## 3. Atlas of the Realm (`atlas_bp` NEW)

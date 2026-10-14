@@ -570,7 +570,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:journal",
-      description: "Field Journal: the mobs, places, fish, weather, relics and story you've found",
+      description: "Field Journal: the mobs, places, fish, weather, relics, story and wanderers you've found",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },

@@ -10,7 +10,12 @@ import { pathToFileURL } from "node:url";
 const root = join(import.meta.dirname, "..");
 const scripts = join(root, "packs", "saga_bp", "scripts");
 const { STORIES, PLACES, NPC_NAMES } = await import(pathToFileURL(join(scripts, "stories.js")).href);
-const { FAVORS } = await import(pathToFileURL(join(scripts, "stories", "index.js")).href);
+const { FAVORS, WANDERERS, WANDER_TEMPLATES, HOSTILES } = await import(pathToFileURL(join(scripts, "stories", "index.js")).href);
+/** Recurring Wanderers: `w_<id>` is an NPC id for stories, `camp:<id>` a place. */
+const WANDERER_IDS = new Set(WANDERERS.map((/** @type {any} */ w) => w.id));
+const ARCHETYPES = new Set(["miner", "ghost", "pilgrim", "rival", "hermit", "storm", "exile", "traveler"]);
+const GUILDS = new Set(["miners", "growers", "wardens", "wayfarers"]);
+const CAMP_PREFABS = new Set(["camp_road", "camp_peak", "camp_deep", "camp_ruin"]);
 
 /** @type {string[]} */
 const errors = [];
@@ -100,6 +105,7 @@ function choicesOf(at, sid, choices) {
     for (const k of Object.keys(c.set ?? {})) setKeys.add(canon(sid, k));
     for (const k of Object.keys(c.inc ?? {})) setKeys.add(canon(sid, k));
     reqs(`${at} choice ${c.id}`, sid, c.requires);
+    if (c.cost !== undefined && !(Number.isInteger(c.cost?.crowns) && c.cost.crowns > 0)) errors.push(`${at}: choice ${c.id}: cost must be { crowns: a positive whole number }`);
     for (const r of c.rep ?? []) whens(`${at} choice ${c.id} rep`, sid, r.when);
     pages(`${at} choice ${c.id} reply`, sid, c.reply);
   }
@@ -119,6 +125,11 @@ function whens(at, sid, when) {
       // Townsfolk affinity (realm:affinity): a level 0-4, set by npc_bp, never by a choice.
       if (!NPC_NAMES[k.slice(6)]) errors.push(`${at}: "${k}": unknown NPC "${k.slice(6)}"`);
       if (!/^(>=|<=|!)?[0-4]$/.test(String(when[k]))) errors.push(`${at}: "${k}" must be a level 0-4 (">=3")`);
+      continue;
+    }
+    if (k === "g:w_accused") {
+      // Wanderers of the Wilds: friendly wanderers this player accused, counted from realm:wander_gone, never by a choice.
+      if (!/^(>=|<=)?[0-9]+$/.test(String(when[k]))) errors.push(`${at}: "${k}" is a count (">=1")`);
       continue;
     }
     if (k.startsWith("cal:")) {
@@ -164,12 +175,12 @@ function pages(at, sid, list) {
 
 /** @param {string} at @param {string | undefined} npc */
 function npcOk(at, npc) {
-  if (npc !== undefined && !NPC_NAMES[npc]) errors.push(`${at}: unknown NPC "${npc}"`);
+  if (npc !== undefined && !NPC_NAMES[npc] && !(npc.startsWith("w_") && WANDERER_IDS.has(npc.slice(2)))) errors.push(`${at}: unknown NPC "${npc}"`);
 }
 
 /** @param {string} at @param {any} w */
 function placeOk(at, w) {
-  if (w?.place && !PLACES[w.place]) errors.push(`${at}: unknown place "${w.place}"`);
+  if (w?.place && !PLACES[w.place] && !(w.place.startsWith("camp:") && WANDERER_IDS.has(w.place.slice(5)))) errors.push(`${at}: unknown place "${w.place}"`);
 }
 
 /** @param {string} at @param {string} sid @param {any} o */
@@ -203,7 +214,12 @@ for (const s of STORIES) {
   ids.add(s.id);
   if (!s.title || !s.short || !s.giver || !Array.isArray(s.chapters)) errors.push(`${at}: needs title, short, giver and chapters`);
   if ((s.short ?? "").length > 18) warnings.push(`${at}: short "${s.short}" is longer than 18 characters`);
-  if (s.kind !== undefined && !["main", "side", "heart"].includes(s.kind)) errors.push(`${at}: kind must be "main", "side" or "heart"`);
+  if (s.kind !== undefined && !["main", "side", "heart", "wander"].includes(s.kind)) errors.push(`${at}: kind must be "main", "side", "heart" or "wander"`);
+  if (s.kind === "wander") {
+    if (!s.giver?.startsWith("w_") || !WANDERER_IDS.has(s.giver.slice(2))) errors.push(`${at}: a wanderer's chain needs a giver "w_<id>" from WANDERERS`);
+    if (!s.chapters?.[0]?.camp) errors.push(`${at}: a wanderer's chain needs a camp on its first chapter (where they wait)`);
+    if (STORIES.filter((/** @type {any} */ x) => x.giver === s.giver && x.kind === "wander").length > 1) errors.push(`${at}: one chain per wanderer`);
+  }
   if (s.kind === "heart" && !s.requires?.flags?.[`g:aff_${s.giver}`]) errors.push(`${at}: a heart story needs requires.flags { "g:aff_${s.giver}": ">=3" }`);
   npcOk(at, s.giver);
   reqs(at, s.id, s.requires);
@@ -221,6 +237,11 @@ for (const s of STORIES) {
     pages(`${cat} intro`, s.id, c.intro);
     pages(`${cat} outro`, s.id, c.outro);
     choicesOf(`${cat} introChoices`, s.id, c.introChoices);
+    if (c.camp !== undefined) {
+      if (s.kind !== "wander") errors.push(`${cat}: camp is for a wanderer's chain`);
+      if (!CAMP_PREFABS.has(c.camp?.prefab)) errors.push(`${cat}: camp prefab must be one of ${[...CAMP_PREFABS].join(", ")}`);
+      if (c.camp?.near !== "wanderer" && !PLACES[c.camp?.near]) errors.push(`${cat}: camp near must be "wanderer" or a place`);
+    }
     choicesOf(`${cat} choices`, s.id, c.choices);
     for (const r of c.rep ?? []) whens(`${cat} rep`, s.id, r.when);
     (c.objectives ?? []).forEach((/** @type {any} */ o, /** @type {number} */ i) => objective(`${cat} objective ${i + 1}`, s.id, o));
@@ -245,6 +266,49 @@ for (const f of FAVORS) {
   npcOk(at, f.npc);
   if (f.objective) objective(at, `fv:${f.npc}`, f.objective);
   if (f.objective?.optional || f.objective?.or) errors.push(`${at}: a favor's only objective can't be optional or in an "either" group`);
+}
+
+// Wanderers of the Wilds: Strangers' one-off templates (checked with their first params) and the hostiles.
+/** A template's objectives as one encounter would see them. @param {any} t */
+function filled(t) {
+  const item = t.params?.item?.[0] ?? "minecraft:stick";
+  const count = t.params?.count?.[0] ?? 1;
+  /** @param {any} v @returns {any} */
+  const f = (v) => {
+    if (typeof v === "string") return v === "{item}" ? item : v === "{count}" ? count : v === "{npc}" ? "w_pell" : v;
+    if (Array.isArray(v)) return v.map(f);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, k === "at" && x === "wanderer" ? { x: 0, z: 0 } : f(x)]));
+    return v;
+  };
+  return f(t.objectives ?? []);
+}
+const tplIds = new Set();
+for (const t of WANDER_TEMPLATES) {
+  const at = `wander template ${t.id}`;
+  if (tplIds.has(t.id)) errors.push(`${at}: id used twice`);
+  tplIds.add(t.id);
+  if (!t.label || !Array.isArray(t.intro) || !Array.isArray(t.outro) || !t.objectives?.length || !t.reward || !t.hint) errors.push(`${at}: needs label, intro, objectives, outro, reward and hint`);
+  if (!t.archetypes?.length || t.archetypes.some((/** @type {string} */ a) => !ARCHETYPES.has(a))) errors.push(`${at}: archetypes must be from ${[...ARCHETYPES].join(", ")}`);
+  if (!GUILDS.has(t.guild)) errors.push(`${at}: guild must be a guild`);
+  if (t.params?.count && !(t.params.count.length === 2 && t.params.count[0] >= 1 && t.params.count[1] >= t.params.count[0])) errors.push(`${at}: params count is [lowest, highest]`);
+  const objs = filled(t);
+  if (objs.every((/** @type {any} */ o) => o.optional)) errors.push(`${at}: needs an objective that isn't optional`);
+  objs.forEach((/** @type {any} */ o, /** @type {number} */ i) => {
+    objective(`${at} objective ${i + 1}`, `wv:${t.id}`, o);
+    if (JSON.stringify(t.objectives[i]).includes("{item}") && !t.params?.item?.length) errors.push(`${at} objective ${i + 1}: uses {item} without params.item`);
+    if (JSON.stringify(t.objectives[i]).includes("{count}") && !t.params?.count) errors.push(`${at} objective ${i + 1}: uses {count} without params.count`);
+  });
+  reqs(at, `wv:${t.id}`, t.requires);
+  pages(`${at} intro`, `wv:${t.id}`, t.intro);
+  pages(`${at} outro`, `wv:${t.id}`, t.outro);
+}
+for (const a of ARCHETYPES) if (!WANDER_TEMPLATES.some((/** @type {any} */ t) => t.archetypes.includes(a) && !t.requires)) errors.push(`wander templates: no one-off for "${a}" that every player can get`);
+for (const h of HOSTILES) {
+  const at = `hostile wanderer ${h.id}`;
+  if (!["spy", "toll", "sailor", "hermit"].includes(h.id)) errors.push(`${at}: id must be spy, toll, sailor or hermit (the wanderer pack's kinds)`);
+  if (!h.label || !h.title || !h.reveal || !Array.isArray(h.intro) || !Array.isArray(h.outro) || !h.reward) errors.push(`${at}: needs label, title, intro, reveal, outro and reward`);
+  if (!h.champion?.mob || !h.champion?.name || !/^realm:saga:/.test(h.champion?.tag ?? "")) errors.push(`${at}: champion needs mob, name and a realm:saga: tag`);
+  if (!h.adds?.mobs?.length) errors.push(`${at}: needs adds`);
 }
 
 for (const [key, at] of readKeys) {
@@ -300,6 +364,16 @@ if (vanilla) {
     if (f.objective) ids(f.objective, `favor ${f.id}`);
     rewardIds(f.reward, `favor ${f.id}`);
   }
+  for (const t of WANDER_TEMPLATES) {
+    for (const it of t.params?.item ?? []) idOk("item", it, `wander template ${t.id} params`);
+    filled(t).forEach((/** @type {any} */ o, /** @type {number} */ i) => ids(o, `wander template ${t.id} objective ${i + 1}`));
+    rewardIds(t.reward, `wander template ${t.id}`);
+  }
+  for (const h of HOSTILES) {
+    for (const x of [h.champion?.mob, ...(h.adds?.mobs ?? [])]) idOk("entity", x, `hostile wanderer ${h.id}`);
+    rewardIds(h.reward, `hostile wanderer ${h.id}`);
+  }
+  for (const w of WANDERERS) idOk("entity", w.entity, `wanderer ${w.id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +383,15 @@ if (vanilla) {
 {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(join(scripts, "prefabs.js"), "utf8").replace(/^import \{[^}]*\} from "@minecraft\/server";/m, "const BlockPermutation = {}; const LiquidType = {};");
-  const { PREFABS, blueprint } = await import(`data:text/javascript,${encodeURIComponent(src)}`);
+  const { PREFABS, CAMPS, blueprint } = await import(`data:text/javascript,${encodeURIComponent(src)}`);
+  for (const name of Object.keys(CAMPS ?? {})) {
+    const blocks = blueprint(name, { x: 0, y: 64, z: 0 }).entries.filter((/** @type {any} */ e) => e.k !== 2 && e.k !== 3 && e.k !== 1);
+    if (blocks.length >= 120) errors.push(`camp ${name}: ${blocks.length} blocks (keep camps under 120)`);
+    if (vanilla) {
+      const known = new Set(Object.values(vanilla.MinecraftBlockTypes));
+      for (const id of new Set(blocks.map((/** @type {any} */ e) => e.b.id))) if (!known.has(id)) errors.push(`camp ${name}: unknown block "${id}"`);
+    }
+  }
   /** @type {Record<string, any[]>} */
   const built = {};
   for (const name of Object.keys(PREFABS)) {

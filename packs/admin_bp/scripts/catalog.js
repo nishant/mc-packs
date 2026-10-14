@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 155 commands in 60 packs */
+/** @type {Pack[]} 157 commands in 61 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -237,7 +237,7 @@ export const PACKS = [
     folder: "journal_bp",
     pack: "Field Journal",
     commands: [
-      {"name":"realm:journal","description":"Field Journal: the mobs, places, fish, weather, relics and story you've found","permission":"any","params":[]},
+      {"name":"realm:journal","description":"Field Journal: the mobs, places, fish, weather, relics, story and wanderers you've found","permission":"any","params":[]},
     ],
   },
   {
@@ -487,6 +487,14 @@ export const PACKS = [
       {"name":"realm:town_remove","description":"Remove the town you're in, with all its project progress (what's built stays)","permission":"op","params":[]},
       {"name":"realm:town_spot","description":"Set (or move) where a project of this town is built, with a preview: where you stand, facing the way you face","permission":"op","params":[{"name":"realm:town_project","type":"Enum","optional":false,"enum":"realm:town_project"}]},
       {"name":"realm:town_stats","description":"Town Projects: the nearest town's level, projects, progress and contributors","permission":"any","params":[]},
+    ],
+  },
+  {
+    folder: "wander_bp",
+    pack: "Wanderers of the Wilds",
+    commands: [
+      {"name":"realm:wander","description":"Wanderers of the Wilds: who's on the road, the wanderers you know and their camps","permission":"any","params":[]},
+      {"name":"realm:wander_clear","description":"Wanderers of the Wilds (operators): send every wanderer on the road away","permission":"op","params":[]},
     ],
   },
   {

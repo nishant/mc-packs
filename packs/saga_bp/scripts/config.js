@@ -60,4 +60,7 @@ export const CONFIG = {
 
   /** Questgivers offer a daily favor: a short job, a new one each real day (UTC). */
   favors: true,
+
+  /** Wanderers of the Wilds: a Recurring Wanderer's camp nobody comes near for this many real days is taken down (terrain put back). */
+  campDays: 7,
 };
