@@ -86,14 +86,22 @@ const calmAt = (x, z) => zoneMode() !== "pass" && isProtected(OVERWORLD, x, z);
 /** Does a safe zone reach within `margin` blocks of x, z? @param {number} x @param {number} z @param {number} margin */
 const zoneNear = (x, z, margin) => protectedBox(OVERWORLD, { x: x - margin, z: z - margin }, { x: x + margin, z: z + margin });
 
+const WATERY = /water|kelp|seagrass|bubble_column/;
+
 /**
- * The ground in a column: the topmost block, or the block under a low plant on it.
+ * The ground in a column: the topmost block, or the block under a low plant on it. Over a lake or the sea, the
+ * water's surface block: getTopmostBlock skips water (it answers the bed under it), so this climbs through it.
  * @param {Dimension} dim @param {number} x @param {number} z
  */
 function groundAt(dim, x, z) {
   try {
     let top = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
     if (top && PLANT.test(top.typeId)) top = top.below();
+    for (let i = 0; top && i < 64; i++) {
+      const up = top.above();
+      if (!up || !(up.isLiquid || WATERY.test(up.typeId))) break;
+      top = up;
+    }
     return top;
   } catch {
     return undefined; // unloaded chunk

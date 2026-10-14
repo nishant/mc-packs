@@ -218,7 +218,7 @@ function pickTarget(player) {
     if (craterInZone(x, z)) continue;
     // Usually too far to be loaded; when it is, skip water right away. The full check comes with the crater.
     const top = topAt(dim, x, z);
-    if (top && top.isLiquid) continue;
+    if (top && (top.isLiquid || waterOver(top) !== undefined)) continue;
     return { x, z };
   }
   return undefined;
@@ -232,6 +232,32 @@ function topAt(dim, x, z) {
     return undefined;
   }
 }
+
+const WATERY = /water|kelp|seagrass|bubble_column/;
+
+/**
+ * The height of the water surface over a column's topmost block, or undefined when no water is over it.
+ * getTopmostBlock skips water (it answers the bed under a lake or the sea), so this climbs through it.
+ * @param {import("@minecraft/server").Block} top
+ */
+function waterOver(top) {
+  let b = top;
+  let wet = false;
+  try {
+    for (let i = 0; i < 64; i++) {
+      const up = b.above();
+      if (!up || !(up.isLiquid || WATERY.test(up.typeId))) break;
+      b = up;
+      wet = true;
+    }
+  } catch {
+    // the top of the world, or unloaded above
+  }
+  return wet ? b.location.y : undefined;
+}
+
+/** The surface height of a column: the water's over a lake or the sea, else the topmost block's. @param {import("@minecraft/server").Block} top */
+const surfaceY = (top) => waterOver(top) ?? top.location.y;
 
 // ---------------------------------------------------------------------------
 // The fall
@@ -258,7 +284,7 @@ function launch(aim, sky = false) {
     landsAt: system.currentTick + seconds * 20,
     streaked: false,
     vel: { x: Math.cos(angle) * FALL_SPEED.side, y: -FALL_SPEED.down, z: Math.sin(angle) * FALL_SPEED.side },
-    y: (top ? top.location.y + 1 : 64) + (impact.burst ? BURST_HEIGHT : 0), // refined at impact when the chunk is loaded
+    y: (top ? surfaceY(top) + 1 : 64) + (impact.burst ? BURST_HEIGHT : 0), // refined at impact when the chunk is loaded
   };
   if (impact.sky) world.sendMessage(`§6A meteor is streaking across the sky! It will break apart high above ${target.x}, ${target.z} in ${seconds} seconds.`);
   else if (impact.burst) world.sendMessage(`§6A meteor is falling toward ${impact.burst}, near ${target.x}, ${target.z}! The safe zone will stop it in the sky in ${seconds} seconds.`);
@@ -291,7 +317,7 @@ function streak(f) {
   const vars = new MolangVariableMap();
   const top = topAt(overworld(), f.impact.x, f.impact.z);
   if (!f.impact.burst && craterInZone(f.impact.x, f.impact.z) && get("inZone") === "burst") f.impact.burst = zoneName(f.impact.x, f.impact.z); // a zone added while it fell
-  if (top) f.y = top.location.y + 1 + (f.impact.burst ? BURST_HEIGHT : 0);
+  if (top) f.y = surfaceY(top) + 1 + (f.impact.burst ? BURST_HEIGHT : 0);
   for (const player of overworld().getPlayers()) {
     const l = player.location;
     const dx = f.impact.x + 0.5 - l.x, dz = f.impact.z + 0.5 - l.z;
@@ -437,6 +463,7 @@ function checkFound() {
  */
 function groundAt(dim, x, z) {
   let b = topAt(dim, x, z);
+  if (b && waterOver(b) !== undefined) return undefined; // a lake or sea bed
   for (let i = 0; b && i < 32; i++) {
     if (b.isLiquid) return undefined;
     if (!b.isAir && !PLANT.test(b.typeId) && !/_log$|_wood$|_stem$/.test(b.typeId)) return b;
@@ -472,7 +499,7 @@ function* checkSpot(dim, x, z, out) {
         return;
       }
       if (isBuiltBlock(top)) return;
-      if (top.isLiquid && ++wet > 12) return; // a lake or the sea
+      if ((top.isLiquid || waterOver(top) !== undefined) && ++wet > 12) return; // a lake or the sea
       for (let y = Math.max(sy - SCAN, dim.heightRange.min); y <= Math.min(sy + SCAN, dim.heightRange.max - 1); y++) {
         let b;
         try {
