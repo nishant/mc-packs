@@ -468,6 +468,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   struckAt.delete(playerId);
   meterLast.delete(playerId);
   affinity.delete(playerId);
+  idaOff.delete(playerId);
   storyFlags.delete(playerId);
   smithWaits.delete(playerId);
   barHeld.delete(playerId);

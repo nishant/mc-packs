@@ -634,6 +634,10 @@ function removeMachine(p) {
 
 /** @type {Map<string, number>} player id -> tick of the last machine tap */
 const lastTap = new Map();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  lastTap.delete(playerId);
+  if ((nextSpin.get(playerId) ?? 0) <= system.currentTick) nextSpin.delete(playerId); // a cooldown still running stays
+});
 
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
   const { block, player } = ev;
