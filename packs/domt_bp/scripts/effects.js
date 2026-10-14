@@ -453,6 +453,7 @@ export const CARDS = [
       const inv = player.getComponent("minecraft:inventory")?.container;
       if (!inv) return false;
       // An item locked in its slot stays where it is; the rest are shuffled.
+      /** @type {number[]} */
       const slots = [];
       for (let i = 0; i < 9; i++) if (inv.getItem(i)?.lockMode !== ItemLockMode.slot) slots.push(i);
       const items = slots.map((i) => inv.getItem(i));
