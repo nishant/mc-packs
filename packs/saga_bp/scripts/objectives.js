@@ -363,12 +363,24 @@ function kitchenOk(stack, key) {
   return stack.typeId === k.item && lore.includes(k.rare ? "§6Rare dish" : "§8Kitchen dish");
 }
 
+/**
+ * A name as typed at an anvil, for comparing: no color codes, any case, single spaces, and a phone keyboard's curly
+ * apostrophe or quotes the same as straight ones ("Lily\u2019s Marble" is "lily's marble"). @param {string} s
+ */
+const nameKey = (s) =>
+  plain(s)
+    .replace(/[\u2018\u2019\u02bc\u0060\u00b4]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 /** Does a stack match an item and/or a custom name (either may be left out)? @param {ItemStack | undefined} stack @param {string | undefined} item @param {string} [name] */
 function same(stack, item, name) {
   if (!stack || (item !== undefined && stack.typeId !== item)) return false;
   if (name === undefined) return true;
-  const key = plain(name).trim().toLowerCase();
-  return plain(stack.nameTag ?? "").trim().toLowerCase() === key && kitchenOk(stack, key);
+  const key = nameKey(name);
+  return nameKey(stack.nameTag ?? "") === key && kitchenOk(stack, key);
 }
 
 /** @param {Player} player @param {string | undefined} item @param {string} [name] */
