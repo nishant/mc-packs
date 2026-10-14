@@ -308,13 +308,16 @@ function deliver(player, t, p) {
   /** @type {string[]} */
   const gave = [];
   let total = 0;
+  // A Heartened town (a Choir siege held, Realm Calendar) counts every delivery x1.25.
+  const mult = moodOf(t.id) === "heartened" ? HEARTENED : 1;
   for (const [item, need] of Object.entries(p.needs)) {
     const left = need - (pr.got[item] ?? 0);
     if (left <= 0) continue;
-    const n = take(player, item, left);
+    const n = take(player, item, Math.ceil(left / mult));
     if (!n) continue;
-    pr.got[item] = (pr.got[item] ?? 0) + n;
-    total += n;
+    const counted = Math.min(left, Math.max(n, Math.floor(n * mult + 1e-9)));
+    pr.got[item] = (pr.got[item] ?? 0) + counted;
+    total += counted;
     gave.push(`${fmt(n)} ${itemName(item)}`);
   }
   if (!total) {
@@ -326,7 +329,7 @@ function deliver(player, t, p) {
   const complete = Object.entries(p.needs).every(([item, n]) => (pr.got[item] ?? 0) >= n);
   if (complete) pr.done = 1;
   saveProgress(t, p, pr);
-  player.sendMessage(`§aYou delivered ${gave.join(", ")} for ${t.n}'s ${p.name}. §7Now ${pct(p, pr)} percent.`);
+  player.sendMessage(`§aYou delivered ${gave.join(", ")} for ${t.n}'s ${p.name}.${mult > 1 ? " §6Heartened: it counts x1.25!" : ""} §7Now ${pct(p, pr)} percent.`);
   player.playSound("random.orb", { pitch: 1.2, volume: 0.7 });
   if (complete) finishProject(t, p, pr);
 }
@@ -1050,6 +1053,7 @@ async function townMenu(player, townId, canDeliver) {
   const body = [
     `§l${t.n}§r: ${levelName(t.lvl)}, level ${t.lvl} of ${MAX_LEVEL}`,
     `§7Center: ${t.x}, ${t.z}${dist}§r`,
+    ...(moodOf(t.id) === "heartened" ? ["§aHeartened§r: the Choir was driven off. Deliveries count x1.25."] : moodOf(t.id) === "shaken" ? ["§cShaken§r: the Choir finished its song here. People are uneasy."] : []),
     t.lvl >= MAX_LEVEL || !open.length
       ? "Every project is done. Thank you, everyone!"
       : `Finish these to make ${t.n} a ${levelName(t.lvl + 1)}:\n\n${open.map((p) => projectLine(t, p)).join("\n\n")}`,
@@ -1679,6 +1683,32 @@ function broadcastZones() {
   parts.forEach((list, i) => send("realm:zones", { src: "town", part: i + 1, parts: parts.length, zones: list }));
 }
 
+/**
+ * Every town for Realm Calendar's sieges: realm:town_list { part, parts, towns: [{ id, n, dim, x, y, z, safe }] },
+ * `safe` while **Protect from world events** is Enabled (parts under 2048 characters; parts 0 = no towns).
+ */
+function broadcastTownList() {
+  const towns = [...allTowns().values()].map((t) => ({ id: t.id, n: t.n, dim: t.dim, x: t.x, y: t.y, z: t.z, safe: isProtected(t) }));
+  if (!towns.length) return send("realm:town_list", { part: 1, parts: 0, towns: [] });
+  /** @type {object[][]} */
+  const parts = [[]];
+  for (const t of towns) {
+    const last = /** @type {object[]} */ (parts.at(-1));
+    if (last.length && JSON.stringify({ part: 99, parts: 99, towns: [...last, t] }).length > ZONE_LIMIT) parts.push([t]);
+    else last.push(t);
+  }
+  parts.forEach((list, i) => send("realm:town_list", { part: i + 1, parts: parts.length, towns: list }));
+}
+
+/** Town moods from Realm Calendar (realm:town_state): Heartened towns count deliveries x1.25. @type {Map<string, { mood: string, until: number }>} */
+const moods = new Map();
+/** @param {string} townId */
+function moodOf(townId) {
+  const m = moods.get(townId);
+  return m && m.until > Date.now() ? m.mood : undefined;
+}
+const HEARTENED = 1.25;
+
 let zonesQueued = false;
 /** Sends the town zones again, once, a moment after a change. */
 function zonesChanged() {
@@ -1688,6 +1718,7 @@ function zonesChanged() {
     zonesQueued = false;
     try {
       broadcastZones();
+      broadcastTownList();
     } catch (e) {
       console.warn(`[town] zones: ${e}`);
     }
@@ -1697,10 +1728,24 @@ function zonesChanged() {
 onChange((key) => {
   if (key === "townRadius" || key === "*") zonesChanged();
 });
-world.afterEvents.worldLoad.subscribe(() => system.runTimeout(zonesChanged, 100));
+world.afterEvents.worldLoad.subscribe(() =>
+  system.runTimeout(() => {
+    zonesChanged();
+    send("realm:town_state_ping", {});
+  }, 100),
+);
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
-    if (id === "realm:zones_ping") zonesChanged();
+  ({ id, message }) => {
+    if (id === "realm:zones_ping" || id === "realm:town_list_ping") zonesChanged();
+    else if (id === "realm:town_state") {
+      try {
+        const m = JSON.parse(message);
+        if (!m || typeof m.town !== "string" || typeof m.mood !== "string" || typeof m.until !== "number") return;
+        if (moods.size < 200 || moods.has(m.town)) moods.set(m.town, { mood: m.mood.slice(0, 16), until: m.until });
+      } catch {
+        // not ours
+      }
+    }
   },
   { namespaces: ["realm"] },
 );

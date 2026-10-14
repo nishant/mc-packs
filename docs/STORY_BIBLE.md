@@ -456,7 +456,7 @@ choices, and the Kitchen dishes against the Cooking pack; flags read but never s
   title: "Signs in the Sky",  // log title
   short: "Signs in the Sky",  // tracker name, <= 18 chars
   giver: "sol",               // NPC id who starts it
-  kind: "main",               // "main" | "side" (default "side")
+  kind: "main",               // "main" | "side" (default) | "heart" | "wander" | "festival" (one chapter, gated on requires.flags "cal:festival")
   act: 1,                     // main story only
   tones: ["mystery", "eerie"],
   summary: "Sol sees something in the eastern sky.", // log line before you start

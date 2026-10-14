@@ -1277,7 +1277,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lHeart stories:§r once you're Close with a townsfolk (Townsfolk: talk, gifts, favors), their menu offers their heart story, three chapters about their own life (Tobin sails his brother's boat once more, Wren's horse has a foal...).",
+        "text": "§lHeart stories:§r once you're Close with a townsfolk (Townsfolk: talk, gifts, favors), their menu offers their heart story, three chapters about their own life (Tobin sails his brother's boat once more, Wren's horse has a foal...). During a festival of the Realm Calendar, four townsfolk each offer a short festival chapter.",
         "ops": false
       },
       {
@@ -1429,6 +1429,62 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Regions and sites you've found (by kind), your Starwright tablets and Fenn's notes to reread, your shrine blessing, the way to the nearest site you haven't found; for operators also §lSites Near Here§r (teleport)"
+      }
+    ]
+  },
+  {
+    "folder": "calendar_bp",
+    "topic": "calendar",
+    "name": "Realm Calendar",
+    "summary": "The realm keeps a calendar now. Every dawn is a new §lRealm day§r, and 96 of them make a §lRealm Year§r of four seasons: Thaw, High Sun, Harvest and Long Dark, 24 days each. In the middle of each season comes a four-day §lfestival§r with its own activities: guard turtle hatchlings at night on the Hatchling Tide, race boats round an 8-checkpoint course at the Midsummer Regatta, carve pumpkins for the realm's vote at the Lantern Fair, and give gifts under falling stars on Starwright's Long Night. Activities pay §lFestival Ribbons§r to spend at the ribbon stall on titles, trails, hats and recipe cards, and the townsfolk have festival chapters for you. The rest of the year the §lGray Choir§r comes for the towns now and then at night: three Ritual Circles rise around a town, and its people have twelve minutes to silence their bells.",
+    "steps": [
+      {
+        "text": "Run §e/realm:calendar§r to see the Realm day, the season, the next festival and whether a siege may come. A Realm day passes at each dawn (sleeping through the night counts too), so a day is about 13 to 20 minutes of play and a festival comes every 5 to 8 hours of play and lasts about an hour.",
+        "ops": false
+      },
+      {
+        "text": "When a festival starts, everyone sees a title and a chat line. Open §e/realm:calendar§r and pick the festival for its three activities and what you've done of each. Each activity counts 3 times per festival (default 3, §eactivityMax§r), not per day: sleeping through the festival doesn't reset it.",
+        "ops": false
+      },
+      {
+        "text": "Every finished activity pays 2 Festival Ribbons (default 2, §eactivityRibbons§r; the regatta 3, §eregattaRibbons§r) and 20 Crowns (default 20, §eactivityCrowns§r), up to 15 ribbons (default 15, §eribbonCap§r) and 250 Crowns (default 250, §ecrownCap§r) per festival. Ribbons are paper with lore: they stack and you can trade them.",
+        "ops": false
+      },
+      {
+        "text": "Spend ribbons at the §lFestival Ribbon stall§r: in §e/realm:calendar§r or at Quill the Trader (any townsfolk with the §emerchant§r role, §estallRole§r) while a festival runs. It sells the festival's title, hat and recipe card, and two trails.",
+        "ops": false
+      },
+      {
+        "text": "Talk to the townsfolk during a festival: four of them have a festival chapter each in Story Questlines, offered only while it runs (you can finish one after).",
+        "ops": false
+      },
+      {
+        "text": "§lSieges:§r when chat warns §eThe Gray Choir is coming to Riverside§r, you have 3 minutes (default 3, §ewarnMinutes§r). Then three Ritual Circles rise 48 to 96 blocks around the town; their spots are in chat and the clock is in the top-left side box. At each circle, beat its §lChoir Singer§r (a vindicator), then hit or tap its bell 5 times (default 5, §ebellHits§r). Silence all three within 12 minutes (default 12, §esiegeMinutes§r) and the town holds.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:calendar_siege§r starts a siege now at the nearest town (or ends the one running), §e/realm:calendar_set <day>§r sets the day of the Realm Year (1-96), and §e/realm:calendar§r -> §lOperators§r sets the regatta course and §lSieges§r switches sieges off for a town. Settings are in §e/realm:config§r (§lRealm Calendar§r).",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:calendar",
+        "ops": false,
+        "who": "Everyone",
+        "text": "The Realm day, season and next festival; during a festival its activities (Nest Watch, the regatta and its board, the carve-off vote) and the Festival Ribbon stall; the Realm Year; siege history and the towns' moods; for operators the regatta course, a siege and each town's siege switch"
+      },
+      {
+        "usage": "/realm:calendar_siege",
+        "ops": false,
+        "who": "Operators",
+        "text": "Starts a Choir siege now at the nearest town (any time, any player count; after a confirmation), or ends the siege running (no rewards, no mood)"
+      },
+      {
+        "usage": "/realm:calendar_set <day>",
+        "ops": false,
+        "who": "Operators",
+        "text": "Sets the day of the Realm Year, 1 to 96 (§e/realm:calendar_set 34§r starts the Midsummer Regatta). Festivals start and end at once; activity limits stay per festival and year"
       }
     ]
   },
@@ -1736,7 +1792,7 @@ export const PACKS = [
         "usage": "/realm:titles_give <player> <title>",
         "ops": true,
         "who": "Ops",
-        "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r, §etrail:hearts§r or §etrail:glyphs§r. Works for offline players this pack has seen"
+        "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r, §etrail:hearts§r, §etrail:glyphs§r, §etrail:confetti§r or §etrail:notes§r. Works for offline players this pack has seen"
       }
     ]
   },

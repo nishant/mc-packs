@@ -10,11 +10,12 @@ import { STORIES as bold } from "./side_bold.js";
 import { STORIES as deep } from "./side_deep.js";
 import { STORIES as heart } from "./side_heart.js";
 import { STORIES as wander } from "./wanderers.js";
+import { STORIES as festivals } from "./festivals.js";
 
 /** @typedef {import("../types.js").Story} Story */
 
 /** @type {Story[]} */
-export const MORE_STORIES = [...act1, ...act2, ...act3, ...act4, ...act5, ...dark, ...bright, ...bold, ...deep, ...heart, ...wander];
+export const MORE_STORIES = [...act1, ...act2, ...act3, ...act4, ...act5, ...dark, ...bright, ...bold, ...deep, ...heart, ...wander, ...festivals];
 
 export { FAVORS } from "./favors.js";
 export { WANDERERS } from "./wanderers.js";

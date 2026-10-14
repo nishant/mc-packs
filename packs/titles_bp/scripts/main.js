@@ -26,6 +26,8 @@ const TRAILS = /** @type {Record<string, { name: string, particle: string, y: nu
   sparkle: { name: "Sparkles", particle: "realm:trail_sparkle", y: 0.9, behind: 0.6 },
   hearts: { name: "Hearts", particle: "minecraft:heart_particle", y: 2.1, behind: 0.4 }, // Townsfolk: a Confidant's trail (vanilla particle)
   glyphs: { name: "Starwright glyphs", particle: "minecraft:enchanting_table_particle", y: 1.4, behind: 0.5 }, // Atlas of the Realm: 25 sites found (vanilla particle)
+  confetti: { name: "Confetti", particle: "minecraft:totem_particle", y: 1.6, behind: 0.5 }, // Realm Calendar: the Festival Ribbon stall (vanilla particle)
+  notes: { name: "Festival notes", particle: "minecraft:note_particle", y: 2.1, behind: 0.4 }, // Realm Calendar: the Festival Ribbon stall (vanilla particle)
 });
 const STAT_TEXT = /** @type {Record<string, (have: number, need: number) => string>} */ ({
   distance: (have, need) => `${fmt(have)}/${fmt(need)} blocks traveled`,
