@@ -32,7 +32,7 @@ const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel
 const shortDim = (/** @type {string} */ id) => id.replace(/^minecraft:/, "").replaceAll("_", " ");
 /** @param {Player} player @param {string} text */
 function bar(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "zones_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 

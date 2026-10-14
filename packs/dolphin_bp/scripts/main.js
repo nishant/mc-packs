@@ -263,6 +263,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
 
 /** @type {Map<string, number>} rider id -> tick a leap is ready */
 const leapReady = new Map();
+world.afterEvents.playerLeave.subscribe(({ playerId }) => leapReady.delete(playerId));
 
 /** The tamed dolphin `p` is riding, if any. @param {Player} p */
 function mountOf(p) {

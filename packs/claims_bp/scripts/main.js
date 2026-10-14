@@ -31,7 +31,7 @@ const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel
  * @param {Player} player @param {string} text
  */
 function bar(player, text) {
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50 }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 50, from: "claims_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 const DISABLED = "Land claims are disabled on this realm. An operator can enable them in /realm:config (Land Claims).";
@@ -505,13 +505,37 @@ function answerCheck(message) {
   system.sendScriptEvent("realm:claims_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), claims: found }));
 }
 
+// Other packs ask which containers a player may not open (Quick Stack & Sort's quick stack, Chest Finder's results):
+//   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }  (at most 40 spots per message)
+//   realm:access_check_result { id, from, closed: [i, ...] }                 (indexes into that message's spots)
+// `closed` lists the spots in someone else's claim, the same rule as opening a chest there: none while claims are
+// disabled. Always answered, so the asker learns that Land Claims takes part.
+/** @param {string} message */
+function answerAccess(message) {
+  const q = JSON.parse(message);
+  if (!q || typeof q !== "object") return;
+  /** @type {number[]} */
+  const closed = [];
+  if (enabled() && claims().size && Array.isArray(q.spots)) {
+    const pid = String(q.player ?? "");
+    const who = world.getAllPlayers().find((p) => p.id === pid);
+    q.spots.slice(0, 40).forEach((/** @type {unknown} */ s, /** @type {number} */ i) => {
+      if (!Array.isArray(s) || typeof s[0] !== "string" || !Number.isFinite(Number(s[1])) || !Number.isFinite(Number(s[3]))) return;
+      const c = claimAt(s[0], { x: Number(s[1]), y: 0, z: Number(s[3]) });
+      if (c && !(who ? allowed(who, c) : c.o === pid || c.s.some((w) => w.i === pid))) closed.push(i);
+    });
+  }
+  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "claims_bp", closed }));
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "claims_bp");
-    else if (id === "realm:claims_check") {
+    else if (id === "realm:claims_check" || id === "realm:access_check") {
       try {
-        answerCheck(message);
+        if (id === "realm:claims_check") answerCheck(message);
+        else answerAccess(message);
       } catch (e) {
         console.warn(`[claims] ${e}`);
       }
