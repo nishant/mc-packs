@@ -1,0 +1,23 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Minimap",
+    "description": "A compass strip at the top of the screen with your destination, townsfolk, wanderers, party mates and nearby mobs, an optional radar, and Mara's Field Map. /realm:map",
+    "uuid": "05a9c93f-737e-474c-8d68-8af406cf479b",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "04ee1db6-e3bf-479b-88df-ad22977d1a0c",
+      "version": [1, 0, 0],
+      "entry": "scripts/main.js"
+    }
+  ],
+  "dependencies": [
+    { "module_name": "@minecraft/server", "version": "2.1.0" },
+    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+  ]
+}

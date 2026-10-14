@@ -1,0 +1,1018 @@
+// Minimap: a compass strip at the top of the screen, an optional radar, destinations and Mara's Field Map.
+// Scripts can't draw on the HUD or on map items, so the picture is made of glyphs (glyphs.js, drawn by the
+// glyph page in Side HUD, hud_rp) sent in the Side HUD title (side.js: the strip in slot "top", the radar in
+// slot "radar" as the part "map/radar"). The land itself is Bedrock's own locator map, held in the offhand.
+//
+// Every intervalTicks per player who has the strip or the radar on: one entity search for monsters within
+// their mob radius (the nearest maxMobs), one for realm:npc within npcRange; everything else is arithmetic on
+// what other packs broadcast (each message under 2048 characters, long lists in parts):
+//   realm:npc_places      { part, parts, folk: [{ id, n, dim, x, z }] }            <- Townsfolk; realm:npc_places_ping {}
+//   realm:waystones_known { player, part, parts, list: [{ i, n, dim, x, z }] }     <- Waystones; realm:waystones_known_ping { player? }
+//   realm:atlas_region    { player, name }                                         <- Atlas, on entering a region
+//   realm:atlas_sites     { player, part, parts, sites: [[label, x, z, region]] }  <- Atlas, every site the player found
+//   realm:atlas_site      { player, site: [label, x, z, region] }                  <- Atlas, one more; realm:atlas_ping { player? }
+//   realm:death_point     { player, dim?, x?, z? }                                 <- Death Point; realm:death_point_ping { player? }
+//   realm:track           { player, label?, dim?, x?, z? }                         <- Story Questlines' tracker target; realm:track_ping { player? }
+//   realm:place_ready     { name, state, dim, x, z, wid?, label? }                 <- story places; only camps (wid) are used; realm:place_ping
+//   realm:wander_spawn / realm:wander_turn / realm:wander_gone                     <- which wanderers on the road are friendly
+//   realm:map_debug       { player, action: "state" | "cost" } (operators, tests)  -> realm:map_state
+// Party mates are the online players with the same `realm_party:<code>` tag (Parties).
+// See "Minimap" in docs/PACKS.md.
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
+import { CONFIG } from "./config.js";
+import { G } from "./glyphs.js";
+import { get, getFor, onChange } from "./settings.js";
+import { sideBoxes } from "./side.js";
+
+/** @typedef {import("@minecraft/server").Entity} Entity */
+/** @typedef {import("@minecraft/server").Vector3} Vector3 */
+/** A place on the map. @typedef {{ n: string, dim: string, x: number, z: number }} Spot */
+/** The destination a player picked: what kind, which one, and where it was when picked. @typedef {Spot & { k: string, id?: string }} Waypoint */
+/** A player's place and party tag this pass. @typedef {{ id: string, dim: string, x: number, z: number, party?: string }} Seen */
+/** A marker this pass: kind, offset from the player, distance; `clamp` ones show at the edge when out of sight. @typedef {{ kind: string, dx: number, dz: number, d: number, clamp: boolean }} Marker */
+
+const PACK = "map_bp";
+const PROP_WP = "map:wp"; // player: JSON Waypoint
+const PROP_MARKS = "map:marks"; // player: JSON Spot[]
+const NPC_TAG = "realm:npc";
+const ID_TAG = "realm:npc_id:";
+const WANDER_OWNER = "realm:npc_owner:wander_bp";
+const CAMP_TAG = "wander:c:";
+const PARTY_TAG = "realm_party:";
+const OVERWORLD = "minecraft:overworld";
+const DIM_NAMES = /** @type {Record<string, string>} */ ({ "minecraft:overworld": "the Overworld", "minecraft:nether": "the Nether", "minecraft:the_end": "the End" });
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+
+const CELLS = 25; // the strip: 25 cells of 5 degrees, 60 degrees each side of where you face
+const MID = 12;
+const DEG = 5;
+const R = 3; // the radar: 7 x 7 cells, you in the middle
+const HOLD = 40; // a readout stays this long without an update (ticks)
+const REFRESH = 30; // an unchanged readout is sent again after this many ticks (before HOLD runs out)
+const OTHERS_RANGE = 128;
+const ARRIVED_TICKS = 60;
+const NAME_MAX = 24;
+const LINE2_BYTES = 159 - CELLS * 3 - 1; // what the strip's second line may take of the slot
+const MENU_MAX = 40;
+
+/** Strip glyphs and drawing order (higher wins a cell) by marker kind. */
+const KINDS = /** @type {Record<string, { s: string, l: string, r: string, q: string, p: number }>} */ ({
+  star: { s: G.S_STAR, l: G.L_STAR, r: G.R_STAR, q: G.Q_STAR, p: 9 },
+  party: { s: G.S_PARTY, l: G.L_PARTY, r: G.R_PARTY, q: G.Q_PARTY, p: 8 },
+  mob: { s: G.S_MOB, l: G.L_MOB, r: G.R_MOB, q: G.Q_MOB, p: 7 },
+  folk: { s: G.S_FOLK, l: G.L_FOLK, r: G.R_FOLK, q: G.Q_FOLK, p: 6 },
+  wander: { s: G.S_WANDER, l: G.L_WANDER, r: G.R_WANDER, q: G.Q_WANDER, p: 6 },
+  other: { s: G.S_OTHER, l: G.L_OTHER, r: G.R_OTHER, q: G.Q_OTHER, p: 5 },
+  camp: { s: G.S_CAMP, l: G.L_CAMP, r: G.R_CAMP, q: G.Q_CAMP, p: 4 },
+  site: { s: G.S_SITE, l: G.L_SITE, r: G.R_SITE, q: G.Q_SITE, p: 4 },
+});
+const LETTERS = [G.S_N, G.S_NE, G.S_E, G.S_SE, G.S_S, G.S_SW, G.S_W, G.S_NW];
+const YOU = [G.Q_YOU_0, G.Q_YOU_1, G.Q_YOU_2, G.Q_YOU_3, G.Q_YOU_4, G.Q_YOU_5, G.Q_YOU_6, G.Q_YOU_7];
+
+const side = sideBoxes("map");
+const isOp = (/** @type {Player} */ p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/** @param {string} id @param {unknown} msg */
+const send = (id, msg) => {
+  try {
+    system.sendScriptEvent(id, JSON.stringify(msg));
+  } catch (e) {
+    console.warn(`[map] ${id}: ${e}`);
+  }
+};
+/** @param {unknown} v @returns {v is number} */
+const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+/** Plain ASCII text of at most `max` characters (names from other packs and players go into the HUD and menus). @param {unknown} v @param {number} [max] */
+const plain = (v, max = NAME_MAX) =>
+  String(v ?? "")
+    .replace(/§./g, "")
+    .replace(/[^\x20-\x7e]/g, "")
+    .replace(/~/g, "-")
+    .trim()
+    .slice(0, max);
+/** A spot from a message, or undefined. @param {any} m @param {string} [name] */
+function spotOf(m, name) {
+  if (!m || typeof m.dim !== "string" || !isNum(m.x) || !isNum(m.z)) return undefined;
+  return { n: plain(name ?? m.n ?? m.label ?? m.name), dim: m.dim, x: Math.floor(m.x), z: Math.floor(m.z) };
+}
+/** Degrees in (-180, 180]. @param {number} a */
+const wrap = (a) => {
+  const w = ((a % 360) + 360) % 360;
+  return w > 180 ? w - 360 : w;
+};
+/** Compass bearing from an offset: 0 = north (-z), 90 = east (+x). @param {number} dx @param {number} dz */
+const bearingOf = (dx, dz) => (Math.atan2(dx, -dz) * 180) / Math.PI;
+/** "NE 240m" or "in the Nether" from a player to a spot. @param {Player} player @param {Spot} s */
+function where(player, s) {
+  if (player.dimension.id !== s.dim) return `in ${DIM_NAMES[s.dim] ?? s.dim}`;
+  const p = player.location;
+  const dx = s.x + 0.5 - p.x;
+  const dz = s.z + 0.5 - p.z;
+  const d = Math.hypot(dx, dz);
+  return d < 2 ? "here" : `${COMPASS[Math.round(((bearingOf(dx, dz) + 360) % 360) / 45) % 8]} ${Math.round(d)}m`;
+}
+/** @param {Player} player @param {Spot} s */
+const distTo = (player, s) => (player.dimension.id === s.dim ? Math.hypot(s.x + 0.5 - player.location.x, s.z + 0.5 - player.location.z) : Infinity);
+/** UTF-8 bytes. @param {string} s */
+const bytes = (s) => {
+  let n = 0;
+  for (const ch of s) {
+    const c = /** @type {number} */ (ch.codePointAt(0));
+    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+  }
+  return n;
+};
+/** The longest start of `s` within `max` UTF-8 bytes (no dangling §). @param {string} s @param {number} max */
+function fit(s, max) {
+  let out = "";
+  let n = 0;
+  for (const ch of s) {
+    const b = bytes(ch);
+    if (n + b > max) break;
+    out += ch;
+    n += b;
+  }
+  while (out.endsWith("§")) out = out.slice(0, -1);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// What other packs told us
+// ---------------------------------------------------------------------------
+
+/** Townsfolk id -> where they are placed. @type {Map<string, Spot>} */
+const folk = new Map();
+/** Wanderer id -> their camp (built). @type {Map<string, Spot>} */
+const camps = new Map();
+/** Player id -> the waystones they know. @type {Map<string, (Spot & { i: number })[]>} */
+const waystones = new Map();
+/** Player id -> the Atlas sites they found (Overworld). @type {Map<string, (Spot & { r: string })[]>} */
+const sites = new Map();
+/** Player id -> the Atlas region they are in. @type {Map<string, string>} */
+const regions = new Map();
+/** Player id -> their last death point. @type {Map<string, Spot>} */
+const deaths = new Map();
+/** Player id -> the story tracker's target: a spot, a townsfolk (by id), or both. @type {Map<string, { n: string, spot?: Spot, npc?: string }>} */
+const tracks = new Map();
+/** Wanderer id -> friendly (true) or a hostile in disguise (false). Road wanderers we never heard about stay hidden. @type {Map<string, boolean>} */
+const wanderers = new Map();
+/** Lists arriving in parts: key -> what came so far. @type {Map<string, unknown[]>} */
+const partial = new Map();
+
+/**
+ * Collects a list sent in parts; returns the whole list when the last part arrives.
+ * @param {string} key @param {any} m @param {unknown[]} items @returns {unknown[] | undefined}
+ */
+function collect(key, m, items) {
+  const part = isNum(m.part) ? m.part : 1;
+  const parts = isNum(m.parts) ? m.parts : 1;
+  if (parts <= 0) {
+    partial.delete(key);
+    return [];
+  }
+  if (part === 1) partial.set(key, []);
+  const got = partial.get(key);
+  if (!got) return undefined; // a middle part without its start
+  got.push(...items);
+  if (part < parts) return undefined;
+  partial.delete(key);
+  return got;
+}
+
+// ---------------------------------------------------------------------------
+// Each player's destination and marked spots (cached; this pack is the only writer)
+// ---------------------------------------------------------------------------
+
+/** @type {Map<string, Waypoint | null>} */
+const wpCache = new Map();
+/** @type {Map<string, Spot[]>} */
+const marksCache = new Map();
+/** Player id -> [name, tick until]: "Arrived" on the strip. @type {Map<string, [string, number]>} */
+const arrived = new Map();
+
+/** @param {Player} player @returns {Waypoint | undefined} */
+function waypointOf(player) {
+  if (wpCache.has(player.id)) return wpCache.get(player.id) ?? undefined;
+  /** @type {Waypoint | null} */
+  let wp = null;
+  try {
+    const v = JSON.parse(String(player.getDynamicProperty(PROP_WP) ?? "null"));
+    const s = spotOf(v);
+    if (s && typeof v.k === "string") wp = { ...s, k: v.k, ...(typeof v.id === "string" ? { id: v.id } : {}) };
+  } catch {
+    wp = null;
+  }
+  wpCache.set(player.id, wp);
+  return wp ?? undefined;
+}
+/** @param {Player} player @param {Waypoint | undefined} wp */
+function setWaypoint(player, wp) {
+  wpCache.set(player.id, wp ?? null);
+  try {
+    player.setDynamicProperty(PROP_WP, wp ? JSON.stringify(wp) : undefined);
+  } catch (e) {
+    console.warn(`[map] save: ${e}`);
+  }
+  lastSent.delete(player.id);
+}
+/** @param {Player} player @returns {Spot[]} */
+function marksOf(player) {
+  const hit = marksCache.get(player.id);
+  if (hit) return hit;
+  /** @type {Spot[]} */
+  const out = [];
+  try {
+    const v = JSON.parse(String(player.getDynamicProperty(PROP_MARKS) ?? "[]"));
+    for (const m of Array.isArray(v) ? v : []) {
+      const s = spotOf(m);
+      if (s && s.n) out.push(s);
+    }
+  } catch {
+    // none
+  }
+  marksCache.set(player.id, out);
+  return out;
+}
+/** @param {Player} player @param {Spot[]} list */
+function saveMarks(player, list) {
+  marksCache.set(player.id, list);
+  try {
+    player.setDynamicProperty(PROP_MARKS, list.length ? JSON.stringify(list) : undefined);
+  } catch (e) {
+    console.warn(`[map] save: ${e}`);
+  }
+}
+
+/**
+ * Marks where the player stands. At the limit the oldest spot goes.
+ * @param {Player} player @param {string} [name] @returns {string} what to tell them
+ */
+function markHere(player, name) {
+  const list = [...marksOf(player)];
+  const max = Math.max(1, Number(get("maxMarks")) || 5);
+  const n = plain(name) || `Spot ${list.length + 1}`;
+  const p = player.location;
+  /** @type {Spot} */
+  const s = { n, dim: player.dimension.id, x: Math.floor(p.x), z: Math.floor(p.z) };
+  const same = list.findIndex((m) => m.n.toLowerCase() === n.toLowerCase());
+  let dropped = "";
+  if (same >= 0) list.splice(same, 1);
+  while (list.length >= max) dropped = /** @type {Spot} */ (list.shift()).n;
+  list.push(s);
+  saveMarks(player, list);
+  return `§a[Map] Marked "${n}" at ${s.x}, ${s.z}.${dropped ? ` §7(${max} at most: forgot "${dropped}")` : ""} §7Pick it in /realm:map.`;
+}
+
+// ---------------------------------------------------------------------------
+// One pass for one player
+// ---------------------------------------------------------------------------
+
+/** What each player's preferences are (cached until /realm:prefs or /realm:config changes them). @type {Map<string, { compass: boolean, radar: boolean, north: boolean, mobs: boolean, radius: number }>} */
+const prefCache = new Map();
+/** @param {Player} player */
+function prefsOf(player) {
+  const hit = prefCache.get(player.id);
+  if (hit) return hit;
+  const cap = Math.max(8, Number(get("mobRadiusMax")) || 32);
+  const p = {
+    compass: getFor(player, "compass") === true,
+    radar: getFor(player, "radar") === true,
+    north: getFor(player, "radarNorthUp") === true,
+    mobs: getFor(player, "showMobs") === true,
+    radius: Math.min(cap, Math.max(8, Number(getFor(player, "mobRadius")) || 24)),
+  };
+  prefCache.set(player.id, p);
+  return p;
+}
+onChange((_key, player) => {
+  if (player) prefCache.delete(player.id);
+  else prefCache.clear();
+  if (player) lastSent.delete(player.id);
+  else lastSent.clear();
+});
+
+/** What was last sent to each player: the text and when. @type {Map<string, { key: string, at: number, compass: boolean, radar: boolean }>} */
+const lastSent = new Map();
+/** The last strip, its second line and the radar per player (realm:map_debug). @type {Map<string, { strip: string, line2: string, radar: string, dest?: string }>} */
+const lastText = new Map();
+let costMs = 0;
+/** Of costMs, the time spent sending the title (side.js: two realm:side events and setTitle). */
+let drawMs = 0;
+let costPasses = 0;
+let costPlayers = 0;
+
+/** A live player's position, if they're online. @param {string} id @param {Player[]} all */
+const onlineById = (id, all) => all.find((p) => p.id === id);
+
+/**
+ * Where the destination is now: the picked waypoint (followed live for townsfolk, camps, the death point and
+ * party mates), else the story tracker's target. `off` says why there's nothing to point at.
+ * @param {Player} player @param {Player[]} all @param {Map<string, Vector3>} liveFolk
+ * @returns {{ spot?: Spot, picked: boolean, off?: string } | undefined}
+ */
+function destination(player, all, liveFolk) {
+  const wp = waypointOf(player);
+  if (wp) {
+    if (wp.k === "npc" && wp.id) {
+      const at = liveFolk.get(wp.id);
+      if (at) return { spot: { ...wp, dim: player.dimension.id, x: Math.floor(at.x), z: Math.floor(at.z) }, picked: true };
+      const f = folk.get(wp.id);
+      return { spot: f ? { ...f, n: wp.n } : wp, picked: true };
+    }
+    if (wp.k === "camp" && wp.id) return { spot: camps.get(wp.id) ? { ...(/** @type {Spot} */ (camps.get(wp.id))), n: wp.n } : wp, picked: true };
+    if (wp.k === "death") return { spot: deaths.get(player.id) ? { ...(/** @type {Spot} */ (deaths.get(player.id))), n: wp.n } : wp, picked: true };
+    if (wp.k === "party" && wp.id) {
+      const mate = onlineById(wp.id, all);
+      if (!mate) return { picked: true, off: `${wp.n} is offline` };
+      const tag = partyTag(player);
+      if (!tag || !mate.hasTag(tag)) {
+        setWaypoint(player, undefined);
+        return undefined;
+      }
+      const l = mate.location;
+      return { spot: { n: wp.n, dim: mate.dimension.id, x: Math.floor(l.x), z: Math.floor(l.z) }, picked: true };
+    }
+    return { spot: wp, picked: true };
+  }
+  const t = tracks.get(player.id);
+  if (!t) return undefined;
+  const live = t.npc ? liveFolk.get(t.npc) : undefined;
+  if (live) return { spot: { n: t.n, dim: player.dimension.id, x: Math.floor(live.x), z: Math.floor(live.z) }, picked: false };
+  if (t.spot) return { spot: t.spot, picked: false };
+  const f = t.npc ? folk.get(t.npc) : undefined;
+  return f ? { spot: { ...f, n: t.n }, picked: false } : { picked: false, off: t.n };
+}
+
+/** @param {Player} player */
+function partyTag(player) {
+  try {
+    return player.getTags().find((t) => t.startsWith(PARTY_TAG));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Townsfolk and wanderers near each player, searched every other pass (they hardly move). @type {Map<string, { tick: number, dim: string, x: number, z: number, list: { kind: string, x: number, y: number, z: number, id?: string }[] }>} */
+const npcCache = new Map();
+
+/** @param {Player} player */
+function npcsNear(player) {
+  const at = player.location;
+  const dim = player.dimension;
+  const hit = npcCache.get(player.id);
+  if (hit && hit.dim === dim.id && system.currentTick - hit.tick < 20 && Math.abs(hit.x - at.x) + Math.abs(hit.z - at.z) < 8) return hit.list;
+  /** @type {{ kind: string, x: number, y: number, z: number, id?: string }[]} */
+  const list = [];
+  for (const e of dim.getEntities({ location: at, maxDistance: Number(get("npcRange")) || 64, tags: [NPC_TAG] })) {
+    try {
+      const tags = e.getTags();
+      const idTag = tags.find((t) => t.startsWith(ID_TAG));
+      const { x, y, z } = e.location;
+      if (tags.includes(WANDER_OWNER)) {
+        // A wanderer: at their camp they are always friendly; on the road only when we heard they are (a hostile
+        // in disguise, or one spawned before this pack loaded, stays hidden).
+        const wid = idTag?.slice(ID_TAG.length + 2) ?? "";
+        if (tags.some((t) => t.startsWith(CAMP_TAG)) || wanderers.get(wid) === true) list.push({ kind: "wander", x, y, z });
+        continue;
+      }
+      list.push({ kind: "folk", x, y, z, ...(idTag ? { id: idTag.slice(ID_TAG.length) } : {}) });
+    } catch {
+      // gone meanwhile
+    }
+  }
+  npcCache.set(player.id, { tick: system.currentTick, dim: dim.id, x: at.x, z: at.z, list });
+  return list;
+}
+
+/**
+ * Markers around the player: two entity searches (townsfolk and wanderers; mobs), the rest from broadcasts.
+ * @param {Player} player @param {Seen[]} seen @param {{ mobs: boolean, radius: number }} pr
+ */
+function gather(player, seen, pr) {
+  const dim = player.dimension;
+  const at = player.location;
+  /** @type {Marker[]} */
+  const out = [];
+  /** @param {string} kind @param {number} x @param {number} z @param {boolean} clamp */
+  const add = (kind, x, z, clamp) => {
+    const dx = x - at.x;
+    const dz = z - at.z;
+    out.push({ kind, dx, dz, d: Math.hypot(dx, dz), clamp });
+  };
+  /** Townsfolk loaded near the player, by id (a picked townsfolk is followed live). @type {Map<string, Vector3>} */
+  const liveFolk = new Map();
+  for (const n of npcsNear(player)) {
+    if (n.id) liveFolk.set(n.id, n);
+    add(n.kind, n.x, n.z, false);
+  }
+  if (pr.mobs) {
+    const max = Math.max(1, Number(get("maxMobs")) || 8);
+    for (const e of dim.getEntities({ location: at, maxDistance: pr.radius, families: ["monster"], excludeTags: [NPC_TAG], closest: max })) {
+      try {
+        const l = e.location;
+        add("mob", l.x, l.z, true);
+      } catch {
+        // gone meanwhile
+      }
+    }
+  }
+  const tag = seen.find((s) => s.id === player.id)?.party;
+  const others = get("showOthers") === true;
+  for (const s of seen) {
+    if (s.id === player.id || s.dim !== dim.id) continue;
+    if (tag && s.party === tag) add("party", s.x, s.z, true);
+    else if (others && Math.hypot(s.x - at.x, s.z - at.z) <= OTHERS_RANGE) add("other", s.x, s.z, false);
+  }
+  const range = Number(get("placeRange")) || 256;
+  for (const c of camps.values()) if (c.dim === dim.id && Math.abs(c.x - at.x) <= range && Math.abs(c.z - at.z) <= range) add("camp", c.x + 0.5, c.z + 0.5, false);
+  if (dim.id === OVERWORLD) for (const s of sites.get(player.id) ?? []) if (Math.abs(s.x - at.x) <= range && Math.abs(s.z - at.z) <= range) add("site", s.x + 0.5, s.z + 0.5, false);
+  return { markers: out, liveFolk };
+}
+
+/**
+ * The strip: 25 cells, 5 degrees each, centered on where the player faces, with N/E/S/W, ticks every 15 degrees
+ * and markers by bearing; out of sight, clamped markers become arrows at the edges.
+ * @param {number} heading 0 = north, clockwise @param {Marker[]} markers
+ */
+function stripOf(heading, markers) {
+  const cells = Array(CELLS).fill(G.S_BLANK);
+  const prio = Array(CELLS).fill(0);
+  cells[MID] = G.S_CENTER;
+  prio[MID] = 1;
+  for (let a = 0; a < 360; a += 15) {
+    const i = MID + Math.round(wrap(a - heading) / DEG);
+    if (i < 0 || i >= CELLS) continue;
+    const p = a % 45 === 0 ? 2 : 1;
+    if (p < prio[i] || (p === prio[i] && i === MID)) continue;
+    cells[i] = a % 45 === 0 ? LETTERS[a / 45] : G.S_TICK;
+    prio[i] = p;
+  }
+  for (const m of markers) {
+    const k = KINDS[m.kind];
+    if (!k) continue;
+    const rel = wrap(bearingOf(m.dx, m.dz) - heading);
+    let i = MID + Math.round(rel / DEG);
+    let g = k.s;
+    if (i < 0 || i >= CELLS) {
+      if (!m.clamp) continue;
+      i = rel < 0 ? 0 : CELLS - 1;
+      g = rel < 0 ? k.l : k.r;
+    }
+    // Nearer wins among equals.
+    const p = 10 + k.p - Math.min(m.d, 999) / 1000;
+    if (p <= prio[i]) continue;
+    cells[i] = g;
+    prio[i] = p;
+  }
+  return cells.join("");
+}
+
+/**
+ * The radar: 7 x 7 cells, the player in the middle, `radius` blocks to the edge; north up or turned so ahead is up.
+ * The destination and party mates beyond the edge sit on it.
+ * @param {number} heading @param {Marker[]} markers @param {number} radius @param {boolean} north
+ */
+function radarOf(heading, markers, radius, north) {
+  const grid = Array.from({ length: 2 * R + 1 }, () => Array(2 * R + 1).fill(G.Q_EMPTY));
+  const prio = Array.from({ length: 2 * R + 1 }, () => Array(2 * R + 1).fill(0));
+  const h = (heading * Math.PI) / 180;
+  const cos = Math.cos(h);
+  const sin = Math.sin(h);
+  /** Screen offset (right, down) of a world offset. @param {number} dx @param {number} dz */
+  const screen = (dx, dz) => (north ? [dx, dz] : [dx * cos + dz * sin, -dx * sin + dz * cos]);
+  const cell = radius / R;
+  /** @param {number} sx @param {number} sy @param {string} g @param {number} p @param {boolean} clamp */
+  const place = (sx, sy, g, p, clamp) => {
+    let c = Math.round(sx / cell);
+    let r = Math.round(sy / cell);
+    if (Math.max(Math.abs(c), Math.abs(r)) > R) {
+      if (!clamp) return;
+      const m = Math.max(Math.abs(sx), Math.abs(sy));
+      c = Math.round((sx * R) / m);
+      r = Math.round((sy * R) / m);
+    }
+    if (c === 0 && r === 0) return; // the player's own cell
+    if (p <= prio[r + R][c + R]) return;
+    grid[r + R][c + R] = g;
+    prio[r + R][c + R] = p;
+  };
+  if (!north) place(-sin * radius * 2, -cos * radius * 2, G.Q_NORTH, 1, true);
+  for (const m of markers) {
+    const k = KINDS[m.kind];
+    if (!k) continue;
+    const [sx, sy] = screen(m.dx, m.dz);
+    place(sx, sy, k.q, 10 + k.p - Math.min(m.d, 999) / 1000, m.kind === "star" || m.kind === "party");
+  }
+  grid[R][R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
+  return grid.map((row) => row.join("")).join("\n");
+}
+
+/** The last second lines built, by their parts (they rarely change). @type {Map<string, string>} */
+const line2Memo = new Map();
+/** The strip's second line: the destination (or Arrived), then the region. @param {string} region @param {string} dest */
+function line2(region, dest) {
+  const k = `${region}|${dest}`;
+  const hit = line2Memo.get(k);
+  if (hit !== undefined) return hit;
+  if (line2Memo.size > 200) line2Memo.clear();
+  const out = line2Of(region, dest);
+  line2Memo.set(k, out);
+  return out;
+}
+/** @param {string} region @param {string} dest */
+function line2Of(region, dest) {
+  const gap = dest && region ? "  " : "";
+  const room = LINE2_BYTES - bytes(dest) - bytes(gap) - 2;
+  return fit(`${dest}${gap}${region ? `§7${fit(region, Math.max(0, room))}` : ""}`, LINE2_BYTES);
+}
+
+/** @param {Player} player @param {Player[]} all @param {Seen[]} seen @param {number} now */
+function pass(player, all, seen, now) {
+  const pr = prefsOf(player);
+  const on = get("enabled") === true;
+  const showCompass = on && pr.compass;
+  const showRadar = on && pr.radar;
+  const sent = lastSent.get(player.id);
+  if (!showCompass && !showRadar) {
+    if (sent) {
+      side.clear(player, "", false);
+      side.clear(player, "radar", false);
+      side.redraw(player);
+      lastSent.delete(player.id);
+    }
+    if (on) arrival(player, destination(player, all, new Map()));
+    return;
+  }
+  const t0 = Date.now();
+  const { markers, liveFolk } = gather(player, seen, pr);
+  const dest = destination(player, all, liveFolk);
+  const reached = arrival(player, dest);
+  const heading = (((player.getRotation().y + 180) % 360) + 360) % 360;
+  let destText = "";
+  const done = arrived.get(player.id);
+  if (reached || (done && done[1] > now)) destText = `${G.I_CHECK}§a Arrived: ${(reached ?? /** @type {[string, number]} */ (done))[0]}`;
+  else if (dest?.off) destText = `§7${dest.off}`;
+  else if (dest?.spot) {
+    const s = dest.spot;
+    // Names are plain ASCII already (spotOf, plain): a slice is enough.
+    const label = (s.n || "Destination").slice(0, dest.picked ? NAME_MAX : 40);
+    if (s.dim !== player.dimension.id) destText = `${G.I_STAR}§f ${label} §7(in ${DIM_NAMES[s.dim] ?? "another dimension"})`;
+    else {
+      const dx = s.x + 0.5 - player.location.x;
+      const dz = s.z + 0.5 - player.location.z;
+      const d = Math.hypot(dx, dz);
+      markers.push({ kind: "star", dx, dz, d, clamp: true });
+      destText = `${G.I_STAR}§f ${label} §7${Math.round(d)}m`;
+    }
+  }
+  const dimId = player.dimension.id;
+  const region = dimId === OVERWORLD ? regions.get(player.id) ?? "" : `In ${DIM_NAMES[dimId] ?? "another dimension"}`;
+  const strip = showCompass ? stripOf(heading, markers) : "";
+  const second = showCompass ? line2(region, destText) : "";
+  const radar = showRadar ? radarOf(heading, markers, pr.radius, pr.north) : "";
+  lastText.set(player.id, { strip, line2: second, radar, dest: dest?.spot?.n });
+  const compassText = second ? `${strip}\n${second}` : strip;
+  const key = `${showCompass ? compassText : ""}|${showRadar ? radar : ""}`;
+  if (!side.held(player) && !(sent && sent.key === key && now - sent.at < REFRESH)) {
+    const t1 = Date.now();
+    if (showCompass) side.show(player, "top", compassText, HOLD, "", false);
+    else if (sent?.compass) side.clear(player, "", false);
+    if (showRadar) side.show(player, "radar", radar, HOLD, "radar", false);
+    else if (sent?.radar) side.clear(player, "radar", false);
+    side.redraw(player);
+    lastSent.set(player.id, { key, at: now, compass: showCompass, radar: showRadar });
+    drawMs += Date.now() - t1;
+  }
+  costMs += Date.now() - t0;
+  costPlayers++;
+}
+
+/**
+ * A picked destination this close is reached: it clears with a note. The story target never clears here.
+ * @param {Player} player @param {ReturnType<typeof destination>} dest
+ * @returns {[string, number] | undefined} the "Arrived" note when it happened now
+ */
+function arrival(player, dest) {
+  if (!dest?.picked || !dest.spot) return undefined;
+  const reach = Math.max(2, Number(get("arriveDistance")) || 8);
+  if (distTo(player, dest.spot) > reach) return undefined;
+  const note = /** @type {[string, number]} */ ([plain(dest.spot.n) || "your destination", system.currentTick + ARRIVED_TICKS]);
+  arrived.set(player.id, note);
+  setWaypoint(player, undefined);
+  try {
+    player.sendMessage(`§a[Map] Arrived at ${note[0]}. §7Destination cleared.`);
+    player.playSound("random.orb", { pitch: 1.2, volume: 0.5 });
+  } catch {
+    // left
+  }
+  return note;
+}
+
+system.runInterval(() => {
+  const now = system.currentTick;
+  const all = world.getAllPlayers();
+  /** Every player's place and party once a pass, for the others' markers. @type {Seen[]} */
+  const seen = [];
+  for (const p of all) {
+    try {
+      const l = p.location;
+      seen.push({ id: p.id, dim: p.dimension.id, x: l.x, z: l.z, party: partyTag(p) });
+    } catch {
+      // left meanwhile
+    }
+  }
+  for (const p of all) {
+    try {
+      if (p.isValid) pass(p, all, seen, now);
+    } catch (e) {
+      console.warn(`[map] ${e}`);
+    }
+  }
+  if (all.length) costPasses++;
+}, Math.max(10, Math.round(Number(CONFIG.intervalTicks) || 10)));
+
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  for (const m of [wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths]) m.delete(playerId);
+});
+
+// ---------------------------------------------------------------------------
+// Menus
+// ---------------------------------------------------------------------------
+
+/** Shows a form, retrying while the player has chat or another screen open. @param {Player} player @param {ActionFormData | ModalFormData} form @returns {Promise<any>} */
+async function show(player, form) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (!player.isValid) return undefined;
+    const res = await form.show(player);
+    if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
+    await new Promise((r) => system.runTimeout(() => r(undefined), 20));
+  }
+  return undefined;
+}
+
+/** Gives Mara's Field Map: an empty locator map, named. @param {Player} player */
+function giveMap(player) {
+  const inv = player.getComponent("minecraft:inventory")?.container;
+  if (!inv || inv.emptySlotsCount === 0) {
+    player.sendMessage("§c[Map] Your inventory is full. Make room and run /realm:map again.");
+    return;
+  }
+  /** Slots that hold an unnamed empty map already, so the new one is the one named. */
+  const before = new Set();
+  for (let i = 0; i < inv.size; i++) if (inv.getItem(i)?.typeId === "minecraft:empty_map") before.add(i);
+  try {
+    player.runCommand("give @s minecraft:empty_map 1 2");
+  } catch (e) {
+    console.warn(`[map] give: ${e}`);
+    player.sendMessage("§c[Map] The map couldn't be given. Try again.");
+    return;
+  }
+  for (let i = 0; i < inv.size; i++) {
+    const it = inv.getItem(i);
+    if (!it || it.typeId !== "minecraft:empty_map" || it.nameTag || before.has(i)) continue;
+    it.nameTag = "§eMara's Field Map";
+    it.setLore(["§7Hold it in your other hand", "§7(offhand) and use it once:", "§7the land and your arrow show", "§7in the corner of your view."]);
+    inv.setItem(i, it);
+    break;
+  }
+  player.sendMessage("§a[Map] Mara's Field Map is in your inventory. §7Use it once to draw the land around you, then hold it in your offhand to keep it in view.");
+}
+
+/** @param {Player} player */
+async function menu(player) {
+  const all = world.getAllPlayers();
+  const dest = destination(player, all, new Map());
+  const wp = waypointOf(player);
+  const lines = [];
+  if (wp && dest?.spot) lines.push(`§fDestination: §e${dest.spot.n}§r §7(${where(player, dest.spot)})`);
+  else if (wp && dest?.off) lines.push(`§fDestination: §e${wp.n}§r §7(${dest.off})`);
+  else if (dest?.spot) lines.push(`§fFollowing your story: §b${dest.spot.n}§r §7(${where(player, dest.spot)})`);
+  else lines.push("§7No destination. Pick one, or start a story and the strip points to it.");
+  lines.push("", "§7Mara's Field Map: hold it in your other hand (offhand) to see the land around you.");
+  if (get("enabled") !== true) lines.push("§cThe compass strip and radar are disabled on this realm.");
+  else lines.push("§7Compass strip and radar: /realm:prefs -> Minimap.");
+  const max = Math.max(1, Number(get("maxMarks")) || 5);
+  /** @type {[string, () => unknown][]} */
+  const actions = [
+    ["Get Mara's Field Map\n§8A locator map", () => giveMap(player)],
+    ["Pick a destination\n§8Townsfolk, waystones, camps...", () => pickMenu(player)],
+    [`Mark this spot\n§8${marksOf(player).length} of ${max} kept`, () => markMenu(player)],
+  ];
+  if (wp) actions.push([`Clear destination\n§8${wp.n}`, () => (setWaypoint(player, undefined), player.sendMessage("§7[Map] Destination cleared."))]);
+  const form = new ActionFormData().title("§lMinimap").body(lines.join("\n"));
+  for (const [label] of actions) form.button(label);
+  form.button("Close");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length || !player.isValid) return;
+  await actions[res.selection][1]();
+}
+
+/** @param {Player} player */
+async function markMenu(player) {
+  const form = new ModalFormData().title("Mark this spot").textField("Name", "e.g. Iron cave", { defaultValue: `Spot ${marksOf(player).length + 1}` });
+  const res = await show(player, form);
+  if (!res || res.canceled || !player.isValid) return;
+  const vals = /** @type {unknown[]} */ (res.formValues ?? []).filter((v) => v !== undefined);
+  player.sendMessage(markHere(player, String(vals[0] ?? "")));
+}
+
+/** Everything a player can pick, by group. @param {Player} player */
+function choices(player) {
+  const all = world.getAllPlayers();
+  const tag = partyTag(player);
+  /** @type {[string, Waypoint[]][]} */
+  const groups = [
+    ["Townsfolk", [...folk].map(([id, s]) => ({ ...s, k: "npc", id }))],
+    ["Waystones I know", (waystones.get(player.id) ?? []).map((w) => ({ n: w.n, dim: w.dim, x: w.x, z: w.z, k: "waystone", id: String(w.i) }))],
+    ["Wanderer camps", [...camps].map(([wid, s]) => ({ ...s, k: "camp", id: wid }))],
+    ["Atlas sites I found", (sites.get(player.id) ?? []).map((s) => ({ n: s.r ? fit(`${s.n} (${s.r})`, 40) : s.n, dim: s.dim, x: s.x, z: s.z, k: "site" }))],
+    ["Where I died", deaths.get(player.id) ? [{ ...(/** @type {Spot} */ (deaths.get(player.id))), n: "Where I died", k: "death" }] : []],
+    [
+      "Party mates",
+      tag
+        ? all
+            .filter((p) => p.id !== player.id && p.hasTag(tag))
+            .map((p) => ({ n: plain(p.name), dim: p.dimension.id, x: Math.floor(p.location.x), z: Math.floor(p.location.z), k: "party", id: p.id }))
+        : [],
+    ],
+    ["My marked spots", marksOf(player).map((m) => ({ ...m, k: "mark" }))],
+  ];
+  return groups;
+}
+
+/** @param {Player} player */
+async function pickMenu(player) {
+  while (player.isValid) {
+    const groups = choices(player);
+    const form = new ActionFormData().title("Pick a destination").body("§7The gold star on your compass strip and radar points there. A destination clears when you arrive.");
+    for (const [name, list] of groups) form.button(`${name}\n§8${list.length ? `${list.length} to pick from` : "None yet"}`);
+    form.button("Back");
+    const res = await show(player, form);
+    if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+    if (res.selection >= groups.length) return menu(player);
+    const [name, list] = groups[res.selection];
+    if (!list.length) {
+      player.sendMessage(`§7[Map] ${name}: none yet.`);
+      continue;
+    }
+    if (await listMenu(player, name, list)) return;
+  }
+}
+
+/** @param {Player} player @param {string} title @param {Waypoint[]} list @returns {Promise<boolean>} whether one was picked (or the menu closed) */
+async function listMenu(player, title, list) {
+  const sorted = [...list].sort((a, b) => distTo(player, a) - distTo(player, b)).slice(0, MENU_MAX);
+  const marks = sorted[0]?.k === "mark";
+  const form = new ActionFormData().title(title);
+  for (const w of sorted) form.button(`${w.n}\n§8${where(player, w)}`);
+  if (marks) form.button("Forget a spot\n§8Remove one from the list");
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return true;
+  if (marks && res.selection === sorted.length) {
+    await forgetMenu(player);
+    return false;
+  }
+  const w = sorted[res.selection];
+  if (!w) return false;
+  setWaypoint(player, w);
+  player.sendMessage(`§a[Map] Destination: ${w.n} §7(${where(player, w)}). The gold star points there.`);
+  return true;
+}
+
+/** @param {Player} player */
+async function forgetMenu(player) {
+  const list = marksOf(player);
+  const form = new ActionFormData().title("Forget a spot");
+  for (const m of list) form.button(`${m.n}\n§8${where(player, m)}`);
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || res.selection >= list.length || !player.isValid) return;
+  const gone = list[res.selection];
+  saveMarks(
+    player,
+    list.filter((_, i) => i !== res.selection)
+  );
+  const wp = waypointOf(player);
+  if (wp?.k === "mark" && wp.n === gone.n) setWaypoint(player, undefined);
+  player.sendMessage(`§7[Map] Forgot "${gone.n}".`);
+}
+
+// ---------------------------------------------------------------------------
+// Broadcasts from other packs
+// ---------------------------------------------------------------------------
+
+const EVENTS = new Set([
+  "realm:npc_places",
+  "realm:waystones_known",
+  "realm:atlas_region",
+  "realm:atlas_sites",
+  "realm:atlas_site",
+  "realm:death_point",
+  "realm:track",
+  "realm:place_ready",
+  "realm:wander_spawn",
+  "realm:wander_turn",
+  "realm:wander_gone",
+  "realm:map_debug",
+]);
+
+/** @param {string} id @param {any} m @param {Entity | undefined} source */
+function onEvent(id, m, source) {
+  const pid = typeof m.player === "string" ? m.player : "";
+  switch (id) {
+    case "realm:npc_places": {
+      const list = collect(id, m, Array.isArray(m.folk) ? m.folk : []);
+      if (!list) return;
+      folk.clear();
+      for (const f of /** @type {any[]} */ (list)) {
+        const s = spotOf(f);
+        if (s && typeof f.id === "string" && s.n) folk.set(f.id, s);
+      }
+      return;
+    }
+    case "realm:waystones_known": {
+      if (!pid) return;
+      const list = collect(`${id}|${pid}`, m, Array.isArray(m.list) ? m.list : []);
+      if (!list) return;
+      /** @type {(Spot & { i: number })[]} */
+      const out = [];
+      for (const w of /** @type {any[]} */ (list)) {
+        const s = spotOf(w);
+        if (s && isNum(w.i) && s.n) out.push({ ...s, i: w.i });
+      }
+      waystones.set(pid, out);
+      return;
+    }
+    case "realm:atlas_region":
+      if (pid) regions.set(pid, plain(m.name, 40));
+      return;
+    case "realm:atlas_sites":
+    case "realm:atlas_site": {
+      if (!pid) return;
+      const items = id === "realm:atlas_site" ? [m.site] : Array.isArray(m.sites) ? m.sites : [];
+      const list = id === "realm:atlas_site" ? [...(sites.get(pid) ?? []), ...items] : collect(`${id}|${pid}`, m, items);
+      if (!list) return;
+      /** @type {(Spot & { r: string })[]} */
+      const out = [];
+      for (const s of /** @type {any[]} */ (list)) {
+        if (Array.isArray(s) && isNum(s[1]) && isNum(s[2])) out.push({ n: plain(s[0]) || "Site", dim: OVERWORLD, x: Math.floor(s[1]), z: Math.floor(s[2]), r: plain(s[3], 40) });
+        else if (s && isNum(s.x) && isNum(s.z) && typeof s.n === "string") out.push(s);
+      }
+      // A found site is never lost: keep the list bounded anyway.
+      sites.set(pid, out.slice(-1000));
+      return;
+    }
+    case "realm:death_point": {
+      if (!pid) return;
+      const s = spotOf(m, "Where I died");
+      if (s) deaths.set(pid, s);
+      else deaths.delete(pid);
+      return;
+    }
+    case "realm:track": {
+      if (!pid) return;
+      const n = plain(m.label, 60);
+      const s = spotOf(m, n);
+      const npc = typeof m.npc === "string" ? m.npc : undefined;
+      if (n && (s || npc)) tracks.set(pid, { n, ...(s ? { spot: s } : {}), ...(npc ? { npc } : {}) });
+      else tracks.delete(pid);
+      return;
+    }
+    case "realm:place_ready": {
+      if (typeof m.wid !== "string") return; // story places stay the story's business
+      const s = spotOf(m, m.label ?? "A Wanderer's Camp");
+      if (!s || m.state === "removed" || m.state === "picked") camps.delete(m.wid);
+      else camps.set(m.wid, s);
+      return;
+    }
+    case "realm:wander_spawn":
+      if (typeof m.wid === "string") wanderers.set(m.wid, !m.hostile);
+      if (wanderers.size > 500) wanderers.delete(/** @type {string} */ (wanderers.keys().next().value));
+      return;
+    case "realm:wander_turn":
+      if (typeof m.wid === "string") wanderers.set(m.wid, false);
+      return;
+    case "realm:wander_gone":
+      if (typeof m.wid === "string") wanderers.delete(m.wid);
+      return;
+    case "realm:map_debug": {
+      if (source instanceof Player && !isOp(source)) return;
+      const player = world.getAllPlayers().find((p) => p.id === pid || p.name === pid);
+      const t = player ? lastText.get(player.id) : undefined;
+      send("realm:map_state", {
+        player: player?.id,
+        strip: t?.strip,
+        line2: t?.line2,
+        radar: t?.radar,
+        dest: t?.dest,
+        wp: player ? waypointOf(player) ?? null : null,
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers },
+        known: { folk: folk.size, camps: camps.size, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
+      });
+      if (m.action === "cost") {
+        costMs = 0;
+        drawMs = 0;
+        costPasses = 0;
+        costPlayers = 0;
+      }
+      return;
+    }
+  }
+}
+
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message, sourceEntity }) => {
+    if (!EVENTS.has(id)) return;
+    try {
+      const m = JSON.parse(message);
+      if (m && typeof m === "object") onEvent(id, m, sourceEntity);
+    } catch {
+      // not ours
+    }
+  },
+  { namespaces: ["realm"] }
+);
+
+/** Asks the packs that own the data to send it (for one player, or everyone). @param {string} [player] */
+function ping(player) {
+  const who = player ? { player } : {};
+  send("realm:waystones_known_ping", who);
+  send("realm:atlas_ping", who);
+  send("realm:death_point_ping", who);
+  send("realm:track_ping", who);
+  if (!player) {
+    send("realm:npc_places_ping", {});
+    send("realm:place_ping", {});
+  }
+}
+
+world.afterEvents.worldLoad.subscribe(() => {
+  system.runTimeout(() => ping(), 60);
+});
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (!initialSpawn) return;
+  const id = player.id;
+  system.runTimeout(() => ping(id), 40);
+});
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+/** @param {import("@minecraft/server").CustomCommandOrigin} origin */
+const playerOf = (origin) => {
+  const p = origin.initiator ?? origin.sourceEntity;
+  return p instanceof Player ? p : undefined;
+};
+
+system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
+  customCommandRegistry.registerCommand(
+    { name: "realm:map", description: "Minimap: get Mara's Field Map, pick a destination for your compass strip, mark spots", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    (origin) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => menu(player).catch((e) => console.warn(`[map] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:map_mark",
+      description: "Mark the spot where you stand, to pick it as a destination later",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+      optionalParameters: [{ name: "name", type: CustomCommandParamType.String }],
+    },
+    (origin, name) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => {
+        if (player.isValid) player.sendMessage(markHere(player, typeof name === "string" ? name : ""));
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    { name: "realm:map_clear", description: "Clear your destination (the strip follows your story again)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    (origin) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => {
+        if (!player.isValid) return;
+        const had = waypointOf(player);
+        setWaypoint(player, undefined);
+        player.sendMessage(had ? `§7[Map] Destination cleared (${had.n}).` : "§7[Map] You had no destination.");
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+});
+
+// /realm:help lists this pack while it's installed: answer its ping with the folder name.
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id }) => {
+    if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "map_bp");
+  },
+  { namespaces: ["realm"] }
+);

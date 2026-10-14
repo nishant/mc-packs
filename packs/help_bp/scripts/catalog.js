@@ -772,6 +772,62 @@ export const PACKS = [
     ]
   },
   {
+    "folder": "map_bp",
+    "topic": "map",
+    "name": "Minimap",
+    "summary": "A compass strip across the top of your screen shows which way you're facing, the region you're in and what's around: your destination (a gold star with its distance), townsfolk, wanderers, party mates, wanderer camps, the Atlas sites you found, and nearby mobs in red. An optional radar shows the same things as a small grid around you. §lMara's Field Map§r, Minecraft's own locator map, shows the land itself. The strip, radar and icons are drawn by Side HUD, part of §lRealm Resources§r.",
+    "steps": [
+      {
+        "text": "Look at the top of your screen. The compass strip shows N, E, S and W with a tick every 15 degrees (60 degrees to each side of where you face) and, under it, the Atlas region you're in. Icons on the strip: a §lgold star§r is your destination, §lyellow dots§r are townsfolk, §lgreen dots§r are wanderers, §lblue dots§r are party mates, §lred dots§r are mobs within 24 blocks, a §ltent§r is a wanderer camp and a §lpurple diamond§r is an Atlas site you found. Your destination, party mates and mobs that are out of view (behind you) show as arrows at the ends of the strip.",
+        "ops": false
+      },
+      {
+        "text": "Run §e/realm:map§r and pick §lGet Mara's Field Map§r to get an empty locator map. Use it once to draw the land around you, then hold it in your other hand (offhand): Minecraft shows it at the side of your view with your arrow and other players' arrows on it. The pack doesn't draw on it.",
+        "ops": false
+      },
+      {
+        "text": "Want to go somewhere? Run §e/realm:map§r, pick §lPick a destination§r, then choose from §lTownsfolk§r, §lWaystones I know§r, §lWanderer camps§r, §lAtlas sites I found§r, §lWhere I died§r, §lParty mates§r or §lMy marked spots§r (each list is nearest first, with the direction and distance). The star points there. When you get within 8 blocks (§earriveDistance§r), chat says §eArrived at ...§r and the destination clears.",
+        "ops": false
+      },
+      {
+        "text": "With no destination picked, the star follows your story tracker's current goal (the place to go or the townsfolk to report to). That one never clears on its own: it moves on with the story.",
+        "ops": false
+      },
+      {
+        "text": "Mark a spot with §e/realm:map_mark \"Iron cave\"§r (or §lMark this spot§r in §e/realm:map§r). You can keep 5 (§emaxMarks§r); marking one more forgets the oldest, and §lMy marked spots§r has §lForget a spot§r. §e/realm:map_clear§r clears your destination.",
+        "ops": false
+      },
+      {
+        "text": "Change it in §e/realm:prefs§r -> §lMinimap§r: §lCompass strip§r (enabled by default), §lRadar§r (disabled by default; a 7 x 7 grid above the left side boxes with you in the middle), §lRadar keeps north up§r (disabled: the radar turns with you, so ahead is always up), §lShow mobs on my minimap§r and §lMy mob and radar range§r (default 24 blocks, §emobRadius§r).",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with, the largest mob range anyone may pick (default 32, §emobRadiusMax§r) and whether players outside your party show as white dots (§lShow players outside your party§r, disabled by default, §eshowOthers§r).",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:map",
+        "ops": false,
+        "who": "Everyone",
+        "text": "The §lMinimap§r menu: your destination, §lGet Mara's Field Map§r (an empty locator map), §lPick a destination§r, §lMark this spot§r and §lClear destination§r"
+      },
+      {
+        "usage": "/realm:map_mark [name]",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Marks where you stand (default name §eSpot 1§r, §eSpot 2§r...); you keep 5 (§emaxMarks§r), the oldest goes first. Pick it later in §e/realm:map§r"
+      },
+      {
+        "usage": "/realm:map_clear",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Clears your destination: the star follows your story again"
+      }
+    ]
+  },
+  {
     "folder": "mail_bp",
     "topic": "mail",
     "name": "Realm Mail",

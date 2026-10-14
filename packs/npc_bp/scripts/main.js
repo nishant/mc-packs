@@ -29,6 +29,7 @@ import { get } from "./settings.js";
 //   realm:npc_flags { player, flags }                                                               <- saga_bp
 //   realm:calendar { day, season, festival?, ends?, doy, year, from }   at dawn, on join, on realm:calendar_ping
 //   realm:mail_send { to, from, subject, body }                                                     -> mail_bp
+// For the Minimap: realm:npc_places { part, parts, folk: [{ id, n, dim, x, z }] } on a change and on realm:npc_places_ping.
 
 const PROP_LIST = "npc:list"; // world: JSON Placed[], where each townsfolk lives
 const PROP_WEATHER = "npc:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -144,6 +145,44 @@ function save() {
   } catch (e) {
     console.warn(`[npc] save: ${e}`);
   }
+  placesSoon();
+}
+
+// Where each townsfolk is placed, for the Minimap (map_bp): realm:npc_places { part, parts, folk: [{ id, n, dim, x, z }] },
+// sent when the list changes (a tick later, once) and on realm:npc_places_ping. Parts stay under 2048 characters.
+let placesQueued = false;
+function placesSoon() {
+  if (placesQueued) return;
+  placesQueued = true;
+  system.runTimeout(() => {
+    placesQueued = false;
+    sendPlaces();
+  }, 1);
+}
+let lastPlaces = "";
+/** @param {boolean} [always] send even if nothing changed */
+function sendPlaces(always = false) {
+  const items = list.filter((r) => folk.has(r.id)).map((r) => ({ id: r.id, n: /** @type {Townsfolk} */ (folk.get(r.id)).name.slice(0, 32), dim: r.dim, x: Math.floor(r.x), z: Math.floor(r.z) }));
+  const key = JSON.stringify(items);
+  if (!always && key === lastPlaces) return;
+  lastPlaces = key;
+  /** @type {object[][]} */
+  const parts = [];
+  let cur = [];
+  let len = 0;
+  for (const it of items) {
+    const n = JSON.stringify(it).length + 1;
+    if (cur.length && len + n > 1800) {
+      parts.push(cur);
+      cur = [];
+      len = 0;
+    }
+    cur.push(it);
+    len += n;
+  }
+  if (cur.length) parts.push(cur);
+  if (!parts.length) return system.sendScriptEvent("realm:npc_places", JSON.stringify({ part: 1, parts: 0, folk: [] }));
+  parts.forEach((p, i) => system.sendScriptEvent("realm:npc_places", JSON.stringify({ part: i + 1, parts: parts.length, folk: p })));
 }
 
 /** @param {string} id */
@@ -1544,6 +1583,10 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // Hearth & Hearsay events from other packs.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
+    if (id === "realm:npc_places_ping") {
+      if (ready) sendPlaces(true);
+      return;
+    }
     if (id !== "realm:gossip" && id !== "realm:npc_flags" && id !== "realm:quest_done" && id !== "realm:calendar" && id !== "realm:calendar_ping") return;
     if (id === "realm:calendar_ping") {
       // { own: true }: Realm Calendar taking over (or back) asks for this pack's own count, even while it listens.

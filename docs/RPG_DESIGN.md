@@ -650,3 +650,32 @@ NPC birthdays (section 2) use this calendar.
   Guilds' top title is `topTitle` "{guild}master"; every reached title is re-sent 11 s after join.
 - Tests: `tools/test-bds/examples/skills-calling.js`, `relics-ascension.js`. A simulated player gets a new id on restart,
   so the Calling's persistence across a restart can't be tested there (relic stages are, through a chest).
+
+---
+
+## Minimap (as shipped, `map_bp` 1.0.0 + Side HUD 1.2.0, October 2026)
+
+- What was asked: region names, a destination marker, NPCs, the player and their heading, and red dots for mobs.
+  Scripts can't draw on the HUD or on map items, so it's three parts: Bedrock's own locator map for the land
+  (`/realm:map` gives "Mara's Field Map", `give @s minecraft:empty_map 1 2` then named; held in the offhand), a
+  compass strip at the top center, and an optional 7 x 7 radar above the left side boxes.
+- Icons: a glyph font page in Side HUD (`font/glyph_F3.png`, U+F300-U+F3FF, Private Use Area, away from E0-E9
+  that Mojang and add-ons use), 55 colored glyphs drawn edge to edge (a baseline or a dark square) so they line
+  up as cells, generated with the names file `map_bp/scripts/glyphs.js` by `tools/gen-glyphs/gen.mjs`
+  (`--check` in `npm run check`). The only exception to the ASCII rule: private-use characters, only in that
+  file (check-ascii also refuses ``-`` escapes elsewhere), only in the map's HUD strings.
+- Transport: the side boxes protocol grew two slots players can't pick (`top`, `radar`; 11 segments, 1769
+  bytes) and parts (`from` `map/radar`), so one pack holds two slots; `show(..., part, false)` + `redraw`
+  draws once. Every copy of `side.js` was synced (6 packs bumped). Strip: 25 cells of 5 degrees (60 each side),
+  75 bytes, plus a second line (destination and region) within the rest of the 159 bytes. Radar: 49 cells, 153
+  bytes.
+- Broadcasts added where the data lives (each under 2048 characters, lists in parts, each with a ping):
+  `realm:npc_places` (npc_bp), `realm:waystones_known` (waystone_bp), `realm:atlas_region`, `realm:atlas_sites`,
+  `realm:atlas_site` (atlas_bp), `realm:death_point` (death_bp), `realm:track` (saga_bp: the tracker's target,
+  with `npc` for a townsfolk to talk to; computed every 2 s for every player with a story, shown or not). Saga's
+  `realm:place_ready` for camps carries `label`. Parties needed nothing (the `realm_party:` tag); wanderers
+  needed nothing: road wanderers show only after a non-hostile `realm:wander_spawn`, camps always.
+- Not done: no drawn terrain; no story places other than camps on the strip; JSON UI layout and glyph size
+  unseen in a client (BDS draws no HUD); the locator map's data value can't be read back by scripts.
+- Cost: 0.39 ms per player pass (10 players, strip and radar on, 24 mobs; includes the test harness's title
+  relay), 0.25-0.3 ms without the title. Scenario: `tools/test-bds/examples/map.js`.
