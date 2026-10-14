@@ -217,6 +217,7 @@ const HUD_STALE_TICKS = 200;
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   tickers.delete(playerId);
   pausedUntil.delete(playerId);
+  tickerPrefs.delete(playerId);
 });
 
 /** @param {unknown} id */
@@ -225,29 +226,52 @@ const colorCode = (id) => COLORS.find((c) => c.id === id)?.code ?? "§f";
 /** @param {Stat} stat @param {number} n */
 const fmt = (stat, n) => (stat.format ? stat.format(n) : n.toLocaleString());
 
-/** @param {Player} player @returns {Stat[]} the stats this player's ticker shows */
-const tickerStats = (player) => STATS.filter((s) => getFor(player, `tickerShows.${s.id}`) === true);
+/**
+ * Each player's ticker settings, read once and kept until one changes (onChange below): getFor reads and parses the
+ * player's saved preferences on every call, and the ticker needed 15 of them per player each second (about 4 ms a
+ * pass with 10 players).
+ * @type {Map<string, { on: boolean, shown: Stat[], lc: string, vc: string, full: boolean, all: boolean, seconds: number }>}
+ */
+const tickerPrefs = new Map();
+
+/** @param {Player} player */
+function prefsOf(player) {
+  let p = tickerPrefs.get(player.id);
+  if (!p) {
+    tickerPrefs.set(
+      player.id,
+      (p = {
+        on: get("tickerEnabled") === true && getFor(player, "ticker") === true,
+        shown: STATS.filter((s) => getFor(player, `tickerShows.${s.id}`) === true),
+        lc: colorCode(getFor(player, "tickerLabelColor")),
+        vc: colorCode(getFor(player, "tickerValueColor")),
+        full: getFor(player, "tickerStyle") === "full",
+        all: getFor(player, "tickerMode") === "all",
+        seconds: Number(getFor(player, "tickerSeconds")) || 5,
+      })
+    );
+  }
+  return p;
+}
 
 /**
  * The ticker's text for a player, advancing to the next stat when its time is up. "" = nothing to show.
  * @param {Player} player @param {{ index: number, seconds: number }} t
  */
 function tickerText(player, t) {
-  const shown = tickerStats(player);
+  const { shown, lc, vc, full, all, seconds } = prefsOf(player);
   if (!shown.length) return "";
-  const lc = colorCode(getFor(player, "tickerLabelColor"));
-  const vc = colorCode(getFor(player, "tickerValueColor"));
-  const full = getFor(player, "tickerStyle") === "full";
   /** @param {Stat} stat */
   const one = (stat) => {
-    const score = scoreOf(stat.id, player.name);
-    if (!full) return `${lc}${stat.short} ${vc}${fmt(stat, score)}`;
+    if (!full) return `${lc}${stat.short} ${vc}${fmt(stat, scoreOf(stat.id, player.name))}`;
     const list = ranked(stat.id);
     const rank = list.findIndex((s) => s.participant.displayName === player.name) + 1;
+    // A ranked player's score is in the list already (read this tick); an unranked one has 0 or none.
+    const score = rank > 0 ? list[rank - 1].score : scoreOf(stat.id, player.name);
     return `${lc}${stat.label} ${vc}${fmt(stat, score)}${rank > 0 ? ` ${lc}#${rank} of ${list.length}` : ""}`;
   };
-  if (getFor(player, "tickerMode") === "all") return shown.map(one).join("§r   ");
-  if (t.seconds >= getFor(player, "tickerSeconds")) {
+  if (all) return shown.map(one).join("§r   ");
+  if (t.seconds >= seconds) {
     t.seconds = 0;
     t.index++;
   }
@@ -255,7 +279,7 @@ function tickerText(player, t) {
 }
 
 /** @param {Player} player */
-const tickerOn = (player) => get("tickerEnabled") === true && getFor(player, "ticker") === true;
+const tickerOn = (player) => prefsOf(player).on;
 
 /** @param {string} playerId @param {string} text */
 const toHud = (playerId, text) => system.sendScriptEvent("realm:hud_line", JSON.stringify({ player: playerId, key: "stats", text, ticks: 80 }));
@@ -331,6 +355,8 @@ onChange((key, player) => {
   if (key === "*" || key === "sidebar" || key.startsWith("sidebarShows.")) {
     if (!player) applySidebar();
   }
+  if (player) tickerPrefs.delete(player.id);
+  else tickerPrefs.clear();
   // A changed ticker setting shows on the next second, from the first chosen stat.
   for (const p of player ? [player] : world.getAllPlayers()) {
     const t = tickers.get(p.id);
