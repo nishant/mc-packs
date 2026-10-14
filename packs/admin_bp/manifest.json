@@ -4,7 +4,7 @@
     "name": "Realm Configuration",
     "description": "An admin menu item every operator gets: run any realm command from one place, with preset choices for every option. /realm:admin",
     "uuid": "09348c78-4c02-45fe-916d-5f752c29a8ca",
-    "version": [1, 5, 0],
+    "version": [1, 5, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
