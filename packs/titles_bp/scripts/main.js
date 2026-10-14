@@ -510,7 +510,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:titles_give",
-      description: 'Operators: give a player a title (or a trail: "trail:cloud", leaves, ember, sparkle, hearts, glyphs)',
+      description: 'Operators: give a player a title (or a trail: "trail:cloud", leaves, ember, sparkle, hearts, glyphs, confetti, notes)',
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
       mandatoryParameters: [
