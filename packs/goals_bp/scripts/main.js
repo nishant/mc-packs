@@ -294,6 +294,7 @@ async function showGoal(player, id) {
           world.sendMessage(
             `§6Community goal §e${now.n}§6 is finished: ${fmt(now.got)} ${itemName(now.item)} given.${t ? ` Top contributors: ${t}.` : ""} Thanks, everyone!`,
           );
+          return mainMenu(player);
         },
       });
       actions.push({
@@ -302,12 +303,15 @@ async function showGoal(player, id) {
           const block = lookedAtContainer(player);
           const now = goals().get(g.id);
           if (!now) return;
-          if (!block) return player.sendMessage(`§c${LOOK}`);
-          const taken = collectorAt(block, now.id);
-          if (taken) return player.sendMessage(`§cThat container already collects for ${taken.n}. Use another one.`);
-          Object.assign(now, { dim: block.dimension.id, x: block.x, y: block.y, z: block.z });
-          save(now);
-          player.sendMessage(`§a${now.n} now collects into the container at ${where(now)}.`);
+          const taken = block && collectorAt(block, now.id);
+          if (!block) player.sendMessage(`§c${LOOK}`);
+          else if (taken) player.sendMessage(`§cThat container already collects for ${taken.n}. Use another one.`);
+          else {
+            Object.assign(now, { dim: block.dimension.id, x: block.x, y: block.y, z: block.z });
+            save(now);
+            player.sendMessage(`§a${now.n} now collects into the container at ${where(now)}.`);
+          }
+          return showGoal(player, now.id);
         },
       });
     }
@@ -320,6 +324,7 @@ async function showGoal(player, id) {
             run: () => {
               remove(g.id);
               player.sendMessage(`§aGoal ${g.n} removed.`);
+              return mainMenu(player);
             },
           },
           { text: "Keep it", run: () => showGoal(player, g.id) },
