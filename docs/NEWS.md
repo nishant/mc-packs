@@ -6,6 +6,24 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## A big round of fixes
+
+We went through every pack looking for bugs. Here is what changed:
+
+- The welcome popup is now a short guide to the realm: the story, what to do, handy commands and the rules.
+- Quick Stack no longer drops your items into chests in someone else's land claim.
+- Chest Finder only lists containers you can open: other players' locked chests and chests in their claims stay private.
+- Story defenses wait while you're away, and attackers that vanished with their chunk regroup when you come back.
+- Items you rename on a phone keyboard now count for story quests, and fish dropped next to your hook no longer count as catches.
+- Expeditions: when several of you fall at once, everyone gets their own items back.
+- Guilds: pumpkins, melons and ores you placed no longer count as harvests or mining after the realm restarts.
+- Meteors burn up over water instead of leaving magma on the lake bed, tornadoes ride the water's surface, and storm fog and rain sounds reach you in a boat.
+- Storm Chasing remembers lightning rods that oxidize or are waxed.
+- The Regatta course puts its checkpoints on the water, and the Deck never drops a locked item.
+- The stats ticker shows up right away for new players and costs the server less.
+- Community Goals and party chat answer instead of closing or doing nothing.
+- Operators: moving a story place keeps its terrain snapshot, and /realm:npc_remove asks first.
+
 ## Rook races you, and Pell walks with you
 
 Rook the Rival doesn't just talk about bounties anymore.
