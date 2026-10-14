@@ -345,9 +345,12 @@ function saveHunts(player, hunts) {
   }
 }
 
+/** Shortest leg (blocks): longer than the Skills pack's widest Map Sense (160), so a marker is never seen from the leg's start. */
+const MIN_LEG = 170;
+
 /**
- * A new hunt from where the player stands: the treasure 800-2000 blocks away (away from world spawn), and 2-3 legs
- * that wander a little on the way.
+ * A new hunt from where the player stands: the treasure `minDistance`-`maxDistance` blocks away (away from world
+ * spawn), and `legsMin`-`legsMax` legs that wander a little on the way, each at least MIN_LEG blocks long.
  * @param {Player} player @returns {Hunt}
  */
 function newHunt(player) {
@@ -363,7 +366,7 @@ function newHunt(player) {
     end = { x: Math.round(from.x + Math.sin(a) * dist), z: Math.round(from.z - Math.cos(a) * dist) };
     if (flat(end, spawn) >= keepAway) break;
   }
-  const legs = randInt(Math.max(1, CONFIG.legsMin), Math.max(1, CONFIG.legsMin, CONFIG.legsMax));
+  const legs = Math.min(randInt(Math.max(1, CONFIG.legsMin), Math.max(1, CONFIG.legsMin, CONFIG.legsMax)), Math.max(1, Math.floor(dist / MIN_LEG)));
   /** @type {XZ[]} */
   const pts = [];
   const dx = end.x - from.x;
