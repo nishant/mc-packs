@@ -144,7 +144,12 @@ if (check) {
       const [x, y, z] = manifest.header.version;
       // Edit the text, not a re-serialized object, so the manifest keeps its formatting.
       const raw = readFileSync(manifestPath, "utf8");
-      writeFileSync(manifestPath, raw.replace(`"version": [${x}, ${y}, ${z}],\n    "min_engine_version"`, `"version": [${x}, ${y}, ${z + 1}],\n    "min_engine_version"`));
+      const bumped = raw.replace(`"version": [${x}, ${y}, ${z}],\n    "min_engine_version"`, `"version": [${x}, ${y}, ${z + 1}],\n    "min_engine_version"`);
+      if (bumped === raw) {
+        console.error(`couldn't find the header version in packs/${HELP}/manifest.json to bump it: bump it by hand`);
+        process.exit(1);
+      }
+      writeFileSync(manifestPath, bumped);
       console.log(`wrote ${out.replace(root + "/", "")}; ${HELP} is now ${x}.${y}.${z + 1}`);
     } else {
       console.log(`wrote ${out.replace(root + "/", "")}`);
