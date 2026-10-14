@@ -19,6 +19,9 @@ We went through every pack looking for bugs. Here is what changed:
 - Guilds: pumpkins, melons and ores you placed no longer count as harvests or mining after the realm restarts.
 - Meteors burn up over water instead of leaving magma on the lake bed, tornadoes ride the water's surface, and storm fog and rain sounds reach you in a boat.
 - Storm Chasing remembers lightning rods that oxidize or are waxed.
+- Bounty targets over a lake or the sea come as drowned in the water, not land mobs on the bottom.
+- The Field Journal's Ocean page can now be found: swim in deep water.
+- Rain Charm, Tide Boots and the Stormchaser title count rain while you swim over a sandy sea floor.
 - The Regatta course puts its checkpoints on the water, and the Deck never drops a locked item.
 - The stats ticker shows up right away for new players and costs the server less.
 - Community Goals and party chat answer instead of closing or doing nothing.

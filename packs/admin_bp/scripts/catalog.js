@@ -493,7 +493,7 @@ export const PACKS = [
     pack: "Titles & Trails",
     commands: [
       {"name":"realm:titles","description":"Titles & Trails: choose the title under your name and the trail that follows you","permission":"any","params":[]},
-      {"name":"realm:titles_give","description":"Operators: give a player a title (or a trail: \"trail:cloud\", leaves, ember, sparkle, hearts, glyphs)","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
+      {"name":"realm:titles_give","description":"Operators: give a player a title (or a trail: \"trail:cloud\", leaves, ember, sparkle, hearts, glyphs, confetti, notes)","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
     ],
   },
   {
