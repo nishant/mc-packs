@@ -33,7 +33,7 @@ Minecraft Bedrock packs for a Realm. Each folder in `packs/` is a self-contained
 npm run check 2>&1 | tail -30   # every check (tsc, ASCII, docs coverage, commands, stories, settings/zones copies, catalogs, news, generated packs); stops at the first failure
 npm run build 2>&1 | tail -3    # dist/<folder>.mcpack
 npm run bundle -- --all         # or --resources; --list [--json]; see the bundle-packs skill. Refreshes the Realm News release first
-npm run gen:rain                # or gen:sky, gen:translucent, gen:platypus, gen:build, gen:glyphs: regenerate a resource pack (rain sounds need ffmpeg with libvorbis)
+npm run gen:rain                # or gen:sky, gen:translucent, gen:platypus, gen:build, gen:glyphs: regenerate a resource pack (rain sounds need ffmpeg with libvorbis; their --check in npm run check doesn't)
 node tools/help-catalog.mjs     # rebuild /realm:help after docs change (bumps help_bp)
 node tools/admin-catalog.mjs    # rebuild the Realm Configuration menu after command changes (then bump admin_bp)
 node tools/gen-news.mjs         # copy the newest docs/NEWS.md entry into news_bp (bumps news_bp)
