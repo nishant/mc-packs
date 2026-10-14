@@ -268,6 +268,8 @@ for (const s of STORIES) {
     npcOk(cat, c.npc);
     npcOk(cat, c.end);
     whens(cat, s.id, c.when);
+    // The engine reads requires on a story (before its first chapter), a choice and a Stranger's template only.
+    if (c.requires !== undefined) errors.push(`${cat}: a chapter has no requires (it would be ignored): use when, or requires on a choice`);
     pages(`${cat} intro`, s.id, c.intro);
     pages(`${cat} outro`, s.id, c.outro);
     choicesOf(`${cat} introChoices`, s.id, c.introChoices);

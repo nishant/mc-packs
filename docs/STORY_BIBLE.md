@@ -465,10 +465,12 @@ choices, and the Kitchen dishes against the Cooking pack; flags read but never s
 }
 ```
 
-### Requirements (`requires` on a story, a chapter or a choice)
+### Requirements (`requires` on a story, a choice or a Stranger's template)
 
 `{ stories?: string[], chapters?: string[] /* "story/chapter" */, flags?: Record<string,string>,
-rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 */ }`. All must hold.
+rep?: Record<guild, number>, minCount?: Record<string, number> /* "g:mercy": 3 */ }`. All must hold. A story's
+`requires` is checked only before its first chapter; a chapter has no `requires` (gate it with `when`), and
+`check-stories` fails on one.
 
 ### Flags
 
