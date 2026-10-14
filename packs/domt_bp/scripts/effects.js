@@ -1702,7 +1702,7 @@ export const CARDS = [
     prep: (p) => testSword(p),
     run: ({ player }) => {
       const { inv, slot, item } = held(player);
-      if (!inv || !item || item.maxAmount > 1) return false;
+      if (!inv || !item || item.maxAmount > 1 || item.lockMode !== ItemLockMode.none) return false;
       const cursed = enchant(item, [["minecraft:vanishing", 1]]);
       if (!cursed) return false;
       const name = pick(["Wet Noodle", "Mister Pokey", "The Disappointment", "Soggy Biscuit", "Tickle Stick", "Old Faithless"]);
