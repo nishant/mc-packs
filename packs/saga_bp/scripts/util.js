@@ -173,6 +173,27 @@ export function groundAt(dim, x, z, yHint, strict = false, bed = false) {
   }
 }
 
+/**
+ * The air just over the water above a spot under water (x/y/z), when nothing but water is between: undefined on land,
+ * under a solid roof (an underwater cave) or in an unloaded column.
+ * @param {Dimension} dim @param {number} x @param {number} y @param {number} z
+ */
+export function waterTop(dim, x, y, z) {
+  const bx = Math.floor(x);
+  const bz = Math.floor(z);
+  try {
+    for (let i = 0, by = Math.floor(y); i < 64; i++, by++) {
+      const b = dim.getBlock({ x: bx, y: by, z: bz });
+      if (!b) return undefined;
+      if (wet(b)) continue;
+      return i > 0 && open(b) && !lava(b) ? by : undefined;
+    }
+  } catch {
+    // unloaded
+  }
+  return undefined;
+}
+
 /** Players in one of our dialogues (or a vision): one at a time. @type {Set<string>} */
 export const busy = new Set();
 

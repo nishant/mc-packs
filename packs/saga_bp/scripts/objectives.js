@@ -30,7 +30,7 @@ import { get, getFor } from "./settings.js";
 import { holdTitle, isSlot, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
 import { FAVORS, WANDERERS } from "./stories/index.js";
-import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait } from "./util.js";
+import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait, waterTop } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -838,7 +838,12 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
       const x = at.x + Math.cos(a) * d;
       const z = at.z + Math.sin(a) * d;
       const y = groundAt(dim, x, z, y0, true, deep);
-      if (y !== undefined && inSight(dim, { x: at.x, y: y0 + 1.5, z: at.z }, { x, y: y + 1.5, z })) spot = { x, y, z };
+      if (y === undefined) continue;
+      const eye = { x: at.x, y: y0 + 1.5, z: at.z };
+      // A swimmer on the bed may be out of a straight line from the middle (the shore's edge is in the way): it counts
+      // when the open water over it reaches a surface that can be seen.
+      let top;
+      if (inSight(dim, eye, { x, y: y + 1.5, z }) || (deep && (top = waterTop(dim, x, y, z)) !== undefined && inSight(dim, eye, { x, y: top + 0.5, z }))) spot = { x, y, z };
     }
     spot ??= { x: at.x, y: y0, z: at.z };
     const ent = spawnActor(dim, type, spot, { owner: player.id, key, role: "add" });
