@@ -1005,6 +1005,8 @@ function answerAccess(message) {
   /** @type {number[]} */
   const closed = [];
   if (locksOn() && locks().size && Array.isArray(q.spots)) {
+    /** @type {Map<string, (b: Block) => string | undefined>} one read per chest for the whole message, per dimension */
+    const sigs = new Map();
     q.spots.slice(0, ACCESS_CHUNK).forEach((/** @type {unknown} */ s, /** @type {number} */ i) => {
       if (!Array.isArray(s) || typeof s[0] !== "string") return;
       const [dim, x, y, z] = [String(s[0]), Number(s[1]), Number(s[2]), Number(s[3])];
@@ -1013,7 +1015,8 @@ function answerAccess(message) {
       if (!lock) {
         try {
           const b = world.getDimension(dim).getBlock({ x, y, z });
-          if (b) lock = lockAt(b); // the half of a double chest added next to a locked one
+          if (!sigs.has(dim)) sigs.set(dim, signatures());
+          if (b) lock = lockAt(b, sigs.get(dim)); // the half of a double chest added next to a locked one
         } catch {
           // unloaded or no such dimension: the saved locks are all there is
         }

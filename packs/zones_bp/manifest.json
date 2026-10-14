@@ -4,7 +4,7 @@
     "name": "Safe Zones",
     "description": "Mark your base as a safe zone: meteors, tornadoes, storm lightning and other world events break no blocks there. /realm:zones",
     "uuid": "93c7f3a1-c0b7-4584-bf8b-03325263f0d4",
-    "version": [1, 0, 1],
+    "version": [1, 0, 2],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
