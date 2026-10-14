@@ -11,7 +11,7 @@ import { BlockPermutation, LiquidType } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
 /** @typedef {import("@minecraft/server").Block} Block */
 /** @typedef {{ x: number, y: number, z: number }} V3 */
-/** @typedef {"land" | "coast" | "water" | "underground" | "sky" | "high"} Site */
+/** @typedef {"land" | "coast" | "water" | "underground" | "sky" | "high" | "deep"} Site */
 /**
  * size: the box the build covers (x and z odd, centered on the origin); below: how many of the
  * size.y layers lie under the origin; y: fixed origin height for underground and sky places;
@@ -102,6 +102,22 @@ export const PREFABS = {
   },
 };
 
+/**
+ * Wanderers' camps (Wanderers of the Wilds): 7 by 7, a lodestone with a "Waystone: <Name>'s Camp" sign
+ * (`lodestone`, `sign`) and where the wanderer stands (`actor`). Instanced: the place is `camp:<wanderer>`,
+ * its record names the prefab. "deep" camps are carved where the wanderer was met underground.
+ * @type {Record<string, PrefabInfo>}
+ */
+export const CAMPS = {
+  camp_road: { label: "Road Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "land", minDist: 0, maxDist: 100000, slope: 3, features: { actor: v(0, 1, -2), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
+  camp_peak: { label: "Peak Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "land", minDist: 0, maxDist: 100000, slope: 4, features: { actor: v(0, 1, -2), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
+  camp_ruin: { label: "Ruin Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "land", minDist: 0, maxDist: 100000, slope: 3, features: { actor: v(0, 1, -1), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
+  camp_deep: { label: "Deep Camp", size: { x: 7, y: 6, z: 7 }, below: 1, site: "deep", minDist: 0, maxDist: 100000, features: { actor: v(0, 1, -1), lodestone: v(-2, 1, -2), sign: v(-2, 1, -3) } },
+};
+
+/** A prefab's info: a story place's or a camp's. @param {string} name @returns {PrefabInfo} */
+export const prefabInfo = (name) => PREFABS[name] ?? CAMPS[name];
+
 /** @param {number} x @param {number} y @param {number} z @returns {V3} */
 function v(x, y, z) {
   return { x, y, z };
@@ -126,7 +142,7 @@ export function rotate(offset, facing) {
  * @param {string} name @param {V3} origin @param {number} facing @returns {{ min: V3, max: V3 }}
  */
 export function footprint(name, origin, facing) {
-  const info = PREFABS[name];
+  const info = prefabInfo(name);
   const hx = (info.size.x - 1) / 2, hz = (info.size.z - 1) / 2;
   const a = rotate({ x: -hx, y: 0, z: -hz }, facing), b = rotate({ x: hx, y: 0, z: hz }, facing);
   const y0 = origin.y - (info.below ?? 0);
@@ -365,6 +381,94 @@ const round = (r) => (x, z) => Math.hypot(x, z) <= r;
 
 /** @type {Record<string, (p: Plan) => void>} */
 const BUILD = {
+  // ---- Wanderers' camps (7 x 7, under 120 blocks each) ----
+  camp_road(p) {
+    p.pad(rect(3, 3), 3, 3, 4, 1);
+    for (const [x, z] of [[0, -3], [0, -2], [1, -3], [-1, 0], [0, 0]]) p.set(x, 0, z, "coarse_dirt");
+    for (let z = 0; z <= 2; z++) {
+      p.set(-1, 1, z, "white_wool");
+      p.set(1, 1, z, "white_wool");
+      p.set(0, 2, z, "white_wool");
+    }
+    p.set(0, 1, 2, "white_wool");
+    p.set(0, 1, 1, b("white_carpet"));
+    p.set(2, 1, -2, campfire());
+    p.set(3, 1, -2, log("spruce_log", "z"));
+    p.set(2, 1, -3, log("spruce_log", "x"));
+    p.set(2, 1, 2, barrel("u"));
+    p.set(-3, 1, 1, "spruce_fence");
+    p.set(-3, 2, 1, lantern());
+    p.set(-2, 1, -2, "lodestone");
+    p.set(-2, 1, -3, b("spruce_standing_sign", { ground_sign_direction: 8 }));
+  },
+  camp_peak(p) {
+    p.pad(rect(3, 3), 3, 3, 4, 2);
+    for (let x = -3; x <= 3; x++) if (x !== 0 && x !== -2) p.set(x, 1, 3, ROCK);
+    for (const z of [1, 2]) {
+      p.set(-3, 1, z, ROCK);
+      p.set(3, 1, z, ROCK);
+    }
+    for (let z = 0; z <= 2; z++) {
+      p.set(-1, 1, z, "light_gray_wool");
+      p.set(1, 1, z, "light_gray_wool");
+      p.set(0, 2, z, "light_gray_wool");
+    }
+    p.set(0, 1, 2, "light_gray_wool");
+    p.set(2, 1, -1, campfire());
+    p.set(2, 1, -2, log("spruce_log", "x"));
+    p.set(3, 1, 0, "hay_block");
+    p.set(-3, 1, -1, "spruce_fence");
+    p.set(-3, 2, -1, lantern());
+    p.set(-2, 1, -2, "lodestone");
+    p.set(-2, 1, -3, b("spruce_standing_sign", { ground_sign_direction: 8 }));
+  },
+  camp_ruin(p) {
+    p.pad(rect(3, 3), 3, 3, 4, 1);
+    for (let x = -3; x <= 3; x++) {
+      p.set(x, 0, 3, COBBLE);
+      if (Math.abs(x) !== 1) p.set(x, 1, 3, OLDBRICK);
+      if (x === -3 || x === 3 || x === 0) p.set(x, 2, 3, OLDBRICK);
+    }
+    for (let z = 0; z <= 2; z++) {
+      p.set(-3, 1, z, OLDBRICK);
+      if (z !== 1) p.set(3, 1, z, OLDBRICK);
+    }
+    p.set(-3, 2, 1, "cracked_stone_bricks");
+    p.set(0, 1, 1, "chiseled_stone_bricks");
+    p.set(0, 2, 1, lantern(false, true));
+    p.set(2, 1, -1, campfire(true));
+    p.set(2, 1, 2, "web");
+    p.set(-2, 1, 2, "mossy_cobblestone");
+    p.set(-2, 1, -2, "lodestone");
+    p.set(-2, 1, -3, b("spruce_standing_sign", { ground_sign_direction: 8 }));
+  },
+  camp_deep(p) {
+    // A room carved where the wanderer was met: floor at y 0, room y 1 to 3.
+    for (let x = -3; x <= 3; x++)
+      for (let z = -3; z <= 3; z++) {
+        for (let y = 1; y <= 3; y++) p.air(x, y, z);
+        p.soft(x, 0, z, "cobbled_deepslate");
+      }
+    for (const [x, z] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) {
+      for (let y = 1; y <= 3; y++) p.set(x, y, z, log("spruce_log"));
+    }
+    for (let x = -3; x <= 3; x++) {
+      p.set(x, 4, -3, log("spruce_log", "x"));
+      p.set(x, 4, 3, log("spruce_log", "x"));
+    }
+    p.set(0, 3, 0, b("lantern", { hanging: true }));
+    p.set(0, 4, 0, "spruce_planks");
+    p.set(2, 1, 2, barrel("u"));
+    p.set(3, 1, 1, "crafting_table");
+    p.set(-3, 1, 1, "iron_ore");
+    p.set(-3, 2, 0, "coal_ore");
+    p.set(1, 1, 3, rail(0));
+    p.set(0, 1, 3, rail(0));
+    p.set(-2, 1, -2, "lodestone");
+    p.set(-2, 1, -3, b("spruce_standing_sign", { ground_sign_direction: 8 }));
+    p.set(2, 1, -2, lantern());
+  },
+
   lighthouse(p) {
     p.pad(rect(4, 4), 4, 4, 21, 3);
     p.box(-3, 0, -3, 3, 0, 3, COBBLE);
@@ -1285,7 +1389,7 @@ export function* buildSteps(name, dimension, origin, facing) {
   let skipped = 0, failed = 0, n = 0;
   try {
     const f = ((facing % 4) + 4) % 4;
-    const wet = PREFABS[name].site === "water";
+    const wet = prefabInfo(name).site === "water";
     const { entries, entities } = blueprint(name, origin);
     for (const e of entries) {
       if (++n % 200 === 0) yield;
@@ -1426,6 +1530,25 @@ function samples(info, x, z, n = 5) {
   return out;
 }
 
+/**
+ * A deep camp's floor: the solid block under an open spot near yHint (the room around it is carved out).
+ * @param {Dimension} dim @param {number} x @param {number} z @param {number | undefined} yHint @returns {{ ok: boolean, y?: number, reason?: string }}
+ */
+function deepOk(dim, x, z, yHint) {
+  if (yHint === undefined) return { ok: false, reason: "no height" };
+  for (let dy = 0; dy <= 4; dy++)
+    for (const y of dy ? [yHint + dy, yHint - dy] : [yHint]) {
+      const feet = dim.getBlock({ x, y, z });
+      const below = dim.getBlock({ x, y: y - 1, z });
+      if (!feet || !below) return { ok: false, reason: "not loaded" };
+      if ((feet.isAir || feet.isLiquid) && !below.isAir && !below.isLiquid) {
+        if (feet.isLiquid && feet.typeId.includes("lava")) return { ok: false, reason: "lava" };
+        return { ok: true, y: y - 1 };
+      }
+    }
+  return { ok: false, reason: "no floor" };
+}
+
 /** @param {Dimension} dim @param {PrefabInfo} info @param {number} x @param {number} z @returns {{ ok: boolean, y?: number, reason?: string }} */
 function landOk(dim, info, x, z) {
   /** @type {number[]} */
@@ -1456,15 +1579,17 @@ function landOk(dim, info, x, z) {
 /**
  * Does the spot at x, z suit the place? Returns the origin y (the ground block's y, or the fixed y of
  * underground and sky places), and for coast places the facing that turns the front toward the water.
- * @param {string} name @param {Dimension} dimension @param {number} x @param {number} z
+ * A "deep" camp needs `yHint` (where the wanderer stood): a floor near it with room above.
+ * @param {string} name @param {Dimension} dimension @param {number} x @param {number} z @param {number} [yHint]
  * @returns {{ ok: boolean, y?: number, reason?: string, facing?: number }}
  */
-export function siteOk(name, dimension, x, z) {
-  const info = PREFABS[name];
+export function siteOk(name, dimension, x, z, yHint) {
+  const info = prefabInfo(name);
   if (!info) return { ok: false, reason: "unknown place" };
   x = Math.floor(x);
   z = Math.floor(z);
   try {
+    if (info.site === "deep") return deepOk(dimension, x, z, yHint);
     const range = dimension.heightRange;
     const above = info.size.y - (info.below ?? 0);
     if (info.site === "land") return landOk(dimension, info, x, z);

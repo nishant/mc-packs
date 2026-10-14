@@ -1254,7 +1254,7 @@ export const PACKS = [
     "folder": "saga_bp",
     "topic": "saga",
     "name": "Story Questlines",
-    "summary": "An RPG quest engine told by the realm's townsfolk: 34 stories and 205 chapters (about 50 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, a §lheart story§r for each townsfolk you become Close with, and a §ldaily favor§r from each questgiver. With the world-event packs installed, the sky joins in (a meteor over the Hollow Gate, a Blood Moon for the Long Night, a rainbow at dawn), and Expeditions get a questline of their own. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
+    "summary": "An RPG quest engine told by the realm's townsfolk: 42 stories and 234 chapters (about 55 hours). A five-act main story, §lThe Lantern and the Hollow§r, that starts with two prologue stories (§lThe Drowned Bell§r and §lThe Cartographer's Last Map§r), plus side questlines that open up as the world does, a §lheart story§r for each townsfolk you become Close with, a §ldaily favor§r from each questgiver, and the quests of the people you meet out in the wilds (Wanderers of the Wilds): eight Recurring Wanderers with chains and camps, Strangers' requests and hostile wanderers' fights. With the world-event packs installed, the sky joins in (a meteor over the Hollow Gate, a Blood Moon for the Long Night, a rainbow at dawn), and Expeditions get a questline of their own. Each chapter starts with a conversation, gives you things to do (go somewhere, sneak past guards, escort someone, answer a riddle, hold a place against waves, follow a wisp, fight a champion...), and ends when you report back, often with a choice that changes later chapters, the ending, and which guild thanks you. A tracker on screen points the way, §lAsk for a hint§r helps when you're stuck, and §e/realm:saga§r is your story log, with a §lCodex§r of every secret you've uncovered. Needs the Townsfolk pack: the stories are told through its NPCs.",
     "steps": [
       {
         "text": "Tap a townsfolk with a story button: §eMain story: The Drowned Bell§r (Old Tobin) or §eMain story: The Cartographer's Last Map§r (Mara) to begin. Read the pages with §lNext§r, then pick §lAccept§r (or §lNot now§r: you can come back any time). Some intros end with a choice instead of Accept.",
@@ -1286,6 +1286,10 @@ export const PACKS = [
       },
       {
         "text": "In a party (the Parties pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.",
+        "ops": false
+      },
+      {
+        "text": "§lWanderers§r (Wanderers of the Wilds): someone you meet out in the wilds offers their chain (§eWanderer: Pell's Long Road§r) or a Stranger's §eRequest: ...§r; it runs like any story, with the tracker and the log. A Recurring Wanderer's first chapter sets up their camp, where you report back from then on.",
         "ops": false
       },
       {
@@ -1327,6 +1331,60 @@ export const PACKS = [
         "ops": false,
         "who": "Operators",
         "text": "Starts the player's stories over: progress, finished chapters, choices, codex and favors. Rewards already given are kept"
+      }
+    ]
+  },
+  {
+    "folder": "wander_bp",
+    "topic": "wander",
+    "name": "Wanderers of the Wilds",
+    "summary": "Out past the town lamps you meet people on the road: a footsore pilgrim, a hermit on a peak, a ghost by old stones, a miner deep underground, a storm-chaser in the thunder, an exile in the Nether, a rival bounty hunter, and a few who aren't what they seem. Eight §lRecurring Wanderers§r have chains of three to five chapters and set up a camp where they wait for you; passing §lStrangers§r ask a short favor (24 kinds, randomized); and once you've finished the prologue some are §lhostile§r in disguise. Every quest runs in Story Questlines, which this pack needs: without it nobody appears.",
+    "steps": [
+      {
+        "text": "Go exploring: at least 300 blocks from world spawn (§espawnDistance§r) and 160 blocks from any town, land claim or safe zone (§ezoneDistance§r), in survival or adventure, in the Overworld or the Nether. About twice an hour of exploring, chat says §e[Wanderers] Someone is on the road ahead (NE): Hob Fairweather.§r",
+        "ops": false
+      },
+      {
+        "text": "Walk up and tap them. Their menu shows what they say and their offers: a Recurring Wanderer's chain (§eWanderer: Hob's Tall Tales§r), a Stranger's §eRequest: Hungry on the Road§r, or a report when you're done. Green sparkles over someone (only you see them) mean they have something for you.",
+        "ops": false
+      },
+      {
+        "text": "Accept, then do it like any story step: the tracker and §e/realm:saga§r show it. A Stranger waits half an hour at most, and leaves if you go more than 96 blocks away for a minute; a job you can finish without them (fight some monsters, mine some rock) still pays, and one that needs them (bring them something) ends when they go.",
+        "ops": false
+      },
+      {
+        "text": "A Recurring Wanderer's first chapter sets up their camp near where you met them (or by a story place): a small tent or ruin with a lodestone and a §eWaystone: <Name>'s Camp§r sign. Tap the lodestone to make it a waystone. They wait there for the rest of the chain, whenever someone on their chain comes within 48 blocks. If another player's chapter moves the camp, Realm Mail brings you a letter with where it went.",
+        "ops": false
+      },
+      {
+        "text": "§lHostile wanderers§r (after both prologue stories): a toll man who wants 20 Crowns for a road that isn't there, a lost sailor dripping seawater by the shore at night, a Choir spy dressed as a pilgrim (after Act II), a hermit who never blinks (after Act III). Each one gives itself away in what it says. Pay the toll or refuse it; the others drop their disguise a little after you talk, and a fight starts right there.",
+        "ops": false
+      },
+      {
+        "text": "§lSomething's off...§r shows in a wanderer's menu once Warden Reyes is your Friend (Townsfolk), you've made three or more hard choices in the story (§eg:iron§r), or you wear the Gray Choir Mask. Accuse a hostile one and it reveals itself early and stumbles (Slowness II for 5 seconds; +10 Wardens reputation). Accuse a friendly one and they walk away hurt, with no reward, and other wanderers hear about it.",
+        "ops": false
+      },
+      {
+        "text": "§e/realm:wander§r lists the Recurring Wanderers you know and where their camps are, and who's on the road for you now. Don't want to meet anyone? Disable §lMeet wanderers§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r §e/realm:wander§r also has §lOn the road now§r (and a button to send everyone away) and §lSomeone appears here§r (pick a wanderer, a Stranger's kind or a hostile). §e/realm:wander_clear§r sends every wanderer on the road away. Camps show among the story places in §e/realm:saga_places§r (Teleport, Rebuild, Remove).",
+        "ops": true
+      }
+    ],
+    "commands": [
+      {
+        "usage": "/realm:wander",
+        "ops": false,
+        "who": "Everyone",
+        "text": "The Recurring Wanderers you know and their camps, who's on the road for you, and when someone new may come; for operators also §lOn the road now§r and §lSomeone appears here§r"
+      },
+      {
+        "usage": "/realm:wander_clear",
+        "ops": false,
+        "who": "Operators",
+        "text": "Sends every wanderer on the road away (camps stay)"
       }
     ]
   },
@@ -1700,7 +1758,7 @@ export const PACKS = [
     "folder": "journal_bp",
     "topic": "journal",
     "name": "Field Journal",
-    "summary": "A journal that fills itself as you play: the mobs you've defeated, the places you've been, the fish you've caught, the weather and sky events you've seen, the relics you've had and the story chapters you've finished. Each page shows how complete it is, and finishing a page gives XP levels, Crowns and a title.",
+    "summary": "A journal that fills itself as you play: the mobs you've defeated, the places you've been, the fish you've caught, the weather and sky events you've seen, the relics you've had, the story chapters you've finished and the wanderers you've befriended. Each page shows how complete it is, and finishing a page gives XP levels, Crowns and a title.",
     "steps": [
       {
         "text": "Play: entries are added on their own. The first time you defeat a creeper, chat says §eJournal: New entry in Mobs - Creeper§r.",

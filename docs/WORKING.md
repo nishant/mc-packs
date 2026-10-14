@@ -42,6 +42,7 @@ Over the last 20 PRs, `docs/PACKS.md` changed in 19, a manifest in 16, the help 
 - Dynamic properties are per pack: a property one pack writes is invisible to every other pack (and to the test pack). Packs may only share state through tags, scoreboards and script events.
 - `entityDie` never fires for `minecraft:npc` on BDS 1.26 (only `entityRemove`, which also fires on chunk unload).
 - `getBlockBelow` skips water unless `includeLiquidBlocks: true`; an operator flying over the sea gets the sea floor.
+- `getTopmostBlock` on a column that isn't ticking can return a block (at y 319) that throws `LocationInUnloadedChunkError` as soon as you read it (`isLiquid`, `typeId`): wrap the reads too, not only the call (wander_bp's spot finder).
 
 ## Audit pass (PR #38: every pack once; what mattered)
 

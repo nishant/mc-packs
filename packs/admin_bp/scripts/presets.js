@@ -21,7 +21,7 @@
 /** Menu categories, in the order the main menu shows them (after Recent, Search and Quick Actions). A pack not listed here lands in "Other". */
 export const CATEGORIES = [
   { id: "world", title: "World & Weather", packs: ["weather_bp", "climate_bp", "storm_bp", "tornado_bp", "rainbow_bp", "night_bp", "meteor_bp", "moon_bp", "rain_bp", "zones_bp", "guard_bp"] },
-  { id: "story", title: "Story & Townsfolk", packs: ["saga_bp", "npc_bp", "journal_bp", "quests_bp", "milestones_bp"] },
+  { id: "story", title: "Story & Townsfolk", packs: ["saga_bp", "npc_bp", "wander_bp", "journal_bp", "quests_bp", "milestones_bp"] },
   { id: "towns", title: "Towns & Places", packs: ["town_bp", "build_bp", "waystone_bp", "caravan_bp", "claims_bp", "farm_bp"] },
   { id: "economy", title: "Economy", packs: ["crowns_bp", "bounty_bp", "guilds_bp", "slots_bp"] },
   { id: "players", title: "Players", packs: ["stats_bp", "titles_bp", "nick_bp", "party_bp", "skills_bp", "mail_bp", "afk_bp", "death_bp"] },
@@ -169,6 +169,8 @@ export const NAMES = {
   "realm:saga_place": ["Set Story Place", "Here, or list them"],
   "realm:saga_places": ["Story Places", "Set, build, move, remove"],
   "realm:saga_reset": ["Reset Player Story", "Stories, choices, progress"],
+  "realm:wander": ["Wanderers Menu", "Who's on the road, camps"],
+  "realm:wander_clear": ["Send Wanderers Away", "Everyone on the road leaves"],
   "realm:silly": ["Silly Enchants", "On the item in your hand"],
   "realm:silly_give": ["Give Silly Books", "To players"],
   "realm:sit": ["Sit Down", "Sneak to stand up"],
@@ -281,6 +283,7 @@ export const CONFIRM = new Set([
   "realm:moon_set",
   "realm:storm_cell",
   "realm:fishing_tournament",
+  "realm:wander_clear",
 ]);
 
 /** @param {string} name */

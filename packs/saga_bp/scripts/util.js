@@ -2,6 +2,7 @@
 import { CommandPermissionLevel, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { NPC_NAMES } from "./stories.js";
+import { WANDERERS } from "./stories/index.js";
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -18,8 +19,13 @@ export const itemName = (id) =>
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 
+/** Recurring Wanderers by their NPC id (`w_pell`). */
+export const WANDERER_NAMES = /** @type {Record<string, string>} */ (Object.fromEntries(WANDERERS.map((w) => [`w_${w.id}`, w.name])));
+/** Strangers' names by their NPC id (`w_<encounter>`), from realm:wander_spawn and saved encounters. @type {Map<string, string>} */
+export const strangerNames = new Map();
+
 /** @param {string} id */
-export const npcName = (id) => NPC_NAMES[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+export const npcName = (id) => NPC_NAMES[id] ?? WANDERER_NAMES[id] ?? strangerNames.get(id) ?? (id.startsWith("w_") ? "the stranger" : id.charAt(0).toUpperCase() + id.slice(1));
 
 /** @param {string} dim */
 export const dimName = (dim) => (dim === "minecraft:nether" ? "Nether" : dim === "minecraft:the_end" ? "End" : "Overworld");

@@ -132,6 +132,27 @@ weather, 4 idle lines).
 | `ashgrave` | Brother Ashgrave | `minecraft:drowned` champion / `minecraft:allay` echo | the finale | The Hollow Herald |
 | `pip` | Pip, a lost boy | `minecraft:villager_v2` (baby) | various | Escort quest (Reyes's story) |
 
+### Wanderers of the Wilds (Recurring Wanderers; NPC id `w_<id>`, chains `kind: "wander"` in `stories/wanderers.js`)
+
+Met out in the wilds (the `wander_bp` pack picks who appears where); each has a chain whose first chapter
+sets up their camp (place `camp:<id>`), where they wait for the rest.
+
+| Id | Name | Kind | Opens after | Voice |
+|---|---|---|---|---|
+| `pell` | Pell the Pilgrim | pilgrim | The Drowned Bell | Gentle, self-mocking, talks about his teacher; walks to the holy places and wonders what the stones listen for |
+| `anwen` | Anwen, the Surveyor's Ghost | ghost (allay) | Signs in the Sky | Drifting, precise, forgetful; a sky surveyor who measured the Lantern's road and marked "three places on a line". She knows nothing past her own death: no Hollow, no Elsie |
+| `brannoch` | Brannoch Deepdelve | deep miner | - | Booming, jokey, fond of the rock; fifty years under the stone |
+| `rook` | Rook the Rival | rival | - | Swaggering bounty hunter who hates to lose; father left him debts. Turns on a player who mocked him and has `g:iron` 4+ |
+| `marigold` | Marigold of the Heights | hermit | - | Dry, kind, eccentric; tea, flowers and a goat named Nettle |
+| `tamsin` | Tamsin Galeward | storm-chaser | - | Exuberant, reckless, loves thunder |
+| `vesk` | Vesk the Exile | Nether exile | - | Haunted, halting; sent to the Nether for a crime he didn't commit (nothing to do with the Choir) |
+| `hob` | Hob Fairweather | traveler | - | Chatty tinker, terrible jokes about a duck and a duke; owes Quill a story |
+
+Strangers (one-offs, `stories/wander_oneoffs.js`) speak through `{name}` and keep to plain favors. Hostile
+wanderers each carry one tell in their lines (the Choir's "Nothing lost, nothing missed" for the spy, a toll on
+a road that isn't there, a sailor dripping seawater far from a wreck, a hermit who never blinks and says the
+stone listens); the Choir spy only after Act II, the Hollow-touched hermit only after Act III.
+
 ## 5. Places
 
 Each place is a name an operator can set with `/realm:saga_place <name>` (standing on the spot), or
@@ -590,6 +611,22 @@ the Relics section of `docs/PACKS.md` has them as they are.
 | `singing_blade` | The Singing Blade | hand | Hits ring a note that slows nearby mobs briefly |
 | `hollow_crown` | The Hollow Crown | head | Night vision and strength at night; villagers flee (dark ending only) |
 | `keeper_lamp` | Keeper's Lamp | carry | Light ring around you at night (particles); mobs lose interest faster |
+
+### Wanderers (chains, camps, one-offs)
+
+- A wanderer's chain is a story with `kind: "wander"` and `giver: "w_<id>"` (an id from `WANDERERS`); its first
+  chapter has `camp: { prefab, near }` (`camp_road`, `camp_peak`, `camp_ruin`, `camp_deep`; near `"wanderer"`,
+  where the player met them, or a place name). A later chapter's `camp` moves it, and the other players on the
+  chain get a letter. Objectives use `npc: "w_<id>"` and `place: "camp:<id>"` like any NPC and place. An escort
+  `who.id` that is a wanderer id hides the wanderer pack's own copy while yours walks.
+- A choice may cost Crowns: `cost: { crowns: 10 }` (shown on the button).
+- Rewards may add `skill: { skill, amount }` and `relicRoll: { chance, relics }` (a finale: 0.15).
+- A Stranger's one-off is a template `{ id, label, archetypes, guild, params?, requires?, intro, objectives,
+  outro, reward, hint }`; text uses `{name}`, `{item}`, `{count}`, objectives `item: "{item}"`,
+  `count: "{count}"`, `npc: "{npc}"` (the stranger) and `at: "wanderer"`. Params `{ item: [...], count: [a, b] }`
+  are seeded per meeting. Rewards: 1-3 levels, 10-30 Crowns, 20-60 skill XP. Chain chapters 2-5 levels and
+  30-60 Crowns; finales 8 levels, 100-150 Crowns, a title, the relic roll and a codex entry.
+- `g:w_accused` counts the friendly wanderers a player accused (set by the wanderer pack, read like `g:aff_`).
 
 ### Daily favors
 

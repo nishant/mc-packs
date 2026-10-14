@@ -19,6 +19,7 @@ import {
   favorShape,
   favorsByNpc,
   finished,
+  hostileById,
   forget,
   giveRep,
   invalidate,
@@ -36,12 +37,14 @@ import {
   storyWaitsForPacks,
   target,
   today,
+  wanderShape,
 } from "./data.js";
-import { askAnswer, askSky, completeStep, counting, endScene, endScenesOf, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, timeText, weather } from "./objectives.js";
-import { ensurePlace, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
+import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, weather } from "./objectives.js";
+import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
+import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
 import { SLOTS, SLOT_NAMES, isSlot } from "./side.js";
-import { PACK, across, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
+import { PACK, across, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -64,6 +67,7 @@ const toneTags = (story) => (story.tones?.length ? `§8${story.tones.map((t) => 
 /** "Chapter 2 of 6: The Drowned Choir" @param {Saga} saga @param {Story} story @param {number} index */
 function chapterHeader(saga, story, index) {
   if (story.id.startsWith("fv:")) return `§7Daily favor: ${story.chapters[index].title}§r`;
+  if (story.id.startsWith("wv:")) return `§7${story.short === "Ambush" ? "Ambush" : "A stranger's request"}: ${story.chapters[index].title}§r`;
   const { pos, total } = chapterNumber(saga, story, index);
   return `§7Chapter ${pos} of ${total}: ${story.chapters[index].title}§r`;
 }
@@ -96,10 +100,14 @@ function bearing(player, loc, radius) {
   return `${compass(loc.x - p.x, loc.z - p.z)} ${num(d)}m`;
 }
 
-/** " (NE 40m)" toward an NPC, or "". @param {Player} player @param {string} npc */
+/** " (NE 40m)" toward an NPC (a Recurring Wanderer: their camp when they aren't loaded), or "". @param {Player} player @param {string} npc */
 function towardNpc(player, npc) {
   const at = npcAt(player.dimension, npc);
-  if (!at) return "";
+  if (!at) {
+    const w = wandererOf(npc);
+    const camp = w ? placesOf()[campName(w.id)] : undefined;
+    return camp ? ` at ${placeLabel(campName(w?.id ?? ""))} ${bearing(player, camp, 6)}` : "";
+  }
   return ` ${bearing(player, { dim: player.dimension.id, x: at.x, z: at.z }, 4)}`;
 }
 
@@ -125,7 +133,7 @@ function objectiveLines(player, e, saga) {
     if (t) line += ` §c${t}`;
     if (obj.npc && (obj.type === "talk" || obj.type === "deliver" || obj.type === "answer")) line += ` §7(${npcName(obj.npc)}${towardNpc(player, obj.npc)})`;
     const loc = locate(obj);
-    if (typeof loc === "string") line += `\n  §7(${placeLabel(loc)} isn't set yet: an operator sets it in /realm:saga_places)`;
+    if (typeof loc === "string") line += isCamp(loc) ? `\n  §7(${placeLabel(loc)} is gone: find ${npcName(e.story.giver)} on the road and they set it up again)` : `\n  §7(${placeLabel(loc)} isn't set yet: an operator sets it in /realm:saga_places)`;
     else if (loc && hidden(e, obj)) line += " §7(find it yourself, or ask for a hint)";
     else if (loc) line += ` §7(${loc.label} ${bearing(player, loc, radiusOf(obj))})`;
     const sky = skyFocus(player.id, e, i);
@@ -141,6 +149,7 @@ function objectiveLines(player, e, saga) {
 
 /** One short line: what to do next (the "current step"). @param {Player} player @param {Entry} e @param {Saga} saga */
 function stepLine(player, e, saga) {
+  if (chapterDone(e, saga) && e.wv && (/** @type {any} */ (e.st).g || /** @type {any} */ (e.st).tn)) return "§6Done: the reward comes in a moment";
   if (chapterDone(e, saga)) return `§6Report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
   const i = currentStep(e, saga);
   if (i < 0) return "";
@@ -173,7 +182,7 @@ export function missingPlaces(e, saga) {
   const out = [];
   e.chapter.objectives.forEach((obj, i) => {
     if (objDone(e, i, saga)) return;
-    for (const name of placesIn(obj)) if (!placesOf()[name] && !ensurePlace(name) && !out.includes(name)) out.push(name);
+    for (const name of placesIn(obj)) if (!isCamp(name) && !placesOf()[name] && !ensurePlace(name) && !out.includes(name)) out.push(name);
   });
   return out;
 }
@@ -195,7 +204,7 @@ function offerFor(player, story, npc) {
   const starter = chapter.npc ?? story.giver;
   const ender = chapter.end ?? starter;
   const { pos } = chapterNumber(saga, story, index);
-  const tag = story.kind === "main" ? "Main story" : story.kind === "heart" ? "Heart story" : "Story";
+  const tag = story.kind === "main" ? "Main story" : story.kind === "heart" ? "Heart story" : story.kind === "wander" ? "Wanderer" : "Story";
   if (!st || !st.a || st.cur !== chapter.id) {
     if (starter !== npc || storyWaitsForPacks(story)) return undefined;
     if (!st?.dn.length && !requires(story.requires, saga, story.id, player).ok) return undefined;
@@ -244,7 +253,31 @@ export function offersAt(player, npc) {
     });
   const f = favorOffer(player, npc);
   if (f) out.push({ ...f, order: CONFIG.offerOrder + 5 });
+  if (npc.startsWith("w_")) {
+    campCheck(player, npc);
+    const w = wanderOffer(player, npc);
+    if (w) out.push({ ...w, order: CONFIG.offerOrder + 2 });
+  }
   return out;
+}
+
+/** A stranger's one-off (or a disguise's talk) at their NPC: start, info or report. @param {Player} player @param {string} npc */
+function wanderOffer(player, npc) {
+  const saga = sagaOf(player);
+  const wv = saga.wv;
+  if (!wv || `w_${wv.w}` !== npc || wv.tn) return undefined;
+  if (!wv.a) {
+    if (wv.hk) {
+      const h = hostileById.get(/** @type {any} */ (wv.hk));
+      return h ? { key: `wvh:${wv.w}`, label: h.label } : undefined;
+    }
+    const shape = wanderShape(wv);
+    return shape ? { key: `wvstart:${wv.w}`, label: `Request: ${shape.chapter.title}` } : undefined;
+  }
+  const e = entries(player).find((x) => x.wv === wv.w);
+  if (!e) return undefined;
+  if (chapterDone(e, saga)) return { key: `wvend:${wv.w}`, label: `${e.chapter.title}\n§8Done: report back` };
+  return { key: `wvinfo:${wv.w}`, label: `${e.chapter.title}\n§8In progress` };
 }
 
 /** The player picked one of our offers. @param {Player} player @param {string} key */
@@ -253,6 +286,10 @@ export async function choose(player, key) {
   if (kind === "fvstart") return favorStart(player, id);
   if (kind === "fvend") return favorEnd(player, id);
   if (kind === "fvinfo") return favorInfo(player, id);
+  if (kind === "wvstart") return wanderStart(player, id);
+  if (kind === "wvinfo") return wanderInfo(player);
+  if (kind === "wvend") return wanderEnd(player, false);
+  if (kind === "wvh") return hostileTalk(player, id);
   if (kind === "ans") {
     const e = entries(player).find((x) => x.story.id === id || x.story.id === `${id}:${extra}`);
     if (e) await askAnswer(player, e, Number(key.split(":").pop()));
@@ -268,6 +305,21 @@ export async function choose(player, key) {
 // ---------------------------------------------------------------------------
 // Chapter dialogues
 // ---------------------------------------------------------------------------
+
+/** A choice's button: its label, and what it costs. @param {import("./types.js").Choice} c */
+const choiceLabel = (c) => (c.cost?.crowns ? `${c.label} (${c.cost.crowns} Crowns)` : c.label);
+
+/** Takes a choice's cost; false (and a note) when the player can't pay. @param {Player} player @param {import("./types.js").Choice | undefined} c */
+function payFor(player, c) {
+  const n = c?.cost?.crowns ?? 0;
+  if (n <= 0) return true;
+  if (takeCrowns(player, n)) {
+    player.sendMessage(`§6-${n} Crowns`);
+    return true;
+  }
+  player.sendMessage(`§c[Story] That costs ${n} Crowns and you have ${crownsOf(player)}. Nothing was chosen: come back when you have them.`);
+  return false;
+}
 
 /** Far places get a travel tip. @param {Player} player @param {Entry} e */
 function travelTips(player, e) {
@@ -298,7 +350,7 @@ export async function startChapter(player, story) {
     }
     const { chapter } = cur;
     const choices = (chapter.introChoices ?? []).filter((c) => requires(c.requires, saga, story.id, player).ok);
-    const buttons = choices.length ? [...choices.map((c) => c.label), "Not now"] : ["Accept", "Not now"];
+    const buttons = choices.length ? [...choices.map(choiceLabel), "Not now"] : ["Accept", "Not now"];
     const header = [story.title !== chapter.title ? chapterHeader(saga, story, cur.index) : "", !st.dn.length ? toneTags(story) : ""].filter(Boolean).join("\n");
     const pick = await dialog(player, story.title, header, pagesFor(chapter.intro, saga, story.id, player.name), buttons);
     if (pick < 0 || pick === buttons.length - 1 || !player.isValid) return;
@@ -306,6 +358,7 @@ export async function startChapter(player, story) {
     const again = currentChapter(saga, story);
     if (!again || again.chapter.id !== chapter.id || (st.a && st.cur === chapter.id)) return;
     const choice = choices[pick];
+    if (!payFor(player, choice)) return;
     if (choice) {
       applyChoice(saga, story, `${chapter.id}@`, choice);
       giveRep(player, choice.rep, saga, story);
@@ -324,6 +377,8 @@ export async function startChapter(player, story) {
     for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: player.id, recipe });
     // Sky events the chapter asks for (meteor, moon, weather...): the world-event packs decide (nothing happens without them).
     for (const req of chapter.sky ?? []) askSky(player, req, `${story.id}:${chapter.id}`);
+    // A Recurring Wanderer's chapter: their camp goes up (or moves) where the chapter says.
+    if (story.kind === "wander") campForChapter(player, story, chapter);
     if (e) {
       const missing = missingPlaces(e, saga); // picks unset places first, so the lines below can point at them
       for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));
@@ -457,13 +512,14 @@ export async function endChapter(player, story) {
     const header = chapterHeader(saga, story, index);
     const choices = (chapter.choices ?? []).filter((c) => requires(c.requires, saga, story.id, player).ok);
     const last = !story.chapters.some((c, k) => k !== index && !st.dn.includes(c.id) && chapterApplies(c, saga, story));
-    const buttons = choices.length ? choices.map((c) => c.label) : [last ? "Finish the story" : "Finish the chapter"];
+    const buttons = choices.length ? choices.map(choiceLabel) : [last ? "Finish the story" : "Finish the chapter"];
     const pick = await dialog(player, story.title, header, pagesFor(chapter.outro, saga, story.id, player.name), buttons);
     if (pick < 0 || !player.isValid) return; // nothing is lost: the report waits at the NPC
     // Check again before paying out: the form was open for a while.
     const again = currentChapter(saga, story);
     if (!again || again.chapter.id !== chapter.id || !st.a || !chapterDone(e, saga)) return;
     const choice = choices[pick];
+    if (!payFor(player, choice)) return; // the report waits at the NPC
     if (choice) {
       applyChoice(saga, story, chapter.id, choice);
       giveRep(player, choice.rep, saga, story);
@@ -488,7 +544,10 @@ export async function endChapter(player, story) {
     player.sendMessage(`§a[Story] Chapter complete: ${chapter.title}!${got ? ` §7Reward: ${got}` : ""}`);
     // npcs: who gave and who ended the chapter (Townsfolk adds affinity with each).
     const npcs = [...new Set([chapter.npc ?? story.giver, chapter.end ?? chapter.npc ?? story.giver])];
-    send("realm:quest_done", { player: player.id, pack: PACK, id: `${story.id}:${chapter.id}`, label: `${story.title}: ${chapter.title}`, kind: "story", npcs });
+    const wanderer = story.kind === "wander" ? wandererOf(story.giver) : undefined;
+    // A wanderer's chapter: its reputation goes to their guild (Guilds), not shared out.
+    send("realm:quest_done", { player: player.id, pack: PACK, id: `${story.id}:${chapter.id}`, label: `${story.title}: ${chapter.title}`, kind: "story", npcs, ...(wanderer ? { guild: wanderer.guild } : {}) });
+    if (wanderer && st.dn.length === 1) send("realm:journal", { player: player.id, page: "wanderers", entry: wanderer.id, label: wanderer.name });
     if (next) {
       const who = next.chapter.npc ?? story.giver;
       player.sendMessage(`§e[Story] Next: talk to ${npcName(who)} for "${next.chapter.title}".`);
@@ -498,6 +557,11 @@ export async function endChapter(player, story) {
       player.sendMessage(`§6[Story] Story complete: ${story.title}!`);
       // Townsfolk gossip about a finished act of the main story.
       if (story.kind === "main" && (story.act ?? 0) >= 1) send("realm:gossip", { kind: "act", player: player.id, name: player.name, place: story.title, n: story.act });
+      // A Recurring Wanderer's chain is done: town gossip, and their camp goes once nobody else needs it.
+      if (wanderer) {
+        send("realm:gossip", { kind: "wander_chain", player: player.id, name: player.name, place: wanderer.name });
+        leaveCamp(wanderer.id, player.id);
+      }
       player.playSound("random.levelup", { pitch: 0.7, volume: 1 });
       for (const s of ORDERED) {
         if (s.id === story.id || saga.s[s.id] || !s.requires?.stories?.includes(story.id)) continue;
@@ -600,6 +664,134 @@ export function tidyFavors(player) {
 }
 
 // ---------------------------------------------------------------------------
+// Wanderers of the Wilds: a Stranger's one-off, a hostile's disguise
+// ---------------------------------------------------------------------------
+
+/** The stranger's request: intro, then Accept. @param {Player} player @param {string} wid */
+async function wanderStart(player, wid) {
+  await exclusive(player, async () => {
+    const saga = sagaOf(player);
+    const wv = saga.wv;
+    if (!wv || wv.w !== wid || wv.a || wv.hk) return;
+    const shape = wanderShape(wv);
+    if (!shape) return;
+    const { chapter } = shape;
+    const pages = pagesFor(chapter.intro, saga, "", player.name);
+    const last = pages.length - 1;
+    pages[last] = `${pages[last]}\n\n§e${chapter.objectives.map((o) => o.label).join("\n")}`;
+    const pick = await dialog(player, wv.nm, `§7A stranger's request: ${chapter.title}§r`, pages, ["Accept", "Not now"]);
+    if (pick !== 0 || !player.isValid || saga.wv !== wv || wv.a) return;
+    wv.a = 1;
+    wv.o = [];
+    wv.t = Date.now();
+    delete wv.x;
+    delete wv.h;
+    invalidate(player.id);
+    markDirty(player, true);
+    send("realm:wander_done", { player: player.id, wid: wv.w, how: "accepted" });
+    player.sendMessage(`§6[Story] ${wv.nm}: ${chapter.title}`);
+    const e = entries(player).find((x) => x.wv === wv.w);
+    if (e) for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));
+    player.sendMessage(`§7${wv.nm} waits here for half an hour at most. Strangers move on: a job you can finish without them pays anyway.`);
+    player.playSound("random.orb", { pitch: 0.8, volume: 0.7 });
+  });
+}
+
+/** The one-off's page: objectives, hint, give up. @param {Player} player */
+async function wanderInfo(player) {
+  await exclusive(player, async () => {
+    const saga = sagaOf(player);
+    const wv = saga.wv;
+    const e = entries(player).find((x) => x.wv === wv?.w);
+    if (!wv || !e) return;
+    const lines = [chapterHeader(saga, e.story, 0), "", `§fCurrent step: §e${stepLine(player, e, saga)}§r`, "", ...objectiveLines(player, e, saga)];
+    if (e.chapter.hint) lines.push("", `§7${e.chapter.hint}`);
+    const form = new ActionFormData().title(wv.nm).body(lines.join("\n")).button("OK");
+    if (!wv.tn) form.button("Give up this job");
+    const res = await show(player, form);
+    if (!res || res.canceled || res.selection !== 1 || wv.tn || saga.wv !== wv) return;
+    e.chapter.objectives.forEach((_, i) => endScene(player.id, objKey(e, i)));
+    delete saga.wv;
+    invalidate(player.id);
+    markDirty(player, true);
+    send("realm:wander_done", { player: player.id, wid: wv.w, how: "left" });
+    player.sendMessage(`§7[Story] You gave up ${wv.nm}'s job. They shrug and go on their way.`);
+  });
+}
+
+/**
+ * The one-off is done: the outro (from the stranger, or in chat when they're gone or it was a fight), the
+ * reward, and the stranger leaves. @param {Player} player @param {boolean} auto
+ */
+export async function wanderEnd(player, auto) {
+  await exclusive(player, async () => {
+    const saga = sagaOf(player);
+    const wv = saga.wv;
+    const e = entries(player).find((x) => x.wv === wv?.w);
+    if (!wv || !e || !chapterDone(e, saga)) return;
+    const pages = pagesFor(e.chapter.outro, saga, "", player.name);
+    if (auto) for (const p of pages) player.sendMessage(`§7${p}`);
+    else if ((await dialog(player, wv.nm, chapterHeader(saga, e.story, 0), pages, ["Thanks"])) < 0 || !player.isValid) return;
+    if (saga.wv !== wv || wv.c) return;
+    wv.c = 1;
+    e.chapter.objectives.forEach((_, i) => endScene(player.id, objKey(e, i)));
+    delete saga.wv;
+    if (!wv.hk) saga.wn = (saga.wn ?? 0) + 1;
+    invalidate(player.id);
+    markDirty(player, true);
+    const penalty = wv.h ? Math.max(0, Math.min(1, Number(get("hintPenalty")) || 0)) : 0;
+    const got = reward(player, e.chapter.reward, wv.hk ? `Ambush: ${e.chapter.title}` : `Stranger: ${wv.nm}`, penalty);
+    player.sendMessage(`§a[Story] ${wv.hk ? "Ambush beaten" : "Job done"}: ${e.chapter.title}!${got ? ` §7Reward: ${got}` : ""}`);
+    player.playSound("random.levelup", { pitch: 1.2, volume: 0.7 });
+    const guild = wv.hk ? "wardens" : (WANDER_GUILD[wv.ar] ?? "wayfarers");
+    send("realm:quest_done", { player: player.id, pack: PACK, id: `wander:${e.chapter.id}`, label: `${wv.hk ? "Ambush" : "Stranger"}: ${e.chapter.title}`, kind: "wander", guild });
+    if (wv.hk) {
+      send("realm:rep_add", { player: player.id, guild: "wardens", amount: 15, reason: `Ambush: ${e.chapter.title}` });
+      send("realm:gossip", { kind: "wander_hostile", player: player.id, name: player.name, place: e.chapter.title });
+    } else send("realm:wander_done", { player: player.id, wid: wv.w, how: "left" });
+  });
+}
+
+/** Strangers' guilds by archetype: who hears about a job done (Guilds, `realm:quest_done` kind `wander`). */
+const WANDER_GUILD = /** @type {Record<string, "miners" | "growers" | "wardens" | "wayfarers">} */ ({ miner: "miners", ghost: "wayfarers", pilgrim: "wayfarers", rival: "wardens", hermit: "growers", storm: "wayfarers", exile: "miners", traveler: "growers" });
+
+/** Finishes a one-off without its stranger (gone, or a fight), once a second. @param {Player} player */
+export function wanderAuto(player) {
+  const wv = sagaOf(player).wv;
+  if (!wv?.a || wv.c || !(wv.g || wv.tn) || busy.has(player.id)) return;
+  const e = entries(player).find((x) => x.wv === wv.w);
+  if (e && chapterDone(e, sagaOf(player))) wanderEnd(player, true).catch((err) => console.warn(`[saga] ${err}`));
+}
+
+/** A disguised hostile talks: its tell is in the pages. The toll man wants paying. @param {Player} player @param {string} wid */
+async function hostileTalk(player, wid) {
+  /** @type {boolean} */
+  let fight = false;
+  await exclusive(player, async () => {
+    const saga = sagaOf(player);
+    const wv = saga.wv;
+    const h = wv?.hk ? hostileById.get(/** @type {any} */ (wv.hk)) : undefined;
+    if (!wv || !h || wv.w !== wid || wv.a) return;
+    const pages = pagesFor(h.intro, saga, "", player.name).map((p) => p.split("{name}").join(wv.nm));
+    const buttons = h.toll ? [`Pay the toll (${h.toll.crowns} Crowns)`, "Refuse"] : ["I'll help", "Not now"];
+    const pick = await dialog(player, wv.nm, "", pages, buttons);
+    if (pick < 0 || !player.isValid || saga.wv !== wv || wv.a) return;
+    if (!h.toll) return; // the disguise drops on its own time (the wanderer pack's clock), or when accused
+    if (pick === 0 && takeCrowns(player, h.toll.crowns)) {
+      player.sendMessage(`§6-${h.toll.crowns} Crowns §7(${wv.nm} pockets them and waves you through)`);
+      delete saga.wv;
+      invalidate(player.id);
+      markDirty(player, true);
+      send("realm:wander_done", { player: player.id, wid: wv.w, how: "left" });
+      return;
+    }
+    if (pick === 0) player.sendMessage(`§c[Story] You don't have ${h.toll.crowns} Crowns. "Then we'll take it out of your hide."`);
+    fight = true;
+  });
+  if (fight && player.isValid) startHostile(player, false);
+}
+
+// ---------------------------------------------------------------------------
 // The tracker
 // ---------------------------------------------------------------------------
 
@@ -610,7 +802,7 @@ function trackLine(player, e, saga) {
     const sky = active(e, i, saga) ? skyFocus(player.id, e, i) : undefined;
     if (sky) return `§e${sky.text}: §fget within ${sky.near} blocks ${bearing(player, sky, sky.near)} §c${clock(sky.left)} left`;
   }
-  if (chapterDone(e, saga)) return `§6report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
+  if (chapterDone(e, saga)) return e.wv && (/** @type {any} */ (e.st).g || /** @type {any} */ (e.st).tn) ? undefined : `§6report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
   // Optional objectives only when nothing required has anything to show.
   return pointAt(player, e, saga, false) ?? pointAt(player, e, saga, true);
 }
@@ -642,7 +834,7 @@ function pointAt(player, e, saga, optional) {
       return;
     }
     if (typeof loc === "string") {
-      if (bestD === Infinity) best = `§7${placeLabel(loc)} isn't set yet`;
+      if (bestD === Infinity) best = isCamp(loc) ? `§7${placeLabel(loc)} is gone: find them on the road` : `§7${placeLabel(loc)} isn't set yet`;
       return;
     }
     if (hidden(e, obj) && !focus) {
@@ -782,7 +974,7 @@ export async function currentPage(player) {
     }
     for (const e of favs) {
       form.button(`${e.story.title}\n§8${plain(stepLine(player, e, saga)).slice(0, 60)}`);
-      acts.push(() => favorInfo(player, /** @type {string} */ (e.fav)));
+      acts.push(() => (e.wv ? wanderInfo(player) : favorInfo(player, /** @type {string} */ (e.fav))));
     }
     form.button("Back");
     const res = await show(player, form);

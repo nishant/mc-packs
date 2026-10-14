@@ -20,7 +20,7 @@ export const CONFIG = {
    * here are kept too and shown under "Also found", but don't count toward the page.
    * `reward` is given once, when every entry is found: XP `levels`, `crowns` and a `title` (Titles pack).
    * Pages with no `entries` (Story) just collect what other packs send, with no completion.
-   * @type {{ id: "mobs" | "places" | "fish" | "weather" | "relics" | "story", label: string, entries: { id: string, label: string, blurb?: string }[], reward: { levels: number, crowns: number, title: string } }[]}
+   * @type {{ id: "mobs" | "places" | "fish" | "weather" | "relics" | "story" | "wanderers", label: string, entries: { id: string, label: string, blurb?: string }[], reward: { levels: number, crowns: number, title: string } }[]}
    */
   pages: [
     {
@@ -145,6 +145,22 @@ export const CONFIG = {
       label: "Story",
       reward: { levels: 10, crowns: 300, title: "Loremaster" },
       entries: [],
+    },
+    {
+      // The Recurring Wanderers (Wanderers of the Wilds): an entry once you finish the first chapter of their chain.
+      id: "wanderers",
+      label: "Wanderers",
+      reward: { levels: 10, crowns: 200, title: "Friend of the Road" },
+      entries: [
+        { id: "pell", label: "Pell the Pilgrim", blurb: "Walks to the old holy places, one at a time, and asks what the stones listen for." },
+        { id: "anwen", label: "Anwen, the Surveyor's Ghost", blurb: "A star-surveyor who never stopped measuring, long after she stopped breathing." },
+        { id: "brannoch", label: "Brannoch Deepdelve", blurb: "Digs where the rock is oldest and talks to it like an old friend." },
+        { id: "rook", label: "Rook the Rival", blurb: "Hunts the same bounties you do, and hates to lose." },
+        { id: "marigold", label: "Marigold of the Heights", blurb: "Grows things where nothing grows, high above the tree line." },
+        { id: "tamsin", label: "Tamsin Galeward", blurb: "Chases thunderstorms for the joy of it." },
+        { id: "vesk", label: "Vesk the Exile", blurb: "Sent to the Nether long ago, and still looking for the way home." },
+        { id: "hob", label: "Hob Fairweather", blurb: "A tinker with a tale for every pot he mends." },
+      ],
     },
   ],
 

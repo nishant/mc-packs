@@ -3,11 +3,12 @@
 // operators' places menu.
 import { Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData } from "@minecraft/server-ui";
-import { PREFABS, buildSteps, footprint, rotate, siteOk } from "./prefabs.js";
+import { CAMPS, PREFABS, buildSteps, footprint, prefabInfo, rotate, siteOk } from "./prefabs.js";
 import { get } from "./settings.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
-import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, num, show, wait } from "./util.js";
+import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, num, send, show, wait } from "./util.js";
+import { WANDERERS } from "./stories/index.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -29,6 +30,11 @@ import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, num
  * @property {number} [p] 1 = picked, waiting for a player to come close so it can be built
  * @property {number} [mv] how often a picked spot was moved because the land didn't suit it
  * @property {[string, number, number, number][]} [s] terrain snapshot: structure id and where it goes back
+ * @property {string} [pf] a wanderer's camp (`camp:<wanderer>`): its prefab
+ * @property {string} [w] a camp: the wanderer's id
+ * @property {number} [yh] a camp: the height it was asked for (deep camps are carved there)
+ * @property {Record<string, number>} [u] a camp: players on that wanderer's chain (id -> when they last needed it)
+ * @property {number} [v] a camp: when a player was last near it (ms)
  */
 /** Where something is for the tracker. @typedef {{ dim: string, x: number, y?: number, z: number, label: string, pending?: boolean }} Loc */
 
@@ -62,17 +68,64 @@ export function placesOf() {
   return /** @type {Record<string, SavedPlace>} */ (places);
 }
 
-/** Sets (or with undefined, forgets) a place. @param {string} name @param {SavedPlace | undefined} rec */
+/**
+ * Sets (or with undefined, forgets) a place, and tells other packs (`realm:place_ready`) when where it is
+ * changed (not for a camp's visit times). @param {string} name @param {SavedPlace | undefined} rec
+ */
 export function setPlace(name, rec) {
+  const old = placesOf()[name];
   const next = { ...placesOf() };
   if (rec) next[name] = rec;
   else delete next[name];
   world.setDynamicProperty(PROP_PLACES, JSON.stringify(next));
   places = next;
+  if (!old || !rec || old.x !== rec.x || old.y !== rec.y || old.z !== rec.z || old.dim !== rec.dim || !!old.b !== !!rec.b || !!old.p !== !!rec.p) placeReady(name, old?.b && rec?.b ? "moved" : undefined);
 }
 
+/** Is this an instanced wanderer's camp? @param {string} name */
+export const isCamp = (name) => name.startsWith("camp:");
+/** A camp's place name. @param {string} wid */
+export const campName = (wid) => `camp:${wid}`;
+/** The prefab a place builds: its own name, or a camp's `pf`. @param {string} name */
+export const pfOf = (name) => (isCamp(name) ? placesOf()[name]?.pf ?? "camp_road" : name);
+/** A structure id safe for any place name. @param {string} name */
+const sid = (name) => name.replace(/[^a-z0-9_]/g, "_");
+
 /** @param {string} name */
-export const placeLabel = (name) => PLACES[name] ?? PREFABS[name]?.label ?? name;
+export const placeLabel = (name) => {
+  if (isCamp(name)) {
+    const w = WANDERERS.find((x) => x.id === name.slice(5));
+    return `${w ? w.short : "A Wanderer"}'s Camp`;
+  }
+  return PLACES[name] ?? PREFABS[name]?.label ?? name;
+};
+
+/**
+ * `realm:place_ready` { name, state, dim, x, y?, z, wid? }: where a place is now. State "picked" (not built
+ * yet), "built", "set" (an operator's spot without a building), "moved" (a built camp moved), "removed". A
+ * built camp's x, y, z is where its wanderer stands. @param {string} name @param {string} [state]
+ */
+export function placeReady(name, state) {
+  const rec = placesOf()[name];
+  /** @type {Record<string, unknown>} */
+  const msg = { name };
+  if (!rec) msg.state = "removed";
+  else {
+    msg.state = state && rec.b ? state : rec.p ? "picked" : rec.b ? "built" : "set";
+    const spot = isCamp(name) && rec.b ? featureSpot(name, "actor") : undefined;
+    const at = spot ?? rec;
+    Object.assign(msg, { dim: rec.dim, x: Math.floor(at.x), z: Math.floor(at.z) });
+    if (at.y !== undefined) msg.y = Math.floor(at.y);
+  }
+  if (isCamp(name)) msg.wid = name.slice(5);
+  send("realm:place_ready", msg);
+}
+
+/** Every place again (at load and on `realm:place_ping`), a few per tick. */
+export function placesReadyAll() {
+  const names = Object.keys(placesOf());
+  names.forEach((n, i) => system.runTimeout(() => placeReady(n), 1 + Math.floor(i / 4)));
+}
 
 /**
  * A place's name in a sentence: "the Lighthouse", but "The Gray Ring" and "Wren's Meadow" as they are.
@@ -85,7 +138,7 @@ export function named(name, start = false) {
 }
 
 /** The prefab's site rules, or plain land a few hundred blocks out when there is no prefab. @param {string} name @returns {PrefabInfo} */
-export const infoOf = (name) => PREFABS[name] ?? { label: placeLabel(name), size: { x: 5, y: 5, z: 5 }, site: "land", minDist: 100, maxDist: 400, features: {} };
+export const infoOf = (name) => prefabInfo(pfOf(name)) ?? { label: placeLabel(name), size: { x: 5, y: 5, z: 5 }, site: "land", minDist: 100, maxDist: 400, features: {} };
 
 /** @param {Vector3} o @param {number} facing */
 const turn = (o, facing) => {
@@ -110,7 +163,9 @@ export function placeSpot(name, off) {
 /** A named feature of a built place's prefab (`bell`, `door`, `actor`), or undefined. @param {string} name @param {string} feature */
 export function featureSpot(name, feature) {
   const rec = placesOf()[name];
-  const f = PREFABS[name]?.features?.[feature];
+  const feats = prefabInfo(pfOf(name))?.features;
+  // A camp has one spot for people: whoever a story places there (an escort's wanderer) stands at it.
+  const f = feats?.[feature] ?? (isCamp(name) ? feats?.actor : undefined);
   if (!rec || !rec.b || !f || rec.y === undefined) return undefined;
   const r = turn(f, rec.f ?? 0);
   return { dim: rec.dim, x: rec.x + r.x, y: rec.y + r.y, z: rec.z + r.z };
@@ -192,6 +247,7 @@ function pickSpot(name, near) {
  */
 export function ensurePlace(name) {
   if (placesOf()[name]) return true;
+  if (isCamp(name)) return false; // a chapter makes it (its `camp`), never picked
   if (get("autoPlaces") !== true) return false;
   const spot = pickSpot(name);
   setPlace(name, { dim: OVERWORLD, x: spot.x, z: spot.z, a: 1, p: 1 });
@@ -227,7 +283,7 @@ function boxLoaded(dim, box) {
 
 /** A footprint box, clamped to the world's height. @param {string} name @param {Vector3} origin @param {number} facing */
 function boxOf(name, origin, facing) {
-  const b = footprint(name, origin, facing);
+  const b = footprint(pfOf(name), origin, facing);
   return {
     min: { x: Math.min(b.min.x, b.max.x), y: Math.max(-64, Math.min(b.min.y, b.max.y)), z: Math.min(b.min.z, b.max.z) },
     max: { x: Math.max(b.min.x, b.max.x), y: Math.min(319, Math.max(b.min.y, b.max.y)), z: Math.max(b.min.z, b.max.z) },
@@ -245,7 +301,7 @@ function snapshot(name, dim, box) {
   let k = 0;
   for (let x = box.min.x; x <= box.max.x; x += TILE)
     for (let z = box.min.z; z <= box.max.z; z += TILE) {
-      const id = `saga:place_${name}_${k++}`;
+      const id = `saga:place_${sid(name)}_${k++}`;
       try {
         if (sm.get(id)) sm.delete(id);
       } catch {
@@ -295,7 +351,7 @@ function runBuild(name, dim, origin, facing) {
     /** @returns {Generator<void, void, void>} */
     function* job() {
       try {
-        const steps = buildSteps(name, dim, origin, facing);
+        const steps = buildSteps(pfOf(name), dim, origin, facing);
         while (true) {
           let r;
           try {
@@ -331,7 +387,7 @@ function tellOps(text) {
  */
 export async function buildAt(name, dim, origin, facing, extra) {
   if (building.has(name)) return "it is being built already";
-  if (!PREFABS[name]) return "it has no building";
+  if (!prefabInfo(pfOf(name))) return "it has no building";
   const o = { x: Math.floor(origin.x), y: Math.floor(origin.y), z: Math.floor(origin.z) };
   const box = boxOf(name, o, facing);
   if (!boxLoaded(dim, box)) return "part of the area isn't loaded; stand closer";
@@ -347,6 +403,7 @@ export async function buildAt(name, dim, origin, facing, extra) {
     }
     const ok = await runBuild(name, dim, o, facing);
     setPlace(name, { ...extra, dim: dim.id, x: o.x, y: o.y, z: o.z, f: facing, b: 1, s: snap });
+    if (isCamp(name)) campSign(name);
     return ok ? undefined : "the build stopped part way (an unloaded chunk?); use Rebuild";
   } finally {
     building.delete(name);
@@ -363,7 +420,9 @@ export async function rebuild(name) {
   if (!boxLoaded(dim, boxOf(name, o, rec.f ?? 0))) return "part of the area isn't loaded; stand closer";
   building.add(name);
   try {
-    return (await runBuild(name, dim, o, rec.f ?? 0)) ? undefined : "the build stopped part way";
+    const ok = await runBuild(name, dim, o, rec.f ?? 0);
+    if (isCamp(name)) campSign(name);
+    return ok ? undefined : "the build stopped part way";
   } finally {
     building.delete(name);
   }
@@ -401,6 +460,7 @@ function search(name, rec, relaxed) {
     const offsets = [[0, 0]];
     for (const r of [12, 24, 36, 48]) for (let k = 0; k < 8; k++) offsets.push([Math.round(Math.cos((k * Math.PI) / 4) * r), Math.round(Math.sin((k * Math.PI) / 4) * r)]);
     const facing = hash(name + rec.x + rec.z) % 4;
+    const camp = isCamp(name);
     /** @returns {Generator<void, void, void>} */
     function* job() {
       let unloaded = 0;
@@ -409,12 +469,12 @@ function search(name, rec, relaxed) {
         const z = rec.z + dz;
         let y;
         try {
-          const site = siteOk(name, dim, x, z);
+          const site = siteOk(pfOf(name), dim, x, z, rec.yh);
           if (site.ok && typeof site.y === "number") y = site.y;
           else if (site.reason === "not loaded") {
             unloaded++;
             continue;
-          } else if (relaxed) y = PREFABS[name]?.y ?? groundAt(dim, x, z); // underground and sky places keep their height
+          } else if (relaxed && prefabInfo(pfOf(name))?.site !== "deep") y = PREFABS[name]?.y ?? groundAt(dim, x, z); // underground and sky places keep their height
         } catch {
           unloaded++;
           continue;
@@ -438,6 +498,11 @@ function search(name, rec, relaxed) {
                   break;
                 }
                 if (!b.isAir && BUILT.test(b.typeId)) {
+                  clean = false;
+                  break;
+                }
+                // A camp is carved into the land: no lava inside it to let loose.
+                if (camp && b.isLiquid && b.typeId.includes("lava")) {
                   clean = false;
                   break;
                 }
@@ -475,15 +540,15 @@ async function autoBuild(name, near) {
   if (!now || !now.p || now.x !== rec.x || now.z !== rec.z) return; // changed meanwhile
   if (res.found) {
     const f = res.found;
-    if (!PREFABS[name]) {
+    if (!prefabInfo(pfOf(name))) {
       setPlace(name, { dim: rec.dim, x: f.x, y: f.y, z: f.z, a: 1 });
       return;
     }
-    const err = await buildAt(name, world.getDimension(rec.dim), f, f.f, { a: 1 });
+    const err = await buildAt(name, world.getDimension(rec.dim), f, f.f, { ...campFields(rec), a: 1 });
     if (err) {
       retryAt.set(name, Date.now() + 20000);
       console.warn(`[saga] auto place ${name}: ${err}`);
-    } else tellOps(`§7[Story] Built ${named(name)} at ${f.x} ${f.y} ${f.z} (picked by the pack; /realm:saga_places to change it).`);
+    } else if (!isCamp(name)) tellOps(`§7[Story] Built ${named(name)} at ${f.x} ${f.y} ${f.z} (picked by the pack; /realm:saga_places to change it).`);
     return;
   }
   if (res.unloaded > 0 && (waits.get(name) ?? 0) < MAX_WAITS) {
@@ -495,14 +560,107 @@ async function autoBuild(name, near) {
   waits.delete(name);
   // Nothing nearby suits it: move the spot.
   const mv = (rec.mv ?? 0) + 1;
-  if (mv > MAX_MOVES) {
+  if (mv > MAX_MOVES && !isCamp(name)) {
     retryAt.set(name, Date.now() + 600000);
     tellOps(`§e[Story] No good spot found for ${named(name)} near ${rec.x} ${rec.z}. Set it by hand: /realm:saga_places.`);
     return;
   }
-  const spot = pickSpot(name, { x: rec.x, z: rec.z });
+  // A camp moves a little (it isn't tied to a distance from spawn); a deep camp keeps its height.
+  const spot = isCamp(name) ? campStep(rec, mv) : pickSpot(name, { x: rec.x, z: rec.z });
   setPlace(name, { ...rec, x: spot.x, z: spot.z, mv });
+  if (isCamp(name)) return;
   if (near.isValid) near.sendMessage(`§e[Story] ${named(name, true)} isn't here after all: the land didn't suit it. The tracker now points to where it really is.`);
+}
+
+// ---------------------------------------------------------------------------
+// Wanderers' camps: instanced places `camp:<wanderer>`, made and moved by chapters
+// ---------------------------------------------------------------------------
+
+/** A camp's own fields, kept through a build. @param {SavedPlace} rec */
+const campFields = (rec) => (rec.pf ? { pf: rec.pf, w: rec.w, yh: rec.yh, u: rec.u, v: rec.v } : {});
+
+/** The next spot to try for a camp that didn't fit: around where it was asked for. @param {SavedPlace} rec @param {number} mv */
+function campStep(rec, mv) {
+  const a = hash(`${rec.w}:${mv}`) / 4294967296 * Math.PI * 2;
+  const d = 24 + 8 * Math.min(mv, 10);
+  return { x: Math.round(rec.x + Math.cos(a) * d), z: Math.round(rec.z + Math.sin(a) * d) };
+}
+
+/** Writes "Waystone: <Name>'s Camp" on a built camp's sign (Waystones & Inns makes a waystone of it on a tap). @param {string} name */
+function campSign(name) {
+  const at = featureSpot(name, "sign");
+  const rec = placesOf()[name];
+  if (!at || !rec) return;
+  try {
+    const sign = world.getDimension(rec.dim).getBlock(at)?.getComponent("minecraft:sign");
+    sign?.setText(`Waystone:\n${placeLabel(name)}`);
+    sign?.setWaxed(true);
+  } catch (e) {
+    console.warn(`[saga] camp sign: ${e}`);
+  }
+}
+
+/**
+ * Makes (or moves) a wanderer's camp near a spot: picked there, built when a player is close. Returns
+ * whether it moved from somewhere else (a built camp more than 32 blocks away), so its other players get a letter.
+ * @param {string} wid @param {string} prefab @param {string} dim @param {{ x: number, y?: number, z: number }} near @param {string} [pid] the player it is for
+ */
+export function makeCamp(wid, prefab, dim, near, pid) {
+  const name = campName(wid);
+  const old = placesOf()[name];
+  /** @type {Record<string, number>} */
+  const u = { ...(old?.u ?? {}) };
+  if (pid) u[pid] = Date.now();
+  if (old && old.dim === dim && across(old, near) <= 32 && old.pf === prefab) {
+    setPlace(name, { ...old, u, v: Date.now() });
+    return false;
+  }
+  if (old?.b) restore(old);
+  retryAt.delete(name);
+  waits.delete(name);
+  setPlace(name, { dim, x: Math.floor(near.x), z: Math.floor(near.z), yh: near.y === undefined ? undefined : Math.floor(near.y), a: 1, p: 1, pf: prefab, w: wid, u, v: Date.now() });
+  return !!old?.b;
+}
+
+/** A player needs this camp (on the chain): kept in its users. @param {string} wid @param {string} pid */
+export function needCamp(wid, pid) {
+  const name = campName(wid);
+  const rec = placesOf()[name];
+  if (!rec || rec.u?.[pid]) return;
+  const u = { ...(rec.u ?? {}), [pid]: Date.now() };
+  // At most 50 players listed: the oldest go first.
+  const keys = Object.keys(u).sort((a, b) => u[a] - u[b]);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 50))) delete u[k];
+  setPlace(name, { ...rec, u });
+}
+
+/** A player is done with this camp (finished the chain): the camp goes when nobody needs it. @param {string} wid @param {string} pid */
+export function leaveCamp(wid, pid) {
+  const name = campName(wid);
+  const rec = placesOf()[name];
+  if (!rec?.u?.[pid]) return;
+  const u = { ...rec.u };
+  delete u[pid];
+  if (!Object.keys(u).length) removePlace(name);
+  else setPlace(name, { ...rec, u });
+}
+
+/**
+ * Once a minute: a camp with a player near is visited; one nobody visited for `days` real days is taken
+ * down (terrain put back). @param {number} days
+ */
+export function campUpkeep(days) {
+  const now = Date.now();
+  for (const [name, rec] of Object.entries(placesOf())) {
+    if (!isCamp(name)) continue;
+    const near = world.getAllPlayers().some((p) => p.dimension.id === rec.dim && across(p.location, rec) <= 48);
+    if (near) {
+      if (now - (rec.v ?? 0) > 600000) setPlace(name, { ...rec, v: now });
+    } else if (now - (rec.v ?? now) > days * 86400000) {
+      removePlace(name);
+      console.warn(`[saga] ${name} unvisited for ${days} days: taken down`);
+    }
+  }
 }
 
 /** Every 2 seconds: picked places with a player close enough get built. */
@@ -678,7 +836,7 @@ async function placePage(player, name) {
   while (player.isValid) {
     const rec = placesOf()[name];
     const info = infoOf(name);
-    const users = usedBy(name);
+    const users = isCamp(name) ? [`${Object.keys(rec?.u ?? {}).length} player(s) on this wanderer's chain`] : usedBy(name);
     const lines = [
       `§e${placeLabel(name)}§r (${name})`,
       `Status: ${statusOf(rec)}§r`,
@@ -699,7 +857,7 @@ async function placePage(player, name) {
           } else player.teleport({ x: rec.x + 0.5, y: rec.y + 0.1, z: rec.z + 0.5 }, { dimension: dim });
         },
       ]);
-    actions.push(["Set here (no building)", () => setHere(player, name)]);
+    if (!isCamp(name)) actions.push(["Set here (no building)", () => setHere(player, name)]);
     if (PREFABS[name]) actions.push(["Build here (preview)", () => previewBuild(player, name)]);
     if (rec && !rec.b && !rec.p && PREFABS[name] && rec.y !== undefined)
       actions.push(["Build at the saved spot (preview)", () => (player.dimension.id === rec.dim ? previewBuild(player, name, { x: rec.x, y: rec.y ?? 0, z: rec.z }) : player.sendMessage("§c[Story] Go to that dimension first."))]);
@@ -720,7 +878,7 @@ async function placePage(player, name) {
           player.sendMessage(`§a[Story] Removed ${named(name)}.`);
         },
       ]);
-    if (rec)
+    if (rec && !isCamp(name))
       actions.push([
         "Relocate",
         async () => {
@@ -746,7 +904,7 @@ async function placePage(player, name) {
 export async function placesMenu(player) {
   while (player.isValid) {
     const saved = placesOf();
-    const names = [...new Set([...Object.keys(PLACES), ...Object.keys(PREFABS), ...Object.keys(saved)])];
+    const names = [...new Set([...Object.keys(PLACES), ...Object.keys(PREFABS), ...Object.keys(saved)])].filter((n) => !CAMPS[n]);
     const form = new ActionFormData()
       .title("Story places")
       .body(
