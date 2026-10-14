@@ -154,16 +154,21 @@ const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 
 /** Tick until which another pack's note (or one of ours) holds a player's bar: the steady readouts wait. @type {Map<string, number>} */
 const barHeld = new Map();
+/**
+ * The readouts' rank among steady lines (`steady` in their `realm:actionbar`): a higher one keeps the bar, a lower one
+ * waits for them. They show only while the player holds that relic, so they come before the lines that are always there.
+ */
+const STEADY = 45;
 
 /**
  * Shows a line above the hotbar, asking the Coordinates HUD to step aside first. A `steady` line (the Storm Meter and
- * Lantern Shard readouts, redrawn every second) waits while another pack's note or one of ours shows.
+ * Lantern Shard readouts, redrawn every second) waits while another pack's note, one of ours or a higher steady line shows.
  * @param {Player} player @param {string} text @param {number} [ticks] @param {boolean} [steady]
  */
 function actionbar(player, text, ticks = 40, steady = false) {
   if (steady && (barHeld.get(player.id) ?? 0) > system.currentTick) return;
   if (!steady) barHeld.set(player.id, system.currentTick + ticks);
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks, from: "relics_bp" }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify(steady ? { player: player.id, ticks, from: "relics_bp", steady: STEADY } : { player: player.id, ticks, from: "relics_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 
@@ -1794,7 +1799,9 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
       if (id === "realm:actionbar") {
         // Another pack's note: the Storm Meter and Lantern Shard readouts wait while it shows (a steady line, like the HUD).
+        // A lower steady line (`steady` below ours, or equal from a pack named after ours) waits for them instead.
         if (typeof msg.player !== "string" || msg.from === "relics_bp" || msg.background === true) return;
+        if (Number.isFinite(msg.steady) && (msg.steady < STEADY || (msg.steady === STEADY && String(msg.from) > "relics_bp"))) return;
         const until = system.currentTick + Math.min(Math.max(Number(msg.ticks) || 40, 0), 200);
         if (until > (barHeld.get(msg.player) ?? 0)) barHeld.set(msg.player, until);
         return;

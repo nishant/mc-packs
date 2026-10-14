@@ -39,7 +39,7 @@ import {
   today,
   wanderShape,
 } from "./data.js";
-import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, weather } from "./objectives.js";
+import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weather } from "./objectives.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
@@ -935,7 +935,7 @@ export function track(player, list, shown = true) {
   // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or our Side HUD box (realm:side).
   const where = getFor(player, "trackerAt");
   if (where === "hotbar" ? system.currentTick < (holdUntil.get(player.id) ?? 0) : side.taken(player, where)) return;
-  showLine(player, line, 50);
+  showLine(player, line, 50, TRACKER_STEADY);
 }
 
 // ---------------------------------------------------------------------------

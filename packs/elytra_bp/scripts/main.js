@@ -55,17 +55,22 @@ const heldAt = new Map();
 
 /** player id -> tick until which another pack's note above the hotbar (realm:actionbar) is left alone */
 const barHeld = new Map();
+/** The HUD's rank among steady lines (`steady` in its `realm:actionbar`): the highest, so the others wait while it glides. */
+const STEADY = 50;
 
 // Other packs' notes (a durability warning, skill XP, mob health) stay readable: above the hotbar the HUD
 // skips its redraws while one lasts, and keeps asking steady lines to wait. A `background` steady line
-// (the Party HUD) waits for this HUD instead.
+// (the Party HUD) and a lower steady line (`steady` below ours, or equal from a pack named after ours) wait
+// for this HUD instead.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id !== "realm:actionbar") return;
     try {
       const m = JSON.parse(message);
       if (!m || typeof m.player !== "string" || m.from === "elytra_bp" || m.background) return;
-      barHeld.set(m.player, system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0)));
+      if (Number.isFinite(m.steady) && (m.steady < STEADY || (m.steady === STEADY && String(m.from) > "elytra_bp"))) return;
+      const until = system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0));
+      if (until > (barHeld.get(m.player) ?? 0)) barHeld.set(m.player, until);
     } catch {
       // not ours
     }
@@ -96,7 +101,7 @@ system.runInterval(() => {
       // Ask the Coordinates HUD, if installed, to leave the action bar to this HUD while gliding.
       if (now - (heldAt.get(player.id) ?? -Infinity) >= HOLD_TICKS / 3) {
         heldAt.set(player.id, now);
-        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HOLD_TICKS, from: "elytra_bp" }));
+        system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HOLD_TICKS, from: "elytra_bp", steady: STEADY }));
       }
       if ((barHeld.get(player.id) ?? 0) > now) continue;
       player.onScreenDisplay.setActionBar(hud(player));

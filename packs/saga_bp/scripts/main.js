@@ -21,6 +21,7 @@ import {
   isChampionTag,
   endScenesOf,
   holdUntil,
+  TRACKER_STEADY,
   loadWeather,
   moonState,
   open,
@@ -470,7 +471,13 @@ system.afterEvents.scriptEventReceive.subscribe(
     if (!msg || typeof msg !== "object") return;
     try {
       if (id === "realm:actionbar") {
-        if (msg.from !== PACK && typeof msg.player === "string" && typeof msg.ticks === "number" && msg.ticks > 0) holdUntil.set(msg.player, system.currentTick + Math.min(200, msg.ticks));
+        // Another pack's note: the tracker waits. Not for a `background` line (the Party HUD) or a lower steady line
+        // (`steady` below the tracker's, or equal from a pack named after ours): those wait for the tracker instead.
+        const lower = msg.background === true || (Number.isFinite(msg.steady) && (msg.steady < TRACKER_STEADY || (msg.steady === TRACKER_STEADY && String(msg.from) > PACK)));
+        if (msg.from !== PACK && !lower && typeof msg.player === "string" && typeof msg.ticks === "number" && msg.ticks > 0) {
+          const until = system.currentTick + Math.min(200, msg.ticks);
+          if (until > (holdUntil.get(msg.player) ?? 0)) holdUntil.set(msg.player, until);
+        }
       } else if (id === "realm:npc_talk") onTalk(msg);
       else if (id === "realm:sky_event") {
         if (get("enabled") === true) skyEvent(msg);
