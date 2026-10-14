@@ -25,7 +25,7 @@ import {
   target,
   WANDER_CHAMPION,
 } from "./data.js";
-import { featureSpot, locate, placeSpot, placesOf } from "./places.js";
+import { featureSpot, infoOf, locate, placeSpot, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { holdTitle, isSlot, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
@@ -650,6 +650,10 @@ export function noBanner(ent) {
 const CHAMPION_MOBS = new Set(["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:zombie_villager_v2", "minecraft:skeleton", "minecraft:stray", "minecraft:spider", "minecraft:creeper", "minecraft:witch"]);
 
 const WATER_MOBS = new Set(["minecraft:guardian", "minecraft:elder_guardian", "minecraft:drowned", "minecraft:squid", "minecraft:glow_squid", "minecraft:dolphin"]);
+/** Mobs at home under water: they may spawn on a lake or sea bed (everything else comes at the water's surface). */
+const SWIMMERS = new Set([...WATER_MOBS, "minecraft:pufferfish", "minecraft:cod", "minecraft:salmon", "minecraft:tropicalfish", "minecraft:axolotl", "minecraft:turtle", "minecraft:tadpole"]);
+/** A place built on a lake or sea bed (the Sunken Bell, the Tide Seal): who and what is there stays on the bottom. @param {string | undefined} name */
+const onBed = (name) => !!name && infoOf(name).site === "water";
 
 /** The nearest water within 24 blocks of a spot (a sea mob's champion swims there), or undefined. @param {Dimension} dim @param {Vector3} at */
 function waterNear(dim, at) {
@@ -692,7 +696,7 @@ function championNear(player, obj) {
     const a = Math.random() * Math.PI * 2;
     const x = p.x + Math.cos(a) * 10;
     const z = p.z + Math.sin(a) * 10;
-    at = { x, y: groundAt(dim, x, z, p.y) ?? p.y, z };
+    at = { x, y: groundAt(dim, x, z, p.y, false, SWIMMERS.has(champ.mob)) ?? p.y, z };
   } else {
     if (typeof loc === "string" || loc.pending || player.dimension.id !== loc.dim) return;
     if (across(player.location, loc) > radiusOf(obj)) return;
@@ -811,19 +815,23 @@ export function spawnGroup(player, dim, at, group, key, min = 4, max = 8) {
   /** @type {Entity[]} */
   const out = [];
   const n = Math.max(0, Math.min(24, Math.floor(group.count ?? 1)));
+  /** The middle's height for land mobs (false: on the water's surface) and for swimmers (true: may be the bed). @type {Map<boolean, number>} */
+  const mids = new Map();
   for (let k = 0; k < n; k++) {
     const type = group.mobs[k % group.mobs.length];
+    const deep = SWIMMERS.has(type);
     // Somewhere a mob can stand and that can be seen from the middle (not inside the rock around a room
     // underground, or in a cave next to it): closer in each try, else the middle.
     /** @type {Vector3 | undefined} */
     let spot;
-    const y0 = groundAt(dim, at.x, at.z, at.y) ?? at.y;
+    let y0 = mids.get(deep);
+    if (y0 === undefined) mids.set(deep, (y0 = groundAt(dim, at.x, at.z, at.y, false, deep) ?? at.y));
     for (let tries = 0; tries < 8 && !spot; tries++) {
       const a = Math.random() * Math.PI * 2;
       const d = (min + Math.random() * (max - min)) * (1 - tries / 8);
       const x = at.x + Math.cos(a) * d;
       const z = at.z + Math.sin(a) * d;
-      const y = groundAt(dim, x, z, y0, true);
+      const y = groundAt(dim, x, z, y0, true, deep);
       if (y !== undefined && inSight(dim, { x: at.x, y: y0 + 1.5, z: at.z }, { x, y: y + 1.5, z })) spot = { x, y, z };
     }
     spot ??= { x: at.x, y: y0, z: at.z };
@@ -1247,7 +1255,7 @@ function standSpot(obj, loc, id) {
   const dim = world.getDimension(loc.dim);
   const x = loc.x + 2.5;
   const z = loc.z + 0.5;
-  const y = groundAt(dim, x, z, loc.y);
+  const y = groundAt(dim, x, z, loc.y, false, onBed(obj.place));
   return y === undefined ? undefined : { x, y, z };
 }
 
@@ -1336,7 +1344,7 @@ function clueSpot(s, obj, k) {
   let y = p.y;
   if (y === undefined) {
     const base = obj.place ? placesOf()[obj.place]?.y : undefined;
-    y = groundAt(world.getDimension(p.dim), p.x, p.z, base);
+    y = groundAt(world.getDimension(p.dim), p.x, p.z, base, false, onBed(obj.place));
     if (y === undefined) return undefined;
   }
   const out = { dim: p.dim, x: Math.floor(p.x) + 0.5, y: y + 0.5, z: Math.floor(p.z) + 0.5 };
@@ -1456,14 +1464,15 @@ function stealthTick(player, e, i, obj) {
     let gr = Math.max(3, r * (0.35 + (0.55 * (k + 0.5)) / n));
     const ang = (2 * Math.PI * k) / n + Math.random() * 0.5;
     // Rounds where a guard can stand: smaller ones when the place is a room in the rock.
-    let y = groundAt(dim, sp.center.x + Math.cos(ang) * gr, sp.center.z + Math.sin(ang) * gr, sp.center.y, true);
+    const deep = SWIMMERS.has(g.mob);
+    let y = groundAt(dim, sp.center.x + Math.cos(ang) * gr, sp.center.z + Math.sin(ang) * gr, sp.center.y, true, deep);
     while (y === undefined && gr > 3) {
       gr = Math.max(3, gr * 0.75);
-      y = groundAt(dim, sp.center.x + Math.cos(ang) * gr, sp.center.z + Math.sin(ang) * gr, sp.center.y, true);
+      y = groundAt(dim, sp.center.x + Math.cos(ang) * gr, sp.center.z + Math.sin(ang) * gr, sp.center.y, true, deep);
     }
     const x = sp.center.x + Math.cos(ang) * gr;
     const z = sp.center.z + Math.sin(ang) * gr;
-    y ??= groundAt(dim, x, z, sp.center.y) ?? sp.center.y;
+    y ??= groundAt(dim, x, z, sp.center.y, false, deep) ?? sp.center.y;
     const ent = spawnActor(dim, g.mob, { x, y, z }, { owner: player.id, key: s.key, role: "guard", name: g.name ? `§c${g.name}` : undefined, invul: true });
     if (ent && CHOIR.has(s.key)) ent.addTag("saga:choir");
     if (ent) s.data.guards.push({ ent, r: gr, ang, dir: k % 2 ? 1 : -1, yaw: 0, y, pause: 0, flipAt: system.currentTick + 200 + Math.floor(Math.random() * 300) });
@@ -1505,7 +1514,7 @@ function stealthFast(s, player) {
     }
     const x = sp.center.x + Math.cos(gd.ang) * gd.r;
     const z = sp.center.z + Math.sin(gd.ang) * gd.r;
-    const y = groundAt(dim, x, z, gd.y) ?? gd.y;
+    const y = groundAt(dim, x, z, gd.y, false, SWIMMERS.has(obj.guards?.mob ?? "")) ?? gd.y;
     gd.y = y;
     gd.yaw = yaw;
     try {
@@ -1751,7 +1760,7 @@ function leadTick(player, e, i, obj) {
         for (let k = have; k < want && base; k++) {
           const x = base.x + (Math.random() * 4 - 2);
           const z = base.z + (Math.random() * 4 - 2);
-          const y = groundAt(dim, x, z, base.y) ?? base.y;
+          const y = groundAt(dim, x, z, base.y, false, SWIMMERS.has(obj.mob ?? "")) ?? base.y;
           spawnActor(dim, obj.mob, { x, y, z }, { owner: player.id, key: s.key, role: "lead", name: obj.name ? `§e${obj.name}` : undefined, fireproof: false });
           if (k === have) player.sendMessage(`§e[Story] There it is. Put a lead on it (use a lead on the animal) and bring it to ${to && typeof to !== "string" ? to.label : "the pen"}.`);
         }
@@ -1786,6 +1795,8 @@ function leadTick(player, e, i, obj) {
 
 /** Wards that would fight the player they need protecting by. */
 const HOSTILE_WARDS = new Set(["minecraft:witch", "minecraft:evocation_illager", "minecraft:vindicator", "minecraft:pillager", "minecraft:zombie", "minecraft:skeleton", "minecraft:drowned", "minecraft:bogged"]);
+/** A wave none of whose monsters fell for this long (stuck in a hole or a wall, out of reach) regroups in sight of the middle. */
+const WAVE_STALL_TICKS = 6000;
 
 /** @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj */
 function defendTick(player, e, i, obj) {
@@ -1848,7 +1859,25 @@ function defendTick(player, e, i, obj) {
     player.sendMessage(`§c[Story] The attackers regroup at ${loc.label}!`);
     s.data.mobs.push(...spawnGroup(player, dim, center, { mobs: cur.mobs, count: lost }, s.key, Math.max(6, r * 0.7), Math.max(8, r)));
   }
-  if (s.data.mobs.length) return;
+  if (s.data.mobs.length) {
+    // The fight is on with the player here: the wave's monsters don't time out (expireAdds) and only count as
+    // beaten when they fall. One none of whose monsters fell for 5 minutes comes again in sight of the middle.
+    for (const m of s.data.mobs) {
+      const a = actors.get(m.id);
+      if (a) a.born = now;
+    }
+    if (s.data.mobs.length < (s.data.alive ?? Infinity)) s.data.stall = now;
+    s.data.alive = s.data.mobs.length;
+    if (cur && now - (s.data.stall ?? now) > WAVE_STALL_TICKS) {
+      const n = s.data.mobs.length;
+      for (const m of s.data.mobs) removeActor(m.id);
+      player.sendMessage(`§c[Story] The last attackers regroup at ${loc.label}!`);
+      s.data.mobs = spawnGroup(player, dim, center, { mobs: cur.mobs, count: n }, s.key, Math.max(6, r * 0.7), Math.max(8, r));
+      s.data.stall = now;
+      s.data.alive = s.data.mobs.length;
+    }
+    return;
+  }
   if (s.data.spawned) {
     // A wave is cleared.
     s.data.spawned = false;
@@ -1872,6 +1901,13 @@ function defendTick(player, e, i, obj) {
   s.data.spawned = true;
   note(player, `§c${e.story.short}: wave ${s.data.wave + 1} of ${waves.length}`, 60);
   s.data.mobs = spawnGroup(player, dim, center, w, s.key, Math.max(6, r * 0.7), Math.max(8, r));
+  s.data.stall = now;
+  s.data.alive = s.data.mobs.length;
+}
+
+/** Test hook (realm:saga_debug `age_adds`): the player's running defenses as if `ticks` passed with no monster falling. @param {string} pid @param {number} ticks */
+export function ageDefenses(pid, ticks) {
+  for (const s of scenes.values()) if (s.pid === pid && s.kind === "defend" && s.state === "run" && s.data.stall !== undefined) s.data.stall -= ticks;
 }
 
 /** A defense failed: everything resets, and it starts again when the player comes back. @param {SceneState} s @param {string} why */
