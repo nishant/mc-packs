@@ -3,7 +3,7 @@
 // Each card is data (id, name, rarity, kind, the line on the card) and a small handler. A handler
 // returns false when it can't happen here (no safe spot, no mob near...), and the deck draws again;
 // a string is shown under the card's text.
-import { EquipmentSlot, ItemStack, Player, system, WeatherType, world } from "@minecraft/server";
+import { EquipmentSlot, ItemLockMode, ItemStack, Player, system, WeatherType, world } from "@minecraft/server";
 import { arena, inDeckArena, rainbowName, spore, wish } from "./events.js";
 import {
   addCrowns,
@@ -432,7 +432,8 @@ export const CARDS = [
       if (!inv) return false;
       const slot = player.selectedSlotIndex;
       const item = inv.getItem(slot);
-      if (!item) return false;
+      // A locked item (the Realm Configuration item, another pack's tool) stays: it can't be dropped.
+      if (!item || item.lockMode !== ItemLockMode.none) return false;
       inv.setItem(slot, undefined);
       // A few blocks away, so it isn't picked straight back up, and where the player can see it: never
       // in another cave below a mine tunnel or on the surface above it.
@@ -451,13 +452,15 @@ export const CARDS = [
     run: ({ player }) => {
       const inv = player.getComponent("minecraft:inventory")?.container;
       if (!inv) return false;
-      const items = [];
-      for (let i = 0; i < 9; i++) items.push(inv.getItem(i));
+      // An item locked in its slot stays where it is; the rest are shuffled.
+      const slots = [];
+      for (let i = 0; i < 9; i++) if (inv.getItem(i)?.lockMode !== ItemLockMode.slot) slots.push(i);
+      const items = slots.map((i) => inv.getItem(i));
       if (items.filter((x) => x).length < 2) return false;
       const before = items.map((x) => x?.typeId ?? "").join();
       let shuffled = items;
       for (let t = 0; t < 5 && shuffled.map((x) => x?.typeId ?? "").join() === before; t++) shuffled = [...items].sort(() => Math.random() - 0.5);
-      shuffled.forEach((it, i) => inv.setItem(i, it));
+      shuffled.forEach((it, k) => inv.setItem(slots[k], it));
       sound(player, "random.pop", 1.4);
     },
   },
@@ -747,7 +750,7 @@ export const CARDS = [
       const slots = [];
       for (let i = 0; i < inv.size; i++) {
         const it = inv.getItem(i);
-        if (!it || it.nameTag || /shulker_box|bundle/.test(it.typeId)) continue;
+        if (!it || it.nameTag || it.lockMode !== ItemLockMode.none || /shulker_box|bundle/.test(it.typeId)) continue;
         if (it.getComponent("minecraft:enchantable")?.getEnchantments().length) continue;
         slots.push(i);
       }
