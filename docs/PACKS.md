@@ -1405,7 +1405,7 @@ A compass strip across the top of your screen shows which way you're facing, the
 
 ### See and hear it
 
-![Render of the compass strip facing east-northeast, with a mob arrow on the left, a townsfolk, the destination star, a mob, E, a wanderer, an Atlas site and a party mate's arrow on the right, and the radar below turning with the player](media/map/map-hud.png) A render made from the glyph font itself (not a screenshot): the strip with markers and edge arrows, and the radar.
+![Render (made from the glyph font itself, not a screenshot) of the compass strip facing east-northeast, with a mob arrow on the left, a townsfolk, the destination star, a mob, E, a wanderer, an Atlas site and a party mate's arrow on the right, and the radar below turning with the player](media/map/map-hud.png)
 
 ### What players see
 
