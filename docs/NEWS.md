@@ -6,6 +6,15 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Lines that take turns
+
+A few more fixes from the big review:
+
+- The lines above your hotbar take turns: the Elytra HUD, Relics readouts, an expedition's run line, the build mode line and the story tracker no longer block each other.
+- Story monsters and characters near a lake or the sea appear on the water's surface, not on the bottom.
+- Story defenses: a wave only counts when its monsters fall. Waiting doesn't win it, and a wave stuck out of reach regroups.
+- Field Journal: "Also found" keeps your 100 newest finds on each page instead of stopping at 40.
+
 ## A big round of fixes
 
 We went through every pack looking for bugs. Here is what changed:
