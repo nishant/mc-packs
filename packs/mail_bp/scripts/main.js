@@ -154,6 +154,9 @@ function stamp(at) {
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} UTC`;
 }
 
+/** Takes the color and format codes (`§` and the character after it) out of typed text. @param {unknown} v */
+const noCodes = (v) => (typeof v === "string" ? v.replace(/§[\s\S]?/g, "") : v);
+
 /** Trims, turns a typed \n into a new line and shortens to `max`. @param {unknown} v @param {number} max @param {boolean} lines */
 function clean(v, max, lines) {
   let s = typeof v === "string" ? v.trim() : "";
@@ -256,8 +259,9 @@ async function write(player, draft = {}) {
   const [who, rawSubject, ...rawParts] = res.formValues;
   const to = others[typeof who === "number" ? who : -1];
   const parts = rawParts.map((v) => (typeof v === "string" ? v : ""));
-  const subject = clean(rawSubject, subjectMax, false);
-  const body = clean(joinParts(parts), bodyMax, true);
+  // Color and format codes are taken out of what players type, so a letter can't pass for a realm message.
+  const subject = clean(noCodes(rawSubject), subjectMax, false);
+  const body = clean(noCodes(joinParts(parts)), bodyMax, true);
   const again = { to: to?.i, subject: typeof rawSubject === "string" ? rawSubject : "", parts };
   if (!to) return;
   if (!body.text) return write(player, { ...again, problem: "Write something in the letter first." });
