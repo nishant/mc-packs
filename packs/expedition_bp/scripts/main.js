@@ -329,16 +329,21 @@ function tryCommand(dim, command) {
 
 /** player id -> tick until which a note holds the bar (another pack's `realm:actionbar`, or one of ours). */
 const barHeld = new Map();
+/** The run line's rank among steady lines (`steady` in its `realm:actionbar`): a higher one keeps the bar, a lower one waits for it. */
+const STEADY = 40;
 
 // Other packs' notes (durability, skill XP, mob health...) hold the bar for a moment: the run line waits.
-// Steady background lines (`background: true`, like the Party HUD) don't stop it.
+// Steady background lines (`background: true`, like the Party HUD) don't stop it, nor do lower steady lines
+// (`steady` below ours, or equal from a pack named after ours): those wait for the run line instead.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id !== "realm:actionbar") return;
     try {
       const m = JSON.parse(message);
       if (!m || typeof m.player !== "string" || m.from === "expedition_bp" || m.background === true) return;
-      barHeld.set(m.player, system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0)));
+      if (Number.isFinite(m.steady) && (m.steady < STEADY || (m.steady === STEADY && String(m.from) > "expedition_bp"))) return;
+      const until = system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0));
+      if (until > (barHeld.get(m.player) ?? 0)) barHeld.set(m.player, until);
     } catch {
       // not ours
     }
@@ -348,14 +353,14 @@ system.afterEvents.scriptEventReceive.subscribe(
 
 /**
  * Actionbar text, after asking the Coordinates HUD (and other bar writers) to step aside. The run line
- * (`steady`) is skipped while a note holds the bar; a note of ours holds the run line off too.
+ * (`steady`) is skipped while a note or a higher steady line holds the bar; a note of ours holds the run line off too.
  * @param {Player} player @param {string} text @param {boolean} [steady]
  */
 function actionbar(player, text, steady = false) {
   const now = system.currentTick;
   if (steady && (barHeld.get(player.id) ?? 0) > now) return;
   if (!steady) barHeld.set(player.id, now + 30);
-  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 30, from: "expedition_bp" }));
+  system.sendScriptEvent("realm:actionbar", JSON.stringify(steady ? { player: player.id, ticks: 30, from: "expedition_bp", steady: STEADY } : { player: player.id, ticks: 30, from: "expedition_bp" }));
   player.onScreenDisplay.setActionBar(text);
 }
 

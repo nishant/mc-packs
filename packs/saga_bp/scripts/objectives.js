@@ -127,6 +127,12 @@ const playerIn = (player, obj) => inArea(obj, player.location, player.dimension.
 /** Tick until which another note owns a player's actionbar: the tracker waits. @type {Map<string, number>} */
 export const holdUntil = new Map();
 
+/**
+ * The tracker's rank among steady lines above the hotbar (`steady` in its `realm:actionbar`): a higher one (a Relics
+ * readout, a run line, build mode, the Elytra HUD) keeps the bar and the tracker waits; a lower one waits for it.
+ */
+export const TRACKER_STEADY = 20;
+
 /** Tick until which our own note owns the line the tracker uses. @type {Map<string, number>} */
 export const ownUntil = new Map();
 
@@ -139,15 +145,15 @@ export const side = sideBoxes("saga");
 /**
  * Shows a line for a while: in the player's Side HUD box (hud_rp; other add-ons that redraw the action bar
  * every tick can't cover it), or above the hotbar for players who chose that.
- * @param {Player} player @param {string} text @param {number} ticks
+ * @param {Player} player @param {string} text @param {number} ticks @param {number} [steady] the tracker's rank (its own redraws, not notes)
  */
-export function showLine(player, text, ticks) {
+export function showLine(player, text, ticks, steady) {
   const where = getFor(player, "trackerAt");
   if (isSlot(where)) {
     side.show(player, where, text, ticks);
     return;
   }
-  send("realm:actionbar", { player: player.id, ticks, from: PACK });
+  send("realm:actionbar", steady ? { player: player.id, ticks, from: PACK, steady } : { player: player.id, ticks, from: PACK });
   player.onScreenDisplay.setActionBar(text);
 }
 
