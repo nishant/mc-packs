@@ -386,10 +386,47 @@ const ores = new Set(CONFIG.ores);
 const crops = new Map(CONFIG.crops.map((c) => [c.block, c]));
 const hostile = new Set(CONFIG.hostile);
 
-/** Ores and stateless crops (melons, pumpkins) players placed lately, "dim:x,y,z". @type {Set<string>} */
-const placed = new Set();
+// Ores and stateless crops (melons, pumpkins) players placed lately, "<dim>x,y,z" (dim: one character). Kept in
+// world properties (guilds:placed0, 1, ...), so a restart (a Realm closes when everyone leaves) doesn't make placed
+// pumpkins and ores count again (and the Growers' extra crop a way to copy pumpkins).
+const PLACED_PROP = "guilds:placed";
+const PLACED_PER_PROP = 1200; // at most about 20 characters each: well under the 32,000 limit
+const DIM_CHARS = /** @type {Record<string, string>} */ ({ "minecraft:overworld": "o", "minecraft:nether": "n", "minecraft:the_end": "e" });
+/** @type {Set<string> | undefined} */
+let placedSet;
+let placedDirty = false;
+
+/** @returns {Set<string>} */
+function placed() {
+  if (placedSet) return placedSet;
+  placedSet = new Set();
+  try {
+    for (let i = 0; ; i++) {
+      const raw = world.getDynamicProperty(`${PLACED_PROP}${i}`);
+      if (typeof raw !== "string") break;
+      for (const key of raw.split(";")) if (key) placedSet.add(key);
+    }
+  } catch (e) {
+    console.warn(`[guilds] placed blocks: ${e}`);
+  }
+  return placedSet;
+}
+
+function savePlaced() {
+  if (!placedDirty || !placedSet) return;
+  try {
+    const keys = [...placedSet];
+    let i = 0;
+    for (; i * PLACED_PER_PROP < keys.length; i++) world.setDynamicProperty(`${PLACED_PROP}${i}`, keys.slice(i * PLACED_PER_PROP, (i + 1) * PLACED_PER_PROP).join(";"));
+    for (; world.getDynamicProperty(`${PLACED_PROP}${i}`) !== undefined; i++) world.setDynamicProperty(`${PLACED_PROP}${i}`, undefined);
+    placedDirty = false;
+  } catch (e) {
+    console.warn(`[guilds] saving placed blocks: ${e}`);
+  }
+}
+
 /** @param {string} dim @param {Vector3} at */
-const spot = (dim, at) => `${dim}:${at.x},${at.y},${at.z}`;
+const spot = (dim, at) => `${DIM_CHARS[dim] ?? dim}${at.x},${at.y},${at.z}`;
 
 /** Is this permutation a fully grown crop from `crops`? @param {import("@minecraft/server").BlockPermutation} perm */
 function ripe(perm) {
@@ -408,9 +445,11 @@ world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
     const id = block.typeId;
     if (!ores.has(id) && !(crops.has(id) && crops.get(id)?.state === undefined)) return;
     const key = spot(block.dimension.id, block.location);
-    placed.delete(key);
-    placed.add(key);
-    if (placed.size > PLACED_MEMORY) placed.delete(/** @type {string} */ (placed.values().next().value));
+    const set = placed();
+    set.delete(key);
+    set.add(key);
+    if (set.size > PLACED_MEMORY) set.delete(/** @type {string} */ (set.values().next().value));
+    placedDirty = true;
   } catch (e) {
     console.warn(`[guilds] ${e}`);
   }
@@ -434,7 +473,10 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
     if (!playing(player)) return;
     const id = brokenBlockPermutation.type.id;
     if (!ores.has(id) && !crops.has(id)) return;
-    if (placed.delete(spot(block.dimension.id, block.location))) return;
+    if (placed().delete(spot(block.dimension.id, block.location))) {
+      placedDirty = true;
+      return;
+    }
     if (ores.has(id)) {
       count(player, "o", 1, get("passive.oresPerRep"), "miners");
       if (hasPerk(player, "miners")) {
@@ -502,6 +544,7 @@ world.beforeEvents.playerLeave.subscribe(({ player }) => {
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  savePlaced(); // a Realm closes soon after the last player leaves: don't wait for the 30-second save
   live.delete(playerId);
   progCache.delete(playerId);
   dirty.delete(playerId);
@@ -553,7 +596,10 @@ system.runInterval(() => {
       console.warn(`[guilds] ${e}`);
     }
   }
-  if (seconds % 30 === 0) saveProgress();
+  if (seconds % 30 === 0) {
+    saveProgress();
+    savePlaced();
+  }
 }, 20);
 
 // ---------------------------------------------------------------------------

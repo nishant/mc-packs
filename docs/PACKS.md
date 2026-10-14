@@ -2895,6 +2895,7 @@ Operators can change `passive.enabled`, `passive.oresPerRep`, `passive.cropsPerR
 | `rep_miners`, `rep_growers`, `rep_wardens`, `rep_wayfarers` | Scoreboards | Each player's reputation with that guild |
 | `guilds:prog` | Player | JSON `{ o, c, k, b }`: ores, crops, kills and blocks counted toward the next point of plain-play reputation (saved every 30 seconds and when the player leaves) |
 | `guilds:pending` | World | JSON `{ playerId: { guild: amount } }`: reputation earned while offline, added when they join (up to 300 players) |
+| `guilds:placed0`, `guilds:placed1`, ... | World | The ores, melons and pumpkins players placed lately (the last 5,000, `;`-separated `<dimension letter>x,y,z`), so breaking them again earns nothing, after a restart too (saved every 30 seconds and when a player leaves) |
 | `guilds:cfg` | World | Settings changed in `/realm:config` |
 | `guilds:pref` | Player | JSON of the player's own `repNotes` choice from `/realm:prefs` |
 
@@ -2903,7 +2904,7 @@ Operators can change `passive.enabled`, `passive.oresPerRep`, `passive.cropsPerR
 - Reputation is a scoreboard per guild, so any pack, `/scoreboard` or a sidebar can read it. Shops spend the `crowns` scoreboard directly, with or without the [Crowns](#crowns--crowns_bp) pack.
 - It listens for `realm:quest_done` `{ player, kind?, guild?, label }`, `realm:rep_add` `{ player, guild, amount, reason }` and `realm:champion_slain` `{ player?, helpers }`. For a player who isn't online, the reputation waits in `guilds:pending`.
 - Rank-ups send `realm:title_unlock` `{ player, title, from: "guilds_bp" }` for the ranks in `titleRanks`, and again for every rank reached 11 seconds after a player joins (Titles & Trails ignores ones it has).
-- Plain play uses `afterEvents.playerBreakBlock` (ores and grown crops; a placed ore or melon is remembered, the last 5,000, so breaking it again earns nothing), a tap on a grown crop that resets it 3 ticks later (the [Right-click Harvest](#right-click-harvest--harvest_bp) pack), `afterEvents.entityDie` with a player as the killer, and the distance moved each second. Sprinting is read from the player's `isSprinting`.
+- Plain play uses `afterEvents.playerBreakBlock` (ores and grown crops; a placed ore, melon or pumpkin is remembered, the last 5,000, saved across restarts, so breaking it again earns nothing and the Growers' extra crop can't copy pumpkins), a tap on a grown crop that resets it 3 ticks later (the [Right-click Harvest](#right-click-harvest--harvest_bp) pack), `afterEvents.entityDie` with a player as the killer, and the distance moved each second. Sprinting is read from the player's `isSprinting`.
 - Perk notes above the hotbar also send `realm:actionbar` (50 ticks), so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside.
 - The **Guild hall** is an offer in the [Townsfolk](#townsfolk--npc_bp) offer round: it answers `realm:npc_talk` for NPCs with the `guildmaster` role and opens on `realm:npc_choose`.
 
