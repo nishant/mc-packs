@@ -321,7 +321,7 @@ system.runInterval(() => {
       if (p.extra) text = text ? `${text} §e${p.extra}` : `§e${p.extra}`;
       if (!text) continue;
       // Ask the Coordinates HUD, if installed, to leave the note on screen for a moment.
-      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40 }));
+      system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "skills_bp" }));
       player.onScreenDisplay.setActionBar(text);
     } catch (e) {
       console.warn(`[skills] note: ${e}`);
