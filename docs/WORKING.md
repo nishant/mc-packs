@@ -42,6 +42,7 @@ Over the last 20 PRs, `docs/PACKS.md` changed in 19, a manifest in 16, the help 
 - Dynamic properties are per pack: a property one pack writes is invisible to every other pack (and to the test pack). Packs may only share state through tags, scoreboards and script events.
 - `entityDie` never fires for `minecraft:npc` on BDS 1.26 (only `entityRemove`, which also fires on chunk unload).
 - `getBlockBelow` skips water unless `includeLiquidBlocks: true`; an operator flying over the sea gets the sea floor.
+- A canceled `beforeEvents` event (a block tap Land Claims refused) is no longer delivered to packs loaded after the one that canceled it, but later subscribers in the same pack still get it. On the Realm everything is one bundle, so every tap handler must return when `event.cancel` is already set (harvest, stash, storm do); a harness run with separate packs hides the bug (`storm-rod-claims.js` shows how to build a two-pack mini bundle). A pack loaded before `claims_bp` never sees the cancel and must ask (`realm:access_check`).
 - `getTopmostBlock` skips water: with water over stone it returns the stone (checked on BDS 1.26), so a lake or sea bed looks like dry ground. Look at the block above it before putting anything on the "surface" (`waterOver()` in calendar_bp, `dryGround()` in rain_bp).
 - `getTopmostBlock` on a column that isn't ticking can return a block (at y 319) that throws `LocationInUnloadedChunkError` as soon as you read it (`isLiquid`, `typeId`): wrap the reads too, not only the call (wander_bp's spot finder).
 
