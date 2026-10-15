@@ -6,6 +6,22 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Better together
+
+Play the story with your party, and a lot of fixes from the Realm:
+
+- Story: pick which quest your tracker follows with Track this quest in /realm:saga > Current quests. In a party it sets the tracker for everyone.
+- Parties share the main story: you play one chapter together, at the pace of whoever is furthest behind, and progress on it counts for everyone.
+- Party mates now share Daily Quest kills nearby, hear where a member died, travel together at waystones, can share a land claim, get letters sent to the whole party, and split treasure they find together.
+- Townsfolk stand on top of paths and slabs instead of sinking in, and show their names instead of "NPC".
+- The Minimap's compass and radar turn smoothly with you.
+- Champions now slowly come looking for nearby players.
+- Expeditions: no more phantoms stuck in corners, no free ladders in climbing rooms (jump the ledges; a fall drifts you gently down), and more jumping ledges.
+- Silly Enchants: Disco, Rainbow Trail, Bubbles and confetti are easy to see now, and Grunt Birthday cheers "yaaay" with a party horn.
+- Platypuses: feed them fish to heal or breed them, name tags always show, and leads attach properly.
+- Dolphins: riders breathe under water, and ridden dolphins are about 20% faster.
+- Lantern Fair: a lone pumpkin in the carve-off wins.
+
 ## Claims that hold
 
 Another round of fixes:
