@@ -45,6 +45,7 @@ import { PACK, hash, itemName, npcName, send, strangerNames } from "./util.js";
  * @property {Record<string, FavorState>} [fv] daily favors by NPC id
  * @property {WanderState} [wv] the player's live wanderer encounter (a Stranger's one-off, or a hostile's fight)
  * @property {number} [wn] Strangers' one-offs finished
+ * @property {string} [tr] the story id of the quest the player picked to track ("fv:<npc>" a favor, "wv:..." a wanderer's job)
  */
 /**
  * A wanderer encounter (Wanderers of the Wilds): who, where they were met, the one-off picked for it and,
@@ -71,7 +72,10 @@ import { PACK, hash, itemName, npcName, send, strangerNames } from "./util.js";
  * A chapter the player is working on. Daily favors are entries too, with a made-up story whose id
  * starts with "fv:" and `fav` set to the NPC id.
  * Wanderer one-offs are entries too: story id "wv:<template>", `fav` the stranger's NPC id and `wv` the encounter id.
- * @typedef {{ story: Story, chapter: Chapter, index: number, st: StoryState | FavorState | WanderState, fav?: string, wv?: string }} Entry
+ * A party quest (the main-story chapter a party mate is on, helped by a player who is past it or hasn't accepted it)
+ * is an entry too, with `pq` set: its state lives in memory only, and its progress goes to the mates (party.js). Its
+ * steps apply (`when`) by the flags of a mate on the chapter (`sg`), not the helper's own.
+ * @typedef {{ story: Story, chapter: Chapter, index: number, st: StoryState | FavorState | WanderState, fav?: string, wv?: string, pq?: boolean, sg?: Saga }} Entry
  */
 
 export const PROP_PLAYER = "saga:p";
@@ -284,6 +288,7 @@ export function sagaOf(player) {
       if (saga.g !== undefined && !isObj(saga.g)) delete saga.g;
       if (saga.cx !== undefined && !Array.isArray(saga.cx)) delete saga.cx;
       if (saga.fv !== undefined && !isObj(saga.fv)) delete saga.fv;
+      if (saga.tr !== undefined && typeof saga.tr !== "string") delete saga.tr;
       if (saga.wv !== undefined && (!isObj(saga.wv) || typeof saga.wv.w !== "string" || !isObj(saga.wv.at))) delete saga.wv;
     }
   } catch {
@@ -572,7 +577,7 @@ export function target(obj) {
 }
 
 /** Does this objective exist for the player now (its `when`)? @param {Entry} e @param {Objective} obj @param {Saga} saga */
-export const objApplies = (e, obj, saga) => e.fav !== undefined || matches(obj.when, saga, e.story.id);
+export const objApplies = (e, obj, saga) => e.fav !== undefined || matches(obj.when, e.sg ?? saga, e.story.id);
 
 /** @param {Entry} e @param {number} i */
 export const progressOf = (e, i) => e.st.o?.[i] ?? 0;
@@ -640,11 +645,43 @@ export function active(e, i, saga) {
 const entryCache = new Map();
 
 /**
- * The chapters this player has accepted and is working on (or is ready to report back on), main
- * story first, then side stories, then daily favors.
+ * What the party sync (party.js) says for a player in a party: the party's main-story chapter, and the party quest
+ * entry they help with (when they don't have that chapter accepted themselves). Undefined out of a party.
+ * @typedef {{ story: Story, chapter: Chapter, ghost?: Entry }} PartyView
+ */
+/** @type {Map<string, PartyView>} */
+export const partyViews = new Map();
+/** The list entries() returned for a player's own list and party view. @type {WeakMap<Entry[], { view: PartyView | undefined, list: Entry[] }>} */
+const viewed = new WeakMap();
+
+/**
+ * Is this main-story chapter on hold for the player? In a party, only the party's chapter counts.
+ * @param {string} playerId @param {Story} story @param {string | undefined} chapterId
+ */
+export function onHold(playerId, story, chapterId) {
+  const view = partyViews.get(playerId);
+  return !!view && story.kind === "main" && (view.story.id !== story.id || view.chapter.id !== chapterId);
+}
+
+/**
+ * The chapters this player has accepted and is working on (or is ready to report back on), main story first, then
+ * side stories, then daily favors. In a party, other main-story chapters than the party's wait (they aren't listed),
+ * and the party quest is listed first when the player helps with it.
  * @param {Player} player @returns {Entry[]}
  */
 export function entries(player) {
+  const own = ownEntries(player);
+  const view = partyViews.get(player.id);
+  const hit = viewed.get(own);
+  if (hit && hit.view === view) return hit.list;
+  const list = view ? own.filter((e) => !onHold(player.id, e.story, e.chapter.id)) : own;
+  if (view?.ghost && !list.some((e) => e.story.id === view.story.id)) list.unshift(view.ghost);
+  viewed.set(own, { view, list });
+  return list;
+}
+
+/** The player's own chapters, without the party view. @param {Player} player @returns {Entry[]} */
+export function ownEntries(player) {
   const v = versions.get(player.id) ?? 0;
   const hit = entryCache.get(player.id);
   if (hit && hit.v === v) return hit.list;

@@ -28,7 +28,9 @@ import {
   objApplies,
   objDone,
   objKey,
+  onHold,
   pagesFor,
+  partyViews,
   progressOf,
   requires,
   sagaOf,
@@ -39,7 +41,8 @@ import {
   today,
   wanderShape,
 } from "./data.js";
-import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weather } from "./objectives.js";
+import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weather } from "./objectives.js";
+import { partyMates, partyTick } from "./party.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
@@ -205,6 +208,8 @@ function offerFor(player, story, npc) {
   const ender = chapter.end ?? starter;
   const { pos } = chapterNumber(saga, story, index);
   const tag = story.kind === "main" ? "Main story" : story.kind === "heart" ? "Heart story" : story.kind === "wander" ? "Wanderer" : story.kind === "festival" ? "Festival" : "Story";
+  // In a party, a main-story chapter other than the party's waits (party.js).
+  if (onHold(player.id, story, chapter.id)) return starter === npc || ender === npc ? { key: `wait:${story.id}`, label: `${tag}: ${story.title}\n§8Waiting for your party` } : undefined;
   if (!st || !st.a || st.cur !== chapter.id) {
     if (starter !== npc || storyWaitsForPacks(story)) return undefined;
     if (!st?.dn.length && !requires(story.requires, saga, story.id, player).ok) return undefined;
@@ -248,7 +253,7 @@ export function offersAt(player, npc) {
   const saga = sagaOf(player);
   for (const e of entries(player))
     e.chapter.objectives.forEach((obj, i) => {
-      if (obj.type === "answer" && obj.npc === npc && !objDone(e, i, saga) && (!e.chapter.sequential || currentStep(e, saga) === i))
+      if (obj.type === "answer" && obj.npc === npc && helps(e, obj) && !objDone(e, i, saga) && (!e.chapter.sequential || currentStep(e, saga) === i))
         out.push({ key: `ans:${e.story.id}:${i}`, label: `Answer: ${obj.label}`, order: CONFIG.offerOrder - 1 });
     });
   const f = favorOffer(player, npc);
@@ -297,6 +302,7 @@ export async function choose(player, key) {
   }
   const story = storyById.get(id ?? "");
   if (!story) return;
+  if (kind === "wait") return void player.sendMessage(holdNote(player));
   if (kind === "start") return startChapter(player, story);
   if (kind === "end") return endChapter(player, story);
   if (kind === "info") return chapterInfo(player, story);
@@ -305,6 +311,46 @@ export async function choose(player, key) {
 // ---------------------------------------------------------------------------
 // Chapter dialogues
 // ---------------------------------------------------------------------------
+
+/** Why a main-story chapter waits in a party. @param {Player} player */
+function holdNote(player) {
+  const view = partyViews.get(player.id);
+  if (!view) return "§7[Story] Nothing to do here right now.";
+  return `§7[Party] Your party is on ${view.story.title}, "${view.chapter.title}". Your own story waits until everyone in the party gets there (or until you leave the party).`;
+}
+
+/**
+ * Tracks a quest: the tracker, the Minimap and the story log follow it instead of the newest one, until it's done.
+ * In a party, every mate online who is on the same story (or helps with it as the party quest) tracks it too; a
+ * daily favor or a wanderer's job is personal, and mates not on the story keep their own choice.
+ * @param {Player} player @param {Entry} e
+ */
+function trackQuest(player, e) {
+  const id = e.story.id;
+  const saga = sagaOf(player);
+  saga.tr = id;
+  markDirty(player);
+  player.sendMessage(`§b[Story] Tracking ${e.story.title}.`);
+  if (e.fav) return;
+  for (const mate of partyMates(player)) {
+    if (!entries(mate).some((x) => x.story.id === id && !x.fav)) continue;
+    sagaOf(mate).tr = id;
+    markDirty(mate);
+    mate.sendMessage(`§b[Party] ${player.name} set the party's tracked quest: ${e.story.title}.`);
+  }
+}
+
+/** The quest the tracker follows: the tracked one while it's on, else the one accepted last. @param {Player} player @param {Entry[]} list */
+export function trackedFirst(player, list) {
+  const tr = sagaOf(player).tr;
+  const sorted = [...list].sort((a, b) => (b.st.t ?? 0) - (a.st.t ?? 0));
+  const k = tr ? sorted.findIndex((e) => e.story.id === tr) : -1;
+  if (k > 0) sorted.unshift(...sorted.splice(k, 1));
+  return sorted;
+}
+
+/** The track button's label. @param {Player} player @param {Entry} e */
+const trackLabel = (player, e) => (sagaOf(player).tr === e.story.id ? "Tracked\n§8The tracker follows this quest" : "Track this quest\n§8The tracker follows it" + (!e.fav && partyMates(player).length ? ", for your party too" : ""));
 
 /** A choice's button: its label, and what it costs. @param {import("./types.js").Choice} c */
 const choiceLabel = (c) => (c.cost?.crowns ? `${c.label} (${c.cost.crowns} Crowns)` : c.label);
@@ -341,6 +387,10 @@ export async function startChapter(player, story) {
     const st = stateOf(saga, story);
     const cur = currentChapter(saga, story);
     if (!cur || (st.a && st.cur === cur.chapter.id) || storyWaitsForPacks(story)) return;
+    if (onHold(player.id, story, cur.chapter.id)) {
+      player.sendMessage(holdNote(player));
+      return;
+    }
     if (!st.dn.length) {
       const req = requires(story.requires, saga, story.id, player);
       if (!req.ok) {
@@ -356,7 +406,7 @@ export async function startChapter(player, story) {
     if (pick < 0 || pick === buttons.length - 1 || !player.isValid) return;
     // Check again: the form was open for a while.
     const again = currentChapter(saga, story);
-    if (!again || again.chapter.id !== chapter.id || (st.a && st.cur === chapter.id)) return;
+    if (!again || again.chapter.id !== chapter.id || (st.a && st.cur === chapter.id) || onHold(player.id, story, chapter.id)) return;
     const choice = choices[pick];
     if (!payFor(player, choice)) return;
     if (choice) {
@@ -371,6 +421,7 @@ export async function startChapter(player, story) {
     st.t = Date.now();
     invalidate(player.id);
     markDirty(player, true);
+    if (story.kind === "main") partyTick(); // party mates get the party quest (and its progress) right away
     const e = entries(player).find((x) => x.story.id === story.id);
     player.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
     // Recipes the chapter asks you to cook; the Kitchen pack tells the player (nothing happens without it).
@@ -399,6 +450,7 @@ export async function startChapter(player, story) {
 
 /** What a hint costs for an entry: levels and Crowns. @param {Entry} e */
 function hintCost(e) {
+  if (e.pq) return { p: 0, levels: 0, crowns: 0 }; // a party quest pays the helper nothing, so its hint is free
   const p = Math.max(0, Math.min(1, Number(get("hintPenalty")) || 0));
   const r = e.chapter.reward ?? {};
   return { p, levels: (r.levels ?? 0) - Math.round((r.levels ?? 0) * (1 - p)), crowns: (r.crowns ?? 0) - Math.round((r.crowns ?? 0) * (1 - p)) };
@@ -460,29 +512,31 @@ export async function chapterInfo(player, story) {
   await exclusive(player, async () => {
     while (player.isValid) {
       const saga = sagaOf(player);
-      const st = stateOf(saga, story);
-      const cur = currentChapter(saga, story);
-      if (!cur) return;
       const e = entries(player).find((x) => x.story.id === story.id);
+      // A party quest (party.js) shows the party's chapter, not the player's own.
+      const cur = e?.pq ? { chapter: e.chapter, index: e.index } : currentChapter(saga, story);
+      if (!cur) return;
       const lines = [chapterHeader(saga, story, cur.index), toneTags(story)].filter(Boolean);
       if (!e) {
         const starter = cur.chapter.npc ?? story.giver;
-        lines.push("", `§7Talk to ${npcName(starter)}${towardNpc(player, starter)} to begin this chapter.`);
+        lines.push("", onHold(player.id, story, cur.chapter.id) ? holdNote(player) : `§7Talk to ${npcName(starter)}${towardNpc(player, starter)} to begin this chapter.`);
         await show(player, new ActionFormData().title(story.title).body(lines.join("\n")).button("OK"));
         return;
       }
+      if (e.pq) lines.push("", "§bParty quest: your party mates' chapter. What you do for it counts for them; they report back.§r");
       lines.push("", `§fCurrent step: §e${stepLine(player, e, saga)}§r`, "", ...objectiveLines(player, e, saga));
-      if (chapterDone(e, saga)) lines.push("", `§6All done: go back to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}.`);
+      if (chapterDone(e, saga)) lines.push("", e.pq ? `§6All done: your party mates report to ${npcName(reportTo(e))}.` : `§6All done: go back to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}.`);
       const cost = hintCost(e);
       /** @type {[string, () => Promise<unknown>][]} */
       const actions = [];
+      actions.push([trackLabel(player, e), async () => trackQuest(player, e)]);
       actions.push([
-        st.h ? "Read the hint again" : cost.levels + cost.crowns > 0 ? `Ask for a hint\n§8Costs ${cost.levels} level${cost.levels === 1 ? "" : "s"}, ${cost.crowns} Crowns` : "Ask for a hint\n§8Free",
+        e.st.h ? "Read the hint again" : cost.levels + cost.crowns > 0 ? `Ask for a hint\n§8Costs ${cost.levels} level${cost.levels === 1 ? "" : "s"}, ${cost.crowns} Crowns` : "Ask for a hint\n§8Free",
         () => showHint(player, e),
       ]);
       actions.push(["Hear the intro again", () => dialog(player, story.title, chapterHeader(saga, story, cur.index), pagesFor(cur.chapter.intro, saga, story.id, player.name), ["OK"])]);
       e.chapter.objectives.forEach((obj, i) => {
-        if (obj.type === "answer" && !obj.npc && !(obj.place || obj.at || obj.offset) && !objDone(e, i, saga))
+        if (obj.type === "answer" && !obj.npc && !(obj.place || obj.at || obj.offset) && !objDone(e, i, saga) && helps(e, obj))
           actions.push([`Answer: ${obj.label}`, async () => void (pending = [e, i])]);
       });
       const form = new ActionFormData().title(story.title).body(lines.join("\n"));
@@ -507,7 +561,11 @@ export async function endChapter(player, story) {
     const st = stateOf(saga, story);
     const cur = currentChapter(saga, story);
     const e = entries(player).find((x) => x.story.id === story.id);
-    if (!cur || !e || !st.a || st.cur !== cur.chapter.id || !chapterDone(e, saga)) return;
+    if (cur && onHold(player.id, story, cur.chapter.id)) {
+      player.sendMessage(holdNote(player));
+      return;
+    }
+    if (!cur || !e || e.pq || !st.a || st.cur !== cur.chapter.id || !chapterDone(e, saga)) return;
     const { chapter, index } = cur;
     const header = chapterHeader(saga, story, index);
     const choices = (chapter.choices ?? []).filter((c) => requires(c.requires, saga, story.id, player).ok);
@@ -517,7 +575,7 @@ export async function endChapter(player, story) {
     if (pick < 0 || !player.isValid) return; // nothing is lost: the report waits at the NPC
     // Check again before paying out: the form was open for a while.
     const again = currentChapter(saga, story);
-    if (!again || again.chapter.id !== chapter.id || !st.a || !chapterDone(e, saga)) return;
+    if (!again || again.chapter.id !== chapter.id || !st.a || !chapterDone(e, saga) || onHold(player.id, story, chapter.id)) return;
     const choice = choices[pick];
     if (!payFor(player, choice)) return; // the report waits at the NPC
     if (choice) {
@@ -540,6 +598,7 @@ export async function endChapter(player, story) {
     }
     invalidate(player.id);
     markDirty(player, true);
+    if (story.kind === "main") partyTick(); // the party's chapter may move on: the next one isn't held up for a second
     const got = reward(player, chapter.reward, `Story: ${story.title}`, penalty);
     player.sendMessage(`§a[Story] Chapter complete: ${chapter.title}!${got ? ` §7Reward: ${got}` : ""}`);
     // npcs: who gave and who ended the chapter (Townsfolk adds affinity with each).
@@ -607,7 +666,8 @@ async function favorInfo(player, npc) {
     const e = entries(player).find((x) => x.fav === npc);
     if (!e) return;
     const lines = [chapterHeader(saga, e.story, 0), "", ...objectiveLines(player, e, saga)];
-    const res = await show(player, new ActionFormData().title(e.story.title).body(lines.join("\n")).button("OK").button("Give up this favor"));
+    const res = await show(player, new ActionFormData().title(e.story.title).body(lines.join("\n")).button("OK").button("Give up this favor").button(trackLabel(player, e)));
+    if (res && !res.canceled && res.selection === 2) trackQuest(player, e);
     if (res && !res.canceled && res.selection === 1) {
       const fs = saga.fv?.[npc];
       if (fs) {
@@ -706,10 +766,11 @@ async function wanderInfo(player) {
     if (!wv || !e) return;
     const lines = [chapterHeader(saga, e.story, 0), "", `§fCurrent step: §e${stepLine(player, e, saga)}§r`, "", ...objectiveLines(player, e, saga)];
     if (e.chapter.hint) lines.push("", `§7${e.chapter.hint}`);
-    const form = new ActionFormData().title(wv.nm).body(lines.join("\n")).button("OK");
+    const form = new ActionFormData().title(wv.nm).body(lines.join("\n")).button("OK").button(trackLabel(player, e));
     if (!wv.tn) form.button("Give up this job");
     const res = await show(player, form);
-    if (!res || res.canceled || res.selection !== 1 || wv.tn || saga.wv !== wv) return;
+    if (res && !res.canceled && res.selection === 1) return void trackQuest(player, e);
+    if (!res || res.canceled || res.selection !== 2 || wv.tn || saga.wv !== wv) return;
     e.chapter.objectives.forEach((_, i) => endScene(player.id, objKey(e, i)));
     delete saga.wv;
     invalidate(player.id);
@@ -825,7 +886,7 @@ function trackLine(player, e, saga) {
   if (chapterDone(e, saga)) {
     if (e.wv && (/** @type {any} */ (e.st).g || /** @type {any} */ (e.st).tn)) return undefined;
     pointed = npcTarget(player, reportTo(e), `Report to ${npcName(reportTo(e))}`);
-    return `§6report to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
+    return `§6${e.pq ? "party reports" : "report"} to ${npcName(reportTo(e))}${towardNpc(player, reportTo(e))}`;
   }
   // Optional objectives only when nothing required has anything to show.
   return pointAt(player, e, saga, false) ?? pointAt(player, e, saga, true);
@@ -910,13 +971,13 @@ export function resendTracks(playerId) {
 }
 
 /**
- * The tracker: where to go for the latest chapter with something to show. The target goes to the Minimap every
+ * The tracker: where to go for the tracked quest (Track this quest), else the latest chapter with something to show. The target goes to the Minimap every
  * time (realm:track, when it changed); the line shows when `shown` (the player's tracker is on).
  * @param {Player} player @param {Entry[]} list @param {boolean} [shown]
  */
 export function track(player, list, shown = true) {
   const saga = sagaOf(player);
-  const sorted = [...list].sort((a, b) => (b.st.t ?? 0) - (a.st.t ?? 0));
+  const sorted = trackedFirst(player, list);
   /** @type {string | undefined} */
   let line;
   /** @type {Pointed | undefined} */
@@ -1000,7 +1061,8 @@ export async function showMenu(player) {
     const active = entries(player);
     const lines = [];
     if (get("enabled") !== true) lines.push("§cStories are paused by an operator: nothing counts for now.§r", "");
-    const main = active.find((e) => e.story.kind === "main") ?? active[0];
+    const tr = saga.tr ? active.find((e) => e.story.id === saga.tr) : undefined;
+    const main = tr ?? active.find((e) => e.story.kind === "main") ?? active[0];
     if (main) lines.push(`§fNow: §e${main.story.title}§r`, `§7Current step: ${stepLine(player, main, saga)}`);
     else lines.push(available.length ? `§7Talk to ${npcName(available[0].giver)} to start ${available[0].title}.` : "§7No story in progress.");
     /** @type {[string, () => Promise<unknown>][]} */
@@ -1028,23 +1090,29 @@ export async function showMenu(player) {
 export async function currentPage(player) {
   while (player.isValid) {
     const { saga, current } = sortStories(player);
-    const favs = entries(player).filter((e) => e.fav);
-    if (!current.length && !favs.length) {
+    const list = entries(player);
+    const favs = list.filter((e) => e.fav);
+    // A party quest (party.js) comes first, also when the player finished that story long ago.
+    const party = list.find((e) => e.pq);
+    const stories = party && !current.includes(party.story) ? [party.story, ...current] : current;
+    if (!stories.length && !favs.length) {
       await show(player, new ActionFormData().title("Current quests").body("No story in progress. See Available for stories you can start.").button("Back"));
       return;
     }
-    const form = new ActionFormData().title("Current quests").body("Pick one for its objectives, a hint, and the intro again.");
+    const form = new ActionFormData().title("Current quests").body("Pick one for its objectives, Track this quest, a hint, and the intro again.");
     /** @type {(() => Promise<unknown>)[]} */
     const acts = [];
-    for (const story of current) {
-      const e = entries(player).find((x) => x.story.id === story.id);
+    /** @param {string} id */
+    const mark = (id) => (saga.tr === id && list.some((x) => x.story.id === id) ? "§b[Tracked]§r " : "");
+    for (const story of stories) {
+      const e = list.find((x) => x.story.id === story.id);
       const cur = currentChapter(saga, story);
-      const step = e ? stepLine(player, e, saga) : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
-      form.button(`${story.kind === "main" ? "§l" : ""}${story.title}§r\n§8${plain(step).slice(0, 60)}`);
+      const step = e ? stepLine(player, e, saga) : cur && onHold(player.id, story, cur.chapter.id) ? "Waiting for your party" : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
+      form.button(`${mark(story.id)}${story.kind === "main" ? "§l" : ""}${e?.pq ? "Party: " : ""}${story.title}§r\n§8${plain(step).slice(0, 60)}`);
       acts.push(() => chapterInfo(player, story));
     }
     for (const e of favs) {
-      form.button(`${e.story.title}\n§8${plain(stepLine(player, e, saga)).slice(0, 60)}`);
+      form.button(`${mark(e.story.id)}${e.story.title}\n§8${plain(stepLine(player, e, saga)).slice(0, 60)}`);
       acts.push(() => (e.wv ? wanderInfo(player) : favorInfo(player, /** @type {string} */ (e.fav))));
     }
     form.button("Back");

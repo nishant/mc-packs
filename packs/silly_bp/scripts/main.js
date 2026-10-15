@@ -8,6 +8,7 @@ import {
   ItemStack,
   MolangVariableMap,
   Player,
+  ScriptEventSource,
   system,
   world,
 } from "@minecraft/server";
@@ -232,6 +233,7 @@ system.runInterval(() => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   gear.delete(playerId);
   lastSneak.delete(playerId);
+  lastPos.delete(playerId);
   flights.delete(playerId);
   wasJumping.delete(playerId);
   cooldowns.delete(playerId);
@@ -252,10 +254,19 @@ function ready(p, what, ticks) {
   return true;
 }
 
+// Tests only: `scriptevent realm:silly_trace on` from the server console makes every effect also send `realm:silly_fx`
+// ({ kind: "particle" | "sound", id }), so a test server, which has no client to draw or play them, can see them.
+let tracing = false;
+/** @param {"particle" | "sound"} kind @param {string} id */
+function trace(kind, id) {
+  if (tracing) system.sendScriptEvent("realm:silly_fx", JSON.stringify({ kind, id }));
+}
+
 /** @param {import("@minecraft/server").Dimension} dim @param {string} id @param {import("@minecraft/server").Vector3} at @param {MolangVariableMap} [vars] */
 function particle(dim, id, at, vars) {
   try {
     dim.spawnParticle(id, at, vars);
+    trace("particle", id);
   } catch {
     // unloaded chunk or unknown particle: skip
   }
@@ -265,6 +276,7 @@ function particle(dim, id, at, vars) {
 function sound(dim, id, at, volume = 1, pitch = 1) {
   try {
     dim.playSound(id, at, { volume, pitch });
+    trace("sound", id);
   } catch {
     // unloaded chunk
   }
@@ -291,37 +303,35 @@ function colorPuff(dim, at, c) {
   particle(dim, "minecraft:mobspell_emitter", at, vars);
 }
 
-/** Confetti and a party pop at a spot. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at @param {boolean} loud */
-function confetti(dim, at, loud) {
+/** A particle with one float variable. @param {string} name @param {number} value */
+function floatVars(name, value) {
+  const vars = new MolangVariableMap();
+  vars.setFloat(name, value);
+  return vars;
+}
+
+/** @param {{ red: number, green: number, blue: number }} c @param {string} [name] */
+function colorVars(c, name = "variable.color") {
+  const vars = new MolangVariableMap();
+  vars.setColorRGBA(name, { ...c, alpha: 1 });
+  return vars;
+}
+
+// The particles and the cheer come from the Silly Enchants resource pack (silly_rp, in the Realm Resources bundle).
+// Vanilla puffs go along with them, so a world without that pack still sees something.
+
+/** Confetti flakes burst out, tumble and settle. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at @param {number} count */
+function confetti(dim, at, count) {
+  particle(dim, "realm:silly_confetti", at, floatVars("variable.count", count));
   particle(dim, "minecraft:totem_particle", at);
-  const puffs = loud ? 8 : 4;
-  for (let i = 0; i < puffs; i++) colorPuff(dim, { x: at.x + between(-1, 1), y: at.y + Math.random(), z: at.z + between(-1, 1) }, pick(RAINBOW));
-  if (!loud) {
-    sound(dim, pick(["random.pop", "bubble.pop", "note.pling", "note.bell"]), at, 1, between(1.2, 2));
-    return;
-  }
-  // A party, never quite the same twice.
-  const party = pick(["fireworks", "fanfare", "horn", "hearts", "zap"]);
-  if (party === "fireworks") {
-    particle(dim, "minecraft:totem_particle", { x: at.x, y: at.y + 1, z: at.z });
-    sound(dim, "firework.large_blast", at, 2, between(0.9, 1.3));
-    sound(dim, "firework.twinkle", at, 2, between(1, 1.4));
-  } else if (party === "fanfare") {
-    sound(dim, "random.levelup", at, 1.5, 1.6);
-    [0.8, 1, 1.2, 1.6].forEach((pitch, i) => system.runTimeout(() => sound(dim, "note.pling", at, 1.5, pitch), i * 3));
-    particle(dim, "minecraft:note_particle", { x: at.x, y: at.y + 1, z: at.z });
-  } else if (party === "horn") {
-    sound(dim, "raid.horn", at, 0.8, 2);
-    sound(dim, "firework.blast", at, 2, 1.4);
-  } else if (party === "hearts") {
-    for (let i = 0; i < 3; i++) particle(dim, "minecraft:heart_particle", { x: at.x + between(-0.6, 0.6), y: at.y + between(0.3, 1.2), z: at.z + between(-0.6, 0.6) });
-    sound(dim, "random.totem", at, 0.6, 1.8);
-  } else {
-    particle(dim, "minecraft:critical_hit_emitter", at);
-    particle(dim, "minecraft:electric_spark_particle", at);
-    sound(dim, "firework.blast", at, 2, 0.8);
-    sound(dim, "random.levelup", at, 1, 2);
-  }
+  for (let i = 0; i < 3; i++) colorPuff(dim, { x: at.x + between(-0.6, 0.6), y: at.y + Math.random(), z: at.z + between(-0.6, 0.6) }, pick(RAINBOW));
+}
+
+/** Grunt Birthday: a party horn, a squeaky little chorus cheering "yaaay" and a shower of confetti. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at */
+function birthday(dim, at) {
+  sound(dim, "realm.silly.yay", at, 1, between(0.95, 1.08));
+  confetti(dim, at, 40);
+  system.runTimeout(() => confetti(dim, { x: at.x, y: at.y + 0.4, z: at.z }, 24), 6); // a second pop as the chorus starts
 }
 
 // Trails and ambient effects, five times a second. Only players with the matching gear do any work.
@@ -331,7 +341,10 @@ system.runInterval(() => {
   beat++;
   for (const p of world.getAllPlayers()) {
     const g = gear.get(p.id);
-    if (!g || (!g.feet.size && !g.armor.size && !g.head.size)) continue;
+    if (!g || (!g.feet.size && !g.armor.size && !g.head.size)) {
+      lastPos.delete(p.id);
+      continue;
+    }
     try {
       if (!playing(p)) continue;
       ambient(p);
@@ -343,27 +356,50 @@ system.runInterval(() => {
 
 /** @type {Map<string, boolean>} */
 const lastSneak = new Map();
+/** Where each player with ambient gear was on the last beat (movement comes from this, not from velocity). @type {Map<string, import("@minecraft/server").Vector3>} */
+const lastPos = new Map();
 
 /** @param {Player} p */
 function ambient(p) {
   const dim = p.dimension;
   const loc = p.location;
-  const v = p.getVelocity();
-  const moving = Math.hypot(v.x, v.z) > 0.06;
-  if (moving && has(p, "rainbow_trail")) colorPuff(dim, { x: loc.x, y: loc.y + 0.1, z: loc.z }, RAINBOW[beat % RAINBOW.length]);
-  if (moving && has(p, "bubbles")) particle(dim, p.isInWater ? "minecraft:bubble_column_up_particle" : "minecraft:basic_bubble_particle_manual", { x: loc.x, y: loc.y + 0.6, z: loc.z });
+  const prev = lastPos.get(p.id) ?? loc;
+  lastPos.set(p.id, { x: loc.x, y: loc.y, z: loc.z });
+  // Moved at least a fifth of a block since the last beat (a slow sneak is about 0.26), and not a teleport.
+  const step = Math.hypot(loc.x - prev.x, loc.z - prev.z);
+  const moving = step > 0.2 && step < 8;
+  if (moving && has(p, "rainbow_trail")) {
+    // A dab on the ground every half block between the last spot and this one, in the next color each time.
+    const n = Math.min(6, Math.max(1, Math.round(step / 0.45)));
+    for (let i = 1; i <= n; i++) {
+      const at = { x: prev.x + ((loc.x - prev.x) * i) / n, y: loc.y + 0.06, z: prev.z + ((loc.z - prev.z) * i) / n };
+      particle(dim, "realm:silly_trail", at, colorVars(RAINBOW[(beat * n + i) % RAINBOW.length]));
+    }
+    colorPuff(dim, { x: loc.x, y: loc.y + 0.1, z: loc.z }, RAINBOW[beat % RAINBOW.length]);
+  }
+  if (moving && has(p, "bubbles")) {
+    particle(dim, "realm:silly_bubble", { x: loc.x, y: loc.y + 0.8, z: loc.z }); // these float through air too
+    if (p.isInWater) particle(dim, "minecraft:bubble_column_up_particle", { x: loc.x, y: loc.y + 0.6, z: loc.z });
+  }
   if (moving && p.isOnGround && beat % 2 === 0 && has(p, "squeak")) sound(dim, Math.random() < 0.85 ? "mob.bat.idle" : "mob.rabbit.idle", loc, 0.6, between(1.6, 2));
-  if (beat % 3 === 0 && has(p, "disco")) {
-    colorPuff(dim, { x: loc.x, y: loc.y + 1.1, z: loc.z }, RAINBOW[Math.floor(beat / 3) % RAINBOW.length]);
-    if (beat % 15 === 0) particle(dim, "minecraft:note_particle", { x: loc.x, y: loc.y + 2.2, z: loc.z });
+  if (has(p, "disco")) {
+    // A dance floor under your feet every beat, a ring of lights in the next color every other beat, and now and then a note.
+    particle(dim, "realm:silly_floor", { x: loc.x, y: loc.y + 0.04, z: loc.z });
+    if (beat % 2 === 0) {
+      const c = RAINBOW[(beat / 2) % RAINBOW.length];
+      particle(dim, "realm:silly_light", { x: loc.x, y: loc.y + 0.4 + ((beat / 2) % 3) * 0.5, z: loc.z }, colorVars(c));
+      colorPuff(dim, { x: loc.x + between(-0.8, 0.8), y: loc.y + 1.1, z: loc.z + between(-0.8, 0.8) }, c);
+    }
+    if (beat % 10 === 0) particle(dim, "minecraft:note_particle", { x: loc.x, y: loc.y + 2.2, z: loc.z }, colorVars(pick(RAINBOW), "variable.note_color"));
   }
   if (beat % 5 === 0 && has(p, "glow")) {
     const t = world.getTimeOfDay();
-    if (t >= 12500 && t <= 23500) particle(dim, "minecraft:endrod", { x: loc.x + (Math.random() - 0.5), y: loc.y + 1 + Math.random(), z: loc.z + (Math.random() - 0.5) });
+    if (t >= 12500 && t <= 23500)
+      for (let i = 0; i < 3; i++) particle(dim, "minecraft:endrod", { x: loc.x + between(-0.7, 0.7), y: loc.y + 0.3 + Math.random() * 1.6, z: loc.z + between(-0.7, 0.7) });
   }
   if (beat % 5 === 0 && has(p, "hiccups") && Math.random() < 1 / 30) {
     sound(dim, "random.burp", loc, 1, between(1.6, 2));
-    for (let i = 0; i < 3; i++) particle(dim, "minecraft:basic_bubble_particle_manual", { x: loc.x + between(-0.3, 0.3), y: loc.y + 1.6 + i * 0.2, z: loc.z + between(-0.3, 0.3) });
+    particle(dim, "realm:silly_bubble", { x: loc.x, y: loc.y + 1.7, z: loc.z }); // the vanilla bubbles vanish out of water
     // Now and then a hiccup that hops you a little.
     if (p.isOnGround && Math.random() < 0.3) p.applyKnockback({ x: 0, z: 0 }, 0.35);
   }
@@ -580,7 +616,10 @@ world.afterEvents.entityHitEntity.subscribe(({ damagingEntity, hitEntity }) => {
     const g = gear.get(p.id);
     if (!g || !g.hand.size || !playing(p) || !hitEntity.isValid) return;
     const at = { x: hitEntity.location.x, y: hitEntity.location.y + 1, z: hitEntity.location.z };
-    if (has(p, "confetti_swing")) confetti(p.dimension, at, false);
+    if (has(p, "confetti_swing")) {
+      confetti(p.dimension, at, 14);
+      sound(p.dimension, pick(["random.pop", "bubble.pop", "note.pling", "note.bell"]), at, 1, between(1.2, 2));
+    }
     if (has(p, "fish_slap")) {
       sound(p.dimension, "mob.fish.flop", at, 2, between(0.6, 1));
       sound(p.dimension, pick(["random.splash", "mob.dolphin.play", "bubble.pop"]), at, 1, between(1.2, 1.8));
@@ -639,7 +678,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     if (deadEntity.hasTag(RABBIT_TAG)) return;
     const loc = deadEntity.location;
     const at = { x: loc.x, y: loc.y + 0.8, z: loc.z };
-    if (has(p, "grunt_birthday")) confetti(deadEntity.dimension, at, true);
+    if (has(p, "grunt_birthday")) birthday(deadEntity.dimension, at);
     if (has(p, "tiny_thunder")) {
       const dim = deadEntity.dimension;
       sound(dim, "ambient.weather.thunder", at, 1, between(1.5, 2));
@@ -784,7 +823,8 @@ export function applyBook(p, bookSlot) {
   p.setDynamicProperty(PROP_APPLIED, n + 1);
   gear.set(p.id, readGear(p));
   p.sendMessage(`§dSilly: ${what.name}! §7${what.what}.`);
-  confetti(p.dimension, { x: p.location.x, y: p.location.y + 1.2, z: p.location.z }, false);
+  const eye = p.getHeadLocation(), look = p.getViewDirection(); // in front of you, where you can see it
+  confetti(p.dimension, { x: eye.x + look.x * 1.5, y: eye.y + look.y * 1.5, z: eye.z + look.z * 1.5 }, 20);
   p.playSound("random.levelup", { pitch: 1.6, volume: 0.6 });
   return true;
 }
@@ -907,8 +947,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message, sourceType }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "silly_bp");
+    else if (id === "realm:silly_trace" && sourceType === ScriptEventSource.Server) tracing = message.trim() === "on"; // console only
   },
   { namespaces: ["realm"] },
 );

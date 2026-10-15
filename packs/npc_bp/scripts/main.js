@@ -62,7 +62,7 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
  * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string, home?: Vector3, posts?: { noon?: Vector3, evening?: Vector3 } }} Placed
  */
 /** @typedef {"work" | "lunch" | "evening" | "night"} Slot */
-/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, slot?: Slot }} State */
+/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, slot?: Slot, viewers?: Set<string>, renameAt?: number, renames?: number }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
 const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
@@ -78,6 +78,8 @@ const states = new Map();
 
 /** @param {Townsfolk} t "§eMara §7the Cartographer": the name above its head */
 const displayName = (t) => `§e${t.name}${t.title ? ` §7${t.title}` : ""}`;
+/** Its name, or the same name with a trailing §r (looks the same: the form a name resend switches to). @param {string} tag @param {Townsfolk} t */
+const isName = (tag, t) => tag === displayName(t) || tag === `${displayName(t)}§r`;
 /** @param {Townsfolk} t "Mara the Cartographer" */
 const plainName = (t) => (t.title ? `${t.name} ${t.title}` : t.name);
 
@@ -311,6 +313,98 @@ function loaded(dim, at) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Standing on the floor: an NPC whose feet are inside a block (a path laid or raised under a placed NPC, a spot
+// saved a block low) stands sunk in it, and inside a slab or a path block it falls through to the block below.
+// ---------------------------------------------------------------------------
+
+/** Blocks an NPC stands in, not on (plants, torches, signs, carpets, rails, doors...). */
+const PASSABLE =
+  /(^|:|_)(air|short_grass|tall_grass|fern|large_fern|dead_bush|bush|seagrass|kelp|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|pitcher_plant|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|sweet_berry_bush|torch|candle|sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|tripwire_hook|redstone_wire|string|ladder|cobweb|door|trapdoor|fence_gate|coral_fan|coral|glow_lichen|deadbush|fire|light_block(_\d+)?|structure_void|scaffolding|snow_layer)$/;
+
+/** Height of a block's top above its base (1 for a full block; slabs, paths, beds... less). @param {import("@minecraft/server").Block} b */
+function heightOf(b) {
+  const id = b.typeId;
+  if (/_slab$/.test(id) && !/double_slab$/.test(id)) {
+    const half = b.permutation.getState("minecraft:vertical_half");
+    return half === "top" ? 1 : 0.5;
+  }
+  if (/_stairs$/.test(id)) return b.permutation.getState("upside_down_bit") === true ? 1 : 0.5;
+  if (/grass_path|dirt_path|farmland/.test(id)) return 0.9375;
+  if (/(^|:|_)bed$/.test(id)) return 0.5625;
+  if (/chest$|soul_sand|(^|:)mud$/.test(id)) return 0.875;
+  return 1;
+}
+
+/** Does block `b` keep feet at height `feet` out (a block the feet are inside of)? @param {import("@minecraft/server").Block} b @param {number} feet */
+function blocks(b, feet) {
+  if (b.isAir || b.isLiquid || PASSABLE.test(b.typeId)) return false;
+  return b.location.y + heightOf(b) > feet + 0.01;
+}
+
+/** Is the block at `at` loaded and keeping feet out? undefined when not loaded. @param {Dimension} dim @param {Vector3} at @param {number} [dy] */
+function solidAt(dim, at, dy = 0) {
+  const b = dim.getBlock({ x: Math.floor(at.x), y: Math.floor(at.y) + dy, z: Math.floor(at.z) });
+  if (!b) return undefined;
+  return blocks(b, at.y + dy);
+}
+
+/** Spots already reported as sunk too deep to lift (logged once). @type {Set<string>} */
+const stuckLogged = new Set();
+
+/**
+ * `at`, or `at` lifted onto the top of the block its feet are inside (a slab, a path block, a full block laid
+ * there): one step, at most 1 block, and only when the feet and head have room there. Only the feet block decides:
+ * a block at head height (a lantern, a top slab) never lifts anyone, and the lift never passes through a ceiling.
+ * A spot that isn't loaded, or can't be lifted, is kept.
+ * @param {Dimension} dim @param {Vector3} at @returns {Vector3}
+ */
+function standUp(dim, at) {
+  try {
+    const x = Math.floor(at.x);
+    const z = Math.floor(at.z);
+    const feet = dim.getBlock({ x, y: Math.floor(at.y), z });
+    if (!feet || !blocks(feet, at.y)) return at;
+    const top = feet.location.y + heightOf(feet);
+    const up = { x: at.x, y: top, z: at.z };
+    if (top - at.y <= 1.001 && solidAt(dim, up) === false && solidAt(dim, up, 1) === false) return up;
+    const key = `${dim.id} ${x} ${at.y} ${z}`;
+    if (!stuckLogged.has(key)) {
+      stuckLogged.add(key);
+      console.warn(`[npc] the spot ${x}, ${at.y}, ${z} is inside ${feet.typeId} with no room on top: left as it is (place the townsfolk again)`);
+    }
+  } catch {
+    // not loaded: keep the spot
+  }
+  return at;
+}
+
+/**
+ * Lifts every saved spot of a townsfolk (post, home, lunch, evening) that is loaded and sunk into the floor, so
+ * spots saved in older worlds or with a path laid on them later are repaired. Returns true when one changed.
+ * @param {Placed} rec
+ */
+function liftSaved(rec) {
+  let changed = false;
+  let dim;
+  try {
+    dim = world.getDimension(rec.dim);
+  } catch {
+    return false;
+  }
+  for (const spot of [rec, rec.home, rec.posts?.noon, rec.posts?.evening]) {
+    if (!spot) continue;
+    const up = standUp(dim, spot);
+    if (up.y !== spot.y) {
+      console.warn(`[npc] ${rec.id}: a spot at ${Math.floor(spot.x)}, ${spot.y}, ${Math.floor(spot.z)} was inside a block: lifted to y ${up.y}`);
+      spot.y = up.y;
+      changed = true;
+    }
+  }
+  if (changed) save();
+  return changed;
+}
+
 /** Yaw that looks from `from` toward `to` (0 = south, 90 = west). @param {Vector3} from @param {Vector3} to */
 const yawTo = (from, to) => (Math.atan2(-(to.x - from.x), to.z - from.z) * 180) / Math.PI;
 /** @param {number} a degrees, to -180..180 */
@@ -337,17 +431,51 @@ function dress(entity, t) {
   }
   for (const tag of want) if (!entity.hasTag(tag)) entity.addTag(tag);
   const st = stateOf(t.id);
-  if (system.currentTick >= st.speech && entity.nameTag !== displayName(t)) entity.nameTag = displayName(t);
+  if (system.currentTick >= st.speech && !isName(entity.nameTag, t)) entity.nameTag = displayName(t);
+}
+
+// The name above an NPC's head: a player's game can show a minecraft:npc as "NPC" (its default name) although its
+// name was set, until the name changes again while they watch. So when a player comes near (or the NPC loads or
+// spawns), the name is sent again a moment later, switching between two forms that look the same.
+const NAME_RANGE = 64; // players this close count as watching
+const RENAME_TICKS = [20, 60]; // resends after a player comes near: 1 s, then 3 s more
+
+/** Sends the name again (when no idle line is showing). @param {Entity} entity @param {Townsfolk} t */
+function resendName(entity, t) {
+  if (system.currentTick < stateOf(t.id).speech) return; // a line is up: its end puts the name back, a change too
+  const name = displayName(t);
+  entity.nameTag = entity.nameTag === name ? `${name}§r` : name;
+}
+
+/** Every loop: a player new within NAME_RANGE gets the name sent again. @param {Entity} entity @param {Townsfolk} t */
+function watchName(entity, t) {
+  const st = stateOf(t.id);
+  const ids = new Set(entity.dimension.getPlayers({ location: entity.location, maxDistance: NAME_RANGE }).map((p) => p.id));
+  const seen = st.viewers;
+  if (!seen || [...ids].some((id) => !seen.has(id))) {
+    st.renameAt = system.currentTick + RENAME_TICKS[0];
+    st.renames = 0;
+  }
+  st.viewers = ids;
+  if (st.renameAt !== undefined && system.currentTick >= st.renameAt) {
+    resendName(entity, t);
+    const n = (st.renames ?? 0) + 1;
+    st.renames = n;
+    st.renameAt = n < RENAME_TICKS.length ? system.currentTick + RENAME_TICKS[n] : undefined;
+  }
 }
 
 /** @param {Placed} rec @param {Townsfolk} t @param {Vector3} at */
 function spawn(rec, t, at) {
   const dim = world.getDimension(rec.dim);
+  if (liftSaved(rec)) at = anchorOf(rec);
   const entity = dim.spawnEntity(NPC_TYPE, at);
   dress(entity, t);
   entity.teleport(at, { rotation: { x: 0, y: rec.yaw } });
   rec.eid = entity.id;
-  stateOf(t.id).yaw = rec.yaw;
+  const st = stateOf(t.id);
+  st.yaw = rec.yaw;
+  st.viewers = undefined; // everyone near counts as new: the name is sent again in a moment
   save();
   return entity;
 }
@@ -376,11 +504,20 @@ function audit(entity) {
     save();
   }
   dress(entity, t);
+  // A spot inside a block (sunk into a path laid later, or saved a block low): lifted and the NPC put on top.
+  if (liftSaved(rec)) {
+    const at = anchorOf(rec);
+    const st = stateOf(rec.id);
+    if (entity.dimension.id === rec.dim && loaded(entity.dimension, at)) entity.teleport(at, { rotation: { x: 0, y: st.yaw ?? rec.yaw } });
+  }
 }
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
-    if (entity.typeId === NPC_TYPE) audit(entity);
+    if (entity.typeId !== NPC_TYPE) return;
+    audit(entity);
+    const id = entity.isValid ? idOf(entity) : undefined;
+    if (id && placedOf(id)?.eid === entity.id) stateOf(id).viewers = undefined; // loaded again: send the name again soon
   } catch (e) {
     console.warn(`[npc] ${e}`);
   }
@@ -482,7 +619,8 @@ function behave(rec, t, entity, lively) {
   if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
     // Pushed, moved by someone, or time to go home or back to its post. Only into a loaded spot.
     if (loaded(dim, at)) {
-      entity.teleport(at, { dimension: dim, rotation: { x: 0, y: rec.yaw } });
+      const up = liftSaved(rec) ? anchorOf(rec) : at;
+      entity.teleport(up, { dimension: dim, rotation: { x: 0, y: rec.yaw } });
       st.yaw = rec.yaw;
     }
     return;
@@ -527,6 +665,7 @@ function loop() {
       }
       stateOf(rec.id).missing = 0;
       behave(rec, t, entity, lively);
+      watchName(entity, t);
     } catch (e) {
       console.warn(`[npc] ${rec.id}: ${e}`); // usually an unloaded chunk
     }
@@ -1318,11 +1457,21 @@ const centered = (loc) => ({ x: Math.floor(loc.x) + 0.5, y: Math.round(loc.y * 1
  */
 function standingSpot(player) {
   const at = centered(player.location);
-  if (player.isOnGround) return at;
+  const dim = player.dimension;
+  if (player.isOnGround) return standUp(dim, at);
   try {
-    const floor = player.dimension.getBlockBelow(at, { maxDistance: 64, includeLiquidBlocks: true });
-    if (floor && !floor.isLiquid) return { x: at.x, y: floor.location.y + 1, z: at.z };
-    // over water or lava: keep the spot rather than put the NPC on the sea floor
+    // The first block under the feet that isn't a plant, torch or carpet; its top, not its base + 1 (a slab or a
+    // path block is lower than a full block).
+    const x = Math.floor(at.x);
+    const z = Math.floor(at.z);
+    const bottom = Math.max(Math.floor(at.y) - 64, dim.heightRange.min);
+    for (let y = Math.floor(at.y); y >= bottom; y--) {
+      const b = dim.getBlock({ x, y, z });
+      if (!b || b.isLiquid) break; // over water or lava: keep the spot rather than put the NPC on the sea floor
+      if (b.isAir || PASSABLE.test(b.typeId)) continue;
+      const top = y + heightOf(b);
+      return top <= at.y + 0.01 ? { x: at.x, y: top, z: at.z } : standUp(dim, at);
+    }
   } catch {
     // below the world or not loaded: keep the spot
   }

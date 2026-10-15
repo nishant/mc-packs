@@ -32,7 +32,7 @@ const NEWS_TEXT = /** @type {Record<string, string>} */ ({
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {{ i: number, n: string, d: string, x: number, y: number, z: number, by: string, t: number }} Waystone id, name, dimension, lodestone position, who made it, when */
 /** @typedef {{ k: string, t: number, text?: string, d?: string, x?: number, z?: number }} News */
-/** @typedef {{ to: Waystone, at: Vector3, dim: string, left: number, cost: number, hurt: boolean }} Channel at/dim: where the player started, and goes back to if the far waystone turns out unsafe */
+/** @typedef {{ to: Waystone, at: Vector3, dim: string, left: number, cost: number, hurt: boolean, lead?: string, leadName?: string }} Channel at/dim: where the player started, and goes back to if the far waystone turns out unsafe; lead: the party mate whose trip this one follows */
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -527,8 +527,49 @@ function begin(player, to, cost) {
   if (channels.has(player.id)) return;
   const secs = Math.max(0, get("channelSeconds"));
   channels.set(player.id, { to, at: { ...player.location }, dim: player.dimension.id, left: secs * 20, cost, hurt: false });
-  if (secs) player.sendMessage(`§bTraveling to ${to.n} in ${secs} seconds. §7Stand still.`);
+  const mates = bringMates(player, to, secs);
+  if (secs) player.sendMessage(`§bTraveling to ${to.n} in ${secs} seconds.${mates.length ? ` §d${mates.join(", ")} ${mates.length === 1 ? "comes" : "come"} along.` : ""} §7Stand still.`);
   player.playSound("beacon.activate", { pitch: 1.4, volume: 0.7 });
+}
+
+const PARTY_TAG = "realm_party:"; // the Parties pack's tag on every member, `realm_party:<code>`
+
+/**
+ * Party mates standing near a player who starts a trip come along: each gets their own countdown, ending with the
+ * leader's, and pays their own fare from where they stand. Returns the names of those who come.
+ * @param {Player} player @param {Waystone} to @param {number} secs
+ */
+function bringMates(player, to, secs) {
+  if (get("partyTravel") !== true) return [];
+  const tag = player.getTags().find((t) => t.startsWith(PARTY_TAG));
+  if (!tag) return [];
+  const r = Math.max(1, get("partyRadius"));
+  /** @type {string[]} */
+  const names = [];
+  for (const mate of player.dimension.getPlayers({ location: player.location, maxDistance: r, tags: [tag] })) {
+    if (mate.id === player.id || channels.has(mate.id)) continue;
+    const cost = pathfinderPrice(mate, costTo(mate.dimension.id, mate.location, to));
+    if (cost === undefined) continue;
+    if (balance(mate) < cost) {
+      mate.sendMessage(`§c${player.name} is traveling to ${to.n}, but you can't come along: the trip costs ${price(cost)}. You have ${price(balance(mate))}.`);
+      continue;
+    }
+    channels.set(mate.id, { to, at: { ...mate.location }, dim: mate.dimension.id, left: secs * 20, cost, hurt: false, lead: player.id, leadName: player.name });
+    mate.sendMessage(`§d[Party] §b${player.name} is traveling to ${to.n}${secs ? ` in ${secs} seconds` : ""}: stand still to come along${cost ? ` (${price(cost)})` : ""}, or walk away to stay.`);
+    mate.playSound("beacon.activate", { pitch: 1.4, volume: 0.5 });
+    names.push(mate.name);
+  }
+  return names;
+}
+
+/** The leader's trip ended without a jump: the mates coming along stay too. @param {string} leadId @param {string} why */
+function dropFollowers(leadId, why) {
+  for (const [id, ch] of channels) {
+    if (ch.lead !== leadId) continue;
+    channels.delete(id);
+    const mate = online(id);
+    if (mate) mate.sendMessage(`§7${why}: you stay here.`);
+  }
 }
 
 world.afterEvents.entityHurt.subscribe(({ hurtEntity }) => {
@@ -544,12 +585,18 @@ system.runInterval(() => {
     const player = online(id);
     if (!player) {
       channels.delete(id);
+      dropFollowers(id, "The trip was canceled");
       continue;
     }
     try {
       const cancel = ch.hurt ? "You got hurt" : player.dimension.id !== ch.dim || dist3(player.location, ch.at) > 1 ? "You moved" : undefined;
       if (cancel) {
         channels.delete(id);
+        if (ch.lead) {
+          player.sendMessage(`§7${cancel}, so you stay here: ${ch.leadName ?? "your party mate"} travels to ${ch.to.n} without you.`);
+          continue;
+        }
+        dropFollowers(id, `${player.name}'s trip to ${ch.to.n} is canceled`);
         player.sendMessage(`§c${cancel}: the trip to ${ch.to.n} is canceled.`);
         send("realm:actionbar", { player: id, ticks: 40, from: "waystone_bp" });
         player.onScreenDisplay.setActionBar("§cTrip canceled");
@@ -622,6 +669,7 @@ function arrive(player, ch) {
   const to = byId(ch.to.i);
   if (!to) {
     player.sendMessage(`§cThe waystone ${ch.to.n} is gone. Your trip is canceled.`);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   const dim = world.getDimension(to.d);
@@ -631,10 +679,12 @@ function arrive(player, ch) {
   const found = safeSpot(dim, to);
   if (loaded && !found) {
     player.sendMessage(`§cThere's no safe place to stand at ${to.n}: the waystone is walled in. Your trip is canceled.`);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   if (!charge(player, ch.cost)) {
     player.sendMessage(`§cThat trip costs ${price(ch.cost)}. You have ${price(balance(player))}.`);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   const spot = found ?? { x: to.x + 0.5, y: to.y + 1, z: to.z + 0.5 };
@@ -644,6 +694,7 @@ function arrive(player, ch) {
     console.warn(`[waystone] teleport: ${e}`);
     player.sendMessage("§cThe waystone's magic fizzled. Try again in a moment.");
     if (ch.cost > 0) refund(player, ch.cost);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   player.playSound("mob.endermen.portal", { volume: 0.8 });

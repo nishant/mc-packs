@@ -3,9 +3,11 @@
 // glyph page in Side HUD, hud_rp) sent in the Side HUD title (side.js: the strip in slot "top", the radar in
 // slot "radar" as the part "map/radar"). The land itself is Bedrock's own locator map, held in the offhand.
 //
-// Every intervalTicks per player who has the strip or the radar on: one entity search for monsters within
-// their mob radius (the nearest maxMobs), one for realm:npc within npcRange; everything else is arithmetic on
-// what other packs broadcast (each message under 2048 characters, long lists in parts):
+// Every intervalTicks per player who has the strip or the radar on (the pass): one entity search for monsters
+// within their mob radius (the nearest maxMobs), one for realm:npc within npcRange; everything else is arithmetic
+// on what other packs broadcast. In between, every tick, the strip and radar are drawn again from the pass's
+// markers for players who turned or moved (at most TURN_BUDGET titles a tick), so the compass follows the view.
+// The broadcasts (each message under 2048 characters, long lists in parts):
 //   realm:npc_places      { part, parts, folk: [{ id, n, dim, x, z }] }            <- Townsfolk; realm:npc_places_ping {}
 //   realm:waystones_known { player, part, parts, list: [{ i, n, dim, x, z }] }     <- Waystones; realm:waystones_known_ping { player? }
 //   realm:atlas_region    { player, name }                                         <- Atlas, on entering a region
@@ -30,7 +32,7 @@ import { sideBoxes } from "./side.js";
 /** A place on the map. @typedef {{ n: string, dim: string, x: number, z: number }} Spot */
 /** The destination a player picked: what kind, which one, and where it was when picked. @typedef {Spot & { k: string, id?: string }} Waypoint */
 /** A player's place and party tag this pass. @typedef {{ id: string, dim: string, x: number, z: number, party?: string }} Seen */
-/** A marker this pass: kind, offset from the player, distance; `clamp` ones show at the edge when out of sight. @typedef {{ kind: string, dx: number, dz: number, d: number, clamp: boolean }} Marker */
+/** A marker this pass: kind, where it is (x, z); `clamp` ones show at the edge when out of sight. @typedef {{ kind: string, x: number, z: number, clamp: boolean }} Marker */
 
 const PACK = "map_bp";
 const PROP_WP = "map:wp"; // player: JSON Waypoint
@@ -214,6 +216,7 @@ function setWaypoint(player, wp) {
     console.warn(`[map] save: ${e}`);
   }
   lastSent.delete(player.id);
+  views.delete(player.id);
 }
 /** @param {Player} player @returns {Spot[]} */
 function marksOf(player) {
@@ -287,8 +290,13 @@ function prefsOf(player) {
 onChange((_key, player) => {
   if (player) prefCache.delete(player.id);
   else prefCache.clear();
-  if (player) lastSent.delete(player.id);
-  else lastSent.clear();
+  if (player) {
+    lastSent.delete(player.id);
+    views.delete(player.id); // drawn again from scratch at the next pass
+  } else {
+    lastSent.clear();
+    views.clear();
+  }
 });
 
 /** What was last sent to each player: the text and when. @type {Map<string, { key: string, at: number, compass: boolean, radar: boolean }>} */
@@ -395,9 +403,7 @@ function gather(player, seen, pr) {
   const out = [];
   /** @param {string} kind @param {number} x @param {number} z @param {boolean} clamp */
   const add = (kind, x, z, clamp) => {
-    const dx = x - at.x;
-    const dz = z - at.z;
-    out.push({ kind, dx, dz, d: Math.hypot(dx, dz), clamp });
+    out.push({ kind, x, z, clamp });
   };
   /** Townsfolk loaded near the player, by id (a picked townsfolk is followed live). @type {Map<string, Vector3>} */
   const liveFolk = new Map();
@@ -432,9 +438,9 @@ function gather(player, seen, pr) {
 /**
  * The strip: 25 cells, 5 degrees each, centered on where the player faces, with N/E/S/W, ticks every 15 degrees
  * and markers by bearing; out of sight, clamped markers become arrows at the edges.
- * @param {number} heading 0 = north, clockwise @param {Marker[]} markers
+ * @param {number} heading 0 = north, clockwise @param {Marker[]} markers @param {{ x: number, z: number }} at the player
  */
-function stripOf(heading, markers) {
+function stripOf(heading, markers, at) {
   const cells = Array(CELLS).fill(G.S_BLANK);
   const prio = Array(CELLS).fill(0);
   cells[MID] = G.S_CENTER;
@@ -450,7 +456,9 @@ function stripOf(heading, markers) {
   for (const m of markers) {
     const k = KINDS[m.kind];
     if (!k) continue;
-    const rel = wrap(bearingOf(m.dx, m.dz) - heading);
+    const dx = m.x - at.x;
+    const dz = m.z - at.z;
+    const rel = wrap(bearingOf(dx, dz) - heading);
     let i = MID + Math.round(rel / DEG);
     let g = k.s;
     if (i < 0 || i >= CELLS) {
@@ -459,7 +467,7 @@ function stripOf(heading, markers) {
       g = rel < 0 ? k.l : k.r;
     }
     // Nearer wins among equals.
-    const p = 10 + k.p - Math.min(m.d, 999) / 1000;
+    const p = 10 + k.p - Math.min(Math.hypot(dx, dz), 999) / 1000;
     if (p <= prio[i]) continue;
     cells[i] = g;
     prio[i] = p;
@@ -470,9 +478,9 @@ function stripOf(heading, markers) {
 /**
  * The radar: 7 x 7 cells, the player in the middle, `radius` blocks to the edge; north up or turned so ahead is up.
  * The destination and party mates beyond the edge sit on it.
- * @param {number} heading @param {Marker[]} markers @param {number} radius @param {boolean} north
+ * @param {number} heading @param {Marker[]} markers @param {number} radius @param {boolean} north @param {{ x: number, z: number }} at the player
  */
-function radarOf(heading, markers, radius, north) {
+function radarOf(heading, markers, radius, north, at) {
   const grid = Array.from({ length: 2 * R + 1 }, () => Array(2 * R + 1).fill(G.Q_EMPTY));
   const prio = Array.from({ length: 2 * R + 1 }, () => Array(2 * R + 1).fill(0));
   const h = (heading * Math.PI) / 180;
@@ -500,8 +508,10 @@ function radarOf(heading, markers, radius, north) {
   for (const m of markers) {
     const k = KINDS[m.kind];
     if (!k) continue;
-    const [sx, sy] = screen(m.dx, m.dz);
-    place(sx, sy, k.q, 10 + k.p - Math.min(m.d, 999) / 1000, m.kind === "star" || m.kind === "party");
+    const dx = m.x - at.x;
+    const dz = m.z - at.z;
+    const [sx, sy] = screen(dx, dz);
+    place(sx, sy, k.q, 10 + k.p - Math.min(Math.hypot(dx, dz), 999) / 1000, m.kind === "star" || m.kind === "party");
   }
   grid[R][R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
   return grid.map((row) => row.join("")).join("\n");
@@ -526,6 +536,17 @@ function line2Of(region, dest) {
   return fit(`${dest}${gap}${region ? `§7${fit(region, Math.max(0, room))}` : ""}`, LINE2_BYTES);
 }
 
+/**
+ * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
+ * markers, the second line, which parts show, and the heading and place they were last drawn for.
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, dest?: string, dim: string, px: number, pz: number, heading: number, x: number, z: number }} View
+ */
+/** @type {Map<string, View>} */
+const views = new Map();
+
+/** 0 = north, clockwise. @param {Player} player */
+const headingOf = (player) => (((player.getRotation().y + 180) % 360) + 360) % 360;
+
 /** @param {Player} player @param {Player[]} all @param {Seen[]} seen @param {number} now */
 function pass(player, all, seen, now) {
   const pr = prefsOf(player);
@@ -534,6 +555,7 @@ function pass(player, all, seen, now) {
   const showRadar = on && pr.radar;
   const sent = lastSent.get(player.id);
   if (!showCompass && !showRadar) {
+    views.delete(player.id);
     if (sent) {
       side.clear(player, "", false);
       side.clear(player, "radar", false);
@@ -547,7 +569,6 @@ function pass(player, all, seen, now) {
   const { markers, liveFolk } = gather(player, seen, pr);
   const dest = destination(player, all, liveFolk);
   const reached = arrival(player, dest);
-  const heading = (((player.getRotation().y + 180) % 360) + 360) % 360;
   let destText = "";
   const done = arrived.get(player.id);
   if (reached || (done && done[1] > now)) destText = `${G.I_CHECK}§a Arrived: ${(reached ?? /** @type {[string, number]} */ (done))[0]}`;
@@ -558,34 +579,107 @@ function pass(player, all, seen, now) {
     const label = (s.n || "Destination").slice(0, dest.picked ? NAME_MAX : 40);
     if (s.dim !== player.dimension.id) destText = `${G.I_STAR}§f ${label} §7(in ${DIM_NAMES[s.dim] ?? "another dimension"})`;
     else {
-      const dx = s.x + 0.5 - player.location.x;
-      const dz = s.z + 0.5 - player.location.z;
-      const d = Math.hypot(dx, dz);
-      markers.push({ kind: "star", dx, dz, d, clamp: true });
-      destText = `${G.I_STAR}§f ${label} §7${Math.round(d)}m`;
+      const x = s.x + 0.5;
+      const z = s.z + 0.5;
+      markers.push({ kind: "star", x, z, clamp: true });
+      destText = `${G.I_STAR}§f ${label} §7${Math.round(Math.hypot(x - player.location.x, z - player.location.z))}m`;
     }
   }
   const dimId = player.dimension.id;
   const region = dimId === OVERWORLD ? regions.get(player.id) ?? "" : `In ${DIM_NAMES[dimId] ?? "another dimension"}`;
-  const strip = showCompass ? stripOf(heading, markers) : "";
-  const second = showCompass ? line2(region, destText) : "";
-  const radar = showRadar ? radarOf(heading, markers, pr.radius, pr.north) : "";
-  lastText.set(player.id, { strip, line2: second, radar, dest: dest?.spot?.n });
-  const compassText = second ? `${strip}\n${second}` : strip;
-  const key = `${showCompass ? compassText : ""}|${showRadar ? radar : ""}`;
-  if (!side.held(player) && !(sent && sent.key === key && now - sent.at < REFRESH)) {
-    const t1 = Date.now();
-    if (showCompass) side.show(player, "top", compassText, HOLD, "", false);
-    else if (sent?.compass) side.clear(player, "", false);
-    if (showRadar) side.show(player, "radar", radar, HOLD, "radar", false);
-    else if (sent?.radar) side.clear(player, "radar", false);
-    side.redraw(player);
-    lastSent.set(player.id, { key, at: now, compass: showCompass, radar: showRadar });
-    drawMs += Date.now() - t1;
-  }
+  /** @type {View} */
+  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, dest: dest?.spot?.n, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, z: 0 };
+  views.set(player.id, view);
+  render(player, view, now, true);
   costMs += Date.now() - t0;
   costPlayers++;
 }
+
+/**
+ * Draws the strip and radar for where the player faces and stands now, from the last pass's markers. Sent when
+ * the text changed; with `refresh` (the pass) also when it's REFRESH ticks old, so it never fades.
+ * @param {Player} player @param {View} v @param {number} now @param {boolean} refresh
+ */
+function render(player, v, now, refresh) {
+  const heading = headingOf(player);
+  const at = player.location;
+  v.heading = heading;
+  v.x = at.x;
+  v.z = at.z;
+  const strip = v.compass ? stripOf(heading, v.markers, at) : "";
+  const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at) : "";
+  lastText.set(player.id, { strip, line2: v.second, radar, dest: v.dest });
+  const compassText = v.second ? `${strip}\n${v.second}` : strip;
+  const key = `${compassText}|${radar}`;
+  const sent = lastSent.get(player.id);
+  if (side.held(player) || (sent && sent.key === key && (!refresh || now - sent.at < REFRESH))) return false;
+  const t1 = Date.now();
+  if (v.compass) side.show(player, "top", compassText, HOLD, "", false);
+  else if (sent?.compass) side.clear(player, "", false);
+  if (v.radar) side.show(player, "radar", radar, HOLD, "radar", false);
+  else if (sent?.radar) side.clear(player, "radar", false);
+  side.redraw(player);
+  lastSent.set(player.id, { key, at: now, compass: v.compass, radar: v.radar });
+  drawMs += Date.now() - t1;
+  return true;
+}
+
+/** Turning by less than this (degrees) or moving less than this (blocks) between ticks doesn't redraw. */
+const TURN_MIN = 0.5;
+const MOVE_MIN = 0.25;
+/** Moved farther than this (blocks) since the pass: a teleport, so the markers wait for the next pass. */
+const FAR_MOVE = 16;
+/**
+ * Titles sent per tick at most by the per-tick redraw. Each one is also a realm:side message that every other pack
+ * with side boxes reads (about 0.06 ms each, measured), so with many players turning at once the ones drawn longest
+ * ago go first and the rest follow a tick later.
+ */
+const TURN_BUDGET = 2;
+let turnMs = 0;
+let turnTicks = 0;
+let turnDraws = 0;
+let turnSends = 0;
+
+// Every tick between passes: the strip and radar turn with the player (the pass, every intervalTicks, finds what's
+// around). Only players who turned or moved are drawn again, and only a changed text is sent.
+system.runInterval(() => {
+  if (!views.size) return;
+  const t0 = Date.now();
+  const now = system.currentTick;
+  /** @type {{ p: Player, v: View, at: number }[]} */
+  const due = [];
+  for (const v of views.values()) {
+    const p = v.player;
+    try {
+      if (!p.isValid) continue;
+      // Another dimension (a portal) or far from where the pass looked (a teleport): wait for the next pass.
+      if (p.dimension.id !== v.dim) {
+        views.delete(p.id);
+        continue;
+      }
+      const at = p.location;
+      if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
+      if (Math.abs(wrap(headingOf(p) - v.heading)) < TURN_MIN && Math.abs(at.x - v.x) + Math.abs(at.z - v.z) < MOVE_MIN) continue;
+      due.push({ p, v, at: lastSent.get(p.id)?.at ?? 0 });
+    } catch (e) {
+      console.warn(`[map] turn: ${e}`);
+    }
+  }
+  if (due.length > TURN_BUDGET) due.sort((a, b) => a.at - b.at);
+  let sends = 0;
+  for (const { p, v } of due) {
+    if (sends >= TURN_BUDGET) break;
+    try {
+      turnDraws++;
+      if (render(p, v, now, false)) sends++;
+    } catch (e) {
+      console.warn(`[map] turn: ${e}`);
+    }
+  }
+  turnSends += sends;
+  turnMs += Date.now() - t0;
+  turnTicks++;
+}, 1);
 
 /**
  * A picked destination this close is reached: it clears with a note. The story target never clears here.
@@ -632,7 +726,7 @@ system.runInterval(() => {
 }, Math.max(10, Math.round(Number(CONFIG.intervalTicks) || 10)));
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths]) m.delete(playerId);
+  for (const m of [wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views]) m.delete(playerId);
 });
 
 // ---------------------------------------------------------------------------
@@ -907,7 +1001,7 @@ function onEvent(id, m, source) {
         radar: t?.radar,
         dest: t?.dest,
         wp: player ? waypointOf(player) ?? null : null,
-        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers },
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends },
         known: { folk: folk.size, camps: camps.size, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
       });
       if (m.action === "cost") {
@@ -915,6 +1009,10 @@ function onEvent(id, m, source) {
         drawMs = 0;
         costPasses = 0;
         costPlayers = 0;
+        turnMs = 0;
+        turnTicks = 0;
+        turnDraws = 0;
+        turnSends = 0;
       }
       return;
     }

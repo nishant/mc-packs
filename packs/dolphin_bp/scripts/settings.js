@@ -15,6 +15,7 @@ const OPTIONS = [
   { key: "maxPerPlayer", type: "int", scope: "world", label: "Tamed dolphins per player", min: 1, max: 10, step: 1 },
   { key: "othersCanRide", type: "bool", scope: "world", label: "Others can ride your dolphins", help: "Other players may ride and steer your tamed dolphins" },
   { key: "maxSpeed", type: "int", scope: "world", label: "Riding top speed (blocks/s)", min: 4, max: 24, step: 1 },
+  { key: "riderWaterBreathing", type: "bool", scope: "world", label: "Riders breathe under water", help: "Riding a tamed dolphin gives Water Breathing until a few seconds after you get off" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

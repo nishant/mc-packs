@@ -13,11 +13,14 @@ export const CONFIG = {
   /** Other players may ride (and steer) your tamed dolphins. When false, only the owner can. */
   othersCanRide: true,
 
-  /** Top speed while ridden, in blocks per second. */
-  maxSpeed: 12,
+  /** Top speed while ridden, in blocks per second (a sprinting player runs about 5.6). */
+  maxSpeed: 7,
 
   /** How quickly a ridden dolphin speeds up: blocks per second gained each tick. */
-  acceleration: 1.6,
+  acceleration: 1.2,
+
+  /** Riders breathe under water (a short Water Breathing, topped up while they ride, gone about 3 s after they get off). */
+  riderWaterBreathing: true,
 
   /** Upward push of a leap out of the water (jump at the surface). */
   leapStrength: 0.9,

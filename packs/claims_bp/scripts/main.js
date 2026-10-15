@@ -20,7 +20,41 @@ const MAX_CLAIMS = 500; // in the whole world
 const NEARBY = 64; // blocks: claims whose borders "Show claim borders" draws
 
 /** @typedef {{ i: string, n: string }} Who */
-/** @typedef {{ id: number, o: string, n: string, dim: string, x: number, z: number, r: number, s: Who[] }} Claim owner id and name, shared with */
+/** @typedef {{ id: number, o: string, n: string, dim: string, x: number, z: number, r: number, s: Who[], pt?: boolean, pc?: string }} Claim owner id and name, shared with; pt: shared with the owner's party, pc: the owner's party code when last seen online ("" = none) */
+
+const PARTY_TAG = "realm_party:"; // the Parties pack's tag on every member, `realm_party:<code>`
+/** The player's party code from the Parties pack's tag, or "". @param {Player} player */
+const partyCode = (player) => player.getTags().find((t) => t.startsWith(PARTY_TAG))?.slice(PARTY_TAG.length) ?? "";
+
+// Every party's members, offline ones included, from the Parties pack (realm:party_members { code, l, m: [[id, name]] }
+// after each change and on realm:party_members_ping). A claim shared with its owner's party lets in a player only while
+// both the owner and that player are on the party's current list, so an owner removed while offline, or a later party
+// that got the same code, opens nothing. Kept in memory; asked for again when the world loads.
+/** @type {Map<string, Set<string>>} party code -> member ids */
+const partyMembers = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:party_members") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.code !== "string") return;
+      const ids = Array.isArray(m.m) ? m.m.map((/** @type {unknown} */ x) => (Array.isArray(x) ? String(x[0]) : "")).filter(Boolean) : [];
+      if (ids.length) partyMembers.set(m.code, new Set(ids));
+      else partyMembers.delete(m.code);
+    } catch (e) {
+      console.warn(`[claims] party_members: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] }
+);
+system.runTimeout(() => system.sendScriptEvent("realm:party_members_ping", "{}"), 60);
+
+/** Is the player in the claim owner's party, by the party's current member list? @param {Player} player @param {Claim} c */
+function partyAllowed(player, c) {
+  if (c.pt !== true || !c.pc) return false;
+  const ids = partyMembers.get(c.pc);
+  return !!ids && ids.has(c.o) && ids.has(player.id);
+}
 
 const protectedEntities = new Set(CONFIG.protectedEntities);
 const enabled = () => get("enabled") === true;
@@ -107,8 +141,12 @@ function claimAt(dim, p) {
   return undefined;
 }
 
-/** Its owner, the players it's shared with, and operators if they may bypass. @param {Player} player @param {Claim} c */
-const allowed = (player, c) => c.o === player.id || c.s.some((s) => s.i === player.id) || (get("operatorsBypass") === true && isOp(player));
+/** Its owner, the players it's shared with, the owner's party when shared with it, and operators if they may bypass. @param {Player} player @param {Claim} c */
+const allowed = (player, c) =>
+  c.o === player.id ||
+  c.s.some((s) => s.i === player.id) ||
+  partyAllowed(player, c) ||
+  (get("operatorsBypass") === true && isOp(player));
 
 /**
  * Someone else's claim at this spot, while claims are enabled.
@@ -209,6 +247,14 @@ world.beforeEvents.explosion.subscribe((event) => {
 const inClaim = new Map();
 world.afterEvents.playerLeave.subscribe(({ playerId }) => inClaim.delete(playerId));
 system.runInterval(() => {
+  // Claims shared with the owner's party follow the party the owner is in now (Parties: realm_party:<code>).
+  for (const c of claims().values()) {
+    if (c.pt !== true) continue;
+    const owner = world.getEntity(c.o);
+    if (!(owner instanceof Player)) continue;
+    const code = partyCode(owner);
+    if (code !== (c.pc ?? "")) saveClaim({ ...c, pc: code });
+  }
   if (!enabled() || !claims().size) {
     inClaim.clear();
     return;
@@ -401,6 +447,13 @@ async function manage(player, c) {
       });
     }
   }
+  if (c.pt === true) actions.push({ text: "Stop sharing with my party", run: () => change(player, c.id, (x) => ({ ...x, pt: false })) });
+  else if (partyCode(player)) {
+    actions.push({
+      text: "Share with my party\n§8Everyone in your party, now and later",
+      run: () => change(player, c.id, (x) => ({ ...x, pt: true, pc: partyCode(player) })),
+    });
+  }
   for (const s of c.s) {
     actions.push({ text: `Stop sharing with ${s.n}`, run: () => change(player, c.id, (x) => ({ ...x, s: x.s.filter((y) => y.i !== s.i) })) });
   }
@@ -422,9 +475,12 @@ async function manage(player, c) {
   });
   const body = [
     `${2 * c.r + 1} x ${2 * c.r + 1} blocks, ${span(c)} (${shortDim(c.dim)}), top to bottom.`,
-    c.s.length ? `Shared with ${c.s.map((s) => s.n).join(", ")}.` : "Only you can build here.",
+    c.s.length ? `Shared with ${c.s.map((s) => s.n).join(", ")}.` : c.pt === true ? "" : "Only you can build here.",
+    c.pt === true ? (c.pc ? "Shared with your party: everyone in it can build here." : "Shared with your party, once you're in one.") : "",
     c.s.length >= CONFIG.maxShared ? `§7Shared with the most players allowed (${CONFIG.maxShared}).` : "§7You can share it with players who are online now.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
   await menu(player, "§lYour claim", body, actions);
 }
 
@@ -478,7 +534,7 @@ async function mainMenu(player) {
   const actions = [];
   if (!here && mine.length < max) actions.push({ text: `Claim this land\n§8${2 * r + 1} x ${2 * r + 1} blocks around you`, run: () => claimHere(player) });
   actions.push({ text: "Show claim borders\n§8Nearby, for a few seconds", run: () => showBorders(player, nearby(player)) });
-  for (const c of mine) actions.push({ text: `My claim: ${c.x}, ${c.z}\n§8${shortDim(c.dim)}, shared with ${c.s.length}`, run: () => manage(player, c) });
+  for (const c of mine) actions.push({ text: `My claim: ${c.x}, ${c.z}\n§8${shortDim(c.dim)}, shared with ${c.s.length}${c.pt === true ? " and your party" : ""}`, run: () => manage(player, c) });
   if (isOp(player)) actions.push({ text: "All claims (operator)\n§8Remove any claim", run: () => allClaims(player) });
   await menu(player, "§lLand Claims", body, actions);
 }

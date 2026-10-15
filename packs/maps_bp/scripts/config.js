@@ -80,6 +80,16 @@ export const CONFIG = {
   /** Exploration skill XP for finding a treasure (sent to the Skills pack). */
   skillXp: 50,
 
+  /**
+   * Party mates (the Parties pack's `realm_party:<code>` tag) within `partyRange` blocks when the treasure is found get
+   * this percent of its Crowns each (on top, not taken from the finder; 0 = none), plus the Field Journal entry and the
+   * Exploration XP.
+   */
+  partyShare: 50,
+
+  /** How near (blocks) a party mate must be when the treasure is found to share it. */
+  partyRange: 32,
+
   /** Chance (0-1) that a treasure also holds a relic (asked of the Relics pack, from `relics`). */
   relicChance: 0.1,
 
