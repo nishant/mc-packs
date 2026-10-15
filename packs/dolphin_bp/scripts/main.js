@@ -329,8 +329,11 @@ export function steer(p, d) {
     // The velocity we want after this tick (at most `accel` closer to the target), pushed hard enough that it's
     // still that after the water's drag.
     const k = Math.min(1, accel / len);
+    // Only fully under water, and up or down only below the surface: at the surface the air above has another
+    // drag, and a pushed-up dolphin would fly (a leap on top of it went twice as high).
     const goal = { x: v.x + dv.x * k, y: v.y + dv.y * k, z: v.z + dv.z * k };
-    d.applyImpulse({ x: goal.x / WATER_KEEP - v.x, y: goal.y / WATER_KEEP - v.y, z: goal.z / WATER_KEEP - v.z });
+    const keepY = atSurface(d) ? 1 : WATER_KEEP;
+    d.applyImpulse({ x: goal.x / WATER_KEEP - v.x, y: goal.y / keepY - v.y, z: goal.z / WATER_KEEP - v.z });
   }
   const rot = p.getRotation();
   d.setRotation({ x: rot.x, y: rot.y });
@@ -384,8 +387,8 @@ system.runInterval(() => {
       continue;
     }
     try {
-      steer(p, d);
-      if (p.isJumping) leap(p, d);
+      // A leap tick has no steering push, so leaps stay as high as before.
+      if (!(p.isJumping && leap(p, d))) steer(p, d);
       if (system.currentTick % 10 === 0) breathe(p);
     } catch (e) {
       console.warn(`[dolphin] ${e}`);
