@@ -21,6 +21,8 @@ const OPTIONS = [
   { key: "plainHints", type: "bool", scope: "world", label: "Plain directions in /realm:maps", help: "Shows the compass direction and distance under the riddle" },
   { key: "crownsMin", type: "int", scope: "world", label: "Treasure Crowns (least)", min: 0, max: 1000, step: 5 },
   { key: "crownsMax", type: "int", scope: "world", label: "Treasure Crowns (most)", min: 0, max: 1000, step: 5 },
+  { key: "partyShare", type: "int", scope: "world", label: "Party mates' share of the treasure (percent)", help: "Each party mate nearby gets this percent of the Crowns on top; 0 = none", min: 0, max: 100, step: 10 },
+  { key: "partyRange", type: "int", scope: "world", label: "Party share range (blocks)", min: 8, max: 128, step: 8 },
   { key: "avoidSpawn", type: "int", scope: "world", label: "No treasure within (blocks of world spawn)", min: 0, max: 1000, step: 16 },
   { key: "showAt", type: "enum", scope: "world", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where Warmer / Colder shows (realm default)", help: "Right and Left 1-4 are boxes from Side HUD (Realm Resources); each pack can take its own, so they show at once. Other add-ons that use the line above the hotbar cannot cover them" },
   { key: "where", type: "enum", scope: "player", base: "showAt", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where Warmer / Colder shows for me", help: "Pick a box no other pack uses so they show at once" },
