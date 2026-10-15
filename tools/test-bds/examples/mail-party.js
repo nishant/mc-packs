@@ -1,25 +1,25 @@
-// Realm Mail: "My party" at the top of the recipient list writes one letter to every party mate (the Parties pack's
-// `realm_party:<code>` tag, set here directly), offline mates included (the roster remembers each player's party);
-// players outside the party get nothing. The writer gets one "sent to your party" line.
-// node tools/test-bds/run.mjs --quiet --only mail_bp --scenario tools/test-bds/examples/mail-party.js --timeout 300
+// Realm Mail with Parties: "My party" at the top of the recipient list writes one letter to every party mate, offline
+// mates included (party_bp's realm:party_members list); players outside the party get nothing. The writer gets one
+// "sent to your party" line, and Sent keeps a copy per mate.
+// node tools/test-bds/run.mjs --quiet --only mail_bp,party_bp --scenario tools/test-bds/examples/mail-party.js --timeout 300
 export default async function (t) {
   const ann = await t.player("Ann");
   const bob = await t.player("Bob");
   const cat = await t.player("Cat");
   const dan = await t.player("Dan");
-  for (const p of [ann, bob, dan]) p.addTag("realm_party:TEST");
   await t.wait(10);
-
-  // Ann opens the letter form once while Dan is online (the roster notes his party), then Dan logs off.
-  let f = t.waitForm(ann, { timeout: 60 });
-  t.cmd(ann, "/realm:mail");
-  (await f).answer("Write a letter");
-  f = await t.waitForm(ann, { timeout: 60 });
-  f.answer(null);
-  await t.wait(5);
-  dan.disconnect();
+  for (const p of [bob, dan]) {
+    const since = t.tick;
+    t.assert(t.cmd(ann, `/realm:party_invite ${p.name}`).ok, `invite ${p.name}`);
+    await t.waitMessage(p, /invited you/, { since });
+    t.assert(t.cmd(p, "/realm:party_accept").ok, `${p.name} accepts`);
+    await t.waitMessage(p, /You joined the party/, { since });
+  }
+  await t.wait(10);
+  dan.disconnect(); // offline, still in the party
   await t.wait(20);
 
+  let f;
   f = t.waitForm(ann, { timeout: 60 });
   t.cmd(ann, "/realm:mail");
   (await f).answer("Write a letter");

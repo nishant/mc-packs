@@ -69,7 +69,12 @@ function save(code) {
     if (json.length > SAVE_LIMIT) {
       // Room for more: forget parties of one whose only member is offline (they'd start a new one).
       const here = new Set(world.getAllPlayers().map((p) => p.id));
-      for (const [c, p] of all) if (p.m.length < 2 && !here.has(p.m[0][0])) all.delete(c);
+      for (const [c, p] of all) {
+        if (p.m.length < 2 && !here.has(p.m[0][0])) {
+          all.delete(c);
+          if (c !== code) sendMembers(c); // gone: other packs forget it
+        }
+      }
       json = JSON.stringify(Object.fromEntries(all));
     }
     if (json.length > SAVE_LIMIT) throw new Error(`too many parties (${json.length} characters)`);
@@ -77,8 +82,32 @@ function save(code) {
   } catch (e) {
     console.warn(`[party] save: ${e}`);
   }
-  if (code) system.sendScriptEvent("realm:party_changed", JSON.stringify({ code }));
+  if (code) {
+    system.sendScriptEvent("realm:party_changed", JSON.stringify({ code }));
+    sendMembers(code);
+  }
 }
+
+// Other packs that need the whole party, offline members included (Land Claims, Realm Mail), hear its member list:
+//   realm:party_members      { code, l, m: [[player id, gamertag], ...] }  after every change (m empty: the party is gone)
+//   realm:party_members_ping {}                                          → realm:party_members for every party
+// One message per party (at most 12 members, well under 2048 characters). Also sent for every party once the world loads.
+/** @param {string} code */
+function sendMembers(code) {
+  const p = parties().get(code);
+  const msg = { code, l: p?.l ?? "", m: (p?.m ?? []).map(([id, name]) => [id, name.slice(0, 32)]) };
+  system.sendScriptEvent("realm:party_members", JSON.stringify(msg));
+}
+function sendAllMembers() {
+  for (const code of parties().keys()) sendMembers(code);
+}
+system.runTimeout(() => {
+  try {
+    sendAllMembers();
+  } catch (e) {
+    console.warn(`[party] members: ${e}`);
+  }
+}, 40);
 
 /** The code of the player's party, or undefined. @param {string} id */
 function partyOf(id) {
@@ -323,6 +352,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     if (code && me && me[1] !== player.name) {
       me[1] = player.name; // keep the saved gamertag current for offline lists
       save();
+      sendMembers(code);
     }
   } catch (e) {
     console.warn(`[party] ${e}`);
@@ -536,6 +566,13 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "party_bp");
+    else if (id === "realm:party_members_ping") {
+      try {
+        sendAllMembers();
+      } catch (e) {
+        console.warn(`[party] members: ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

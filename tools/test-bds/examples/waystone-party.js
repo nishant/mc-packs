@@ -1,6 +1,7 @@
 // Waystones: party mates (the Parties pack's `realm_party:<code>` tag, set here directly) standing near a player who
 // starts a trip come along, each paying their own fare; a player outside the party or a mate farther away stays; a
-// mate who walks away during the countdown stays behind while the leader still goes; a mate who can't pay is told.
+// mate who walks away during the countdown stays behind while the leader still goes; a mate who can't pay is told;
+// when the leader's own jump fails (can't pay at the end), the mates stay too.
 // Taps go through the pack's test hook (simulated players can't tap with an empty hand), as in waystone-trips.js.
 // Run with: node tools/test-bds/run.mjs --quiet --flat --only waystone_bp --scenario tools/test-bds/examples/waystone-party.js --timeout 400
 export default async function (t) {
@@ -79,4 +80,21 @@ export default async function (t) {
   await t.wait(10);
   t.check(!near(bob, A), "Bob stayed at Beta");
   t.check(crowns(bob) === 49, `Bob paid nothing for the trip he skipped (${crowns(bob)})`);
+
+  // ---- 3. The leader can't pay when the countdown ends: the mates stay too and pay nothing ----
+  await t.wait(110);
+  const at2 = { ...ann.location };
+  bob.teleport({ x: at2.x + 1, y: at2.y, z: at2.z + 1 });
+  await t.wait(5);
+  const bobBefore = crowns(bob);
+  since = t.tick;
+  await travel(ann, A, "Beta");
+  await t.waitMessage(bob, /\[Party\] Ann is traveling to Beta/, { since, timeout: 40 });
+  t.server("/scoreboard players set Ann crowns 0");
+  await t.waitMessage(ann, /That trip costs/, { since, timeout: 100 });
+  const dropped = await t.waitMessage(bob, /didn't happen: you stay here/, { since, timeout: 40 });
+  t.log(`Bob: ${dropped.plain}`);
+  await t.wait(10);
+  t.check(!near(bob, B), "Bob didn't travel without Ann");
+  t.check(crowns(bob) === bobBefore, `Bob paid nothing (${crowns(bob)})`);
 }
