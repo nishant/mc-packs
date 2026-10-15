@@ -65,6 +65,7 @@ What each pack in this repo does, how to use it, and how to configure it.
 - [Deck of Many Things — `domt_bp`](#deck-of-many-things--domt_bp)
 - [Slot Machine — `slots_bp`](#slot-machine--slots_bp)
 - [Silly Enchants — `silly_bp`](#silly-enchants--silly_bp)
+- [Silly Enchants Sounds — `silly_rp`](#silly-enchants-sounds--silly_rp)
 - [Dolphin Friends — `dolphin_bp`](#dolphin-friends--dolphin_bp)
 - [Platypus — `platypus_bp`](#platypus--platypus_bp)
 - [Platypus Models — `platypus_rp`](#platypus-models--platypus_rp)
@@ -120,7 +121,7 @@ The realm runs everything as two packs: **Realm Bundle**, a behavior pack with e
 
 **Updating:** download and open the newer version, then check that the realm's active Realm Bundle (or Realm Resources) shows the new version. If it still shows the old one, deactivate it and activate it again so the new version uploads. Nothing is lost: in-game settings and stats are stored in the world. Version numbers are the build date and time in UTC (`YYYY.MMDD.HHMM`, without leading zeros, so 5 January at 09:05 is `2026.105.905`), so every build is higher than the last, which Minecraft needs to treat it as an update.
 
-**What's in each:** the Realm Bundle holds every behavior pack in this repo, Rain Extras included. Realm Resources holds the six resource packs: [Realistic Rain](#realistic-rain--rain_rp), [Realm Skies](#realm-skies--sky_rp), [Translucent Tools](#translucent-tools--translucent_rp), [Side HUD](#side-hud--hud_rp), [Platypus Models](#platypus-models--platypus_rp) and [Easy Building Guides](#easy-building-guides--build_rp). Players get both packs automatically when they join. Realm Skies draws the tornadoes, rainbows, aurora, shooting stars, meteors, sandstorms, blizzards, moon fogs and trails of the bundle's sky packs: without it those still happen, but you can't see them.
+**What's in each:** the Realm Bundle holds every behavior pack in this repo, Rain Extras included. Realm Resources holds the seven resource packs: [Realistic Rain](#realistic-rain--rain_rp), [Realm Skies](#realm-skies--sky_rp), [Translucent Tools](#translucent-tools--translucent_rp), [Side HUD](#side-hud--hud_rp), [Platypus Models](#platypus-models--platypus_rp), [Easy Building Guides](#easy-building-guides--build_rp) and [Silly Enchants Sounds](#silly-enchants-sounds--silly_rp). Players get both packs automatically when they join. Realm Skies draws the tornadoes, rainbows, aurora, shooting stars, meteors, sandstorms, blizzards, moon fogs and trails of the bundle's sky packs: without it those still happen, but you can't see them.
 
 **Only some features?** Every feature is also its own pack, downloaded from its card or the "one at a time" list under the Realm Bundle download, and activated the same way. Use **either** the Realm Bundle **or** single packs, never both: the same commands would be registered twice and fail to load. The same goes for Realm Resources and the single resource packs. If you had Realistic Rain, Realm Skies, Translucent Tools or Rain Extras active on their own before, remove them when you add the bundles. Switching between them starts the features' in-game settings over (welcome and news text, tips, settings from `/realm:config`, per-player choices, remembered chests, zones and farms); stats on the scoreboard are kept. Single packs use ordinary version numbers (`1.0.0`) that go up whenever that pack changes.
 
@@ -4316,7 +4317,11 @@ Operators can change `enabled`, `currencies.crowns`, `currencies.emeralds`, `dai
 
 ## Silly Enchants — `silly_bp`
 
-Fourteen silly "enchantments" for your gear. They only add particles, sounds and some very big bounces: none of them changes damage, armor, speed, drops or durability. Most effects come in a few random variants, so they rarely sound the same twice. Each one is a lore line on the item, like `Silly: Grunt Birthday`, and an item holds at most two. They come on **Silly Books** (enchanted books named `Silly Book`), which you apply from `/realm:silly` to the item in your hand.
+Fourteen silly "enchantments" for your gear. They only add particles, sounds and some very big bounces: none of them changes damage, armor, speed, drops or durability. Most effects come in a few random variants, so they rarely sound the same twice. Each one is a lore line on the item, like `Silly: Grunt Birthday`, and an item holds at most two. They come on **Silly Books** (enchanted books named `Silly Book`), which you apply from `/realm:silly` to the item in your hand. The confetti, disco lights, rainbow trail, bubbles and the Grunt Birthday cheer come from [Silly Enchants Sounds](#silly-enchants-sounds--silly_rp) (in Realm Resources).
+
+### See and hear it
+
+[The Grunt Birthday cheer](media/silly/yay.mp3): a party-horn toot and a squeaky little chorus cheering "yaaay", synthesized for this pack (no recordings).
 
 ### How to use
 
@@ -4331,24 +4336,26 @@ Fourteen silly "enchantments" for your gear. They only add particles, sounds and
 
 | Enchant | Goes on | What it does |
 |---|---|---|
-| Grunt Birthday (`grunt_birthday`) | Held item | Mobs you defeat pop like a party: a big burst of confetti, then one of five parties at random (fireworks, a little fanfare, a party horn, hearts, or a zap) |
+| Grunt Birthday (`grunt_birthday`) | Held item | Mobs you defeat pop like a party: a party-horn toot and a squeaky little chorus cheering "yaaay" (`realm.silly.yay`, 1.4 seconds), with a shower of confetti in two bursts |
 | Hyper Jump (`hyper_jump`) | Boots | Sneak and jump to launch. Each launch is a surprise (`hyperJumpOdds`): 60% a big jump (about 30 blocks up), 30% a huge one (about 50), and 10% the **Realm Space Program**: a `3`, `2`, `1`, `LIFTOFF!` countdown on screen, a harmless explosion, then a rocket burn with flames and smoke to about 150 blocks up, while players within 96 blocks read `[Space Program] <name> has left the atmosphere.` (or another line). You fall at full speed and land for real: wear Feather Falling or aim for water, because a big jump onto land is a deadly fall. Operators can switch on a soft landing (`hyperJumpSoftLanding`, off by default): a puff of slow falling just above the ground. Every 4 seconds (`hyperJumpCooldownSeconds`) |
 | Squeak (`squeak`) | Boots | Your footsteps squeak (now and then a different squeak) |
-| Bubbles (`bubbles`) | Any armor | You leave a trail of bubbles |
-| Rainbow Trail (`rainbow_trail`) | Boots | Rainbow-colored puffs follow your steps |
+| Bubbles (`bubbles`) | Any armor | You leave a trail of bubbles that float up and wobble, in the air as well as under water |
+| Rainbow Trail (`rainbow_trail`) | Boots | Rainbow-colored dabs on the ground follow your steps, a new color every half block, and fade after about 2 seconds |
 | Hat Trick (`hat_trick`) | Held item | A critical hit (hitting while falling) pulls a baby rabbit out of thin air (sometimes with a ta-da); it vanishes in a puff after 10 seconds (`hatTrickRabbitSeconds`). At most one every 10 seconds (`hatTrickCooldownSeconds`). Baby rabbits drop nothing |
-| Disco (`disco`) | Any armor | Colored lights flash around you, with music notes |
+| Disco (`disco`) | Any armor | A dance floor of colored tiles flashes under your feet, a ring of colored lights rises around you in a new color 2 or 3 times a second, and a music note pops up every 2 seconds, even while you stand still |
 | Moo (`moo`) | Helmet | You moo when you get hurt. Sometimes the wrong animal answers: an oink, a baa, a cluck or a meow |
-| Confetti Swing (`confetti_swing`) | Held item | Every hit throws confetti, with a pop, a bubble, a pling or a bell |
+| Confetti Swing (`confetti_swing`) | Held item | Every hit throws a burst of confetti, with a pop, a bubble, a pling or a bell |
 | Tiny Thunder (`tiny_thunder`) | Held item | A thunderclap and a shower of sparks when you defeat a mob, sometimes with a lightning crack |
 | Fish Slap (`fish_slap`) | Held item | Your hits make a loud wet fish slap and a splash (or a dolphin's giggle). Best on a fish |
 | Glow (`glow`) | Helmet | You sparkle softly at night |
 | Duck (`duck`) | Any armor | You quack when you sneak; sometimes twice |
-| Hiccups (`hiccups`) | Helmet | You hiccup now and then, with bubbles; some hiccups hop you off the ground a little |
+| Hiccups (`hiccups`) | Helmet | You hiccup now and then, with a few bubbles floating up from your head; some hiccups hop you off the ground a little |
 
 - **Held item** means anything you hold that isn't armor or a book: swords, tools, a bow, even a raw cod. **Helmet** includes the turtle shell; **any armor** includes the elytra.
-- **Applying** says `Silly: Hyper Jump! Sneak and jump: a big bounce, a huge one, or now and then a trip with the Realm Space Program.` with a puff of confetti. A book that doesn't fit says so (`Hyper Jump goes on boots.`), and an item with 2 already says `An item holds at most 2 silly enchants. Remove one first.` A relic says `Relics can't take silly enchants.` and keeps the book (relics rewrite their lore, which would wipe the line). A Random book picks one that fits the item.
+- **Applying** says `Silly: Hyper Jump! Sneak and jump: a big bounce, a huge one, or now and then a trip with the Realm Space Program.` with a burst of confetti in front of you. A book that doesn't fit says so (`Hyper Jump goes on boots.`), and an item with 2 already says `An item holds at most 2 silly enchants. Remove one first.` A relic says `Relics can't take silly enchants.` and keeps the book (relics rewrite their lore, which would wipe the line). A Random book picks one that fits the item.
 - The effects follow your worn armor and the item in your main hand, checked twice a second. Other players see and hear them too.
+- **Confetti** flakes burst out, tumble and settle on the ground. Without [Silly Enchants Sounds](#silly-enchants-sounds--silly_rp) you see only vanilla puffs (totem sparkles and colored swirls): no floor, lights, trail dabs or bubbles in the air, and Grunt Birthday makes no sound.
+- **For tests:** `/scriptevent realm:silly_trace on` makes every silly particle and sound also send a `realm:silly_fx` script event (`{ kind: "particle" | "sound", id }`), so a test server, which draws and plays nothing, can see them; `off` stops it.
 
 **Selling Silly Books** (for operators). This pack doesn't change other packs, but a book is recognized by its lore line, so a shop can sell one. In the [Merchant Caravan](#merchant-caravan--caravan_bp)'s `goods` in `caravan_bp/scripts/config.js`, add for example:
 
@@ -4396,9 +4403,51 @@ Operators can change `enabled`, `maxPerItem`, `hyperJumpCooldownSeconds` and `hy
 
 ---
 
+## Silly Enchants Sounds — `silly_rp`
+
+The particles and the cheer of [Silly Enchants](#silly-enchants--silly_bp): confetti, the disco floor and lights, the rainbow trail, bubbles that float in the air and the Grunt Birthday cheer. A **resource pack**, part of **Realm Resources** (or on its own, together with Silly Enchants).
+
+### How to use
+
+1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears).
+2. Without it, Silly Enchants works the same, but you see only vanilla puffs: no confetti flakes, dance floor, lights, trail dabs or bubbles on land, and Grunt Birthday makes no sound.
+3. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**. To use it alone instead, download Silly Enchants Sounds from its card and activate it the same way, with Silly Enchants under **Behavior Packs**.
+
+### What players see
+
+- **Confetti:** small square flakes in six party colors burst up and out, tumble (they flip as they fall) and settle on the ground, fading after 2 to 3 seconds. Grunt Birthday throws 40 and then 24 more, Confetti Swing 14, and applying a Silly Book 20.
+- **Disco floor:** nine colored tiles on a half-block grid, flat on the ground under your feet, flashing in new colors five times a second.
+- **Disco lights:** a ring of eight soft glows around you in one color, drifting up and fading in under half a second.
+- **Rainbow trail:** flat colored dabs on the ground that fade over about 2 seconds.
+- **Bubbles:** vanilla-looking bubbles that wobble up through air as well as water (vanilla's bubbles vanish as soon as they leave water).
+- **The Grunt Birthday cheer** (`realm.silly.yay`, 1.4 seconds): a party-horn toot and a squeaky little chorus cheering "yaaay", heard up to 24 blocks away, about as loud as a mob. It's synthesized from scratch: no recordings, nobody else's audio. Listen in [Silly Enchants](#silly-enchants--silly_bp)'s **See and hear it**.
+
+### Saved data
+
+None. It's a resource pack: no scripts and no commands.
+
+### How it's made
+
+`npm run gen:silly` (`tools/gen-silly/gen.mjs`, with the cheer in `tools/gen-silly/yay.mjs`) writes everything but `manifest.json`; `npm run check` fails if a file differs from what it makes. Writing the sound needs ffmpeg with libvorbis. Ogg Vorbis isn't byte-for-byte the same across ffmpeg versions, so the generator keeps `tools/gen-silly/sounds-lock.json` (the sha256 of the samples before encoding, and of the `.ogg`), and the check compares those without ffmpeg. `node tools/gen-silly/gen.mjs --audition docs/media/silly` also writes the listening clip `docs/media/silly/yay.mp3` (needs libmp3lame).
+
+| Files | |
+|---|---|
+| `particles/silly_confetti.json` | `realm:silly_confetti`: `variable.count` flakes, each a random party color, that land and settle on blocks |
+| `particles/silly_floor.json` | `realm:silly_floor`: nine flat tiles under your feet, living 0.3 seconds |
+| `particles/silly_light.json` | `realm:silly_light`: a ring of eight glows in `variable.color`, living 0.45 seconds |
+| `particles/silly_trail.json` | `realm:silly_trail`: one flat dab in `variable.color`, living 2.2 seconds |
+| `particles/silly_bubble.json` | `realm:silly_bubble`: three bubbles (vanilla's bubble picture) that float up through air |
+| `textures/particle/realm_silly.png` | The particles' pictures (32 x 16): a confetti square, a soft square for the trail and floor, and a round glow, white so they take any color |
+| `sounds/silly/yay.ogg`, `sounds/sound_definitions.json` | The cheer, and `realm.silly.yay` (category `player`, volume 0.5, heard up to 24 blocks) |
+| `pack_icon.png` | A party hat in a shower of confetti |
+
+The particle files are named after their ids so they can't collide with another pack's when Realm Resources merges them.
+
+---
+
 ## Dolphin Friends — `dolphin_bp`
 
-Tame a dolphin with raw fish, then ride it through the sea: it swims where you look. Tamed dolphins stay (they never despawn), follow you in the water, can be named and called to you.
+Tame a dolphin with raw fish, then ride it through the sea: it swims where you look, and you breathe under water while you ride. Tamed dolphins stay (they never despawn), follow you in the water, can be named and called to you.
 
 ### How to use
 
@@ -4407,12 +4456,13 @@ Tame a dolphin with raw fish, then ride it through the sea: it swims where you l
 3. **Leap:** press jump while swimming at the surface and the dolphin jumps out of the water.
 4. **Get off:** sneak.
 5. Run `/realm:dolphin` for **My dolphins**: call one to you (it swims over when you're in the water, up to 128 blocks), name it or release it. **Call the nearest** calls the closest one; `/realm:dolphin_call` does the same.
-6. **Operators:** `/realm:dolphin` → **Operator tools** lists every tamed dolphin with its owner and releases the one you look at. `/realm:config` → **Dolphin Friends** sets the taming chance, how many dolphins each player may have, whether others can ride yours and the top speed.
+6. **Operators:** `/realm:dolphin` → **Operator tools** lists every tamed dolphin with its owner and releases the one you look at. `/realm:config` → **Dolphin Friends** sets the taming chance, how many dolphins each player may have, whether others can ride yours, the top speed and whether riders breathe under water.
 
 ### What players see
 
 - **Feeding** works as in vanilla too: a fed dolphin may still lead you to treasure. One fish is used per tap, whether or not the dolphin takes it as a vanilla treat. A player can have up to 3 tamed dolphins (`maxPerPlayer`); a fourth says `You already have 3 dolphins. Release one first (/realm:dolphin).`
-- **Riding:** the dolphin turns to face where you look and speeds up to 12 blocks per second (`maxSpeed`, gaining `acceleration` 1.6 blocks per second each tick). Without input it glides to a stop. Out of the water it doesn't steer. Leaps need 1.5 seconds between them. Others can ride your dolphins too unless an operator disables `othersCanRide`.
+- **Riding:** the dolphin turns to face where you look and speeds up to 7 blocks per second (`maxSpeed`; a sprinting player runs about 5.6), gaining 1.2 blocks per second each tick (`acceleration`). Steering pushes against the water's drag, so a ridden dolphin really reaches its top speed. Without input it glides to a stop. Out of the water it doesn't steer. Leaps need 1.5 seconds between them. Others can ride your dolphins too unless an operator disables `othersCanRide`.
+- **Breathing:** while you ride, you have Water Breathing (no particles), so you can dive as long as you like (`riderWaterBreathing`). It's a 3-second effect topped up every half second, so it runs out about 3 seconds after you get off; a longer one, like a potion's, is left alone.
 - **Following:** an unridden tamed dolphin swims toward its owner when you're both in the water and more than 8 blocks apart (`followDistance`), up to 64 blocks away.
 - **Calling:** the dolphin must be loaded (near a player) and in your dimension, and you must be in the water. It appears next to you with hearts. Calling, naming and releasing only work on a dolphin that is still yours (one an operator released and someone else tamed says `That dolphin isn't yours any more.`).
 - A tamed dolphin that dies tells its owner: `Splash died.`
@@ -4435,12 +4485,13 @@ Tame a dolphin with raw fish, then ride it through the sea: it swims where you l
 | `tameChancePercent` | `25` | Chance in percent that one raw cod or salmon tames a dolphin |
 | `maxPerPlayer` | `3` | Most tamed dolphins one player can have |
 | `othersCanRide` | `true` | Other players may ride and steer your tamed dolphins |
-| `maxSpeed` | `12` | Top speed while ridden, in blocks per second |
-| `acceleration` | `1.6` | Blocks per second a ridden dolphin gains each tick |
+| `maxSpeed` | `7` | Top speed while ridden, in blocks per second (a sprinting player runs about 5.6) |
+| `acceleration` | `1.2` | Blocks per second a ridden dolphin gains each tick |
+| `riderWaterBreathing` | `true` | Riders breathe under water: Water Breathing while they ride, gone about 3 seconds after they get off |
 | `leapStrength` | `0.9` | Upward push of a leap out of the water |
 | `followDistance` | `8` | A tamed dolphin swims after its owner (in water) when farther than this many blocks |
 
-Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanRide` and `maxSpeed` in game with `/realm:config` (**Dolphin Friends**).
+Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanRide`, `maxSpeed` and `riderWaterBreathing` (**Riders breathe under water**) in game with `/realm:config` (**Dolphin Friends**).
 
 ### Saved data
 
@@ -4456,7 +4507,7 @@ Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanR
 
 ## Platypus — `platypus_bp`
 
-An uncommon new animal, the platypus (`realm:platypus`), lives along rivers and in swamps and mangrove swamps, always close to the water. It is passive until you hit it: then it fights back, and its bite poisons you and makes your screen wobble (nausea). About 1 in 200 is a teal platypus in a brown fedora: Perry the Platypus. There is a spawn egg too. Needs [Platypus Models](#platypus-models--platypus_rp) (in Realm Resources) to look like a platypus.
+An uncommon new animal, the platypus (`realm:platypus`), lives along rivers and in swamps and mangrove swamps, always close to the water. Feed it fish to heal it or to raise baby platypuses. It is passive until you hit it: then it fights back, and its bite poisons you and makes your screen wobble (nausea). About 1 in 200 is a teal platypus in a brown fedora: Perry the Platypus. There is a spawn egg too. Needs [Platypus Models](#platypus-models--platypus_rp) (in Realm Resources) to look like a platypus.
 
 ### See and hear it
 
@@ -4468,18 +4519,23 @@ A render of the model and its two skins, not an in-game screenshot.
 
 1. Look along rivers and in swamps and mangrove swamps: platypuses spawn on the banks (grass, dirt, sand, gravel, clay, mud, mangrove roots), alone or in pairs, in daylight-bright spots. They are uncommon: you may walk a long river before you meet one.
 2. Run `/realm:platypus` to see how many platypuses are within 64 blocks (`findRadius`) and how far, and in which direction, the nearest one is. If one of them is a Perry, it tells you where that one is too.
-3. Leave it be and it wanders, swims and waddles back to the water. Hold **raw cod** or **raw salmon** and it follows you. You can put it on a lead and name it with a name tag.
-4. Hit it and it bites back for 15 seconds: each bite does 1 heart of damage, 5 seconds of **Poison** and 8 seconds of **Nausea** (`nauseaSeconds`). Then it calms down.
-5. **Creative:** the **Platypus Spawn Egg** (brown with teal spots) is in the creative inventory with the other spawn eggs, and every egg has the same 1 in 200 chance of hatching a Perry.
-6. **Operators:** `/summon realm:platypus ~ ~ ~ 0 0 realm:platypus_make_perry` summons a Perry (`realm:platypus_make_brown` a brown one). `/realm:config` → **Platypus** sets the nausea length, the Perry message and the `/realm:platypus` search radius.
+3. Leave it be and it wanders, swims and waddles back to the water. Hold **raw cod** or **raw salmon** and it follows you. You can put it on a lead and name it with a name tag (rename the tag on an anvil first).
+4. **Feed it:** tap a hurt platypus with **raw cod**, **raw salmon**, **cooked cod**, **cooked salmon** or **tropical fish** to heal it (hearts show).
+5. **Breed:** feed raw cod or raw salmon to two grown-up platypuses near each other: they fall in love and make a baby platypus. The baby follows a parent and grows up in 20 minutes; feeding it raw cod or salmon makes it grow faster.
+6. Hit it and it bites back for 15 seconds: each bite does 1 heart of damage, 5 seconds of **Poison** and 8 seconds of **Nausea** (`nauseaSeconds`). Then it calms down.
+7. **Creative:** the **Platypus Spawn Egg** (brown with teal spots) is in the creative inventory with the other spawn eggs, and every egg has the same 1 in 200 chance of hatching a Perry.
+8. **Operators:** `/summon realm:platypus ~ ~ ~ 0 0 realm:platypus_make_perry` summons a Perry (`realm:platypus_make_brown` a brown one). `/realm:config` → **Platypus** sets the nausea length, the Perry message and the `/realm:platypus` search radius.
 
 ### What players see
 
 - **The platypus:** a small, flat brown animal (10 health, 5 hearts) with a dark duck bill, a broad flat tail and four short legs with webbed feet. It walks, swims and paddles, wags its tail and looks at players nearby. It breathes air and water, so it never drowns.
+- **Feeding:** a hurt platypus eats raw cod or salmon (heals 3 health, 1.5 hearts), cooked cod (5), cooked salmon (6) or tropical fish (2), and hearts float up. At full health it doesn't eat cooked fish or tropical fish; raw cod or salmon then goes to breeding (or, for a baby, to growing up).
+- **Babies:** half the size of a grown-up, they follow a parent and grow up after 20 minutes (raw cod or salmon speeds that up). A baby has the same 1 in 200 chance of being a Perry.
+- **Names and leads:** a name from a name tag always shows above the platypus, not only when you look at it. A lead ties on at its shoulders.
 - **Perry:** 1 in 200 platypuses (from natural spawns, spawn eggs and `/summon`) is teal with an orange bill and feet, wearing a brown fedora with a dark band. Players within 64 blocks get `A teal platypus in a brown fedora is nearby. Perry the Platypus?!` when one appears (`perryMessage`). It acts like any other platypus.
 - **When hit:** the platypus (and only that one) chases whoever hit it, player or mob, for 15 seconds and bites: 2 damage, Poison for 5 seconds, and for players Nausea for 8 seconds (`nauseaSeconds`, 0 = none). Hitting it again restarts the 15 seconds. Players in Creative are left alone.
 - **Drops:** no items; 1 to 3 experience when a player kills it.
-- **Spawning:** surface spawns in river biomes (not frozen rivers), swamps and mangrove swamps, on grass, dirt, coarse dirt, podzol, sand, gravel, clay, mud or mangrove roots, at light level 7 or more. Weight 2, groups of 1 or 2, and no more than 3 per area, counted with the other animals' cap. They never despawn (the entity has no `minecraft:despawn`), so the density limit and the animal cap are what keep their numbers down.
+- **Spawning:** surface spawns in river biomes (not frozen rivers), swamps and mangrove swamps, on grass, dirt, coarse dirt, podzol, sand, gravel, clay, mud or mangrove roots, at light level 7 or more. Weight 2, groups of 1 or 2, and no more than 3 per area, counted with the other animals' cap. They never despawn (the entity has `minecraft:persistent` and no `minecraft:despawn`), so the density limit and the animal cap are what keep their numbers down.
 - `/realm:platypus` answers in chat, for example `3 platypuses within 64 blocks. Nearest: 12 blocks northeast.`, or `No platypuses within 64 blocks. They live along rivers and in swamps and mangrove swamps, near the water.` when there are none.
 
 ### Commands
@@ -4508,7 +4564,9 @@ The platypus's color is its `minecraft:variant` (0 brown, 1 Perry), saved with t
 
 ### How it works
 
-- **The mob** (`entities/platypus.json`) uses only stable components, so no experiments are needed: amphibious movement and navigation like the turtle's (`minecraft:movement.amphibious`, `minecraft:navigation.generic` with `can_swim` and `can_walk`), random strolling and swimming, `minecraft:behavior.move_to_water` so it returns to the water, and `minecraft:behavior.tempt` with raw cod and salmon.
+- **The mob** (`entities/platypus.json`) uses only stable components, so no experiments are needed: amphibious movement and navigation like the turtle's (`minecraft:movement.amphibious`, `minecraft:navigation.generic` with `can_swim` and `can_walk`), random strolling and swimming, `minecraft:behavior.move_to_water` so it returns to the water, and `minecraft:behavior.tempt` with raw cod and salmon. `minecraft:nameable` has `always_show`, and `minecraft:persistent` keeps it (and its name) for good.
+- **Feeding and breeding:** `minecraft:healable` heals a hurt platypus (raw cod and salmon 3, cooked cod 5, cooked salmon 6, tropical fish 2). Grown-ups have the group `realm:platypus_adult` (`minecraft:breedable` with raw cod and salmon, `minecraft:behavior.breed`, and `minecraft:mark_variant` 1 to mark it); `minecraft:entity_born` gives a baby `realm:platypus_baby` (`minecraft:is_baby`, `minecraft:scale` 0.5, `minecraft:ageable` for 1200 seconds with raw cod and salmon, `minecraft:behavior.follow_parent`), and `minecraft:ageable_grow_up` swaps it for the adult group. The script shows the hearts (`world.afterEvents.playerInteractWithEntity`, when the fish was used up, or always in Creative).
+- **Older platypuses:** ones that spawned before breeding existed (or from `/summon` with a variant event) have no adult group, so on `world.afterEvents.entitySpawn` and `entityLoad` the script fires `realm:platypus_grow_up` on any platypus that isn't a baby and has no `minecraft:mark_variant` of 1. That event adds `realm:platypus_adult` (only when `is_baby` is false).
 - **Fighting back:** `minecraft:behavior.hurt_by_target` picks whoever hurt it, and a `minecraft:damage_sensor` trigger fires `realm:platypus_anger` when a player or mob hurts it. That event removes and re-adds the group `realm:platypus_angry` (so a new hit starts the 15 seconds again): `minecraft:angry`, a 15-second `minecraft:timer` whose `realm:platypus_calm` removes the group (`minecraft:angry` alone never calms down while it has a target), and `minecraft:behavior.melee_attack`. Its `minecraft:attack` does 2 damage with `effect_name` `poison` for 5 seconds. The script adds the Nausea: `world.afterEvents.entityHurt` for players, when the damaging entity is a `realm:platypus`.
 - **Perry:** `minecraft:entity_spawned` (natural spawns, eggs, `/summon` without an event) picks `realm:platypus_brown` (weight 199, variant 0) or `realm:platypus_perry` (weight 1, variant 1). The events `realm:platypus_make_brown` and `realm:platypus_make_perry` switch it. The resource pack chooses the skin by `query.variant` and shows the fedora bone only for variant 1. The script reads the variant on `world.afterEvents.entitySpawn` (causes `Spawned` and `Event`, not chunk loads) for the Perry message.
 
@@ -4540,7 +4598,7 @@ None. It's a resource pack: no scripts and no commands.
 
 | Files | |
 |---|---|
-| `models/entity/platypus.geo.json` | Generated. `geometry.realm_platypus`: bones `body`, `head`, `bill`, `tail`, `leg_front_left`, `leg_front_right`, `leg_back_left`, `leg_back_right` and `fedora`, on a 64 x 32 texture |
+| `models/entity/platypus.geo.json` | Generated. `geometry.realm_platypus`: bones `body`, `head`, `bill`, `tail`, `leg_front_left`, `leg_front_right`, `leg_back_left`, `leg_back_right` and `fedora`, on a 64 x 32 texture. A `lead` locator on top of `body`, at the shoulders, is where a lead ties on (without one the lead floats above the mob) |
 | `textures/entity/platypus/platypus.png`, `perry.png` | Generated. The brown and the Perry skins, shaded with a little noise. The brown skin leaves the fedora area empty |
 | `pack_icon.png` (both packs), `docs/media/platypus/platypus.png` | Generated renders of the model |
 | `entity/platypus.entity.json` | The client entity: material `entity_alphatest`, the two textures, the animations and `spawn_egg` colors `#7a5233` and `#2aa59a` |
@@ -6503,6 +6561,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Right-click Harvest → Daily Quests | A crop harvested by tapping counts for harvest quests, the same as breaking it |
 | Daily Quests ↔ Stats, Milestones | Separate counts: the same mining, kills and travel add to all of them |
 | Slot Machine ↔ Crowns | Crowns stakes are taken from and wins paid into the shared `crowns` scoreboard, so they show in `/realm:crowns` at once. Without the Crowns pack, Crowns stakes still work but nobody earns Crowns to play with |
+| Silly Enchants Sounds → Silly Enchants | The confetti, disco floor and lights, rainbow trail dabs, bubbles in the air and the Grunt Birthday cheer are this resource pack's (`realm:silly_*` particles, sound `realm.silly.yay`). Without it Silly Enchants still works, with only vanilla puffs and no cheer |
 | Silly Enchants → Merchant Caravan | The caravan can sell Silly Books if an operator adds one to its `goods` (see [Silly Enchants](#silly-enchants--silly_bp)); the book is recognized by its lore |
 | Dolphin Friends ↔ other dolphin packs | Dolphin Friends replaces the vanilla dolphin's behavior file with a copy plus a seat. Another behavior pack that also changes the dolphin conflicts with it: only the higher pack's file is used |
 | Stats → Milestones | Milestones reads the `stats_<stat>` scoreboards when they exist and uses the larger of their number and its own, so history from Stats counts. Works without Stats |
