@@ -1156,6 +1156,12 @@ function shaft(rm, r, s) {
   };
   const ledges = climb(RING, R0, from, dir, y - 1, s.gap, bad, r);
   if (ledges) for (const p of ledges) rm.parts.push({ k: "trim", u: p.u, v: p.v, y: p.y });
+  else {
+    // Never stuck, as a last resort only (a staircase along the wall always fits, so no seed checked needs it):
+    // a ladder up the wall beside the landing.
+    const lad = onSide(side, 2 * startSide, R0);
+    rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) });
+  }
   rm.fly = [{ u: 0, v: 0, y: Math.floor(rm.h / 2) }, { u: 3, v: 3, y: Math.floor(rm.h / 3) }, { u: -3, v: -3, y: Math.floor((rm.h * 2) / 3) }];
   rm.parts.push({ k: "sign", u: 0, v: -5, y: 1, f: "back", t: "§lThe shaft§r\nThe way on is\nhigh up. Climb,\nbuild or fly!" });
   for (let yy = 6; yy < rm.h - 1; yy += 6) rm.parts.push({ k: "glow", u: 0, v: 0, y: yy, i: 1 });
