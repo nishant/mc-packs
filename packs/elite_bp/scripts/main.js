@@ -662,18 +662,27 @@ const ground = (b) => !!b && !b.isAir && !b.isLiquid && !WALK_THROUGH.test(b.typ
 /**
  * Where a mob standing at `from` lands after a step to (x, z): the same height, one block up, or up to
  * three down, wherever its feet and head fit and the ground holds. Undefined when it can't go there.
+ * Nothing it would pass through may be solid: for a step down, the whole target column from head height
+ * down to its new feet; for a step up, the room above its own head; for a diagonal step, at least one of
+ * the two columns beside it (no slipping between two blocks that touch at a corner).
  * @param {Dimension} dim @param {Vector3} from @param {number} x @param {number} z
  */
 function stepTo(dim, from, x, z) {
   const bx = Math.floor(x);
   const bz = Math.floor(z);
+  const fx = Math.floor(from.x);
+  const fz = Math.floor(from.z);
   const fy = Math.floor(from.y + 0.01);
+  /** Are blocks y1..y2 of column (cx, cz) all open? @param {number} cx @param {number} cz @param {number} y1 @param {number} y2 */
+  const clear = (cx, cz, y1, y2) => {
+    for (let y = y1; y <= y2; y++) if (!open(dim.getBlock({ x: cx, y, z: cz }))) return false;
+    return true;
+  };
   for (const dy of [0, 1, -1, -2, -3]) {
     const y = fy + dy;
     if (y - from.y > 1.01) continue; // no higher than a jump
-    const feet = dim.getBlock({ x: bx, y, z: bz });
-    const head = dim.getBlock({ x: bx, y: y + 1, z: bz });
-    if (!open(feet) || !open(head)) continue;
+    const top = Math.max(y, fy) + 1; // the highest block it passes through: its head, at the higher of the two heights
+    if (!clear(bx, bz, y, top)) continue; // a step down needs the whole column clear, a wall in front stops it
     const below = dim.getBlock({ x: bx, y: y - 1, z: bz });
     if (!ground(below)) {
       // Air below: only fine further down (the drop is checked by the next dy).
@@ -681,7 +690,8 @@ function stepTo(dim, from, x, z) {
       return undefined;
     }
     // A step up also needs room above its own head.
-    if (dy > 0 && !open(dim.getBlock({ x: Math.floor(from.x), y: fy + 2, z: Math.floor(from.z) }))) return undefined;
+    if (dy > 0 && !open(dim.getBlock({ x: fx, y: fy + 2, z: fz }))) return undefined;
+    if (bx !== fx && bz !== fz && !clear(bx, fz, Math.max(y, fy), top) && !clear(fx, bz, Math.max(y, fy), top)) return undefined;
     return { x, y, z };
   }
   return undefined;
@@ -698,8 +708,10 @@ function approachStep(e, step) {
   const at = e.location;
   const range = Number(get("approach.range")) || CONFIG.approach.range;
   const stop = CONFIG.approach.stopDistance;
+  // Players in a safe zone, land claim or town are left alone (no crowd of champions at its edge).
   const target = dim
     .getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })
+    .filter((p) => !isProtected(dim.id, p.location.x, p.location.z))
     .sort((a, b) => dist(a.location, at) - dist(b.location, at))[0];
   if (!target) return;
   const dx = target.location.x - at.x;
