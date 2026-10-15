@@ -2031,6 +2031,13 @@ function spawnSpot(run, i) {
   return wmid(run, rm, list[Math.floor(Math.random() * list.length)]);
 }
 
+/**
+ * A dungeon's flyers, never phantoms: in a closed room a phantom loses its player and circles into a corner
+ * for good (and the Phantom Opt-out pack would remove some for players who disabled them, but not others).
+ * @param {Dungeon} d
+ */
+const flyersOf = (d) => (d.flyers ?? []).filter((id) => id !== "minecraft:phantom");
+
 /** @param {Run} run */
 function spawnWave(run) {
   const d = run.dungeon;
@@ -2044,11 +2051,12 @@ function spawnWave(run) {
   count = Math.min(count, room);
   run.mobs = [];
   const elites = Math.min(count, s.elites + (eliteRoom ? 1 : 0));
-  const flyers = rm.fly.length && d.flyers?.length ? Math.floor(count / 4) : 0;
+  const fl = flyersOf(d);
+  const flyers = rm.fly.length && fl.length ? Math.floor(count / 4) : 0;
   for (let k = 0; k < count; k++) {
     if (k < flyers) {
       const at = wmid(run, rm, rm.fly[k % rm.fly.length]);
-      spawnMob(run, /** @type {string[]} */ (d.flyers)[Math.floor(Math.random() * (d.flyers?.length ?? 1))], at);
+      spawnMob(run, fl[Math.floor(Math.random() * fl.length)], at);
     } else spawnMob(run, pickMob(d, run.level), spawnSpot(run, run.room), { elite: k >= count - elites });
   }
   const champ = run.affixes.includes("champions") || eliteRoom || Math.random() < s.champChance;
@@ -2284,7 +2292,7 @@ function puzzleIntro(run, i) {
     case "wool":
       return tell(run, "§eA color riddle! Each button changes the color of the wool under it. Make each pillar match its sign.");
     case "parkour":
-      return tell(run, "§eA climbing puzzle! Jump up the ledges along the walls and press the button at the top.");
+      return tell(run, "§eA climbing puzzle! Jump up the ledges and stepping stones along the walls and press the button at the top. A fall drifts you gently back down.");
     case "rush":
       return tell(run, `§eA button rush! Press all ${pz.count} buttons on the walls within ${pz.seconds} seconds of the first.`);
     case "riddle":
@@ -3041,7 +3049,7 @@ function tickRun(run, players) {
       tell(run, "§eA trap hall! The way out is open: run for the far door. Flames flicker on the floor before they burst, and arrows fly from the walls.");
     } else if (rm.kind === "shaft") {
       run.nextWaveAt = now + 60;
-      tell(run, `§eA vertical shaft! The way on is ${rm.ey} blocks up. ${run.s.ladders ? "Climb the ladder or the ledges" : "Jump up the ledges"}, build your way up with your own blocks${run.s.build && get("allowBuilding") === true ? "" : " (not allowed here)"}, or fly with an elytra.`);
+      tell(run, `§eA vertical shaft! The way on is ${rm.ey} blocks up. Jump up the ledges and stepping stones (a fall drifts you gently back down), build your way up with your own blocks${run.s.build && get("allowBuilding") === true ? "" : " (not allowed here)"}, or fly with an elytra.`);
     } else if (rm.kind === "boon") {
       run.sanct = { i: run.room, offered: new Set(), picked: new Set(), offers: new Map(), firstAt: 0 };
       tell(run, "§dA sanctuary! Each of you may choose one of three boons for the rest of the Gauntlet. Press the button on the altar if the choice closed.");
@@ -3093,8 +3101,8 @@ function tickRun(run, players) {
       if (run.nextWaveAt && now >= run.nextWaveAt) {
         run.nextWaveAt = now + Math.max(120, 300 - run.s.t * 8);
         const flyers = run.extra.filter(alive).length;
-        const d = run.dungeon;
-        if (d.flyers?.length && flyers < 2 + Math.floor(run.s.t / 5) && aliveCount(run) < get("mobCap")) spawnMob(run, d.flyers[Math.floor(Math.random() * d.flyers.length)], wmid(run, rm, rm.fly[Math.floor(Math.random() * rm.fly.length)]), { list: "extra" });
+        const fl = flyersOf(run.dungeon);
+        if (fl.length && flyers < 2 + Math.floor(run.s.t / 5) && aliveCount(run) < get("mobCap")) spawnMob(run, fl[Math.floor(Math.random() * fl.length)], wmid(run, rm, rm.fly[Math.floor(Math.random() * rm.fly.length)]), { list: "extra" });
       }
       if (all.some((p) => inZone(run, rm, /** @type {Player} */ (p)))) {
         tell(run, "§aYou reached the top of the shaft! Drop down the chute into the pool.");
@@ -3196,6 +3204,27 @@ system.runInterval(() => {
     }
   }
 }, LOOP_TICKS);
+
+// A fall in a climbing room (a shaft, a climbing puzzle) never hurts: a member falling fast in one gets a
+// moment of Slow Falling and drifts back down to the floor to try again. There is no ladder to the top.
+const FALL_SPEED = -0.7; // blocks per tick, about 4 blocks into a fall (fall damage starts after 3)
+system.runInterval(() => {
+  if (!runs.size) return;
+  for (const run of runs.values()) {
+    try {
+      if (run.phase !== "active") continue;
+      const rm = run.lay.rooms[run.room];
+      if (!rm || (rm.kind !== "shaft" && rm.puzzle?.type !== "parkour")) continue;
+      for (const id of run.members.keys()) {
+        const p = online(id);
+        if (!p || p.isOnGround || p.isGliding || p.getVelocity().y > FALL_SPEED || !inRoom(run, rm, p.location)) continue;
+        if (!p.getEffect("slow_falling")) p.addEffect("slow_falling", 60, { amplifier: 0, showParticles: false });
+      }
+    } catch (e) {
+      console.warn(`[expedition] fall: ${e}`);
+    }
+  }
+}, 2);
 
 // ---------------------------------------------------------------------------
 // Events

@@ -149,8 +149,6 @@ export function scaleFor(L) {
     tallMax: t >= tallFrom ? Math.min(MAX_ROOM_H, 14 + 2 * (t - tallFrom)) : 5,
     /** Gap between parkour ledges (blocks of air). */
     gap: t >= 8 ? 2 : 1,
-    /** Shafts get a ladder below tier 10; from tier 10 it's ledges, your own blocks or an elytra. */
-    ladders: t < 10,
     build: t >= Math.max(1, Math.floor(CONFIG.buildFromTier)),
   };
 }
@@ -529,6 +527,80 @@ function chain(RING, from, dir, step, top, bad) {
     out.push({ u: p.u, v: p.v, y });
   }
   return out;
+}
+
+/**
+ * A climbing route along the walls, like `chain` but more of a platformer: most ledges are one block
+ * higher than the last with a gap of 1 to `maxGap` blocks, some are a flat jump (same height, gap of 2,
+ * or 3 when `maxGap` is 2), and some are stepping stones one block out from the wall. Built from (ring
+ * index `from`, height `top`) down to height 1, going `dir` around the ring. Undefined when a ledge
+ * would land where it mustn't.
+ * @param {{ u: number, v: number, side: Face, a: number }[]} RING @param {number} R0 the room's half width
+ * @param {number} from @param {number} dir @param {number} top @param {number} maxGap
+ * @param {(p: { u: number, v: number }, y: number) => boolean} bad @param {() => number} r
+ */
+function route(RING, R0, from, dir, top, maxGap, bad, r) {
+  /** @type {(P3 & { tag?: string })[]} */
+  const out = [];
+  const n = RING.length;
+  let idx = from;
+  let yPrev = top + 1; // the goal
+  /** @type {boolean} */
+  let lastFlat = true; // the first ledge is always a step down from the goal
+  /** @type {boolean} */
+  let lastStone = false;
+  /** @type {{ u: number, v: number }} */
+  let prev = RING[from];
+  for (;;) {
+    /** @type {boolean} */
+    const flat = !lastFlat && yPrev >= 3 && r() < 0.2;
+    const y = flat ? yPrev : yPrev - 1;
+    if (y < 1) break;
+    // Right after a stone the next jump is a short one (it comes at an angle).
+    /** @type {number} */
+    const most = lastStone ? 1 : maxGap;
+    /** @type {number} */
+    const gap = flat ? (most >= 2 && r() < 0.5 ? 3 : 2) : 1 + Math.floor(r() * most);
+    idx = (((idx + dir * (gap + 1)) % n) + n) % n;
+    const q = RING[idx];
+    // A stepping stone: one block out from the wall, away from the corners, never two in a row, only on short jumps.
+    /** @type {boolean} */
+    const stone = !lastStone && gap <= (flat ? 2 : 1) && Math.abs(q.a) <= R0 - 3 && y >= 2 && r() < 0.25;
+    const p = stone ? onSide(q.side, q.a, R0 - 1) : q;
+    if (bad(p, y)) return undefined;
+    // Never a longer jump than meant (going round a corner or out to a stone stretches it): 2 blocks of gap
+    // up (1 just after a stone), 3 flat, measured center to center.
+    if (Math.hypot(p.u - prev.u, p.v - prev.v) > (flat ? 4 : most === 1 ? 2.25 : 3)) return undefined;
+    // Head room: nothing within 3 above or below in the same column or the one next to it.
+    if (out.some((o) => Math.abs(o.u - p.u) + Math.abs(o.v - p.v) <= (o.y === y ? 0 : 1) && Math.abs(o.y - y) < 4)) return undefined;
+    out.push({ u: p.u, v: p.v, y, ...(flat ? { tag: "flat" } : stone ? { tag: "stone" } : {}) });
+    prev = p;
+    yPrev = y;
+    lastFlat = flat;
+    lastStone = stone;
+  }
+  return out;
+}
+
+/**
+ * Ledges up to a goal: a few tries at a platforming `route` each way round, then plain `chain`s with
+ * shorter and shorter steps (a step of 1 is a staircase along the wall, which always fits). Undefined
+ * only when nothing fits at all.
+ * @param {{ u: number, v: number, side: Face, a: number }[]} RING @param {number} R0 @param {number} from @param {number} dir
+ * @param {number} top @param {number} maxGap @param {(p: { u: number, v: number }, y: number) => boolean} bad @param {() => number} r
+ */
+function climb(RING, R0, from, dir, top, maxGap, bad, r) {
+  for (let k = 0; k < 6; k++) {
+    const got = route(RING, R0, from, k % 2 ? -dir : dir, top, maxGap, bad, r);
+    if (got) return got;
+  }
+  for (const step of [maxGap + 1, 2, 1]) {
+    for (const d of [dir, -dir]) {
+      const got = chain(RING, from, d, step, top, bad);
+      if (got) return got;
+    }
+  }
+  return undefined;
 }
 
 /** The cell size for a level: rooms grow from Normal. @param {number} L @param {boolean} long */
@@ -1009,7 +1081,10 @@ function balconies(rm, r) {
       const p1 = onSide(side, a1, R0 - 2);
       const p2 = onSide(side, a2, R0);
       rm.parts.push({ k: "trim", u: p1.u, v: p1.v, y, u2: p2.u, v2: p2.v, y2: y });
-      rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) });
+      // The lowest balcony is often reached by jumping up ledges round the corner instead of a ladder.
+      const steps = y < 8 && r() < 0.6 ? balconySteps(rm, side, lad, y, r) : undefined;
+      if (steps) for (const p of steps) rm.parts.push({ k: "trim", u: p.u, v: p.v, y: p.y });
+      else rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) });
       const lamp = onSide(side, (R0 - 3) * flip, R0);
       rm.parts.push({ k: "lantern", u: lamp.u, v: lamp.v, y: y + 1 });
       const mid = onSide(side, 0, R0 - 1);
@@ -1020,8 +1095,31 @@ function balconies(rm, r) {
 }
 
 /**
- * A vertical shaft: the exit is high in the wall, over a landing; ledges climb the walls to it (and a
- * ladder below tier 10). Reaching the landing clears the room.
+ * Ledges up to a balcony at height y in place of its ladder: the first right where the ladder would be (one
+ * below the balcony, next to its end), then easy jumps (1-block gaps) down round the corner to the floor.
+ * Undefined when they don't fit (a door, a wall of the shape).
+ * @param {Room} rm @param {Face} side @param {{ u: number, v: number }} lad @param {number} y @param {() => number} r
+ * @returns {P3[] | undefined}
+ */
+function balconySteps(rm, side, lad, y, r) {
+  const R0 = rm.r;
+  const solid = rm.solid ?? new Set();
+  const RING = ring(R0);
+  const at = RING.findIndex((p) => p.u === lad.u && p.v === lad.v);
+  if (at < 0) return undefined;
+  const dir = RING[(at + 1) % RING.length].side === side ? -1 : 1; // away from the balcony, round the corner
+  /** @param {{ u: number, v: number }} p @param {number} yy */
+  const bad = (p, yy) =>
+    solid.has(key(p.u, p.v)) || blocksDoor(rm.doors, p.u, p.v, yy, R0) || blocksDoor(rm.doors, p.u, p.v, yy + 1, R0) || blocksDoor(rm.doors, p.u, p.v, yy + 2, R0) || blocksDoor(rm.doors, p.u, p.v, 1, R0);
+  if (bad(lad, y - 1)) return undefined;
+  const rest = y - 2 >= 1 ? route(RING, R0, at, dir, y - 2, 1, bad, r) : [];
+  return rest && [{ u: lad.u, v: lad.v, y: y - 1 }, ...rest.map(({ u, v, y: yy }) => ({ u, v, y: yy }))];
+}
+
+/**
+ * A vertical shaft: the exit is high in the wall, over a landing; a climbing route of ledges and stepping
+ * stones goes up the walls to it. No ladder: the climb is the challenge (a fall lands you back on the floor,
+ * by the door you came in, to try again). Reaching the landing clears the room.
  * @param {Room} rm @param {() => number} r @param {ReturnType<typeof scaleFor>} s
  */
 function shaft(rm, r, s) {
@@ -1030,44 +1128,34 @@ function shaft(rm, r, s) {
   const exit = rm.doors.find((d) => d.y > 0);
   const side = exit?.side ?? "fwd";
   const y = rm.ey;
-  const ladderSide = r() < 0.5 ? 1 : -1; // the ladder goes on this side of the landing, the ledges start on the other
+  const startSide = r() < 0.5 ? 1 : -1; // the route starts off this end of the landing
   const l1 = onSide(side, -1, R0 - 1);
   const l2 = onSide(side, 1, R0);
   rm.parts.push({ k: "trim", u: l1.u, v: l1.v, y, u2: l2.u, v2: l2.v, y2: y });
   const z = onSide(side, 0, R0 - 1);
   rm.zone = { u: z.u, v: z.v, y: y + 1, r: 2 };
-  const ladderA = 2 * ladderSide;
-  const lad = onSide(side, ladderA, R0);
-  if (s.ladders) rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) });
-  // The ring index of the landing's edge on the ledge side, then down from there.
-  const edgeA = -ladderSide;
+  // The ring index of the landing's edge, then down from there.
+  const edgeA = -startSide;
   const from = RING.findIndex((p) => p.side === side && p.a === edgeA);
   const dir = (() => {
-    // Which way round the ring moves away from the landing on the ledge side.
+    // Which way round the ring moves away from the landing.
     const next = RING[(from + 1) % RING.length];
-    return next.side === side && next.a === edgeA - ladderSide ? 1 : next.side === side && next.a === edgeA + ladderSide ? -1 : 1;
+    return next.side === side && next.a === edgeA + startSide ? -1 : 1;
   })();
   /** @param {{ u: number, v: number }} p @param {number} yy */
   const bad = (p, yy) => {
     if (blocksDoor(rm.doors, p.u, p.v, yy, R0) || blocksDoor(rm.doors, p.u, p.v, yy + 1, R0) || blocksDoor(rm.doors, p.u, p.v, yy + 2, R0)) return true;
-    if (s.ladders && p.u === lad.u && p.v === lad.v) return true;
-    // Not in or right under the landing.
+    // Not in or right under the landing (it is two deep: the wall row and the one in front).
     for (let a = -1; a <= 1; a++) {
-      const q = onSide(side, a, R0);
-      if (q.u === p.u && q.v === p.v && Math.abs(y - yy) < 4) return true;
+      for (const d of [R0, R0 - 1]) {
+        const q = onSide(side, a, d);
+        if (q.u === p.u && q.v === p.v && Math.abs(y - yy) < 4) return true;
+      }
     }
     return false;
   };
-  let ledges;
-  for (const step of [s.gap + 1, s.gap + 1, 2]) {
-    for (const d of [dir, -dir]) {
-      if (ledges) break;
-      ledges = chain(RING, from, d, step, y - 1, bad);
-    }
-    if (ledges) break;
-  }
+  const ledges = climb(RING, R0, from, dir, y - 1, s.gap, bad, r);
   if (ledges) for (const p of ledges) rm.parts.push({ k: "trim", u: p.u, v: p.v, y: p.y });
-  else if (!s.ladders) rm.parts.push({ k: "ladder", u: lad.u, v: lad.v, y: 1, y2: y + 1, f: opposite(side) }); // never stuck
   rm.fly = [{ u: 0, v: 0, y: Math.floor(rm.h / 2) }, { u: 3, v: 3, y: Math.floor(rm.h / 3) }, { u: -3, v: -3, y: Math.floor((rm.h * 2) / 3) }];
   rm.parts.push({ k: "sign", u: 0, v: -5, y: 1, f: "back", t: "§lThe shaft§r\nThe way on is\nhigh up. Climb,\nbuild or fly!" });
   for (let yy = 6; yy < rm.h - 1; yy += 6) rm.parts.push({ k: "glow", u: 0, v: 0, y: yy, i: 1 });
@@ -1189,7 +1277,7 @@ function puzzleParts(rm, r, s, L) {
             const bad = (p, yy) =>
               blocksDoor(rm.doors, p.u, p.v, yy, rm.r) || blocksDoor(rm.doors, p.u, p.v, yy + 1, rm.r) || ((p.u === plat.u && p.v === plat.v) || (p.u === stand.u && p.v === stand.v) ? Math.abs(yy - top) < 4 : false);
             const fromIdx = (from + d + RING.length) % RING.length;
-            const ledges = chain(RING, fromIdx, d, s.gap + 1, top - 1, bad);
+            const ledges = climb(RING, rm.r, fromIdx, d, top - 1, s.gap, bad, r);
             if (!ledges) continue;
             P.push({ k: "trim", u: plat.u, v: plat.v, y: top }, { k: "trim", u: stand.u, v: stand.v, y: top }, { k: "button", u: plat.u, v: plat.v, y: top + 1, f: "up", i: 0 });
             for (const p of ledges) P.push({ k: "trim", u: p.u, v: p.v, y: p.y });
@@ -1200,8 +1288,13 @@ function puzzleParts(rm, r, s, L) {
         }
       }
       if (!done) {
-        // Never stuck: a ladder up to a platform in the middle.
-        P.push({ k: "trim", u: 0, v: 3, y: top }, { k: "button", u: 0, v: 3, y: top + 1, f: "up", i: 0 }, { k: "trim", u: 0, v: 2, y: 1, y2: top }, { k: "ladder", u: 0, v: 1, y: 1, y2: top + 1, f: "back" });
+        // Never stuck (never needed across thousands of layouts): a staircase of steps round a column in the middle, no ladder.
+        P.push({ k: "trim", u: 0, v: 0, y: 1, y2: top }, { k: "button", u: 0, v: 0, y: top + 1, f: "up", i: 0 });
+        const around = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+        for (let yy = 1; yy < top; yy++) {
+          const [u, v] = around[(yy - 1) % 8];
+          P.push({ k: "trim", u, v, y: yy });
+        }
       }
       for (let yy = 6; yy < rm.h - 1; yy += 6) P.push({ k: "glow", u: 0, v: 0, y: yy, i: 1 });
       P.push({ k: "sign", u: 0, v: signRow, y: 1, f: "back", t: "§lClimb§r\nJump up the\nledges and press\nthe button" });
