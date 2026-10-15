@@ -35,6 +35,24 @@ export const CONFIG = {
    */
   avoidBuilds: true,
 
+  /**
+   * Champions come looking for you: a champion with a player (survival or adventure, not AFK) within
+   * `range` blocks walks slowly toward the nearest one, a small step along the ground every quarter
+   * second, until it is `stopDistance` blocks away and its own hunt takes over. It never steps into
+   * water, lava, a safe zone or a land claim, over a fence or wall, or up more than one block.
+   * Champions in an Expedition dungeon are left to the dungeon.
+   */
+  approach: {
+    /** Disabled: champions only wander and hunt like ordinary mobs. */
+    enabled: true,
+    /** How far away (blocks) a champion notices a player and starts coming. */
+    range: 48,
+    /** Walking pace of the approach in blocks per second (an ordinary zombie walks about 2.3). */
+    speed: 1,
+    /** It stops stepping this close (blocks) and lets the mob's own hunting take over. */
+    stopDistance: 10,
+  },
+
   /** Mobs that can become champions. Mobs not listed here are never champions. */
   mobs: [
     "minecraft:zombie",

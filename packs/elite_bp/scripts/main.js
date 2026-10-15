@@ -13,6 +13,7 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { isProtected } from "./zones.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -641,6 +642,101 @@ system.runInterval(() => {
     console.warn(`[elite] ${e}`);
   }
 }, 20);
+
+// ---------------------------------------------------------------------------
+// The approach: champions slowly come to the nearest player
+// ---------------------------------------------------------------------------
+
+const STEP_TICKS = 5;
+/** Blocks a mob walks through (air aside): plants, snow layers, carpets, torches, rails, buttons... */
+const WALK_THROUGH =
+  /^minecraft:(short_grass|tall_grass|fern|large_fern|deadbush|dead_bush|bush|firefly_bush|short_dry_grass|tall_dry_grass|leaf_litter|snow_layer|.*_carpet|.*sapling|.*flower|poppy|dandelion|.*tulip|blue_orchid|allium|azure_bluet|oxeye_daisy|cornflower|lily_of_the_valley|wither_rose|pink_petals|rose_bush|lilac|peony|sunflower|vine|glow_lichen|.*torch|.*rail|redstone_wire|.*_button|.*pressure_plate|lever|tripwire)$/;
+/** Ground it never steps onto: what mobs can't climb over, what burns or pricks, and fluids. */
+const NO_STEP_ON = /fence|wall|_gate|magma|campfire|fire|cactus|sweet_berry|powder_snow|lava|water|scaffolding|pointed_dripstone/;
+
+/** Can a mob stand in this block (feet or head)? @param {import("@minecraft/server").Block | undefined} b */
+const open = (b) => !!b && !b.isLiquid && (b.isAir || WALK_THROUGH.test(b.typeId));
+/** Can a mob stand on this block? @param {import("@minecraft/server").Block | undefined} b */
+const ground = (b) => !!b && !b.isAir && !b.isLiquid && !WALK_THROUGH.test(b.typeId) && !NO_STEP_ON.test(b.typeId);
+
+/**
+ * Where a mob standing at `from` lands after a step to (x, z): the same height, one block up, or up to
+ * three down, wherever its feet and head fit and the ground holds. Undefined when it can't go there.
+ * @param {Dimension} dim @param {Vector3} from @param {number} x @param {number} z
+ */
+function stepTo(dim, from, x, z) {
+  const bx = Math.floor(x);
+  const bz = Math.floor(z);
+  const fy = Math.floor(from.y + 0.01);
+  for (const dy of [0, 1, -1, -2, -3]) {
+    const y = fy + dy;
+    if (y - from.y > 1.01) continue; // no higher than a jump
+    const feet = dim.getBlock({ x: bx, y, z: bz });
+    const head = dim.getBlock({ x: bx, y: y + 1, z: bz });
+    if (!open(feet) || !open(head)) continue;
+    const below = dim.getBlock({ x: bx, y: y - 1, z: bz });
+    if (!ground(below)) {
+      // Air below: only fine further down (the drop is checked by the next dy).
+      if (below && (below.isAir || WALK_THROUGH.test(below.typeId))) continue;
+      return undefined;
+    }
+    // A step up also needs room above its own head.
+    if (dy > 0 && !open(dim.getBlock({ x: Math.floor(from.x), y: fy + 2, z: Math.floor(from.z) }))) return undefined;
+    return { x, y, z };
+  }
+  return undefined;
+}
+
+/** Is this champion one the approach leaves alone (an Expedition's)? @param {Entity} e */
+const ownedElsewhere = (e) => e.getTags().some((t) => t.startsWith("realm:exp"));
+
+/** One champion's step toward the nearest player in range, if any. @param {Entity} e @param {number} step */
+function approachStep(e, step) {
+  if (!e.isValid || ownedElsewhere(e)) return;
+  if (e.isInWater || !e.isOnGround) return;
+  const dim = e.dimension;
+  const at = e.location;
+  const range = Number(get("approach.range")) || CONFIG.approach.range;
+  const stop = CONFIG.approach.stopDistance;
+  const target = dim
+    .getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })
+    .sort((a, b) => dist(a.location, at) - dist(b.location, at))[0];
+  if (!target) return;
+  const dx = target.location.x - at.x;
+  const dz = target.location.z - at.z;
+  const flat = Math.hypot(dx, dz);
+  if (flat <= stop) return;
+  const base = Math.atan2(dz, dx);
+  // Straight on, or a little to either side round something in the way.
+  for (const turn of [0, Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2]) {
+    const a = base + turn;
+    const x = at.x + Math.cos(a) * step;
+    const z = at.z + Math.sin(a) * step;
+    if (isProtected(dim.id, x, z) && !isProtected(dim.id, at.x, at.z)) continue; // safe zones and claims: not by our hand
+    const to = stepTo(dim, at, x, z);
+    if (!to) continue;
+    const y = to.y === Math.floor(at.y + 0.01) ? at.y : to.y; // same height: keep a slab's half
+    e.teleport({ x: to.x, y, z: to.z }, { facingLocation: { x: target.location.x, y: y + 1.5, z: target.location.z }, keepVelocity: false });
+    return;
+  }
+}
+
+/** @param {Vector3} a @param {Vector3} b */
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+system.runInterval(() => {
+  if (get("approach.enabled") !== true || !live.size) return;
+  const step = (Math.max(0, Number(get("approach.speed")) || 0) * STEP_TICKS) / 20;
+  if (step <= 0) return;
+  for (const e of live.values()) {
+    try {
+      approachStep(e, Math.min(step, 0.9));
+    } catch (err) {
+      // an unloaded column or a champion that just died: try again next step
+      if (!String(err).includes("LocationInUnloadedChunk") && !String(err).includes("InvalidEntity")) console.warn(`[elite] approach: ${err}`);
+    }
+  }
+}, STEP_TICKS);
 
 // ---------------------------------------------------------------------------
 // Death
