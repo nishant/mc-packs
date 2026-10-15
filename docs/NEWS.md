@@ -6,6 +6,19 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Claims that hold
+
+Another round of fixes:
+
+- Land claims now cover stairs and slabs you sit on, cooking pots, slot machines, waystones and charged lightning rods: only the claim's players can use them.
+- Only operators can claim land that reaches into a safe zone or a town.
+- Mail subjects and letters no longer keep color codes.
+- Story drowned and other sea creatures by the water come in the water, not on the shore.
+- Field Journal: an "Also found" entry that made room for newer finds comes back quietly when you find it again.
+- A merchant caravan that arrives while nobody is near stands on the ground instead of high in the sky.
+- A meteor that lands at the edge of the loaded world waits for its crater instead of vanishing.
+- Side HUD has its own pack icon.
+
 ## Lines that take turns
 
 A few more fixes from the big review:

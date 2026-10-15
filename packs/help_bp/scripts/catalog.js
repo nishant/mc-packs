@@ -2905,7 +2905,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Place lightning rods where the storm goes. When lightning strikes one you placed (the cell's, or ordinary storm lightning), it sparks blue and is charged. Tap a charged rod to collect 1 or 2 §lStorm Glass§r, and it can be charged again.",
+        "text": "Place lightning rods where the storm goes. When lightning strikes one you placed (the cell's, or ordinary storm lightning), it sparks blue and is charged. Tap a charged rod to collect 1 or 2 §lStorm Glass§r, and it can be charged again. A rod in someone else's land claim is theirs: only the claim's players can collect its glass.",
         "ops": false
       },
       {
