@@ -1,0 +1,17 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Silly Enchants Sounds",
+    "description": "The Grunt Birthday cheer (a party horn and a squeaky \"yaaay\"), confetti, disco lights, the rainbow trail and bubbles for the Silly Enchants behavior pack.",
+    "uuid": "cc15543b-a17d-4f5a-a022-d97d6a9dd2af",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "f553e020-46c4-40d1-8e6b-e9dd4761bd06",
+      "version": [1, 0, 0]
+    }
+  ]
+}
