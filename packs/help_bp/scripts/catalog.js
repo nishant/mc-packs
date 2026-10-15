@@ -584,7 +584,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). The same menu stops sharing, shows its borders or removes the claim (it asks first).",
+        "text": "§lShare it:§r §e/realm:claim§r -> §lMy claim: 120, -340§r -> §lShare with Alex§r (players online now). In a party, §lShare with my party§r shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first).",
         "ops": false
       },
       {
@@ -605,7 +605,7 @@ export const PACKS = [
         "usage": "/realm:claim",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens the Land Claims menu: claim the land around you (default 33 x 33 blocks, §eradius§r 16), show nearby claim borders, share or remove your claims (default 2 each, §emaxClaims§r); operators also get every claim, to remove any. Only works once an operator has enabled land claims (default disabled, §eenabled§r)"
+        "text": "Opens the Land Claims menu: claim the land around you (default 33 x 33 blocks, §eradius§r 16), show nearby claim borders, share or remove your claims (default 2 each, §emaxClaims§r), including with your whole party while you're in one; operators also get every claim, to remove any. Only works once an operator has enabled land claims (default disabled, §eenabled§r)"
       }
     ]
   },
@@ -624,6 +624,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "In a party, your online mates are told where you died, with how far and which way it is from them, so they can come help. Don't want to hear about theirs? Disable §lTell me where party mates die§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
         "text": "Don't want the chat message? Disable §lTell me where I died§r in §e/realm:prefs§r. §e/realm:death§r still works.",
         "ops": false
       },
@@ -632,7 +636,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r enable §e/realm:death_back§r in §e/realm:config§r -> §lDeath Point§r -> §lTeleport back to the death point (/realm:death_back)§r. The same page turns the respawn message off for everyone.",
+        "text": "§lOperators:§r enable §e/realm:death_back§r in §e/realm:config§r -> §lDeath Point§r -> §lTeleport back to the death point (/realm:death_back)§r. The same page turns the respawn message and the party message off for everyone.",
         "ops": true
       }
     ],
@@ -848,6 +852,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lWrite to your whole party:§r in a party, the first choice in the list is §lMy party (Bob, Dan)§r: it sends a copy of the letter to every mate, offline ones included.",
+        "ops": false
+      },
+      {
         "text": "If they're online, they see §eNew letter from Sam: \"Hello!\". Read it with /realm:mail§r in chat. If not, the letter waits: the next time they join, chat says §eYou have 2 unread letters: /realm:mail§r.",
         "ops": false
       },
@@ -873,7 +881,7 @@ export const PACKS = [
         "usage": "/realm:mail",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens Realm Mail: your §lInbox§r (read, reply, delete; default 50 letters each, §einboxLimit§r), §lWrite a letter§r to any player who has joined, even offline, and §lSent§r (your last 30 letters, §esentLimit§r)"
+        "text": "Opens Realm Mail: your §lInbox§r (read, reply, delete; default 50 letters each, §einboxLimit§r), §lWrite a letter§r to any player who has joined, even offline, or to your whole party, and §lSent§r (your last 30 letters, §esentLimit§r)"
       }
     ]
   },
@@ -928,11 +936,15 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "Hunting with friends? In a party, a mob you defeat also counts for the Defeat quests of party mates within 32 blocks in your dimension, and theirs count for you.",
+        "ops": false
+      },
+      {
         "text": "Don't want the progress notes? Disable §lQuest progress notes§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lDaily Quests§r sets the hour new quests come (UTC), how many each player gets, and whether creative mode counts. The quests themselves and their rewards are the §epool§r in §econfig.js§r.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lDaily Quests§r sets the hour new quests come (UTC), how many each player gets, whether creative mode counts, and whether party mates share defeats (and how near they must be). The quests themselves and their rewards are the §epool§r in §econfig.js§r.",
         "ops": true
       }
     ],
@@ -1164,7 +1176,7 @@ export const PACKS = [
         "usage": "/realm:npc_add <id>",
         "ops": false,
         "who": "Operators",
-        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed); if you're flying, on the ground under you"
+        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed); if you're flying, on top of the floor under you (a slab's or path's real top)"
       },
       {
         "usage": "/realm:npc_remove",
@@ -1335,6 +1347,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "Several quests going? In §e/realm:saga§r -> §lCurrent quests§r, pick one and tap §lTrack this quest§r: the tracker and the Minimap follow it (marked §e[Tracked]§r) until it's done, then the newest quest again. In a party, it sets the tracked quest for every mate online who is on the same story (a daily favor or a wanderer's job is yours alone).",
+        "ops": false
+      },
+      {
         "text": "When everything is done, chat says §e[Story] The Drowned Bell: \"Salt and Silence\" is done. Go back to Old Tobin to hear what happens.§r Tap that NPC and pick the story (§eDone: report back§r). If the chapter ends with a choice, nothing is final until you pick one: close the form and the report waits.",
         "ops": false
       },
@@ -1351,7 +1367,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "In a party (the Parties pack), mates within 64 blocks on the same chapter share progress for defeating, keeping watch in a storm and reaching places.",
+        "text": "In a party (Parties), the main story is shared. The party works on one main-story chapter at a time: the next one of the member online who is furthest behind. Everyone on it shares its progress, wherever they are: counts add up, time spent and distance ridden count for whoever is furthest along, a timed step only once someone finishes it in time, and a step one member finishes is done for all. A step only reaches mates it applies to: an either/or step done one way never finishes another way for a mate. Each member still accepts it and reports back themselves for their own rewards. Members who are past it get it as a party quest (§eParty: The Drowned Bell§r in Current quests, on the tracker): what they do for it (defeating, mining, fishing, delivering, talking, reaching places, keeping watch...) counts for the others, and their own main story waits, saved, until the party catches up. Steps about one player themselves (meeting a character, escorts, defenses, riddles, items to have) are for the members on the chapter. Offline members don't hold the party up, and neither does a member who can't start their next main story yet (it needs something else first): they help, and chat tells them what they need. Leaving the party gives you your own story back. Side stories and favors are your own; mates within 64 blocks on the same chapter still share defeat, survive and reach progress.",
         "ops": false
       },
       {
@@ -2226,7 +2242,7 @@ export const PACKS = [
     "folder": "silly_bp",
     "topic": "silly",
     "name": "Silly Enchants",
-    "summary": "Fourteen silly \"enchantments\" for your gear. They only add particles, sounds and some very big bounces: none of them changes damage, armor, speed, drops or durability. Most effects come in a few random variants, so they rarely sound the same twice. Each one is a lore line on the item, like §eSilly: Grunt Birthday§r, and an item holds at most two. They come on §lSilly Books§r (enchanted books named §eSilly Book§r), which you apply from §e/realm:silly§r to the item in your hand.",
+    "summary": "Fourteen silly \"enchantments\" for your gear. They only add particles, sounds and some very big bounces: none of them changes damage, armor, speed, drops or durability. Most effects come in a few random variants, so they rarely sound the same twice. Each one is a lore line on the item, like §eSilly: Grunt Birthday§r, and an item holds at most two. They come on §lSilly Books§r (enchanted books named §eSilly Book§r), which you apply from §e/realm:silly§r to the item in your hand. The confetti, disco lights, rainbow trail, bubbles and the Grunt Birthday cheer come from Silly Enchants Sounds (in Realm Resources).",
     "steps": [
       {
         "text": "Get a §lSilly Book§r: operators hand them out, and the realm may sell them (at the caravan or market, if an operator adds them). A book says what it holds (§eSilly Book: Hyper Jump§r), or §eSilly Book: Random§r for a surprise.",
@@ -2272,7 +2288,7 @@ export const PACKS = [
     "folder": "dolphin_bp",
     "topic": "dolphin",
     "name": "Dolphin Friends",
-    "summary": "Tame a dolphin with raw fish, then ride it through the sea: it swims where you look. Tamed dolphins stay (they never despawn), follow you in the water, can be named and called to you.",
+    "summary": "Tame a dolphin with raw fish, then ride it through the sea: it swims where you look, and you breathe under water while you ride. Tamed dolphins stay (they never despawn), follow you in the water, can be named and called to you.",
     "steps": [
       {
         "text": "Find a dolphin (oceans) and feed it §lraw cod§r or §lraw salmon§r: tap it with the fish. Each fish has a 25% chance (§etameChancePercent§r) to tame it: hearts mean it worked, smoke means try again. Chat says §eThe dolphin trusts you!§r. It takes 4 fish on average.",
@@ -2295,7 +2311,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:dolphin§r -> §lOperator tools§r lists every tamed dolphin with its owner and releases the one you look at. §e/realm:config§r -> §lDolphin Friends§r sets the taming chance, how many dolphins each player may have, whether others can ride yours and the top speed.",
+        "text": "§lOperators:§r §e/realm:dolphin§r -> §lOperator tools§r lists every tamed dolphin with its owner and releases the one you look at. §e/realm:config§r -> §lDolphin Friends§r sets the taming chance, how many dolphins each player may have, whether others can ride yours, the top speed and whether riders breathe under water.",
         "ops": true
       }
     ],
@@ -2318,7 +2334,7 @@ export const PACKS = [
     "folder": "platypus_bp",
     "topic": "platypus",
     "name": "Platypus",
-    "summary": "An uncommon new animal, the platypus (§erealm:platypus§r), lives along rivers and in swamps and mangrove swamps, always close to the water. It is passive until you hit it: then it fights back, and its bite poisons you and makes your screen wobble (nausea). About 1 in 200 is a teal platypus in a brown fedora: Perry the Platypus. There is a spawn egg too. Needs Platypus Models (in Realm Resources) to look like a platypus.",
+    "summary": "An uncommon new animal, the platypus (§erealm:platypus§r), lives along rivers and in swamps and mangrove swamps, always close to the water. Feed it fish to heal it or to raise baby platypuses. It is passive until you hit it: then it fights back, and its bite poisons you and makes your screen wobble (nausea). About 1 in 200 is a teal platypus in a brown fedora: Perry the Platypus. There is a spawn egg too. Needs Platypus Models (in Realm Resources) to look like a platypus.",
     "steps": [
       {
         "text": "Look along rivers and in swamps and mangrove swamps: platypuses spawn on the banks (grass, dirt, sand, gravel, clay, mud, mangrove roots), alone or in pairs, in daylight-bright spots. They are uncommon: you may walk a long river before you meet one.",
@@ -2329,7 +2345,15 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Leave it be and it wanders, swims and waddles back to the water. Hold §lraw cod§r or §lraw salmon§r and it follows you. You can put it on a lead and name it with a name tag.",
+        "text": "Leave it be and it wanders, swims and waddles back to the water. Hold §lraw cod§r or §lraw salmon§r and it follows you. You can put it on a lead and name it with a name tag (rename the tag on an anvil first).",
+        "ops": false
+      },
+      {
+        "text": "§lFeed it:§r tap a hurt platypus with §lraw cod§r, §lraw salmon§r, §lcooked cod§r, §lcooked salmon§r or §ltropical fish§r to heal it (hearts show).",
+        "ops": false
+      },
+      {
+        "text": "§lBreed:§r feed raw cod or raw salmon to two grown-up platypuses near each other: they fall in love and make a baby platypus. The baby follows a parent and grows up in 20 minutes; feeding it raw cod or salmon makes it grow faster.",
         "ops": false
       },
       {
@@ -2385,6 +2409,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "Hunting with your party? Mates within 32 blocks of you when you find the treasure each get half its Crowns on top of yours (nothing is taken from you), plus the journal entry and the Exploration XP. The chest's loot is yours to split.",
+        "ops": false
+      },
+      {
         "text": "Lost the map, or the clue? Run §e/realm:maps§r (or §e/realm:maps_hunts§r) for your hunt's clue, a new copy of the map, or to give the hunt up.",
         "ops": false
       },
@@ -2393,7 +2421,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:maps§r opens the §lTreasure Maps§r menu instead: §eYour treasure hunts§r, §eGive a treasure map§r (pick a player online) and §eSettings§r (which points to §e/realm:config§r -> Treasure Maps & Riddles). §e/realm:maps_give <player>§r gives a free map from chat. §e/realm:config§r -> §lTreasure Maps & Riddles§r sets the price, how far maps lead, how many hunts a player can have, the Warmer / Colder range, whether markers are built, the Crowns found, the distance from world spawn and the hints.",
+        "text": "§lOperators:§r §e/realm:maps§r opens the §lTreasure Maps§r menu instead: §eYour treasure hunts§r, §eGive a treasure map§r (pick a player online) and §eSettings§r (which points to §e/realm:config§r -> Treasure Maps & Riddles). §e/realm:maps_give <player>§r gives a free map from chat. §e/realm:config§r -> §lTreasure Maps & Riddles§r sets the price, how far maps lead, how many hunts a player can have, the Warmer / Colder range, whether markers are built, the Crowns found, the party mates' share and range, the distance from world spawn and the hints.",
         "ops": true
       }
     ],
@@ -2441,6 +2469,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "Traveling with your party? Mates standing within 6 blocks of you when you start a trip come along: they stand still through the same countdown and each pays their own fare. A mate who walks away stays behind.",
+        "ops": false
+      },
+      {
         "text": "Run §e/realm:waystones§r for the waystone menu: §lMy waystones§r (also §e/realm:waystones_list§r) lists the waystones you've discovered and how far they are.",
         "ops": false
       },
@@ -2449,7 +2481,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §lRemove a waystone§r in §e/realm:waystones§r lists every waystone, nearest first, to pick from; or look at a waystone's lodestone or sign and run §e/realm:waystones_remove§r. §e/realm:config§r -> §lWaystones & Inns§r sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, and the inn's price and Well Rested time.",
+        "text": "§lOperators:§r §lRemove a waystone§r in §e/realm:waystones§r lists every waystone, nearest first, to pick from; or look at a waystone's lodestone or sign and run §e/realm:waystones_remove§r. §e/realm:config§r -> §lWaystones & Inns§r sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, whether party mates come along (and how near they must stand), and the inn's price and Well Rested time.",
         "ops": true
       }
     ],
@@ -2493,7 +2525,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Walk into each room. The bars on the way out rise once the room is done (§eThe bars rise. Onward!§r):\n  - §lCombat§r and §lelite§r rooms send waves (§eWave 1 of 4!§r): kill every mob. Elite halls bring a champion every wave.\n  - §lPuzzle§r rooms explain themselves on signs and in chat: levers, a memory sequence, a safe path of pressure plates, target practice, lights out, a color riddle, a climb, a button rush or a riddle (see below).\n  - §lTrap halls§r: the door out is already open, but it's on the far side and walls make the way wind through the hall. Run for it while flames flicker on the floor along the way (they burst a moment later), arrows fly from the walls across it, and pits cross it (soul sand at the bottom, magma from Nightmare 1): jump them.\n  - §lShrines§r: press one of three buttons: a §lBlessing§r for the rest of the run, a §lcurse§r (one more affix, but more treasure and Crowns), or pass by.\n  - §lShafts§r (Nightmare 3 and up): the way on is high up the wall. Climb the ladder (below tier 10) or the ledges, pillar up with your own blocks, or fly with an elytra. At the top, drop down the chute into the pool.\n  - §lSide rooms§r (Nightmare): an open doorway off a room leads to a puzzle; solve it for a hidden cache chest.",
+        "text": "Walk into each room. The bars on the way out rise once the room is done (§eThe bars rise. Onward!§r):\n  - §lCombat§r and §lelite§r rooms send waves (§eWave 1 of 4!§r): kill every mob. Elite halls bring a champion every wave.\n  - §lPuzzle§r rooms explain themselves on signs and in chat: levers, a memory sequence, a safe path of pressure plates, target practice, lights out, a color riddle, a climb, a button rush or a riddle (see below).\n  - §lTrap halls§r: the door out is already open, but it's on the far side and walls make the way wind through the hall. Run for it while flames flicker on the floor along the way (they burst a moment later), arrows fly from the walls across it, and pits cross it (soul sand at the bottom, magma from Nightmare 1): jump them.\n  - §lShrines§r: press one of three buttons: a §lBlessing§r for the rest of the run, a §lcurse§r (one more affix, but more treasure and Crowns), or pass by.\n  - §lShafts§r (Nightmare 3 and up): the way on is high up the wall. There's no ladder: jump up the ledges and stepping stones, pillar up with your own blocks, or fly with an elytra. Fall and you get 3 seconds of Slow Falling and drift gently back to the floor to try again. At the top, drop down the chute into the pool.\n  - §lSide rooms§r (Nightmare): an open doorway off a room leads to a puzzle; solve it for a hidden cache chest.",
         "ops": false
       },
       {
