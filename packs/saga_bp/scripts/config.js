@@ -21,6 +21,12 @@ export const CONFIG = {
   /** How close (blocks) a party mate must be to share progress. */
   partyRange: 64,
 
+  /**
+   * A party (Parties pack) works on one main-story chapter at a time: the one of the member online who is furthest
+   * behind. Members on it share its progress (anywhere); members past it help, and their own story waits.
+   */
+  partyStory: true,
+
   /** Players in creative mode make no story progress. */
   skipCreative: true,
 

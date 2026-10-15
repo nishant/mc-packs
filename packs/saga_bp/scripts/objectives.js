@@ -21,6 +21,7 @@ import {
   progressOf,
   requires,
   sagaOf,
+  partyViews,
   setFlag,
   target,
   WANDER_CHAMPION,
@@ -188,12 +189,15 @@ export function bump(player, e, i, n, absolute = false) {
     player.sendMessage(`§a[Story] ${obj.optional ? "Optional: " : ""}${obj.label}: done.`);
     player.playSound("random.orb", { pitch: 1.2, volume: 0.6 });
     const saga = sagaOf(player);
-    finishObj(player, e, i, saga);
+    // A party quest's flags, bonuses and sky requests belong to the mates whose chapter it is: they get them when
+    // the progress reaches their own entry (party.js).
+    if (!e.pq) finishObj(player, e, i, saga);
     if (obj.optional) return true; // the chapter's own steps didn't move
     if (chapterDone(e, saga)) {
       const to = npcName(reportTo(e));
       const wv = /** @type {any} */ (e.st);
-      if (e.wv && (wv.g || wv.tn)) player.sendMessage(`§6[Story] ${e.chapter.title}: done.`);
+      if (e.pq) player.sendMessage(`§6[Party] ${e.story.title}: "${e.chapter.title}" is done. Your party mates on it report to ${to}.`);
+      else if (e.wv && (wv.g || wv.tn)) player.sendMessage(`§6[Story] ${e.chapter.title}: done.`);
       else if (e.wv) player.sendMessage(`§6[Story] Job done: go back to ${to} for your reward.`);
       else if (e.fav) player.sendMessage(`§6[Story] Favor done: go back to ${to} for your reward.`);
       else player.sendMessage(`§6[Story] ${e.story.title}: "${e.chapter.title}" is done. Go back to ${to} to hear what happens.`);
@@ -249,12 +253,20 @@ function byType(player) {
   return idx;
 }
 
+/**
+ * Objectives a helper does for their party mates (on a party quest, party.js): not the ones that are about the
+ * mate themselves (a story character to meet, an escort, a riddle, items in their own pack...). @type {Set<string>}
+ */
+const SOLO = new Set(["meet", "inspect", "stealth", "escort", "lead", "defend", "follow", "vision", "answer", "collect", "wait", "sleep", "wear"]);
+/** Does this objective count for the player? Always, but on a party quest only what a helper can do. @param {Entry} e @param {Objective} obj */
+export const helps = (e, obj) => !e.pq || (!SOLO.has(obj.type) && !obj.race);
+
 /** The player's unfinished objectives of a type that exist for them now. @param {Player} player @param {Objective["type"]} type */
 export function open(player, type) {
   const items = byType(player).get(type);
   if (!items) return [];
   const saga = sagaOf(player);
-  return items.filter(({ e, i }) => active(e, i, saga));
+  return items.filter(({ e, i, obj }) => helps(e, obj) && active(e, i, saga));
 }
 
 /**
@@ -298,7 +310,10 @@ function share(player, keys, type, amountFor, credited) {
   for (const mate of mates(player)) {
     if (credited.has(mate.id)) continue;
     credited.add(mate.id);
-    advance(mate, type, amountFor, keys);
+    // The party's main-story chapter is shared by the party sync (party.js), wherever the mates are: not twice.
+    const view = partyViews.get(mate.id);
+    const prefix = view ? `${view.story.id}:${view.chapter.id}:` : "";
+    advance(mate, type, amountFor, prefix ? new Set([...keys].filter((k) => !k.startsWith(prefix))) : keys);
   }
 }
 
@@ -2609,7 +2624,7 @@ export function tickPlayer(player, list) {
   const p = player.location;
   for (const e of list) {
     e.chapter.objectives.forEach((obj, i) => {
-      if (!active(e, i, saga)) return;
+      if (!helps(e, obj) || !active(e, i, saga)) return;
       try {
         // Timed objectives: progress resets when the time runs out.
         if (obj.within && e.st.x?.[`t${i}`] && Date.now() - e.st.x[`t${i}`] > obj.within * 1000) {

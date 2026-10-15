@@ -5,6 +5,7 @@
 //   actors.js      story characters and mobs the pack spawns, and their cleanup
 //   places.js      story places, building their prefabs (prefabs.js), snapshots, the places menu
 //   ui.js          offers, dialogues, hints, rewards, tracker, the story log menu
+//   party.js       a party's shared main story (one chapter at a time, progress shared)
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ageAdds, expireAdds, sweep, tendActors } from "./actors.js";
 import { calendar, entries, finished, flagOf, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
@@ -35,6 +36,7 @@ import {
   talked,
   tickPlayer,
 } from "./objectives.js";
+import { partyForget, partyTick } from "./party.js";
 import { autoTick, campUpkeep, listPlaces, placeLabel, placesMenu, placesOf, placesReadyAll, setHere } from "./places.js";
 import { get, getFor } from "./settings.js";
 import { initFar } from "./scale.js";
@@ -72,6 +74,11 @@ system.runInterval(() => {
     skyHousekeeping();
   } catch (e) {
     console.warn(`[saga] ${e}`);
+  }
+  try {
+    partyTick();
+  } catch (e) {
+    console.warn(`[saga] party: ${e}`);
   }
   if (get("enabled") !== true) return;
   beginRun();
@@ -325,6 +332,7 @@ function onChoose(msg) {
  * `{ player, action: "answer", text }` answers the player's first open riddle, `{ player, action: "finish", story, flags? }`
  * marks a whole story finished, `{ player, action: "places" }` tells the player every saved place, `{ player, action: "state" }`
  * prints their saved progress to the content log, `{ player, action: "wander_finish" }` finishes their stranger's one-off,
+ * `{ player, action: "bump", story, i?, n? }` adds n (1) to objective i (0) of their chapter (or party quest) of that story,
  * `{ player, action: "race_expire" }` ends their running races now (lost, unless the target falls first),
  * `{ player, action: "age_adds", seconds? }` makes every story monster and the player's running defenses `seconds` (600)
  * older, and runs the 10-minute story monster expiry 2 seconds later.
@@ -371,6 +379,10 @@ function onDebug(msg) {
     // Every step of the player's stranger's one-off (or fight) done.
     const e = entries(player).find((x) => x.wv);
     if (e) e.chapter.objectives.forEach((o, i) => bump(player, e, i, 1e9));
+  } else if (msg.action === "bump" && typeof msg.story === "string") {
+    // Adds `n` (1) to objective `i` (0) of the player's entry for that story (their own, or their party quest).
+    const e = entries(player).find((x) => x.story.id === msg.story);
+    if (e) bump(player, e, Math.floor(Number(msg.i) || 0), Number(msg.n ?? 1) || 1);
   } else if (msg.action === "race_expire") {
     expireRaces(player);
   } else if (msg.action === "age_adds") {
@@ -646,6 +658,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   progressSent.delete(playerId);
   wanderForget(playerId);
   racesForget(playerId);
+  partyForget(playerId);
   forget(playerId);
   busy.delete(playerId);
 });
