@@ -669,6 +669,7 @@ function arrive(player, ch) {
   const to = byId(ch.to.i);
   if (!to) {
     player.sendMessage(`§cThe waystone ${ch.to.n} is gone. Your trip is canceled.`);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   const dim = world.getDimension(to.d);
@@ -678,10 +679,12 @@ function arrive(player, ch) {
   const found = safeSpot(dim, to);
   if (loaded && !found) {
     player.sendMessage(`§cThere's no safe place to stand at ${to.n}: the waystone is walled in. Your trip is canceled.`);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   if (!charge(player, ch.cost)) {
     player.sendMessage(`§cThat trip costs ${price(ch.cost)}. You have ${price(balance(player))}.`);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   const spot = found ?? { x: to.x + 0.5, y: to.y + 1, z: to.z + 0.5 };
@@ -691,6 +694,7 @@ function arrive(player, ch) {
     console.warn(`[waystone] teleport: ${e}`);
     player.sendMessage("§cThe waystone's magic fizzled. Try again in a moment.");
     if (ch.cost > 0) refund(player, ch.cost);
+    if (!ch.lead) dropFollowers(player.id, `${player.name}'s trip to ${ch.to.n} didn't happen`);
     return;
   }
   player.playSound("mob.endermen.portal", { volume: 0.8 });

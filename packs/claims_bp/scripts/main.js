@@ -26,6 +26,36 @@ const PARTY_TAG = "realm_party:"; // the Parties pack's tag on every member, `re
 /** The player's party code from the Parties pack's tag, or "". @param {Player} player */
 const partyCode = (player) => player.getTags().find((t) => t.startsWith(PARTY_TAG))?.slice(PARTY_TAG.length) ?? "";
 
+// Every party's members, offline ones included, from the Parties pack (realm:party_members { code, l, m: [[id, name]] }
+// after each change and on realm:party_members_ping). A claim shared with its owner's party lets in a player only while
+// both the owner and that player are on the party's current list, so an owner removed while offline, or a later party
+// that got the same code, opens nothing. Kept in memory; asked for again when the world loads.
+/** @type {Map<string, Set<string>>} party code -> member ids */
+const partyMembers = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:party_members") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.code !== "string") return;
+      const ids = Array.isArray(m.m) ? m.m.map((/** @type {unknown} */ x) => (Array.isArray(x) ? String(x[0]) : "")).filter(Boolean) : [];
+      if (ids.length) partyMembers.set(m.code, new Set(ids));
+      else partyMembers.delete(m.code);
+    } catch (e) {
+      console.warn(`[claims] party_members: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] }
+);
+system.runTimeout(() => system.sendScriptEvent("realm:party_members_ping", "{}"), 60);
+
+/** Is the player in the claim owner's party, by the party's current member list? @param {Player} player @param {Claim} c */
+function partyAllowed(player, c) {
+  if (c.pt !== true || !c.pc) return false;
+  const ids = partyMembers.get(c.pc);
+  return !!ids && ids.has(c.o) && ids.has(player.id);
+}
+
 const protectedEntities = new Set(CONFIG.protectedEntities);
 const enabled = () => get("enabled") === true;
 /** @param {Player} player */
@@ -115,7 +145,7 @@ function claimAt(dim, p) {
 const allowed = (player, c) =>
   c.o === player.id ||
   c.s.some((s) => s.i === player.id) ||
-  (c.pt === true && !!c.pc && player.hasTag(PARTY_TAG + c.pc)) ||
+  partyAllowed(player, c) ||
   (get("operatorsBypass") === true && isOp(player));
 
 /**

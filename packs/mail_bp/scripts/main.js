@@ -16,12 +16,44 @@ const MAX_LETTERS = 5000; // in the whole world, as a safety net
  * @typedef {{ id: number, f: string, fn: string, t: string, tn: string, s: string, b: string, at: number, r: number, di: number, ds: number }} Letter
  * from id and name, to id and name, subject, body, sent (ms), read, deleted from the inbox, deleted from Sent
  */
-/** @typedef {{ i: string, n: string, t: number, p?: string }} Member p: their party code (the Parties pack's realm_party:<code> tag) when last seen online */
+/** @typedef {{ i: string, n: string, t: number }} Member */
 
 const PARTY_TAG = "realm_party:";
 /** The player's party code, or "". @param {Player} player */
 const partyCode = (player) => player.getTags().find((t) => t.startsWith(PARTY_TAG))?.slice(PARTY_TAG.length) ?? "";
 const PARTY = "*party"; // draft.to for a letter to the whole party
+
+// Every party's members, offline ones included, from the Parties pack (realm:party_members { code, l, m: [[id, name]] }
+// after each change and on realm:party_members_ping). Kept in memory; asked for again when the world loads.
+/** @type {Map<string, [string, string][]>} party code -> [player id, gamertag] */
+const partyMembers = new Map();
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:party_members") return;
+    try {
+      const m = JSON.parse(message);
+      if (!m || typeof m.code !== "string") return;
+      /** @type {[string, string][]} */
+      const list = Array.isArray(m.m) ? m.m.filter((/** @type {unknown} */ x) => Array.isArray(x) && typeof x[0] === "string").map((/** @type {any[]} */ x) => [x[0], String(x[1] ?? "?").slice(0, 32)]) : [];
+      if (list.length) partyMembers.set(m.code, list);
+      else partyMembers.delete(m.code);
+    } catch (e) {
+      console.warn(`[mail] party_members: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
+system.runTimeout(() => system.sendScriptEvent("realm:party_members_ping", "{}"), 60);
+
+/** The player's party mates (offline too), by the Parties pack's current list; none when they aren't on it. @param {Player} player @returns {Member[]} */
+function partyMatesOf(player) {
+  const list = partyMembers.get(partyCode(player));
+  if (!list || !list.some(([id]) => id === player.id)) return [];
+  return list
+    .filter(([id]) => id !== player.id)
+    .map(([id, name]) => ({ i: id, n: members().find((m) => m.i === id)?.n ?? name, t: 0 }))
+    .sort((a, b) => a.n.localeCompare(b.n));
+}
 
 // ---------------------------------------------------------------------------
 // Letters (cached; this pack is the only writer)
@@ -93,25 +125,10 @@ function members() {
 /** Adds or refreshes a player (their name may have changed). @param {Player} player */
 function remember(player) {
   const list = members().filter((m) => m.i !== player.id);
-  const p = partyCode(player);
-  list.push({ i: player.id, n: player.name, t: Date.now(), ...(p ? { p } : {}) });
+  list.push({ i: player.id, n: player.name, t: Date.now() });
   list.sort((a, b) => b.t - a.t);
   roster = list.slice(0, Math.max(1, CONFIG.maxRoster));
   world.setDynamicProperty(PROP_ROSTER, JSON.stringify(roster));
-}
-
-/** Updates the party code of every online player in the roster (parties change while people play). */
-function syncParties() {
-  let changed = false;
-  for (const player of world.getAllPlayers()) {
-    const m = members().find((x) => x.i === player.id);
-    const p = partyCode(player);
-    if (!m || (m.p ?? "") === p) continue;
-    if (p) m.p = p;
-    else delete m.p;
-    changed = true;
-  }
-  if (changed) world.setDynamicProperty(PROP_ROSTER, JSON.stringify(members()));
 }
 
 /** @param {string} id @returns {Player | undefined} */
@@ -239,9 +256,7 @@ function joinParts(parts) {
  * @param {Player} player @param {{ to?: string, subject?: string, parts?: string[], problem?: string }} [draft]
  */
 async function write(player, draft = {}) {
-  syncParties();
-  const code = partyCode(player);
-  const mates = code ? members().filter((m) => m.i !== player.id && m.p === code).sort((a, b) => a.n.localeCompare(b.n)) : [];
+  const mates = partyMatesOf(player);
   const others = members()
     .filter((m) => m.i !== player.id)
     .sort((a, b) => a.n.localeCompare(b.n));
