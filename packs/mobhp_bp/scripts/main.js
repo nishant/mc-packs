@@ -74,7 +74,8 @@ world.afterEvents.entityHurt.subscribe(({ hurtEntity, damageSource }) => {
     if (!health) return;
     const max = Math.round(health.effectiveMax);
     const current = Math.max(0, Math.ceil(health.currentValue));
-    const numbers = `§f${current}/${max} ${bar(current, max)}`;
+    // "HP", and "defeated" at 0, so the box doesn't read like a quest's kill counter ("Squid 0/10").
+    const numbers = current <= 0 ? "§7defeated" : `§f${current}/${max} HP ${bar(current, max)}`;
     let where = getFor(attacker, "where");
     if (where === "overhead") {
       // A killing blow: no name on a dying mob (a named mob's death can show in chat); take ours off now.

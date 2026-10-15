@@ -30,6 +30,21 @@ function untilReset() {
 /** 12345 -> "12,345". @param {number} n */
 const fmt = (n) => String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
+/**
+ * A label counting down while it is under way: with 4 of 10 done, "Defeat 10 zombies" reads "Defeat 6 more zombies"
+ * ("Travel 1,000 blocks" too). A label without its target number once gets " (6 left)"; not started or done: as written.
+ * @param {string} label @param {number} n @param {number} need
+ */
+function countdown(label, n, need) {
+  if (n <= 0 || n >= need) return label;
+  const left = fmt(Math.ceil(need - n));
+  for (const s of new Set([fmt(need), String(need)])) {
+    const re = new RegExp(`(?<![\\w.,/])${s.replace(/[.,]/g, "\\$&")}(?![\\w.,/])`, "g");
+    if ((label.match(re)?.length ?? 0) === 1) return label.replace(re, `${left} more`);
+  }
+  return `${label} (${left} left)`;
+}
+
 // ---------------------------------------------------------------------------
 // Saved progress (cached per player)
 // ---------------------------------------------------------------------------
@@ -125,7 +140,7 @@ function progress(player, kind, id, n = 1) {
         // The action bar protocol: ask the Coordinates HUD and other steady lines, if installed, to leave the note on
         // screen for a moment, before writing it.
         system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 40, from: "quests_bp" }));
-        player.onScreenDisplay.setActionBar(`§eQuest: ${q.label} §f${fmt(p.p)}/${fmt(q.count)}`);
+        player.onScreenDisplay.setActionBar(`§eQuest: ${countdown(q.label, p.p, q.count)} §f${fmt(p.p)}/${fmt(q.count)}`);
       }
     }
   }
@@ -430,7 +445,7 @@ async function showQuests(player) {
       .join(", ");
     return p.done
       ? `§a[Done] ${q.label}§r\n§7Reward: ${rewardText}`
-      : `§e${q.label}§r\n${bar(p.p, q.count)} §f${fmt(p.p)}/${fmt(q.count)}\n§7Reward: ${rewardText}`;
+      : `§e${countdown(q.label, p.p, q.count)}§r\n${bar(p.p, q.count)} §f${fmt(p.p)}/${fmt(q.count)}\n§7Reward: ${rewardText}`;
   });
   const done = day.q.filter((p) => p.done).length;
   const body = [`${done} of ${day.q.length} done today. New quests in ${untilReset()}.`, ...lines].join("\n\n");

@@ -607,10 +607,28 @@ export function orMates(e, i, saga) {
  */
 export function labelOf(e, i, saga) {
   const obj = e.chapter.objectives[i];
-  if (obj.optional) return `Optional: ${obj.label}`;
+  const label = countdown(obj, progressOf(e, i));
+  if (obj.optional) return `Optional: ${label}`;
   const mates = orMates(e, i, saga);
-  if (mates.length) return `${mates.some((k) => k < i) ? "Or" : "Either"}: ${obj.label}`;
-  return obj.label;
+  if (mates.length) return `${mates.some((k) => k < i) ? "Or" : "Either"}: ${label}`;
+  return label;
+}
+
+/**
+ * An objective's label counting down while it is under way: with 6 of 12 done, "Defeat 12 drowned" reads "Defeat 6
+ * more drowned" and "... with the wardens (12)" reads "... (6 left)". A label without its target number once gets
+ * " (6 left)", with a unit for seconds, blocks, waves and clues. Not started or done: the label as written.
+ * @param {Objective} obj @param {number} n
+ */
+export function countdown(obj, n) {
+  const need = target(obj);
+  if (need <= 1 || n <= 0 || n >= need) return obj.label;
+  const left = need - n;
+  const re = new RegExp(`(?<![\\w./])${need}(?![\\w./])`, "g");
+  if ((obj.label.match(re)?.length ?? 0) === 1)
+    return obj.label.replace(re, (m, at) => (obj.label[at - 1] === "(" && obj.label[at + m.length] === ")" ? `${left} left` : `${left} more`));
+  const unit = /** @type {Record<string, string>} */ ({ survive: " s", vigil: " s", ride: " blocks", defend: " waves", inspect: " clues" })[obj.type] ?? "";
+  return `${obj.label} (${left}${unit} left)`;
 }
 
 /** Is objective i done (or not there for this player, or another member of its "either" group is done)? @param {Entry} e @param {number} i @param {Saga} saga */

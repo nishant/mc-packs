@@ -46,7 +46,7 @@ import { partyMates, partyTick } from "./party.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
-import { SLOTS, SLOT_NAMES, isSlot } from "./side.js";
+import { SLOTS, SLOT_NAMES, TEXT_BYTES, byteLength, isSlot } from "./side.js";
 import { PACK, across, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
@@ -980,23 +980,63 @@ export function track(player, list, shown = true) {
   const sorted = trackedFirst(player, list);
   /** @type {string | undefined} */
   let line;
+  /** @type {Entry | undefined} */
+  let shownE;
   /** @type {Pointed | undefined} */
   let target;
   for (const e of sorted) {
     const text = trackLine(player, e, saga);
     if (!text) continue;
-    line = `§b${e.story.short}: ${text}`;
+    line = text;
+    shownE = e;
     target = pointed ? { ...pointed, label: `${e.story.short}: ${pointed.label}` } : undefined;
     break;
   }
   sendTrack(player, target);
-  if (!shown || !line) return;
+  if (!shown || !line || !shownE) return;
   // Our own note is showing, or (above the hotbar) another pack's (a quest, a bounty, mob health): don't write over it.
   if (system.currentTick < (ownUntil.get(player.id) ?? 0)) return;
   // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or our Side HUD box (realm:side).
   const where = getFor(player, "trackerAt");
   if (where === "hotbar" ? system.currentTick < (holdUntil.get(player.id) ?? 0) : side.taken(player, where)) return;
-  showLine(player, line, 50, TRACKER_STEADY);
+  showLine(player, isSlot(where) ? questBox(shownE, saga, line) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
+}
+
+/**
+ * The tracker in a Side HUD box: a small quest log. The quest's name in aqua, the step the tracker points at in white,
+ * then the chapter's other open steps in gray (each counting down), as many as the box's bytes hold ("+2 more").
+ * @param {Entry} e @param {Saga} saga @param {string} first the tracker's line for the quest
+ */
+function questBox(e, saga, first) {
+  let box = clipTo(`§b${e.story.short}§r\n${first}`, TEXT_BYTES);
+  if (chapterDone(e, saga)) return box;
+  const rest = /** @type {string[]} */ ([]);
+  e.chapter.objectives.forEach((obj, i) => {
+    if (obj.optional || !active(e, i, saga)) return;
+    const label = labelOf(e, i, saga);
+    if (!first.includes(label)) rest.push(`§7- ${label}`);
+  });
+  let left = rest.length;
+  for (const r of rest) {
+    const more = left > 1 ? `\n§7+${left - 1} more` : "";
+    if (byteLength(`${box}\n${r}${more}`) > TEXT_BYTES) {
+      if (byteLength(`${box}\n§7+${left} more`) <= TEXT_BYTES) box += `\n§7+${left} more`;
+      return box;
+    }
+    box += `\n${r}`;
+    left--;
+  }
+  return box;
+}
+
+/** Text cut to a number of UTF-8 bytes on a whole character, with no dangling "§". @param {string} text @param {number} max */
+function clipTo(text, max) {
+  let out = "";
+  for (const ch of text) {
+    if (byteLength(out + ch) > max) break;
+    out += ch;
+  }
+  return out.replace(/§$/, "");
 }
 
 // ---------------------------------------------------------------------------

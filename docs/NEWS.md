@@ -6,6 +6,16 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Counting down
+
+Quests now show how many are left:
+
+- The story tracker on the right is a small quest log: the quest's name on top, the next step in white, the other steps in gray.
+- It counts down within a second of every kill: after 6 of 12, "Defeat 12 drowned" reads "Defeat 6 more drowned". Steps without a number show "(6 left)", "(60 s left)" or "(2 waves left)".
+- No more progress notes flashing over the tracker: it counts by itself.
+- The story log, Daily Quests and Bounty Board count down the same way.
+- Mob Health: the box for the mob you hit now says "Drowned 14/20 HP", and "Drowned defeated" when it dies, so it no longer looks like a quest counter.
+
 ## Better together
 
 Play the story with your party, and a lot of fixes from the Realm:

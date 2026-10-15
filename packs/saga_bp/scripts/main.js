@@ -28,6 +28,7 @@ import {
   moonState,
   open,
   playerGone,
+  progressed,
   questDone,
   resolveAnswer,
   skyEvent,
@@ -95,7 +96,8 @@ system.runInterval(() => {
       const saga = sagaOf(player);
       if (runs % 5 === 0) for (const e of list) for (const name of missingPlaces(e, saga)) hintOps(player, name, e.story);
       tickPlayer(player, list);
-      if (tracking) track(player, list, getFor(player, "tracker") === true && !busy.has(player.id));
+      // Every 2 seconds, or on the next run after progress so the count never lags.
+      if (tracking || progressed.delete(player.id)) track(player, list, getFor(player, "tracker") === true && !busy.has(player.id));
     } catch (e) {
       console.warn(`[saga] ${e}`);
     }
