@@ -7,6 +7,7 @@ import {
   active,
   applyChoice,
   chapterDone,
+  countdown,
   currentStep,
   entries,
   giveRep,
@@ -125,6 +126,9 @@ const playerIn = (player, obj) => inArea(obj, player.location, player.dimension.
 // Progress
 // ---------------------------------------------------------------------------
 
+/** Players whose progress changed since the last tracker draw: the tracker redraws on the next loop. @type {Set<string>} */
+export const progressed = new Set();
+
 /** Tick until which another note owns a player's actionbar: the tracker waits. @type {Map<string, number>} */
 export const holdUntil = new Map();
 
@@ -185,6 +189,7 @@ export function bump(player, e, i, n, absolute = false) {
   if (obj.within && before === 0 && after > 0 && after < need) x[`t${i}`] = Date.now();
   if (after === 0 || after >= need) delete x[`t${i}`];
   markDirty(player);
+  progressed.add(player.id);
   if (after >= need) {
     player.sendMessage(`§a[Story] ${obj.optional ? "Optional: " : ""}${obj.label}: done.`);
     player.playSound("random.orb", { pitch: 1.2, volume: 0.6 });
@@ -206,10 +211,10 @@ export function bump(player, e, i, n, absolute = false) {
       const next = currentStep(e, saga);
       if (next >= 0) player.sendMessage(`§e[Story] Next: ${e.chapter.objectives[next].label}`);
     }
-  } else if (need >= 4 && obj.type !== "collect" && obj.type !== "deliver") {
-    // A note above the hotbar at each quarter.
+  } else if (need >= 4 && obj.type !== "collect" && obj.type !== "deliver" && !(isSlot(getFor(player, "trackerAt")) && getFor(player, "tracker") === true)) {
+    // A note above the hotbar at each quarter (the tracker's box counts down by itself: no note over it).
     const step = need / 4;
-    if (Math.floor(before / step) !== Math.floor(after / step)) note(player, `§b${e.story.short}: §f${obj.label} ${after}/${need}${obj.type === "survive" || obj.type === "vigil" ? " s" : obj.type === "ride" ? " blocks" : ""}`);
+    if (Math.floor(before / step) !== Math.floor(after / step)) note(player, `§b${e.story.short}: §f${countdown(obj, after)} ${after}/${need}${obj.type === "survive" || obj.type === "vigil" ? " s" : obj.type === "ride" ? " blocks" : ""}`);
   }
   return true;
 }

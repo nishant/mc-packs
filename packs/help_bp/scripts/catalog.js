@@ -732,7 +732,7 @@ export const PACKS = [
     "summary": "Hit a mob and its name and health show in a small box on the right side of your screen (or in another box, above the mob's head, or above your hotbar, if you prefer), so you know how close it is to going down.",
     "steps": [
       {
-        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the top box on the right side of your screen (§lRight 1§r) shows something like §eZombie  14/20 ||||||||||§r with the bar in color. Only you see it.",
+        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the top box on the right side of your screen (§lRight 1§r) shows something like §eZombie  14/20 HP ||||||||||§r (a killing blow shows §eZombie  defeated§r; it's the mob's health, not a quest counter) with the bar in color. Only you see it.",
         "ops": false
       },
       {
@@ -928,7 +928,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "A note above the hotbar shows your progress at each quarter (§eQuest: Mine 12 coal ore 6/12§r). Finishing one says §eQuest complete: Mine 12 coal ore! Reward: 16 Torch§r in chat and gives the reward.",
+        "text": "A note above the hotbar shows your progress at each quarter, counting down what's left (§eQuest: Mine 6 more coal ore 6/12§r). Finishing one says §eQuest complete: Mine 12 coal ore! Reward: 16 Torch§r in chat and gives the reward.",
         "ops": false
       },
       {
@@ -1339,7 +1339,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker in the bottom box on the right side of the screen (§lRight 4§r, just above the scoreboard) always shows where to go next (§eDrowned Bell: Lighthouse NE 240m§r), or who to report to.",
+        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker in the bottom box on the right side of the screen (§lRight 4§r, just above the scoreboard) is a small quest log: the quest's name in aqua on top (§eDrowned Bell§r), under it the step to do next in white with where to go (§eLighthouse NE 240m§r) or who to report to, then the chapter's other open steps in gray. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r.",
         "ops": false
       },
       {
@@ -1629,7 +1629,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lCull bounties:§r every mob of the right kind that anyone defeats counts (§eBounty: Defeat 30 drowned 12/30§r above your hotbar). When the count is reached, everyone who defeated at least one gets 40 Crowns.",
+        "text": "§lCull bounties:§r every mob of the right kind that anyone defeats counts (§eBounty: Defeat 18 more drowned 12/30§r above your hotbar, counting down what's left). When the count is reached, everyone who defeated at least one gets 40 Crowns.",
         "ops": false
       },
       {

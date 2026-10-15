@@ -44,6 +44,21 @@ const pick = (list) => list[Math.floor(Math.random() * list.length)];
 /** 12345 -> "12,345". @param {number} n */
 const fmt = (n) => String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
+/**
+ * A label counting down while it is under way: with 4 of 10 done, "Defeat 10 zombies" reads "Defeat 6 more zombies"
+ * ("Travel 1,000 blocks" too). A label without its target number once gets " (6 left)"; not started or done: as written.
+ * @param {string} label @param {number} n @param {number} need
+ */
+function countdown(label, n, need) {
+  if (n <= 0 || n >= need) return label;
+  const left = fmt(Math.ceil(need - n));
+  for (const s of new Set([fmt(need), String(need)])) {
+    const re = new RegExp(`(?<![\\w.,/])${s.replace(/[.,]/g, "\\$&")}(?![\\w.,/])`, "g");
+    if ((label.match(re)?.length ?? 0) === 1) return label.replace(re, `${left} more`);
+  }
+  return `${label} (${left} left)`;
+}
+
 /** @param {string} id @returns {Player | undefined} */
 const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 
@@ -679,7 +694,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
       if (b.p >= b.count) finishCull(b, killer);
       else if (getFor(killer, "notes") === true) {
         system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: killer.id, ticks: 40, from: "bounty_bp" }));
-        killer.onScreenDisplay.setActionBar(`§eBounty: ${b.label} §f${b.p}/${b.count}`);
+        killer.onScreenDisplay.setActionBar(`§eBounty: ${countdown(b.label, b.p, b.count)} §f${b.p}/${b.count}`);
       }
     }
   } catch (e) {
@@ -788,7 +803,7 @@ async function showBoard(player, board) {
       } else if (b.done) parts.push(`§a[Done] §7${b.label}`);
       else {
         const mine = b.who[player.id] ?? 0;
-        parts.push(`§e${b.label}§r (everyone together)\n${bar(b.p, b.count)} §f${b.p}/${b.count}${mine ? ` §7(${mine} by you)` : ""}\n§7Reward: ${fmt(get("rewards.cull"))} Crowns to everyone who helps`);
+        parts.push(`§e${countdown(b.label, b.p, b.count)}§r (everyone together)\n${bar(b.p, b.count)} §f${b.p}/${b.count}${mine ? ` §7(${mine} by you)` : ""}\n§7Reward: ${fmt(get("rewards.cull"))} Crowns to everyone who helps`);
       }
     }
   }
