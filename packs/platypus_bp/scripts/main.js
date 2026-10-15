@@ -1,8 +1,10 @@
 // Platypus: the realm:platypus mob is all JSON (entities/platypus.json, spawn_rules/platypus.json; the look is in
 // platypus_rp). This script adds what JSON can't: nausea when a platypus bites a player, a chat line when a Perry
-// spawns, and /realm:platypus to find the nearest ones.
+// spawns, hearts when you feed one, grown-up platypuses from before breeding existed, and /realm:platypus to find the
+// nearest ones.
 import {
   CommandPermissionLevel,
+  GameMode,
   CustomCommandStatus,
   EntityInitializationCause,
   Player,
@@ -64,6 +66,41 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
       console.warn(`[platypus] ${e}`);
     }
   });
+});
+
+// Grown-ups: a platypus that spawned before feeding and breeding existed, or from a summon with a variant event, has no
+// adult group yet (marked by mark_variant 1), so it couldn't breed. Give it one when it spawns or its chunk loads.
+/** @param {import("@minecraft/server").Entity} entity */
+function growUpOld(entity) {
+  system.run(() => {
+    try {
+      if (!entity.isValid || entity.typeId !== PLATYPUS) return;
+      if (entity.getComponent("minecraft:is_baby")) return;
+      if (entity.getComponent("minecraft:mark_variant")?.value === 1) return;
+      entity.triggerEvent("realm:platypus_grow_up");
+    } catch {
+      // gone again
+    }
+  });
+}
+world.afterEvents.entityLoad.subscribe(({ entity }) => growUpOld(entity));
+world.afterEvents.entitySpawn.subscribe(({ entity }) => growUpOld(entity));
+
+/** What platypuses eat (the entity's healable and breedable items). */
+const FOOD = new Set(["minecraft:cod", "minecraft:salmon", "minecraft:cooked_cod", "minecraft:cooked_salmon", "minecraft:tropical_fish"]);
+
+// Feeding: the JSON heals it (when hurt) or puts it in the mood to breed (raw cod or salmon); show some hearts.
+world.afterEvents.playerInteractWithEntity.subscribe(({ player, target, beforeItemStack, itemStack }) => {
+  try {
+    if (target.typeId !== PLATYPUS || !beforeItemStack || !FOOD.has(beforeItemStack.typeId)) return;
+    const ate = player.getGameMode() === GameMode.Creative || (itemStack?.typeId === beforeItemStack.typeId ? itemStack.amount : 0) < beforeItemStack.amount;
+    if (!ate) return;
+    const at = target.location;
+    for (let i = 0; i < 4; i++)
+      target.dimension.spawnParticle("minecraft:heart_particle", { x: at.x + (Math.random() - 0.5) * 0.8, y: at.y + 0.5 + Math.random() * 0.4, z: at.z + (Math.random() - 0.5) * 0.8 });
+  } catch {
+    // gone, or an unloaded chunk
+  }
 });
 
 const COMPASS = ["south", "southwest", "west", "northwest", "north", "northeast", "east", "southeast"];

@@ -17,7 +17,7 @@ const check = process.argv.includes("--check");
 /** @typedef {import("../gen-rain/png.mjs").Image} Image */
 /** @typedef {[number, number, number]} Vec */
 /** @typedef {{ origin: Vec, size: Vec, uv: [number, number] }} Cube */
-/** @typedef {{ name: string, parent?: string, pivot: Vec, cubes: Cube[] }} Bone */
+/** @typedef {{ name: string, parent?: string, pivot: Vec, cubes: Cube[], locators?: Record<string, Vec> }} Bone */
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,7 +65,8 @@ function leg(/** @type {string} */ name, /** @type {number} */ side, /** @type {
 
 /** @type {Bone[]} */
 const BONES = [
-  { name: "body", pivot: [0, 3, 0], cubes: [{ origin: [-3.5, 1, -5], size: [7, 4, 10], uv: [0, 0] }] },
+  // The lead ties on at the shoulders, on top of the body (without a "lead" locator it floats above the mob).
+  { name: "body", pivot: [0, 3, 0], cubes: [{ origin: [-3.5, 1, -5], size: [7, 4, 10], uv: [0, 0] }], locators: { lead: /** @type {Vec} */ ([0, 5, -3]) } },
   { name: "head", parent: "body", pivot: [0, 3, -5], cubes: [{ origin: [-2.5, 1.5, -9], size: [5, 3, 4], uv: [0, 14] }] },
   { name: "bill", parent: "head", pivot: [0, 2.5, -9], cubes: [{ origin: [-2.5, 1.75, -13], size: [5, 1, 4], uv: [18, 14] }] },
   { name: "tail", parent: "body", pivot: [0, 2.5, 5], cubes: [{ origin: [-3, 1.75, 5], size: [6, 1, 6], uv: [34, 0] }] },
@@ -247,6 +248,7 @@ const GEOMETRY = {
         ...(b.parent ? { parent: b.parent } : {}),
         pivot: b.pivot,
         cubes: b.cubes.map((c) => ({ origin: c.origin, size: c.size, uv: c.uv })),
+        ...(b.locators ? { locators: b.locators } : {}),
       })),
     },
   ],

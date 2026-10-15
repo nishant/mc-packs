@@ -14,6 +14,29 @@
       "realm:platypus_perry": {
         "minecraft:variant": { "value": 1 }
       },
+      "realm:platypus_adult": {
+        "minecraft:mark_variant": { "value": 1 },
+        "minecraft:breedable": {
+          "require_tame": false,
+          "breed_items": ["minecraft:cod", "minecraft:salmon"],
+          "breeds_with": {
+            "mate_type": "realm:platypus",
+            "baby_type": "realm:platypus",
+            "breed_event": { "event": "minecraft:entity_born", "target": "baby" }
+          }
+        },
+        "minecraft:behavior.breed": { "priority": 3, "speed_multiplier": 1.0 }
+      },
+      "realm:platypus_baby": {
+        "minecraft:is_baby": {},
+        "minecraft:scale": { "value": 0.5 },
+        "minecraft:ageable": {
+          "duration": 1200,
+          "feed_items": ["minecraft:cod", "minecraft:salmon"],
+          "grow_up": { "event": "minecraft:ageable_grow_up", "target": "self" }
+        },
+        "minecraft:behavior.follow_parent": { "priority": 5, "speed_multiplier": 1.1 }
+      },
       "realm:platypus_angry": {
         "minecraft:angry": {
           "duration": 15,
@@ -40,7 +63,18 @@
       "minecraft:health": { "value": 10, "max": 10 },
       "minecraft:attack": { "damage": 2, "effect_name": "poison", "effect_duration": 5 },
       "minecraft:experience_reward": { "on_death": "query.last_hit_by_player ? math.random(1, 3) : 0" },
-      "minecraft:nameable": {},
+      "minecraft:nameable": { "allow_name_tag_renaming": true, "always_show": true },
+      "minecraft:persistent": {},
+      "minecraft:healable": {
+        "force_use": false,
+        "items": [
+          { "item": "minecraft:cod", "heal_amount": 3 },
+          { "item": "minecraft:salmon", "heal_amount": 3 },
+          { "item": "minecraft:cooked_cod", "heal_amount": 5 },
+          { "item": "minecraft:cooked_salmon", "heal_amount": 6 },
+          { "item": "minecraft:tropical_fish", "heal_amount": 2 }
+        ]
+      },
       "minecraft:leashable": { "soft_distance": 4.0, "hard_distance": 6.0, "max_distance": 10.0 },
       "minecraft:physics": {},
       "minecraft:pushable": { "is_pushable": true, "is_pushable_by_piston": true },
@@ -95,6 +129,30 @@
     },
     "events": {
       "minecraft:entity_spawned": {
+        "sequence": [
+          { "add": { "component_groups": ["realm:platypus_adult"] } },
+          { "trigger": "realm:platypus_roll_variant" }
+        ]
+      },
+      "minecraft:entity_born": {
+        "sequence": [
+          { "add": { "component_groups": ["realm:platypus_baby"] } },
+          { "trigger": "realm:platypus_roll_variant" }
+        ]
+      },
+      "minecraft:ageable_grow_up": {
+        "remove": { "component_groups": ["realm:platypus_baby"] },
+        "add": { "component_groups": ["realm:platypus_adult"] }
+      },
+      "realm:platypus_grow_up": {
+        "sequence": [
+          {
+            "filters": { "test": "is_baby", "subject": "self", "value": false },
+            "add": { "component_groups": ["realm:platypus_adult"] }
+          }
+        ]
+      },
+      "realm:platypus_roll_variant": {
         "randomize": [
           { "weight": 199, "add": { "component_groups": ["realm:platypus_brown"] } },
           { "weight": 1, "add": { "component_groups": ["realm:platypus_perry"] } }

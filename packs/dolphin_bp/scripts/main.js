@@ -286,6 +286,13 @@ function atSurface(d) {
 }
 
 /**
+ * How much of its speed a dolphin keeps each tick in water (measured on BDS 1.26: 0.78 to 0.81, the same
+ * for every speed). Steering pushes against this drag, so a ridden dolphin really reaches maxSpeed.
+ * Pushing without it, as before, topped out at about 4 x acceleration (6 blocks per second), whatever maxSpeed said.
+ */
+const WATER_KEEP = 0.8;
+
+/**
  * One tick of steering: speed up toward where the rider looks (forward and back on the move stick,
  * a little sideways for strafing), capped at maxSpeed.
  * @param {Player} p @param {Entity} d
@@ -305,8 +312,8 @@ export function steer(p, d) {
   const flat = Math.hypot(view.x, view.z) || 1;
   // left of the view on the horizontal plane
   const left = { x: view.z / flat, y: 0, z: -view.x / flat };
-  const max = Math.min(24, Math.max(4, Number(get("maxSpeed")) || 12)) / 20; // blocks per tick
-  const accel = Math.max(0.01, Number(CONFIG.acceleration) || 1.6) / 20;
+  const max = Math.min(24, Math.max(4, Number(get("maxSpeed")) || 7)) / 20; // blocks per tick
+  const accel = Math.max(0.01, Number(CONFIG.acceleration) || 1.2) / 20;
   const target = {
     x: (view.x * fwd + left.x * side * 0.5) * max,
     y: view.y * fwd * max,
@@ -319,8 +326,11 @@ export function steer(p, d) {
     // no input: glide to a stop, slowly
     d.applyImpulse({ x: -v.x * 0.08, y: -v.y * 0.08, z: -v.z * 0.08 });
   } else if (len > 0.0001) {
+    // The velocity we want after this tick (at most `accel` closer to the target), pushed hard enough that it's
+    // still that after the water's drag.
     const k = Math.min(1, accel / len);
-    d.applyImpulse({ x: dv.x * k, y: dv.y * k, z: dv.z * k });
+    const goal = { x: v.x + dv.x * k, y: v.y + dv.y * k, z: v.z + dv.z * k };
+    d.applyImpulse({ x: goal.x / WATER_KEEP - v.x, y: goal.y / WATER_KEEP - v.y, z: goal.z / WATER_KEEP - v.z });
   }
   const rot = p.getRotation();
   d.setRotation({ x: rot.x, y: rot.y });
@@ -344,6 +354,18 @@ export function leap(p, d) {
   return true;
 }
 
+/**
+ * A rider breathes under water, like on a nautilus: a short Water Breathing, topped up while they ride, that runs
+ * out about 3 seconds after they get off. A longer one (a potion) is left alone.
+ * @param {Player} p
+ */
+function breathe(p) {
+  if (get("riderWaterBreathing") !== true) return;
+  const now = p.getEffect("water_breathing");
+  if (now && now.duration > 30) return;
+  p.addEffect("water_breathing", 60, { amplifier: 0, showParticles: false });
+}
+
 /** Players riding a tamed dolphin, steered every tick. Everyone else is looked at every 5 ticks, and at once when they tap a dolphin. @type {Map<string, Player>} */
 const riders = new Map();
 
@@ -364,6 +386,7 @@ system.runInterval(() => {
     try {
       steer(p, d);
       if (p.isJumping) leap(p, d);
+      if (system.currentTick % 10 === 0) breathe(p);
     } catch (e) {
       console.warn(`[dolphin] ${e}`);
     }
