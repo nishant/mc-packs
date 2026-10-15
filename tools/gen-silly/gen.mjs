@@ -239,7 +239,7 @@ const SOUND_DEFS = {
 
 /** @type {Map<string, string>} relative path -> JSON text */
 const jsonOut = new Map();
-for (const [id, def] of Object.entries(PARTICLES)) jsonOut.set(`particles/${id.split(":")[1].replace(/^silly_/, "")}.json`, JSON.stringify(def, null, 2) + "\n");
+for (const [id, def] of Object.entries(PARTICLES)) jsonOut.set(`particles/${id.split(":")[1]}.json`, JSON.stringify(def, null, 2) + "\n");
 jsonOut.set("sounds/sound_definitions.json", JSON.stringify(SOUND_DEFS, null, 2) + "\n");
 /** @type {Map<string, Image>} */
 const pngOut = new Map([
