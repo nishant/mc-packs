@@ -533,12 +533,20 @@ function fairResult(key) {
       votes = v;
     }
   }
+  const entries = Object.keys(fair.e);
+  // A lone entry can't get a vote (nobody votes for their own): on a quiet realm it wins unopposed.
+  const unopposed = !best && entries.length === 1;
+  if (unopposed) best = entries[0];
   if (!best) {
     world.sendMessage("§6[Lantern Fair] Nobody voted in the carve-off this year. The pumpkins are very disappointed.");
     return;
   }
   const name = String(fair.e[best][0]);
-  world.sendMessage(`§6[Lantern Fair] ${name} won the Pumpkin Carve-off with ${votes} vote${votes === 1 ? "" : "s"}!`);
+  world.sendMessage(
+    unopposed
+      ? `§6[Lantern Fair] ${name}'s pumpkin was the only entry, so ${name} wins the Pumpkin Carve-off unopposed!`
+      : `§6[Lantern Fair] ${name} won the Pumpkin Carve-off with ${votes} vote${votes === 1 ? "" : "s"}!`,
+  );
   send("realm:title_unlock", { player: best, title: "Pumpkin Champion" });
   send("realm:gossip", { kind: "carve_off", player: best, name, n: votes });
   fair.done = 1;
