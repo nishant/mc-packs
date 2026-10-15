@@ -227,7 +227,10 @@ function pickTarget(player) {
 /** @param {Dimension} dim @param {number} x @param {number} z */
 function topAt(dim, x, z) {
   try {
-    return dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    const top = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    // A column that isn't ticking hands back a block (at y 319) that throws as soon as it's read: not loaded.
+    if (top) void top.typeId;
+    return top;
   } catch {
     return undefined;
   }
