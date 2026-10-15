@@ -496,6 +496,8 @@ function keepCaravan(vis) {
     let top;
     try {
       top = dim.getTopmostBlock({ x: Math.floor(vis.spot.x), z: Math.floor(vis.spot.z) });
+      // A column that isn't ticking hands back a block (at y 319) that throws as soon as it's read: not loaded yet.
+      if (top) void top.typeId;
     } catch {
       top = undefined;
     }
