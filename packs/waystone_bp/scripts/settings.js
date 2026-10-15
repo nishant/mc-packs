@@ -18,6 +18,8 @@ const OPTIONS = [
   { key: "crossDimensionCost", type: "int", scope: "world", label: "Cost to another dimension", min: 0, max: 200, step: 1 },
   { key: "channelSeconds", type: "int", scope: "world", label: "Seconds to stand still before traveling", min: 0, max: 30, step: 1 },
   { key: "travelAnywhere", type: "bool", scope: "world", label: "Travel from anywhere with /realm:waystones" },
+  { key: "partyTravel", type: "bool", scope: "world", label: "Party mates nearby travel along", help: "Mates standing close when a trip starts come along; each pays their own fare" },
+  { key: "partyRadius", type: "int", scope: "world", label: "Travel along: how near (blocks)", min: 2, max: 16, step: 1 },
   { key: "bedPrice", type: "int", scope: "world", label: "Inn bed price (Crowns)", min: 0, max: 500, step: 1 },
   { key: "wellRestedMinutes", type: "int", scope: "world", label: "Well Rested lasts (minutes)", min: 0, max: 240, step: 5 },
 ];
