@@ -23,7 +23,7 @@ const OPTIONS = [
   { key: "placeRange", type: "int", scope: "world", min: 32, max: 512, step: 32, label: "Camps and found sites show within (blocks)" },
   { key: "arriveDistance", type: "int", scope: "world", min: 2, max: 32, label: "Arrived within (blocks)", help: "A picked destination clears this close. The story target never does" },
   { key: "maxMarks", type: "int", scope: "world", min: 1, max: 10, label: "Marked spots per player" },
-  { key: "intervalTicks", type: "int", scope: "world", label: "Update every (ticks)", restart: true },
+  { key: "intervalTicks", type: "int", scope: "world", label: "Markers update every (ticks)", help: "The strip and radar still turn with you every tick", restart: true },
   { key: "compass", type: "bool", scope: "player", base: "compassDefault", label: "Compass strip", help: "At the top of the screen: which way you face, your destination, townsfolk, wanderers, party mates and mobs (needs Realm Resources)" },
   { key: "radar", type: "bool", scope: "player", base: "radarDefault", label: "Radar", help: "A small grid above the left side boxes, with you in the middle (needs Realm Resources)" },
   { key: "radarNorthUp", type: "bool", scope: "player", base: "radarNorthUp", label: "Radar keeps north up", help: "Disabled: it turns with you, so ahead is always up" },

@@ -38,6 +38,6 @@ export const CONFIG = {
   /** Spots each player can keep with "Mark this spot". */
   maxMarks: 5,
 
-  /** How often (ticks) the strip and radar update. Read when the world starts. */
+  /** How often (ticks) the markers, destination and region are looked up again. The strip and radar turn with you every tick in between. Read when the world starts. */
   intervalTicks: 10,
 };
