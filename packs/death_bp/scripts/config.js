@@ -2,6 +2,12 @@ export const CONFIG = {
   /** Tell players in chat where they died once they respawn. Each player can change it for themselves in /realm:prefs. */
   announce: true,
 
+  /**
+   * Tell a player's party mates (the Parties pack's `realm_party:<code>` tag) in chat where they died,
+   * with the distance and direction from each mate. Each player can change it for themselves in /realm:prefs.
+   */
+  tellParty: true,
+
   /** /realm:death_back teleports a player to their last death point, once per death. Off by default: operators enable it in /realm:config. */
   backEnabled: false,
 

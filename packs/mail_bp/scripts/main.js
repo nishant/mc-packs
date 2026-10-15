@@ -16,7 +16,12 @@ const MAX_LETTERS = 5000; // in the whole world, as a safety net
  * @typedef {{ id: number, f: string, fn: string, t: string, tn: string, s: string, b: string, at: number, r: number, di: number, ds: number }} Letter
  * from id and name, to id and name, subject, body, sent (ms), read, deleted from the inbox, deleted from Sent
  */
-/** @typedef {{ i: string, n: string, t: number }} Member */
+/** @typedef {{ i: string, n: string, t: number, p?: string }} Member p: their party code (the Parties pack's realm_party:<code> tag) when last seen online */
+
+const PARTY_TAG = "realm_party:";
+/** The player's party code, or "". @param {Player} player */
+const partyCode = (player) => player.getTags().find((t) => t.startsWith(PARTY_TAG))?.slice(PARTY_TAG.length) ?? "";
+const PARTY = "*party"; // draft.to for a letter to the whole party
 
 // ---------------------------------------------------------------------------
 // Letters (cached; this pack is the only writer)
@@ -88,10 +93,25 @@ function members() {
 /** Adds or refreshes a player (their name may have changed). @param {Player} player */
 function remember(player) {
   const list = members().filter((m) => m.i !== player.id);
-  list.push({ i: player.id, n: player.name, t: Date.now() });
+  const p = partyCode(player);
+  list.push({ i: player.id, n: player.name, t: Date.now(), ...(p ? { p } : {}) });
   list.sort((a, b) => b.t - a.t);
   roster = list.slice(0, Math.max(1, CONFIG.maxRoster));
   world.setDynamicProperty(PROP_ROSTER, JSON.stringify(roster));
+}
+
+/** Updates the party code of every online player in the roster (parties change while people play). */
+function syncParties() {
+  let changed = false;
+  for (const player of world.getAllPlayers()) {
+    const m = members().find((x) => x.i === player.id);
+    const p = partyCode(player);
+    if (!m || (m.p ?? "") === p) continue;
+    if (p) m.p = p;
+    else delete m.p;
+    changed = true;
+  }
+  if (changed) world.setDynamicProperty(PROP_ROSTER, JSON.stringify(members()));
 }
 
 /** @param {string} id @returns {Player | undefined} */
@@ -219,6 +239,9 @@ function joinParts(parts) {
  * @param {Player} player @param {{ to?: string, subject?: string, parts?: string[], problem?: string }} [draft]
  */
 async function write(player, draft = {}) {
+  syncParties();
+  const code = partyCode(player);
+  const mates = code ? members().filter((m) => m.i !== player.id && m.p === code).sort((a, b) => a.n.localeCompare(b.n)) : [];
   const others = members()
     .filter((m) => m.i !== player.id)
     .sort((a, b) => a.n.localeCompare(b.n));
@@ -231,10 +254,9 @@ async function write(player, draft = {}) {
     return;
   }
   const here = new Set(world.getAllPlayers().map((p) => p.id));
-  const index = Math.max(
-    0,
-    others.findIndex((m) => m.i === draft.to),
-  );
+  // With a party, the first choice writes to all of it (offline mates get it when they're back).
+  const lead = mates.length ? [`§dMy party §r(${mates.map((m) => m.n).join(", ").slice(0, 60)})`] : [];
+  const index = draft.to === PARTY && mates.length ? 0 : lead.length + Math.max(0, others.findIndex((m) => m.i === draft.to));
   const subjectMax = Math.min(BOX, CONFIG.subjectLength);
   const bodyMax = CONFIG.bodyLength;
   const boxes = Math.max(1, Math.ceil(bodyMax / BOX));
@@ -242,7 +264,7 @@ async function write(player, draft = {}) {
     .title("§lWrite a letter")
     .dropdown(
       `${draft.problem ? `§c${draft.problem}§r\n\n` : ""}To (everyone who has joined the realm; offline players get it when they're back)`,
-      others.map((m) => (here.has(m.i) ? `${m.n} §a(online)` : m.n)),
+      [...lead, ...others.map((m) => (here.has(m.i) ? `${m.n} §a(online)` : m.n))],
       { defaultValueIndex: index },
     )
     .textField(`Subject (up to ${subjectMax} characters)`, "Hello!", { defaultValue: draft.subject ?? "" });
@@ -257,14 +279,22 @@ async function write(player, draft = {}) {
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
   const [who, rawSubject, ...rawParts] = res.formValues;
-  const to = others[typeof who === "number" ? who : -1];
+  const pick = typeof who === "number" ? who : -1;
+  const toParty = lead.length > 0 && pick === 0;
+  const to = toParty ? undefined : others[pick - lead.length];
   const parts = rawParts.map((v) => (typeof v === "string" ? v : ""));
   // Color and format codes are taken out of what players type, so a letter can't pass for a realm message.
   const subject = clean(noCodes(rawSubject), subjectMax, false);
   const body = clean(noCodes(joinParts(parts)), bodyMax, true);
-  const again = { to: to?.i, subject: typeof rawSubject === "string" ? rawSubject : "", parts };
-  if (!to) return;
+  const again = { to: toParty ? PARTY : to?.i, subject: typeof rawSubject === "string" ? rawSubject : "", parts };
+  if (!to && !toParty) return;
   if (!body.text) return write(player, { ...again, problem: "Write something in the letter first." });
+  if (toParty) {
+    const problem = sendToParty(player, mates, subject.text || "(no subject)", body.text, subject.cut || body.cut);
+    if (problem) return write(player, { ...again, problem });
+    return;
+  }
+  if (!to) return;
   const problem = send(player, to, subject.text || "(no subject)", body.text, subject.cut || body.cut);
   // Nothing typed is lost: the form comes back filled in, with what went wrong at the top.
   if (problem) return write(player, { ...again, problem });
@@ -273,11 +303,12 @@ async function write(player, draft = {}) {
 /**
  * Sends the letter, or says why it can't go yet.
  * @param {Player} player @param {Member} to @param {string} subject @param {string} body @param {boolean} shortened
+ * @param {boolean} [group] one of a letter to the whole party: no wait between letters and no "Letter sent" line (sendToParty does both)
  * @returns {string | undefined} the problem, or undefined once it's sent
  */
-function send(player, to, subject, body, shortened) {
+function send(player, to, subject, body, shortened, group = false) {
   const wait = get("sendCooldownSeconds") * 1000 - (Date.now() - (lastSent.get(player.id) ?? 0));
-  if (wait > 0) return `Wait ${Math.ceil(wait / 1000)} more seconds before sending another letter, then press Send again.`;
+  if (wait > 0 && !group) return `Wait ${Math.ceil(wait / 1000)} more seconds before sending another letter, then press Send again.`;
   if (letters().size >= MAX_LETTERS) return "The realm's mail is full. Ask players to delete old letters.";
   // Make room: the oldest letters the recipient has already read go first.
   const inbox = inboxOf(to.i);
@@ -302,13 +333,40 @@ function send(player, to, subject, body, shortened) {
   // Sent keeps the newest sentLimit letters.
   for (const old of sentOf(player.id).slice(Math.max(0, keepSent))) save({ ...old, ds: 1 });
 
-  player.sendMessage(`§aLetter sent to ${to.n}.${shortened ? " §7(It was shortened to fit.)" : ""}`);
-  player.playSound("random.orb", { pitch: 1.4, volume: 0.6 });
+  if (!group) {
+    player.sendMessage(`§aLetter sent to ${to.n}.${shortened ? " §7(It was shortened to fit.)" : ""}`);
+    player.playSound("random.orb", { pitch: 1.4, volume: 0.6 });
+  }
   const reader = online(to.i);
   if (reader) {
     reader.sendMessage(`§eNew letter from ${player.name}: "${subject}§r§e". Read it with /realm:mail`);
     reader.playSound("random.orb", { pitch: 0.9, volume: 0.8 });
   }
+  return undefined;
+}
+
+/**
+ * One letter to each party mate (a copy each, so each can read, reply and delete their own). Says who got it and whose
+ * full mailbox it skipped.
+ * @param {Player} player @param {Member[]} mates @param {string} subject @param {string} body @param {boolean} shortened
+ * @returns {string | undefined} the problem when nobody got it
+ */
+function sendToParty(player, mates, subject, body, shortened) {
+  const wait = get("sendCooldownSeconds") * 1000 - (Date.now() - (lastSent.get(player.id) ?? 0));
+  if (wait > 0) return `Wait ${Math.ceil(wait / 1000)} more seconds before sending another letter, then press Send again.`;
+  /** @type {string[]} */
+  const got = [];
+  /** @type {string[]} */
+  const skipped = [];
+  for (const m of mates) {
+    const problem = send(player, m, subject, body, shortened, true);
+    if (!problem) got.push(m.n);
+    else if (/full of unread/.test(problem)) skipped.push(m.n);
+    else return got.length ? (player.sendMessage(`§aLetter sent to ${got.join(", ")}. §c${problem}`), undefined) : problem;
+  }
+  if (!got.length) return `Every mailbox in your party is full of unread letters (${skipped.join(", ")}). Try again once they've read some.`;
+  player.sendMessage(`§aLetter sent to your party: ${got.join(", ")}.${skipped.length ? ` §c${skipped.join(", ")}'s mailbox is full of unread letters, so they didn't get it.` : ""}${shortened ? " §7(It was shortened to fit.)" : ""}`);
+  player.playSound("random.orb", { pitch: 1.4, volume: 0.6 });
   return undefined;
 }
 

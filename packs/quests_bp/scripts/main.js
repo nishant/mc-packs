@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
@@ -273,11 +273,29 @@ world.beforeEvents.playerInteractWithBlock.subscribe(({ player, block, isFirstEv
   }, 3);
 });
 
+const PARTY_TAG = "realm_party:"; // the Parties pack's tag on every member, `realm_party:<code>`
+
+/** Online party mates of `player` within `partyRange` blocks in the same dimension (none with `partyShare` off). @param {Player} player @returns {Player[]} */
+function partyMatesNear(player) {
+  if (get("partyShare") !== true) return [];
+  const tag = player.getTags().find((t) => t.startsWith(PARTY_TAG));
+  if (!tag) return [];
+  const range = Math.max(1, get("partyRange"));
+  const dim = player.dimension.id;
+  const { x, y, z } = player.location;
+  return world.getAllPlayers().filter((p) => {
+    if (p.id === player.id || !p.hasTag(tag) || p.dimension.id !== dim) return false;
+    const l = p.location;
+    return (l.x - x) ** 2 + (l.y - y) ** 2 + (l.z - z) ** 2 <= range * range;
+  });
+}
+
 world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   const killer = damageSource.damagingEntity;
   if (!(killer instanceof Player) || deadEntity instanceof Player) return;
   try {
     progress(killer, "kill", deadEntity.typeId);
+    for (const mate of partyMatesNear(killer)) progress(mate, "kill", deadEntity.typeId);
   } catch (e) {
     console.warn(`[quests] ${e}`);
   }
@@ -443,6 +461,24 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
+// Scenario tests (BDS harness): give a player set quests for today, since they're picked at random.
+// Only from the server console. /scriptevent realm:quests_test {"player":"<name>","ids":["kill_zombies"]}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:quests_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const m = JSON.parse(ev.message);
+      const player = world.getAllPlayers().find((p) => p.name === m?.player);
+      /** @type {string[]} */
+      const ids = Array.isArray(m?.ids) ? m.ids.filter((/** @type {unknown} */ i) => typeof i === "string" && pool.has(i)) : [];
+      if (player && ids.length) save(player, { d: today(), q: ids.map((/** @type {string} */ id) => ({ id, p: 0, done: 0 })) });
+    } catch (e) {
+      console.warn(`[quests] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "quests_bp");

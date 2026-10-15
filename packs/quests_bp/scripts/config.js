@@ -15,6 +15,15 @@ export const CONFIG = {
   skipCreative: true,
 
   /**
+   * Party mates (the Parties pack's `realm_party:<code>` tag) within `partyRange` blocks in the same
+   * dimension also count a mob one of them defeats for their own Defeat quests.
+   */
+  partyShare: true,
+
+  /** How near (blocks) a party mate must be to share a defeat. */
+  partyRange: 32,
+
+  /**
    * Movement faster than this (blocks per second) is a teleport and doesn't count for travel quests.
    */
   maxSpeed: 100,

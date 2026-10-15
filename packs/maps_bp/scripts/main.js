@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
@@ -1044,7 +1044,47 @@ function found(player, hunt, inChest) {
     send("realm:relic_give", { player: player.id, relic: any(CONFIG.relics) });
     player.sendMessage("§dSomething old and strange glints among the coins...");
   }
+  shareWithParty(player, crowns);
 }
+
+const PARTY_TAG = "realm_party:"; // the Parties pack's tag on every member, `realm_party:<code>`
+
+/**
+ * Party mates near the finder share the find: `partyShare` percent of its Crowns each (paid on top), the Field Journal
+ * entry and the Exploration XP. The loot in the chest is theirs to split.
+ * @param {Player} player @param {number} crowns what the finder got
+ */
+function shareWithParty(player, crowns) {
+  const tag = player.getTags().find((t) => t.startsWith(PARTY_TAG));
+  if (!tag) return;
+  const range = Math.max(1, get("partyRange"));
+  const share = Math.floor((crowns * Math.max(0, Math.min(100, get("partyShare")))) / 100);
+  const mates = player.dimension.getPlayers({ location: player.location, maxDistance: range, tags: [tag] }).filter((p) => p.id !== player.id);
+  for (const mate of mates) {
+    mate.sendMessage(`§d[Party] §6You helped ${player.name} find the treasure!`);
+    if (share > 0 && addCrowns(mate, share)) mate.sendMessage(`§6+${share} Crowns §7(Treasure map, with ${player.name})`);
+    mate.playSound("random.levelup", { pitch: 1.2 });
+    send("realm:journal", { player: mate.id, page: "places", entry: "treasure", label: "Buried treasure" });
+    if (CONFIG.skillXp > 0) send("realm:skill_xp", { player: mate.id, skill: "exploration", amount: CONFIG.skillXp });
+  }
+}
+
+// Scenario tests (BDS harness): finds the treasure of a player's first hunt right away (a whole hunt takes minutes).
+// Only from the server console. /scriptevent realm:maps_test {"action":"found","player":"<name>"}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:maps_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const m = JSON.parse(ev.message);
+      const player = world.getAllPlayers().find((p) => p.name === m?.player);
+      const hunt = player ? huntsOf(player)[0] : undefined;
+      if (player && hunt && m.action === "found") found(player, hunt, false);
+    } catch (e) {
+      console.warn(`[maps] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // ---------------------------------------------------------------------------
 // Menus

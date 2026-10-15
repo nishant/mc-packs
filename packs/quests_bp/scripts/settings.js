@@ -14,6 +14,8 @@ const OPTIONS = [
   { key: "questsPerDay", type: "int", scope: "world", label: "Quests per day", help: "Applies from the next day's quests", min: 1, max: 5, step: 1 },
   { key: "progressNotes", type: "bool", scope: "world", label: "Quest progress notes", help: "A note above the hotbar at each quarter of a quest" },
   { key: "skipCreative", type: "bool", scope: "world", label: "Creative mode makes no quest progress" },
+  { key: "partyShare", type: "bool", scope: "world", label: "Party mates share defeats", help: "A mob a party mate defeats nearby counts for your Defeat quests too" },
+  { key: "partyRange", type: "int", scope: "world", label: "Party share range (blocks)", help: "How near a party mate must be, in the same dimension", min: 8, max: 128, step: 8 },
   { key: "progressNotes", type: "bool", scope: "player", base: "progressNotes", label: "Quest progress notes", help: "A note above the hotbar at each quarter of a quest" },
 ];
 

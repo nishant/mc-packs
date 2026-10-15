@@ -116,12 +116,34 @@ world.afterEvents.entityDie.subscribe(
         used: false,
       });
       sendPoint(deadEntity);
+      tellParty(deadEntity);
     } catch (e) {
       console.warn(`[death] ${e}`);
     }
   },
   { entityTypes: ["minecraft:player"] }
 );
+
+const PARTY_TAG = "realm_party:"; // the Parties pack's tag on every member, `realm_party:<code>`
+
+/** Tells the dead player's online party mates where they died, from where each mate stands. @param {Player} dead */
+function tellParty(dead) {
+  if (get("tellParty") !== true) return;
+  const tag = dead.getTags().find((t) => t.startsWith(PARTY_TAG));
+  if (!tag) return;
+  const point = lastDeath(dead);
+  if (!point) return;
+  for (const mate of world.getAllPlayers()) {
+    if (mate.id === dead.id || !mate.hasTag(tag) || getFor(mate, "tellParty") !== true) continue;
+    let where;
+    if (mate.dimension.id !== point.d) where = "";
+    else {
+      const w = wayTo(mate, point);
+      where = w.flat < 2 ? " (right where you are)" : ` (${w.flat} blocks ${w.dir} of you)`;
+    }
+    mate.sendMessage(`§d[Party] §f${dead.name}§e died at §f${coords(point)}§e in ${dimensionName(point.d)}${where}.`);
+  }
+}
 
 // Any spawn counts, so a player who leaves on the death screen hears it when they come back.
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
@@ -140,21 +162,24 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 // /realm:death
 // ---------------------------------------------------------------------------
 
+/** Distance along the ground, height difference and compass direction from the player to the point. @param {Player} player @param {DeathPoint} point */
+function wayTo(player, point) {
+  const here = player.location;
+  const dx = point.x + 0.5 - here.x;
+  const dz = point.z + 0.5 - here.z;
+  const angle = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360; // 0 = north (-z), 90 = east (+x)
+  return { flat: Math.round(Math.hypot(dx, dz)), dy: point.y - Math.floor(here.y), dir: COMPASS[Math.round(angle / 45) % 8] };
+}
+
 /** @param {Player} player @param {DeathPoint} point */
 function describe(player, point) {
   const lines = [`§eYour last death point: §f${coords(point)}§e in ${dimensionName(point.d)}.`];
   if (player.dimension.id !== point.d) {
     lines.push(`§7You're in ${dimensionName(player.dimension.id)} now, so there's no distance to show.`);
   } else {
-    const here = player.location;
-    const dx = point.x + 0.5 - here.x;
-    const dz = point.z + 0.5 - here.z;
-    const dy = point.y - Math.floor(here.y);
-    const flat = Math.round(Math.hypot(dx, dz));
+    const { flat, dy, dir } = wayTo(player, point);
     if (flat < 2 && Math.abs(dy) < 2) lines.push("§7You're standing on it.");
     else {
-      const angle = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360) % 360; // 0 = north (-z), 90 = east (+x)
-      const dir = COMPASS[Math.round(angle / 45) % 8];
       const vertical = dy === 0 ? "" : `, ${Math.abs(dy)} block${Math.abs(dy) === 1 ? "" : "s"} ${dy > 0 ? "up" : "down"}`;
       lines.push(flat < 2 ? `§7It's right here${vertical}.` : `§7It's ${flat} block${flat === 1 ? "" : "s"} to the ${dir}${vertical}.`);
     }

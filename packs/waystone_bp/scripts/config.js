@@ -25,6 +25,15 @@ export const CONFIG = {
   /** `/realm:waystones` can start a trip from anywhere (otherwise only by tapping a waystone). */
   travelAnywhere: false,
 
+  /**
+   * Party mates (the Parties pack's `realm_party:<code>` tag) standing within `partyRadius` blocks of a player who
+   * starts a trip come along: they stand still through the same countdown and each pays their own fare.
+   */
+  partyTravel: true,
+
+  /** How near (blocks) a party mate must stand to come along on a trip. */
+  partyRadius: 6,
+
   /** Standing this close (blocks) to a waystone discovers it. */
   discoverRadius: 4,
 
