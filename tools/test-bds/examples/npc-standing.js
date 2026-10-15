@@ -60,6 +60,13 @@ export default async function (t) {
     // quill: on stone; a bottom slab is then laid where its feet are.
     const d = floorAt(3, "minecraft:air");
     await place("quill", d, false);
+    // ida: in a room 2 blocks high; a block is then laid at her feet (no room on top: never onto the roof).
+    const e = floorAt(4, "minecraft:air");
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) dim.setBlockType({ x: e.x - 0.5 + dx, y: e.y + 2, z: e.z - 0.5 + dz }, "minecraft:stone");
+    await place("ida", e, false);
+    // sol: on stone; a top slab is then hung at head height (only the feet block lifts anyone).
+    const f = floorAt(5, "minecraft:air");
+    await place("sol", f, false);
     p.stopFlying();
     p.teleport({ x: sx + 6, y: c.y + 4, z: sz - 4 });
 
@@ -78,6 +85,8 @@ export default async function (t) {
     // A path laid later: a full block at tobin's feet, a slab at quill's.
     t.server(`/setblock ${Math.floor(c.x)} ${c.y} ${Math.floor(c.z)} stone_bricks`);
     t.server(`/setblock ${Math.floor(d.x)} ${d.y} ${Math.floor(d.z)} stone_brick_slab`);
+    t.server(`/setblock ${Math.floor(e.x)} ${e.y} ${Math.floor(e.z)} stone_bricks`);
+    dim.setBlockPermutation({ x: Math.floor(f.x), y: f.y + 1, z: Math.floor(f.z) }, t.mc.BlockPermutation.resolve("minecraft:stone_brick_slab", { "minecraft:vertical_half": "top" }));
     await t.wait(5);
     t.log(`after laying blocks: tobin y ${yOf("tobin")}, quill y ${yOf("quill")}`);
     await t.waitUntil(() => yOf("tobin") === c.y + 1 && yOf("quill") === d.y + 0.5, {
@@ -88,6 +97,9 @@ export default async function (t) {
     t.log(`lifted: tobin y ${yOf("tobin")}, quill y ${yOf("quill")}`);
     await t.wait(40);
     t.check(yOf("tobin") === c.y + 1 && yOf("quill") === d.y + 0.5, "they stay on top");
+    t.log(`ida y ${yOf("ida")} (floor ${e.y}, roof at ${e.y + 2}), sol y ${yOf("sol")} (floor ${f.y})`);
+    t.check(yOf("ida") < e.y + 2, "ida, with no room above the block, is not put on the roof");
+    t.check(yOf("sol") === f.y, "sol is not lifted by a top slab at head height");
     t.restart("restarting");
     return;
   }
