@@ -1,5 +1,6 @@
 // Generates the minimap's glyph font and the file that names its characters:
 //   packs/hud_rp/font/glyph_F3.png      Bedrock glyph page F3: 16 x 16 cells of 16 x 16 pixels, cell k is U+F300 + k
+//   packs/hud_rp/pack_icon.png          Side HUD's pack icon (128 x 128): the HUD over a game view
 //   packs/map_bp/scripts/glyphs.js      every private-use character the packs use, by name (the only file allowed them)
 //   docs/media/map-hud.png              a render of the compass strip and the radar made from the same cells
 // Page F3 (U+F300-U+F3FF) is in Unicode's Private Use Area, so no real text uses it, and it is away from the pages
@@ -286,10 +287,88 @@ function render(sheet) {
   return img;
 }
 
+// ---------------------------------------------------------------------------
+// Side HUD's pack_icon.png (128 x 128): a game view with the HUD over it, the compass strip across the top, dark
+// side boxes left and right, the crosshair with its box below, and the hotbar. Drawn big enough to read at 64 px.
+// ---------------------------------------------------------------------------
+
+/** Fills where inside(x, y) holds in the box [x0, x1) x [y0, y1), 4 x 4 samples a pixel. @param {Image} img @param {number} x0 @param {number} y0 @param {number} x1 @param {number} y1 @param {(x: number, y: number) => boolean} test @param {RGBA} c */
+function fill(img, x0, y0, x1, y1, test, c) {
+  for (let y = Math.floor(y0); y < Math.ceil(y1); y++)
+    for (let x = Math.floor(x0); x < Math.ceil(x1); x++) {
+      let n = 0;
+      for (let sy = 0; sy < 4; sy++) for (let sx = 0; sx < 4; sx++) if (test(x + (sx + 0.5) / 4, y + (sy + 0.5) / 4)) n++;
+      if (n) put(img, x, y, [c[0], c[1], c[2], Math.round((c[3] * n) / 16)]);
+    }
+}
+/** A rounded rectangle covering [x0, x1) x [y0, y1). @param {Image} img @param {number} x0 @param {number} y0 @param {number} x1 @param {number} y1 @param {number} r @param {RGBA} c */
+function roundRect(img, x0, y0, x1, y1, r, c) {
+  fill(img, x0, y0, x1, y1, (x, y) => Math.hypot(Math.max(0, Math.abs(x - (x0 + x1) / 2) - ((x1 - x0) / 2 - r)), Math.max(0, Math.abs(y - (y0 + y1) / 2) - ((y1 - y0) / 2 - r))) <= r, c);
+}
+
+function packIcon() {
+  const N = 128;
+  const img = blank(N, N);
+  // Sky over blocky hills and grass.
+  const hill = (/** @type {number} */ x) => 78 - 8 * Math.floor(Math.max(0, 3 - Math.abs(x - 34) / 9)) - 6 * Math.floor(Math.max(0, 2 - Math.abs(x - 100) / 10));
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const t = y / (N - 1);
+      /** @type {RGBA} */
+      const sky = [Math.round(100 + 70 * t), Math.round(150 + 50 * t), 235, 255];
+      /** @type {RGBA} */
+      const grass = y < hill(x) + 4 ? [96, 168, 64, 255] : [Math.round(78 - 24 * t), Math.round(140 - 36 * t), Math.round(54 - 12 * t), 255];
+      put(img, x, y, y < hill(x) ? sky : grass);
+    }
+  const panel = /** @type {RGBA} */ ([10, 14, 18, 175]);
+  const text = /** @type {RGBA} */ ([235, 235, 235, 255]);
+  const dimText = /** @type {RGBA} */ ([170, 176, 184, 255]);
+
+  // The compass strip: ticks, N in red, E, a star marker and the white pointer where you face.
+  roundRect(img, 8, 6, 120, 34, 5, panel);
+  rect(img, 13, 29, 114, 30, LINE);
+  for (const x of [22, 46, 82, 106]) rect(img, x - 1, 24, x, 28, TICK);
+  letter(img, 0, 0, BIG.N, 29, 11, 2, NORTH);
+  letter(img, 0, 0, BIG.E, 89, 11, 2, WHITE);
+  rect(img, 63, 15, 64, 28, WHITE);
+  fill(img, 56, 8, 72, 16, (x, y) => inside([[57, 8.5], [71, 8.5], [64, 15]], x, y), WHITE);
+  fill(img, 70, 10, 86, 26, (x, y) => inside(star(6.5).map(([px, py]) => [px + 70, py + 9]), x, y), COLOR.star);
+
+  // Side boxes: two on each side, each with a line of text and a bar or a second line.
+  /** @param {number} x0 @param {number} y0 @param {RGBA} accent @param {number} fillTo how much of the bar is full (0-1), or -1 for a second line of text */
+  const box = (x0, y0, accent, fillTo) => {
+    roundRect(img, x0, y0, x0 + 40, y0 + 22, 4, panel);
+    rect(img, x0 + 5, y0 + 5, x0 + 9, y0 + 9, accent);
+    rect(img, x0 + 12, y0 + 6, x0 + 34, y0 + 8, text);
+    if (fillTo < 0) rect(img, x0 + 5, y0 + 13, x0 + 27, y0 + 15, dimText);
+    else {
+      rect(img, x0 + 5, y0 + 13, x0 + 34, y0 + 16, [40, 44, 50, 255]);
+      rect(img, x0 + 5, y0 + 13, x0 + 5 + Math.round(29 * fillTo), y0 + 16, accent);
+    }
+  };
+  box(4, 42, COLOR.mob, 0.7);
+  box(4, 68, COLOR.folk, -1);
+  box(84, 42, COLOR.party, -1);
+  box(84, 68, COLOR.wander, 0.45);
+
+  // The crosshair, and the box under it.
+  rect(img, 63, 49, 64, 61, WHITE);
+  rect(img, 58, 54, 69, 55, WHITE);
+  roundRect(img, 48, 68, 80, 82, 4, panel);
+  rect(img, 53, 73, 75, 76, text);
+
+  // The hotbar.
+  rect(img, 18, 103, 109, 117, [20, 20, 20, 200]);
+  for (let i = 0; i < 9; i++) rect(img, 20 + i * 10, 105, 27 + i * 10, 115, [120, 120, 120, 150]);
+  for (const [x0, x1, y0, y1] of [[18, 29, 102, 103], [18, 29, 117, 118], [18, 19, 102, 118], [28, 29, 102, 118]]) rect(img, x0, y0, x1, y1, WHITE);
+  return img;
+}
+
 const sheet = page();
 /** @type {Map<string, Image | string>} */
 const outputs = new Map();
 outputs.set("packs/hud_rp/font/glyph_F3.png", sheet);
+outputs.set("packs/hud_rp/pack_icon.png", packIcon());
 outputs.set("packs/map_bp/scripts/glyphs.js", glyphsJs());
 outputs.set("docs/media/map/map-hud.png", render(sheet));
 

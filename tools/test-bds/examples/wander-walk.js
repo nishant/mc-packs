@@ -108,7 +108,9 @@ export default async function (t) {
       moved = Math.max(moved, Math.hypot(l.x - home.x, l.z - home.z));
       return moved > 1;
     },
-    { timeout: 900, interval: 5, message: "the villager walks on its own" },
+    // Up to 2 minutes: a villager in its morning wander schedule can stand still for over a minute before its first
+    // stroll (measured: 5 to 1395 ticks for ours, 35 to 1230 for a plain villager with the same name and effects).
+    { timeout: 2400, interval: 5, message: "the villager walks on its own" },
   );
   t.log(`walked ${moved.toFixed(1)} blocks from its spot`);
 
@@ -161,6 +163,7 @@ export default async function (t) {
 
   // Zombies can't hurt it or make a zombie villager of it.
   const zombie = t.dimension.spawnEntity("minecraft:zombie", { x: v.location.x + 1, y: v.location.y, z: v.location.z });
+  zombie.addEffect("fire_resistance", 2000, { showParticles: false }); // it's morning: don't let it burn up mid-test
   for (let i = 0; i < 6; i++) {
     try {
       v.applyDamage(8, { cause: t.mc.EntityDamageCause.entityAttack, damagingEntity: zombie });
@@ -171,7 +174,7 @@ export default async function (t) {
   t.check(v.isValid && v.typeId === "minecraft:villager_v2", "still a villager after a zombie's attacks");
   t.check(v.getComponent("minecraft:health").currentValue >= 20, "at full health");
   t.check(t.dimension.getEntities({ type: "minecraft:zombie_villager_v2", location: v.location, maxDistance: 16 }).length === 0, "no zombie villager");
-  zombie.remove();
+  if (zombie.isValid) zombie.remove();
 
   // Lightning: the witch it would become is removed and the wanderer comes back.
   const oldId = v.id;
@@ -221,9 +224,12 @@ export default async function (t) {
 
   // --- Hob's camp: a villager (toolsmith look) that walks within his tether.
   await t.wait(200); // past the cooldown rules (the debug spawn skips them anyway)
-  since = t.tick;
-  wdebug({ player: p.id, action: "spawn", named: "hob" });
-  await t.waitUntil(() => of("realm:wander_spawn", (m) => m.wid === "hob", since).length > 0, { timeout: 60, message: "Hob appears" });
+  // Back to the loaded middle first: the sailor's spot can be near the edge of the loaded area, and a simulated
+  // player loads no chunks, so every spot ahead of it could be unloaded ("no spot to stand on ahead").
+  p.teleport({ x: X + 0.5, y: (await t.loadArea(X, Z, { radius: 2 })).top.y + 1, z: Z + 0.5 }, { rotation: { x: 0, y: 0 } });
+  await t.wait(20);
+  const { m: hm } = await spawnFor(p, { named: "hob" });
+  t.check(hm.wid === "hob", `Hob appears (${hm.wid})`);
   await t.wait(10);
   t.check(ents("wander:k:hob")[0]?.typeId === "minecraft:villager_v2", "Hob on the road is a villager");
   await talk(p, "hob", "Hob's Tall Tales");

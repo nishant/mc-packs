@@ -43,10 +43,18 @@ export default async function (t) {
   const px = fx + 30, pz = fz;
   const { top } = await t.loadArea(px, pz);
   const gy = top.location.y + 1;
-  t.server(`/fill ${px - 2} ${gy} ${pz - 2} ${px + 2} ${gy + 2} ${pz + 2} glass`);
+  // A glass floor too: the ground here slopes away under one corner, and a pen without a floor left a
+  // pocket under the wall that a calm platypus walked out through (or got stuck in, out of reach).
+  t.server(`/fill ${px - 2} ${gy - 1} ${pz - 2} ${px + 2} ${gy + 2} ${pz + 2} glass`);
   t.server(`/fill ${px - 1} ${gy} ${pz - 1} ${px + 1} ${gy + 2} ${pz + 1} air`);
-  p.teleport({ x: px - 0.5, y: gy, z: pz + 0.5 }, { dimension: t.dimension });
-  brown.teleport({ x: px + 1.5, y: gy, z: pz + 0.5 }, { dimension: t.dimension });
+  // Both back to their marks, 2 blocks apart. The checks for biting or not biting start from here: bites knock the
+  // player about, and an angry platypus can park diagonally just out of reach of a player who stands still (the
+  // vanilla melee AI) and stop biting, which looked like calming down too early or too late.
+  const marks = () => {
+    p.teleport({ x: px - 0.5, y: gy, z: pz + 0.5 }, { dimension: t.dimension });
+    brown.teleport({ x: px + 1.5, y: gy, z: pz + 0.5 }, { dimension: t.dimension });
+  };
+  marks();
   t.server("/effect Tester health_boost 600 9 true");
   t.server("/effect Tester instant_health 1 9 true");
   await t.wait(10);
@@ -65,13 +73,17 @@ export default async function (t) {
   t.check(!!p.getEffect("nausea"), "the bite gives Nausea");
   t.check(!!p.getEffect("poison"), "the bite gives Poison");
   t.log(`first bite ${bites[0].tick - hitAt} ticks after the hit`);
-  // Calm after 15 s: no bites from 18 s on (it may still be on its last attack at 15 s).
-  await t.waitUntil(() => t.tick - hitAt > 20 * 18, { timeout: 500, interval: 20 });
+  // Calm after 15 s: no bites from 18 s on (it may still be on its last attack at 15 s), even from its mark.
+  await t.waitUntil(() => t.tick - hitAt > 20 * 18, { timeout: 500 });
+  marks();
   const n = bites.length;
   t.server("/effect Tester instant_health 1 9 true");
   await t.seconds(8);
   t.check(bites.length === n, `calm after 15 seconds (${bites.length - n} bites later)`);
   t.log(`${n} bites in the first 18 s`);
+
+  const inPen = () => Math.abs(brown.location.x - (px + 0.5)) <= 1.6 && Math.abs(brown.location.z - (pz + 0.5)) <= 1.6 && brown.location.y >= gy - 0.1;
+  t.check(inPen(), `still in the pen after calming down (${brown.location.x.toFixed(1)} ${brown.location.y.toFixed(1)} ${brown.location.z.toFixed(1)})`);
 
   // 5. A second hit 10 s into the anger restarts the 15 seconds (still biting at 20 s).
   const hits = [];
@@ -88,6 +100,9 @@ export default async function (t) {
     await t.wait(4);
   }
   t.check(hits.length >= 2, `both hits landed (${hits.map((h) => h - hit2).join(",")})`);
+  // At 16 s (past the first hit's 15) back to the marks: an angry platypus comes and bites within about 2 s.
+  await t.waitUntil(() => t.tick - hit2 > 20 * 16, { timeout: 600 });
+  marks();
   await t.waitUntil(() => t.tick - hit2 > 20 * 21, { timeout: 600, interval: 20 });
   const late = bites.filter((b) => b.tick - hit2 > 20 * 16 && b.tick - hit2 <= 20 * 21).length;
   t.log(`bites 16-21 s after the first of two hits: ${late}`);
@@ -96,6 +111,8 @@ export default async function (t) {
 
   // 6. Creative players are left alone.
   t.server("/gamemode creative Tester");
+  await t.wait(5);
+  marks();
   await t.wait(5);
   const c0 = bites.length;
   p.lookAtEntity(brown);

@@ -227,7 +227,10 @@ function pickTarget(player) {
 /** @param {Dimension} dim @param {number} x @param {number} z */
 function topAt(dim, x, z) {
   try {
-    return dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    const top = dim.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    // A column that isn't ticking hands back a block (at y 319) that throws as soon as it's read: not loaded.
+    if (top) void top.typeId;
+    return top;
   } catch {
     return undefined;
   }
@@ -720,14 +723,22 @@ async function show(player, form) {
   return undefined;
 }
 
-/** @param {Player} player @param {string} title @param {string} body @param {{ text: string, run: () => unknown }[]} actions */
+/**
+ * Buttons with what each does. An `op` action checks again that the player is an operator when picked: they may
+ * have been de-opped while the menu was open.
+ * @param {Player} player @param {string} title @param {string} body @param {{ text: string, run: () => unknown, op?: boolean }[]} actions
+ */
 async function menu(player, title, body, actions) {
   const form = new ActionFormData().title(title).body(body);
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  await actions[res.selection]?.run();
+  const a = actions[res.selection];
+  if (a?.op && !isOp(player)) return player.sendMessage(NOT_OP);
+  await a?.run();
 }
+
+const NOT_OP = "§cOnly operators can do that.";
 
 /** The last few meteors, newest first, with how far each is from the player. @param {Player} player */
 async function lastMeteors(player) {
@@ -766,6 +777,7 @@ async function settingsForm(player) {
     .submitButton("Save");
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
   const v = res.formValues.filter((x) => x !== undefined);
   const changes = /** @type {[string, unknown][]} */ ([
     ["enabled", v[0] === true],
@@ -801,18 +813,19 @@ async function mainMenu(player) {
   const status = get("enabled") === true ? `Meteors fall on some nights (a ${Math.round(Number(get("chance")) * 100)}% chance each night).` : "Meteors don't fall on their own on this realm.";
   const zones = avoidZones() ? (get("craters") === true ? "They never land in a safe zone, protected town or claim." : "") : "§7They ignore safe zones.§r";
   const body = [describe(), [status, zones].filter(Boolean).join(" ")].join("\n\n");
-  /** @type {{ text: string, run: () => unknown }[]} */
+  /** @type {{ text: string, run: () => unknown, op?: boolean }[]} */
   const actions = [{ text: "Last meteors\n§8Where they fell, who found them", run: () => lastMeteors(player) }];
   if (isOp(player)) {
     actions.push({
       text: "Drop one now (operator)\n§8In front of you, after the warning",
+      op: true,
       run: () => {
         const why = dropNow(player);
         if (why) player.sendMessage(`§c${why}`);
       },
     });
-    actions.push({ text: "Meteor settings (operator)\n§8Chance, craters, spawn, safe zones", run: () => settingsForm(player) });
-    actions.push({ text: "Protect this area from meteors\n§8Add a safe zone here (operator)", run: () => protectHere(player) });
+    actions.push({ text: "Meteor settings (operator)\n§8Chance, craters, spawn, safe zones", op: true, run: () => settingsForm(player) });
+    actions.push({ text: "Protect this area from meteors\n§8Add a safe zone here (operator)", op: true, run: () => protectHere(player) });
   }
   await menu(player, "§lMeteor Strikes", body, actions);
 }

@@ -977,9 +977,12 @@ async function menu(player) {
     actions.push(() => costForm(player));
   }
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined) return;
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  if (res.selection > 1 && !isOp(player)) return player.sendMessage(NOT_OP); // the buttons after the first two are an operator's
   await actions[res.selection]?.();
 }
+
+const NOT_OP = "§cOnly operators can do that.";
 
 /** A page with a Back button to the menu. @param {Player} player @param {string} title @param {string} body */
 async function page(player, title, body) {
@@ -1013,7 +1016,8 @@ async function spawnForm(player) {
       .dropdown("Trait", ["Random", ...TRAITS.map((t) => TRAIT_NAMES[t])], { defaultValueIndex: 0 })
       .dropdown("Mob", ["Random (one that suits the trait)", ...mobs.map((m) => m.replace(/^minecraft:/, "").replace(/_v2$/, "").replace(/_/g, " "))], { defaultValueIndex: 0 }),
   );
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
   const [ti, mi] = /** @type {number[]} */ (res.formValues);
   const trait = ti > 0 ? TRAITS[ti - 1] : undefined;
   let mob = mi > 0 ? mobs[mi - 1] : undefined;
@@ -1040,7 +1044,8 @@ async function removeForm(player) {
       .button1("Remove")
       .button2("Cancel"),
   );
-  if (!res || res.canceled || res.selection !== 0) return;
+  if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
   let n = 0;
   for (const e of list) {
     try {

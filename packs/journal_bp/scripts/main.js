@@ -5,7 +5,8 @@ import { get, getFor } from "./settings.js";
 
 // Each player's journal is one player property, "journal:data" -> JSON
 // { e: { page: [entry ids] }, l: { "page:entry": label } (labels of entries not in config.js),
-//   r: [pages rewarded], lo: deepest y, hi: highest y, far: farthest from spawn }.
+//   r: [pages rewarded], lo: deepest y, hi: highest y, far: farthest from spawn,
+//   d: { page: marks of the "Also found" entries dropped to make room } (only once one was dropped) }.
 const PROP_DATA = "journal:data";
 const PROP_WEATHER = "journal:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 const OVERWORLD = "minecraft:overworld";
@@ -14,6 +15,10 @@ const OVERWORLD = "minecraft:overworld";
 // 40-character label that may need escaping), so a full page is at most about 18,000; the whole journal is kept under
 // SAVE_LIMIT by dropping the oldest of the page with the most of them.
 const EXTRAS_PER_PAGE = 100;
+// Dropped "Also found" entries remembered per page (6 characters each, so at most 600 a page and 4,200 for the seven),
+// so one found again comes back quietly instead of as a new entry. Past it, the oldest mark goes.
+const DROPPED_PER_PAGE = 100;
+const MARK = 6;
 const ENTRY_ID = /^[a-z0-9_:.-]{1,40}$/;
 const LABEL_MAX = 40;
 const SAVE_LIMIT = 30000; // a string property holds at most about 32,000 characters
@@ -23,7 +28,7 @@ const MIN_HOOK_TICKS = 30; // a hook out for less than this can't have caught an
 
 /** @typedef {typeof CONFIG.pages[number]} Page */
 /** @typedef {Page["id"]} PageId */
-/** @typedef {{ e: Record<string, string[]>, l: Record<string, string>, r: string[], lo?: number, hi?: number, far?: number }} Data */
+/** @typedef {{ e: Record<string, string[]>, l: Record<string, string>, r: string[], lo?: number, hi?: number, far?: number, d?: Record<string, string> }} Data */
 
 /** @type {Map<string, { page: Page, labels: Map<string, string>, blurbs: Map<string, string> }>} */
 const pages = new Map(
@@ -103,6 +108,11 @@ function dataOf(player) {
       if (parsed.l && typeof parsed.l === "object") for (const [k, v] of Object.entries(parsed.l)) if (typeof v === "string") data.l[k] = v;
       if (Array.isArray(parsed.r)) data.r = parsed.r.filter((/** @type {unknown} */ x) => typeof x === "string");
       for (const k of /** @type {const} */ (["lo", "hi", "far"])) if (typeof parsed[k] === "number") data[k] = parsed[k];
+      if (parsed.d && typeof parsed.d === "object") {
+        for (const [k, v] of Object.entries(parsed.d)) {
+          if (typeof v === "string" && /^[0-9a-z]+$/.test(v) && v.length >= MARK) (data.d ??= {})[k] = v.slice(0, v.length - (v.length % MARK)).slice(-DROPPED_PER_PAGE * MARK);
+        }
+      }
     }
   } catch {
     console.warn(`[journal] ${player.name}'s journal was unreadable; starting a new one`);
@@ -150,7 +160,37 @@ function dropOldest(data, pageId, keep) {
   if (id === undefined) return false;
   ids.splice(ids.indexOf(id), 1);
   delete data.l[`${pageId}:${id}`];
+  addMark(data, pageId, id);
   return true;
+}
+
+/** Remembers that an entry was dropped from a page (the newest DROPPED_PER_PAGE). @param {Data} data @param {string} pageId @param {string} id */
+function addMark(data, pageId, id) {
+  const d = (data.d ??= {});
+  d[pageId] = ((d[pageId] ?? "") + markOf(id)).slice(-DROPPED_PER_PAGE * MARK);
+}
+
+/** A dropped entry's mark: a 30-bit hash of its id in 6 base-36 characters. @param {string} id */
+function markOf(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193);
+  return (h >>> 2).toString(36).padStart(MARK, "0");
+}
+
+/** Forgets that an entry was dropped from a page; true if it was. @param {Data} data @param {string} pageId @param {string} id */
+function takeMark(data, pageId, id) {
+  const marks = data.d?.[pageId];
+  if (!data.d || !marks) return false;
+  const m = markOf(id);
+  for (let i = 0; i < marks.length; i += MARK) {
+    if (!marks.startsWith(m, i)) continue;
+    const rest = marks.slice(0, i) + marks.slice(i + MARK);
+    if (rest) data.d[pageId] = rest;
+    else delete data.d[pageId];
+    if (!Object.keys(data.d).length) delete data.d;
+    return true;
+  }
+  return false;
 }
 
 /** Drops the oldest "Also found" entry of the page with the most of them; false when there's none. @param {Data} data @param {string} keep */
@@ -177,6 +217,8 @@ function addEntry(player, pageId, entry, label) {
   if (list.includes(entry)) return false;
   const known = p.labels.has(entry);
   const key = `${pageId}:${entry}`;
+  // Dropped earlier to make room and found again: it comes back quietly.
+  const back = !known && takeMark(data, pageId, entry);
   if (!known) {
     // A full page makes room: its oldest "Also found" entry goes, so the newest finds always show.
     for (let n = extrasOf(pageId, list).length; n >= EXTRAS_PER_PAGE && dropOldest(data, pageId, key); n--);
@@ -199,10 +241,11 @@ function addEntry(player, pageId, entry, label) {
       // Full: undo, so the journal keeps saving what it already has.
       list.pop();
       delete data.l[key];
+      if (back) addMark(data, pageId, entry);
       return false;
     }
   }
-  if (getFor(player, "notes") === true) {
+  if (!back && getFor(player, "notes") === true) {
     const name = known ? p.labels.get(entry) : (data.l[key] ?? prettyId(entry));
     const hint = firstNote.has(player.id) ? "" : " §7(/realm:journal)";
     firstNote.add(player.id);

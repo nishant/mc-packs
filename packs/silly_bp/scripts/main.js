@@ -826,7 +826,8 @@ async function giveMenu(op) {
     .slider("How many", 1, 16, { valueStep: 1, defaultValue: 1 })
     .submitButton("Give");
   const res = await show(op, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !op.isValid) return;
+  if (!isOp(op)) return op.sendMessage("§cOnly operators can give Silly Books."); // de-opped while the form was open
   const [pi, ki, n] = res.formValues.map(Number);
   const target = players[pi];
   if (!target?.isValid) return op.sendMessage("§cThat player left.");

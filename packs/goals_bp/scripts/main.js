@@ -19,6 +19,8 @@ const NAME_LENGTH = 32;
 
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/** Checked again once a form comes back: a player de-opped while it was open can't use it. @param {Player} player */
+const stillOp = (player) => isOp(player) || (player.sendMessage("§cOnly operators can do that."), false);
 
 /** 12345 -> "12,345". @param {number} n */
 const fmt = (n) => String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -286,6 +288,7 @@ async function showGoal(player, id) {
       actions.push({
         text: "Mark finished (operator)\n§8No more donations",
         run: () => {
+          if (!stillOp(player)) return;
           const now = goals().get(g.id);
           if (!now) return;
           now.done = 1;
@@ -300,6 +303,7 @@ async function showGoal(player, id) {
       actions.push({
         text: "Link to the block I'm looking at\n§8Operator: move the goal to another chest",
         run: () => {
+          if (!stillOp(player)) return;
           const block = lookedAtContainer(player);
           const now = goals().get(g.id);
           if (!now) return;
@@ -322,6 +326,7 @@ async function showGoal(player, id) {
           {
             text: "§cRemove it",
             run: () => {
+              if (!stillOp(player)) return;
               remove(g.id);
               player.sendMessage(`§aGoal ${g.n} removed.`);
               return mainMenu(player);
@@ -443,7 +448,7 @@ async function addForm(player) {
       await new Promise((r) => system.runTimeout(() => r(undefined), 20));
       continue;
     }
-    if (res.canceled || !res.formValues || !player.isValid) return;
+    if (res.canceled || !res.formValues || !player.isValid || !stillOp(player)) return;
     // Labels may or may not take a place in formValues: the text boxes are the strings, in order.
     const [rawItem = "", rawAmount = "", name = ""] = res.formValues.filter((v) => typeof v === "string").map((v) => v.trim());
     typed = [rawItem, rawAmount, name];

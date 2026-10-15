@@ -515,10 +515,11 @@ function spot(p) {
     let top;
     try {
       top = dim.getTopmostBlock({ x, z });
+      // A column that isn't ticking hands back a block (at y 319) that throws as soon as it's read: skip it.
+      if (!top || top.isAir || top.isLiquid || BAD_GROUND.test(top.typeId)) continue;
     } catch {
       continue; // unloaded
     }
-    if (!top || top.isAir || top.isLiquid || BAD_GROUND.test(top.typeId)) continue;
     const y = top.location.y;
     try {
       // getTopmostBlock skips water: this is the bed of a lake or the sea, no place for a monster to appear.
@@ -773,6 +774,8 @@ async function mainMenu(player) {
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  // Every button after the first is an operator's: checked again, as the player may have been de-opped meanwhile.
+  if (res.selection > 0 && player.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return player.sendMessage("§cOnly operators can do that.");
   actions[res.selection]?.run();
 }
 

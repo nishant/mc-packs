@@ -1337,7 +1337,7 @@ async function opList(player) {
   const lines = list.length ? list.map((l) => `§e${l.n}§r${l.h ? ` §c(${l.h})` : ""} for ${online(l.o)?.name ?? "someone gone"} at ${Math.floor(l.x)} ${Math.floor(l.y)} ${Math.floor(l.z)}`) : ["Nobody is on the road."];
   lines.push("", `Camps: ${Object.keys(camps).length ? Object.entries(camps).map(([w, c]) => `${NAMED_BY_ID.get(w)?.name ?? w} (${Math.floor(c.x)}, ${Math.floor(c.z)})`).join(", ") : "none"}`);
   const res = await show(player, new ActionFormData().title("On the road now").body(lines.join("\n")).button("Send everyone on the road away").button("Back"));
-  if (!res || res.canceled || res.selection !== 0) return;
+  if (!res || res.canceled || res.selection !== 0 || !player.isValid || !isOp(player)) return;
   clearRoad();
   player.sendMessage(`§a[Wanderers] Sent ${list.length} wanderer(s) away.`);
 }
@@ -1361,7 +1361,7 @@ async function opSpawn(player) {
       .dropdown("Hostile (a Stranger only)", ["No", "Choir Spy", "Toll Man", "Drowned Sailor", "Hollow-touched Hermit"])
       .submitButton("Appear"),
   );
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid || !isOp(player)) return;
   const v = (res.formValues ?? []).filter((/** @type {unknown} */ x) => x !== undefined);
   const who = Number(v[0] ?? 0);
   const named = who > 0 ? NAMED[who - 1]?.id : undefined;

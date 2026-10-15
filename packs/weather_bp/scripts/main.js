@@ -623,6 +623,7 @@ async function setForm(player) {
     .submitButton("Start it now");
   const res = await showForm(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can set the weather."); // de-opped while the form was open
   const v = res.formValues.filter((x) => x !== undefined);
   const kind = KINDS[Number(v[0])] ?? "Rain";
   const minutes = Math.max(1, Math.min(1440, Math.round(Number(v[1])) || 30));

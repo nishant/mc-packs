@@ -200,6 +200,7 @@ async function openEditor(player) {
     return;
   }
   if (response.canceled || !response.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the editor was open
 
   // Labels may or may not take a place in formValues: the text boxes are the strings, in order, and the switches the booleans.
   const strings = response.formValues.filter((v) => typeof v === "string");
@@ -271,6 +272,7 @@ async function resetWelcome(player) {
     if (player.isValid) player.sendMessage("§7Welcome message kept.");
     return;
   }
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
   saveSettings(undefined);
   player.sendMessage("§aWelcome message reset to the pack defaults.");
 }
@@ -307,8 +309,11 @@ async function packMenu(player) {
   for (const e of entries) form.button(e.text);
   const res = await showForm(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  if (res.selection > 0 && !isOp(player)) return player.sendMessage(NOT_OP); // every button but the first is an operator's
   await entries[res.selection]?.run();
 }
+
+const NOT_OP = "§cOnly operators can do that.";
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(

@@ -561,7 +561,8 @@ async function opMenu(op) {
   const all = Object.entries(index());
   const body = all.length ? all.slice(0, 40).map(([, k]) => `${k.n || "Dolphin"} §7(${k.on}) ${k.d.replace("minecraft:", "")} ${k.x}, ${k.y}, ${k.z}`).join("\n") : "No tamed dolphins.";
   const res = await show(op, new ActionFormData().title("§lDolphins: operator tools").body(`${all.length} tamed dolphins:\n${body}`).button("Release the dolphin I look at").button("Back"));
-  if (!res || res.canceled || res.selection !== 0) return res?.selection === 1 ? menu(op) : undefined;
+  if (!res || res.canceled || res.selection !== 0 || !op.isValid) return res?.selection === 1 && op.isValid ? menu(op) : undefined;
+  if (!isOp(op)) return op.sendMessage("§cOnly operators can release other players' dolphins."); // de-opped while the form was open
   const hit = op.getEntitiesFromViewDirection({ maxDistance: 16, type: DOLPHIN })[0]?.entity;
   if (!hit || !ownerOf(hit)) return op.sendMessage("§cLook at a tamed dolphin (within 16 blocks).");
   const owner = String(hit.getDynamicProperty(PROP_OWNER_NAME) ?? "someone");

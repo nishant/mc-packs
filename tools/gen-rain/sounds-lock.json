@@ -1,0 +1,180 @@
+{
+  "why": "Written by sounds.mjs, read by sounds.mjs --check (npm run check): each clip's recipe hash (what decides its sound), the sha256 of its .ogg and its definition volume. Don't edit it: rerun the generator.",
+  "files": {
+    "rain1": {
+      "recipe": "d7d2118fbe6534e01b56aba1f18bf6ae1a03acf48d2274cf0252c421f2c7328e",
+      "ogg": "2b84fed4b7e5cc7412d95247a98b71c3ddcbbe6bfb074768591394dede3850f9",
+      "volume": 0.043
+    },
+    "rain2": {
+      "recipe": "4c38b5c2e9fdf421d8c8e88df1f2269596415391cf0b35ca298d1aa1c0de3cf9",
+      "ogg": "4e54b143220b7d55da8d13598a27270793e5344e7179eb125787dc3cf6e8d688",
+      "volume": 0.043
+    },
+    "rain3": {
+      "recipe": "4dfb699020f88d58fba20eb4bf216eee6f372040e1350eeece5d4a56fdc45a81",
+      "ogg": "8d54ca26ece2cc61e879312a080f556a61059dc0896ebb51220f1fb178c22985",
+      "volume": 0.043
+    },
+    "rain4": {
+      "recipe": "75d8ea949e815f5cc794d3da74aacb02172d8e0112605ee225dfff8bb6a73c4e",
+      "ogg": "045b2b13fc158cf1ec29c01302743659746cd0fc5d2adee90633c73550db02a8",
+      "volume": 0.043
+    },
+    "rain5": {
+      "recipe": "1d73d40e11c52f059a63e921621e9e5b8148776fe5c7ecbe930f4dfe18bab8b5",
+      "ogg": "1344ec37f9b1f3c767fb61abd05e5abae3b78030f677c2221eb4314726a5ee04",
+      "volume": 0.043
+    },
+    "rain6": {
+      "recipe": "147d60be0356b5ac4d30fbe5875e3996fb91d66dfaf0eed781ea3c6fdb456477",
+      "ogg": "2bd24cf40f0df0b268bc31670ca27bd26b819ce7ddbc8eea92282d3bc8f1307f",
+      "volume": 0.043
+    },
+    "rain7": {
+      "recipe": "08ea9f0492cb12e69f32a22c462bac40c9173764dc01232cd126edd1e9c8cb61",
+      "ogg": "6ba3d4a09fdf57642367eeb8a2bfda780cad04370d0ef332fb705d9de6459a3e",
+      "volume": 0.043
+    },
+    "rain8": {
+      "recipe": "08a001a88379e3f35335de6ea38fff484720578406e51b2550e89a2884a776a7",
+      "ogg": "da5e65329fe2a7a89ffc9e4a121822d842de69a8d1a44d9cf985dbcbc447ba2e",
+      "volume": 0.043
+    },
+    "thunder1": {
+      "recipe": "51320ffbc2ed3758829425a231780932fd14881c0da8a2f78d396f5ce54aacb0",
+      "ogg": "61929b34ba598a6d051b42ed8ad47a39c47227726b3ede6a07e42ec03eeeecfc",
+      "volume": 0.794
+    },
+    "thunder2": {
+      "recipe": "2e86a844e834560f0beab4541daa8b51a0eeef865ee11043e2ea3a102cb3e38e",
+      "ogg": "7b69b830243e0240e7d8fa96affc2f2c5950362d9f491c8a54bbddffb32271fc",
+      "volume": 0.781
+    },
+    "thunder3": {
+      "recipe": "b9545e636f544e026ce540bc72721677b66ada6dca390bcbd30c54dd770a2cb1",
+      "ogg": "84e361521c6753216b413bd642589fbceb2ddd47e5d2955d73af30bc71428cc2",
+      "volume": 0.795
+    },
+    "thunder4": {
+      "recipe": "a34ef86ec3f3e3c27b6c9ee29c3512410732233b8fe6bddf9864aab37e997d40",
+      "ogg": "a4f0cc0485ed3799e979019fd1e323e8f8c4dd9357507c793ee27094053ca659",
+      "volume": 0.797
+    },
+    "thunder5": {
+      "recipe": "630b12dbf813c55bdb5b9707c0fa18f9f3d64b4e60629f54b8ddcd57447507df",
+      "ogg": "8713c454e2c11adf0f7c72d3d0c952af2b2fec731762fd1df92a85010939a0d4",
+      "volume": 0.794
+    },
+    "thunder6": {
+      "recipe": "cb0a85c2e15eae7dc53f7e229cea414ca02ea7d6a4be2e9df2cacb97ae6b2da9",
+      "ogg": "fd8e52951b4b782663938095c5462942f7bbe593557d5f3f58e592814953a6ce",
+      "volume": 0.729
+    },
+    "crack1": {
+      "recipe": "1b6fc81f05ea02d7d252bbabb333d3e3fecee893a581ab03fbc61e8743ca0905",
+      "ogg": "5aa94b7cf6f54f409a6e31d03ee0127e28bf41cc5d684961bf5d8bc4624b7c6f",
+      "volume": 0.743
+    },
+    "crack2": {
+      "recipe": "e3f5b8723331523278df855bf46f82de2e8fe036ba05fe0395ef27d3bcd96e52",
+      "ogg": "44d155bf3edf436bb1c6a308619bd2e47bf66fe79f5507bdab04f1842ea81917",
+      "volume": 0.797
+    },
+    "crack3": {
+      "recipe": "4413fee4eb7cc77bfbecca12d585c957513b707aa682622fe536afe60efe7380",
+      "ogg": "203ee911755e7c7a8961e341c96992a18d80fbc053fe6c2c8ab6647b49acb57f",
+      "volume": 0.714
+    },
+    "crack4": {
+      "recipe": "32d606317f271a1837087262d7f8a520c024e0f0bdb0917b73ad7a0f1509da55",
+      "ogg": "76b851667673d755b2d636a048dee7a93599e8136ff5164c0f2ea0cd9c9f69b8",
+      "volume": 0.803
+    },
+    "bed1": {
+      "recipe": "db15d1f73f3f208a41a1041e190eda883f891f940a50eb70c3ebd214d6cf3832",
+      "ogg": "fa3ff36496cf429daa5f237ea4d34437fa7bb5e0529e4685c3daa730c0a367d4",
+      "volume": 0.182
+    },
+    "bed2": {
+      "recipe": "ee080642c26c4e9d1d14133e55e527ad2c8635d797b0b435da7fed7e5a369141",
+      "ogg": "5104c5cf33e5ea7f41712d91f441b6caf9c5438758cad77b40a2f2b4c9b5abea",
+      "volume": 0.18
+    },
+    "bed3": {
+      "recipe": "8d522a755a878897c92c89e89cfcbacb773e3dd96c60c9e403714033e07c8145",
+      "ogg": "54d5df71a605a328732c6b1ede2c00b12f0118f36ad3421f20a8fa73480bc456",
+      "volume": 0.18
+    },
+    "bed4": {
+      "recipe": "2277aff427c5a671e3e9849c8d9454de957f6ae39109cd0f595e586056cd64f9",
+      "ogg": "920d341bf9ab83305c7f070ac9b4a26e28f81967c3ae2b3a91fac31378a526bd",
+      "volume": 0.184
+    },
+    "bed_inside1": {
+      "recipe": "ffc7b2bd30a83252472952d7d2b4ef224dfe6db478c714ee60c0314a58c2c6b3",
+      "ogg": "5f75b338a784e87adcc71fcb26c9fc562a7959081b5ec3141efed11226cbba53",
+      "volume": 0.16
+    },
+    "bed_inside2": {
+      "recipe": "7c4809f5d0e069f7bda782fc0929cddba1c4cea6dcd4a5ef3c48c2f37416b117",
+      "ogg": "107dec47492404a6224a8dc10ce207326a68ed9c50aea7d77cd220616c5c9a00",
+      "volume": 0.16
+    },
+    "rain_inside1": {
+      "recipe": "2a8958162c4c540531583b5569377dc04a0793b62bb3ffc9f791135fb14036f4",
+      "ogg": "2866da8a699af4aa7f546b9cf12e4814e9c2393323a5335b9498867bee930cd3",
+      "volume": 0.064
+    },
+    "rain_inside2": {
+      "recipe": "c6858e6f70c6aa485f259a9eaba27f93757602b8c76fade27b4e9bd98f31dd9c",
+      "ogg": "6abd31407114235f6f5280c46f27e1e08a2c1eda115d9a857dd95377860be721",
+      "volume": 0.064
+    },
+    "wind1": {
+      "recipe": "f8de2b001ec54618b083c31a734510e2d48bed2cbaffb5de898f066161743693",
+      "ogg": "8867847a1cd3c6be09066cf22de7ed65948c414e5b9dbf64e81388dfc9f235ab",
+      "volume": 0.204
+    },
+    "wind2": {
+      "recipe": "87c8e424aa12049467066e528cf3c83357f559651d1cd4b670dff28e66ad1ba3",
+      "ogg": "67a84490301ce3566a402aa9264d17637dbf44d8a67c6103ac73c25d6464679c",
+      "volume": 0.207
+    },
+    "wind3": {
+      "recipe": "3f206b741e2ac6ca4c8b73e8c22143b4363d222feacaf8a49e11254bfb91d3f8",
+      "ogg": "272ebe4a2b9c8e0c1a2005f053f76402259269425bc9b1d9bda3114f6240f468",
+      "volume": 0.204
+    },
+    "wind_inside1": {
+      "recipe": "bd835ca5a9c57ce44a28b90244c8c0d3d8ba6e42eca85427197cacf4121916bd",
+      "ogg": "9bddb6316776931b9b8ce70b3d513b3003dbfcbc2489158ad8e8d41f8165b65d",
+      "volume": 0.18
+    },
+    "wind_inside2": {
+      "recipe": "e3a559f5fa740a8ed6f2846fb5d6bffda55689f28c9b473e8ed7cb6d2a653530",
+      "ogg": "90620c23818aff80db4769f8f639ab59d970e4d67e97234cd36876e0790facd2",
+      "volume": 0.182
+    },
+    "roof1": {
+      "recipe": "2470de89fccbd447aab449093a0c7672ade2aae5d2b83185183c017ea22b41a2",
+      "ogg": "18f6ac56b3b45bafd6cfa3c334ae0e1a61c79299d20442312b24cad0e9cce3ec",
+      "volume": 0.18
+    },
+    "roof2": {
+      "recipe": "86cbd883078e39ace61f0f7fc526079e112c378b6ecf276759be75ab9060cdea",
+      "ogg": "d5761291f38c3fdfe69dbe7da0bba43e48bf4f210ba70fc5c8d9c404154630d4",
+      "volume": 0.18
+    },
+    "roof3": {
+      "recipe": "a347fd4445ee6a34a6153ee840083f2beeddf57ed5ce7ad8c50412cfa7a66d40",
+      "ogg": "a263715a3d8afde895259d668c316fe02b12ace26a4ef72a30678231c8965899",
+      "volume": 0.182
+    },
+    "roof4": {
+      "recipe": "5c2b9390dfa0db165148bb37f3e17649146ad499e4628dd57cf9b66459c4d546",
+      "ogg": "131a08a3196e527cd430402552825ff02d2da684bcb4968706a97fa806b3d82f",
+      "volume": 0.18
+    }
+  }
+}

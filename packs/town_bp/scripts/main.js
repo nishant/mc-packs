@@ -56,6 +56,8 @@ const byId = new Map(PROJECTS.map((p) => [p.id, p]));
 
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/** Checked again once a form comes back: a player de-opped while it was open can't use it. @param {Player} player */
+const stillOp = (player) => isOp(player) || (player.sendMessage("§cOnly operators can do that."), false);
 /** 12345 -> "12,345". @param {number} n */
 const fmt = (n) => String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 /** "minecraft:oak_planks" -> "Oak Planks". @param {string} id */
@@ -1215,7 +1217,7 @@ async function projectsMenu(player, townId, canDeliver) {
 /** @param {Player} player */
 async function addTownForm(player) {
   const res = await show(player, new ModalFormData().title("§lAdd a town here").textField("Town name", "Riverside").submitButton("Add town"));
-  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!res || res.canceled || !res.formValues || !player.isValid || !stillOp(player)) return;
   const name = res.formValues.find((v) => typeof v === "string");
   addTown(player, typeof name === "string" ? name : "");
 }
@@ -1334,7 +1336,7 @@ async function manageSpot(player, townId, projectId) {
 /** @param {Player} player @param {string} title @param {string} body @param {string} yes */
 async function confirm(player, title, body, yes) {
   const res = await show(player, new MessageFormData().title(title).body(body).button1(yes).button2("Cancel"));
-  return !!res && !res.canceled && res.selection === 0 && player.isValid;
+  return !!res && !res.canceled && res.selection === 0 && player.isValid && stillOp(player);
 }
 
 /** @param {Player} player @param {string} townId @param {string} projectId */
@@ -1478,6 +1480,7 @@ async function previewSpot(player, townId, projectId) {
       continue;
     }
     previews.delete(player.id);
+    if (!stillOp(player)) return;
     const now = allTowns().get(townId);
     if (now) applySpot(now, p, s, (m) => player.sendMessage(m));
     return;
@@ -1612,7 +1615,7 @@ async function protectForm(player, townId) {
       })
       .submitButton("Save"),
   );
-  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!res || res.canceled || !res.formValues || !player.isValid || !stillOp(player)) return;
   const on = res.formValues.find((v) => typeof v === "boolean");
   if (typeof on === "boolean") setProtected(t, on, (m) => player.sendMessage(m));
 }
@@ -1640,7 +1643,7 @@ async function removeTown(player) {
       .button1("§cRemove it")
       .button2("Keep it"),
   );
-  if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+  if (!res || res.canceled || res.selection !== 0 || !player.isValid || !stillOp(player)) return;
   deleteTown(t);
   player.sendMessage(`§aTown ${t.n} removed.`);
 }

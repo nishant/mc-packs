@@ -800,6 +800,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
 // Cooking pots (tap a cauldron over a lit campfire) and beehives (Glow Honey at night). A hive needs
 // no isFirstEvent check: harvesting empties it, so a repeat sees honey_level 0.
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return; // another pack refused the tap (e.g. a land claim)
   const { block, player, itemStack, isFirstEvent } = ev;
   let type;
   try {
@@ -1089,7 +1090,8 @@ async function opTeach(op) {
     .toggle("Forget instead of teach (basics can't be forgotten)", { defaultValue: false })
     .submitButton("OK");
   const res = await show(op, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !op.isValid) return;
+  if (!isOp(op)) return op.sendMessage("§cOnly operators can do that."); // de-opped while the form was open
   const [pi, ri, forget] = res.formValues;
   const p = players[Number(pi)];
   if (!p?.isValid) return;
@@ -1121,7 +1123,8 @@ async function opGive(op) {
     .slider("How many", 1, 64, { valueStep: 1, defaultValue: 1 })
     .submitButton("Give");
   const res = await show(op, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !op.isValid) return;
+  if (!isOp(op)) return op.sendMessage("§cOnly operators can do that."); // de-opped while the form was open
   const [pi, ii, count] = res.formValues;
   const p = players[Number(pi)];
   const it = items[Number(ii)];

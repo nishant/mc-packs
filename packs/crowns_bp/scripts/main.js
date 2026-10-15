@@ -343,6 +343,7 @@ async function giveForm(player) {
     .submitButton("Give");
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can give Crowns."); // de-opped while the form was open
   const [index, amount] = res.formValues;
   const i = typeof index === "number" ? index : -1;
   const targets = i === 0 ? world.getAllPlayers() : all[i - 1] ? [all[i - 1]] : [];

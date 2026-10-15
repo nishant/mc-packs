@@ -266,6 +266,8 @@ async function editNews(player) {
     if (draft && player.isValid) player.sendMessage("§7Draft kept.§r §b/realm:news_add§r adds more, §b/realm:news_edit§r opens it again.");
     return;
   }
+  if (!player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the editor was open
 
   const values = res.formValues;
   // Labels may or may not take a place in formValues: the title is the first string, the toggles the booleans.
@@ -314,7 +316,8 @@ async function tipsMenu(player) {
     if (player.isValid) player.sendMessage("§eCouldn't open the editor. Close chat or your inventory and try again.");
     return;
   }
-  if (res.canceled || res.selection === undefined) return;
+  if (res.canceled || res.selection === undefined || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the menu was open
 
   if (res.selection === 0) await editTip(player, -1);
   else if (res.selection === 1) await tipSettings(player);
@@ -333,6 +336,8 @@ async function editTip(player, index) {
 
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues) return tipsMenu(player);
+  if (!player.isValid) return;
+  if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
 
   const [text, remove] = res.formValues;
   // Another operator may have changed the list meanwhile: find this tip again by its text.
@@ -365,7 +370,9 @@ async function tipSettings(player) {
       .slider("Every N minutes", 5, 120, { valueStep: 5, defaultValue: s.intervalMinutes })
       .submitButton("Save")
   );
+  if (!player.isValid) return;
   if (res && !res.canceled && res.formValues) {
+    if (!isOp(player)) return player.sendMessage(NOT_OP); // de-opped while the form was open
     const [enabled, interval] = res.formValues;
     // Through settings.js, so the values are checked and /realm:config shows the same.
     const errors = [set("tipsEnabled", enabled === true), typeof interval === "number" ? set("tipIntervalMinutes", interval) : undefined].filter(Boolean);
@@ -480,8 +487,11 @@ async function packMenu(player) {
   for (const e of entries) form.button(e.text);
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  if (res.selection > 0 && !isOp(player)) return player.sendMessage(NOT_OP); // every button but "Read the news" is an operator's
   await entries[res.selection]?.run();
 }
+
+const NOT_OP = "§cOnly operators can do that.";
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(

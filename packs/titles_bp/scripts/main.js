@@ -403,6 +403,8 @@ async function giveForm(op) {
       .submitButton("Give")
   );
   if (!res || res.canceled || !res.formValues || !op.isValid) return;
+  // Checked again: the player may have been de-opped while the form was open.
+  if (op.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return op.sendMessage("§cOnly operators can give titles and trails.");
   const [pick, typed, what] = res.formValues;
   const who = String(typed ?? "").trim() || online[Number(pick)] || "";
   give(op, who, String(what ?? ""));

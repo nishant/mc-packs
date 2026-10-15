@@ -5,7 +5,6 @@ import {
   Entity,
   GameMode,
   Player,
-  PlayerPermissionLevel,
   ItemStack,
   WeatherType,
   system,
@@ -83,7 +82,7 @@ const displayName = (t) => `§e${t.name}${t.title ? ` §7${t.title}` : ""}`;
 const plainName = (t) => (t.title ? `${t.name} ${t.title}` : t.name);
 
 /** @param {Player} player */
-const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors || player.playerPermissionLevel === PlayerPermissionLevel.Operator;
+const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 
 /** @param {number} ticks */
 const wait = (ticks) => new Promise((r) => system.runTimeout(() => r(undefined), ticks));
@@ -1492,7 +1491,9 @@ async function menu(player) {
   for (const [label] of actions) form.button(label);
   form.button("Close");
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length) return;
+  if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length || !player.isValid) return;
+  // Everything after "Who lives here?" is for operators: checked again, as the player may have been de-opped meanwhile.
+  if (res.selection > 0 && !isOp(player)) return player.sendMessage("§cOnly operators can do that.");
   await actions[res.selection][1]();
 }
 
@@ -1511,7 +1512,8 @@ async function pickAndRun(player, title, help, fn, placedOnly = false) {
     return `${plainName(t)}${placedOf(id) ? "" : " (not placed)"}`;
   });
   const res = await show(player, new ModalFormData().title(title).dropdown(help, names).submitButton("OK"));
-  if (!res || res.canceled) return;
+  if (!res || res.canceled || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can do that."); // de-opped while the form was open
   const id = ids[Number(res.formValues?.[0] ?? 0)];
   if (id) fn(id);
 }

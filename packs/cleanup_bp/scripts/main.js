@@ -282,6 +282,7 @@ async function opMenu(player) {
   for (const a of actions) form.button(a.text);
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can do that."); // de-opped while the menu was open
   if (clearing) return player.sendMessage("§7A cleanup is already running.");
   actions[res.selection]?.run();
 }

@@ -83,9 +83,70 @@ function sit(player, dim, at, yaw, onBlock) {
 /** @param {Player} player */
 const isRiding = (player) => !!player.getComponent("minecraft:riding");
 
+// ---------------------------------------------------------------------------
+// Access checks: may this player use that block? (Land Claims answers for someone else's claim.)
+// ---------------------------------------------------------------------------
+//   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }
+//   realm:access_check_result { id, from, closed: [i, ...] }
+// In the Realm Bundle this pack's tap handler runs before Land Claims', so it never sees a claim's cancel: each
+// stair or slab tap asks first. Every protection pack answers every check, so the ask waits for each pack that
+// has answered before (2 s at most), or 5 ticks while none has; a hello 3 s after load learns who answers.
+
+/** Packs that have answered an access check. @type {Set<string>} */
+const accessResponders = new Set();
+/** @type {Map<string, { got: Set<string>, closed: boolean, check: () => void }>} */
+const accessAsks = new Map();
+let accessNext = 1;
+
+/**
+ * Whether another pack says this player may not use the block at `at` (someone else's land claim).
+ * @param {string} playerId @param {string} dim @param {import("@minecraft/server").Vector3} at
+ * @returns {Promise<boolean>}
+ */
+function closedTo(playerId, dim, at) {
+  return new Promise((resolve) => {
+    const waitFor = [...accessResponders];
+    const id = `chairs${accessNext++}`;
+    let done = false;
+    const ask = {
+      got: new Set(),
+      closed: false,
+      check: () => {
+        if (ask.closed || (waitFor.length && waitFor.every((r) => ask.got.has(r)))) finish();
+      },
+    };
+    const finish = () => {
+      if (done) return;
+      done = true;
+      accessAsks.delete(id);
+      resolve(ask.closed);
+    };
+    accessAsks.set(id, ask);
+    system.sendScriptEvent("realm:access_check", JSON.stringify({ id, player: playerId, spots: [[dim, at.x, at.y, at.z]] }));
+    system.runTimeout(finish, waitFor.length ? 40 : 5);
+  });
+}
+
+/** @param {string} message a realm:access_check_result */
+function accessResult(message) {
+  const m = JSON.parse(message);
+  if (!m || typeof m.from !== "string") return;
+  const from = m.from.slice(0, 32);
+  accessResponders.add(from);
+  const ask = accessAsks.get(String(m.id));
+  if (!ask) return;
+  ask.got.add(from);
+  if (Array.isArray(m.closed) && m.closed.includes(0)) ask.closed = true;
+  ask.check();
+}
+
+system.run(() =>
+  system.runTimeout(() => system.sendScriptEvent("realm:access_check", JSON.stringify({ id: "hello", player: "", spots: [] })), 60)
+);
+
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   const { player, block, itemStack, isFirstEvent } = event;
-  if (!isFirstEvent || itemStack || player.isSneaking) return;
+  if (event.cancel || !isFirstEvent || itemStack || player.isSneaking) return; // canceled: another pack refused the tap
   const seat = seatFor(block);
   if (!seat || !block.above(1)?.isAir || !block.above(2)?.isAir) return;
   const { x, y, z } = block.location;
@@ -94,13 +155,18 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
 
   event.cancel = true;
   const dim = block.dimension;
-  system.run(() => {
-    try {
-      if (player.isValid && !isRiding(player)) sit(player, dim, { x: x + 0.5, y: y + CONFIG.seatHeight, z: z + 0.5 }, seat.yaw, true);
-    } catch (e) {
-      console.warn(`[chairs] ${e}`);
-    }
-  });
+  const at = { x, y, z };
+  // Asked on the next tick, outside this read-only event; the seat comes once the answer allows it.
+  system.run(() =>
+    closedTo(player.id, dim.id, at)
+      .then((closed) => {
+        if (closed || !player.isValid || isRiding(player)) return;
+        const b = dim.getBlock(at);
+        const again = b && seatFor(b);
+        if (again) sit(player, dim, { x: x + 0.5, y: y + CONFIG.seatHeight, z: z + 0.5 }, again.yaw, true);
+      })
+      .catch((e) => console.warn(`[chairs] ${e}`))
+  );
 });
 
 // Breaking the block under a seat stands its rider up straight away.
@@ -171,8 +237,15 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "chairs_bp");
+    else if (id === "realm:access_check_result") {
+      try {
+        accessResult(message);
+      } catch (e) {
+        console.warn(`[chairs] ${e}`);
+      }
+    }
   },
   { namespaces: ["realm"] }
 );

@@ -4019,7 +4019,10 @@ async function opMenu(player) {
     .button("Unlock every tier for me")
     .button("Back");
   const res = await show(player, form);
-  if (!res || res.canceled) return;
+  if (!res || res.canceled || !player.isValid) return;
+  // Checked again after each form: the player may have been de-opped while it was open.
+  const NOT_OP = "§cOnly operators can use the expedition tools.";
+  if (res.selection !== 4 && !isOp(player)) return player.sendMessage(NOT_OP);
   if (res.selection === 0) setSite(player, undefined, undefined);
   else if (res.selection === 1) {
     // Ending someone's run can't be undone: say whose it is and ask first (nothing to ask when only a box waits for its reset).
@@ -4032,7 +4035,8 @@ async function opMenu(player) {
           .button1("End and reset")
           .button2("Back"),
       );
-      if (!sure || sure.canceled || sure.selection !== 0) return;
+      if (!sure || sure.canceled || sure.selection !== 0 || !player.isValid) return;
+      if (!isOp(player)) return player.sendMessage(NOT_OP);
     }
     await opReset(player);
   }
@@ -4055,7 +4059,8 @@ async function opSigil(player) {
     .toggle("Random affixes for the tier", { defaultValue: true });
   for (const a of AFFIXES) form.toggle(`${a.color}${a.name}§r (if not random)`, { defaultValue: false });
   const res = await show(player, form);
-  if (!res || res.canceled || !res.formValues) return;
+  if (!res || res.canceled || !res.formValues || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can create Nightmare Sigils."); // de-opped while the form was open
   const v = res.formValues;
   const d = CONFIG.dungeons[Number(v[0]) || 0];
   const tier = clamp(Math.round(Number(v[1]) || 1), 1, maxTier());
