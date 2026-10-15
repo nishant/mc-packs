@@ -4347,7 +4347,7 @@ Fourteen silly "enchantments" for your gear. They only add particles, sounds and
 
 ### See and hear it
 
-[The Grunt Birthday cheer](media/silly/yay.mp3): a party-horn toot and a squeaky little chorus cheering "yaaay", synthesized for this pack (no recordings).
+[The Grunt Birthday cheer: a party-horn toot and a squeaky little chorus cheering "yaaay", synthesized for this pack (no recordings)](media/silly/yay.mp3)
 
 ### How to use
 
