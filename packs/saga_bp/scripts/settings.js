@@ -16,6 +16,7 @@ const OPTIONS = [
   { key: "trackerAt", type: "enum", scope: "world", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where the story tracker shows (realm default)", help: "Right and Left 1-4 are boxes from Side HUD (Realm Resources); each pack can take its own, so they show at once. Other add-ons that use the line above the hotbar cannot cover them" },
   { key: "partyShare", type: "bool", scope: "world", label: "Party mates share story progress", help: "Defeat, survive and reach objectives, on the same chapter" },
   { key: "partyRange", type: "int", scope: "world", label: "Party sharing range (blocks)", min: 8, max: 256, step: 8 },
+  { key: "partyStory", type: "bool", scope: "world", label: "Parties share the main story", help: "One main-story chapter per party: the one of the member furthest behind. Its progress is shared; members ahead help" },
   { key: "skipCreative", type: "bool", scope: "world", label: "Creative mode makes no story progress" },
   { key: "opHints", type: "bool", scope: "world", label: "Operator hints for unset places", help: "Tells operators when a player's chapter needs a place nobody set" },
   { key: "championFallback", type: "bool", scope: "world", label: "Story champions without the Champions pack", help: "Spawn the story's mob ourselves when no Champions pack answers" },

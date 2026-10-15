@@ -1,0 +1,143 @@
+// Story Questlines: Track this quest, and a party's shared main story (saga_bp party.js with party_bp's tags).
+//   node tools/test-bds/run.mjs --quiet --only saga_bp,party_bp --scenario tools/test-bds/examples/saga-party-story.js --timeout 600
+// Checks:
+// 1. Solo, the tracker follows the chapter accepted last; Track this quest (Current quests > the story) switches it.
+// 2. A party works on one main-story chapter: Bob (no progress) joins Ann (on "Salt and Silence"): Bob helps with a party
+//    quest, and what he does (talk to Reyes) counts for Ann. Ann's other main chapter (Last Map) waits.
+// 3. Tracking in a party sets the party's tracked quest: Bob is told.
+// 4. Once Bob accepts the same chapter, he gets the progress made so far, and Ann reaching the lighthouse finishes it for both.
+// 5. Cat (no progress) joins: the party goes back to her chapter; Ann can't start her next chapter, and Bob's help counts for Cat.
+// 6. Counts add up: Ann 3 + Bob 4 drowned on "The Drowned Choir" is 7/12 for both.
+// 7. Leaving the party or the others going offline gives a player their own story back.
+// The story is driven without the Townsfolk pack: the scenario sends realm:npc_choose and realm:npc_talk itself.
+export default async function (t) {
+  const sys = t.system;
+  const ann = await t.player("Ann", { op: true, x: 163, z: 170 });
+  const bob = await t.player("Bob", { x: 165, z: 170 });
+  const send = (id, msg) => sys.sendScriptEvent(id, JSON.stringify(msg));
+  /** Starts or ends a chapter and answers its dialogue: Next through the pages, then Accept / Finish (or the first choice). */
+  const choose = async (p, npc, key) => {
+    let next = t.waitForm(p, { timeout: 300 });
+    send("realm:npc_choose", { player: p.id, npc, pack: "saga_bp", key });
+    for (let k = 0; k < 20; k++) {
+      const f = await next;
+      const last = !f.buttons.includes("Next");
+      if (!last) next = t.waitForm(p, { timeout: 300 });
+      f.answer(last ? Math.max(0, f.buttons.findIndex((b) => /Accept|Finish/.test(b))) : "Next");
+      if (last) return;
+    }
+  };
+  /** The story tracker's last text in the player's Side HUD box (a title's subtitle) since a tick. */
+  const trackerSays = (p, re, since) => t.messages(p, { kind: "title", since }).some((m) => re.test(String(m.subtitle ?? "").replace(/§./g, "")));
+
+  // --- 1. Solo tracking --------------------------------------------------------------------------------------
+  let since = t.tick;
+  await choose(ann, "tobin", "start:drowned_bell");
+  await t.waitMessage(ann, /The Drowned Bell: Salt and Silence/, { since, timeout: 300 });
+  await t.wait(30);
+  since = t.tick;
+  await choose(ann, "mara", "start:last_map");
+  await t.waitMessage(ann, /Pins in an Old Map/, { since, timeout: 300 });
+  await t.waitUntil(() => trackerSays(ann, /Last Map:/, since), { timeout: 200, message: "the tracker follows the newest chapter (Last Map)" });
+
+  const trackFromMenu = async (p) => {
+    t.answerForm(p, "Current quests", "Drowned Bell", (f) => f.buttons.findIndex((b) => /Track/.test(b)), "OK", "Back", "Close");
+    t.assert(t.cmd(p, "/realm:saga").ok, "/realm:saga ran");
+  };
+  since = t.tick;
+  await trackFromMenu(ann);
+  await t.waitMessage(ann, /Tracking The Drowned Bell/, { since, timeout: 300 });
+  const tracked = t.tick;
+  await t.waitUntil(() => trackerSays(ann, /Drowned Bell:/, tracked), { timeout: 200, message: "the tracker follows the tracked quest" });
+  t.log("1. solo tracking: OK");
+
+  // --- 2. Party: Bob (no progress) joins Ann -----------------------------------------------------------------
+  since = t.tick;
+  t.assert(t.cmd(ann, "/realm:party_invite Bob").ok, "invite ran");
+  await t.waitMessage(bob, /Ann invited you/, { since });
+  t.assert(t.cmd(bob, "/realm:party_accept").ok, "accept ran");
+  const m1 = await t.waitMessage(bob, /Party story: The Drowned Bell, "Salt and Silence"/, { since, timeout: 200 });
+  t.log("Bob told:", m1.plain);
+  await t.waitMessage(ann, /Party story: The Drowned Bell, "Salt and Silence"/, { since, timeout: 200 });
+
+  // Bob hasn't accepted the chapter: he helps. Talking to Reyes counts for Ann.
+  since = t.tick;
+  send("realm:npc_talk", { player: bob.id, npc: "reyes" });
+  await t.waitMessage(ann, /Ask Warden Reyes what the night watch heard: done/, { since, timeout: 100 });
+  t.log("2. a helper's step counts for the mate: OK");
+
+  // Ann's Last Map chapter waits: her tracker never shows it while in the party.
+  since = t.tick;
+  await t.wait(80);
+  t.check(!trackerSays(ann, /Last Map:/, since), "Ann's other main chapter (Last Map) waits in the party");
+
+  // --- 3. Tracking in a party --------------------------------------------------------------------------------
+  since = t.tick;
+  await trackFromMenu(ann);
+  await t.waitMessage(bob, /Ann set the party's tracked quest: The Drowned Bell\./, { since, timeout: 300 });
+  t.log("3. party tracking: OK");
+
+  // --- 4. Bob accepts the same chapter: progress so far, then shared ---------------------------------------
+  since = t.tick;
+  await choose(bob, "tobin", "start:drowned_bell");
+  await t.waitMessage(bob, /Ask Warden Reyes what the night watch heard: done/, { since, timeout: 300 });
+  since = t.tick;
+  t.assert(t.cmd(ann, "/realm:saga_place lighthouse").ok, "saga_place ran");
+  await t.waitMessage(bob, /"Salt and Silence" is done\. Go back to/, { since, timeout: 200 });
+  await t.waitMessage(ann, /"Salt and Silence" is done\. Go back to/, { since, timeout: 200 });
+  t.log("4. shared chapter finished for both: OK");
+  since = t.tick;
+  await choose(ann, "tobin", "end:drowned_bell");
+  await t.waitMessage(ann, /Chapter complete: Salt and Silence/, { since, timeout: 300 });
+  await choose(bob, "tobin", "end:drowned_bell");
+  await t.waitMessage(bob, /Chapter complete: Salt and Silence/, { since, timeout: 300 });
+
+  // --- 5. Cat (no progress) joins: the party goes back to her chapter -------------------------------------
+  const cat = await t.player("Cat", { x: 161, z: 170 });
+  since = t.tick;
+  t.assert(t.cmd(ann, "/realm:party_invite Cat").ok, "invite Cat ran");
+  await t.waitMessage(cat, /Ann invited you/, { since });
+  t.assert(t.cmd(cat, "/realm:party_accept").ok, "Cat's accept ran");
+  await t.waitMessage(ann, /Party story: The Drowned Bell, "Salt and Silence", where Cat is/, { since, timeout: 200 });
+  await t.waitMessage(bob, /where Cat is/, { since, timeout: 200 });
+  since = t.tick;
+  send("realm:npc_choose", { player: ann.id, npc: "reyes", pack: "saga_bp", key: "start:drowned_bell" });
+  await t.waitMessage(ann, /Your party is on The Drowned Bell, "Salt and Silence"/, { since, timeout: 200 });
+  t.log("5a. Ann's next chapter waits for Cat: OK");
+  since = t.tick;
+  await choose(cat, "tobin", "start:drowned_bell");
+  await t.waitMessage(cat, /The Drowned Bell: Salt and Silence/, { since, timeout: 300 });
+  // Ann stands at the lighthouse: her help reaches it for Cat. Reyes wasn't asked yet in Cat's chapter.
+  await t.waitMessage(cat, /Climb to the lighthouse: done/, { since, timeout: 100 });
+  await t.wait(30);
+  t.check(!t.messages(cat, { since }).some((m) => /Ask Warden Reyes what the night watch heard: done/.test(m.plain)), "Cat's chapter starts from her own progress");
+  since = t.tick;
+  send("realm:npc_talk", { player: bob.id, npc: "reyes" });
+  await t.waitMessage(cat, /Ask Warden Reyes what the night watch heard: done/, { since, timeout: 100 });
+  t.log("5b. Bob's help counts for Cat: OK");
+
+  // --- 7a. Cat leaves: her own story again; Ann and Bob move on together ------------------------------------
+  since = t.tick;
+  t.cmd(cat, "/realm:party_leave");
+  await t.waitMessage(cat, /Your own story counts again/, { since, timeout: 200 });
+  await t.waitMessage(ann, /Party story: The Drowned Bell, "The Drowned Choir"/, { since, timeout: 200 });
+  t.log("7a. leaving the party: OK");
+
+  // --- 6. Counts add up ---------------------------------------------------------------------------------------
+  since = t.tick;
+  await choose(ann, "reyes", "start:drowned_bell");
+  await t.waitMessage(ann, /The Drowned Bell: The Drowned Choir/, { since, timeout: 300 });
+  await t.wait(30);
+  since = t.tick;
+  send("realm:saga_debug", { player: "Ann", action: "bump", story: "drowned_bell", i: 0, n: 3 });
+  send("realm:saga_debug", { player: "Bob", action: "bump", story: "drowned_bell", i: 0, n: 4 });
+  const says7 = (p) => t.messages(p, { since }).some((m) => /Defeat 12 drowned 7\/12/.test(String(m.subtitle ?? m.plain ?? "").replace(/§./g, "")));
+  await t.waitUntil(() => says7(ann) && says7(bob), { timeout: 100, message: "3 + 4 drowned is 7/12 for both Ann and Bob" });
+  t.log("6. counts add up: OK");
+
+  // --- 7b. Bob goes offline: Ann's own story again -----------------------------------------------------------
+  since = t.tick;
+  bob.disconnect();
+  await t.waitMessage(ann, /Your own story counts again/, { since, timeout: 200 });
+  t.log("7b. a mate offline: OK");
+}
