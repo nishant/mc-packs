@@ -469,8 +469,9 @@ system.afterEvents.scriptEventReceive.subscribe(
     try {
       const m = JSON.parse(ev.message);
       const player = world.getAllPlayers().find((p) => p.name === m?.player);
-      const ids = Array.isArray(m?.ids) ? m.ids.filter((i) => typeof i === "string" && pool.has(i)) : [];
-      if (player && ids.length) save(player, { d: today(), q: ids.map((id) => ({ id, p: 0, done: 0 })) });
+      /** @type {string[]} */
+      const ids = Array.isArray(m?.ids) ? m.ids.filter((/** @type {unknown} */ i) => typeof i === "string" && pool.has(i)) : [];
+      if (player && ids.length) save(player, { d: today(), q: ids.map((/** @type {string} */ id) => ({ id, p: 0, done: 0 })) });
     } catch (e) {
       console.warn(`[quests] test: ${e}`);
     }
