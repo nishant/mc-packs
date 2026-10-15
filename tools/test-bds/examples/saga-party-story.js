@@ -9,6 +9,8 @@
 // 5. Cat (no progress) joins: the party goes back to her chapter; Ann can't start her next chapter, and Bob's help counts for Cat.
 // 6. Counts add up: Ann 3 + Bob 4 drowned on "The Drowned Choir" is 7/12 for both.
 // 7. Leaving the party or the others going offline gives a player their own story back.
+// 8. A step that doesn't apply to a mate (an "either" way needing a pack that isn't installed) isn't shared to them.
+// Also: tracking a daily favor stays personal.
 // The story is driven without the Townsfolk pack: the scenario sends realm:npc_choose and realm:npc_talk itself.
 export default async function (t) {
   const sys = t.system;
@@ -77,6 +79,19 @@ export default async function (t) {
   await t.waitMessage(bob, /Ann set the party's tracked quest: The Drowned Bell\./, { since, timeout: 300 });
   t.log("3. party tracking: OK");
 
+  // A daily favor is personal: tracking it doesn't touch the party.
+  await t.wait(40); // the story log menu has closed
+  since = t.tick;
+  await choose(ann, "tobin", "fvstart:tobin");
+  await t.waitMessage(ann, /Daily favor for Old Tobin/, { since, timeout: 200 });
+  since = t.tick;
+  t.answerForm(ann, "Current quests", "Daily favor", (f) => f.buttons.findIndex((b) => /Track/.test(b)), "Back", "Close");
+  t.assert(t.cmd(ann, "/realm:saga").ok, "/realm:saga ran");
+  await t.waitMessage(ann, /Tracking Daily favor for Old Tobin/, { since, timeout: 300 });
+  await t.wait(40);
+  t.check(!t.messages(bob, { since }).some((m) => /tracked quest/.test(m.plain)), "a favor's tracking stays Ann's own");
+  t.log("3b. favor tracking is personal: OK");
+
   // --- 4. Bob accepts the same chapter: progress so far, then shared ---------------------------------------
   since = t.tick;
   await choose(bob, "tobin", "start:drowned_bell");
@@ -134,6 +149,25 @@ export default async function (t) {
   const says7 = (p) => t.messages(p, { since }).some((m) => /Defeat 12 drowned 7\/12/.test(String(m.subtitle ?? m.plain ?? "").replace(/§./g, "")));
   await t.waitUntil(() => says7(ann) && says7(bob), { timeout: 100, message: "3 + 4 drowned is 7/12 for both Ann and Bob" });
   t.log("6. counts add up: OK");
+
+  // --- 8. A step that doesn't apply to a mate never reaches them -------------------------------------------
+  // Act III "Echoes in Crystal": the expedition way (only with expedition_bp, not installed here) is an "either"
+  // with the echo shards and sets shards:"depths". Bob's gets done; Ann's must not (nor her flag), the stealth step is shared.
+  for (const who of ["Ann", "Bob"]) for (const story of ["drowned_bell", "last_map", "act1_signs", "act2_choir"]) send("realm:saga_debug", { player: who, action: "finish", story });
+  await t.wait(40);
+  since = t.tick;
+  await choose(ann, "ida", "start:act3_deep");
+  await t.waitMessage(ann, /Act III|Echoes in Crystal/, { since, timeout: 300 });
+  await choose(bob, "ida", "start:act3_deep");
+  await t.waitMessage(bob, /Echoes in Crystal/, { since, timeout: 300 });
+  await t.wait(30);
+  since = t.tick;
+  send("realm:saga_debug", { player: "Bob", action: "bump", story: "act3_deep", i: 2, n: 1 });
+  send("realm:saga_debug", { player: "Bob", action: "bump", story: "act3_deep", i: 0, n: 1 });
+  await t.waitMessage(ann, /Sneak past the Choir diggers to their dig at the mine: done/, { since, timeout: 100 });
+  await t.wait(40);
+  t.check(!t.messages(ann, { since }).some((m) => /Clear the Sculk Depths expedition/.test(m.plain)), "a step that doesn't apply to Ann isn't shared to her");
+  t.log("8. or/when steps stay with whoever they apply to: OK");
 
   // --- 7b. Bob goes offline: Ann's own story again -----------------------------------------------------------
   since = t.tick;

@@ -4,7 +4,7 @@
 // lives in memory only, and their own main story waits. Nothing anyone saved is ever taken back: leaving the party
 // (or the others going offline) brings back the player's own story where they left it.
 import { world } from "@minecraft/server";
-import { ORDERED, currentChapter, finished, installed, ownEntries, partyViews, sagaOf, target } from "./data.js";
+import { ORDERED, active, currentChapter, finished, installed, objDone, ownEntries, partyViews, reached, requires, sagaOf, storyWaitsForPacks, target } from "./data.js";
 import { bump } from "./objectives.js";
 import { get } from "./settings.js";
 import { npcName } from "./util.js";
@@ -31,14 +31,28 @@ export function partyMates(player) {
 
 /**
  * Where the player is in the main story: the first unfinished main chapter, in story order (prologue first).
- * @param {Saga} saga @returns {{ si: number, story: Story, chapter: Chapter, index: number } | undefined}
+ * `why` is set when they can't start that story yet (what it needs, or a pack check still running): such a
+ * member doesn't set the party's chapter.
+ * @param {Saga} saga @param {Player} player
+ * @returns {{ si: number, story: Story, chapter: Chapter, index: number, why?: string[] } | undefined}
  */
-export function frontier(saga) {
+export function frontier(saga, player) {
   for (let si = 0; si < MAIN.length; si++) {
     const story = MAIN[si];
     if (finished(saga, story)) continue;
     const cur = currentChapter(saga, story);
-    if (cur) return { si, story, chapter: cur.chapter, index: cur.index };
+    if (!cur) continue;
+    const st = saga.s[story.id];
+    /** @type {string[] | undefined} */
+    let why;
+    if (!st?.a && !st?.dn.length) {
+      if (storyWaitsForPacks(story)) why = [];
+      else {
+        const req = requires(story.requires, saga, story.id, player);
+        if (!req.ok) why = req.why;
+      }
+    }
+    return { si, story, chapter: cur.chapter, index: cur.index, why };
   }
   return undefined;
 }
@@ -51,8 +65,10 @@ export function frontier(saga) {
  */
 function modeOf(obj) {
   if (obj.type === "collect") return undefined;
-  if (obj.race) return "done";
-  if (obj.type === "survive" || obj.type === "vigil") return "max";
+  // Timed steps (each member's own clock) and races: only a finished one is shared.
+  if (obj.race || obj.within) return "done";
+  // Time spent, and distance ridden (two in one boat both ride it): whoever is furthest along.
+  if (obj.type === "survive" || obj.type === "vigil" || obj.type === "ride") return "max";
   if (target(obj) <= 1) return "done";
   switch (obj.type) {
     case "defeat":
@@ -62,7 +78,6 @@ function modeOf(obj) {
     case "place":
     case "tend":
     case "tame":
-    case "ride":
     case "interact":
     case "use":
     case "lead":
@@ -112,11 +127,12 @@ export function partyTick() {
   const seen = new Set();
   for (const [tag, members] of groups) {
     if (members.length < 2) continue;
-    const where = members.map((p) => ({ p, f: frontier(sagaOf(p)) }));
+    const where = members.map((p) => ({ p, f: frontier(sagaOf(p), p) }));
     /** @type {{ si: number, story: Story, chapter: Chapter, index: number } | undefined} */
     let at;
-    for (const { f } of where) if (f && (!at || f.si < at.si || (f.si === at.si && f.index < at.index))) at = f;
-    if (!at) continue; // everyone finished the main story
+    // A member who can't start their next main story yet doesn't hold the party there: they help, and are told why.
+    for (const { f } of where) if (f && !f.why && (!at || f.si < at.si || (f.si === at.si && f.index < at.index))) at = f;
+    if (!at) continue; // everyone finished the main story, or nobody can go on with it: each their own
     const here = at;
     const key = `${here.story.id}/${here.chapter.id}`;
     /** @type {Map<string, Entry>} */
@@ -126,7 +142,10 @@ export function partyTick() {
       if (e) real.set(p.id, e);
     }
     const behind = where.filter(({ f }) => f && f.story === here.story && f.chapter === here.chapter).map(({ p }) => p.name);
-    /** @type {{ p: Player, e: Entry }[]} */
+    // A party quest's steps apply (`when`) as they do for a mate on the chapter.
+    const lead = [...real.keys()].map((id) => members.find((p) => p.id === id)).find((p) => p);
+    const leadSaga = lead ? sagaOf(lead) : undefined;
+    /** @type {{ p: Player, e: Entry, saga: Saga }[]} */
     const parts = [];
     for (const { p, f } of where) {
       seen.add(p.id);
@@ -135,19 +154,21 @@ export function partyTick() {
       /** @type {Entry | undefined} */
       let ghost;
       if (!real.has(p.id) && real.size) ghost = same && prev?.ghost ? prev.ghost : partyQuest(here, [...real.values()]);
+      if (ghost) ghost.sg = leadSaga;
       /** @type {PartyView} */
       const view = same && prev?.ghost === ghost ? /** @type {PartyView} */ (prev) : { story: here.story, chapter: here.chapter, ghost };
       partyViews.set(p.id, view);
       const e = real.get(p.id) ?? ghost;
-      if (e) parts.push({ p, e });
+      if (e) parts.push({ p, e, saga: e.sg ?? sagaOf(p) });
       const onIt = !!f && f.story === here.story && f.chapter === here.chapter;
-      tell(p, `${key}|${onIt ? "on" : "help"}`, () => {
+      const needs = f?.why?.length ? ` First, for ${f.story.title}, you need to: ${f.why.join(", ")}.` : "";
+      tell(p, `${key}|${onIt ? "on" : "help"}${needs}`, () => {
         const title = `${here.story.title}, "${here.chapter.title}"`;
         if (onIt) {
           const start = real.has(p.id) ? "" : ` Talk to ${npcName(here.chapter.npc ?? here.story.giver)} to start it.`;
           return `§b[Party] Party story: ${title}. Progress on it is shared with your party.${start}`;
         }
-        return `§b[Party] Party story: ${title}, where ${listNames(behind)} ${behind.length > 1 ? "are" : "is"}. Help out: what you do for it counts for them. Your own story waits until the party catches up.`;
+        return `§b[Party] Party story: ${title}, where ${listNames(behind)} ${behind.length > 1 ? "are" : "is"}. Help out: what you do for it counts for them. Your own story waits until the party catches up.${needs}`;
       });
     }
     if (real.size) share(tag, key, here.chapter, parts);
@@ -174,7 +195,9 @@ function tell(player, key, text) {
  * Shares the progress on the party's chapter among the members working on it (their own entry, or a helper's
  * party quest). Counts add up, time is the furthest along, and a step one member finished is finished for all.
  * Each member's own entry gets it through bump(), so they see the usual notes and get their own bonuses.
- * @param {string} tag @param {string} key @param {Chapter} chapter @param {{ p: Player, e: Entry }[]} parts
+ * A step counts only for members it applies to (`when`, `or` groups, the current step of a sequential chapter): a
+ * member who finished an "either" step one way never gets the other way's flags from a mate.
+ * @param {string} tag @param {string} key @param {Chapter} chapter @param {{ p: Player, e: Entry, saga: Saga }[]} parts
  */
 function share(tag, key, chapter, parts) {
   let s = synced.get(tag);
@@ -188,16 +211,19 @@ function share(tag, key, chapter, parts) {
     if (!mode) return;
     const need = target(obj);
     let g = state.v[i] ?? 0;
-    for (const { e } of parts) {
+    // Gives: a member it applies to, and whose "either" group wasn't done another way. Takes: active() for them.
+    const gives = parts.filter(({ e, saga }) => reached(e, i) || !objDone(e, i, saga));
+    const takes = parts.filter(({ e, saga }) => active(e, i, saga));
+    for (const { e } of gives) {
       const val = e.st.o?.[i] ?? 0;
       const last = state.last.get(e.st)?.[i];
       g = mode === "add" && last !== undefined ? g + (val - last) : Math.max(g, val);
     }
     g = Math.max(0, Math.min(need, g));
     state.v[i] = g;
-    for (const { p, e } of parts) {
+    for (const { p, e } of gives) {
       const val = e.st.o?.[i] ?? 0;
-      if (val !== g && (mode !== "done" || g >= need) && p.isValid) bump(p, e, i, g, true);
+      if (takes.some((x) => x.e === e) && val !== g && (mode !== "done" || g >= need) && p.isValid) bump(p, e, i, g, true);
       const arr = state.last.get(e.st) ?? [];
       arr[i] = e.st.o?.[i] ?? 0;
       state.last.set(e.st, arr);
