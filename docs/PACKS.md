@@ -1062,7 +1062,7 @@ Claim the land around your base so other players can't break, place or open anyt
 
 1. Once an operator has enabled land claims, stand in the middle of your base and run `/realm:claim`, then pick **Claim this land**. You get 33 × 33 blocks around you (default radius 16, `radius`), from the bottom of the world to the top, and green sparkles show its borders.
 2. Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees `This land is claimed by Sam`.
-3. **Share it:** `/realm:claim` → **My claim: 120, -340** → **Share with Alex** (players online now). The same menu stops sharing, shows its borders or removes the claim (it asks first).
+3. **Share it:** `/realm:claim` → **My claim: 120, -340** → **Share with Alex** (players online now). In a [party](#parties--party_bp), **Share with my party** shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first).
 4. **Where are the borders?** `/realm:claim` → **Show claim borders** sparkles the edges of every claim near you for 10 seconds (asking again starts over). Walking in or out of one says `Entering Sam's claim` / `Leaving Sam's claim` above the hotbar.
 5. Claims are safe zones for world events too: meteors, storm lightning and the other world-event packs break no blocks in them (see [Safe Zones](#safe-zones--zones_bp)).
 6. **Operators:** enable it in `/realm:config` → **Land Claims** → **Land claims**, and set the claim size and how many each player gets there. `/realm:claim` → **All claims (operator)** lists every claim to remove any of them. **Protect claims from world events** (`protectWorldEvents`) turns the safe zone part off.
@@ -1075,6 +1075,7 @@ Claim the land around your base so other players can't break, place or open anyt
 - **What's protected** from everyone who isn't the owner or shared: breaking and placing blocks, tapping any block (chests, doors, trapdoors, buttons, levers, beds, crafting tables, buckets), and using the entities in `protectedEntities`. A block placed from outside onto the edge of a claim is refused too; with an empty hand you can still open a door or chest just outside the border.
 - **Explosions** break no blocks inside a claim (`protectExplosions`), whatever caused them; the damage is unchanged, and the part of the blast outside the claim breaks blocks as usual.
 - **World events** (`protectWorldEvents`, default enabled): every claim is a safe zone, so no meteor crater, storm cell lightning or other world event changes blocks in it, and [Safe Zones](#safe-zones--zones_bp) lists it under **Towns and claims** as `Sam's claim`.
+- **Sharing with your party** (only offered while you're in a [party](#parties--party_bp)): **Share with my party** lets every member of your party build and open things in the claim, without using up the `maxShared` places. The claim follows the party you're in now, checked once a second while you're online: a player who joins your party gets in, a member who leaves loses access, and if you join another party, that party gets it instead (nobody, while you're in none). The menu says `Shared with your party: everyone in it can build here.` (or `Shared with your party, once you're in one.`), the **My claim** button adds `and your party`, and **Stop sharing with my party** ends it.
 - **Operators** can't build in other players' claims unless **Operators can build in any claim** is enabled (`operatorsBypass`), so a realm where everyone is an operator still gets protection. They can always remove a claim.
 - **Containers in a claim** are also kept from other players' [Quick Stack & Sort](#quick-stack--sort--stash_bp) (`/realm:stash` puts nothing in them) and [Chest Finder](#chest-finder--find_bp) (`/realm:find` doesn't list them).
 - **Other packs' blocks in a claim** follow the same rule, since tapping them is refused like any other tap: only the claim's players can collect a charged lightning rod's Storm Glass ([Storm Chasing](#storm-chasing--storm_bp)), sit on its stairs and slabs ([Chairs](#chairs--chairs_bp)), cook in its pots ([Kitchen](#kitchen--cooking_bp)), play its slot machines ([Slot Machine](#slot-machine--slots_bp)) or use its waystones ([Waystones & Inns](#waystones--inns--waystone_bp)).
@@ -1084,7 +1085,7 @@ Claim the land around your base so other players can't break, place or open anyt
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:claim` | Everyone | Opens the Land Claims menu: claim the land around you (default 33 × 33 blocks, `radius` 16), show nearby claim borders, share or remove your claims (default 2 each, `maxClaims`); operators also get every claim, to remove any. Only works once an operator has enabled land claims (default disabled, `enabled`) |
+| `/realm:claim` | Everyone | Opens the Land Claims menu: claim the land around you (default 33 × 33 blocks, `radius` 16), show nearby claim borders, share or remove your claims (default 2 each, `maxClaims`), including with your whole party while you're in one; operators also get every claim, to remove any. Only works once an operator has enabled land claims (default disabled, `enabled`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -1106,7 +1107,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `pro
 
 | Key | Scope | Contents |
 |---|---|---|
-| `claims:c:<id>` | World | One per claim: JSON `{ id, o, n, dim, x, z, r, s }`, the owner's id and name, the dimension, the center, the radius and the players it's shared with (`[{ i, n }]`). The owner's and shared players' names are updated when they join with a new gamertag |
+| `claims:c:<id>` | World | One per claim: JSON `{ id, o, n, dim, x, z, r, s, pt?, pc? }`, the owner's id and name, the dimension, the center, the radius, the players it's shared with (`[{ i, n }]`), whether it's shared with the owner's party (`pt`) and that party's code when the owner was last seen online (`pc`, `""` for none). The owner's and shared players' names are updated when they join with a new gamertag |
 | `claims:next` | World | The next claim id |
 | `claims:cfg` | World | Settings changed in `/realm:config` |
 
@@ -1115,6 +1116,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `pro
 - Claims are read into memory once and kept in step as they change, so the checks below never read saved data.
 - `beforeEvents.playerBreakBlock` and `beforeEvents.playerInteractWithBlock` are canceled inside someone else's claim. The tap is checked at the block and at the spot a block would be placed, since the stable API has no "before place" event and placing starts with that tap. `afterEvents.playerPlaceBlock` removes anything that still got placed. `beforeEvents.playerInteractWithEntity` is canceled for `protectedEntities`.
 - `beforeEvents.explosion` takes the blocks inside claims out of the blast without canceling it.
+- **Party sharing:** a claim with `pt` lets in every player carrying the tag `realm_party:<pc>` ([Parties](#parties--party_bp)). Once a second, for each such claim whose owner is online, `pc` is set to the owner's current party code and saved when it changed.
 - The pack is the `claims` provider of the safe zones protocol: while claims are enabled and `protectWorldEvents` is on, it sends every claim as a square zone (`realm:zones`) whenever claims change, when the world starts and when asked (`realm:zones_ping`); otherwise it sends an empty list. It also listens to the other providers (Safe Zones' `zones`, Town Projects' `town`) to refuse a player's new claim that would reach into one of their zones (operators may claim there).
 - Other packs ask before changing blocks in a box (Easy Building): `realm:claims_check` `{ id, player, dim, x1, z1, x2, z2 }` is answered with `realm:claims_check_result` `{ id, claims: [{ n, x1, z1, x2, z2 }] }`, the owner's name and corners of up to 10 claims in that box the player may not build in (none while claims are disabled; shared players, and operators with `operatorsBypass`, may build). It is always answered, so the asker also learns that Land Claims is installed.
 - Quick Stack & Sort, Chest Finder and Chairs ask which blocks a player may not open: `realm:access_check` `{ id, player, spots: [[dim, x, y, z], ...] }` is answered with `realm:access_check_result` `{ id, from: "claims_bp", closed: [i, ...] }`, the spots in a claim that player may not open (the same rule as tapping a chest there; none while claims are disabled). See Quick Stack & Sort's **How it works**.
@@ -1130,13 +1132,15 @@ Tells you where you died once you respawn, and points you back there. The realm 
 
 1. Nothing to set up: when you respawn after dying, chat says `You died at 120, 64, -340 in the Overworld.`
 2. Run `/realm:death` any time to see your last death point again, how far it is from where you stand and in which direction, for example `It's 245 blocks to the NE, 12 blocks down.` When teleporting back is enabled (or you're an operator) it opens the **Death Point** menu with that text and the buttons `Where I died` (the same in chat), `Teleport back` and, for operators, `Settings`; otherwise it answers in chat right away. `/realm:death_info` always answers in chat.
-3. Don't want the chat message? Disable **Tell me where I died** in `/realm:prefs`. `/realm:death` still works.
-4. If an operator has enabled it, tap `Teleport back` in `/realm:death`, or run `/realm:death_back`, to teleport to your last death point, once per death. It only lands you somewhere safe to stand, and says so when there isn't such a place.
-5. **Operators:** enable `/realm:death_back` in `/realm:config` → **Death Point** → **Teleport back to the death point (/realm:death_back)**. The same page turns the respawn message off for everyone.
+3. In a [party](#parties--party_bp), your online mates are told where you died, with how far and which way it is from them, so they can come help. Don't want to hear about theirs? Disable **Tell me where party mates die** in `/realm:prefs`.
+4. Don't want the chat message? Disable **Tell me where I died** in `/realm:prefs`. `/realm:death` still works.
+5. If an operator has enabled it, tap `Teleport back` in `/realm:death`, or run `/realm:death_back`, to teleport to your last death point, once per death. It only lands you somewhere safe to stand, and says so when there isn't such a place.
+6. **Operators:** enable `/realm:death_back` in `/realm:config` → **Death Point** → **Teleport back to the death point (/realm:death_back)**. The same page turns the respawn message and the party message off for everyone.
 
 ### What players see
 
 - **On respawn** (`announce`): `You died at 120, 64, -340 in the Overworld. Run /realm:death to see where that is from here.` A player who leaves on the death screen gets it when they next spawn.
+- **Party mates** (`tellParty`, each player's own **Tell me where party mates die** in `/realm:prefs`): right when a [party](#parties--party_bp) member dies, every other online member gets `[Party] Ann died at 120, 64, -340 in the Overworld (40 blocks W of you).`, the distance along the ground and one of 8 directions from where they stand, or `(right where you are)` within 2 blocks. A mate in another dimension gets the line without the distance.
 - **`/realm:death`** (or `/realm:death_info`) shows the block you died in and its dimension, then the distance along the ground, rounded to whole blocks, with one of 8 directions (N, NE, E, SE, S, SW, W, NW; north is toward negative Z) and how far up or down. Within 2 blocks it says `You're standing on it.` In another dimension it says which one you're in, with no distance. When `/realm:death_back` is enabled it adds whether you can still use it for this death.
 - **`/realm:death_back`** while disabled (`backEnabled`, disabled by default): `Teleporting back is disabled on this realm. An operator can enable it in /realm:config (Death Point). /realm:death still shows the way.`
 - **`/realm:death_back`** while enabled looks for the nearest safe spot within 2 blocks sideways (`backSearchRadius`) and 8 blocks up or down (`backSearchHeight`) of the death point: two blocks of air (or grass, ferns, flowers, a dead bush, vines, glow lichen or a torch) to stand in, on a block that isn't air, water, lava, magma, fire, a campfire, cactus, a berry bush, a wither rose, powder snow or pointed dripstone, with no lava or fire right beside it. It works across dimensions. Then:
@@ -1158,25 +1162,27 @@ Tells you where you died once you respawn, and points you back there. The realm 
 | Option | Default | Description |
 |---|---|---|
 | `announce` | `true` | Tell players in chat where they died once they respawn. Each player can change it for themselves |
+| `tellParty` | `true` | Tell a player's online party mates ([Parties](#parties--party_bp)) in chat where they died, with the distance and direction from each mate. Each player can change it for themselves |
 | `backEnabled` | `false` | `/realm:death_back` teleports players to their last death point, once per death |
 | `backSearchRadius` | `2` | How far sideways (blocks) from the death point `/realm:death_back` looks for a safe place to stand (0 to 4 in game) |
 | `backSearchHeight` | `8` | How far up and down (blocks) it looks (0 to 16 in game) |
 | `backLoadSeconds` | `5` | How long `/realm:death_back` waits for a faraway death point to load before giving up |
 
-Operators can change `announce`, `backEnabled`, `backSearchRadius` and `backSearchHeight` in game with `/realm:config`. `backLoadSeconds` stays in `config.js`. Each player can disable the respawn message for themselves in `/realm:prefs` (**Tell me where I died**).
+Operators can change `announce`, `tellParty`, `backEnabled`, `backSearchRadius` and `backSearchHeight` in game with `/realm:config`. `backLoadSeconds` stays in `config.js`. Each player can disable the respawn message (**Tell me where I died**) and the party mates' deaths (**Tell me where party mates die**) for themselves in `/realm:prefs`; each follows the realm's setting until they choose.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `death:last` | Player | JSON `{ d, x, y, z, told, used }`: the dimension and block of the last death, whether the respawn message was sent and whether `/realm:death_back` was used for it |
-| `death:pref` | Player | The player's choice for **Tell me where I died**, when it differs from the realm's |
+| `death:pref` | Player | The player's choices for **Tell me where I died** and **Tell me where party mates die**, when they differ from the realm's |
 | `death:areas` | World | JSON list of the temporary ticking areas `/realm:death_back` is using right now; any left after a restart are removed when the world loads |
 | `death:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
 
 - `world.afterEvents.entityDie` saves the block a player died in; `world.afterEvents.playerSpawn` sends the message once.
+- **Party message:** right after saving, the pack finds the dead player's `realm_party:<code>` tag (from [Parties](#parties--party_bp)) and messages every other online player with the same tag whose own `tellParty` is on.
 - `/realm:death_back` checks the blocks around the death point with `Dimension.getBlock`, nearest first. When the death point isn't loaded, it runs `tickingarea add circle <x> <y> <z> 1 "death_back_<id>" true` in that dimension, checks again every 5 ticks until the blocks can be read, and removes the ticking area right after (`tickingarea remove`). While it's there it counts toward Bedrock's 10 ticking areas per world (see [Farm Loader](#farm-loader--farm_bp)); if all 10 are taken, `/realm:death_back` says it can't load the death point now.
 - The teleport uses `Entity.tryTeleport` with `checkForBlocks`, so the game refuses it too if the spot became blocked meanwhile. It is marked used only after it succeeds.
 - **Minimap:** after each death the pack sends `realm:death_point` `{ player, dim, x, z }`, and on `realm:death_point_ping` `{ player? }` the point of every online player (`{ player }` alone when there is none).
@@ -1486,16 +1492,18 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 ### How to use
 
 1. Run `/realm:mail` and pick **Write a letter**. Choose who it's for (everyone who has joined since the pack was added, with `(online)` after the ones playing now), type a subject and the letter, and press **Send**. Minecraft's text boxes hold only 100 characters each, so the letter has several boxes (6 for the default 600 characters): a full box runs straight on into the next, and after a box that isn't full the next one starts a new line. You can also type `\n` for a new line.
-2. If they're online, they see `New letter from Sam: "Hello!". Read it with /realm:mail` in chat. If not, the letter waits: the next time they join, chat says `You have 2 unread letters: /realm:mail`.
-3. **Read your letters:** `/realm:mail` → **Inbox**. New letters are marked `[New]`. Open one to read it, then **Reply** or **Delete** it. **Delete all read letters** clears out the rest and shows the inbox again.
-4. **See what you sent:** `/realm:mail` → **Sent** shows your recent letters and whether each was read yet.
-5. Don't want the chat line on joining? Disable **Unread letters notice on join** in `/realm:prefs`.
-6. **Operators:** `/realm:config` → **Realm Mail** sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining.
+2. **Write to your whole party:** in a [party](#parties--party_bp), the first choice in the list is **My party (Bob, Dan)**: it sends a copy of the letter to every mate, offline ones included.
+3. If they're online, they see `New letter from Sam: "Hello!". Read it with /realm:mail` in chat. If not, the letter waits: the next time they join, chat says `You have 2 unread letters: /realm:mail`.
+4. **Read your letters:** `/realm:mail` → **Inbox**. New letters are marked `[New]`. Open one to read it, then **Reply** or **Delete** it. **Delete all read letters** clears out the rest and shows the inbox again.
+5. **See what you sent:** `/realm:mail` → **Sent** shows your recent letters and whether each was read yet.
+6. Don't want the chat line on joining? Disable **Unread letters notice on join** in `/realm:prefs`.
+7. **Operators:** `/realm:config` → **Realm Mail** sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining.
 
 ### What players see
 
 - **The menu** says how many unread letters you have, then **Inbox** (`3 letters, 1 unread`), **Write a letter** and **Sent**.
 - **Writing:** the recipient list holds every player who has joined since the pack was added (up to 400, `maxRoster`; the ones seen longest ago are forgotten first). The subject is shortened to 40 characters (`subjectLength`) and the letter to 600 (`bodyLength`); chat says `(It was shortened to fit.)` when that happens. An empty letter brings the form back with `Write something in the letter first.` A letter without a subject gets `(no subject)`. Color and format codes (`§` and the character after it) are taken out of the subject and the letter, so a letter can't pass for a message from the realm. The subject is at most 100 characters whatever `subjectLength` says, the most a text box takes.
+- **To your party:** while you're in a [party](#parties--party_bp), the recipient list starts with `My party (Bob, Dan)`: every player in the list whose party (as last seen online) is yours, offline mates included. It sends each of them their own copy, to read, answer and delete like any letter, and each copy shows in your Sent list. Chat says `Letter sent to your party: Bob, Dan.`; a mate whose mailbox is full of unread letters is skipped and named (`Dan's mailbox is full of unread letters, so they didn't get it.`), and when every mailbox is full the form comes back with `Every mailbox in your party is full of unread letters (Bob, Dan). Try again once they've read some.` The wait between letters counts once for the whole party letter.
 - **Waiting between letters:** each player can send one letter every 10 seconds (`sendCooldownSeconds`); sending sooner brings the form back, filled in, with `Wait 4 more seconds before sending another letter, then press Send again.` at the top
 - **Full inboxes:** an inbox holds 50 letters (`inboxLimit`). When a letter arrives in a full inbox, the oldest letters its owner has already read are dropped to make room. If every letter in it is still unread, the letter isn't sent: the form comes back, filled in, with `Alex's mailbox is full of unread letters. Try again once they've read some.` at the top, so you can pick someone else or keep the text.
 - **Reading** a letter shows who sent it and when (`3h ago (2026-10-06 14:05 UTC)`), and marks it read. **Reply** opens the letter form with the sender picked and the subject `Re: ...`.
@@ -1507,7 +1515,7 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:mail` | Everyone | Opens Realm Mail: your **Inbox** (read, reply, delete; default 50 letters each, `inboxLimit`), **Write a letter** to any player who has joined, even offline, and **Sent** (your last 30 letters, `sentLimit`) |
+| `/realm:mail` | Everyone | Opens Realm Mail: your **Inbox** (read, reply, delete; default 50 letters each, `inboxLimit`), **Write a letter** to any player who has joined, even offline, or to your whole party, and **Sent** (your last 30 letters, `sentLimit`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -1530,7 +1538,7 @@ Operators can change `inboxLimit`, `sentLimit`, `notifyOnJoin` and `sendCooldown
 |---|---|---|
 | `mail:l:<id>` | World | One per letter: JSON `{ id, f, fn, t, tn, s, b, at, r, di, ds }`, the writer's and recipient's ids and names, subject, letter, when it was sent (ms), read, deleted from the inbox, removed from Sent. Removed once both the recipient deleted it and it left the writer's Sent list |
 | `mail:next` | World | The next letter id |
-| `mail:roster` | World | JSON list of players who have joined: `[{ i, n, t }]`, id, name and last join (ms), newest first, up to `maxRoster` |
+| `mail:roster` | World | JSON list of players who have joined: `[{ i, n, t, p? }]`, id, name, last join (ms) and party code ([Parties](#parties--party_bp), when they were last seen in one), newest first, up to `maxRoster` |
 | `mail:pref` | Player | JSON of the player's own `joinNotice` choice from `/realm:prefs` |
 | `mail:cfg` | World | Settings changed in `/realm:config` |
 
@@ -1538,6 +1546,7 @@ Operators can change `inboxLimit`, `sentLimit`, `notifyOnJoin` and `sendCooldown
 
 - Each letter is its own small world property (a few hundred bytes up to about 2 KB), so no property comes near the 32 KB limit however many letters a player keeps. The realm holds up to 5,000 letters in all. Letters are read into memory once and kept in step as they change.
 - The roster is updated on every join (`afterEvents.playerSpawn` with `initialSpawn`), so a player who changes their gamertag shows under the new name. Letters are addressed by player id, so they still arrive.
+- **Party letters:** each roster entry keeps the player's party code from their `realm_party:<code>` tag, saved on joining and refreshed for every online player whenever someone opens the letter form. **My party** lists the roster entries with the writer's code, so mates who are offline still get the letter; it is sent as one ordinary letter per mate.
 - The unread notice is sent `notifyDelaySeconds` after joining. A letter to someone online reaches them straight away with a chat line and a sound.
 - The forms are `ActionFormData` and `ModalFormData` from `@minecraft/server-ui`.
 - **Letters from other packs:** `realm:mail_send` `{ to, from, subject, body }`: `to` a player id or name from the roster, `from` any name to show as the sender, the subject and letter shortened to `subjectLength` and `bodyLength`. The letter has no writer id (`f` is empty), so it can't be answered; it makes room in a full inbox the same way, and the recipient gets the usual chat line if online.
@@ -1605,15 +1614,16 @@ Every player gets three quests a day, such as mining coal, defeating zombies, ha
 1. Play: about 10 seconds after you join, chat lists today's quests, for example `New daily quests: Mine 12 coal ore, Defeat 10 zombies, Travel 1,000 blocks.` They count as you play; nothing to start.
 2. A note above the hotbar shows your progress at each quarter (`Quest: Mine 12 coal ore 6/12`). Finishing one says `Quest complete: Mine 12 coal ore! Reward: 16 Torch` in chat and gives the reward.
 3. Run `/realm:quests` to see today's quests with progress bars, their rewards and the time until new ones (`New quests in 5h 12m`).
-4. Don't want the progress notes? Disable **Quest progress notes** in `/realm:prefs`.
-5. **Operators:** `/realm:config` → **Daily Quests** sets the hour new quests come (UTC), how many each player gets, and whether creative mode counts. The quests themselves and their rewards are the `pool` in `config.js`.
+4. Hunting with friends? In a [party](#parties--party_bp), a mob you defeat also counts for the Defeat quests of party mates within 32 blocks in your dimension, and theirs count for you.
+5. Don't want the progress notes? Disable **Quest progress notes** in `/realm:prefs`.
+6. **Operators:** `/realm:config` → **Daily Quests** sets the hour new quests come (UTC), how many each player gets, whether creative mode counts, and whether party mates share defeats (and how near they must be). The quests themselves and their rewards are the `pool` in `config.js`.
 
 ### What players see
 
 - **Each day** (from `resetHourUtc`, 0 = midnight UTC) every player gets 3 quests (`questsPerDay`) picked at random from the `pool`, each of a different kind where possible. Players get different quests. Joining with quests left says `You have 2 daily quests to finish: /realm:quests`; a new day while playing lists the new quests in chat.
 - **Quest kinds**, and what counts:
   - **Mine:** breaking the listed blocks. Blocks a player placed lately (the last 10,000 placed on the realm, since it last started) don't count, so placing and breaking the same block doesn't work.
-  - **Defeat:** killing the listed mobs (any mob when none are listed). Arrows and tridents count for the shooter.
+  - **Defeat:** killing the listed mobs (any mob when none are listed). Arrows and tridents count for the shooter. Online [party](#parties--party_bp) mates of the killer in the same dimension within 32 blocks (`partyRange`) count the mob for their own Defeat quests too (`partyShare`).
   - **Harvest:** breaking a fully grown crop (wheat, carrots, potatoes, beetroot, nether wart, cocoa), or a melon or pumpkin, from `crops`. Tapping a grown crop so it resets, as the Right-click Harvest pack does, counts too. Crops you planted yourself count once grown; a melon or pumpkin block you placed doesn't.
   - **Place:** placing blocks.
   - **Travel:** blocks moved any way (walking, swimming, riding, flying), added every 5 seconds. Teleports (faster than `maxSpeed`) and respawning don't count.
@@ -1639,6 +1649,8 @@ Every player gets three quests a day, such as mining coal, defeating zombies, ha
 | `questsPerDay` | `3` | Quests each player gets per day (1–5 in game). Applies from the next day |
 | `progressNotes` | `true` | A note above the hotbar at each quarter of a quest |
 | `skipCreative` | `true` | Players in creative mode make no progress |
+| `partyShare` | `true` | A mob a player defeats also counts for the Defeat quests of their online party mates ([Parties](#parties--party_bp)) within `partyRange` in the same dimension |
+| `partyRange` | `32` | How near (blocks) a party mate must be to share a defeat (8–128 in game) |
 | `maxSpeed` | `100` | Movement faster than this (blocks per second) is a teleport and doesn't count for travel quests |
 | `crops` | wheat, carrots, potatoes, beetroot (`growth` 7), nether wart (`age` 3), cocoa (`age` 2), melon, pumpkin | What counts for harvest quests: `{ block, state, ripe }`, the block, its growth state and fully grown value; without `state`, any break counts |
 | `pool` | 16 quests (below) | The quests to pick from: `{ id, kind, count, label, targets?, reward: { levels?, item?, amount? } }`. `kind` is `mine`, `kill`, `harvest`, `place`, `travel`, `eat` or `fish`; `targets` lists the block, mob, crop, food or fish ids that count (leave it out for any). Keep each `id` when editing: progress is saved by it |
@@ -1664,7 +1676,7 @@ The default `pool`:
 | Eat 5 meals | 1 level and 4 cookies |
 | Catch 5 fish | 3 levels |
 
-Operators can change `resetHourUtc`, `questsPerDay`, `progressNotes` and `skipCreative` in game with `/realm:config`. Each player can switch the progress notes for themselves with **Quest progress notes** in `/realm:prefs`, which follows `progressNotes` until they choose. `pool`, `crops` and `maxSpeed` stay in `config.js`.
+Operators can change `resetHourUtc`, `questsPerDay`, `progressNotes`, `skipCreative`, `partyShare` and `partyRange` in game with `/realm:config`. Each player can switch the progress notes for themselves with **Quest progress notes** in `/realm:prefs`, which follows `progressNotes` until they choose. `pool`, `crops` and `maxSpeed` stay in `config.js`.
 
 ### Saved data
 
@@ -1677,11 +1689,12 @@ Operators can change `resetHourUtc`, `questsPerDay`, `progressNotes` and `skipCr
 ### How it works
 
 - The day number counts days since 1970 from `resetHourUtc`; when a player's saved day is older, they get new quests the next time anything checks them (joining, the once-a-second loop, any progress).
-- **Mine** and **harvest** use `afterEvents.playerBreakBlock` (its `brokenBlockPermutation` tells a grown crop); **place** uses `afterEvents.playerPlaceBlock`, which also remembers the spot so mining it again doesn't count; **defeat** uses `afterEvents.entityDie` with the killer from its damage source; **eat** uses `afterEvents.itemCompleteUse` for items with a food component.
+- **Mine** and **harvest** use `afterEvents.playerBreakBlock` (its `brokenBlockPermutation` tells a grown crop); **place** uses `afterEvents.playerPlaceBlock`, which also remembers the spot so mining it again doesn't count; **defeat** uses `afterEvents.entityDie` with the killer from its damage source, then counts the same mob for every online player with the killer's `realm_party:<code>` tag in the same dimension within `partyRange`; **eat** uses `afterEvents.itemCompleteUse` for items with a food component.
 - **Harvest by tapping:** `beforeEvents.playerInteractWithBlock` notes a tap on a grown crop, and 3 ticks later the crop is checked again: if it's the same crop at its first stage, it was harvested.
 - **Fish:** a fishing hook belongs to the player nearest to it when it appears, and its place is followed every 2 ticks. An item that appears within 3 blocks of where a hook was in the last second is that player's catch, once per hook, unless it appears within 1 block of the player's head, where items dropped from the inventory appear. There is no "caught a fish" event in the stable API, so this is how a catch is recognized.
 - **Travel** adds the distance moved each second while a travel quest is open, as the Stats pack measures it.
 - The quests are saved on the player whenever they progress.
+- **Test hook** (for the BDS scenario tests, since quests are picked at random): the script event `realm:quests_test` `{ player, ids }` (a player name and pool ids) sets that player's quests for today. It only works from the server console.
 - Finishing a quest sends the script event `realm:quest_done` `{ player: player.id, pack: "quests_bp", id, label, kind }`, the same event Story Questlines, Bounty Board, Treasure Maps, Fishing 2.0, Expeditions and Town Projects send for their quest-like things.
 
 ---
@@ -2720,7 +2733,7 @@ The realm keeps a calendar now. Every dawn is a new **Realm day**, and 96 of the
   | Long Night | Gift Round | Give gifts to 3 different townsfolk (sneak-tap holding a gift, [Townsfolk](#townsfolk--npc_bp)) |
   | Long Night | Candle Vigil | At night, place 4 candles |
 
-- **Festival results:** when the Lantern Fair ends, the entry with the most votes wins the carve-off (the title `Pumpkin Champion`, chat and town gossip); when the Midsummer Regatta ends, the best time wins it (the title `Regatta Champion`).
+- **Festival results:** when the Lantern Fair ends, the entry with the most votes wins the carve-off (the title `Pumpkin Champion`, chat and town gossip). Nobody can vote for their own pumpkin, so a carve-off with a single entry and no votes is won by it unopposed (`Ann's pumpkin was the only entry, so Ann wins the Pumpkin Carve-off unopposed!`). When the Midsummer Regatta ends, the best time wins the regatta (the title `Regatta Champion`).
 - **Starwright's Long Night:** gifts to the townsfolk count double, every player under the open sky at night gets a shooting star once a night, and the Gray Choir keeps a truce (no sieges).
 - **The ribbon stall** (cosmetics only):
 
@@ -3375,7 +3388,19 @@ Pending invites are kept in memory only: they end when the realm restarts.
 
 ### How it works
 
-- Every member carries the tag `realm_party:<code>`. Other packs read it: [Skills](#skills--skills_bp) (the party bonus), the [Bounty Board](#bounty-board--bounty_bp) shares credit with mates in the same dimension within 64 blocks, [Story Questlines](#story-questlines--saga_bp) shares the whole main story with the party (one chapter at a time, at the pace of the member furthest behind) and side-story progress with mates within 64 blocks, and [Expeditions](#expeditions--expedition_bp) takes nearby mates along. The pack puts every online player's tag right when they join and every 2 seconds, so a tag left from a party they were removed from goes away.
+- Every member carries the tag `realm_party:<code>`. Other packs read it:
+  - [Skills](#skills--skills_bp): the party bonus.
+  - [Bounty Board](#bounty-board--bounty_bp): shares credit with mates in the same dimension within 64 blocks.
+  - [Story Questlines](#story-questlines--saga_bp): shares the whole main story with the party (one chapter at a time, at the pace of the member furthest behind) and side-story progress with mates within 64 blocks.
+  - [Expeditions](#expeditions--expedition_bp): takes nearby mates along.
+  - [Daily Quests](#daily-quests--quests_bp): a mob one member defeats counts for the Defeat quests of mates within 32 blocks.
+  - [Death Point](#death-point--death_bp): tells online mates where a member died, with the distance and direction from them.
+  - [Waystones & Inns](#waystones--inns--waystone_bp): mates standing within 6 blocks when a trip starts come along, each paying their own fare.
+  - [Land Claims](#land-claims--claims_bp): a claim can be shared with the owner's party, following it as members come and go.
+  - [Realm Mail](#realm-mail--mail_bp): one letter to the whole party, offline mates included.
+  - [Treasure Maps & Riddles](#treasure-maps--riddles--maps_bp): mates within 32 blocks of the finder get half the treasure's Crowns, the journal entry and the Exploration XP.
+  - [Minimap](#minimap--map_bp): shows party mates.
+- The pack puts every online player's tag right when they join and every 2 seconds, so a tag left from a party they were removed from goes away.
 - After any change (start, join, leave, remove) the pack sends the script event `realm:party_changed` `{ code }`.
 - Parties are read into memory once and saved whenever they change. The HUD runs every 40 ticks; it's a few distance sums per member.
 - `/realm:party_chat` takes one command argument, so a message of several words needs double quotes; the menu's **Send a message** box doesn't.
@@ -4621,9 +4646,10 @@ Buy a treasure map from Mara the Cartographer and puzzle your way across the lan
    Far from the marker or the chest (more than 64 blocks) the map only says `The map is cold.`, `The map is cool.` or `The map is faintly warm.`, so it can't steer you there.
 5. Walk up to the marker (within 4 blocks) and the next clue appears in chat and on the map: `You found the cairn! Tucked between its stones: the next clue (2 of 3).`
 6. On the last clue the ink names where the treasure lies buried (`The treasure lies buried on the shore of the wide water.`). Follow `Hot` to `Burning hot! Dig here.`; standing over it pays the Crowns. Then dig up the chest, 1 to 3 blocks down, for the rest.
-7. Lost the map, or the clue? Run `/realm:maps` (or `/realm:maps_hunts`) for your hunt's clue, a new copy of the map, or to give the hunt up.
-8. **Racing Rook** ([Story Questlines](#story-questlines--saga_bp)' Rook the Rival, chapter "The Map Room", optional): within 300 blocks of your last clue's spot, chat says `[Story] Rook is after your treasure too! Get there first: you have 5:00.` Find the chest in time to win the race. Too slow and Rook got there first: the chest and its loot are still yours, but he takes his cut of the coins (`Rook got here first: he left you the chest, but took his cut of the coins.`, half the Crowns, `rivalShare`).
-9. **Operators:** `/realm:maps` opens the **Treasure Maps** menu instead: `Your treasure hunts`, `Give a treasure map` (pick a player online) and `Settings` (which points to `/realm:config` → Treasure Maps & Riddles). `/realm:maps_give <player>` gives a free map from chat. `/realm:config` → **Treasure Maps & Riddles** sets the price, how far maps lead, how many hunts a player can have, the Warmer / Colder range, whether markers are built, the Crowns found, the distance from world spawn and the hints.
+7. Hunting with your [party](#parties--party_bp)? Mates within 32 blocks of you when you find the treasure each get half its Crowns on top of yours (nothing is taken from you), plus the journal entry and the Exploration XP. The chest's loot is yours to split.
+8. Lost the map, or the clue? Run `/realm:maps` (or `/realm:maps_hunts`) for your hunt's clue, a new copy of the map, or to give the hunt up.
+9. **Racing Rook** ([Story Questlines](#story-questlines--saga_bp)' Rook the Rival, chapter "The Map Room", optional): within 300 blocks of your last clue's spot, chat says `[Story] Rook is after your treasure too! Get there first: you have 5:00.` Find the chest in time to win the race. Too slow and Rook got there first: the chest and its loot are still yours, but he takes his cut of the coins (`Rook got here first: he left you the chest, but took his cut of the coins.`, half the Crowns, `rivalShare`).
+10. **Operators:** `/realm:maps` opens the **Treasure Maps** menu instead: `Your treasure hunts`, `Give a treasure map` (pick a player online) and `Settings` (which points to `/realm:config` → Treasure Maps & Riddles). `/realm:maps_give <player>` gives a free map from chat. `/realm:config` → **Treasure Maps & Riddles** sets the price, how far maps lead, how many hunts a player can have, the Warmer / Colder range, whether markers are built, the Crowns found, the party mates' share and range, the distance from world spawn and the hints.
 
 ### What players see
 
@@ -4640,6 +4666,7 @@ Buy a treasure map from Mara the Cartographer and puzzle your way across the lan
 - **Finding it:** standing within 3 blocks of the chest says `You found the treasure! The chest is buried right here, 1 to 3 blocks down: dig it up.` and pays 30 to 90 [Crowns](#crowns--crowns_bp) (`crownsMin`, `crownsMax`): `+40 Crowns (Treasure map)`. The map disappears. The chest holds what `loot` rolls: by default often gold and iron ingots, often emeralds or bottles o' enchanting, sometimes ender pearls, a diamond or two, a golden apple, a name tag or a saddle, and rarely a heart of the sea.
 - **Older maps** (bought before markers) keep their route and any buried chest; the next time their holder is online the clue rewrites itself as a coordinate puzzle: `The ink on your treasure map stirs and rewrites itself.`
 - **Other packs:** finding a treasure finishes a `treasure` quest (`realm:quest_done`), gives 10 Wayfarers reputation in [Guilds & Reputation](#guilds--reputation--guilds_bp) (`reputation`), 50 Exploration XP in [Skills](#skills--skills_bp) (`skillXp`) and a `Buried treasure` entry on the Places page of the [Field Journal](#field-journal--journal_bp) (listed under "Also found"). One treasure in 10 (`relicChance`) also holds a relic from [Relics](#relics--relics_bp) (`relics`): `Something old and strange glints among the coins...`
+- **Party mates share the find:** when a player in a [party](#parties--party_bp) finds the treasure, every online mate in the same dimension within 32 blocks (`partyRange`) gets `[Party] You helped Ann find the treasure!`, 50% of the Crowns the finder got (`partyShare`, rounded down; paid on top, not taken from the finder): `+20 Crowns (Treasure map, with Ann)`, plus the `Buried treasure` journal entry and the 50 Exploration XP. Reputation and the finished quest are the finder's. With `partyShare` at 0 mates still get the journal entry and the XP.
 - **Giving up** (`/realm:maps` → **Give up this hunt**) removes the hunt and its map; the Crowns aren't paid back.
 - **The land is put back:** a marker comes down once the hunt is done with it (you reached it and read the next clue, found the treasure or gave up), and an empty treasure chest is turned back into the ground it replaced. The pack remembers exactly which blocks each marker and chest placed and what was there before (grass, flowers and snow too), and puts them back at least 30 seconds later, once nobody is within 32 blocks (or 10 minutes later even with someone close). It only puts back a block that is still what the hunt placed, so a block a player broke, changed or built on is left alone, and a chest that still holds anything stays (items are never destroyed; after 30 days it is left for good). Land that isn't loaded is put back when its chunk loads again, even after a restart. A bottle spot never places anything. Markers and chests from before Treasure Maps 1.5.0 come down too, with air under a marker and dirt under a chest, except markers of legs already passed before the update.
 
@@ -4681,13 +4708,15 @@ Buy a treasure map from Mara the Cartographer and puzzle your way across the lan
 | `rivalShare` | `0.5` | The share of the treasure's Crowns paid after losing a race to Rook to that chest (Story Questlines' `realm:map_rival`); the loot is the same |
 | `reputation` | `10` | Wayfarers reputation for a treasure |
 | `skillXp` | `50` | Exploration skill XP for a treasure |
+| `partyShare` | `50` | Party mates ([Parties](#parties--party_bp)) near the finder each get this percent of the treasure's Crowns, on top of the finder's (0–100; 0 = none), plus the Field Journal entry and the Exploration XP |
+| `partyRange` | `32` | How near (blocks, same dimension) a party mate must be when the treasure is found to share it (8–128 in game) |
 | `relicChance` | `0.1` | Chance (0 to 1) that a treasure also holds a relic |
 | `relics` | `compass_echoes`, `wayfarer_boots`, `sun_pendant`, `rain_charm` | The relics a treasure can hold (Relics pack ids) |
 | `loot` | 10 lines | What the chest holds: `{ item, min, max, chance }`, each line rolled on its own. Default: gold ingots 2-6 (80%), iron ingots 3-8 (70%), emeralds 1-5 (50%), diamonds 1-2 (25%), a golden apple (20%), ender pearls 1-3 (30%), bottles o' enchanting 3-8 (50%), a name tag (15%), a saddle (10%), a heart of the sea (3%). A chest that rolls nothing gets the first line |
 
 The clue, landmark and marker wording lives in `scripts/clues.js`.
 
-Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`, `warmthRadius`, `markers`, `showAt`, `plainHints`, `crownsMin`, `crownsMax` and `avoidSpawn` in game with `/realm:config` (**Treasure Maps & Riddles**). The rest stays in `config.js`. Each player picks where Warmer / Colder shows with **Where Warmer / Colder shows for me** in `/realm:prefs`.
+Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`, `warmthRadius`, `markers`, `showAt`, `plainHints`, `crownsMin`, `crownsMax`, `partyShare`, `partyRange` and `avoidSpawn` in game with `/realm:config` (**Treasure Maps & Riddles**). The rest stays in `config.js`. Each player picks where Warmer / Colder shows with **Where Warmer / Colder shows for me** in `/realm:prefs`.
 
 ### Saved data
 
@@ -4709,7 +4738,8 @@ Operators can change `price`, `maxHunts`, `minDistance`, `maxDistance`, `warmth`
 - **Cartographers:** on `realm:npc_talk` with the `cartographer` role the pack answers `realm:npc_offer` with **Buy a treasure map** (`order` 20) and, during a hunt, **Your treasure hunt** (21).
 - **Legs for other packs:** `realm:map_leg` `{ player, hunt, dim, x, z, leg, legs, final }` goes out when a hunt's current leg changes (a new clue, its marker or the chest placed, the treasure moved further), checked once a second, and for every hunt again after `realm:map_leg_ping`; `{ player, hunt, gone: true }` when the hunt ends (found or given up). `x`, `z` are the chest once buried, else the marker, else the leg's planned end; `final` is the last leg. [Wanderers of the Wilds](#wanderers-of-the-wilds--wander_bp) sends Rook to a player near their own last leg; Story Questlines races to it.
 - **Races:** `realm:map_rival` `{ player, hunt, until }` (Story Questlines, when a race to that hunt's chest starts; `until` in ms since 1970) is saved on the hunt. Found after `until`, the treasure's Crowns are cut to `rivalShare`. A second message can only end the race sooner.
-- Events sent on finding a treasure: `realm:quest_done` `{ kind: "treasure" }`, `realm:rep_add` `{ guild: "wayfarers" }`, `realm:journal` `{ page: "places", entry: "treasure" }`, `realm:skill_xp` `{ skill: "exploration" }`, and sometimes `realm:relic_give`.
+- Events sent on finding a treasure: `realm:quest_done` `{ kind: "treasure" }`, `realm:rep_add` `{ guild: "wayfarers" }`, `realm:journal` `{ page: "places", entry: "treasure" }`, `realm:skill_xp` `{ skill: "exploration" }`, and sometimes `realm:relic_give`. Each party mate near the finder (the finder's `realm_party:<code>` tag, `Dimension.getPlayers` within `partyRange`) gets the Crowns share from the `crowns` scoreboard, `realm:journal` and `realm:skill_xp`.
+- **Test hook:** the script event `realm:maps_test` `{ action: "found", player }` (a player name) finds the treasure of that player's first hunt right away, for the BDS scenario tests. It only works from the server console.
 
 ---
 
@@ -4723,9 +4753,10 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 2. Discover waystones by tapping them or walking within 4 blocks of one: `Waystone discovered: River Gate.`
 3. To travel, tap any waystone with an empty hand. Pick a waystone you've discovered; each button shows how far it is and what it costs (`240m NE, 3 Crowns`).
 4. Stand still for 10 seconds while the countdown runs above the hotbar (`Traveling to River Gate in 7...`). Moving more than a block or getting hurt cancels the trip. The screen fades and you arrive next to the other waystone; the trip is paid then.
-5. Run `/realm:waystones` for the waystone menu: **My waystones** (also `/realm:waystones_list`) lists the waystones you've discovered and how far they are.
-6. At an inn, tap the innkeeper: **Rent a bed** (10 Crowns) makes the inn your respawn point and gives you Well Rested; **Hear the news** tells what's happened lately (tornadoes, meteors, caravans...).
-7. **Operators:** **Remove a waystone** in `/realm:waystones` lists every waystone, nearest first, to pick from; or look at a waystone's lodestone or sign and run `/realm:waystones_remove`. `/realm:config` → **Waystones & Inns** sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, and the inn's price and Well Rested time.
+5. Traveling with your [party](#parties--party_bp)? Mates standing within 6 blocks of you when you start a trip come along: they stand still through the same countdown and each pays their own fare. A mate who walks away stays behind.
+6. Run `/realm:waystones` for the waystone menu: **My waystones** (also `/realm:waystones_list`) lists the waystones you've discovered and how far they are.
+7. At an inn, tap the innkeeper: **Rent a bed** (10 Crowns) makes the inn your respawn point and gives you Well Rested; **Hear the news** tells what's happened lately (tornadoes, meteors, caravans...).
+8. **Operators:** **Remove a waystone** in `/realm:waystones` lists every waystone, nearest first, to pick from; or look at a waystone's lodestone or sign and run `/realm:waystones_remove`. `/realm:config` → **Waystones & Inns** sets who can make waystones, whether travel costs Crowns or XP levels and how much, the wait, travel between dimensions and from anywhere, whether party mates come along (and how near they must stand), and the inn's price and Well Rested time.
 
 ### What players see
 
@@ -4735,6 +4766,10 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 - **Travel menu** (tap a waystone): `Where to? You have 42 Crowns.` and a button per discovered waystone, nearest first: `River Gate` / `240m NE, 3 Crowns`, or `Nether, 10 Crowns` for one in another dimension.
 - **Cost:** 1 Crown per 100 blocks (`costPer100`), rounded up, at least 1 (`minCost`); 10 to another dimension (`crossDimensionCost`, or not offered with `crossDimension` disabled). With `currency` set to `levels`, trips cost XP levels instead. The cost is checked when you choose and taken when you arrive (`Paid 3 Crowns for the trip to River Gate.`).
 - **The wait:** 10 seconds (`channelSeconds`, 0 = at once): `Traveling to River Gate in 10 seconds. Stand still.` in chat and a countdown above the hotbar. Moving more than 1 block, changing dimension or taking any damage cancels it: `You moved: the trip to River Gate is canceled.` Half a second before the jump the screen fades to dark blue and back. Tapping a waystone (or `/realm:waystones` with `travelAnywhere`) during the countdown says `You're already traveling to River Gate. Stand still.`
+- **Party travel** (`partyTravel`): when a player in a [party](#parties--party_bp) starts a trip, online mates in the same dimension within 6 blocks (`partyRadius`) who aren't traveling already come along. The traveler's line adds who comes (`Traveling to River Gate in 10 seconds. Bob, Dan come along. Stand still.`), and each mate gets `[Party] Ann is traveling to River Gate in 10 seconds: stand still to come along (3 Crowns), or walk away to stay.` Each mate has their own countdown, ending with the traveler's, and pays their own fare, priced from where they stand (with their own Waystone Friend discount), when they arrive.
+  - A mate who can't pay is told and stays: `Ann is traveling to River Gate, but you can't come along: the trip costs 3 Crowns. You have 1 Crown.`
+  - A mate who moves or gets hurt stays, and the others still go: `You moved, so you stay here: Ann travels to River Gate without you.`
+  - When the traveler's own trip is canceled, every mate coming along stays too: `Ann's trip to River Gate is canceled: you stay here.` (`The trip was canceled: you stay here.` when the traveler logs off).
 - **Arriving:** you land beside the other waystone's lodestone, facing it, on a free spot with solid floor (or, for a waystone in a cellar, the first open space straight above it); if its surroundings aren't loaded yet you land on top of the lodestone and are moved beside it once they load. If you'd land inside a block, in lava, or over a drop where the lodestone used to be, you're moved to a free spot, and when there's none you're sent back to where you started with the trip paid back (`There's no safe place to stand at River Gate, so the waystone sent you back.`). A waystone that's loaded and walled in on every side isn't traveled to at all, and nothing is paid.
 - **A broken waystone:** breaking or blowing up its lodestone removes the waystone (`The waystone River Gate is gone.`). A lodestone that vanished another way (pistons, commands) is noticed when someone is within 96 blocks, or when someone arrives there. Trips on the way to it are canceled.
 - **`/realm:waystones`:** a menu saying how many waystones you've discovered, with **My waystones** (**Travel** with `travelAnywhere` enabled) and, for operators, **Remove a waystone** (asks first; the lodestone and sign stay).
@@ -4765,6 +4800,8 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 | `crossDimensionCost` | `10` | What a trip to another dimension costs (instead of the distance cost) |
 | `channelSeconds` | `10` | Seconds to stand still before traveling (0 = at once) |
 | `travelAnywhere` | `false` | `/realm:waystones` opens the travel menu anywhere |
+| `partyTravel` | `true` | Online party mates ([Parties](#parties--party_bp)) standing within `partyRadius` of a player who starts a trip come along, through the same countdown, each paying their own fare |
+| `partyRadius` | `6` | How near (blocks) a party mate must stand to come along (2–16 in game) |
 | `discoverRadius` | `4` | Standing this close (blocks) to a waystone discovers it |
 | `maxWaystones` | `150` | Most waystones the realm keeps |
 | `npcRole` | `"innkeeper"` | The NPC role whose NPCs rent beds and tell the news |
@@ -4772,7 +4809,7 @@ Fast travel you build yourself. Put a sign saying `Waystone: <name>` next to a l
 | `wellRestedMinutes` | `60` | How long Well Rested (Health Boost I) lasts, in minutes; 0 = no Well Rested |
 | `newsKept` | `6` | How many of the latest sky events the innkeeper remembers |
 
-Operators can change `whoCanCreate`, `currency`, `costPer100`, `minCost`, `crossDimension`, `crossDimensionCost`, `channelSeconds`, `travelAnywhere`, `bedPrice` and `wellRestedMinutes` in game with `/realm:config` (**Waystones & Inns**). The rest stays in `config.js`. There are no player preferences.
+Operators can change `whoCanCreate`, `currency`, `costPer100`, `minCost`, `crossDimension`, `crossDimensionCost`, `channelSeconds`, `travelAnywhere`, `partyTravel`, `partyRadius`, `bedPrice` and `wellRestedMinutes` in game with `/realm:config` (**Waystones & Inns**). The rest stays in `config.js`. There are no player preferences.
 
 ### Saved data
 
@@ -4791,6 +4828,7 @@ Operators can change `whoCanCreate`, `currency`, `costPer100`, `minCost`, `cross
 - **Discovery** checks every online player against the waystones in their dimension once a second (distance math only, no block reads).
 - **Removal:** `afterEvents.playerBreakBlock` and `afterEvents.blockExplode` on a registered lodestone; every 5 seconds up to 8 waystones within 96 blocks of a player are checked for their lodestone; arriving checks the one you traveled to.
 - **The trip** is followed every 5 ticks: distance from where it started (over 1 block cancels) and `afterEvents.entityHurt`. Then `player.camera.fade`, the cost, and `player.teleport` with the destination dimension. The landing spot is checked for free feet and head room and a solid, safe floor (no lava, fire, magma, cactus, powder snow or water) on the 12 blocks around the lodestone at its height, one above and one below, then on top of it and up to 40 blocks straight above it; 10, 40 and 100 ticks after landing the pack checks the player's feet, head and the block under them again in case the area wasn't loaded. The countdown sends `realm:actionbar` first, so the [Coordinates HUD](#coordinates-hud--hud_bp) steps aside.
+- **Party travel:** starting a trip looks for players with the traveler's `realm_party:<code>` tag within `partyRadius` (`Dimension.getPlayers`) and gives each who can pay a trip of their own to the same waystone, with the same countdown, marked with the traveler as its leader. A follower's trip ends on its own when they move or get hurt; the leader's ending without a jump (canceled, or logged off) ends every follower's.
 - **Inns:** on `realm:npc_talk` with the `innkeeper` role the pack answers `realm:npc_offer` with **Rent a bed** (`order` 20) and **Hear the news** (21). Renting finds the innkeeper (the nearest `minecraft:npc` with its `realm:npc_id:<id>` tag within 16 blocks) and sets the player's spawn point there with `Player.setSpawnPoint`. The news is every `realm:sky_event` the pack hears (the same kind twice within a minute counts once), kept in the world.
 - Events sent: `realm:journal` `{ page: "places", entry: "waystone_<name>" }` on discovery; `realm:waystones_known` `{ player, part, parts, list }` (the waystones that player knows) on discovery, when a known one is removed and on `realm:waystones_known_ping` `{ player? }`, for the [Minimap](#minimap--map_bp).
 - **Scenario tests:** `/scriptevent realm:waystone_test {"action":"tap","player":"<name>","x":..,"y":..,"z":..}` taps a waystone for a player without a hand tap (simulated players can't tap with an empty hand), for the test harness. It's only honored from the server console or an operator.
@@ -6594,7 +6632,7 @@ npm run bundle -- --all --name my_bundle --title "My Bundle"
 | Safe Zones, Town Projects → Land Claims | Only operators can claim land reaching into a safe zone or a protected town (`realm:zones`); a town with **Protect from world events** Disabled sends no zone, so it can be claimed. Claims made before stay |
 | Safe Zones → Easy Building | Only operators can use the building tools inside a safe zone (`safeZonesOperatorsOnly`) |
 | Kitchen, Fishing 2.0, Treasure Maps, Deck of Many Things → Skills | Cooking (Farming), catches (Fishing), treasure chests (Exploration) and the Deck's cards send skill XP with `realm:skill_xp` `{ player, skill, amount }`. Without Skills nothing happens |
-| Skills, Bounty Board, Story Questlines, Expeditions ← Parties | Party mates carry the tag `realm_party:<code>`. Skills gives 10% more XP near a mate; bounties and side-story objectives count for mates within 64 blocks; the main story is one shared chapter for the whole party; Expeditions takes the party in together |
+| Parties → Skills, Bounty Board, Story Questlines, Expeditions, Daily Quests, Death Point, Waystones, Land Claims, Realm Mail, Treasure Maps | Party mates carry the tag `realm_party:<code>`. Skills gives 10% more XP near a mate; bounties and side-story objectives count for mates within 64 blocks; the main story is one shared chapter for the whole party; Expeditions takes the party in together. Defeats count for nearby mates' Defeat quests (32 blocks); mates are told where a member died; mates within 6 blocks travel along by waystone, each paying their fare; a claim can be shared with the owner's party; a letter can go to the whole party; mates within 32 blocks of a found treasure get half its Crowns |
 | Titles & Trails → Nicknames | The title a player wears is the tag `realm_title:<text>`; Nicknames shows it in gray under the name. Guilds, Skills, Field Journal, Blood Moon and Story Questlines unlock titles with `realm:title_unlock` |
 | Relics ← Champions, Story Questlines, Treasure Maps, Rainbows, Expeditions | Champions drop Relic Shards; the others may give a relic with `realm:relic_give` (the seven story relics come only from Story Questlines). Relics' Storm Meter reads Storm Chasing's cell (`realm:storm_cell`), and the Storm Staff answers near one too. The Lantern Shard points at the seals Story Questlines reports with `realm:seals`; the Gray Choir Mask reads its `saga:choir` tag. **Place a relicsmith here** asks Townsfolk with `realm:npc_summon` |
 | Skills (Callings) → Waystones & Inns, Treasure Maps, Kitchen, Fishing 2.0, Easy Building, Storm Chasing, Expeditions | `realm:calling` `{ player, name, calling, label, talents, bonus, ready }` carries each player's Calling and the talent numbers the others use (`bonus`): Waystone Friend 25% off trips, Map Sense spots built from 128 blocks (not 96), Hearty Dishes 25% longer dish effects, Lucky Line 50% more rare fish, Builder's Eye 25% more blocks per survival build, Rod Reader 1 more Storm Glass per rod. Expeditions shows each player's Calling on its leaderboards. Each keeps it in memory (Expeditions saves the names) and asks with `realm:calling_ping` at load |
