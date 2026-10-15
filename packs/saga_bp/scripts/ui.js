@@ -321,7 +321,8 @@ function holdNote(player) {
 
 /**
  * Tracks a quest: the tracker, the Minimap and the story log follow it instead of the newest one, until it's done.
- * In a party, every mate online tracks it too.
+ * In a party, every mate online who is on the same story (or helps with it as the party quest) tracks it too; a
+ * daily favor or a wanderer's job is personal, and mates not on the story keep their own choice.
  * @param {Player} player @param {Entry} e
  */
 function trackQuest(player, e) {
@@ -330,11 +331,12 @@ function trackQuest(player, e) {
   saga.tr = id;
   markDirty(player);
   player.sendMessage(`§b[Story] Tracking ${e.story.title}.`);
+  if (e.fav) return;
   for (const mate of partyMates(player)) {
+    if (!entries(mate).some((x) => x.story.id === id && !x.fav)) continue;
     sagaOf(mate).tr = id;
     markDirty(mate);
-    const has = entries(mate).some((x) => x.story.id === id);
-    mate.sendMessage(`§b[Party] ${player.name} set the party's tracked quest: ${e.story.title}.${has ? "" : " You aren't on it, so your tracker shows your newest quest."}`);
+    mate.sendMessage(`§b[Party] ${player.name} set the party's tracked quest: ${e.story.title}.`);
   }
 }
 
@@ -348,7 +350,7 @@ export function trackedFirst(player, list) {
 }
 
 /** The track button's label. @param {Player} player @param {Entry} e */
-const trackLabel = (player, e) => (sagaOf(player).tr === e.story.id ? "Tracked\n§8The tracker follows this quest" : "Track this quest\n§8The tracker follows it" + (partyMates(player).length ? ", for your party too" : ""));
+const trackLabel = (player, e) => (sagaOf(player).tr === e.story.id ? "Tracked\n§8The tracker follows this quest" : "Track this quest\n§8The tracker follows it" + (!e.fav && partyMates(player).length ? ", for your party too" : ""));
 
 /** A choice's button: its label, and what it costs. @param {import("./types.js").Choice} c */
 const choiceLabel = (c) => (c.cost?.crowns ? `${c.label} (${c.cost.crowns} Crowns)` : c.label);

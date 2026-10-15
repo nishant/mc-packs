@@ -73,8 +73,9 @@ import { PACK, hash, itemName, npcName, send, strangerNames } from "./util.js";
  * starts with "fv:" and `fav` set to the NPC id.
  * Wanderer one-offs are entries too: story id "wv:<template>", `fav` the stranger's NPC id and `wv` the encounter id.
  * A party quest (the main-story chapter a party mate is on, helped by a player who is past it or hasn't accepted it)
- * is an entry too, with `pq` set: its state lives in memory only, and its progress goes to the mates (party.js).
- * @typedef {{ story: Story, chapter: Chapter, index: number, st: StoryState | FavorState | WanderState, fav?: string, wv?: string, pq?: boolean }} Entry
+ * is an entry too, with `pq` set: its state lives in memory only, and its progress goes to the mates (party.js). Its
+ * steps apply (`when`) by the flags of a mate on the chapter (`sg`), not the helper's own.
+ * @typedef {{ story: Story, chapter: Chapter, index: number, st: StoryState | FavorState | WanderState, fav?: string, wv?: string, pq?: boolean, sg?: Saga }} Entry
  */
 
 export const PROP_PLAYER = "saga:p";
@@ -576,7 +577,7 @@ export function target(obj) {
 }
 
 /** Does this objective exist for the player now (its `when`)? @param {Entry} e @param {Objective} obj @param {Saga} saga */
-export const objApplies = (e, obj, saga) => e.fav !== undefined || matches(obj.when, saga, e.story.id);
+export const objApplies = (e, obj, saga) => e.fav !== undefined || matches(obj.when, e.sg ?? saga, e.story.id);
 
 /** @param {Entry} e @param {number} i */
 export const progressOf = (e, i) => e.st.o?.[i] ?? 0;
