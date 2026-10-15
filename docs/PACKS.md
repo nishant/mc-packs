@@ -3037,6 +3037,7 @@ About one in 40 monsters that spawn in the overworld at night becomes a champion
   - **Helmets** (`looks.gear`) go on the mobs that show armor: zombies, husks, drowned, zombie villagers, skeletons and strays (and bogged, wither skeletons, zombified piglins, piglins and piglin brutes if they're added to `mobs`). Spiders, creepers and witches can't show one: they have the badge and the aura. The helmet adds its usual armor (2 or 3 points; diamond and netherite also some toughness). It never drops: when a champion dies, the pack removes the helmet it dropped (one helmet of that kind, without a custom name, within 2.5 blocks, that appeared as it died: a helmet a player dropped there earlier stays), so champion gear can't be farmed. The helmet goes on once; a champion that loses it (it can swap it for a better one it picks up) carries on without it. Disabling **Champion helmets** takes the pack's helmets off loaded champions within 5 seconds.
   - **The aura** (`looks.aura`) is 2 particles around the champion's body every 10 ticks, half a second (`looks.auraTicks`), only while a player is within 64 blocks. With 20 champions near a player it took 1.1 to 1.8 ms per puff on a test server, 0.1 to 0.2 ms a tick on average; operators can see the live numbers under **Aura cost** in the menu.
   - **Arrival** (`looks.spawnEffect`): a spell sound (the evoker's summoning sound, a little lower) and a burst of the aura where the champion appears.
+- **They come for you:** a champion with a survival or adventure player within 48 blocks (`approach.range`; AFK players don't count) walks slowly toward the nearest one, about a block a second (`approach.speed`), along the ground: never into water or lava, over fences or walls, or into a safe zone, land claim or town. 10 blocks away (`approach.stopDistance`) it stops and hunts you itself. Champions in an expedition stay in their room.
 - **Every champion** has Resistance I (`resistanceLevel`), 8 extra health from Health Boost II (`healthBoostLevel`; Absorption instead on a mob that ignores Health Boost) and Fire Resistance, so daylight doesn't burn it (`fireResistance`). Named mobs don't despawn, so a champion stays until it's defeated.
 - **The traits:**
 
@@ -3086,6 +3087,10 @@ About one in 40 monsters that spawn in the overworld at night becomes a champion
 | `speedTraits` | `["vampiric", "splitting"]` | Traits that also give Speed I |
 | `resistanceLevel` | `1` | Resistance level every champion has (0 = none) |
 | `healthBoostLevel` | `2` | Health Boost level every champion has (4 health per level); Absorption of the same level on a mob that ignores it |
+| `approach.enabled` | `true` | Champions walk slowly toward the nearest survival or adventure player (not AFK) in range, a small step along the ground at a time. They never step into water or lava, over fences or walls, up more than 1 block, or into a safe zone, land claim or town. Expedition champions are left out |
+| `approach.range` | `48` | How far away (blocks) a champion notices a player |
+| `approach.speed` | `1` | Approach pace in blocks per second (a zombie walks about 2.3) |
+| `approach.stopDistance` | `10` | It stops this close and hunts on its own |
 | `fireResistance` | `true` | Champions don't burn in daylight or fire |
 | `shards.min` | `1` | Fewest Relic Shards a champion drops |
 | `shards.max` | `3` | Most Relic Shards a champion drops |
