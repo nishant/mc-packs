@@ -216,6 +216,7 @@ function setWaypoint(player, wp) {
     console.warn(`[map] save: ${e}`);
   }
   lastSent.delete(player.id);
+  views.delete(player.id);
 }
 /** @param {Player} player @returns {Spot[]} */
 function marksOf(player) {
@@ -289,8 +290,13 @@ function prefsOf(player) {
 onChange((_key, player) => {
   if (player) prefCache.delete(player.id);
   else prefCache.clear();
-  if (player) lastSent.delete(player.id);
-  else lastSent.clear();
+  if (player) {
+    lastSent.delete(player.id);
+    views.delete(player.id); // drawn again from scratch at the next pass
+  } else {
+    lastSent.clear();
+    views.clear();
+  }
 });
 
 /** What was last sent to each player: the text and when. @type {Map<string, { key: string, at: number, compass: boolean, radar: boolean }>} */
@@ -533,7 +539,7 @@ function line2Of(region, dest) {
 /**
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, dest?: string, heading: number, x: number, z: number }} View
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, dest?: string, dim: string, px: number, pz: number, heading: number, x: number, z: number }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
@@ -582,7 +588,7 @@ function pass(player, all, seen, now) {
   const dimId = player.dimension.id;
   const region = dimId === OVERWORLD ? regions.get(player.id) ?? "" : `In ${DIM_NAMES[dimId] ?? "another dimension"}`;
   /** @type {View} */
-  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, dest: dest?.spot?.n, heading: 0, x: 0, z: 0 };
+  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, dest: dest?.spot?.n, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, z: 0 };
   views.set(player.id, view);
   render(player, view, now, true);
   costMs += Date.now() - t0;
@@ -621,6 +627,8 @@ function render(player, v, now, refresh) {
 /** Turning by less than this (degrees) or moving less than this (blocks) between ticks doesn't redraw. */
 const TURN_MIN = 0.5;
 const MOVE_MIN = 0.25;
+/** Moved farther than this (blocks) since the pass: a teleport, so the markers wait for the next pass. */
+const FAR_MOVE = 16;
 /**
  * Titles sent per tick at most by the per-tick redraw. Each one is also a realm:side message that every other pack
  * with side boxes reads (about 0.06 ms each, measured), so with many players turning at once the ones drawn longest
@@ -644,7 +652,13 @@ system.runInterval(() => {
     const p = v.player;
     try {
       if (!p.isValid) continue;
+      // Another dimension (a portal) or far from where the pass looked (a teleport): wait for the next pass.
+      if (p.dimension.id !== v.dim) {
+        views.delete(p.id);
+        continue;
+      }
       const at = p.location;
+      if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
       if (Math.abs(wrap(headingOf(p) - v.heading)) < TURN_MIN && Math.abs(at.x - v.x) + Math.abs(at.z - v.z) < MOVE_MIN) continue;
       due.push({ p, v, at: lastSent.get(p.id)?.at ?? 0 });
     } catch (e) {

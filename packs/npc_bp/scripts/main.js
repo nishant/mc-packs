@@ -342,35 +342,36 @@ function blocks(b, feet) {
   return b.location.y + heightOf(b) > feet + 0.01;
 }
 
-/** Are the feet and head of an NPC at `at` inside a block? undefined when not loaded. @param {Dimension} dim @param {Vector3} at */
-function sunk(dim, at) {
-  const x = Math.floor(at.x);
-  const z = Math.floor(at.z);
-  const y = Math.floor(at.y);
-  const feet = dim.getBlock({ x, y, z });
-  const head = dim.getBlock({ x, y: y + 1, z });
-  if (!feet || !head) return undefined;
-  return blocks(feet, at.y) || blocks(head, at.y);
+/** Is the block at `at` loaded and keeping feet out? undefined when not loaded. @param {Dimension} dim @param {Vector3} at @param {number} [dy] */
+function solidAt(dim, at, dy = 0) {
+  const b = dim.getBlock({ x: Math.floor(at.x), y: Math.floor(at.y) + dy, z: Math.floor(at.z) });
+  if (!b) return undefined;
+  return blocks(b, at.y + dy);
 }
 
-const LIFT_MAX = 3; // blocks an NPC is lifted at most: deeper than that, it was buried on purpose (or it's a cave)
+/** Spots already reported as sunk too deep to lift (logged once). @type {Set<string>} */
+const stuckLogged = new Set();
 
 /**
- * `at`, or the first spot above it (up to LIFT_MAX blocks) where an NPC stands on top of the floor rather than in
- * it. A spot that isn't loaded, or has no free spot close above, is kept.
+ * `at`, or `at` lifted onto the top of the block its feet are inside (a slab, a path block, a full block laid
+ * there): one step, at most 1 block, and only when the feet and head have room there. Only the feet block decides:
+ * a block at head height (a lantern, a top slab) never lifts anyone, and the lift never passes through a ceiling.
+ * A spot that isn't loaded, or can't be lifted, is kept.
  * @param {Dimension} dim @param {Vector3} at @returns {Vector3}
  */
 function standUp(dim, at) {
   try {
-    if (sunk(dim, at) !== true) return at;
     const x = Math.floor(at.x);
     const z = Math.floor(at.z);
-    for (let y = Math.floor(at.y); y <= Math.floor(at.y) + LIFT_MAX; y++) {
-      const b = dim.getBlock({ x, y, z });
-      if (!b) return at;
-      const top = b.isAir || b.isLiquid || PASSABLE.test(b.typeId) ? y : y + heightOf(b);
-      if (top <= at.y) continue;
-      if (sunk(dim, { x: at.x, y: top, z: at.z }) === false) return { x: at.x, y: top, z: at.z };
+    const feet = dim.getBlock({ x, y: Math.floor(at.y), z });
+    if (!feet || !blocks(feet, at.y)) return at;
+    const top = feet.location.y + heightOf(feet);
+    const up = { x: at.x, y: top, z: at.z };
+    if (top - at.y <= 1.001 && solidAt(dim, up) === false && solidAt(dim, up, 1) === false) return up;
+    const key = `${dim.id} ${x} ${at.y} ${z}`;
+    if (!stuckLogged.has(key)) {
+      stuckLogged.add(key);
+      console.warn(`[npc] the spot ${x}, ${at.y}, ${z} is inside ${feet.typeId} with no room on top: left as it is (place the townsfolk again)`);
     }
   } catch {
     // not loaded: keep the spot
