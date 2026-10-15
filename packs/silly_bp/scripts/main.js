@@ -8,6 +8,7 @@ import {
   ItemStack,
   MolangVariableMap,
   Player,
+  ScriptEventSource,
   system,
   world,
 } from "@minecraft/server";
@@ -253,7 +254,7 @@ function ready(p, what, ticks) {
   return true;
 }
 
-// Tests only: `scriptevent realm:silly_trace on` makes every effect also send `realm:silly_fx`
+// Tests only: `scriptevent realm:silly_trace on` from the server console makes every effect also send `realm:silly_fx`
 // ({ kind: "particle" | "sound", id }), so a test server, which has no client to draw or play them, can see them.
 let tracing = false;
 /** @param {"particle" | "sound"} kind @param {string} id */
@@ -946,9 +947,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id, message }) => {
+  ({ id, message, sourceType }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "silly_bp");
-    else if (id === "realm:silly_trace") tracing = message.trim() === "on";
+    else if (id === "realm:silly_trace" && sourceType === ScriptEventSource.Server) tracing = message.trim() === "on"; // console only
   },
   { namespaces: ["realm"] },
 );

@@ -30,6 +30,7 @@
       "realm:platypus_baby": {
         "minecraft:is_baby": {},
         "minecraft:scale": { "value": 0.5 },
+        "minecraft:collision_box": { "width": 0.3, "height": 0.225 },
         "minecraft:ageable": {
           "duration": 1200,
           "feed_items": ["minecraft:cod", "minecraft:salmon"],
