@@ -17,7 +17,7 @@ export default async function (t) {
   const first = t.waitForm(p, { timeout: 100 });
   t.cmd(p, "/realm:admin");
   const main = await first;
-  let page = await tap(main, "Quick Actions");
+  let page = await tap(main, "Operator Tools");
   const form = await tap(page, "Teleport to a Player");
   t.assert(title(form) === "Teleport me to a player", `the teleport form opened (got "${title(form)}")`);
   const dd = form.elements.find((/** @type {any} */ e) => e.kind === "dropdown");
