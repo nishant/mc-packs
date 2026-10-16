@@ -1893,12 +1893,12 @@ function findHouses(dim, center, radius) {
   const y1 = Math.min(dim.heightRange.max - 1, Math.floor(center.y) + 24);
   /** @type {Vector3[]} */
   const found = [];
-  // Chunk by chunk: one that isn't loaded is skipped rather than failing the whole search.
-  for (let x = cx - radius; x <= cx + radius; x += 16)
-    for (let z = cz - radius; z <= cz + radius; z += 16) {
+  // Chunk by chunk on the chunk grid, so one unloaded chunk only skips itself.
+  for (let x = Math.floor((cx - radius) / 16) * 16; x <= cx + radius; x += 16)
+    for (let z = Math.floor((cz - radius) / 16) * 16; z <= cz + radius; z += 16) {
       try {
         const a = { x, y: y0, z };
-        const b = { x: Math.min(x + 15, cx + radius), y: y1, z: Math.min(z + 15, cz + radius) };
+        const b = { x: x + 15, y: y1, z: z + 15 };
         found.push(...findBlocks(dim, a, b, { includeTypes: doors() }, 400));
       } catch {
         // not loaded
@@ -1906,6 +1906,7 @@ function findHouses(dim, center, radius) {
     }
   /** @type {{ door: Vector3, out: { x: number, z: number }, outside: Vector3[], inside: Vector3[] }[]} */
   const houses = [];
+  stats = { doors: 0, both: 0, cramped: 0 };
   for (const d of found) {
     if (Math.hypot(d.x - cx, d.z - cz) > radius) continue;
     try {
@@ -1914,15 +1915,23 @@ function findHouses(dim, center, radius) {
     } catch {
       continue;
     }
-    if (houses.some((h) => Math.hypot(h.door.x - d.x, h.door.z - d.z) < 6 && Math.abs(h.door.y - d.y) < 3)) continue;
-    // Which way is out: the side with open sky; in: the roofed side.
+    // Double doors and the next door along one wall are one house; a neighbor's door 3 or more blocks away isn't.
+    if (houses.some((h) => Math.hypot(h.door.x - d.x, h.door.z - d.z) < 3 && Math.abs(h.door.y - d.y) < 3)) continue;
+    stats.doors++;
+    // Which way is out: the side with more open sky over the 6 blocks in front of the door (a porch roof, an awning
+    // or eaves over the step still count as outside); in: the roofed side.
+    /** @param {number} dx @param {number} dz */
+    const cover = (dx, dz) => {
+      let n = 0;
+      for (let k = 1; k <= 6; k++) if (roofed(dim, d.x + dx * k, d.y, d.z + dz * k)) n++;
+      return n;
+    };
+    let placed = false;
     for (const [ax, az] of [[1, 0], [0, 1]]) {
-      const p = { x: d.x + ax, z: d.z + az };
-      const q = { x: d.x - ax, z: d.z - az };
-      const rp = roofed(dim, p.x, d.y, p.z);
-      const rq = roofed(dim, q.x, d.y, q.z);
-      if (rp === rq) continue;
-      const out = rp ? { x: -ax, z: -az } : { x: ax, z: az };
+      const cp = cover(ax, az);
+      const cq = cover(-ax, -az);
+      if (Math.abs(cp - cq) < 2) continue;
+      const out = cp > cq ? { x: -ax, z: -az } : { x: ax, z: az };
       const side = { x: out.z, z: out.x }; // along the wall
       /** @param {number} dir 1 out, -1 in @param {number[]} depths @param {number[]} offsets */
       const spots = (dir, depths, offsets) => {
@@ -1931,18 +1940,25 @@ function findHouses(dim, center, radius) {
         for (const k of depths)
           for (const o of offsets) {
             const at = standNear(dim, d.x + dir * out.x * k + side.x * o, d.y, d.z + dir * out.z * k + side.z * o);
-            if (at && (dir > 0 ? !roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)) : roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)))) list.push(at);
+            if (at && (dir > 0 || roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)))) list.push(at);
           }
-        return list;
+        // Outside: under the open sky first, then under a porch roof or an awning.
+        return dir > 0 ? [...list.filter((at) => !roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z))), ...list.filter((at) => roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)))] : list;
       };
-      const outside = spots(1, [2, 3, 1], [0, 2, -2, 3, -3]);
+      const outside = spots(1, [2, 3, 1, 4], [0, 2, -2, 3, -3]);
       const inside = spots(-1, [2, 3, 1, 4], [0, 1, -1, 2, -2]);
+      placed = true;
       if (outside.length && inside.length) houses.push({ door: d, out, outside, inside });
+      else stats.cramped++;
       break;
     }
+    if (!placed) stats.both++;
   }
   return houses;
 }
+
+/** What the last findHouses saw: doors checked, doors with no clear inside and outside, houses with no room to stand. */
+let stats = { doors: 0, both: 0, cramped: 0 };
 
 /** Loads the village for a moment (our own ticking area, 4 chunks around x, z): true once the middle is loaded. @param {Dimension} dim @param {Vector3} at */
 async function loadVillage(dim, at) {
@@ -2037,7 +2053,8 @@ async function houseNpcs(player, radius) {
     await loadVillage(dim, center);
     if (!player.isValid) return;
     const houses = findHouses(dim, center, R);
-    if (!houses.length) return player.sendMessage(`§cNo houses found within ${R} blocks: a house here is a door with a roof on one side and open sky on the other. Stand in the middle of the town, or try /realm:npc_houses 64.`);
+    const seen = `${stats.doors} door${stats.doors === 1 ? "" : "s"} checked: ${stats.both} with no clear inside and outside (roofed or open on both sides), ${stats.cramped} with no room to stand by them`;
+    if (!houses.length) return player.sendMessage(`§cNo houses found within ${R} blocks (${seen}). A house here is a door with a roofed room on one side and more open sky on the other. Stand in the middle of the town, or try /realm:npc_houses 64.`);
     for (;;) {
       const plan = assignHouses(houses, ids);
       const lines = plan.map((p) => {
@@ -2049,7 +2066,7 @@ async function houseNpcs(player, radius) {
       const missing = ids.filter((id) => !plan.some((p) => p.id === id));
       const shared = houses.length < plan.length ? ` §7(${plan.length} townsfolk, so some share a house)` : "";
       const body = [
-        `§fFound ${houses.length} house${houses.length === 1 ? "" : "s"}${shared}. By day each townsfolk stands right outside their door and strolls nearby; at night they're inside.`,
+        `§fFound ${houses.length} house${houses.length === 1 ? "" : "s"}${shared}. By day each townsfolk stands right outside their door and strolls nearby; at night they're inside. §7(${seen}.)`,
         ...lines,
         missing.length ? `§eNo room found for: ${missing.map((id) => plainName(/** @type {Townsfolk} */ (folk.get(id)))).join(", ")}. They stay where they are.` : "",
         "§7Lunch and evening spots are cleared. /realm:npc_undo puts everyone back where they are now.",
