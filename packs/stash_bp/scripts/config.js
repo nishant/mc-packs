@@ -50,10 +50,25 @@ export const CONFIG = {
     "minecraft:lodestone_compass",
     "minecraft:recovery_compass",
     "minecraft:clock",
+    "custom:inv_prev",
+    "custom:inv_menu",
+    "custom:inv_next",
   ],
 
   /** /realm:sort also sorts the hotbar (otherwise only slots 9–35). */
   sortHotbar: false,
+
+  /**
+   * Expansive Inventory: how many pages of the main inventory (slots 9-35) everyone has, 1 to 15. 1 is the
+   * vanilla inventory (no buttons). Operators can set their own count with /realm:inv_pages.
+   */
+  pages: 5,
+
+  /** Expansive Inventory: the three page buttons in the top row of the inventory (slots 9, 13 and 17). Each player can change it in /realm:prefs. */
+  invButtons: true,
+
+  /** Expansive Inventory: when a page is full, new stacks are stored on another page. Each player can change it in /realm:prefs. */
+  autoStore: true,
 
   /** Minimum time between uses per player, in ticks (20 = 1 s). */
   cooldownTicks: 20,

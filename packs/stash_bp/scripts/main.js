@@ -4,6 +4,7 @@ import {
   BlockVolume,
   CommandPermissionLevel,
   Container,
+  CustomCommandParamType,
   CustomCommandStatus,
   Dimension,
   Direction,
@@ -14,6 +15,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { buttonSlots, initPages, openInvMenu, setOpPages } from "./pages.js";
 import { get, getFor } from "./settings.js";
 
 const containerTypes = new Set(CONFIG.containerTypes);
@@ -109,33 +111,35 @@ function plain(item) {
 
 /**
  * Merges partial stacks, then orders slots [from, to) by item id and largest stack first,
- * empty slots last. Returns the number of stacks.
- * @param {Container} container @param {number} from @param {number} to
+ * empty slots last. Slots in `skip` (the page buttons) are left exactly as they are.
+ * Returns the number of stacks.
+ * @param {Container} container @param {number} from @param {number} to @param {Set<number>} [skip]
  */
-function sortRange(container, from, to) {
-  /** @type {(ItemStack | undefined)[]} */
-  const items = [];
-  for (let i = from; i < to; i++) items[i] = container.getItem(i);
+function sortRange(container, from, to, skip) {
+  /** @type {number[]} */
+  const slots = [];
+  for (let i = from; i < to; i++) if (!skip?.has(i)) slots.push(i);
+  const items = slots.map((i) => container.getItem(i));
 
   // 1. Merge: change amounts in place (ContainerSlot.amount), never re-create a stack.
-  for (let i = from; i < to; i++) {
+  for (let i = 0; i < slots.length; i++) {
     const a = items[i];
     if (!a || !plain(a) || a.amount >= a.maxAmount) continue;
     let amount = a.amount;
-    for (let j = i + 1; j < to && amount < a.maxAmount; j++) {
+    for (let j = i + 1; j < slots.length && amount < a.maxAmount; j++) {
       const b = items[j];
       if (!b || b.typeId !== a.typeId || !plain(b) || !a.isStackableWith(b)) continue;
       const move = Math.min(a.maxAmount - amount, b.amount);
       amount += move;
       if (move === b.amount) {
-        container.setItem(j, undefined);
+        container.setItem(slots[j], undefined);
         items[j] = undefined;
       } else {
-        container.getSlot(j).amount = b.amount - move;
+        container.getSlot(slots[j]).amount = b.amount - move;
         b.amount -= move;
       }
     }
-    if (amount !== a.amount) container.getSlot(i).amount = amount;
+    if (amount !== a.amount) container.getSlot(slots[i]).amount = amount;
     a.amount = amount;
   }
 
@@ -144,18 +148,17 @@ function sortRange(container, from, to) {
   /** @param {{ id: string, n: number } | undefined} x @param {{ id: string, n: number } | undefined} y */
   const before = (x, y) => !!x && (!y || x.id < y.id || (x.id === y.id && x.n > y.n));
   let stacks = 0;
-  for (let i = from; i < to; i++) {
+  for (let i = 0; i < slots.length; i++) {
     let best = i;
-    for (let j = i + 1; j < to; j++) if (before(keys[j], keys[best])) best = j;
+    for (let j = i + 1; j < slots.length; j++) if (before(keys[j], keys[best])) best = j;
     if (best !== i) {
-      container.swapItems(i, best, container);
+      container.swapItems(slots[i], slots[best], container);
       [keys[i], keys[best]] = [keys[best], keys[i]];
     }
     if (keys[i]) stacks++;
   }
   return stacks;
 }
-
 /** @param {Block} block */
 const containerOf = (block) => block.getComponent("minecraft:inventory")?.container;
 
@@ -172,7 +175,7 @@ function sortBlock(player, block) {
 function sortInventory(player) {
   const container = player.getComponent("minecraft:inventory")?.container;
   if (!container) return;
-  const stacks = sortRange(container, getFor(player, "sortHotbar") ? 0 : MAIN_FIRST, MAIN_END);
+  const stacks = sortRange(container, getFor(player, "sortHotbar") ? 0 : MAIN_FIRST, MAIN_END, buttonSlots(container));
   bar(player, `§aSorted ${stacks} stack${stacks === 1 ? "" : "s"} in your inventory`);
 }
 
@@ -338,7 +341,9 @@ function quickStack(player, targets, skipped) {
   let moved = 0;
   /** @type {Set<Target>} */
   const received = new Set();
+  const buttons = buttonSlots(inv); // the page buttons are never stashed
   for (let slot = MAIN_FIRST; slot < MAIN_END; slot++) {
+    if (buttons.has(slot)) continue;
     const item = inv.getItem(slot);
     if (!item || kept(item)) continue;
     let left = item.amount;
@@ -853,6 +858,19 @@ async function showHelp(player) {
     ].join("\n")
   );
 
+  const pages = get("pages");
+  form.divider().header("Expansive Inventory");
+  form.label(
+    pages > 1
+      ? [
+          `Your main inventory (slots 9 to 35) has §e${pages} pages§r of 24 slots; the hotbar is the same on every page. Three buttons sit in the top row: §e<§r (previous page) top left, the menu in the middle, §e>§r (next page) top right. Click one in your open inventory to switch.`,
+          "§e/realm:inv§r opens the menu: every page and how full it is, a scan that finds the page holding an item, sort this page, quick stack, and your settings.",
+          "When a page is full, new stacks are stored on another page by themselves. Shulker boxes, bundles, potions, maps, banners and the like stay with you on every page.",
+          "§7Turn the buttons or auto-store off in /realm:prefs or the menu's settings. Operators: §e/realm:inv_pages <count>§r sets your own number of pages.",
+        ].join("\n")
+      : "§7Extra inventory pages are off: this realm uses the vanilla inventory (operators can raise the page count in /realm:config)."
+  );
+
   form.divider().header("/realm:stash_help");
   form.label("§7Usage:§r §e/realm:stash_help\nShows this page.");
 
@@ -897,6 +915,13 @@ function playerCommand(origin, run) {
   return { status: CustomCommandStatus.Success };
 }
 
+// The inventory menu's two sort buttons share the cooldown of the commands.
+initPages({
+  bar,
+  sort: (p) => (ready(p) ? sortInventory(p) : bar(p, "§7Too fast. Try again in a moment.")),
+  stash: (p) => (ready(p) ? void stash(p) : bar(p, "§7Too fast. Try again in a moment.")),
+});
+
 // The descriptions are what /help and autocomplete show.
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
@@ -917,6 +942,46 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       cheatsRequired: false,
     },
     (origin) => playerCommand(origin, sortInventory)
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:inv",
+      description: "Expansive Inventory: switch between your inventory pages, scan every page for an item, sort, quick stack and change the page buttons. More: /realm:stash_help",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => openInvMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:inv_pages",
+      description: "Operators: set how many inventory pages you have, 2 to 25 (1 = a single vanilla page, 0 or nothing = the realm's count). Only you; items on removed pages move to the pages left",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      optionalParameters: [{ name: "pages", type: CustomCommandParamType.Integer }],
+    },
+    (origin, pages) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      const count = typeof pages === "number" ? pages : 0;
+      if (!Number.isInteger(count) || count < 0 || count > 25) return { status: CustomCommandStatus.Failure, message: "Choose 0 to 25 pages (0 = the realm's count)." };
+      system.run(() => {
+        try {
+          const out = setOpPages(player, count);
+          player.sendMessage(out.message);
+        } catch (e) {
+          console.warn(`[stash] ${e}`);
+        }
+      });
+      return { status: CustomCommandStatus.Success };
+    }
   );
 
   customCommandRegistry.registerCommand(

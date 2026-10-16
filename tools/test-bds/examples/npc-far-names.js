@@ -35,7 +35,7 @@ export default async function (t) {
   t.check(labels()[0].location.x < wallX, "label moves in front of the house wall");
   t.server(`/fill ${wallX} ${y} ${z - 3} ${wallX} ${y + 4} ${z + 3} air`);
   await move(-4);
-  t.check(labels().length === 0, "nearby clear view uses only Ida's native name");
+  t.check(labels().length === 1 && Math.hypot(labels()[0].location.x - base.x, labels()[0].location.z - base.z) < 0.2, "nearby clear view keeps overhead label above Ida");
 
   await t.loadArea(-110, 0, { radius: 2 });
   await move(-110);

@@ -1,6 +1,7 @@
 // Generates the pictures of the Easy Building Guides resource pack (packs/build_rp): the guide particle
 // textures (textures/particle/realm_guide.png: a one-block outline and a corner outline side by side;
-// realm_guide_dot.png), the Building Book icon (textures/items/realm_building_book.png) and pack_icon.png.
+// realm_guide_dot.png), the Building Book icon (textures/items/realm_building_book.png), inventory page
+// buttons (textures/items/inv_{prev,menu,next}.png), and pack_icon.png.
 // The particles, item_texture.json and the manifest are hand-written.
 // Deterministic (no Math.random), so the same code always writes the same files.
 //
@@ -139,6 +140,72 @@ function bookIcon() {
 }
 
 // ---------------------------------------------------------------------------
+// Inventory slot buttons (128 x 128): matte obsidian, beveled edges and silver/cyan glyphs.
+// ---------------------------------------------------------------------------
+
+/** @param {"prev" | "menu" | "next"} kind */
+function inventoryIcon(kind) {
+  const img = blank(128, 128);
+  /** @param {number} x @param {number} y @param {number} lo @param {number} hi */
+  const inside = (x, y, lo, hi) => x >= lo && x <= hi && y >= lo && y <= hi
+    && Math.min(x - lo, hi - x) + Math.min(y - lo, hi - y) >= 3;
+  for (let y = 4; y <= 123; y++) {
+    for (let x = 4; x <= 123; x++) {
+      if (!inside(x, y, 4, 123)) continue;
+      let color = /** @type {RGBA} */ ([8, 9, 12, 255]);
+      if (inside(x, y, 8, 119)) color = x + y < 128 ? [46, 52, 66, 255] : [14, 16, 22, 255];
+      if (inside(x, y, 12, 115)) {
+        const t = (y - 12) / 103;
+        color = [Math.round(22 - 10 * t), Math.round(25 - 11 * t), Math.round(34 - 15 * t), 255];
+      }
+      if (inside(x, y, 18, 109) && !inside(x, y, 19, 108)) color = [32, 36, 48, 255];
+      put(img, x, y, color);
+    }
+  }
+
+  /** Signed-distance coverage keeps the glyphs crisp without overlapping stroke seams.
+   * @param {(x: number, y: number) => number} distance @param {RGBA} [core] */
+  const glyph = (distance, core = [235, 245, 255, 255]) => {
+    for (let y = 28; y <= 99; y++) {
+      for (let x = 24; x <= 103; x++) {
+        const d = distance(x + 0.5, y + 0.5);
+        if (d >= 4) continue;
+        const glow = Math.round(140 * (core[3] / 255) * (1 - Math.max(0, d) / 4) ** 2);
+        put(img, x, y, [50, 180, 220, glow]);
+        const coverage = Math.max(0, Math.min(1, 0.5 - d));
+        if (coverage) put(img, x, y, [core[0], core[1], core[2], Math.round(core[3] * coverage)]);
+      }
+    }
+  };
+  /** @param {number} x @param {number} y @param {number[]} a @param {number[]} b */
+  const segmentDistance = (x, y, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy);
+  };
+  if (kind === "menu") {
+    glyph((x, y) => {
+      let d = Infinity;
+      for (const cy of [46, 64, 82]) {
+        for (const cx of [46, 64, 82]) {
+          const qx = Math.abs(x - cx) - 4, qy = Math.abs(y - cy) - 4;
+          d = Math.min(d, Math.hypot(Math.max(0, qx), Math.max(0, qy)) + Math.min(0, Math.max(qx, qy)) - 2);
+        }
+      }
+      return d;
+    });
+  } else {
+    const tip = kind === "prev" ? 48 : 80, back = kind === "prev" ? 72 : 56;
+    glyph((x, y) => Math.min(
+      segmentDistance(x, y, [back, 44], [tip, 64]),
+      segmentDistance(x, y, [tip, 64], [back, 84]),
+    ) - 4.5);
+    if (kind === "prev") glyph((x, y) => segmentDistance(x, y, [36, 55], [36, 73]) - 1.5, [142, 165, 182, 190]);
+  }
+  return img;
+}
+
+// ---------------------------------------------------------------------------
 // pack_icon.png (128 x 128): outlined blocks of a wall going up on a dark blue background.
 // ---------------------------------------------------------------------------
 
@@ -203,6 +270,9 @@ const outputs = new Map();
 outputs.set(`${RP}/textures/particle/realm_guide.png`, guideTexture());
 outputs.set(`${RP}/textures/particle/realm_guide_dot.png`, dotTexture());
 outputs.set(`${RP}/textures/items/realm_building_book.png`, bookIcon());
+outputs.set(`${RP}/textures/items/inv_prev.png`, inventoryIcon("prev"));
+outputs.set(`${RP}/textures/items/inv_menu.png`, inventoryIcon("menu"));
+outputs.set(`${RP}/textures/items/inv_next.png`, inventoryIcon("next"));
 outputs.set(`${RP}/pack_icon.png`, packIcon());
 
 if (check) {

@@ -17,8 +17,13 @@ const OPTIONS = [
   { key: "cooldownTicks", type: "int", scope: "world", label: "Cooldown between sorts (ticks)", min: 0, max: 100, step: 5 },
   { key: "locks", type: "bool", scope: "world", label: "Chest locks", help: "The sneak-tap menu can lock a container to its owner. Disabled: no Lock button, and existing locks aren't enforced (they're kept)" },
   { key: "maxLocks", type: "int", scope: "world", label: "Locked containers per player", min: 1, max: 500, step: 5 },
+  { key: "pages", type: "int", scope: "world", label: "Inventory pages (1 = vanilla inventory)", min: 1, max: 15, step: 1, help: "Pages of the main inventory, switched with the buttons in the inventory or /realm:inv. Items on a page that goes away move to the pages that are left" },
+  { key: "invButtons", type: "bool", scope: "world", label: "In-inventory page buttons", help: "The three page buttons in the top row of the inventory. Players can turn them off for themselves" },
+  { key: "autoStore", type: "bool", scope: "world", label: "Auto-store pickups into other pages", help: "When a page is full, new stacks move to another page. Players can turn it off for themselves" },
   { key: "sneakTap", type: "enum", scope: "player", base: "sneakTap", choices: ["menu", "sort", "off"], names: ["Open the menu", "Sort it right away", "Nothing (opens as usual)"], label: "When I sneak-tap a container" },
   { key: "sortHotbar", type: "bool", scope: "player", base: "sortHotbar", label: "My inventory sort includes my hotbar" },
+  { key: "invButtons", type: "bool", scope: "player", base: "invButtons", label: "In-inventory page buttons" },
+  { key: "autoStore", type: "bool", scope: "player", base: "autoStore", label: "Auto-store pickups into other pages" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

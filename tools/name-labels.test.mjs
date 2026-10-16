@@ -101,14 +101,17 @@ test("an obstructed label is in front of a wall, including up close", () => {
   assert.ok(f.options.labels.get("ida").location.x < 4);
 });
 
-test("clear nearby names use only the native name tag", () => {
+test("clear nearby names keep the always-visible overhead label above the NPC", () => {
   const f = setup();
   f.update();
   const label = f.options.labels.get("ida");
   f.options.targets[0].x = 4;
   f.update();
-  assert.equal(f.options.labels.size, 0);
-  assert.equal(label.isValid, false);
+  assert.equal(f.options.labels.size, 1);
+  assert.equal(label.isValid, true);
+  assert.equal(label.location.x, 4);
+  assert.equal(label.location.y, 2.05);
+  assert.equal(label.nameTag, "§eIda §7the Relicsmith");
 });
 
 for (const why of ["disabled", "out of range", "spectator", "other dimension", "removed target"]) {
@@ -139,7 +142,8 @@ test("the closest eligible player owns the projection", () => {
   const f = setup();
   f.options.players.push({ ...f.player, location: { x: 35, y: 0, z: 0 } });
   f.update();
-  assert.equal(f.options.labels.size, 0, "the nearby player sees only the native name");
+  assert.equal(f.options.labels.size, 1, "the nearby player anchors the overhead label above Ida");
+  assert.equal(f.options.labels.get("ida").location.x, 38);
 });
 
 test("invalid labels are replaced and orphan loads are removed", () => {

@@ -9,7 +9,7 @@
     },
     "components": {
       "minecraft:type_family": { "family": ["realm_npc_label", "inanimate"] },
-      "minecraft:collision_box": { "width": 0.0, "height": 0.0 },
+      "minecraft:collision_box": { "width": 0.05, "height": 0.05 },
       "minecraft:nameable": { "always_show": true, "allow_name_tag_renaming": false },
       "minecraft:physics": { "has_gravity": false, "has_collision": false },
       "minecraft:pushable": { "is_pushable": false, "is_pushable_by_piston": false },

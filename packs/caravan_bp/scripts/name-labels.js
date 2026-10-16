@@ -75,10 +75,12 @@ export function updateNameLabels({ labels, targets, players, maxRange, labelType
       const d = Math.hypot(dx, dy, dz);
       if (d < 0.5) continue;
       const ux = dx / d, uy = dy / d, uz = dz / d;
-      const wall = firstWallDist(dim, eye, ux, uy, uz, Math.min(d, 9.5));
-      if (d <= 7 && wall === undefined) continue;
-      const projDist = wall !== undefined ? Math.max(0.1, wall - 0.55) : Math.min(d - 0.3, 8.8);
-      const pos = { x: eye.x + ux * projDist, y: eye.y + uy * projDist, z: eye.z + uz * projDist };
+      const wall = firstWallDist(dim, eye, ux, uy, uz, Math.min(d, 8.5));
+      const closeClear = d <= 6.5 && wall === undefined;
+      const projDist = wall !== undefined ? Math.max(0.1, wall - 0.55) : Math.min(d - 0.3, 7.5);
+      const pos = closeClear
+        ? { x: target.x, y: target.y + 2.05, z: target.z }
+        : { x: eye.x + ux * projDist, y: eye.y + uy * projDist, z: eye.z + uz * projDist };
       if (!dim.getBlock({ x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) })) continue;
       if (!label) {
         label = dim.spawnEntity(labelType, pos);

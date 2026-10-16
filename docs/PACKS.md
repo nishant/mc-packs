@@ -913,7 +913,7 @@ Operators can change `defaultRadius` and `maxAreas` in game with `/realm:config`
 
 ## Quick Stack & Sort — `stash_bp`
 
-Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory.
+Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory. The inventory itself has **5 pages** (the Expansive Inventory): three buttons in its top row flip between them, and when a page fills up, new pickups are stored on another page by themselves.
 
 ### How to use
 
@@ -926,10 +926,17 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
 3. **Sort your inventory:** run `/realm:sort`. Your main inventory is sorted; the hotbar stays as it is.
 4. **Your way:** in `/realm:prefs`, choose what sneak-tapping a container does for you (**When I sneak-tap a container**: `Open the menu`, `Sort it right away` or `Nothing (opens as usual)`), and whether sorting your inventory includes your hotbar.
 5. **Help:** run `/realm:stash_help` for a page that explains the menu, chest locks and every command with its usage. `/help realm:stash` and `/help realm:sort` also describe them.
-6. **Operators:** sneak-tap someone else's locked container for **Remove the lock (operator)**. To switch chest locks off for the realm, disable **Chest locks** in `/realm:config` (existing locks are kept for when they're enabled again).
+6. **Inventory pages:** open your inventory. The top row of the main inventory has three buttons: `<` (previous page) top left, the page number and menu in the middle, `>` (next page) top right. Click one and that page's items replace the 24 slots between them. The hotbar, armor and offhand are the same on every page. `/realm:inv` opens a menu with every page and how full it is, **Scan all items across pages** (pick an item to jump to a page that holds it), **Sort this page**, **Quick stack to nearby chests** and **Inventory settings**. Click the middle button, then close your inventory, and the same menu opens.
+7. **Auto-store:** when the page you are on is full (or down to its last free slot), the stack you just picked up moves to another page by itself, and the bar says `[Page #2] Auto-stored 12x Cobblestone (96 slots left)`.
+8. **Settings:** in `/realm:prefs` or **Inventory settings**, turn the in-inventory buttons (`invButtons`) and auto-store (`autoStore`) off for yourself. With the buttons off you still switch pages with `/realm:inv`.
+9. **Operators:** sneak-tap someone else's locked container for **Remove the lock (operator)**. To switch chest locks off for the realm, disable **Chest locks** in `/realm:config` (existing locks are kept for when they're enabled again). `/realm:inv_pages <count>` gives you your own number of pages (2 to 25, `1` for a single page with no buttons, `0` to follow the realm again) without changing everyone else's; **Inventory pages** in `/realm:config` (`pages`, 1 to 15) sets the realm's.
 
 ### What players see
 
+- **Inventory pages (Expansive Inventory):** with `pages` at its default of `5`, your main inventory (slots 9 to 35) is five pages of 24 slots, 120 slots in all, plus the hotbar, which is shared by every page. All pages are open from the start. The buttons sit in slot 9 (previous), slot 13 (menu) and slot 17 (next) of the top row: `Page 5/5 (Prev)`, `Page 1/5 Inventory Menu`, `Page 2/5 (Next)`. Clicking one (or dropping it, or shift-clicking it out of its slot) puts it straight back and switches the page, and the bar says `[Page #2/5] 2/24 slots used`. A button that ends up in your hand when you right-click it goes back to its slot and does its job too. Buttons can't be dropped, and `/realm:sort` and `/realm:stash` never touch them.
+- **Nothing is ever lost:** a real item that lands on a button slot (you click a button with an item on your cursor) is moved to a free slot on the current page, else the hotbar, else another page, and dropped at your feet only when everything is full. A page is saved and read back before its slots are cleared, and the new page is only shown after that. Items that can't be copied exactly (shulker boxes, bundles, potions and tipped arrows, banners, shields, maps, books, fireworks, goat horns, player heads, mob buckets, crossbows, armor with a trim and leather armor, decorated pots, bee nests) stay in their slots and come with you from page to page, like the hotbar. A stack that can't be put back on a page (no room for it where it was) waits on that page and shows in the scan; it is never deleted.
+- **Fewer pages:** when your page count goes down (an operator lowers `pages`, you run `/realm:inv_pages 1`, or you turn the buttons off), you are moved to page 1 and everything saved on the removed pages moves to free slots on your current page, then your hotbar, then the other pages that are left, and only when all are full to the floor at your feet. With the buttons off, slots 9, 13 and 17 are ordinary slots again.
+- **Auto-store** (`autoStore`) looks every half second. When your page has 1 or no free slots, the newest stack goes to another page: onto matching stacks first, then into empty slots. It stops once two slots are free, and never touches the hotbar. If every other page is full nothing moves.
 - **The menu** shows how full the container is and how full your inventory is (`Barrel - 18 of 27 slots used`, `Your inventory - 22 of 27 slots used`), then the three buttons. Close it to do nothing. Holding anything other than gear (a block, a hopper, honeycomb) skips the menu, so sneak-placing a hopper on a chest or waxing a copper chest works as usual. To scrape a copper chest with an axe, don't sneak.
 - **Ender chests** get the menu without **Sort this**: add-ons can't see inside an ender chest, so it can't be sorted or stashed into.
 - **Sorting** merges partial stacks of the same item, then orders the slots by item id, the biggest stack first, with empty slots at the end. A chest with 3 partial stacks of cobblestone ends with 1 full stack plus the rest.
@@ -958,8 +965,10 @@ Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick s
 | `/realm:stash` | Everyone | Quick stack: puts your main inventory into chests and barrels within 8 blocks that already hold the same items, keeping your gear and carried items. Same as the menu's **Quick stack my inventory** |
 | `/realm:sort` | Everyone | Sorts your inventory, slots 9–35. The hotbar is untouched, unless you turned that on in `/realm:prefs` (default off, `sortHotbar`). Same as the menu's **Sort my inventory** |
 | `/realm:stash_help` | Everyone | Opens the help page: the sneak-tap menu, then each command with its usage and what it never touches |
+| `/realm:inv` | Everyone | Opens the Expansive Inventory menu: your current page (`Page #1 of 5`), every page with how many of its 24 slots are used (click one to switch), **Scan all items across pages**, **Sort this page**, **Quick stack to nearby chests** and **Inventory settings**. When your inventory screen is open it waits and appears as soon as you close it |
+| `/realm:inv_pages [pages]` | Operators | Sets how many pages you have, only for yourself (`pages`: 0 to 25; with no number, `0`, which follows the realm's `pages`, default `5`): `2` to `25` is your own total, `1` is one vanilla page with no buttons, `0` or no number follows the realm's setting again. Items on pages that go away move to the pages you keep. The realm's setting is not changed |
 
-None of them take parameters. The help page follows the settings in force, yours from `/realm:prefs` included; the `/help` description of `/realm:stash` follows `stashRadius` in `config.js`.
+`/realm:stash`, `/realm:sort` and `/realm:stash_help` take no parameters. The help page follows the settings in force, yours from `/realm:prefs` included; the `/help` description of `/realm:stash` follows `stashRadius` in `config.js`.
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -971,25 +980,32 @@ None of them take parameters. The help page follows the settings in force, yours
 | `sneakTap` | `"menu"` | What sneak-tapping a container with an empty hand or gear in it does: `"menu"` opens the menu, `"sort"` sorts it right away (no menu, no ender chests), `"off"` does nothing so it opens as usual. With `"menu"` or `"sort"`, sneak-tapping never opens it |
 | `stashNamedItems` | `false` | `/realm:stash` also moves items with a custom name |
 | `stashGear` | `false` | `/realm:stash` also moves gear: anything with durability (tools, weapons, armor, elytra, shields…) |
-| `keepItems` | shulker boxes (17), bundles (17), `totem_of_undying`, `filled_map`, `compass`, `lodestone_compass`, `recovery_compass`, `clock` | Item ids `/realm:stash` never moves |
+| `keepItems` | shulker boxes (17), bundles (17), `totem_of_undying`, `filled_map`, `compass`, `lodestone_compass`, `recovery_compass`, `clock`, `custom:inv_prev`, `custom:inv_menu`, `custom:inv_next` | Item ids `/realm:stash` never moves (the last three are the inventory page buttons) |
 | `sortHotbar` | `false` | `/realm:sort` and the menu's **Sort my inventory** also sort the hotbar |
+| `pages` | `5` | Expansive Inventory: how many pages of the main inventory everyone has, 1 to 15 (`1` = the vanilla inventory, no buttons). Each page is 24 slots. Operators can set their own with `/realm:inv_pages` |
+| `invButtons` | `true` | The three page buttons in slots 9, 13 and 17 of the inventory. Each player can turn them off for themselves in `/realm:prefs` |
+| `autoStore` | `true` | When a page is full, new stacks are stored on another page. Each player can turn it off for themselves in `/realm:prefs` |
 | `cooldownTicks` | `20` | Minimum time between sorts and stashes per player (20 = 1 s). Opening the menu, the help page or a lock button doesn't count |
 | `locks` | `true` | Chest locks: the sneak-tap menu's **Lock this chest**. Disabled: no lock buttons and no lock is enforced; the locks are kept and apply again once it's enabled |
 | `maxLocks` | `50` | Most containers one player can have locked at a time (a double chest counts once) |
 | `maxShared` | `10` | Most players one locked container can be shared with |
 
-Operators can change `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `cooldownTicks`, `locks` and `maxLocks` in game with `/realm:config`. Each player can choose their own `sneakTap` and `sortHotbar` in `/realm:prefs`, which wins over the realm's for them. `stashRadius` and the lists stay in `config.js`.
+Operators can change `pages`, `invButtons`, `autoStore`, `sneakTap`, `sortHotbar`, `stashGear`, `stashNamedItems`, `cooldownTicks`, `locks` and `maxLocks` in game with `/realm:config`. Each player can choose their own `invButtons`, `autoStore`, `sneakTap` and `sortHotbar` in `/realm:prefs`, which wins over the realm's for them. `stashRadius` and the lists stay in `config.js`.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
 | `stash:cfg` | World | Settings changed in `/realm:config` |
-| `stash:pref` | Player | JSON of the player's own `sneakTap` and `sortHotbar` from `/realm:prefs` |
+| `stash:pref` | Player | JSON of the player's own `invButtons`, `autoStore`, `sneakTap` and `sortHotbar` from `/realm:prefs` |
+| `stash:cur` | Player | The inventory page the player is on (absent = page 1) |
+| `stash:page:<n>` | Player | The saved stacks of page `n` while it isn't the one in the inventory: JSON, one record per stack (`s` slot, `id`, `n` amount, and name, lore, enchantments, damage, color, lock mode, dynamic properties when it has them). A page over 28 KB is split: this key holds `#<count>` and the parts are `stash:page:<n>:<k>` |
+| `stash:op_pages` | Player | An operator's own page count from `/realm:inv_pages` (absent = the realm's `pages`) |
 | `stash:lock:<dimension>:<x>,<y>,<z>` | World | One per locked block (both halves of a double chest): JSON `{ o, n, s, h? }`, the owner's id and name, the players it's shared with (`[{ i, n }]`), and `h: 1` on a double chest's second half so it counts once |
 
 ### How it works
 
+- **Inventory pages:** the active page is the real inventory; the other pages are JSON in the player's dynamic properties. Switching copies each stack of the 24 slots to a record, rebuilds it to check the copy matches (anything that doesn't, or that is on the list of items with hidden data, stays in its slot), saves the page and reads it back, and only then clears the slots and fills them from the page being opened. Every two ticks the pack looks at slots 9, 13 and 17: a button that has left its slot was clicked, so any real item that took its place is rescued first, strays in other slots and dropped button items (`world.afterEvents.entitySpawn`) are removed, and the action runs once (6-tick debounce per player). The menu button opens `/realm:inv` through a form that retries while the inventory screen is open. `/realm:sort`, `/realm:stash` and the menu's sort skip the three slots while they hold buttons. The button items are `custom:inv_prev`, `custom:inv_menu` and `custom:inv_next` (the textures are in Effortless Building's resource pack, `build_rp`).
 - **Menu:** `world.beforeEvents.playerInteractWithBlock` cancels the tap when the player is sneaking, the hand is empty or holds an item with a `minecraft:durability` component, and the block is a listed container or an ender chest. On the next tick an `ActionFormData` from `@minecraft/server-ui` shows the menu; a player can have one open at a time. The chosen action re-reads the block, so a container broken while the menu was open is left alone.
 - **Sort:** stacks are merged by changing the amount of the slot that stays (`ContainerSlot.amount`) and ordered with `swapItems`. Both are native moves, so no item is ever copied or re-created and nothing about it can be lost.
 - **Stash:** one `dimension.getBlocks` query finds the `stashTypes` containers in the cube (loaded chunks only), and they are read a few per tick with `system.runJob`. The pack then asks the other packs which of them the player may not open (`realm:access_check`, below) and leaves those out. Each main-inventory slot is then moved with `transferItem` into the nearest container holding that item, then the next.

@@ -493,7 +493,7 @@ export const PACKS = [
     "folder": "stash_bp",
     "topic": "stash",
     "name": "Quick Stack & Sort",
-    "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory.",
+    "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory. The inventory itself has §l5 pages§r (the Expansive Inventory): three buttons in its top row flip between them, and when a page fills up, new pickups are stored on another page by themselves.",
     "steps": [
       {
         "text": "§lOpen the menu:§r sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a §lQuick Stack & Sort§r menu does, with these buttons:\n  - §lSort this chest§r (or barrel, shulker box...): its stacks merge and sort, and the bar above the hotbar says §eSorted 31 stacks§r.\n  - §lLock this chest:§r only you can open, sort or break it. Once it's yours, the button reads §lShare or unlock§r: share it with players who are online, stop sharing, or unlock it.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
@@ -516,7 +516,19 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r sneak-tap someone else's locked container for §lRemove the lock (operator)§r. To switch chest locks off for the realm, disable §lChest locks§r in §e/realm:config§r (existing locks are kept for when they're enabled again).",
+        "text": "§lInventory pages:§r open your inventory. The top row of the main inventory has three buttons: §e<§r (previous page) top left, the page number and menu in the middle, §e>§r (next page) top right. Click one and that page's items replace the 24 slots between them. The hotbar, armor and offhand are the same on every page. §e/realm:inv§r opens a menu with every page and how full it is, §lScan all items across pages§r (pick an item to jump to a page that holds it), §lSort this page§r, §lQuick stack to nearby chests§r and §lInventory settings§r. Click the middle button, then close your inventory, and the same menu opens.",
+        "ops": false
+      },
+      {
+        "text": "§lAuto-store:§r when the page you are on is full (or down to its last free slot), the stack you just picked up moves to another page by itself, and the bar says §e[Page #2] Auto-stored 12x Cobblestone (96 slots left)§r.",
+        "ops": false
+      },
+      {
+        "text": "§lSettings:§r in §e/realm:prefs§r or §lInventory settings§r, turn the in-inventory buttons (§einvButtons§r) and auto-store (§eautoStore§r) off for yourself. With the buttons off you still switch pages with §e/realm:inv§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r sneak-tap someone else's locked container for §lRemove the lock (operator)§r. To switch chest locks off for the realm, disable §lChest locks§r in §e/realm:config§r (existing locks are kept for when they're enabled again). §e/realm:inv_pages <count>§r gives you your own number of pages (2 to 25, §e1§r for a single page with no buttons, §e0§r to follow the realm again) without changing everyone else's; §lInventory pages§r in §e/realm:config§r (§epages§r, 1 to 15) sets the realm's.",
         "ops": true
       }
     ],
@@ -538,6 +550,18 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Opens the help page: the sneak-tap menu, then each command with its usage and what it never touches"
+      },
+      {
+        "usage": "/realm:inv",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the Expansive Inventory menu: your current page (§ePage #1 of 5§r), every page with how many of its 24 slots are used (click one to switch), §lScan all items across pages§r, §lSort this page§r, §lQuick stack to nearby chests§r and §lInventory settings§r. When your inventory screen is open it waits and appears as soon as you close it"
+      },
+      {
+        "usage": "/realm:inv_pages [pages]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Sets how many pages you have, only for yourself (§epages§r: 0 to 25; with no number, §e0§r, which follows the realm's §epages§r, default §e5§r): §e2§r to §e25§r is your own total, §e1§r is one vanilla page with no buttons, §e0§r or no number follows the realm's setting again. Items on pages that go away move to the pages you keep. The realm's setting is not changed"
       }
     ]
   },
