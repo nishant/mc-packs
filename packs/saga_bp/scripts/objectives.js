@@ -1,6 +1,6 @@
 // Objectives: what counts for each objective type, the per-second and fast loops, and the scenes
 // (story characters, guards, escorts, wisps, defenses, visions, riddles).
-import { EquipmentSlot, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
+import { EquipmentSlot, GameMode, ItemStack, MolangVariableMap, Player, system, world } from "@minecraft/server";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
 import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor } from "./actors.js";
 import {
@@ -121,6 +121,155 @@ function inArea(obj, at, dim) {
 
 /** Is the player standing in an objective's area? @param {Player} player @param {Objective} obj */
 const playerIn = (player, obj) => inArea(obj, player.location, player.dimension.id);
+
+// ---- Quest spot outlines (realm:guide_x / _y / _z from build_rp) ------------------------------------------
+
+const COLOR_GOLD = { r: 1.0, g: 0.78, b: 0.18, a: 0.58 };
+const COLOR_GREEN = { r: 0.25, g: 0.95, b: 0.55, a: 0.52 };
+const COLOR_CYAN = { r: 0.25, g: 0.88, b: 1.0, a: 0.62 };
+
+/** Does this player see quest spot outlines? @param {Player} player */
+const guidesOn = (player) => getFor(player, "spotGuides") !== false;
+
+/**
+ * The variables of a guide particle.
+ * @param {{ r: number, g: number, b: number, a: number }} color @param {number} [style] 0 = full block outline, 1 = corner brackets @param {number} [life] seconds
+ */
+function guideVars(color, style = 0, life = 1.15) {
+  const m = new MolangVariableMap();
+  m.setFloat("life", life);
+  m.setFloat("style", style);
+  m.setColorRGBA("color", { red: color.r, green: color.g, blue: color.b, alpha: color.a });
+  return m;
+}
+
+/** Outlines the 1x1x1 block at (bx, by, bz), all six faces, for this player only. @param {Player} player @param {number} bx @param {number} by @param {number} bz @param {MolangVariableMap} vars */
+function drawBlockOutline(player, bx, by, bz, vars) {
+  const x = Math.floor(bx);
+  const y = Math.floor(by);
+  const z = Math.floor(bz);
+  try {
+    player.spawnParticle("realm:guide_y", { x: x + 0.5, y: y + 1.015, z: z + 0.5 }, vars);
+    player.spawnParticle("realm:guide_y", { x: x + 0.5, y: y - 0.015, z: z + 0.5 }, vars);
+    player.spawnParticle("realm:guide_x", { x: x - 0.015, y: y + 0.5, z: z + 0.5 }, vars);
+    player.spawnParticle("realm:guide_x", { x: x + 1.015, y: y + 0.5, z: z + 0.5 }, vars);
+    player.spawnParticle("realm:guide_z", { x: x + 0.5, y: y + 0.5, z: z - 0.015 }, vars);
+    player.spawnParticle("realm:guide_z", { x: x + 0.5, y: y + 0.5, z: z + 1.015 }, vars);
+  } catch {
+    // unloaded, or build_rp is not installed
+  }
+}
+
+/**
+ * A standing box: the block to stand on outlined, a 3x3 of floor tiles around it and, with a radius of 3 or more, a ring of floor tiles at the edge.
+ * @param {Player} player @param {Dimension} dim @param {number} cx @param {number} cy feet y on the ground @param {number} cz
+ * @param {{ r: number, g: number, b: number, a: number }} color @param {number} [ringRadius]
+ */
+function drawStandingPad(player, dim, cx, cy, cz, color, ringRadius = 0) {
+  const x0 = Math.floor(cx);
+  const y0 = Math.floor(cy);
+  const z0 = Math.floor(cz);
+  const centerVars = guideVars(color, 0, 1.15);
+  const cornerVars = guideVars({ r: color.r, g: color.g, b: color.b, a: color.a * 0.78 }, 1, 1.15);
+  drawBlockOutline(player, x0, y0, z0, cornerVars);
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      try {
+        player.spawnParticle("realm:guide_y", { x: x0 + dx + 0.5, y: y0 + 0.02, z: z0 + dz + 0.5 }, dx === 0 && dz === 0 ? centerVars : cornerVars);
+      } catch {
+        // unloaded
+      }
+    }
+  }
+  if (ringRadius >= 3) {
+    const r = Math.min(ringRadius, 12);
+    const steps = 12;
+    for (let k = 0; k < steps; k++) {
+      const ang = (k / steps) * Math.PI * 2;
+      const rx = Math.floor(cx + Math.cos(ang) * r);
+      const rz = Math.floor(cz + Math.sin(ang) * r);
+      const ry = groundAt(dim, rx + 0.5, rz + 0.5, y0, false) ?? y0;
+      try {
+        player.spawnParticle("realm:guide_y", { x: rx + 0.5, y: Math.floor(ry) + 0.02, z: rz + 0.5 }, cornerVars);
+      } catch {
+        // unloaded
+      }
+    }
+  }
+}
+
+/** Objective types whose spot is a box to stand in (the box shows the radius for the ones that need a zone). */
+const STAND_GUIDES = new Set(["reach", "vigil", "survive", "vision", "answer", "defend", "place"]);
+const ZONE_GUIDES = new Set(["vigil", "survive", "defend", "place"]);
+
+/** Up to 4 blocks of an interact objective near its spot, kept per scene. @param {SceneState} s @param {Player} player @param {Objective} obj @param {Loc} loc */
+function interactBlocks(s, player, obj, loc) {
+  const dim = player.dimension;
+  /** @type {{ x: number, y: number, z: number, type?: string }[] | undefined} */
+  let list = s.data.interactBlocks;
+  if (list?.length && list.every((b) => !b.type || dim.getBlock(b)?.typeId === b.type)) return list;
+  const now = system.currentTick;
+  if (list && now < (s.data.interactTry ?? 0)) return list;
+  s.data.interactTry = now + 100;
+  const r = Math.min(radiusOf(obj), 12);
+  const cy = Math.floor(loc.y ?? player.location.y);
+  const dy = loc.y === undefined ? 6 : Math.min(r, 8);
+  const wanted = obj.blocks ?? [];
+  /** @type {{ x: number, y: number, z: number, type: string, d: number }[]} */
+  const found = [];
+  let complete = true;
+  if (wanted.length) {
+    for (let x = Math.floor(loc.x - r); x <= Math.floor(loc.x + r); x++) {
+      for (let z = Math.floor(loc.z - r); z <= Math.floor(loc.z + r); z++) {
+        if (across({ x: x + 0.5, z: z + 0.5 }, loc) > r) continue;
+        for (let y = cy - dy; y <= cy + dy; y++) {
+          const b = dim.getBlock({ x, y, z });
+          if (!b) {
+            complete = false;
+            continue;
+          }
+          if (wanted.includes(b.typeId)) found.push({ x, y, z, type: b.typeId, d: Math.hypot(x + 0.5 - loc.x, z + 0.5 - loc.z) + Math.abs(y - cy) });
+        }
+      }
+    }
+  }
+  found.sort((a, b) => a.d - b.d);
+  list = found.slice(0, 4).map(({ x, y, z, type }) => ({ x, y, z, type }));
+  if (!list.length) {
+    const gy = loc.y !== undefined ? Math.floor(loc.y) : Math.floor(groundAt(dim, loc.x, loc.z, player.location.y) ?? player.location.y) - 1;
+    list = [{ x: Math.floor(loc.x), y: gy, z: Math.floor(loc.z) }];
+    if (!complete) s.data.interactTry = now + 40;
+  }
+  s.data.interactBlocks = list;
+  return list;
+}
+
+/**
+ * The outlines of an objective's spot for this player: gold to walk to, green when standing in it, cyan blocks to tap.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
+function questGuides(player, e, i, obj) {
+  const isStand = STAND_GUIDES.has(obj.type);
+  if ((!isStand && obj.type !== "interact") || !guidesOn(player)) return;
+  const loc = locate(obj);
+  const p = player.location;
+  if (!loc || typeof loc === "string" || loc.pending || loc.dim !== player.dimension.id) return;
+  if (obj.type === "interact") {
+    if (across(p, loc) > 40) return;
+    const s = sceneFor(player, e, i, "interact");
+    const vars = guideVars(COLOR_CYAN, 0, 1.15);
+    try {
+      for (const b of interactBlocks(s, player, obj, loc)) drawBlockOutline(player, b.x, b.y, b.z, vars);
+    } catch {
+      // unloaded
+    }
+    return;
+  }
+  if (across(p, loc) > Math.max(40, radiusOf(obj) + 20)) return;
+  const gy = loc.y ?? groundAt(player.dimension, loc.x, loc.z, p.y, false, onBed(obj.place)) ?? p.y;
+  const col = playerIn(player, obj) ? COLOR_GREEN : COLOR_GOLD;
+  drawStandingPad(player, player.dimension, loc.x, gy, loc.z, col, ZONE_GUIDES.has(obj.type) ? radiusOf(obj) : 0);
+}
 
 // ---------------------------------------------------------------------------
 // Progress
@@ -1434,6 +1583,10 @@ function inspectTick(player, e, i, obj) {
     } catch {
       // unloaded
     }
+    if (guidesOn(player)) {
+      drawBlockOutline(player, Math.floor(c.x), Math.floor(c.y) - 1, Math.floor(c.z), guideVars(COLOR_CYAN, 0, 1.15));
+      drawBlockOutline(player, Math.floor(c.x), Math.floor(c.y), Math.floor(c.z), guideVars(COLOR_GOLD, 1, 1.15));
+    }
     if (across(p, c) <= 1.6 && Math.abs(p.y - c.y) <= 2.5) clueFound(player, e, i, obj, k);
   });
 }
@@ -1518,6 +1671,7 @@ function stealthTick(player, e, i, obj) {
     }
     return;
   }
+  if (guidesOn(player)) drawStandingPad(player, player.dimension, sp.goal.x, sp.goal.y ?? sp.center.y, sp.goal.z, COLOR_GOLD, 0);
   if (s.data.guards && s.data.guards.some((/** @type {any} */ g) => g.ent.isValid)) return;
   // Post the guards.
   const g = obj.guards ?? { mob: "minecraft:pillager", count: 2 };
@@ -1674,6 +1828,10 @@ function escortTick(player, e, i, obj) {
   }
   const now = system.currentTick;
   const to = locate(obj.to, "the destination");
+  if (to && typeof to !== "string" && !to.pending && to.dim === player.dimension.id && across(player.location, to) <= 48 && guidesOn(player)) {
+    const ty = to.y ?? groundAt(player.dimension, to.x, to.z, player.location.y) ?? player.location.y;
+    drawStandingPad(player, player.dimension, to.x, ty, to.z, COLOR_GOLD, obj.to?.radius ?? 6);
+  }
   const [a] = actorsOf(player.id, s.key, "escort");
   if (a?.ent.isValid) {
     const near = a.ent.dimension.id === player.dimension.id && dist3(a.ent.location, player.location) <= 96;
@@ -1834,6 +1992,10 @@ function leadTick(player, e, i, obj) {
   }
   if (!to || typeof to === "string" || to.pending || to.dim !== dim.id) return;
   const r = obj.to?.radius ?? 8;
+  if (across(player.location, to) <= 48 && guidesOn(player)) {
+    const ty = to.y ?? groundAt(dim, to.x, to.z, player.location.y) ?? player.location.y;
+    drawStandingPad(player, dim, to.x, ty, to.z, COLOR_GOLD, r);
+  }
   if (across(player.location, to) > r + 24) return;
   try {
     const center = { x: to.x, y: to.y ?? player.location.y, z: to.z };
@@ -2672,6 +2834,7 @@ export function tickPlayer(player, list) {
           player.playSound("note.bass", { pitch: 0.6 });
         }
         if (obj.sky && obj.sky.on !== "done" && counts) skyOnStart(player, e, i, obj);
+        questGuides(player, e, i, obj);
         switch (obj.type) {
           case "reach": {
             if (!counts) break;

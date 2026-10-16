@@ -1413,6 +1413,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lQuest spot outlines:§r the exact block or box a quest needs shows as a semi-clear colored outline, only for you (drawn by the Easy Building Guides resource pack). §lAmber§r is a standing box to walk to: the block under you, a 3x3 of floor tiles and, for steps with a zone (a vigil, a survive, a defense or a placing), a ring of tiles at its edge; also the escort and lead drop-off and the stealth goal. It turns §lemerald green§r while you stand inside it. §lCyan§r is a block to tap: the bell, altar or brazier of an Interact step, and the block of an Inspect clue (which also gets amber corner brackets in its air space). They show within about 40 blocks of the spot. Don't want them? Disable §lShow quest spot outlines§r in §e/realm:prefs§r.",
+        "ops": false
+      },
+      {
         "text": "§lOperators:§r stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. §e/realm:saga_places§r (also in §e/realm:saga§r) lists every place with its status and lets you §lTeleport§r, §lSet here§r, §lBuild here§r (a green outline preview with Build here, Rotate, Look around and Cancel), §lRebuild§r, §lRemove§r (puts the terrain back exactly) and §lRelocate§r. §e/realm:saga_place <name>§r sets a spot where you stand without building. §lOperator tools§r in §e/realm:saga§r finish a stuck player's current step or reset their stories. §e/realm:config§r -> §lStory Questlines§r has the switches.",
         "ops": true
       }

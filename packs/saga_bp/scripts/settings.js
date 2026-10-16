@@ -31,6 +31,7 @@ const OPTIONS = [
   { key: "farNameRange", type: "int", scope: "world", label: "Show story character names from afar (blocks)", help: "Story characters' names stay visible from this far away (0 = only up close)", min: 0, max: 200, step: 10 },
   { key: "tracker", type: "bool", scope: "player", base: "tracker", label: "Story tracker", help: "Where to go next for your story" },
   { key: "trackerAt", type: "enum", scope: "player", base: "trackerAt", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where my story tracker shows", help: "Pick a box no other pack uses so they show at once" },
+  { key: "spotGuides", type: "bool", scope: "player", default: true, label: "Show quest spot outlines", help: "Semi-clear colored outlines on the blocks and standing boxes your quests need (drawn by the Easy Building Guides resource pack)" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
