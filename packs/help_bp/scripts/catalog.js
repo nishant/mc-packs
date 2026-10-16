@@ -1155,7 +1155,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:npc§r has every tool as a button: §lAdd or move a townsfolk here§r, §lSet a home here§r, §lSpread them out around me§r, §lRemove the nearest townsfolk§r and §lList with coordinates§r. Or stand where an NPC should live, face the way it should look back, and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r, §ehollis§r, §emoss§r, §ewren§r, §ebea§r). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). Set where it sleeps with §e/realm:npc_home <id>§r (run it at its post to clear the home), where it spends lunch or the evening with §e/realm:npc_post <id> <noon|evening>§r (same: at its post to clear), list everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. To give everyone a spot of their own, stand in the middle of the village and run §e/realm:npc_spread§r (or §lSpread them out around me§r in §e/realm:npc§r): it shows where each one would go, then moves them. §e/realm:config§r -> §lTownsfolk§r switches the turning, idle lines, night routine, daily schedule, Hearth & Hearsay, gossip and letters.",
+        "text": "§lOperators:§r §e/realm:npc§r has every tool as a button: §lAdd or move a townsfolk here§r, §lSet a home here§r, §lMove them into the houses around me§r, §lUndo the last move§r, §lRemove the nearest townsfolk§r and §lList with coordinates§r. Or stand where an NPC should live, face the way it should look back, and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r, §ehollis§r, §emoss§r, §ewren§r, §ebea§r). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). Set where it sleeps with §e/realm:npc_home <id>§r (run it at its post to clear the home), where it spends lunch or the evening with §e/realm:npc_post <id> <noon|evening>§r (same: at its post to clear), list everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. To give everyone a house, stand in the middle of the town and run §e/realm:npc_houses§r (or §lMove them into the houses around me§r in §e/realm:npc§r): it finds the houses by their doors, shows who would live where, then moves them; §e/realm:npc_undo§r puts them back. §e/realm:config§r -> §lTownsfolk§r switches the turning, idle lines, night routine, daily schedule, Hearth & Hearsay, gossip and letters.",
         "ops": true
       }
     ],
@@ -1164,7 +1164,7 @@ export const PACKS = [
         "usage": "/realm:npc",
         "ops": false,
         "who": "Everyone",
-        "text": "The townsfolk menu: §lWho lives here?§r, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Set a lunch spot here, Set an evening spot here, Spread them out around me, Remove the nearest townsfolk, List with coordinates"
+        "text": "The townsfolk menu: §lWho lives here?§r, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Set a lunch spot here, Set an evening spot here, Move them into the houses around me, Undo the last move, Remove the nearest townsfolk, List with coordinates"
       },
       {
         "usage": "/realm:npc_who",
@@ -1197,10 +1197,16 @@ export const PACKS = [
         "text": "Where that townsfolk spends lunch (from time 6000, §elunchStart§r) or the evening (from 9000, §eeveningStart§r, until night), where you stand; same dimension as its post. Run it within 2 blocks of the post to clear that spot. Warns when the spot is on another townsfolk's spot at that time of day"
       },
       {
-        "usage": "/realm:npc_spread [radius] [spacing]",
+        "usage": "/realm:npc_houses [radius]",
         "ops": false,
         "who": "Operators",
-        "text": "Gives every placed townsfolk a spot of its own around you: within 100 blocks (default, §espreadRadius§r), at least 24 apart (default, §espreadSpacing§r), on open ground, facing you. Shows the new spots first, with §lMove them§r, §lPick other spots§r, §lKeep homes and meal spots§r (cleared by default) and §lCancel§r"
+        "text": "Gives each townsfolk a house of the town around you (within 48 blocks, default §ehousesRadius§r), found by its door: outside the door by day, inside at night. Shows who lives where first, with §lMove them§r, §lShuffle who lives where§r and §lCancel§r"
+      },
+      {
+        "usage": "/realm:npc_undo",
+        "ops": false,
+        "who": "Operators",
+        "text": "Puts every townsfolk back where it was before the last §e/realm:npc_houses§r (asks first); run again to swap back"
       },
       {
         "usage": "/realm:npc_list",
@@ -1345,7 +1351,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker in the bottom box on the right side of the screen (§lRight 4§r, just above the scoreboard) is a small quest log: the quest's name in aqua on top (§eDrowned Bell§r), under it the step to do next in white with where to go (§eLighthouse NE 240m§r) or who to report to, then the chapter's other open steps in gray. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r.",
+        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker in the bottom box on the right side of the screen (§lRight 4§r, just above the scoreboard) is a small quest log: the quest's name in aqua on top (§eDrowned Bell§r), under it the step to do next in white with where to go (§eLighthouse NE 240m§r) or who to report to, then every other quest you have going on a row of its own (§eGot Away: Catch 7 more fish with a rod§r), then the chapter's other open steps in gray. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r.",
         "ops": false
       },
       {

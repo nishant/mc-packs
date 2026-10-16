@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 167 commands in 64 packs */
+/** @type {Pack[]} 168 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -347,10 +347,11 @@ export const PACKS = [
       {"name":"realm:npc","description":"Townsfolk: menu (who lives here; operators: add, move, home, remove)","permission":"any","params":[]},
       {"name":"realm:npc_add","description":"Townsfolk: place an NPC here, facing you (moves it if it is already placed)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"}]},
       {"name":"realm:npc_home","description":"Townsfolk: the NPC goes here at night (run it at their post to clear)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"}]},
+      {"name":"realm:npc_houses","description":"Townsfolk: give each NPC a house of the town around you (outside the door by day, inside at night), after a preview","permission":"op","params":[{"name":"radius","type":"Integer","optional":true}]},
       {"name":"realm:npc_list","description":"Townsfolk: every placed NPC with its coordinates and home","permission":"op","params":[]},
       {"name":"realm:npc_post","description":"Townsfolk: the NPC spends lunch (noon) or the evening here (run it at their post to clear)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"},{"name":"realm:npc_slot","type":"Enum","optional":false,"enum":"realm:npc_slot"}]},
       {"name":"realm:npc_remove","description":"Townsfolk: remove the nearest townsfolk NPC within 5 blocks","permission":"op","params":[]},
-      {"name":"realm:npc_spread","description":"Townsfolk: give every NPC its own spot around you (within 100 blocks, 24 apart), after a preview","permission":"op","params":[{"name":"radius","type":"Integer","optional":true},{"name":"spacing","type":"Integer","optional":true}]},
+      {"name":"realm:npc_undo","description":"Townsfolk: put every NPC back where it was before the last move to houses","permission":"op","params":[]},
       {"name":"realm:npc_who","description":"Townsfolk: who lives on the realm and where they are","permission":"any","params":[]},
     ],
   },

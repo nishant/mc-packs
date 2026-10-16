@@ -10,7 +10,7 @@ entries below as a changelog.
 
 - Townsfolk now live in the houses of the town: right outside their front door by day, inside at night. They stroll a few steps around and stop when you walk up to talk.
 - The quest box on the right lists every quest you have going, not just one: the one you follow on top, the others under it.
-- Morning fog by the water now looks like real mist: wide, faint wisps lying low instead of round puffs.
+- Fog and storm mist now look like real mist: wide, faint wisps lying low instead of round puffs.
 - Compass: a destination's name is no longer cut off (Report to Warden Reyes).
 - Operators: stand in the middle of the town and run /realm:npc_houses (or Move them into the houses around me in /realm:npc). /realm:npc_undo puts them back.
 
