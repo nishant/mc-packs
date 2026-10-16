@@ -11,6 +11,13 @@ entries below as a changelog.
 - Story steps that need a storm or rain (like The Storm Vigil) now say so in the quest box: the seconds still needed, and when the next storm is due.
 - Operators: /weather gets put back by the Weather Almanac. You now get a chat line when that happens. Use /realm:weather_set instead.
 
+## Story together
+
+- Parties: one of you accepts a story chapter and it's accepted for the whole party. Mates see the conversation in a popup, and chat lists the steps.
+- One report back gives everyone in the party their reward, and the choice made counts for everyone.
+- Started a side story in a party? Your mates get a Join? popup.
+- Everyone's quest box keeps the party's main quest on top, so you all follow the same story.
+
 ## Home in town
 
 - Townsfolk now live in the houses of the town: right outside their front door by day, inside at night. They stroll a few steps around and stop when you walk up to talk.
