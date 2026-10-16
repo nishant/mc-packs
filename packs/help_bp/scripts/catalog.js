@@ -78,53 +78,53 @@ export const PACKS = [
     "folder": "admin_bp",
     "topic": "admin",
     "name": "Realm Configuration",
-    "summary": "Every operator carries a §lRealm Configuration§r item (a nether star with a gold name). Using it opens an admin menu that runs §levery realm command§r from one place: pick a category, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. The commands still work as typed; this is for when you'd rather not type them while playing. It isn't settings: settings are one button away, at the bottom.",
+    "summary": "Every player carries a §lRealm Configuration§r item (a nether star with a gold name, whose lore starts §eHold it in your hand and use it§r / §eto open the realm menu:§r). Using it opens one menu with §levery realm command you can use§r: pick what you want to do, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. Players who aren't operators see the same menu without the operator entries; operators see everything, with operator-only entries in §lgold§r. The commands still work as typed; this is for when you'd rather not type them while playing.",
     "steps": [
       {
-        "text": "§lOperators:§r you get the §eRealm Configuration§r item when you join or respawn without one (and within 30 seconds of becoming an operator). It stays through death and can't be dropped or put in a chest. Lost it anyway? Run §e/realm:admin_item§r. §e/realm:admin§r opens the same menu.",
+        "text": "You get the §eRealm Configuration§r item when you join or respawn without one (§egiveToPlayers§r). It stays through death and can't be dropped or put in a chest, and you only ever get one. Lost it anyway? Run §e/realm:admin_item§r. §e/realm:admin§r opens the same menu.",
+        "ops": false
+      },
+      {
+        "text": "Use the item (right-click or long press, like eating). The menu starts with §lMy Preferences§r (opens §e/realm:prefs§r), §lRecent§r and §lSearch§r, then §lWhat do you want to do?§r: §lMy Screen & Toggles§r, §lItems & Building§r, §lStory & Adventure§r, §lFriends, Crowns & Fun§r, §lWorld & Events§r and §lTowns & Townsfolk§r (and §lOther§r for a pack the menu doesn't know yet; a page with nothing you can use is left out). Each is one page that scrolls, with a heading per section (§eOn your screen§r, §eWeather and sky§r...). Every button has two lines: what it is (§eFind Container§r, §eSet Weather§r...) and, under it, what it does.",
+        "ops": false
+      },
+      {
+        "text": "Pick a command. Without options it runs right away (a menu command such as §e/realm:map§r opens its own menu). With options, a form asks for them: lists for choices, a list of online players, sliders for amounts, a switch for true or false, and your current position already filled in for coordinates. Leave an optional choice on §e(leave out)§r or its box empty to skip it. Press §lRun§r. Afterwards the page you picked it from comes back, so the next command is two taps away (a command that opened its own menu keeps it). Closing the options form, or §lCancel§r, goes back too. Chat says §e[Realm Configuration] Ran /realm:...§r with the exact command, or that it didn't run.",
+        "ops": false
+      },
+      {
+        "text": "§lRecent§r (with how many it holds, like §eRecent (3)§r) keeps your last 8 commands with their options (§erecentSize§r), each with the exact command under it: tap one to run it again right away, with no form. §lSearch§r finds commands by any word of their name, hint, command or description; the results end with §lSearch again§r.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r you see everything, and the top of each page says §eGold = operators only. The rest is for every player.§r Gold buttons are operator commands; the plain dark ones are what every player sees too. The main menu adds §lRealm Settings§r (right after §lMy Preferences§r; opens §e/realm:config§r) and, last, §lOperator Tools§r.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r use the item (right-click or long press, like eating). The menu starts with §lRecent§r, §lSearch Commands§r and §lQuick Actions§r, then the categories: §lWorld & Weather§r, §lStory & Townsfolk§r, §lTowns & Places§r, §lEconomy§r, §lPlayers§r, §lDungeons & Loot§r, §lFun§r, §lUtilities§r, §lEvents & News§r (and §lOther§r for a pack the menu doesn't know yet), and ends with §lServer Setup Checklist§r and §lRealm Settings§r (opens §e/realm:config§r). Each category lists its commands by what they do (§eFind Container§r, §eCoordinates HUD§r, §eSet Weather§r...) with a short hint under each name; §e(ops)§r marks operator commands. The command itself and its full description show at the top of its options form.",
+        "text": "§lOperators: Operator Tools§r is one page (everything on it is for operators) with three headings. §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player (nearest first) or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the Townsfolk§r. §lSafe Zones§r and §lAdd a Town§r show §e[x]§r with how many exist; the others can't be checked from here. Under §lRealm Configuration§r, §lGet the Menu Item§r gives the item to other players.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r pick a command. Without options it runs right away (a menu command such as §e/realm:meteor§r opens its own menu). With options, a form asks for them: lists for choices (§emara§r, §ethunder§r, §estorm_staff§r...), a list of online players (with §lEveryone online (@a)§r where a command can take several, and a box for an offline name where it makes sense), sliders for amounts and radii, a switch for true or false, and your current position already filled in for coordinates. Leave an optional choice on §e(leave out)§r or its box empty to skip it. Press §lRun§r. After it runs, the list you picked it from comes back, so the next command is two taps away (a command that opened its own menu keeps it). Closing the options form, or §lCancel§r, goes back to the list too.",
-        "ops": true
-      },
-      {
-        "text": "§lOperators:§r chat says §e[Realm Configuration] Ran /realm:...§r with the exact command, or that it didn't run. Every §e*_remove§r and §e*_reset§r command, anything run for §lEveryone online (@a)§r, and §e/realm:meteor_now§r, §e/realm:tornado_spawn§r, §e/realm:caravan_call§r, §e/realm:crowns_give§r, §e/realm:domt_draw§r, §e/realm:weather_set§r, §e/realm:moon_set§r, §e/realm:storm_cell§r and §e/realm:fishing_tournament§r ask §lAre you sure?§r first.",
-        "ops": true
-      },
-      {
-        "text": "§lOperators:§r §lRecent§r keeps your last 8 commands with their options (§erecentSize§r), each with the exact command under it (a quick action shows its choices, like §eQuick action: Steve§r): tap one to run it again right away, with no form. §lSearch Commands§r finds commands and quick actions by any word of their name, hint, command or description; the results end with §lSearch again§r.",
-        "ops": true
-      },
-      {
-        "text": "§lOperators:§r §lQuick Actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player (a list of everyone else online, nearest first) or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (a title and an optional subtitle in the middle of the screen, 1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects, teleport or a title for everyone online ask §lAre you sure?§r first.",
+        "text": "§lOperators:§r every §e*_remove§r and §e*_reset§r command, anything run for §lEveryone online (@a)§r, and §e/realm:meteor_now§r, §e/realm:tornado_spawn§r, §e/realm:caravan_call§r, §e/realm:crowns_give§r, §e/realm:domt_draw§r, §e/realm:weather_set§r, §e/realm:moon_set§r, §e/realm:storm_cell§r, §e/realm:fishing_tournament§r, §e/realm:wander_clear§r and §e/realm:calendar_set§r ask §lAre you sure?§r first; so do set the time, set the weather, game rules, and give, heal, clear effects, teleport or a title for everyone online.",
         "ops": true
       },
       {
         "text": "§lOperators: use §e/realm:admin_title§r (or Show a Title) instead of §e/title§r.§r The Minimap's compass strip, the story tracker and the other Side HUD boxes share the title channel with real titles, so they draw over a plain §e/title§r within a second or two. §e/realm:admin_title \"Market Day\" \"In the square\" 8§r tells every pack with a box first (the title protocol), so the boxes step aside until it has faded and then come back.",
-        "ops": true
-      },
-      {
-        "text": "§lOperators:§r §lServer Setup Checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the townsfolk§r, so either one does it. §lSafe Zones§r and §lAdd a Town§r show §e[x]§r with how many exist; the others can't be checked from here.",
         "ops": true
       }
     ],
     "commands": [
       {
         "usage": "/realm:admin",
-        "ops": true,
-        "who": "Ops",
-        "text": "Opens the Realm Configuration menu (the same as using the item)"
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the Realm Configuration menu (the same as using the item): every command you can use; operators see theirs in gold"
       },
       {
         "usage": "/realm:admin_item [player]",
-        "ops": true,
-        "who": "Ops",
-        "text": "Gives you the Realm Configuration item if you don't carry one, or checks the named operators and gives them one. Players who aren't operators are refused"
+        "ops": false,
+        "who": "Everyone",
+        "text": "Gives you the Realm Configuration item if you don't carry one. Operators can name other players to check them and give them one. With §egiveToPlayers§r off it's for operators only"
       },
       {
         "usage": "/realm:admin_title <title> [subtitle] [seconds] [player]",
@@ -1357,7 +1357,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Several quests going? In §e/realm:saga§r -> §lCurrent quests§r, pick one and tap §lTrack this quest§r: the tracker and the Minimap follow it (marked §e[Tracked]§r) until it's done, then the newest quest again. In a party, it sets the tracked quest for every mate online who is on the same story (a daily favor or a wanderer's job is yours alone).",
+        "text": "Several quests going? In §e/realm:saga§r -> §lCurrent quests§r, pick one and tap §lTrack this quest§r: the tracker and the Minimap follow it (marked §e[Tracked]§r) until it's done, then the newest quest again. In a party, it sets the tracked quest for every mate online who is on the same story (a daily favor or a wanderer's job is yours alone). Don't want a quest right now? Tap §lStop tracking§r on its page: it leaves the tracker and the Minimap (it still counts, and shows §e[Not tracked]§r in §lCurrent quests§r). §lTrack this quest§r, or starting its next chapter, brings it back. Stopping is yours alone, also in a party.",
         "ops": false
       },
       {
@@ -1925,7 +1925,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Keep a relic where it works: some in your main hand, some anywhere in your hotbar or off hand, helmets and boots worn. Its lore says what it does; §lYour relics§r in §e/realm:relics§r says where it works.",
+        "text": "Keep a relic where it works: some in your main hand, some anywhere in your hotbar or offhand, helmets and boots worn. Its lore says what it does, and its last line where it works (§eWorks in your main hand§r, §eWorks anywhere in your hotbar or offhand§r, §eWorks worn on your head§r or §eWorks worn on your feet§r); §lYour relics§r in §e/realm:relics§r says where it works.",
         "ops": false
       },
       {
@@ -1945,7 +1945,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Carry a whole §lset§r in your hotbar, off hand or armor: Storm Staff + Storm Meter + Rain Charm, Tide Boots + Hal's Compass + Compass of Echoes, Miner's Lamp + Lantern of the Deep + Lantern Shard, or Sun Pendant + Frost Band + Wayfarer Boots. The bar above the hotbar names the bonus when it starts; §lYour relics§r lists the sets.",
+        "text": "Carry a whole §lset§r in your hotbar, offhand or armor: Storm Staff + Storm Meter + Rain Charm, Tide Boots + Hal's Compass + Compass of Echoes, Miner's Lamp + Lantern of the Deep + Lantern Shard, or Sun Pendant + Frost Band + Wayfarer Boots. The bar above the hotbar names the bonus when it starts; §lYour relics§r lists the sets.",
         "ops": false
       },
       {
@@ -2203,7 +2203,7 @@ export const PACKS = [
     "summary": "A slot machine with three reels, played for Crowns or emeralds. Play it anywhere from the §lSlot Machine§r item, or at a fixed machine an operator made from a block (a note block or a jukebox at the tavern, say). The reels are honest: each one is drawn at random on its own and stops on exactly what was drawn, and the pay table, with each line's odds and the exact return, is one tap away. Every player has a daily loss limit, a short pause between spins and can block themselves from the slots for a while.",
     "steps": [
       {
-        "text": "Run §e/realm:slots§r and pick §lSpin§r, use a §lSlot Machine§r item, or tap a slot machine block.",
+        "text": "Run §e/realm:slots§r and pick §lSpin§r, use a §lSlot Machine§r item (its lore: §eUse it to play the slots§r, §eHold it in your hand and use it§r), or tap a slot machine block.",
         "ops": false
       },
       {
@@ -2255,7 +2255,7 @@ export const PACKS = [
     "summary": "Fourteen silly \"enchantments\" for your gear. They only add particles, sounds and some very big bounces: none of them changes damage, armor, speed, drops or durability. Most effects come in a few random variants, so they rarely sound the same twice. Each one is a lore line on the item, like §eSilly: Grunt Birthday§r, and an item holds at most two. They come on §lSilly Books§r (enchanted books named §eSilly Book§r), which you apply from §e/realm:silly§r to the item in your hand. The confetti, disco lights, rainbow trail, bubbles and the Grunt Birthday cheer come from Silly Enchants Sounds (in Realm Resources).",
     "steps": [
       {
-        "text": "Get a §lSilly Book§r: operators hand them out, and the realm may sell them (at the caravan or market, if an operator adds them). A book says what it holds (§eSilly Book: Hyper Jump§r), or §eSilly Book: Random§r for a surprise.",
+        "text": "Get a §lSilly Book§r: operators hand them out, and the realm may sell them (at the caravan or market, if an operator adds them). A book says what it holds (§eSilly Book: Hyper Jump§r), or §eSilly Book: Random§r for a surprise. Its last lore line says where that enchant works: §eWorks in your main hand§r, §eWorks on boots you wear§r, §eWorks on a helmet you wear§r or §eWorks on any armor you wear§r (a Random book doesn't say).",
         "ops": false
       },
       {
@@ -2671,7 +2671,7 @@ export const PACKS = [
     "summary": "Effortless Building v5.0 ported directly into the Realm: build lines, walls, floors, diagonal lines and walls, sloped floors, cubes, circles, semicircles (flat, arch or dome), cylinders, spheres, cones and Bezier splines by clicking two or three anchor points in the world with a live 3D block outline preview. Includes floating 3D in-world UI panels, a hold-right-click radial Quick Switch Wheel, Mirror/Array/Radial modifiers (which also work on single hand-placed and broken blocks), multi-block Palettes with noise/gradient/structural patterns, Air Build and Infinite Reach, Copy/Cut/Paste with a multi-slot Clipboard, Destroy mode with digging tools, Undo/Redo, a 48-page illustrated 3D Tutorial Book, and an interactive Live Coach in 13 languages.",
     "steps": [
       {
-        "text": "Hold the §lBuilding Book§r (§e/realm:build_book§r, or craft one from a book and paper or a brick):\n  - §lRight-click (tap):§r opens the floating 3D §lMode Menu§r (or §e/realm:build§r). Aim at any tile and click to pick a mode, toggle options (filled/hollow/skeleton, even/uneven, straight/bezier, horizontal/arch/dome), pin favorite modes, or open Tools.\n  - §lHold right-click:§r opens the floating §lQuick Switch Wheel§r right in front of you; aim at a slice and release right-click to switch modes on the fly.\n  - §lLeft-click (swing):§r opens the §lBlock Palette§r (§e/realm:build_palette§r).\n  - §lSneak + left-click:§r opens §lModifiers§r (§e/realm:build_modifiers§r: Mirror, Array, Radial).\n  - §lSneak + right-click:§r opens §lSettings§r (§e/realm:build_settings§r).\n  - §lDouble-sneak while holding the book:§r toggles between your active build mode and §eDisable§r.",
+        "text": "Hold the §lBuilding Book§r (§e/realm:build_book§r, or craft one from a book and paper or a brick; its last lore line says §eHold it in your hand and use it§r):\n  - §lRight-click (tap):§r opens the floating 3D §lMode Menu§r (or §e/realm:build§r). Aim at any tile and click to pick a mode, toggle options (filled/hollow/skeleton, even/uneven, straight/bezier, horizontal/arch/dome), pin favorite modes, or open Tools.\n  - §lHold right-click:§r opens the floating §lQuick Switch Wheel§r right in front of you; aim at a slice and release right-click to switch modes on the fly.\n  - §lLeft-click (swing):§r opens the §lBlock Palette§r (§e/realm:build_palette§r).\n  - §lSneak + left-click:§r opens §lModifiers§r (§e/realm:build_modifiers§r: Mirror, Array, Radial).\n  - §lSneak + right-click:§r opens §lSettings§r (§e/realm:build_settings§r).\n  - §lDouble-sneak while holding the book:§r toggles between your active build mode and §eDisable§r.",
         "ops": false
       },
       {
@@ -2711,7 +2711,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lTutorial Book and Live Coach:§r run §e/realm:build_tutorial§r for the 48-page illustrated 3D §lEffortless Building Tutorial§r book, §e/realm:build_guide§r to start the interactive §lLive Coach§r walkthrough, and §e/realm:build_language§r to switch between 13 languages.",
+        "text": "§lTutorial Book and Live Coach:§r run §e/realm:build_tutorial§r for the 48-page illustrated 3D §lEffortless Building Tutorial§r book (its last lore line: §eWorks in your main hand§r), §e/realm:build_guide§r to start the interactive §lLive Coach§r walkthrough, and §e/realm:build_language§r to switch between 13 languages.",
         "ops": false
       },
       {
@@ -3036,7 +3036,7 @@ export const PACKS = [
     "folder": "rainbow_bp",
     "topic": "rainbow",
     "name": "Rainbows & the Pot of Gold",
-    "summary": "When rain clears in the morning or the evening, a rainbow often comes out, and it really does end somewhere: a pot of gold waits at its end, 150 to 300 blocks away. Race your friends to it. The first one there gets Crowns, the chest of gold and dyes, and sometimes a relic. The way there is a §lrainbow icon on the Minimap's compass strip§r: it sits at the pot's bearing, and when the pot is behind you, rainbow-striped arrows at the strip's ends say which way to turn. Before 1.4.0 the rainbow was drawn in the sky with particles, with a golden beam over the pot; it didn't look right (big blobs from far away, and wrong up close), so the compass replaced it.",
+    "summary": "When rain clears in the morning or the evening, a rainbow often comes out, and it really does end somewhere: a pot of gold waits at its end, 150 to 300 blocks away. Race your friends to it. The first one there gets Crowns, the chest of gold and dyes, and sometimes a relic. The way there is a §lrainbow icon on the Minimap's compass strip§r: it sits at the pot's bearing, and when the pot is behind you, rainbow-striped arrows at the strip's ends say which way to turn. Near its end (within 96 blocks) a small rainbow of colored sparks stands over the pot, one foot on the chest, until it's found or expires. Before 1.4.0 a big rainbow was drawn across the sky with particles, with a golden beam over the pot; it didn't look right (big blobs from far away, and wrong up close), so the compass replaced it.",
     "steps": [
       {
         "text": "When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (§echance§r, 0.7) of a rainbow. Chat says which way its end is, for example §e&eA rainbow! Its pot of gold is somewhere to the NE: follow the rainbow on your compass.§r",
@@ -3047,7 +3047,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Head that way. Within 40 blocks of the end a §lchest§r appears on the ground there.",
+        "text": "Head that way. Within 96 blocks of the end you see a small rainbow standing over it, and within 40 blocks a §lchest§r appears at its foot, on the ground (or floating on the water when the end is out at sea).",
         "ops": false
       },
       {
@@ -3055,7 +3055,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Missed the rainbow? The pot stays findable (and on the compass) for 15 minutes (§epotMinutes§r) after it appeared: §e/realm:rainbow§r says §eThe rainbow has faded, but its pot of gold is still out there, somewhere to the NE (the rainbow on your compass).§r",
+        "text": "Missed the rainbow? The pot stays findable (and on the compass) for 15 minutes (§epotMinutes§r) after it appeared: §e/realm:rainbow§r says §eThe rainbow still stands over its pot of gold, somewhere to the NE (the rainbow on your compass).§r",
         "ops": false
       },
       {
