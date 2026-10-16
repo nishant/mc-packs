@@ -12,6 +12,9 @@ entries below as a changelog.
 - One report back gives everyone in the party their reward, and the choice made counts for everyone.
 - Started a side story in a party? Your mates get a Join? popup.
 - Everyone's quest box keeps the party's main quest on top, so you all follow the same story.
+- Choir sieges now show the way: the compass star points to the town during the warning, then to the nearest circle still singing. The siege box says how far too.
+- Circles find room more often: when the land around a town is too built up, they rise near the players defending it instead.
+- If the Choir still can't find open ground, chat now says so. Nothing is lost.
 
 ## Storm watch
 
