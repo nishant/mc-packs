@@ -13,30 +13,37 @@
           "volume": 0.043
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain2",
           "volume": 0.043
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain3",
           "volume": 0.043
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain4",
           "volume": 0.043
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain5",
           "volume": 0.043
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain6",
           "volume": 0.043
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain7",
           "volume": 0.043
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain8",
           "volume": 0.043
         }
@@ -55,22 +62,27 @@
           "volume": 0.794
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/thunder2",
           "volume": 0.781
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/thunder3",
           "volume": 0.795
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/thunder4",
           "volume": 0.797
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/thunder5",
           "volume": 0.794
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/thunder6",
           "volume": 0.729
         }
@@ -89,14 +101,17 @@
           "volume": 0.743
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/crack2",
           "volume": 0.797
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/crack3",
           "volume": 0.714
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/crack4",
           "volume": 0.803
         }
@@ -115,14 +130,17 @@
           "volume": 0.182
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed2",
           "volume": 0.18
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed3",
           "volume": 0.18
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed4",
           "volume": 0.184
         }
@@ -140,6 +158,7 @@
           "volume": 0.16
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/bed_inside2",
           "volume": 0.16
         }
@@ -157,6 +176,7 @@
           "volume": 0.064
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain_inside2",
           "volume": 0.064
         }
@@ -175,10 +195,12 @@
           "volume": 0.204
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind2",
           "volume": 0.207
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind3",
           "volume": 0.204
         }
@@ -196,6 +218,7 @@
           "volume": 0.18
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind_inside2",
           "volume": 0.182
         }
@@ -213,14 +236,17 @@
           "volume": 0.18
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/roof2",
           "volume": 0.18
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/roof3",
           "volume": 0.182
         },
         {
+          "load_on_low_memory": true,
           "name": "sounds/realistic_rain/roof4",
           "volume": 0.18
         }

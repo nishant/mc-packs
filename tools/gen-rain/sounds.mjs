@@ -490,7 +490,7 @@ function definitions(/** @type {Map<string, number>} */ volumes) {
       category: "weather",
       max_distance: null,
       min_distance: 100.0,
-      sounds: e.files.map((f, i) => ({ ...(i === 0 ? { load_on_low_memory: true } : {}), name: `sounds/realistic_rain/${f.name}`, volume: volumes.get(f.name) })),
+      sounds: e.files.map((f) => ({ load_on_low_memory: true, name: `sounds/realistic_rain/${f.name}`, volume: volumes.get(f.name) })),
       ...(e.subtitle ? { subtitle: e.subtitle } : {}),
     };
   }

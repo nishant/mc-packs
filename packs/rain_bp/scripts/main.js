@@ -42,7 +42,8 @@ const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]
 /** @typedef {"out" | "in" | "none"} Place where the player hears the weather from: outdoors (or under a tree), indoors, or out of its reach */
 /**
  * @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number,
- *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean }} State muffle: stop the game's rain for this player
+ *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean, covered: number }} State muffle: stop the game's rain
+ *   for this player; covered: updates in a row with a roof overhead
  */
 /** @typedef {{ level: number, stepIn: number }} Roll a fog that rolls in or out in steps */
 
@@ -68,7 +69,7 @@ function extrasOff(player) {
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let st = players.get(player.id);
-  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false }));
+  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false, covered: 0 }));
   return st;
 }
 
@@ -203,13 +204,17 @@ function update(player, st) {
     if (st.place !== "none") stopSounds(player, st);
     return;
   }
-  const place = outdoors || underTree ? "out" : "in";
+  // A roof counts once it has been overhead for two updates (about 2 s), so walking under an awning, through a
+  // doorway or past a lamp's arm doesn't cut the game's rain and bring it back a second later.
+  st.covered = outdoors || underTree ? 0 : st.covered + 1;
+  const place = st.covered >= 2 || (st.covered > 0 && st.place === "in") ? "in" : "out";
   st.muffle = place === "in" && get("roof.muffleRain");
   sounds(player, st, place, !outdoors && !underTree && above <= CONFIG.roof.maxHeadroom);
 }
 
 /** Out of the rain's reach (another dimension, underground, a desert, extras off): no haze, no weather sounds. @param {Player} player @param {State} st */
 function leave(player, st) {
+  st.covered = 0;
   if (st.haze) setHaze(player, st, 0);
   if (st.place !== "none") stopSounds(player, st);
 }
