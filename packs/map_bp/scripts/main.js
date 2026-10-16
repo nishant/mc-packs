@@ -565,6 +565,13 @@ function line2(region, dest) {
   line2Memo.set(k, out);
   return out;
 }
+/** Plain text of at most `max` characters, cut at a word with "..." (never mid-name). @param {string} text @param {number} max */
+function cutWords(text, max) {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 3);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > max / 2 ? cut.slice(0, at) : cut).replace(/[\s,:;-]+$/, "")}...`;
+}
 /** @param {string} region @param {string} dest */
 function line2Of(region, dest) {
   const gap = dest && region ? "  " : "";
@@ -611,8 +618,8 @@ function pass(player, all, seen, now) {
   else if (dest?.off) destText = `§7${dest.off}`;
   else if (dest?.spot) {
     const s = dest.spot;
-    // Names are plain ASCII already (spotOf, plain): a slice is enough.
-    const label = (s.n || "Destination").slice(0, dest.picked ? NAME_MAX : 40);
+    // Names are plain ASCII already (spotOf, plain): cut at a word, with "...", when too long for the line.
+    const label = cutWords(s.n || "Destination", 40);
     if (s.dim !== player.dimension.id) destText = `${G.I_STAR}§f ${label} §7(in ${DIM_NAMES[s.dim] ?? "another dimension"})`;
     else {
       const x = s.x + 0.5;
