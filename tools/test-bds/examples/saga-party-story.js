@@ -5,11 +5,13 @@
 // 2. A party works on one main-story chapter: Bob (no progress) joins Ann (on "Salt and Silence"): Bob helps with a party
 //    quest, and what he does (talk to Reyes) counts for Ann. Ann's other main chapter (Last Map) waits.
 // 3. Tracking in a party sets the party's tracked quest: Bob is told.
-// 4. Once Bob accepts the same chapter, he gets the progress made so far, and Ann reaching the lighthouse finishes it for both.
+// 4. Once Bob accepts the same chapter, he gets the progress made so far, and Ann reaching the lighthouse finishes it for both;
+//    Ann's report back counts for Bob too.
 // 5. Cat (no progress) joins: the party goes back to her chapter; Ann can't start her next chapter, and Bob's help counts for Cat.
 // 6. Counts add up: Ann 3 + Bob 4 drowned on "The Drowned Choir" is 7/12 for both.
 // 7. Leaving the party or the others going offline gives a player their own story back.
 // 8. A step that doesn't apply to a mate (an "either" way needing a pack that isn't installed) isn't shared to them.
+//    (Ann accepts that chapter once for the party: Bob gets it without talking to Ida.)
 // Also: tracking a daily favor stays personal.
 // The story is driven without the Townsfolk pack: the scenario sends realm:npc_choose and realm:npc_talk itself.
 export default async function (t) {
@@ -29,8 +31,20 @@ export default async function (t) {
       if (last) return;
     }
   };
-  /** The story tracker's last text in the player's Side HUD box (a title's subtitle) since a tick. */
-  const trackerSays = (p, re, since) => t.messages(p, { kind: "title", since }).some((m) => re.test(String(m.subtitle ?? "").replace(/§./g, "")));
+  // The story tracker's box (realm:side from saga): its first line is the quest it follows, other quests get a row each.
+  /** @type {{ tick: number, m: any }[]} */
+  const sides = [];
+  sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
+    if (id !== "realm:side") return;
+    try {
+      sides.push({ tick: sys.currentTick, m: JSON.parse(message) });
+    } catch {}
+  }, { namespaces: ["realm"] });
+  const boxes = (p, since) => sides.filter((s) => s.tick >= since && s.m.player === p.id && s.m.from === "saga" && s.m.text).map((s) => String(s.m.text).replace(/§./g, ""));
+  /** Did the tracker box follow this quest (its name on the first line) since a tick? */
+  const trackerSays = (p, re, since) => boxes(p, since).some((b) => re.test(b.split("\n")[0]));
+  /** Did the tracker box show this quest at all (on top or as another quest's row)? */
+  const trackerLists = (p, re, since) => boxes(p, since).some((b) => re.test(b));
 
   // --- 1. Solo tracking --------------------------------------------------------------------------------------
   let since = t.tick;
@@ -40,7 +54,7 @@ export default async function (t) {
   since = t.tick;
   await choose(ann, "mara", "start:last_map");
   await t.waitMessage(ann, /Pins in an Old Map/, { since, timeout: 300 });
-  await t.waitUntil(() => trackerSays(ann, /Last Map:/, since), { timeout: 200, message: "the tracker follows the newest chapter (Last Map)" });
+  await t.waitUntil(() => trackerSays(ann, /^Last Map$/, since), { timeout: 200, message: "the tracker follows the newest chapter (Last Map)" });
 
   const trackFromMenu = async (p) => {
     t.answerForm(p, "Current quests", "Drowned Bell", (f) => f.buttons.findIndex((b) => /Track/.test(b)), "OK", "Back", "Close");
@@ -50,7 +64,7 @@ export default async function (t) {
   await trackFromMenu(ann);
   await t.waitMessage(ann, /Tracking The Drowned Bell/, { since, timeout: 300 });
   const tracked = t.tick;
-  await t.waitUntil(() => trackerSays(ann, /Drowned Bell:/, tracked), { timeout: 200, message: "the tracker follows the tracked quest" });
+  await t.waitUntil(() => trackerSays(ann, /^Drowned Bell$/, tracked), { timeout: 200, message: "the tracker follows the tracked quest" });
   t.log("1. solo tracking: OK");
 
   // --- 2. Party: Bob (no progress) joins Ann -----------------------------------------------------------------
@@ -71,7 +85,7 @@ export default async function (t) {
   // Ann's Last Map chapter waits: her tracker never shows it while in the party.
   since = t.tick;
   await t.wait(80);
-  t.check(!trackerSays(ann, /Last Map:/, since), "Ann's other main chapter (Last Map) waits in the party");
+  t.check(!trackerLists(ann, /Last Map/, since), "Ann's other main chapter (Last Map) waits in the party");
 
   // --- 3. Tracking in a party --------------------------------------------------------------------------------
   since = t.tick;
@@ -104,8 +118,8 @@ export default async function (t) {
   since = t.tick;
   await choose(ann, "tobin", "end:drowned_bell");
   await t.waitMessage(ann, /Chapter complete: Salt and Silence/, { since, timeout: 300 });
-  await choose(bob, "tobin", "end:drowned_bell");
-  await t.waitMessage(bob, /Chapter complete: Salt and Silence/, { since, timeout: 300 });
+  // Ann's report counts for Bob too (he finished it as well): no second trip to Tobin.
+  await t.waitMessage(bob, /Chapter complete: Salt and Silence/, { since, timeout: 100 });
 
   // --- 5. Cat (no progress) joins: the party goes back to her chapter -------------------------------------
   const cat = await t.player("Cat", { x: 161, z: 170 });
@@ -146,8 +160,10 @@ export default async function (t) {
   since = t.tick;
   send("realm:saga_debug", { player: "Ann", action: "bump", story: "drowned_bell", i: 0, n: 3 });
   send("realm:saga_debug", { player: "Bob", action: "bump", story: "drowned_bell", i: 0, n: 4 });
-  const says7 = (p) => t.messages(p, { since }).some((m) => /Defeat 12 drowned 7\/12/.test(String(m.subtitle ?? m.plain ?? "").replace(/§./g, "")));
-  await t.waitUntil(() => says7(ann) && says7(bob), { timeout: 100, message: "3 + 4 drowned is 7/12 for both Ann and Bob" });
+  // The tracker box counts down: 7 of 12 reads "Defeat 5 more drowned" (cut to "Defeat 5 more..." on the row of a quest not on top: Ann tracks her favor).
+  const says7 = (p) => trackerLists(p, /Defeat 5 more/, since);
+  for (let k = 0; k < 100 && !(says7(ann) && says7(bob)); k++) await t.wait(1);
+  t.assert(says7(ann) && says7(bob), `3 + 4 drowned is 7/12 for both Ann and Bob (Ann: ${JSON.stringify(boxes(ann, since).slice(-1))}, Bob: ${JSON.stringify(boxes(bob, since).slice(-1))})`);
   t.log("6. counts add up: OK");
 
   // --- 8. A step that doesn't apply to a mate never reaches them -------------------------------------------
@@ -156,10 +172,10 @@ export default async function (t) {
   for (const who of ["Ann", "Bob"]) for (const story of ["drowned_bell", "last_map", "act1_signs", "act2_choir"]) send("realm:saga_debug", { player: who, action: "finish", story });
   await t.wait(40);
   since = t.tick;
+  // Ann accepts it once for the party: Bob gets it too, with no trip to Ida.
   await choose(ann, "ida", "start:act3_deep");
   await t.waitMessage(ann, /Act III|Echoes in Crystal/, { since, timeout: 300 });
-  await choose(bob, "ida", "start:act3_deep");
-  await t.waitMessage(bob, /Echoes in Crystal/, { since, timeout: 300 });
+  await t.waitMessage(bob, /Ann accepted .*Echoes in Crystal.* for the party/, { since, timeout: 100 });
   await t.wait(30);
   since = t.tick;
   send("realm:saga_debug", { player: "Bob", action: "bump", story: "act3_deep", i: 2, n: 1 });

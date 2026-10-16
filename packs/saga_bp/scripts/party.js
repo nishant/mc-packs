@@ -3,8 +3,10 @@
 // chapter share its progress; members past it (or who haven't accepted it yet) help with a party quest entry that
 // lives in memory only, and their own main story waits. Nothing anyone saved is ever taken back: leaving the party
 // (or the others going offline) brings back the player's own story where they left it.
+// A party also takes chapters on together: one member accepting the party's chapter (or a side story mates join)
+// accepts it for them, and one member reporting it back completes it for every mate who finished it too (ui.js).
 import { world } from "@minecraft/server";
-import { ORDERED, active, currentChapter, finished, installed, objDone, ownEntries, partyViews, reached, requires, sagaOf, storyWaitsForPacks, target } from "./data.js";
+import { ORDERED, active, chapterDone, currentChapter, finished, installed, objDone, onHold, ownEntries, partyViews, reached, requires, sagaOf, storyWaitsForPacks, target } from "./data.js";
 import { bump } from "./objectives.js";
 import { get } from "./settings.js";
 import { npcName } from "./util.js";
@@ -27,6 +29,64 @@ export const partyTag = (player) => player.getTags().find((t) => t.startsWith(PA
 export function partyMates(player) {
   const tag = partyTag(player);
   return tag ? world.getAllPlayers().filter((p) => p.id !== player.id && p.hasTag(tag)) : [];
+}
+
+/**
+ * Does a party take this story's chapters on together (accept once, report once)? The main story with the party story
+ * on (`partyStory`), side and festival stories with party sharing on (`partyShare`). Heart stories (a townsfolk's own
+ * life, for whoever is Close with them) and wanderers' chains stay each player's own.
+ * @param {Story} story
+ */
+export function together(story) {
+  if (get("enabled") !== true) return false;
+  if (story.kind === "main") return get("partyStory") === true && installed.ready;
+  return (story.kind === undefined || story.kind === "side" || story.kind === "festival") && get("partyShare") === true;
+}
+
+/**
+ * Could this player accept this chapter right now, as if they talked to its NPC themselves? It's their next chapter of
+ * the story, not accepted yet, they could start the story, and (in a party) it isn't a main chapter that waits.
+ * @param {Player} player @param {Story} story @param {string} chapterId
+ */
+export function canTake(player, story, chapterId) {
+  if (!player.isValid) return false;
+  const saga = sagaOf(player);
+  const st = saga.s[story.id];
+  const cur = currentChapter(saga, story);
+  if (!cur || cur.chapter.id !== chapterId || (st?.a && st.cur === chapterId)) return false;
+  if (storyWaitsForPacks(story) || onHold(player.id, story, chapterId)) return false;
+  return !!st?.dn.length || requires(story.requires, saga, story.id, player).ok;
+}
+
+/**
+ * The party mates who take a chapter along when `player` accepts it: for the main story only while it is the party's
+ * chapter (every mate on it), for a side story the mates who could start it too (they are asked first).
+ * @param {Player} player @param {Story} story @param {string} chapterId
+ */
+export function takers(player, story, chapterId) {
+  if (!together(story)) return [];
+  if (story.kind === "main") {
+    const view = partyViews.get(player.id);
+    if (!view || view.story.id !== story.id || view.chapter.id !== chapterId) return [];
+  }
+  return partyMates(player).filter((m) => canTake(m, story, chapterId));
+}
+
+/**
+ * The party mates on the same chapter when `player` reports it back: `done` finished it too (the report counts for
+ * them), `open` still have something of their own left (items to have, a step only for them).
+ * @param {Player} player @param {Story} story @param {string} chapterId
+ */
+export function reporters(player, story, chapterId) {
+  /** @type {{ done: { p: Player, e: Entry }[], open: { p: Player, e: Entry }[] }} */
+  const out = { done: [], open: [] };
+  if (!together(story)) return out;
+  for (const p of partyMates(player)) {
+    const e = ownEntries(p).find((x) => x.story.id === story.id && !x.fav && x.chapter.id === chapterId);
+    if (!e || onHold(p.id, story, chapterId)) continue;
+    (chapterDone(e, sagaOf(p)) ? out.done : out.open).push({ p, e });
+  }
+  return out;
 }
 
 /**
@@ -165,7 +225,7 @@ export function partyTick() {
       tell(p, `${key}|${onIt ? "on" : "help"}${needs}`, () => {
         const title = `${here.story.title}, "${here.chapter.title}"`;
         if (onIt) {
-          const start = real.has(p.id) ? "" : ` Talk to ${npcName(here.chapter.npc ?? here.story.giver)} to start it.`;
+          const start = real.has(p.id) ? "" : ` Talk to ${npcName(here.chapter.npc ?? here.story.giver)} to start it: when one of you accepts it, it starts for the whole party.`;
           return `§b[Party] Party story: ${title}. Progress on it is shared with your party.${start}`;
         }
         return `§b[Party] Party story: ${title}, where ${listNames(behind)} ${behind.length > 1 ? "are" : "is"}. Help out: what you do for it counts for them. Your own story waits until the party catches up.${needs}`;
