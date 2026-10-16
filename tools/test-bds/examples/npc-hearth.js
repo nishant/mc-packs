@@ -1,6 +1,6 @@
 // Townsfolk, Hearth & Hearsay: a gift by sneak-tap, affinity from Story Questlines' quest_done, the level-up
 // event and the Close letter through Realm Mail, the heart story it unlocks in Story Questlines (g:aff_tobin),
-// gossip heard in a greeting, the "Ask about..." topics, a lunch spot (schedule teleport), realm:mail_send, and
+// gossip heard in a greeting, the "Ask about..." topics, realm:mail_send, and
 // the Realm day counter (a dawn counts once the night was seen; /time set back to morning never counts), kept
 // across a restart.
 //   node tools/test-bds/run.mjs --quiet --only npc_bp,saga_bp,mail_bp --scenario tools/test-bds/examples/npc-hearth.js --timeout 600
@@ -153,23 +153,6 @@ export default async function (t) {
   since = t.tick;
   sys.sendScriptEvent("realm:mail_send", JSON.stringify({ to: "Sam", from: "The Realm", subject: "Hello", body: "A test letter." }));
   await t.waitMessage(sam, /New letter from The Realm: "Hello/, { since, timeout: 40 });
-
-  // --- A lunch spot 20 blocks off: Mara moves there at lunch once nobody is within 16 blocks of either spot.
-  const post = npc("mara").location;
-  p.teleport({ x: post.x + 20, y: post.y, z: post.z });
-  await t.wait(5);
-  t.assert(t.cmd(p, "/realm:npc_post mara noon").ok, "npc_post mara noon");
-  const noon = { x: Math.floor(p.location.x) + 0.5, z: Math.floor(p.location.z) + 0.5 };
-  t.server("/time set 6500");
-  await t.wait(220);
-  const d0 = Math.hypot(npc("mara").location.x - noon.x, npc("mara").location.z - noon.z);
-  t.check(d0 > 10, `Mara stays put while the tester stands at the lunch spot (${d0.toFixed(1)} from it)`);
-  p.teleport({ x: post.x + 60, y: post.y + 5, z: post.z + 40 });
-  sam.teleport({ x: post.x - 60, y: post.y + 5, z: post.z - 40 });
-  await t.waitUntil(() => {
-    const m = npc("mara");
-    return m && Math.hypot(m.location.x - noon.x, m.location.z - noon.z) < 2;
-  }, { timeout: 500, interval: 20, message: "Mara goes to her lunch spot" });
 
   // --- A dawn: night seen, then morning.
   t.server("/time set 14000");

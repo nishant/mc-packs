@@ -6,6 +6,12 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Townsfolk stay home
+
+- Every townsfolk now lives in a house of their own and stays inside it, day and night. No more wandering off, no more lunch or evening trips: knock on their door and they are there, facing you.
+- The town grew east, past the end of the main road: Sol's observatory, Wren's stable, Brother Hollis's chapel, Moss's cottage by the graveyard and Old Tobin's fishing hut by the pond. All twelve townsfolk now have a home of their own.
+- /realm:npc_who still shows the way to each of them.
+
 ## Your finished quests
 
 - /realm:saga -> Finished now has two sections: Stories you finished to the end, and Quests, every chapter you finished in stories still going. No more "0 finished" after a dozen quests.

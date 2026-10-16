@@ -145,12 +145,10 @@ export const NAMES = {
   "realm:nick": ["Nickname", "Name and color over your head"],
   "realm:night": ["Night Sky Show", "Aurora and shooting stars"],
   "realm:npc": ["Townsfolk Menu", "Who lives here, place them"],
-  "realm:npc_add": ["Place Townsfolk", "Here, facing you"],
-  "realm:npc_home": ["Townsfolk Night Home", "Where they go at night"],
-  "realm:npc_list": ["List Townsfolk", "Coordinates and homes"],
-  "realm:npc_post": ["Townsfolk Day Spots", "Lunch or evening spot"],
+  "realm:npc_add": ["Place Townsfolk", "Lives here, facing your way"],
+  "realm:npc_list": ["List Townsfolk", "Where each one lives"],
   "realm:npc_remove": ["Remove Townsfolk", "The nearest, within 5 blocks"],
-  "realm:npc_houses": ["Townsfolk to Houses", "Doors of the town around you"],
+  "realm:npc_houses": ["Townsfolk to Houses", "One house each, around you"],
   "realm:npc_undo": ["Undo Townsfolk Move", "Back where they were"],
   "realm:npc_who": ["Who Lives Here", "Townsfolk and where they are"],
   "realm:party": ["Party Menu", "Members, invite, chat"],
@@ -265,8 +263,6 @@ export const PARAMS = {
   "realm:news_add": { text: { label: "Text to add to your news draft" } },
   "realm:news_body": { text: { label: "News body (then the editor opens)" } },
   "realm:npc_add": { "realm:npc_id": { label: "Townsfolk to place where you stand", names: TOWNSFOLK } },
-  "realm:npc_home": { "realm:npc_id": { label: "Townsfolk whose night home is here", names: TOWNSFOLK } },
-  "realm:npc_post": { "realm:npc_id": { label: "Townsfolk whose spot is here", names: TOWNSFOLK }, "realm:npc_slot": { label: "Spot", names: { noon: "Lunch (noon)", evening: "Evening" } } },
   "realm:npc_houses": { radius: { label: "Look for houses within (blocks of you)", kind: "slider", min: 16, max: 64, step: 4, default: 48 } },
   "realm:party_chat": { message: { label: "Message to your party" } },
   "realm:party_invite": { player: { label: "Invite", kind: "player" } },
@@ -317,7 +313,7 @@ export const needsConfirm = (name) => CONFIRM.has(name) || /_(remove|reset)$|_re
  * @type {{ title: string, hint: string, help: string, cmd: string, done?: "zones" | "towns" }[]}
  */
 export const SETUP = [
-  { title: "Place the Townsfolk", hint: "Stand where each one lives", help: "Stand where each one should live and pick them. /realm:npc_list shows who is placed.", cmd: "realm:npc_add" },
+  { title: "Place the Townsfolk", hint: "Stand where each one lives", help: "Stand inside each one's house, facing the way they should face, and pick them. /realm:npc_list shows who is placed.", cmd: "realm:npc_add" },
   { title: "Relicsmith", hint: "Where Ida works", help: "Stand where the relicsmith should work (needs the Townsfolk pack).", cmd: "realm:relics_smith" },
   { title: "Story Places", hint: "Set, build or move them", help: "Set, build or relocate the places the stories use. Places nobody set are picked and built on their own when a story needs them.", cmd: "realm:saga_places" },
   { title: "Add a Town", hint: "Stand at its center", help: "Stand at the center of the town and give it a name.", cmd: "realm:town_add", done: "towns" },

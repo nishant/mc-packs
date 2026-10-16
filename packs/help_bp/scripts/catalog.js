@@ -1124,7 +1124,7 @@ export const PACKS = [
     "folder": "npc_bp",
     "topic": "npc",
     "name": "Townsfolk",
-    "summary": "Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. They turn to face you as you walk up, mutter to themselves now and then, keep a daily routine (a lunch spot, an evening spot, home at night), and greet you depending on the time of day and the weather. They also remember you (Hearth & Hearsay): talk to them, bring gifts and help them, and each one warms up from Stranger to Confidant, with more to say, friend prices, a heart story, a title and keepsakes. They pass on gossip about what players did, and react to the choices you made in the stories. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from Crowns, the stories of Story Questlines or Sol's forecast from the Weather Almanac. The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.",
+    "summary": "Twelve named townsfolk that operators place around town: Mara the Cartographer, Old Tobin the Fisherman, Warden Reyes, Elsie the Innkeeper, Mayor Bram, Quill the Trader, Ida the Relicsmith, Sol the Sky-reader, Brother Hollis the Chapel Keeper, Moss the Gravedigger, Wren the Stable Girl and Bea the Cook. Each one lives in a house of its own and stays inside it, day and night, so you always know where to find them. They turn to face you as you walk in, mutter to themselves now and then, and greet you depending on the time of day and the weather. They also remember you (Hearth & Hearsay): talk to them, bring gifts and help them, and each one warms up from Stranger to Confidant, with more to say, friend prices, a heart story, a title and keepsakes. They pass on gossip about what players did, and react to the choices you made in the stories. Tap one to talk: the menu lists what the realm's other packs offer at that NPC, such as Quill's market from Crowns, the stories of Story Questlines or Sol's forecast from the Weather Almanac. The townsfolk are the game's own NPC entities, so operators can give each one any of the game's NPC skins.",
     "steps": [
       {
         "text": "Run §e/realm:npc§r and pick §lWho lives here?§r (or run §e/realm:npc_who§r for the list in chat) to see who lives on the realm and where: each townsfolk with the distance and direction from you, like §eMara the Cartographer - 240m NE (cartographer)§r.",
@@ -1151,11 +1151,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "During the day, townsfolk with a lunch or evening spot go there; at night, those with a home go home. They're back at their post in the morning.",
+        "text": "Townsfolk never wander: each one stands inside their own house, near the door and facing it, day and night. Knock and walk in.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:npc§r has every tool as a button: §lAdd or move a townsfolk here§r, §lSet a home here§r, §lMove them into the houses around me§r, §lUndo the last move§r, §lRemove the nearest townsfolk§r and §lList with coordinates§r. Or stand where an NPC should live, face the way it should look back, and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r, §ehollis§r, §emoss§r, §ewren§r, §ebea§r). To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). Set where it sleeps with §e/realm:npc_home <id>§r (run it at its post to clear the home), where it spends lunch or the evening with §e/realm:npc_post <id> <noon|evening>§r (same: at its post to clear), list everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. To give everyone a house, stand in the middle of the town and run §e/realm:npc_houses§r (or §lMove them into the houses around me§r in §e/realm:npc§r): it finds the houses by their doors, shows who would live where, then moves them; §e/realm:npc_undo§r puts them back. §e/realm:config§r -> §lTownsfolk§r switches the turning, idle lines, night routine, daily schedule, Hearth & Hearsay, gossip and letters.",
+        "text": "§lOperators:§r §e/realm:npc§r has every tool as a button: §lAdd or move a townsfolk here§r, §lMove them into the houses around me§r, §lUndo the last move§r, §lRemove the nearest townsfolk§r and §lList with coordinates§r. Or stand inside the townsfolk's house where it should live, face the way it should look (at the door, so it greets whoever comes in), and run §e/realm:npc_add <id>§r (§emara§r, §etobin§r, §ereyes§r, §eelsie§r, §ebram§r, §equill§r, §eida§r, §esol§r, §ehollis§r, §emoss§r, §ewren§r, §ebea§r): that spot is where it lives from now on. To pick a skin, sneak and tap the NPC in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). List everyone with §e/realm:npc_list§r, and remove the nearest NPC with §e/realm:npc_remove§r. To give everyone a house at once, stand in the middle of the town and run §e/realm:npc_houses§r (or §lMove them into the houses around me§r in §e/realm:npc§r): it finds the houses by their doors, gives each townsfolk one of its own, shows who would live where, then moves them; §e/realm:npc_undo§r puts them back. §e/realm:config§r -> §lTownsfolk§r switches the turning and idle lines, Hearth & Hearsay, gossip and letters.",
         "ops": true
       }
     ],
@@ -1164,7 +1164,7 @@ export const PACKS = [
         "usage": "/realm:npc",
         "ops": false,
         "who": "Everyone",
-        "text": "The townsfolk menu: §lWho lives here?§r, and for operators Add or move a townsfolk here (pick one from a list), Set a home here, Set a lunch spot here, Set an evening spot here, Move them into the houses around me, Undo the last move, Remove the nearest townsfolk, List with coordinates"
+        "text": "The townsfolk menu: §lWho lives here?§r, and for operators Add or move a townsfolk here (pick one from a list), Move them into the houses around me, Undo the last move, Remove the nearest townsfolk, List with coordinates"
       },
       {
         "usage": "/realm:npc_who",
@@ -1176,7 +1176,7 @@ export const PACKS = [
         "usage": "/realm:npc_add <id>",
         "ops": false,
         "who": "Operators",
-        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed); if you're flying, on top of the floor under you (a slab's or path's real top). Warns when that puts it on another townsfolk's spot (within 1.5 blocks at the same time of day): two on one spot push each other"
+        "text": "That townsfolk lives where you stand (stand inside its house) and stays there, facing the way you face (moves it there if it's already placed); if you're flying, on top of the floor under you (a slab's or path's real top). Warns when that puts it on another townsfolk's spot (within 1.5 blocks): two on one spot push each other"
       },
       {
         "usage": "/realm:npc_remove",
@@ -1185,22 +1185,10 @@ export const PACKS = [
         "text": "Removes the nearest townsfolk within 5 blocks (default 5, §eremoveRange§r) and forgets its spot, after a §lRemove§r / §lCancel§r confirmation (the skin picked for it is lost)"
       },
       {
-        "usage": "/realm:npc_home <id>",
-        "ops": false,
-        "who": "Operators",
-        "text": "Where that townsfolk goes at night (time 13000 to 23000, §enightStart§r/§enightEnd§r); in the same dimension as its post (on the ground under you if you're flying). Run it within 2 blocks of the post to clear the home. Warns when the spot is on another townsfolk's spot at that time of day"
-      },
-      {
-        "usage": "/realm:npc_post <id> <noon\\|evening>",
-        "ops": false,
-        "who": "Operators",
-        "text": "Where that townsfolk spends lunch (from time 6000, §elunchStart§r) or the evening (from 9000, §eeveningStart§r, until night), where you stand; same dimension as its post. Run it within 2 blocks of the post to clear that spot. Warns when the spot is on another townsfolk's spot at that time of day"
-      },
-      {
         "usage": "/realm:npc_houses [radius]",
         "ops": false,
         "who": "Operators",
-        "text": "Gives each townsfolk a house of the town around you (within 48 blocks, default §ehousesRadius§r), found by its door: outside the door by day, inside at night. Shows who lives where first, with §lMove them§r, §lShuffle who lives where§r and §lCancel§r"
+        "text": "Gives each townsfolk a house of its own in the town around you (within 48 blocks, default §ehousesRadius§r), found by its door: it lives inside, facing the door. Townsfolk left without a house stay where they are. Shows who lives where first, with §lMove them§r, §lShuffle who lives where§r and §lCancel§r"
       },
       {
         "usage": "/realm:npc_undo",
@@ -1212,7 +1200,7 @@ export const PACKS = [
         "usage": "/realm:npc_list",
         "ops": false,
         "who": "Operators",
-        "text": "Every placed townsfolk with its coordinates, dimension, home, lunch and evening spots and whether it's loaded, and the ids not placed yet. A townsfolk whose spot is within 1.5 blocks of another's at the same time of day is marked in red (§e(same spot as Elsie the Innkeeper at lunch)§r)"
+        "text": "Every placed townsfolk with its coordinates, dimension and whether it's loaded, and the ids not placed yet. A townsfolk whose spot is within 1.5 blocks of another's is marked in red (§e(same spot as Elsie the Innkeeper)§r)"
       }
     ]
   },

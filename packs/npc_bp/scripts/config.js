@@ -12,7 +12,7 @@
  */
 
 export const CONFIG = {
-  /** Townsfolk turn to face players, say idle lines and go home at night. Taps and the menu work either way. */
+  /** Townsfolk turn to face players and say idle lines. They stay in their house either way, and taps and the menu work. */
   enabled: true,
 
   /** Townsfolk turn to face the nearest player within this many blocks. 0 = never turn. */
@@ -30,29 +30,14 @@ export const CONFIG = {
   /** How long an idle line stays above the NPC, in seconds. */
   speechSeconds: 3,
 
-  /** Townsfolk with a home (`/realm:npc_home`) go there at night and back to their post at dawn. */
-  nightRoutine: true,
-
-  /** Night for the routine: from this time of day (ticks, 13000 = dusk)... */
-  nightStart: 13000,
-
-  /** ...to this one (23000 = just before sunrise). */
-  nightEnd: 23000,
-
   /** How far `/realm:npc_remove` looks for a townsfolk NPC, in blocks. */
   removeRange: 5,
 
   /** `/realm:npc_houses`: houses (doors) are looked for within this many blocks of the operator (16 to 64). */
   housesRadius: 48,
 
-  /** Townsfolk stroll a few blocks around their spot now and then, while a player is within 48 blocks. */
-  stroll: true,
-
-  /** How far from its spot a townsfolk strolls, in blocks (0 to 8; 0 = stands still). */
-  strollRadius: 4,
-
   /**
-   * A missing NPC is spawned again at its post (or home at night) once a player has been within this many
+   * A missing NPC is spawned again at its post (inside its house) once a player has been within this many
    * blocks of that spot for a few seconds and the NPC still isn't there.
    */
   respawnRange: 24,
@@ -102,21 +87,6 @@ export const CONFIG = {
 
   /** Most pieces of gossip the town remembers at once; the oldest go first. */
   gossipMax: 24,
-
-  /**
-   * Daily schedule: townsfolk with a lunch spot (`/realm:npc_post <id> noon`) go there from `lunchStart`,
-   * and those with an evening spot from `eveningStart` until night. Disabled: they stay at their post by day.
-   */
-  schedules: true,
-
-  /** Lunch starts at this time of day (ticks; 6000 = noon). */
-  lunchStart: 6000,
-
-  /** The evening starts at this time of day (9000 = mid-afternoon), until `nightStart`. */
-  eveningStart: 9000,
-
-  /** A townsfolk only moves to its lunch or evening spot when no player is within this many blocks of either spot. */
-  scheduleRange: 16,
 
   /**
    * The townsfolk operators can place with `/realm:npc_add <id>`. Keep the ids: other packs and saved data use them.

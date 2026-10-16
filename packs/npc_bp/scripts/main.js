@@ -19,13 +19,14 @@ import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from
 import { get } from "./settings.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
-// the game's skins in its NPC editor). Where each one belongs is saved in the world, so an NPC that goes
+// the game's skins in its NPC editor). Each one lives inside its own house and stays there: its one spot (its
+// post) is saved in the world, so an NPC that goes
 // missing is found again or spawned again, and taps run the offer round other packs answer (see the spec in
 // docs/PACKS.md, "Townsfolk"):
 //   realm:npc_talk  { req, player, npc, roles, name }   -> every pack
 //   realm:npc_offer { req, pack, key, label, order? }   <- packs with something for this NPC, within 4 ticks
 //   realm:npc_choose { player, npc, pack, key }         -> the pack whose button the player picked
-// Hearth & Hearsay (affinity, gifts, gossip, schedules, the Realm day counter) is further down; its protocol:
+// Hearth & Hearsay (affinity, gifts, gossip, the Realm day counter) is further down; its protocol:
 //   realm:affinity { player, npc, level, pts, off } on a level change, { player, all, off } on join  -> consumers
 //   realm:gossip   { kind, player, name?, place?, n? }                                              <- producers
 //   realm:npc_flags { player, flags }                                                               <- saga_bp
@@ -44,7 +45,7 @@ const ROLE_TAG = "realm:npc_role:";
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
 
-const LOOP_TICKS = 10; // facing, idle lines and the routine
+const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot
 const MISSING_EVERY = 4; // loops between checks for a missing NPC (2 s)
 const MISSING_CHECKS = 3; // checks in a row before a missing NPC is spawned again (6 s): its chunk may still be loading
 const AUDIT_TICKS = 200; // every 10 s, look for duplicates, leftovers and changed names
@@ -52,7 +53,7 @@ const OFFER_TICKS = 4; // how long other packs have to answer realm:npc_talk
 const MAX_OFFERS = 16;
 const TAP_COOLDOWN = 10;
 const MOVE_DISTANCE = 1.5; // farther than this from where it belongs, an NPC is teleported back
-const SPOT_SHARED = 1.5; // two townsfolk's spots closer than this at the same time of day: operators are warned
+const SPOT_SHARED = 1.5; // two townsfolk's spots closer than this: operators are warned
 const SPOT_CLEAR = 0.9; // someone within this of an NPC's spot: it isn't put back there until they move off
 const TURN_STEP = 45; // degrees an NPC turns per loop at most, so it turns rather than snaps
 const TURN_MIN = 4; // smaller differences aren't worth a teleport
@@ -62,12 +63,11 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
 /** @typedef {typeof CONFIG.townsfolk[number]} Townsfolk */
 /** @typedef {keyof Townsfolk["greetings"]} Situation */
 /**
- * Where one townsfolk lives. `eid` is the id of its entity (ids stay the same across loads), so any other
- * entity with its tags is a duplicate or a leftover.
- * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string, home?: Vector3, posts?: { noon?: Vector3, evening?: Vector3 } }} Placed
+ * Where one townsfolk lives: its post, inside its house, and the way it faces there. `eid` is the id of its entity
+ * (ids stay the same across loads), so any other entity with its tags is a duplicate or a leftover.
+ * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string }} Placed
  */
-/** @typedef {"work" | "lunch" | "evening" | "night"} Slot */
-/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, slot?: Slot, viewers?: Set<string>, renameAt?: number, renames?: number, walk?: Vector3, rest?: Vector3, restUntil?: number, anchor?: Vector3 }} State */
+/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
 const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
@@ -121,23 +121,38 @@ const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 /** A saved { x, y, z }, or undefined. @param {any} v @returns {Vector3 | undefined} */
 const spotOrNot = (v) => (v && isNum(v.x) && isNum(v.y) && isNum(v.z) ? { x: v.x, y: v.y, z: v.z } : undefined);
 
+/**
+ * A saved record as it is now, or undefined. Lists saved before townsfolk stayed home (before npc_bp 1.7.0) may also have a
+ * `home` (inside their house, where they slept) and lunch and evening `posts`: the home becomes the post, with its
+ * yaw kept, and the rest is dropped. @param {any} r @returns {{ rec: Placed, old: boolean } | undefined}
+ */
+function upgrade(r) {
+  if (!r || typeof r.id !== "string" || typeof r.dim !== "string" || !isNum(r.x) || !isNum(r.y) || !isNum(r.z)) return undefined;
+  const home = spotOrNot(r.home);
+  const at = home ?? { x: r.x, y: r.y, z: r.z };
+  const rec = { id: r.id, dim: r.dim, x: at.x, y: at.y, z: at.z, yaw: isNum(r.yaw) ? r.yaw : 0, eid: typeof r.eid === "string" ? r.eid : undefined };
+  return { rec, old: "home" in r || "posts" in r };
+}
+
 function load() {
   try {
     const raw = world.getDynamicProperty(PROP_LIST);
     const parsed = typeof raw === "string" ? JSON.parse(raw) : [];
     /** @type {Placed[]} */
     const out = [];
+    let old = false;
     for (const r of Array.isArray(parsed) ? parsed : []) {
-      if (!r || typeof r.id !== "string" || typeof r.dim !== "string" || !isNum(r.x) || !isNum(r.y) || !isNum(r.z)) continue;
-      if (out.some((o) => o.id === r.id)) continue;
-      if (!folk.has(r.id)) console.warn(`[npc] "${r.id}" is no longer in config.js: its NPC is removed when its chunk loads`);
-      const home = spotOrNot(r.home);
-      const noon = spotOrNot(r.posts?.noon);
-      const evening = spotOrNot(r.posts?.evening);
-      const posts = noon || evening ? { ...(noon ? { noon } : {}), ...(evening ? { evening } : {}) } : undefined;
-      out.push({ id: r.id, dim: r.dim, x: r.x, y: r.y, z: r.z, yaw: isNum(r.yaw) ? r.yaw : 0, eid: typeof r.eid === "string" ? r.eid : undefined, home, posts });
+      const u = upgrade(r);
+      if (!u || out.some((o) => o.id === u.rec.id)) continue;
+      if (!folk.has(u.rec.id)) console.warn(`[npc] "${u.rec.id}" is no longer in config.js: its NPC is removed when its chunk loads`);
+      old ||= u.old;
+      out.push(u.rec);
     }
     list = out.filter((r) => folk.has(r.id));
+    if (old) {
+      console.warn("[npc] townsfolk with a home now live there: their homes became their posts, lunch and evening spots are gone");
+      save();
+    }
   } catch (e) {
     console.warn(`[npc] ${PROP_LIST} is corrupt: ${e}`);
     list = [];
@@ -216,7 +231,7 @@ function entityOf(rec) {
 }
 
 // ---------------------------------------------------------------------------
-// Time, weather and where an NPC belongs right now
+// Weather, time of day and where an NPC belongs
 // ---------------------------------------------------------------------------
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
@@ -229,13 +244,6 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
   }
 });
 
-function isNight() {
-  const t = world.getTimeOfDay();
-  const a = CONFIG.nightStart;
-  const b = CONFIG.nightEnd;
-  return a <= b ? t >= a && t < b : t >= a || t < b;
-}
-
 /** Which greetings fit now, for an NPC in this dimension. @param {string} dim @returns {Situation} */
 function situation(dim) {
   if (dim === OVERWORLD && weather === WeatherType.Thunder) return "thunder";
@@ -247,64 +255,8 @@ function situation(dim) {
   return "night";
 }
 
-/** Home at night (with the routine on), else the spot of its schedule slot (lunch, evening), else its post. @param {Placed} rec @returns {Vector3} */
-function anchorOf(rec) {
-  if (rec.home && get("enabled") === true && get("nightRoutine") === true && isNight()) return rec.home;
-  const slot = stateOf(rec.id).slot ?? "work";
-  return spotOf(rec, slot === "night" ? "work" : slot); // home is handled above; a night slot by day is a few seconds after dawn
-}
-
-/** Where a slot puts this townsfolk (a slot without a spot is its post). @param {Placed} rec @param {Slot} slot @returns {Vector3} */
-function spotOf(rec, slot) {
-  const on = get("enabled") === true;
-  if (slot === "night" && rec.home && on && get("nightRoutine") === true) return rec.home;
-  if (on && get("schedules") === true) {
-    if (slot === "lunch" && rec.posts?.noon) return rec.posts.noon;
-    if (slot === "evening" && rec.posts?.evening) return rec.posts.evening;
-  }
-  return { x: rec.x, y: rec.y, z: rec.z };
-}
-
-/** The slot the time of day asks for. @returns {Slot} */
-function slotNow() {
-  if (isNight()) return "night";
-  const t = world.getTimeOfDay();
-  if (t >= CONFIG.eveningStart && t < CONFIG.nightStart) return "evening";
-  if (t >= CONFIG.lunchStart && t < CONFIG.eveningStart) return "lunch";
-  return "work";
-}
-
-/**
- * Every 10 s (the audit): townsfolk whose slot changed move to its spot, but only while no player is within
- * `scheduleRange` blocks of where they are and where they go (nobody sees them vanish). Going home at night and
- * back at dawn stays instant, as before. A restart puts everyone straight into the slot of the time.
- */
-function scheduleTick() {
-  const want = slotNow();
-  const range = Math.max(0, Number(CONFIG.scheduleRange) || 0);
-  for (const rec of list) {
-    const st = stateOf(rec.id);
-    if (st.slot === undefined || st.slot === want) {
-      st.slot = want;
-      continue;
-    }
-    const from = spotOf(rec, st.slot);
-    const to = spotOf(rec, want);
-    // Same spot, or to or from home at night (the old routine, instant): just change the slot.
-    const homeMove = !!rec.home && get("nightRoutine") === true && (want === "night" || st.slot === "night");
-    if (dist(from, to) < 0.5 || homeMove) {
-      st.slot = want;
-      continue;
-    }
-    try {
-      const dim = world.getDimension(rec.dim);
-      const seen = range > 0 && (dim.getPlayers({ location: from, maxDistance: range }).length > 0 || dim.getPlayers({ location: to, maxDistance: range }).length > 0);
-      if (!seen) st.slot = want;
-    } catch (e) {
-      console.warn(`[npc] schedule ${rec.id}: ${e}`);
-    }
-  }
-}
+/** Where a townsfolk belongs, always: its post, inside its house. @param {Placed} rec @returns {Vector3} */
+const anchorOf = (rec) => ({ x: rec.x, y: rec.y, z: rec.z });
 
 /** @param {Vector3} a @param {Vector3} b */
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -385,8 +337,8 @@ function standUp(dim, at) {
 }
 
 /**
- * Lifts every saved spot of a townsfolk (post, home, lunch, evening) that is loaded and sunk into the floor, so
- * spots saved in older worlds or with a path laid on them later are repaired. Returns true when one changed.
+ * Lifts a townsfolk's post when it is loaded and sunk into the floor, so posts saved in older worlds or with a path
+ * laid on them later are repaired. Returns true when it changed.
  * @param {Placed} rec
  */
 function liftSaved(rec) {
@@ -397,14 +349,11 @@ function liftSaved(rec) {
   } catch {
     return false;
   }
-  for (const spot of [rec, rec.home, rec.posts?.noon, rec.posts?.evening]) {
-    if (!spot) continue;
-    const up = standUp(dim, spot);
-    if (up.y !== spot.y) {
-      console.warn(`[npc] ${rec.id}: a spot at ${Math.floor(spot.x)}, ${spot.y}, ${Math.floor(spot.z)} was inside a block: lifted to y ${up.y}`);
-      spot.y = up.y;
-      changed = true;
-    }
+  const up = standUp(dim, rec);
+  if (up.y !== rec.y) {
+    console.warn(`[npc] ${rec.id}: its post at ${Math.floor(rec.x)}, ${rec.y}, ${Math.floor(rec.z)} was inside a block: lifted to y ${up.y}`);
+    rec.y = up.y;
+    changed = true;
   }
   if (changed) save();
   return changed;
@@ -579,7 +528,7 @@ function checkMissing(rec, t) {
 }
 
 // ---------------------------------------------------------------------------
-// Behavior: turning, idle lines, the routine
+// Behavior: staying home, turning, idle lines
 // ---------------------------------------------------------------------------
 
 /**
@@ -604,8 +553,7 @@ function turn(entity, st, at, yaw, snap) {
   if (Math.abs(diff) < TURN_MIN) return;
   const next = snap ? yaw : wrap(current + Math.max(-TURN_STEP, Math.min(TURN_STEP, diff)));
   const loc = entity.location;
-  // Nudged a little: back onto its spot while turning. Far from it (home not loaded yet): turn in place, never
-  // teleport into a spot that may not be loaded.
+  // Nudged a little: back onto its spot while turning. Farther (the loop puts it back): turn in place.
   const d = dist(loc, at);
   entity.teleport(d > 0.3 && d <= MOVE_DISTANCE && !occupied(entity, at) ? at : loc, { rotation: { x: 0, y: next } });
   st.yaw = next;
@@ -630,29 +578,16 @@ function say(entity, t, line) {
 const fill = (line, name) => line.split("{player}").join(name);
 
 /**
- * Keeps an NPC at its spot (always), and with `lively` turns it toward players and has it say idle lines.
+ * Keeps an NPC on its post inside its house (always), and with `lively` turns it toward players and has it say
+ * idle lines. It never walks anywhere: pushed or moved more than MOVE_DISTANCE away, it's put back.
  * @param {Placed} rec @param {Townsfolk} t @param {Entity} entity @param {boolean} lively
  */
 function behave(rec, t, entity, lively) {
   const st = stateOf(rec.id);
   const dim = world.getDimension(rec.dim);
   const at = anchorOf(rec);
-  const r = lively && get("stroll") === true ? Math.max(0, Math.min(8, Number(get("strollRadius")) || 0)) : 0;
-  // A stroll from another spot (its spot changed: home at night, a new post) or too far is dropped: a spot near the
-  // last one can be on the other side of a wall.
-  if (!st.anchor || dist(st.anchor, at) > 0.5) {
-    st.walk = undefined;
-    st.rest = undefined;
-    st.anchor = { ...at };
-  }
-  if (st.walk && (r <= 0 || dist(st.walk, at) > r + 0.5)) st.walk = undefined;
-  if (st.rest && (r <= 0 || dist(st.rest, at) > r + 0.5)) st.rest = undefined;
-  // Where it should be now: its spot, where its last stroll ended, or wherever it is while walking.
-  const here = st.walk ? entity.location : (st.rest ?? at);
-  if (entity.dimension.id !== rec.dim || dist(entity.location, here) > MOVE_DISTANCE) {
-    st.walk = undefined;
-    st.rest = undefined;
-    // Pushed, moved by someone, or time to go home or back to its post. Only into a loaded spot nobody stands on.
+  if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
+    // Pushed or moved by someone: back home, but only into a loaded spot nobody stands on.
     if (loaded(dim, at) && !occupied(entity, at)) {
       const up = liftSaved(rec) ? anchorOf(rec) : at;
       entity.teleport(up, { dimension: dim, rotation: { x: 0, y: rec.yaw } });
@@ -664,24 +599,7 @@ function behave(rec, t, entity, lively) {
   const range = Number(get("faceRange")) || 0;
   const loc = entity.location;
   const [near] = range > 0 ? dim.getPlayers({ location: loc, maxDistance: range, closest: 1, excludeGameModes: [GameMode.Spectator] }) : [];
-  const [close] = dim.getPlayers({ location: loc, maxDistance: STROLL_STOP, closest: 1, excludeGameModes: [GameMode.Spectator] });
-  if (st.walk) {
-    if (!close) return; // walking: strollTick turns it the way it goes
-    st.walk = undefined; // someone came up to talk: stop here
-    st.rest = { ...loc };
-    st.restUntil = system.currentTick + 200;
-  }
-  const away = !!st.rest && dist(st.rest, at) > 0.5;
-  turn(entity, st, st.rest ?? at, near ? yawTo(loc, near.location) : away ? (st.yaw ?? rec.yaw) : rec.yaw, false);
-  // Time for a stroll: only with someone around to see it, and nobody right next to it.
-  if (r > 0 && !close) {
-    if (st.restUntil === undefined) st.restUntil = system.currentTick + 100 + Math.floor(Math.random() * 300);
-    else if (system.currentTick >= st.restUntil && dim.getPlayers({ location: loc, maxDistance: STROLL_SEEN }).length) {
-      const to = strollTarget(dim, at, st.rest ?? at, r, othersSpots(rec.id));
-      if (to) st.walk = to;
-      else st.restUntil = system.currentTick + 200;
-    }
-  }
+  turn(entity, st, at, near ? yawTo(loc, near.location) : rec.yaw, false);
 
   if (system.currentTick >= st.nextIdle) {
     st.nextIdle = system.currentTick + idleDelay();
@@ -737,19 +655,10 @@ world.afterEvents.worldLoad.subscribe(() => {
   ready = true;
   // A move to houses cut short by a restart or reload leaves its ticking area: it's removed.
   for (const d of DIMENSIONS) tryCommand(world.getDimension(d), `tickingarea remove ${HOUSES_AREA}`);
-  system.runInterval(strollTick, 1);
-  scheduleTick();
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
   system.runInterval(loop, LOOP_TICKS);
-  system.runInterval(() => {
-    try {
-      scheduleTick();
-    } catch (e) {
-      console.warn(`[npc] schedule: ${e}`);
-    }
-    auditAll();
-  }, AUDIT_TICKS);
+  system.runInterval(auditAll, AUDIT_TICKS);
   // Other packs are loaded by now: the calendar, and each online player's affinity (after a /reload).
   system.runTimeout(() => {
     broadcastCalendar();
@@ -1475,10 +1384,8 @@ function whereabouts(player) {
       const entity = entityOf(r);
       const at = entity && entity.dimension.id === r.dim ? entity.location : anchorOf(r);
       const roles = t.roles.length ? ` §8(${t.roles.join(", ")})` : "";
-      // Where they are in their day, and how well you know them.
-      const anchor = anchorOf(r);
-      const same = (/** @type {Vector3 | undefined} */ v) => !!v && dist(v, anchor) < 0.5;
-      const doing = r.home && same(r.home) && isNight() ? " §7at home" : same(r.posts?.noon) ? " §7at lunch" : same(r.posts?.evening) ? " §7at their evening spot" : "";
+      // At home (they always are), and how well you know them.
+      const doing = " §7at home";
       const heart = get("affinity") === true ? ` §d${LEVEL_NAMES[levelWith(player, t.id)]}` : "";
       if (r.dim !== player.dimension.id) return { d: Infinity, text: `${displayName(t)}§f - in ${dimName(r.dim)}${doing}${heart}${roles}` };
       const d = Math.round(Math.hypot(at.x - here.x, at.z - here.z));
@@ -1540,7 +1447,10 @@ function standingSpot(player) {
 /** @param {Vector3} p */
 const coords = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
 
-/** Places (or moves) a townsfolk where the player stands, facing them. Returns an error, or undefined. @param {Player} player @param {string} id */
+/**
+ * Places (or moves) a townsfolk where the player stands (inside its house): that spot becomes its post, where it
+ * stays, facing the way the player faces. Returns an error, or undefined. @param {Player} player @param {string} id
+ */
 function addNpc(player, id) {
   const t = folk.get(id);
   if (!t) {
@@ -1548,16 +1458,10 @@ function addNpc(player, id) {
     return `no townsfolk "${id}"`;
   }
   const at = standingSpot(player);
-  const yaw = wrap(player.getRotation().y + 180); // facing the operator who placed it
+  const yaw = wrap(player.getRotation().y); // facing the way the operator faces (stand on the spot, look at the door)
   const dim = player.dimension;
   let rec = placedOf(id);
-  let note = "";
   if (rec) {
-    if ((rec.home || rec.posts) && rec.dim !== dim.id) {
-      rec.home = undefined;
-      rec.posts = undefined;
-      note = " §7Their home and lunch or evening spots were in another dimension, so they were cleared.";
-    }
     Object.assign(rec, { dim: dim.id, x: at.x, y: at.y, z: at.z, yaw });
   } else {
     rec = { id, dim: dim.id, x: at.x, y: at.y, z: at.z, yaw };
@@ -1585,7 +1489,7 @@ function addNpc(player, id) {
   }
   // Not loaded (or couldn't move): a new one here; the old one is removed when its chunk loads.
   if (!moved) spawn(rec, t, at);
-  player.sendMessage(`§aPlaced ${plainName(t)} at ${coords(at)}.§7 Sneak and tap them in creative mode to pick a skin.${note}${sharedNote(rec)}`);
+  player.sendMessage(`§a${plainName(t)} now lives at ${coords(at)} and stays there.§7 Sneak and tap them in creative mode to pick a skin.${sharedNote(rec)}`);
   return undefined;
 }
 
@@ -1600,7 +1504,7 @@ async function removeNpc(player) {
     player,
     new ActionFormData()
       .title("Remove townsfolk?")
-      .body(`Remove ${who}, ${Math.round(dist(entity.location, player.location))} blocks from you? Their post, home and lunch and evening spots are forgotten, and the skin picked for them is lost: /realm:npc_add ${id ?? "<id>"} places them again with the default skin.`)
+      .body(`Remove ${who}, ${Math.round(dist(entity.location, player.location))} blocks from you? Where they live is forgotten, and the skin picked for them is lost: /realm:npc_add ${id ?? "<id>"} places them again with the default skin.`)
       .button("Remove")
       .button("Cancel"),
   );
@@ -1615,88 +1519,21 @@ async function removeNpc(player) {
   player.sendMessage(`§aRemoved ${t ? plainName(t) : "that NPC"}. §7Place them again with /realm:npc_add ${id ?? "<id>"}.`);
 }
 
-/** @param {Player} player @param {string} id */
-function setHome(player, id) {
-  const t = folk.get(id);
-  const rec = placedOf(id);
-  if (!t || !rec) return player.sendMessage(`§c${t ? plainName(t) : id} isn't placed yet: /realm:npc_add ${id} first.`);
-  if (player.dimension.id !== rec.dim) return player.sendMessage(`§cA home must be in the same dimension as their post (${dimName(rec.dim)}).`);
-  const at = standingSpot(player);
-  if (dist(at, rec) <= 2) {
-    rec.home = undefined;
-    save();
-    return player.sendMessage(`§a${plainName(t)} no longer has a home: they stay at their post day and night.`);
-  }
-  rec.home = { x: at.x, y: at.y, z: at.z };
-  save();
-  const far = dist(at, rec) > 96 ? " §eTip: a home close to the post (under 96 blocks) loads together with it, so they never miss the walk." : "";
-  const off = get("nightRoutine") === true ? "" : " §7(Go home at night is disabled in /realm:config.)";
-  player.sendMessage(`§a${plainName(t)} now goes home to ${coords(at)} at night.${off}${far}${sharedNote(rec)}`);
-}
-
-/** When each townsfolk stands where (a slot without a spot of its own is the post), and how chat says it. */
-const WHEN = /** @type {const} */ ([
-  ["work", "by day"],
-  ["lunch", "at lunch"],
-  ["evening", "in the evening"],
-  ["night", "at night"],
-]);
-
-/** A townsfolk's saved spot for a slot, falling back to its post. @param {Placed} r @param {string} slot @returns {Vector3} */
-function savedSpot(r, slot) {
-  const post = { x: r.x, y: r.y, z: r.z };
-  if (slot === "night") return r.home ?? post;
-  if (slot === "lunch") return r.posts?.noon ?? post;
-  if (slot === "evening") return r.posts?.evening ?? post;
-  return post;
-}
-
 /**
- * Other townsfolk standing on the same spot as this one at the same time of day ("Elsie the Innkeeper at lunch"):
- * two on one spot push each other off it, so operators are told.
- * @param {Placed} rec
+ * Other townsfolk whose post is on the same spot as this one's: two on one spot push each other off it, so
+ * operators are told. @param {Placed} rec
  */
 function sharedSpots(rec) {
-  /** @type {string[]} */
-  const out = [];
-  for (const r of list) {
-    if (r.id === rec.id || r.dim !== rec.dim) continue;
-    const when = WHEN.filter(([slot]) => dist(savedSpot(rec, slot), savedSpot(r, slot)) < SPOT_SHARED).map(([, w]) => w);
+  return list.filter((r) => r.id !== rec.id && r.dim === rec.dim && dist(r, rec) < SPOT_SHARED).map((r) => {
     const t = folk.get(r.id);
-    if (when.length) out.push(`${t ? plainName(t) : r.id} ${when.join(", ")}`);
-  }
-  return out;
+    return t ? plainName(t) : r.id;
+  });
 }
 
 /** The chat warning for spots shared with other townsfolk, or "". @param {Placed} rec */
 function sharedNote(rec) {
   const shared = sharedSpots(rec);
   return shared.length ? `\n§eHeads up: they share a spot with ${shared.join("; ")}. Townsfolk on one spot push each other: move one at least 2 blocks away.` : "";
-}
-
-/** A lunch (`noon`) or evening spot where the operator stands; at the post it clears it. @param {Player} player @param {string} id @param {string} slot */
-function setPost(player, id, slot) {
-  const t = folk.get(id);
-  const rec = placedOf(id);
-  if (slot !== "noon" && slot !== "evening") return player.sendMessage("§cPick noon or evening.");
-  if (!t || !rec) return player.sendMessage(`§c${t ? plainName(t) : id} isn't placed yet: /realm:npc_add ${id} first.`);
-  if (player.dimension.id !== rec.dim) return player.sendMessage(`§cThat spot must be in the same dimension as their post (${dimName(rec.dim)}).`);
-  const what = slot === "noon" ? "lunch" : "evening";
-  const when = slot === "noon" ? `${CONFIG.lunchStart} to ${CONFIG.eveningStart}` : `${CONFIG.eveningStart} to ${CONFIG.nightStart}`;
-  const at = standingSpot(player);
-  const posts = { ...(rec.posts ?? {}) };
-  if (dist(at, rec) <= 2) {
-    delete posts[slot];
-    rec.posts = posts.noon || posts.evening ? posts : undefined;
-    save();
-    return player.sendMessage(`§a${plainName(t)} no longer has a ${what} spot: they stay at their post then.`);
-  }
-  posts[slot] = { x: at.x, y: at.y, z: at.z };
-  rec.posts = posts;
-  save();
-  const far = dist(at, rec) > 96 ? " §eTip: a spot close to the post (under 96 blocks) loads together with it, so they keep their skin when they move." : "";
-  const off = get("schedules") === true ? "" : " §7(Daily schedule is disabled in /realm:config.)";
-  player.sendMessage(`§a${plainName(t)} now spends ${what} (time ${when}) at ${coords(at)}, moving when nobody is within ${CONFIG.scheduleRange} blocks.${off}${far}${sharedNote(rec)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1787,8 +1624,9 @@ function fromSkin(rec, dim, at) {
 
 // ---------------------------------------------------------------------------
 // Houses: /realm:npc_houses finds the houses of the village around the operator by their doors, and gives each
-// townsfolk one: by day it stands (and strolls) right outside the door, at night it's inside. The village's chunks
-// are loaded for a moment with a ticking area of the pack's own. /realm:npc_undo puts back the spots from before.
+// townsfolk one of its own: its post is inside, near the door and facing it, and it stays there day and night.
+// The village's chunks are loaded for a moment with a ticking area of the pack's own. /realm:npc_undo puts back
+// the spots from before.
 // ---------------------------------------------------------------------------
 
 const HOUSES_AREA = "realm_npc_houses";
@@ -1880,11 +1718,11 @@ function roofed(dim, x, y, z) {
 }
 
 /**
- * The houses of the village: each door (its lower half) with an open side and a roofed side, then doors within 6
- * blocks of each other merged (double doors, two doors of one house). For each house, spots right outside the
- * door (by day) and inside (at night), nearest the door first, and which way is out.
+ * The houses of the village, nearest `center` first: each door (its lower half) with an open side and a roofed
+ * side, then doors within 3 blocks of each other merged (double doors). For each house, the spots inside where a
+ * townsfolk can stand, nearest the door first, and which way is out.
  * @param {Dimension} dim @param {Vector3} center @param {number} radius
- * @returns {{ door: Vector3, out: { x: number, z: number }, outside: Vector3[], inside: Vector3[] }[]}
+ * @returns {{ door: Vector3, out: { x: number, z: number }, inside: Vector3[] }[]}
  */
 function findHouses(dim, center, radius) {
   const cx = Math.floor(center.x);
@@ -1904,8 +1742,9 @@ function findHouses(dim, center, radius) {
         // not loaded
       }
     }
-  /** @type {{ door: Vector3, out: { x: number, z: number }, outside: Vector3[], inside: Vector3[] }[]} */
+  /** @type {{ door: Vector3, out: { x: number, z: number }, inside: Vector3[] }[]} */
   const houses = [];
+  found.sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz));
   stats = { doors: 0, both: 0, cramped: 0 };
   for (const d of found) {
     if (Math.hypot(d.x - cx, d.z - cz) > radius) continue;
@@ -1933,22 +1772,16 @@ function findHouses(dim, center, radius) {
       if (Math.abs(cp - cq) < 2) continue;
       const out = cp > cq ? { x: -ax, z: -az } : { x: ax, z: az };
       const side = { x: out.z, z: out.x }; // along the wall
-      /** @param {number} dir 1 out, -1 in @param {number[]} depths @param {number[]} offsets */
-      const spots = (dir, depths, offsets) => {
-        /** @type {Vector3[]} */
-        const list = [];
-        for (const k of depths)
-          for (const o of offsets) {
-            const at = standNear(dim, d.x + dir * out.x * k + side.x * o, d.y, d.z + dir * out.z * k + side.z * o);
-            if (at && (dir > 0 || roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)))) list.push(at);
-          }
-        // Outside: under the open sky first, then under a porch roof or an awning.
-        return dir > 0 ? [...list.filter((at) => !roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z))), ...list.filter((at) => roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)))] : list;
-      };
-      const outside = spots(1, [2, 3, 1, 4], [0, 2, -2, 3, -3]);
-      const inside = spots(-1, [2, 3, 1, 4], [0, 1, -1, 2, -2]);
+      // Inside, under the roof: 2 blocks in from the door first (out of the doorway, where a visitor sees them).
+      /** @type {Vector3[]} */
+      const inside = [];
+      for (const k of [2, 3, 1, 4])
+        for (const o of [0, 1, -1, 2, -2]) {
+          const at = standNear(dim, d.x - out.x * k + side.x * o, d.y, d.z - out.z * k + side.z * o);
+          if (at && roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z))) inside.push(at);
+        }
       placed = true;
-      if (outside.length && inside.length) houses.push({ door: d, out, outside, inside });
+      if (inside.length) houses.push({ door: d, out, inside });
       else stats.cramped++;
       break;
     }
@@ -1957,7 +1790,7 @@ function findHouses(dim, center, radius) {
   return houses;
 }
 
-/** What the last findHouses saw: doors checked, doors with no clear inside and outside, houses with no room to stand. */
+/** What the last findHouses saw: doors checked, doors with no clear inside and outside, houses with no room to stand inside. */
 let stats = { doors: 0, both: 0, cramped: 0 };
 
 /** Loads the village for a moment (our own ticking area, 4 chunks around x, z): true once the middle is loaded. @param {Dimension} dim @param {Vector3} at */
@@ -1968,36 +1801,34 @@ async function loadVillage(dim, at) {
 }
 
 /**
- * A house for each townsfolk: houses nearest the middle first, in a shuffled order of townsfolk; more townsfolk
- * than houses share them, on other spots by the same door (at least 2 blocks apart).
+ * One house of its own for each townsfolk, in a shuffled order of townsfolk, houses nearest the middle first. Its
+ * post is the first spot inside (2 blocks in from the door) at least 2 blocks from the others', facing the door, so
+ * it greets whoever comes in. More townsfolk than houses: the rest get none (they stay where they are).
  * @param {ReturnType<typeof findHouses>} houses @param {string[]} ids
- * @returns {{ id: string, post: Vector3, home: Vector3, yaw: number, house: number }[]}
+ * @returns {{ id: string, post: Vector3, yaw: number, house: number }[]}
  */
 function assignHouses(houses, ids) {
-  /** @type {{ id: string, post: Vector3, home: Vector3, yaw: number, house: number }[]} */
+  /** @type {{ id: string, post: Vector3, yaw: number, house: number }[]} */
   const out = [];
-  if (!houses.length) return out;
   const order = [...ids].sort(() => Math.random() - 0.5);
-  const free = (/** @type {Vector3} */ p, /** @type {"post" | "home"} */ k) => out.every((o) => dist(o[k], p) >= 2);
-  order.forEach((id, i) => {
-    for (let n = 0; n < houses.length; n++) {
-      const hi = (i + n) % houses.length;
+  let hi = 0;
+  for (const id of order) {
+    for (; hi < houses.length; hi++) {
       const h = houses[hi];
-      const post = h.outside.find((p) => free(p, "post"));
-      const home = h.inside.find((p) => free(p, "home"));
-      if (!post || !home) continue;
-      const yaw = wrap(yawTo(h.door, { x: h.door.x + h.out.x, y: h.door.y, z: h.door.z + h.out.z })); // facing away from the door, toward the street
-      out.push({ id, post, home, yaw, house: hi });
-      return;
+      const post = h.inside.find((p) => out.every((o) => dist(o.post, p) >= 2));
+      if (!post) continue;
+      const yaw = wrap(yawTo(post, { x: h.door.x + 0.5, y: h.door.y, z: h.door.z + 0.5 })); // facing the door
+      out.push({ id, post, yaw, house: hi++ });
+      break;
     }
-  });
+  }
   return out;
 }
 
 /**
- * Moves each townsfolk to its new spots: the NPC itself (its skin stays) to where the time of day puts it, or
- * placed again from its saved skin when it can't be reached. The spots from before are kept for /realm:npc_undo.
- * @param {Dimension} dim @param {{ id: string, post: Vector3, home?: Vector3, yaw: number, posts?: Placed["posts"] }[]} plan
+ * Moves each townsfolk to its new post: the NPC itself (its skin stays), or placed again from its saved skin when
+ * it can't be reached. The spots from before are kept for /realm:npc_undo.
+ * @param {Dimension} dim @param {{ id: string, post: Vector3, yaw: number }[]} plan
  */
 async function moveTo(dim, plan) {
   try {
@@ -2011,13 +1842,10 @@ async function moveTo(dim, plan) {
     const t = folk.get(p.id);
     if (!rec || !t) continue;
     let entity = entityOf(rec);
-    Object.assign(rec, { dim: dim.id, x: p.post.x, y: p.post.y, z: p.post.z, yaw: p.yaw, home: p.home, posts: p.posts });
+    Object.assign(rec, { dim: dim.id, x: p.post.x, y: p.post.y, z: p.post.z, yaw: p.yaw });
     const st = stateOf(p.id);
-    st.slot = undefined;
     st.missing = 0;
     st.yaw = p.yaw;
-    st.walk = undefined;
-    st.rest = undefined;
     const at = anchorOf(rec);
     save();
     if (entity?.isValid && loaded(dim, at)) {
@@ -2053,7 +1881,7 @@ async function houseNpcs(player, radius) {
     await loadVillage(dim, center);
     if (!player.isValid) return;
     const houses = findHouses(dim, center, R);
-    const seen = `${stats.doors} door${stats.doors === 1 ? "" : "s"} checked: ${stats.both} with no clear inside and outside (roofed or open on both sides), ${stats.cramped} with no room to stand by them`;
+    const seen = `${stats.doors} door${stats.doors === 1 ? "" : "s"} checked: ${stats.both} with no clear inside and outside (roofed or open on both sides), ${stats.cramped} with no room to stand inside`;
     if (!houses.length) return player.sendMessage(`§cNo houses found within ${R} blocks (${seen}). A house here is a door with a roofed room on one side and more open sky on the other. Stand in the middle of the town, or try /realm:npc_houses 64.`);
     for (;;) {
       const plan = assignHouses(houses, ids);
@@ -2064,12 +1892,11 @@ async function houseNpcs(player, radius) {
         return `§f${plainName(t)}§7: house ${p.house + 1}, ${Math.round(Math.hypot(dx, dz))}m ${compass(dx, dz)} (door at ${coords(houses[p.house].door)})`;
       });
       const missing = ids.filter((id) => !plan.some((p) => p.id === id));
-      const shared = houses.length < plan.length ? ` §7(${plan.length} townsfolk, so some share a house)` : "";
       const body = [
-        `§fFound ${houses.length} house${houses.length === 1 ? "" : "s"}${shared}. By day each townsfolk stands right outside their door and strolls nearby; at night they're inside. §7(${seen}.)`,
+        `§fFound ${houses.length} house${houses.length === 1 ? "" : "s"} for ${ids.length} townsfolk. Each townsfolk lives inside their own house, facing the door, and stays there day and night. §7(${seen}.)`,
         ...lines,
-        missing.length ? `§eNo room found for: ${missing.map((id) => plainName(/** @type {Townsfolk} */ (folk.get(id)))).join(", ")}. They stay where they are.` : "",
-        "§7Lunch and evening spots are cleared. /realm:npc_undo puts everyone back where they are now.",
+        missing.length ? `§eNo house yet for: ${missing.map((id) => plainName(/** @type {Townsfolk} */ (folk.get(id)))).join(", ")}. They stay where they are: build them a house, or place them inside one with /realm:npc_add.` : "",
+        "§7/realm:npc_undo puts everyone back where they are now.",
       ].filter(Boolean);
       const res = await show(
         player,
@@ -2084,7 +1911,7 @@ async function houseNpcs(player, radius) {
       if (!isOp(player)) return player.sendMessage("§cOnly operators can do that."); // de-opped while the form was open
       if (res.selection === 1) continue;
       if (!plan.length) return player.sendMessage("§cNobody to move.");
-      const moved = await moveTo(dim, plan.map((p) => ({ ...p, posts: undefined })));
+      const moved = await moveTo(dim, plan);
       if (player.isValid) player.sendMessage(`§aMoved ${moved} townsfolk to their houses.§7 /realm:npc_who shows the way to each; /realm:npc_undo puts them back.`);
       return;
     }
@@ -2105,17 +1932,23 @@ async function undoMove(player) {
   } catch {
     prev = [];
   }
-  prev = prev.filter((r) => r && folk.has(r.id) && placedOf(r.id) && isNum(r.x) && isNum(r.y) && isNum(r.z));
+  // Lists kept by an older version can have homes: upgraded like the saved list (the home is where they live).
+  prev = (Array.isArray(prev) ? prev : [])
+    .flatMap((r) => {
+      const u = upgrade(r);
+      return u ? [u.rec] : [];
+    })
+    .filter((r) => folk.has(r.id) && !!placedOf(r.id));
   if (!prev.length) return player.sendMessage("§7Nothing to undo: the townsfolk haven't been moved to houses yet.");
   if (moving) return player.sendMessage("§eThe townsfolk are already moving. Wait for it to finish.");
-  const res = await show(player, new ActionFormData().title("Undo the move?").body(`Put ${prev.length} townsfolk back on the spots they had before the last move to houses (with their homes and lunch and evening spots then)?`).button("Put them back").button("Cancel"));
+  const res = await show(player, new ActionFormData().title("Undo the move?").body(`Put ${prev.length} townsfolk back on the spots they had before the last move to houses?`).button("Put them back").button("Cancel"));
   if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
   if (!isOp(player)) return player.sendMessage("§cOnly operators can do that.");
   moving = true;
   try {
     // Each townsfolk goes back to its own dimension; the move keeps these spots as the new "before".
     const byDim = new Map();
-    for (const r of prev) byDim.set(r.dim, [...(byDim.get(r.dim) ?? []), { id: r.id, post: { x: r.x, y: r.y, z: r.z }, home: r.home, yaw: r.yaw ?? 0, posts: r.posts }]);
+    for (const r of prev) byDim.set(r.dim, [...(byDim.get(r.dim) ?? []), { id: r.id, post: { x: r.x, y: r.y, z: r.z }, yaw: r.yaw }]);
     let moved = 0;
     for (const [d, plan] of byDim) moved += await moveTo(world.getDimension(d), plan);
     if (player.isValid) player.sendMessage(`§aPut ${moved} townsfolk back.§7 Run /realm:npc_undo again to swap back.`);
@@ -2124,102 +1957,13 @@ async function undoMove(player) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Strolling: a townsfolk walks a few blocks around its spot now and then (`strollRadius`), along a straight line
-// with floor all the way and no wall in between, and rests 10 to 30 seconds. It stops when a player comes within
-// 3 blocks, and only walks while a player is within 48 blocks (nobody else would see it).
-// ---------------------------------------------------------------------------
-
-const STROLL_SPEED = 0.07; // blocks a tick (a slow amble)
-const STROLL_STOP = 3; // a player this close: stop and talk
-const STROLL_SEEN = 48;
-
-/** Can a townsfolk walk straight from `a` to `b` (floor all the way, room for feet and head, no step over half a block)? @param {Dimension} dim @param {Vector3} a @param {Vector3} b */
-function walkable(dim, a, b) {
-  const n = Math.ceil(dist(a, b) / 0.4);
-  let y = a.y;
-  for (let i = 1; i <= n; i++) {
-    const x = a.x + ((b.x - a.x) * i) / n;
-    const z = a.z + ((b.z - a.z) * i) / n;
-    const at = standNear(dim, Math.floor(x), y, Math.floor(z));
-    if (!at || Math.abs(at.y - y) > 0.55) return false;
-    y = at.y;
-  }
-  return true;
-}
-
-/** Where the other townsfolk belong or are headed right now (a stroll never ends there). @param {string} id */
-function othersSpots(id) {
-  /** @type {Vector3[]} */
-  const out = [];
-  for (const r of list) {
-    if (r.id === id) continue;
-    const st = stateOf(r.id);
-    out.push(anchorOf(r));
-    if (st.walk) out.push(st.walk);
-    if (st.rest) out.push(st.rest);
-  }
-  return out;
-}
-
-/**
- * A spot to stroll to within the radius of `anchor`, reachable from `from`, at least 2 blocks from where the other
- * townsfolk belong or are headed, or undefined. @param {Dimension} dim @param {Vector3} anchor @param {Vector3} from @param {number} r @param {Vector3[]} avoid
- */
-function strollTarget(dim, anchor, from, r, avoid) {
-  const clear = (/** @type {Vector3} */ at) => avoid.every((o) => dist(o, at) >= 2);
-  if (dist(from, anchor) > 0.5 && Math.random() < 0.35) return clear(anchor) && walkable(dim, from, anchor) ? { ...anchor } : undefined; // back to its own spot now and then
-  for (let k = 0; k < 6; k++) {
-    const a = Math.random() * 2 * Math.PI;
-    const d = 1.5 + Math.random() * (r - 1.5);
-    const at = standNear(dim, Math.floor(anchor.x + d * Math.cos(a)), anchor.y, Math.floor(anchor.z + d * Math.sin(a)));
-    if (!at || dist(at, anchor) > r + 0.5 || dist(at, from) < 1.5 || !clear(at)) continue;
-    if (walkable(dim, from, at)) return at;
-  }
-  return undefined;
-}
-
-/** Every tick: walking townsfolk take a step. */
-function strollTick() {
-  for (const rec of list) {
-    const st = stateOf(rec.id);
-    const w = st.walk;
-    if (!w) continue;
-    try {
-      const entity = entityOf(rec);
-      if (!entity) {
-        st.walk = undefined;
-        continue;
-      }
-      const loc = entity.location;
-      const d = dist(loc, w);
-      const yaw = yawTo(loc, w);
-      if (d <= STROLL_SPEED) {
-        entity.teleport(w, { rotation: { x: 0, y: yaw } });
-        st.walk = undefined;
-        st.rest = { ...w };
-        st.yaw = yaw;
-        st.restUntil = system.currentTick + 200 + Math.floor(Math.random() * 400);
-        continue;
-      }
-      const f = STROLL_SPEED / d;
-      entity.teleport({ x: loc.x + (w.x - loc.x) * f, y: loc.y + (w.y - loc.y) * f, z: loc.z + (w.z - loc.z) * f }, { rotation: { x: 0, y: yaw } });
-      st.yaw = yaw;
-    } catch {
-      st.walk = undefined; // unloaded meanwhile
-    }
-  }
-}
-
-
 /** @param {Player} player */
 function listForOps(player) {
   const lines = list.map((r) => {
     const t = folk.get(r.id);
-    const home = `${r.home ? ` §7home ${coords(r.home)}` : ""}${r.posts?.noon ? ` §7lunch ${coords(r.posts.noon)}` : ""}${r.posts?.evening ? ` §7evening ${coords(r.posts.evening)}` : ""}`;
     const state = entityOf(r) ? "§a(loaded)" : "§8(not loaded)";
     const shared = sharedSpots(r);
-    return `§e${r.id}§f ${t ? plainName(t) : ""}: ${coords(r)} in ${dimName(r.dim)}${home} ${state}${shared.length ? ` §c(same spot as ${shared.join("; ")})` : ""}`;
+    return `§e${r.id}§f ${t ? plainName(t) : ""}: ${coords(r)} in ${dimName(r.dim)} ${state}${shared.length ? ` §c(same spot as ${shared.join("; ")})` : ""}`;
   });
   const missing = CONFIG.townsfolk.filter((t) => !placedOf(t.id)).map((t) => t.id);
   player.sendMessage(
@@ -2244,10 +1988,7 @@ async function menu(player) {
   /** @type {[string, () => unknown][]} */
   const actions = [["Who lives here?", () => whoMenu(player)]];
   if (op) {
-    actions.push(["Add or move a townsfolk here\n§8Operators", () => pickAndRun(player, "Add or move here", "They stand where you are, facing you.", (id) => addNpc(player, id))]);
-    actions.push(["Set a home here\n§8Operators", () => pickAndRun(player, "Set home", "They come here at night. Pick one standing at its post to clear its home.", (id) => setHome(player, id), true)]);
-    actions.push(["Set a lunch spot here\n§8Operators", () => pickAndRun(player, "Set lunch spot", "They come here at lunch. Pick one standing at its post to clear it.", (id) => setPost(player, id, "noon"), true)]);
-    actions.push(["Set an evening spot here\n§8Operators", () => pickAndRun(player, "Set evening spot", "They come here in the evening. Pick one standing at its post to clear it.", (id) => setPost(player, id, "evening"), true)]);
+    actions.push(["Add or move a townsfolk here\n§8Operators", () => pickAndRun(player, "Add or move here", "They live where you stand (inside their house) and stay there, facing the way you face.", (id) => addNpc(player, id))]);
     actions.push(["Move them into the houses around me\n§8Operators", () => houseNpcs(player)]);
     actions.push(["Undo the last move\n§8Operators", () => undoMove(player)]);
     actions.push(["Remove the nearest townsfolk\n§8Operators", () => removeNpc(player)]);
@@ -2309,11 +2050,10 @@ function withPlayer(origin, fn) {
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerEnum("realm:npc_id", CONFIG.townsfolk.map((t) => t.id));
-  customCommandRegistry.registerEnum("realm:npc_slot", ["noon", "evening"]);
   const idParam = [{ name: "realm:npc_id", type: CustomCommandParamType.Enum }];
 
   customCommandRegistry.registerCommand(
-    { name: "realm:npc", description: "Townsfolk: menu (who lives here; operators: add, move, home, remove)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    { name: "realm:npc", description: "Townsfolk: menu (who lives here; operators: add, move, houses, remove)", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
     (origin) => withPlayer(origin, menu),
   );
   customCommandRegistry.registerCommand(
@@ -2321,13 +2061,13 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     (origin) => withPlayer(origin, listForPlayers),
   );
   customCommandRegistry.registerCommand(
-    { name: "realm:npc_list", description: "Townsfolk: every placed NPC with its coordinates and home", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
+    { name: "realm:npc_list", description: "Townsfolk: every placed NPC with where it lives", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
     (origin) => withPlayer(origin, listForOps),
   );
   customCommandRegistry.registerCommand(
     {
       name: "realm:npc_add",
-      description: "Townsfolk: place an NPC here, facing you (moves it if it is already placed)",
+      description: "Townsfolk: the NPC lives here (inside its house), facing your way; moves it if already placed",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
       mandatoryParameters: idParam,
@@ -2337,7 +2077,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:npc_houses",
-      description: "Townsfolk: give each NPC a house of the town around you (outside the door by day, inside at night), after a preview",
+      description: "Townsfolk: give each NPC a house of its own in the town around you (inside, facing the door), after a preview",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
       optionalParameters: [{ name: "radius", type: CustomCommandParamType.Integer }],
@@ -2351,26 +2091,6 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     { name: "realm:npc_remove", description: "Townsfolk: remove the nearest townsfolk NPC within 5 blocks", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
     (origin) => withPlayer(origin, removeNpc),
-  );
-  customCommandRegistry.registerCommand(
-    {
-      name: "realm:npc_home",
-      description: "Townsfolk: the NPC goes here at night (run it at their post to clear)",
-      permissionLevel: CommandPermissionLevel.GameDirectors,
-      cheatsRequired: false,
-      mandatoryParameters: idParam,
-    },
-    (origin, /** @type {string} */ id) => withPlayer(origin, (p) => setHome(p, id)),
-  );
-  customCommandRegistry.registerCommand(
-    {
-      name: "realm:npc_post",
-      description: "Townsfolk: the NPC spends lunch (noon) or the evening here (run it at their post to clear)",
-      permissionLevel: CommandPermissionLevel.GameDirectors,
-      cheatsRequired: false,
-      mandatoryParameters: [...idParam, { name: "realm:npc_slot", type: CustomCommandParamType.Enum }],
-    },
-    (origin, /** @type {string} */ id, /** @type {string} */ slot) => withPlayer(origin, (p) => setPost(p, id, slot)),
   );
 });
 
