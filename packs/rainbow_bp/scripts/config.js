@@ -20,9 +20,6 @@ export const CONFIG = {
   /** The pot of gold is never placed closer than this many blocks to the world spawn. */
   avoidSpawn: 64,
 
-  /** Width of the rainbow in blocks, foot to foot (it stands in the world, one foot on the pot of gold; half as tall). */
-  size: 80,
-
   /** Minutes the pot of gold can be found after the rainbow appears. After that an empty pot chest is removed; one with items is left. */
   potMinutes: 15,
 

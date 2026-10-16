@@ -1,14 +1,17 @@
-import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
-import { COLORS, SPREAD, antisolarAngle, arcAngle, arcDots, beamSegments, boldness, center, toward } from "./sky.js";
+import { SPREAD, antisolarAngle } from "./sky.js";
 import { get } from "./settings.js";
 
-// World property "rainbow:pot": JSON { id, x, z, y?, low?, ang, by, ground?, until, expires, placed, missed?, found? }
+// World property "rainbow:pot": JSON { id, x, z, y?, low?, until, expires, placed, missed?, found? }
 // for the current rainbow and its pot of gold (until / expires: Date.now() ms when the rainbow fades / the pot
 // can no longer be found; placed: its chest is in the world; missed: no safe spot for a chest, so the
-// finder gets the loot straight into their inventory; ang: the angle of the arc's plane, from the pot's foot
-// toward the other one; by: the arc's ground height, a guess until ground is true, when it was read at the pot's
-// spot once its chunk loaded). Cleared once the pot expires.
+// finder gets the loot straight into their inventory). Cleared once the pot expires. Pots saved by older
+// versions also have ang, by and ground (the drawn arc's plane and ground height): ignored.
+//
+// The rainbow isn't drawn in the sky: the Minimap shows it on its compass. While a pot is up and not found,
+// realm:rainbow_pot { dim, x, z } says where it is (when it appears, when its chest moves it, on
+// realm:rainbow_ping and once after world load); realm:rainbow_pot {} says there is none.
 const PROP_POT = "rainbow:pot";
 // World property "rainbow:left": JSON [{ x, y, z }], pot chests that were still in the world when their pot expired
 // but couldn't be checked (no one near: their chunk wasn't loaded). Each is removed, if it's still an empty chest,
@@ -19,13 +22,7 @@ const PROP_STORY = "rainbow:story";
 const STORY_GAP = 30 * 60000; // at most one story rainbow per 30 real minutes
 const MAX_LEFT = 20;
 const OVERWORLD = "minecraft:overworld";
-const BAND = "realm:sky_rainbow_band"; // particles from the Realm Skies resource pack
-const BEAM = "realm:sky_rainbow_beam";
-const DRAW_TICKS = 20; // drawn every second for each player: dots stood in closer (see sky.js) last 1.5 s...
-const LIFE_NEAR = 1.5;
-const LIFE_REAL = 2.6; // ...dots at their real spot only every other second, lasting 2.6 s (they don't move)
-const MAX_SEE = 512; // players farther than this from the rainbow don't see it
-const EYE = 1.62;
+const MAX_SEE = 512; // players farther than this from the rainbow's end don't see it (no Journal entry)
 const PLACE_DISTANCE = 40; // the pot's chest is placed when a player comes this close (its chunk is loaded then)
 const FIND_DISTANCE = 3;
 const MAX_HEADROOM = 24; // deeper underground than this, no rainbow
@@ -43,7 +40,7 @@ const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|waxed_|copper_block|quartz_block|purpur|lamp|cauldron|crafter|beehive|_head$|_skull$|pot$|terracotta|(iron|gold|diamond|emerald|lapis|redstone|coal|netherite|amethyst)_block|raw_/;
 const NATURAL_EXCEPTIONS = /^minecraft:(moss_carpet|torchflower|(white|orange|yellow|brown|red|light_gray)?_?terracotta)$/;
 
-/** @typedef {{ id: number, x: number, z: number, y?: number, low?: number, ang?: number, by?: number, ground?: boolean, until: number, expires: number, placed: boolean, missed?: boolean, found?: string }} Pot */
+/** @typedef {{ id: number, x: number, z: number, y?: number, low?: number, until: number, expires: number, placed: boolean, missed?: boolean, found?: string }} Pot */
 
 /** @type {Pot | undefined} */
 let pot;
@@ -53,9 +50,6 @@ let busy = false; // looking for the chest's spot
 let left = [];
 /** @type {Set<string>} players who saw this rainbow (journal sent) */
 const saw = new Set();
-/** One map, made on first use: the stable API may refuse native objects while the world is still loading. @type {MolangVariableMap | undefined} */
-let varsMap;
-const molang = () => (varsMap ??= new MolangVariableMap()); // reused: spawnParticle copies the values
 
 const rand = (/** @type {number} */ min, /** @type {number} */ max) => min + Math.random() * (max - min);
 const randInt = (/** @type {number} */ min, /** @type {number} */ max) => Math.floor(rand(min, max + 1));
@@ -136,7 +130,10 @@ function load() {
   loaded = true;
   try {
     const saved = typeof raw === "string" ? JSON.parse(raw) : undefined;
-    if (!pot && saved && typeof saved.x === "number" && typeof saved.z === "number" && typeof saved.expires === "number") pot = saved;
+    if (!pot && saved && typeof saved.x === "number" && typeof saved.z === "number" && typeof saved.expires === "number") {
+      delete saved.ang, delete saved.by, delete saved.ground; // from older versions, when the arc was drawn
+      pot = saved;
+    }
   } catch {
     console.warn(`[rainbow] ${PROP_POT} is corrupt; ignoring it`);
   }
@@ -149,6 +146,17 @@ function load() {
   }
 }
 
+/** Tells the Minimap where the unfound pot of gold is, or that there is none (realm:rainbow_pot). */
+function broadcastPot() {
+  const p0 = pot;
+  const up = p0 && !p0.found && Date.now() < p0.expires;
+  try {
+    system.sendScriptEvent("realm:rainbow_pot", up ? JSON.stringify({ dim: OVERWORLD, x: Math.floor(p0.x), z: Math.floor(p0.z) }) : "{}");
+  } catch (e) {
+    console.warn(`[rainbow] ${e}`);
+  }
+}
+
 function saveLeft() {
   try {
     world.setDynamicProperty(PROP_LEFT, left.length ? JSON.stringify(left) : undefined);
@@ -157,7 +165,13 @@ function saveLeft() {
   }
 }
 
-world.afterEvents.worldLoad.subscribe(load);
+world.afterEvents.worldLoad.subscribe(() => {
+  load();
+  system.runTimeout(() => {
+    load();
+    broadcastPot();
+  }, 40);
+});
 
 // ---------------------------------------------------------------------------
 // Safe zones (realm:zones from Safe Zones, Town Projects, Land Claims): no pot chest inside one
@@ -266,160 +280,36 @@ function appear(player) {
     const now = Date.now();
     // Replacing an earlier pot (an operator's /realm:rainbow_now, or one past its time): its chest goes if it's empty.
     if (pot) expire(pot);
-    // The arc stands across this player's line of sight, so they see it side on. Its ground height is the
-    // surface at its end when that's loaded, else this player's surface (corrected once the end loads).
-    const here = topAt(dim, player.location.x, player.location.z);
-    const by = top ? top.y + 1 : Math.max(63, here ? here.location.y + 1 : Math.floor(player.location.y));
-    const ang = arcAngle(player.location, { x: x + 0.5, z: z + 0.5 }, Math.random() < 0.5);
-    pot = { id: now, x, z, ang, by, ground: !!top, until: now + get("durationSeconds") * 1000, expires: now + Math.max(get("durationSeconds") / 60, get("potMinutes")) * 60000, placed: false };
+    pot = { id: now, x, z, until: now + get("durationSeconds") * 1000, expires: now + Math.max(get("durationSeconds") / 60, get("potMinutes")) * 60000, placed: false };
     saw.clear();
     savePot();
-    for (const p of dim.getPlayers()) p.sendMessage(`§eA rainbow! Its end is somewhere to the ${compass(x - p.location.x, z - p.location.z)}: look for the golden beam where it touches the ground.`);
+    for (const p of dim.getPlayers()) p.sendMessage(`§eA rainbow! Its pot of gold is somewhere to the ${compass(x + 0.5 - p.location.x, z + 0.5 - p.location.z)}: follow the rainbow on your compass.`);
     system.sendScriptEvent("realm:sky_event", JSON.stringify({ kind: "rainbow", dim: OVERWORLD, x, z, text: "A rainbow, with a pot of gold at its end" }));
-    draw(pot, true);
+    broadcastPot();
+    watch(pot);
     return true;
   }
   return false;
 }
 
 // ---------------------------------------------------------------------------
-// Drawing it: a fixed arc in the world plus a golden beam over the pot (see sky.js). Player.spawnParticle, so
-// each player gets their own stand-ins for the far parts, on their own lines of sight.
+// Who sees it: every player in the Overworld within MAX_SEE of its end and not deep underground, while the
+// rainbow lasts, gets its Journal entry once (nothing is drawn: the Minimap shows it on the compass).
 // ---------------------------------------------------------------------------
 
-/** Player id -> the tick (0 to DRAW_TICKS - 1) of each second their rainbow is drawn on. @type {Map<string, number>} */
-const drawSlots = new Map();
-let nextSlot = 0;
-world.afterEvents.playerLeave.subscribe(({ playerId }) => drawSlots.delete(playerId));
-
-// Each player is drawn once a second, on a tick of their own: drawing everyone on the same tick took 55-80 ms
-// with 8 players.
-system.runInterval(() => {
-  const p0 = pot;
-  if (!p0) return;
-  const now = Date.now();
-  // The rainbow while it lasts; the beam as long as the pot can be found.
-  if (!(now < p0.until || (!p0.found && now < p0.expires))) return;
-  const tick = system.currentTick;
-  const due = overworld()
-    .getPlayers()
-    .filter((p) => {
-      let slot = drawSlots.get(p.id);
-      if (slot === undefined) drawSlots.set(p.id, (slot = nextSlot++ % DRAW_TICKS));
-      return (tick + slot) % DRAW_TICKS === 0;
-    });
-  if (due.length) draw(p0, Math.floor(tick / DRAW_TICKS) % 2 === 0, due);
-});
-
-/** Once the pot's chunk is loaded, the arc's ground height becomes the surface there (once). @param {Pot} p0 @param {Dimension} dim */
-function settleGround(p0, dim) {
-  if (p0.ground) return;
-  const top = surfaceAt(dim, p0.x, p0.z);
-  if (!top) return;
-  p0.by = top.y + 1;
-  p0.ground = true;
-  savePot();
-}
-
-/**
- * What draw() needs that is the same for every player, made once a second and shared by that second's draws.
- * @type {{ sec: number, p0: Pot, size: number, a: import("./sky.js").Anchor, mid: import("./sky.js").Vec, beamY: number, loadedAt: (x: number, z: number) => boolean } | undefined}
- */
-let frame;
-
-/** @param {Pot} p0 @param {Dimension} dim */
-function frameFor(p0, dim) {
-  const sec = Math.floor(system.currentTick / DRAW_TICKS);
-  if (frame && frame.sec === sec && frame.p0 === p0) return frame;
-  try {
-    settleGround(p0, dim);
-  } catch {
-    // not loaded
-  }
-  const size = get("size");
-  /** @type {import("./sky.js").Anchor} */
-  const a = { x: p0.x, z: p0.z, y: p0.by ?? 64, ang: p0.ang ?? 0 };
-  const mid = center(a, size);
-  const beamY = typeof p0.y === "number" ? p0.y + (p0.placed ? 0.9 : 0) : a.y;
-  /** chunk "cx,cz" -> loaded, for this second @type {Map<string, boolean>} */
-  const chunks = new Map();
-  const loadedAt = (/** @type {number} */ x, /** @type {number} */ z) => {
-    const key = `${Math.floor(x) >> 4},${Math.floor(z) >> 4}`;
-    let ok = chunks.get(key);
-    if (ok === undefined) {
-      try {
-        ok = !!dim.getBlock({ x: Math.floor(x), y: 64, z: Math.floor(z) });
-      } catch {
-        ok = false;
-      }
-      chunks.set(key, ok);
-    }
-    return ok;
-  };
-  frame = { sec, p0, size, a, mid, beamY, loadedAt };
-  return frame;
-}
-
-/**
- * For each player in the Overworld within MAX_SEE of it and not deep underground: every dot of the arc (while
- * the rainbow lasts) and of the beam (until the pot is found or expires), at its real spot when close or as a
- * stand-in on the same line of sight. Dots whose spot isn't loaded are skipped.
- * @param {Pot} p0 @param {boolean} even this second also redraws the dots at their real spots
- * @param {Player[]} [players] the players to draw it for (default: everyone in the Overworld)
- */
-function draw(p0, even, players) {
+/** @param {Pot} p0 */
+function watch(p0) {
+  if (Date.now() >= p0.until) return;
   const dim = overworld();
-  const now = Date.now();
-  const sky = now < p0.until, beam = !p0.found && now < p0.expires;
-  const { size, a, mid, beamY, loadedAt } = frameFor(p0, dim);
-  const vars = molang();
-  for (const player of players ?? dim.getPlayers()) {
+  for (const player of dim.getPlayers()) {
+    if (saw.has(player.id)) continue;
     try {
       const l = player.location;
-      if (Math.hypot(l.x - mid.x, l.z - mid.z) > MAX_SEE) continue;
+      if (Math.hypot(l.x - (p0.x + 0.5), l.z - (p0.z + 0.5)) > MAX_SEE) continue;
       const top = topAt(dim, l.x, l.z);
       if (top && top.location.y - l.y > MAX_HEADROOM) continue; // far underground
-      const eye = { x: l.x, y: l.y + EYE, z: l.z };
-      const bold = boldness(eye, mid);
-      let drawn = 0;
-      /** @param {string} id @param {import("./sky.js").Vec & { k: number }} at */
-      const spawn = (id, at) => {
-        if (at.y < -63 || at.y > 319 || !loadedAt(at.x, at.z)) return;
-        try {
-          player.spawnParticle(id, { x: at.x, y: at.y, z: at.z }, vars);
-          drawn++;
-        } catch {
-          // not loaded after all
-        }
-      };
-      if (sky) {
-        for (const dot of arcDots(a, size, bold)) {
-          const at = toward(eye, dot);
-          if (at.k === 1 && !even) continue; // still showing from last second
-          const c = COLORS[dot.band];
-          vars.setFloat("variable.size", dot.r * at.k);
-          vars.setFloat("variable.life", at.k === 1 ? LIFE_REAL : LIFE_NEAR);
-          vars.setFloat("variable.cr", c[0]);
-          vars.setFloat("variable.cg", c[1]);
-          vars.setFloat("variable.cb", c[2]);
-          spawn(BAND, at);
-        }
-      }
-      if (beam) {
-        for (const seg of beamSegments(a, beamY, size, bold)) {
-          const at = toward(eye, seg);
-          if (at.k === 1 && !even) continue;
-          vars.setFloat("variable.size", seg.w * at.k);
-          vars.setFloat("variable.height", seg.hh * at.k);
-          vars.setFloat("variable.alpha", seg.alpha);
-          vars.setFloat("variable.life", at.k === 1 ? LIFE_REAL : LIFE_NEAR);
-          spawn(BEAM, at);
-        }
-      }
-      if (sky && drawn && !saw.has(player.id)) {
-        saw.add(player.id);
-        system.sendScriptEvent("realm:journal", JSON.stringify({ player: player.id, page: "weather", entry: "rainbow", label: "Rainbow" }));
-      }
+      saw.add(player.id);
+      system.sendScriptEvent("realm:journal", JSON.stringify({ player: player.id, page: "weather", entry: "rainbow", label: "Rainbow" }));
     } catch (e) {
       console.warn(`[rainbow] ${e}`);
     }
@@ -430,7 +320,8 @@ function draw(p0, even, players) {
 // The pot of gold
 // ---------------------------------------------------------------------------
 
-// Every second: place the chest when someone gets close, see who reaches it first, expire it.
+// Every second: Journal entries for who sees the rainbow, place the chest when someone gets close, see who reaches
+// it first, expire it.
 system.runInterval(() => {
   load();
   if (!loaded) return;
@@ -442,6 +333,7 @@ system.runInterval(() => {
       expire(p0);
       return;
     }
+    watch(p0);
     if (p0.found) return;
     for (const player of overworld().getPlayers()) {
       const l = player.location;
@@ -508,10 +400,9 @@ function* placePot(p0) {
       p0.x = x;
       p0.z = z;
       p0.y = spot.location.y;
-      p0.by = p0.y; // the arc's foot (and the beam) move onto the chest
-      p0.ground = true;
       p0.placed = true;
       savePot();
+      broadcastPot(); // the chest may stand up to SPOT_RADIUS from the end
       return;
     }
     // No safe spot: the pot of gold is still there to find, and its loot goes straight to the finder. Its height
@@ -557,6 +448,7 @@ function fill(container) {
 function find(p0, player) {
   p0.found = player.name;
   savePot();
+  broadcastPot();
   const crowns = get("crowns");
   if (crowns > 0 && addCrowns(player, crowns)) player.sendMessage(`§6+${crowns} Crowns §7(Pot of gold)`);
   if (p0.missed) {
@@ -613,6 +505,7 @@ function expire(p0) {
   if (pot === p0) {
     pot = undefined;
     savePot();
+    broadcastPot();
   }
 }
 
@@ -630,8 +523,8 @@ function describe(player) {
   if (!player || player.dimension.id !== OVERWORLD) return now < p0.until ? "There's a rainbow in the Overworld." : "A pot of gold is still out there in the Overworld.";
   const dir = compass(p0.x + 0.5 - player.location.x, p0.z + 0.5 - player.location.z);
   return now < p0.until
-    ? `§eA rainbow is up! Its end is somewhere to the ${dir}, under a golden beam.`
-    : `§eThe rainbow has faded, but its pot of gold is still out there, somewhere to the ${dir}, under a golden beam.`;
+    ? `§eA rainbow is up! Its pot of gold is somewhere to the ${dir} (the rainbow on your compass).`
+    : `§eThe rainbow has faded, but its pot of gold is still out there, somewhere to the ${dir} (the rainbow on your compass).`;
 }
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
@@ -712,6 +605,10 @@ function skyRequest(message) {
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "rainbow_bp");
+    else if (id === "realm:rainbow_ping") {
+      load();
+      broadcastPot();
+    }
     else if (id === "realm:sky_request") {
       try {
         skyRequest(message);

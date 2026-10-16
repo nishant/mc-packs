@@ -1,22 +1,33 @@
-// Rainbows: forced rainbow, fixed anchor, drawing, restart, the race for the pot, the beam until found, a second
-// player too late, a safe zone at the end, no spot at all. Needs a copy of rainbow_bp with a test hook (packs can't
-// read each other's dynamic properties, and particles aren't relayed):
+// Rainbows: forced rainbow, fixed end, restart, the race for the pot, a second player too late, a safe zone at the
+// end, no spot at all; nothing drawn (no particles), and the realm:rainbow_pot broadcasts for the Minimap follow
+// the pot (its spot while unfound, {} once found). Needs a copy of rainbow_bp with a test hook (packs can't read
+// each other's dynamic properties):
 //   mkdir -p /tmp/rb && cp -r packs/rainbow_bp /tmp/rb/
 //   append to /tmp/rb/rainbow_bp/scripts/main.js: a wrapper around Player.prototype.spawnParticle that counts
 //   calls per `${player.name}/${id}`, and a scriptEventReceive handler (namespace "rvtest") that answers
 //   rvtest:pot with rvtest:pot_r {pot, counts, busy}
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/rb --scenario tools/test-bds/examples/rainbow-race.js --timeout 400
-const BAND = "realm:sky_rainbow_band";
-const BEAM = "realm:sky_rainbow_beam";
 
 export default async function (t) {
   const sys = t.mc.system;
   const dim = t.dimension;
   const box = { r: undefined, acks: new Set() };
+  /** realm:rainbow_pot messages so far @type {any[]} */
+  const pots = [];
   sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
     if (id === "rvtest:pot_r") box.r = JSON.parse(message);
     else if (id === "realm:cfg_ack") box.acks.add(JSON.parse(message).id);
+    else if (id === "realm:rainbow_pot") pots.push(JSON.parse(message));
   }, { namespaces: ["rvtest", "realm"] });
+  const lastPot = () => pots[pots.length - 1];
+  /** Pings for the Minimap's view of the pot and returns the answer. */
+  async function ping() {
+    const n = pots.length;
+    sys.sendScriptEvent("realm:rainbow_ping", "");
+    await t.waitUntil(() => pots.length > n, { timeout: 20, message: "rainbow_pot answer" });
+    return lastPot();
+  }
+  const particles = (counts) => Object.values(counts ?? {}).reduce((a, b) => a + b, 0);
   async function state() {
     box.r = undefined;
     sys.sendScriptEvent("rvtest:pot", "");
@@ -45,13 +56,15 @@ export default async function (t) {
     const s0 = await state();
     const p0 = s0.pot;
     t.assert(p0 && !p0.placed, "a pot");
-    t.log(`pot ${p0.x}, ${p0.z} ang ${p0.ang.toFixed(2)} by ${p0.by}; ${Math.round(Math.hypot(p0.x - a.location.x, p0.z - a.location.z))} blocks away`);
-    t.check((s0.counts[`Ann/${BAND}`] ?? 0) > 100 && (s0.counts[`Ann/${BEAM}`] ?? 0) > 0, `drawn for Ann: ${JSON.stringify(s0.counts)}`);
+    t.log(`pot ${p0.x}, ${p0.z}; ${Math.round(Math.hypot(p0.x - a.location.x, p0.z - a.location.z))} blocks away`);
+    t.check(p0.ang === undefined && p0.by === undefined && p0.ground === undefined, `no arc fields saved: ${JSON.stringify(p0)}`);
+    t.check(particles(s0.counts) === 0, `nothing drawn: ${JSON.stringify(s0.counts)}`);
+    t.check(lastPot()?.x === p0.x && lastPot()?.z === p0.z && lastPot()?.dim === "minecraft:overworld", `rainbow_pot when it appeared: ${JSON.stringify(lastPot())}`);
     // Walk halfway: the anchor doesn't move.
     tp(a, await goNear(Math.round((a.location.x + p0.x) / 2), Math.round((a.location.z + p0.z) / 2)));
     await t.seconds(3);
     const p1 = (await state()).pot;
-    t.check(p1.x === p0.x && p1.z === p0.z && p1.ang === p0.ang && p1.id === p0.id, "anchor fixed while walking");
+    t.check(p1.x === p0.x && p1.z === p0.z && p1.id === p0.id, "end fixed while walking");
     t.world.setDynamicProperty("rv:pot", JSON.stringify(p1));
     t.restart("restart with a rainbow up");
     return;
@@ -65,13 +78,12 @@ export default async function (t) {
   let s = await state();
   t.check(s.pot && s.pot.id === before.id && s.pot.x === before.x && s.pot.z === before.z, "the same pot after the restart");
   const p0 = s.pot;
-  // Beam only once the rainbow has faded (30 s after it appeared).
+  let m = await ping();
+  t.check(m.x === p0.x && m.z === p0.z, `rainbow_pot after the restart: ${JSON.stringify(m)}`);
+  // Still on the compass once the rainbow has faded (30 s after it appeared), until it's found.
   await t.waitUntil(() => Date.now() > p0.until + 2000, { timeout: 900, message: "rainbow fades" });
-  const c1 = (await state()).counts;
-  await t.seconds(3);
-  const c2 = (await state()).counts;
-  t.check((c2[`Ann/${BAND}`] ?? 0) === (c1[`Ann/${BAND}`] ?? 0), "no rainbow dots after it faded");
-  t.check((c2[`Ann/${BEAM}`] ?? 0) > (c1[`Ann/${BEAM}`] ?? 0), "the beam still drawn after the rainbow faded");
+  m = await ping();
+  t.check(m.x === p0.x && m.z === p0.z, `rainbow_pot after the rainbow faded: ${JSON.stringify(m)}`);
 
   // The race: Ann gets close (chest placed), then reaches it.
   tp(a, await goNear(p0.x + 20, p0.z));
@@ -84,15 +96,15 @@ export default async function (t) {
   t.assert(placed, "the chest is placed (or missed) within 40 blocks");
   t.log(`pot ${placed.placed ? `chest at ${placed.x} ${placed.y} ${placed.z}` : "missed (no spot)"}`);
   if (placed.placed) t.check(dim.getBlock({ x: placed.x, y: placed.y, z: placed.z })?.typeId === "minecraft:chest", "chest in the world");
+  t.check(lastPot()?.x === placed.x && lastPot()?.z === placed.z, `rainbow_pot at the chest's spot: ${JSON.stringify(lastPot())}`);
   const ca = crowns(a), cb = crowns(b);
   let since = t.tick;
   tp(a, { x: placed.x + 1.5, y: (placed.y ?? 70) + 0.5, z: placed.z + 0.5 });
   await t.waitMessage(a, /Ann found the pot of gold/, { since, timeout: 60 });
   t.check(crowns(a) === ca + 50, `Ann +50 Crowns (${ca} -> ${crowns(a)})`);
-  const c3 = (await state()).counts;
-  await t.seconds(3);
-  const c4 = (await state()).counts;
-  t.check((c4[`Ann/${BEAM}`] ?? 0) === (c3[`Ann/${BEAM}`] ?? 0), "no beam after the pot was found");
+  await t.seconds(1);
+  t.check(lastPot()?.x === undefined, `rainbow_pot {} once found: ${JSON.stringify(lastPot())}`);
+  t.check((await ping()).x === undefined, "ping after found: {}");
   // Bea, too late.
   since = t.tick;
   tp(b, { x: placed.x - 0.5, y: (placed.y ?? 70) + 0.5, z: placed.z + 0.5 });
@@ -107,6 +119,8 @@ export default async function (t) {
   t.assert(t.cmd(a, "/realm:rainbow_now").ok, "second rainbow_now");
   await t.waitMessage(a, /A rainbow!/, { since, timeout: 60 });
   const q = (await state()).pot;
+  await t.seconds(1);
+  t.check(lastPot()?.x === q.x && lastPot()?.z === q.z, `rainbow_pot for the second pot: ${JSON.stringify(lastPot())}`);
   if (placed.placed) {
     await t.loadArea(placed.x, placed.z, { radius: 1 });
     t.check(dim.getBlock({ x: placed.x, y: placed.y, z: placed.z })?.typeId === "minecraft:chest", "the old chest with loot stays");
@@ -131,6 +145,8 @@ export default async function (t) {
   let gold = 0;
   for (let i = 0; i < invA.size; i++) if (invA.getItem(i)?.typeId === "minecraft:gold_ingot") gold += invA.getItem(i).amount;
   t.check(gold > goldBefore, `loot straight into the inventory (${goldBefore} -> ${gold} gold ingots)`);
+  t.check((await ping()).x === undefined, "no pot on the compass after the second find");
+  t.check(particles((await state()).counts) === 0, "still nothing drawn");
 
   // A zone over everything near the player: no rainbow at all.
   sys.sendScriptEvent("realm:zones", JSON.stringify({ src: "rvtest", part: 1, parts: 1, zones: [{ dim: "minecraft:overworld", x: Math.round(a.location.x), z: Math.round(a.location.z), r: 400 }] }));
