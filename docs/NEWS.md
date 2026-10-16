@@ -6,6 +6,10 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## More houses found
+
+- Operators: /realm:npc_houses now finds houses with a porch roof, an awning or eaves over the front door, and neighbors' doors on a tight street count as separate houses.
+
 ## Story together
 
 - Parties: one of you accepts a story chapter and it's accepted for the whole party. Mates see the conversation in a popup, and chat lists the steps.
