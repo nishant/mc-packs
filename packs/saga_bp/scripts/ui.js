@@ -1426,7 +1426,7 @@ export async function showMenu(player) {
     const actions = [
       [`Current quests (${current.length + active.filter((e) => e.fav).length})`, () => currentPage(player)],
       [`Available (${available.length})`, () => availablePage(player)],
-      [`Finished (${done.length})`, () => finishedPage(player)],
+      [`Finished (${done.length} ${done.length === 1 ? "story" : "stories"}, ${questsDone(saga)} quests)`, () => finishedPage(player)],
       [`Codex (${saga.cx?.length ?? 0})`, () => codexPage(player)],
     ];
     if (favorsOn) actions.push(["Daily favors", () => favorsPage(player)]);
@@ -1495,25 +1495,45 @@ async function availablePage(player) {
   await show(player, new ActionFormData().title("Available").body(lines.join("\n")).button("Back"));
 }
 
-/** Finished stories with the choices made. @param {Player} player */
+/** Quests (story chapters) finished, in every story, finished or not. @param {Saga} saga */
+function questsDone(saga) {
+  let n = 0;
+  for (const story of ORDERED) n += story.chapters.filter((c) => saga.s[story.id]?.dn.includes(c.id)).length;
+  return n;
+}
+
+/**
+ * Finished: two sections on one page. Stories finished to the end, with how they ended; then Quests, the chapters
+ * finished in stories still going. Each opens its chapters and the choices made.
+ * @param {Player} player
+ */
 async function finishedPage(player) {
   while (player.isValid) {
     const { saga, done } = sortStories(player);
-    if (!done.length) {
-      await show(player, new ActionFormData().title("Finished").body("No story finished yet.").button("Back"));
-      return;
-    }
-    const form = new ActionFormData().title("Finished").body("Stories you've finished, and how they ended.");
+    const going = ORDERED.filter((s) => !done.includes(s) && s.chapters.some((c) => saga.s[s.id]?.dn.includes(c.id)));
+    const quests = questsDone(saga);
+    const form = new ActionFormData().title("Finished").body(`${done.length} ${done.length === 1 ? "story" : "stories"} and ${quests} quest${quests === 1 ? "" : "s"} finished.${saga.wn ? ` Strangers' requests done: ${saga.wn}.` : ""}`);
+    form.header(`Stories (${done.length})`);
+    if (!done.length) form.label("§7No story finished to the end yet.");
     for (const s of done) form.button(`${s.title}\n§8${choicesMade(s, saga.s[s.id]).length} choices made`);
+    form.header(`Quests (${quests})`);
+    if (!going.length && !done.length) form.label("§7No quest finished yet. Each chapter of a story you finish shows here.");
+    else if (!going.length) form.label("§7Every quest you finished is part of a story above.");
+    for (const s of going) {
+      const n = s.chapters.filter((c) => saga.s[s.id].dn.includes(c.id)).length;
+      form.button(`${s.title}\n§8${n} of ${s.chapters.length} quests done`);
+    }
     form.button("Back");
     const res = await show(player, form);
-    if (!res || res.canceled || res.selection === undefined || res.selection >= done.length) return;
-    const s = done[res.selection];
+    const list = [...done, ...going];
+    if (!res || res.canceled || res.selection === undefined || res.selection >= list.length) return;
+    const s = list[res.selection];
     const st = saga.s[s.id];
     const made = choicesMade(s, st);
     const chapters = s.chapters.filter((c) => st.dn.includes(c.id)).map((c) => `§a- ${c.title}§r`);
-    const body = [toneTags(s), "", "§lChapters§r", ...(chapters.length ? chapters : ["§7(all of them)"]), "", "§lYour choices§r", ...(made.length ? made.map((m) => `§7${m}`) : ["§7No choices in this story."])];
-    if (made.length) body.push("", `§fThe ending: §e${made[made.length - 1].split(": ").slice(1).join(": ")}`);
+    const ended = done.includes(s);
+    const body = [toneTags(s), "", ended ? "§lChapters§r" : `§lQuests done (${chapters.length} of ${s.chapters.length})§r`, ...(chapters.length ? chapters : ["§7(all of them)"]), "", "§lYour choices§r", ...(made.length ? made.map((m) => `§7${m}`) : ["§7No choices made yet."])];
+    if (ended && made.length) body.push("", `§fThe ending: §e${made[made.length - 1].split(": ").slice(1).join(": ")}`);
     await show(player, new ActionFormData().title(s.title).body(body.join("\n")).button("Back"));
   }
 }

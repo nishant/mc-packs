@@ -6,6 +6,10 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Your finished quests
+
+- /realm:saga -> Finished now has two sections: Stories you finished to the end, and Quests, every chapter you finished in stories still going. No more "0 finished" after a dozen quests.
+
 ## More houses found
 
 - Operators: /realm:npc_houses now finds houses with a porch roof, an awning or eaves over the front door, and neighbors' doors on a tight street count as separate houses.
