@@ -6,6 +6,11 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Storm watch
+
+- Story steps that need a storm or rain (like The Storm Vigil) now say so in the quest box: the seconds still needed, and when the next storm is due.
+- Operators: /weather gets put back by the Weather Almanac. You now get a chat line when that happens. Use /realm:weather_set instead.
+
 ## Home in town
 
 - Townsfolk now live in the houses of the town: right outside their front door by day, inside at night. They stroll a few steps around and stop when you walk up to talk.

@@ -623,6 +623,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   system.runTimeout(scanPacks, 60);
   system.runTimeout(() => send("realm:calendar_ping", {}), 80); // the calendar's live flags, if Townsfolk (or Realm Calendar) is here
   system.runTimeout(() => send("realm:calling_ping", {}), 90); // Callings (Skills), for The Calling
+  system.runTimeout(() => send("realm:weather_ask", {}), 95); // the Weather Almanac's plan, for "due in" times
   system.runTimeout(() => {
     for (const p of world.getAllPlayers()) sendSeals(p, true);
   }, 100);
