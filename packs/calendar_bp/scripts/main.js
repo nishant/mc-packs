@@ -1352,6 +1352,50 @@ async function circleSpot(dim, x, z) {
   return { x, y: y0, z };
 }
 
+/** Ticking areas that load the circles' ground (a town's safe zone pushes them past what players keep loaded). */
+const AREA_SLOTS = 3;
+const areaName = (/** @type {number} */ i) => `realm_siege_${i}`;
+/** Some of the siege's ticking areas may be up (true after a load: one may be left from before a restart). */
+let areasUp = true;
+/** @param {Dimension} dim @param {string} command */
+function tryCommand(dim, command) {
+  try {
+    return dim.runCommand(command).successCount > 0;
+  } catch {
+    return false;
+  }
+}
+/** @param {Dimension} dim @param {number} x @param {number} z */
+function isLoaded(dim, x, z) {
+  try {
+    // getTopmostBlock can answer before the chunk ticks (air at the top of the world): the block under it must read too.
+    const top = dim.getTopmostBlock({ x, z });
+    return !!top && !top.isAir && !!dim.getBlock({ x, y: top.y - 1, z });
+  } catch {
+    return false;
+  }
+}
+/** Loads the ground around x, z with ticking area `i` (2 chunks around) and waits up to 15 seconds for it. @param {Dimension} dim @param {number} i @param {number} x @param {number} z */
+async function loadGround(dim, i, x, z) {
+  x = Math.floor(x);
+  z = Math.floor(z);
+  if (isLoaded(dim, x, z) && isLoaded(dim, x + 24, z + 24) && isLoaded(dim, x - 24, z - 24)) return true;
+  tryCommand(dim, `tickingarea remove ${areaName(i)}`);
+  if (!tryCommand(dim, `tickingarea add circle ${x} 64 ${z} 2 ${areaName(i)} true`)) console.warn(`[calendar] tickingarea add ${areaName(i)} failed (10 ticking areas already?)`);
+  areasUp = true;
+  for (let k = 0; k < 30; k++) {
+    await system.waitTicks(10);
+    if (isLoaded(dim, x, z) && isLoaded(dim, x + 24, z + 24) && isLoaded(dim, x - 24, z - 24)) return true;
+  }
+  return isLoaded(dim, x, z);
+}
+/** @param {number} [i] one slot, or every slot */
+function dropAreas(i) {
+  const dim = world.getDimension(OVERWORLD);
+  for (let k = 0; k < AREA_SLOTS; k++) if (i === undefined || i === k) tryCommand(dim, `tickingarea remove ${areaName(k)}`);
+  if (i === undefined) areasUp = false;
+}
+
 /** Why spots were turned down while the circles rose (for the content log when none fit). @type {Record<string, number>} */
 let spotRejects = {};
 
@@ -1437,6 +1481,8 @@ function writePending(list) {
 
 /** Every 10 seconds: circles left over from before (a restart, an unloaded spot) are put back once loaded. */
 function restorePending() {
+  // Once no siege runs and every circle is put back, its ticking areas go.
+  if (!siege && areasUp && !pendingCache.length) dropAreas();
   if (!pendingCache.length) return;
   for (const r of [...pendingCache]) {
     if (siege && siege.c.some((c) => c.snap === r[0])) continue;
@@ -1473,7 +1519,11 @@ function spawnChoir(dim, c, i, type, singer) {
   try {
     const top = dim.getTopmostBlock(at);
     const y = top && waterOver(top) === undefined && Math.abs(top.y - c.y) < 5 ? top.y + 1 : c.y;
-    const e = dim.spawnEntity(/** @type {any} */ (type), { x: at.x, y, z: at.z });
+    // A world whose entity ids repeat (an old level.dat put back) can hand back another entity: leave that one alone
+    // and spawn again (the next id is usually free).
+    let e = dim.spawnEntity(/** @type {any} */ (type), { x: at.x, y, z: at.z });
+    for (let k = 0; k < 8 && e.typeId !== type; k++) e = dim.spawnEntity(/** @type {any} */ (type), { x: at.x, y, z: at.z });
+    if (e.typeId !== type) return;
     e.addTag(SIEGE_TAG);
     e.addTag(`realm:siege_${siege.id}`);
     e.addTag(`realm:siege_c${i}`);
@@ -1510,13 +1560,22 @@ async function raiseCircles() {
     if (c) circles.push(c);
     return !!c;
   };
-  // Three ways around the town, 48 to 96 blocks out (each further try a little closer in).
-  for (let i = 0; i < 3; i++) {
-    for (let k = 0; k < 16; k++) {
-      const a = base + (i * Math.PI * 2) / 3 + (Math.random() - 0.5) * 0.9;
-      const d = Math.max(24, 48 - k * 2) + Math.random() * 48;
-      if (await tryAt(s.town.x + Math.cos(a) * d, s.town.z + Math.sin(a) * d)) break;
+  // Three ways around the town, 48 to 96 blocks out, or just past its safe zone. Nobody may be out there to keep
+  // the ground loaded (players keep about 4 chunks around them), so a ticking area loads it first.
+  for (let i = 0; i < 3 && siege === s; i++) {
+    const a = base + (i * Math.PI * 2) / 3;
+    const d = 48 + Math.random() * 48;
+    const out = escapeZones(OVERWORLD, s.town.x + Math.cos(a) * d, s.town.z + Math.sin(a) * d, 10);
+    if (!out || Math.hypot(out.x - s.town.x, out.z - s.town.z) > 180) continue;
+    const had = circles.length;
+    if (await loadGround(dim, i, out.x, out.z)) {
+      for (let k = 0; k < 24 && siege === s; k++) {
+        const r = k === 0 ? 0 : 4 + Math.random() * 18;
+        const b = Math.random() * Math.PI * 2;
+        if (await tryAt(out.x + Math.cos(b) * r, out.z + Math.sin(b) * r)) break;
+      }
     }
+    if (circles.length === had) dropAreas(i);
   }
   // Too built up (or too far from anyone, in unloaded ground): around the players near the town instead, where
   // the ground is loaded, still within 180 blocks of the town.

@@ -6,6 +6,13 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Sieges that come, and steady rain
+
+- The Gray Choir no longer scatters for want of "open ground". Its circles rise just outside a town's safe zone, about 110 blocks from Lanternford, and nobody was out there to load that ground. Now the Choir loads it itself, so the next siege night really comes.
+- The Choir's pillagers gather as you walk up to a circle. Its Singer waits there from the start.
+- Rain no longer cuts out and comes back as you pass under an awning, a doorway or a lamp. It goes muffled only once you've been under a roof for about 2 seconds.
+- On phones and tablets, the indoor rain, wind and thunderstorm sounds no longer drop out for 20 seconds at a time.
+
 ## Townsfolk stay home
 
 - Every townsfolk now lives in a house of their own and stays inside it, day and night. No more wandering off, no more lunch or evening trips: knock on their door and they are there, facing you.

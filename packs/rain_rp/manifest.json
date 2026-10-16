@@ -4,7 +4,7 @@
     "name": "Realistic Rain",
     "description": "Thicker, heavier blue rain, the realm's own rain and thunderstorm recordings, gloomier rain fog, softer splashes, plus heavier snowflakes and a whiter snow fog in snowy biomes. Put it at the top of Resource Packs.",
     "uuid": "7ebf32a5-cfd1-4bdc-b5b4-38e869345cda",
-    "version": [1, 4, 2],
+    "version": [1, 4, 3],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
