@@ -33,7 +33,7 @@ import { allZones, pingZones } from "./zones.js";
 
 const TITLE = "Realm Configuration";
 const RECENT_PROP = "admin:recent";
-const LORE = ["§r§7Use it to open the realm menu:", "§r§7every realm command you can use,", "§r§7in one place.", "§r§8Gold entries: operators only"];
+const LORE = ["§r§7Hold it in your hand and use it", "§r§7to open the realm menu:", "§r§7every realm command you can use,", "§r§7in one place.", "§r§8Gold entries: operators only"];
 const MARK = /** @type {string} */ (LORE.at(-1));
 /** The last lore line of items handed out before the menu was for everyone: still the real item. */
 const OLD_MARK = "§r§8Operators only";
