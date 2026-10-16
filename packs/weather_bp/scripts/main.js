@@ -4,8 +4,9 @@ import { CONFIG } from "./config.js";
 import { get, getFor, onChange } from "./settings.js";
 
 // The plan is a list of spells in real time: world property "weather:plan" -> JSON
-// { v: 1, s: [{ w: "Clear" | "Rain" | "Thunder", s: start ms, e: end ms }] }, the first one being now.
+// { v: 2, s: [{ w: "Clear" | "Rain" | "Thunder", s: start ms, e: end ms }] }, the first one being now.
 const PROP_PLAN = "weather:plan";
+const PLAN_V = 2;
 const PROP_WEATHER = "weather:weather"; // world: overworld weather at the last change; scripts can't read the current weather
 const PROP_CYCLE = "weather:cycle"; // world: doWeatherCycle as it was before the almanac took over; unset = not taken over
 const PROP_DAY = "weather:day"; // player: UTC day number of the last daily forecast in chat
@@ -71,6 +72,8 @@ function loadPlan() {
         if (x && isKind(x.w) && Number.isFinite(x.s) && Number.isFinite(x.e) && x.e > x.s) spells.push({ w: x.w, s: x.s, e: x.e });
       }
       spells.sort((a, b) => a.s - b.s);
+      // A plan made with older defaults (v 1: clear spells of 20-60 minutes) keeps only the spell on now.
+      if (parsed.v !== PLAN_V) spells = spells.slice(0, 1);
     }
   } catch {
     console.warn("[weather] weather:plan is corrupt; planning again");
@@ -80,7 +83,7 @@ function loadPlan() {
 
 function savePlan() {
   try {
-    world.setDynamicProperty(PROP_PLAN, spells.length ? JSON.stringify({ v: 1, s: spells }) : undefined);
+    world.setDynamicProperty(PROP_PLAN, spells.length ? JSON.stringify({ v: PLAN_V, s: spells }) : undefined);
   } catch (e) {
     console.warn(`[weather] ${e}`);
   }

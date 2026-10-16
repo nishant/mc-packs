@@ -5404,7 +5404,7 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 ### What players see
 
 - **The weather follows a plan**, 3 hours ahead (`horizonHours`), in real time:
-  - **Clear** spells last 20 to 60 minutes (`clear.minMinutes`, `clear.maxMinutes`) and always end in rain, or, one time in ten (`thunderAfterClear`, 0.1), straight in a thunderstorm.
+  - **Clear** spells last 30 to 90 minutes (`clear.minMinutes`, `clear.maxMinutes`) and always end in rain, or, one time in ten (`thunderAfterClear`, 0.1), straight in a thunderstorm.
   - **Rain** lasts 8 to 20 minutes (`rain.minMinutes`, `rain.maxMinutes`), then clears, or builds into a thunderstorm 35% of the time (`thunderAfterRain`).
   - **Thunderstorms** last 6 to 12 minutes (`thunder.minMinutes`, `thunder.maxMinutes`), then clear, or ease back into rain half the time (`rainAfterThunder`).
   - Each length is picked at random between its shortest and longest.
@@ -5428,8 +5428,8 @@ Plans the overworld weather hours ahead, so the realm has a forecast: clear spel
 | `enabled` | `true` | The almanac runs the overworld weather: it sets the `doWeatherCycle` gamerule to false and plays its plan. Disabled, it puts the gamerule back how it was before and the game's weather takes over |
 | `storyEvents` | `true` | Story Questlines can ask for rain or a thunderstorm when a story step needs one (`realm:sky_request` kinds `rain`, `thunder`): it's planned to start within 8 minutes for 6 minutes and shows in the forecast, then the plan carries on. Not when that weather is already here or planned that soon; at most one every 20 minutes |
 | `horizonHours` | `3` | How far ahead the plan reaches, in real hours. The forecast shows this far |
-| `clear.minMinutes` | `20` | Shortest clear spell, in real minutes |
-| `clear.maxMinutes` | `60` | Longest clear spell, in real minutes |
+| `clear.minMinutes` | `30` | Shortest clear spell, in real minutes |
+| `clear.maxMinutes` | `90` | Longest clear spell, in real minutes |
 | `rain.minMinutes` | `8` | Shortest rain, in real minutes |
 | `rain.maxMinutes` | `20` | Longest rain, in real minutes |
 | `thunder.minMinutes` | `6` | Shortest thunderstorm, in real minutes |
@@ -5446,7 +5446,7 @@ Operators can change `enabled`, `storyEvents`, every `.minMinutes` and `.maxMinu
 
 | Key | Scope | Contents |
 |---|---|---|
-| `weather:plan` | World | JSON `{ v: 1, s: [{ w, s, e }] }`: the plan, each spell's weather (`Clear`, `Rain` or `Thunder`) and its start and end (ms since 1970). The first one is now |
+| `weather:plan` | World | JSON `{ v: 2, s: [{ w, s, e }] }`: the plan, each spell's weather (`Clear`, `Rain` or `Thunder`) and its start and end (ms since 1970). The first one is now. A plan saved by an older version (`v: 1`, made with the old 20-60 minute clear spells) keeps only the spell on now and is planned again after it |
 | `weather:weather` | World | The overworld weather at the last change. The stable Script API can't read the current weather |
 | `weather:cycle` | World | The `doWeatherCycle` gamerule as it was before the almanac took over, put back when it's disabled. Not set while the almanac isn't running |
 | `weather:day` | Player | The UTC day number of the player's last daily forecast |
