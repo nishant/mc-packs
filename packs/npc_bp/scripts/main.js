@@ -49,6 +49,7 @@ const OFFER_TICKS = 4; // how long other packs have to answer realm:npc_talk
 const MAX_OFFERS = 16;
 const TAP_COOLDOWN = 10;
 const MOVE_DISTANCE = 1.5; // farther than this from where it belongs, an NPC is teleported back
+const SPOT_CLEAR = 0.9; // someone within this of an NPC's spot: it isn't put back there until they move off
 const TURN_STEP = 45; // degrees an NPC turns per loop at most, so it turns rather than snaps
 const TURN_MIN = 4; // smaller differences aren't worth a teleport
 
@@ -576,6 +577,21 @@ function checkMissing(rec, t) {
 // Behavior: turning, idle lines, the routine
 // ---------------------------------------------------------------------------
 
+/**
+ * Is someone else standing on an NPC's spot (a player, another townsfolk, a mob)? Putting the NPC back there would
+ * push them apart and pop it up, again and again, so it waits beside the spot until they move off.
+ * @param {Entity} entity @param {Vector3} at
+ */
+function occupied(entity, at) {
+  try {
+    return entity.dimension
+      .getEntities({ location: at, maxDistance: SPOT_CLEAR })
+      .some((e) => e.id !== entity.id && Math.abs(e.location.y - at.y) < 2 && e.hasComponent("minecraft:health"));
+  } catch {
+    return false;
+  }
+}
+
 /** Turns (a step) toward `yaw`, staying where it belongs. @param {Entity} entity @param {State} st @param {Vector3} at @param {number} yaw @param {boolean} snap */
 function turn(entity, st, at, yaw, snap) {
   const current = st.yaw ?? entity.getRotation().y;
@@ -586,7 +602,7 @@ function turn(entity, st, at, yaw, snap) {
   // Nudged a little: back onto its spot while turning. Far from it (home not loaded yet): turn in place, never
   // teleport into a spot that may not be loaded.
   const d = dist(loc, at);
-  entity.teleport(d > 0.3 && d <= MOVE_DISTANCE ? at : loc, { rotation: { x: 0, y: next } });
+  entity.teleport(d > 0.3 && d <= MOVE_DISTANCE && !occupied(entity, at) ? at : loc, { rotation: { x: 0, y: next } });
   st.yaw = next;
 }
 
@@ -617,8 +633,8 @@ function behave(rec, t, entity, lively) {
   const dim = world.getDimension(rec.dim);
   const at = anchorOf(rec);
   if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
-    // Pushed, moved by someone, or time to go home or back to its post. Only into a loaded spot.
-    if (loaded(dim, at)) {
+    // Pushed, moved by someone, or time to go home or back to its post. Only into a loaded spot nobody stands on.
+    if (loaded(dim, at) && !occupied(entity, at)) {
       const up = liftSaved(rec) ? anchorOf(rec) : at;
       entity.teleport(up, { dimension: dim, rotation: { x: 0, y: rec.yaw } });
       st.yaw = rec.yaw;

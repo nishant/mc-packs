@@ -6,8 +6,9 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
-## Tidier tracker
+## Townsfolk stay put
 
+- Townsfolk no longer hop up and down when you stand in their spot: they wait beside it until you step off.
 - The story tracker box never gets cut off: long steps end with "..." and extra steps show as "+2 more". /realm:saga has the full text.
 
 ## Counting down

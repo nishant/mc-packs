@@ -2010,7 +2010,7 @@ Twelve named townsfolk that operators place around town: Mara the Cartographer, 
 
 ### What players see
 
-- **The NPCs** show their name in yellow and their trade in gray above their heads (`Mara the Cartographer`). They can't be hurt, pushed away or led off: one that's moved is put back at its spot.
+- **The NPCs** show their name in yellow and their trade in gray above their heads (`Mara the Cartographer`). They can't be hurt, pushed away or led off: one that's moved is put back at its spot, once nobody is standing on it (a player, another townsfolk or a mob within 0.9 blocks of the spot): until then it waits beside it, so it doesn't bounce off whoever is in the way.
 - **Turning:** a townsfolk turns, in steps, toward the nearest player within 8 blocks (`faceRange`), and back to the way it was placed when nobody is near.
 - **Idle lines:** every 30 to 60 seconds (`idleMinSeconds`, `idleMaxSeconds`), if a player is within 12 blocks (`idleRange`), the NPC's name turns into a line for 3 seconds (`speechSeconds`), like a speech bubble. Mostly its own chatter, sometimes a remark about the time of day or the weather.
 - **Greetings** in the menu fit the moment: morning, day, evening or night, or the rain or a thunderstorm (in the Overworld). `{player}` in a line is your name.
