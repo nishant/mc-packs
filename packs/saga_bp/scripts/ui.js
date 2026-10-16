@@ -984,13 +984,18 @@ export function track(player, list, shown = true) {
   let shownE;
   /** @type {Pointed | undefined} */
   let target;
+  /** @type {{ e: Entry, text: string }[]} the other quests going, each with its own tracker line */
+  const others = [];
   for (const e of sorted) {
     const text = trackLine(player, e, saga);
     if (!text) continue;
+    if (shownE) {
+      others.push({ e, text });
+      continue;
+    }
     line = text;
     shownE = e;
     target = pointed ? { ...pointed, label: `${e.story.short}: ${pointed.label}` } : undefined;
-    break;
   }
   sendTrack(player, target);
   if (!shown || !line || !shownE) return;
@@ -999,7 +1004,7 @@ export function track(player, list, shown = true) {
   // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or our Side HUD box (realm:side).
   const where = getFor(player, "trackerAt");
   if (where === "hotbar" ? system.currentTick < (holdUntil.get(player.id) ?? 0) : side.taken(player, where)) return;
-  showLine(player, isSlot(where) ? questBox(shownE, saga, line) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
+  showLine(player, isSlot(where) ? questBox(shownE, saga, line, others) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
 }
 
 /** A Side HUD box: 200 x 60 pixels of the default font, about 32 characters a row and 6 rows; more gets cut off. */
@@ -1038,32 +1043,43 @@ function fitRows(line, rows) {
 }
 
 /**
- * The tracker in a Side HUD box: a small quest log. The quest's name in aqua, the step the tracker points at in white,
- * then the chapter's other open steps in gray (each counting down). Laid out to fit the box: the name takes a row, the
- * step up to 3, each other step up to 2, cut at a word with "..." when longer, and the last row says "+2 more" when
- * steps don't fit (in rows, or in the box's 159 bytes).
+ * The tracker in a Side HUD box: a small quest log. The followed quest's name in aqua and the step the tracker points
+ * at in white; then every other quest going, one row each (its name in dark aqua and its own next step in gray);
+ * then, with room left, the followed chapter's other open steps in gray (each counting down). Laid out to fit the
+ * box: the name takes a row, the step up to 3 (2 when other quests follow), each other step up to 2, cut at a word
+ * with "..." when longer, and the last row says "+2 more" when quests or steps don't fit (in rows, or in the box's
+ * bytes).
  * @param {Entry} e @param {Saga} saga @param {string} first the tracker's line for the quest
+ * @param {{ e: Entry, text: string }[]} [others] the other quests going, with their tracker lines
  */
-function questBox(e, saga, first) {
+function questBox(e, saga, first, others = []) {
   const head = fitRows(`§b${e.story.short}§r`, 1);
-  const main = fitRows(first, Math.min(3, BOX_ROWS - 1));
+  const main = fitRows(first, Math.min(others.length ? 2 : 3, BOX_ROWS - 1));
   const lines = [head, main];
   let used = rowsOf(head) + rowsOf(main);
-  if (chapterDone(e, saga)) return clipTo(lines.join("\n"), TEXT_BYTES);
-  const rest = /** @type {string[]} */ ([]);
-  e.chapter.objectives.forEach((obj, i) => {
-    if (obj.optional || !active(e, i, saga)) return;
-    const label = labelOf(e, i, saga);
-    if (!first.includes(label)) rest.push(`§7- ${label}`);
-  });
+  /** @type {{ text: string, rows: number, quest: boolean }[]} */
+  const rest = others.map((o) => ({ text: `§3${o.e.story.short}§7: ${plain(o.text)}`, rows: 1, quest: true }));
+  if (!chapterDone(e, saga))
+    e.chapter.objectives.forEach((obj, i) => {
+      if (obj.optional || !active(e, i, saga)) return;
+      const label = labelOf(e, i, saga);
+      if (!first.includes(label)) rest.push({ text: `§7- ${label}`, rows: 2, quest: false });
+    });
+  /** "+2 more quests", "+1 more step", or "+3 more" for both. @param {number} from */
+  const more = (from) => {
+    const left = rest.slice(from);
+    const q = left.filter((x) => x.quest).length;
+    const n = left.length;
+    return `§7+${n} more${q === n ? (n === 1 ? " quest" : " quests") : q === 0 ? (n === 1 ? " step" : " steps") : ""}`;
+  };
   for (let k = 0; k < rest.length; k++) {
     const after = rest.length - k - 1;
-    // Keep a row for "+N more" while more steps follow.
+    // Keep a row for "+N more" while more follow.
     const room = BOX_ROWS - used - (after ? 1 : 0);
-    const line = room > 0 ? fitRows(rest[k], Math.min(2, room)) : "";
-    const text = [...lines, line].join("\n") + (after ? `\n§7+${after} more` : "");
+    const line = room > 0 ? fitRows(rest[k].text, Math.min(rest[k].rows, room)) : "";
+    const text = [...lines, line].join("\n") + (after ? `\n${more(k + 1)}` : "");
     if (!line || byteLength(text) > TEXT_BYTES) {
-      if (used < BOX_ROWS) lines.push(`§7+${rest.length - k} more`);
+      if (used < BOX_ROWS) lines.push(more(k));
       break;
     }
     lines.push(line);

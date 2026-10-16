@@ -1,6 +1,6 @@
 // Generates the Realistic Rain textures into packs/rain_rp/:
 //   textures/environment/weather.png     the weather atlas at 4× vanilla (128×128): new rain, heavier snowflakes
-//   textures/particle/realm_rain_mist.png soft blob for the Rain Extras ground mist (32×32)
+//   textures/particle/realm_rain_mist.png wispy sheet for the Rain Extras ground mist (128×32)
 //   pack_icon.png                         128×128
 // Deterministic: the same code always produces the same pixels.
 //
@@ -161,15 +161,44 @@ function snow(/** @type {import("./png.mjs").Image} */ vanilla, /** @type {impor
   if (ink < SNOW_INK.min || ink > SNOW_INK.max) throw new Error(`snow ink ${(ink * 100).toFixed(1)}% is outside ${SNOW_INK.min * 100}–${SNOW_INK.max * 100}%`);
 }
 
-// Ground mist: a soft, slightly lumpy white blob; the particle tints it gray-blue and fades it.
+// Ground mist: a sheet of low mist, 128x32, white (the particle tints it gray-blue and fades it). Its alpha is
+// stretched fractal noise (wisps several times wider than tall) in a band that wanders and swells along its length,
+// and its sides and edges dissolve unevenly instead of ending on a circle or an oval, so overlapping sheets blend
+// into one layer rather than showing as separate puffs.
+const clamp01 = (/** @type {number} */ v) => Math.max(0, Math.min(1, v));
+function smooth(/** @type {number} */ e0, /** @type {number} */ e1, /** @type {number} */ v) {
+  const t = clamp01((v - e0) / (e1 - e0));
+  return t * t * (3 - 2 * t);
+}
+/** Smooth value noise from the hash. */
+function noise(/** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ seed) {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const top = hash(xi, yi, seed) + (hash(xi + 1, yi, seed) - hash(xi, yi, seed)) * sx;
+  const bottom = hash(xi, yi + 1, seed) + (hash(xi + 1, yi + 1, seed) - hash(xi, yi + 1, seed)) * sx;
+  return top + (bottom - top) * sy;
+}
+/** Fractal noise in [0, 1). */
+function fbm(/** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ seed, octaves = 4) {
+  let sum = 0, amp = 0.5, norm = 0;
+  for (let o = 0; o < octaves; o++) {
+    sum += noise(x * 2 ** o, y * 2 ** o, seed + o * 17) * amp;
+    norm += amp;
+    amp /= 2;
+  }
+  return sum / norm;
+}
 function mist() {
-  const n = 32, img = blank(n, n);
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      const dx = (x + 0.5 - n / 2) / (n / 2), dy = (y + 0.5 - n / 2) / (n / 2);
-      const r = Math.sqrt(dx * dx + dy * dy);
-      const lump = 0.85 + 0.15 * hash(x >> 2, y >> 2, 7);
-      const a = r >= 1 ? 0 : Math.pow(1 - r * r, 2) * lump;
+  const w = 128, h = 32, img = blank(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const u = (x + 0.5) / w, v = (y + 0.5) / h; // v: 0 top .. 1 bottom
+      const wisp = smooth(0.3, 0.75, fbm(u * 3.5, v * 2.5, 20, 5)); // wisps about 1/4 of the width, 1/2 of the height
+      const warp = (fbm(u * 2, v * 1.5, 27, 3) - 0.5) * 0.5; // ragged, uneven edges
+      const mid = 0.58 + (noise(u * 3, 0, 33) - 0.5) * 0.25, thick = 0.2 + 0.14 * noise(u * 2.5, 0, 34); // the band wanders and swells
+      const side = smooth(0, 0.3, u + warp * 0.5) * smooth(0, 0.3, 1 - u + warp * 0.5);
+      const band = Math.exp(-(((v - mid + warp * 0.3) / thick) ** 2)) * smooth(0, 0.15, v) * smooth(0, 0.12, 1 - v);
+      const a = clamp01(side * band * (0.15 + 0.95 * wisp));
       put(img, x, y, [255, 255, 255, a * 255]);
     }
   }

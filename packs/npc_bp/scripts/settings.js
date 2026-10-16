@@ -14,6 +14,8 @@ const OPTIONS = [
   { key: "faceRange", type: "int", scope: "world", label: "Turn to players within (blocks)", help: "0 = never turn", min: 0, max: 16, step: 1 },
   { key: "idleMinSeconds", type: "int", scope: "world", label: "Idle lines at least every (seconds)", min: 10, max: 600, step: 5 },
   { key: "idleMaxSeconds", type: "int", scope: "world", label: "Idle lines at most every (seconds)", min: 10, max: 600, step: 5 },
+  { key: "stroll", type: "bool", scope: "world", label: "Stroll around their spot", help: "A few blocks, never through walls; they stop when you come close" },
+  { key: "strollRadius", type: "int", scope: "world", label: "Stroll up to (blocks from their spot)", min: 1, max: 8, step: 1 },
   { key: "nightRoutine", type: "bool", scope: "world", label: "Go home at night", help: "Only townsfolk with a home set by /realm:npc_home" },
   { key: "schedules", type: "bool", scope: "world", label: "Daily schedule (lunch and evening spots)", help: "Only townsfolk with a spot set by /realm:npc_post" },
   { key: "affinity", type: "bool", scope: "world", label: "Hearth & Hearsay: affinity, gifts and gossip", help: "Disabled: nothing is gained or lost; earned levels stay" },

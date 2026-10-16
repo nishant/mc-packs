@@ -268,27 +268,33 @@ function drawSplashes(d, depth, S, /** @type {number} */ t) {
     }
   }
 }
-// Mist: about 32 soft sprites 3-14 blocks out, hugging the ground and drifting with the wind.
-const MIST = Array.from({ length: 32 }, (_, n) => {
+// Mist: about 24 wide, faint sheets 3-14 blocks out, hugging the ground and drifting with the wind, drawn with the
+// pack's own mist texture (realm_rain_mist.png) at the particle's size (rain_mist.json: about 5 x 1.2 blocks).
+const MIST_TEX = decode(readFileSync(join(root, "packs", "rain_rp", "textures", "particle", "realm_rain_mist.png")));
+const MIST = Array.from({ length: 24 }, (_, n) => {
   const ang = (hash(n, 1, 71) - 0.5) * 1.6, dist = 3 + hash(n, 2, 72) * 11;
   const wx = CX + FWD[0] * dist * Math.cos(ang) + RIGHT[0] * dist * Math.sin(ang);
   const wz = CZ + FWD[1] * dist * Math.cos(ang) + RIGHT[1] * dist * Math.sin(ang);
-  return { wx, wz, size: 1.4 + hash(n, 3, 73) * 1.6, lift: 0.25 + hash(n, 4, 74) * 0.6, phase: hash(n, 5, 75), drift: 0.3 + hash(n, 6, 76) * 0.4 };
+  return { wx, wz, half: 2 + hash(n, 3, 73) * 0.8, tall: 0.5 + hash(n, 7, 77) * 0.15, lift: 0.6 + hash(n, 4, 74) * 0.3, phase: hash(n, 5, 75), drift: 0.15 + hash(n, 6, 76) * 0.2, flip: hash(n, 8, 78) < 0.5 };
 });
 /** @param {Uint8ClampedArray} d @param {Float32Array} depth @param {Scene} P */
 function drawMist(d, depth, P, /** @type {number} */ t) {
   const col = hex(/** @type {string} */ (P.mistColor));
   for (const m of MIST) {
-    const life = (m.phase + t / LOOP_S) % 1, alpha = Math.sin(Math.PI * life) * /** @type {number} */ (P.mistAlpha);
+    const life = (m.phase + t / LOOP_S) % 1, alpha = (0.8 + 0.2 * Math.sin(2 * Math.PI * life)) * /** @type {number} */ (P.mistAlpha);
     const wx = m.wx + m.drift * (life - 0.5) * 2, g = Ground[Math.floor(m.wz) * N + Math.floor(wx)] || 64;
     const p = proj(wx, g + m.lift, m.wz);
     if (p.d < 1.5) continue;
-    const rx = (m.size * F) / p.d, ry = rx * 0.38;
+    const rx = (m.half * F) / p.d, ry = (m.tall * F) / p.d;
     for (let y = Math.max(0, Math.floor(p.y - ry)); y < Math.min(PH, p.y + ry); y++) {
       for (let x = Math.max(0, Math.floor(p.x - rx)); x < Math.min(PW, p.x + rx); x++) {
-        const e = ((x - p.x) / rx) ** 2 + ((y - p.y) / ry) ** 2;
-        if (e >= 1 || depth[y * PW + x] < p.d - 0.5) continue;
-        blend(d, x, y, col, alpha * (1 - e) * (1 - e));
+        if (depth[y * PW + x] < p.d - 0.5) continue;
+        let u = (x - (p.x - rx)) / (2 * rx);
+        if (m.flip) u = 1 - u;
+        const v = (y - (p.y - ry)) / (2 * ry);
+        const tx = Math.min(MIST_TEX.width - 1, Math.floor(u * MIST_TEX.width)), ty = Math.min(MIST_TEX.height - 1, Math.floor(v * MIST_TEX.height));
+        const a = MIST_TEX.data[(ty * MIST_TEX.width + tx) * 4 + 3] / 255;
+        if (a > 0) blend(d, x, y, col, alpha * a);
       }
     }
   }

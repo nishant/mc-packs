@@ -6,6 +6,14 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Home in town
+
+- Townsfolk now live in the houses of the town: right outside their front door by day, inside at night. They stroll a few steps around and stop when you walk up to talk.
+- The quest box on the right lists every quest you have going, not just one: the one you follow on top, the others under it.
+- Fog and storm mist now look like real mist: wide, faint wisps lying low instead of round puffs.
+- Compass: a destination's name is no longer cut off (Report to Warden Reyes).
+- Operators: stand in the middle of the town and run /realm:npc_houses (or Move them into the houses around me in /realm:npc). /realm:npc_undo puts them back.
+
 ## Out and about
 
 - Townsfolk can now live all around the village instead of in one crowd. Go find them: /realm:npc_who and the Minimap show the way.
