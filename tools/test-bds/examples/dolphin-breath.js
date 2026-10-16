@@ -59,9 +59,17 @@ export default async function (t) {
   const moved = Math.hypot(d.location.x - start.x, d.location.z - start.z);
   t.log(`moved ${moved.toFixed(2)} blocks in 8 s with no input`);
   t.check(moved < 1.5, `stays put with no input (${moved.toFixed(2)} blocks)`);
+  const br = () => d.getComponent("minecraft:breathable");
+  t.check(br()?.breathesWater === true && br()?.breathesAir === true, "a ridden dolphin breathes water too (it can't swim up for air)");
   d.getComponent("minecraft:rideable").ejectRider(p);
   await t.wait(30);
   t.log(`after getting off: underwater movement ${uw()}, movement ${d.getComponent("minecraft:movement")?.currentValue}`);
   t.check(Math.abs((uw() ?? 0) - 0.15) < 0.001, "swims on its own again after the rider is off (its usual 0.15)");
-  t.log(`underwater movement back to ${uw()}`);
+  t.check(br()?.breathesWater === false && br()?.breathesAir === true, "off: it breathes air only again, like a vanilla dolphin");
+  // Disabling the pack while someone rides: the dolphin swims on its own again.
+  t.assert(d.getComponent("minecraft:rideable").addRider(p), "on once more");
+  await t.waitUntil(() => uw() === 0, { timeout: 40, message: "ridden again" });
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `t_off_${t.tick}`, pack: "dolphin_bp", key: "enabled", value: false }));
+  await t.wait(40);
+  t.check(Math.abs((uw() ?? 0) - 0.15) < 0.001, `disabled: its own swimming is back (${uw()})`);
 }

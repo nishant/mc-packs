@@ -367,7 +367,7 @@ function breathe(p) {
 /**
  * A ridden dolphin swims only where its rider steers: its own swimming (random swims, breaching, following boats and
  * players) stops while the `realm:dolphin_ridden` group sets its movement to 0. Steering pushes it directly, so it
- * still goes where the rider looks.
+ * still goes where the rider looks. The group also lets it breathe water, since it can't swim up for air any more.
  * @param {Entity} d @param {boolean} on
  */
 function setRidden(d, on) {
@@ -449,7 +449,11 @@ world.afterEvents.playerButtonInput.subscribe(
 // ---------------------------------------------------------------------------
 
 system.runInterval(() => {
-  if (get("enabled") !== true) return;
+  if (get("enabled") !== true) {
+    // nobody steers while disabled: every dolphin swims on its own (also one unloaded when the pack was disabled)
+    for (const d of loadedTamed()) setRidden(d, false);
+    return;
+  }
   const follow = Math.max(2, Number(CONFIG.followDistance) || 8);
   const idx = index();
   let changed = false;
