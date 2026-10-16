@@ -93,15 +93,20 @@ export default async function (t) {
   for (let s = 0; s < 80; s++) {
     await t.seconds(1);
     for (const r of runs) {
-      if (!r.e.isValid) continue;
+      if (!r.e.isValid) {
+        if (r.goneAt === undefined) r.goneAt = s;
+        continue;
+      }
       const d = Math.hypot(r.e.location.x - r.p.location.x, r.e.location.z - r.p.location.z);
+      r.last = { x: r.e.location.x - X0, y: r.e.location.y - Math.floor(r.p.location.y), z: r.e.location.z - r.z };
+      if (r.lane.name === "pocket") t.log(`pocket ${s}: ${JSON.stringify(r.last)} hp ${r.e.getComponent("health")?.currentValue}`);
       r.best = Math.min(r.best, d);
       if (r.reached === undefined && d <= 14) r.reached = s + 1;
     }
   }
   for (const r of runs) {
     const at = r.e.isValid ? r.e.location : undefined;
-    const where = at ? `x ${(at.x - X0).toFixed(1)}, y ${(at.y - Math.floor(r.p.location.y)).toFixed(1)}, z ${(at.z - r.z).toFixed(1)}` : "gone";
+    const where = at ? `x ${(at.x - X0).toFixed(1)}, y ${(at.y - Math.floor(r.p.location.y)).toFixed(1)}, z ${(at.z - r.z).toFixed(1)}` : `gone after ${r.goneAt} s`;
     t.log(`${r.lane.name}: ${r.d0.toFixed(1)} -> closest ${r.best.toFixed(1)} blocks, ${r.reached ? `within 14 after ${r.reached} s` : "never within 14"} (now at ${where})`);
     if (r.lane.must) t.check(r.best <= 14, `${r.lane.name}: the champion got within 14 blocks (closest ${r.best.toFixed(1)})`);
   }
