@@ -1189,19 +1189,22 @@ function present(run) {
   return out;
 }
 
-/** Party members near the leader who could come along. @param {Player} leader */
-function partyNear(leader) {
+/**
+ * Party members who could come along: every online mate (`partyRadius` 0) or those within it in the leader's
+ * dimension, nearest first (same dimension first). All are asked; the first to join fill the run.
+ * @param {Player} leader
+ */
+function partyMates(leader) {
   const tag = leader.getTags().find((t) => t.startsWith(PARTY_TAG));
   if (!tag) return [];
   const loc = leader.location;
   const r = CONFIG.partyRadius;
   return world
     .getAllPlayers()
-    .filter((p) => p.id !== leader.id && p.hasTag(tag) && p.dimension.id === leader.dimension.id && !runOf(p.id))
-    .map((p) => ({ p, d: Math.hypot(p.location.x - loc.x, p.location.y - loc.y, p.location.z - loc.z) }))
-    .filter((e) => e.d <= r)
+    .filter((p) => p.id !== leader.id && p.hasTag(tag) && !runOf(p.id))
+    .map((p) => ({ p, d: p.dimension.id === leader.dimension.id ? Math.hypot(p.location.x - loc.x, p.location.y - loc.y, p.location.z - loc.z) : Infinity }))
+    .filter((e) => !(r > 0) || e.d <= r)
     .sort((a, b) => a.d - b.d)
-    .slice(0, Math.max(0, get("maxParty") - 1))
     .map((e) => e.p);
 }
 
@@ -1301,7 +1304,7 @@ async function start(leader, d, L, affixes, sigilLine, g) {
   const s = g ? longScale(scaleFor(L), lay.n, L) : scaleFor(L);
   const size = lay.grid * lay.cell;
   const r = rng(seed ^ 0x5bd1e995);
-  const others = partyNear(leader);
+  const others = partyMates(leader);
   /** @type {Run} */
   const run = {
     id,
@@ -1370,8 +1373,12 @@ async function start(leader, d, L, affixes, sigilLine, g) {
     const answers = await Promise.all(invite.map((p) => ask(p, leader.name, d, L, affixes, g)));
     if (runs.get(slot) !== run || run.phase !== "gathering") return; // ended meanwhile (an operator's reset)
     invite.forEach((p, i) => {
-      if (answers[i] && p.isValid && !runOf(p.id) && run.members.size < get("maxParty")) run.members.set(p.id, { name: p.name, since: 0, away: 0 });
-      else if (p.isValid) leader.sendMessage(`§7${p.name} isn't coming.`);
+      if (!p.isValid) return;
+      if (answers[i] && !runOf(p.id) && run.members.size < get("maxParty")) run.members.set(p.id, { name: p.name, since: 0, away: 0 });
+      else if (answers[i] && !runOf(p.id)) {
+        p.sendMessage(`§eThe expedition is full (${get("maxParty")} players), so you stay here this time.`);
+        leader.sendMessage(`§7${p.name} wanted to come, but the expedition is full.`);
+      } else leader.sendMessage(`§7${p.name} isn't coming.`);
     });
     if (!leader.isValid) run.members.delete(leader.id);
     if (!run.members.size) {
@@ -3997,7 +4004,7 @@ async function mainMenu(player) {
   if (active.length) body.push(...active.map((r) => `§eAn expedition is in progress (${statusLine(r)})§r`));
   if (get("enabled") !== true) body.push("New expeditions are disabled right now.");
   else if (!s) body.push(`The operators haven't picked an expedition site yet.${isOp(player) ? " Use Operator tools, or stand far from spawn and run /realm:expedition_site." : ""}`);
-  else body.push(`Dungeon runs for your party (members within ${CONFIG.partyRadius} blocks are asked along). Clear Hard to unlock Nightmare tiers: up to ${maxTier()}, with affixes, more rooms and better rewards. You can play up to §e${levelName(unlockedLevel(player))}§r.`);
+  else body.push(`Dungeon runs for your party (${CONFIG.partyRadius > 0 ? `members within ${CONFIG.partyRadius} blocks` : "every member online, wherever they are,"} are asked along). Clear Hard to unlock Nightmare tiers: up to ${maxTier()}, with affixes, more rooms and better rewards. You can play up to §e${levelName(unlockedLevel(player))}§r.`);
   const form = new ActionFormData().title("§lExpeditions").body(body.join("\n\n"));
   /** @type {(() => Promise<void> | void)[]} */
   const actions = [];
