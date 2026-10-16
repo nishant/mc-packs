@@ -496,3 +496,5 @@ entity.eb:guide_book.name=튜토리얼
 action.interact.eb_guide_turn=다음 페이지
 eb.set.book_language.tip=책 언어\n§7튜토리얼 책과 플로팅 메뉴의\n§7힌트 및 레슨에 쓰이는 언어.
 eb.help.btn.guided=§l실시간 튜토리얼§r\n§8한 단계씩 직접 해 보며 배우기
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

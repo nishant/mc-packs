@@ -496,3 +496,5 @@ entity.eb:guide_book.name=Обучение
 action.interact.eb_guide_turn=Следующая страница
 eb.set.book_language.tip=Язык книги\n§7Язык книги «Обучение», а также\n§7подсказок и уроков в парящих меню.
 eb.help.btn.guided=§lЖивое обучение§r\n§8Учитесь на деле, шаг за шагом
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

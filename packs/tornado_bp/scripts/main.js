@@ -13,7 +13,7 @@ const SPARK = "realm:sky_spark";
 const FRAME_TICKS = 2; // the funnel is redrawn and players are spun every 2 ticks
 const FRAMES_PER_SECOND = 20 / FRAME_TICKS;
 const NEAR = 64; // beyond this, players get half the rings
-const REDRAW_FRAMES = 7; // each ring lives ~1.4s and is redrawn every 7 frames (0.7s) for high FPS with zero gaps
+const REDRAW_FRAMES = 5; // each ring lives ~1.05-1.55s and every ring is redrawn every 5 frames (0.5s), so there are no gaps
 const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
 const WIND_EVERY = 5; // seconds
@@ -394,24 +394,24 @@ function draw(t) {
         player.spawnParticle(RING, axis, molang());
       }
       // Keep the ground contact dust whirl and upper storm collar anchored without excess emitters
-      if (t.frame % 4 === 0) {
+      if (t.frame % 2 === 0) {
         molang().setFloat("variable.radius", 3.2);
         molang().setFloat("variable.spin", 8.8);
         molang().setFloat("variable.height", 0.02);
         player.spawnParticle(RING, { x: t.x, y: t.y + 0.35, z: t.z }, molang());
-      } else if (t.frame % 4 === 2) {
+      } else {
         const topAxis = funnelAxis(t, 0.94, top);
         molang().setFloat("variable.radius", funnelRadius(0.94));
         molang().setFloat("variable.spin", 3.5);
         molang().setFloat("variable.height", 0.94);
         player.spawnParticle(RING, topAxis, molang());
       }
-      if (dist <= NEAR && t.frame % 3 === 0) {
+      if (dist <= NEAR && t.frame % 2 === 0) {
         molang().setFloat("variable.radius", rand(1.8, 3.8));
         player.spawnParticle(DEBRIS, { x: t.x + rand(-1.2, 1.2), y: t.y + rand(0.2, 2.0), z: t.z + rand(-1.2, 1.2) }, molang());
       }
-      if (dist <= NEAR && t.frame % 8 === 0) {
-        const collarAxis = funnelAxis(t, rand(0.8, 0.96), top);
+      if (dist <= NEAR && t.frame % 4 === 0) {
+        const collarAxis = funnelAxis(t, rand(0.78, 0.96), top);
         const ang = Math.random() * Math.PI * 2;
         const r = rand(1.5, 5.0);
         player.spawnParticle(SPARK, { x: collarAxis.x + Math.cos(ang) * r, y: collarAxis.y, z: collarAxis.z + Math.sin(ang) * r });

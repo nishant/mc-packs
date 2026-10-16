@@ -496,3 +496,5 @@ entity.eb:guide_book.name=チュートリアル
 action.interact.eb_guide_turn=次のページ
 eb.set.book_language.tip=本の言語\n§7チュートリアルの本と、フローティングメニューの\n§7ヒントやレッスンの言語。
 eb.help.btn.guided=§lライブチュートリアル§r\n§81ステップずつ、やりながら学ぶ
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

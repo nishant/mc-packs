@@ -496,3 +496,5 @@ entity.eb:guide_book.name=ట్యుటోరియల్
 action.interact.eb_guide_turn=తరువాతి పేజీ
 eb.set.book_language.tip=బుక్ భాష\n§7ట్యుటోరియల్ బుక్, తేలియాడే మెనూల్లోని\n§7సూచనలు, పాఠాల భాష.
 eb.help.btn.guided=§lలైవ్ ట్యుటోరియల్§r\n§8చేస్తూ నేర్చుకోండి, ఒక్కో అడుగు
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

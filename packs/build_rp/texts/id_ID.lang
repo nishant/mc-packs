@@ -496,3 +496,5 @@ entity.eb:guide_book.name=Tutorial
 action.interact.eb_guide_turn=Halaman berikut
 eb.set.book_language.tip=Bahasa Buku\n§7Bahasa buku Tutorial serta\n§7petunjuk dan pelajaran di menu melayang.
 eb.help.btn.guided=§lTutorial Langsung§r\n§8Belajar sambil mencoba, selangkah demi selangkah
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

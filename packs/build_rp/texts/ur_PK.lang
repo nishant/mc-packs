@@ -496,3 +496,5 @@ entity.eb:guide_book.name=ٹیوٹوریل
 action.interact.eb_guide_turn=اگلا صفحہ
 eb.set.book_language.tip=بک کی زبان\n§7ٹیوٹوریل بک کی اور تیرتے مینو کے\n§7اشاروں اور اسباق کی زبان۔
 eb.help.btn.guided=§lلائیو ٹیوٹوریل§r\n§8کر کے سیکھیں، ایک ایک قدم
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

@@ -496,3 +496,5 @@ entity.eb:guide_book.name=Tutorial
 action.interact.eb_guide_turn=Volgende pagina
 eb.set.book_language.tip=Boektaal\n§7De taal van het Tutorialboek en van de\n§7tips en lessen op de zwevende menu's.
 eb.help.btn.guided=§lLive tutorial§r\n§8Leer door te doen, stap voor stap
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

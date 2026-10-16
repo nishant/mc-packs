@@ -496,3 +496,5 @@ entity.eb:guide_book.name=ट्यूटोरियल
 action.interact.eb_guide_turn=अगला पन्ना
 eb.set.book_language.tip=बुक की भाषा\n§7ट्यूटोरियल बुक की और तैरते मेनू के\n§7संकेतों व पाठों की भाषा।
 eb.help.btn.guided=§lलाइव ट्यूटोरियल§r\n§8करके सीखें, एक-एक कदम
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

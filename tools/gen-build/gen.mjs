@@ -135,16 +135,7 @@ function bookIcon() {
   rect(img, 12, 1, 13, 2, gold);
   put(img, 13, 3, gold);
   rect(img, 9, 12, 9, 14, [200, 50, 50, 255]);
-  // Upscale 8x nearest-neighbor to 128x128 so all item textures in build_rp share a 128x128 atlas cell size
-  const big = blank(128, 128);
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const o = (y * 16 + x) * 4;
-      const c = /** @type {RGBA} */ ([img.data[o], img.data[o + 1], img.data[o + 2], img.data[o + 3]]);
-      if (c[3]) rect(big, x * 8, y * 8, x * 8 + 7, y * 8 + 7, c);
-    }
-  }
-  return big;
+  return img;
 }
 
 // ---------------------------------------------------------------------------

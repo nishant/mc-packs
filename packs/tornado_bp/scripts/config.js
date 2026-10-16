@@ -38,7 +38,7 @@ export const CONFIG = {
    * Rings of vortex cloud stacked from the ground to the top of the funnel, for each player near it (half as many
    * beyond 64 blocks). The funnel is redrawn in slices every 2 ticks, plus a churning ground dust skirt and storm collar.
    */
-  rings: 14,
+  rings: 22,
 
   /** Multiplies `rings` and the debris: lower it if the funnel slows devices down, 0.25 to 1.5. */
   density: 1,

@@ -496,3 +496,5 @@ entity.eb:guide_book.name=Tutorial
 action.interact.eb_guide_turn=Faqja tjetër
 eb.set.book_language.tip=Gjuha e Librit\n§7Gjuha e librit Tutorial dhe e\n§7këshillave e mësimeve në menutë pluskuese.
 eb.help.btn.guided=§lTutorial i Drejtpërdrejtë§r\n§8Mësoni duke bërë, një hap pas tjetrit
+item.custom:nos_rocket=NOS Rocket
+item.custom:nos_rocket.name=NOS Rocket

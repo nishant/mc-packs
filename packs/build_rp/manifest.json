@@ -4,7 +4,7 @@
     "name": "Easy Building Guides",
     "description": "Effortless Building 3D floating panels, radial quick-switch wheel, tutorial book, live coach, UI sounds, and block outline particles. Goes with the Easy Building behavior pack.",
     "uuid": "e4166196-a525-46ea-aaaa-4a6fd77408ba",
-    "version": [2, 1, 1],
+    "version": [2, 1, 2],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
