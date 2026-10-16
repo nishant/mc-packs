@@ -1670,7 +1670,7 @@ async function showRelics(player, atSmith) {
   if (rest.length) lines.push(`§7Still to find: ${rest.join(", ")}`);
   lines.push(`§fStory relics: ${foundStory.length} of ${storyRelics.length}§7 (rewards from the story, never forged)`);
   for (const def of foundStory) lines.push(relicLines(def, on, best.get(def.id)));
-  if (get("setsEnabled") === true) lines.push(`§fRelic sets§7 (all three in your hotbar, off hand or worn):\n${setLines(on)}`);
+  if (get("setsEnabled") === true) lines.push(`§fRelic sets§7 (all three in your hotbar, offhand or worn):\n${setLines(on)}`);
   lines.push(
     canForge
       ? `§fYou have ${shards} Relic Shard${shards === 1 ? "" : "s"}. Forging a relic takes ${cost}.`
