@@ -603,6 +603,40 @@ export function weatherOk(obj, dim) {
   return weather === "Rain" || weather === "Thunder";
 }
 
+/**
+ * The Weather Almanac's plan (realm:weather_plan, asked for with realm:weather_ask at start), for "due in" times.
+ * @type {{ next: { weather: string, at: number }[] } | undefined}
+ */
+let weatherPlan;
+system.afterEvents.scriptEventReceive.subscribe(
+  ({ id, message }) => {
+    if (id !== "realm:weather_plan") return;
+    try {
+      const msg = JSON.parse(message);
+      weatherPlan = msg && !msg.off && Array.isArray(msg.next) ? { next: msg.next.filter((/** @type {any} */ s) => s && typeof s.weather === "string" && Number.isFinite(s.at)) } : undefined;
+    } catch {
+      weatherPlan = undefined;
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+/**
+ * "wait for a thunderstorm (due in about 6 min)" while the weather doesn't suit a survive/vigil objective, else
+ * undefined. The time comes from the Weather Almanac's plan, when it's installed.
+ * @param {Objective} obj
+ */
+export function weatherWait(obj) {
+  if (obj.type !== "survive" && obj.type !== "vigil") return undefined;
+  const want = obj.weather ?? (obj.type === "survive" ? "thunder" : undefined);
+  if (want !== "thunder" && want !== "rain") return undefined;
+  if (weatherOk(obj, OVERWORLD)) return undefined;
+  const now = Date.now();
+  const due = weatherPlan?.next.find((s) => s.at > now && (s.weather === "Thunder" || (want === "rain" && s.weather === "Rain")));
+  const what = want === "thunder" ? "a thunderstorm" : "rain";
+  return due ? `wait for ${what} (due in about ${Math.max(1, Math.ceil((due.at - now) / 60000))} min)` : `wait for ${what}`;
+}
+
 /** Nothing over the player's head (the sky can see them). @param {Player} player */
 export function outdoors(player) {
   try {

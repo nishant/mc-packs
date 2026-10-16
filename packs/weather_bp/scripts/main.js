@@ -18,6 +18,7 @@ const MAX_SPELLS = 200; // keeps the saved plan far under the 32,000-character p
 const NEXT_MAX = 24; // spells sent in realm:weather_plan (each about 40 characters, under the 2,048 limit)
 const SLEEP_GRACE = 200; // ticks: a clear sky this soon after someone was in bed was slept through
 const REVERT_LIMIT = 6; // weather put back at most this often a minute, so we never fight another script forever
+const TOLD_GAP = 12000; // ticks (10 minutes) between telling operators that a /weather change was put back
 const NOTICE_DELAY = 200; // ticks after joining before the daily forecast, so it isn't lost in the join popups
 const SELF = "weather_bp";
 
@@ -48,6 +49,7 @@ let lastAbsolute;
 let reverts = [];
 let revertPending = false;
 let warnedFight = false;
+let toldOps = -Infinity; // tick operators were last told that a /weather change was put back
 let warnedCycle = false;
 /** Tick each player joined at, until they had their daily forecast check. @type {Map<string, number>} */
 const joinedAt = new Map();
@@ -279,12 +281,33 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
         return;
       }
       reverts.push(now);
+      const was = tracked;
       apply();
+      tellOps(was, current.w);
     } catch (e) {
       console.warn(`[weather] ${e}`);
     }
   }, 20);
 });
+
+/**
+ * Tells the operators online, at most every 10 minutes, that a weather change (/weather, or another pack) was put back
+ * and how to change the weather for real.
+ * @param {Kind} was @param {Kind} back
+ */
+function tellOps(was, back) {
+  if (system.currentTick - toldOps < TOLD_GAP) return;
+  const ops = world.getAllPlayers().filter((p) => {
+    try {
+      return isOp(p);
+    } catch {
+      return false;
+    }
+  });
+  if (!ops.length) return;
+  toldOps = system.currentTick;
+  for (const p of ops) p.sendMessage(`§e[Weather] The Weather Almanac put the weather back to ${NAME[back]} (it was changed to ${NAME[was]} without the almanac, maybe by /weather). Use /realm:weather_set to change the weather.`);
+}
 
 /** Once a second: who's in bed, did the night get skipped, did the spell end, and the daily forecasts. */
 system.runInterval(() => {

@@ -41,7 +41,7 @@ import {
   today,
   wanderShape,
 } from "./data.js";
-import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weather } from "./objectives.js";
+import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weatherWait } from "./objectives.js";
 import { partyMates, partyTick } from "./party.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
@@ -141,10 +141,8 @@ function objectiveLines(player, e, saga) {
     else if (loc) line += ` §7(${loc.label} ${bearing(player, loc, radiusOf(obj))})`;
     const sky = skyFocus(player.id, e, i);
     if (sky) line += `\n  §e${sky.text}: get within ${sky.near} blocks of ${sky.spot} (${bearing(player, sky, sky.near)}), ${clock(sky.left)} left.`;
-    if ((obj.type === "survive" || obj.type === "vigil") && obj.weather !== "any" && (obj.weather || obj.type === "survive")) {
-      const want = obj.weather ?? "thunder";
-      if ((want === "thunder" && weather !== "Thunder") || (want === "rain" && weather === "Clear")) line += `\n  §7Wait for ${want === "thunder" ? "a thunderstorm" : "rain"}.`;
-    }
+    const wait = weatherWait(obj);
+    if (wait) line += `\n  §7${wait[0].toUpperCase()}${wait.slice(1)}.`;
     out.push(`${line}§r`);
   });
   return out;
@@ -920,7 +918,8 @@ function pointAt(player, e, saga, optional) {
       return;
     }
     if (loc === undefined) {
-      if (!best) best = `§f${label}`;
+      const wait = weatherWait(obj); // the label already counts down the seconds
+      if (!best) best = `§f${label}${wait ? ` §7- ${wait}` : ""}`;
       return;
     }
     if (typeof loc === "string") {
@@ -934,12 +933,24 @@ function pointAt(player, e, saga, optional) {
     const d = loc.dim === player.dimension.id ? across(player.location, loc) : 1e9;
     if (d < bestD) {
       bestD = d;
-      best = `§f${loc.label} ${bearing(player, loc, radiusOf(obj))}${loc.pending ? "" : ""}`;
+      best = `§f${loc.label} ${bearing(player, loc, radiusOf(obj))}${watchText(e, i, obj)}`;
       bestAt = { label: loc.label, dim: loc.dim, x: loc.x, z: loc.z };
     }
   });
   pointed = bestAt;
   return timed ?? best;
+}
+
+/**
+ * A survive or vigil step's seconds so far and, while the weather is wrong, what it waits for:
+ * " 83 s left" or " 120 s left - wait for a thunderstorm (due in about 6 min)".
+ * @param {Entry} e @param {number} i @param {Objective} obj
+ */
+function watchText(e, i, obj) {
+  if (obj.type !== "survive" && obj.type !== "vigil") return "";
+  const left = target(obj) - progressOf(e, i);
+  const wait = weatherWait(obj);
+  return `${left > 0 ? ` §e${left} s left` : ""}${wait ? ` §7- ${wait}` : ""}`;
 }
 
 /** What realm:track last sent for each player (JSON). @type {Map<string, string>} */
