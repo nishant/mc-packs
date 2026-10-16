@@ -46,6 +46,7 @@ import { PACK, hash, itemName, npcName, send, strangerNames } from "./util.js";
  * @property {WanderState} [wv] the player's live wanderer encounter (a Stranger's one-off, or a hostile's fight)
  * @property {number} [wn] Strangers' one-offs finished
  * @property {string} [tr] the story id of the quest the player picked to track ("fv:<npc>" a favor, "wv:..." a wanderer's job)
+ * @property {string[]} [ut] story ids the player stopped tracking (Stop tracking): kept off the tracker and the Minimap until tracked again
  */
 /**
  * A wanderer encounter (Wanderers of the Wilds): who, where they were met, the one-off picked for it and,
@@ -289,6 +290,7 @@ export function sagaOf(player) {
       if (saga.cx !== undefined && !Array.isArray(saga.cx)) delete saga.cx;
       if (saga.fv !== undefined && !isObj(saga.fv)) delete saga.fv;
       if (saga.tr !== undefined && typeof saga.tr !== "string") delete saga.tr;
+      if (saga.ut !== undefined && (!Array.isArray(saga.ut) || saga.ut.some((x) => typeof x !== "string"))) delete saga.ut;
       if (saga.wv !== undefined && (!isObj(saga.wv) || typeof saga.wv.w !== "string" || !isObj(saga.wv.at))) delete saga.wv;
     }
   } catch {
