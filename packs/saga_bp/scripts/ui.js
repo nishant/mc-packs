@@ -1002,31 +1002,74 @@ export function track(player, list, shown = true) {
   showLine(player, isSlot(where) ? questBox(shownE, saga, line) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
 }
 
+/** A Side HUD box: 200 x 60 pixels of the default font, about 32 characters a row and 6 rows; more gets cut off. */
+const BOX_COLS = 32;
+const BOX_ROWS = 6;
+
+/** Rows a line takes in a box, wrapped at spaces like the game does (color codes take no room). @param {string} line */
+function rowsOf(line) {
+  let rows = 1;
+  let col = 0;
+  for (const word of line.replace(/§./g, "").split(" ")) {
+    const w = word.length;
+    if (col > 0 && col + 1 + w <= BOX_COLS) col += 1 + w;
+    else {
+      if (col > 0) rows++;
+      col = w;
+      while (col > BOX_COLS) {
+        rows++;
+        col -= BOX_COLS;
+      }
+    }
+  }
+  return rows;
+}
+
+/** A line cut at a word to fit in `rows` rows, ending in "..." when cut. @param {string} line @param {number} rows */
+function fitRows(line, rows) {
+  if (rowsOf(line) <= rows) return line;
+  const words = line.split(" ");
+  while (words.length > 1) {
+    words.pop();
+    const cut = `${words.join(" ").replace(/[\s,:;(-]+$/, "")}...`;
+    if (rowsOf(cut) <= rows) return cut;
+  }
+  return `${line.replace(/§./g, "").slice(0, BOX_COLS * rows - 3)}...`;
+}
+
 /**
  * The tracker in a Side HUD box: a small quest log. The quest's name in aqua, the step the tracker points at in white,
- * then the chapter's other open steps in gray (each counting down), as many as the box's bytes hold ("+2 more").
+ * then the chapter's other open steps in gray (each counting down). Laid out to fit the box: the name takes a row, the
+ * step up to 3, each other step up to 2, cut at a word with "..." when longer, and the last row says "+2 more" when
+ * steps don't fit (in rows, or in the box's 159 bytes).
  * @param {Entry} e @param {Saga} saga @param {string} first the tracker's line for the quest
  */
 function questBox(e, saga, first) {
-  let box = clipTo(`§b${e.story.short}§r\n${first}`, TEXT_BYTES);
-  if (chapterDone(e, saga)) return box;
+  const head = fitRows(`§b${e.story.short}§r`, 1);
+  const main = fitRows(first, Math.min(3, BOX_ROWS - 1));
+  const lines = [head, main];
+  let used = rowsOf(head) + rowsOf(main);
+  if (chapterDone(e, saga)) return clipTo(lines.join("\n"), TEXT_BYTES);
   const rest = /** @type {string[]} */ ([]);
   e.chapter.objectives.forEach((obj, i) => {
     if (obj.optional || !active(e, i, saga)) return;
     const label = labelOf(e, i, saga);
     if (!first.includes(label)) rest.push(`§7- ${label}`);
   });
-  let left = rest.length;
-  for (const r of rest) {
-    const more = left > 1 ? `\n§7+${left - 1} more` : "";
-    if (byteLength(`${box}\n${r}${more}`) > TEXT_BYTES) {
-      if (byteLength(`${box}\n§7+${left} more`) <= TEXT_BYTES) box += `\n§7+${left} more`;
-      return box;
+  for (let k = 0; k < rest.length; k++) {
+    const after = rest.length - k - 1;
+    // Keep a row for "+N more" while more steps follow.
+    const room = BOX_ROWS - used - (after ? 1 : 0);
+    const line = room > 0 ? fitRows(rest[k], Math.min(2, room)) : "";
+    const text = [...lines, line].join("\n") + (after ? `\n§7+${after} more` : "");
+    if (!line || byteLength(text) > TEXT_BYTES) {
+      if (used < BOX_ROWS) lines.push(`§7+${rest.length - k} more`);
+      break;
     }
-    box += `\n${r}`;
-    left--;
+    lines.push(line);
+    used += rowsOf(line);
   }
-  return box;
+  return clipTo(lines.join("\n"), TEXT_BYTES);
 }
 
 /** Text cut to a number of UTF-8 bytes on a whole character, with no dangling "§". @param {string} text @param {number} max */

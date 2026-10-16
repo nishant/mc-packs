@@ -6,6 +6,10 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Tidier tracker
+
+- The story tracker box never gets cut off: long steps end with "..." and extra steps show as "+2 more". /realm:saga has the full text.
+
 ## Counting down
 
 Quests now show how many are left:
