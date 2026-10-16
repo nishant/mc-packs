@@ -115,4 +115,20 @@ export const G = {
   I_STAR: "",
   /** U+F351 inline: arrived */
   I_CHECK: "",
+  /** U+F360 strip: the nearest town (house) */
+  S_TOWN: "",
+  /** U+F361 strip: your bed or respawn point (bed) */
+  S_HOME: "",
+  /** U+F362 strip: the rainbow's pot of gold (rainbow) */
+  S_RAINBOW: "",
+  /** U+F370 strip edge, left: the rainbow's pot of gold */
+  L_RAINBOW: "",
+  /** U+F371 strip edge, right: the rainbow's pot of gold */
+  R_RAINBOW: "",
+  /** U+F380 radar: the nearest town (house) */
+  Q_TOWN: "",
+  /** U+F381 radar: your bed or respawn point (bed) */
+  Q_HOME: "",
+  /** U+F382 radar: the rainbow's pot of gold (rainbow) */
+  Q_RAINBOW: "",
 };

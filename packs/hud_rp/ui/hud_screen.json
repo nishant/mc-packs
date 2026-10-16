@@ -409,7 +409,7 @@
                 "$slot_anchor": "top_middle",
                 "$slot_align": "center",
                 "$slot_max": [
-                  420,
+                  440,
                   30
                 ],
                 "$slot_alpha": 0.3
@@ -438,8 +438,8 @@
                 "$slot_anchor": "bottom_left",
                 "$slot_align": "left",
                 "$slot_max": [
-                  120,
-                  120
+                  132,
+                  132
                 ],
                 "$slot_alpha": 0.0
               }

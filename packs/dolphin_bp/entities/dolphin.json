@@ -183,6 +183,36 @@
             ]
           }
         }
+      },
+      "realm:dolphin_ridden": {
+        "minecraft:movement": {
+          "value": 0
+        },
+        "minecraft:underwater_movement": {
+          "value": 0
+        },
+        "minecraft:breathable": {
+          "total_supply": 240,
+          "suffocate_time": 0,
+          "breathes_air": true,
+          "breathes_water": true,
+          "generates_bubbles": false
+        }
+      },
+      "realm:dolphin_free": {
+        "minecraft:movement": {
+          "value": 0.1
+        },
+        "minecraft:underwater_movement": {
+          "value": 0.15
+        },
+        "minecraft:breathable": {
+          "total_supply": 240,
+          "suffocate_time": 0,
+          "breathes_air": true,
+          "breathes_water": false,
+          "generates_bubbles": false
+        }
       }
     },
     "components": {
@@ -520,7 +550,37 @@
       "realm:dolphin_release": {
         "remove": {
           "component_groups": [
-            "realm:dolphin_tamed"
+            "realm:dolphin_tamed",
+            "realm:dolphin_ridden"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "realm:dolphin_free"
+          ]
+        }
+      },
+      "realm:dolphin_ridden": {
+        "remove": {
+          "component_groups": [
+            "realm:dolphin_free"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "realm:dolphin_ridden"
+          ]
+        }
+      },
+      "realm:dolphin_unridden": {
+        "remove": {
+          "component_groups": [
+            "realm:dolphin_ridden"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "realm:dolphin_free"
           ]
         }
       }

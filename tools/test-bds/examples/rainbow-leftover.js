@@ -1,14 +1,17 @@
 // Rainbows: an empty pot chest whose pot expires while no one is near (its chunk unloaded) is removed when a
 // player comes back, instead of staying in the world for good. potMinutes is set to 3, so this takes ~4 minutes.
-// (It removes every ticking area, the harness's included, so the chest's chunk can unload.)
+// (It removes every ticking area, the harness's included, so the chest's chunk can unload.) Also checks that the
+// realm:rainbow_pot broadcast for the Minimap moves to the chest's spot, and says {} once the pot expires.
 //   node tools/test-bds/run.mjs --quiet --only rainbow_bp --scenario tools/test-bds/examples/rainbow-leftover.js --timeout 600
 export default async function (t) {
   const sys = t.mc.system;
   const dim = t.dimension;
   /** @type {any} */ let ev;
   const acks = new Set();
+  /** @type {any[]} */ const pots = [];
   sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
     if (id === "realm:sky_event") ev = JSON.parse(message);
+    else if (id === "realm:rainbow_pot") pots.push(JSON.parse(message));
     else if (id === "realm:cfg_ack") acks.add(JSON.parse(message).id);
   }, { namespaces: ["realm"] });
   const p = await t.player("Ann", { op: true, gameMode: "creative" });
@@ -48,6 +51,9 @@ export default async function (t) {
   }
   t.assert(chest, "pot chest placed");
   t.log(`chest at ${chest.x} ${chest.y} ${chest.z}`);
+  await t.seconds(1);
+  const at = pots[pots.length - 1];
+  t.check(at?.x === chest.x && at?.z === chest.z, `rainbow_pot moved to the chest (${pots.length} sent, last ${JSON.stringify(at)})`);
   // Someone emptied it.
   dim.getBlock(chest)?.getComponent("minecraft:inventory")?.container?.clearAll();
   // Walk far away, and nothing else keeps it loaded: its chunk unloads.
@@ -66,6 +72,7 @@ export default async function (t) {
   const left = start + 3 * 60000 + 8000 - Date.now();
   if (left > 0) await t.wait(Math.ceil(left / 50));
   t.check(unloaded(), "still unloaded when the pot expired");
+  t.check(pots[pots.length - 1]?.x === undefined, `rainbow_pot {} once the pot expired: ${JSON.stringify(pots[pots.length - 1])}`);
   // Back: the empty chest goes once its chunk is loaded.
   await t.loadArea(chest.x + 0.5, chest.z + 0.5, { radius: 1 });
   p.teleport({ x: chest.x + 10.5, y: chest.y + 2, z: chest.z + 0.5 });

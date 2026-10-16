@@ -1,5 +1,5 @@
 // Generates the whole Realm Skies resource pack, packs/sky_rp/: the sky particles and fogs the adventure behavior
-// packs spawn and push (tornado_bp, rainbow_bp, night_bp, meteor_bp, climate_bp, moon_bp, storm_bp, titles_bp), their
+// packs spawn and push (tornado_bp, night_bp, meteor_bp, climate_bp, moon_bp, storm_bp, titles_bp), their
 // procedurally drawn textures, the pack icon and the manifest. Nothing in sky_rp is hand-edited.
 // Deterministic: hash-based noise only, no Math.random and no timestamps, so the same code always writes the same files.
 //
@@ -11,7 +11,7 @@
 //   particle expression can read them; an unset one reads 0, so each expression falls back to a default.
 // - Billboard `size` is half the width and half the height (a 1x1 block billboard is [0.5, 0.5]).
 // - Molang trig works in degrees.
-// - Glowing things (rainbow, aurora, stars, meteors, sparks, embers, motes, sparkles) skip
+// - Glowing things (aurora, stars, meteors, sparks, embers, motes, sparkles) skip
 //   particle_appearance_lighting so they stay bright at night; dust, sand, snow, smoke, fog and leaves are lit.
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -89,39 +89,6 @@ function hsv(/** @type {number} */ h, /** @type {number} */ s, /** @type {number
 // ---------------------------------------------------------------------------
 // Textures (white or gray where the particle tints them; colored where the color is the point)
 // ---------------------------------------------------------------------------
-
-/**
- * A rainbow dot, 32x32, white: a soft round disc, flat in the middle and fading over its outer half, so a row of
- * overlapping dots reads as one smooth stripe. The particle tints it with its band's color.
- */
-function dot() {
-  const n = 32, img = blank(n, n);
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      const r = Math.hypot(x + 0.5 - n / 2, y + 0.5 - n / 2) / (n / 2);
-      put(img, x, y, [255, 255, 255, (1 - smooth(0.4, 1, r)) * 255]);
-    }
-  }
-  return img;
-}
-
-/**
- * The pot of gold's light beam, 16x32 in color: a white-hot core and a golden glow fading to the sides, the same
- * all the way up so stacked segments join seamlessly.
- */
-function beam() {
-  const w = 16, h = 32, img = blank(w, h);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const u = Math.abs(x + 0.5 - w / 2) / (w / 2);
-      const core = Math.exp(-((u / 0.18) ** 2)), halo = Math.exp(-((u / 0.55) ** 2));
-      const a = clamp(core + 0.7 * halo) * (1 - smooth(0.85, 1, u));
-      const rgb = [mix(255, 255, core), mix(200, 255, core), mix(70, 235, core)];
-      put(img, x, y, [...rgb, a * 255]);
-    }
-  }
-  return img;
-}
 
 /**
  * Aurora, a flipbook of 8 frames of 32x128 (256x128): a curtain whose lower edge is bright and wavy and whose rays
@@ -375,8 +342,6 @@ function icon() {
 }
 
 const TEXTURES = {
-  dot: dot(),
-  beam: beam(),
   aurora: aurora(),
   glow: glow(),
   meteor: meteor(),
@@ -454,40 +419,6 @@ function motes(/** @type {string} */ id, /** @type {number[]} */ color) {
 }
 
 const PARTICLES = {
-  // One dot of a rainbow's color band. rainbow_bp builds a fixed arc in the world from these (7 bands, a dot per
-  // band every couple of blocks), so it never follows you: dots far away are drawn closer on the same line of
-  // sight and smaller, so they look the same. The script passes the band's color; at most 85% opaque.
-  sky_rainbow_band: effect("realm:sky_rainbow_band", "dot", "particles_blend", {
-    ...burst(1),
-    ...once(),
-    "minecraft:emitter_shape_point": {},
-    "minecraft:particle_initial_speed": 0,
-    "minecraft:particle_lifetime_expression": { max_lifetime: or("life", 2) },
-    "minecraft:particle_appearance_billboard": {
-      size: [or("size", 1), or("size", 1)],
-      facing_camera_mode: "lookat_xyz",
-      uv: uv("dot"),
-    },
-    // Redrawn every second (or two) and lasting a little longer, fading in over 0.3 s and out over the last 0.5 s.
-    "minecraft:particle_appearance_tinting": { color: ["variable.cr", "variable.cg", "variable.cb", `${fade(0.3, 0.5)} * 0.85`] },
-  }),
-
-  // One segment of the golden light beam over the pot of gold, upright and turning to face you; stacked
-  // segments make a beam like a beacon's.
-  sky_rainbow_beam: effect("realm:sky_rainbow_beam", "beam", "particles_blend", {
-    ...burst(1),
-    ...once(),
-    "minecraft:emitter_shape_point": {},
-    "minecraft:particle_initial_speed": 0,
-    "minecraft:particle_lifetime_expression": { max_lifetime: or("life", 2) },
-    "minecraft:particle_appearance_billboard": {
-      size: [or("size", 0.5), or("height", 2)],
-      facing_camera_mode: "rotate_y",
-      uv: uv("beam"),
-    },
-    "minecraft:particle_appearance_tinting": { color: [1, 1, 1, `${fade(0.3, 0.5)} * ${or("alpha", 1)} * 0.9`] },
-  }),
-
   // One segment of an aurora curtain: upright, rippling (an 8-frame flipbook), additive, tinted green to purple.
   sky_aurora: effect("realm:sky_aurora", "aurora", "particles_add", {
     ...burst(1),
@@ -891,9 +822,9 @@ const MANIFEST = {
   format_version: 2,
   header: {
     name: "Realm Skies",
-    description: "Rainbows, auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
+    description: "Auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 1, 0],
+    version: [1, 2, 0],
     min_engine_version: [1, 21, 100],
   },
   modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 1, 0] }],

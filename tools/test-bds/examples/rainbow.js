@@ -1,10 +1,20 @@
-// Rainbow: force one, walk toward its end (logging positions), find the chest, claim the pot.
+// Rainbow: force one, walk toward its end (logging positions), find the chest, claim the pot. Checks the
+// realm:rainbow_pot broadcasts for the Minimap (where the unfound pot is; {} once found) and the Journal entry.
+//   node tools/test-bds/run.mjs --quiet --only rainbow_bp --scenario tools/test-bds/examples/rainbow.js --timeout 600
 export default async function (t) {
   const { system } = t.mc;
   /** @type {any} */ let ev;
+  /** @type {any[]} */ const pots = [];
+  let journal = 0;
   system.afterEvents.scriptEventReceive.subscribe((e) => {
     if (e.id === "realm:sky_event") ev = JSON.parse(e.message);
+    else if (e.id === "realm:rainbow_pot") pots.push(JSON.parse(e.message));
+    else if (e.id === "realm:journal" && JSON.parse(e.message).entry === "rainbow") journal++;
   });
+  // No pot yet: {} (sent once after load, which may come before this scenario listens, and on a ping).
+  system.sendScriptEvent("realm:rainbow_ping", "");
+  await t.waitUntil(() => pots.length, { timeout: 100, message: "rainbow_pot before any rainbow" });
+  t.check(pots.every((m) => m.x === undefined), `no pot yet: ${JSON.stringify(pots)}`);
   const p = await t.player("Ann", { op: true, gameMode: "creative" });
   t.log(`start ${fmt(p.location)}`);
   const since = t.tick;
@@ -13,6 +23,17 @@ export default async function (t) {
   t.log(msg.plain);
   await t.waitUntil(() => ev, { timeout: 40, message: "sky_event" });
   t.log(`end at ${ev.x}, ${ev.z}`);
+  await t.waitUntil(() => pots.some((m) => m.x === ev.x), { timeout: 40, message: "rainbow_pot for the new pot" });
+  const last = pots[pots.length - 1];
+  t.check(last.dim === "minecraft:overworld" && last.x === ev.x && last.z === ev.z, `rainbow_pot at the end: ${JSON.stringify(last)}`);
+  t.check(/follow the rainbow on your compass/.test(msg.plain) && !/beam/.test(msg.plain), "chat points at the compass");
+  // A ping is answered with the same spot.
+  const n0 = pots.length;
+  system.sendScriptEvent("realm:rainbow_ping", "");
+  await t.waitUntil(() => pots.length > n0, { timeout: 40, message: "rainbow_pot answers the ping" });
+  t.check(pots[pots.length - 1].x === ev.x, "ping answer: the pot's spot");
+  await t.seconds(2);
+  t.check(journal === 1, `one Journal entry for Ann (${journal})`);
   const s = p.location;
   const dx = ev.x + 0.5 - s.x, dz = ev.z + 0.5 - s.z, D = Math.hypot(dx, dz);
   // Walk toward it in jumps; the end stays where it is (the chat said its direction from the start).
@@ -44,7 +65,11 @@ export default async function (t) {
     return false;
   };
   for (let i = 0; i < 15 && !scan(); i++) await t.seconds(1);
-  if (chest) t.log(`chest at ${fmt(chest)} (${Math.round(Math.hypot(chest.x - ev.x, chest.z - ev.z))} from the end)`);
+  if (chest) {
+    t.log(`chest at ${fmt(chest)} (${Math.round(Math.hypot(chest.x - ev.x, chest.z - ev.z))} from the end)`);
+    const at = pots[pots.length - 1];
+    t.check(at.x === chest.x && at.z === chest.z, `rainbow_pot follows the chest: ${JSON.stringify(at)}`);
+  }
   else {
     t.log("no chest (no safe spot): the loot goes to the finder");
     chest = { x: ev.x - 1, y: (endTop?.location.y ?? 64) + 1, z: ev.z };
@@ -55,6 +80,13 @@ export default async function (t) {
   p.teleport({ x: chest.x + 1.5, y: chest.y, z: chest.z + 0.5 });
   const found = await t.waitMessage(p, /found the pot of gold/, { since: since2, timeout: 100 });
   t.log(found.plain);
-  await t.seconds(4);
+  await t.seconds(2);
+  t.check(pots[pots.length - 1].x === undefined, `rainbow_pot {} once found: ${JSON.stringify(pots[pots.length - 1])}`);
+  const n1 = pots.length;
+  system.sendScriptEvent("realm:rainbow_ping", "{}");
+  await t.waitUntil(() => pots.length > n1, { timeout: 40, message: "ping after found" });
+  t.check(pots[pots.length - 1].x === undefined, "ping after found: {}");
+  t.check(journal === 1, `still one Journal entry (${journal})`);
+  await t.seconds(2);
 }
 const fmt = (/** @type {any} */ l) => `${Math.round(l.x)} ${Math.round(l.y)} ${Math.round(l.z)}`;

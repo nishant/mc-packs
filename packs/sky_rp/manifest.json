@@ -2,11 +2,11 @@
   "format_version": 2,
   "header": {
     "name": "Realm Skies",
-    "description": "Rainbows, auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
+    "description": "Auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     "uuid": "c9dba129-e60f-4f08-919b-0d4901bea43a",
     "version": [
       1,
-      1,
+      2,
       0
     ],
     "min_engine_version": [

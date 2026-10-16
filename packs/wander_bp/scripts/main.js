@@ -609,12 +609,25 @@ function protect(ent) {
       ent.addEffect("fire_resistance", LONG, { amplifier: 0, showParticles: false });
       ent.addEffect("water_breathing", LONG, { amplifier: 0, showParticles: false });
     }
+    // One that went invisible before `effectAdd` could stop it (a world saved that way) shows again.
+    if (ent.getEffect("invisibility")) ent.removeEffect("invisibility");
     const h = ent.getComponent("minecraft:health");
     if (h && h.currentValue < h.effectiveMax) h.resetToMaxValue();
   } catch {
     // unloaded
   }
 }
+
+// A wandering trader drinks a Potion of Invisibility whenever a zombie or illager comes within 6 blocks (vanilla):
+// ours would vanish with their name, sparkles and map dot still there. They never go invisible. (`effectType` is the
+// effect's display name here, "Invisibility", not its id.)
+world.beforeEvents.effectAdd.subscribe((ev) => {
+  try {
+    if (/^(minecraft:)?invisibility$/i.test(ev.effectType) && ev.entity.typeId === TRADER && ev.entity.hasTag(OWNER_TAG)) ev.cancel = true;
+  } catch {
+    // unloaded
+  }
+});
 
 /**
  * Spawns a wanderer's entity: a villager in their profession's look (a wandering trader for travelers, an allay for

@@ -6,6 +6,16 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Follow the rainbow
+
+- Rainbows: the dotted rainbow in the sky is gone. A rainbow on your compass now points to the pot of gold, with rainbow arrows at the ends of the strip when it's behind you.
+- Compass: a house shows the nearest town and a red bed shows where you respawn. Turn either off in /realm:prefs > Minimap. Towns are in /realm:map > Pick a destination.
+- Compass: the last icon on the right no longer drops below the strip.
+- Dolphins: back to their old speed, and a dolphin you ride only swims where you steer it. It can stay under water as long as you ride.
+- Champions now walk around trees and walls to reach you instead of getting stuck.
+- Wanderers on the road no longer turn invisible when a monster comes near.
+- Fen Charm: Poison really can't touch you now.
+
 ## Townsfolk stay put
 
 - Townsfolk no longer hop up and down when you, or another townsfolk, stand in their spot: they wait beside it until it is free.

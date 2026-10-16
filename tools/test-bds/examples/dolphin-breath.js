@@ -1,7 +1,6 @@
 // Dolphin Friends: a rider gets Water Breathing while on a tamed dolphin (topped up) and loses it about 3 s after
-// getting off; a potion's longer one is left alone. Then the water drag that steering pushes against: a simulated
-// rider can't use the move stick, so this repeats the pack's steer() push (WATER_KEEP 0.8) on the dolphin and checks
-// it reaches the default top speed of 7 blocks per second (the old push topped out near 6 whatever maxSpeed said).
+// getting off; a potion's longer one is left alone. Then a ridden dolphin with no input holds still: its own swimming
+// stops (the realm:dolphin_ridden group sets its movement to 0) and comes back once the rider is off.
 // About 1 minute:
 //   node tools/test-bds/run.mjs --quiet --timeout 600 --only dolphin_bp --scenario tools/test-bds/examples/dolphin-breath.js
 export default async function (t) {
@@ -48,24 +47,29 @@ export default async function (t) {
   p.teleport({ x: at.x, y: at.y + 2, z: at.z });
   await t.wait(5);
 
-  // 4. The drag steering pushes against: steer()'s push, forward along +x, with the defaults (7 b/s, 1.2 b/s per tick).
-  d.teleport({ x: at.x + 1.5, y: at.y - 3, z: at.z + 0.5 });
-  d.clearVelocity();
+  // 4. Ridden without input: no swimming of its own (a simulated rider can't use the move stick).
+  const uw = () => d.getComponent("minecraft:underwater_movement")?.currentValue;
+  d.teleport({ x: at.x + 30.5, y: at.y - 3, z: at.z + 0.5 });
+  p.teleport({ x: at.x + 30.5, y: at.y - 3, z: at.z + 1.5 });
   await t.wait(10);
-  const max = 7 / 20, accel = 1.2 / 20, KEEP = 0.8;
-  const speeds = [];
-  for (let i = 0; i < 60; i++) {
-    const v = d.getVelocity();
-    const dv = { x: max - v.x, y: -v.y, z: -v.z };
-    const len = Math.hypot(dv.x, dv.y, dv.z);
-    const k = Math.min(1, accel / len);
-    const goal = { x: v.x + dv.x * k, y: v.y + dv.y * k, z: v.z + dv.z * k };
-    d.applyImpulse({ x: goal.x / KEEP - v.x, y: goal.y / KEEP - v.y, z: goal.z / KEEP - v.z });
-    await t.wait(1);
-    const w = d.getVelocity();
-    speeds.push(Math.hypot(w.x, w.z) * 20);
-  }
-  const top = speeds.slice(-20).reduce((a, b) => a + b, 0) / 20;
-  t.log(`speed after 1, 5, 10 ticks: ${[0, 4, 9].map((i) => speeds[i].toFixed(1)).join(", ")} b/s; held ${top.toFixed(2)} b/s`);
-  t.check(top > 6.3 && top < 7.7, `holds about 7 blocks per second (${top.toFixed(2)})`);
+  t.assert(d.getComponent("minecraft:rideable").addRider(p), "on again, in open water");
+  await t.waitUntil(() => uw() === 0, { timeout: 40, message: "the ridden dolphin's own swimming is off" });
+  const start = { ...d.location };
+  await t.seconds(8);
+  const moved = Math.hypot(d.location.x - start.x, d.location.z - start.z);
+  t.log(`moved ${moved.toFixed(2)} blocks in 8 s with no input`);
+  t.check(moved < 1.5, `stays put with no input (${moved.toFixed(2)} blocks)`);
+  const br = () => d.getComponent("minecraft:breathable");
+  t.check(br()?.breathesWater === true && br()?.breathesAir === true, "a ridden dolphin breathes water too (it can't swim up for air)");
+  d.getComponent("minecraft:rideable").ejectRider(p);
+  await t.wait(30);
+  t.log(`after getting off: underwater movement ${uw()}, movement ${d.getComponent("minecraft:movement")?.currentValue}`);
+  t.check(Math.abs((uw() ?? 0) - 0.15) < 0.001, "swims on its own again after the rider is off (its usual 0.15)");
+  t.check(br()?.breathesWater === false && br()?.breathesAir === true, "off: it breathes air only again, like a vanilla dolphin");
+  // Disabling the pack while someone rides: the dolphin swims on its own again.
+  t.assert(d.getComponent("minecraft:rideable").addRider(p), "on once more");
+  await t.waitUntil(() => uw() === 0, { timeout: 40, message: "ridden again" });
+  t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `t_off_${t.tick}`, pack: "dolphin_bp", key: "enabled", value: false }));
+  await t.wait(40);
+  t.check(Math.abs((uw() ?? 0) - 0.15) < 0.001, `disabled: its own swimming is back (${uw()})`);
 }

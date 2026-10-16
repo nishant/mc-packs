@@ -215,6 +215,79 @@ for (let k = 0; k < 8; k++)
 glyph("I_STAR", 0x50, "inline: the destination star", (img, ox, oy) => rimmedPoly(img, ox, oy, star(6.8), COLOR.star));
 glyph("I_CHECK", 0x51, "inline: arrived", (img, ox, oy) => rimmedPoly(img, ox, oy, [[2, 8], [5, 5], [7, 8], [12, 2], [15, 5], [7, 13]], COLOR.wander));
 
+// Rows 6-8: places on the strip (the nearest town, your bed or respawn point, the rainbow's pot of gold), the
+// rainbow's edge arrows (left, right), and the same places on a radar square.
+const RAINBOW = /** @type {RGBA[]} */ ([
+  [235, 55, 45, 255],
+  [255, 140, 30, 255],
+  [255, 220, 50, 255],
+  [80, 200, 80, 255],
+  [70, 140, 255, 255],
+  [160, 90, 240, 255],
+]);
+const HOUSE = [[8, 1.8], [14.2, 7.4], [12.6, 7.4], [12.6, 13.6], [3.4, 13.6], [3.4, 7.4], [1.8, 7.4]];
+/** A house: the nearest town. @param {Image} img @param {number} ox @param {number} oy */
+const town = (img, ox, oy) => {
+  rimmedPoly(img, ox, oy, HOUSE, [235, 200, 130, 255]);
+  rect(img, ox + 7, oy + 10, ox + 8, oy + 13, [110, 70, 40, 255]);
+};
+/** A bed seen from the side (headboard, white pillow, red blanket, wooden frame): your respawn point. @param {Image} img @param {number} ox @param {number} oy */
+const bed = (img, ox, oy) => {
+  const WOOD = /** @type {RGBA} */ ([150, 100, 60, 255]);
+  const parts = /** @type {[number, number, number, number, RGBA][]} */ ([
+    [1, 3, 2, 13, WOOD], // headboard
+    [3, 6, 6, 8, WHITE], // pillow
+    [3, 8, 14, 9, [215, 45, 45, 255]], // blanket
+    [6, 6, 14, 7, [215, 45, 45, 255]],
+    [1, 10, 14, 11, WOOD], // frame
+    [13, 12, 14, 13, WOOD], // foot leg
+  ]);
+  for (const [x0, y0, x1, y1] of parts) rect(img, ox + x0 - 1, oy + y0 - 1, ox + x1 + 1, oy + y1 + 1, RIM);
+  for (const [x0, y0, x1, y1, c] of parts) rect(img, ox + x0, oy + y0, ox + x1, oy + y1, c);
+};
+/** A rainbow arch, red outside to violet inside: the pot of gold. @param {Image} img @param {number} ox @param {number} oy */
+const arch = (img, ox, oy) => {
+  const cx = 8, cy = 13.5, outer = 7.4, band = 0.95;
+  fill(img, ox, oy, ox + CELL, oy + CELL, (x, y) => {
+    const d = Math.hypot(x - ox - cx, y - oy - cy);
+    return y - oy <= cy && d <= outer + 1.1 && d >= outer - RAINBOW.length * band - 1.1;
+  }, RIM);
+  RAINBOW.forEach((c, i) =>
+    fill(img, ox, oy, ox + CELL, oy + CELL, (x, y) => {
+      const d = Math.hypot(x - ox - cx, y - oy - cy);
+      return y - oy <= cy && d <= outer - i * band && d > outer - (i + 1) * band;
+    }, c),
+  );
+};
+/** An edge arrow striped like a rainbow. @param {Image} img @param {number} ox @param {number} oy @param {number[][]} pts */
+const rainbowArrow = (img, ox, oy, pts) => {
+  rimmedPoly(img, ox, oy, pts, RAINBOW[0]);
+  RAINBOW.forEach((c, i) => fill(img, ox, oy, ox + CELL, oy + CELL, (x, y) => inside(pts, x - ox, y - oy) && y - oy >= 2.5 + i * (11 / 6) && y - oy < 2.5 + (i + 1) * (11 / 6), c));
+};
+const PLACES = /** @type {[string, string, (img: Image, ox: number, oy: number) => void][]} */ ([
+  ["TOWN", "the nearest town (house)", town],
+  ["HOME", "your bed or respawn point (bed)", bed],
+  ["RAINBOW", "the rainbow's pot of gold (rainbow)", arch],
+]);
+PLACES.forEach(([name, what, draw], i) => {
+  glyph(`S_${name}`, 0x60 + i, `strip: ${what}`, (img, ox, oy) => {
+    baseline(img, ox, oy);
+    draw(img, ox, oy);
+  });
+  glyph(`Q_${name}`, 0x80 + i, `radar: ${what}`, (img, ox, oy) => {
+    square(img, ox, oy);
+    draw(img, ox, oy);
+  });
+});
+glyph("L_RAINBOW", 0x70, "strip edge, left: the rainbow's pot of gold", (img, ox, oy) => {
+  baseline(img, ox, oy);
+  rainbowArrow(img, ox, oy, LEFT);
+});
+glyph("R_RAINBOW", 0x71, "strip edge, right: the rainbow's pot of gold", (img, ox, oy) => {
+  baseline(img, ox, oy);
+  rainbowArrow(img, ox, oy, RIGHT);
+});
+
 // ---------------------------------------------------------------------------
 // The outputs
 // ---------------------------------------------------------------------------
@@ -270,7 +343,7 @@ function render(sheet) {
   strip[12] = "S_CENTER";
   strip[3] = "S_NE";
   strip[16] = "S_E";
-  Object.assign(strip, { 0: "L_MOB", 7: "S_FOLK", 10: "S_STAR", 14: "S_MOB", 19: "S_WANDER", 21: "S_SITE", 24: "R_PARTY" });
+  Object.assign(strip, { 0: "L_MOB", 5: "S_TOWN", 7: "S_FOLK", 10: "S_STAR", 14: "S_MOB", 19: "S_WANDER", 21: "S_SITE", 22: "S_HOME", 24: "R_RAINBOW" });
   const dim = /** @type {RGBA} */ ([0, 0, 0, 120]);
   rect(img, 9, 3, 9 + 25 * CELL + 5, 3 + CELL + 3, dim);
   strip.forEach((g, i) => blit(g, 12 + i * CELL, 5));

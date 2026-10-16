@@ -17,6 +17,8 @@
 //   realm:track           { player, label?, dim?, x?, z? }                         <- Story Questlines' tracker target; realm:track_ping { player? }
 //   realm:place_ready     { name, state, dim, x, z, wid?, label? }                 <- story places; only camps (wid) are used; realm:place_ping
 //   realm:wander_spawn / realm:wander_turn / realm:wander_gone                     <- which wanderers on the road are friendly
+//   realm:town_list       { part, parts, towns: [{ id, n, dim, x, z }] }            <- Town Projects; realm:town_list_ping {}
+//   realm:rainbow_pot     { dim?, x?, z? }                                         <- Rainbows: the unfound pot of gold, or {}; realm:rainbow_ping {}
 //   realm:map_debug       { player, action: "state" | "cost" } (operators, tests)  -> realm:map_state
 // Party mates are the online players with the same `realm_party:<code>` tag (Parties).
 // See "Minimap" in docs/PACKS.md.
@@ -68,7 +70,12 @@ const KINDS = /** @type {Record<string, { s: string, l: string, r: string, q: st
   other: { s: G.S_OTHER, l: G.L_OTHER, r: G.R_OTHER, q: G.Q_OTHER, p: 5 },
   camp: { s: G.S_CAMP, l: G.L_CAMP, r: G.R_CAMP, q: G.Q_CAMP, p: 4 },
   site: { s: G.S_SITE, l: G.L_SITE, r: G.R_SITE, q: G.Q_SITE, p: 4 },
+  rainbow: { s: G.S_RAINBOW, l: G.L_RAINBOW, r: G.R_RAINBOW, q: G.Q_RAINBOW, p: 8 },
+  town: { s: G.S_TOWN, l: G.S_TOWN, r: G.S_TOWN, q: G.Q_TOWN, p: 3 },
+  home: { s: G.S_HOME, l: G.S_HOME, r: G.S_HOME, q: G.Q_HOME, p: 3 },
 });
+/** The nearest town and your respawn point don't show this close (you're there). */
+const PLACE_NEAR = { town: 24, home: 4 };
 const LETTERS = [G.S_N, G.S_NE, G.S_E, G.S_SE, G.S_S, G.S_SW, G.S_W, G.S_NW];
 const YOU = [G.Q_YOU_0, G.Q_YOU_1, G.Q_YOU_2, G.Q_YOU_3, G.Q_YOU_4, G.Q_YOU_5, G.Q_YOU_6, G.Q_YOU_7];
 
@@ -156,6 +163,10 @@ const regions = new Map();
 const deaths = new Map();
 /** Player id -> the story tracker's target: a spot, a townsfolk (by id), or both. @type {Map<string, { n: string, spot?: Spot, npc?: string }>} */
 const tracks = new Map();
+/** Town id -> where it is (Town Projects). @type {Map<string, Spot>} */
+const towns = new Map();
+/** The rainbow's pot of gold while nobody has found it (Rainbows & the Pot of Gold). @type {Spot | undefined} */
+let pot;
 /** Wanderer id -> friendly (true) or a hostile in disguise (false). Road wanderers we never heard about stay hidden. @type {Map<string, boolean>} */
 const wanderers = new Map();
 /** Lists arriving in parts: key -> what came so far. @type {Map<string, unknown[]>} */
@@ -270,7 +281,7 @@ function markHere(player, name) {
 // One pass for one player
 // ---------------------------------------------------------------------------
 
-/** What each player's preferences are (cached until /realm:prefs or /realm:config changes them). @type {Map<string, { compass: boolean, radar: boolean, north: boolean, mobs: boolean, radius: number }>} */
+/** What each player's preferences are (cached until /realm:prefs or /realm:config changes them). @type {Map<string, { compass: boolean, radar: boolean, north: boolean, mobs: boolean, radius: number, town: boolean, home: boolean }>} */
 const prefCache = new Map();
 /** @param {Player} player */
 function prefsOf(player) {
@@ -283,6 +294,8 @@ function prefsOf(player) {
     north: getFor(player, "radarNorthUp") === true,
     mobs: getFor(player, "showMobs") === true,
     radius: Math.min(cap, Math.max(8, Number(getFor(player, "mobRadius")) || 24)),
+    town: getFor(player, "showTown") === true,
+    home: getFor(player, "showHome") === true,
   };
   prefCache.set(player.id, p);
   return p;
@@ -394,7 +407,7 @@ function npcsNear(player) {
 
 /**
  * Markers around the player: two entity searches (townsfolk and wanderers; mobs), the rest from broadcasts.
- * @param {Player} player @param {Seen[]} seen @param {{ mobs: boolean, radius: number }} pr
+ * @param {Player} player @param {Seen[]} seen @param {{ mobs: boolean, radius: number, town: boolean, home: boolean }} pr
  */
 function gather(player, seen, pr) {
   const dim = player.dimension;
@@ -432,6 +445,26 @@ function gather(player, seen, pr) {
   const range = Number(get("placeRange")) || 256;
   for (const c of camps.values()) if (c.dim === dim.id && Math.abs(c.x - at.x) <= range && Math.abs(c.z - at.z) <= range) add("camp", c.x + 0.5, c.z + 0.5, false);
   if (dim.id === OVERWORLD) for (const s of sites.get(player.id) ?? []) if (Math.abs(s.x - at.x) <= range && Math.abs(s.z - at.z) <= range) add("site", s.x + 0.5, s.z + 0.5, false);
+  if (pr.town) {
+    /** @type {Spot | undefined} */
+    let best;
+    let bestD = Infinity;
+    for (const t of towns.values()) {
+      if (t.dim !== dim.id) continue;
+      const d = Math.hypot(t.x + 0.5 - at.x, t.z + 0.5 - at.z);
+      if (d < bestD) [best, bestD] = [t, d];
+    }
+    if (best && bestD > PLACE_NEAR.town) add("town", best.x + 0.5, best.z + 0.5, false);
+  }
+  if (pr.home) {
+    try {
+      const sp = player.getSpawnPoint();
+      if (sp && sp.dimension.id === dim.id && Math.hypot(sp.x + 0.5 - at.x, sp.z + 0.5 - at.z) > PLACE_NEAR.home) add("home", sp.x + 0.5, sp.z + 0.5, false);
+    } catch {
+      // no respawn point
+    }
+  }
+  if (pot && pot.dim === dim.id) add("rainbow", pot.x + 0.5, pot.z + 0.5, true);
   return { markers: out, liveFolk };
 }
 
@@ -511,7 +544,7 @@ function radarOf(heading, markers, radius, north, at) {
     const dx = m.x - at.x;
     const dz = m.z - at.z;
     const [sx, sy] = screen(dx, dz);
-    place(sx, sy, k.q, 10 + k.p - Math.min(Math.hypot(dx, dz), 999) / 1000, m.kind === "star" || m.kind === "party");
+    place(sx, sy, k.q, 10 + k.p - Math.min(Math.hypot(dx, dz), 999) / 1000, m.kind === "star" || m.kind === "party" || m.kind === "rainbow");
   }
   grid[R][R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
   return grid.map((row) => row.join("")).join("\n");
@@ -818,6 +851,7 @@ function choices(player) {
   const groups = [
     ["Townsfolk", [...folk].map(([id, s]) => ({ ...s, k: "npc", id }))],
     ["Waystones I know", (waystones.get(player.id) ?? []).map((w) => ({ n: w.n, dim: w.dim, x: w.x, z: w.z, k: "waystone", id: String(w.i) }))],
+    ["Towns", [...towns].map(([id, s]) => ({ ...s, k: "town", id }))],
     ["Wanderer camps", [...camps].map(([wid, s]) => ({ ...s, k: "camp", id: wid }))],
     ["Atlas sites I found", (sites.get(player.id) ?? []).map((s) => ({ n: s.r ? fit(`${s.n} (${s.r})`, 40) : s.n, dim: s.dim, x: s.x, z: s.z, k: "site" }))],
     ["Where I died", deaths.get(player.id) ? [{ ...(/** @type {Spot} */ (deaths.get(player.id))), n: "Where I died", k: "death" }] : []],
@@ -908,6 +942,8 @@ const EVENTS = new Set([
   "realm:wander_spawn",
   "realm:wander_turn",
   "realm:wander_gone",
+  "realm:town_list",
+  "realm:rainbow_pot",
   "realm:map_debug",
 ]);
 
@@ -990,6 +1026,19 @@ function onEvent(id, m, source) {
     case "realm:wander_gone":
       if (typeof m.wid === "string") wanderers.delete(m.wid);
       return;
+    case "realm:town_list": {
+      const list = collect(id, m, Array.isArray(m.towns) ? m.towns : []);
+      if (!list) return;
+      towns.clear();
+      for (const t of /** @type {any[]} */ (list)) {
+        const s = spotOf(t);
+        if (s && typeof t.id === "string") towns.set(t.id, { ...s, n: s.n || "Town" });
+      }
+      return;
+    }
+    case "realm:rainbow_pot":
+      pot = spotOf(m, "Pot of gold");
+      return;
     case "realm:map_debug": {
       if (source instanceof Player && !isOp(source)) return;
       const player = world.getAllPlayers().find((p) => p.id === pid || p.name === pid);
@@ -1002,7 +1051,7 @@ function onEvent(id, m, source) {
         dest: t?.dest,
         wp: player ? waypointOf(player) ?? null : null,
         cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends },
-        known: { folk: folk.size, camps: camps.size, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
+        known: { folk: folk.size, camps: camps.size, towns: towns.size, pot: pot ?? null, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
       });
       if (m.action === "cost") {
         costMs = 0;
@@ -1042,6 +1091,8 @@ function ping(player) {
   if (!player) {
     send("realm:npc_places_ping", {});
     send("realm:place_ping", {});
+    send("realm:town_list_ping", {});
+    send("realm:rainbow_ping", {});
   }
 }
 

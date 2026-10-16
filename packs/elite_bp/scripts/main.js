@@ -390,7 +390,7 @@ function makeChampion(e, opts = {}) {
   if (opts.tag) e.addTag(opts.tag);
   e.setDynamicProperty(PROP_NAME, name);
   e.setDynamicProperty(PROP_HITS, 0);
-  // A named mob doesn't despawn, so champions stay until someone deals with them.
+  // The name doesn't make it persistent (BDS 1.26): far from every player it can still despawn.
   e.nameTag = tagFor(e, trait, name);
   applyEffects(e, trait, true);
   try {
@@ -700,12 +700,86 @@ function stepTo(dim, from, x, z) {
 /** Is this champion one the approach leaves alone (an Expedition's)? @param {Entity} e */
 const ownedElsewhere = (e) => e.getTags().some((t) => t.startsWith("realm:exp"));
 
+/** How far ahead of its center a step looks: the mob's body reaches past its center, and a wall or a
+ * step that only its body touches stopped it for good (the game pushed it back out every step). */
+const BODY = 0.4;
+/** Its body's half width across the way it goes (the leading edge's two corners are looked at too). */
+const SIDE = 0.28;
+/** Steps a detour round something may take before the champion gives up for a while (60 s). */
+const DETOUR_STEPS = 240;
+/** Steps it rests after a detour that led nowhere (20 s), before it tries the other way round. */
+const REST_STEPS = 80;
+/**
+ * How far from the player a detour may take it (blocks): `LEASH`, or up to `LEASH_GRACE` further than
+ * where it met the obstacle (to get out of a dead end) but never past `LEASH_MAX`. A champion more than
+ * about 32 blocks from every player may despawn (a name tag given by a script doesn't keep it) and one
+ * about 44 away goes at once, so a detour that led away would lose it.
+ */
+const LEASH = 32;
+const LEASH_GRACE = 8;
+const LEASH_MAX = 40;
+
+/**
+ * A detour in progress for each champion going round something: the side it keeps the obstacle on
+ * (`side`: 1 or -1, the obstacle on its -side), its heading, how far from the player it was when it
+ * met the obstacle, and the steps so far; or a rest after a detour that led nowhere.
+ * @type {Map<string, { side: number, heading?: number, hit?: number, steps: number, rest?: number }>}
+ */
+const detours = new Map();
+
+/**
+ * Where a step of `step` blocks at angle `a` lands, if the mob's whole body fits: its center's column
+ * and the columns its leading edge reaches (straight ahead and both corners) must all take it (a corner
+ * its body already presses against is left out). A step up that only the body reaches lifts it (it
+ * stands on the edge); otherwise it keeps the center's height.
+ * @param {Dimension} dim @param {Vector3} at @param {number} a @param {number} step
+ */
+function bodyStep(dim, at, a, step) {
+  const cx = Math.cos(a);
+  const cz = Math.sin(a);
+  const x = at.x + cx * step;
+  const z = at.z + cz * step;
+  const center = stepTo(dim, at, x, z);
+  if (!center) return undefined;
+  let y = center.y;
+  const lead = step + BODY;
+  for (const off of [0, SIDE, -SIDE]) {
+    // A side its body already presses into (the game let it overlap a wall a little) can't stop it going along.
+    if (off && !stepTo(dim, at, at.x - cz * off, at.z + cx * off)) continue;
+    const probe = stepTo(dim, at, at.x + cx * lead - cz * off, at.z + cz * lead + cx * off);
+    if (!probe) return undefined;
+    y = Math.max(y, probe.y);
+  }
+  return { x, y, z };
+}
+
+/**
+ * Where a champion stands for a step: its location, or, in a small hop (a mob pressing on toward its
+ * target keeps jumping at a wall, and a step waited for it to land, so it could stand there for good),
+ * the ground under it. Undefined while it falls, flies or is knocked back: it lands first.
+ * @param {Entity} e
+ */
+function feet(e) {
+  const at = e.location;
+  if (e.isOnGround) return at;
+  const v = e.getVelocity();
+  if (v.y < -0.5 || Math.hypot(v.x, v.z) > 0.4) return undefined;
+  for (let y = Math.floor(at.y + 0.01); y >= Math.floor(at.y) - 2; y--) {
+    const b = e.dimension.getBlock({ x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
+    if (!b || b.isLiquid) return undefined;
+    if (ground(b)) return at.y - y <= 1.3 ? { x: at.x, y, z: at.z } : undefined;
+    if (!open(b)) return undefined;
+  }
+  return undefined;
+}
+
 /** One champion's step toward the nearest player in range, if any. @param {Entity} e @param {number} step */
 function approachStep(e, step) {
   if (!e.isValid || ownedElsewhere(e)) return;
-  if (e.isInWater || !e.isOnGround) return;
+  if (e.isInWater) return;
   const dim = e.dimension;
-  const at = e.location;
+  const at = feet(e);
+  if (!at) return;
   const range = Number(get("approach.range")) || CONFIG.approach.range;
   const stop = CONFIG.approach.stopDistance;
   // Players in a safe zone, land claim or town are left alone (no crowd of champions at its edge).
@@ -713,23 +787,70 @@ function approachStep(e, step) {
     .getPlayers({ location: at, maxDistance: range, excludeGameModes: [GameMode.Creative, GameMode.Spectator], excludeTags: ["afk"] })
     .filter((p) => !isProtected(dim.id, p.location.x, p.location.z))
     .sort((a, b) => dist(a.location, at) - dist(b.location, at))[0];
-  if (!target) return;
+  let d = detours.get(e.id);
+  if (!target) {
+    if (d && d.rest === undefined) detours.delete(e.id);
+    return;
+  }
   const dx = target.location.x - at.x;
   const dz = target.location.z - at.z;
   const flat = Math.hypot(dx, dz);
-  if (flat <= stop) return;
+  if (flat <= stop) {
+    detours.delete(e.id);
+    return;
+  }
+  if (d && d.rest !== undefined) {
+    if (--d.rest > 0) return;
+    d = { side: -d.side, steps: 0 }; // rested: the other way round this time
+    detours.set(e.id, d);
+  }
   const base = Math.atan2(dz, dx);
-  // Straight on, or a little to either side round something in the way.
-  for (const turn of [0, Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2]) {
-    const a = base + turn;
-    const x = at.x + Math.cos(a) * step;
-    const z = at.z + Math.sin(a) * step;
-    if (isProtected(dim.id, x, z) && !isProtected(dim.id, at.x, at.z)) continue; // safe zones and claims: not by our hand
-    const to = stepTo(dim, at, x, z);
-    if (!to) continue;
+  const inZone = isProtected(dim.id, at.x, at.z);
+  const reach = Math.min(LEASH_MAX, Math.max(LEASH, (d?.hit ?? flat) + LEASH_GRACE));
+  /** Step at angle a if it can: true when it moved. @param {number} a */
+  const go = (a) => {
+    if (!inZone && isProtected(dim.id, at.x + Math.cos(a) * (step + BODY), at.z + Math.sin(a) * (step + BODY))) return false; // safe zones and claims: not by our hand
+    const to = bodyStep(dim, at, a, step);
+    if (!to) return false;
+    const after = Math.hypot(target.location.x - to.x, target.location.z - to.z);
+    if (after > reach && after > flat) return false;
     const y = to.y === Math.floor(at.y + 0.01) ? at.y : to.y; // same height: keep a slab's half
     e.teleport({ x: to.x, y, z: to.z }, { facingLocation: { x: target.location.x, y: y + 1.5, z: target.location.z }, keepVelocity: false });
+    return true;
+  };
+  if (!d || d.heading === undefined || d.hit === undefined) {
+    // Straight on; blocked, it starts going round, on the side it went last time if it rested.
+    if (go(base)) {
+      if (d) detours.delete(e.id);
+      return;
+    }
+    const first = d?.side ?? 1;
+    for (const turn of [Math.PI / 4, Math.PI / 2]) {
+      for (const side of [first, -first]) {
+        if (!go(base + side * turn)) continue;
+        detours.set(e.id, { side, heading: base + side * turn, hit: flat, steps: 1 });
+        return;
+      }
+    }
+    return; // boxed in this step: tried again next step
+  }
+  // Going round: once closer than where it met the obstacle and free straight on, the detour is over.
+  if (flat < d.hit - 0.5 && go(base)) {
+    detours.delete(e.id);
     return;
+  }
+  if (++d.steps > DETOUR_STEPS) {
+    detours.set(e.id, { side: d.side, steps: 0, rest: REST_STEPS }); // a river or a cliff: rest, then the other way
+    return;
+  }
+  // Keep the obstacle on one side: turn toward it where it ends, along it where it goes on, away where it blocks.
+  const q = Math.PI / 4;
+  for (const k of [-2, -1, 0, 1, 2, 3, 4]) {
+    const a = d.heading + d.side * k * q;
+    if (go(a)) {
+      d.heading = a;
+      return;
+    }
   }
 }
 
@@ -818,6 +939,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
   nextStrike.delete(id);
   known.delete(id);
   live.delete(id);
+  detours.delete(id);
   loaded = Math.max(0, loaded - 1);
 });
 
@@ -927,6 +1049,7 @@ function refresh() {
   // Forget champions that unloaded (they come back through entityLoad / the next refresh).
   for (const id of known.keys()) if (!seen.has(id)) known.delete(id);
   for (const id of live.keys()) if (!seen.has(id)) live.delete(id);
+  for (const id of detours.keys()) if (!seen.has(id)) detours.delete(id);
   for (const id of nextStrike.keys()) if (!seen.has(id)) nextStrike.delete(id);
   const now = Date.now();
   for (const [id, m] of hitters) {
