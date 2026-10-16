@@ -2,6 +2,8 @@ import {
   CommandPermissionLevel,
   CustomCommandParamType,
   CustomCommandStatus,
+  BlockTypes,
+  BlockVolume,
   Entity,
   GameMode,
   Player,
@@ -65,7 +67,7 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
  * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string, home?: Vector3, posts?: { noon?: Vector3, evening?: Vector3 } }} Placed
  */
 /** @typedef {"work" | "lunch" | "evening" | "night"} Slot */
-/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, slot?: Slot, viewers?: Set<string>, renameAt?: number, renames?: number }} State */
+/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, slot?: Slot, viewers?: Set<string>, renameAt?: number, renames?: number, walk?: Vector3, rest?: Vector3, restUntil?: number, anchor?: Vector3 }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
 const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
@@ -635,7 +637,21 @@ function behave(rec, t, entity, lively) {
   const st = stateOf(rec.id);
   const dim = world.getDimension(rec.dim);
   const at = anchorOf(rec);
-  if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
+  const r = lively && get("stroll") === true ? Math.max(0, Math.min(8, Number(get("strollRadius")) || 0)) : 0;
+  // A stroll from another spot (its spot changed: home at night, a new post) or too far is dropped: a spot near the
+  // last one can be on the other side of a wall.
+  if (!st.anchor || dist(st.anchor, at) > 0.5) {
+    st.walk = undefined;
+    st.rest = undefined;
+    st.anchor = { ...at };
+  }
+  if (st.walk && (r <= 0 || dist(st.walk, at) > r + 0.5)) st.walk = undefined;
+  if (st.rest && (r <= 0 || dist(st.rest, at) > r + 0.5)) st.rest = undefined;
+  // Where it should be now: its spot, where its last stroll ended, or wherever it is while walking.
+  const here = st.walk ? entity.location : (st.rest ?? at);
+  if (entity.dimension.id !== rec.dim || dist(entity.location, here) > MOVE_DISTANCE) {
+    st.walk = undefined;
+    st.rest = undefined;
     // Pushed, moved by someone, or time to go home or back to its post. Only into a loaded spot nobody stands on.
     if (loaded(dim, at) && !occupied(entity, at)) {
       const up = liftSaved(rec) ? anchorOf(rec) : at;
@@ -648,7 +664,24 @@ function behave(rec, t, entity, lively) {
   const range = Number(get("faceRange")) || 0;
   const loc = entity.location;
   const [near] = range > 0 ? dim.getPlayers({ location: loc, maxDistance: range, closest: 1, excludeGameModes: [GameMode.Spectator] }) : [];
-  turn(entity, st, at, near ? yawTo(loc, near.location) : rec.yaw, false);
+  const [close] = dim.getPlayers({ location: loc, maxDistance: STROLL_STOP, closest: 1, excludeGameModes: [GameMode.Spectator] });
+  if (st.walk) {
+    if (!close) return; // walking: strollTick turns it the way it goes
+    st.walk = undefined; // someone came up to talk: stop here
+    st.rest = { ...loc };
+    st.restUntil = system.currentTick + 200;
+  }
+  const away = !!st.rest && dist(st.rest, at) > 0.5;
+  turn(entity, st, st.rest ?? at, near ? yawTo(loc, near.location) : away ? (st.yaw ?? rec.yaw) : rec.yaw, false);
+  // Time for a stroll: only with someone around to see it, and nobody right next to it.
+  if (r > 0 && !close) {
+    if (st.restUntil === undefined) st.restUntil = system.currentTick + 100 + Math.floor(Math.random() * 300);
+    else if (system.currentTick >= st.restUntil && dim.getPlayers({ location: loc, maxDistance: STROLL_SEEN }).length) {
+      const to = strollTarget(dim, at, st.rest ?? at, r, othersSpots(rec.id));
+      if (to) st.walk = to;
+      else st.restUntil = system.currentTick + 200;
+    }
+  }
 
   if (system.currentTick >= st.nextIdle) {
     st.nextIdle = system.currentTick + idleDelay();
@@ -702,8 +735,9 @@ world.afterEvents.worldLoad.subscribe(() => {
   loadGossip();
   loadDay();
   ready = true;
-  // A spread cut short by a restart or reload leaves its ticking areas: they're removed.
-  for (const d of DIMENSIONS) for (const n of [SPREAD_AREA, `${SPREAD_AREA}_from`]) tryCommand(world.getDimension(d), `tickingarea remove ${n}`);
+  // A move to houses cut short by a restart or reload leaves its ticking area: it's removed.
+  for (const d of DIMENSIONS) tryCommand(world.getDimension(d), `tickingarea remove ${HOUSES_AREA}`);
+  system.runInterval(strollTick, 1);
   scheduleTick();
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
@@ -1752,16 +1786,19 @@ function fromSkin(rec, dim, at) {
 }
 
 // ---------------------------------------------------------------------------
-// Spreading out: /realm:npc_spread gives every townsfolk a spot of its own around the operator (the middle of the
-// village), far enough apart that players walk from one to the next. Spots are on open ground (natural ground,
-// paths, plazas), never on a roof, a wall top, a slope or in water. Spots that aren't loaded are loaded for a
-// moment with a ticking area of our own (one at a time).
+// Houses: /realm:npc_houses finds the houses of the village around the operator by their doors, and gives each
+// townsfolk one: by day it stands (and strolls) right outside the door, at night it's inside. The village's chunks
+// are loaded for a moment with a ticking area of the pack's own. /realm:npc_undo puts back the spots from before.
 // ---------------------------------------------------------------------------
 
-const SPREAD_AREA = "realm_npc_spread";
-/** What a townsfolk may stand on: natural ground, paths and plazas (not planks, slabs or leaves, which are roofs and trees). */
-const GROUND =
-  /^minecraft:(grass_block|dirt|coarse_dirt|rooted_dirt|podzol|mycelium|dirt_path|grass_path|sand|red_sand|gravel|clay|mud|packed_mud|moss_block|snow|stone|cobblestone|mossy_cobblestone|stone_bricks|mossy_stone_bricks|cracked_stone_bricks|andesite|diorite|granite|polished_andesite|polished_diorite|polished_granite|smooth_stone|sandstone|red_sandstone|cobbled_deepslate|tuff|calcite|terracotta|[a-z_]+_terracotta|bricks|mud_bricks|crimson_nylium|warped_nylium|netherrack|soul_soil|end_stone)$/;
+const HOUSES_AREA = "realm_npc_houses";
+const PROP_PREV = "npc:list_prev"; // world: JSON Placed[] from before the last /realm:npc_houses (for /realm:npc_undo)
+/** Door block ids (not trapdoors), from the game's own list (read on first use: not allowed at startup). @type {string[] | undefined} */
+let doorTypes;
+const doors = () =>
+  (doorTypes ??= BlockTypes.getAll()
+    .map((b) => b.id)
+    .filter((id) => /(^minecraft:|_)door$/.test(id) && !/trapdoor/.test(id)));
 
 /** @param {Dimension} dim @param {string} command */
 function tryCommand(dim, command) {
@@ -1772,233 +1809,391 @@ function tryCommand(dim, command) {
   }
 }
 
-/** The top of the ground column at x, z (skipping grass, flowers and snow layers), or undefined. @param {Dimension} dim @param {number} x @param {number} z */
-function groundBlock(dim, x, z) {
-  let b = dim.getTopmostBlock({ x, z });
-  for (let i = 0; i < 3 && b && (b.isAir || PASSABLE.test(b.typeId)); i++) b = b.below();
-  return b;
-}
-
 /**
- * Where a townsfolk can stand at x, z: on open, level ground with room for feet and head, out of water, not on a
- * roof (solid under the ground block) or a wall top or slope (the four neighbors within a block). undefined if not.
- * @param {Dimension} dim @param {number} x @param {number} z @returns {Vector3 | undefined}
+ * Blocks in a volume matching a filter, by halving it with containsBlock (a few hundred native checks instead of
+ * reading every block). Stops after `max`. Throws when part of it isn't loaded.
+ * @param {Dimension} dim @param {Vector3} a @param {Vector3} b @param {import("@minecraft/server").BlockFilter} filter @param {number} max
  */
-function standAt(dim, x, z) {
-  try {
-    const b = groundBlock(dim, x, z);
-    if (!b || b.isLiquid || !GROUND.test(b.typeId)) return undefined;
-    const at = { x: x + 0.5, y: b.location.y + heightOf(b), z: z + 0.5 };
-    const feet = dim.getBlock({ x, y: Math.floor(at.y), z });
-    const head = dim.getBlock({ x, y: Math.floor(at.y) + 1, z });
-    if (!feet || !head || feet.isLiquid || head.isLiquid || blocks(feet, at.y) || blocks(head, at.y + 1)) return undefined;
-    const under = b.below();
-    if (!under || under.isAir || under.isLiquid) return undefined; // a roof or a ledge over a room
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const n = groundBlock(dim, x + dx, z + dz);
-      if (!n) return undefined;
-      if (Math.abs(n.location.y - b.location.y) > 1 && !n.above()?.isLiquid) return undefined;
-    }
-    return at;
-  } catch {
-    return undefined; // not loaded
-  }
-}
-
-/** Water within a few blocks of a spot, at its level (for the fisherman). @param {Dimension} dim @param {Vector3} at */
-function nearWater(dim, at) {
-  for (let r = 2; r <= 6; r += 2)
-    for (let k = 0; k < 8; k++) {
-      const a = (k * Math.PI) / 4;
-      for (const dy of [-1, -2]) {
-        try {
-          if (dim.getBlock({ x: Math.floor(at.x + r * Math.cos(a)), y: Math.floor(at.y) + dy, z: Math.floor(at.z + r * Math.sin(a)) })?.isLiquid) return true;
-        } catch {
-          // not loaded
-        }
-      }
-    }
-  return false;
-}
-
-/** Loads the chunks around x, z for a moment (our own ticking area): true once loaded. @param {Dimension} dim @param {number} x @param {number} z @param {string} name */
-async function loadAround(dim, x, z, name) {
-  if (loaded(dim, { x, y: 64, z })) return true;
-  if (!tryCommand(dim, `tickingarea add circle ${Math.floor(x)} 64 ${Math.floor(z)} 1 ${name}`)) return false; // the world's 10 ticking areas are taken
-  for (let i = 0; i < 40; i++) {
-    await wait(5);
-    if (loaded(dim, { x, y: 64, z })) return true;
-  }
-  return false;
-}
-/** @param {Dimension} dim @param {string} name */
-const unload = (dim, name) => tryCommand(dim, `tickingarea remove ${name}`);
-
-/**
- * New spots for these townsfolk within `radius` of `center`, at least `spacing` apart (a little less if the land
- * is tight). The fisherman looks for water first.
- * @param {Player} player @param {Vector3} center @param {number} radius @param {number} spacing @param {string[]} ids
- * @returns {Promise<{ id: string, at: Vector3 }[]>}
- */
-async function planSpread(player, center, radius, spacing, ids) {
-  const dim = player.dimension;
-  /** @type {{ id: string, at: Vector3 }[]} */
+function findBlocks(dim, a, b, filter, max) {
+  /** @type {Vector3[]} */
   const out = [];
-  const order = [...ids.filter((id) => folk.get(id)?.roles.includes("fisher")), ...ids.filter((id) => !folk.get(id)?.roles.includes("fisher")).sort(() => Math.random() - 0.5)];
-  const free = (/** @type {Vector3} */ p, /** @type {number} */ need) => out.every((o) => Math.hypot(o.at.x - p.x, o.at.z - p.z) >= need);
+  /** @param {Vector3} p @param {Vector3} q */
+  const search = (p, q) => {
+    if (out.length >= max || !dim.containsBlock(new BlockVolume(p, q), filter, false)) return;
+    const sx = q.x - p.x;
+    const sy = q.y - p.y;
+    const sz = q.z - p.z;
+    if (sx === 0 && sy === 0 && sz === 0) return void out.push(p);
+    if (sx >= sy && sx >= sz) {
+      const m = Math.floor((p.x + q.x) / 2);
+      search(p, { ...q, x: m });
+      search({ ...p, x: m + 1 }, q);
+    } else if (sz >= sy) {
+      const m = Math.floor((p.z + q.z) / 2);
+      search(p, { ...q, z: m });
+      search({ ...p, z: m + 1 }, q);
+    } else {
+      const m = Math.floor((p.y + q.y) / 2);
+      search(p, { ...q, y: m });
+      search({ ...p, y: m + 1 }, q);
+    }
+  };
+  search(a, b);
+  return out;
+}
+
+/**
+ * Where a townsfolk can stand in block column x, z at about height y (the floor within a block of it): room for
+ * feet and head, a solid floor, no liquid. undefined if not (or not loaded).
+ * @param {Dimension} dim @param {number} x @param {number} y @param {number} z @returns {Vector3 | undefined}
+ */
+function standNear(dim, x, y, z) {
   try {
-    for (const id of order) {
-      const fisher = !!folk.get(id)?.roles.includes("fisher");
-      let found;
-      for (let attempt = 0; attempt < 40 && !found; attempt++) {
-        if (!player.isValid) return out;
-        const need = attempt < 25 ? spacing : spacing * 0.75;
-        const r = radius * Math.sqrt(Math.random());
-        const a = Math.random() * 2 * Math.PI;
-        const p = { x: center.x + r * Math.cos(a), y: center.y, z: center.z + r * Math.sin(a) };
-        if (!free(p, need)) continue;
-        if (!(await loadAround(dim, p.x, p.z, SPREAD_AREA))) continue;
-        for (let k = 0; k < 24 && !found; k++) {
-          const qx = Math.floor(p.x + (Math.random() * 2 - 1) * 6);
-          const qz = Math.floor(p.z + (Math.random() * 2 - 1) * 6);
-          if (Math.hypot(qx + 0.5 - center.x, qz + 0.5 - center.z) > radius) continue;
-          const at = standAt(dim, qx, qz);
-          if (!at || !free(at, need)) continue;
-          if (fisher && attempt < 30 && !nearWater(dim, at)) continue;
-          found = at;
-        }
-        unload(dim, SPREAD_AREA);
+    for (const dy of [0, 1, -1]) {
+      const fy = Math.floor(y) + dy - 1; // the floor block
+      const floor = dim.getBlock({ x, y: fy, z });
+      if (!floor || floor.isAir || floor.isLiquid || PASSABLE.test(floor.typeId) || /door/.test(floor.typeId)) continue;
+      const at = { x: x + 0.5, y: fy + heightOf(floor), z: z + 0.5 };
+      const feet = dim.getBlock({ x, y: Math.floor(at.y), z });
+      const head = dim.getBlock({ x, y: Math.floor(at.y) + 1, z });
+      if (!feet || !head || feet.isLiquid || head.isLiquid || blocks(feet, at.y) || blocks(head, at.y + 1)) continue;
+      if (/door/.test(feet.typeId) || /door/.test(head.typeId)) continue; // never in a doorway
+      return at;
+    }
+  } catch {
+    // not loaded
+  }
+  return undefined;
+}
+
+/** Is there a roof over x, z within 8 blocks above y (inside a house)? @param {Dimension} dim @param {number} x @param {number} y @param {number} z */
+function roofed(dim, x, y, z) {
+  try {
+    for (let dy = 2; dy <= 8; dy++) {
+      const b = dim.getBlock({ x, y: Math.floor(y) + dy, z });
+      if (b && !b.isAir && !b.isLiquid && !PASSABLE.test(b.typeId)) return true;
+    }
+  } catch {
+    // not loaded
+  }
+  return false;
+}
+
+/**
+ * The houses of the village: each door (its lower half) with an open side and a roofed side, then doors within 6
+ * blocks of each other merged (double doors, two doors of one house). For each house, spots right outside the
+ * door (by day) and inside (at night), nearest the door first, and which way is out.
+ * @param {Dimension} dim @param {Vector3} center @param {number} radius
+ * @returns {{ door: Vector3, out: { x: number, z: number }, outside: Vector3[], inside: Vector3[] }[]}
+ */
+function findHouses(dim, center, radius) {
+  const cx = Math.floor(center.x);
+  const cz = Math.floor(center.z);
+  const y0 = Math.max(dim.heightRange.min, Math.floor(center.y) - 16);
+  const y1 = Math.min(dim.heightRange.max - 1, Math.floor(center.y) + 24);
+  /** @type {Vector3[]} */
+  const found = [];
+  // Chunk by chunk: one that isn't loaded is skipped rather than failing the whole search.
+  for (let x = cx - radius; x <= cx + radius; x += 16)
+    for (let z = cz - radius; z <= cz + radius; z += 16) {
+      try {
+        const a = { x, y: y0, z };
+        const b = { x: Math.min(x + 15, cx + radius), y: y1, z: Math.min(z + 15, cz + radius) };
+        found.push(...findBlocks(dim, a, b, { includeTypes: doors() }, 400));
+      } catch {
+        // not loaded
       }
-      if (found) out.push({ id, at: found });
+    }
+  /** @type {{ door: Vector3, out: { x: number, z: number }, outside: Vector3[], inside: Vector3[] }[]} */
+  const houses = [];
+  for (const d of found) {
+    if (Math.hypot(d.x - cx, d.z - cz) > radius) continue;
+    try {
+      const below = dim.getBlock({ ...d, y: d.y - 1 });
+      if (below && doors().includes(below.typeId)) continue; // the upper half
+    } catch {
+      continue;
+    }
+    if (houses.some((h) => Math.hypot(h.door.x - d.x, h.door.z - d.z) < 6 && Math.abs(h.door.y - d.y) < 3)) continue;
+    // Which way is out: the side with open sky; in: the roofed side.
+    for (const [ax, az] of [[1, 0], [0, 1]]) {
+      const p = { x: d.x + ax, z: d.z + az };
+      const q = { x: d.x - ax, z: d.z - az };
+      const rp = roofed(dim, p.x, d.y, p.z);
+      const rq = roofed(dim, q.x, d.y, q.z);
+      if (rp === rq) continue;
+      const out = rp ? { x: -ax, z: -az } : { x: ax, z: az };
+      const side = { x: out.z, z: out.x }; // along the wall
+      /** @param {number} dir 1 out, -1 in @param {number[]} depths @param {number[]} offsets */
+      const spots = (dir, depths, offsets) => {
+        /** @type {Vector3[]} */
+        const list = [];
+        for (const k of depths)
+          for (const o of offsets) {
+            const at = standNear(dim, d.x + dir * out.x * k + side.x * o, d.y, d.z + dir * out.z * k + side.z * o);
+            if (at && (dir > 0 ? !roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)) : roofed(dim, Math.floor(at.x), at.y, Math.floor(at.z)))) list.push(at);
+          }
+        return list;
+      };
+      const outside = spots(1, [2, 3, 1], [0, 2, -2, 3, -3]);
+      const inside = spots(-1, [2, 3, 1, 4], [0, 1, -1, 2, -2]);
+      if (outside.length && inside.length) houses.push({ door: d, out, outside, inside });
+      break;
+    }
+  }
+  return houses;
+}
+
+/** Loads the village for a moment (our own ticking area, 4 chunks around x, z): true once the middle is loaded. @param {Dimension} dim @param {Vector3} at */
+async function loadVillage(dim, at) {
+  tryCommand(dim, `tickingarea add circle ${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)} 4 ${HOUSES_AREA}`);
+  await wait(40); // the area's chunks load over a moment
+  return loaded(dim, at);
+}
+
+/**
+ * A house for each townsfolk: houses nearest the middle first, in a shuffled order of townsfolk; more townsfolk
+ * than houses share them, on other spots by the same door (at least 2 blocks apart).
+ * @param {ReturnType<typeof findHouses>} houses @param {string[]} ids
+ * @returns {{ id: string, post: Vector3, home: Vector3, yaw: number, house: number }[]}
+ */
+function assignHouses(houses, ids) {
+  /** @type {{ id: string, post: Vector3, home: Vector3, yaw: number, house: number }[]} */
+  const out = [];
+  if (!houses.length) return out;
+  const order = [...ids].sort(() => Math.random() - 0.5);
+  const free = (/** @type {Vector3} */ p, /** @type {"post" | "home"} */ k) => out.every((o) => dist(o[k], p) >= 2);
+  order.forEach((id, i) => {
+    for (let n = 0; n < houses.length; n++) {
+      const hi = (i + n) % houses.length;
+      const h = houses[hi];
+      const post = h.outside.find((p) => free(p, "post"));
+      const home = h.inside.find((p) => free(p, "home"));
+      if (!post || !home) continue;
+      const yaw = wrap(yawTo(h.door, { x: h.door.x + h.out.x, y: h.door.y, z: h.door.z + h.out.z })); // facing away from the door, toward the street
+      out.push({ id, post, home, yaw, house: hi });
+      return;
+    }
+  });
+  return out;
+}
+
+/**
+ * Moves each townsfolk to its new spots: the NPC itself (its skin stays) to where the time of day puts it, or
+ * placed again from its saved skin when it can't be reached. The spots from before are kept for /realm:npc_undo.
+ * @param {Dimension} dim @param {{ id: string, post: Vector3, home?: Vector3, yaw: number, posts?: Placed["posts"] }[]} plan
+ */
+async function moveTo(dim, plan) {
+  try {
+    world.setDynamicProperty(PROP_PREV, JSON.stringify(list));
+  } catch (e) {
+    console.warn(`[npc] keep the old spots: ${e}`);
+  }
+  let moved = 0;
+  for (const p of plan) {
+    const rec = placedOf(p.id);
+    const t = folk.get(p.id);
+    if (!rec || !t) continue;
+    let entity = entityOf(rec);
+    Object.assign(rec, { dim: dim.id, x: p.post.x, y: p.post.y, z: p.post.z, yaw: p.yaw, home: p.home, posts: p.posts });
+    const st = stateOf(p.id);
+    st.slot = undefined;
+    st.missing = 0;
+    st.yaw = p.yaw;
+    st.walk = undefined;
+    st.rest = undefined;
+    const at = anchorOf(rec);
+    save();
+    if (entity?.isValid && loaded(dim, at)) {
+      try {
+        entity.teleport(at, { dimension: dim, rotation: { x: 0, y: p.yaw } });
+        rec.eid = entity.id;
+      } catch (e) {
+        console.warn(`[npc] move ${p.id}: ${e}`);
+        entity = undefined;
+      }
+    } else entity = undefined;
+    if (!entity && loaded(dim, at)) spawn(rec, t, at); // from its saved skin if there is one; the old NPC goes when its chunk loads
+    moved++;
+    await wait(2);
+    const now = entityOf(rec);
+    if (now && dist(now.location, at) < 1) saveSkin(now, p.id); // on its own spot now: the skin snapshot is (re)taken
+  }
+  save();
+  return moved;
+}
+
+/** /realm:npc_houses [radius]: find the houses, preview, then move. @param {Player} player @param {number} [radius] */
+async function houseNpcs(player, radius) {
+  const R = Math.max(16, Math.min(64, Math.round(Number(radius) || CONFIG.housesRadius)));
+  const ids = list.map((r) => r.id);
+  if (!ids.length) return player.sendMessage("§cNo townsfolk are placed yet: /realm:npc_add <id> first.");
+  if (moving) return player.sendMessage("§eThe townsfolk are already moving. Wait for it to finish.");
+  moving = true;
+  const dim = player.dimension;
+  const center = { ...player.location };
+  try {
+    player.sendMessage(`§7Looking for the houses within ${R} blocks of you (their doors)...`);
+    await loadVillage(dim, center);
+    if (!player.isValid) return;
+    const houses = findHouses(dim, center, R);
+    if (!houses.length) return player.sendMessage(`§cNo houses found within ${R} blocks: a house here is a door with a roof on one side and open sky on the other. Stand in the middle of the town, or try /realm:npc_houses 64.`);
+    for (;;) {
+      const plan = assignHouses(houses, ids);
+      const lines = plan.map((p) => {
+        const t = /** @type {Townsfolk} */ (folk.get(p.id));
+        const dx = p.post.x - center.x;
+        const dz = p.post.z - center.z;
+        return `§f${plainName(t)}§7: house ${p.house + 1}, ${Math.round(Math.hypot(dx, dz))}m ${compass(dx, dz)} (door at ${coords(houses[p.house].door)})`;
+      });
+      const missing = ids.filter((id) => !plan.some((p) => p.id === id));
+      const shared = houses.length < plan.length ? ` §7(${plan.length} townsfolk, so some share a house)` : "";
+      const body = [
+        `§fFound ${houses.length} house${houses.length === 1 ? "" : "s"}${shared}. By day each townsfolk stands right outside their door and strolls nearby; at night they're inside.`,
+        ...lines,
+        missing.length ? `§eNo room found for: ${missing.map((id) => plainName(/** @type {Townsfolk} */ (folk.get(id)))).join(", ")}. They stay where they are.` : "",
+        "§7Lunch and evening spots are cleared. /realm:npc_undo puts everyone back where they are now.",
+      ].filter(Boolean);
+      const res = await show(
+        player,
+        new ActionFormData()
+          .title("Townsfolk to their houses")
+          .body(body.join("\n"))
+          .button(`Move them\n§8${plan.length} townsfolk`)
+          .button("Shuffle who lives where")
+          .button("Cancel"),
+      );
+      if (!res || res.canceled || res.selection === 2 || !player.isValid) return;
+      if (!isOp(player)) return player.sendMessage("§cOnly operators can do that."); // de-opped while the form was open
+      if (res.selection === 1) continue;
+      if (!plan.length) return player.sendMessage("§cNobody to move.");
+      const moved = await moveTo(dim, plan.map((p) => ({ ...p, posts: undefined })));
+      if (player.isValid) player.sendMessage(`§aMoved ${moved} townsfolk to their houses.§7 /realm:npc_who shows the way to each; /realm:npc_undo puts them back.`);
+      return;
     }
   } finally {
-    unload(dim, SPREAD_AREA);
+    tryCommand(dim, `tickingarea remove ${HOUSES_AREA}`);
+    moving = false;
+  }
+}
+let moving = false;
+
+/** /realm:npc_undo: the spots from before the last /realm:npc_houses, after a confirmation. @param {Player} player */
+async function undoMove(player) {
+  /** @type {Placed[]} */
+  let prev;
+  try {
+    const raw = world.getDynamicProperty(PROP_PREV);
+    prev = typeof raw === "string" ? JSON.parse(raw) : [];
+  } catch {
+    prev = [];
+  }
+  prev = prev.filter((r) => r && folk.has(r.id) && placedOf(r.id) && isNum(r.x) && isNum(r.y) && isNum(r.z));
+  if (!prev.length) return player.sendMessage("§7Nothing to undo: the townsfolk haven't been moved to houses yet.");
+  if (moving) return player.sendMessage("§eThe townsfolk are already moving. Wait for it to finish.");
+  const res = await show(player, new ActionFormData().title("Undo the move?").body(`Put ${prev.length} townsfolk back on the spots they had before the last move to houses (with their homes and lunch and evening spots then)?`).button("Put them back").button("Cancel"));
+  if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can do that.");
+  moving = true;
+  try {
+    // Each townsfolk goes back to its own dimension; the move keeps these spots as the new "before".
+    const byDim = new Map();
+    for (const r of prev) byDim.set(r.dim, [...(byDim.get(r.dim) ?? []), { id: r.id, post: { x: r.x, y: r.y, z: r.z }, home: r.home, yaw: r.yaw ?? 0, posts: r.posts }]);
+    let moved = 0;
+    for (const [d, plan] of byDim) moved += await moveTo(world.getDimension(d), plan);
+    if (player.isValid) player.sendMessage(`§aPut ${moved} townsfolk back.§7 Run /realm:npc_undo again to swap back.`);
+  } finally {
+    moving = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Strolling: a townsfolk walks a few blocks around its spot now and then (`strollRadius`), along a straight line
+// with floor all the way and no wall in between, and rests 10 to 30 seconds. It stops when a player comes within
+// 3 blocks, and only walks while a player is within 48 blocks (nobody else would see it).
+// ---------------------------------------------------------------------------
+
+const STROLL_SPEED = 0.07; // blocks a tick (a slow amble)
+const STROLL_STOP = 3; // a player this close: stop and talk
+const STROLL_SEEN = 48;
+
+/** Can a townsfolk walk straight from `a` to `b` (floor all the way, room for feet and head, no step over half a block)? @param {Dimension} dim @param {Vector3} a @param {Vector3} b */
+function walkable(dim, a, b) {
+  const n = Math.ceil(dist(a, b) / 0.4);
+  let y = a.y;
+  for (let i = 1; i <= n; i++) {
+    const x = a.x + ((b.x - a.x) * i) / n;
+    const z = a.z + ((b.z - a.z) * i) / n;
+    const at = standNear(dim, Math.floor(x), y, Math.floor(z));
+    if (!at || Math.abs(at.y - y) > 0.55) return false;
+    y = at.y;
+  }
+  return true;
+}
+
+/** Where the other townsfolk belong or are headed right now (a stroll never ends there). @param {string} id */
+function othersSpots(id) {
+  /** @type {Vector3[]} */
+  const out = [];
+  for (const r of list) {
+    if (r.id === id) continue;
+    const st = stateOf(r.id);
+    out.push(anchorOf(r));
+    if (st.walk) out.push(st.walk);
+    if (st.rest) out.push(st.rest);
   }
   return out;
 }
 
 /**
- * Moves each townsfolk to its new spot, facing `center`: the NPC itself (its skin stays) when it can be loaded,
- * otherwise placed again from its saved skin there. `clear`: homes and lunch and evening spots are forgotten.
- * @param {Player} player @param {Vector3} center @param {{ id: string, at: Vector3 }[]} plan @param {boolean} clear
+ * A spot to stroll to within the radius of `anchor`, reachable from `from`, at least 2 blocks from where the other
+ * townsfolk belong or are headed, or undefined. @param {Dimension} dim @param {Vector3} anchor @param {Vector3} from @param {number} r @param {Vector3[]} avoid
  */
-async function applySpread(player, center, plan, clear) {
-  const dim = player.dimension;
-  let moved = 0;
-  try {
-    for (const { id, at } of plan) {
-      const rec = placedOf(id);
-      const t = folk.get(id);
-      if (!rec || !t) continue;
-      const yaw = wrap(yawTo(at, center));
-      // Its NPC: loaded where it stands now, or loaded for a moment.
-      let entity = entityOf(rec);
-      if (!entity && rec.dim === dim.id) {
-        const old = anchorOf(rec);
-        if (await loadAround(dim, old.x, old.z, `${SPREAD_AREA}_from`)) {
-          await wait(10);
-          entity = entityOf(rec) ?? dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG, ID_TAG + id] })[0];
-        }
-      }
-      const there = await loadAround(dim, at.x, at.z, SPREAD_AREA);
-      Object.assign(rec, { dim: dim.id, x: at.x, y: at.y, z: at.z, yaw });
-      if (clear) {
-        rec.home = undefined;
-        rec.posts = undefined;
-      }
-      const st = stateOf(id);
-      st.slot = undefined;
-      st.missing = 0;
-      st.yaw = yaw;
-      let done = false;
-      if (entity?.isValid && there) {
-        try {
-          entity.teleport(at, { dimension: dim, rotation: { x: 0, y: yaw } });
-          rec.eid = entity.id;
-          done = true;
-        } catch (e) {
-          console.warn(`[npc] spread ${id}: ${e}`);
-        }
-      }
-      save();
-      if (!done && there) {
-        // Its NPC couldn't be reached: a new one here (from its saved skin if there is one); the old one goes when its chunk loads.
-        spawn(rec, t, at);
-        done = true;
-      }
-      // Not loadable now: the saved spot is enough, it's moved (or placed from its skin) when a player comes near.
-      await wait(4);
-      const now = entityOf(rec);
-      if (now && dist(now.location, at) < 1) saveSkin(now, id); // alone now: the skin snapshot is taken (or refreshed)
-      unload(dim, `${SPREAD_AREA}_from`);
-      unload(dim, SPREAD_AREA);
-      moved++;
-    }
-  } finally {
-    unload(dim, `${SPREAD_AREA}_from`);
-    unload(dim, SPREAD_AREA);
+function strollTarget(dim, anchor, from, r, avoid) {
+  const clear = (/** @type {Vector3} */ at) => avoid.every((o) => dist(o, at) >= 2);
+  if (dist(from, anchor) > 0.5 && Math.random() < 0.35) return clear(anchor) && walkable(dim, from, anchor) ? { ...anchor } : undefined; // back to its own spot now and then
+  for (let k = 0; k < 6; k++) {
+    const a = Math.random() * 2 * Math.PI;
+    const d = 1.5 + Math.random() * (r - 1.5);
+    const at = standNear(dim, Math.floor(anchor.x + d * Math.cos(a)), anchor.y, Math.floor(anchor.z + d * Math.sin(a)));
+    if (!at || dist(at, anchor) > r + 0.5 || dist(at, from) < 1.5 || !clear(at)) continue;
+    if (walkable(dim, from, at)) return at;
   }
-  placesSoon();
-  return moved;
+  return undefined;
 }
 
-/** /realm:npc_spread [radius] [spacing]: plan, preview, then move. @param {Player} player @param {number} [radius] @param {number} [spacing] */
-async function spreadNpcs(player, radius, spacing) {
-  const R = Math.max(16, Math.min(200, Math.round(Number(radius) || CONFIG.spreadRadius)));
-  const S = Math.max(4, Math.min(64, Math.round(Number(spacing) || CONFIG.spreadSpacing)));
-  const ids = list.map((r) => r.id);
-  if (!ids.length) return player.sendMessage("§cNo townsfolk are placed yet: /realm:npc_add <id> first.");
-  if (spreading) return player.sendMessage("§eThe townsfolk are already being spread out. Wait for it to finish.");
-  spreading = true;
-  try {
-    const center = { ...player.location };
-    let clear = true;
-    for (;;) {
-      player.sendMessage(`§7Looking for ${ids.length} spots within ${R} blocks of you, ${S} blocks apart...`);
-      const plan = await planSpread(player, center, R, S, ids);
-      if (!player.isValid) return;
-      const missing = ids.filter((id) => !plan.some((p) => p.id === id));
-      const lines = plan.map(({ id, at }) => {
-        const t = /** @type {Townsfolk} */ (folk.get(id));
-        const dx = at.x - center.x;
-        const dz = at.z - center.z;
-        return `§f${plainName(t)}§7: ${Math.round(Math.hypot(dx, dz))}m ${compass(dx, dz)} (${coords(at)})`;
-      });
-      const closest = plan.length > 1 ? Math.min(...plan.flatMap((p, i) => plan.slice(i + 1).map((q) => Math.hypot(p.at.x - q.at.x, p.at.z - q.at.z)))) : 0;
-      const body = [
-        `§fNew spots around you${plan.length > 1 ? `, the closest two ${Math.round(closest)} blocks apart` : ""}. Each one faces where you stand.`,
-        ...lines,
-        missing.length ? `§eNo open ground found for: ${missing.map((id) => plainName(/** @type {Townsfolk} */ (folk.get(id)))).join(", ")}. They stay where they are (try a bigger radius or a smaller spacing).` : "",
-        clear ? "§7Homes and lunch and evening spots are cleared: each one stays at their own spot all day and night." : "§7Homes and lunch and evening spots are kept (they may meet there).",
-      ].filter(Boolean);
-      const res = await show(
-        player,
-        new ActionFormData()
-          .title("Spread out the townsfolk")
-          .body(body.join("\n"))
-          .button(`Move them\n§8${plan.length} townsfolk`)
-          .button("Pick other spots")
-          .button(clear ? "Keep homes and meal spots\n§8Now: cleared" : "Clear homes and meal spots\n§8Now: kept")
-          .button("Cancel"),
-      );
-      if (!res || res.canceled || res.selection === 3 || !player.isValid) return;
-      if (!isOp(player)) return player.sendMessage("§cOnly operators can do that."); // de-opped while the form was open
-      if (res.selection === 2) {
-        clear = !clear;
-        continue; // the same question again, with new spots
+/** Every tick: walking townsfolk take a step. */
+function strollTick() {
+  for (const rec of list) {
+    const st = stateOf(rec.id);
+    const w = st.walk;
+    if (!w) continue;
+    try {
+      const entity = entityOf(rec);
+      if (!entity) {
+        st.walk = undefined;
+        continue;
       }
-      if (res.selection === 1) continue;
-      if (!plan.length) return player.sendMessage("§cNo spots to move anyone to.");
-      player.sendMessage(`§7Moving ${plan.length} townsfolk...`);
-      const moved = await applySpread(player, center, plan, clear);
-      if (player.isValid) player.sendMessage(`§aMoved ${moved} townsfolk to their new spots.§7 /realm:npc_list has the coordinates; the Minimap and /realm:npc_who show the way.`);
-      return;
+      const loc = entity.location;
+      const d = dist(loc, w);
+      const yaw = yawTo(loc, w);
+      if (d <= STROLL_SPEED) {
+        entity.teleport(w, { rotation: { x: 0, y: yaw } });
+        st.walk = undefined;
+        st.rest = { ...w };
+        st.yaw = yaw;
+        st.restUntil = system.currentTick + 200 + Math.floor(Math.random() * 400);
+        continue;
+      }
+      const f = STROLL_SPEED / d;
+      entity.teleport({ x: loc.x + (w.x - loc.x) * f, y: loc.y + (w.y - loc.y) * f, z: loc.z + (w.z - loc.z) * f }, { rotation: { x: 0, y: yaw } });
+      st.yaw = yaw;
+    } catch {
+      st.walk = undefined; // unloaded meanwhile
     }
-  } finally {
-    spreading = false;
   }
 }
-let spreading = false;
+
 
 /** @param {Player} player */
 function listForOps(player) {
@@ -2036,7 +2231,8 @@ async function menu(player) {
     actions.push(["Set a home here\n§8Operators", () => pickAndRun(player, "Set home", "They come here at night. Pick one standing at its post to clear its home.", (id) => setHome(player, id), true)]);
     actions.push(["Set a lunch spot here\n§8Operators", () => pickAndRun(player, "Set lunch spot", "They come here at lunch. Pick one standing at its post to clear it.", (id) => setPost(player, id, "noon"), true)]);
     actions.push(["Set an evening spot here\n§8Operators", () => pickAndRun(player, "Set evening spot", "They come here in the evening. Pick one standing at its post to clear it.", (id) => setPost(player, id, "evening"), true)]);
-    actions.push(["Spread them out around me\n§8Operators", () => spreadNpcs(player)]);
+    actions.push(["Move them into the houses around me\n§8Operators", () => houseNpcs(player)]);
+    actions.push(["Undo the last move\n§8Operators", () => undoMove(player)]);
     actions.push(["Remove the nearest townsfolk\n§8Operators", () => removeNpc(player)]);
     actions.push(["List with coordinates\n§8Operators", () => listForOps(player)]);
   }
@@ -2123,16 +2319,17 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   );
   customCommandRegistry.registerCommand(
     {
-      name: "realm:npc_spread",
-      description: "Townsfolk: give every NPC its own spot around you (within 100 blocks, 24 apart), after a preview",
+      name: "realm:npc_houses",
+      description: "Townsfolk: give each NPC a house of the town around you (outside the door by day, inside at night), after a preview",
       permissionLevel: CommandPermissionLevel.GameDirectors,
       cheatsRequired: false,
-      optionalParameters: [
-        { name: "radius", type: CustomCommandParamType.Integer },
-        { name: "spacing", type: CustomCommandParamType.Integer },
-      ],
+      optionalParameters: [{ name: "radius", type: CustomCommandParamType.Integer }],
     },
-    (origin, /** @type {number | undefined} */ radius, /** @type {number | undefined} */ spacing) => withPlayer(origin, (p) => spreadNpcs(p, radius, spacing)),
+    (origin, /** @type {number | undefined} */ radius) => withPlayer(origin, (p) => houseNpcs(p, radius)),
+  );
+  customCommandRegistry.registerCommand(
+    { name: "realm:npc_undo", description: "Townsfolk: put every NPC back where it was before the last move to houses", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
+    (origin) => withPlayer(origin, undoMove),
   );
   customCommandRegistry.registerCommand(
     { name: "realm:npc_remove", description: "Townsfolk: remove the nearest townsfolk NPC within 5 blocks", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },

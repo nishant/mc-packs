@@ -42,11 +42,14 @@ export const CONFIG = {
   /** How far `/realm:npc_remove` looks for a townsfolk NPC, in blocks. */
   removeRange: 5,
 
-  /** `/realm:npc_spread`: townsfolk get new spots within this many blocks of the operator (16 to 200). */
-  spreadRadius: 100,
+  /** `/realm:npc_houses`: houses (doors) are looked for within this many blocks of the operator (16 to 64). */
+  housesRadius: 48,
 
-  /** `/realm:npc_spread`: the new spots are at least this many blocks apart (4 to 64), so you walk from one townsfolk to the next. */
-  spreadSpacing: 24,
+  /** Townsfolk stroll a few blocks around their spot now and then, while a player is within 48 blocks. */
+  stroll: true,
+
+  /** How far from its spot a townsfolk strolls, in blocks (0 to 8; 0 = stands still). */
+  strollRadius: 4,
 
   /**
    * A missing NPC is spawned again at its post (or home at night) once a player has been within this many
