@@ -167,6 +167,30 @@ function puff(/** @type {number} */ n, /** @type {number} */ seed, /** @type {nu
   return img;
 }
 
+/**
+ * A sheet of low mist, 128x32, white: a wide band with no round outline. Its alpha is stretched fractal noise
+ * (wisps several times wider than tall), densest just below the middle and thinning out upward, and the sides
+ * and edges dissolve unevenly into the noise instead of ending on a circle or an oval, so overlapping sheets
+ * blend into one layer.
+ */
+function mistSheet() {
+  const w = 128, h = 32, img = blank(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const u = (x + 0.5) / w, v = (y + 0.5) / h; // v: 0 top .. 1 bottom
+      const wisp = smooth(0.3, 0.75, fbm(u * 3.5, v * 2.5, 50, 5)); // wisps about 1/4 of the width, 1/2 of the height
+      const warp = (fbm(u * 2, v * 1.5, 57, 3) - 0.5) * 0.5; // ragged, uneven edges
+      const mid = 0.58 + (noise(u * 3, 0, 63) - 0.5) * 0.25, thick = 0.2 + 0.14 * noise(u * 2.5, 0, 64); // the band wanders and swells
+      const side = smooth(0, 0.3, u + warp * 0.5) * smooth(0, 0.3, 1 - u + warp * 0.5);
+      const band = Math.exp(-(((v - mid + warp * 0.3) / thick) ** 2)) * smooth(0, 0.15, v) * smooth(0, 0.12, 1 - v);
+      const a = clamp(side * band * (0.15 + 0.95 * wisp));
+      const shade = 232 + 23 * wisp;
+      put(img, x, y, [shade, shade, shade, a * 255]);
+    }
+  }
+  return img;
+}
+
 /** Four 16x16 dust puffs side by side (64x16); the tornado picks one at random. */
 function dust() {
   const img = blank(64, 16);
@@ -346,7 +370,7 @@ const TEXTURES = {
   glow: glow(),
   meteor: meteor(),
   smoke: puff(32, 40, 0.45),
-  fog: puff(64, 50, 0.25),
+  fog: mistSheet(),
   dust: dust(),
   grain: grain(),
   streak: streak(),
@@ -587,21 +611,22 @@ const PARTICLES = {
     "minecraft:particle_appearance_tinting": { color: [0.95, 0.97, 1, `${fade(0.1, 0.3)} * 0.85`] },
   }),
 
-  // A low fog bank: 4 big pale puffs that hug the ground and drift.
+  // A low fog bank: 2 wide, faint sheets of mist that lie low, overlap into one layer and drift slowly,
+  // fading in and out over most of their life (no round puffs). The /fog of the same name does the overall haze.
   sky_fogbank: effect("realm:sky_fogbank", "fog", "particles_blend", {
-    ...burst(4),
+    ...burst(2),
     ...once(),
-    "minecraft:emitter_shape_disc": { plane_normal: "y", radius: 5, direction: "outwards", offset: [0, 1, 0] },
-    "minecraft:particle_initial_speed": "Math.random(0.05, 0.2)",
-    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(9, 13)" },
-    "minecraft:particle_motion_dynamic": { linear_acceleration: [0.06, 0, 0.03], linear_drag_coefficient: 0.3 },
+    "minecraft:emitter_shape_disc": { plane_normal: "y", radius: 6, direction: "outwards", offset: [0, 0.5, 0] },
+    "minecraft:particle_initial_speed": "Math.random(0.02, 0.08)",
+    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(12, 16)" },
+    "minecraft:particle_motion_dynamic": { linear_acceleration: [0.025, 0, 0.012], linear_drag_coefficient: 0.5 },
     "minecraft:particle_appearance_billboard": {
-      size: [`(2.6 + variable.particle_random_1 * 1.4) * (1 + 0.3 * ${T})`, `(1.3 + variable.particle_random_1 * 0.5) * (1 + 0.3 * ${T})`],
+      size: [`(5 + variable.particle_random_1 * 2.5) * (1 + 0.25 * ${T})`, `(1.1 + variable.particle_random_2 * 0.4) * (1 + 0.1 * ${T})`],
       facing_camera_mode: "rotate_y",
       uv: uv("fog"),
     },
     "minecraft:particle_appearance_lighting": {},
-    "minecraft:particle_appearance_tinting": { color: [0.86, 0.88, 0.9, `${fade(2.5, 3)} * 0.42`] },
+    "minecraft:particle_appearance_tinting": { color: [0.88, 0.9, 0.92, `${fade(4, 5)} * 0.26`] },
   }),
 
   // One ring of a tornado: dust circling the point at variable.radius, spinning at variable.spin rad/s and climbing.
