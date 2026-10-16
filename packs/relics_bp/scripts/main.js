@@ -941,7 +941,8 @@ function singingBlade(player, target, asc) {
 // Fen Charm: poison never takes hold.
 world.beforeEvents.effectAdd.subscribe((ev) => {
   try {
-    const type = ev.effectType.replace(/^minecraft:/, "");
+    // BDS 1.26 gives the display name with its level ("Poison", "Wither II"), not the id: accept both.
+    const type = ev.effectType.toLowerCase().replace(/^minecraft:/, "").replace(/\s+[ivx]+$/, "");
     if (type !== "poison" && type !== "wither") return;
     const c = carried.get(ev.entity.id);
     if (!c?.carry.has("vesna_charm") || get("enabled") !== true) return;
