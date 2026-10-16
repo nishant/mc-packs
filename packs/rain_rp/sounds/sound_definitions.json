@@ -173,12 +173,31 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain_inside1",
-          "volume": 0.064
+          "volume": 0.069
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/rain_inside2",
+          "volume": 0.069
+        }
+      ],
+      "subtitle": "subtitles.weather.rain"
+    },
+    "realm.rain.enter": {
+      "__use_legacy_max_distance": "true",
+      "category": "weather",
+      "max_distance": null,
+      "min_distance": 100,
+      "sounds": [
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/rain_enter1",
           "volume": 0.064
+        },
+        {
+          "load_on_low_memory": true,
+          "name": "sounds/realistic_rain/rain_enter2",
+          "volume": 0.067
         }
       ],
       "subtitle": "subtitles.weather.rain"
@@ -215,12 +234,12 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind_inside1",
-          "volume": 0.18
+          "volume": 0.127
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/wind_inside2",
-          "volume": 0.182
+          "volume": 0.129
         }
       ]
     },
@@ -233,22 +252,22 @@
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/roof1",
-          "volume": 0.18
+          "volume": 0.038
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/roof2",
-          "volume": 0.18
+          "volume": 0.038
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/roof3",
-          "volume": 0.182
+          "volume": 0.039
         },
         {
           "load_on_low_memory": true,
           "name": "sounds/realistic_rain/roof4",
-          "volume": 0.18
+          "volume": 0.038
         }
       ],
       "subtitle": "subtitles.weather.rain"
