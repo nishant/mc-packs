@@ -2043,7 +2043,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Measured fish don't stack. To stack them, pick §lMake my fish stackable§r (or run §e/realm:fishing_stack§r): after you confirm, every measured raw fish in your inventory becomes a plain cod, salmon, tropical fish or pufferfish. Your log and the records keep them.",
+        "text": "Fish of the same species stack automatically, up to 64, so ten Atlantic Cod take one slot. Each catch still rolls its own size for chat, your fish log, the realm records and the tournament. Fish caught before version 1.1.4 (with §eCaught by ...§r lore) are merged into species stacks the next time the fish reaches your inventory or you open the fishing menu or a fisher. If you want every species of the same vanilla fish combined (for smelting or the Crowns market), pick §lMake my fish stackable§r (or run §e/realm:fishing_stack§r): after you confirm, every measured raw fish in your inventory becomes a plain cod, salmon, tropical fish or pufferfish. Your log and the records keep them.",
         "ops": false
       },
       {
@@ -2055,7 +2055,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Sell your fish: tap Old Tobin (or any NPC with the §efisher§r role) and pick §lSell fish§r. §lFish records§r there shows the realm's records. Fishers only buy measured fish.",
+        "text": "Sell your fish: tap Old Tobin (or any NPC with the §efisher§r role) and pick §lSell fish§r. §lFish records§r there shows the realm's records. Fishers buy species fish (stacked or not; fish from before 1.1.4 are merged into species stacks first) but not plain vanilla fish.",
         "ops": false
       },
       {

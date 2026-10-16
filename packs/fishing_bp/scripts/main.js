@@ -291,11 +291,18 @@ function rollSize(sp) {
   return Math.max(1, Math.round(lo + (hi - lo) * Math.random() ** 1.6));
 }
 
-/** @param {Species} sp @param {number} size @param {Player} owner @param {number} amount */
-function fishStack(sp, size, owner, amount) {
+/** Average size of a species in whole cm, used on stackable species items. @param {Species} sp */
+function avgSize(sp) {
+  const lo = Math.max(1, Math.min(sp.min, sp.max));
+  const hi = Math.max(lo, sp.max);
+  return Math.max(1, Math.round((lo + hi) / 2));
+}
+
+/** Every fish of a species has identical lore, so they stack. @param {Species} sp @param {number} [amount] */
+function fishStack(sp, amount = 1) {
   const stack = new ItemStack(sp.item, Math.max(1, amount));
   stack.nameTag = `§r${colorOf(sp)}${sp.name}`;
-  stack.setLore([`§7${size} cm`, `§7Caught by ${owner.name}`, `§7${dateText(Date.now())}`]);
+  stack.setLore([`§7${avgSize(sp)} cm`, `§7${rarityLabel(sp)} catch`]);
   return stack;
 }
 
@@ -310,8 +317,59 @@ function readFish(stack) {
   if (!sp || sp.item !== stack.typeId) return undefined;
   const lore = stack.getLore();
   const size = /^§7(\d+) cm$/.exec(lore[0] ?? "");
-  if (!size || !(lore[1] ?? "").startsWith("§7Caught by ")) return undefined;
+  const line1 = lore[1] ?? "";
+  // Species stacks end in " catch"; fish caught before 1.1.4 carry "Caught by <name>".
+  if (!size || (!line1.startsWith("§7Caught by ") && !line1.endsWith(" catch"))) return undefined;
   return { sp, size: Number(size[1]) };
+}
+
+/**
+ * Upgrades any legacy per-catch fish in the player's inventory to canonical stackable species lore
+ * and merges split stacks of the same species into full stacks of up to 64.
+ * @param {Player} player @returns {number} number of fish consolidated
+ */
+function mergeSpeciesStacks(player) {
+  const inv = inventoryOf(player);
+  if (!inv) return 0;
+  /** @type {Map<string, { sp: Species, slots: number[], amounts: number[], total: number, legacy: boolean }>} */
+  const groups = new Map();
+  for (let slot = 0; slot < inv.size; slot++) {
+    const stack = inv.getItem(slot);
+    const f = readFish(stack);
+    if (!stack || !f) continue;
+    let g = groups.get(f.sp.id);
+    if (!g) {
+      g = { sp: f.sp, slots: [], amounts: [], total: 0, legacy: false };
+      groups.set(f.sp.id, g);
+    }
+    g.slots.push(slot);
+    g.amounts.push(stack.amount);
+    g.total += stack.amount;
+    const lore = stack.getLore();
+    const isCanonical = lore.length === 2 && lore[0] === `§7${avgSize(f.sp)} cm` && lore[1] === `§7${rarityLabel(f.sp)} catch`;
+    if (!isCanonical) g.legacy = true;
+  }
+  let merged = 0;
+  for (const g of groups.values()) {
+    const packed = !g.legacy && g.slots.length === Math.ceil(g.total / 64) && g.amounts.slice(0, -1).every((a) => a === 64);
+    if (packed) continue;
+    for (const s of g.slots) inv.setItem(s, undefined);
+    let left = g.total;
+    let idx = 0;
+    while (left > 0) {
+      const amt = Math.min(64, left);
+      left -= amt;
+      const stack = fishStack(g.sp, amt);
+      const targetSlot = g.slots[idx++];
+      if (targetSlot !== undefined) inv.setItem(targetSlot, stack);
+      else {
+        const rest = inv.addItem(stack);
+        if (rest) player.dimension.spawnItem(rest, player.location);
+      }
+    }
+    merged += g.total;
+  }
+  return merged;
 }
 
 /** Crowns a fisher pays for one fish: the rarity's price x (0.5 + size / the species' biggest). @param {Species} sp @param {number} size */
@@ -504,7 +562,7 @@ function replace(entity, owner, hookAt) {
     caught(owner, sp, size);
     return;
   }
-  const fish = fishStack(sp, size, owner, 1);
+  const fish = fishStack(sp, 1);
   const loc = entity.location;
   let vel = { x: 0, y: 0, z: 0 };
   try {
@@ -531,6 +589,14 @@ function replace(entity, owner, hookAt) {
     // it still drops where the fish was
   }
   caught(owner, sp, size);
+  // Once the fish has flown into the inventory, merge it with the species' other stacks.
+  system.runTimeout(() => {
+    try {
+      if (owner.isValid) mergeSpeciesStacks(owner);
+    } catch {
+      // the player left or the inventory is unavailable
+    }
+  }, 15);
 }
 
 // Follow live hooks every tick (a catch must appear as its hook goes), and forget them a second after they're gone.
@@ -827,6 +893,7 @@ function sell(player, picks) {
 /** The fisher's "Sell fish" menu. @param {Player} player */
 async function sellMenu(player) {
   const title = lastNpc.get(player.id) ?? "§lSell Fish";
+  mergeSpeciesStacks(player);
   for (let round = 0; round < 50; round++) {
     const fish = fishFor(player);
     if (!fish.length) {
@@ -907,6 +974,7 @@ function makeStackable(player) {
 
 /** "Make my fish stackable": asks first, then converts. @param {Player} player */
 async function stackMenu(player) {
+  mergeSpeciesStacks(player);
   const fish = measuredFish(player);
   const count = fish.reduce((n, f) => n + f.stack.amount, 0);
   if (!count) {
@@ -947,6 +1015,7 @@ async function settingsMenu(player) {
 
 /** /realm:fishing: every action of the pack. @param {Player} player */
 async function mainMenu(player) {
+  mergeSpeciesStacks(player);
   const measured = measuredFish(player).reduce((n, f) => n + f.stack.amount, 0);
   /** @type {[string, () => Promise<void> | void][]} */
   const actions = [
