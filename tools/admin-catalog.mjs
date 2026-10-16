@@ -187,10 +187,14 @@ for (const p of packs)
       problems.push(`${p.folder}: ${c.name} has no button name: add it to NAMES in packs/${SELF}/scripts/presets.js`);
       continue;
     }
-    fits(`NAMES ${c.name} name`, n[0], presets.LINE - (c.permission === "any" ? 0 : presets.textWidth(presets.OPS_MARK)));
+    fits(`NAMES ${c.name} name`, n[0]); // operator commands are gold, with no mark after the name
     fits(`NAMES ${c.name} hint`, n[1]);
   }
 for (const name of Object.keys(presets.NAMES)) if (!allNames.has(name)) problems.push(`presets.js NAMES: ${name} isn't a registered command any more`);
+for (const g of presets.GROUPS) {
+  fits(`GROUPS ${g.id} title`, g.title);
+  fits(`GROUPS ${g.id} hint`, g.hint);
+}
 for (const item of presets.SETUP) {
   fits(`SETUP ${item.cmd} title`, `[x] ${item.title} (99)`);
   fits(`SETUP ${item.cmd} hint`, item.hint);
