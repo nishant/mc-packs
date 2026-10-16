@@ -1,0 +1,21 @@
+{
+  "format_version": "1.20.80",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "realm:npc_label",
+      "is_spawnable": false,
+      "is_summonable": true,
+      "is_experimental": false
+    },
+    "components": {
+      "minecraft:type_family": { "family": ["realm_npc_label", "inanimate"] },
+      "minecraft:collision_box": { "width": 0.0, "height": 0.0 },
+      "minecraft:nameable": { "always_show": true, "allow_name_tag_renaming": false },
+      "minecraft:physics": { "has_gravity": false, "has_collision": false },
+      "minecraft:pushable": { "is_pushable": false, "is_pushable_by_piston": false },
+      "minecraft:damage_sensor": { "triggers": { "cause": "all", "deals_damage": false } },
+      "minecraft:fire_immune": {},
+      "minecraft:knockback_resistance": { "value": 1.0 }
+    }
+  }
+}

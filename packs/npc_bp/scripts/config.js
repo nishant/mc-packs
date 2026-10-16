@@ -18,6 +18,9 @@ export const CONFIG = {
   /** Townsfolk turn to face the nearest player within this many blocks. 0 = never turn. */
   faceRange: 8,
 
+  /** Show townsfolk names floating in 3D from up to this many blocks away (even through house roofs/walls). 0 = vanilla close-up only. */
+  farNameRange: 120,
+
   /** An NPC says an idle line only while a player is within this many blocks. */
   idleRange: 12,
 

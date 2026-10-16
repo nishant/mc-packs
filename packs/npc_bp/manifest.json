@@ -4,10 +4,15 @@
     "name": "Townsfolk",
     "description": "Named townsfolk who greet you, chat, live in their own houses and offer what the realm's other packs have when you tap them. /realm:npc",
     "uuid": "72e17e31-5236-4502-8a92-6c9498444093",
-    "version": [1, 7, 0],
+    "version": [1, 7, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
+    {
+      "type": "data",
+      "uuid": "66879f83-fcaf-4b08-8c56-53c9d75daf93",
+      "version": [1, 0, 0]
+    },
     {
       "type": "script",
       "language": "javascript",

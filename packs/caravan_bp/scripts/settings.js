@@ -11,6 +11,7 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Caravan visits", help: "/realm:caravan_call still works when disabled" },
+  { key: "farNameRange", type: "int", scope: "world", label: "Show names from afar (blocks)", help: "Trader names stay visible behind walls (0 = only up close)", min: 0, max: 200, step: 10 },
   { key: "everyDays", type: "int", scope: "world", label: "Comes every (days)", min: 1, max: 30, step: 1 },
   { key: "offsetDays", type: "int", scope: "world", label: "Day shift", help: "Moves the visit day: with every 7 days, 0 = Thursday, 2 = Saturday", min: 0, max: 29, step: 1 },
   { key: "hourUtc", type: "int", scope: "world", label: "Arrives at (hour, UTC)", min: 0, max: 23, step: 1 },

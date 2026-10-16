@@ -1,11 +1,15 @@
 # BDS test harness (`tools/test-bds`)
 
-Runs this repo's behavior packs on a real Bedrock Dedicated Server (BDS 1.26.52, Linux) with simulated
+Runs this repo's behavior packs on a real Bedrock Dedicated Server (BDS 1.26.52, Windows or Linux) with simulated
 players, and fails when a pack logs a script error or when your scenario fails. Each run gets its
 own temp copy of the server, its own world copy and its own port, so many runs (and agents) can go
 at once. The pristine BDS is never run in place. Run from the repo root; `node tools/test-bds/setup.mjs`
-downloads BDS into `BDS_DIR` (default `/home/user/bds`) if it is not there, and `run.mjs` does that
-by itself on first use. Linux x86-64 only (BDS is a Linux binary); Node 22.
+downloads the platform's BDS into `BDS_DIR` (default `%USERPROFILE%\.bds` on Windows,
+`/home/user/bds` on Linux) if it is not there, and `run.mjs` does that by itself on first use.
+Requires Windows or Linux x86-64 and Node 22. Setup uses `curl.exe` and `tar.exe` on Windows
+(falling back to PowerShell `Expand-Archive`), or `curl` and `unzip` on Linux (falling back to Python 3).
+Platform path, installation detection, linking and copy-fallback regression tests (no BDS download):
+`node --test tools/test-bds/lib/server.test.mjs`.
 
 ```bash
 # Every *_bp and *_rp folder in packs/ (default --packs is this repo's packs/), no players: just watch them start (about 15 s)
@@ -44,7 +48,7 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--quiet` | off | Print only harness lines, warnings and errors. Recommended. |
 | `-h`, `--help` | | Print the usage and exit. |
 
-Environment: `BDS_DIR` (pristine BDS, default `/home/user/bds`; downloaded by `setup.mjs` if
+Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or `/home/user/bds` on Linux; downloaded by `setup.mjs` if
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
 `logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
 
@@ -167,8 +171,10 @@ Examples: `examples/smoke.js` (help menu, commands from several packs), `example
    (the "Beta APIs" toggle that `@minecraft/server-gametest` needs; BDS logs
    `Experiment(s) active: gtst`), `cheatsEnabled`, `commandsEnabled`. For flat it sets
    `Generator = 2` and drops the chunks. The result is cached in `.cache/worlds/` (about 100 KB).
-2. **Server copy.** `bedrock_server`, `behavior_packs`, `resource_packs`, `definitions`, `data` are
-   hard-linked (no disk, about 0.3 s); config files are copied. `server.properties`:
+2. **Server copy.** The platform binary (`bedrock_server.exe` or `bedrock_server`),
+   `behavior_packs`, `resource_packs`, `definitions`, `data` are linked (no disk, about 0.3 s).
+   Windows uses directory junctions and file hardlinks, including DLLs; Linux uses `cp -al`.
+   Linking falls back to copying when unavailable (for example, across drives). Config files are copied. `server.properties`:
    `transport=nethernet` (TCP on `server-port`; raknet needs IPv6, which this container lacks), a
    random free port, `allow-cheats=true`, `online-mode=false`, no allow list, LAN visibility off,
    content log to the console.

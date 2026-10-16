@@ -24,6 +24,9 @@ export const CONFIG = {
   /** Caravans come on their own schedule. `/realm:caravan_call` works either way. */
   enabled: true,
 
+  /** Show floating trader names from this far away, even behind walls. 0 = vanilla close-up only. */
+  farNameRange: 120,
+
   /** A caravan comes every this many real days. */
   everyDays: 7,
 

@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { HERE, makeServerDir, writeProps, baseProps, freePort, startBds, stopBds, ensureTemplate, bdsDir } from "./lib/server.mjs";
+import { HERE, IS_WIN, BDS_BIN, makeServerDir, writeProps, baseProps, freePort, startBds, stopBds, ensureTemplate, bdsDir } from "./lib/server.mjs";
 import { findPacks, installBehaviorPack, installResourcePack, installHarnessPack, HARNESS_PACK } from "./lib/packs.mjs";
 
 const USAGE = `usage: node run.mjs --packs <dir> [options]
@@ -77,18 +77,21 @@ say(`[harness] log ${logFile}`);
 
 let serverDir, bds;
 let cleaned = false;
-function cleanup() {
+async function cleanup() {
   if (cleaned) return;
   cleaned = true;
-  if (bds && bds.proc.exitCode === null) { try { bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ } }
+  if (bds && bds.proc.exitCode === null) {
+    try { IS_WIN ? bds.proc.kill() : bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ }
+    await bds.exited;
+  }
   if (serverDir && !args.keep) fs.rmSync(serverDir, { recursive: true, force: true });
 }
-process.on("SIGINT", () => { say("[harness] interrupted"); cleanup(); process.exit(130); });
-process.on("SIGTERM", () => { cleanup(); process.exit(143); });
+process.on("SIGINT", async () => { say("[harness] interrupted"); await cleanup(); process.exit(130); });
+process.on("SIGTERM", async () => { await cleanup(); process.exit(143); });
 
 let port;
 try {
-  if (!fs.existsSync(path.join(bdsDir(), "bedrock_server"))) {
+  if (!fs.existsSync(path.join(bdsDir(), BDS_BIN))) {
     say(`[harness] no BDS at ${bdsDir()}: downloading it first`);
     (await import("./setup.mjs")).setup();
   }
@@ -107,7 +110,7 @@ try {
   fs.writeFileSync(path.join(world, "world_resource_packs.json"), JSON.stringify(rpList, null, 2));
 } catch (e) {
   say(`[harness] setup failed: ${e.stack || e}`);
-  cleanup();
+  await cleanup();
   process.exit(4);
 }
 say(`[harness] server ${serverDir} port ${port} (prepared in ${secs()} s)`);
@@ -308,8 +311,8 @@ function summary(reason) {
   if (args.keep) L.push(`server folder kept: ${serverDir}`);
   L.push("=".repeat(72));
   say(L.join("\n"));
-  logStream.end(() => {
-    cleanup();
+  logStream.end(async () => {
+    await cleanup();
     process.exit(code);
   });
 }

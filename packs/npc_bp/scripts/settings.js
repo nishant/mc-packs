@@ -12,6 +12,7 @@ const BASE = CONFIG;
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Townsfolk turn to players and chat", help: "They stay in their house either way; taps and menus work" },
   { key: "faceRange", type: "int", scope: "world", label: "Turn to players within (blocks)", help: "0 = never turn", min: 0, max: 16, step: 1 },
+  { key: "farNameRange", type: "int", scope: "world", label: "Show names from afar (blocks)", help: "Townsfolk names stay visible from this far away, even inside their houses (0 = only up close)", min: 0, max: 200, step: 10 },
   { key: "idleMinSeconds", type: "int", scope: "world", label: "Idle lines at least every (seconds)", min: 10, max: 600, step: 5 },
   { key: "idleMaxSeconds", type: "int", scope: "world", label: "Idle lines at most every (seconds)", min: 10, max: 600, step: 5 },
   { key: "affinity", type: "bool", scope: "world", label: "Hearth & Hearsay: affinity, gifts and gossip", help: "Disabled: nothing is gained or lost; earned levels stay" },

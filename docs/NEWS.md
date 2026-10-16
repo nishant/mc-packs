@@ -6,6 +6,12 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Names across town
+
+- Townsfolk, wanderers and caravan traders have floating names from up to 120 blocks away, even behind house walls and roofs. You don't have to aim directly at them.
+- Operators: Show names from afar in /realm:config adjusts each pack's range from 0 to 200 blocks. Zero keeps only the ordinary close-up names.
+- Each character's shared label follows the nearest player; other players may see it offset.
+
 ## Sieges that come, and steady rain
 
 - The Gray Choir no longer scatters for want of "open ground". Its circles rise just outside a town's safe zone, about 110 blocks from Lanternford, and nobody was out there to load that ground. Now the Choir loads it itself, so the next siege night really comes.

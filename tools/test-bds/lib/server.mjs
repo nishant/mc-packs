@@ -5,13 +5,16 @@ import path from "node:path";
 import net from "node:net";
 import dgram from "node:dgram";
 import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { readLevelDat, writeLevelDat, T } from "./nbt.mjs";
 
-export const HERE = path.dirname(path.dirname(new URL(import.meta.url).pathname));
+export const HERE = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+export const IS_WIN = process.platform === "win32";
+export const BDS_BIN = IS_WIN ? "bedrock_server.exe" : "bedrock_server";
 export const BDS_VERSION = "1.26.52.3";
 
 export function bdsDir() {
-  return path.resolve(process.env.BDS_DIR || "/home/user/bds");
+  return path.resolve(process.env.BDS_DIR || (IS_WIN ? path.join(os.homedir(), ".bds") : "/home/user/bds"));
 }
 export function cacheDir() {
   return path.resolve(process.env.BDS_HARNESS_CACHE || path.join(HERE, ".cache"));
@@ -20,22 +23,31 @@ export function tmpRoot() {
   return path.resolve(process.env.BDS_HARNESS_TMP || os.tmpdir());
 }
 
-/** Big read-only parts of BDS are hard-linked (fast, no disk); config files are copied. */
-const LINKED = new Set(["bedrock_server", "behavior_packs", "resource_packs", "definitions", "data"]);
+/** Big read-only parts of BDS are linked (junctions on Windows); config files are copied. */
+const LINKED = new Set([BDS_BIN, "behavior_packs", "resource_packs", "definitions", "data"]);
 const SKIPPED = new Set(["worlds", "development_behavior_packs", "development_resource_packs", "bds.zip", "logs"]);
 
 export function makeServerDir(prefix = "bds-run-") {
   const src = bdsDir();
-  if (!fs.existsSync(path.join(src, "bedrock_server"))) {
+  if (!fs.existsSync(path.join(src, BDS_BIN))) {
     throw new Error(`No BDS at ${src} (set BDS_DIR, or run setup.mjs to download it)`);
   }
   const dir = fs.mkdtempSync(path.join(tmpRoot(), prefix));
   for (const name of fs.readdirSync(src)) {
     if (SKIPPED.has(name) || name.endsWith(".zip")) continue;
     const from = path.join(src, name), to = path.join(dir, name);
-    if (LINKED.has(name)) {
-      const r = spawnSync("cp", ["-al", from, to]);
-      if (r.status !== 0) fs.cpSync(from, to, { recursive: true });
+    if (LINKED.has(name) || (IS_WIN && /\.dll$/i.test(name))) {
+      if (IS_WIN) {
+        try {
+          if (fs.statSync(from).isDirectory()) fs.symlinkSync(from, to, "junction");
+          else fs.linkSync(from, to);
+        } catch {
+          fs.cpSync(from, to, { recursive: true });
+        }
+      } else {
+        const r = spawnSync("cp", ["-al", from, to]);
+        if (r.status !== 0) fs.cpSync(from, to, { recursive: true });
+      }
     } else {
       fs.cpSync(from, to, { recursive: true });
     }
@@ -115,7 +127,7 @@ export async function freePort() {
  * Returns { proc, send(cmd), exited: Promise<code> }.
  */
 export function startBds(dir, onLine) {
-  const proc = spawn("./bedrock_server", [], {
+  const proc = spawn(IS_WIN ? path.join(dir, BDS_BIN) : "./bedrock_server", [], {
     cwd: dir,
     env: { ...process.env, LD_LIBRARY_PATH: "." },
     stdio: ["pipe", "pipe", "pipe"],
@@ -139,7 +151,7 @@ export function startBds(dir, onLine) {
 
 export async function stopBds(bds, graceMs = 15000) {
   bds.send("stop");
-  const t = setTimeout(() => { try { bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ } }, graceMs);
+  const t = setTimeout(() => { try { IS_WIN ? bds.proc.kill() : bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ } }, graceMs);
   const code = await bds.exited;
   clearTimeout(t);
   return code;
@@ -184,7 +196,11 @@ export async function ensureTemplate({ seed, flat, log = () => {} }) {
     });
     const t0 = Date.now();
     while (!started && !failed && Date.now() - t0 < 120000 && bds.proc.exitCode === null) await new Promise((r) => setTimeout(r, 200));
-    if (!started) { try { bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ } throw new Error(`template server did not start ${failed}`); }
+    if (!started) {
+      try { IS_WIN ? bds.proc.kill() : bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ }
+      await bds.exited;
+      throw new Error(`template server did not start ${failed}`);
+    }
     await stopBds(bds);
     const world = path.join(dir, "worlds", "world");
     patchLevelDat(path.join(world, "level.dat"), { flat });

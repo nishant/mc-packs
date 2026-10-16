@@ -43,20 +43,35 @@ function rocketCounts(player) {
   return { rockets, nos };
 }
 
-/** Durability left of what's in the chest slot, as "§a87%", or "§7--" when it has none. @param {Player} player */
+/** Durability left of what's in the chest slot, as "§a87%", or "§7--" when nothing is worn or it has none (vanilla and armored elytras both report it). @param {Player} player */
 function elytraLeft(player) {
   const chest = player.getComponent("minecraft:equippable")?.getEquipment(EquipmentSlot.Chest);
-  const dur = chest?.getComponent("minecraft:durability");
+  if (!chest) return "§7--";
+  const dur = chest.getComponent("minecraft:durability");
   if (!dur || dur.maxDurability <= 0) return "§7--";
   const pct = Math.max(0, Math.floor(((dur.maxDurability - dur.damage) / dur.maxDurability) * 100));
   const color = pct <= get("lowPercent") ? "§c" : pct <= 30 ? "§e" : "§a";
   return `${color}${pct}%`;
 }
 
+const SPEED_SAMPLES = 3;
+/** @type {Map<string, number[]>} player id -> the last few speed readings (blocks/s) while gliding, averaged so single-tick jitter doesn't flicker */
+const speedHistory = new Map();
+
+/** Moving average of the player's speed in blocks per second. @param {Player} player */
+function smoothedSpeed(player) {
+  const v = player.getVelocity(); // blocks per tick
+  const raw = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) * 20;
+  let hist = speedHistory.get(player.id);
+  if (!hist) speedHistory.set(player.id, (hist = []));
+  hist.push(raw);
+  if (hist.length > SPEED_SAMPLES) hist.shift();
+  return hist.reduce((a, b) => a + b, 0) / hist.length;
+}
+
 /** @param {Player} player @param {string} [gap] between speed and height and the rest: two lines in a side box */
 function hud(player, gap = "  ") {
-  const v = player.getVelocity(); // blocks per tick
-  const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) * 20;
+  const speed = smoothedSpeed(player);
   const y = Math.floor(player.location.y);
   const { rockets: n, nos } = rocketCounts(player);
   const nosPart = nos > 0 ? `  §bNOS ${nos}` : "";
@@ -69,7 +84,7 @@ function hud(player, gap = "  ") {
 
 /** player id -> tick of the last NOS Rocket activation */
 const lastNosTick = new Map();
-/** player id -> active NOS burst state { remaining: number, maxSpeed: number, stepThrust: number } */
+/** player id -> active NOS burst state { player, tick, spoolTicks, boostEndTick, totalTicks, maxSpeed, ... } */
 const activeNosBursts = new Map();
 
 /**
@@ -159,8 +174,9 @@ function spawnNosParticles(player, forward, phase) {
   const dim = player.dimension;
   const pos = player.location;
   const head = player.getHeadLocation();
-  const rLen = Math.hypot(forward.z, forward.x);
-  const right = rLen > 1e-4 ? { x: -forward.z / rLen, z: forward.x / rLen } : { x: 1, z: 0 };
+  const vel = player.getVelocity();
+  const spd = Math.hypot(vel.x, vel.y, vel.z); // blocks per tick: 3.6 at 72 blocks/s
+  const hot = phase === "boost" || phase === "flutter";
   const jitter = (/** @type {number} */ s) => (Math.random() - 0.5) * s * 2;
   const emit = (/** @type {string} */ id, /** @type {{ x: number, y: number, z: number }} */ at) => {
     try {
@@ -170,40 +186,55 @@ function spawnNosParticles(player, forward, phase) {
     }
   };
 
-  // 1) Forward/wingtip slipstream corridor (ahead of the camera so at high speed the player flies
-  // directly through glowing cyan sparks and orange flames in both 1st and 3rd person)
-  for (const side of [-1, 1]) {
-    const d = phase === "spool" ? 1.4 + Math.random() * 1.4 : 1.8 + Math.random() * 2.4;
-    const w = (0.45 + Math.random() * 0.35) * side;
-    const wingPt = {
-      x: head.x + forward.x * d + right.x * w + jitter(0.15),
-      y: head.y + forward.y * d - 0.25 + jitter(0.15),
-      z: head.z + forward.z * d + right.z * w + jitter(0.15),
+  // Orthogonal axes around the sightline (falls back to world X when looking straight up or down)
+  const flat = Math.hypot(forward.x, forward.z);
+  const right = flat > 1e-4 ? { x: -forward.z / flat, y: 0, z: forward.x / flat } : { x: 1, y: 0, z: 0 };
+  const up = {
+    x: right.y * forward.z - right.z * forward.y,
+    y: right.z * forward.x - right.x * forward.z,
+    z: right.x * forward.y - right.y * forward.x,
+  };
+
+  // 1) Forward slipstream ring: the player covers `spd` blocks a tick, so lead the camera far enough that the
+  // sparks are still ahead of it next frame and stream past all four corners of the view
+  const baseLead = Math.max(3.5, spd * 2.4);
+  for (const angle of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
+    const d = baseLead + Math.random() * 4.5;
+    const r = 0.65 + Math.random() * 0.5;
+    const rx = Math.cos(angle) * r;
+    const ry = Math.sin(angle) * r;
+    const ringPt = {
+      x: head.x + forward.x * d + right.x * rx + up.x * ry,
+      y: head.y + forward.y * d + right.y * rx + up.y * ry,
+      z: head.z + forward.z * d + right.z * rx + up.z * ry,
     };
-    emit("realm:sky_spark", wingPt);
-    emit("minecraft:blue_flame_particle", wingPt);
-    if (phase === "boost" || phase === "flutter") {
-      emit("realm:trail_ember", wingPt);
-      emit("minecraft:basic_flame_particle", wingPt);
+    emit("realm:sky_spark", ringPt);
+    emit("minecraft:blue_flame_particle", ringPt);
+    if (hot) {
+      emit("realm:trail_ember", ringPt);
+      emit("minecraft:basic_flame_particle", ringPt);
     }
   }
 
-  // 2) Core afterburner stream along the body
-  const steps = phase === "boost" ? 4 : phase === "flutter" ? 2 : 1;
+  // 2) Continuous afterburner ribbon behind: interpolated from where the player just was to the tail,
+  // so there are no gaps even at 72 blocks/s
+  const steps = phase === "boost" ? 6 : phase === "flutter" ? 3 : 2;
+  const from = { x: pos.x - vel.x * 1.4 - forward.x * 1.8, y: pos.y - vel.y * 1.4 - forward.y * 1.8, z: pos.z - vel.z * 1.4 - forward.z * 1.8 };
+  const to = { x: pos.x - forward.x * 0.3, y: pos.y - forward.y * 0.3, z: pos.z - forward.z * 0.3 };
   for (let i = 0; i < steps; i++) {
-    const along = -0.2 + i * 0.85;
+    const t = steps > 1 ? i / (steps - 1) : 1;
     const corePt = {
-      x: pos.x + forward.x * along + jitter(0.22),
-      y: pos.y + 0.4 + forward.y * along + jitter(0.18),
-      z: pos.z + forward.z * along + jitter(0.22),
+      x: from.x + (to.x - from.x) * t + jitter(0.2),
+      y: from.y + (to.y - from.y) * t + 0.4 + jitter(0.16),
+      z: from.z + (to.z - from.z) * t + jitter(0.2),
     };
     emit("realm:sky_spark", corePt);
     emit("minecraft:blue_flame_particle", corePt);
-    if (phase === "boost" || phase === "flutter") {
+    if (hot) {
       emit("realm:trail_ember", corePt);
       emit("minecraft:basic_flame_particle", corePt);
     }
-    if (phase === "boost" && i === 0) emit("minecraft:lava_particle", corePt);
+    if (phase === "boost" && i === steps - 1) emit("minecraft:lava_particle", corePt);
   }
 }
 
@@ -298,6 +329,7 @@ function triggerNosRocket(player) {
   const boostEndTick = spoolTicks + Math.max(10, burstTicks);
   const taperTicks = 90;
   activeNosBursts.set(player.id, {
+    player,
     tick: 1,
     spoolTicks,
     boostEndTick,
@@ -345,9 +377,9 @@ world.afterEvents.itemUse.subscribe((event) => {
 //   2. Full Boost (ticks 12..boostEndTick): quick kick to peak speed, then hold + blazing cyan/orange plume
 //   3. Wastegate Flutter & Taper (boostEndTick+1..totalTicks): very slow speed taper + "stu-tu-tu-tu" flame pops
 system.runInterval(() => {
-  if (!activeNosBursts.size) return;
+  const tick = system.currentTick;
   for (const [playerId, burst] of activeNosBursts) {
-    const player = world.getAllPlayers().find((p) => p.id === playerId);
+    const player = burst.player;
     if (!player || !player.isValid || !player.isGliding || player.isOnGround || get("nosEnabled") === false) {
       activeNosBursts.delete(playerId);
       continue;
@@ -431,6 +463,38 @@ system.runInterval(() => {
     burst.tick += 1;
     if (burst.tick > burst.totalTicks) activeNosBursts.delete(playerId);
   }
+
+  // Ambient slipstream: fast gliding without a NOS burst still shows a crisp air-stream ahead and a puff behind
+  if (tick % 2 !== 0 || get("enabled") === false) return;
+  for (const player of world.getAllPlayers()) {
+    try {
+      if (!player.isGliding || player.isOnGround || activeNosBursts.has(player.id) || hudOff(player)) continue;
+      const vel = player.getVelocity();
+      const spd = Math.hypot(vel.x, vel.y, vel.z);
+      if (spd < 1.2) continue; // 24+ blocks/s
+      const forward = normalize3(player.getViewDirection());
+      const flat = Math.hypot(forward.x, forward.z);
+      const right = flat > 1e-4 ? { x: -forward.z / flat, z: forward.x / flat } : { x: 1, z: 0 };
+      const head = player.getHeadLocation();
+      const pos = player.location;
+      const dim = player.dimension;
+      const d = spd * 2.2 + 3.2;
+      for (const side of [-0.85, 0.85]) {
+        dim.spawnParticle("realm:sky_spark", {
+          x: head.x + forward.x * d + right.x * side,
+          y: head.y + forward.y * d - 0.2,
+          z: head.z + forward.z * d + right.z * side,
+        });
+      }
+      dim.spawnParticle("minecraft:white_smoke_particle", {
+        x: pos.x - forward.x,
+        y: pos.y + 0.4 - forward.y,
+        z: pos.z - forward.z,
+      });
+    } catch {
+      // unloaded chunk, or the player left
+    }
+  }
 }, 1);
 
 const INTERVAL = Math.max(1, CONFIG.intervalTicks);
@@ -477,7 +541,10 @@ system.runInterval(() => {
       if (!player.isGliding || hudOff(player) || where === "hotbar") {
         // Landed (or switched to the hotbar): take the box away now instead of when it runs out.
         if (inBox.delete(player.id)) side.clear(player);
-        if (!player.isGliding || hudOff(player)) continue;
+        if (!player.isGliding || hudOff(player)) {
+          speedHistory.delete(player.id);
+          continue;
+        }
       }
       if (isSlot(where)) {
         side.show(player, where, hud(player, "\n"), INTERVAL + 10);
@@ -503,6 +570,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   inBox.delete(playerId);
   lastNosTick.delete(playerId);
   activeNosBursts.delete(playerId);
+  speedHistory.delete(playerId);
 });
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {

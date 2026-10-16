@@ -4,10 +4,15 @@
     "name": "Wanderers of the Wilds",
     "description": "People on the road far from town: pilgrims, hermits, ghosts, rivals, and a few who aren't what they seem. /realm:wander",
     "uuid": "20007ad8-3637-4966-8759-750f9e4b8d3b",
-    "version": [1, 2, 2],
+    "version": [1, 2, 3],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
+    {
+      "type": "data",
+      "uuid": "42f475b6-c5cd-4e31-8ac4-c14027937d24",
+      "version": [1, 0, 0]
+    },
     {
       "type": "script",
       "language": "javascript",

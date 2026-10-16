@@ -13,6 +13,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { removeOrphanLabel, updateNameLabels } from "./name-labels.js";
 
 // A visit is one saved object: where the caravan is, until when, its traders' entity ids and what's left
 // in stock. The traders are vanilla minecraft:npc entities with this pack as their owner tag (the Townsfolk
@@ -32,6 +33,9 @@ const TRADER_TAG = "realm:caravan_trader:";
 const LLAMA_TAG = "realm:caravan_llama";
 const OWNER_TAG = "realm:npc_owner:caravan_bp";
 const NPC_TAG = "realm:npc";
+const LABEL_TYPE = "realm:caravan_label";
+const LABEL_TAG = "realm:caravan_label";
+const LABEL_ID_TAG = "realm:caravan_label_id:";
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
 
@@ -84,6 +88,23 @@ let spots = [];
 let visit;
 /** @type {Map<number, { missing: number, yaw?: number }>} trader index -> runtime state */
 const traderState = new Map();
+/** @type {Map<string, Entity>} */
+const labels = new Map();
+
+function updateLabels() {
+  if (!ready) return;
+  const vis = visit;
+  const targets = vis?.placed ? vis.traders.flatMap((tr, i) => {
+    const entity = entityById(tr.eid);
+    const at = entity?.location ?? tr.at;
+    return at ? [{ id: `${vis.v}:${i}`, dim: entity?.dimension.id ?? vis.spot.dim, ...at, name: `§6${tr.name}` }] : [];
+  }) : [];
+  updateNameLabels({
+    labels, targets, players: world.getAllPlayers(), maxRange: Math.max(0, Number(get("farNameRange")) || 0),
+    labelType: LABEL_TYPE, ownerTag: OWNER_TAG, labelTag: LABEL_TAG, labelIdTag: LABEL_ID_TAG,
+    dimension: (id) => world.getDimension(id),
+  });
+}
 
 /** @param {unknown} v */
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
@@ -472,6 +493,7 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (removeOrphanLabel(entity, labels, LABEL_TYPE)) return;
     audit(entity);
   } catch (e) {
     console.warn(`[caravan] ${e}`);
@@ -482,6 +504,7 @@ function auditAll() {
   for (const id of DIMENSIONS) {
     try {
       for (const e of world.getDimension(id).getEntities({ tags: [TAG] })) audit(e);
+      for (const e of world.getDimension(id).getEntities({ type: LABEL_TYPE })) removeOrphanLabel(e, labels, LABEL_TYPE);
     } catch (e) {
       console.warn(`[caravan] audit: ${e}`);
     }
@@ -638,6 +661,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     }
   }, LOOP_TICKS);
   system.runInterval(auditAll, AUDIT_TICKS);
+  system.runInterval(updateLabels, 2);
 });
 
 // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { get } from "./settings.js";
+import { removeOrphanLabel, updateNameLabels } from "./name-labels.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
 // the game's skins in its NPC editor). Each one lives inside its own house and stays there: its one spot (its
@@ -42,6 +43,9 @@ const OWNER_TAG = "realm:npc_owner:npc_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
 const ROLE_TAG = "realm:npc_role:";
+const LABEL_TYPE = "realm:npc_label";
+const LABEL_TAG = "realm:npc_label";
+const LABEL_ID_TAG = "realm:npc_label_id:";
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
 
@@ -80,6 +84,23 @@ let loadFailed = false; // a corrupt list: leave the NPCs alone rather than remo
 let weather = WeatherType.Clear;
 /** @type {Map<string, State>} townsfolk id -> runtime state */
 const states = new Map();
+/** @type {Map<string, Entity>} townsfolk id -> label entity */
+const labels = new Map();
+
+function updateLabels() {
+  if (!ready) return;
+  const maxRange = Math.max(0, Number(get("farNameRange")) || 0);
+  updateNameLabels({
+    labels,
+    targets: list.flatMap((rec) => {
+      const t = folk.get(rec.id);
+      return t ? [{ ...rec, name: displayName(t) }] : [];
+    }),
+    players: world.getAllPlayers(), maxRange,
+    labelType: LABEL_TYPE, ownerTag: OWNER_TAG, labelTag: LABEL_TAG, labelIdTag: LABEL_ID_TAG,
+    dimension: (id) => world.getDimension(id),
+  });
+}
 
 /** @param {Townsfolk} t "§eMara §7the Cartographer": the name above its head */
 const displayName = (t) => `§e${t.name}${t.title ? ` §7${t.title}` : ""}`;
@@ -469,6 +490,7 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (removeOrphanLabel(entity, labels, LABEL_TYPE)) return;
     if (entity.typeId !== NPC_TYPE) return;
     audit(entity);
     const id = entity.isValid ? idOf(entity) : undefined;
@@ -481,7 +503,9 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
 function auditAll() {
   for (const id of DIMENSIONS) {
     try {
-      for (const e of world.getDimension(id).getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] })) audit(e);
+      const dim = world.getDimension(id);
+      for (const e of dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] })) audit(e);
+      for (const e of dim.getEntities({ type: LABEL_TYPE })) removeOrphanLabel(e, labels, LABEL_TYPE);
     } catch (e) {
       console.warn(`[npc] audit: ${e}`);
     }
@@ -624,10 +648,21 @@ function loop() {
     }
   }
   const lively = get("enabled") === true;
+  const maxRange = Math.max(0, Number(get("farNameRange")) || 0);
+  const activeRange = Math.max(NAME_RANGE, CONFIG.respawnRange, maxRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
+  const players = world.getAllPlayers();
   for (const rec of list) {
     const t = folk.get(rec.id);
     if (!t) continue;
     try {
+      if (!players.some((p) => p.dimension.id === rec.dim && dist(p.location, rec) <= activeRange)) {
+        const st = states.get(rec.id);
+        if (st) {
+          st.missing = 0;
+          st.viewers = undefined;
+        }
+        continue;
+      }
       const entity = entityOf(rec);
       if (!entity) {
         if (loops % MISSING_EVERY === 0) checkMissing(rec, t);
@@ -658,6 +693,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
   system.runInterval(loop, LOOP_TICKS);
+  system.runInterval(updateLabels, 2);
   system.runInterval(auditAll, AUDIT_TICKS);
   // Other packs are loaded by now: the calendar, and each online player's affinity (after a /reload).
   system.runTimeout(() => {

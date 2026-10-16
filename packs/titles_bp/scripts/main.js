@@ -316,12 +316,44 @@ system.runInterval(() => {
       const dx = loc.x - prev.x;
       const dz = loc.z - prev.z;
       const moved = Math.hypot(dx, loc.y - prev.y, dz);
-      if (moved < 0.1 || moved > 20) continue; // standing still, or teleported
+      const gliding = player.isGliding;
+      const maxMove = gliding ? 45 : 20; // fast elytra and NOS Rocket flight covers many blocks per check
+      if (moved < 0.1 || moved > maxMove) continue; // standing still, or teleported
       if (player.getEffect("invisibility") || player.getGameMode() === GameMode.Spectator) continue;
       const flat = Math.hypot(dx, dz);
       const back = flat > 0.01 ? trail.behind / flat : 0;
-      player.dimension.spawnParticle(trail.particle, { x: loc.x - dx * back, y: loc.y + trail.y, z: loc.z - dz * back });
-      budget--;
+      const dim3 = player.dimension;
+      // Fast movement leaves a continuous ribbon: 3 puffs along the way from the last spot to here.
+      const fracs = gliding || moved > 1.2 ? [0.2, 0.6, 1.0] : [1.0];
+      for (const frac of fracs) {
+        if (budget <= 0) break;
+        dim3.spawnParticle(trail.particle, {
+          x: prev.x + dx * frac - dx * back,
+          y: loc.y + trail.y - (loc.y - prev.y) * (1 - frac),
+          z: prev.z + dz * frac - dz * back,
+        });
+        budget--;
+      }
+      if (gliding) {
+        // Ahead of the camera too, so a gliding player sees their own trail stream past in 1st and 3rd person.
+        const head = player.getHeadLocation();
+        const vel = player.getVelocity();
+        const spd = Math.hypot(vel.x, vel.y, vel.z);
+        const fwd = player.getViewDirection();
+        const rLen = Math.hypot(fwd.x, fwd.z);
+        const rx = rLen > 1e-4 ? -fwd.z / rLen : 1;
+        const rz = rLen > 1e-4 ? fwd.x / rLen : 0;
+        const lead = Math.max(3.2, spd * 2.3 + 2.5);
+        for (const side of [-1, 1]) {
+          if (budget <= 0) break;
+          dim3.spawnParticle(trail.particle, {
+            x: head.x + fwd.x * lead + rx * 0.75 * side,
+            y: head.y + fwd.y * lead - 0.2,
+            z: head.z + fwd.z * lead + rz * 0.75 * side,
+          });
+          budget--;
+        }
+      }
     } catch {
       // unloaded chunk, or the player left
     }

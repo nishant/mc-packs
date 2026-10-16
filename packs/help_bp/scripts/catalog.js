@@ -1141,7 +1141,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Walk up to one. They turn to face you, and now and then say something above their head (§eWhere did I leave my compass?§r).",
+        "text": "Their floating names help you find them from up to 120 blocks away (§efarNameRange§r), including behind house walls and roofs, without aiming directly at them. Walk up to one: they turn to face you, and now and then say something above their head (§eWhere did I leave my compass?§r).",
         "ops": false
       },
       {

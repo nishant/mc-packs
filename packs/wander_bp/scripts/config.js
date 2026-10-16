@@ -2,6 +2,9 @@ export const CONFIG = {
   /** Wanderers appear. Disabled, nobody new appears (those on the road leave within a minute) and camps stay empty. */
   enabled: true,
 
+  /** Show floating names from this far away, even behind walls. 0 = vanilla close-up only. */
+  farNameRange: 120,
+
   /** Ticks between rolls for each player (1200 = once a minute). Read when the world starts. */
   scheduleTicks: 1200,
 
