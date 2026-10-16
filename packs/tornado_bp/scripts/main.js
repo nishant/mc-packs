@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandStatus, Dimension, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -13,7 +13,7 @@ const SPARK = "realm:sky_spark";
 const FRAME_TICKS = 2; // the funnel is redrawn and players are spun every 2 ticks
 const FRAMES_PER_SECOND = 20 / FRAME_TICKS;
 const NEAR = 64; // beyond this, players get half the rings
-const REDRAW_FRAMES = 4; // each ring is redrawn every 4 frames (0.4 s) so the funnel stays dense and cohesive
+const REDRAW_FRAMES = 7; // each ring lives ~1.4s and is redrawn every 7 frames (0.7s) for high FPS with zero gaps
 const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
 const WIND_EVERY = 5; // seconds
@@ -381,44 +381,40 @@ function draw(t) {
   const top = Math.max(12, Math.min(CONFIG.height, 318 - t.y));
   for (const { player, dist } of t.viewers) {
     if (!player.isValid) continue;
-    const rings = Math.max(6, Math.round(get("rings") * density * (dist > NEAR ? 0.55 : 1)));
+    const rings = Math.max(5, Math.round(get("rings") * density * (dist > NEAR ? 0.5 : 1)));
     const slice = Math.ceil(rings / REDRAW_FRAMES);
     try {
       for (let k = 0; k < slice; k++) {
         const i = (t.frame * slice + k) % rings;
-        const f = (i + Math.random() * 0.75) / rings; // 0 at the ground, 1 at the top
+        const f = (i + Math.random() * 0.7) / rings; // 0 at the ground, 1 at the top
         const axis = funnelAxis(t, f, top);
         molang().setFloat("variable.radius", funnelRadius(f));
-        molang().setFloat("variable.spin", 8.5 - 4.8 * f);
+        molang().setFloat("variable.spin", 8.0 - 4.5 * f);
         molang().setFloat("variable.height", f);
         player.spawnParticle(RING, axis, molang());
       }
-      // Keep the ground contact dust whirl and upper storm collar anchored and dense
-      if (t.frame % 2 === 0) {
-        molang().setFloat("variable.radius", 3.4);
-        molang().setFloat("variable.spin", 9.2);
+      // Keep the ground contact dust whirl and upper storm collar anchored without excess emitters
+      if (t.frame % 4 === 0) {
+        molang().setFloat("variable.radius", 3.2);
+        molang().setFloat("variable.spin", 8.8);
         molang().setFloat("variable.height", 0.02);
         player.spawnParticle(RING, { x: t.x, y: t.y + 0.35, z: t.z }, molang());
-      } else {
-        const topAxis = funnelAxis(t, 0.95, top);
-        molang().setFloat("variable.radius", funnelRadius(0.95));
-        molang().setFloat("variable.spin", 3.6);
-        molang().setFloat("variable.height", 0.95);
+      } else if (t.frame % 4 === 2) {
+        const topAxis = funnelAxis(t, 0.94, top);
+        molang().setFloat("variable.radius", funnelRadius(0.94));
+        molang().setFloat("variable.spin", 3.5);
+        molang().setFloat("variable.height", 0.94);
         player.spawnParticle(RING, topAxis, molang());
       }
-      if (dist <= NEAR) {
-        const bits = Math.max(1, Math.round(density * 1.5));
-        for (let i = 0; i < bits; i++) {
-          molang().setFloat("variable.radius", rand(1.8, 4.2));
-          player.spawnParticle(DEBRIS, { x: t.x + rand(-1.5, 1.5), y: t.y + rand(0.2, 2.5), z: t.z + rand(-1.5, 1.5) }, molang());
-        }
-        // Occasional internal storm lightning flickers inside the upper wall cloud collar
-        if (t.frame % 5 === 0) {
-          const collarAxis = funnelAxis(t, rand(0.78, 0.96), top);
-          const ang = Math.random() * Math.PI * 2;
-          const r = rand(1.5, 5.5);
-          player.spawnParticle(SPARK, { x: collarAxis.x + Math.cos(ang) * r, y: collarAxis.y, z: collarAxis.z + Math.sin(ang) * r });
-        }
+      if (dist <= NEAR && t.frame % 3 === 0) {
+        molang().setFloat("variable.radius", rand(1.8, 3.8));
+        player.spawnParticle(DEBRIS, { x: t.x + rand(-1.2, 1.2), y: t.y + rand(0.2, 2.0), z: t.z + rand(-1.2, 1.2) }, molang());
+      }
+      if (dist <= NEAR && t.frame % 8 === 0) {
+        const collarAxis = funnelAxis(t, rand(0.8, 0.96), top);
+        const ang = Math.random() * Math.PI * 2;
+        const r = rand(1.5, 5.0);
+        player.spawnParticle(SPARK, { x: collarAxis.x + Math.cos(ang) * r, y: collarAxis.y, z: collarAxis.z + Math.sin(ang) * r });
       }
     } catch {
       // An unloaded chunk or the edge of the world: skip this player for this frame.
@@ -484,19 +480,21 @@ function pull(t, dim) {
           p.playSound("mob.breeze.wind_burst", { location: l, volume: 0.75, pitch: 0.85 });
         } else {
           // Outer suction zone: pull the player inward toward the funnel with a counterclockwise swirl
-          const inX = -dx / d;
-          const inZ = -dz / d;
-          const tanX = -inZ;
-          const tanZ = inX;
-          const pullStrength = 0.65 + 0.55 * (1 - d / radius);
-          const vx = (inX * 0.78 + tanX * 0.42) * pullStrength;
-          const vz = (inZ * 0.78 + tanZ * 0.42) * pullStrength;
-          const vy = l.y < t.y + 1.2 ? 0.24 : 0.08;
-          p.applyKnockback({ x: vx, z: vz }, vy);
-          // Fallback for Creative flight / Spectator where applyKnockback may be ignored by client physics
-          const vel = p.getVelocity();
-          if (Math.hypot(vel.x, vel.z) < 0.04) {
-            p.teleport({ x: l.x + vx * 0.85, y: Math.max(t.y, l.y + 0.1), z: l.z + vz * 0.85 }, { keepVelocity: false });
+          if (t.frame % 2 === 0) {
+            const inX = -dx / d;
+            const inZ = -dz / d;
+            const tanX = -inZ;
+            const tanZ = inX;
+            const pullStrength = 0.75 + 0.65 * (1 - d / radius);
+            const vx = (inX * 0.78 + tanX * 0.42) * pullStrength;
+            const vz = (inZ * 0.78 + tanZ * 0.42) * pullStrength;
+            const vy = l.y < t.y + 1.2 ? 0.28 : 0.12;
+            p.applyKnockback({ x: vx, z: vz }, vy);
+            const mode = p.getGameMode();
+            const vel = p.getVelocity();
+            if (mode === GameMode.Spectator || (mode === GameMode.Creative && !p.isOnGround && Math.abs(vel.y) < 0.002 && Math.hypot(vel.x, vel.z) < 0.005)) {
+              p.teleport({ x: l.x + vx * 0.7, y: Math.max(t.y, l.y + 0.15), z: l.z + vz * 0.7 }, { keepVelocity: false });
+            }
           }
           continue;
         }
@@ -530,8 +528,12 @@ function pull(t, dim) {
       const vy = Math.max(0.38, Math.min(1.15, stepY * 0.36 + 0.52));
 
       p.applyKnockback({ x: vx, z: vz }, vy);
-      // Ensure Creative-flying or Spectator players still spiral smoothly up the funnel
-      if (elapsed >= 4 && (l.y < targetY - 3.0 || Math.hypot(stepX, stepZ) > orbitR + 4.5)) {
+      const mode = p.getGameMode();
+      const vel = p.getVelocity();
+      if (
+        t.frame % 2 === 0 &&
+        (mode === GameMode.Spectator || (mode === GameMode.Creative && !p.isOnGround && Math.abs(vel.y) < 0.002 && Math.hypot(vel.x, vel.z) < 0.005))
+      ) {
         p.teleport({ x: targetX, y: targetY, z: targetZ }, { keepVelocity: false });
       }
     } catch (e) {

@@ -654,25 +654,25 @@ const PARTICLES = {
   }),
 
   // One ring of a tornado: dense inner condensation core + fast-whipping outer vortex bands circling at variable.radius,
-  // spinning at variable.spin rad/s and climbing. Billboard size scales with variable.radius so rings form a solid,
-  // seamless twisting funnel from the ground dust skirt up to the dark mesocyclone storm collar.
+  // spinning at variable.spin rad/s and climbing. Billboard size scales with variable.radius so 8-18 particles per ring
+  // form a solid, seamless twisting funnel with minimal GPU overdraw.
   sky_tornado: effect("realm:sky_tornado", "dust", "particles_blend", {
-    ...burst(`Math.clamp(${or("radius", 2)} * 8 + 16, 24, 68)`),
+    ...burst(`Math.clamp(${or("radius", 2)} * 1.8 + 6, 8, 18)`),
     ...once(),
     "minecraft:emitter_shape_point": {},
-    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(0.85, 1.35)" },
+    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(1.15, 1.6)" },
     "minecraft:particle_motion_parametric": {
       relative_position: [
-        `Math.cos(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 5)} * 57.2958 * (variable.particle_random_2 < 0.42 ? 1.2 : 0.92)) * ${or("radius", 2)} * (variable.particle_random_2 < 0.42 ? (0.28 + 0.52 * variable.particle_random_2) : (0.78 + 0.36 * variable.particle_random_2))`,
-        "variable.particle_age * (1.2 + variable.particle_random_3 * 1.5) + (variable.particle_random_2 - 0.5) * 1.1",
-        `Math.sin(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 5)} * 57.2958 * (variable.particle_random_2 < 0.42 ? 1.2 : 0.92)) * ${or("radius", 2)} * (variable.particle_random_2 < 0.42 ? (0.28 + 0.52 * variable.particle_random_2) : (0.78 + 0.36 * variable.particle_random_2))`,
+        `Math.cos(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 5)} * 57.2958) * ${or("radius", 2)} * (0.38 + 0.68 * variable.particle_random_2)`,
+        "variable.particle_age * (1.1 + variable.particle_random_3 * 1.3) + (variable.particle_random_2 - 0.5) * 1.1",
+        `Math.sin(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 5)} * 57.2958) * ${or("radius", 2)} * (0.38 + 0.68 * variable.particle_random_2)`,
       ],
     },
-    "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-180, 180)" },
+    "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-160, 160)" },
     "minecraft:particle_appearance_billboard": {
       size: [
-        `(0.72 + ${or("radius", 2)} * 0.28 + variable.particle_random_3 * 0.45) * (1 + 0.35 * ${T})`,
-        `(0.54 + ${or("radius", 2)} * 0.19 + variable.particle_random_3 * 0.32) * (1 + 0.28 * ${T})`,
+        `(0.68 + ${or("radius", 2)} * 0.24 + variable.particle_random_3 * 0.38) * (1 + 0.3 * ${T})`,
+        `(0.52 + ${or("radius", 2)} * 0.17 + variable.particle_random_3 * 0.28) * (1 + 0.24 * ${T})`,
       ],
       facing_camera_mode: "lookat_xyz",
       uv: uv("dust", ["Math.floor(variable.particle_random_4 * 4) * 32", 0], [32, 32]),
@@ -680,20 +680,20 @@ const PARTICLES = {
     "minecraft:particle_appearance_lighting": {},
     "minecraft:particle_appearance_tinting": {
       color: [
-        "variable.particle_random_2 < 0.42 ? (0.24 + 0.08 * variable.particle_random_3) : (0.48 + 0.16 * variable.particle_random_3 - 0.08 * variable.height)",
-        "variable.particle_random_2 < 0.42 ? (0.26 + 0.08 * variable.particle_random_3) : (0.51 + 0.16 * variable.particle_random_3 - 0.07 * variable.height)",
-        "variable.particle_random_2 < 0.42 ? (0.30 + 0.09 * variable.particle_random_3) : (0.56 + 0.17 * variable.particle_random_3 - 0.05 * variable.height)",
-        `${fade(0.16, 0.36)} * (variable.particle_random_2 < 0.42 ? 0.92 : 0.78)`,
+        "0.24 + 0.34 * variable.particle_random_2 - 0.06 * variable.height",
+        "0.26 + 0.36 * variable.particle_random_2 - 0.05 * variable.height",
+        "0.30 + 0.38 * variable.particle_random_2 - 0.04 * variable.height",
+        `${fade(0.18, 0.4)} * 0.82`,
       ],
     },
   }),
 
   // Debris whipped around the base and lower trunk of a tornado: dark leaves and dirt clods spiraling upward and outward.
   sky_debris: effect("realm:sky_debris", "bits", "particles_alpha", {
-    ...burst(12),
+    ...burst(5),
     ...once(),
     "minecraft:emitter_shape_point": {},
-    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(1.2, 2.1)" },
+    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(1.1, 1.8)" },
     "minecraft:particle_motion_parametric": {
       relative_position: [
         `Math.cos(variable.particle_random_1 * 360 + variable.particle_age * 380) * (${or("radius", 2.5)} + variable.particle_age * (1.8 + variable.particle_random_2 * 2.4))`,
@@ -878,7 +878,7 @@ const MANIFEST = {
     name: "Realm Skies",
     description: "Auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 3, 0],
+    version: [1, 3, 1],
     min_engine_version: [1, 21, 100],
   },
   modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 2, 0] }],

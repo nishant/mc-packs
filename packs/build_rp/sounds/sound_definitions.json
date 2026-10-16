@@ -139,6 +139,28 @@
           "is3D": false
         }
       ]
+    },
+    "realm.nos.boost": {
+      "category": "player",
+      "sounds": [
+        {
+          "name": "sounds/nos/turbo_boost",
+          "volume": 1.0,
+          "pitch": 1.0,
+          "is3D": false
+        }
+      ]
+    },
+    "realm.nos.boost_world": {
+      "category": "player",
+      "sounds": [
+        {
+          "name": "sounds/nos/turbo_boost",
+          "volume": 1.4,
+          "pitch": 1.0,
+          "is3D": true
+        }
+      ]
     }
   }
 }

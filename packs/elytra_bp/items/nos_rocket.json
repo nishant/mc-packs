@@ -1,23 +1,26 @@
 {
-  "format_version": "1.21.60",
+  "format_version": "1.21.0",
   "minecraft:item": {
     "description": {
       "identifier": "custom:nos_rocket",
       "menu_category": {
-        "category": "items",
-        "group": "itemGroup.name.firework"
+        "category": "items"
       }
     },
     "components": {
       "minecraft:display_name": {
-        "value": "NOS Rocket"
+        "value": "item.custom:nos_rocket.name"
       },
       "minecraft:icon": {
         "textures": {
           "default": "nos_rocket"
         }
       },
-      "minecraft:max_stack_size": 64
+      "minecraft:max_stack_size": 64,
+      "minecraft:use_modifiers": {
+        "use_duration": 3600,
+        "movement_modifier": 1.0
+      }
     }
   }
 }

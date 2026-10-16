@@ -28,6 +28,6 @@ export const CONFIG = {
   /** Maximum total flight speed cap in blocks/tick (~72 blocks/s) so repeated NOS Rockets do not compound infinitely. */
   nosMaxSpeed: 3.6,
 
-  /** Short hard nitrous burst duration in ticks. */
-  nosBurstTicks: 6,
+  /** Sustained full-boost turbo hold duration in ticks (30 ticks = 1.5s at peak speed, plus spool-up and wastegate taper). */
+  nosBurstTicks: 30,
 };

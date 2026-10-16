@@ -148,87 +148,97 @@ function consumeNosRocket(player) {
 }
 
 /**
- * Spawns blue/cyan nitrous flame particles with orange spark accents behind the gliding player.
+ * Spawns blue/cyan nitrous flame particles with orange spark accents along the gliding player's flight path
+ * (both in front/beside the wings so first-person players see the nitrous slipstream, and at the tail so
+ * third-person players and bystanders see a blazing cyan-blue & orange afterburner trail).
  * @param {Player} player
  * @param {{ x: number, y: number, z: number }} forward
- * @param {boolean} initialBurst
+ * @param {"spool" | "boost" | "flutter"} phase
  */
-function spawnNosParticles(player, forward, initialBurst) {
+function spawnNosParticles(player, forward, phase) {
   const dim = player.dimension;
   const pos = player.location;
-  const tail = {
-    x: pos.x - forward.x * 1.2,
-    y: pos.y + 0.5 - forward.y * 1.2,
-    z: pos.z - forward.z * 1.2,
+  const head = player.getHeadLocation();
+  const rLen = Math.hypot(forward.z, forward.x);
+  const right = rLen > 1e-4 ? { x: -forward.z / rLen, z: forward.x / rLen } : { x: 1, z: 0 };
+  const jitter = (/** @type {number} */ s) => (Math.random() - 0.5) * s * 2;
+  const emit = (/** @type {string} */ id, /** @type {{ x: number, y: number, z: number }} */ at) => {
+    try {
+      dim.spawnParticle(id, at);
+    } catch {
+      // unloaded or unsupported particle
+    }
   };
-  const spread = initialBurst ? 0.35 : 0.2;
-  const jitter = () => (Math.random() - 0.5) * spread * 2;
-  const count = initialBurst ? 4 : 2;
-  for (let i = 0; i < count; i++) {
-    try {
-      dim.spawnParticle("minecraft:blue_flame_particle", {
-        x: tail.x + jitter(),
-        y: tail.y + jitter(),
-        z: tail.z + jitter(),
-      });
-    } catch {
-      // unloaded or unsupported particle
-    }
-    try {
-      dim.spawnParticle("minecraft:soul_fire_flame", {
-        x: tail.x - forward.x * 0.3 + jitter(),
-        y: tail.y - forward.y * 0.3 + jitter(),
-        z: tail.z - forward.z * 0.3 + jitter(),
-      });
-    } catch {
-      // unloaded or unsupported particle
+
+  // 1) Forward/wingtip slipstream corridor (ahead of the camera so at high speed the player flies
+  // directly through glowing cyan sparks and orange flames in both 1st and 3rd person)
+  for (const side of [-1, 1]) {
+    const d = phase === "spool" ? 1.4 + Math.random() * 1.4 : 1.8 + Math.random() * 2.4;
+    const w = (0.45 + Math.random() * 0.35) * side;
+    const wingPt = {
+      x: head.x + forward.x * d + right.x * w + jitter(0.15),
+      y: head.y + forward.y * d - 0.25 + jitter(0.15),
+      z: head.z + forward.z * d + right.z * w + jitter(0.15),
+    };
+    emit("realm:sky_spark", wingPt);
+    emit("minecraft:blue_flame_particle", wingPt);
+    if (phase === "boost" || phase === "flutter") {
+      emit("realm:trail_ember", wingPt);
+      emit("minecraft:basic_flame_particle", wingPt);
     }
   }
-  try {
-    dim.spawnParticle("minecraft:basic_flame_particle", {
-      x: tail.x + jitter(),
-      y: tail.y + jitter(),
-      z: tail.z + jitter(),
-    });
-  } catch {
-    // unloaded or unsupported particle
-  }
-  if (initialBurst) {
-    try {
-      dim.spawnParticle("minecraft:lava_particle", tail);
-    } catch {
-      // unloaded or unsupported particle
+
+  // 2) Core afterburner stream along the body
+  const steps = phase === "boost" ? 4 : phase === "flutter" ? 2 : 1;
+  for (let i = 0; i < steps; i++) {
+    const along = -0.2 + i * 0.85;
+    const corePt = {
+      x: pos.x + forward.x * along + jitter(0.22),
+      y: pos.y + 0.4 + forward.y * along + jitter(0.18),
+      z: pos.z + forward.z * along + jitter(0.22),
+    };
+    emit("realm:sky_spark", corePt);
+    emit("minecraft:blue_flame_particle", corePt);
+    if (phase === "boost" || phase === "flutter") {
+      emit("realm:trail_ember", corePt);
+      emit("minecraft:basic_flame_particle", corePt);
     }
+    if (phase === "boost" && i === 0) emit("minecraft:lava_particle", corePt);
   }
 }
 
 /**
- * Plays the pressurized nitrous ignition + rocket burst audio at the player's location.
+ * Plays the custom RB26 turbo spool + wastegate flutter ("stu-tu-tu-tu") audio (`realm.nos.boost`),
+ * timed with an afterburner punch at tick 7 when full boost kicks in.
  * @param {Player} player
  */
 function playNosAudio(player) {
   const dim = player.dimension;
-  const loc = player.location;
   try {
-    dim.playSound("firework.launch", loc, { volume: 1.8, pitch: 1.35 });
+    player.playSound("realm.nos.boost", { volume: 1.0, pitch: 1.0 });
   } catch {
     // ignore audio error
   }
   try {
-    dim.playSound("mob.breeze.shoot", loc, { volume: 1.4, pitch: 1.4 });
+    dim.playSound("realm.nos.boost_world", player.location, { volume: 1.3, pitch: 1.0 });
   } catch {
     // ignore audio error
   }
   try {
-    dim.playSound("random.fizz", loc, { volume: 0.9, pitch: 1.7 });
+    player.playSound("random.fizz", { volume: 0.55, pitch: 1.65 });
   } catch {
     // ignore audio error
   }
-  try {
-    dim.playSound("firework.blast", loc, { volume: 1.1, pitch: 1.5 });
-  } catch {
-    // ignore audio error
-  }
+  // At tick 7 (0.35s), right as the turbo finishes spooling up, hit the afterburner kick sound
+  system.runTimeout(() => {
+    if (!player.isValid || !player.isGliding) return;
+    try {
+      player.playSound("firework.launch", { volume: 0.9, pitch: 0.85 });
+      player.playSound("mob.breeze.wind_burst", { volume: 0.85, pitch: 1.2 });
+    } catch {
+      // ignore audio error
+    }
+  }, 7);
 }
 
 /**
@@ -257,28 +267,36 @@ function triggerNosRocket(player) {
   const burstTicks = Math.max(1, Math.floor(Number(get("nosBurstTicks")) || CONFIG.nosBurstTicks));
   const boostStrength = baseline * multiplier;
 
+  playNosAudio(player);
+
+  // 3-stage turbo curve (60 ticks / 3.0s total):
+  //   - Spool-up: ticks 1..7 (0.35s)
+  //   - Sustained full 3.5x boost hold: ticks 8..(7 + burstTicks) (default 30 ticks = 1.5s at peak speed)
+  //   - Wastegate flutter ("stu-tu-tu-tu") & smooth momentum taper: 22 ticks (1.1s)
   const currentVelocity = player.getVelocity();
   const forward = normalize3(player.getViewDirection());
-  const newVelocity = clampFlightVelocity(
+  const spoolInitial = clampFlightVelocity(
     {
-      x: currentVelocity.x + forward.x * boostStrength,
-      y: currentVelocity.y + forward.y * boostStrength,
-      z: currentVelocity.z + forward.z * boostStrength,
+      x: currentVelocity.x + forward.x * (baseline * 0.45),
+      y: currentVelocity.y + forward.y * (baseline * 0.45),
+      z: currentVelocity.z + forward.z * (baseline * 0.45),
     },
     maxSpeed
   );
+  applyPropulsion(player, currentVelocity, spoolInitial);
+  spawnNosParticles(player, forward, "spool");
 
-  applyPropulsion(player, currentVelocity, newVelocity);
-  playNosAudio(player);
-  spawnNosParticles(player, forward, true);
-
-  if (burstTicks > 1) {
-    activeNosBursts.set(player.id, {
-      remaining: burstTicks - 1,
-      maxSpeed,
-      stepThrust: boostStrength * 0.35,
-    });
-  }
+  const spoolTicks = 7;
+  const boostEndTick = spoolTicks + Math.max(10, burstTicks);
+  activeNosBursts.set(player.id, {
+    tick: 1,
+    spoolTicks,
+    boostEndTick,
+    totalTicks: boostEndTick + 22,
+    maxSpeed,
+    boostStrength,
+    baseline,
+  });
 }
 
 // Guard against accidental block interaction consumption when holding custom:nos_rocket while gliding.
@@ -292,13 +310,29 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
   }
 });
 
+world.beforeEvents.itemUse.subscribe((event) => {
+  if (event.itemStack?.typeId !== NOS_ROCKET) return;
+  const source = event.source;
+  if (!(source instanceof Player)) return;
+  system.run(() => triggerNosRocket(source));
+});
+
+world.afterEvents.itemStartUse.subscribe((event) => {
+  if (event.itemStack?.typeId !== NOS_ROCKET) return;
+  if (!(event.source instanceof Player)) return;
+  triggerNosRocket(event.source);
+});
+
 world.afterEvents.itemUse.subscribe((event) => {
   if (event.itemStack?.typeId !== NOS_ROCKET) return;
   if (!(event.source instanceof Player)) return;
   triggerNosRocket(event.source);
 });
 
-// Sustain the short nitrous burst and particle trail over nosBurstTicks while gliding.
+// Choreograph the 3-stage turbo curve:
+//   1. Spool-up (ticks 1..7): smooth intake pressure ramp + blue sparks
+//   2. Full Boost Hold (ticks 8..boostEndTick): sustained 3.5x nitrous speed + blazing cyan/orange plume
+//   3. Wastegate Flutter & Taper (boostEndTick+1..totalTicks): smooth speed taper + "stu-tu-tu-tu" flame pops
 system.runInterval(() => {
   if (!activeNosBursts.size) return;
   for (const [playerId, burst] of activeNosBursts) {
@@ -308,26 +342,65 @@ system.runInterval(() => {
       continue;
     }
     try {
-      const currentVelocity = player.getVelocity();
       const forward = normalize3(player.getViewDirection());
-      const curSpeed = Math.hypot(currentVelocity.x, currentVelocity.y, currentVelocity.z);
-      const targetSpeed = Math.min(burst.maxSpeed, Math.max(curSpeed, burst.stepThrust * 2.5));
-      const steered = clampFlightVelocity(
-        {
-          x: currentVelocity.x * 0.45 + forward.x * (targetSpeed * 0.55 + burst.stepThrust),
-          y: currentVelocity.y * 0.45 + forward.y * (targetSpeed * 0.55 + burst.stepThrust),
-          z: currentVelocity.z * 0.45 + forward.z * (targetSpeed * 0.55 + burst.stepThrust),
-        },
-        burst.maxSpeed
-      );
-      applyPropulsion(player, currentVelocity, steered);
-      spawnNosParticles(player, forward, false);
+      const currentVelocity = player.getVelocity();
+      if (burst.tick <= burst.spoolTicks) {
+        // Stage 1: Turbo spooling up (gentle progressive pull)
+        const ramp = (burst.tick / burst.spoolTicks) * (burst.baseline * 0.38);
+        const nextVel = clampFlightVelocity(
+          {
+            x: currentVelocity.x + forward.x * ramp,
+            y: currentVelocity.y + forward.y * ramp,
+            z: currentVelocity.z + forward.z * ramp,
+          },
+          burst.maxSpeed
+        );
+        applyPropulsion(player, currentVelocity, nextVel);
+        spawnNosParticles(player, forward, "spool");
+      } else if (burst.tick <= burst.boostEndTick) {
+        // Stage 2: Full turbo boost kicks in and holds peak speed against Elytra drag
+        const isKickTick = burst.tick <= burst.spoolTicks + 3;
+        const stepAdd = isKickTick ? burst.boostStrength * 0.65 : burst.boostStrength * 0.35;
+        const curSpeed = Math.hypot(currentVelocity.x, currentVelocity.y, currentVelocity.z);
+        const targetSpeed = Math.min(burst.maxSpeed, Math.max(curSpeed, burst.boostStrength));
+        const steered = clampFlightVelocity(
+          {
+            x: currentVelocity.x * 0.32 + forward.x * (targetSpeed * 0.68 + stepAdd),
+            y: currentVelocity.y * 0.32 + forward.y * (targetSpeed * 0.68 + stepAdd),
+            z: currentVelocity.z * 0.32 + forward.z * (targetSpeed * 0.68 + stepAdd),
+          },
+          burst.maxSpeed
+        );
+        applyPropulsion(player, currentVelocity, steered);
+        spawnNosParticles(player, forward, "boost");
+      } else {
+        // Stage 3: Wastegate flutter ("stu-tu-tu-tu") + gradual momentum taper so speed carries much longer
+        const taperTick = burst.tick - burst.boostEndTick;
+        const taperTotal = Math.max(1, burst.totalTicks - burst.boostEndTick);
+        const taperFrac = Math.max(0, 1 - taperTick / taperTotal);
+        const holdSpeed = burst.boostStrength * (0.45 + 0.55 * taperFrac);
+        const curSpeed = Math.hypot(currentVelocity.x, currentVelocity.y, currentVelocity.z);
+        if (curSpeed < holdSpeed) {
+          const steered = clampFlightVelocity(
+            {
+              x: currentVelocity.x * 0.6 + forward.x * (holdSpeed * 0.4),
+              y: currentVelocity.y * 0.6 + forward.y * (holdSpeed * 0.4),
+              z: currentVelocity.z * 0.6 + forward.z * (holdSpeed * 0.4),
+            },
+            burst.maxSpeed
+          );
+          applyPropulsion(player, currentVelocity, steered);
+        }
+        if (taperTick % 3 === 1) {
+          spawnNosParticles(player, forward, "flutter");
+        }
+      }
     } catch {
       activeNosBursts.delete(playerId);
       continue;
     }
-    burst.remaining -= 1;
-    if (burst.remaining <= 0) activeNosBursts.delete(playerId);
+    burst.tick += 1;
+    if (burst.tick > burst.totalTicks) activeNosBursts.delete(playerId);
   }
 }, 1);
 

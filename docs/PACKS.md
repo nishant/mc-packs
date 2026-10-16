@@ -1369,7 +1369,7 @@ While you glide, a small box on the right side of your screen (or another box, o
 ### What players see
 
 - **Speed** in blocks per second (your total speed, diving included), **Y** (your height), **Elytra** durability left in percent, **Rockets** (firework rockets in your inventory and offhand) and **NOS** (NOS Rockets carried, when at least 1).
-- **NOS Rocket** (`custom:nos_rocket`, stack size 64, 128x128 `nos_rocket` icon in `build_rp`): when activated while gliding, consumes 1 item (outside Creative), adds a `nosMultiplier` (`3.5`x) forward impulse over `nosBurstTicks` (`6` ticks) clamped to `nosMaxSpeed` (`3.6` blocks/tick, ~72 blocks/s) so consecutive boosts stay steerable and never compound infinitely. Normal vanilla firework rockets remain completely unchanged.
+- **NOS Rocket** (`custom:nos_rocket`, stack size 64, 128x128 `nos_rocket` icon in `build_rp`): when activated while gliding, consumes 1 item (outside Creative), spools up the turbo for ~0.35s, hits and holds a `nosMultiplier` (`3.5`x) forward nitrous boost over `nosBurstTicks` (`30` ticks = 1.5s at peak speed, clamped to `nosMaxSpeed` = `3.6` blocks/tick, ~72 blocks/s), and tapers off gradually over the next 1.1s with a `"stu-tu-tu-tu"` wastegate turbo flutter (`realm.nos.boost`) and cyan-blue + orange slipstream flames. Normal vanilla firework rockets remain completely unchanged.
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
 - It only shows while you're gliding: the box goes away as you land (above the hotbar, the bar fades a moment after). Nothing is shown for players who aren't gliding.
 - When it shows above the hotbar and the [Coordinates HUD](#coordinates-hud--hud_bp) is on, the coordinates pause while you glide, so the two don't take turns on the bar; they come back a second or two after you land. In a side box, both show at once.
@@ -1394,7 +1394,7 @@ While you glide, a small box on the right side of your screen (or another box, o
 | `nosMultiplier` | `3.5` | NOS Rocket boost multiplier relative to a normal firework rocket baseline (2.0 to 5.0 in game) |
 | `nosBaseline` | `0.75` | Normal firework rocket impulse baseline in blocks/tick |
 | `nosMaxSpeed` | `3.6` | Maximum total flight speed cap in blocks/tick (~72 blocks/s) so repeated NOS Rockets stay steerable and do not compound infinitely |
-| `nosBurstTicks` | `6` | Duration in ticks of the short nitrous thrust and particle trail burst |
+| `nosBurstTicks` | `30` | Sustained full-boost turbo hold duration in ticks (1.5s at peak speed before the wastegate flutter taper) |
 
 Operators can change `enabled`, `lowPercent`, `showAt`, `nosEnabled`, `nosMultiplier`, `nosBaseline`, `nosMaxSpeed` and `nosBurstTicks` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`, and pick where it shows (**Where my Elytra HUD shows**).
 
@@ -5637,7 +5637,7 @@ Some thunderstorms spin up a tornado: a tall, dense, swirling vortex funnel with
 
 ### What players see
 
-- **The funnel:** a dense, multi-layered swirling vortex stacked 42 blocks (`height`) up from the ground—flaring into a churning dust and debris skirt at the base, tapering through a dark inner condensation core wrapped in silver-gray spiral cloud bands, and spreading into a brooding storm collar with lightning sparks at the top. Each player within `viewDistance` (128) blocks gets their own copy (`rings`, 24 rings, roughly half beyond 64 blocks; `density` scales both), so players far away cost nothing.
+- **The funnel:** a dense, multi-layered swirling vortex stacked 42 blocks (`height`) up from the ground—flaring into a churning dust and debris skirt at the base, tapering through a dark inner condensation core wrapped in silver-gray spiral cloud bands, and spreading into a brooding storm collar with lightning sparks at the top. Each player within `viewDistance` (128) blocks gets their own copy (`rings`, 14 rings, half as many beyond 64 blocks; `density` scales both), so players far away cost nothing.
 - **Where it goes:** it drifts 2 to 4 blocks a second (`speed`) on a slowly wandering heading, follows the ground over hills, and turns away rather than come within `avoidSpawn` (64) blocks of the world spawn. It may pass by builds: it never changes a block.
 - **Safe zones** ([Safe Zones](#safe-zones--zones_bp), protected towns and claims), by **Tornadoes and safe zones** (`zoneMode`): `pass` (default) goes through them like anywhere else, since it breaks nothing; `calm` leaves players inside a zone alone; `avoid` never forms within `pullRadius` + 16 blocks of a zone and turns away before its pull reaches one (and is calm inside one, if an operator spawns it there).
 - **Players only (any gamemode):** mobs, pets, villagers, townsfolk and dropped items are never pulled or harmed. Players within `pullRadius` (14) blocks feel the vortex suck them inward toward the base; once inside the funnel core they spiral rapidly around and up the vortex for ~2.8 seconds before being shot high into the sky out the top (boosted by `liftHeight`, 16) and receiving Slow Falling for `slowFallingSeconds` (8) seconds near the apex of their sky launch. Works in Survival, Creative, Adventure and Spectator alike. `throwPlayers` disabled leaves players alone.
@@ -5671,7 +5671,7 @@ Some thunderstorms spin up a tornado: a tall, dense, swirling vortex funnel with
 | `zoneMode` | `"pass"` | Safe zones: `pass` goes through them as usual (it never breaks blocks anyway), `calm` leaves players inside them alone, `avoid` never forms near one and turns away from them |
 | `viewDistance` | `128` | Players within this many blocks see the funnel (and get the journal page) |
 | `height` | `42` | Height of the funnel, in blocks |
-| `rings` | `24` | Rings of vortex clouds stacked up the funnel for each player near it (roughly half beyond 64 blocks) |
+| `rings` | `14` | Rings of vortex clouds stacked up the funnel for each player near it (half as many beyond 64 blocks) |
 | `density` | `1` | Multiplies `rings` and the debris, 0.25 to 1.5: lower it if the funnel slows devices down |
 | `pullRadius` | `14` | Players within this many blocks of the funnel are sucked in, spun up the vortex and shot out the top |
 | `liftHeight` | `16` | Extra sky launch boost height above the top of the funnel |
@@ -6229,8 +6229,8 @@ Particles, each spawned by a behavior pack with `player.spawnParticle(id, locati
 | `realm:sky_sand` | 20 sand grains in an 8 x 3 x 8 box around the location, blown by the wind | `variable.wx`, `variable.wz` wind in blocks/s | [Regional Weather](#regional-weather--climate_bp) |
 | `realm:sky_snow` | 20 snow streaks in an 8 x 4 x 8 box, driven by the wind and falling | `variable.wx`, `variable.wz` | [Regional Weather](#regional-weather--climate_bp) |
 | `realm:sky_fogbank` | 2 wide, faint, wispy sheets of pale mist (a 128 by 32 noise texture, no round outline) lying low within 6 blocks, about 10 to 15 blocks across, fading in over 4 s and out over 5 s, for 12 to 16 s | none | [Regional Weather](#regional-weather--climate_bp) |
-| `realm:sky_tornado` | One ring of swirling vortex clouds (inner condensation core + outer spiral bands, 24 to 68 puffs) circling the location and climbing for about a second | `variable.radius` blocks (2), `variable.spin` radians/s (5), `variable.height` 0..1 (0) | [Tornadoes](#tornadoes--tornado_bp) |
-| `realm:sky_debris` | 12 dark leaves and dirt clods spiraling upward and outward around the lower funnel | `variable.radius` (2.5) | [Tornadoes](#tornadoes--tornado_bp) |
+| `realm:sky_tornado` | One ring of swirling vortex clouds (inner condensation core + outer spiral bands, 8 to 18 puffs) circling the location and climbing for about 1.4 seconds | `variable.radius` blocks (2), `variable.spin` radians/s (5), `variable.height` 0..1 (0) | [Tornadoes](#tornadoes--tornado_bp) |
+| `realm:sky_debris` | 5 dark leaves and dirt clods spiraling upward and outward around the lower funnel | `variable.radius` (2.5) | [Tornadoes](#tornadoes--tornado_bp) |
 | `realm:sky_blood` | 6 slow red motes rising in an 8 x 2 x 8 box, 4 to 6.5 s | none | [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) |
 | `realm:sky_harvest` | The same, golden | none | [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) |
 | `realm:sky_spark` | 4 blue zigzag sparks, a quarter second | none | [Storm Chasing](#storm-chasing--storm_bp) |
@@ -6270,7 +6270,7 @@ Everything in `packs/sky_rp/` is generated by `npm run gen:sky` (`tools/gen-sky/
 | `fogs/*.json` | The 5 fogs above (`distance.air` and `distance.weather`) |
 | `textures/particle/realm_sky_*.png` | Aurora flipbook (8 frames of 32x128), glow, meteor fireball, smoke, fog puff, 4 swirling 32x32 vortex cloud puffs, sand grain, snow streak, leaf and clod, 2 sparks, sparkle, cloud and raindrop |
 | `pack_icon.png` | A night sky with stars, an aurora, a shooting star and dark hills (128x128) |
-| `manifest.json` | Fixed uuids, version 1.3.0 |
+| `manifest.json` | Fixed uuids, version 1.3.1 |
 
 `npm run check` runs `node tools/gen-sky/gen.mjs --check`, which fails if any file in the pack differs from what the generator makes, is missing, or is left over in its folders. It also fails if a particle names a texture the generator doesn't make.
 
