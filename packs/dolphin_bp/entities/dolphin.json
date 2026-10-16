@@ -183,6 +183,22 @@
             ]
           }
         }
+      },
+      "realm:dolphin_ridden": {
+        "minecraft:movement": {
+          "value": 0
+        },
+        "minecraft:underwater_movement": {
+          "value": 0
+        }
+      },
+      "realm:dolphin_free": {
+        "minecraft:movement": {
+          "value": 0.1
+        },
+        "minecraft:underwater_movement": {
+          "value": 0.15
+        }
       }
     },
     "components": {
@@ -520,7 +536,37 @@
       "realm:dolphin_release": {
         "remove": {
           "component_groups": [
-            "realm:dolphin_tamed"
+            "realm:dolphin_tamed",
+            "realm:dolphin_ridden"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "realm:dolphin_free"
+          ]
+        }
+      },
+      "realm:dolphin_ridden": {
+        "remove": {
+          "component_groups": [
+            "realm:dolphin_free"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "realm:dolphin_ridden"
+          ]
+        }
+      },
+      "realm:dolphin_unridden": {
+        "remove": {
+          "component_groups": [
+            "realm:dolphin_ridden"
+          ]
+        },
+        "add": {
+          "component_groups": [
+            "realm:dolphin_free"
           ]
         }
       }

@@ -25,6 +25,9 @@ const PROP_INDEX = "dolphin:index"; // world: JSON { [entity id]: Known }
 const PROP_TAMED = "dolphin:tamedCount"; // player: dolphins tamed ever
 const TAME_EVENT = "realm:dolphin_tame";
 const RELEASE_EVENT = "realm:dolphin_release";
+const RIDDEN_EVENT = "realm:dolphin_ridden"; // no swimming of its own while someone rides it
+const UNRIDDEN_EVENT = "realm:dolphin_unridden";
+const PROP_RIDDEN = "dolphin:ridden"; // dolphin: true while it has the ridden group
 const DIMS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
 const LEAP_COOLDOWN = 30; // ticks
 
@@ -127,7 +130,8 @@ export function tame(player, dolphin) {
 
 /** @param {Entity} dolphin */
 function release(dolphin) {
-  dolphin.triggerEvent(RELEASE_EVENT);
+  dolphin.triggerEvent(RELEASE_EVENT); // also ends the ridden group
+  dolphin.setDynamicProperty(PROP_RIDDEN, undefined);
   dolphin.setDynamicProperty(PROP_OWNER, undefined);
   dolphin.setDynamicProperty(PROP_OWNER_NAME, undefined);
   forget(dolphin.id);
@@ -234,7 +238,11 @@ world.afterEvents.playerInteractWithEntity.subscribe(({ player, target }) => {
   system.runTimeout(() => {
     try {
       if (!player.isValid || !target.isValid) return;
-      if (mountOf(player)) riders.set(player.id, player);
+      const on = mountOf(player);
+      if (on && !riders.has(player.id)) {
+        riders.set(player.id, { p: player, d: on });
+        setRidden(on, true);
+      }
       const owner = ownerOf(target);
       if (!owner || owner === player.id || get("othersCanRide") === true) return;
       const ride = target.getComponent("minecraft:rideable");
@@ -286,13 +294,6 @@ function atSurface(d) {
 }
 
 /**
- * How much of its speed a dolphin keeps each tick in water (measured on BDS 1.26: 0.78 to 0.81, the same
- * for every speed). Steering pushes against this drag, so a ridden dolphin really reaches maxSpeed.
- * Pushing without it, as before, topped out at about 4 x acceleration (6 blocks per second), whatever maxSpeed said.
- */
-const WATER_KEEP = 0.8;
-
-/**
  * One tick of steering: speed up toward where the rider looks (forward and back on the move stick,
  * a little sideways for strafing), capped at maxSpeed.
  * @param {Player} p @param {Entity} d
@@ -312,8 +313,8 @@ export function steer(p, d) {
   const flat = Math.hypot(view.x, view.z) || 1;
   // left of the view on the horizontal plane
   const left = { x: view.z / flat, y: 0, z: -view.x / flat };
-  const max = Math.min(24, Math.max(4, Number(get("maxSpeed")) || 7)) / 20; // blocks per tick
-  const accel = Math.max(0.01, Number(CONFIG.acceleration) || 1.2) / 20;
+  const max = Math.min(24, Math.max(4, Number(get("maxSpeed")) || 12)) / 20; // blocks per tick
+  const accel = Math.max(0.01, Number(CONFIG.acceleration) || 1.6) / 20;
   const target = {
     x: (view.x * fwd + left.x * side * 0.5) * max,
     y: view.y * fwd * max,
@@ -326,14 +327,8 @@ export function steer(p, d) {
     // no input: glide to a stop, slowly
     d.applyImpulse({ x: -v.x * 0.08, y: -v.y * 0.08, z: -v.z * 0.08 });
   } else if (len > 0.0001) {
-    // The velocity we want after this tick (at most `accel` closer to the target), pushed hard enough that it's
-    // still that after the water's drag.
     const k = Math.min(1, accel / len);
-    // Only fully under water, and up or down only below the surface: at the surface the air above has another
-    // drag, and a pushed-up dolphin would fly (a leap on top of it went twice as high).
-    const goal = { x: v.x + dv.x * k, y: v.y + dv.y * k, z: v.z + dv.z * k };
-    const keepY = atSurface(d) ? 1 : WATER_KEEP;
-    d.applyImpulse({ x: goal.x / WATER_KEEP - v.x, y: goal.y / keepY - v.y, z: goal.z / WATER_KEEP - v.z });
+    d.applyImpulse({ x: dv.x * k, y: dv.y * k, z: dv.z * k });
   }
   const rot = p.getRotation();
   d.setRotation({ x: rot.x, y: rot.y });
@@ -369,22 +364,61 @@ function breathe(p) {
   p.addEffect("water_breathing", 60, { amplifier: 0, showParticles: false });
 }
 
-/** Players riding a tamed dolphin, steered every tick. Everyone else is looked at every 5 ticks, and at once when they tap a dolphin. @type {Map<string, Player>} */
+/**
+ * A ridden dolphin swims only where its rider steers: its own swimming (random swims, breaching, following boats and
+ * players) stops while the `realm:dolphin_ridden` group sets its movement to 0. Steering pushes it directly, so it
+ * still goes where the rider looks.
+ * @param {Entity} d @param {boolean} on
+ */
+function setRidden(d, on) {
+  try {
+    if (!d.isValid || (d.getDynamicProperty(PROP_RIDDEN) === true) === on) return;
+    d.triggerEvent(on ? RIDDEN_EVENT : UNRIDDEN_EVENT);
+    d.setDynamicProperty(PROP_RIDDEN, on ? true : undefined);
+  } catch {
+    // unloaded
+  }
+}
+
+/** Players riding a tamed dolphin, steered every tick. Everyone else is looked at every 5 ticks, and at once when they tap a dolphin. @type {Map<string, { p: Player, d: Entity }>} */
 const riders = new Map();
+
+/** @param {string} id */
+function dropRider(id) {
+  const r = riders.get(id);
+  riders.delete(id);
+  if (r) setRidden(r.d, false);
+}
 
 system.runInterval(() => {
   if (get("enabled") !== true) return;
-  for (const p of world.getAllPlayers()) if (!riders.has(p.id) && mountOf(p)) riders.set(p.id, p);
+  for (const p of world.getAllPlayers()) {
+    if (riders.has(p.id)) continue;
+    const d = mountOf(p);
+    if (!d) continue;
+    riders.set(p.id, { p, d });
+    setRidden(d, true);
+  }
 }, 5);
 
 system.runInterval(() => {
   if (!riders.size) return;
-  if (get("enabled") !== true) return void riders.clear();
-  for (const [id, p] of riders) {
+  if (get("enabled") !== true) {
+    for (const id of [...riders.keys()]) dropRider(id);
+    return;
+  }
+  for (const [id, r] of riders) {
+    const p = r.p;
     const d = p.isValid ? mountOf(p) : undefined;
     if (!d) {
-      riders.delete(id);
+      dropRider(id);
       continue;
+    }
+    if (d.id !== r.d.id) {
+      // straight onto another dolphin
+      setRidden(r.d, false);
+      r.d = d;
+      setRidden(d, true);
     }
     try {
       // A leap tick has no steering push, so leaps stay as high as before.
@@ -436,6 +470,8 @@ system.runInterval(() => {
         changed = true;
       }
       if (d.getComponent("minecraft:rideable")?.getRiders().length) continue;
+      // nobody on it (the rider left, or the realm restarted mid-ride): it swims on its own again
+      setRidden(d, false);
       const p = online(owner);
       if (!p || p.dimension.id !== d.dimension.id || !p.isInWater || !d.isInWater) continue;
       const gap = dist(p.location, l);

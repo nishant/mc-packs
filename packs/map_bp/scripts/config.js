@@ -23,6 +23,12 @@ export const CONFIG = {
   /** At most this many mobs are drawn per player (the nearest). */
   maxMobs: 8,
 
+  /** The nearest town (Town Projects) shows as a house on the strip and the radar, for players who haven't chosen. */
+  showTown: true,
+
+  /** Your bed or respawn anchor shows as a bed on the strip and the radar, for players who haven't chosen. */
+  showHome: true,
+
   /** Players who aren't in your party show as white dots (within 128 blocks). Party mates always show. */
   showOthers: false,
 
