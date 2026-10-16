@@ -709,6 +709,15 @@ const SIDE = 0.28;
 const DETOUR_STEPS = 240;
 /** Steps it rests after a detour that led nowhere (20 s), before it tries the other way round. */
 const REST_STEPS = 80;
+/**
+ * How far from the player a detour may take it (blocks): `LEASH`, or up to `LEASH_GRACE` further than
+ * where it met the obstacle (to get out of a dead end) but never past `LEASH_MAX`. A champion more than
+ * about 32 blocks from every player may despawn (a name tag given by a script doesn't keep it) and one
+ * about 44 away goes at once, so a detour that led away would lose it.
+ */
+const LEASH = 32;
+const LEASH_GRACE = 8;
+const LEASH_MAX = 40;
 
 /**
  * A detour in progress for each champion going round something: the side it keeps the obstacle on
@@ -773,11 +782,14 @@ function approachStep(e, step) {
   }
   const base = Math.atan2(dz, dx);
   const inZone = isProtected(dim.id, at.x, at.z);
+  const reach = Math.min(LEASH_MAX, Math.max(LEASH, (d?.hit ?? flat) + LEASH_GRACE));
   /** Step at angle a if it can: true when it moved. @param {number} a */
   const go = (a) => {
     if (!inZone && isProtected(dim.id, at.x + Math.cos(a) * (step + BODY), at.z + Math.sin(a) * (step + BODY))) return false; // safe zones and claims: not by our hand
     const to = bodyStep(dim, at, a, step);
     if (!to) return false;
+    const after = Math.hypot(target.location.x - to.x, target.location.z - to.z);
+    if (after > reach && after > flat) return false;
     const y = to.y === Math.floor(at.y + 0.01) ? at.y : to.y; // same height: keep a slab's half
     e.teleport({ x: to.x, y, z: to.z }, { facingLocation: { x: target.location.x, y: y + 1.5, z: target.location.z }, keepVelocity: false });
     return true;
