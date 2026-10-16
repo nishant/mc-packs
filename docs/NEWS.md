@@ -6,6 +6,12 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Out and about
+
+- Townsfolk can now live all around the village instead of in one crowd. Go find them: /realm:npc_who and the Minimap show the way.
+- Townsfolk keep their skins: one that has to come back now looks the same as before.
+- Operators: stand in the middle of the village and run /realm:npc_spread (or Spread them out around me in /realm:npc). It shows the new spots first.
+
 ## Tidy compass
 
 - Compass: the place name under the strip no longer runs through the line. It sits just below it now.

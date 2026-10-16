@@ -6,6 +6,7 @@ import {
   GameMode,
   Player,
   ItemStack,
+  StructureSaveMode,
   WeatherType,
   system,
   world,
@@ -471,7 +472,7 @@ function watchName(entity, t) {
 function spawn(rec, t, at) {
   const dim = world.getDimension(rec.dim);
   if (liftSaved(rec)) at = anchorOf(rec);
-  const entity = dim.spawnEntity(NPC_TYPE, at);
+  const entity = fromSkin(rec, dim, at) ?? dim.spawnEntity(NPC_TYPE, at);
   dress(entity, t);
   entity.teleport(at, { rotation: { x: 0, y: rec.yaw } });
   rec.eid = entity.id;
@@ -506,6 +507,7 @@ function audit(entity) {
     save();
   }
   dress(entity, t);
+  if (!hasSkin(rec.id)) saveSkin(entity, rec.id); // the first snapshot of its skin (not while another townsfolk stands on it)
   // A spot inside a block (sunk into a path laid later, or saved a block low): lifted and the NPC put on top.
   if (liftSaved(rec)) {
     const at = anchorOf(rec);
@@ -700,6 +702,8 @@ world.afterEvents.worldLoad.subscribe(() => {
   loadGossip();
   loadDay();
   ready = true;
+  // A spread cut short by a restart or reload leaves its ticking areas: they're removed.
+  for (const d of DIMENSIONS) for (const n of [SPREAD_AREA, `${SPREAD_AREA}_from`]) tryCommand(world.getDimension(d), `tickingarea remove ${n}`);
   scheduleTick();
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
@@ -763,7 +767,12 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
     } catch {
       creative = false;
     }
-    if (player.isSneaking && creative && isOp(player)) return; // the game's NPC editor, to pick a skin
+    if (player.isSneaking && creative && isOp(player)) {
+      // The game's NPC editor, to pick a skin: snapshot the skin a few times while the operator may still be choosing.
+      const id = idOf(target);
+      if (id) for (const ticks of SKIN_SAVE_AFTER) system.runTimeout(() => skinAfterEdit(target, id), ticks);
+      return;
+    }
     ev.cancel = true;
     const id = idOf(target);
     const gift = player.isSneaking; // sneak-tap: give the item in hand
@@ -1567,6 +1576,7 @@ async function removeNpc(player) {
   list = list.filter((r) => r.id !== id);
   if (list.length !== before) save();
   if (id) states.delete(id);
+  if (id) dropSkin(id);
   entity.remove();
   player.sendMessage(`§aRemoved ${t ? plainName(t) : "that NPC"}. §7Place them again with /realm:npc_add ${id ?? "<id>"}.`);
 }
@@ -1655,6 +1665,341 @@ function setPost(player, id, slot) {
   player.sendMessage(`§a${plainName(t)} now spends ${what} (time ${when}) at ${coords(at)}, moving when nobody is within ${CONFIG.scheduleRange} blocks.${off}${far}${sharedNote(rec)}`);
 }
 
+// ---------------------------------------------------------------------------
+// Skins: the stable API can't read or set an NPC's skin, but a structure keeps the whole entity. Each townsfolk is
+// saved as a small structure (no blocks, just the NPC: `realm_npc:<id>` in the world), taken the first time it loads
+// and again after an operator opens its editor, and a townsfolk that has to be spawned again is placed from it,
+// skin and all, instead of a new NPC with the default skin.
+// ---------------------------------------------------------------------------
+
+const SKIN_PREFIX = "realm_npc:";
+const SKIN_SAVE_AFTER = [100, 600, 2400]; // ticks after an operator opens the NPC editor (5 s, 30 s, 2 min)
+/** Townsfolk ids known to have a saved skin. @type {Set<string>} */
+const skins = new Set();
+
+/** @param {string} id */
+function hasSkin(id) {
+  if (skins.has(id)) return true;
+  try {
+    if (world.structureManager.get(SKIN_PREFIX + id)) skins.add(id);
+  } catch {
+    // no structure manager access right now
+  }
+  return skins.has(id);
+}
+
+/**
+ * Saves `entity` as townsfolk `id`'s skin. Not while any other entity but a player is within 2 blocks: it would be
+ * saved (and placed again) with it. Returns true when saved.
+ * @param {Entity} entity @param {string} id
+ */
+function saveSkin(entity, id) {
+  try {
+    if (!entity.isValid) return false;
+    const dim = entity.dimension;
+    const loc = entity.location;
+    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player")) return false; // players aren't saved
+    const from = { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) };
+    const sm = world.structureManager;
+    if (sm.get(SKIN_PREFIX + id)) sm.delete(SKIN_PREFIX + id);
+    sm.createFromWorld(SKIN_PREFIX + id, dim, from, { ...from, y: from.y + 1 }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
+    skins.add(id);
+    return true;
+  } catch (e) {
+    console.warn(`[npc] save skin ${id}: ${e}`);
+    return false;
+  }
+}
+
+/** After an operator opened the editor: saves the skin if this is still that townsfolk's NPC. @param {Entity} entity @param {string} id */
+function skinAfterEdit(entity, id) {
+  try {
+    if (entity.isValid && placedOf(id)?.eid === entity.id) saveSkin(entity, id);
+  } catch (e) {
+    console.warn(`[npc] skin ${id}: ${e}`);
+  }
+}
+
+/** @param {string} id */
+function dropSkin(id) {
+  skins.delete(id);
+  try {
+    world.structureManager.delete(SKIN_PREFIX + id);
+  } catch {
+    // none saved
+  }
+}
+
+/**
+ * The townsfolk placed again from its saved skin at `at`, or undefined (none saved, or it didn't work).
+ * @param {Placed} rec @param {Dimension} dim @param {Vector3} at @returns {Entity | undefined}
+ */
+function fromSkin(rec, dim, at) {
+  if (!hasSkin(rec.id)) return undefined;
+  try {
+    const tags = [OWNER_TAG, ID_TAG + rec.id];
+    const before = new Set(dim.getEntities({ type: NPC_TYPE, tags }).map((e) => e.id));
+    world.structureManager.place(SKIN_PREFIX + rec.id, dim, { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) }, { includeBlocks: false, includeEntities: true });
+    const fresh = dim.getEntities({ type: NPC_TYPE, tags, location: at, maxDistance: 4 }).filter((e) => !before.has(e.id));
+    if (!fresh.length) return undefined;
+    for (const e of fresh.slice(1)) e.remove();
+    rec.eid = fresh[0].id; // before its load event: the audit must see it as the one
+    return fresh[0];
+  } catch (e) {
+    console.warn(`[npc] place skin ${rec.id}: ${e}`);
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Spreading out: /realm:npc_spread gives every townsfolk a spot of its own around the operator (the middle of the
+// village), far enough apart that players walk from one to the next. Spots are on open ground (natural ground,
+// paths, plazas), never on a roof, a wall top, a slope or in water. Spots that aren't loaded are loaded for a
+// moment with a ticking area of our own (one at a time).
+// ---------------------------------------------------------------------------
+
+const SPREAD_AREA = "realm_npc_spread";
+/** What a townsfolk may stand on: natural ground, paths and plazas (not planks, slabs or leaves, which are roofs and trees). */
+const GROUND =
+  /^minecraft:(grass_block|dirt|coarse_dirt|rooted_dirt|podzol|mycelium|dirt_path|grass_path|sand|red_sand|gravel|clay|mud|packed_mud|moss_block|snow|stone|cobblestone|mossy_cobblestone|stone_bricks|mossy_stone_bricks|cracked_stone_bricks|andesite|diorite|granite|polished_andesite|polished_diorite|polished_granite|smooth_stone|sandstone|red_sandstone|cobbled_deepslate|tuff|calcite|terracotta|[a-z_]+_terracotta|bricks|mud_bricks|crimson_nylium|warped_nylium|netherrack|soul_soil|end_stone)$/;
+
+/** @param {Dimension} dim @param {string} command */
+function tryCommand(dim, command) {
+  try {
+    return dim.runCommand(command).successCount > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** The top of the ground column at x, z (skipping grass, flowers and snow layers), or undefined. @param {Dimension} dim @param {number} x @param {number} z */
+function groundBlock(dim, x, z) {
+  let b = dim.getTopmostBlock({ x, z });
+  for (let i = 0; i < 3 && b && (b.isAir || PASSABLE.test(b.typeId)); i++) b = b.below();
+  return b;
+}
+
+/**
+ * Where a townsfolk can stand at x, z: on open, level ground with room for feet and head, out of water, not on a
+ * roof (solid under the ground block) or a wall top or slope (the four neighbors within a block). undefined if not.
+ * @param {Dimension} dim @param {number} x @param {number} z @returns {Vector3 | undefined}
+ */
+function standAt(dim, x, z) {
+  try {
+    const b = groundBlock(dim, x, z);
+    if (!b || b.isLiquid || !GROUND.test(b.typeId)) return undefined;
+    const at = { x: x + 0.5, y: b.location.y + heightOf(b), z: z + 0.5 };
+    const feet = dim.getBlock({ x, y: Math.floor(at.y), z });
+    const head = dim.getBlock({ x, y: Math.floor(at.y) + 1, z });
+    if (!feet || !head || feet.isLiquid || head.isLiquid || blocks(feet, at.y) || blocks(head, at.y + 1)) return undefined;
+    const under = b.below();
+    if (!under || under.isAir || under.isLiquid) return undefined; // a roof or a ledge over a room
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const n = groundBlock(dim, x + dx, z + dz);
+      if (!n) return undefined;
+      if (Math.abs(n.location.y - b.location.y) > 1 && !n.above()?.isLiquid) return undefined;
+    }
+    return at;
+  } catch {
+    return undefined; // not loaded
+  }
+}
+
+/** Water within a few blocks of a spot, at its level (for the fisherman). @param {Dimension} dim @param {Vector3} at */
+function nearWater(dim, at) {
+  for (let r = 2; r <= 6; r += 2)
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      for (const dy of [-1, -2]) {
+        try {
+          if (dim.getBlock({ x: Math.floor(at.x + r * Math.cos(a)), y: Math.floor(at.y) + dy, z: Math.floor(at.z + r * Math.sin(a)) })?.isLiquid) return true;
+        } catch {
+          // not loaded
+        }
+      }
+    }
+  return false;
+}
+
+/** Loads the chunks around x, z for a moment (our own ticking area): true once loaded. @param {Dimension} dim @param {number} x @param {number} z @param {string} name */
+async function loadAround(dim, x, z, name) {
+  if (loaded(dim, { x, y: 64, z })) return true;
+  if (!tryCommand(dim, `tickingarea add circle ${Math.floor(x)} 64 ${Math.floor(z)} 1 ${name}`)) return false; // the world's 10 ticking areas are taken
+  for (let i = 0; i < 40; i++) {
+    await wait(5);
+    if (loaded(dim, { x, y: 64, z })) return true;
+  }
+  return false;
+}
+/** @param {Dimension} dim @param {string} name */
+const unload = (dim, name) => tryCommand(dim, `tickingarea remove ${name}`);
+
+/**
+ * New spots for these townsfolk within `radius` of `center`, at least `spacing` apart (a little less if the land
+ * is tight). The fisherman looks for water first.
+ * @param {Player} player @param {Vector3} center @param {number} radius @param {number} spacing @param {string[]} ids
+ * @returns {Promise<{ id: string, at: Vector3 }[]>}
+ */
+async function planSpread(player, center, radius, spacing, ids) {
+  const dim = player.dimension;
+  /** @type {{ id: string, at: Vector3 }[]} */
+  const out = [];
+  const order = [...ids.filter((id) => folk.get(id)?.roles.includes("fisher")), ...ids.filter((id) => !folk.get(id)?.roles.includes("fisher")).sort(() => Math.random() - 0.5)];
+  const free = (/** @type {Vector3} */ p, /** @type {number} */ need) => out.every((o) => Math.hypot(o.at.x - p.x, o.at.z - p.z) >= need);
+  try {
+    for (const id of order) {
+      const fisher = !!folk.get(id)?.roles.includes("fisher");
+      let found;
+      for (let attempt = 0; attempt < 40 && !found; attempt++) {
+        if (!player.isValid) return out;
+        const need = attempt < 25 ? spacing : spacing * 0.75;
+        const r = radius * Math.sqrt(Math.random());
+        const a = Math.random() * 2 * Math.PI;
+        const p = { x: center.x + r * Math.cos(a), y: center.y, z: center.z + r * Math.sin(a) };
+        if (!free(p, need)) continue;
+        if (!(await loadAround(dim, p.x, p.z, SPREAD_AREA))) continue;
+        for (let k = 0; k < 24 && !found; k++) {
+          const qx = Math.floor(p.x + (Math.random() * 2 - 1) * 6);
+          const qz = Math.floor(p.z + (Math.random() * 2 - 1) * 6);
+          if (Math.hypot(qx + 0.5 - center.x, qz + 0.5 - center.z) > radius) continue;
+          const at = standAt(dim, qx, qz);
+          if (!at || !free(at, need)) continue;
+          if (fisher && attempt < 30 && !nearWater(dim, at)) continue;
+          found = at;
+        }
+        unload(dim, SPREAD_AREA);
+      }
+      if (found) out.push({ id, at: found });
+    }
+  } finally {
+    unload(dim, SPREAD_AREA);
+  }
+  return out;
+}
+
+/**
+ * Moves each townsfolk to its new spot, facing `center`: the NPC itself (its skin stays) when it can be loaded,
+ * otherwise placed again from its saved skin there. `clear`: homes and lunch and evening spots are forgotten.
+ * @param {Player} player @param {Vector3} center @param {{ id: string, at: Vector3 }[]} plan @param {boolean} clear
+ */
+async function applySpread(player, center, plan, clear) {
+  const dim = player.dimension;
+  let moved = 0;
+  try {
+    for (const { id, at } of plan) {
+      const rec = placedOf(id);
+      const t = folk.get(id);
+      if (!rec || !t) continue;
+      const yaw = wrap(yawTo(at, center));
+      // Its NPC: loaded where it stands now, or loaded for a moment.
+      let entity = entityOf(rec);
+      if (!entity && rec.dim === dim.id) {
+        const old = anchorOf(rec);
+        if (await loadAround(dim, old.x, old.z, `${SPREAD_AREA}_from`)) {
+          await wait(10);
+          entity = entityOf(rec) ?? dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG, ID_TAG + id] })[0];
+        }
+      }
+      const there = await loadAround(dim, at.x, at.z, SPREAD_AREA);
+      Object.assign(rec, { dim: dim.id, x: at.x, y: at.y, z: at.z, yaw });
+      if (clear) {
+        rec.home = undefined;
+        rec.posts = undefined;
+      }
+      const st = stateOf(id);
+      st.slot = undefined;
+      st.missing = 0;
+      st.yaw = yaw;
+      let done = false;
+      if (entity?.isValid && there) {
+        try {
+          entity.teleport(at, { dimension: dim, rotation: { x: 0, y: yaw } });
+          rec.eid = entity.id;
+          done = true;
+        } catch (e) {
+          console.warn(`[npc] spread ${id}: ${e}`);
+        }
+      }
+      save();
+      if (!done && there) {
+        // Its NPC couldn't be reached: a new one here (from its saved skin if there is one); the old one goes when its chunk loads.
+        spawn(rec, t, at);
+        done = true;
+      }
+      // Not loadable now: the saved spot is enough, it's moved (or placed from its skin) when a player comes near.
+      await wait(4);
+      const now = entityOf(rec);
+      if (now && dist(now.location, at) < 1) saveSkin(now, id); // alone now: the skin snapshot is taken (or refreshed)
+      unload(dim, `${SPREAD_AREA}_from`);
+      unload(dim, SPREAD_AREA);
+      moved++;
+    }
+  } finally {
+    unload(dim, `${SPREAD_AREA}_from`);
+    unload(dim, SPREAD_AREA);
+  }
+  placesSoon();
+  return moved;
+}
+
+/** /realm:npc_spread [radius] [spacing]: plan, preview, then move. @param {Player} player @param {number} [radius] @param {number} [spacing] */
+async function spreadNpcs(player, radius, spacing) {
+  const R = Math.max(16, Math.min(200, Math.round(Number(radius) || CONFIG.spreadRadius)));
+  const S = Math.max(4, Math.min(64, Math.round(Number(spacing) || CONFIG.spreadSpacing)));
+  const ids = list.map((r) => r.id);
+  if (!ids.length) return player.sendMessage("§cNo townsfolk are placed yet: /realm:npc_add <id> first.");
+  if (spreading) return player.sendMessage("§eThe townsfolk are already being spread out. Wait for it to finish.");
+  spreading = true;
+  try {
+    const center = { ...player.location };
+    let clear = true;
+    for (;;) {
+      player.sendMessage(`§7Looking for ${ids.length} spots within ${R} blocks of you, ${S} blocks apart...`);
+      const plan = await planSpread(player, center, R, S, ids);
+      if (!player.isValid) return;
+      const missing = ids.filter((id) => !plan.some((p) => p.id === id));
+      const lines = plan.map(({ id, at }) => {
+        const t = /** @type {Townsfolk} */ (folk.get(id));
+        const dx = at.x - center.x;
+        const dz = at.z - center.z;
+        return `§f${plainName(t)}§7: ${Math.round(Math.hypot(dx, dz))}m ${compass(dx, dz)} (${coords(at)})`;
+      });
+      const closest = plan.length > 1 ? Math.min(...plan.flatMap((p, i) => plan.slice(i + 1).map((q) => Math.hypot(p.at.x - q.at.x, p.at.z - q.at.z)))) : 0;
+      const body = [
+        `§fNew spots around you${plan.length > 1 ? `, the closest two ${Math.round(closest)} blocks apart` : ""}. Each one faces where you stand.`,
+        ...lines,
+        missing.length ? `§eNo open ground found for: ${missing.map((id) => plainName(/** @type {Townsfolk} */ (folk.get(id)))).join(", ")}. They stay where they are (try a bigger radius or a smaller spacing).` : "",
+        clear ? "§7Homes and lunch and evening spots are cleared: each one stays at their own spot all day and night." : "§7Homes and lunch and evening spots are kept (they may meet there).",
+      ].filter(Boolean);
+      const res = await show(
+        player,
+        new ActionFormData()
+          .title("Spread out the townsfolk")
+          .body(body.join("\n"))
+          .button(`Move them\n§8${plan.length} townsfolk`)
+          .button("Pick other spots")
+          .button(clear ? "Keep homes and meal spots\n§8Now: cleared" : "Clear homes and meal spots\n§8Now: kept")
+          .button("Cancel"),
+      );
+      if (!res || res.canceled || res.selection === 3 || !player.isValid) return;
+      if (!isOp(player)) return player.sendMessage("§cOnly operators can do that."); // de-opped while the form was open
+      if (res.selection === 2) {
+        clear = !clear;
+        continue; // the same question again, with new spots
+      }
+      if (res.selection === 1) continue;
+      if (!plan.length) return player.sendMessage("§cNo spots to move anyone to.");
+      player.sendMessage(`§7Moving ${plan.length} townsfolk...`);
+      const moved = await applySpread(player, center, plan, clear);
+      if (player.isValid) player.sendMessage(`§aMoved ${moved} townsfolk to their new spots.§7 /realm:npc_list has the coordinates; the Minimap and /realm:npc_who show the way.`);
+      return;
+    }
+  } finally {
+    spreading = false;
+  }
+}
+let spreading = false;
+
 /** @param {Player} player */
 function listForOps(player) {
   const lines = list.map((r) => {
@@ -1691,6 +2036,7 @@ async function menu(player) {
     actions.push(["Set a home here\n§8Operators", () => pickAndRun(player, "Set home", "They come here at night. Pick one standing at its post to clear its home.", (id) => setHome(player, id), true)]);
     actions.push(["Set a lunch spot here\n§8Operators", () => pickAndRun(player, "Set lunch spot", "They come here at lunch. Pick one standing at its post to clear it.", (id) => setPost(player, id, "noon"), true)]);
     actions.push(["Set an evening spot here\n§8Operators", () => pickAndRun(player, "Set evening spot", "They come here in the evening. Pick one standing at its post to clear it.", (id) => setPost(player, id, "evening"), true)]);
+    actions.push(["Spread them out around me\n§8Operators", () => spreadNpcs(player)]);
     actions.push(["Remove the nearest townsfolk\n§8Operators", () => removeNpc(player)]);
     actions.push(["List with coordinates\n§8Operators", () => listForOps(player)]);
   }
@@ -1774,6 +2120,19 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       mandatoryParameters: idParam,
     },
     (origin, /** @type {string} */ id) => withPlayer(origin, (p) => addNpc(p, id)),
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:npc_spread",
+      description: "Townsfolk: give every NPC its own spot around you (within 100 blocks, 24 apart), after a preview",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      optionalParameters: [
+        { name: "radius", type: CustomCommandParamType.Integer },
+        { name: "spacing", type: CustomCommandParamType.Integer },
+      ],
+    },
+    (origin, /** @type {number | undefined} */ radius, /** @type {number | undefined} */ spacing) => withPlayer(origin, (p) => spreadNpcs(p, radius, spacing)),
   );
   customCommandRegistry.registerCommand(
     { name: "realm:npc_remove", description: "Townsfolk: remove the nearest townsfolk NPC within 5 blocks", permissionLevel: CommandPermissionLevel.GameDirectors, cheatsRequired: false },
