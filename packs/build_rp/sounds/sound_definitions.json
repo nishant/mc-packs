@@ -145,7 +145,7 @@
       "sounds": [
         {
           "name": "sounds/nos/turbo_boost",
-          "volume": 0.5,
+          "volume": 0.55,
           "pitch": 1.0,
           "is3D": false
         }
