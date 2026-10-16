@@ -1,7 +1,7 @@
 // What players see: offers at the townsfolk, chapter dialogues, hints, rewards, the tracker, the
 // story log menu (current, available, finished, codex, daily favors) and the operators' tools.
 import { Player, system, world } from "@minecraft/server";
-import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
+import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import {
   ORDERED,
@@ -23,8 +23,10 @@ import {
   forget,
   giveRep,
   invalidate,
+  ownEntries,
   labelOf,
   markDirty,
+  matches,
   objApplies,
   objDone,
   objKey,
@@ -42,7 +44,7 @@ import {
   wanderShape,
 } from "./data.js";
 import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weatherWait } from "./objectives.js";
-import { partyMates, partyTick } from "./party.js";
+import { canTake, partyMates, partyTick, reporters, takers } from "./party.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
@@ -338,11 +340,17 @@ function trackQuest(player, e) {
   }
 }
 
-/** The quest the tracker follows: the tracked one while it's on, else the one accepted last. @param {Player} player @param {Entry[]} list */
+/**
+ * The quest the tracker follows: the tracked one while it's on, else (in a party) the party's chapter, so every mate
+ * sees the same quest on top, else the one accepted last.
+ * @param {Player} player @param {Entry[]} list
+ */
 export function trackedFirst(player, list) {
   const tr = sagaOf(player).tr;
   const sorted = [...list].sort((a, b) => (b.st.t ?? 0) - (a.st.t ?? 0));
-  const k = tr ? sorted.findIndex((e) => e.story.id === tr) : -1;
+  let k = tr ? sorted.findIndex((e) => e.story.id === tr) : -1;
+  const view = k < 0 ? partyViews.get(player.id) : undefined;
+  if (view) k = sorted.findIndex((e) => !e.fav && e.story.id === view.story.id && e.chapter.id === view.chapter.id);
   if (k > 0) sorted.unshift(...sorted.splice(k, 1));
   return sorted;
 }
@@ -352,6 +360,13 @@ const trackLabel = (player, e) => (sagaOf(player).tr === e.story.id ? "Tracked\n
 
 /** A choice's button: its label, and what it costs. @param {import("./types.js").Choice} c */
 const choiceLabel = (c) => (c.cost?.crowns ? `${c.label} (${c.cost.crowns} Crowns)` : c.label);
+
+/**
+ * Can the talker's choice be made for this mate too? Not when it fits only the talker's own path (its `requires`
+ * don't hold for the mate: they took another way earlier) or when it costs something (each pays their own way).
+ * @param {Player} p @param {Story} story @param {import("./types.js").Choice | undefined} c
+ */
+const choiceFits = (p, story, c) => !c || (!(c.cost?.crowns ?? 0) && requires(c.requires, sagaOf(p), story.id, p).ok);
 
 /** Takes a choice's cost; false (and a note) when the player can't pay. @param {Player} player @param {import("./types.js").Choice | undefined} c */
 function payFor(player, c) {
@@ -378,6 +393,146 @@ function travelTips(player, e) {
   if (far > 600) player.sendMessage(`§7[Story] That's about ${num(far)} blocks away: take a horse, a boat or elytra, and food for the road.`);
 }
 
+// ---------------------------------------------------------------------------
+// Co-op: a party accepts and reports back once
+// ---------------------------------------------------------------------------
+
+/** How long a mate's listening-in popup may stay open (ticks), and a side-story invite. */
+const LISTEN_TICKS = 2400;
+const INVITE_TICKS = 1200;
+/** Players with a chapter's dialogue open (startChapter, endChapter): player id -> story id. @type {Map<string, string>} */
+const talking = new Map();
+/** Players with one of our party popups open. @type {Set<string>} */
+const popups = new Set();
+
+/** Closes whatever form a player has open (ours: a popup still showing, or their own copy of a dialogue). @param {Player} p */
+function closeForms(p) {
+  try {
+    if (p.isValid) uiManager.closeAllForms(p);
+  } catch {
+    // left meanwhile
+  }
+}
+
+/** "- Catch 5 things with a fishing rod" lines: a chapter's required steps that apply for a player. @param {Chapter} chapter @param {Saga} saga @param {Story} story */
+const stepsFor = (chapter, saga, story) => chapter.objectives.filter((o) => !o.optional && matches(o.when, saga, story.id)).map((o) => `§e- ${o.label}§r`);
+
+/**
+ * Party mates listening in while one of them talks to an NPC: a popup with what the NPC says (and the chapter's
+ * steps), closed by itself once the talk is over (the returned function) or after LISTEN_TICKS. A mate who has a form
+ * open already (ours, or anything else: UserBusy) gets nothing; the chat line afterwards is enough.
+ * @param {Player[]} mates @param {string} title @param {string} body @returns {() => void} closes the popups still open
+ */
+function listenIn(mates, title, body) {
+  /** @type {{ p: Player, done: boolean }[]} */
+  const open = [];
+  for (const p of mates) {
+    if (!p.isValid || busy.has(p.id) || popups.has(p.id)) continue;
+    const h = { p, done: false };
+    open.push(h);
+    popups.add(p.id);
+    const form = new ActionFormData().title(title).body(body).button("OK");
+    form
+      .show(p)
+      .catch(() => undefined)
+      .then(() => {
+        h.done = true;
+        popups.delete(p.id);
+      });
+  }
+  const close = () => {
+    for (const h of open) if (!h.done) closeForms(h.p);
+    open.length = 0;
+  };
+  const timer = open.length ? system.runTimeout(close, LISTEN_TICKS) : undefined;
+  return () => {
+    if (timer !== undefined) system.clearRun(timer);
+    close();
+  };
+}
+
+/** Pages of a dialogue as one popup body. @param {string} lead @param {string[]} pages @param {string[]} steps */
+const listenBody = (lead, pages, steps) => [`§b${lead}§r`, "", ...pages.flatMap((t) => [t, ""]), ...(steps.length ? ["§fSteps:§r", ...steps, ""] : []), "§7This closes by itself."].join("\n");
+
+/**
+ * Accepts a chapter for a party mate, as if they had talked to its NPC: the intro choice the talker made, recipes it
+ * teaches, the steps in chat. A dialogue of theirs still open for the same story closes.
+ * Returns false (with a note to talk to the NPC themselves) when the talker's choice doesn't fit their story.
+ * @param {Player} p @param {Story} story @param {Chapter} chapter @param {string} by the talker's name @param {import("./types.js").Choice | undefined} choice @param {boolean} joined they picked Join (a side story)
+ */
+function acceptFor(p, story, chapter, by, choice, joined) {
+  if (!choiceFits(p, story, choice)) {
+    p.sendMessage(`§e[Party] ${by} took on ${story.title}, "${chapter.title}" with a choice that isn't yours to make (your story went another way, or it has a cost). Talk to ${npcName(chapter.npc ?? story.giver)} to take it on yourself.`);
+    return false;
+  }
+  const saga = sagaOf(p);
+  const st = stateOf(saga, story);
+  if (choice) {
+    applyChoice(saga, story, `${chapter.id}@`, choice);
+    giveRep(p, choice.rep, saga, story);
+  }
+  st.a = 1;
+  st.cur = chapter.id;
+  st.o = [];
+  delete st.x;
+  delete st.h;
+  st.t = Date.now();
+  invalidate(p.id);
+  markDirty(p, true);
+  if (talking.get(p.id) === story.id) closeForms(p); // their own copy of the intro: it's accepted now
+  const pick = choice ? ` ${by} chose: ${choice.label}.` : "";
+  p.sendMessage(joined ? `§6[Party] You joined ${by}: ${story.title}, "${chapter.title}".` : `§6[Party] ${by} accepted ${story.title}, "${chapter.title}" for the party.${pick}`);
+  p.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
+  for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: p.id, recipe });
+  const e = entries(p).find((x) => x.story.id === story.id && !x.pq);
+  if (e) for (const line of objectiveLines(p, e, saga)) p.sendMessage(line.replace(/\n\s*/g, " "));
+  p.sendMessage(`§7Progress is shared with your party. /realm:saga can play the intro again (Current quests > ${story.short}).`);
+  p.playSound("random.orb", { pitch: 0.8, volume: 0.7 });
+  return true;
+}
+
+/**
+ * A side story one member started: each mate who could start it too is asked "Join?" (a popup that closes itself after
+ * INVITE_TICKS, or chat only when they're busy with another form). Joining accepts it as the talker did.
+ * @param {Player} by @param {Story} story @param {Chapter} chapter @param {import("./types.js").Choice | undefined} choice @param {Player[]} mates
+ */
+function inviteSide(by, story, chapter, choice, mates) {
+  const npc = npcName(chapter.npc ?? story.giver);
+  const byName = by.name; // by may have left by the time a mate answers
+  for (const p of mates) {
+    p.sendMessage(`§b[Party] ${by.name} started ${story.title}, "${chapter.title}". Join in from the popup, or talk to ${npc} to start it too.`);
+    if (busy.has(p.id) || popups.has(p.id)) continue;
+    popups.add(p.id);
+    void exclusive(p, async () => {
+      const steps = stepsFor(chapter, sagaOf(p), story);
+      const form = new MessageFormData()
+        .title("Party: join a story?")
+        .body([`§b${by.name}§r started a story with ${npc}:`, `§e${story.title}, "${chapter.title}"§r`, "", ...steps, "", "Join, and you take it on too: progress near each other is shared, and one report back counts for everyone who finished it."].join("\n"))
+        .button1("Join")
+        .button2("Not now");
+      let answered = false;
+      const timer = system.runTimeout(() => {
+        if (!answered) closeForms(p);
+      }, INVITE_TICKS);
+      const res = await form.show(p).catch(() => undefined);
+      answered = true;
+      system.clearRun(timer);
+      if (!res || res.canceled || res.selection !== 0 || !p.isValid) {
+        if (res?.canceled && res.cancelationReason === FormCancelationReason.UserBusy) return;
+        p.sendMessage(`§7[Party] Not now: ${npc} can start ${story.title} for you any time.`);
+        return;
+      }
+      if (!canTake(p, story, chapter.id)) {
+        p.sendMessage(`§7[Party] ${story.title} can't start for you right now.`);
+        return;
+      }
+      if (acceptFor(p, story, chapter, byName, choice, true) && by.isValid) by.sendMessage(`§b[Party] ${p.name} joined ${story.title}.`);
+    })
+      .catch((e) => console.warn(`[saga] invite: ${e}`))
+      .finally(() => popups.delete(p.id));
+  }
+}
+
 /** The intro of the next chapter, and accepting it. @param {Player} player @param {Story} story */
 export async function startChapter(player, story) {
   await exclusive(player, async () => {
@@ -400,51 +555,90 @@ export async function startChapter(player, story) {
     const choices = (chapter.introChoices ?? []).filter((c) => requires(c.requires, saga, story.id, player).ok);
     const buttons = choices.length ? [...choices.map(choiceLabel), "Not now"] : ["Accept", "Not now"];
     const header = [story.title !== chapter.title ? chapterHeader(saga, story, cur.index) : "", !st.dn.length ? toneTags(story) : ""].filter(Boolean).join("\n");
-    const pick = await dialog(player, story.title, header, pagesFor(chapter.intro, saga, story.id, player.name), buttons);
-    if (pick < 0 || pick === buttons.length - 1 || !player.isValid) return;
-    // Check again: the form was open for a while.
-    const again = currentChapter(saga, story);
-    if (!again || again.chapter.id !== chapter.id || (st.a && st.cur === chapter.id) || onHold(player.id, story, chapter.id)) return;
-    const choice = choices[pick];
-    if (!payFor(player, choice)) return;
-    if (choice) {
-      applyChoice(saga, story, `${chapter.id}@`, choice);
-      giveRep(player, choice.rep, saga, story);
+    const pages = pagesFor(chapter.intro, saga, story.id, player.name);
+    // The party's main chapter: mates on it listen in (a popup that closes once this talk is over).
+    const along = story.kind === "main" ? takers(player, story, chapter.id) : [];
+    const stop = listenIn(along, story.title, listenBody(`${player.name} is talking to ${npcName(chapter.npc ?? story.giver)} about your party's next chapter, "${chapter.title}". When ${player.name} accepts it, it's yours too.`, pages, stepsFor(chapter, saga, story)));
+    let accepted = false;
+    try {
+      talking.set(player.id, story.id);
+      const pick = await dialog(player, story.title, header, pages, buttons);
+      talking.delete(player.id);
+      if (pick < 0 || pick === buttons.length - 1 || !player.isValid) return;
+      // Check again: the form was open for a while (and a party mate may have accepted it for everyone meanwhile).
+      const again = currentChapter(saga, story);
+      if (!again || again.chapter.id !== chapter.id || (st.a && st.cur === chapter.id) || onHold(player.id, story, chapter.id)) return;
+      const choice = choices[pick];
+      if (!payFor(player, choice)) return;
+      accepted = true;
+      await accept(player, story, chapter, saga, st, choice, stop);
+    } finally {
+      talking.delete(player.id);
+      stop();
+      if (!accepted) for (const p of along) if (p.isValid && canTake(p, story, chapter.id)) p.sendMessage(`§7[Party] ${player.name} didn't take on "${chapter.title}" yet.`);
     }
-    st.a = 1;
-    st.cur = chapter.id;
-    st.o = [];
-    delete st.x;
-    delete st.h;
-    st.t = Date.now();
-    invalidate(player.id);
-    markDirty(player, true);
-    if (story.kind === "main") partyTick(); // party mates get the party quest (and its progress) right away
-    const e = entries(player).find((x) => x.story.id === story.id);
-    player.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
-    // Recipes the chapter asks you to cook; the Kitchen pack tells the player (nothing happens without it).
-    for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: player.id, recipe });
-    // Sky events the chapter asks for (meteor, moon, weather...): the world-event packs decide (nothing happens without them).
-    for (const req of chapter.sky ?? []) askSky(player, req, `${story.id}:${chapter.id}`);
-    // A Recurring Wanderer's chapter: their camp goes up (or moves) where the chapter says.
-    if (story.kind === "wander") campForChapter(player, story, chapter);
-    if (e) {
-      const missing = missingPlaces(e, saga); // picks unset places first, so the lines below can point at them
-      for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));
-      for (const name of missing) {
-        player.sendMessage(`§c[Story] This chapter needs the place "${placeLabel(name)}", which isn't set yet: an operator sets it in /realm:saga_places.`);
-        hintOps(player, name, story);
-      }
-      travelTips(player, e);
-    }
-    // Where the tracker shows for this player: a Side HUD box (the default, bottom right) or above the hotbar.
-    const where = getFor(player, "trackerAt");
-    const spot = isSlot(where) ? `in the ${SLOT_NAMES[SLOTS.indexOf(where)].replace(/ \(.*\)$/, "")} box at the ${where.startsWith("left") ? "left" : where.startsWith("right") ? "right" : "middle"} of your screen` : "above your hotbar";
-    player.sendMessage(`§7The tracker ${spot} points the way. /realm:saga shows your progress, and a hint if you're stuck.`);
-    player.playSound("random.orb", { pitch: 0.8, volume: 0.7 });
-    if (choice?.reply?.length) await dialog(player, story.title, "", pagesFor(choice.reply, saga, story.id, player.name), ["OK"]);
   });
 }
+
+/**
+ * Accepting a chapter the player picked Accept (or an intro choice) for, and the party's share of it.
+ * @param {Player} player @param {Story} story @param {Chapter} chapter @param {Saga} saga @param {StoryState} st @param {import("./types.js").Choice | undefined} choice @param {() => void} [heard] closes the mates' listening-in popups
+ */
+async function accept(player, story, chapter, saga, st, choice, heard = () => {}) {
+  // Before this player's own state changes: who takes it along (the main story's party chapter: everyone on it; a
+  // side story: who could start it too, asked below).
+  const mates = takers(player, story, chapter.id);
+  if (choice) {
+    applyChoice(saga, story, `${chapter.id}@`, choice);
+    giveRep(player, choice.rep, saga, story);
+  }
+  st.a = 1;
+  st.cur = chapter.id;
+  st.o = [];
+  delete st.x;
+  delete st.h;
+  st.t = Date.now();
+  invalidate(player.id);
+  markDirty(player, true);
+  if (story.kind === "main") {
+    // Accepted once for the party: every mate on the chapter gets it too, with the choice made here.
+    const took = mates.filter((p) => acceptFor(p, story, chapter, player.name, choice, false));
+    // Mates past it (or who can't start it) help with it as the party quest.
+    const others = partyMates(player).filter((p) => !mates.some((m) => m.id === p.id) && partyViews.get(p.id)?.chapter.id === chapter.id && !ownEntries(p).some((x) => x.story.id === story.id));
+    for (const p of others) p.sendMessage(`§b[Party] ${player.name} accepted ${story.title}, "${chapter.title}" for the party. Help out: what you do for it counts for them.`);
+    if (took.length) player.sendMessage(`§b[Party] Accepted for your party too: ${listNames(took.map((p) => p.name))}.`);
+    partyTick(); // party mates get the party quest (and its progress) right away
+  }
+  heard();
+  const e = entries(player).find((x) => x.story.id === story.id);
+  player.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
+  // Recipes the chapter asks you to cook; the Kitchen pack tells the player (nothing happens without it).
+  for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: player.id, recipe });
+  // Sky events the chapter asks for (meteor, moon, weather...): the world-event packs decide (nothing happens without them).
+  for (const req of chapter.sky ?? []) askSky(player, req, `${story.id}:${chapter.id}`);
+  // A Recurring Wanderer's chapter: their camp goes up (or moves) where the chapter says.
+  if (story.kind === "wander") campForChapter(player, story, chapter);
+  if (e) {
+    const missing = missingPlaces(e, saga); // picks unset places first, so the lines below can point at them
+    for (const line of objectiveLines(player, e, saga)) player.sendMessage(line.replace(/\n\s*/g, " "));
+    for (const name of missing) {
+      player.sendMessage(`§c[Story] This chapter needs the place "${placeLabel(name)}", which isn't set yet: an operator sets it in /realm:saga_places.`);
+      hintOps(player, name, story);
+    }
+    travelTips(player, e);
+  }
+  // Where the tracker shows for this player: a Side HUD box (the default, bottom right) or above the hotbar.
+  const where = getFor(player, "trackerAt");
+  const spot = isSlot(where) ? `in the ${SLOT_NAMES[SLOTS.indexOf(where)].replace(/ \(.*\)$/, "")} box at the ${where.startsWith("left") ? "left" : where.startsWith("right") ? "right" : "middle"} of your screen` : "above your hotbar";
+  player.sendMessage(`§7The tracker ${spot} points the way. /realm:saga shows your progress, and a hint if you're stuck.`);
+  player.playSound("random.orb", { pitch: 0.8, volume: 0.7 });
+  // A side story: mates who could start it are asked to join.
+  if (story.kind !== "main" && mates.length) inviteSide(player, story, chapter, choice, mates);
+  if (choice?.reply?.length) await dialog(player, story.title, "", pagesFor(choice.reply, saga, story.id, player.name), ["OK"]);
+}
+
+/** Names as "Ann", "Ann and Bob", "Ann, Bob and Cy". @param {string[]} names */
+const listNames = (names) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
 
 /** What a hint costs for an entry: levels and Crowns. @param {Entry} e */
 function hintCost(e) {
@@ -550,7 +744,7 @@ export async function chapterInfo(player, story) {
   if (pending) await askAnswer(player, ...pending);
 }
 
-/** The outro, the choice, the rewards. @param {Player} player @param {Story} story */
+/** The outro, the choice, the rewards. In a party, one report counts for every mate who finished the chapter too. @param {Player} player @param {Story} story */
 export async function endChapter(player, story) {
   /** @type {Story | undefined} */
   let continueWith;
@@ -569,66 +763,119 @@ export async function endChapter(player, story) {
     const choices = (chapter.choices ?? []).filter((c) => requires(c.requires, saga, story.id, player).ok);
     const last = !story.chapters.some((c, k) => k !== index && !st.dn.includes(c.id) && chapterApplies(c, saga, story));
     const buttons = choices.length ? choices.map(choiceLabel) : [last ? "Finish the story" : "Finish the chapter"];
-    const pick = await dialog(player, story.title, header, pagesFor(chapter.outro, saga, story.id, player.name), buttons);
-    if (pick < 0 || !player.isValid) return; // nothing is lost: the report waits at the NPC
-    // Check again before paying out: the form was open for a while.
-    const again = currentChapter(saga, story);
-    if (!again || again.chapter.id !== chapter.id || !st.a || !chapterDone(e, saga) || onHold(player.id, story, chapter.id)) return;
-    const choice = choices[pick];
-    if (!payFor(player, choice)) return; // the report waits at the NPC
-    if (choice) {
-      applyChoice(saga, story, chapter.id, choice);
-      giveRep(player, choice.rep, saga, story);
-    }
-    giveRep(player, chapter.rep, saga, story);
-    const penalty = st.h ? Math.max(0, Math.min(1, Number(get("hintPenalty")) || 0)) : 0;
-    chapter.objectives.forEach((_, i) => endScene(player.id, objKey(e, i)));
-    st.dn.push(chapter.id);
-    st.a = 0;
-    delete st.cur;
-    delete st.o;
-    delete st.x;
-    delete st.h;
-    const next = currentChapter(saga, story);
-    if (!next) {
-      st.fin = Date.now();
-      delete st.t;
-    }
-    invalidate(player.id);
-    markDirty(player, true);
-    if (story.kind === "main") partyTick(); // the party's chapter may move on: the next one isn't held up for a second
-    const got = reward(player, chapter.reward, `Story: ${story.title}`, penalty);
-    player.sendMessage(`§a[Story] Chapter complete: ${chapter.title}!${got ? ` §7Reward: ${got}` : ""}`);
-    // npcs: who gave and who ended the chapter (Townsfolk adds affinity with each).
-    const npcs = [...new Set([chapter.npc ?? story.giver, chapter.end ?? chapter.npc ?? story.giver])];
-    const wanderer = story.kind === "wander" ? wandererOf(story.giver) : undefined;
-    // A wanderer's chapter: its reputation goes to their guild (Guilds), not shared out.
-    send("realm:quest_done", { player: player.id, pack: PACK, id: `${story.id}:${chapter.id}`, label: `${story.title}: ${chapter.title}`, kind: "story", npcs, ...(wanderer ? { guild: wanderer.guild } : {}) });
-    if (wanderer && st.dn.length === 1) send("realm:journal", { player: player.id, page: "wanderers", entry: wanderer.id, label: wanderer.name });
-    if (next) {
-      const who = next.chapter.npc ?? story.giver;
-      player.sendMessage(`§e[Story] Next: talk to ${npcName(who)} for "${next.chapter.title}".`);
-      player.playSound("random.levelup", { pitch: 1, volume: 0.8 });
-      if (who === (chapter.end ?? chapter.npc ?? story.giver)) continueWith = story;
-    } else {
-      player.sendMessage(`§6[Story] Story complete: ${story.title}!`);
-      // Townsfolk gossip about a finished act of the main story.
-      if (story.kind === "main" && (story.act ?? 0) >= 1) send("realm:gossip", { kind: "act", player: player.id, name: player.name, place: story.title, n: story.act });
-      // A Recurring Wanderer's chain is done: town gossip, and their camp goes once nobody else needs it.
-      if (wanderer) {
-        send("realm:gossip", { kind: "wander_chain", player: player.id, name: player.name, place: wanderer.name });
-        leaveCamp(wanderer.id, player.id);
+    const pages = pagesFor(chapter.outro, saga, story.id, player.name);
+    const ender = npcName(chapter.end ?? chapter.npc ?? story.giver);
+    // Mates who finished it too listen in: the report counts for them.
+    const stop = listenIn(
+      reporters(player, story, chapter.id).done.map((x) => x.p),
+      story.title,
+      listenBody(`${player.name} is reporting back to ${ender} on "${chapter.title}". It counts for you too${choices.length ? `, with what ${player.name} chooses` : ""}.`, pages, [])
+    );
+    try {
+      talking.set(player.id, story.id);
+      const pick = await dialog(player, story.title, header, pages, buttons);
+      talking.delete(player.id);
+      if (pick < 0 || !player.isValid) return; // nothing is lost: the report waits at the NPC
+      // Check again before paying out: the form was open for a while (and a mate may have reported for the party).
+      const again = currentChapter(saga, story);
+      if (!again || again.chapter.id !== chapter.id || !st.a || !chapterDone(e, saga) || onHold(player.id, story, chapter.id)) return;
+      const choice = choices[pick];
+      if (!payFor(player, choice)) return; // the report waits at the NPC
+      // Who it counts for, before this player's own report moves the party's chapter on.
+      const party = reporters(player, story, chapter.id);
+      const next = complete(player, story, chapter, e, choice);
+      for (const { p, e: pe } of party.done) {
+        // Still on it and done (they may have reported themselves meanwhile).
+        const ps = sagaOf(p);
+        if (!p.isValid || !pe.st.a || /** @type {StoryState} */ (pe.st).cur !== chapter.id || !chapterDone(pe, ps)) continue;
+        if (!choiceFits(p, story, choice)) {
+          p.sendMessage(`§e[Party] ${player.name} reported back to ${ender} and chose: ${choice?.label}. That choice isn't yours to make (your story went another way, or it has a cost): report back yourself to choose.`);
+          continue;
+        }
+        if (talking.get(p.id) === story.id) closeForms(p); // their own copy of the outro
+        p.sendMessage(`§b[Party] ${player.name} reported back to ${ender} for the party${choice ? ` and chose: ${choice.label}` : ""}.`);
+        complete(p, story, chapter, pe, choice, player);
       }
-      player.playSound("random.levelup", { pitch: 0.7, volume: 1 });
-      for (const s of ORDERED) {
-        if (s.id === story.id || saga.s[s.id] || !s.requires?.stories?.includes(story.id)) continue;
-        if (requires(s.requires, saga, s.id, player).ok) player.sendMessage(`§e[Story] New story: ${s.title}. Talk to ${npcName(s.giver)}.`);
+      for (const { p, e: pe } of party.open) {
+        if (!p.isValid) continue;
+        const left = pe.chapter.objectives.filter((o, i) => !o.optional && !objDone(pe, i, sagaOf(p))).map((o) => o.label);
+        p.sendMessage(`§e[Party] ${player.name} reported back to ${ender} on "${chapter.title}". Your part isn't done yet${left.length ? `: ${left.join(", ")}` : ""}. Then report back yourself.`);
       }
+      const done = party.done.filter(({ p }) => p.isValid && sagaOf(p).s[story.id]?.dn.includes(chapter.id));
+      if (done.length) player.sendMessage(`§b[Party] It counts for ${listNames(done.map(({ p }) => p.name))} too.`);
+      if (story.kind === "main") partyTick(); // the party's chapter may move on: the next one isn't held up for a second
+      stop();
+      if (next && (next.chapter.npc ?? story.giver) === (chapter.end ?? chapter.npc ?? story.giver)) continueWith = story;
+      if (choice?.reply?.length) await dialog(player, story.title, header, pagesFor(choice.reply, saga, story.id, player.name), ["OK"]);
+    } finally {
+      talking.delete(player.id);
+      stop();
     }
-    if (choice?.reply?.length) await dialog(player, story.title, header, pagesFor(choice.reply, saga, story.id, player.name), ["OK"]);
   });
   // The same NPC tells the next chapter: go straight on (Not now is always there).
   if (continueWith && player.isValid) await startChapter(player, continueWith);
+}
+
+/**
+ * Completes a reported chapter for a player: the choice, reputation, rewards, what comes next. `by` is the party mate
+ * who reported it for them (their talk, gossip and the reply stay with `by`).
+ * @param {Player} player @param {Story} story @param {Chapter} chapter @param {Entry} e
+ * @param {import("./types.js").Choice | undefined} choice @param {Player} [by]
+ * @returns {{ chapter: Chapter, index: number } | undefined} the story's next chapter for them
+ */
+function complete(player, story, chapter, e, choice, by) {
+  const saga = sagaOf(player);
+  const st = stateOf(saga, story);
+  if (choice) {
+    applyChoice(saga, story, chapter.id, choice);
+    giveRep(player, choice.rep, saga, story);
+  }
+  giveRep(player, chapter.rep, saga, story);
+  const penalty = st.h ? Math.max(0, Math.min(1, Number(get("hintPenalty")) || 0)) : 0;
+  chapter.objectives.forEach((_, i) => endScene(player.id, objKey(e, i)));
+  st.dn.push(chapter.id);
+  st.a = 0;
+  delete st.cur;
+  delete st.o;
+  delete st.x;
+  delete st.h;
+  const next = currentChapter(saga, story);
+  if (!next) {
+    st.fin = Date.now();
+    delete st.t;
+  }
+  invalidate(player.id);
+  markDirty(player, true);
+  const got = reward(player, chapter.reward, `Story: ${story.title}`, penalty);
+  player.sendMessage(`§a[Story] Chapter complete: ${chapter.title}!${got ? ` §7Reward: ${got}` : ""}`);
+  // npcs: who gave and who ended the chapter (Townsfolk adds affinity with each).
+  const npcs = [...new Set([chapter.npc ?? story.giver, chapter.end ?? chapter.npc ?? story.giver])];
+  const wanderer = story.kind === "wander" ? wandererOf(story.giver) : undefined;
+  // A wanderer's chapter: its reputation goes to their guild (Guilds), not shared out.
+  send("realm:quest_done", { player: player.id, pack: PACK, id: `${story.id}:${chapter.id}`, label: `${story.title}: ${chapter.title}`, kind: "story", npcs, ...(wanderer ? { guild: wanderer.guild } : {}) });
+  if (wanderer && st.dn.length === 1) send("realm:journal", { player: player.id, page: "wanderers", entry: wanderer.id, label: wanderer.name });
+  if (next) {
+    const who = next.chapter.npc ?? story.giver;
+    const same = who === (chapter.end ?? chapter.npc ?? story.giver);
+    const shared = by && same ? (story.kind === "main" ? ": when one of you accepts it, it starts for the party" : ": when one of you starts it, the others are asked to join") : "";
+    player.sendMessage(shared ? `§e[Story] Next: "${next.chapter.title}", from ${npcName(who)}${shared}.` : `§e[Story] Next: talk to ${npcName(who)} for "${next.chapter.title}".`);
+    player.playSound("random.levelup", { pitch: 1, volume: 0.8 });
+  } else {
+    player.sendMessage(`§6[Story] Story complete: ${story.title}!`);
+    // Townsfolk gossip about a finished act of the main story (once, for whoever told it).
+    if (!by && story.kind === "main" && (story.act ?? 0) >= 1) send("realm:gossip", { kind: "act", player: player.id, name: player.name, place: story.title, n: story.act });
+    // A Recurring Wanderer's chain is done: town gossip, and their camp goes once nobody else needs it.
+    if (wanderer) {
+      send("realm:gossip", { kind: "wander_chain", player: player.id, name: player.name, place: wanderer.name });
+      leaveCamp(wanderer.id, player.id);
+    }
+    player.playSound("random.levelup", { pitch: 0.7, volume: 1 });
+    for (const s of ORDERED) {
+      if (s.id === story.id || saga.s[s.id] || !s.requires?.stories?.includes(story.id)) continue;
+      if (requires(s.requires, saga, s.id, player).ok) player.sendMessage(`§e[Story] New story: ${s.title}. Talk to ${npcName(s.giver)}.`);
+    }
+  }
+  return next;
 }
 
 // ---------------------------------------------------------------------------
