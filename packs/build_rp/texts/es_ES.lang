@@ -1,0 +1,498 @@
+eb.join.admin_granted=§6[Effortless Building] §rSe te ha otorgado §6acceso de administrador§r como el primer jugador en este mundo.\n§7Abre Configuración (Agacharse + Clic derecho) para acceder a las opciones de administrador.
+eb.join.no_left_click=§e[Effortless Building] §rEl clic izquierdo (balanceo) §cno está soportado§r en tu versión de Minecraft.\n§7Usa §f/palette§7 en lugar de clic izquierdo en el §6Libro de Construcción§7 para abrir la paleta de bloques.
+eb.join.received_book=§a[Effortless Building] §r¡Recibiste un §6Libro de Construcción§r!\n§7Clic derecho §rpara abrir modos de construcción §7| §rAgacharse + Clic derecho §rpara configuración.\n§c§l❗ §r§c¿Lo perdiste? §fEscribe §a/getbook §f(cuesta §e5 niveles de XP§f).
+
+eb.getbook.already_have=§c[EB] Ya tienes el Libro de Construcción.
+eb.getbook.not_enough_xp=§c[EB] Necesitas al menos %1 niveles de XP para obtener un libro nuevo. (Tienes %2)
+
+eb.place.no_blocks=§c[EB] §r¡No hay bloques en el inventario!
+eb.place.limited_blocks=§e[EB] §rSolo tienes %1 bloques – colocando lo que hay.
+eb.place.no_palette_blocks=§c[EB] §r¡No hay bloques de paleta en el inventario!
+eb.place.limited_palette_blocks=§e[EB] §rBloques de paleta limitados - colocando %1.
+eb.place.undo_disabled=§e[EB] §7Deshacer desactivado.
+eb.place.too_large_to_undo=§e[EB] §7Demasiado grande para deshacer (>%1 bloques).
+
+eb.destroy.pickaxe_broke=§c[EB] §r¡Tu herramienta se rompió!
+eb.destroy.no_mode=§c[EB] §rEl Modo Destruir no funciona con Air Build. Selecciona primero un modo de forma (Línea, Pared, Piso, etc.).
+eb.destroy.disabled=§c[EB] §rEl Modo Destruir está §cdesactivado§r en este servidor.
+eb.destroy.creative_only=§c[EB] §rEl Modo Destruir requiere el modo §eCreativo §ren este servidor.
+eb.destroy.wrong_tool=§c[EB] §rTu herramienta no puede romper este bloque.
+
+eb.tag.required=§c[EB] §rNecesitas la etiqueta §e%1§r para usar Effortless Building.
+eb.getbook.no_tag=§c[EB] §rNecesitas la etiqueta §e%1§r para usar /getbook.
+
+eb.undo.nothing=§c[EB] Nada que deshacer.
+eb.undo.done=§a[EB] Deshacer §7- %1 bloques restaurados.
+eb.redo.nothing=§c[EB] Nada que rehacer.
+eb.redo.done=§a[EB] Rehacer §7- %1 bloques colocados.
+
+eb.bar.xz_set_destroy=§c[EB] §fExtensión XZ establecida §8- §7clic derecho para establecer §ealtura §7& §cdestruir
+eb.bar.xz_set_place=§a[EB] §fExtensión XZ establecida §8- §7clic derecho para establecer §ealtura §7& §acolocar
+eb.bar.destroyed=%1 bloques §cdestruidos §8(§7%2§8)
+eb.bar.destroying=§c[EB] §rDestruyendo... quedan §e%1§7
+eb.bar.toggle_disabled=§7[EB] §rModo §8desactivado§7. Agáchate dos veces para restaurarlo.
+eb.bar.toggle_restored=§a[EB] §rModo restaurado: §b§l%1
+eb.bar.placed=%1 bloques §7colocados §8(§7%2§8)
+eb.bar.placed_one=§f1 bloque §7colocado §8(§7air build§8)
+eb.bar.destroy_anchor_set=§c[EB] §rAnclaje de destrucción establecido §7(%1, %2, %3)
+eb.bar.anchor_set=§a[EB] §rAnclaje establecido §7(%1, %2, %3)
+eb.bar.copy_corner1=§a[EB] §rEsquina 1 establecida §7(%1, %2, %3) - clic derecho para esquina 2
+eb.bar.copy_corner2=§a[EB] §rEsquina 2 establecida §7(%1, %2, %3) - clic derecho para seleccionar altura
+eb.bar.copy_done=§a[EB] §rCopiados §e%1§r bloques - clic derecho para pegar
+eb.bar.cut_done=§6[EB] §r§e%1§r bloques cortados - clic derecho para pegar §7(uso unico en supervivencia)
+eb.bar.copy_empty=§c[EB] §rNo se encontraron bloques en la selección.
+eb.bar.copy_cleared=§7[EB] Portapapeles limpiado - clic derecho para establecer esquina 1
+eb.bar.copy_cancelled=§7[EB] Selección cancelada - clic derecho para establecer esquina 1
+eb.first_open=§b[EB] §f¿Nuevo aquí? Sostén el libro §6Tutorial§f para leer la guía, o escribe §a/guide§f para un recorrido rápido.
+item.eb:building_book.name=§b§lLibro de Construcción
+eb.bar.pasted=%1 bloques §apegados
+eb.bar.paste_empty=§e[EB] §7Nada en el portapapeles para pegar.
+
+eb.queue.waiting=§e⏳ %1 bloques esperando §7- camina cerca\n§f(%2, %3, %4) §7para cargar los fragmentos
+eb.queue.waiting_one=§e⏳ 1 bloque esperando §7- camina cerca\n§f(%1, %2, %3) §7para cargar los fragmentos
+
+eb.preview.air_build=§7Air Build  §8·  §7Clic derecho para §acolocar §8(%1, %2, %3)
+eb.preview.no_anchor_destroy=§7%1 (Alcance Infinito)  §8·  §7Clic derecho para §cestabler ancla de destrucción §8(%2, %3, %4)
+eb.preview.no_anchor_build=§7%1 (Alcance Infinito)  §8·  §7Clic derecho para §aestabler ancla §8(%2, %3, %4)
+eb.preview.hint_destroy=§7Clic derecho para §cdestruir
+eb.preview.hint_place=§7Clic derecho para §acolocar
+eb.preview.step2=§8[2/3] §7Clic derecho para establecer §eextensión XZ
+eb.preview.step3_destroy=§8[3/3] §7Clic derecho para establecer §ealtura §7& §cdestruir
+eb.preview.step3_place=§8[3/3] §7Clic derecho para establecer §ealtura §7& §acolocar
+
+eb.dir.ew=Este-Oeste
+eb.dir.ns=Norte-Sur
+eb.dir.ud=Arriba-Abajo
+eb.dir.single=-
+
+eb.mode.normal=Normal
+eb.mode.normal_plus=Normal+
+eb.mode.line=Línea
+eb.mode.wall=Pared
+eb.mode.floor=Piso
+eb.mode.cube=Cubo
+eb.mode.circle=Círculo
+eb.mode.cylinder=Cilindro
+eb.mode.sphere=Esfera
+eb.mode.diagonal_line=Línea Diagonal
+eb.mode.diagonal_wall=Pared Diagonal
+eb.mode.diagonal_floor=Piso Diagonal
+eb.mode.slope=Pendiente
+eb.mode.slope_floor=Suelo Inclinado
+eb.mode.air_build=Construir en el aire
+eb.mode.semicircle=Semicírculo
+eb.mode.cone=Cono
+eb.mode.destroy=Destruir
+eb.mode.copy_paste=Copiar / Pegar
+
+eb.mode_select.body=Selecciona un modo de construcción.\nClic derecho en un bloque para establecer el §eancla§r, luego clic derecho de nuevo para confirmar la colocación.\n§8Sostén un §7pico §8y haz clic derecho para §cdestruir §8en la forma seleccionada.\n§8New? Type §7/tutorial §8for a full guide.
+eb.mode_select.mode_set=§a[EB] §rModo establecido a §e%1§r.
+
+eb.mode_select.options_title=§l%1§r §8- Opciones
+eb.mode_select.quick_access=§l§dAcceso rápido§r
+eb.mode_select.btn.clipboard=§lPortapapeles§r
+eb.mode_select.btn.palette=§lPaleta§r
+eb.mode_select.btn.settings=§lAjustes§r
+eb.mode_select.btn.undo=§lDeshacer§r
+eb.mode_select.btn.redo=§lRehacer§r
+eb.mode_select.btn.done=§cListo§r
+eb.mode_select.btn.modifiers=§lModificadores§r
+
+eb.modifiers.btn.mirror=§lEspejo§r  [%1]
+eb.modifiers.btn.array=§lMatriz§r  [%1]
+eb.modifiers.btn.radial=§lRadial§r  [%1]
+eb.modifiers.btn.close=Cerrar
+
+eb.modifiers.mirror.body=Status: %1\nCenter: %2, %3, %4\nAxes: %5  %6  %7\nRadius: %8  Mode: %9
+eb.modifiers.mirror.btn.set_pos=Poner el centro en mi posición
+eb.modifiers.mirror.btn.configure=Configurar...
+eb.modifiers.mirror.config.title=Ajustes del Espejo
+eb.modifiers.mirror.center_x=Centro X
+eb.modifiers.mirror.center_y=Centro Y
+eb.modifiers.mirror.center_z=Centro Z
+eb.modifiers.mirror.radius=Radio (bloques)
+eb.modifiers.mirror.pos_set=§e[EB] Centro del espejo puesto en %1, %2, %3
+
+eb.modifiers.array.body=Estado: %1\nDesfase: %2, %3, %4\nCantidad: %5
+eb.modifiers.array.btn.configure=Configurar...
+eb.modifiers.array.config.title=Ajustes de la Matriz
+eb.modifiers.array.offset_x=Desfase X
+eb.modifiers.array.offset_y=Desfase Y
+eb.modifiers.array.offset_z=Desfase Z
+eb.modifiers.array.count=Cantidad (copias)
+
+eb.modifiers.radial.body=Estado: %1\nCentro: %2, %3\nSectores: %4\nRadio: %5\nAlternar: %6
+eb.modifiers.radial.btn.set_pos=Poner el centro en mi posición
+eb.modifiers.radial.btn.configure=Configurar...
+eb.modifiers.radial.config.title=Ajustes del Espejo Radial
+eb.modifiers.radial.center_x=Centro X
+eb.modifiers.radial.center_z=Centro Z
+eb.modifiers.radial.slices=Sectores
+eb.modifiers.radial.radius=Radio (bloques)
+eb.modifiers.radial.alternate=Alternar (reflejar un sector de cada dos)
+eb.modifiers.radial.pos_set=§e[EB] Centro radial puesto en %1, %2, %3
+
+eb.settings.player.preview_style=Estilo de vista previa\n§7Estilo visual mostrado al seleccionar
+eb.settings.player.replace_blocks=Reemplazar bloques existentes\n§7Permite que la colocación sobrescriba\n§7bloques existentes
+eb.settings.player.build_speed=Velocidad de construcción\n§7Qué tan rápido se colocan los bloques en secuencia
+eb.settings.player.destroy_drops=Drops de destrucción\n§7Si los bloques rotos sueltan sus objetos
+eb.settings.player.selection_zoom=Zoom de selección\n§7Hacer zoom mientras una selección está activa
+eb.settings.player.zoom_start=Distancia de inicio del zoom (bloques)\n§7Distancia a la que comienza el zoom
+eb.settings.player.zoom_max=Distancia de zoom completo (bloques)\n§7Distancia a la que se alcanza el zoom máximo
+eb.settings.player.air_reach=Alcance de construcción en el aire (bloques)\n§7Alcance máximo al colocar en el aire
+eb.settings.player.infinite_reach=Alcance infinito\n§7Construye más allá de la distancia normal de alcance
+eb.settings.player.inf_reach_dist=Distancia de alcance infinito (bloques)\n§7Hasta dónde se extiende el alcance infinito
+eb.settings.player.swap_book_actions=Intercambiar acciones del libro\n§7Clic derecho abre Paleta, Clic izquierdo abre Menú
+eb.settings.player.undo_limit=Límite de deshacer\n§7Máximo de bloques rastreados para deshacer tras romper
+eb.settings.player.max_blocks=Máx. de bloques (1 – %1)\n§7Máximo de bloques por operación única
+
+eb.settings.title=§l§6Configuración de EB§r
+eb.settings.admin_require_tag=§cAdmin§r - Requerir etiqueta para usar EB\n§7Solo los jugadores con la etiqueta pueden construir
+eb.settings.admin_tag=§cAdmin§r - Etiqueta requerida\n§7Actual: §e%1
+eb.settings.admin_allow_destroy=§cAdmin§r - Permitir Modo Destruir\n§7Cuando está desactivado, ningún jugador puede usar el Modo Destruir
+eb.settings.admin_destroy_creative=§cAdmin§r - Modo Destruir: Solo Creativo\n§7Cuando está activado, el Modo Destruir requiere modo Creativo
+eb.settings.admin_allow_inf_reach=§cAdmin§r - Permitir Alcance Infinito\n§7Cuando está desactivado, el Alcance Infinito está globalmente desactivado
+eb.settings.admin_max_reach_cap=§cAdmin§r - Distancia Máx. de Alcance Infinito\n§7Actual: §e%1  §70 = sin límite
+eb.settings.admin_max_blocks_cap=§cAdmin§r - Tope de bloques (por jugador)\n§7Actual: §e%1  §7Máximo: §e%2
+eb.settings.admin_auto_give_book=§cAdmin§r - Auto-Dar Libro de Construcción\n§7Cuando está activado, los jugadores reciben el libro al unirse
+eb.settings.admin_config_tag=Restringir /config a etiqueta requerida\n§7Si está ACTIVO, solo los jugadores con la etiqueta pueden usar /config.
+
+eb.config.restricted=§c[EB] /config está restringido. Necesitas la etiqueta §e%1§c.
+eb.config.done=§cListo§r
+eb.config.quality.smooth.label=Suave
+eb.config.quality.smooth.desc=Se actualiza cada tick. Vista previa ultra fluida con total capacidad de respuesta. Ideal para PC rápidas.
+eb.config.quality.sharp.label=Nítido
+eb.config.quality.sharp.desc=Se actualiza cada 2 ticks. Casi tan fluido como Suave con una pequeña mejora de rendimiento.
+eb.config.quality.crisp.label=Claro
+eb.config.quality.crisp.desc=Se actualiza cada 3 ticks. Ligero retraso en giros rápidos, sensación sólida al construir de forma normal.
+eb.config.quality.balanced.label=Equilibrado
+eb.config.quality.balanced.desc=Se actualiza cada 4 ticks. Buen equilibrio entre calidad visual y rendimiento.
+eb.config.quality.responsive.label=Sensible
+eb.config.quality.responsive.desc=Se actualiza cada 5 ticks. Recomendado para dispositivos de gama media o vistas previas grandes.
+eb.config.quality.lite.label=Ligero
+eb.config.quality.lite.desc=Se actualiza cada 10 ticks (~2 veces/seg). Retraso notable pero significativamente más liviano.
+eb.config.quality.minimal.label=Mínimo
+eb.config.quality.minimal.desc=Se actualiza cada 20 ticks (1 vez/seg). Rendimiento máximo: la vista previa se siente lenta pero estable.
+
+eb.clipboard.slot.empty=§8Ranura %1: (vacía)§r
+eb.clipboard.slot.empty_active=§fRanura %1:§r §7(vacía)§r
+eb.clipboard.slot.filled=§fRanura %1:§r §7%2§r
+eb.clipboard.slot.filled_active=§l§eRanura %1:§r §e%2§r
+eb.clipboard.tip.dims=%1 de ancho × %2 de alto × %3 de profundidad - %4 bloques
+eb.clipboard.tip.dims_named="%1" · %2 de ancho × %3 de alto × %4 de profundidad - %5 bloques
+eb.clipboard.tip.empty=Ranura vacía - ¡copia algo primero!
+eb.clipboard.btn.paste=§lPegar§r
+eb.clipboard.btn.paste_empty=§8Pegar§r
+eb.clipboard.btn.rename=§lRenombrar§r
+eb.clipboard.btn.rename_empty=§8Renombrar§r
+eb.clipboard.btn.delete=§lEliminar§r
+eb.clipboard.btn.delete_empty=§8Eliminar§r
+eb.clipboard.btn.done=Listo
+eb.clipboard.load_failed=§c[EB] Error al cargar la ranura.
+eb.clipboard.loaded=§a[EB] §7Ranura %1 cargada - ¡apunta e interactúa para pegar!
+eb.clipboard.rename_title=Renombrar ranura de portapapeles
+eb.clipboard.rename_label=Nombre
+eb.clipboard.rename_placeholder=Escribe un nombre...
+eb.clipboard.cleared=§7[EB] Ranura %1 borrada.
+
+eb.palette.bar=§a[EB] §fPaleta: %1 §8· §f%2 §8· §f%3
+
+§7After turning off, also select the §e"No Custom UI"§7 subpack in
+§7your RP and BP pack settings to fully remove the panels.
+
+§7§8Admins can force-disable Custom UI for all players - see Admin Settings.
+
+§eDefault §8(OFF)§e:
+§7  §eRight-click§7 → opens Mode Selector
+§7  §eLeft-click §8(swing)§7 → opens Block Palette
+
+§eSwapped §8(ON)§e:
+§7  §eRight-click§7 → opens Block Palette
+§7  §eLeft-click §8(swing)§7 → opens Mode Selector
+
+§7Enable this in §ePlayer Settings§7 if you prefer fast palette access on right-click.
+
+§7After disabling, also select the §e"No Custom UI"§7 subpack in both your
+§eRP§7 and §eBP§7 pack settings to fully remove the panels for everyone.
+
+eb.common.on=§aSÍ§r
+eb.common.off=§cNO§r
+
+eb.bar.bezier=§7Bézier: §f%1 puntos puestos  §8·  §fAgacharse+clic §7para colocar  §8·  §7Clic para añadir más
+eb.bar.bezier_one=§7Bézier: §f1 punto puesto  §8·  §fAgacharse+clic §7para colocar  §8·  §7Clic para añadir más
+
+eb.modifiers.overview_body=Espejo: %1\nMatriz:  %2\nRadial: %3
+eb.modifiers.btn.mirror_active=§l§eEspejo§r  [%1]
+eb.modifiers.btn.array_active=§l§eMatriz§r  [%1]
+eb.modifiers.btn.radial_active=§l§eRadial§r  [%1]
+eb.modifiers.mirror.btn.enable=§a■ Activar Espejo§r
+eb.modifiers.mirror.btn.disable=§c■ Desactivar Espejo§r
+eb.modifiers.mirror.axis_x_toggle=Eje X: %1
+eb.modifiers.mirror.axis_y_toggle=Eje Y: %1
+eb.modifiers.mirror.axis_z_toggle=Eje Z: %1
+eb.modifiers.mirror.odd_toggle=Desfase impar: %1
+eb.modifiers.array.btn.enable=§a■ Activar Matriz§r
+eb.modifiers.array.btn.disable=§c■ Desactivar Matriz§r
+eb.modifiers.radial.btn.enable=§a■ Activar Radial§r
+eb.modifiers.radial.btn.disable=§c■ Desactivar Radial§r
+
+eb.palette.cat.source=Origen
+eb.palette.cat.dist=Distribución
+eb.palette.cat.weight=Peso
+eb.palette.source.disable=No
+eb.palette.source.hotbar=Mezclar de la barra rápida
+eb.palette.source.inventory=Mezclar del inventario
+eb.palette.source.hotbar_inventory=Mezclar de la barra rápida + inventario
+eb.palette.source.disable.desc=§aConstrucción normal.§r Solo se usa el bloque en el que hiciste clic.\n§7Es lo predeterminado. Elige una opción de mezcla abajo para combinar varios tipos de bloque en una construcción.
+eb.palette.source.hotbar.desc=§eLa mezcla está ACTIVA.§r Las construcciones combinan §etodos los bloques de tu barra rápida§r, no solo el que pulsaste.\n§7Pon Origen en §fNo§7 para volver a construir con un solo bloque.
+eb.palette.source.inventory.desc=§eLa mezcla está ACTIVA.§r Las construcciones combinan §etodos los bloques de tu inventario§r, no solo el que pulsaste.\n§7Pon Origen en §fNo§7 para volver a construir con un solo bloque.
+eb.palette.source.hotbar_inventory.desc=§eLa mezcla está ACTIVA.§r Las construcciones combinan §etodos los bloques de tu barra rápida e inventario§r, no solo el que pulsaste.\n§7Pon Origen en §fNo§7 para volver a construir con un solo bloque.
+eb.palette.dist.random=Aleatorio
+eb.palette.dist.spread=Repartido
+eb.palette.dist.grad_x=Degradado X
+eb.palette.dist.grad_y=Degradado Y
+eb.palette.dist.grad_z=Degradado Z
+eb.palette.dist.grad_radial=Degradado radial
+eb.palette.dist.grad_diagonal=Degradado diagonal
+eb.palette.dist.concentric=Concéntrico
+eb.palette.dist.checker=Ajedrez
+eb.palette.dist.stripes_h=Franjas H
+eb.palette.dist.stripes_v=Franjas V
+eb.palette.dist.stripes_d=Franjas D
+eb.palette.dist.brick=Ladrillo
+eb.palette.dist.herringbone=Espiga
+eb.palette.dist.noise=Mezcla de ruido
+eb.palette.dist.cell=Celdas / Voronoi
+eb.palette.dist.marble=Mármol
+eb.palette.dist.border=Borde
+eb.palette.dist.wave=Onda
+eb.palette.dist.spiral=Espiral
+eb.palette.best_tag= §a(mejor)
+eb.palette.dist.dissolve=Disolver
+eb.palette.dist.random.desc=Cada bloque se elige al azar de forma independiente.
+eb.palette.dist.spread.desc=Reparte los bloques de forma uniforme, casi sin grupos.
+eb.palette.dist.grad_x.desc=Degradado suave a lo largo del eje X.
+eb.palette.dist.grad_y.desc=Degradado suave a lo largo del eje Y.
+eb.palette.dist.grad_z.desc=Degradado suave a lo largo del eje Z.
+eb.palette.dist.grad_radial.desc=Degradado radial que sale del centro hacia fuera.
+eb.palette.dist.grad_diagonal.desc=Degradado diagonal a través de la estructura.
+eb.palette.dist.concentric.desc=Anillos concéntricos que se expanden desde el centro.
+eb.palette.dist.checker.desc=Bloques alternos en patrón de ajedrez.
+eb.palette.dist.stripes_h.desc=Franjas horizontales a través de la estructura.
+eb.palette.dist.stripes_v.desc=Franjas verticales a lo alto de la estructura.
+eb.palette.dist.stripes_d.desc=Franjas diagonales a través de la estructura.
+eb.palette.dist.brick.desc=Filas desplazadas que imitan un muro de ladrillos.
+eb.palette.dist.herringbone.desc=Filas en V con trama de espiga.
+eb.palette.dist.noise.desc=Mezcla orgánica entre bloques basada en ruido.
+eb.palette.dist.cell.desc=Regiones de Voronoi, cada una con un solo bloque.
+eb.palette.dist.marble.desc=Vetas fluidas como de mármol a través de la construcción.
+eb.palette.dist.border.desc=Bloque de contorno en los bordes, bloque de relleno por dentro.
+eb.palette.dist.wave.desc=Patrón de onda sinusoidal a través de la construcción.
+eb.palette.dist.spiral.desc=Patrón en espiral que envuelve la estructura.
+eb.palette.dist.dissolve.desc=Disolución dispersa sobre la cara: los bloques se mezclan al azar en la transición.
+eb.palette.weight.amount=Cantidad
+eb.palette.weight.slots=Ranuras
+eb.palette.weight.unique=Únicos
+eb.palette.weight.amount.desc=Ponderado por el total de bloques de todas las pilas.
+eb.palette.weight.slots.desc=Cada ranura ocupada del inventario cuenta igual.
+eb.palette.weight.unique.desc=Cada tipo de bloque cuenta con el mismo peso.
+eb.palette.tile_pattern_on=Repetir patrón §a[SÍ]§r
+eb.palette.tile_pattern_off=Repetir patrón §c[NO]§r
+eb.palette.btn.done=§cListo§r
+
+eb.settings.admin_custom_ui_toggle=§cAdmin§r - Menús simples para todos\n§7Si está activo, cada jugador usa los menús estándar del juego
+eb.ui.title.mode_select=Effortless Building
+eb.ui.title.palette=Paleta de bloques
+eb.ui.title.clipboard=Portapapeles
+eb.ui.title.modifiers=Modificadores de construcción
+
+eb.preview.copy_corner1=§7Modo copiar  §8·  §7Clic derecho para fijar la esquina 1
+eb.preview.copy_corner1_sneak=§7Modo copiar  §8·  §7Clic derecho para fijar la esquina 1 §8(dentro del bloque)
+
+eb.settings.player.hints_enabled=Consejos contextuales\n§7Un consejo de una línea en el chat la primera vez\n§7que abres un panel o eliges un modo
+eb.hint.defer_shape=§a[EB] §r§7Consejo: §fLa caja que ves al apuntar es §eAplazar el cálculo de la forma§f: espera a que dejes de moverte para calcular la forma completa, y así el juego va fluido. Quédate quieto un momento para ver la forma real; al colocar siempre se construye exacta. §7¿Prefieres la vista en vivo? Desactívalo en §eAjustes §8> §eAjustes del jugador§7.
+eb.hint.panel.mode_menu=§a[EB] §r§7Consejo: §fEste es el menú: elige una forma a la izquierda y luego haz clic en bloques para construir. §eMenú§f, arriba en la lista, contiene Paleta, Modificadores, Portapapeles, Deshacer, Ajustes y Ayuda.
+eb.hint.panel.palette=§a[EB] §r§7Consejo: §fEsta es la Paleta de bloques: elige qué bloques se usan al construir (bloque ancla, barra rápida o todo tu inventario).
+eb.hint.panel.modifiers=§a[EB] §r§7Consejo: §fLos modificadores repiten lo que construyas después: Espejo, Matriz o Radial. Activa uno aquí antes de colocar una forma.
+eb.hint.panel.settings=§a[EB] §r§7Consejo: §fToca un ajuste para cambiarlo; el consejo de abajo lo explica. §eConfiguración rápida§f lo ajusta todo para tu dispositivo con un toque.
+eb.hint.panel.clipboard=§a[EB] §r§7Consejo: §fEl Portapapeles guarda varias selecciones copiadas o cortadas para que puedas pegar cualquiera más tarde.
+eb.hint.mode.air_build=§a[EB] §r§7Consejo: §fConstruir en el aire coloca bloques en pleno aire, sin superficie: apunta adonde quieras el bloque y usa tu herramienta.
+eb.hint.mode.line=§a[EB] §r§7Consejo: §fLínea: el primer clic fija el inicio, el segundo el final.
+eb.hint.mode.wall=§a[EB] §r§7Consejo: §fPared: el primer clic fija una esquina, el segundo la altura y el ancho.
+eb.hint.mode.floor=§a[EB] §r§7Consejo: §fPiso: el primer clic fija una esquina, el segundo la esquina opuesta.
+eb.hint.mode.diagonal_line=§a[EB] §r§7Consejo: §fLínea diagonal: como Línea, pero en cualquier ángulo: primer clic inicio, segundo clic final.
+eb.hint.mode.diagonal_wall=§a[EB] §r§7Consejo: §fPared diagonal: el primer clic fija la línea base, el segundo la altura.
+eb.hint.mode.slope_floor=§a[EB] §r§7Consejo: §fSuelo inclinado: el primer clic fija la esquina baja, el segundo la esquina alta.
+eb.hint.mode.cube=§a[EB] §r§7Consejo: §fCubo: el primer clic fija una esquina, el segundo la esquina opuesta.
+eb.hint.mode.circle=§a[EB] §r§7Consejo: §fCírculo: el primer clic fija el centro, el segundo el radio.
+eb.hint.mode.cylinder=§a[EB] §r§7Consejo: §fCilindro: el primer clic fija el centro, el segundo el radio, el tercero la altura.
+eb.hint.mode.sphere=§a[EB] §r§7Consejo: §fEsfera: el primer clic fija el centro, el segundo el radio.
+eb.hint.mode.semicircle=§a[EB] §r§7Consejo: §fSemicírculo: el primer clic fija el centro, el segundo el radio.
+eb.hint.mode.cone=§a[EB] §r§7Consejo: §fCono: centro de la base, luego su radio, luego la altura. Pon el Eje en Diagonal en las opciones del modo para apuntar la punta libremente e inclinar el cono.
+eb.hint.mode.copy_paste=§a[EB] §r§7Consejo: §fCopiar/Pegar: selecciona dos esquinas para copiar o cortar, luego usa Pegar en las opciones del modo.
+
+item.eb:tutorial_book.name=§b§lTutorial de Effortless Building
+
+eb.settings.player.destroy_preview_style=Estilo de vista previa al destruir\n§7Estilo visual mostrado al destruir
+
+eb.preview.deferred_head=§7Región §f%1
+eb.preview.exceeds_limit=§c[EB] §rLa selección supera tu límite de bloques §7(%1)§r. Acércate o reduce el tamaño de la selección.
+
+eb.settings.player.defer_shape=Aplazar el cálculo de la forma\n§7Dibuja una caja rápida mientras apuntas y\n§7calcula la forma real solo cuando\n§7te quedas quieto o colocas\n§eGama baja: muy recomendado\n§eGama media: recomendado
+eb.settings.player.flick_preview=Vista previa al mover\n§7Redibuja la vista previa solo cuando tu mira\n§7se mueve: parpadea al cambiar en lugar de\n§7mostrarse siempre (ahorra rendimiento)
+
+eb.onboarding.title=§l§6Effortless Building - Configuración§r
+eb.onboarding.welcome.body=§f¿En qué estás jugando?\n\n§7Esto adapta la vista previa y el límite de bloques a tu dispositivo. Puedes cambiarlo cuando quieras en §eAjustes > Configuración rápida§7.
+eb.onboarding.btn.low=§eDispositivo de gama baja\n§8Móvil / tableta / PC antiguo
+eb.onboarding.btn.mid=§eDispositivo de gama media\n§8La mayoría de móviles, portátiles, consolas\n§eRecomendado
+eb.onboarding.btn.high=§eDispositivo de gama alta\n§8PC para juegos / dispositivo potente
+eb.onboarding.btn.skip=§8Omitir
+eb.onboarding.tier.low=Gama baja
+eb.onboarding.tier.mid=Gama media
+eb.onboarding.tier.high=Gama alta
+eb.onboarding.tier_applied=§a[EB] §rAjuste %1 aplicado. Puedes afinarlo todo en §eAjustes§r cuando quieras.
+eb.onboarding.capped_by_admin=§e[EB] §rTu máximo de bloques quedó limitado a §f%1§r por el tope del administrador del servidor.
+eb.onboarding.complete=§a[EB] §r¡Todo listo! Haz clic derecho con el §6Libro de Construcción§r para empezar. Sostén el libro §6Tutorial§r para la guía, o escribe §a/guide§r para el tutorial en vivo.
+
+eb.mode_select.btn.more_modes=§b+ Más modos§r
+eb.mode_select.btn.fewer_modes=§8- Menos modos§r
+eb.mode_select.simple_on=§a[EB] §rSe muestran los modos §ebásicos§r. Usa §e+ Más modos§r en el menú para ver la lista completa.
+eb.mode_select.simple_off=§a[EB] §rSe muestran §etodos§r los modos de construcción.
+eb.settings.player.simple_modes=Lista de modos simple\n§7Muestra solo Línea, Pared, Piso y Cubo.\n§7Desactívalo para ver todos los modos
+eb.settings.admin_mode_complexity=§cAdmin§r - Lista de modos de construcción\n§7Deja elegir a los jugadores, o impón a todos\n§7la lista simple o la completa
+eb.preview.step_of=Paso %1/%2
+eb.preview.idle_start=§7%1  §8·  §7Paso %2/%3  §8·  §fClic derecho en un bloque para empezar
+eb.preview.idle_need_item=§7%1  §8·  §eSostén un bloque para empezar a construir
+
+eb.bar.book_controls=§6§lLibro de Construcción§r  §8|  §7Clic derecho §fMenú§r  §8·  §7Mantener §fCambio rápido§r  §8·  §7Clic izquierdo §fPaleta\n§7Agacharse+Derecho §fAjustes§r  §8·  §7Agacharse+Izquierdo §fModificadores§r  §8·  §7Agacharse dos veces §fModo sí/no
+eb.bar.book_controls_swapped=§6§lLibro de Construcción§r  §8|  §7Clic derecho §fPaleta§r  §8·  §7Mantener §fCambio rápido§r  §8·  §7Clic izquierdo §fMenú\n§7Agacharse+Derecho §fAjustes§r  §8·  §7Agacharse+Izquierdo §fModificadores§r  §8·  §7Agacharse dos veces §fModo sí/no
+eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Clic derecho §fPágina siguiente§r  §8·  §7Golpear el libro §fAtrás§r  §8·  §7Agacharse §fSaltar un capítulo
+
+eb.palette.enabled_notice=§e[EB] §fPaleta de bloques §eACTIVA§f - §6%1§f.\n§7Tus construcciones ahora §emezclan varios tipos de bloque§7 en lugar de usar solo el que pulsas.\n§7Para desactivarla: §eLibro > Paleta > Origen > No§7.
+eb.palette.disabled_notice=§a[EB] §fPaleta de bloques §adesactivada§f. Las construcciones usan solo el bloque que pulsas.
+eb.preview.palette_active=§6Paleta: %1 §8(%2)§r §7- las construcciones mezclan bloques
+
+eb.preview.copy_step2=§7Paso 2/3  §8·  §fClic derecho en la esquina 2
+eb.preview.copy_step3=§7Paso 3/3  §8·  §fClic derecho para fijar la altura
+eb.clipboard.action.title=§l§6Región seleccionada§r
+eb.clipboard.action.body=§f¿Qué quieres hacer con ella?\n\n§7§lCopiar§r§7 deja los bloques donde están.\n§7§lCortar§r§7 los quita y los llevas contigo.
+eb.clipboard.action.copy=§a§lCopiar§r\n§7Deja el original en su sitio
+eb.clipboard.action.cut=§6§lCortar§r\n§7Quita los bloques y llévalos
+eb.clipboard.action.cancel=§8Cancelar
+eb.clipboard.slot.auto=§bÚltima copia:§r §7%1§r
+eb.clipboard.slot.auto_active=§l§eÚltima copia:§r §e%1§r
+eb.clipboard.slot.auto_empty=§8Última copia: (vacía)§r
+eb.clipboard.slot.auto_empty_active=§fÚltima copia:§r §7(vacía)§r
+eb.clipboard.tip.auto_empty=Aún no has copiado nada. Copia algo y aparecerá aquí automáticamente.
+eb.clipboard.btn.save=§lGuardar una copia§r
+eb.clipboard.btn.save_empty=§8Guardar una copia§r
+eb.clipboard.saved=§a[EB] §7Guardado en la ranura %1. Las copias futuras no lo sobrescribirán.
+eb.clipboard.save_full=§c[EB] §7Todas las ranuras de guardado están llenas. Borra una primero.
+eb.clipboard.loaded_auto=§a[EB] §7Última copia cargada: ¡apunta e interactúa para pegar!
+eb.clipboard.cleared_auto=§7[EB] Última copia borrada.
+eb.clipboard.restored_cut=§6[EB] §fAún tienes una selección §6cortada§f esperando a ser pegada.\n§7Abre el §ePortapapeles§7 o apunta e interactúa para colocarla.
+
+eb.set.custom_ui=Menús propios
+eb.join.welcome=§a[Effortless Building] §rRecibiste el §6Libro de Construcción§r y el libro §6Tutorial§r.\n§7Sostén el libro §fTutorial§7 para aprenderlo todo. Haz clic derecho con el §fLibro de Construcción§7 para empezar.
+eb.help.title=Ayuda
+eb.help.body=§fEl libro §6Tutorial§f lo explica todo con imágenes. Sostenlo en la mano y se abre frente a ti.
+eb.help.btn.book=§lLibro Tutorial§r\n§8Consíguelo o mira cómo abrirlo
+eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
+eb.help.btn.setup=§lConfiguración rápida§r\n§8Adapta el addon a tu dispositivo
+eb.help.book_hold=§a[EB] §rYa tienes el libro §6Tutorial§r. Sostenlo en la mano y se abre frente a ti.
+eb.help.book_given=§a[EB] §rAquí tienes el libro §6Tutorial§r. Sostenlo en la mano y se abre frente a ti.
+eb.help.book_no_room=§c[EB] §rNo hay espacio en tu inventario para el libro Tutorial.
+eb.mode_select.btn.help=§lAyuda§r
+eb.mode_select.btn.tools=§lMenú§r
+eb.mode_select.btn.tools_active=§l§eMenú§r
+eb.mode_select.disabled_body=§7Las formas están desactivadas§r
+eb.set.cat.setup=Configuración rápida
+eb.set.cat.building=Construcción
+eb.set.cat.preview=Vista previa
+eb.set.cat.controls=Controles
+eb.set.cat.admin=Admin
+eb.set.cat.setup.desc=Elige tu tipo de dispositivo. Un toque ajusta el estilo y la calidad de la vista previa y el límite de bloques.
+eb.set.cat.building.desc=Cómo se colocan las formas: velocidad, límite de tamaño, alcance y qué obtienes al romper.\n§7Toca un ajuste para cambiarlo.
+eb.set.cat.preview.desc=Cómo se muestra una forma antes de colocarla. Los estilos ligeros y la calidad baja van más fluidos.\n§7Toca un ajuste para cambiarlo.
+eb.set.cat.controls.desc=Clics del libro, zoom de cámara, consejos y el aspecto de los menús.\n§7Toca un ajuste para cambiarlo.
+eb.set.cat.admin.desc=§cAdmin§r - reglas para todos los jugadores de este mundo.\n§7Toca un ajuste para cambiarlo.
+eb.set.simple_modes=Solo formas básicas
+eb.set.build_speed=Velocidad de construcción
+eb.set.max_blocks=Máximo de bloques
+eb.set.replace_blocks=Reemplazar bloques
+eb.set.infinite_reach=Alcance infinito
+eb.set.inf_reach_dist=Distancia de alcance
+eb.set.air_reach=Alcance en el aire
+eb.set.destroy_drops=Objetos al romper
+eb.set.undo_limit=Límite de deshacer
+eb.set.preview_style=Vista previa de construcción
+eb.set.destroy_preview_style=Vista previa de rotura
+eb.set.preview_quality=Calidad de vista previa
+eb.set.defer_shape=Aplazar forma
+eb.set.flick_preview=Vista previa al mover
+eb.set.swap_book_actions=Intercambiar clics del libro
+eb.set.selection_zoom=Zoom de selección
+eb.set.zoom_start=El zoom empieza en
+eb.set.zoom_max=Zoom completo en
+eb.set.hints=Consejos
+eb.set.menu_style=Estilo de menú
+eb.set.menu_style.tip=Estilo de menú\n§fFlotante§7: los menús cuelgan en el aire frente a ti\n§fSimple§7: los menús estándar del juego
+eb.set.admin_mode_list=Lista de formas
+eb.set.admin_require_tag=Requerir etiqueta
+eb.set.admin_tag=Etiqueta
+eb.set.admin_allow_destroy=Permitir romper
+eb.set.admin_destroy_creative=Romper solo en Creativo
+eb.set.admin_allow_inf_reach=Permitir alcance infinito
+eb.set.admin_reach_cap=Tope de alcance
+eb.set.admin_blocks_cap=Tope de bloques
+eb.set.admin_auto_give_book=Dar libros al entrar
+eb.set.admin_lock_quality=Bloquear calidad de vista previa
+eb.set.admin_vanilla_menus=Menús simples para todos
+eb.set.book_language=Idioma del libro
+eb.set.book_language.tip=Idioma del libro\n§7El idioma del libro Tutorial y de los\n§7consejos y lecciones de los menús flotantes.
+eb.help.btn.language=§lIdioma del libro§r\n§8English, Español, Deutsch, 日本語 ...
+entity.eb:language_picker.name=Idioma
+eb.palette.dist.dissolve_x=Disolver X
+eb.palette.dist.dissolve_y=Disolver Y
+eb.palette.dist.dissolve_z=Disolver Z
+eb.palette.dist.dissolve_x.desc=Disolución dispersa a lo largo del eje X.
+eb.palette.dist.dissolve_y.desc=Disolución dispersa a lo largo del eje Y, de abajo arriba.
+eb.palette.dist.dissolve_z.desc=Disolución dispersa a lo largo del eje Z.
+eb.coach.started=§a[EB] §rTu entrenador está aquí. Sigue la tarjeta que tienes al lado, paso a paso. Su §eX§r la guarda.
+eb.coach.stopped=§7[EB] El entrenador está guardado. §a/guide§7 o §eAyuda§7 lo trae de vuelta donde lo dejaste.
+eb.coach.done=§a[EB] §r¡Tutorial completado! Todo lo que usaste está en el menú. ¡A construir!
+entity.eb:panel_ring.name=Cambio rápido
+eb.set.cursor=Cursor
+eb.set.cursor.tip=Cursor\n§7Una flecha pequeña que muestra adónde apuntas\n§7en los menús flotantes. Útil en pantallas táctiles.
+eb.cursor.turned_off=§a[EB] §rCursor desactivado. Vuelve a activarlo en §eAjustes > Controles > Cursor§r.
+eb.set.panel_size=Tamaño del panel
+eb.set.panel_size.tip=Tamaño del panel\n§7Qué tan grandes son los menús flotantes.\n§7Grande es más cómodo en un móvil.
+eb.set.coach_side=Lado de la tarjeta del entrenador
+eb.set.coach_side.tip=Lado de la tarjeta del entrenador\n§7De qué lado tuyo cuelga la tarjeta del tutorial.
+eb.set.panel_sounds=Sonidos del menú
+eb.set.panel_sounds.tip=Sonidos del menú\n§7Qué tan fuertes suenan los clics y campanillas\n§7de los menús flotantes.
+entity.eb:panel_wheel.name=Rueda de cambio rápido
+entity.eb:panel_mirror_config.name=Espejo
+entity.eb:panel_array_config.name=Matriz
+entity.eb:panel_radial_config.name=Radial
+entity.eb:panel_menu.name=Menú
+entity.eb:panel_palette.name=Paleta de bloques
+entity.eb:panel_modifiers.name=Modificadores de construcción
+entity.eb:panel_clipboard.name=Portapapeles
+entity.eb:panel_coach.name=Entrenador
+entity.eb:panel_lessons.name=Lecciones
+entity.eb:coach_marker.name=Marcador
+entity.eb:panel_help.name=Ayuda
+entity.eb:panel_setup.name=Configuración rápida
+entity.eb:panel_copycut.name=Región seleccionada
+entity.eb:panel_settings_setup.name=Ajustes
+entity.eb:panel_settings_building.name=Ajustes
+entity.eb:panel_settings_preview.name=Ajustes
+entity.eb:panel_settings_controls.name=Ajustes
+entity.eb:panel_settings_admin.name=Ajustes
+eb.hint.panel.mode_menu_floating=§a[EB] §r§7Consejo: §fEste es el menú: mira una forma y haz clic para elegirla. Sus opciones están a la derecha y las herramientas abajo. Cambia de ranura de la barra rápida o haz clic fuera para cerrarlo.
+action.interact.eb_picker_select=Seleccionar
+entity.eb:guide_book.name=Tutorial
+action.interact.eb_guide_turn=Página siguiente
+eb.set.book_language.tip=Idioma del libro\n§7El idioma del libro Tutorial y de los\n§7consejos y lecciones de los menús flotantes.
+eb.help.btn.guided=§lTutorial en vivo§r\n§8Aprende haciendo, paso a paso

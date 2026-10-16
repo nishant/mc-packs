@@ -1,0 +1,498 @@
+eb.join.admin_granted=§6[Effortless Building] §r이 세계의 첫 번째 플레이어로 §6관리자 권한§r을 받았습니다.\n§7설정을 열려면 웅크리기 + 우클릭 하세요 (관리자 옵션 포함).
+eb.join.no_left_click=§e[Effortless Building] §r좌클릭(스윙)은 현재 Minecraft 버전에서 §c지원되지 않습니다§r.\n§7블록 팔레트를 열려면 §6건축의 서§7에 좌클릭 대신 §f/palette§7 명령어를 사용하세요.
+eb.join.received_book=§a[Effortless Building] §r§6건축의 서§r를 받았습니다!\n§7우클릭 §r- 건축 모드 열기 §7| §r웅크리기 + 우클릭 §r- 설정 열기.\n§c§l❗ §r§c잃어버렸나요? §f/getbook §f을 입력하세요 §7(§eXP 레벨 5§7 소모).
+
+eb.getbook.already_have=§c[EB] 이미 건축서를 가지고 있습니다.
+eb.getbook.not_enough_xp=§c[EB] 새 책을 얻으려면 적어도 %1 레벨의 경험치가 필요합니다. (현재: %2)
+
+eb.place.no_blocks=§c[EB] §r인벤토리에 블록이 없습니다!
+eb.place.limited_blocks=§e[EB] §r블록이 %1개뿐입니다 - 가진 것만 배치합니다.
+eb.place.no_palette_blocks=§c[EB] §r인벤토리에 팔레트 블록이 없습니다!
+eb.place.limited_palette_blocks=§e[EB] §r팔레트 블록이 제한됩니다 - %1개 배치.
+eb.place.undo_disabled=§e[EB] §7되돌리기가 비활성화됩니다.
+eb.place.too_large_to_undo=§e[EB] §7너무 커서 되돌릴 수 없습니다 (>%1 블록).
+
+eb.destroy.pickaxe_broke=§c[EB] §r도구가 부서졌습니다!
+eb.destroy.no_mode=§c[EB] §r파괴 모드는 Air Build와 호환되지 않습니다. 먼저 형태 모드를 선택하세요 (선, 벽, 바닥 등).
+eb.destroy.disabled=§c[EB] §r파괴 모드가 이 서버에서 §c비활성화§r되었습니다.
+eb.destroy.creative_only=§c[EB] §r파괴 모드는 이 서버에서 §e창의 모드§r가 필요합니다.
+eb.destroy.wrong_tool=§c[EB] §r이 도구로는 이 블록을 부술 수 없습니다.
+
+eb.tag.required=§c[EB] §rEffortless Building을 사용하려면 §e%1§r 태그가 필요합니다.
+eb.getbook.no_tag=§c[EB] §r/getbook을 사용하려면 §e%1§r 태그가 필요합니다.
+
+eb.undo.nothing=§c[EB] 되돌릴 것이 없습니다.
+eb.undo.done=§a[EB] 되돌리기 §7- %1 블록 복원됨.
+eb.redo.nothing=§c[EB] 다시 실행할 것이 없습니다.
+eb.redo.done=§a[EB] 다시 실행 §7- %1 블록 배치됨.
+
+eb.bar.xz_set_destroy=§c[EB] §fXZ 범위 설정됨 §8- §7우클릭으로 §e높이§7 & §c파괴 §7확인
+eb.bar.xz_set_place=§a[EB] §fXZ 범위 설정됨 §8- §7우클릭으로 §e높이§7 & §a배치 §7확인
+eb.bar.destroyed=%1 블록 §c파괴됨 §8(§7%2§8)
+eb.bar.destroying=§c[EB] §r파괴 중... §e%1 §7남음
+eb.bar.toggle_disabled=§7[EB] §r모드가 §8비활성화§7되었습니다. 두 번 웅크리면 복원됩니다.
+eb.bar.toggle_restored=§a[EB] §r모드 복원됨: §b§l%1
+eb.bar.placed=%1 블록 §7배치됨 §8(§7%2§8)
+eb.bar.placed_one=§f블록 1개 §7배치됨 §8(§7air build§8)
+eb.bar.destroy_anchor_set=§c[EB] §r파괴 앵커 설정됨 §7(%1, %2, %3)
+eb.bar.anchor_set=§a[EB] §r앵커 설정됨 §7(%1, %2, %3)
+eb.bar.copy_corner1=§a[EB] §r복사 모서리 1 설정됨 §7(%1, %2, %3) - 모서리 2를 우클릭하세요
+eb.bar.copy_corner2=§a[EB] §r복사 모서리 2 설정됨 §7(%1, %2, %3) - 높이 선택을 위해 우클릭하세요
+eb.bar.copy_done=§a[EB] §r§e%1§r 블록 복사됨 - 우클릭으로 붙여넣기
+eb.bar.cut_done=§6[EB] §r§e%1§r 블록 잘라냄 - 붙여넣기를 우클릭 §7(생존에서 1회 사용)
+eb.bar.copy_empty=§c[EB] §r선택 영역에서 블록을 찾을 수 없습니다.
+eb.bar.copy_cleared=§7[EB] 클립보드 지워짐 - 모서리 1을 우클릭하세요
+eb.bar.copy_cancelled=§7[EB] 선택 취소됨 - 모서리 1을 우클릭하세요
+eb.first_open=§b[EB] §f처음이신가요? §6튜토리얼§f 책을 손에 들면 가이드를 읽을 수 있고, §a/guide§f 를 입력하면 간단한 안내가 시작됩니다.
+item.eb:building_book.name=§b§l건축의 서
+eb.bar.pasted=%1 블록 §a붙여넣어짐
+eb.bar.paste_empty=§e[EB] §7클립보드에 붙여넣을 것이 없습니다.
+
+eb.queue.waiting=§e⏳ %1 블록 대기 중 §7- 다음 위치로 이동하세요:\n§f(%2, %3, %4) §7청크 로드 필요
+eb.queue.waiting_one=§e⏳ 1 블록 대기 중 §7- 다음 위치로 이동하세요:\n§f(%1, %2, %3) §7청크 로드 필요
+
+eb.preview.air_build=§7Air Build  §8·  §7우클릭으로 §a배치 §8(%1, %2, %3)
+eb.preview.no_anchor_destroy=§7%1 (무한 범위)  §8·  §7우클릭으로 §c파괴 앵커 설정 §8(%2, %3, %4)
+eb.preview.no_anchor_build=§7%1 (무한 범위)  §8·  §7우클릭으로 §a앵커 설정 §8(%2, %3, %4)
+eb.preview.hint_destroy=§7우클릭으로 §c파괴
+eb.preview.hint_place=§7우클릭으로 §a배치
+eb.preview.step2=§8[2/3] §7우클릭으로 §eXZ 범위 §7설정
+eb.preview.step3_destroy=§8[3/3] §7우클릭으로 §e높이§7 & §c파괴
+eb.preview.step3_place=§8[3/3] §7우클릭으로 §e높이§7 & §a배치
+
+eb.dir.ew=동-서
+eb.dir.ns=북-남
+eb.dir.ud=위-아래
+eb.dir.single=-
+
+eb.mode.normal=일반
+eb.mode.normal_plus=일반+
+eb.mode.line=선
+eb.mode.wall=벽
+eb.mode.floor=바닥
+eb.mode.cube=직육면체
+eb.mode.circle=원
+eb.mode.cylinder=실린더
+eb.mode.sphere=구
+eb.mode.diagonal_line=대각선
+eb.mode.diagonal_wall=대각 벽
+eb.mode.diagonal_floor=대각 바닥
+eb.mode.slope=경사
+eb.mode.slope_floor=경사 바닥
+eb.mode.air_build=공중 건축
+eb.mode.semicircle=반원
+eb.mode.cone=원뿔
+eb.mode.destroy=파괴
+eb.mode.copy_paste=복사 / 붙여넣기
+
+eb.mode_select.body=건축 모드를 선택하세요.\n블록을 우클릭하여 §e앵커§r를 설정한 다음 우클릭하여 배치를 확인하세요.\n§8§7곡괭이§8를 들고 우클릭하면 선택한 형태로 §c파괴§8합니다.\n§8New? Type §7/tutorial §8for a full guide.
+eb.mode_select.mode_set=§a[EB] §r모드가 §e%1§r(으)로 설정됨.
+
+eb.mode_select.options_title=§l%1§r §8- 옵션
+eb.mode_select.quick_access=§l§d빠른 액세스§r
+eb.mode_select.btn.clipboard=§l클립보드§r
+eb.mode_select.btn.palette=§l팔레트§r
+eb.mode_select.btn.settings=§l설정§r
+eb.mode_select.btn.undo=§l되돌리기§r
+eb.mode_select.btn.redo=§l다시 실행§r
+eb.mode_select.btn.done=§c완료§r
+eb.mode_select.btn.modifiers=§l수정자§r
+
+eb.modifiers.btn.mirror=§l미러§r  [%1]
+eb.modifiers.btn.array=§l배열§r  [%1]
+eb.modifiers.btn.radial=§l방사§r  [%1]
+eb.modifiers.btn.close=닫기
+
+eb.modifiers.mirror.body=Status: %1\nCenter: %2, %3, %4\nAxes: %5  %6  %7\nRadius: %8  Mode: %9
+eb.modifiers.mirror.btn.set_pos=중심을 내 위치로 설정
+eb.modifiers.mirror.btn.configure=구성...
+eb.modifiers.mirror.config.title=미러 설정
+eb.modifiers.mirror.center_x=중심 X
+eb.modifiers.mirror.center_y=중심 Y
+eb.modifiers.mirror.center_z=중심 Z
+eb.modifiers.mirror.radius=반지름 (블록)
+eb.modifiers.mirror.pos_set=§e[EB] 미러 중심을 %1, %2, %3 으로 설정했습니다
+
+eb.modifiers.array.body=상태: %1\n오프셋: %2, %3, %4\n개수: %5
+eb.modifiers.array.btn.configure=구성...
+eb.modifiers.array.config.title=배열 설정
+eb.modifiers.array.offset_x=오프셋 X
+eb.modifiers.array.offset_y=오프셋 Y
+eb.modifiers.array.offset_z=오프셋 Z
+eb.modifiers.array.count=개수 (복사본)
+
+eb.modifiers.radial.body=상태: %1\n중심: %2, %3\n조각 수: %4\n반지름: %5\n교대: %6
+eb.modifiers.radial.btn.set_pos=중심을 내 위치로 설정
+eb.modifiers.radial.btn.configure=구성...
+eb.modifiers.radial.config.title=방사 미러 설정
+eb.modifiers.radial.center_x=중심 X
+eb.modifiers.radial.center_z=중심 Z
+eb.modifiers.radial.slices=조각 수
+eb.modifiers.radial.radius=반지름 (블록)
+eb.modifiers.radial.alternate=교대 (한 조각 건너 반전)
+eb.modifiers.radial.pos_set=§e[EB] 방사 중심을 %1, %2, %3 으로 설정했습니다
+
+eb.settings.player.preview_style=미리보기 스타일\n§7선택 영역을 지정할 때 표시되는 모양의 비주얼 스타일
+eb.settings.player.replace_blocks=기존 블록 대체\n§7배치 시 기존 블록을 덮어쓰도록 허용
+eb.settings.player.build_speed=건축 속도\n§7블록이 연속해서 배치되는 속도
+eb.settings.player.destroy_drops=철거 드롭\n§7철거된 블록이 아이템을 드롭하는지 여부
+eb.settings.player.selection_zoom=선택 영역 줌\n§7영역 지정 중에 카메라를 줌인
+eb.settings.player.zoom_start=줌 시작 거리 (블록)\n§7줌이 시작되는 거리
+eb.settings.player.zoom_max=최대 줌 거리 (블록)\n§7최대 줌에 도달하는 거리
+eb.settings.player.air_reach=공중 건축 도달 거리 (블록)\n§7공중에 블록을 배치할 때의 최대 거리
+eb.settings.player.infinite_reach=무한 도달\n§7일반적인 도달 거리를 넘어 건축을 가능하게 함
+eb.settings.player.inf_reach_dist=무한 도달 거리 (블록)\n§7무한 도달 거리가 연장되는 범위
+eb.settings.player.swap_book_actions=책 동작 교환\n§7우클릭: 팔레트 열기, 좌클릭: 메뉴 열기
+eb.settings.player.undo_limit=되돌리기 제한\n§7블록 파괴 후 되돌릴 수 있는 최대 블록 수
+eb.settings.player.max_blocks=최대 블록 (1 – %1)\n§7단일 작업당 배치할 수 있는 최대 블록 수
+
+eb.settings.title=§l§6EB 설정§r
+eb.settings.admin_require_tag=§c관리§r - EB에 태그 필요\n§7태그를 가진 플레이어만 건축 가능
+eb.settings.admin_tag=§c관리§r - 필요한 태그\n§7현재: §e%1
+eb.settings.admin_allow_destroy=§c관리§r - 파괴 모드 허용\n§7끄기: 어떤 플레이어도 파괴 모드 사용 불가
+eb.settings.admin_destroy_creative=§c관리§r - 파괴 모드: 창의 전용\n§7켜기: 파괴 모드는 창의 모드 필요
+eb.settings.admin_allow_inf_reach=§c관리§r - 무한 범위 허용\n§7끄기: 무한 범위 전역 비활성화
+eb.settings.admin_max_reach_cap=§c관리§r - 최대 무한 범위 거리\n§7현재: §e%1  §70 = 제한 없음
+eb.settings.admin_max_blocks_cap=§c관리자§r - 최대 블록 상한 (플레이어당)\n§7현재: §e%1  §7최대: §e%2
+eb.settings.admin_auto_give_book=§c관리§r - 건축의 서 자동 지급\n§7켜기: 플레이어 참여 시 자동 지급
+eb.settings.admin_config_tag=config 명령어를 필수 태그로 제한\n§7켜져 있을 경우 필요한 태그를 가진 플레이어만 /config 를 사용할 수 있습니다.
+
+eb.config.restricted=§c[EB] /config 가 제한되었습니다. §e%1§c 태그가 필요합니다.
+eb.config.done=§c완료§r
+eb.config.quality.smooth.label=부드럽게
+eb.config.quality.smooth.desc=매 틱마다 업데이트합니다. 응답성이 완벽하고 가장 매끄러운 화면을 보여줍니다 (고사양 기기 권장).
+eb.config.quality.sharp.label=선명하게
+eb.config.quality.sharp.desc=2틱마다 업데이트합니다. 부드럽게와 비슷하면서 리소스를 덜 소모합니다.
+eb.config.quality.crisp.label=바삭하게
+eb.config.quality.crisp.desc=3틱마다 업데이트합니다. 마우스를 빠르게 회전할 때 미세한 지연이 있으나 일반 건축에 좋습니다.
+eb.config.quality.balanced.label=균형있게
+eb.config.quality.balanced.desc=4틱마다 업데이트합니다. 화질과 성능 사이의 훌륭한 타협점입니다.
+eb.config.quality.responsive.label=응답형
+eb.config.quality.responsive.desc=5틱마다 업데이트합니다. 중사양 기기나 거대한 미리보기에 권장됩니다.
+eb.config.quality.lite.label=라이트
+eb.config.quality.lite.desc=10틱마다 업데이트합니다 (초당 약 2회). 지연이 다소 보이지만 부하가 훨씬 덜합니다.
+eb.config.quality.minimal.label=최소한으로
+eb.config.quality.minimal.desc=20틱마다 업데이트합니다 (초당 1회). 성능 최적화를 최대로 하며 미리보기가 느리게 반응합니다.
+
+eb.clipboard.slot.empty=§8슬롯 %1: (비어 있음)§r
+eb.clipboard.slot.empty_active=§f슬롯 %1:§r §7(비어 있음)§r
+eb.clipboard.slot.filled=§f슬롯 %1:§r §7%2§r
+eb.clipboard.slot.filled_active=§l§e슬롯 %1:§r §e%2§r
+eb.clipboard.tip.dims=%1 너비 × %2 높이 × %3 깊이 - %4 블록
+eb.clipboard.tip.dims_named="%1" · %2 너비 × %3 높이 × %4 깊이 - %5 블록
+eb.clipboard.tip.empty=비어 있는 슬롯입니다 - 먼저 무언가를 복사하세요!
+eb.clipboard.btn.paste=§l붙여넣기§r
+eb.clipboard.btn.paste_empty=§8붙여넣기§r
+eb.clipboard.btn.rename=§l이름 바꾸기§r
+eb.clipboard.btn.rename_empty=§8이름 바꾸기§r
+eb.clipboard.btn.delete=§l삭제§r
+eb.clipboard.btn.delete_empty=§8삭제§r
+eb.clipboard.btn.done=완료
+eb.clipboard.load_failed=§c[EB] 슬롯을 불러오지 못했습니다.
+eb.clipboard.loaded=§a[EB] §7슬롯 %1 을 불러왔습니다 - 대상지를 바라보고 상호작용하여 붙여넣으세요!
+eb.clipboard.rename_title=클립보드 슬롯 이름 바꾸기
+eb.clipboard.rename_label=이름
+eb.clipboard.rename_placeholder=이름 입력…
+eb.clipboard.cleared=§7[EB] 슬롯 %1 이 비워졌습니다.
+
+eb.palette.bar=§a[EB] §f팔레트: %1 §8· §f%2 §8· §f%3
+
+§7After turning off, also select the §e"No Custom UI"§7 subpack in
+§7your RP and BP pack settings to fully remove the panels.
+
+§7§8Admins can force-disable Custom UI for all players - see Admin Settings.
+
+§eDefault §8(OFF)§e:
+§7  §eRight-click§7 → opens Mode Selector
+§7  §eLeft-click §8(swing)§7 → opens Block Palette
+
+§eSwapped §8(ON)§e:
+§7  §eRight-click§7 → opens Block Palette
+§7  §eLeft-click §8(swing)§7 → opens Mode Selector
+
+§7Enable this in §ePlayer Settings§7 if you prefer fast palette access on right-click.
+
+§7After disabling, also select the §e"No Custom UI"§7 subpack in both your
+§eRP§7 and §eBP§7 pack settings to fully remove the panels for everyone.
+
+eb.common.on=§a켜짐§r
+eb.common.off=§c꺼짐§r
+
+eb.bar.bezier=§7베지어: §f점 %1개 설정됨  §8·  §f웅크리기+클릭 §7으로 설치  §8·  §7클릭으로 점 추가
+eb.bar.bezier_one=§7베지어: §f점 1개 설정됨  §8·  §f웅크리기+클릭 §7으로 설치  §8·  §7클릭으로 점 추가
+
+eb.modifiers.overview_body=미러: %1\n배열:  %2\n방사: %3
+eb.modifiers.btn.mirror_active=§l§e미러§r  [%1]
+eb.modifiers.btn.array_active=§l§e배열§r  [%1]
+eb.modifiers.btn.radial_active=§l§e방사§r  [%1]
+eb.modifiers.mirror.btn.enable=§a■ 미러 켜기§r
+eb.modifiers.mirror.btn.disable=§c■ 미러 끄기§r
+eb.modifiers.mirror.axis_x_toggle=X축: %1
+eb.modifiers.mirror.axis_y_toggle=Y축: %1
+eb.modifiers.mirror.axis_z_toggle=Z축: %1
+eb.modifiers.mirror.odd_toggle=홀수 오프셋: %1
+eb.modifiers.array.btn.enable=§a■ 배열 켜기§r
+eb.modifiers.array.btn.disable=§c■ 배열 끄기§r
+eb.modifiers.radial.btn.enable=§a■ 방사 켜기§r
+eb.modifiers.radial.btn.disable=§c■ 방사 끄기§r
+
+eb.palette.cat.source=소스
+eb.palette.cat.dist=분포
+eb.palette.cat.weight=가중치
+eb.palette.source.disable=끄기
+eb.palette.source.hotbar=핫바에서 섞기
+eb.palette.source.inventory=인벤토리에서 섞기
+eb.palette.source.hotbar_inventory=핫바 + 인벤토리에서 섞기
+eb.palette.source.disable.desc=§a일반 건축.§r 클릭한 블록만 사용합니다.\n§7기본값입니다. 아래의 섞기 옵션을 고르면 여러 종류의 블록을 한 건축물에 섞을 수 있습니다.
+eb.palette.source.hotbar.desc=§e섞기가 켜져 있습니다.§r 클릭한 블록만이 아니라 §e핫바의 모든 블록§r을 섞어 건축합니다.\n§7소스를 §f끄기§7로 되돌리면 한 종류의 블록으로 건축합니다.
+eb.palette.source.inventory.desc=§e섞기가 켜져 있습니다.§r 클릭한 블록만이 아니라 §e인벤토리의 모든 블록§r을 섞어 건축합니다.\n§7소스를 §f끄기§7로 되돌리면 한 종류의 블록으로 건축합니다.
+eb.palette.source.hotbar_inventory.desc=§e섞기가 켜져 있습니다.§r 클릭한 블록만이 아니라 §e핫바와 인벤토리의 모든 블록§r을 섞어 건축합니다.\n§7소스를 §f끄기§7로 되돌리면 한 종류의 블록으로 건축합니다.
+eb.palette.dist.random=무작위
+eb.palette.dist.spread=고르게
+eb.palette.dist.grad_x=그라데이션 X
+eb.palette.dist.grad_y=그라데이션 Y
+eb.palette.dist.grad_z=그라데이션 Z
+eb.palette.dist.grad_radial=방사 그라데이션
+eb.palette.dist.grad_diagonal=대각 그라데이션
+eb.palette.dist.concentric=동심원
+eb.palette.dist.checker=체커보드
+eb.palette.dist.stripes_h=가로 줄무늬
+eb.palette.dist.stripes_v=세로 줄무늬
+eb.palette.dist.stripes_d=대각 줄무늬
+eb.palette.dist.brick=벽돌
+eb.palette.dist.herringbone=헤링본
+eb.palette.dist.noise=노이즈 블렌드
+eb.palette.dist.cell=셀 / 보로노이
+eb.palette.dist.marble=대리석
+eb.palette.dist.border=테두리
+eb.palette.dist.wave=물결
+eb.palette.dist.spiral=나선
+eb.palette.best_tag= §a(최적)
+eb.palette.dist.dissolve=디졸브
+eb.palette.dist.random.desc=각 블록을 독립적으로 무작위 선택합니다.
+eb.palette.dist.spread.desc=뭉침을 줄여 블록을 고르게 분포시킵니다.
+eb.palette.dist.grad_x.desc=X축을 따라 부드럽게 변하는 그라데이션.
+eb.palette.dist.grad_y.desc=Y축을 따라 부드럽게 변하는 그라데이션.
+eb.palette.dist.grad_z.desc=Z축을 따라 부드럽게 변하는 그라데이션.
+eb.palette.dist.grad_radial.desc=중심에서 바깥으로 퍼지는 방사 그라데이션.
+eb.palette.dist.grad_diagonal.desc=건축물을 가로지르는 대각 그라데이션.
+eb.palette.dist.concentric.desc=중심에서 퍼져 나가는 동심원 고리.
+eb.palette.dist.checker.desc=체커보드 무늬로 번갈아 놓이는 블록.
+eb.palette.dist.stripes_h.desc=건축물을 가로지르는 가로 줄무늬.
+eb.palette.dist.stripes_v.desc=건축물의 높이를 따라가는 세로 줄무늬.
+eb.palette.dist.stripes_d.desc=건축물을 가로지르는 대각 줄무늬.
+eb.palette.dist.brick.desc=벽돌 쌓기처럼 어긋난 줄.
+eb.palette.dist.herringbone.desc=헤링본 짜임의 V자 줄.
+eb.palette.dist.noise.desc=노이즈 기반의 자연스러운 블록 혼합.
+eb.palette.dist.cell.desc=보로노이 셀 영역, 각각 한 블록으로 채움.
+eb.palette.dist.marble.desc=건축물 전체에 흐르는 대리석 같은 결.
+eb.palette.dist.border.desc=가장자리에는 윤곽 블록, 안쪽에는 채움 블록.
+eb.palette.dist.wave.desc=건축물을 가로지르는 사인파 물결 무늬.
+eb.palette.dist.spiral.desc=건축물을 감싸는 나선 무늬.
+eb.palette.dist.dissolve.desc=면 전체에 흩어지는 디졸브 - 경계에서 블록이 무작위로 섞입니다.
+eb.palette.weight.amount=수량
+eb.palette.weight.slots=슬롯
+eb.palette.weight.unique=종류
+eb.palette.weight.amount.desc=모든 묶음의 총 블록 수로 가중합니다.
+eb.palette.weight.slots.desc=차 있는 인벤토리 슬롯마다 똑같이 셉니다.
+eb.palette.weight.unique.desc=블록 종류마다 같은 가중치로 셉니다.
+eb.palette.tile_pattern_on=패턴 반복 §a[켜짐]§r
+eb.palette.tile_pattern_off=패턴 반복 §c[꺼짐]§r
+eb.palette.btn.done=§c완료§r
+
+eb.settings.admin_custom_ui_toggle=§c관리자§r - 모두에게 기본 메뉴\n§7켜면 모든 플레이어가 게임의 기본 메뉴를 사용합니다
+eb.ui.title.mode_select=Effortless Building
+eb.ui.title.palette=블록 팔레트
+eb.ui.title.clipboard=클립보드
+eb.ui.title.modifiers=건축 수정자
+
+eb.preview.copy_corner1=§7복사 모드  §8·  §7우클릭으로 모서리 1 설정
+eb.preview.copy_corner1_sneak=§7복사 모드  §8·  §7우클릭으로 모서리 1 설정 §8(블록 안쪽)
+
+eb.settings.player.hints_enabled=상황별 힌트\n§7패널을 처음 열거나 건축 모드를 고를 때\n§7채팅에 한 줄 팁을 표시
+eb.hint.defer_shape=§a[EB] §r§7팁: §f조준할 때 보이는 상자는 §e모양 계산 미루기§f입니다. 움직임을 멈출 때까지 전체 모양 계산을 미뤄 게임이 부드럽게 돌아갑니다. 잠시 멈추면 실제 모양이 보이고, 설치는 항상 정확하게 됩니다. §7실시간 미리보기가 좋다면 §e설정 §8> §e플레이어 설정§7에서 끄세요.
+eb.hint.panel.mode_menu=§a[EB] §r§7팁: §f이것이 메뉴입니다. 왼쪽에서 모양을 고른 뒤 블록을 클릭해 건축하세요. 목록 맨 위의 §e메뉴§f에 팔레트, 수정자, 클립보드, 되돌리기, 설정, 도움말이 있습니다.
+eb.hint.panel.palette=§a[EB] §r§7팁: §f이것은 블록 팔레트입니다. 건축에 쓸 블록을 고릅니다 (기준 블록, 핫바 또는 인벤토리 전체).
+eb.hint.panel.modifiers=§a[EB] §r§7팁: §f수정자는 다음에 짓는 것을 반복합니다 - 미러, 배열 또는 방사. 모양을 놓기 전에 여기서 하나를 켜세요.
+eb.hint.panel.settings=§a[EB] §r§7팁: §f설정을 탭하면 바꿀 수 있고, 아래의 팁이 설명해 줍니다. §e빠른 설정§f은 한 번의 탭으로 기기에 맞게 모두 맞춥니다.
+eb.hint.panel.clipboard=§a[EB] §r§7팁: §f클립보드는 복사하거나 잘라낸 선택을 여러 개 저장해 두어 나중에 아무것이나 붙여넣을 수 있습니다.
+eb.hint.mode.air_build=§a[EB] §r§7팁: §f공중 건축은 바닥 없이 공중에 블록을 놓습니다. 블록을 놓을 곳을 조준하고 도구를 사용하세요.
+eb.hint.mode.line=§a[EB] §r§7팁: §f선: 첫 클릭이 시작점, 두 번째 클릭이 끝점입니다.
+eb.hint.mode.wall=§a[EB] §r§7팁: §f벽: 첫 클릭이 한 모서리, 두 번째 클릭이 높이와 너비입니다.
+eb.hint.mode.floor=§a[EB] §r§7팁: §f바닥: 첫 클릭이 한 모서리, 두 번째 클릭이 반대쪽 모서리입니다.
+eb.hint.mode.diagonal_line=§a[EB] §r§7팁: §f대각선: 선과 같지만 어떤 각도든 됩니다 - 첫 클릭 시작, 두 번째 클릭 끝.
+eb.hint.mode.diagonal_wall=§a[EB] §r§7팁: §f대각 벽: 첫 클릭이 밑변, 두 번째 클릭이 높이입니다.
+eb.hint.mode.slope_floor=§a[EB] §r§7팁: §f경사 바닥: 첫 클릭이 낮은 모서리, 두 번째 클릭이 높은 모서리입니다.
+eb.hint.mode.cube=§a[EB] §r§7팁: §f직육면체: 첫 클릭이 한 모서리, 두 번째 클릭이 반대쪽 모서리입니다.
+eb.hint.mode.circle=§a[EB] §r§7팁: §f원: 첫 클릭이 중심, 두 번째 클릭이 반지름입니다.
+eb.hint.mode.cylinder=§a[EB] §r§7팁: §f실린더: 첫 클릭이 중심, 두 번째가 반지름, 세 번째가 높이입니다.
+eb.hint.mode.sphere=§a[EB] §r§7팁: §f구: 첫 클릭이 중심, 두 번째 클릭이 반지름입니다.
+eb.hint.mode.semicircle=§a[EB] §r§7팁: §f반원: 첫 클릭이 중심, 두 번째 클릭이 반지름입니다.
+eb.hint.mode.cone=§a[EB] §r§7팁: §f원뿔: 밑면 중심, 밑면 반지름, 높이 순서입니다. 모드 옵션에서 축을 대각으로 바꾸면 꼭짓점을 자유롭게 향하게 하고 원뿔을 기울일 수 있습니다.
+eb.hint.mode.copy_paste=§a[EB] §r§7팁: §f복사/붙여넣기: 두 모서리를 골라 복사하거나 잘라낸 뒤 모드 옵션의 붙여넣기를 사용하세요.
+
+item.eb:tutorial_book.name=§b§lEffortless Building 튜토리얼
+
+eb.settings.player.destroy_preview_style=파괴 미리보기 스타일\n§7파괴하는 동안 표시되는 비주얼 스타일
+
+eb.preview.deferred_head=§f%1 §7영역
+eb.preview.exceeds_limit=§c[EB] §r선택 영역이 최대 블록 한도 §7(%1)§r를 넘습니다. 더 가까이 가거나 선택 크기를 줄이세요.
+
+eb.settings.player.defer_shape=모양 계산 미루기\n§7조준하는 동안 빠른 상자를 그리고\n§7실제 모양은 멈춰 있거나\n§7설치할 때만 계산합니다\n§e저사양: 적극 권장\n§e중사양: 권장
+eb.settings.player.flick_preview=움직일 때만 미리보기\n§7조준이 움직일 때만 미리보기를\n§7다시 그립니다 - 계속 표시하는 대신\n§7바뀔 때 깜빡입니다 (성능 절약)
+
+eb.onboarding.title=§l§6Effortless Building - 설정 마법사§r
+eb.onboarding.welcome.body=§f어떤 기기로 플레이하나요?\n\n§7미리보기와 블록 한도를 기기에 맞춥니다. §e설정 > 빠른 설정§7에서 언제든 바꿀 수 있습니다.
+eb.onboarding.btn.low=§e저사양 기기\n§8휴대폰 / 태블릿 / 오래된 PC
+eb.onboarding.btn.mid=§e중사양 기기\n§8대부분의 휴대폰, 노트북, 콘솔\n§e권장
+eb.onboarding.btn.high=§e고사양 기기\n§8게이밍 PC / 강력한 기기
+eb.onboarding.btn.skip=§8건너뛰기
+eb.onboarding.tier.low=저사양
+eb.onboarding.tier.mid=중사양
+eb.onboarding.tier.high=고사양
+eb.onboarding.tier_applied=§a[EB] §r%1 프리셋을 적용했습니다. §e설정§r에서 언제든 세부 조정할 수 있습니다.
+eb.onboarding.capped_by_admin=§e[EB] §r최대 블록 수가 서버 관리자 한도에 따라 §f%1§r로 제한되었습니다.
+eb.onboarding.complete=§a[EB] §r준비 완료! §6건축의 서§r를 들고 우클릭해 시작하세요. §6튜토리얼§r 책을 들면 가이드를, §a/guide§r 를 입력하면 실시간 튜토리얼을 볼 수 있습니다.
+
+eb.mode_select.btn.more_modes=§b+ 모드 더 보기§r
+eb.mode_select.btn.fewer_modes=§8- 모드 줄이기§r
+eb.mode_select.simple_on=§a[EB] §r§e입문§r 모드를 표시합니다. 메뉴의 §e+ 모드 더 보기§r로 전체 목록을 볼 수 있습니다.
+eb.mode_select.simple_off=§a[EB] §r§e모든§r 건축 모드를 표시합니다.
+eb.settings.player.simple_modes=간단한 모드 목록\n§7선, 벽, 바닥, 직육면체만 표시합니다.\n§7끄면 모든 건축 모드가 보입니다
+eb.settings.admin_mode_complexity=§c관리자§r - 건축 모드 목록\n§7플레이어가 고르게 하거나, 모두를\n§7간단한 목록 또는 전체 목록으로 고정
+eb.preview.step_of=단계 %1/%2
+eb.preview.idle_start=§7%1  §8·  §7단계 %2/%3  §8·  §f블록을 우클릭해 시작
+eb.preview.idle_need_item=§7%1  §8·  §e블록을 들면 건축을 시작합니다
+
+eb.bar.book_controls=§6§l건축의 서§r  §8|  §7우클릭 §f메뉴§r  §8·  §7길게 누르기 §f빠른 전환§r  §8·  §7좌클릭 §f팔레트\n§7웅크리기+우클릭 §f설정§r  §8·  §7웅크리기+좌클릭 §f수정자§r  §8·  §7두 번 웅크리기 §f모드 켜기/끄기
+eb.bar.book_controls_swapped=§6§l건축의 서§r  §8|  §7우클릭 §f팔레트§r  §8·  §7길게 누르기 §f빠른 전환§r  §8·  §7좌클릭 §f메뉴\n§7웅크리기+우클릭 §f설정§r  §8·  §7웅크리기+좌클릭 §f수정자§r  §8·  §7두 번 웅크리기 §f모드 켜기/끄기
+eb.bar.tutorial_book_controls=§6§l튜토리얼§r  §8|  §7우클릭 §f다음 페이지§r  §8·  §7책 때리기 §f뒤로§r  §8·  §7웅크리기 §f장 건너뛰기
+
+eb.palette.enabled_notice=§e[EB] §f블록 팔레트 §e켜짐§f - §6%1§f.\n§7이제 클릭한 블록만이 아니라 §e여러 종류의 블록을 섞어§7 건축합니다.\n§7끄려면: §e책 > 팔레트 > 소스 > 끄기§7.
+eb.palette.disabled_notice=§a[EB] §f블록 팔레트 §a꺼짐§f. 클릭한 블록만으로 건축합니다.
+eb.preview.palette_active=§6팔레트: %1 §8(%2)§r §7- 블록을 섞어 건축합니다
+
+eb.preview.copy_step2=§7단계 2/3  §8·  §f모서리 2를 우클릭
+eb.preview.copy_step3=§7단계 3/3  §8·  §f우클릭으로 높이 설정
+eb.clipboard.action.title=§l§6영역 선택됨§r
+eb.clipboard.action.body=§f이 영역으로 무엇을 할까요?\n\n§7§l복사§r§7는 블록을 그대로 둡니다.\n§7§l잘라내기§r§7는 블록을 없애고 들고 다닙니다.
+eb.clipboard.action.copy=§a§l복사§r\n§7원본을 그대로 둠
+eb.clipboard.action.cut=§6§l잘라내기§r\n§7블록을 없애고 가져감
+eb.clipboard.action.cancel=§8취소
+eb.clipboard.slot.auto=§b마지막 복사:§r §7%1§r
+eb.clipboard.slot.auto_active=§l§e마지막 복사:§r §e%1§r
+eb.clipboard.slot.auto_empty=§8마지막 복사: (비어 있음)§r
+eb.clipboard.slot.auto_empty_active=§f마지막 복사:§r §7(비어 있음)§r
+eb.clipboard.tip.auto_empty=아직 복사한 것이 없습니다. 무언가 복사하면 자동으로 여기에 들어옵니다.
+eb.clipboard.btn.save=§l복사본 저장§r
+eb.clipboard.btn.save_empty=§8복사본 저장§r
+eb.clipboard.saved=§a[EB] §7슬롯 %1에 저장했습니다. 이후의 복사로 덮어써지지 않습니다.
+eb.clipboard.save_full=§c[EB] §7저장 슬롯이 모두 찼습니다. 먼저 하나를 삭제하세요.
+eb.clipboard.loaded_auto=§a[EB] §7마지막 복사를 불러왔습니다 - 조준하고 상호작용하면 붙여넣습니다!
+eb.clipboard.cleared_auto=§7[EB] 마지막 복사를 지웠습니다.
+eb.clipboard.restored_cut=§6[EB] §f붙여넣기를 기다리는 §6잘라낸§f 선택이 아직 있습니다.\n§7§e클립보드§7를 열거나 조준하고 상호작용해 놓으세요.
+
+eb.set.custom_ui=사용자 지정 메뉴
+eb.join.welcome=§a[Effortless Building] §r§6건축의 서§r와 §6튜토리얼§r 책을 받았습니다.\n§7§f튜토리얼§7 책을 들면 모든 것을 배울 수 있습니다. §f건축의 서§7를 들고 우클릭해 시작하세요.
+eb.help.title=도움말
+eb.help.body=§f§6튜토리얼§f 책이 그림으로 모든 것을 설명합니다. 손에 들면 눈앞에서 펼쳐집니다.
+eb.help.btn.book=§l튜토리얼 책§r\n§8받거나 여는 법 보기
+eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
+eb.help.btn.setup=§l빠른 설정§r\n§8애드온을 기기에 맞추기
+eb.help.book_hold=§a[EB] §r§6튜토리얼§r 책을 이미 가지고 있습니다. 손에 들면 눈앞에서 펼쳐집니다.
+eb.help.book_given=§a[EB] §r§6튜토리얼§r 책을 드립니다. 손에 들면 눈앞에서 펼쳐집니다.
+eb.help.book_no_room=§c[EB] §r인벤토리에 튜토리얼 책을 넣을 자리가 없습니다.
+eb.mode_select.btn.help=§l도움말§r
+eb.mode_select.btn.tools=§l메뉴§r
+eb.mode_select.btn.tools_active=§l§e메뉴§r
+eb.mode_select.disabled_body=§7모양이 꺼져 있습니다§r
+eb.set.cat.setup=빠른 설정
+eb.set.cat.building=건축
+eb.set.cat.preview=미리보기
+eb.set.cat.controls=조작
+eb.set.cat.admin=관리자
+eb.set.cat.setup.desc=기기 종류를 고르세요. 한 번에 미리보기 모양과 품질, 블록 한도가 맞춰집니다.
+eb.set.cat.building.desc=모양을 놓는 방식: 속도, 크기 한도, 도달 거리, 파괴로 얻는 것.\n§7설정을 탭하면 바꿀 수 있습니다.
+eb.set.cat.preview.desc=놓기 전에 모양이 보이는 방식. 가벼운 스타일과 낮은 품질일수록 부드럽게 돌아갑니다.\n§7설정을 탭하면 바꿀 수 있습니다.
+eb.set.cat.controls.desc=책 클릭, 카메라 줌, 힌트, 메뉴의 모양.\n§7설정을 탭하면 바꿀 수 있습니다.
+eb.set.cat.admin.desc=§c관리자§r - 이 월드의 모든 플레이어에게 적용되는 규칙.\n§7설정을 탭하면 바꿀 수 있습니다.
+eb.set.simple_modes=입문 모양만
+eb.set.build_speed=건축 속도
+eb.set.max_blocks=최대 블록
+eb.set.replace_blocks=블록 교체
+eb.set.infinite_reach=무한 도달
+eb.set.inf_reach_dist=도달 거리
+eb.set.air_reach=공중 건축 도달 거리
+eb.set.destroy_drops=파괴 시 드롭
+eb.set.undo_limit=되돌리기 제한
+eb.set.preview_style=건축 미리보기
+eb.set.destroy_preview_style=파괴 미리보기
+eb.set.preview_quality=미리보기 품질
+eb.set.defer_shape=모양 미루기
+eb.set.flick_preview=움직일 때만 미리보기
+eb.set.swap_book_actions=책 클릭 바꾸기
+eb.set.selection_zoom=선택 줌
+eb.set.zoom_start=줌 시작
+eb.set.zoom_max=최대 줌
+eb.set.hints=힌트
+eb.set.menu_style=메뉴 스타일
+eb.set.menu_style.tip=메뉴 스타일\n§f플로팅§7: 메뉴가 눈앞 공중에 떠 있습니다\n§f기본§7: 게임의 기본 메뉴
+eb.set.admin_mode_list=모양 목록
+eb.set.admin_require_tag=태그 필요
+eb.set.admin_tag=태그
+eb.set.admin_allow_destroy=파괴 허용
+eb.set.admin_destroy_creative=크리에이티브에서만 파괴
+eb.set.admin_allow_inf_reach=무한 도달 허용
+eb.set.admin_reach_cap=도달 상한
+eb.set.admin_blocks_cap=블록 상한
+eb.set.admin_auto_give_book=접속 시 책 지급
+eb.set.admin_lock_quality=미리보기 품질 고정
+eb.set.admin_vanilla_menus=모두에게 기본 메뉴
+eb.set.book_language=책 언어
+eb.set.book_language.tip=책 언어\n§7튜토리얼 책과 플로팅 메뉴의\n§7힌트 및 레슨에 쓰이는 언어.
+eb.help.btn.language=§l책 언어§r\n§8English, Español, Deutsch, 日本語 ...
+entity.eb:language_picker.name=언어
+eb.palette.dist.dissolve_x=디졸브 X
+eb.palette.dist.dissolve_y=디졸브 Y
+eb.palette.dist.dissolve_z=디졸브 Z
+eb.palette.dist.dissolve_x.desc=X축을 따라 흩어지는 디졸브.
+eb.palette.dist.dissolve_y.desc=Y축을 따라 아래에서 위로 흩어지는 디졸브.
+eb.palette.dist.dissolve_z.desc=Z축을 따라 흩어지는 디졸브.
+eb.coach.started=§a[EB] §r코치가 왔습니다. 옆의 카드를 따라 한 단계씩 진행하세요. §eX§r를 누르면 치워집니다.
+eb.coach.stopped=§7[EB] 코치를 치웠습니다. §a/guide§7 또는 §e도움말§7로 멈춘 곳에서 다시 부를 수 있습니다.
+eb.coach.done=§a[EB] §r튜토리얼 완료! 사용한 모든 것이 메뉴에 있습니다. 즐거운 건축 되세요.
+entity.eb:panel_ring.name=빠른 전환
+eb.set.cursor=커서
+eb.set.cursor.tip=커서\n§7플로팅 메뉴에서 조준하는 곳을 보여 주는\n§7작은 화살표. 터치 화면에서 편리합니다.
+eb.cursor.turned_off=§a[EB] §r커서를 껐습니다. §e설정 > 조작 > 커서§r에서 다시 켤 수 있습니다.
+eb.set.panel_size=패널 크기
+eb.set.panel_size.tip=패널 크기\n§7플로팅 메뉴의 크기.\n§7휴대폰에서는 크게가 편합니다.
+eb.set.coach_side=코치 카드 위치
+eb.set.coach_side.tip=코치 카드 위치\n§7튜토리얼 카드가 어느 쪽에 걸리는지.
+eb.set.panel_sounds=메뉴 소리
+eb.set.panel_sounds.tip=메뉴 소리\n§7플로팅 메뉴의 클릭음과\n§7알림음의 크기.
+entity.eb:panel_wheel.name=빠른 전환 휠
+entity.eb:panel_mirror_config.name=미러
+entity.eb:panel_array_config.name=배열
+entity.eb:panel_radial_config.name=방사
+entity.eb:panel_menu.name=메뉴
+entity.eb:panel_palette.name=블록 팔레트
+entity.eb:panel_modifiers.name=건축 수정자
+entity.eb:panel_clipboard.name=클립보드
+entity.eb:panel_coach.name=코치
+entity.eb:panel_lessons.name=레슨
+entity.eb:coach_marker.name=표시
+entity.eb:panel_help.name=도움말
+entity.eb:panel_setup.name=빠른 설정
+entity.eb:panel_copycut.name=영역 선택됨
+entity.eb:panel_settings_setup.name=설정
+entity.eb:panel_settings_building.name=설정
+entity.eb:panel_settings_preview.name=설정
+entity.eb:panel_settings_controls.name=설정
+entity.eb:panel_settings_admin.name=설정
+eb.hint.panel.mode_menu_floating=§a[EB] §r§7팁: §f이것이 메뉴입니다. 모양을 바라보고 클릭해 고르세요. 옵션은 오른쪽, 도구는 아래에 있습니다. 핫바 슬롯을 바꾸거나 바깥을 클릭하면 닫힙니다.
+action.interact.eb_picker_select=선택
+entity.eb:guide_book.name=튜토리얼
+action.interact.eb_guide_turn=다음 페이지
+eb.set.book_language.tip=책 언어\n§7튜토리얼 책과 플로팅 메뉴의\n§7힌트 및 레슨에 쓰이는 언어.
+eb.help.btn.guided=§l실시간 튜토리얼§r\n§8한 단계씩 직접 해 보며 배우기

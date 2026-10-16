@@ -1,0 +1,144 @@
+{
+  "format_version": "1.20.20",
+  "sound_definitions": {
+    "eb.ui.hover": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/random/wood_click",
+          "volume": 0.3,
+          "pitch": 1.8,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.click": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/random/click",
+          "volume": 0.55,
+          "pitch": 1.0,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.on": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/block/copper_bulb/turn_on",
+          "volume": 0.7,
+          "pitch": 1.25,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.off": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/block/copper_bulb/turn_on",
+          "volume": 0.7,
+          "pitch": 0.8,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.open": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/item/book/open_flip1",
+          "volume": 1.4,
+          "pitch": 1.0,
+          "is3D": false
+        },
+        {
+          "name": "sounds/item/book/open_flip2",
+          "volume": 1.4,
+          "pitch": 1.0,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.close": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/item/book/close_put1",
+          "volume": 1.6,
+          "pitch": 1.0,
+          "is3D": false
+        },
+        {
+          "name": "sounds/item/book/close_put2",
+          "volume": 1.6,
+          "pitch": 1.0,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.swap": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/item/book/open_flip1",
+          "volume": 1.2,
+          "pitch": 1.35,
+          "is3D": false
+        },
+        {
+          "name": "sounds/item/book/open_flip2",
+          "volume": 1.2,
+          "pitch": 1.35,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.deny": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/note/bass",
+          "volume": 0.6,
+          "pitch": 0.8,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.done": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/random/orb",
+          "volume": 0.5,
+          "pitch": 1.3,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.lesson": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/random/levelup",
+          "volume": 0.6,
+          "pitch": 1.0,
+          "is3D": false
+        }
+      ]
+    },
+    "eb.ui.hint": {
+      "category": "ui",
+      "sounds": [
+        {
+          "name": "sounds/random/pop",
+          "volume": 0.7,
+          "pitch": 1.5,
+          "is3D": false
+        }
+      ]
+    }
+  }
+}

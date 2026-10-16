@@ -1,0 +1,1 @@
+{"format_version":"1.10.0","animation_controllers":{"controller.animation.eb_guide_book.sounds":{"initial_state":"idle","states":{"idle":{"transitions":[{"flipping":"v.flipping"}]},"flipping":{"animations":["flip_sound"],"transitions":[{"idle":"!v.flipping"}]}}}}}

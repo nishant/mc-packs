@@ -1,0 +1,44 @@
+{
+    "format_version": "1.10.0",
+    "minecraft:attachable": {
+        "description": {
+            "identifier": "eb:tutorial_book",
+            "materials": {
+                "default": "entity_alphatest",
+                "enchanted": "entity_alphatest_glint"
+            },
+            "textures": {
+                "default": "textures/entity/guide_book/cover",
+                "enchanted": "textures/misc/enchanted_item_glint"
+            },
+            "geometry": {
+                "default": "geometry.eb_tutorial_book_hand"
+            },
+            "animations": {
+                "hold_first": "animation.eb_tutorial_book_hand.hold_first",
+                "hold_third": "animation.eb_tutorial_book_hand.hold_third",
+                "fly": "animation.eb_tutorial_book_hand.fly"
+            },
+            "scripts": {
+                "pre_animation": [
+                    "v.age = (v.age ?? 0) + q.delta_time;",
+                    "v.lift = math.min(1, v.age / 0.25);",
+                    "v.fly = math.clamp((v.age - 0.25) / 0.35, 0, 1);",
+                    "v.fly = v.fly * v.fly;"
+                ],
+                "animate": [
+                    {
+                        "hold_first": "c.is_first_person"
+                    },
+                    {
+                        "hold_third": "!c.is_first_person"
+                    },
+                    "fly"
+                ]
+            },
+            "render_controllers": [
+                "controller.render.item_default"
+            ]
+        }
+    }
+}

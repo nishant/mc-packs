@@ -1,0 +1,498 @@
+eb.join.admin_granted=§6[Effortless Building] §rآپ کو §6ایڈمن رسائی§r دی گئی ہے کیونکہ آپ اس دنیا کے پہلے کھلاڑی ہیں۔\n§7ایڈمن آپشنز تک رسائی کے لیے ترتیبات کھولیں (جھکنا + دائیں کلک)۔
+eb.join.no_left_click=§e[Effortless Building] §rبائیں کلک (جھولنا) آپ کے Minecraft ورژن میں §cسپورٹ نہیں ہے§r۔\n§7بلاک پیلٹ کھولنے کے لیے §6بلڈنگ بک§7 پر بائیں کلک کی بجائے §f/palette§7 استعمال کریں۔
+eb.join.received_book=§a[Effortless Building] §rآپ کو ایک §6بلڈنگ بک§r ملی!\n§7بلڈ موڈز کھولنے کے لیے دائیں کلک §rکریں §7| §rترتیبات کے لیے جھکنا + دائیں کلک §rکریں۔\n§c§l❗ §r§cگم ہو گئی؟ §fٹائپ کریں §a/getbook §f(§e5 XP لیول§f لگیں گے)۔
+
+eb.getbook.already_have=§c[EB] آپ کے پاس پہلے ہی بلڈنگ بک موجود ہے۔
+eb.getbook.not_enough_xp=§c[EB] نیا کتاب حاصل کرنے کے لیے آپ کو کم از کم %1 XP لیول درکار ہیں۔ (آپ کے پاس %2 ہیں)
+
+eb.place.no_blocks=§c[EB] §rانوینٹری میں کوئی بلاک نہیں!
+eb.place.limited_blocks=§e[EB] §rصرف %1 بلاک ہیں – جو ہیں وہ رکھے جا رہے ہیں۔
+eb.place.no_palette_blocks=§c[EB] §rانوینٹری میں کوئی پیلٹ بلاک نہیں!
+eb.place.limited_palette_blocks=§e[EB] §rپیلٹ بلاک محدود ہیں - %1 رکھے جا رہے ہیں۔
+eb.place.undo_disabled=§e[EB] §7انڈو غیر فعال ہے۔
+eb.place.too_large_to_undo=§e[EB] §7انڈو کے لیے بہت بڑا (>%1 بلاک)۔
+
+eb.destroy.pickaxe_broke=§c[EB] §rآپ کا آلہ ٹوٹ گیا!
+eb.destroy.no_mode=§c[EB] §rڈسٹرائے موڈ Air Build کے ساتھ کام نہیں کرتا۔ پہلے ایک شکل موڈ منتخب کریں (لائن، دیوار، فرش، وغیرہ)۔
+eb.destroy.disabled=§c[EB] §rڈسٹرائے موڈ اس سرور پر §cغیر فعال§r ہے۔
+eb.destroy.creative_only=§c[EB] §rڈسٹرائے موڈ کے لیے اس سرور پر §eکریٹیو §rموڈ ضروری ہے۔
+eb.destroy.wrong_tool=§c[EB] §rآپ کا آلہ اس بلاک کو توڑ نہیں سکتا۔
+
+eb.tag.required=§c[EB] §rEffortless Building استعمال کرنے کے لیے آپ کو §e%1§r ٹیگ درکار ہے۔
+eb.getbook.no_tag=§c[EB] §r/getbook استعمال کرنے کے لیے آپ کو §e%1§r ٹیگ درکار ہے۔
+
+eb.undo.nothing=§c[EB] انڈو کرنے کے لیے کچھ نہیں۔
+eb.undo.done=§a[EB] انڈو §7- %1 بلاک بحال ہوئے۔
+eb.redo.nothing=§c[EB] ریڈو کرنے کے لیے کچھ نہیں۔
+eb.redo.done=§a[EB] ریڈو §7- %1 بلاک رکھے گئے۔
+
+eb.bar.xz_set_destroy=§c[EB] §fXZ حد مقرر §8- §7اونچائی §e§7اور §cتباہی §7مقرر کرنے کے لیے دائیں کلک کریں
+eb.bar.xz_set_place=§a[EB] §fXZ حد مقرر §8- §7اونچائی §e§7اور §aرکھنے §7کے لیے دائیں کلک کریں
+eb.bar.destroyed=%1 بلاک §cتباہ §8(§7%2§8)
+eb.bar.destroying=§c[EB] §rتباہ ہو رہا ہے... §e%1 §7باقی
+eb.bar.toggle_disabled=§7[EB] §rموڈ §8غیر فعال§7 ہے۔ بحال کرنے کے لیے دو بار جھکیں۔
+eb.bar.toggle_restored=§a[EB] §rموڈ بحال ہوا: §b§l%1
+eb.bar.placed=%1 بلاک §7رکھے گئے §8(§7%2§8)
+eb.bar.placed_one=§f1 بلاک §7رکھا گیا §8(§7air build§8)
+eb.bar.destroy_anchor_set=§c[EB] §rتباہی لنگر مقرر §7(%1, %2, %3)
+eb.bar.anchor_set=§a[EB] §rلنگر مقرر §7(%1, %2, %3)
+eb.bar.copy_corner1=§a[EB] §rکونہ 1 مقرر §7(%1, %2, %3) - کونہ 2 کے لیے دائیں کلک کریں
+eb.bar.copy_corner2=§a[EB] §rکونہ 2 مقرر §7(%1, %2, %3) - اونچائی منتخب کرنے کے لیے دائیں کلک کریں
+eb.bar.copy_done=§a[EB] §r§e%1§r بلاک کاپی ہوئے - چپکانے کے لیے دائیں کلک کریں
+eb.bar.cut_done=§6[EB] §r§e%1§r بلاک کٹ ہوئے - چپکانے کے لیے دائیں کلک کریں §7(سروائیول میں ایک بار)
+eb.bar.copy_empty=§c[EB] §rانتخاب میں کوئی بلاک نہیں ملا۔
+eb.bar.copy_cleared=§7[EB] کلپ بورڈ صاف ہوا - کونہ 1 مقرر کرنے کے لیے دائیں کلک کریں
+eb.bar.copy_cancelled=§7[EB] انتخاب منسوخ ہوا - کونہ 1 مقرر کرنے کے لیے دائیں کلک کریں
+eb.first_open=§b[EB] §fیہاں نئے ہیں؟ گائیڈ پڑھنے کے لیے §6ٹیوٹوریل§f بک ہاتھ میں لیں، یا مختصر تعارف کے لیے §a/guide§f ٹائپ کریں۔
+item.eb:building_book.name=§b§lبلڈنگ بک
+eb.bar.pasted=%1 بلاک §aچپکائے گئے
+eb.bar.paste_empty=§e[EB] §7چپکانے کے لیے کلپ بورڈ میں کچھ نہیں۔
+
+eb.queue.waiting=§e⏳ %1 بلاک انتظار میں §7- قریب چلیں\n§f(%2, %3, %4) §7چنکس لوڈ کرنے کے لیے
+eb.queue.waiting_one=§e⏳ 1 بلاک انتظار میں §7- قریب چلیں\n§f(%1, %2, %3) §7چنکس لوڈ کرنے کے لیے
+
+eb.preview.air_build=§7Air Build  §8·  §7رکھنے کے لیے دائیں کلک کریں §8(%1, %2, %3)
+eb.preview.no_anchor_destroy=§7%1 (لامحدود رسائی)  §8·  §7تباہی لنگر مقرر کرنے کے لیے دائیں کلک §8(%2, %3, %4)
+eb.preview.no_anchor_build=§7%1 (لامحدود رسائی)  §8·  §7لنگر مقرر کرنے کے لیے دائیں کلک §8(%2, %3, %4)
+eb.preview.hint_destroy=§7تباہ کرنے کے لیے دائیں کلک §cکریں
+eb.preview.hint_place=§7رکھنے کے لیے دائیں کلک §aکریں
+eb.preview.step2=§8[2/3] §7XZ حد §emقرر کرنے کے لیے دائیں کلک کریں
+eb.preview.step3_destroy=§8[3/3] §7اونچائی §e§7اور §cتباہی §7مقرر کرنے کے لیے دائیں کلک کریں
+eb.preview.step3_place=§8[3/3] §7اونچائی §e§7اور §aرکھنے §7کے لیے دائیں کلک کریں
+
+eb.dir.ew=مشرق-مغرب
+eb.dir.ns=شمال-جنوب
+eb.dir.ud=اوپر-نیچے
+eb.dir.single=-
+
+eb.mode.normal=نارمل
+eb.mode.normal_plus=نارمل+
+eb.mode.line=لائن
+eb.mode.wall=دیوار
+eb.mode.floor=فرش
+eb.mode.cube=مکعب
+eb.mode.circle=دائرہ
+eb.mode.cylinder=بیلن
+eb.mode.sphere=کرہ
+eb.mode.diagonal_line=ترچھی لائن
+eb.mode.diagonal_wall=ترچھی دیوار
+eb.mode.diagonal_floor=ترچھا فرش
+eb.mode.slope=ڈھلوان
+eb.mode.slope_floor=ڈھلوان فرش
+eb.mode.air_build=ہوا میں تعمیر
+eb.mode.semicircle=نیم دائرہ
+eb.mode.cone=مخروط
+eb.mode.destroy=تباہ کریں
+eb.mode.copy_paste=کاپی / پیسٹ
+
+eb.mode_select.body=ایک تعمیراتی موڈ چنیں۔\n§eاینکر§r لگانے کے لیے کسی بلاک پر دائیں کلک کریں، پھر رکھنے کی تصدیق کے لیے دوبارہ دائیں کلک کریں۔\n§8منتخب شکل میں §cتوڑنے §8کے لیے §7کدال §8پکڑ کر دائیں کلک کریں۔\n§8نئے ہیں؟ مکمل گائیڈ کے لیے §7/tutorial §8ٹائپ کریں۔
+eb.mode_select.mode_set=§a[EB] §rموڈ §e%1§r پر مقرر ہوا۔
+
+eb.mode_select.options_title=§l%1§r §8- آپشنز
+eb.mode_select.quick_access=§l§dفوری رسائی§r
+eb.mode_select.btn.clipboard=§lکلپ بورڈ§r
+eb.mode_select.btn.palette=§lپلیٹ§r
+eb.mode_select.btn.settings=§lترتیبات§r
+eb.mode_select.btn.undo=§lکالعدم§r
+eb.mode_select.btn.redo=§lاعادہ§r
+eb.mode_select.btn.done=§cمکمل§r
+eb.mode_select.btn.modifiers=§lموڈیفائرز§r
+
+eb.modifiers.btn.mirror=§lمرر§r  [%1]
+eb.modifiers.btn.array=§lایرے§r  [%1]
+eb.modifiers.btn.radial=§lریڈیل§r  [%1]
+eb.modifiers.btn.close=بند کریں
+
+eb.modifiers.mirror.body=Status: %1\nCenter: %2, %3, %4\nAxes: %5  %6  %7\nRadius: %8  Mode: %9
+eb.modifiers.mirror.btn.set_pos=مرکز میری جگہ پر رکھیں
+eb.modifiers.mirror.btn.configure=ترتیب دیں...
+eb.modifiers.mirror.config.title=مرر کی ترتیبات
+eb.modifiers.mirror.center_x=مرکز X
+eb.modifiers.mirror.center_y=مرکز Y
+eb.modifiers.mirror.center_z=مرکز Z
+eb.modifiers.mirror.radius=رداس (بلاک)
+eb.modifiers.mirror.pos_set=§e[EB] مرر کا مرکز %1, %2, %3 پر رکھا گیا
+
+eb.modifiers.array.body=حالت: %1\nآفسیٹ: %2, %3, %4\nتعداد: %5
+eb.modifiers.array.btn.configure=ترتیب دیں...
+eb.modifiers.array.config.title=ایرے کی ترتیبات
+eb.modifiers.array.offset_x=آفسیٹ X
+eb.modifiers.array.offset_y=آفسیٹ Y
+eb.modifiers.array.offset_z=آفسیٹ Z
+eb.modifiers.array.count=تعداد (نقلیں)
+
+eb.modifiers.radial.body=حالت: %1\nمرکز: %2, %3\nقاشیں: %4\nرداس: %5\nباری باری: %6
+eb.modifiers.radial.btn.set_pos=مرکز میری جگہ پر رکھیں
+eb.modifiers.radial.btn.configure=ترتیب دیں...
+eb.modifiers.radial.config.title=ریڈیل مرر کی ترتیبات
+eb.modifiers.radial.center_x=مرکز X
+eb.modifiers.radial.center_z=مرکز Z
+eb.modifiers.radial.slices=قاشیں
+eb.modifiers.radial.radius=رداس (بلاک)
+eb.modifiers.radial.alternate=باری باری (ہر دوسری قاش الٹیں)
+eb.modifiers.radial.pos_set=§e[EB] ریڈیل مرکز %1, %2, %3 پر رکھا گیا
+
+eb.settings.player.preview_style=پیش نظارہ کا انداز\n§7انتخاب کے دوران دکھایا جانے والا انداز
+eb.settings.player.replace_blocks=موجودہ بلاکس کو تبدیل کریں\n§7تعمیر کو موجودہ بلاکس کو تبدیل کرنے کی اجازت دیں
+eb.settings.player.build_speed=تعمیر کی رفتار\n§7بلاکس کتنی تیزی سے ترتیب وار رکھے جاتے ہیں
+eb.settings.player.destroy_drops=تباہی کے قطرے\n§7آیا ٹوٹے ہوئے بلاکس اپنے آئٹمز گراتے ہیں
+eb.settings.player.selection_zoom=انتخاب زوم\n§7जब انتخاب فعال ہو تو زوم ان کریں
+eb.settings.player.zoom_start=زوم شروع ہونے کا فاصلہ (بلاکس)\n§7فاصلہ جہاں سے زوم شروع ہوتا ہے
+eb.settings.player.zoom_max=مکمل زوم کا فاصلہ (بلاکس)\n§7وہ فاصلہ جہاں زیادہ سے زیادہ زوم پہنچ جاتا ہے
+eb.settings.player.air_reach=ہوا میں رسائی (بلاکس)\n§7کھلی ہوا میں تعمیر کے دوران زیادہ سے زیادہ فاصلہ
+eb.settings.player.infinite_reach=لامحدود رسائی\n§7عام رسائی کی دوری سے آگے تعمیر کریں
+eb.settings.player.inf_reach_dist=لامحدود رسائی کا فاصلہ (بلاکس)\n§7لامحدود رسائی کتنی دور تک پھیلی ہوئی ہے
+eb.settings.player.swap_book_actions=بک ایکشنز سویچ کریں\n§7دائیں کلک: پیلٹ، بائیں کلک: مینو
+eb.settings.player.undo_limit=کالعدم کرنے کی حد\n§7توڑنے کے بعد کالعدم کرنے کے لیے ٹریک کردہ زیادہ سے زیادہ بلاکس
+eb.settings.player.max_blocks=زیادہ سے زیادہ بلاکس (1 – %1)\n§7ایک ہی آپریشن میں زیادہ سے زیادہ بلاکس
+
+eb.settings.title=§l§6EB ترتیبات§r
+eb.settings.admin_require_tag=§cایڈمن§r - EB استعمال کے لیے ٹیگ درکار\n§7صرف ٹیگ والے کھلاڑی بنا سکتے ہیں
+eb.settings.admin_tag=§cایڈمن§r - درکار ٹیگ\n§7موجودہ: §e%1
+eb.settings.admin_allow_destroy=§cایڈمن§r - ڈسٹرائے موڈ کی اجازت دیں\n§7جب بند ہو، کوئی کھلاڑی ڈسٹرائے موڈ نہیں استعمال کر سکتا
+eb.settings.admin_destroy_creative=§cایڈمن§r - ڈسٹرائے موڈ: صرف کریٹیو\n§7جب آن ہو، ڈسٹرائے موڈ کے لیے کریٹیو موڈ ضروری ہے
+eb.settings.admin_allow_inf_reach=§cایڈمن§r - لامحدود رسائی کی اجازت دیں\n§7جب بند ہو، تمام کھلاڑیوں کے لیے لامحدود رسائی غیر فعال ہے
+eb.settings.admin_max_reach_cap=§cایڈمن§r - زیادہ سے زیادہ لامحدود رسائی فاصلہ\n§7موجودہ: §e%1  §70 = کوئی حد نہیں
+eb.settings.admin_max_blocks_cap=§cایڈمن§r - زیادہ سے زیادہ بلاکس کی حد (فی کھلاڑی)\n§7موجودہ: §e%1  §7آخری حد: §e%2
+eb.settings.admin_auto_give_book=§cایڈمن§r - خودکار بلڈنگ بک دینا\n§7جب آن ہو، کھلاڑیوں کو شامل ہونے پر بک ملتی ہے
+eb.settings.admin_config_tag=eb:config کو مطلوبہ ٹیگ تک محدود کریں\n§7اگر یہ آن ہے تو صرف مطلوبہ ٹیگ والے کھلاڑی ہی /config استعمال کر سکتے ہیں۔
+
+eb.config.restricted=§c[EB] /config محدود ہے۔ آپ کو §e%1§c ٹیگ کی ضرورت ہے۔
+eb.config.done=§cمکمل§r
+eb.config.quality.smooth.label=ہموار
+eb.config.quality.smooth.desc=ہر ٹک پر اپ ڈیٹ ہوتا ہے۔ بہترین ردعمل کے ساتھ ریشمی ہموار پیش نظارہ۔ تیز مشینوں کے لیے بہترین۔
+eb.config.quality.sharp.label=تیز
+eb.config.quality.sharp.desc=ہر 2 ٹک پر اپ ڈیٹ ہوتا ہے۔ کارکردگی میں تھوڑے فائدے کے ساتھ تقریباً ہموار جیسا۔
+eb.config.quality.crisp.label=واضح
+eb.config.quality.crisp.desc=ہر 3 ٹک پر اپ ڈیٹ ہوتا ہے۔ تیز گھماؤ پر معمولی تاخیر، عام تعمیر پر اچھا احساس۔
+eb.config.quality.balanced.label=متوازن
+eb.config.quality.balanced.desc=ہر 4 ٹک پر اپ ڈیٹ होता ہے۔ بصری معیار اور کارکردگی کے درمیان اچھا توازن۔
+eb.config.quality.responsive.label=قبول کرنے والا
+eb.config.quality.responsive.desc=ہر 5 ٹک پر اپ ڈیٹ ہوتا ہے۔ درمیانی درجے کے آلات یا بڑے پیش نظاروں کے لیے تجویز کردہ۔
+eb.config.quality.lite.label=ہلکا
+eb.config.quality.lite.desc=ہر 10 ٹک پر اپ ڈیٹ ہوتا ہے (~2× فی سیکنڈ)۔ واضح تاخیر لیکن نمایاں طور پر ہلکا۔
+eb.config.quality.minimal.label=کم سے کم
+eb.config.quality.minimal.desc=ہر 20 ٹک پر اپ ڈیٹ ہوتا ہے (1× فی سیکنڈ)۔ زیادہ سے زیادہ کارکردگی - پیش نظارہ سست لیکن مستحکم محسوس ہوتا ہے۔
+
+eb.clipboard.slot.empty=§8سلاٹ %1: (خالی)§r
+eb.clipboard.slot.empty_active=§fسلاٹ %1:§r §7(خالی)§r
+eb.clipboard.slot.filled=§fسلاٹ %1:§r §7%2§r
+eb.clipboard.slot.filled_active=§l§eسلاٹ %1:§r §e%2§r
+eb.clipboard.tip.dims=%1 چوڑا × %2 اونچا × %3 گہرا - %4 بلاکس
+eb.clipboard.tip.dims_named="%1" · %2 چوڑا × %3 اونچا × %4 گہرا - %5 بلاکس
+eb.clipboard.tip.empty=خالی سلاٹ - پہلے کچھ کاپی کریں!
+eb.clipboard.btn.paste=§lپیسٹ کریں§r
+eb.clipboard.btn.paste_empty=§8پیسٹ کریں§r
+eb.clipboard.btn.rename=§lنام تبدیل کریں§r
+eb.clipboard.btn.rename_empty=§8نام تبدیل کریں§r
+eb.clipboard.btn.delete=§lحذف کریں§r
+eb.clipboard.btn.delete_empty=§8حذف کریں§r
+eb.clipboard.btn.done=مکمل
+eb.clipboard.load_failed=§c[EB] SLOT لوڈ کرنے میں ناکامی۔
+eb.clipboard.loaded=§a[EB] §7سلاٹ %1 لوڈ ہو گیا - نشانہ بنائیں اور پیسٹ کرنے کے لیے کلک کریں!
+eb.clipboard.rename_title=کلپ بورڈ سلاٹ کا نام تبدیل کریں
+eb.clipboard.rename_label=نام
+eb.clipboard.rename_placeholder=نام درج کریں…
+eb.clipboard.cleared=§7[EB] SLOT %1 صاف کر دیا گیا۔
+
+eb.palette.bar=§a[EB] §fپیلٹ: %1 §8· §f%2 §8· §f%3
+
+§7After turning off, also select the §e"No Custom UI"§7 subpack in
+§7your RP and BP pack settings to fully remove the panels.
+
+§7§8Admins can force-disable Custom UI for all players - see Admin Settings.
+
+§eDefault §8(OFF)§e:
+§7  §eRight-click§7 → opens Mode Selector
+§7  §eLeft-click §8(swing)§7 → opens Block Palette
+
+§eSwapped §8(ON)§e:
+§7  §eRight-click§7 → opens Block Palette
+§7  §eLeft-click §8(swing)§7 → opens Mode Selector
+
+§7Enable this in §ePlayer Settings§7 if you prefer fast palette access on right-click.
+
+§7After disabling, also select the §e"No Custom UI"§7 subpack in both your
+§eRP§7 and §eBP§7 pack settings to fully remove the panels for everyone.
+
+eb.common.on=§aآن§r
+eb.common.off=§cآف§r
+
+eb.bar.bezier=§7بیزیئر: §f%1 نقطے لگے  §8·  §fجھکنا+کلک §7سے رکھیں  §8·  §7مزید کے لیے کلک کریں
+eb.bar.bezier_one=§7بیزیئر: §f1 نقطہ لگا  §8·  §fجھکنا+کلک §7سے رکھیں  §8·  §7مزید کے لیے کلک کریں
+
+eb.modifiers.overview_body=مرر: %1\nایرے:  %2\nریڈیل: %3
+eb.modifiers.btn.mirror_active=§l§eمرر§r  [%1]
+eb.modifiers.btn.array_active=§l§eایرے§r  [%1]
+eb.modifiers.btn.radial_active=§l§eریڈیل§r  [%1]
+eb.modifiers.mirror.btn.enable=§a■ مرر فعال کریں§r
+eb.modifiers.mirror.btn.disable=§c■ مرر غیر فعال کریں§r
+eb.modifiers.mirror.axis_x_toggle=محور X: %1
+eb.modifiers.mirror.axis_y_toggle=محور Y: %1
+eb.modifiers.mirror.axis_z_toggle=محور Z: %1
+eb.modifiers.mirror.odd_toggle=طاق آفسیٹ: %1
+eb.modifiers.array.btn.enable=§a■ ایرے فعال کریں§r
+eb.modifiers.array.btn.disable=§c■ ایرے غیر فعال کریں§r
+eb.modifiers.radial.btn.enable=§a■ ریڈیل فعال کریں§r
+eb.modifiers.radial.btn.disable=§c■ ریڈیل غیر فعال کریں§r
+
+eb.palette.cat.source=ماخذ
+eb.palette.cat.dist=تقسیم
+eb.palette.cat.weight=وزن
+eb.palette.source.disable=آف
+eb.palette.source.hotbar=ہاٹ بار سے ملائیں
+eb.palette.source.inventory=انوینٹری سے ملائیں
+eb.palette.source.hotbar_inventory=ہاٹ بار + انوینٹری سے ملائیں
+eb.palette.source.disable.desc=§aعام تعمیر۔§r صرف وہی بلاک استعمال ہوتا ہے جس پر آپ نے کلک کیا۔\n§7یہ طے شدہ ہے۔ ایک تعمیر میں کئی قسم کے بلاک ملانے کے لیے نیچے ملانے کا کوئی اختیار چنیں۔
+eb.palette.source.hotbar.desc=§eملانا آن ہے۔§r تعمیرات صرف کلک کیے گئے بلاک کے بجائے §eآپ کی ہاٹ بار کا ہر بلاک§r ملاتی ہیں۔\n§7ایک بلاک سے بنانے کے لیے ماخذ کو واپس §fآف§7 کریں۔
+eb.palette.source.inventory.desc=§eملانا آن ہے۔§r تعمیرات صرف کلک کیے گئے بلاک کے بجائے §eآپ کی انوینٹری کا ہر بلاک§r ملاتی ہیں۔\n§7ایک بلاک سے بنانے کے لیے ماخذ کو واپس §fآف§7 کریں۔
+eb.palette.source.hotbar_inventory.desc=§eملانا آن ہے۔§r تعمیرات صرف کلک کیے گئے بلاک کے بجائے §eہاٹ بار اور انوینٹری کا ہر بلاک§r ملاتی ہیں۔\n§7ایک بلاک سے بنانے کے لیے ماخذ کو واپس §fآف§7 کریں۔
+eb.palette.dist.random=بے ترتیب
+eb.palette.dist.spread=پھیلا ہوا
+eb.palette.dist.grad_x=گریڈینٹ X
+eb.palette.dist.grad_y=گریڈینٹ Y
+eb.palette.dist.grad_z=گریڈینٹ Z
+eb.palette.dist.grad_radial=ریڈیل گریڈینٹ
+eb.palette.dist.grad_diagonal=ترچھا گریڈینٹ
+eb.palette.dist.concentric=ہم مرکز
+eb.palette.dist.checker=شطرنجی
+eb.palette.dist.stripes_h=دھاریاں H
+eb.palette.dist.stripes_v=دھاریاں V
+eb.palette.dist.stripes_d=دھاریاں D
+eb.palette.dist.brick=اینٹ
+eb.palette.dist.herringbone=ہیرنگ بون
+eb.palette.dist.noise=نوائز آمیزش
+eb.palette.dist.cell=خانے / وورونوئی
+eb.palette.dist.marble=سنگ مرمر
+eb.palette.dist.border=کنارہ
+eb.palette.dist.wave=لہر
+eb.palette.dist.spiral=چکر دار
+eb.palette.best_tag= §a(بہترین)
+eb.palette.dist.dissolve=تحلیل
+eb.palette.dist.random.desc=ہر بلاک الگ سے بے ترتیب چنا جاتا ہے۔
+eb.palette.dist.spread.desc=بلاکس کو کم گچھوں کے ساتھ برابر پھیلاتا ہے۔
+eb.palette.dist.grad_x.desc=X محور کے ساتھ ہموار گریڈینٹ۔
+eb.palette.dist.grad_y.desc=Y محور کے ساتھ ہموار گریڈینٹ۔
+eb.palette.dist.grad_z.desc=Z محور کے ساتھ ہموار گریڈینٹ۔
+eb.palette.dist.grad_radial.desc=مرکز سے باہر پھیلتا ریڈیل گریڈینٹ۔
+eb.palette.dist.grad_diagonal.desc=ڈھانچے کے آر پار ترچھا گریڈینٹ۔
+eb.palette.dist.concentric.desc=مرکز سے پھیلتے ہم مرکز حلقے۔
+eb.palette.dist.checker.desc=شطرنجی نمونے میں باری باری بلاک۔
+eb.palette.dist.stripes_h.desc=ڈھانچے کے آر پار افقی دھاریاں۔
+eb.palette.dist.stripes_v.desc=ڈھانچے کی اونچائی کے ساتھ عمودی دھاریاں۔
+eb.palette.dist.stripes_d.desc=ڈھانچے کے آر پار ترچھی دھاریاں۔
+eb.palette.dist.brick.desc=اینٹوں کی چنائی جیسی سرکی ہوئی قطاریں۔
+eb.palette.dist.herringbone.desc=ہیرنگ بون بنائی میں V شکل کی قطاریں۔
+eb.palette.dist.noise.desc=نوائز پر مبنی بلاکس کی قدرتی آمیزش۔
+eb.palette.dist.cell.desc=وورونوئی خانے، ہر ایک میں ایک بلاک۔
+eb.palette.dist.marble.desc=تعمیر میں بہتی سنگ مرمر جیسی رگیں۔
+eb.palette.dist.border.desc=کناروں پر خاکے کا بلاک، اندر بھرائی کا بلاک۔
+eb.palette.dist.wave.desc=تعمیر کے آر پار سائن لہر کا نمونہ۔
+eb.palette.dist.spiral.desc=ڈھانچے کے گرد لپٹتا چکر دار نمونہ۔
+eb.palette.dist.dissolve.desc=سطح پر بکھری تحلیل - تبدیلی کی جگہ بلاک بے ترتیب ملتے ہیں۔
+eb.palette.weight.amount=مقدار
+eb.palette.weight.slots=سلاٹس
+eb.palette.weight.unique=منفرد
+eb.palette.weight.amount.desc=تمام ڈھیروں کے کل بلاکس کے حساب سے وزن۔
+eb.palette.weight.slots.desc=انوینٹری کا ہر بھرا سلاٹ برابر گنا جاتا ہے۔
+eb.palette.weight.unique.desc=ہر قسم کا بلاک برابر وزن سے گنا جاتا ہے۔
+eb.palette.tile_pattern_on=نمونہ دہرائیں §a[آن]§r
+eb.palette.tile_pattern_off=نمونہ دہرائیں §c[آف]§r
+eb.palette.btn.done=§cمکمل§r
+
+eb.settings.admin_custom_ui_toggle=§cایڈمن§r - سب کے لیے سادہ مینو\n§7آن ہونے پر ہر کھلاڑی کو گیم کے معیاری مینو ملتے ہیں
+eb.ui.title.mode_select=Effortless Building
+eb.ui.title.palette=بلاک پیلٹ
+eb.ui.title.clipboard=کلپ بورڈ
+eb.ui.title.modifiers=تعمیراتی موڈیفائرز
+
+eb.preview.copy_corner1=§7کاپی موڈ  §8·  §7کونا 1 لگانے کے لیے دائیں کلک
+eb.preview.copy_corner1_sneak=§7کاپی موڈ  §8·  §7کونا 1 لگانے کے لیے دائیں کلک §8(بلاک کے اندر)
+
+eb.settings.player.hints_enabled=موقع کے اشارے\n§7پہلی بار پینل کھولنے یا تعمیراتی موڈ چننے پر\n§7چیٹ میں ایک سطر کا مشورہ
+eb.hint.defer_shape=§a[EB] §r§7مشورہ: §fنشانہ لیتے وقت دکھنے والا ڈبہ §eشکل کا حساب مؤخر کریں§f ہے - پوری شکل تب نکلتی ہے جب آپ ہلنا بند کرتے ہیں، جس سے گیم رواں رہتی ہے۔ اصل شکل دیکھنے کے لیے لمحہ بھر رکیں؛ رکھنے پر ہمیشہ درست بنتی ہے۔ §7لائیو پیش نظارہ چاہیے؟ اسے §eترتیبات §8> §eکھلاڑی کی ترتیبات§7 میں بند کریں۔
+eb.hint.panel.mode_menu=§a[EB] §r§7مشورہ: §fیہ مینو ہے - بائیں طرف ایک شکل چنیں، پھر بنانے کے لیے بلاکس پر کلک کریں۔ فہرست کے اوپر §eمینو§f میں پیلٹ، موڈیفائرز، کلپ بورڈ، کالعدم، ترتیبات اور مدد ہیں۔
+eb.hint.panel.palette=§a[EB] §r§7مشورہ: §fیہ بلاک پیلٹ ہے - چنیں کہ بناتے وقت کون سے بلاک استعمال ہوں (اینکر بلاک، ہاٹ بار یا پوری انوینٹری)۔
+eb.hint.panel.modifiers=§a[EB] §r§7مشورہ: §fموڈیفائرز آپ کی اگلی تعمیر کو دہراتے ہیں - مرر، ایرے یا ریڈیل۔ شکل رکھنے سے پہلے یہاں ایک فعال کریں۔
+eb.hint.panel.settings=§a[EB] §r§7مشورہ: §fترتیب بدلنے کے لیے اس پر ٹیپ کریں؛ نیچے کا مشورہ اسے سمجھاتا ہے۔ §eفوری سیٹ اپ§f ایک ٹیپ میں سب کچھ آپ کی ڈیوائس کے مطابق کر دیتا ہے۔
+eb.hint.panel.clipboard=§a[EB] §r§7مشورہ: §fکلپ بورڈ کئی کاپی/کٹ انتخاب رکھتا ہے تاکہ آپ بعد میں کوئی بھی پیسٹ کر سکیں۔
+eb.hint.mode.air_build=§a[EB] §r§7مشورہ: §fہوا میں تعمیر بغیر سطح کے ہوا میں بلاک رکھتی ہے - جہاں بلاک چاہیے وہاں نشانہ لیں اور آلہ استعمال کریں۔
+eb.hint.mode.line=§a[EB] §r§7مشورہ: §fلائن: پہلا کلک آغاز طے کرتا ہے، دوسرا کلک اختتام۔
+eb.hint.mode.wall=§a[EB] §r§7مشورہ: §fدیوار: پہلا کلک ایک کونا طے کرتا ہے، دوسرا اونچائی اور چوڑائی۔
+eb.hint.mode.floor=§a[EB] §r§7مشورہ: §fفرش: پہلا کلک ایک کونا طے کرتا ہے، دوسرا سامنے والا کونا۔
+eb.hint.mode.diagonal_line=§a[EB] §r§7مشورہ: §fترچھی لائن: لائن کی طرح، مگر کسی بھی زاویے پر - پہلا کلک آغاز، دوسرا کلک اختتام۔
+eb.hint.mode.diagonal_wall=§a[EB] §r§7مشورہ: §fترچھی دیوار: پہلا کلک بنیادی خط طے کرتا ہے، دوسرا اونچائی۔
+eb.hint.mode.slope_floor=§a[EB] §r§7مشورہ: §fڈھلوان فرش: پہلا کلک نچلا کونا طے کرتا ہے، دوسرا اونچا کونا۔
+eb.hint.mode.cube=§a[EB] §r§7مشورہ: §fمکعب: پہلا کلک ایک کونا طے کرتا ہے، دوسرا سامنے والا کونا۔
+eb.hint.mode.circle=§a[EB] §r§7مشورہ: §fدائرہ: پہلا کلک مرکز طے کرتا ہے، دوسرا رداس۔
+eb.hint.mode.cylinder=§a[EB] §r§7مشورہ: §fبیلن: پہلا کلک مرکز، دوسرا رداس، تیسرا اونچائی طے کرتا ہے۔
+eb.hint.mode.sphere=§a[EB] §r§7مشورہ: §fکرہ: پہلا کلک مرکز طے کرتا ہے، دوسرا رداس۔
+eb.hint.mode.semicircle=§a[EB] §r§7مشورہ: §fنیم دائرہ: پہلا کلک مرکز طے کرتا ہے، دوسرا رداس۔
+eb.hint.mode.cone=§a[EB] §r§7مشورہ: §fمخروط: بنیاد کا مرکز، پھر بنیاد کا رداس، پھر اونچائی۔ نوک کو آزادانہ رخ دینے اور مخروط جھکانے کے لیے موڈ کے اختیارات میں محور کو ترچھا کریں۔
+eb.hint.mode.copy_paste=§a[EB] §r§7مشورہ: §fکاپی/پیسٹ: کاپی یا کٹ کے لیے دو کونے چنیں، پھر موڈ کے اختیارات سے پیسٹ کریں۔
+
+item.eb:tutorial_book.name=§b§lEffortless Building ٹیوٹوریل
+
+eb.settings.player.destroy_preview_style=توڑنے کے پیش نظارہ کا انداز\n§7توڑتے وقت دکھایا جانے والا انداز
+
+eb.preview.deferred_head=§f%1 §7علاقہ
+eb.preview.exceeds_limit=§c[EB] §rانتخاب آپ کی زیادہ سے زیادہ بلاک حد §7(%1)§r سے بڑا ہے۔ قریب جائیں یا انتخاب چھوٹا کریں۔
+
+eb.settings.player.defer_shape=شکل کا حساب مؤخر کریں\n§7نشانہ لیتے وقت ایک تیز ڈبہ بناتا ہے اور\n§7اصل شکل صرف تب نکالتا ہے جب\n§7آپ رکتے ہیں یا رکھتے ہیں\n§eکمزور ڈیوائس: بہت تجویز کردہ\n§eدرمیانی ڈیوائس: تجویز کردہ
+eb.settings.player.flick_preview=حرکت پر پیش نظارہ\n§7پیش نظارہ صرف تب دوبارہ بنتا ہے جب آپ کا نشانہ\n§7ہلتا ہے - مسلسل دکھنے کے بجائے\n§7تبدیلی پر چمکتا ہے (کارکردگی بچاتا ہے)
+
+eb.onboarding.title=§l§6Effortless Building - سیٹ اپ§r
+eb.onboarding.welcome.body=§fآپ کس ڈیوائس پر کھیل رہے ہیں؟\n\n§7اس سے پیش نظارہ اور بلاک کی حد آپ کی ڈیوائس کے مطابق ہو جاتی ہے۔ آپ اسے کسی بھی وقت §eترتیبات > فوری سیٹ اپ§7 میں بدل سکتے ہیں۔
+eb.onboarding.btn.low=§eکمزور ڈیوائس\n§8فون / ٹیبلٹ / پرانا PC
+eb.onboarding.btn.mid=§eدرمیانی ڈیوائس\n§8زیادہ تر فون، لیپ ٹاپ، کنسول\n§eتجویز کردہ
+eb.onboarding.btn.high=§eطاقتور ڈیوائس\n§8گیمنگ PC / طاقتور ڈیوائس
+eb.onboarding.btn.skip=§8چھوڑیں
+eb.onboarding.tier.low=کمزور
+eb.onboarding.tier.mid=درمیانی
+eb.onboarding.tier.high=طاقتور
+eb.onboarding.tier_applied=§a[EB] §r%1 پری سیٹ لاگو ہوا۔ آپ کسی بھی وقت §eترتیبات§r میں سب کچھ باریکی سے بدل سکتے ہیں۔
+eb.onboarding.capped_by_admin=§e[EB] §rسرور کی ایڈمن حد کی وجہ سے آپ کے زیادہ سے زیادہ بلاک §f%1§r تک محدود کر دیے گئے۔
+eb.onboarding.complete=§a[EB] §rسب تیار! شروع کرنے کے لیے §6بلڈنگ بک§r سے دائیں کلک کریں۔ گائیڈ کے لیے §6ٹیوٹوریل§r بک ہاتھ میں لیں، یا لائیو ٹیوٹوریل کے لیے §a/guide§r ٹائپ کریں۔
+
+eb.mode_select.btn.more_modes=§b+ مزید موڈز§r
+eb.mode_select.btn.fewer_modes=§8- کم موڈز§r
+eb.mode_select.simple_on=§a[EB] §r§eابتدائی§r موڈز دکھائے جا رہے ہیں۔ پوری فہرست کے لیے مینو میں §e+ مزید موڈز§r استعمال کریں۔
+eb.mode_select.simple_off=§a[EB] §r§eتمام§r تعمیراتی موڈز دکھائے جا رہے ہیں۔
+eb.settings.player.simple_modes=سادہ موڈ فہرست\n§7صرف لائن، دیوار، فرش اور مکعب دکھائیں۔\n§7ہر تعمیراتی موڈ دیکھنے کے لیے بند کریں
+eb.settings.admin_mode_complexity=§cایڈمن§r - تعمیراتی موڈ فہرست\n§7کھلاڑیوں کو چننے دیں، یا سب کو\n§7سادہ یا پوری فہرست پر رکھیں
+eb.preview.step_of=مرحلہ %1/%2
+eb.preview.idle_start=§7%1  §8·  §7مرحلہ %2/%3  §8·  §fشروع کرنے کے لیے کسی بلاک پر دائیں کلک کریں
+eb.preview.idle_need_item=§7%1  §8·  §eبنانا شروع کرنے کے لیے ایک بلاک ہاتھ میں لیں
+
+eb.bar.book_controls=§6§lبلڈنگ بک§r  §8|  §7دائیں کلک §fمینو§r  §8·  §7دبائے رکھیں §fفوری تبدیلی§r  §8·  §7بائیں کلک §fپیلٹ\n§7جھکنا+دائیں §fترتیبات§r  §8·  §7جھکنا+بائیں §fموڈیفائرز§r  §8·  §7دو بار جھکیں §fموڈ آن/آف
+eb.bar.book_controls_swapped=§6§lبلڈنگ بک§r  §8|  §7دائیں کلک §fپیلٹ§r  §8·  §7دبائے رکھیں §fفوری تبدیلی§r  §8·  §7بائیں کلک §fمینو\n§7جھکنا+دائیں §fترتیبات§r  §8·  §7جھکنا+بائیں §fموڈیفائرز§r  §8·  §7دو بار جھکیں §fموڈ آن/آف
+eb.bar.tutorial_book_controls=§6§lٹیوٹوریل§r  §8|  §7دائیں کلک §fاگلا صفحہ§r  §8·  §7بک کو ماریں §fپیچھے§r  §8·  §7جھکنا §fایک باب آگے
+
+eb.palette.enabled_notice=§e[EB] §fبلاک پیلٹ §eآن§f - §6%1§f۔\n§7اب آپ کی تعمیرات صرف کلک کیے گئے بلاک کے بجائے §eکئی قسم کے بلاک ملائیں گی§7۔\n§7بند کرنے کے لیے: §eبک > پیلٹ > ماخذ > آف§7۔
+eb.palette.disabled_notice=§a[EB] §fبلاک پیلٹ §aآف§f۔ تعمیرات صرف وہی بلاک استعمال کرتی ہیں جس پر آپ کلک کرتے ہیں۔
+eb.preview.palette_active=§6پیلٹ: %1 §8(%2)§r §7- تعمیرات بلاک ملائیں گی
+
+eb.preview.copy_step2=§7مرحلہ 2/3  §8·  §fکونا 2 پر دائیں کلک کریں
+eb.preview.copy_step3=§7مرحلہ 3/3  §8·  §fاونچائی طے کرنے کے لیے دائیں کلک کریں
+eb.clipboard.action.title=§l§6علاقہ منتخب ہوا§r
+eb.clipboard.action.body=§fاس کے ساتھ کیا کرنا ہے؟\n\n§7§lکاپی§r§7 بلاکس کو وہیں چھوڑتی ہے۔\n§7§lکٹ§r§7 انہیں ہٹا کر آپ کے ساتھ لے چلتا ہے۔
+eb.clipboard.action.copy=§a§lکاپی§r\n§7اصل کو جگہ پر رہنے دیں
+eb.clipboard.action.cut=§6§lکٹ§r\n§7بلاک ہٹائیں اور ساتھ لے جائیں
+eb.clipboard.action.cancel=§8منسوخ
+eb.clipboard.slot.auto=§bآخری کاپی:§r §7%1§r
+eb.clipboard.slot.auto_active=§l§eآخری کاپی:§r §e%1§r
+eb.clipboard.slot.auto_empty=§8آخری کاپی: (خالی)§r
+eb.clipboard.slot.auto_empty_active=§fآخری کاپی:§r §7(خالی)§r
+eb.clipboard.tip.auto_empty=ابھی کچھ کاپی نہیں ہوا۔ کچھ کاپی کریں اور وہ خود یہاں آ جائے گا۔
+eb.clipboard.btn.save=§lکاپی محفوظ کریں§r
+eb.clipboard.btn.save_empty=§8کاپی محفوظ کریں§r
+eb.clipboard.saved=§a[EB] §7سلاٹ %1 میں محفوظ ہوا۔ آئندہ کاپیاں اسے نہیں بدلیں گی۔
+eb.clipboard.save_full=§c[EB] §7محفوظ کرنے کے تمام سلاٹ بھرے ہیں۔ پہلے ایک حذف کریں۔
+eb.clipboard.loaded_auto=§a[EB] §7آخری کاپی لوڈ ہوئی - پیسٹ کرنے کے لیے نشانہ لے کر تعامل کریں!
+eb.clipboard.cleared_auto=§7[EB] آخری کاپی صاف کر دی گئی۔
+eb.clipboard.restored_cut=§6[EB] §fآپ کے پاس اب بھی ایک §6کٹ§f انتخاب پیسٹ ہونے کا منتظر ہے۔\n§7§eکلپ بورڈ§7 کھولیں یا رکھنے کے لیے نشانہ لے کر تعامل کریں۔
+
+eb.set.custom_ui=حسب ضرورت مینو
+eb.join.welcome=§a[Effortless Building] §rآپ کو §6بلڈنگ بک§r اور §6ٹیوٹوریل§r بک ملی ہیں۔\n§7سب کچھ سیکھنے کے لیے §fٹیوٹوریل§7 بک ہاتھ میں لیں۔ شروع کرنے کے لیے §fبلڈنگ بک§7 سے دائیں کلک کریں۔
+eb.help.title=مدد
+eb.help.body=§f§6ٹیوٹوریل§f بک سب کچھ تصویروں سے سمجھاتی ہے۔ اسے ہاتھ میں لیں اور یہ آپ کے سامنے کھل جاتی ہے۔
+eb.help.btn.book=§lٹیوٹوریل بک§r\n§8اسے حاصل کریں، یا دیکھیں کیسے کھلتی ہے
+eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
+eb.help.btn.setup=§lفوری سیٹ اپ§r\n§8ایڈ آن کو اپنی ڈیوائس کے مطابق کریں
+eb.help.book_hold=§a[EB] §rآپ کے پاس §6ٹیوٹوریل§r بک پہلے سے ہے۔ اسے ہاتھ میں لیں اور یہ آپ کے سامنے کھل جاتی ہے۔
+eb.help.book_given=§a[EB] §rیہ رہی §6ٹیوٹوریل§r بک۔ اسے ہاتھ میں لیں اور یہ آپ کے سامنے کھل جاتی ہے۔
+eb.help.book_no_room=§c[EB] §rٹیوٹوریل بک کے لیے انوینٹری میں جگہ نہیں ہے۔
+eb.mode_select.btn.help=§lمدد§r
+eb.mode_select.btn.tools=§lمینو§r
+eb.mode_select.btn.tools_active=§l§eمینو§r
+eb.mode_select.disabled_body=§7شکلیں بند ہیں§r
+eb.set.cat.setup=فوری سیٹ اپ
+eb.set.cat.building=تعمیر
+eb.set.cat.preview=پیش نظارہ
+eb.set.cat.controls=کنٹرولز
+eb.set.cat.admin=ایڈمن
+eb.set.cat.setup.desc=اپنے آلے کی قسم چنیں۔ ایک ٹیپ پیش نظارہ اور بلاک حد درست کر دیتا ہے۔
+eb.set.cat.building.desc=شکلیں کیسے رکھی جاتی ہیں: رفتار، سائز کی حد، رسائی اور توڑنے پر کیا ملتا ہے۔\n§7ترتیب بدلنے کے لیے اس پر ٹیپ کریں۔
+eb.set.cat.preview.desc=رکھنے سے پہلے شکل کیسی دکھتی ہے۔ ہلکے انداز اور کم معیار زیادہ رواں چلتے ہیں۔\n§7ترتیب بدلنے کے لیے اس پر ٹیپ کریں۔
+eb.set.cat.controls.desc=بک کے کلک، کیمرہ زوم، اشارے اور مینو کی شکل۔\n§7ترتیب بدلنے کے لیے اس پر ٹیپ کریں۔
+eb.set.cat.admin.desc=§cایڈمن§r - اس دنیا کے ہر کھلاڑی کے لیے اصول۔\n§7ترتیب بدلنے کے لیے اس پر ٹیپ کریں۔
+eb.set.simple_modes=صرف ابتدائی شکلیں
+eb.set.build_speed=تعمیر کی رفتار
+eb.set.max_blocks=زیادہ سے زیادہ بلاکس
+eb.set.replace_blocks=بلاک بدلیں
+eb.set.infinite_reach=لامحدود رسائی
+eb.set.inf_reach_dist=رسائی کا فاصلہ
+eb.set.air_reach=ہوا میں تعمیر کی رسائی
+eb.set.destroy_drops=توڑنے پر ڈراپس
+eb.set.undo_limit=کالعدم کی حد
+eb.set.preview_style=تعمیر کا پیش نظارہ
+eb.set.destroy_preview_style=توڑنے کا پیش نظارہ
+eb.set.preview_quality=پیش نظارہ کا معیار
+eb.set.defer_shape=شکل مؤخر کریں
+eb.set.flick_preview=حرکت پر پیش نظارہ
+eb.set.swap_book_actions=بک کے کلک بدلیں
+eb.set.selection_zoom=انتخاب زوم
+eb.set.zoom_start=زوم کب شروع ہو
+eb.set.zoom_max=پورا زوم کب ہو
+eb.set.hints=اشارے
+eb.set.menu_style=مینو کا انداز
+eb.set.menu_style.tip=مینو کا انداز\n§fتیرتے§7: مینو آپ کے سامنے ہوا میں لٹکتے ہیں\n§fسادہ§7: گیم کے معیاری مینو
+eb.set.admin_mode_list=شکلوں کی فہرست
+eb.set.admin_require_tag=ٹیگ لازمی
+eb.set.admin_tag=ٹیگ
+eb.set.admin_allow_destroy=توڑنے کی اجازت
+eb.set.admin_destroy_creative=توڑنا صرف کریئیٹو میں
+eb.set.admin_allow_inf_reach=لامحدود رسائی کی اجازت
+eb.set.admin_reach_cap=رسائی کی حد
+eb.set.admin_blocks_cap=بلاکس کی حد
+eb.set.admin_auto_give_book=شامل ہونے پر بکس دیں
+eb.set.admin_lock_quality=پیش نظارہ کا معیار مقفل کریں
+eb.set.admin_vanilla_menus=سب کے لیے سادہ مینو
+eb.set.book_language=بک کی زبان
+eb.set.book_language.tip=بک کی زبان\n§7ٹیوٹوریل بک کی اور تیرتے مینو کے\n§7اشاروں اور اسباق کی زبان۔
+eb.help.btn.language=§lبک کی زبان§r\n§8English, Español, Deutsch, 日本語 ...
+entity.eb:language_picker.name=زبان
+eb.palette.dist.dissolve_x=تحلیل X
+eb.palette.dist.dissolve_y=تحلیل Y
+eb.palette.dist.dissolve_z=تحلیل Z
+eb.palette.dist.dissolve_x.desc=X محور کے ساتھ بکھری تحلیل۔
+eb.palette.dist.dissolve_y.desc=Y محور کے ساتھ بکھری تحلیل، نیچے سے اوپر۔
+eb.palette.dist.dissolve_z.desc=Z محور کے ساتھ بکھری تحلیل۔
+eb.coach.started=§a[EB] §rآپ کا کوچ آ گیا ہے۔ اپنے پاس والے کارڈ پر چلیں، ایک ایک قدم۔ اس کا §eX§r اسے ہٹا دیتا ہے۔
+eb.coach.stopped=§7[EB] کوچ ہٹا دیا گیا۔ §a/guide§7 یا §eمدد§7 اسے وہیں سے واپس لاتی ہے جہاں آپ رکے تھے۔
+eb.coach.done=§a[EB] §rٹیوٹوریل مکمل! آپ نے جو کچھ استعمال کیا وہ سب مینو میں ہے۔ تعمیر کا لطف اٹھائیں۔
+entity.eb:panel_ring.name=فوری تبدیلی
+eb.set.cursor=کرسر
+eb.set.cursor.tip=کرسر\n§7ایک چھوٹا تیر جو دکھاتا ہے کہ آپ تیرتے مینو پر\n§7کہاں نشانہ لے رہے ہیں۔ ٹچ اسکرین پر کارآمد۔
+eb.cursor.turned_off=§a[EB] §rکرسر آف۔ اسے §eترتیبات > کنٹرولز > کرسر§r میں دوبارہ آن کریں۔
+eb.set.panel_size=پینل کا سائز
+eb.set.panel_size.tip=پینل کا سائز\n§7تیرتے مینو کتنے بڑے ہیں۔\n§7فون پر بڑا آسان رہتا ہے۔
+eb.set.coach_side=کوچ کارڈ کی طرف
+eb.set.coach_side.tip=کوچ کارڈ کی طرف\n§7ٹیوٹوریل کا کارڈ آپ کی کس طرف لٹکتا ہے۔
+eb.set.panel_sounds=مینو کی آوازیں
+eb.set.panel_sounds.tip=مینو کی آوازیں\n§7تیرتے مینو کے کلک اور گھنٹیاں\n§7کتنی اونچی ہیں۔
+entity.eb:panel_wheel.name=فوری تبدیلی کا پہیہ
+entity.eb:panel_mirror_config.name=مرر
+entity.eb:panel_array_config.name=ایرے
+entity.eb:panel_radial_config.name=ریڈیل
+entity.eb:panel_menu.name=مینو
+entity.eb:panel_palette.name=بلاک پیلٹ
+entity.eb:panel_modifiers.name=تعمیراتی موڈیفائرز
+entity.eb:panel_clipboard.name=کلپ بورڈ
+entity.eb:panel_coach.name=کوچ
+entity.eb:panel_lessons.name=اسباق
+entity.eb:coach_marker.name=نشان
+entity.eb:panel_help.name=مدد
+entity.eb:panel_setup.name=فوری سیٹ اپ
+entity.eb:panel_copycut.name=علاقہ منتخب ہوا
+entity.eb:panel_settings_setup.name=ترتیبات
+entity.eb:panel_settings_building.name=ترتیبات
+entity.eb:panel_settings_preview.name=ترتیبات
+entity.eb:panel_settings_controls.name=ترتیبات
+entity.eb:panel_settings_admin.name=ترتیبات
+eb.hint.panel.mode_menu_floating=§a[EB] §r§7مشورہ: §fیہ مینو ہے - کسی شکل کو دیکھیں اور چننے کے لیے کلک کریں۔ اس کے اختیارات دائیں طرف ہیں، آلات نیچے۔ بند کرنے کے لیے ہاٹ بار سلاٹ بدلیں یا اس سے باہر کلک کریں۔
+action.interact.eb_picker_select=منتخب کریں
+entity.eb:guide_book.name=ٹیوٹوریل
+action.interact.eb_guide_turn=اگلا صفحہ
+eb.set.book_language.tip=بک کی زبان\n§7ٹیوٹوریل بک کی اور تیرتے مینو کے\n§7اشاروں اور اسباق کی زبان۔
+eb.help.btn.guided=§lلائیو ٹیوٹوریل§r\n§8کر کے سیکھیں، ایک ایک قدم

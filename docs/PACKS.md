@@ -5190,240 +5190,118 @@ Operators can change `announce`, `fireworks`, `deliverWithCommand`, `keepNamedIt
 
 ## Easy Building — `build_bp`
 
-Build a whole wall, floor, tower, dome, roof, curve or bridge in one go, like the Effortless Building add-on: pick a shape and its size in a menu, then place one block and the shape appears there, made of the block you placed. Mirror, radial and array modifiers copy every build around a center, a palette spreads your blocks in patterns, Air Build builds in midair, copy, cut and paste move whole regions (with 19 saved copies), destroy mode breaks a shape with your tool, and block guides outline exactly where it will go. Survival builds use blocks from your inventory, and undo (which survives a restart) gives them back. Everything is in `/realm:build`, or in the **Building Book**.
+Effortless Building v5.0 ported directly into the Realm: build lines, walls, floors, diagonal lines and walls, sloped floors, cubes, circles, semicircles (flat, arch or dome), cylinders, spheres, cones and Bezier splines by clicking two or three anchor points in the world with a live 3D block outline preview. Includes floating 3D in-world UI panels, a hold-right-click radial Quick Switch Wheel, Mirror/Array/Radial modifiers (which also work on single hand-placed and broken blocks), multi-block Palettes with noise/gradient/structural patterns, Air Build and Infinite Reach, Copy/Cut/Paste with a multi-slot Clipboard, Destroy mode with digging tools, Undo/Redo, a 48-page illustrated 3D Tutorial Book, and an interactive Live Coach in 13 languages.
 
 ### How to use
 
-1. Run `/realm:build` (or use the **Building Book**) and pick **Choose a shape**, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap **Use this shape**. That turns **build mode** on and brings the menu back, with what you picked at the top. The menus stay open while you switch things on or off, save settings or go **Back**; close them with the **X** when you're done. Only a step that needs you to look at the world closes them for you: **Build here now**, **Paste here now**, **Destroy here now**, **Select a region** and finishing a curve. Closing a settings form (or **Cancel**) goes back to the menu it came from.
-2. Hold a block and place it as usual: the shape is built where the block went, made of that block. Facing matters: a wall runs across your view, depth goes away from you, and stairs, slopes and roofs climb away from you. Looking along a diagonal, the shape keeps the way you faced until you turn 10 degrees past it, so it doesn't flip back and forth. Sneak while placing to place just one block.
-3. While build mode is on and you hold a block (or the Building Book), the **block guide** outlines every block the shape would fill at the spot you look at, modifiers included, and the bar above the hotbar says what placing will build (`Build: Wall 5 x 3 x 1 - place a block (sneak: just one)`). Gold outlines mark the modifier center, a start block and curve points.
-4. **Between two blocks:** most shapes can take their size from two blocks instead (**Size** -> **From two blocks you place**). Place the start block, then the end block: the shape fills the box between them, and a line or a wall goes straight from one to the other, diagonals too. With both blocks at the same height, the shape keeps the height from its settings (a 3-high wall along the ground).
-5. **Curves:** pick **Curved line** or **Curved wall or path**, then place a block at each point the curve should pass through (or look and use `/realm:build_here`). Finish with **Finish the curve** at the top of `/realm:build` or `/realm:build_finish`.
-6. **Modifiers** (in `/realm:build`) copy every build: mirror on X, Y and/or Z, turn it around a center in 2 to 16 slices (radial), or repeat it in a row (array). Pick **Center here** in the same form to set the center at the block you look at or where you stand.
-7. **Palette** (in `/realm:build`) builds with a mix of your blocks: from your hotbar, your inventory or both, spread at random, weighted, or in a pattern (checkerboard, stripes, gradient, brick, noise, marble, border, wave, spiral, dissolve).
-8. **Blocks and placing** picks the main block (the block you place, your palette, or a block id you type such as `minecraft:stone_bricks`), the second block for patterns, posts and trim (by default the block in the hotbar slot right of your hand), what may be replaced, where the shape sits, and quick copies: mirrored, turned four ways around the block, or repeated in a row.
-9. Made a mistake? `/realm:build_undo` takes back your last build, paste, cut or destroy and gives survival blocks back; `/realm:build_redo` does it again. Your last 5 steps can be undone (`undoSteps`), and the newest 10 of up to 2000 blocks each are kept when the server restarts (`undoSaveSteps`, `undoSaveBlocks`).
-10. No block to place, or want a look first? Look at a spot and pick **Build here now** in `/realm:build`: the guide shows for 3 seconds (`previewSeconds`), then a box lists the cost and asks **Build it**. `/realm:build_here` builds at the block you look at straight away.
-11. **Guides, reach and Air Build** (in `/realm:build`, also in `/realm:prefs`) picks the guide style, color and refresh, how far away you build at a look, **Air Build** (build in midair in front of you) and whether your modifiers also copy blocks you place and break by hand.
-12. `/realm:build_mode` turns build mode on or off without the menu; so does sneaking and using the Building Book. `/realm:build_book` gives you a Building Book.
-13. **Copy, cut and paste:** in `/realm:build` pick **Copy, cut and paste**, then **Select a region**. Use (right-click or long-press) a block for the first corner and another for the opposite corner; a third block sets the height (using an item in the air sets a corner in front of you, at your Air Build distance, 4 blocks by default). Then pick **Copy** (or `/realm:build_copy`) or **Cut** (`/realm:build_cut`, which takes the blocks away without drops). Look at a spot and pick **Paste here now** (the paste ghost for 3 seconds, `previewSeconds`, then the cost and **Paste it**), or use `/realm:build_paste`. Pastes turn to face the way you look.
-14. **Paste mode** (same menu): placing a block pastes your copy there, like build mode builds a shape. **Saved copies** keeps up to 19 named copies (`clipboardSlots`) besides **Last copy**; they stay after a restart.
-15. **Destroy mode:** `/realm:build_destroy` (or **Destroy mode** in `/realm:build`). Break a block with a pickaxe, axe or shovel and your shape breaks there (sneak to break just one). **Destroy here now** shows what would break at the block you look at and asks first.
-16. **Operators:** `/realm:config` -> **Easy Building** sets the limits (most blocks per build, largest size, blocks placed per tick, longest reach, guide particles), whether survival builds use items, Air Build, hand modifiers, destroy mode, saved copies and undo after a restart, and who may build where.
+1. Hold the **Building Book** (`/realm:build_book`, or craft one from a book and paper or a brick):
+   - **Right-click (tap):** opens the floating 3D **Mode Menu** (or `/realm:build`). Aim at any tile and click to pick a mode, toggle options (filled/hollow/skeleton, even/uneven, straight/bezier, horizontal/arch/dome), pin favorite modes, or open Tools.
+   - **Hold right-click:** opens the floating **Quick Switch Wheel** right in front of you; aim at a slice and release right-click to switch modes on the fly.
+   - **Left-click (swing):** opens the **Block Palette** (`/realm:build_palette`).
+   - **Sneak + left-click:** opens **Modifiers** (`/realm:build_modifiers`: Mirror, Array, Radial).
+   - **Sneak + right-click:** opens **Settings** (`/realm:build_settings`).
+   - **Double-sneak while holding the book:** toggles between your active build mode and `Disable`.
+2. **Two-click shapes** (Line, Diagonal Line, Wall, Floor, Circle, Semicircle, Sphere): hold any block and right-click to set the **first anchor** (`Anchor set`). As you look around, the live 3D outline preview stretches to your aim and shows the dimensions and block count above the hotbar. Right-click again to place the entire shape.
+3. **Three-click shapes** (Cube, Cylinder, Cone, Diagonal Wall, Slope Floor): right-click to set the first anchor, right-click a second time to lock the horizontal **XZ footprint**, then look up or down to stretch the height and right-click a third time to build.
+4. **Bezier curves:** select **Line** or **Diagonal Line** and set **Curve** to `Bezier`. Right-click to add curve waypoints through the world, then **Sneak + right-click** to place the smooth Catmull-Rom spline through all points.
+5. **Destroy mode:** while any shape mode is active, hold a **pickaxe, axe or shovel** and right-click a block to set a red **Destroy anchor**. Right-click again (or a third time for 3-step shapes) to mine the entire shape with tool tier checks, Unbreaking wear, Fortune/Silk Touch drops, and spare-tool swapping.
+6. **Air Build and Infinite Reach:** choose **Air Build** mode to place single blocks in midair in front of you (`airBuildReach`, default 4 blocks), or enable **Infinite Reach** in `/realm:build_settings` (`allowInfiniteReach`) to set anchors and build shapes at a distance in midair (`maxReachCap`, default 64 blocks).
+7. **Modifiers** (`/realm:build_modifiers` or Sneak + left-click with the Building Book): enable **Mirror** (X, Y, Z axes, odd/even center, radius), **Array** (offset X/Y/Z and copy count), and/or **Radial** (2 to 16 slices around a center, optional alternate slice mirroring). Colored guide planes mark your active mirror and radial axes, and modifiers also copy single blocks you place or break by hand when build mode is `Disable`.
+8. **Palette** (`/realm:build_palette` or left-click with the Building Book): mix blocks from your **Hotbar**, **Inventory**, or **Both**, weighted by item count, slot count, or unique block types, using Random, Spread, Gradients (X, Y, Z, Radial, Diagonal), Concentric Rings, Checkerboard, Noise (Value/Worley), Bricks, Pillars, or Frame patterns, plus smart Glazed Terracotta pinwheel tiling.
+9. **Copy, Cut and Paste:** select **Copy / Paste** mode. Right-click corner 1, corner 2, and height (corner 3) to open the **Copy / Cut** prompt. Once copied or cut, aim to preview the rotated bounding box (or full ghost preview) and right-click to paste; **Sneak + right-click** clears the clipboard to select a new region. Manage saved slots in `/realm:build_clipboard`.
+10. **Undo and Redo:** run `/realm:build_undo` and `/realm:build_redo` (or click **Undo** / **Redo** in the Mode Menu Tools row) to step backward or forward up to 10 actions; survival builds refund placed blocks to your inventory on undo.
+11. **Tutorial Book and Live Coach:** run `/realm:build_tutorial` for the 48-page illustrated 3D **Effortless Building Tutorial** book, `/realm:build_guide` to start the interactive **Live Coach** walkthrough, and `/realm:build_language` to switch between 13 languages.
+12. **Operators:** `/realm:config` -> **Easy Building** (or the **Admin** tab in `/realm:build_settings`) sets realm-wide limits and permissions. Prefer standard menus instead of 3D floating panels? Switch **Menu Style** to **Plain** under Controls in `/realm:build_settings` (or enable `plainMenusForAll` for everyone).
 
-### The shapes
+### Modes and options
 
-| Group | Shape | Settings |
+| Mode | Steps | Options |
 |---|---|---|
-| Basic | **Line** | Length, thickness, direction (away from you, left to right, straight up, rising away from you) |
-| Basic | **Wall** | Width, height, thickness, pattern |
-| Basic | **Floor or platform** | Width, depth, thickness, pattern |
-| Basic | **Box or room** | Width, height, depth, fill (hollow, filled, walls only, frame), pattern |
-| Basic | **Column or pillar** | Height, width (1 to 7), round or square, a base and top of the second block |
-| Basic | **Fence or railing** | Width, height, posts of the second block every N blocks, a gate in the middle (matching the fence: oak fence gate otherwise), torches on the posts. Hold a fence or wall |
-| Basic | **Animal pen** | Width, depth, a gate in the middle of the front, corner posts of the second block, torches on the corners |
-| Slopes and curves | **Staircase** | Width, height, fill underneath. Hold stairs for real steps (any block works) |
-| Slopes and curves | **Slope or ramp** | Width, height, depth, fill underneath. Stairs where it rises |
-| Slopes and curves | **Arch** | Width, height, thickness of the band, depth |
-| Slopes and curves | **Circle or ring** | Radius, thickness, filled |
-| Slopes and curves | **Ellipse (oval)** | Radius left to right, radius away from you (each up to half of `maxSize`), thickness, filled |
-| Slopes and curves | **Semicircle** | Radius, thickness, filled: half a circle on the ground, its straight side at the block, curving away from you |
-| Slopes and curves | **Tower or cylinder** | Radius, height, wall thickness, filled, battlements of the second block on top |
-| Slopes and curves | **Sphere**, **Dome** | Radius, hollow |
-| Slopes and curves | **Pyramid** | Width (height is half of it), hollow; stairs give it smooth sides |
-| Slopes and curves | **Cone or spire** | Radius, height, hollow, and which way it points: straight up, up and away from you (leaning 45 degrees), or away from you (lying down) |
-| Slopes and curves | **Roof** | Width, depth, gable (two slopes, ridge running away from you) or hip (four slopes), gable ends of the second block. Hold stairs |
-| Slopes and curves | **Curved line** | Thickness. A smooth curve (a Bezier-style spline) through every point you place, in order |
-| Slopes and curves | **Curved wall or path** | A wall (height) or a path on the ground (width 1 to 16) along a smooth curve through your points |
-| Ready-made | **Small hut** | Width, depth, wall height: walls of your block; floor, corner posts and roof of the second block; a doorway, three `glass_pane` windows and a `lantern` |
-| Ready-made | **Watchtower** | Height: four corner posts, a center column with a `ladder`, a platform, railings (the second block, `oak_fence` without one) and four `lantern`s |
-| Ready-made | **Bridge** | Width, length, lantern spacing: a deck of your block, railings of the second block (`oak_fence` without one), `lantern`s |
-| Ready-made | **Lamp post** | Height: a base of your block, a post of the second block (`oak_fence` without one), a `lantern` on top |
-| Ready-made | **Farm plot** | Width, depth: a border of your block, `farmland` (costs `dirt`) and a `water` channel down the middle (free) |
-
-Sizes go up to 64 blocks (`maxSize`; radius up to half of it), and so does the distance between the two blocks of a two-block shape. **Patterns** for walls, floors and boxes use the second block: checkerboard, stripes, border, pillars every N blocks, or speckled (about one block in three). Shapes whose settings have a **Size** choice can also be sized from two blocks.
-
-### Modifiers
-
-**Modifiers** in `/realm:build` add copies to every build, of every shape, on the world's own axes:
-
-- **Mirror X** (east-west), **Mirror Y** (up-down) and **Mirror Z** (north-south), any mix of them (all three make 8 copies). **Mirror between blocks** puts the mirror on the center block's east, top or south side instead of through its middle, so the two halves meet without sharing a row.
-- **Radial:** the build turned around the center's up axis in 2 to 16 equal slices (default 4); **Every other slice mirrored** flips every second slice, like a kaleidoscope.
-- **Array:** the build repeated 1 to 16 times (default 2), each copy moved by a step of -32 to 32 blocks east (X), up (Y) and south (Z) from the last (default 1 up).
-- **Only within this many blocks of the center** (0 to 64, default 0: no limit): blocks farther from the center than that (along any axis) get no mirror or radial copies.
-- **Center:** where mirrors and radial turn. **Center here: the block you look at** or **Center here: where you stand** sets it; **The block each build starts at** (the default) mirrors each build around the block it is built at. A center in another dimension doesn't count there.
-- Modifiers also copy pastes (except the one free paste of a cut) and what destroy mode breaks, and the guides show the copies too.
-- The array goes first, then the mirrors, then radial. Copies that land on the same spot count once, and they all count toward the build's block limit. Stairs, logs, trapdoors, ladders, signs, fence gates, rails, torches, levers, walls and other blocks that face a way are turned and mirrored with their copy (a mirrored door hinges on the other side); a mirror up-down turns stairs and slabs upside down.
-- **Modifiers copy blocks I place and break by hand** (in **Guides, reach and Air Build** or `/realm:prefs`, default disabled; operators can switch it off for everyone with `handModifiers`): a block you place one at a time (build mode off, or sneaking) gets its copies too (not doors, tall plants or a block added onto one already there), paid for in survival, following the replace rules, claims and safe zones, and undone by `/realm:build_undo`. Breaking a block breaks its copies where the same block is: creative players just clear them; survival players get each copy's drops where it was, as if broken by hand (your tool's enchantments don't apply, and it doesn't wear). Protected blocks are never broken, nor copies in someone else's claim or (for non-operators) a safe zone. Undo doesn't bring broken copies back.
-
-The quick **Copies** and **Repeat in a row** in **Blocks and placing** still work as before: they turn with the way you face and stay around the block you build at. Modifiers come on top of them.
-
-### Palette
-
-Pick **Your palette** as the main block (in **Blocks and placing**, or **Build with the palette** in **Palette**), and builds mix your blocks:
-
-- **Blocks from:** **Your hotbar** (the default), **Your inventory (not the hotbar)** or **Hotbar and inventory**: every block item there, one entry per slot, in slot order.
-- **Pattern:** **Random (each slot alike)** (the default; a block in two slots comes up twice as often), **Random, weighted by how many you have**, **Random, weighted by slot (left slots more)**, **Random, each kind of block alike**, **Checkerboard**, **Stripes**, **Gradient (in palette order)**, **Brick (offset rows)**, **Noise (patches)**, **Marble (wavy veins)**, **Border (first block on the edges)** (the first block on the outside of the build's box, the others at random inside), **Wave**, **Spiral (around the middle)** and **Dissolve (a gradient that crumbles)**. Patterns go through the blocks in slot order and line up on the world grid, so builds next to each other match.
-- **Direction** (up, east to west, north to south) for stripes, gradient, wave, marble and dissolve, and **Pattern size** (1 to 16 blocks, default 2): stripe width, checker squares, brick height, the size of noise patches.
-- Survival: the random patterns only pick blocks you still have; the other patterns put each block where the pattern says, and if you run out of one, those spots are left out (with partial builds) and listed as missing. The second block isn't part of the palette.
-
-### Block guides
-
-Guides need the [Easy Building Guides](#easy-building-guides--build_rp) resource pack (in Realm Resources). Your choices, in **Guides, reach and Air Build** or `/realm:prefs`:
-
-- **Block guides:** **Outline** (the default: a square on every outer face of every block, so you see the shape itself, not just its box), **Corner outline** (only the corners of each face), **Particles (a dot per block)** (a dot in each block of the shape's surface), **Box edges (sparkles)** (vanilla sparkles along the edges of the box around the shape: works without the resource pack) or **Off**.
-- **Guide color:** white (the default), green, cyan, yellow, orange or purple. Gold marks the modifier center, a two-block start and curve points.
-- **Guide refresh:** every 1 to 20 ticks (default 4), never faster than the realm allows (`guideFastest`, default 2). Each outline lasts until the next refresh plus a fifth of a second, and longer while the realm runs slow, so guides don't blink on a busy realm or a slow connection (one long stall, like a world save, doesn't count). A shape up to 4096 blocks shows its guide right away, also after you change it or turn.
-- Big shapes are thinned evenly to at most 400 squares or dots (`guideMax`); a shape too big to build shows no guide (in two-block mode, also an end farther than `maxSize` from the start). A big two-block shape's guide is laid out over a few ticks, so it follows your look a moment behind.
-- **Box edges sparkles:** green, white, flame or blue flame.
-
-### Air Build and reach
-
-- **My reach** (4 blocks up to the realm's longest reach, `reach`, default 16): how far away the block you look at may be for the guide, `/realm:build_here` and **Build here now**.
-- **Air Build** (default disabled; operators can switch it off for everyone with `airBuild`): with no block within your reach, the guide and `/realm:build_here` use a spot in midair **Air Build distance** blocks in front of your eyes (1 to 64, default 4, at most your reach). Using a block in the air (not looking at a block within 6 blocks) builds there: the shape in build mode, or one block with build mode off or while sneaking (plus its modifier copies if your modifiers copy blocks by hand). It costs the same as any build.
-
-### The Building Book
-
-- A `realm:building_book` item named `Building Book` (with a glint). Get one with **Get a Building Book** in `/realm:build` (shown while you don't carry one) or `/realm:build_book`, or craft one from a book and a brick (any crafting table).
-- **Use it:** opens `/realm:build`. **Sneak and use it:** build mode on or off. Using it on a block opens the menu too, without using the block. Holding the button down (or a long press) counts as one use; let go for a moment before the next. Holding it in build mode shows the guide, like holding a block.
-- Its icon comes from Easy Building Guides; without that pack it shows without its icon, but works the same.
-
-### Copy, cut and paste
-
-- **Selecting:** **Select a region** (or `/realm:build_copy` / `/realm:build_cut` with nothing selected) starts selecting: `Select: use an item on the first corner block (or in the air)`. While you select, using a block marks it instead of opening or placing anything. The first two corners make the box, diagonally opposite, on any heights; a third block stretches it up or down to its height. Using an item in the air marks the spot in front of your eyes at your Air Build distance (4 blocks unless you changed it in **Guides, reach and Air Build**). The menu also has **Corner at the block you look at** and **Corner where you stand**. Sparkles (your **Box edges sparkles** color) outline the box while you select and for 30 seconds after. The bar says `Selected 3 x 3 x 4 - copy or cut it now`.
-- **Copy** (`/realm:build_copy`) saves the box into **Last copy**: `Copied 20 blocks (3 x 3 x 4) - paste it with /realm:build_paste`. A copy can be at most 64 blocks across each way (and 384 high) and hold at most 32768 blocks, air included (`copyMaxBlocks`). It keeps blocks and the way they point, not what's inside them: chests come out empty, signs blank, and creatures aren't copied. Blocks the tools never place (`forbiddenBlocks`, like bedrock, spawners, TNT, beds) are left out; doors come along, both halves.
-- **Cut** (`/realm:build_cut`) copies the box and takes its blocks away, with no drops (anything that pops off goes too). Chests, signs and the other `protectedBlocks`, water and lava stay where they are and are left out of the copy. A cut follows the same rules as a build: not in other players' claims, safe zones are for operators only, at most 4096 blocks in survival (`maxBlocks`). Leave while a cut is still taking blocks away and it is canceled: the blocks go back where they were, and no copy is kept.
-- **Paste** (`/realm:build_paste` at the block you look at; **Paste here now** with an outline first; or **Paste mode**, where placing a block pastes there and the block goes back to your hand, sneak to place normally) puts the copy down starting at that spot and going away from you, centered left to right, turned from the way you faced when you copied it to the way you face now: stairs, logs, doors, trapdoors, signs, rails, torches, ladders and the rest turn with it. It replaces what your **Replace** setting in **Blocks and placing** allows and follows every build rule: claims, safe zones, limits (4096 blocks in survival, 32768 in creative), and in survival it costs the blocks from your inventory (partial pastes when short, like builds). Your **modifiers** copy a paste too (mirrored, turned or repeated, blocks turned with them), except the one free paste of a cut. The top half of a door or tall flower only goes onto its bottom half (both or neither). Undo takes a paste back and refunds it.
-- **A cut pastes once for free in survival:** the next paste of that copy costs nothing (`These are blocks you cut: this paste is free.`), then it costs blocks like any copy. Undoing that paste makes it free again; undoing the cut puts the blocks back where they were and ends the free paste. Once the free paste is used, the cut can only be undone after undoing that paste (`Those cut blocks were already pasted for free. Undo that paste first.`).
-- **Saved copies:** **Last copy** plus up to 19 named copies (`clipboardSlots`, default 19). Pick one to **Paste from this copy** (pastes then use it), **Save Last copy here** (or **Replace it with Last copy**) with a name up to 24 letters, **Rename** or **Delete** it. Copies are structures saved in the world, so they stay after a restart. Your own copies only: other players can't see or paste them.
-- **Paste preview** in paste mode: the outside blocks of your copy (and its modifier copies) show as a light blue ghost at the block you look at (your choice in `/realm:prefs`: **Paste preview in paste mode**, default enabled). Build mode and paste mode take turns: turning one on turns the other off.
-
-### Destroy mode
-
-- `/realm:build_destroy` or **Destroy mode** in `/realm:build` turns it on (`Destroy mode on: breaking a block with a pickaxe, axe or shovel breaks your shape (sneak: just one)`). Break a block while holding a pickaxe, axe or shovel (wooden to netherite, copper too) and the shape you chose in **Choose a shape**, with its size and settings and your modifier copies, breaks there, placed the way a build would be. In two-block mode the first block you break is the start and the second breaks everything between them. Sneak to break just one block.
-- **Destroy here now** (in the Destroy mode menu) shows a red guide over what would break at the block you look at for 3 seconds (`previewSeconds`), then asks **Break them**. While destroy mode is on and you hold a tool, the red guide follows the block you look at (your choice in `/realm:prefs`: **Outline in destroy mode**, default enabled).
-- **Survival:** each block needs the right tool: blocks that need a pickaxe, axe or shovel only break with that tool, and ores and obsidian need a good enough pickaxe (iron ore: stone or copper or better; diamond and gold ore: iron or better; obsidian and ancient debris: diamond or netherite). Blocks you can break by hand (glass, leaves...) break with any of the three. The rest are skipped (`Skipped 1 block needs another tool.`).
-- **Drops** land at your feet: what the game drops for each block (stone gives cobblestone, glowstone gives dust...). Ores drop their items with **Fortune** (more of them) and give experience; **Silk Touch** drops the blocks themselves, except budding amethyst, infested blocks and double slabs, which drop what they drop without it. Fortune doesn't change other blocks' drops. A door or tall flower breaks whole (one item). Creative players get no drops.
-- **The tool wears out** one use per block, with **Unbreaking** as in the game. When it breaks, another tool of the same kind from your inventory goes into your hand (the same tool first); with none left, destroy mode stops there.
-- Chests, signs and the other `protectedBlocks`, water and lava never break. Not in other players' claims, safe zones are for operators only, and at most 4096 blocks at once in survival (`maxBlocks`; 32768 in creative). Blocks break `blocksPerTick` / 4 a tick (100 by default).
-- **Undo** puts the blocks back. In creative it's free. In survival it builds them again with blocks from your inventory, each costing its own item like a build (short of them, it puts back as many as you have; a door or tall flower comes back whole or not at all); **redo** breaks them again and gives those blocks back. The drops you got stay yours.
-- Operators can turn destroy mode off for the realm (`destroyMode`).
-
-### What players see
-
-- **What a build replaces** (Blocks and placing -> **Replace**): **Air and soft blocks** (the default: air plus water, lava, grass, ferns, flowers, snow layers, vines, fire...), **Air only**, or **Everything but chests and other protected blocks**. Containers, signs, banners, beds, spawners, portals, bedrock and the other `protectedBlocks` are never replaced. **Everything** is for creative players only (survival players too with `survivalReplaceAll`, default disabled), since it destroys blocks without drops. A spot that is already taken is skipped.
-- **Where it goes** (Blocks and placing): **Starts at the block, centered** (the default: the shape starts at the block and goes away from you, centered left to right), **Centered on the block** or **Corner at the block (goes away and right)**; **Move up or down** shifts it up to 16 blocks; **Turn it a quarter (sideways)** turns it so a wall runs away from you.
-- **Copies:** **Mirror left-right**, **Mirror front-back**, **Mirror both ways (4)**, **Turned around the block (4)** (stairs turn with them), and **Repeat in a row** (1 to 16 copies, a gap of 0 to 16 blocks, away from you, to the right or up). Copies that land on the same spot count once.
-- **The block you place marks the spot:** in build mode it is taken back (and returned to your hand in survival) and the shape is built there instead. In two-block mode the start block stays until the end is set (placed, or with `/realm:build_here`); curve points are taken back as you place them. Doors, beds, tall flowers, the `forbiddenBlocks` and a block added onto one already there (a slab that makes a double slab, a second snow layer, candle or sea pickle) always place normally.
-- **Curves:** up to 32 points, each within 127 blocks of the first (twice `maxSize`, less one); the curve passes through every point in the order you placed them. `Point 2 set - more points, or finish: /realm:build_finish` confirms each one. **Forget the curve points** in `/realm:build` starts over; points are also forgotten when you leave. A curve needs at least two points.
-- **Survival** (`requireItems`, default enabled): every block comes from your inventory (stacks you named are used last). A stair, log or slab costs its own item, farmland costs dirt, water is free. Short of blocks, it builds as much as you have, bottom first, and says what's missing: `Out of blocks: built 10 of 15. Still needed: 5 cobblestone.` (with `partialBuilds` disabled it builds nothing and says how many you need). Creative builds are free. Double slabs and blocks with no item of their own can't be built in survival.
-- **Limits:** one build places at most 4096 blocks in survival (`maxBlocks`) and 32768 in creative (`maxBlocksCreative`), copies and modifiers included; bigger ones are refused with the count (a shape far over the limit is refused from its size alone, before it is laid out, and big shapes are laid out over a few ticks so the realm doesn't stall). Big builds go up 400 blocks a tick (`blocksPerTick`), so a 30,000-block dome takes a few seconds. One build at a time per player.
-- **Undo** puts back exactly what each spot held before (a flower, water, air) and gives survival blocks back, but only where your block is still there: blocks someone mined or changed since stay as they are. It works the same for builds, pastes and cuts; for destroy mode see above. Redo does the step again (and charges for it again in survival; a cut is redone for free, as it gives nothing). A chest or other container someone filled since stays, with its items. Undo from too far away (the blocks aren't loaded, or they are in another dimension) changes nothing and keeps the step: go back and undo there. Your last 5 steps can be undone (`undoSteps`). **Undo survives a restart:** the newest 10 steps (`undoSaveSteps`) that changed up to 2000 blocks each (`undoSaveBlocks`) are saved on you; a bigger step is kept in memory only, so after a restart undo goes back only as far as the newest step that was saved after it. Leave while a build or undo is still going and the blocks it owes you are given back when you next join.
-- **Land claims:** a build that would reach into another player's claim ([Land Claims](#land-claims--claims_bp)) is refused: `That would reach into Sam's claim. Do it somewhere else, or make it smaller.` Your own claims and claims shared with you are fine. Operators can allow it (`inOthersClaims`). The check covers the box around the whole build, modifier copies included.
-- **Safe zones:** inside a zone made with [Safe Zones](#safe-zones--zones_bp) (`/realm:zones`), only operators can use the tools (`safeZonesOperatorsOnly`, default enabled). Towns and claims don't count here.
-- **Not in adventure or spectator mode:** the tools build and undo nothing there (`The building tools don't work in adventure or spectator mode.`), since those modes can't place or break blocks.
-- **Your setup is remembered** (shape, every shape's own settings, blocks and placing, modifiers and their center, palette); build mode itself starts off each time you join.
+| **Disable** | - | Normal vanilla block placing and breaking (active Modifiers still mirror/repeat hand-placed and broken blocks) |
+| **Air Build** | 1 | Places blocks in midair at your Air Build reach distance (1 to 64 blocks, default 4) |
+| **Line** | 2 | `Curve`: `Straight` or `Bezier` (multi-point Catmull-Rom spline; Sneak + click to finish) |
+| **Diagonal Line** | 2 | `Curve`: `Straight` or `Bezier` |
+| **Wall** | 2 | `Fill`: `Filled` or `Hollow` (vertical wall along the dominant axis) |
+| **Diagonal Wall** | 3 | `Fill`: `Filled` or `Hollow` (angled wall between any two XZ points, then height) |
+| **Floor** | 2 | `Fill`: `Filled` or `Hollow` (horizontal floor on the anchor's Y plane) |
+| **Slope Floor** | 3 | `Fill`: `Filled` or `Hollow` (inclined ramp between two XZ points, then height) |
+| **Cube** | 3 | `Fill`: `Filled`, `Hollow` (6 walls), or `Skeleton` (12 wireframe edges) |
+| **Circle** | 2 | `Fill`: `Filled` or `Hollow`; `Shape`: `Even` or `Uneven` (ellipses) |
+| **Semicircle** | 2 | `Shape`: `Horizontal`, `Arch`, or `Dome`; `Fill`: `Filled` or `Hollow` |
+| **Cylinder** | 3 | `Fill`: `Filled` or `Hollow`; `Shape`: `Even` or `Uneven` |
+| **Sphere** | 2 | `Fill`: `Filled` or `Hollow` |
+| **Cone** | 3 | `Fill`: `Filled` or `Hollow`; `Axis`: `Straight` or `Diagonal` |
+| **Copy / Paste** | 3 | Select 3 corners to Copy or Cut, then right-click to Paste (rotates with your facing) |
 
 ### Commands
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:build` | Everyone | Opens Easy Building: build mode on or off, **Choose a shape** (26 shapes, sizes up to 64 blocks, `maxSize`), the current shape's settings, **Blocks and placing**, **Build here now** (the guide for 3 seconds, `previewSeconds`, then the cost and **Build it**), **Modifiers**, **Palette**, **Guides, reach and Air Build**, **Copy, cut and paste**, **Destroy mode**, **Get a Building Book**, finishing or forgetting a curve, undo and redo |
-| `/realm:build_here` | Everyone | Builds your shape at the block you look at (within your reach, default 16 blocks, `reach`; or in midair with Air Build), no questions. In two-block mode the first use sets the start and the second builds; for a curve, each use adds a point |
-| `/realm:build_mode` | Everyone | Turns build mode on or off: while on, placing a block builds your shape there (sneak to place just one) |
-| `/realm:build_finish` | Everyone | Builds your curve through the points you placed (at least 2, up to 32) |
-| `/realm:build_book` | Everyone | Gives you a Building Book (one at a time): use it to open `/realm:build`, sneak and use it to turn build mode on or off |
-| `/realm:build_undo` | Everyone | Undoes your last build, paste, cut or destroy: what was there comes back, and survival blocks are given back. Up to 5 steps (`undoSteps`); the newest 10 of up to 2000 blocks each survive a restart (`undoSaveSteps`, `undoSaveBlocks`) |
-| `/realm:build_redo` | Everyone | Does again what you last undid |
-| `/realm:build_copy` | Everyone | Copies the region you selected into **Last copy** (up to 64 blocks across and 32768 blocks, `copyMaxBlocks`). With nothing selected, starts selecting: use a block for each corner |
-| `/realm:build_cut` | Everyone | Like copy, but takes the blocks away (no drops). In survival the next paste of it is free |
-| `/realm:build_paste` | Everyone | Pastes your copy at the block you look at (within your reach, default 16 blocks, `reach`), turned to face your way, with your modifier copies. Survival pastes cost the blocks |
-| `/realm:build_destroy` | Everyone | Turns destroy mode on or off: breaking a block with a pickaxe, axe or shovel breaks your shape (sneak to break just one). Needs `destroyMode` (default enabled) |
-
-All of them only work while Easy Building is enabled (`enabled`, default enabled) and, with `operatorsOnly` enabled (default disabled), only for operators.
+| `/realm:build` | Everyone | Opens the Effortless Building mode menu (3D floating panel or plain menu) |
+| `/realm:build_book` | Everyone | Gives you an Effortless Building `Building Book` |
+| `/realm:build_tutorial` | Everyone | Gives you the 48-page illustrated `Effortless Building Tutorial` book |
+| `/realm:build_guide` | Everyone | Starts or stops the interactive Live Coach tutorial |
+| `/realm:build_palette` | Everyone | Opens the Block Palette (source, weighting, distribution patterns, glazed terracotta tiling) |
+| `/realm:build_modifiers` | Everyone | Opens Modifiers: Mirror (X/Y/Z), Array, and Radial symmetry |
+| `/realm:build_clipboard` | Everyone | Opens the Clipboard Manager (auto-saved copy and named saved slots) |
+| `/realm:build_settings` | Everyone | Opens Effortless Building Settings (Setup, Building, Preview, Controls, and Admin for operators) |
+| `/realm:build_preview` | Everyone | Opens the Preview Settings tab directly (outline style, refresh quality, defer shape, flick mode) |
+| `/realm:build_setup` | Everyone | Opens the device performance preset picker (Low-end, Mid-end, High-end) |
+| `/realm:build_language` | Everyone | Opens the 13-language picker for floating panels, coach, and tutorial book |
+| `/realm:build_undo` | Everyone | Undoes your last Effortless Building placement (restores blocks and refunds survival items) |
+| `/realm:build_redo` | Everyone | Redoes the last undone Effortless Building placement |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
 | Option | Default | Description |
 |---|---|---|
-| `enabled` | `true` | Easy Building for the whole realm. Disabled: `/realm:build` only says so and placing blocks builds nothing extra |
+| `enabled` | `true` | Easy Building for the whole realm. Disabled: commands say so and placing blocks builds nothing extra |
 | `operatorsOnly` | `false` | Only operators can use the building tools |
-| `maxBlocks` | `4096` | Most blocks one build may place in survival, copies, repeats and modifiers included (64 to 16384 in game); 25% more for a Woodwright with Builder's Eye ([Skills](#skills--skills_bp) Callings, `bonus.buildEye` in `realm:calling`) |
-| `maxBlocksCreative` | `32768` | Most blocks one build may place in creative (256 to 65536 in game) |
-| `maxSize` | `64` | Largest width, height, depth or length the menus offer, in blocks; a radius goes up to half of it (8 to 128 in game) |
-| `blocksPerTick` | `400` | Blocks placed per tick; bigger builds are spread over several ticks (50 to 2000 in game). Lower it if big builds make the realm stutter |
-| `requireItems` | `true` | In survival, every block a build places is taken from your inventory, and undo gives it back |
-| `partialBuilds` | `true` | Short of blocks in survival: build as much as you have. Disabled: build nothing and say what's missing |
-| `survivalReplaceAll` | `false` | Survival players may pick **Everything but chests and other protected blocks** (it destroys blocks without drops). Creative players always can |
-| `inOthersClaims` | `false` | Builds may reach into other players' land claims. Disabled: a build that would is refused |
-| `safeZonesOperatorsOnly` | `true` | Inside a safe zone made with Safe Zones, only operators can build with the tools |
-| `undoSteps` | `5` | Steps each player can undo and redo: builds, pastes, cuts and destroy mode (1 to 20 in game) |
-| `undoSaveSteps` | `10` | How many of the newest undo (and redo) steps are also saved on the player, so they survive a restart (0 to 10 in game) |
-| `undoSaveBlocks` | `2000` | Most blocks a step may change and still be saved for after a restart; bigger steps are kept in memory only (250 to 4000 in game) |
-| `reach` | `16` | The longest reach players may pick: how far away the block you look at may be for the guide, `/realm:build_here`, **Build here now** and Air Build, in blocks (4 to 64 in game). Each player's **My reach** starts here |
-| `airBuild` | `true` | Players may use Air Build (building in midair in front of them). Disabled: the Air Build switch is hidden and does nothing |
-| `handModifiers` | `true` | Players may let their modifiers also copy blocks they place and break by hand. Disabled: the switch is hidden and does nothing |
-| `guideMax` | `400` | Most guide squares or dots drawn for one player at each refresh; bigger shapes are thinned evenly (50 to 2000 in game) |
-| `guideFastest` | `2` | The fastest guide refresh players may pick, in ticks (1 to 20 in game). Raise it if guides make a busy realm lag |
-| `previewSeconds` | `3` | Seconds the guide shows before **Build here now**, **Paste here now** and **Destroy here now** ask to confirm (0 to 10 in game) |
-| `clipboardSlots` | `19` | Saved copies each player can keep besides **Last copy** (0 to 19 in game). Each one is a structure saved in the world |
-| `copyMaxBlocks` | `32768` | Largest region one copy or cut may cover, air included (1024 to 65536 in game). Each side is at most 64 blocks across (384 high) either way |
-| `destroyMode` | `true` | Players can use destroy mode. Disabled: `/realm:build_destroy` and the menu only say so |
-| `softBlocks` | water, lava, grass, ferns, flowers, snow layers, vines, fire... | What **Air and soft blocks** replaces besides air, `*` as a wildcard |
-| `protectedBlocks` | containers, signs, banners, beds, spawners, portals, bedrock, command blocks, heads, beehives, sculk... | Never replaced by a build, whatever the replace mode, and never broken as a hand modifier copy |
-| `forbiddenBlocks` | bedrock, barriers, command and structure blocks, light blocks, portals, spawners, shulker boxes, TNT, beds, doors, fire | Never placed by the tools, not even typed in by an operator. These place normally in build mode |
+| `maxBlocksCap` | `50000` | Maximum blocks per build allowed on the realm (64 to 300000 in game); Woodwrights with Builder's Eye ([Skills](#skills--skills_bp)) get up to 25% more |
+| `modeComplexity` | `"player"` | Mode list complexity: `"player"` (players choose Simple or All modes), `"simple"` (Force Simple: Disable, Line, Wall, Floor, Cube), or `"advanced"` (Force All 15 modes) |
+| `tagRequired` | `false` | Require a player tag (`requiredTag`) to use Effortless Building (operators are always allowed) |
+| `requiredTag` | `"admin"` | The tag name required when `tagRequired` is enabled |
+| `allowDestroy` | `true` | Allow Destroy mode when right-clicking with a pickaxe, axe or shovel |
+| `destroyCreativeOnly` | `false` | Restrict Destroy mode to Creative mode only |
+| `allowInfiniteReach` | `true` | Allow players to enable Infinite Reach to place and destroy at a distance in midair |
+| `maxReachCap` | `64` | Longest Infinite Reach distance players may pick, in blocks (0 = no cap, up to 256) |
+| `autoGiveBook` | `false` | Automatically give the Building Book and Tutorial Book to new players on their first spawn |
+| `configTagRequired` | `false` | Restrict changing Preview Quality to players with `requiredTag` |
+| `plainMenusForAll` | `false` | Use standard menus instead of 3D floating panels for all players |
+| `inOthersClaims` | `false` | Allow builds and destroy actions to reach into other players' land claims ([Land Claims](#land-claims--claims_bp)) |
+| `safeZonesOperatorsOnly` | `true` | Inside a safe zone made with [Safe Zones](#safe-zones--zones_bp) (`/realm:zones`), only operators can build or destroy with the tools |
 
-Operators can change every option but the three block lists in game with `/realm:config` (**Easy Building**). Each player's own choices in `/realm:prefs` (and **Guides, reach and Air Build** in `/realm:build`): **Block guides** (default Outline), **Guide color** (default white), **Guide refresh (ticks)** (default 4), **Box edges sparkles** (green, white, flame or blue flame), **My reach (blocks)** (default the realm's `reach`), **Air Build** (default disabled), **Air Build distance (blocks)** (default 4), **Modifiers copy blocks I place and break by hand** (default disabled), **Build mode line above the hotbar** (default enabled), **Outline in destroy mode** (default enabled) and **Paste preview in paste mode** (default enabled).
+Operators can change every option in game with `/realm:config` (**Easy Building**) or in the **Admin** tab of `/realm:build_settings`. Each player's own preferences in `/realm:prefs` and `/realm:build_settings` share the same `eb:*` properties.
 
 ### Saved data
 
 | Key | Scope | Contents |
 |---|---|---|
-| `build:owed` | World | JSON: blocks owed to players who left while their build or undo was still going (player id -> item id -> count), given back when they next join |
-| `build:cutback` | World | JSON `{ [structure id]: { d, x, y, z } }`: cuts abandoned when their player left, whose blocks couldn't go back because their spot wasn't loaded any more: the dimension and corner of each kept structure |
-| `build:r<id>` | World structure | The blocks of one such cut, put back by a job once its spot is loaded (also after a restart), then deleted |
-| `build:plan` | Player | JSON: the chosen shape, each shape's own settings, the size mode, main and second block, replace mode, where it goes, copies and repeats, modifiers (mirror axes, radial, array, radius and the center with its dimension) and the palette (where from, pattern, direction, size) |
-| `build:pref` | Player | Choices made in `/realm:prefs` and **Guides, reach and Air Build** |
-| `build:cfg` | World | Settings changed in `/realm:config` |
-| `build:clip` | Player | JSON: your copies (name, size, block count, the way you faced when copying, a survival cut's free paste), which one pastes, and which cuts were already pasted for free |
-| `build:p<player id>_<slot>` | World structure | Each copy's blocks: slot 0 is **Last copy**, 1 to 19 the saved copies (`world.structureManager`, saved in the world). Deleting a copy deletes its structure |
-| `build:undo` | Player | JSON: which saved steps make up your undo and redo lists |
-| `build:h<n>_<part>` | Player | A saved undo or redo step: its label, dimension and every changed block (before, after, item it cost) in a compact text form, split into parts under 30,000 characters. At most about 400,000 characters per player |
-
-Build mode, paste mode, destroy mode, a selection, pending start blocks, curve points and undo steps bigger than `undoSaveBlocks` are kept in memory only.
-
-### How it works
-
-- Shapes are pure geometry (`scripts/shapes.js`): each fills a box of width x height x depth in its own frame (right, up, away from you), with cells marked as main block, second block, stair (and which way it climbs), gate or a fixed block. `main.js` turns the frame to the way you face (snapped to north, south, east or west), anchors it at the block, adds copies and repeats, and picks the real blocks: stairs get their `weirdo_direction`, gates their `minecraft:cardinal_direction`, ladders their `facing_direction`, and a ladder's backing is oak planks when your block isn't a full one. Curves are a Catmull-Rom spline through the points, with any gaps filled by straight runs.
-- Modifiers (`scripts/modifiers.js`) work on the world positions after that: array, then mirrors, then radial, each copy's block state turned or mirrored (`weirdo_direction`, `direction`, `minecraft:cardinal_direction`, `facing_direction`, `minecraft:facing_direction`, `torch_facing_direction`, `rail_direction`, `pillar_axis`, `ground_sign_direction`, `door_hinge_bit`, vine and lichen face bits, wall sides, `upside_down_bit`, `minecraft:vertical_half`...). The palette (`scripts/palette.js`) picks each block from its world position and the build's box.
-- Build mode listens to `afterEvents.playerPlaceBlock`: the placed block is set back to air (and returned in survival), and the build starts there. Hand modifiers listen to `playerPlaceBlock` and `playerBreakBlock`; a survival copy breaks with `setblock ... destroy`, which drops what the block drops. The Building Book and Air Build listen to `afterEvents.itemUse` (and `beforeEvents.playerInteractWithBlock` for the book on a block, which it cancels).
-- A build first reads every spot (what's there, what may be replaced, what each block costs), takes the items, then places blocks bottom first, `blocksPerTick` a tick, with lanterns, torches and ladders last. Anything paid for but not placed is given back. Each placed block is remembered with what it replaced, for undo.
-- Before building it asks Land Claims over `realm:claims_check` (see Land Claims' **How it works**) and waits for the answer; without Land Claims installed it waits a few ticks at most. It takes part in the safe zones protocol as a listener (`scripts/zones.js`), for the Safe Zones check.
-- Guides (`scripts/guides.js`, `drawGuide(player, cells, kind)`, also used for the paste ghost and the destroy guide) work out the faces of the cells that have no cell beside them (cached per layout; a new shape or facing up to 4096 blocks is laid out at once, a bigger one is laid out and outlined by a `system.runJob` job over a few ticks, so its guide shows a moment later (and a two-block shape over 4096 blocks each time its end moves, the last guide staying up meanwhile; the paste ghost and destroy outline are cached per copy, facing and plan and moved to where you look)), thin them to `guideMax` (shared among the modifier copies, which are worked out face by face from the shape's own outline instead of laying the build out again at every look), and spawn one `realm:guide_x`, `realm:guide_y` or `realm:guide_z` particle per face (or `realm:guide_dot` per surface block) with `Player.spawnParticle`, only for that player (each draw spread over the ticks until the next refresh, at most 600 particles a tick for all players together), with `variable.color`, `variable.life` (the refresh in real time, from a running average of recent tick lengths up to 150 ms that skips single stalls, plus 0.2 seconds, so they don't flicker; the paste ghost and destroy outline, drawn every 10 ticks, count from that) and `variable.style` (outline or corners). While a **Build here now**, **Paste here now** or **Destroy here now** preview draws, the steady guide of the same color waits, so the two don't cut each other short. Box edges uses vanilla particles along the box's 12 edges. The facing (`facingOf`) keeps a player's last way until the look is 55 degrees from it, while it was asked for in the last 40 ticks (the guide asks every refresh). The menus are loops: an action answers `CLOSE` (it needs the world, or the player pressed a sub-menu's X), a line for the top of the menu, or nothing (the menu comes back).
-- **Copies** are structures: `world.structureManager.createFromWorld` saves the box (blocks only, no entities) under `build:p<player id>_<slot>` with `StructureSaveMode.World`; saving a copy into a slot is `Structure.saveAs`. Blocks a copy leaves out are cleared in the structure. Pasting reads the structure's blocks a few thousand a tick (cached), turns each block's direction states (`weirdo_direction`, `facing_direction`, `minecraft:cardinal_direction`, `minecraft:facing_direction`, `direction`, `ground_sign_direction`, `pillar_axis`, `rail_direction`, vine and lichen face bits, wall and connection sides...) by the quarter turns between the copying and pasting facings, and hands the blocks to the same budgeted build as shapes (`scripts/clipboard.js`). The turns are checked against the game's own `StructureRotation` on a test server.
-- **Destroy mode** (`scripts/destroy.js`) listens to `afterEvents.playerBreakBlock`. The tool rules come from block tags (`minecraft:is_pickaxe_item_destructible`, `minecraft:is_axe_item_destructible`, `minecraft:is_shovel_item_destructible`, `minecraft:stone_tier_destructible`, `minecraft:iron_tier_destructible`, `minecraft:diamond_tier_destructible`). Drops come from `/setblock <x> <y> <z> air destroy` (the game's loot as if mined with the right tool, no enchantments), except ores (a table with Fortune and experience) and Silk Touch (`Block.getItemStack`), because the stable API can't run a loot table with a given tool. New item entities in the area are moved to your feet. Wear uses the tool's `minecraft:durability` component (`getDamageChance` with the Unbreaking level).
-- **Undo** (`scripts/undo.js`) keeps each player's steps in memory and saves the small ones on the player: each block as before/after permutations and its cost, sorted bottom first by its place in the step's box and written as runs (a wall of 2000 identical blocks takes about 140 characters, a mixed one about 4 per block).
-- The build mode line is a steady line of the action bar protocol: it sends `realm:actionbar` with `steady: 30` before each write and waits while another pack's note shows, and for the higher steady lines (the Elytra HUD while you glide, an expedition's run line); the story tracker waits for it. Its notes (`Built 15 blocks`, `Undone: ...`, `Point 2 set`) send `realm:actionbar` without `steady`, so every steady line waits for them.
+| `build:cfg` | World | World settings changed in `/realm:config` (`enabled`, `operatorsOnly`, `inOthersClaims`, `safeZonesOperatorsOnly`) |
+| `eb:adminMaxBlocksCap`, `eb:adminModeComplexity`, `eb:tagRequired`, `eb:requiredTag`, `eb:allowDestroy`, `eb:destroyCreativeOnly`, `eb:allowInfiniteReach`, `eb:maxReachCap`, `eb:autoGiveBook`, `eb:configTagRequired`, `eb:globalCustomUI` | World | Effortless Building admin settings shared between `/realm:config` and `/realm:build_settings` |
+| `eb:modifiers`, `eb:palette`, `eb:palette_dist`, `eb:palette_weight`, `eb:smartPattern`, `eb:modeOpts`, `eb:pins`, `eb:wheel` | Player | Active mirror/array/radial modifier settings, palette settings, per-mode options, pinned modes, and quick-wheel layout |
+| `eb:clip_meta`, `eb:clip_<slot>_<chunk>` | Player | Saved clipboard slots and auto-saved copy/cut data |
+| `eb:undo_n`, `eb:undo_<i>`, `eb:redo_n`, `eb:redo_<i>` | Player | Persistent undo and redo snapshots |
+| `eb:previewMode`, `eb:destroyPreviewMode`, `eb:previewQuality`, `eb:deferShapeCalc`, `eb:flickPreview`, `eb:simpleModes`, `eb:buildSpeed`, `eb:maxBlocks`, `eb:replaceBlocks`, `eb:infiniteReach`, `eb:infiniteReachDistance`, `eb:airBuildReach`, `eb:destroyDrops`, `eb:undoThreshold`, `eb:floatingUI`, `eb:cursor`, `eb:panelSize`, `eb:coachSide`, `eb:panelSounds`, `eb:swapBookActions`, `eb:fovZoomEnabled`, `eb:hintsEnabled`, `eb:bookLanguage` | Player | Per-player preferences shared between `/realm:prefs` and `/realm:build_settings` |
 
 ---
 
 ## Easy Building Guides — `build_rp`
 
-How [Easy Building](#easy-building--build_bp)'s block guides look, and the Building Book's icon. A **resource pack**, part of **Realm Resources** (or on its own, together with Easy Building).
+The resource pack for [Easy Building](#easy-building--build_bp): 3D floating UI panels, the radial Quick Switch Wheel, the 48-page illustrated 3D Tutorial Book, Live Coach markers, directional block outline and destroy particles (`eb:*`), UI sound definitions (`eb.ui.*`), 13 language files, and the Building Book and Tutorial Book icons. Part of **Realm Resources** (or downloadable on its own).
 
 ### How to use
 
-1. Nothing to do as a player: when the realm has it, Minecraft downloads it as you join (accept the resource pack prompt if one appears). Pick how guides look in `/realm:build` -> **Guides, reach and Air Build**.
-2. Without it, Easy Building works the same, but the **Outline**, **Corner outline** and **Particles** guides show nothing (pick **Box edges (sparkles)** instead) and the Building Book has no icon.
-3. **Operators:** it comes with Realm Resources: activate that under **Resource Packs**. To use it alone instead, download Easy Building Guides from its card and activate it the same way, with Easy Building under **Behavior Packs**.
+1. Nothing to do as a player: when the realm has **Realm Resources** active, Minecraft downloads it automatically when you join.
+2. Hold the **Building Book** and right-click (or hold right-click for the radial wheel) to use the 3D floating panels in the world, or hold the **Effortless Building Tutorial** book (`/realm:build_tutorial`) to flip through its 3D illustrated pages.
+3. **Operators:** included in **Realm Resources** under **Resource Packs**.
 
 ### What players see
 
-- **Outline:** a thin square line on each outer face of each block the build would fill (1/16 of a block wide, with a faint dark inner line so it shows on snow and quartz), in your guide color, glowing in the dark.
-- **Corner outline:** only the corners of those squares.
-- **Particles:** a small round dot in the middle of each block on the shape's surface.
-- Red for a destroy guide, light blue for a paste ghost and gold for marks (the modifier center, a two-block start, curve points). Only you see your guides.
-- The **Building Book** icon: a teal book with a brick wall on its cover, a gold corner and a red ribbon.
+- **3D Floating Panels & Quick Switch Wheel:** interactive in-world panels for the Mode Menu, Quick Switch Ring, Modifiers, Mirror/Array/Radial configuration, Block Palette, Clipboard, Copy/Cut prompt, Onboarding Setup, and Settings, with hover highlights, aiming cursor, and UI sounds.
+- **3D Illustrated Tutorial Book & Live Coach:** an animated book entity (`eb:guide_book`) that opens in front of you with 24 spreads (48 pages) in 13 languages, plus ghost previews and markers for the Live Coach.
+- **Block Outlines & Modifier Guides:** crisp per-face white build outlines (`eb:top*`, `eb:bottom*`, `eb:x1*`, `eb:x2*`, `eb:z1*`, `eb:z2*`), red destroy outlines (`*_d*`), controller emitters (`eb:controller*`) across 7 refresh quality tiers (`q1` to `q20`), and colored symmetry planes (`eb:mod_x`, `eb:mod_z`, `eb:mod_top`).
+- **Book Icons:** icons for `eb:building_book`, `realm:building_book`, and `eb:tutorial_book`.
 
 ### Saved data
 
@@ -5431,18 +5309,9 @@ None. It's a resource pack: no scripts and no commands.
 
 ### How it's made
 
-`npm run gen:build` (`tools/gen-build/gen.mjs`) draws the pictures; `npm run check` fails if they differ from what it makes. The rest is hand-written.
-
-| Files | |
-|---|---|
-| `particles/guide_x.json`, `guide_y.json`, `guide_z.json` | `realm:guide_x`, `realm:guide_y`, `realm:guide_z`: one block-sized square facing x, y or z (`emitter_transform_yz`, `_xz`, `_xy`), material `particles_blend`, tinted by `variable.color`, living `variable.life` seconds; `variable.style` picks the outline (0) or corner (1) half of the texture |
-| `particles/guide_dot.json` | `realm:guide_dot`: a dot facing you, 0.12 of a block |
-| `textures/particle/realm_guide.png`, `realm_guide_dot.png` | Generated. The outline and corner outline side by side (64 x 32), and the dot (16 x 16), white so they take any color |
-| `textures/items/realm_building_book.png`, `textures/item_texture.json` | Generated icon (16 x 16) of `realm:building_book`, as `realm_building_book` |
-| `pack_icon.png` | Generated: a stone wall with an outlined row of blocks going on top |
+`npm run gen:build` (`tools/gen-build/gen.mjs`) verifies the generated pack icon and base guide textures; the Effortless Building v5.0 models, animations, render controllers, particles, texts, and panel/book textures live alongside them in `packs/build_rp/`.
 
 ---
-
 ## Safe Zones — `zones_bp`
 
 Mark your base, a town square or a farm as a **safe zone**, and world events leave it alone: meteors don't make craters there, storm lightning doesn't strike (so it can't start fires), tornadoes can be set to calm down or steer around it, and Blood Moon creepers don't spawn in it. The events still happen, and you still see the meteor streak across the sky; they just break no blocks inside. Towns ([Town Projects](#town-projects--town_bp)) and land claims ([Land Claims](#land-claims--claims_bp)) can be safe zones too, and the world-event packs treat them all the same.

@@ -1,0 +1,498 @@
+eb.join.admin_granted=§6[Effortless Building] §rఈ ప్రపంచానికి మీరు మొదటి ఆటగాడు కాబట్టి మీకు §6అడ్మిన్ అనుమతి§r మంజూరు చేయబడింది.\n§7అడ్మిన్ ఎంపికల కోసం సెట్టింగులు తెరవండి (స్నీక్ + రైట్-క్లిక్).
+eb.join.no_left_click=§e[Effortless Building] §rమీ Minecraft వర్షన్‌లో లెఫ్ట్-క్లిక్ (స్వింగ్) §cసపోర్ట్ చేయబడలేదు§r.\n§7బ్లాక్ పాలెట్ తెరవడానికి §6బిల్డింగ్ బుక్§7‌తో లెఫ్ట్-క్లిక్ బదులు §f/palette§7 వాడండి.
+eb.join.received_book=§a[Effortless Building] §rమీకు §6బిల్డింగ్ బుక్§r అందించబడింది!\n§7రైట్-క్లిక్ §rతో నిర్మాణ మోడ్‌లు తెరవండి §7| §rస్నీక్ + రైట్-క్లిక్ §rతో సెట్టింగులు.\n§c§l❗ §r§cపోగొట్టుకున్నారా? §f§a/getbook §fటైప్ చేయండి (§e5 XP స్థాయిలు§f ఖర్చవుతాయి).
+
+eb.getbook.already_have=§c[EB] మీ వద్ద ఇప్పటికే బిల్డింగ్ బుక్ ఉంది.
+eb.getbook.not_enough_xp=§c[EB] కొత్త పుస్తకాన్ని పొందడానికి మీకు కనీసం %1 XP స్థాయిలు అవసరం. (మీ వద్ద %2 ఉన్నాయి)
+
+eb.place.no_blocks=§c[EB] §rఇన్వెంటరీలో బ్లాకులు లేవు!
+eb.place.limited_blocks=§e[EB] §rకేవలం %1 బ్లాకులు మాత్రమే - అందుబాటులో ఉన్నవి ఉంచబడతాయి.
+eb.place.no_palette_blocks=§c[EB] §rఇన్వెంటరీలో పాలెట్ బ్లాకులు లేవు!
+eb.place.limited_palette_blocks=§e[EB] §rపరిమిత పాలెట్ బ్లాకులు - %1 ఉంచబడతాయి.
+eb.place.undo_disabled=§e[EB] §7Undo నిలిపివేయబడింది.
+eb.place.too_large_to_undo=§e[EB] §7Undo కోసం చాలా పెద్దది (>%1 బ్లాకులు).
+
+eb.destroy.pickaxe_broke=§c[EB] §rమీ పరికరం విరిగిపోయింది!
+eb.destroy.no_mode=§c[EB] §rDestroy మోడ్ Air Build తో పని చేయదు. ముందు ఒక ఆకార మోడ్ ఎంచుకోండి (లైన్, వాల్, ఫ్లోర్, మొ.).
+eb.destroy.disabled=§c[EB] §rDestroy మోడ్ ఈ సర్వర్‌లో §cనిలిపివేయబడింది§r.
+eb.destroy.creative_only=§c[EB] §rDestroy మోడ్‌కు ఈ సర్వర్‌లో §eక్రియేటివ్§r మోడ్ అవసరం.
+eb.destroy.wrong_tool=§c[EB] §rమీ పరికరం ఈ బ్లాక్‌ను విరగగొట్టలేదు.
+
+eb.tag.required=§c[EB] §rEffortless Building ఉపయోగించడానికి §e%1§r ట్యాగ్ అవసరం.
+eb.getbook.no_tag=§c[EB] §r/getbook ఉపయోగించడానికి §e%1§r ట్యాగ్ అవసరం.
+
+eb.undo.nothing=§c[EB] అన్డూ చేయడానికి ఏమీ లేదు.
+eb.undo.done=§a[EB] అన్డూ §7- %1 బ్లాకులు పునరుద్ధరించబడ్డాయి.
+eb.redo.nothing=§c[EB] రీడూ చేయడానికి ఏమీ లేదు.
+eb.redo.done=§a[EB] రీడూ §7- %1 బ్లాకులు ఉంచబడ్డాయి.
+
+eb.bar.xz_set_destroy=§c[EB] §fXZ రేంజ్ సెట్ అయింది §8- §7రైట్-క్లిక్ చేయండి §eఎత్తు§7 & §cనాశనం §7నిర్ధారించడానికి
+eb.bar.xz_set_place=§a[EB] §fXZ రేంజ్ సెట్ అయింది §8- §7రైట్-క్లిక్ చేయండి §eఎత్తు§7 & §aఉంచడం §7నిర్ధారించడానికి
+eb.bar.destroyed=%1 బ్లాకులు §cనాశనం చేయబడ్డాయి §8(§7%2§8)
+eb.bar.destroying=§c[EB] §rనాశనం అవుతోంది... §e%1 §7మిగిలాయి
+eb.bar.toggle_disabled=§7[EB] §rమోడ్ §8ఆపబడింది§7. తిరిగి తేవడానికి రెండుసార్లు స్నీక్ చేయండి.
+eb.bar.toggle_restored=§a[EB] §rమోడ్ తిరిగి వచ్చింది: §b§l%1
+eb.bar.placed=%1 బ్లాకులు §7ఉంచబడ్డాయి §8(§7%2§8)
+eb.bar.placed_one=§f1 బ్లాక్ §7ఉంచబడింది §8(§7air build§8)
+eb.bar.destroy_anchor_set=§c[EB] §rDestroy ఆంకర్ సెట్ §7(%1, %2, %3)
+eb.bar.anchor_set=§a[EB] §rఆంకర్ సెట్ §7(%1, %2, %3)
+eb.bar.copy_corner1=§a[EB] §rకాపీ కార్నర్ 1 సెట్ §7(%1, %2, %3) - కార్నర్ 2 కోసం రైట్-క్లిక్ చేయండి
+eb.bar.copy_corner2=§a[EB] §rకాపీ కార్నర్ 2 సెట్ §7(%1, %2, %3) - ఎత్తు ఎంచుకోవడానికి రైట్-క్లిక్ చేయండి
+eb.bar.copy_done=§a[EB] §r§e%1§r బ్లాకులు కాపీ అయ్యాయి - పేస్ట్ చేయడానికి రైట్-క్లిక్ చేయండి
+eb.bar.cut_done=§6[EB] §r§e%1§r బ్లాకులు కట్ అయ్యాయి - పేస్ట్ చేయడానికి రైట్-క్లిక్ §7(సర్వైవల్‌లో ఒకసారే)
+eb.bar.copy_empty=§c[EB] §rఎంపికలో బ్లాకులు కనుగొనబడలేదు.
+eb.bar.copy_cleared=§7[EB] క్లిప్‌బోర్డ్ క్లియర్ - కార్నర్ 1 కోసం రైట్-క్లిక్ చేయండి
+eb.bar.copy_cancelled=§7[EB] ఎంపిక రద్దు చేయబడింది - కార్నర్ 1 కోసం రైట్-క్లిక్ చేయండి
+eb.first_open=§b[EB] §fఇక్కడ కొత్తా? గైడ్ చదవడానికి §6ట్యుటోరియల్§f బుక్‌ను చేతిలో పట్టుకోండి, లేదా చిన్న పరిచయం కోసం §a/guide§f టైప్ చేయండి.
+item.eb:building_book.name=§b§lబిల్డింగ్ బుక్
+eb.bar.pasted=%1 బ్లాకులు §aపేస్ట్ అయ్యాయి
+eb.bar.paste_empty=§e[EB] §7పేస్ట్ చేయడానికి క్లిప్‌బోర్డ్‌లో ఏమీ లేదు.
+
+eb.queue.waiting=§e⏳ %1 బ్లాకులు క్యూలో §7- చంక్స్ లోడ్ చేయడానికి\n§f(%2, %3, %4) §7దగ్గరకు వెళ్ళండి
+eb.queue.waiting_one=§e⏳ 1 బ్లాక్ క్యూలో §7- చంక్స్ లోడ్ చేయడానికి\n§f(%1, %2, %3) §7దగ్గరకు వెళ్ళండి
+
+eb.preview.air_build=§7Air Build  §8·  §7రైట్-క్లిక్ §aఉంచడానికి §8(%1, %2, %3)
+eb.preview.no_anchor_destroy=§7%1 (అనంత రేంజ్)  §8·  §7రైట్-క్లిక్ §cDestroy ఆంకర్ సెట్ §8(%2, %3, %4) చేయడానికి
+eb.preview.no_anchor_build=§7%1 (అనంత రేంజ్)  §8·  §7రైట్-క్లిక్ §aఆంకర్ సెట్ §8(%2, %3, %4) చేయడానికి
+eb.preview.hint_destroy=§7రైట్-క్లిక్ §cనాశనం చేయడానికి
+eb.preview.hint_place=§7రైట్-క్లిక్ §aఉంచడానికి
+eb.preview.step2=§8[2/3] §7రైట్-క్లిక్ §eXZ రేంజ్ §7సెట్ చేయడానికి
+eb.preview.step3_destroy=§8[3/3] §7రైట్-క్లిక్ §eఎత్తు§7 & §cనాశనం §7చేయడానికి
+eb.preview.step3_place=§8[3/3] §7రైట్-క్లిక్ §eఎత్తు§7 & §aఉంచడానికి
+
+eb.dir.ew=తూర్పు-పడమర
+eb.dir.ns=ఉత్తర-దక్షిణ
+eb.dir.ud=పైకి-కిందికి
+eb.dir.single=-
+
+eb.mode.normal=సాధారణ
+eb.mode.normal_plus=సాధారణ+
+eb.mode.line=లైన్
+eb.mode.wall=వాల్
+eb.mode.floor=ఫ్లోర్
+eb.mode.cube=క్యూబ్
+eb.mode.circle=వృత్తం
+eb.mode.cylinder=సిలిండర్
+eb.mode.sphere=గోళం
+eb.mode.diagonal_line=వికర్ణ లైన్
+eb.mode.diagonal_wall=వికర్ణ వాల్
+eb.mode.diagonal_floor=వికర్ణ ఫ్లోర్
+eb.mode.slope=వాలు
+eb.mode.slope_floor=వాలు ఫ్లోర్
+eb.mode.air_build=గాలిలో నిర్మాణం
+eb.mode.semicircle=అర్ధవృత్తం
+eb.mode.cone=శంఖువు
+eb.mode.destroy=నాశనం
+eb.mode.copy_paste=కాపీ / పేస్ట్
+
+eb.mode_select.body=ఒక బిల్డ్ మోడ్ ఎంచుకోండి.\n§eయాంకర్§r పెట్టడానికి ఒక బ్లాక్‌పై రైట్-క్లిక్ చేసి, ఉంచడాన్ని నిర్ధారించడానికి మళ్లీ రైట్-క్లిక్ చేయండి.\n§8ఎంచుకున్న ఆకారంలో §cకూల్చడానికి §7పికాక్స్ §8పట్టుకుని రైట్-క్లిక్ చేయండి§8.\n§8కొత్తా? పూర్తి గైడ్ కోసం §7/tutorial §8టైప్ చేయండి.
+eb.mode_select.mode_set=§a[EB] §rమోడ్ §e%1§r కి సెట్ అయింది.
+
+eb.mode_select.options_title=§l%1§r §8- ఎంపికలు
+eb.mode_select.quick_access=§l§dత్వరిత ప్రాప్యత§r
+eb.mode_select.btn.clipboard=§lక్లిప్‌బోర్డ్§r
+eb.mode_select.btn.palette=§lప్యాలెట్§r
+eb.mode_select.btn.settings=§lసెట్టింగులు§r
+eb.mode_select.btn.undo=§lవెనుకకు§r
+eb.mode_select.btn.redo=§lముందుకు§r
+eb.mode_select.btn.done=§cపూర్తయింది§r
+eb.mode_select.btn.modifiers=§lమోడిఫైయర్లు§r
+
+eb.modifiers.btn.mirror=§lమిర్రర్§r  [%1]
+eb.modifiers.btn.array=§lఅరే§r  [%1]
+eb.modifiers.btn.radial=§lరేడియల్§r  [%1]
+eb.modifiers.btn.close=మూసివేయి
+
+eb.modifiers.mirror.body=Status: %1\nCenter: %2, %3, %4\nAxes: %5  %6  %7\nRadius: %8  Mode: %9
+eb.modifiers.mirror.btn.set_pos=కేంద్రాన్ని నా స్థానానికి పెట్టు
+eb.modifiers.mirror.btn.configure=కాన్ఫిగర్...
+eb.modifiers.mirror.config.title=మిర్రర్ సెట్టింగులు
+eb.modifiers.mirror.center_x=కేంద్రం X
+eb.modifiers.mirror.center_y=కేంద్రం Y
+eb.modifiers.mirror.center_z=కేంద్రం Z
+eb.modifiers.mirror.radius=వ్యాసార్థం (బ్లాకులు)
+eb.modifiers.mirror.pos_set=§e[EB] మిర్రర్ కేంద్రం %1, %2, %3 వద్ద పెట్టబడింది
+
+eb.modifiers.array.body=స్థితి: %1\nఆఫ్‌సెట్: %2, %3, %4\nసంఖ్య: %5
+eb.modifiers.array.btn.configure=కాన్ఫిగర్...
+eb.modifiers.array.config.title=అరే సెట్టింగులు
+eb.modifiers.array.offset_x=ఆఫ్‌సెట్ X
+eb.modifiers.array.offset_y=ఆఫ్‌సెట్ Y
+eb.modifiers.array.offset_z=ఆఫ్‌సెట్ Z
+eb.modifiers.array.count=సంఖ్య (కాపీలు)
+
+eb.modifiers.radial.body=స్థితి: %1\nకేంద్రం: %2, %3\nముక్కలు: %4\nవ్యాసార్థం: %5\nమార్చి మార్చి: %6
+eb.modifiers.radial.btn.set_pos=కేంద్రాన్ని నా స్థానానికి పెట్టు
+eb.modifiers.radial.btn.configure=కాన్ఫిగర్...
+eb.modifiers.radial.config.title=రేడియల్ మిర్రర్ సెట్టింగులు
+eb.modifiers.radial.center_x=కేంద్రం X
+eb.modifiers.radial.center_z=కేంద్రం Z
+eb.modifiers.radial.slices=ముక్కలు
+eb.modifiers.radial.radius=వ్యాసార్థం (బ్లాకులు)
+eb.modifiers.radial.alternate=మార్చి మార్చి (ప్రతి 2వ ముక్కను తిప్పు)
+eb.modifiers.radial.pos_set=§e[EB] రేడియల్ కేంద్రం %1, %2, %3 వద్ద పెట్టబడింది
+
+eb.settings.player.preview_style=ప్రివ్యూ శైలి\n§7ఎంపిక చేసేటప్పుడు చూపించే విజువల్ శైలి
+eb.settings.player.replace_blocks=ఉన్న బ్లాక్‌లను భర్తీ చేయి\n§7నిర్మాణ సమయంలో ఉన్న బ్లాక్‌లను భర్తీ చేయడానికి అనుమతించు
+eb.settings.player.build_speed=నిర్మాణ వేగం\n§7బ్లాక్‌లు ఎంత వేగంగా వరుసగా ఉంచబడతాయి
+eb.settings.player.destroy_drops=కూల్చివేత డ్రాప్స్\n§7కూల్చిన బ్లాక్‌ల నుండి వస్తువులు పడాలా వద్దా
+eb.settings.player.selection_zoom=సెలెక్షన్ జూమ్\n§7ఎంపిక యాక్టివ్‌గా ఉన్నప్పుడు జూమ్ ఇన్ చేయి
+eb.settings.player.zoom_start=జూమ్ ప్రారంభ దూరం (బ్లాక్‌లు)\n§7జూమ్ ప్రారంభమయ్యే దూరం
+eb.settings.player.zoom_max=పూర్తి జూమ్ దూరం (బ్లాక్‌లు)\n§7గరిష్ట జూమ్ చేరే దూరం
+eb.settings.player.air_reach=గాలిలో నిర్మాణ దూరం (బ్లాక్‌లు)\n§7గాలిలో బ్లాక్‌లను ఉంచే గరిష్ట దూరం
+eb.settings.player.infinite_reach=అనంతమైన దూరం\n§7సాధారణ పరిమితికి మించి నిర్మించు
+eb.settings.player.inf_reach_dist=అనంతమైన పరిమితి దూరం (బ్లాక్‌లు)\n§7అనంతమైన దూరం ఎంతవరకు ఉంటుంది
+eb.settings.player.swap_book_actions=పుస్తక చర్యలు మార్చండి\n§7కుడి-క్లిక్: పాలెట్, ఎడమ-క్లిక్: మెను
+eb.settings.player.undo_limit=అన్‌డూ పరిమితి\n§7కూల్చిన తర్వాత వెనక్కి తీసుకోవడానికి గరిష్ట బ్లాక్‌ల సంఖ్య
+eb.settings.player.max_blocks=గరిష్ట బ్లాక్‌లు (1 – %1)\n§7ఒకే ఆపరేషన్‌లో ఉంచగలిగే గరిష్ట బ్లాక్‌లు
+
+eb.settings.title=§l§6EB సెట్టింగ్స్§r
+eb.settings.admin_require_tag=§cఅడ్మిన్§r - EB కోసం ట్యాగ్ అవసరం\n§7ఆన్‌లో ఉంటే, కింది ట్యాగ్ ఉన్న ఆటగాళ్లు మాత్రమే కట్టగలరు
+eb.settings.admin_tag=§cఅడ్మిన్§r - అవసరమైన ట్యాగ్\n§7ప్రస్తుతం: §e%1
+eb.settings.admin_allow_destroy=§cఅడ్మిన్§r - Destroy మోడ్‌ను అనుమతించండి\n§7ఆఫ్‌లో ఉంటే, ఏ ఆటగాడూ Destroy మోడ్ వాడలేడు
+eb.settings.admin_destroy_creative=§cఅడ్మిన్§r - Destroy: క్రియేటివ్ మాత్రమే\n§7ఆన్‌లో ఉంటే, Destroy మోడ్‌కు క్రియేటివ్ గేమ్‌మోడ్ అవసరం
+eb.settings.admin_allow_inf_reach=§cఅడ్మిన్§r - అనంత రేంజ్‌ను అనుమతించండి\n§7ఆఫ్‌లో ఉంటే, అనంత రేంజ్ అందరు ఆటగాళ్లకూ ఆపబడుతుంది
+eb.settings.admin_max_reach_cap=§cఅడ్మిన్§r - గరిష్ట అనంత పరిధి దూరం\n§7ప్రస్తుతం: §e%1  §70 = పరిమితి లేదు
+eb.settings.admin_max_blocks_cap=§cఅడ్మిన్§r - గరిష్ఠ బ్లాకుల పరిమితి (ఒక్కో ఆటగాడికి)\n§7ప్రస్తుతం: §e%1  §7గరిష్ఠం: §e%2
+eb.settings.admin_auto_give_book=§cఅడ్మిన్§r - బిల్డింగ్ బుక్ స్వయంచాలకంగా ఇవ్వండి\n§7ఆన్‌లో ఉంటే, ఆటగాళ్లు చేరినప్పుడు బిల్డింగ్ బుక్ స్వయంచాలకంగా అందుతుంది
+eb.settings.admin_config_tag=కాన్ఫిగ్‌ని అవసరమైన ట్యాగ్‌కి పరిమితం చేయి\n§7ఆన్ చేస్తే, అవసరమైన ట్యాగ్ ఉన్న ప్లేయర్లు మాత్రమే /config ఉపయోగించగలరు.
+
+eb.config.restricted=§c[EB] /config పరిమితం చేయబడింది. మీకు §e%1§c ట్యాగ్ అవసరం.
+eb.config.done=§cపూర్తయింది§r
+eb.config.quality.smooth.label=సున్నితమైన
+eb.config.quality.smooth.desc=ప్రతి టిక్‌కు అప్‌డేట్ అవుతుంది. గరిష్ట వేగంతో అత్యంత సున్నితమైన ప్రివ్యూ.
+eb.config.quality.sharp.label=తీవ్రమైన
+eb.config.quality.sharp.desc=ప్రతి 2 టిక్‌లకు అప్‌డేట్ అవుతుంది. కొద్దిగా తక్కువ లోడ్‌తో దాదాపు సమానమైన ప్రివ్యూ.
+eb.config.quality.crisp.label=స్పష్టమైన
+eb.config.quality.crisp.desc=ప్రతి 3 టిక్‌లకు అప్‌డేట్ అవుతుంది. వేగంగా తిరిగినప్పుడు కొద్దిగా ఆలస్యం ఉంటుంది.
+eb.config.quality.balanced.label=సమతుల్య
+eb.config.quality.balanced.desc=ప్రతి 4 టిక్‌లకు అప్‌డేట్ అవుతుంది. విజువల్ నాణ్యత మరియు పనితీరు మధ్య మంచి సమతుల్యత.
+eb.config.quality.responsive.label=ప్రతిస్పందించే
+eb.config.quality.responsive.desc=ప్రతి 5 టిక్‌లకు అప్‌డేట్ అవుతుంది. సాధారణ పరికరాలకు లేదా పెద్ద ప్రివ్యూలకు సిఫార్సు చేయబడింది.
+eb.config.quality.lite.label=లైట్
+eb.config.quality.lite.desc=ప్రతి 10 టిక్‌లకు అప్‌డేట్ అవుతుంది (~సెకనుకు 2 సార్లు). కొద్దిగా ఆలస్యం ఉన్నా చాలా తేలికైనది.
+eb.config.quality.minimal.label=కనిష్ట
+eb.config.quality.minimal.desc=ప్రతి 20 టిక్‌లకు అప్‌డేట్ అవుతుంది (సెకనుకు 1 సారి). అత్యంత తక్కువ లోడ్ కోసం.
+
+eb.clipboard.slot.empty=§8స్లాట్ %1: (ఖాళీ)§r
+eb.clipboard.slot.empty_active=§fస్లాట్ %1:§r §7(ఖాళీ)§r
+eb.clipboard.slot.filled=§fస్లాట్ %1:§r §7%2§r
+eb.clipboard.slot.filled_active=§l§eస్లాట్ %1:§r §e%2§r
+eb.clipboard.tip.dims=%1 వెడల్పు × %2 ఎత్తు × %3 లోతు - %4 బ్లాక్‌లు
+eb.clipboard.tip.dims_named="%1" · %2 వెడల్పు × %3 ఎత్తు × %4 లోతు - %5 బ్లాక్‌లు
+eb.clipboard.tip.empty=ఖాళీ స్లాట్ - మొదట ఏదైనా కాపీ చేయండి!
+eb.clipboard.btn.paste=§lఅతికించు§r
+eb.clipboard.btn.paste_empty=§8అతికించు§r
+eb.clipboard.btn.rename=§lపేరు మార్చు§r
+eb.clipboard.btn.rename_empty=§8పేరు మార్చు§r
+eb.clipboard.btn.delete=§lతొలగించు§r
+eb.clipboard.btn.delete_empty=§8తొలగించు§r
+eb.clipboard.btn.done=పూర్తయింది
+eb.clipboard.load_failed=§c[EB] స్లాట్ లోడ్ చేయడం విఫలమైంది.
+eb.clipboard.loaded=§a[EB] §7స్లాట్ %1 లోడ్ అయింది - అతికించడానికి లక్ష్యం చేసి క్లిక్ చేయండి!
+eb.clipboard.rename_title=క్లిప్‌బోర్డ్ స్లాట్ పేరు మార్చండి
+eb.clipboard.rename_label=పేరు
+eb.clipboard.rename_placeholder=పేరును నమోదు చేయండి…
+eb.clipboard.cleared=§7[EB] స్లాట్ %1 క్లియర్ చేయబడింది.
+
+eb.palette.bar=§a[EB] §fపాలెట్: %1 §8· §f%2 §8· §f%3
+
+§7After turning off, also select the §e"No Custom UI"§7 subpack in
+§7your RP and BP pack settings to fully remove the panels.
+
+§7§8Admins can force-disable Custom UI for all players - see Admin Settings.
+
+§eDefault §8(OFF)§e:
+§7  §eRight-click§7 → opens Mode Selector
+§7  §eLeft-click §8(swing)§7 → opens Block Palette
+
+§eSwapped §8(ON)§e:
+§7  §eRight-click§7 → opens Block Palette
+§7  §eLeft-click §8(swing)§7 → opens Mode Selector
+
+§7Enable this in §ePlayer Settings§7 if you prefer fast palette access on right-click.
+
+§7After disabling, also select the §e"No Custom UI"§7 subpack in both your
+§eRP§7 and §eBP§7 pack settings to fully remove the panels for everyone.
+
+eb.common.on=§aఆన్§r
+eb.common.off=§cఆఫ్§r
+
+eb.bar.bezier=§7బెజియర్: §f%1 బిందువులు పెట్టారు  §8·  §fస్నీక్+క్లిక్ §7తో ఉంచండి  §8·  §7మరిన్ని జోడించడానికి క్లిక్
+eb.bar.bezier_one=§7బెజియర్: §f1 బిందువు పెట్టారు  §8·  §fస్నీక్+క్లిక్ §7తో ఉంచండి  §8·  §7మరిన్ని జోడించడానికి క్లిక్
+
+eb.modifiers.overview_body=మిర్రర్: %1\nఅరే:  %2\nరేడియల్: %3
+eb.modifiers.btn.mirror_active=§l§eమిర్రర్§r  [%1]
+eb.modifiers.btn.array_active=§l§eఅరే§r  [%1]
+eb.modifiers.btn.radial_active=§l§eరేడియల్§r  [%1]
+eb.modifiers.mirror.btn.enable=§a■ మిర్రర్ ఆన్ చేయి§r
+eb.modifiers.mirror.btn.disable=§c■ మిర్రర్ ఆఫ్ చేయి§r
+eb.modifiers.mirror.axis_x_toggle=అక్షం X: %1
+eb.modifiers.mirror.axis_y_toggle=అక్షం Y: %1
+eb.modifiers.mirror.axis_z_toggle=అక్షం Z: %1
+eb.modifiers.mirror.odd_toggle=బేసి ఆఫ్‌సెట్: %1
+eb.modifiers.array.btn.enable=§a■ అరే ఆన్ చేయి§r
+eb.modifiers.array.btn.disable=§c■ అరే ఆఫ్ చేయి§r
+eb.modifiers.radial.btn.enable=§a■ రేడియల్ ఆన్ చేయి§r
+eb.modifiers.radial.btn.disable=§c■ రేడియల్ ఆఫ్ చేయి§r
+
+eb.palette.cat.source=మూలం
+eb.palette.cat.dist=పంపిణీ
+eb.palette.cat.weight=బరువు
+eb.palette.source.disable=ఆఫ్
+eb.palette.source.hotbar=హాట్‌బార్ నుండి కలుపు
+eb.palette.source.inventory=ఇన్వెంటరీ నుండి కలుపు
+eb.palette.source.hotbar_inventory=హాట్‌బార్ + ఇన్వెంటరీ నుండి కలుపు
+eb.palette.source.disable.desc=§aసాధారణ నిర్మాణం.§r మీరు క్లిక్ చేసిన బ్లాక్ మాత్రమే వాడబడుతుంది.\n§7ఇదే డిఫాల్ట్. ఒకే నిర్మాణంలో పలు రకాల బ్లాకులు కలపడానికి కింద ఒక కలుపు ఎంపికను ఎంచుకోండి.
+eb.palette.source.hotbar.desc=§eకలపడం ఆన్‌లో ఉంది.§r నిర్మాణాలు క్లిక్ చేసినది మాత్రమే కాక §eమీ హాట్‌బార్‌లోని ప్రతి బ్లాక్‌ను§r కలుపుతాయి.\n§7ఒకే బ్లాక్‌తో కట్టడానికి మూలాన్ని తిరిగి §fఆఫ్§7 చేయండి.
+eb.palette.source.inventory.desc=§eకలపడం ఆన్‌లో ఉంది.§r నిర్మాణాలు క్లిక్ చేసినది మాత్రమే కాక §eమీ ఇన్వెంటరీలోని ప్రతి బ్లాక్‌ను§r కలుపుతాయి.\n§7ఒకే బ్లాక్‌తో కట్టడానికి మూలాన్ని తిరిగి §fఆఫ్§7 చేయండి.
+eb.palette.source.hotbar_inventory.desc=§eకలపడం ఆన్‌లో ఉంది.§r నిర్మాణాలు క్లిక్ చేసినది మాత్రమే కాక §eహాట్‌బార్, ఇన్వెంటరీలోని ప్రతి బ్లాక్‌ను§r కలుపుతాయి.\n§7ఒకే బ్లాక్‌తో కట్టడానికి మూలాన్ని తిరిగి §fఆఫ్§7 చేయండి.
+eb.palette.dist.random=యాదృచ్ఛికం
+eb.palette.dist.spread=సమంగా
+eb.palette.dist.grad_x=గ్రేడియంట్ X
+eb.palette.dist.grad_y=గ్రేడియంట్ Y
+eb.palette.dist.grad_z=గ్రేడియంట్ Z
+eb.palette.dist.grad_radial=రేడియల్ గ్రేడియంట్
+eb.palette.dist.grad_diagonal=వికర్ణ గ్రేడియంట్
+eb.palette.dist.concentric=ఏకకేంద్ర
+eb.palette.dist.checker=చదరంగం గళ్లు
+eb.palette.dist.stripes_h=చారలు H
+eb.palette.dist.stripes_v=చారలు V
+eb.palette.dist.stripes_d=చారలు D
+eb.palette.dist.brick=ఇటుక
+eb.palette.dist.herringbone=హెరింగ్‌బోన్
+eb.palette.dist.noise=నాయిస్ మిశ్రమం
+eb.palette.dist.cell=సెల్ / వొరొనోయ్
+eb.palette.dist.marble=పాలరాయి
+eb.palette.dist.border=అంచు
+eb.palette.dist.wave=అల
+eb.palette.dist.spiral=సర్పిలం
+eb.palette.best_tag= §a(ఉత్తమం)
+eb.palette.dist.dissolve=కరిగించు
+eb.palette.dist.random.desc=ప్రతి బ్లాక్ విడిగా యాదృచ్ఛికంగా ఎంచుకోబడుతుంది.
+eb.palette.dist.spread.desc=గుంపులు తక్కువగా, బ్లాకులను సమంగా పంచుతుంది.
+eb.palette.dist.grad_x.desc=X అక్షం వెంట మృదువైన గ్రేడియంట్.
+eb.palette.dist.grad_y.desc=Y అక్షం వెంట మృదువైన గ్రేడియంట్.
+eb.palette.dist.grad_z.desc=Z అక్షం వెంట మృదువైన గ్రేడియంట్.
+eb.palette.dist.grad_radial.desc=కేంద్రం నుండి బయటికి వ్యాపించే రేడియల్ గ్రేడియంట్.
+eb.palette.dist.grad_diagonal.desc=నిర్మాణం అంతటా వికర్ణ గ్రేడియంట్.
+eb.palette.dist.concentric.desc=కేంద్రం నుండి విస్తరించే ఏకకేంద్ర వలయాలు.
+eb.palette.dist.checker.desc=చదరంగం గళ్ల నమూనాలో మారుతూ ఉండే బ్లాకులు.
+eb.palette.dist.stripes_h.desc=నిర్మాణం అంతటా అడ్డ చారలు.
+eb.palette.dist.stripes_v.desc=నిర్మాణం ఎత్తు వెంట నిలువు చారలు.
+eb.palette.dist.stripes_d.desc=నిర్మాణం అంతటా వికర్ణ చారలు.
+eb.palette.dist.brick.desc=ఇటుక కట్టడంలా జరిపిన వరుసలు.
+eb.palette.dist.herringbone.desc=హెరింగ్‌బోన్ అల్లికలో V ఆకార వరుసలు.
+eb.palette.dist.noise.desc=నాయిస్ ఆధారంగా బ్లాకుల సహజ మిశ్రమం.
+eb.palette.dist.cell.desc=వొరొనోయ్ సెల్ ప్రాంతాలు, ప్రతిదీ ఒక బ్లాక్‌తో నిండి ఉంటుంది.
+eb.palette.dist.marble.desc=నిర్మాణం గుండా పారే పాలరాయి వంటి చారలు.
+eb.palette.dist.border.desc=అంచులపై ఔట్‌లైన్ బ్లాక్, లోపల నింపే బ్లాక్.
+eb.palette.dist.wave.desc=నిర్మాణం అంతటా సైన్ అల నమూనా.
+eb.palette.dist.spiral.desc=నిర్మాణాన్ని చుట్టే సర్పిల నమూనా.
+eb.palette.dist.dissolve.desc=ముఖం అంతటా చెదిరిన కరుగుదల - మార్పు వద్ద బ్లాకులు యాదృచ్ఛికంగా కలుస్తాయి.
+eb.palette.weight.amount=మొత్తం
+eb.palette.weight.slots=స్లాట్లు
+eb.palette.weight.unique=విభిన్న
+eb.palette.weight.amount.desc=అన్ని స్టాక్‌లలోని మొత్తం బ్లాకుల సంఖ్యను బట్టి బరువు.
+eb.palette.weight.slots.desc=నిండిన ప్రతి ఇన్వెంటరీ స్లాట్ సమానంగా లెక్కించబడుతుంది.
+eb.palette.weight.unique.desc=ప్రతి బ్లాక్ రకం సమాన బరువుతో లెక్కించబడుతుంది.
+eb.palette.tile_pattern_on=నమూనా పునరావృతం §a[ఆన్]§r
+eb.palette.tile_pattern_off=నమూనా పునరావృతం §c[ఆఫ్]§r
+eb.palette.btn.done=§cపూర్తయింది§r
+
+eb.settings.admin_custom_ui_toggle=§cఅడ్మిన్§r - అందరికీ సాదా మెనూలు\n§7ఆన్‌లో ఉంటే, ప్రతి ఆటగాడికి గేమ్ ప్రామాణిక మెనూలు వస్తాయి
+eb.ui.title.mode_select=Effortless Building
+eb.ui.title.palette=బ్లాక్ పాలెట్
+eb.ui.title.clipboard=క్లిప్‌బోర్డ్
+eb.ui.title.modifiers=నిర్మాణ మోడిఫైయర్లు
+
+eb.preview.copy_corner1=§7కాపీ మోడ్  §8·  §7మూల 1 పెట్టడానికి రైట్-క్లిక్
+eb.preview.copy_corner1_sneak=§7కాపీ మోడ్  §8·  §7మూల 1 పెట్టడానికి రైట్-క్లిక్ §8(బ్లాక్ లోపల)
+
+eb.settings.player.hints_enabled=సందర్భ సూచనలు\n§7మీరు మొదటిసారి ప్యానెల్ తెరిచినప్పుడు లేదా\n§7నిర్మాణ మోడ్ ఎంచుకున్నప్పుడు చాట్‌లో ఒక లైన్ సూచన
+eb.hint.defer_shape=§a[EB] §r§7సూచన: §fమీరు గురిపెట్టేటప్పుడు కనిపించే బాక్స్ §eఆకార లెక్కను వాయిదా వేయి§f - మీరు కదలడం ఆపే వరకు పూర్తి ఆకార లెక్క ఆగుతుంది, దాంతో గేమ్ సాఫీగా నడుస్తుంది. అసలు ఆకారం చూడటానికి క్షణం నిలవండి; ఉంచినప్పుడు అది ఎప్పుడూ ఖచ్చితంగా కట్టబడుతుంది. §7లైవ్ ప్రివ్యూ కావాలా? §eసెట్టింగులు §8> §eఆటగాడి సెట్టింగులు§7లో ఆఫ్ చేయండి.
+eb.hint.panel.mode_menu=§a[EB] §r§7సూచన: §fఇదే మెనూ - ఎడమవైపు ఒక ఆకారం ఎంచుకుని, కట్టడానికి బ్లాకులపై క్లిక్ చేయండి. జాబితా పైన ఉన్న §eమెనూ§fలో పాలెట్, మోడిఫైయర్లు, క్లిప్‌బోర్డ్, అన్డూ, సెట్టింగులు, సహాయం ఉన్నాయి.
+eb.hint.panel.palette=§a[EB] §r§7సూచన: §fఇది బ్లాక్ పాలెట్ - కట్టేటప్పుడు ఏ బ్లాకులు వాడాలో ఎంచుకోండి (యాంకర్ బ్లాక్, హాట్‌బార్ లేదా మీ మొత్తం ఇన్వెంటరీ).
+eb.hint.panel.modifiers=§a[EB] §r§7సూచన: §fమోడిఫైయర్లు మీరు తరువాత కట్టేదాన్ని పునరావృతం చేస్తాయి - మిర్రర్, అరే లేదా రేడియల్. ఆకారం ఉంచే ముందు ఇక్కడ ఒకదాన్ని ఆన్ చేయండి.
+eb.hint.panel.settings=§a[EB] §r§7సూచన: §fసెట్టింగ్‌ను మార్చడానికి దానిపై ట్యాప్ చేయండి; కింద ఉన్న సూచన దాన్ని వివరిస్తుంది. §eత్వరిత సెటప్§f ఒక్క ట్యాప్‌తో మీ పరికరానికి అన్నీ సెట్ చేస్తుంది.
+eb.hint.panel.clipboard=§a[EB] §r§7సూచన: §fక్లిప్‌బోర్డ్ పలు కాపీ/కట్ ఎంపికలను దాచుతుంది, తరువాత ఏదైనా పేస్ట్ చేయవచ్చు.
+eb.hint.mode.air_build=§a[EB] §r§7సూచన: §fగాలిలో నిర్మాణం ఉపరితలం లేకుండా గాలిలో బ్లాకులు ఉంచుతుంది - బ్లాక్ కావాల్సిన చోట గురిపెట్టి మీ పరికరాన్ని వాడండి.
+eb.hint.mode.line=§a[EB] §r§7సూచన: §fలైన్: మొదటి క్లిక్ ప్రారంభాన్ని, రెండో క్లిక్ ముగింపును పెడుతుంది.
+eb.hint.mode.wall=§a[EB] §r§7సూచన: §fవాల్: మొదటి క్లిక్ ఒక మూలను, రెండోది ఎత్తు, వెడల్పును పెడుతుంది.
+eb.hint.mode.floor=§a[EB] §r§7సూచన: §fఫ్లోర్: మొదటి క్లిక్ ఒక మూలను, రెండోది ఎదురు మూలను పెడుతుంది.
+eb.hint.mode.diagonal_line=§a[EB] §r§7సూచన: §fవికర్ణ లైన్: లైన్ లాంటిదే, కానీ ఏ కోణంలోనైనా - మొదటి క్లిక్ ప్రారంభం, రెండో క్లిక్ ముగింపు.
+eb.hint.mode.diagonal_wall=§a[EB] §r§7సూచన: §fవికర్ణ వాల్: మొదటి క్లిక్ ఆధార రేఖను, రెండోది ఎత్తును పెడుతుంది.
+eb.hint.mode.slope_floor=§a[EB] §r§7సూచన: §fవాలు ఫ్లోర్: మొదటి క్లిక్ కింది మూలను, రెండోది పై మూలను పెడుతుంది.
+eb.hint.mode.cube=§a[EB] §r§7సూచన: §fక్యూబ్: మొదటి క్లిక్ ఒక మూలను, రెండోది ఎదురు మూలను పెడుతుంది.
+eb.hint.mode.circle=§a[EB] §r§7సూచన: §fవృత్తం: మొదటి క్లిక్ కేంద్రాన్ని, రెండోది వ్యాసార్థాన్ని పెడుతుంది.
+eb.hint.mode.cylinder=§a[EB] §r§7సూచన: §fసిలిండర్: మొదటి క్లిక్ కేంద్రం, రెండోది వ్యాసార్థం, మూడోది ఎత్తు.
+eb.hint.mode.sphere=§a[EB] §r§7సూచన: §fగోళం: మొదటి క్లిక్ కేంద్రాన్ని, రెండోది వ్యాసార్థాన్ని పెడుతుంది.
+eb.hint.mode.semicircle=§a[EB] §r§7సూచన: §fఅర్ధవృత్తం: మొదటి క్లిక్ కేంద్రాన్ని, రెండోది వ్యాసార్థాన్ని పెడుతుంది.
+eb.hint.mode.cone=§a[EB] §r§7సూచన: §fశంఖువు: అడుగు కేంద్రం, తరువాత అడుగు వ్యాసార్థం, తరువాత ఎత్తు. కొనను స్వేచ్ఛగా గురిపెట్టి శంఖువును వంచడానికి మోడ్ ఎంపికల్లో అక్షాన్ని వికర్ణానికి మార్చండి.
+eb.hint.mode.copy_paste=§a[EB] §r§7సూచన: §fకాపీ/పేస్ట్: కాపీ లేదా కట్ చేయడానికి రెండు మూలలు ఎంచుకుని, మోడ్ ఎంపికల నుండి పేస్ట్ వాడండి.
+
+item.eb:tutorial_book.name=§b§lEffortless Building ట్యుటోరియల్
+
+eb.settings.player.destroy_preview_style=కూల్చే ప్రివ్యూ శైలి\n§7కూల్చేటప్పుడు చూపించే విజువల్ శైలి
+
+eb.preview.deferred_head=§f%1 §7ప్రాంతం
+eb.preview.exceeds_limit=§c[EB] §rఎంపిక మీ గరిష్ఠ బ్లాకుల పరిమితిని §7(%1)§r మించింది. దగ్గరికి వెళ్లండి లేదా ఎంపికను చిన్నది చేయండి.
+
+eb.settings.player.defer_shape=ఆకార లెక్కను వాయిదా వేయి\n§7మీరు గురిపెడుతున్నప్పుడు వేగమైన బాక్స్ గీసి\n§7అసలు ఆకారాన్ని మీరు నిలిచినప్పుడు\n§7లేదా ఉంచినప్పుడు మాత్రమే లెక్కిస్తుంది\n§eతక్కువ స్థాయి పరికరం: బాగా సిఫార్సు\n§eమధ్య స్థాయి పరికరం: సిఫార్సు
+eb.settings.player.flick_preview=కదిలినప్పుడే ప్రివ్యూ\n§7మీ గురి కదిలినప్పుడే ప్రివ్యూను\n§7మళ్లీ గీస్తుంది - ఎప్పుడూ చూపకుండా\n§7మార్పు వద్ద మెరుస్తుంది (పనితీరు ఆదా)
+
+eb.onboarding.title=§l§6Effortless Building - సెటప్§r
+eb.onboarding.welcome.body=§fమీరు దేనిపై ఆడుతున్నారు?\n\n§7ఇది ప్రివ్యూను, బ్లాక్ పరిమితిని మీ పరికరానికి సరిపెడుతుంది. ఎప్పుడైనా §eసెట్టింగులు > త్వరిత సెటప్§7లో మార్చవచ్చు.
+eb.onboarding.btn.low=§eతక్కువ స్థాయి పరికరం\n§8ఫోన్ / టాబ్లెట్ / పాత PC
+eb.onboarding.btn.mid=§eమధ్య స్థాయి పరికరం\n§8చాలా ఫోన్‌లు, ల్యాప్‌టాప్‌లు, కన్సోల్‌లు\n§eసిఫార్సు
+eb.onboarding.btn.high=§eఉన్నత స్థాయి పరికరం\n§8గేమింగ్ PC / శక్తివంతమైన పరికరం
+eb.onboarding.btn.skip=§8దాటవేయి
+eb.onboarding.tier.low=తక్కువ
+eb.onboarding.tier.mid=మధ్య
+eb.onboarding.tier.high=ఉన్నత
+eb.onboarding.tier_applied=§a[EB] §r%1 ప్రీసెట్ అమలైంది. ఎప్పుడైనా §eసెట్టింగులు§rలో అన్నీ సరిదిద్దవచ్చు.
+eb.onboarding.capped_by_admin=§e[EB] §rసర్వర్ అడ్మిన్ పరిమితి వల్ల మీ గరిష్ఠ బ్లాకులు §f%1§rకి పరిమితం చేయబడ్డాయి.
+eb.onboarding.complete=§a[EB] §rఅంతా సిద్ధం! ప్రారంభించడానికి §6బిల్డింగ్ బుక్§rతో రైట్-క్లిక్ చేయండి. గైడ్ కోసం §6ట్యుటోరియల్§r బుక్ పట్టుకోండి, లేదా లైవ్ ట్యుటోరియల్ కోసం §a/guide§r టైప్ చేయండి.
+
+eb.mode_select.btn.more_modes=§b+ మరిన్ని మోడ్‌లు§r
+eb.mode_select.btn.fewer_modes=§8- తక్కువ మోడ్‌లు§r
+eb.mode_select.simple_on=§a[EB] §r§eప్రారంభ§r మోడ్‌లు చూపిస్తోంది. పూర్తి జాబితా కోసం మెనూలో §e+ మరిన్ని మోడ్‌లు§r వాడండి.
+eb.mode_select.simple_off=§a[EB] §r§eఅన్ని§r నిర్మాణ మోడ్‌లు చూపిస్తోంది.
+eb.settings.player.simple_modes=సులభ మోడ్ జాబితా\n§7లైన్, వాల్, ఫ్లోర్, క్యూబ్ మాత్రమే చూపించు.\n§7ప్రతి నిర్మాణ మోడ్ చూడటానికి ఆఫ్ చేయండి
+eb.settings.admin_mode_complexity=§cఅడ్మిన్§r - నిర్మాణ మోడ్ జాబితా\n§7ఆటగాళ్లను ఎంచుకోనివ్వండి, లేదా అందరినీ\n§7సులభ లేదా పూర్తి జాబితాకు కట్టుబెట్టండి
+eb.preview.step_of=దశ %1/%2
+eb.preview.idle_start=§7%1  §8·  §7దశ %2/%3  §8·  §fప్రారంభించడానికి ఒక బ్లాక్‌పై రైట్-క్లిక్
+eb.preview.idle_need_item=§7%1  §8·  §eకట్టడం ప్రారంభించడానికి ఒక బ్లాక్ పట్టుకోండి
+
+eb.bar.book_controls=§6§lబిల్డింగ్ బుక్§r  §8|  §7రైట్-క్లిక్ §fమెనూ§r  §8·  §7నొక్కి పట్టు §fత్వరిత మార్పు§r  §8·  §7లెఫ్ట్-క్లిక్ §fపాలెట్\n§7స్నీక్+రైట్ §fసెట్టింగులు§r  §8·  §7స్నీక్+లెఫ్ట్ §fమోడిఫైయర్లు§r  §8·  §7రెండుసార్లు స్నీక్ §fమోడ్ ఆన్/ఆఫ్
+eb.bar.book_controls_swapped=§6§lబిల్డింగ్ బుక్§r  §8|  §7రైట్-క్లిక్ §fపాలెట్§r  §8·  §7నొక్కి పట్టు §fత్వరిత మార్పు§r  §8·  §7లెఫ్ట్-క్లిక్ §fమెనూ\n§7స్నీక్+రైట్ §fసెట్టింగులు§r  §8·  §7స్నీక్+లెఫ్ట్ §fమోడిఫైయర్లు§r  §8·  §7రెండుసార్లు స్నీక్ §fమోడ్ ఆన్/ఆఫ్
+eb.bar.tutorial_book_controls=§6§lట్యుటోరియల్§r  §8|  §7రైట్-క్లిక్ §fతరువాతి పేజీ§r  §8·  §7బుక్‌ను కొట్టు §fవెనక్కి§r  §8·  §7స్నీక్ §fఒక అధ్యాయం దాటు
+
+eb.palette.enabled_notice=§e[EB] §fబ్లాక్ పాలెట్ §eఆన్§f - §6%1§f.\n§7ఇకపై మీ నిర్మాణాలు క్లిక్ చేసిన బ్లాక్ మాత్రమే కాక §eపలు రకాల బ్లాకులను కలుపుతాయి§7.\n§7ఆఫ్ చేయడానికి: §eబుక్ > పాలెట్ > మూలం > ఆఫ్§7.
+eb.palette.disabled_notice=§a[EB] §fబ్లాక్ పాలెట్ §aఆఫ్§f. నిర్మాణాలు మీరు క్లిక్ చేసిన బ్లాక్‌ను మాత్రమే వాడతాయి.
+eb.preview.palette_active=§6పాలెట్: %1 §8(%2)§r §7- నిర్మాణాలు బ్లాకులను కలుపుతాయి
+
+eb.preview.copy_step2=§7దశ 2/3  §8·  §fమూల 2పై రైట్-క్లిక్
+eb.preview.copy_step3=§7దశ 3/3  §8·  §fఎత్తు పెట్టడానికి రైట్-క్లిక్
+eb.clipboard.action.title=§l§6ప్రాంతం ఎంచుకోబడింది§r
+eb.clipboard.action.body=§fదీంతో ఏం చేయాలి?\n\n§7§lకాపీ§r§7 బ్లాకులను ఉన్న చోటే వదులుతుంది.\n§7§lకట్§r§7 వాటిని తీసి మీతో తీసుకెళ్తుంది.
+eb.clipboard.action.copy=§a§lకాపీ§r\n§7అసలును అక్కడే ఉంచు
+eb.clipboard.action.cut=§6§lకట్§r\n§7బ్లాకులను తీసి వెంట తీసుకెళ్లు
+eb.clipboard.action.cancel=§8రద్దు
+eb.clipboard.slot.auto=§bచివరి కాపీ:§r §7%1§r
+eb.clipboard.slot.auto_active=§l§eచివరి కాపీ:§r §e%1§r
+eb.clipboard.slot.auto_empty=§8చివరి కాపీ: (ఖాళీ)§r
+eb.clipboard.slot.auto_empty_active=§fచివరి కాపీ:§r §7(ఖాళీ)§r
+eb.clipboard.tip.auto_empty=ఇంకా ఏమీ కాపీ చేయలేదు. ఏదైనా కాపీ చేస్తే అది తానే ఇక్కడికి వస్తుంది.
+eb.clipboard.btn.save=§lకాపీని దాచు§r
+eb.clipboard.btn.save_empty=§8కాపీని దాచు§r
+eb.clipboard.saved=§a[EB] §7స్లాట్ %1లో దాచబడింది. తరువాతి కాపీలు దీన్ని మార్చవు.
+eb.clipboard.save_full=§c[EB] §7దాచే స్లాట్లు అన్నీ నిండాయి. ముందు ఒకదాన్ని తొలగించండి.
+eb.clipboard.loaded_auto=§a[EB] §7చివరి కాపీ లోడ్ అయింది - పేస్ట్ చేయడానికి గురిపెట్టి ఇంటరాక్ట్ చేయండి!
+eb.clipboard.cleared_auto=§7[EB] చివరి కాపీ తొలగించబడింది.
+eb.clipboard.restored_cut=§6[EB] §fపేస్ట్ కోసం ఎదురుచూస్తున్న §6కట్§f ఎంపిక ఇంకా మీ వద్ద ఉంది.\n§7§eక్లిప్‌బోర్డ్§7 తెరవండి లేదా ఉంచడానికి గురిపెట్టి ఇంటరాక్ట్ చేయండి.
+
+eb.set.custom_ui=కస్టమ్ మెనూలు
+eb.join.welcome=§a[Effortless Building] §rమీకు §6బిల్డింగ్ బుక్§r, §6ట్యుటోరియల్§r బుక్ అందాయి.\n§7అన్నీ నేర్చుకోవడానికి §fట్యుటోరియల్§7 బుక్ పట్టుకోండి. ప్రారంభించడానికి §fబిల్డింగ్ బుక్§7తో రైట్-క్లిక్ చేయండి.
+eb.help.title=సహాయం
+eb.help.body=§f§6ట్యుటోరియల్§f బుక్ అన్నిటినీ బొమ్మలతో వివరిస్తుంది. చేతిలో పట్టుకుంటే అది మీ ముందు తెరుచుకుంటుంది.
+eb.help.btn.book=§lట్యుటోరియల్ బుక్§r\n§8తీసుకోండి, లేదా ఎలా తెరవాలో చూడండి
+eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
+eb.help.btn.setup=§lత్వరిత సెటప్§r\n§8యాడాన్‌ను మీ పరికరానికి సరిపెట్టండి
+eb.help.book_hold=§a[EB] §r§6ట్యుటోరియల్§r బుక్ మీ వద్ద ఇప్పటికే ఉంది. చేతిలో పట్టుకుంటే అది మీ ముందు తెరుచుకుంటుంది.
+eb.help.book_given=§a[EB] §rఇదిగో §6ట్యుటోరియల్§r బుక్. చేతిలో పట్టుకుంటే అది మీ ముందు తెరుచుకుంటుంది.
+eb.help.book_no_room=§c[EB] §rట్యుటోరియల్ బుక్ కోసం మీ ఇన్వెంటరీలో చోటు లేదు.
+eb.mode_select.btn.help=§lసహాయం§r
+eb.mode_select.btn.tools=§lమెనూ§r
+eb.mode_select.btn.tools_active=§l§eమెనూ§r
+eb.mode_select.disabled_body=§7ఆకారాలు ఆఫ్‌లో ఉన్నాయి§r
+eb.set.cat.setup=త్వరిత సెటప్
+eb.set.cat.building=నిర్మాణం
+eb.set.cat.preview=ప్రివ్యూ
+eb.set.cat.controls=నియంత్రణలు
+eb.set.cat.admin=అడ్మిన్
+eb.set.cat.setup.desc=మీ పరికరం రకం ఎంచుకోండి. ఒక ట్యాప్ ప్రివ్యూ, బ్లాక్ పరిమితిని సరిచేస్తుంది.
+eb.set.cat.building.desc=ఆకారాలు ఎలా ఉంచబడతాయి: వేగం, పరిమాణ పరిమితి, దూరం, కూల్చితే ఏమి వస్తుంది.\n§7సెట్టింగ్‌ను మార్చడానికి దానిపై ట్యాప్ చేయండి.
+eb.set.cat.preview.desc=ఉంచే ముందు ఆకారం ఎలా కనిపిస్తుంది. తేలికైన శైలులు, తక్కువ నాణ్యత మరింత సాఫీగా నడుస్తాయి.\n§7సెట్టింగ్‌ను మార్చడానికి దానిపై ట్యాప్ చేయండి.
+eb.set.cat.controls.desc=బుక్ క్లిక్‌లు, కెమెరా జూమ్, సూచనలు, మెనూల రూపం.\n§7సెట్టింగ్‌ను మార్చడానికి దానిపై ట్యాప్ చేయండి.
+eb.set.cat.admin.desc=§cఅడ్మిన్§r - ఈ ప్రపంచంలోని ప్రతి ఆటగాడికి నియమాలు.\n§7సెట్టింగ్‌ను మార్చడానికి దానిపై ట్యాప్ చేయండి.
+eb.set.simple_modes=ప్రారంభ ఆకారాలు మాత్రమే
+eb.set.build_speed=నిర్మాణ వేగం
+eb.set.max_blocks=గరిష్ఠ బ్లాకులు
+eb.set.replace_blocks=బ్లాకులను మార్చు
+eb.set.infinite_reach=అనంతమైన దూరం
+eb.set.inf_reach_dist=చేరే దూరం
+eb.set.air_reach=గాలిలో నిర్మాణ దూరం
+eb.set.destroy_drops=కూల్చినప్పుడు డ్రాప్‌లు
+eb.set.undo_limit=అన్‌డూ పరిమితి
+eb.set.preview_style=నిర్మాణ ప్రివ్యూ
+eb.set.destroy_preview_style=కూల్చే ప్రివ్యూ
+eb.set.preview_quality=ప్రివ్యూ నాణ్యత
+eb.set.defer_shape=ఆకారాన్ని వాయిదా వేయి
+eb.set.flick_preview=కదిలినప్పుడే ప్రివ్యూ
+eb.set.swap_book_actions=బుక్ క్లిక్‌లను మార్చు
+eb.set.selection_zoom=ఎంపిక జూమ్
+eb.set.zoom_start=జూమ్ ప్రారంభం
+eb.set.zoom_max=పూర్తి జూమ్
+eb.set.hints=సూచనలు
+eb.set.menu_style=మెనూ శైలి
+eb.set.menu_style.tip=మెనూ శైలి\n§fతేలియాడే§7: మెనూలు మీ ముందు గాలిలో వేలాడతాయి\n§fసాదా§7: గేమ్ ప్రామాణిక మెనూలు
+eb.set.admin_mode_list=ఆకారాల జాబితా
+eb.set.admin_require_tag=ట్యాగ్ అవసరం
+eb.set.admin_tag=ట్యాగ్
+eb.set.admin_allow_destroy=కూల్చడాన్ని అనుమతించు
+eb.set.admin_destroy_creative=క్రియేటివ్‌లో మాత్రమే కూల్చడం
+eb.set.admin_allow_inf_reach=అనంతమైన దూరాన్ని అనుమతించు
+eb.set.admin_reach_cap=దూర పరిమితి
+eb.set.admin_blocks_cap=బ్లాకుల పరిమితి
+eb.set.admin_auto_give_book=చేరినప్పుడు బుక్‌లు ఇవ్వు
+eb.set.admin_lock_quality=ప్రివ్యూ నాణ్యతను లాక్ చేయి
+eb.set.admin_vanilla_menus=అందరికీ సాదా మెనూలు
+eb.set.book_language=బుక్ భాష
+eb.set.book_language.tip=బుక్ భాష\n§7ట్యుటోరియల్ బుక్, తేలియాడే మెనూల్లోని\n§7సూచనలు, పాఠాల భాష.
+eb.help.btn.language=§lబుక్ భాష§r\n§8English, Español, Deutsch, 日本語 ...
+entity.eb:language_picker.name=భాష
+eb.palette.dist.dissolve_x=కరిగించు X
+eb.palette.dist.dissolve_y=కరిగించు Y
+eb.palette.dist.dissolve_z=కరిగించు Z
+eb.palette.dist.dissolve_x.desc=X అక్షం వెంట చెదిరిన కరుగుదల.
+eb.palette.dist.dissolve_y.desc=Y అక్షం వెంట చెదిరిన కరుగుదల, కింది నుండి పైకి.
+eb.palette.dist.dissolve_z.desc=Z అక్షం వెంట చెదిరిన కరుగుదల.
+eb.coach.started=§a[EB] §rమీ కోచ్ వచ్చాడు. మీ పక్కన ఉన్న కార్డ్‌ను అనుసరించండి, ఒక్కో అడుగు. దాని §eX§r దాన్ని తీసేస్తుంది.
+eb.coach.stopped=§7[EB] కోచ్ తీసేయబడ్డాడు. §a/guide§7 లేదా §eసహాయం§7 మీరు ఆపిన చోటి నుండి తిరిగి తెస్తుంది.
+eb.coach.done=§a[EB] §rట్యుటోరియల్ పూర్తయింది! మీరు వాడినవన్నీ మెనూలో ఉన్నాయి. ఆనందంగా కట్టండి.
+entity.eb:panel_ring.name=త్వరిత మార్పు
+eb.set.cursor=కర్సర్
+eb.set.cursor.tip=కర్సర్\n§7తేలియాడే మెనూలపై మీరు ఎక్కడ గురిపెడుతున్నారో\n§7చూపే చిన్న బాణం. టచ్ స్క్రీన్‌లపై ఉపయోగకరం.
+eb.cursor.turned_off=§a[EB] §rకర్సర్ ఆఫ్. §eసెట్టింగులు > నియంత్రణలు > కర్సర్§rలో మళ్లీ ఆన్ చేయండి.
+eb.set.panel_size=ప్యానెల్ పరిమాణం
+eb.set.panel_size.tip=ప్యానెల్ పరిమాణం\n§7తేలియాడే మెనూలు ఎంత పెద్దవి.\n§7ఫోన్‌లో పెద్దది సులభం.
+eb.set.coach_side=కోచ్ కార్డ్ వైపు
+eb.set.coach_side.tip=కోచ్ కార్డ్ వైపు\n§7ట్యుటోరియల్ కార్డ్ మీకు ఏ వైపు వేలాడుతుంది.
+eb.set.panel_sounds=మెనూ శబ్దాలు
+eb.set.panel_sounds.tip=మెనూ శబ్దాలు\n§7తేలియాడే మెనూల క్లిక్‌లు, గంటలు\n§7ఎంత గట్టిగా వినిపిస్తాయి.
+entity.eb:panel_wheel.name=త్వరిత మార్పు చక్రం
+entity.eb:panel_mirror_config.name=మిర్రర్
+entity.eb:panel_array_config.name=అరే
+entity.eb:panel_radial_config.name=రేడియల్
+entity.eb:panel_menu.name=మెనూ
+entity.eb:panel_palette.name=బ్లాక్ పాలెట్
+entity.eb:panel_modifiers.name=నిర్మాణ మోడిఫైయర్లు
+entity.eb:panel_clipboard.name=క్లిప్‌బోర్డ్
+entity.eb:panel_coach.name=కోచ్
+entity.eb:panel_lessons.name=పాఠాలు
+entity.eb:coach_marker.name=గుర్తు
+entity.eb:panel_help.name=సహాయం
+entity.eb:panel_setup.name=త్వరిత సెటప్
+entity.eb:panel_copycut.name=ప్రాంతం ఎంచుకోబడింది
+entity.eb:panel_settings_setup.name=సెట్టింగులు
+entity.eb:panel_settings_building.name=సెట్టింగులు
+entity.eb:panel_settings_preview.name=సెట్టింగులు
+entity.eb:panel_settings_controls.name=సెట్టింగులు
+entity.eb:panel_settings_admin.name=సెట్టింగులు
+eb.hint.panel.mode_menu_floating=§a[EB] §r§7సూచన: §fఇదే మెనూ - ఒక ఆకారాన్ని చూసి ఎంచుకోవడానికి క్లిక్ చేయండి. దాని ఎంపికలు కుడివైపు, పరికరాలు కింద ఉన్నాయి. మూసివేయడానికి హాట్‌బార్ స్లాట్ మార్చండి లేదా దాని బయట క్లిక్ చేయండి.
+action.interact.eb_picker_select=ఎంచుకో
+entity.eb:guide_book.name=ట్యుటోరియల్
+action.interact.eb_guide_turn=తరువాతి పేజీ
+eb.set.book_language.tip=బుక్ భాష\n§7ట్యుటోరియల్ బుక్, తేలియాడే మెనూల్లోని\n§7సూచనలు, పాఠాల భాష.
+eb.help.btn.guided=§lలైవ్ ట్యుటోరియల్§r\n§8చేస్తూ నేర్చుకోండి, ఒక్కో అడుగు
