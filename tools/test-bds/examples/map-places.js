@@ -59,11 +59,13 @@ export default async function (t) {
   cfg("radar", true, p);
 
   // --- Towns: Riverside 150 north, Hilltop 300 north-east. Facing north: Riverside in the middle.
+  await t.loadArea(0, -150);
   stand(p, 0, -150);
-  await t.wait(10);
+  await t.wait(20);
   t.assert(t.cmd(p, '/realm:town_add Riverside').ok, "town_add Riverside");
+  await t.loadArea(300, -300);
   stand(p, 300, -300);
-  await t.wait(10);
+  await t.wait(20);
   t.assert(t.cmd(p, '/realm:town_add Hilltop').ok, "town_add Hilltop");
   await t.waitUntil(() => of("realm:town_list", (m) => (m.towns ?? []).length >= 2).length > 0, { timeout: 60, message: "town_bp sends both towns" });
   stand(p, 0, 0);
