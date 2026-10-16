@@ -111,6 +111,7 @@ export const SIEGE_LINES = {
   held: "§6[Siege] {town} held! The Choir's song breaks apart and the singers flee into the dark.",
   failed: "§7[Siege] §cThe Choir's song is finished. {town} is shaken.",
   scattered: "§7[Siege] The Choir scattered before the song began.",
+  noGround: "§7[Siege] The Choir found no open ground around {town} for its circles and scattered. Nothing was lost. §8(Circles need flat, open, natural ground outside safe zones and claims.)",
   hollis: "§eHollis:§r I heard them singing, all night, through the chapel walls. I knew the words. I don't know how I knew the words.",
   reyes: "§eReyes:§r Good work. Clean up, get some sleep, and stop grinning. That's an order. Mostly.",
 };

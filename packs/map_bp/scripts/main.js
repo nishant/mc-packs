@@ -19,6 +19,7 @@
 //   realm:wander_spawn / realm:wander_turn / realm:wander_gone                     <- which wanderers on the road are friendly
 //   realm:town_list       { part, parts, towns: [{ id, n, dim, x, z }] }            <- Town Projects; realm:town_list_ping {}
 //   realm:rainbow_pot     { dim?, x?, z? }                                         <- Rainbows: the unfound pot of gold, or {}; realm:rainbow_ping {}
+//   realm:siege_marks     { dim?, town?: { n, x, z }, circles?: [{ x, z }] }       <- Realm Calendar: a Choir siege, or {}; realm:siege_ping {}
 //   realm:map_debug       { player, action: "state" | "cost" } (operators, tests)  -> realm:map_state
 // Party mates are the online players with the same `realm_party:<code>` tag (Parties).
 // See "Minimap" in docs/PACKS.md.
@@ -170,6 +171,8 @@ const tracks = new Map();
 const towns = new Map();
 /** The rainbow's pot of gold while nobody has found it (Rainbows & the Pot of Gold). @type {Spot | undefined} */
 let pot;
+/** A Choir siege (Realm Calendar): the town and the circles still singing (none during the warning). @type {{ town: Spot, circles: Spot[] } | undefined} */
+let siege;
 /** Wanderer id -> friendly (true) or a hostile in disguise (false). Road wanderers we never heard about stay hidden. @type {Map<string, boolean>} */
 const wanderers = new Map();
 /** Lists arriving in parts: key -> what came so far. @type {Map<string, unknown[]>} */
@@ -328,9 +331,17 @@ let costPlayers = 0;
 /** A live player's position, if they're online. @param {string} id @param {Player[]} all */
 const onlineById = (id, all) => all.find((p) => p.id === id);
 
+/** The siege spot for a player: the nearest circle still singing, else the town (the warning). @param {Player} player */
+function siegeSpot(player) {
+  if (!siege || player.dimension.id !== siege.town.dim) return undefined;
+  if (!siege.circles.length) return siege.town;
+  return siege.circles.reduce((a, b) => (distTo(player, a) <= distTo(player, b) ? a : b));
+}
+
 /**
  * Where the destination is now: the picked waypoint (followed live for townsfolk, camps, the death point and
- * party mates), else the story tracker's target. `off` says why there's nothing to point at.
+ * party mates), else a Choir siege in the player's dimension, else the story tracker's target. `off` says why
+ * there's nothing to point at.
  * @param {Player} player @param {Player[]} all @param {Map<string, Vector3>} liveFolk
  * @returns {{ spot?: Spot, picked: boolean, off?: string } | undefined}
  */
@@ -358,6 +369,8 @@ function destination(player, all, liveFolk) {
     }
     return { spot: wp, picked: true };
   }
+  const sg = siegeSpot(player);
+  if (sg) return { spot: sg, picked: false };
   const t = tracks.get(player.id);
   if (!t) return undefined;
   const live = t.npc ? liveFolk.get(t.npc) : undefined;
@@ -823,6 +836,7 @@ async function menu(player) {
   const lines = [];
   if (wp && dest?.spot) lines.push(`§fDestination: §e${dest.spot.n}§r §7(${where(player, dest.spot)})`);
   else if (wp && dest?.off) lines.push(`§fDestination: §e${wp.n}§r §7(${dest.off})`);
+  else if (dest?.spot && dest.spot === siegeSpot(player)) lines.push(`§fFollowing the Choir siege: §c${dest.spot.n}§r §7(${where(player, dest.spot)})`);
   else if (dest?.spot) lines.push(`§fFollowing your story: §b${dest.spot.n}§r §7(${where(player, dest.spot)})`);
   else lines.push("§7No destination. Pick one, or start a story and the strip points to it.");
   lines.push("", "§7Mara's Field Map: hold it in your other hand (offhand) to see the land around you.");
@@ -954,6 +968,7 @@ const EVENTS = new Set([
   "realm:wander_gone",
   "realm:town_list",
   "realm:rainbow_pot",
+  "realm:siege_marks",
   "realm:map_debug",
 ]);
 
@@ -1049,6 +1064,17 @@ function onEvent(id, m, source) {
     case "realm:rainbow_pot":
       pot = spotOf(m, "Pot of gold");
       return;
+    case "realm:siege_marks": {
+      const t = m.town && typeof m.town === "object" ? spotOf({ ...m.town, dim: m.dim }) : undefined;
+      if (!t) {
+        siege = undefined;
+        return;
+      }
+      const left = Array.isArray(m.circles) ? m.circles.slice(0, 8) : [];
+      const circles = /** @type {Spot[]} */ (left.map((/** @type {any} */ c) => spotOf({ ...c, dim: t.dim }, `Choir circle (${left.length} left)`)).filter(Boolean));
+      siege = { town: { ...t, n: `Siege: ${t.n}` }, circles };
+      return;
+    }
     case "realm:map_debug": {
       if (source instanceof Player && !isOp(source)) return;
       const player = world.getAllPlayers().find((p) => p.id === pid || p.name === pid);
@@ -1103,6 +1129,7 @@ function ping(player) {
     send("realm:place_ping", {});
     send("realm:town_list_ping", {});
     send("realm:rainbow_ping", {});
+    send("realm:siege_ping", {});
   }
 }
 

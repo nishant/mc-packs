@@ -804,7 +804,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "With no destination picked, the star follows your story tracker's current goal (the place to go or the townsfolk to report to). That one never clears on its own: it moves on with the story.",
+        "text": "With no destination picked, the star follows your story tracker's current goal (the place to go or the townsfolk to report to). That one never clears on its own: it moves on with the story. During a Choir siege the star points to the siege instead, for everyone in the Overworld: the besieged town during the warning (§eSiege: Lanternford§r), then the nearest Ritual Circle still singing (§eChoir circle (3 left)§r); after the siege it goes back to the story. A destination you picked still wins.",
         "ops": false
       },
       {
@@ -1553,7 +1553,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lSieges:§r when chat warns §eThe Gray Choir is coming to Riverside§r, you have 3 minutes (default 3, §ewarnMinutes§r). Then three Ritual Circles rise 48 to 96 blocks around the town; their spots are in chat and the clock is in the top-left side box. At each circle, beat its §lChoir Singer§r (a vindicator), then hit or tap its bell 5 times (default 5, §ebellHits§r). Silence all three within 12 minutes (default 12, §esiegeMinutes§r) and the town holds.",
+        "text": "§lSieges:§r when chat warns §eThe Gray Choir is coming to Riverside§r, you have 3 minutes (default 3, §ewarnMinutes§r). Then three Ritual Circles rise 48 to 96 blocks around the town; their spots are in chat, the clock is in the top-left side box with an arrow to the town center (during the warning) or the nearest circle still singing (§eNearest circle NE 64m§r), and the Minimap's compass strip points there with its gold star. At each circle, beat its §lChoir Singer§r (a vindicator), then hit or tap its bell 5 times (default 5, §ebellHits§r). Silence all three within 12 minutes (default 12, §esiegeMinutes§r) and the town holds.",
         "ops": false
       },
       {
