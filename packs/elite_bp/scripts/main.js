@@ -1041,12 +1041,29 @@ function upkeep(e) {
   live.set(e.id, e);
 }
 
+/** Takes the champion tags and name off an entity that isn't a mob. @param {import("@minecraft/server").Entity} e */
+function unChampion(e) {
+  try {
+    for (const t of e.getTags()) if (t === CHAMP || t.startsWith(TRAIT_TAG) || t.startsWith("realm:")) e.removeTag(t);
+    e.nameTag = "";
+    e.setDynamicProperty(PROP_NAME, undefined);
+  } catch {
+    // gone
+  }
+}
+
 function refresh() {
   let n = 0;
   const seen = new Set();
   for (const id of DIMS) {
     try {
       for (const e of world.getDimension(id).getEntities({ tags: [CHAMP] })) {
+        // Not a mob (an item tagged by mistake when the game handed back the wrong entity): no champion, and it
+        // doesn't take a place under maxAlive.
+        if (!e.getComponent("minecraft:health")) {
+          unChampion(e);
+          continue;
+        }
         n++;
         seen.add(e.id);
         try {
@@ -1076,7 +1093,10 @@ system.runInterval(refresh, 100);
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
-    if (entity.isValid && entity.hasTag(CHAMP)) upkeep(entity);
+    if (entity.isValid && entity.hasTag(CHAMP)) {
+      if (entity.getComponent("minecraft:health")) upkeep(entity);
+      else unChampion(entity);
+    }
   } catch (e) {
     console.warn(`[elite] load: ${e}`);
   }

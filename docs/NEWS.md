@@ -6,6 +6,10 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Champions are back
+
+- Champions spawn in the wild again. A few dropped items had been mistaken for champions, which used up the limit of 8 at once. They are cleared out now.
+
 ## Story bosses on time
 
 - The Bell Warden and other story champions now come within seconds of you reaching their place. A spawn that went wrong used to leave you waiting 2 minutes for another try.
