@@ -361,6 +361,13 @@ const trackLabel = (player, e) => (sagaOf(player).tr === e.story.id ? "Tracked\n
 /** A choice's button: its label, and what it costs. @param {import("./types.js").Choice} c */
 const choiceLabel = (c) => (c.cost?.crowns ? `${c.label} (${c.cost.crowns} Crowns)` : c.label);
 
+/**
+ * Can the talker's choice be made for this mate too? Not when it fits only the talker's own path (its `requires`
+ * don't hold for the mate: they took another way earlier) or when it costs something (each pays their own way).
+ * @param {Player} p @param {Story} story @param {import("./types.js").Choice | undefined} c
+ */
+const choiceFits = (p, story, c) => !c || (!(c.cost?.crowns ?? 0) && requires(c.requires, sagaOf(p), story.id, p).ok);
+
 /** Takes a choice's cost; false (and a note) when the player can't pay. @param {Player} player @param {import("./types.js").Choice | undefined} c */
 function payFor(player, c) {
   const n = c?.cost?.crowns ?? 0;
@@ -450,9 +457,14 @@ const listenBody = (lead, pages, steps) => [`§b${lead}§r`, "", ...pages.flatMa
 /**
  * Accepts a chapter for a party mate, as if they had talked to its NPC: the intro choice the talker made, recipes it
  * teaches, the steps in chat. A dialogue of theirs still open for the same story closes.
- * @param {Player} p @param {Story} story @param {Chapter} chapter @param {Player} by @param {import("./types.js").Choice | undefined} choice @param {boolean} joined they picked Join (a side story)
+ * Returns false (with a note to talk to the NPC themselves) when the talker's choice doesn't fit their story.
+ * @param {Player} p @param {Story} story @param {Chapter} chapter @param {string} by the talker's name @param {import("./types.js").Choice | undefined} choice @param {boolean} joined they picked Join (a side story)
  */
 function acceptFor(p, story, chapter, by, choice, joined) {
+  if (!choiceFits(p, story, choice)) {
+    p.sendMessage(`§e[Party] ${by} took on ${story.title}, "${chapter.title}" with a choice that isn't yours to make (your story went another way, or it has a cost). Talk to ${npcName(chapter.npc ?? story.giver)} to take it on yourself.`);
+    return false;
+  }
   const saga = sagaOf(p);
   const st = stateOf(saga, story);
   if (choice) {
@@ -468,14 +480,15 @@ function acceptFor(p, story, chapter, by, choice, joined) {
   invalidate(p.id);
   markDirty(p, true);
   if (talking.get(p.id) === story.id) closeForms(p); // their own copy of the intro: it's accepted now
-  const pick = choice ? ` ${by.name} chose: ${choice.label}.` : "";
-  p.sendMessage(joined ? `§6[Party] You joined ${by.name}: ${story.title}, "${chapter.title}".` : `§6[Party] ${by.name} accepted ${story.title}, "${chapter.title}" for the party.${pick}`);
+  const pick = choice ? ` ${by} chose: ${choice.label}.` : "";
+  p.sendMessage(joined ? `§6[Party] You joined ${by}: ${story.title}, "${chapter.title}".` : `§6[Party] ${by} accepted ${story.title}, "${chapter.title}" for the party.${pick}`);
   p.sendMessage(`§6[Story] ${story.title}: ${chapter.title}`);
   for (const recipe of chapter.teach ?? []) send("realm:recipe_learn", { player: p.id, recipe });
   const e = entries(p).find((x) => x.story.id === story.id && !x.pq);
   if (e) for (const line of objectiveLines(p, e, saga)) p.sendMessage(line.replace(/\n\s*/g, " "));
   p.sendMessage(`§7Progress is shared with your party. /realm:saga can play the intro again (Current quests > ${story.short}).`);
   p.playSound("random.orb", { pitch: 0.8, volume: 0.7 });
+  return true;
 }
 
 /**
@@ -485,6 +498,7 @@ function acceptFor(p, story, chapter, by, choice, joined) {
  */
 function inviteSide(by, story, chapter, choice, mates) {
   const npc = npcName(chapter.npc ?? story.giver);
+  const byName = by.name; // by may have left by the time a mate answers
   for (const p of mates) {
     p.sendMessage(`§b[Party] ${by.name} started ${story.title}, "${chapter.title}". Join in from the popup, or talk to ${npc} to start it too.`);
     if (busy.has(p.id) || popups.has(p.id)) continue;
@@ -512,8 +526,7 @@ function inviteSide(by, story, chapter, choice, mates) {
         p.sendMessage(`§7[Party] ${story.title} can't start for you right now.`);
         return;
       }
-      acceptFor(p, story, chapter, by, choice, true);
-      if (by.isValid) by.sendMessage(`§b[Party] ${p.name} joined ${story.title}.`);
+      if (acceptFor(p, story, chapter, byName, choice, true) && by.isValid) by.sendMessage(`§b[Party] ${p.name} joined ${story.title}.`);
     })
       .catch((e) => console.warn(`[saga] invite: ${e}`))
       .finally(() => popups.delete(p.id));
@@ -589,11 +602,11 @@ async function accept(player, story, chapter, saga, st, choice, heard = () => {}
   markDirty(player, true);
   if (story.kind === "main") {
     // Accepted once for the party: every mate on the chapter gets it too, with the choice made here.
-    for (const p of mates) acceptFor(p, story, chapter, player, choice, false);
+    const took = mates.filter((p) => acceptFor(p, story, chapter, player.name, choice, false));
     // Mates past it (or who can't start it) help with it as the party quest.
-    const others = partyMates(player).filter((p) => !mates.some((m) => m.id === p.id) &&partyViews.get(p.id)?.chapter.id === chapter.id && !ownEntries(p).some((x) => x.story.id === story.id));
+    const others = partyMates(player).filter((p) => !mates.some((m) => m.id === p.id) && partyViews.get(p.id)?.chapter.id === chapter.id && !ownEntries(p).some((x) => x.story.id === story.id));
     for (const p of others) p.sendMessage(`§b[Party] ${player.name} accepted ${story.title}, "${chapter.title}" for the party. Help out: what you do for it counts for them.`);
-    if (mates.length) player.sendMessage(`§b[Party] Accepted for your party too: ${listNames(mates.map((p) => p.name))}.`);
+    if (took.length) player.sendMessage(`§b[Party] Accepted for your party too: ${listNames(took.map((p) => p.name))}.`);
     partyTick(); // party mates get the party quest (and its progress) right away
   }
   heard();
@@ -775,6 +788,10 @@ export async function endChapter(player, story) {
         // Still on it and done (they may have reported themselves meanwhile).
         const ps = sagaOf(p);
         if (!p.isValid || !pe.st.a || /** @type {StoryState} */ (pe.st).cur !== chapter.id || !chapterDone(pe, ps)) continue;
+        if (!choiceFits(p, story, choice)) {
+          p.sendMessage(`§e[Party] ${player.name} reported back to ${ender} and chose: ${choice?.label}. That choice isn't yours to make (your story went another way, or it has a cost): report back yourself to choose.`);
+          continue;
+        }
         if (talking.get(p.id) === story.id) closeForms(p); // their own copy of the outro
         p.sendMessage(`§b[Party] ${player.name} reported back to ${ender} for the party${choice ? ` and chose: ${choice.label}` : ""}.`);
         complete(p, story, chapter, pe, choice, player);
@@ -840,7 +857,8 @@ function complete(player, story, chapter, e, choice, by) {
   if (next) {
     const who = next.chapter.npc ?? story.giver;
     const same = who === (chapter.end ?? chapter.npc ?? story.giver);
-    player.sendMessage(by && same ? `§e[Story] Next: "${next.chapter.title}", from ${npcName(who)}: when one of you accepts it, it starts for the party.` : `§e[Story] Next: talk to ${npcName(who)} for "${next.chapter.title}".`);
+    const shared = by && same ? (story.kind === "main" ? ": when one of you accepts it, it starts for the party" : ": when one of you starts it, the others are asked to join") : "";
+    player.sendMessage(shared ? `§e[Story] Next: "${next.chapter.title}", from ${npcName(who)}${shared}.` : `§e[Story] Next: talk to ${npcName(who)} for "${next.chapter.title}".`);
     player.playSound("random.levelup", { pitch: 1, volume: 0.8 });
   } else {
     player.sendMessage(`§6[Story] Story complete: ${story.title}!`);
