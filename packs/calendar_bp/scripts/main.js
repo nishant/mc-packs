@@ -1280,6 +1280,7 @@ function startSiege(town, warnMs) {
     p.playSound("mob.evocation_illager.prepare_summon", { volume: 0.6, pitch: 0.7 });
   }
   send("realm:siege", { state: "warn", town: town.n, id: town.id });
+  sendMarks();
   send("realm:sky_event", { kind: "siege", dim: OVERWORLD, x: Math.round(town.x), z: Math.round(town.z), text: `The Gray Choir comes to ${town.n}` });
 }
 
@@ -1321,31 +1322,38 @@ function groundAt(dim, x, z) {
 async function circleSpot(dim, x, z) {
   x = Math.floor(x);
   z = Math.floor(z);
+  const no = (/** @type {string} */ why) => {
+    spotRejects[why] = (spotRejects[why] ?? 0) + 1;
+    return undefined;
+  };
   if (protectedBox(OVERWORLD, { x: x - 4, z: z - 4 }, { x: x + 4, z: z + 4 })) {
     const out = escapeZones(OVERWORLD, x, z, 6);
-    if (!out || !siege || Math.hypot(out.x - siege.town.x, out.z - siege.town.z) > 180) return undefined;
+    if (!out || !siege || Math.hypot(out.x - siege.town.x, out.z - siege.town.z) > 180) return no("zone");
     x = Math.floor(out.x);
     z = Math.floor(out.z);
   }
   const y0 = groundAt(dim, x, z);
-  if (y0 === undefined) return undefined;
+  if (y0 === undefined) return no("ground");
   for (let dx = -2; dx <= 2; dx++)
     for (let dz = -2; dz <= 2; dz++) {
       const y = groundAt(dim, x + dx, z + dz);
-      if (y === undefined || Math.abs(y - y0) > 1) return undefined;
+      if (y === undefined || Math.abs(y - y0) > 1) return no("uneven");
       // Nothing built over the circle (a roof, a tree) and nothing of a player's on it.
       for (let yy = y + 1; yy <= y0 + 3; yy++) {
         try {
           const b = dim.getBlock({ x: x + dx, y: yy, z: z + dz });
-          if (!b || (!b.isAir && !SOFT.test(b.typeId))) return undefined;
+          if (!b || (!b.isAir && !SOFT.test(b.typeId))) return no("covered");
         } catch {
-          return undefined;
+          return no("unloaded");
         }
       }
     }
-  if ((await claimsNear(x, z, 8)) > 0) return undefined;
+  if ((await claimsNear(x, z, 8)) > 0) return no("claim");
   return { x, y: y0, z };
 }
+
+/** Why spots were turned down while the circles rose (for the content log when none fit). @type {Record<string, number>} */
+let spotRejects = {};
 
 /** @param {string} id @param {Record<string, string | number | boolean>} [states] */
 function perm(id, states) {
@@ -1487,23 +1495,46 @@ async function raiseCircles() {
   s.st = "on"; // nothing else starts this twice
   const dim = world.getDimension(OVERWORLD);
   const base = Math.random() * Math.PI * 2;
+  spotRejects = {};
   /** @type {Circle[]} */
   const circles = [];
+  let tries = 0;
+  /** Tries a spot; true once a circle stands there. @param {number} x @param {number} z @returns {Promise<boolean>} */
+  const tryAt = async (x, z) => {
+    if (++tries % 8 === 0) await system.waitTicks(1); // spread the block reads over ticks
+    if (siege !== s) return false;
+    const spot = await circleSpot(dim, x, z);
+    if (!spot || siege !== s) return false;
+    if (circles.some((c) => Math.hypot(c.x - spot.x, c.z - spot.z) < 24)) return false;
+    const c = buildCircle(dim, spot, circles.length);
+    if (c) circles.push(c);
+    return !!c;
+  };
+  // Three ways around the town, 48 to 96 blocks out (each further try a little closer in).
   for (let i = 0; i < 3; i++) {
-    const had = circles.length;
-    for (let k = 0; k < 10 && circles.length === had; k++) {
-      const a = base + (i * Math.PI * 2) / 3 + (Math.random() - 0.5) * 0.7;
-      const d = 48 + Math.random() * 48;
-      const spot = await circleSpot(dim, s.town.x + Math.cos(a) * d, s.town.z + Math.sin(a) * d);
-      if (!spot || siege !== s) continue;
-      if (circles.some((c) => Math.hypot(c.x - spot.x, c.z - spot.z) < 24)) continue;
-      const c = buildCircle(dim, spot, i);
-      if (c) circles.push(c);
+    for (let k = 0; k < 16; k++) {
+      const a = base + (i * Math.PI * 2) / 3 + (Math.random() - 0.5) * 0.9;
+      const d = Math.max(24, 48 - k * 2) + Math.random() * 48;
+      if (await tryAt(s.town.x + Math.cos(a) * d, s.town.z + Math.sin(a) * d)) break;
     }
+  }
+  // Too built up (or too far from anyone, in unloaded ground): around the players near the town instead, where
+  // the ground is loaded, still within 180 blocks of the town.
+  const nearby = world.getAllPlayers().filter((p) => near(p, 220));
+  for (let k = 0; k < 60 && circles.length < 3 && nearby.length && siege === s; k++) {
+    const p = nearby[k % nearby.length];
+    if (!p.isValid) continue;
+    const a = Math.random() * Math.PI * 2;
+    const d = 12 + Math.random() * 36;
+    const x = p.location.x + Math.cos(a) * d;
+    const z = p.location.z + Math.sin(a) * d;
+    if (Math.hypot(x - s.town.x, z - s.town.z) > 180) continue;
+    await tryAt(x, z);
   }
   if (siege !== s) return;
   if (!circles.length) {
-    endSiege("scattered");
+    console.warn(`[calendar] no spot for a Ritual Circle around ${s.town.n}: ${JSON.stringify(spotRejects)}`);
+    endSiege("scattered", true);
     return;
   }
   s.c = circles;
@@ -1530,6 +1561,7 @@ async function raiseCircles() {
   const line = SIEGE_LINES.rise.replace("{town}", s.town.n).replace("{hits}", String(int("bellHits"))).replace("{minutes}", String(Math.round((s.t2 - s.t1) / 60000)));
   for (const p of world.getAllPlayers()) if (p.dimension.id === OVERWORLD) p.sendMessage(`${line} §7Circles: ${circles.map((c) => `${c.x}, ${c.z}`).join(" / ")}`);
   send("realm:siege", { state: "on", town: s.town.n, id: s.town.id });
+  sendMarks();
 }
 
 /** @type {Map<string, number>} */
@@ -1576,6 +1608,42 @@ function bellHit(player, b) {
   for (const p of world.getAllPlayers()) if (p.dimension.id === OVERWORLD && near(p, 200)) p.sendMessage(line);
   saveSiege();
   if (n >= siege.c.length) endSiege("held");
+  else sendMarks();
+}
+
+/**
+ * Where to go, for the Minimap's compass: realm:siege_marks { dim, town: { n, x, z }, circles: [{ x, z }] } (the
+ * circles still singing; none during the warning), or {} when no siege runs. Also the answer to realm:siege_ping.
+ */
+function sendMarks() {
+  const s = siege;
+  send("realm:siege_marks", s ? { dim: OVERWORLD, town: { n: s.town.n, x: Math.floor(s.town.x), z: Math.floor(s.town.z) }, circles: s.c.filter((c) => !c.s).map((c) => ({ x: c.x, z: c.z })) } : {});
+}
+
+/** "NE 64m" from a player to a spot, or "here" within 4 blocks. @param {Player} p @param {{ x: number, z: number }} at */
+function toward(p, at) {
+  const dx = at.x + 0.5 - p.location.x;
+  const dz = at.z + 0.5 - p.location.z;
+  const d = Math.hypot(dx, dz);
+  if (d <= 4) return "here";
+  const deg = ((Math.atan2(dx, -dz) * 180) / Math.PI + 360 + 22.5) % 360;
+  return `${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.floor(deg / 45) % 8]} ${Math.round(d)}m`;
+}
+
+/** The nearest circle still singing, or undefined. @param {Player} p */
+function nearestCircle(p) {
+  if (!siege) return undefined;
+  let best;
+  let bestD = Infinity;
+  for (const c of siege.c) {
+    if (c.s) continue;
+    const d = Math.hypot(c.x - p.location.x, c.z - p.location.z);
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best;
 }
 
 /** Within r blocks of the siege's town? @param {Player} p @param {number} r */
@@ -1598,7 +1666,7 @@ function siegeTick() {
   if (!s) return;
   const now = Date.now();
   if (s.st === "warn") {
-    for (const p of world.getAllPlayers()) if (near(p, 220)) side.show(p, "left1", `§cChoir siege: ${s.town.n}\n§7Circles rise in ${clock(s.t1 - now)}`, 40);
+    for (const p of world.getAllPlayers()) if (near(p, 220)) side.show(p, "left1", `§cChoir siege: ${s.town.n}\n§7Circles rise in ${clock(s.t1 - now)}\n§fTown center ${toward(p, s.town)}`, 40);
     if (now >= s.t1) raiseCircles().catch((e) => console.warn(`[calendar] circles: ${e}`));
     return;
   }
@@ -1610,7 +1678,8 @@ function siegeTick() {
   const done = s.c.filter((c) => c.s).length;
   for (const p of world.getAllPlayers()) {
     if (!near(p, 220)) continue;
-    side.show(p, "left1", `§cChoir siege: ${s.town.n}\n§7${clock(s.t2 - now)} - bells ${done}/${s.c.length}`, 40);
+    const c = nearestCircle(p);
+    side.show(p, "left1", `§cChoir siege: ${s.town.n}\n§7${clock(s.t2 - now)} - bells ${done}/${s.c.length}${c ? `\n§fNearest circle ${toward(p, c)}` : ""}`, 40);
   }
   if (!s.wave && now >= s.t1 + (s.t2 - s.t1) / 2) {
     s.wave = 1;
@@ -1647,8 +1716,8 @@ function siegePresence() {
   }
 }
 
-/** @param {"held" | "failed" | "scattered"} result */
-function endSiege(result) {
+/** @param {"held" | "failed" | "scattered"} result @param {boolean} [noGround] scattered because no circle could rise */
+function endSiege(result, noGround = false) {
   const s = siege;
   if (!s) return;
   siege = undefined;
@@ -1669,8 +1738,10 @@ function endSiege(result) {
   }
   addHistory(s.town.n, result);
   send("realm:siege", { state: "end", town: s.town.n, id: s.town.id, result });
+  sendMarks();
   if (result === "scattered") {
-    for (const p of world.getAllPlayers()) if (p.dimension.id === OVERWORLD) p.sendMessage(SIEGE_LINES.scattered);
+    const line = noGround ? SIEGE_LINES.noGround.replace("{town}", s.town.n) : SIEGE_LINES.scattered;
+    for (const p of world.getAllPlayers()) if (p.dimension.id === OVERWORLD) p.sendMessage(line);
     return;
   }
   const held = result === "held";
@@ -2362,6 +2433,7 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "calendar_bp");
+    else if (id === "realm:siege_ping") sendMarks();
   },
   { namespaces: ["realm"] },
 );

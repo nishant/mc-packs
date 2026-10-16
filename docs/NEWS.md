@@ -6,6 +6,12 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Find the siege
+
+- Choir sieges now show the way: the compass star points to the town during the warning, then to the nearest circle still singing. The siege box says how far too.
+- Circles find room more often: when the land around a town is too built up, they rise near the players defending it instead.
+- If the Choir still can't find open ground, chat now says so. Nothing is lost.
+
 ## Storm watch
 
 - Story steps that need a storm or rain (like The Storm Vigil) now say so in the quest box: the seconds still needed, and when the next storm is due.
