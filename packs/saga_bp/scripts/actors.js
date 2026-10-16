@@ -1,7 +1,9 @@
 // Story characters and story mobs the pack spawns for one player's scene: who they belong to, keeping
-// them where they should be, and cleaning them up. Imports only util.js.
+// them where they should be, and cleaning them up. Imports only util.js, settings.js and name-labels.js.
 import { system, world } from "@minecraft/server";
 import { DIMENSIONS, dist3, hash } from "./util.js";
+import { removeOrphanLabel, updateNameLabels } from "./name-labels.js";
+import { get } from "./settings.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -148,8 +150,49 @@ export function actorsOf(owner, key, role) {
 /** Is this entity one of ours (and alive)? @param {Entity} ent */
 export const actorOf = (ent) => actors.get(ent.id);
 
+const LABEL_TYPE = "realm:saga_label";
+/** Floating name projections by actor entity id. @type {Map<string, Entity>} */
+const actorLabels = new Map();
+
+/** Removes name projections nothing tracks (left over from a restart or an unloaded chunk). */
+function sweepLabels() {
+  for (const id of DIMENSIONS) {
+    try {
+      for (const e of world.getDimension(id).getEntities({ type: LABEL_TYPE })) removeOrphanLabel(e, actorLabels, LABEL_TYPE);
+    } catch {
+      // the dimension isn't loaded
+    }
+  }
+}
+
+// Every story character's name floats in 3D for players up to `farNameRange` blocks away.
+system.runInterval(() => {
+  try {
+    const targets = [];
+    for (const a of actors.values()) {
+      if (a.role === "add" || !a.ent.isValid || !a.opts.name || !a.opts.name.trim()) continue;
+      const l = a.ent.location;
+      targets.push({ id: a.ent.id, dim: a.dim, x: l.x, y: l.y, z: l.z, name: a.opts.name });
+    }
+    updateNameLabels({
+      labels: actorLabels,
+      targets,
+      players: world.getAllPlayers(),
+      maxRange: Math.max(0, Number(get("farNameRange")) || 0),
+      labelType: LABEL_TYPE,
+      ownerTag: "realm:npc_owner:saga_bp",
+      labelTag: "realm:saga_label",
+      labelIdTag: "realm:saga_label_id:",
+      dimension: (id) => world.getDimension(id),
+    });
+  } catch (e) {
+    console.warn(`[saga] name labels: ${e}`);
+  }
+}, 2);
+
 /** Keeps anchored actors at their spot and invulnerable ones at full health; drops entries of entities that are gone. */
 export function tendActors() {
+  sweepLabels();
   for (const [id, a] of [...actors]) {
     try {
       if (!a.ent.isValid) {
@@ -219,6 +262,7 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
 // scene moved on) is removed when it loads.
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (removeOrphanLabel(entity, actorLabels, LABEL_TYPE)) return;
     if (actors.has(entity.id)) return;
     if (entity.hasTag(ACTOR) || entity.hasTag(ADD)) entity.remove();
   } catch {
@@ -228,6 +272,7 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
 
 /** Removes every tagged leftover in loaded chunks (at world load). */
 export function sweep() {
+  sweepLabels();
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);

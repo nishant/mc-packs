@@ -245,18 +245,22 @@ function spawnNosParticles(player, forward, phase) {
  */
 function playNosAudio(player) {
   const dim = player.dimension;
+  const loc = player.location;
   try {
-    player.playSound("realm.nos.boost", { volume: 0.65, pitch: 1.0 });
+    player.playSound("realm.nos.boost", { volume: 0.45, pitch: 1.0 });
   } catch {
     // ignore audio error
   }
   try {
-    dim.playSound("realm.nos.boost_world", player.location, { volume: 0.85, pitch: 1.0 });
+    for (const other of dim.getPlayers({ location: loc, maxDistance: 32 })) {
+      if (other.id === player.id) continue;
+      other.playSound("realm.nos.boost_world", { location: loc, volume: 0.5, pitch: 1.0 });
+    }
   } catch {
     // ignore audio error
   }
   try {
-    player.playSound("random.fizz", { volume: 0.36, pitch: 1.65 });
+    player.playSound("random.fizz", { volume: 0.22, pitch: 1.65 });
   } catch {
     // ignore audio error
   }
@@ -264,8 +268,8 @@ function playNosAudio(player) {
   system.runTimeout(() => {
     if (!player.isValid || !player.isGliding) return;
     try {
-      player.playSound("firework.launch", { volume: 0.58, pitch: 0.85 });
-      player.playSound("mob.breeze.wind_burst", { volume: 0.55, pitch: 1.2 });
+      player.playSound("firework.launch", { volume: 0.38, pitch: 0.85 });
+      player.playSound("mob.breeze.wind_burst", { volume: 0.35, pitch: 1.2 });
     } catch {
       // ignore audio error
     }

@@ -8,6 +8,7 @@ const PROP_WEATHER = "fishing:weather"; // world: overworld weather from the las
 const PROP_RAIN_END = "fishing:rainEnd"; // world: when rain last stopped (ms), for `afterRain` species
 const PROP_LOG = "fishing:log"; // player: JSON { [speciesId]: [count, best cm] }
 const PROP_RECORDS = "fishing:records"; // world: JSON { [speciesId]: [cm, name, player id, ms] }
+const PROP_BASKET = "fishing:basket"; // player: JSON Record<string, [string, number][]> item typeId -> [[speciesId, sizeCm], ...]
 const PROP_TOURNEY = "fishing:tourney"; // world: JSON of the running tournament (see Tourney)
 const PROP_TMETA = "fishing:tmeta"; // world: JSON { last, warned }: the scheduled starts already handled
 const PROP_OWED = "fishing:owed"; // world: JSON { [player id]: [crowns, note] }: prizes for players who were offline
@@ -375,6 +376,67 @@ function mergeSpeciesStacks(player) {
 /** Crowns a fisher pays for one fish: the rarity's price x (0.5 + size / the species' biggest). @param {Species} sp @param {number} size */
 const priceOf = (sp, size) => Math.max(1, Math.round((rarities.get(sp.rarity)?.price ?? 1) * (0.5 + Math.min(1, size / Math.max(1, sp.max)))));
 
+const BASKET_MAX = 128;
+
+/**
+ * The catches behind a player's plain fish: item typeId -> [species id, cm] entries, best first, so a plain stack of
+ * fish still sells for its rarity and size.
+ * @param {Player} player @returns {Record<string, [string, number][]>}
+ */
+function basketOf(player) {
+  /** @type {Record<string, [string, number][]>} */
+  const basket = {};
+  try {
+    const raw = player.getDynamicProperty(PROP_BASKET);
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : undefined;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return basket;
+    for (const item of FISH_ITEMS) {
+      const list = parsed[item];
+      if (!Array.isArray(list)) continue;
+      basket[item] = list.filter((e) => Array.isArray(e) && typeof e[0] === "string" && byId.has(e[0]) && Number.isFinite(e[1]));
+    }
+  } catch {
+    // corrupt: start a new basket
+  }
+  return basket;
+}
+
+/** @param {Player} player @param {Record<string, [string, number][]>} basket */
+function saveBasket(player, basket) {
+  /** @type {Record<string, [string, number][]>} */
+  const out = {};
+  for (const [item, list] of Object.entries(basket)) if (list.length) out[item] = list;
+  try {
+    player.setDynamicProperty(PROP_BASKET, Object.keys(out).length ? JSON.stringify(out) : undefined);
+  } catch (e) {
+    console.warn(`[fishing] basket: ${e}`);
+  }
+}
+
+/** Crowns one basket entry is worth. @param {[string, number]} e */
+const entryPrice = (e) => {
+  const sp = byId.get(e[0]);
+  return sp ? priceOf(sp, e[1]) : 0;
+};
+
+/** The basket's entries of an item, the most valuable first. @param {[string, number][]} list */
+const bestFirst = (list) => list.sort((a, b) => entryPrice(b) - entryPrice(a));
+
+/** Remembers `count` plain fish of this species and size, keeping the 128 most valuable per item. @param {Player} player @param {Species} sp @param {number} size @param {number} [count] */
+function recordInBasket(player, sp, size, count = 1) {
+  const basket = basketOf(player);
+  const list = basket[sp.item] ?? [];
+  for (let i = 0; i < Math.min(count, BASKET_MAX); i++) list.push([sp.id, size]);
+  basket[sp.item] = bestFirst(list).slice(0, BASKET_MAX);
+  saveBasket(player, basket);
+}
+
+/** What a plain fish with no catch behind it counts as: the species of that item that has no conditions. @param {string} item */
+function defaultSpecies(item) {
+  const open = species.filter((sp) => sp.item === item && rarities.has(sp.rarity));
+  return open.find((sp) => !sp.weather && !sp.time && !sp.places && sp.afterRain === undefined) ?? open[0];
+}
+
 // ---------------------------------------------------------------------------
 // Logs and records
 // ---------------------------------------------------------------------------
@@ -467,8 +529,34 @@ function caught(player, sp, size) {
 // hook just was is that player's catch (as Daily Quests recognizes it: there is no fishing event).
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number }>} */
+/** @type {Map<string, { hook: Entity, owner: Player, dim: string, at: Vector3, seen: number, born: number, nudged: number }>} */
 const hooks = new Map();
+
+/**
+ * Dynamic Lightning (rdl) puts light blocks around a player holding a torch; a bobber that spawns in one stops in
+ * midair. Gives such blocks back their base block. @param {Entity} hook
+ */
+function clearLightBlocksNearHook(hook) {
+  try {
+    const at = hook.location;
+    const dim = hook.dimension;
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dz = -1; dz <= 1; dz++) {
+          const b = blockAt(dim, at.x + dx, at.y + dy, at.z + dz);
+          if (!b || !b.typeId.startsWith("rdl:light_block")) continue;
+          let base = "minecraft:air";
+          try {
+            base = String(/** @type {any} */ (b.permutation).getState("rdl:base") || "minecraft:air");
+          } catch {
+            // no base state: air
+          }
+          dim.setBlockType(b.location, base);
+        }
+  } catch {
+    // unloaded, or the hook is gone
+  }
+}
 
 /** The player who cast a hook: the projectile's owner when the game says, else the nearest player. @param {Entity} hook */
 function hookOwner(hook) {
@@ -499,8 +587,9 @@ function droppedByPlayer(item) {
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   try {
     if (entity.typeId === "minecraft:fishing_hook") {
+      clearLightBlocksNearHook(entity);
       const owner = hookOwner(entity);
-      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick });
+      if (owner) hooks.set(entity.id, { hook: entity, owner, dim: entity.dimension.id, at: entity.location, seen: system.currentTick, born: system.currentTick, nudged: 0 });
       return;
     }
     if (entity.typeId !== "minecraft:item" || !hooks.size) return;
@@ -559,7 +648,16 @@ function replace(entity, owner, hookAt) {
   // A player who doesn't want measured fish (or only notable ones) keeps the vanilla fish: it stacks. The catch still counts.
   const plain = getFor(owner, "measure") !== true || (getFor(owner, "notableOnly") === true && !notable(owner, sp, size));
   if (plain) {
+    // The vanilla fish stays; the basket remembers its species and size so a fisher still pays for it.
+    recordInBasket(owner, sp, size, 1);
     caught(owner, sp, size);
+    system.runTimeout(() => {
+      try {
+        if (owner.isValid) makeStackable(owner, getFor(owner, "measure") !== true);
+      } catch {
+        // the player left or the inventory is unavailable
+      }
+    }, 15);
     return;
   }
   const fish = fishStack(sp, 1);
@@ -605,8 +703,21 @@ system.runInterval(() => {
   for (const [id, h] of hooks) {
     if (h.hook.isValid) {
       try {
+        clearLightBlocksNearHook(h.hook);
         h.at = h.hook.location;
         h.seen = system.currentTick;
+        // A bobber that stopped in the air right after the cast (snagged on something next to the player) gets the cast again.
+        const age = system.currentTick - h.born;
+        if (age >= 1 && age <= 5 && h.nudged < 2 && h.owner.isValid && h.owner.dimension.id === h.dim) {
+          const v = h.hook.getVelocity();
+          const o = h.owner.location;
+          const near = Math.hypot(h.at.x - o.x, h.at.y - o.y, h.at.z - o.z) <= 2.5;
+          if (near && Math.hypot(v.x, v.y, v.z) < 0.05 && !WATERY.test(blockAt(h.hook.dimension, h.at.x, h.at.y, h.at.z)?.typeId ?? "")) {
+            const dir = h.owner.getViewDirection();
+            h.hook.applyImpulse({ x: dir.x * 1.1, y: Math.max(0.2, dir.y * 1.1 + 0.25), z: dir.z * 1.1 });
+            h.nudged++;
+          }
+        }
       } catch {
         // unloaded
       }
@@ -852,36 +963,72 @@ system.afterEvents.scriptEventReceive.subscribe(
 /** @param {Player} player */
 const tobinOffOf = (player) => Math.max(0, Math.min(50, tobinOff.get(player.id) ?? 0));
 
+/** @type {Record<string, string>} */
+const FISH_NAMES = { "minecraft:cod": "Cod", "minecraft:salmon": "Salmon", "minecraft:tropical_fish": "Tropical Fish", "minecraft:pufferfish": "Pufferfish" };
+
 /** The player's fish that a fisher buys. @param {Player} player */
 function fishFor(player) {
-  /** @type {{ slot: number, stack: ItemStack, sp: Species, size: number, price: number }[]} */
+  /** @type {{ slot: number, stack: ItemStack, sp: Species, size: number, price: number, plain?: [string, number][] }[]} */
   const out = [];
   const inv = inventoryOf(player);
   if (!inv) return out;
+  const bonus = 1 + tobinOffOf(player) / 100;
+  const basket = basketOf(player);
+  /** @type {Map<string, number>} */
+  const used = new Map(); // basket entries already given to an earlier stack of the same item
   for (let slot = 0; slot < inv.size; slot++) {
     const stack = inv.getItem(slot);
+    if (!stack) continue;
     const f = readFish(stack);
-    if (stack && f) out.push({ slot, stack, sp: f.sp, size: f.size, price: Math.round(priceOf(f.sp, f.size) * stack.amount * (1 + tobinOffOf(player) / 100)) });
+    if (f) {
+      out.push({ slot, stack, sp: f.sp, size: f.size, price: Math.round(priceOf(f.sp, f.size) * stack.amount * bonus) });
+      continue;
+    }
+    if (!FISH_ITEMS.has(stack.typeId) || stack.nameTag || stack.getLore().length > 0) continue;
+    const list = bestFirst(basket[stack.typeId] ?? []);
+    const from = used.get(stack.typeId) ?? 0;
+    const entries = list.slice(from, from + stack.amount);
+    used.set(stack.typeId, from + entries.length);
+    const base = defaultSpecies(stack.typeId);
+    if (!base && !entries.length) continue;
+    let total = entries.reduce((n, e) => n + entryPrice(e), 0);
+    if (base) total += priceOf(base, avgSize(base)) * (stack.amount - entries.length);
+    const top = entries[0] ? byId.get(entries[0][0]) : undefined;
+    const sp = top ?? base;
+    if (!sp) continue;
+    out.push({ slot, stack, sp, size: entries[0]?.[1] ?? avgSize(sp), price: Math.round(total * bonus), plain: entries });
   }
   return out;
 }
 
 /**
- * Sells these slots if they still hold the same fish; returns [fish sold, Crowns].
- * @param {Player} player @param {{ slot: number, stack: ItemStack, price: number }[]} picks
+ * Sells these slots if they still hold the same fish; returns [fish sold, Crowns]. Plain fish use up their catches in the basket.
+ * @param {Player} player @param {{ slot: number, stack: ItemStack, price: number, plain?: [string, number][] }[]} picks
  */
 function sell(player, picks) {
   const inv = inventoryOf(player);
   if (!inv) return [0, 0];
   let n = 0;
   let crowns = 0;
+  const basket = basketOf(player);
+  let basketChanged = false;
   for (const p of picks) {
     const now = inv.getItem(p.slot);
     if (!now || !now.isStackableWith(p.stack) || now.amount !== p.stack.amount) continue; // moved or changed since the menu opened
     inv.setItem(p.slot, undefined);
     n += now.amount;
     crowns += p.price;
+    if (p.plain) {
+      const list = basket[now.typeId] ?? [];
+      for (const e of p.plain) {
+        const i = list.findIndex((x) => x[0] === e[0] && x[1] === e[1]);
+        if (i >= 0) list.splice(i, 1);
+      }
+      basket[now.typeId] = list;
+      basketChanged = true;
+    }
   }
+  if (basketChanged) saveBasket(player, basket);
   if (crowns > 0) {
     addCrowns(player, crowns);
     player.sendMessage(`§6+${fmt(crowns)} Crowns §7(Sold ${n} fish)`);
@@ -893,11 +1040,12 @@ function sell(player, picks) {
 /** The fisher's "Sell fish" menu. @param {Player} player */
 async function sellMenu(player) {
   const title = lastNpc.get(player.id) ?? "§lSell Fish";
+  if (getFor(player, "measure") !== true) makeStackable(player);
   mergeSpeciesStacks(player);
   for (let round = 0; round < 50; round++) {
     const fish = fishFor(player);
     if (!fish.length) {
-      await show(player, new ActionFormData().title(title).body("You have no fish I can buy. Bring me fish you caught with a rod: the ones with a name and a size.").button("Goodbye"));
+      await show(player, new ActionFormData().title(title).body("You have no fish I can buy. Bring me fish you caught with a rod.").button("Goodbye"));
       return;
     }
     const total = fish.reduce((n, f) => n + f.price, 0);
@@ -907,7 +1055,10 @@ async function sellMenu(player) {
       .title(title)
       .body(`You have ${count} fish worth ${fmt(total)} Crowns. Bigger and rarer fish pay more.`)
       .button(`Sell all\n§8${count} fish, ${fmt(total)} Crowns`);
-    for (const f of shown) form.button(`${colorOf(f.sp)}${f.sp.name}§r ${f.size} cm${f.stack.amount > 1 ? ` x${f.stack.amount}` : ""}\n§8${fmt(f.price)} Crowns`);
+    for (const f of shown) {
+      if (f.plain) form.button(`${FISH_NAMES[f.stack.typeId] ?? "Fish"} catch stack x${f.stack.amount}\n§8${fmt(f.price)} Crowns${f.plain.length ? " (includes shiny/rare catches)" : ""}`);
+      else form.button(`${colorOf(f.sp)}${f.sp.name}§r ${f.size} cm${f.stack.amount > 1 ? ` x${f.stack.amount}` : ""}\n§8${fmt(f.price)} Crowns`);
+    }
     form.button("Goodbye");
     const res = await show(player, form);
     if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
@@ -940,30 +1091,48 @@ function measuredFish(player) {
 }
 
 /**
- * Turns every measured raw fish in the inventory into plain vanilla fish, merged into full stacks. Returns how many.
- * @param {Player} player
+ * Turns every measured raw fish in the inventory into plain vanilla fish (the basket remembers their species and size
+ * for a fisher) and merges all the plain fish into full stacks. Returns how many measured fish became plain.
+ * @param {Player} player @param {boolean} [convertNamed] false leaves the measured fish as they are and only merges plain stacks
  */
-function makeStackable(player) {
+function makeStackable(player, convertNamed = true) {
   const inv = inventoryOf(player);
   if (!inv) return 0;
-  /** @type {Map<string, number>} */
-  const counts = new Map();
-  for (const { slot, stack } of measuredFish(player)) {
-    counts.set(stack.typeId, (counts.get(stack.typeId) ?? 0) + stack.amount);
-    inv.setItem(slot, undefined);
-  }
-  const converted = [...counts.values()].reduce((a, b) => a + b, 0);
-  // Plain stacks of the same fish join in, so everything ends up in as few full stacks as possible.
+  /** @type {Map<string, { slots: number[], amounts: number[], total: number, named: boolean }>} */
+  const groups = new Map();
+  let converted = 0;
   for (let slot = 0; slot < inv.size; slot++) {
     const stack = inv.getItem(slot);
-    if (!stack || !counts.has(stack.typeId) || !stack.isStackableWith(new ItemStack(stack.typeId, 1))) continue;
-    counts.set(stack.typeId, (counts.get(stack.typeId) ?? 0) + stack.amount);
-    inv.setItem(slot, undefined);
+    if (!stack || !FISH_ITEMS.has(stack.typeId)) continue;
+    const f = readFish(stack);
+    if (!f && !stack.isStackableWith(new ItemStack(stack.typeId, 1))) continue; // renamed or other fish: left alone
+    if (f && !convertNamed) continue;
+    let g = groups.get(stack.typeId);
+    if (!g) {
+      g = { slots: [], amounts: [], total: 0, named: false };
+      groups.set(stack.typeId, g);
+    }
+    g.slots.push(slot);
+    g.amounts.push(stack.amount);
+    g.total += stack.amount;
+    if (f) g.named = true;
   }
-  for (const [typeId, count] of counts) {
-    for (let left = count; left > 0; ) {
+  for (const [typeId, g] of groups) {
+    const max = new ItemStack(typeId, 1).maxAmount;
+    const packed = !g.named && g.slots.length === Math.ceil(g.total / max) && g.amounts.slice(0, -1).every((a) => a === max);
+    if (packed) continue;
+    for (const slot of g.slots) {
+      const stack = inv.getItem(slot);
+      const f = readFish(stack);
+      if (stack && f) {
+        recordInBasket(player, f.sp, f.size, stack.amount);
+        converted += stack.amount;
+      }
+      inv.setItem(slot, undefined);
+    }
+    for (let left = g.total; left > 0; ) {
       const stack = new ItemStack(typeId, 1);
-      stack.amount = Math.min(left, stack.maxAmount);
+      stack.amount = Math.min(left, max);
       left -= stack.amount;
       const rest = inv.addItem(stack); // the freed slots always fit them; anything over drops at the player's feet
       if (rest) player.dimension.spawnItem(rest, player.location);
@@ -984,7 +1153,7 @@ async function stackMenu(player) {
   const body = [
     `Turn your ${count} measured raw fish into plain cod, salmon, tropical fish and pufferfish that stack?`,
     "",
-    "§7They lose their names, sizes and catcher. Your fish log, personal bests and realm records keep them. A fisher only buys measured fish.",
+    "§7They lose their names and sizes. Your fish log, personal bests and realm records keep them, and a fisher still pays for their rarity and size.",
   ].join("\n");
   const res = await show(player, new ActionFormData().title("§lStackable Fish").body(body).button(`Make ${count} fish stackable`).button("Cancel"));
   if (!res || res.canceled || res.selection !== 0 || !player.isValid) return;
@@ -1001,7 +1170,7 @@ async function settingsMenu(player) {
   const notableOnly = getFor(player, "notableOnly") === true;
   const form = new ModalFormData()
     .title("§lFishing Settings")
-    .toggle("Measure my catches", { defaultValue: measure, tooltip: "Your fish carry their species, size and your name. Disabled: plain fish that stack (the catch still counts in your log)" })
+    .toggle("Separate named items per species", { defaultValue: measure, tooltip: "Disabled: all fish stack as plain cod, salmon, tropical fish and pufferfish; your log, records and Old Tobin still remember every catch. Enabled: each species has its own colored name and lore" })
     .toggle("Only measure notable catches", { defaultValue: notableOnly, tooltip: "A catch that isn't a new species, a personal best or a realm record comes as a plain fish that stacks" })
     .submitButton("Save");
   const res = await show(player, form);
@@ -1010,7 +1179,7 @@ async function settingsMenu(player) {
   if (typeof m === "boolean" && m !== measure) setFor(player, "measure", m);
   if (typeof n === "boolean" && n !== notableOnly) setFor(player, "notableOnly", n);
   const state = (/** @type {string} */ key) => (getFor(player, key) === true ? "§aEnabled§7" : "§cDisabled§7");
-  player.sendMessage(`§7Measure my catches: ${state("measure")}. Only measure notable catches: ${state("notableOnly")}.`);
+  player.sendMessage(`§7Separate named items per species: ${state("measure")}. Only measure notable catches: ${state("notableOnly")}.`);
 }
 
 /** /realm:fishing: every action of the pack. @param {Player} player */
@@ -1022,7 +1191,7 @@ async function mainMenu(player) {
     ["Fish log\n§8Species caught and personal bests", () => showLog(player)],
     ["Realm records\n§8The biggest fish of each species", () => showRecords(player)],
     [`Make my fish stackable\n§8${measured ? `${measured} measured raw fish` : "No measured raw fish"}`, () => stackMenu(player)],
-    [`Fishing settings\n§8Measure my catches: ${getFor(player, "measure") === true ? "Enabled" : "Disabled"}`, () => settingsMenu(player)],
+    [`Fishing settings\n§8Separate named items: ${getFor(player, "measure") === true ? "Enabled" : "Disabled"}`, () => settingsMenu(player)],
   ];
   if (isOp(player)) actions.push([`Start a tournament now\n§8Operators, ${get("tournamentMinutes")} minutes`, () => opStartTournament(player)]);
   const form = new ActionFormData().title("§lFishing 2.0").body(tournamentStatus());

@@ -524,7 +524,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lSettings:§r in §e/realm:prefs§r or §lInventory settings§r, turn the in-inventory buttons (§einvButtons§r) and auto-store (§eautoStore§r) off for yourself. With the buttons off you still switch pages with §e/realm:inv§r.",
+        "text": "§lSettings:§r in §e/realm:prefs§r or §lInventory settings§r, turn the in-inventory buttons (§einvButtons§r) and auto-store (§eautoStore§r) off for yourself. With the buttons off you still switch pages with §e/realm:inv§r. §lExpansive inventory (5 pages)§r (§einvOff§r, on by default) switches the extra pages off entirely: you get a normal 27-slot inventory with no buttons, and the items on pages 2 and up move back to page 1, your hotbar or your feet, so nothing is lost. §e/realm:inv§r has a one-click §lUse normal inventory (turn off pages)§r button, and §lEnable Expansive Inventory (5 pages)§r brings the pages and buttons back. Operators' personal page count (§e/realm:inv_pages§r, or the slider in §lInventory settings§r) also takes §e1§r for a normal inventory.",
         "ops": false
       },
       {
@@ -2048,7 +2048,7 @@ export const PACKS = [
     "folder": "fishing_bp",
     "topic": "fishing",
     "name": "Fishing 2.0",
-    "summary": "Every fish you catch with a rod becomes one of 40 species, from the common Atlantic Cod to the legendary Old Whiskers, with a size in cm and your name on it. Which species bite depends on the weather, the time of day and the water you fish in (ocean, river, frozen water, swamp, jungle or cave). Your fish log keeps your personal bests, the realm keeps the biggest fish of each species, and every Sunday evening there's a fishing tournament with Crowns for the top three. Old Tobin the fisherman, from Townsfolk, buys your fish.",
+    "summary": "Every fish you catch with a rod is one of 40 species, from the common Atlantic Cod to the legendary Old Whiskers, with a size in cm. By default the fish itself stays a plain cod, salmon, tropical fish or pufferfish so every catch stacks, while your log, the records and Old Tobin remember the species and size. Which species bite depends on the weather, the time of day and the water you fish in (ocean, river, frozen water, swamp, jungle or cave). Your fish log keeps your personal bests, the realm keeps the biggest fish of each species, and every Sunday evening there's a fishing tournament with Crowns for the top three. Old Tobin the fisherman, from Townsfolk, buys your fish.",
     "steps": [
       {
         "text": "Fish with a rod as usual. When a cod, salmon, tropical fish or pufferfish comes up, it's a species: chat says §eYou caught a Storm Eel (82 cm)!§r, with §eNew realm record!§r, §ePersonal best!§r or §eNew species for your log (12/40).§r when it is one.",
@@ -2067,11 +2067,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Fish of the same species stack automatically, up to 64, so ten Atlantic Cod take one slot. Each catch still rolls its own size for chat, your fish log, the realm records and the tournament. Fish caught before version 1.1.4 (with §eCaught by ...§r lore) are merged into species stacks the next time the fish reaches your inventory or you open the fishing menu or a fisher. If you want every species of the same vanilla fish combined (for smelting or the Crowns market), pick §lMake my fish stackable§r (or run §e/realm:fishing_stack§r): after you confirm, every measured raw fish in your inventory becomes a plain cod, salmon, tropical fish or pufferfish. Your log and the records keep them.",
+        "text": "All your fish stack, whatever the species or rarity: by default every catch (common, rare, a personal best or a legendary) is a plain cod, salmon, tropical fish or pufferfish, so a whole fishing trip takes one stack per kind (up to 64). Each catch still rolls its own species and size for chat (§eYou caught a Moonscale Cod (88 cm)!§r), your fish log, the realm records and the tournament, and your §lbasket§r remembers it so Old Tobin pays the full rarity and size price for every fish in the stack. Fish with a species name (caught with §lSeparate named items per species§r enabled, or before version 1.1.5) are turned into plain fish, with their value kept, the next time the fish reaches your inventory or you open §lSell fish§r. §lMake my fish stackable§r (or §e/realm:fishing_stack§r) does it on request.",
         "ops": false
       },
       {
-        "text": "In §lFishing settings§r (or §e/realm:prefs§r -> §lFishing 2.0§r), disable §lMeasure my catches§r to always get plain fish that stack, or enable §lOnly measure notable catches§r to get a measured fish only for a new species, a personal best or a realm record. Either way, every catch still counts in your log, the records and the tournament.",
+        "text": "In §lFishing settings§r (or §e/realm:prefs§r -> §lFishing 2.0§r), enable §lSeparate named items per species§r (disabled by default) to get a colored, named fish per species that stacks only with its own species, or enable §lOnly measure notable catches§r to get a named fish only for a new species, a personal best or a realm record. Either way, every catch still counts in your log, the records and the tournament.",
         "ops": false
       },
       {
@@ -2079,7 +2079,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Sell your fish: tap Old Tobin (or any NPC with the §efisher§r role) and pick §lSell fish§r. §lFish records§r there shows the realm's records. Fishers buy species fish (stacked or not; fish from before 1.1.4 are merged into species stacks first) but not plain vanilla fish.",
+        "text": "Sell your fish: tap Old Tobin (or any NPC with the §efisher§r role) and pick §lSell fish§r. §lFish records§r there shows the realm's records. Fishers buy your plain fish stacks at the price of the catches in your basket (a shiny Moonscale Cod pays its Rare price, a big fish more than a small one, best catches first); plain fish with no catch behind them count as the common species of their kind (Atlantic Cod, Silver Salmon, Clownfish, Pufferfish) at its average size. Named species fish are bought too. §lSell fish§r first turns named fish into plain ones (with their value kept) unless you enabled §lSeparate named items per species§r.",
         "ops": false
       },
       {

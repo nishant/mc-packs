@@ -4,10 +4,15 @@
     "name": "Story Questlines",
     "description": "An RPG quest engine told by the townsfolk: a five-act main story, side questlines, daily favors, choices, hints, a codex, a tracker and story places the pack builds. /realm:saga",
     "uuid": "6e363486-40b0-40b4-9497-7fb5fd1770f1",
-    "version": [1, 15, 1],
+    "version": [1, 15, 2],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
+    {
+      "type": "data",
+      "uuid": "c4f1d2e8-53a9-4c7b-9e01-728394a5b6c7",
+      "version": [1, 0, 0]
+    },
     {
       "type": "script",
       "language": "javascript",

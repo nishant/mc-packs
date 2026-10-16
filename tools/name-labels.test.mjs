@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
-const packs = ["npc_bp", "wander_bp", "caravan_bp"];
+const packs = ["npc_bp", "wander_bp", "caravan_bp", "saga_bp"];
 const helperPath = new URL("../packs/npc_bp/scripts/name-labels.js", import.meta.url);
 const helper = existsSync(helperPath) ? await import(helperPath) : undefined;
 
@@ -50,7 +50,7 @@ function setup() {
   };
 }
 
-test("all three independent packs ship the same projection helper and their own data entity", () => {
+test("all four independent packs ship the same projection helper and their own data entity", () => {
   assert.ok(helper, "projected name helper exists");
   const source = readFileSync(helperPath, "utf8");
   for (const pack of packs) {
@@ -68,6 +68,76 @@ test("all three independent packs ship the same projection helper and their own 
     assert.match(settings, /key: "farNameRange".*min: 0, max: 200, step: 10/);
   }
 });
+
+test("all label entities have zero collision and an underground zero-sized hitbox", () => {
+  for (const pack of packs) {
+    const name = pack.replace("_bp", "");
+    const definition = JSON.parse(readFileSync(new URL(`../packs/${pack}/entities/${name}_label.json`, import.meta.url), "utf8"));
+    assert.equal(definition.format_version, "1.21.40", pack);
+    const components = definition["minecraft:entity"].components;
+    assert.deepEqual(components["minecraft:collision_box"], { width: 0, height: 0 }, pack);
+    assert.deepEqual(components["minecraft:custom_hit_test"], {
+      hitboxes: [{ pivot: [0, -48, 0], width: 0, height: 0 }],
+    }, pack);
+    assert.equal(components["minecraft:damage_sensor"].triggers.deals_damage, "no", pack);
+  }
+});
+
+for (const typeId of [
+  "minecraft:light_block", "minecraft:light_block_15",
+  "rdl:light_block_default", "rdl:light_block_soul", "rdl:light_block_copper", "rdl:light_block_white",
+  "minecraft:oak_door", "minecraft:oak_trapdoor", "minecraft:oak_fence", "minecraft:oak_fence_gate",
+  "minecraft:oak_wall_sign", "minecraft:oak_hanging_sign", "minecraft:lantern", "minecraft:chain",
+  "minecraft:iron_bars", "minecraft:glass_pane", "minecraft:white_stained_glass_pane", "minecraft:oak_leaves",
+]) {
+  test(`${typeId} does not pull a projected label into the camera`, () => {
+    const f = setup();
+    f.dim.getBlock = (pos) => ({
+      isAir: pos.x !== 0, isLiquid: false, typeId: pos.x === 0 ? typeId : "minecraft:air",
+    });
+    assert.equal(helper.firstWallDist(f.dim, f.player.getHeadLocation(), 1, 0, 0, 8.5), undefined);
+    f.update();
+    const eye = f.player.getHeadLocation(), pos = f.options.labels.get("ida").location;
+    assert.ok(Math.abs(Math.hypot(pos.x - eye.x, pos.y - eye.y, pos.z - eye.z) - 7.5) < 1e-10);
+  });
+}
+
+for (const fishing of ["Mainhand", "Offhand", "nearby bobber"]) {
+  function enableFishing(f) {
+    f.player.getComponent = (id) => id === "minecraft:equippable" ? {
+      getEquipment: (slot) => ({ typeId: slot === fishing ? "minecraft:fishing_rod" : "minecraft:stone" }),
+    } : undefined;
+    f.dim.getEntities = (query) => {
+      assert.deepEqual(query, { type: "minecraft:fishing_hook", location: f.player.location, maxDistance: 24 });
+      return fishing === "nearby bobber" ? [{}] : [];
+    };
+  }
+
+  test(`fishing (${fishing}) keeps nearby labels above their target even behind a wall`, () => {
+    const f = setup();
+    f.options.targets[0].x = 10;
+    f.wall(() => true);
+    enableFishing(f);
+    f.update();
+    assert.deepEqual(f.options.labels.get("ida")?.location, { x: 10, y: 2.05, z: 0 });
+  });
+
+  test(`fishing (${fishing}) removes distant projections and prevents new ones until fishing ends`, () => {
+    const f = setup();
+    f.update();
+    const old = f.options.labels.get("ida");
+    enableFishing(f);
+    f.update();
+    assert.equal(f.options.labels.size, 0);
+    assert.equal(old.isValid, false);
+    f.update();
+    assert.equal(f.entities.length, 1, "no new in-air label was spawned");
+    f.player.getComponent = () => undefined;
+    f.dim.getEntities = () => [];
+    f.update();
+    assert.equal(f.options.labels.size, 1, "projection resumes after fishing");
+  });
+}
 
 test("120-block range needs no view direction or aiming check", () => {
   const f = setup();

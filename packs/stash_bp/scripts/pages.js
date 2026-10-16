@@ -76,6 +76,7 @@ export function buttonSlots(inv) {
 
 /** How many pages this player has: an operator's own count (/realm:inv_pages), else the realm's `pages`. @param {Player} player */
 export function totalPages(player) {
+  if (getFor(player, "invOff") === true) return 1;
   if (isOp(player)) {
     try {
       const own = player.getDynamicProperty(OP_PROP);
@@ -944,10 +945,30 @@ export async function openInvMenu(player) {
       .body(
         total > 1
           ? `Page #${cur} of ${total}\n${total * PAGE_SIZE - free} of ${total * PAGE_SIZE} slots used, ${free} free across all pages\n§7The hotbar is shared by every page.`
-          : "Your inventory has a single page.\n§7The realm's page count is 1 (operators can change it in /realm:config)."
+          : getFor(player, "invOff") === true
+            ? "You're using the normal 27-slot inventory (no buttons or extra pages).\n§7Enable Expansive Inventory below to get your pages back."
+            : "Your inventory has a single page.\n§7The realm's page count is 1 (operators can change it in /realm:config)."
       );
+    const off = getFor(player, "invOff") === true;
     /** @type {(() => void)[]} */
     const actions = [];
+    if (off) {
+      form.button("Enable Expansive Inventory (5 pages)\n§8Restore extra pages and dark slot buttons");
+      actions.push(() => {
+        setFor(player, "invOff", false);
+        enforcePageCount(player);
+        if (buttonsWanted(player)) refreshButtons(player);
+        player.sendMessage("§aExpansive Inventory enabled!");
+      });
+    } else if (total > 1) {
+      form.button("Use normal inventory (turn off pages)\n§8Remove buttons and bring items to 1 page");
+      actions.push(() => {
+        setFor(player, "invOff", true);
+        enforcePageCount(player);
+        removeButtons(player);
+        player.sendMessage("§aSwitched to normal 1-page inventory (no buttons). Run /realm:inv anytime to re-enable 5 pages.");
+      });
+    }
     if (total > 1) {
       for (let p = 1; p <= total; p++) {
         form.button(`Page #${p}${p === cur ? " (Active)" : ""}\n§8${usage[p - 1]}/${PAGE_SIZE} slots used`);
@@ -1001,6 +1022,7 @@ async function settingsMenu(player) {
   const op = isOp(player);
   const form = new ModalFormData()
     .title("§lInventory settings")
+    .toggle("Expansive inventory (extra pages)", { defaultValue: getFor(player, "invOff") !== true, tooltip: "Off: a normal 27-slot inventory with no buttons. Items on other pages move back to your inventory" })
     .toggle("In-inventory page buttons", { defaultValue: getFor(player, "invButtons") !== false, tooltip: "The three buttons in the top row of your inventory" })
     .toggle("Auto-store pickups into other pages", { defaultValue: getFor(player, "autoStore") !== false, tooltip: "When this page is full, new stacks move to another page" });
   if (op) {
@@ -1011,11 +1033,12 @@ async function settingsMenu(player) {
     } catch {
       // none
     }
-    form.slider("My personal page count (0 = realm default)", 0, MAX_PAGES, { defaultValue: own, valueStep: 1, tooltip: `The realm's default is ${get("pages")}` });
+    form.slider("My personal page count (0 = realm default, 1 = normal inventory)", 0, MAX_PAGES, { defaultValue: own, valueStep: 1, tooltip: `The realm's default is ${get("pages")}` });
   }
   const res = await showForm(player, form, 3);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
-  const [buttons, auto, count] = res.formValues;
+  const [expansive, buttons, auto, count] = res.formValues;
+  if (typeof expansive === "boolean") setFor(player, "invOff", !expansive);
   if (typeof buttons === "boolean") setFor(player, "invButtons", buttons);
   if (typeof auto === "boolean") setFor(player, "autoStore", auto);
   if (op && typeof count === "number") {

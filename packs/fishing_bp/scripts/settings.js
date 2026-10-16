@@ -16,7 +16,7 @@ const OPTIONS = [
   { key: "tournamentDay", type: "int", scope: "world", label: "Tournament day (UTC)", help: "0 = Sunday, 1 = Monday ... 6 = Saturday", min: 0, max: 6, step: 1 },
   { key: "tournamentHourUtc", type: "int", scope: "world", label: "Tournament starts at (hour, UTC)", min: 0, max: 23, step: 1 },
   { key: "tournamentMinutes", type: "int", scope: "world", label: "Tournament length (minutes)", min: 10, max: 180, step: 5 },
-  { key: "measure", type: "bool", scope: "player", default: true, label: "Measure my catches", help: "Your fish carry their species, size and your name. Disabled: plain fish that stack (the catch still counts in your log)" },
+  { key: "measure", type: "bool", scope: "player", default: false, label: "Separate named items per species", help: "Disabled (default): all caught fish (common, rare/shiny, or record) stack together as plain cod, salmon, tropical fish and pufferfish, while your log, records and Old Tobin still remember every catch. Enabled: each species has its own colored name and lore" },
   { key: "notableOnly", type: "bool", scope: "player", default: false, label: "Only measure notable catches", help: "A catch that isn't a new species, a personal best or a realm record comes as a plain fish that stacks" },
 ];
 

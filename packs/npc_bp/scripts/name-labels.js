@@ -1,11 +1,28 @@
-// Kept identical in npc_bp, wander_bp and caravan_bp; each pack must also work on its own.
+// Kept identical in npc_bp, wander_bp, caravan_bp and saga_bp; each pack must also work on its own.
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
+/** @typedef {import("@minecraft/server").EquipmentSlot} EquipmentSlot */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
 /** @typedef {Vector3 & { id: string, dim: string, name: string }} LabelTarget */
 
-const PASSABLE = /(^|:|_)(air|short_grass|tall_grass|fern|large_fern|dead_bush|bush|seagrass|kelp|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|pitcher_plant|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|sweet_berry_bush|torch|candle|sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|tripwire_hook|redstone_wire|string|ladder|cobweb|coral_fan|coral|glow_lichen|deadbush|fire|light_block(_\d+)?|structure_void|scaffolding|snow_layer)$/;
+const PASSABLE = /(^|:|_)(air|light_block[a-z0-9_]*|short_grass|tall_grass|fern|large_fern|dead_bush|bush|seagrass|kelp|vine|vines|sapling|propagule|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of_the_valley|rose|lilac|peony|sunflower|petals|leaf_litter|torchflower|pitcher_plant|crimson_roots|warped_roots|hanging_roots|sprouts|fungus|mushroom|wheat|carrots|potatoes|beetroot|sweet_berry_bush|torch|candle|sign|wall_sign|hanging_sign|banner|carpet|rail|button|lever|pressure_plate|tripwire|tripwire_hook|redstone_wire|string|ladder|cobweb|door|trapdoor|fence|fence_gate|lantern|chain|iron_bars|glass_pane|stained_glass_pane|leaves|coral_fan|coral|glow_lichen|deadbush|fire|structure_void|scaffolding|snow_layer)$/;
+
+/** True when the viewer holds a fishing rod or has a bobber nearby, so no label is projected into the air near them. @param {Player} player @param {Dimension} dim */
+function isFishing(player, dim) {
+  try {
+    const eq = player.getComponent?.("minecraft:equippable");
+    if (eq) {
+      const main = eq.getEquipment?.(/** @type {EquipmentSlot} */ ("Mainhand"))?.typeId ?? "";
+      const off = eq.getEquipment?.(/** @type {EquipmentSlot} */ ("Offhand"))?.typeId ?? "";
+      if (main.includes("fishing_rod") || off.includes("fishing_rod")) return true;
+    }
+    if (dim.getEntities?.({ type: "minecraft:fishing_hook", location: player.location, maxDistance: 24 })?.length) return true;
+  } catch {
+    // ignore in unit test mocks
+  }
+  return false;
+}
 
 /**
  * First wall on the short projection ray. Fine steps also catch a wall right beside the camera;
@@ -74,9 +91,11 @@ export function updateNameLabels({ labels, targets, players, maxRange, labelType
       const dx = target.x - eye.x, dy = target.y + 2.25 - eye.y, dz = target.z - eye.z;
       const d = Math.hypot(dx, dy, dz);
       if (d < 0.5) continue;
+      const fishing = isFishing(near, dim);
+      if (fishing && d > 12) continue;
       const ux = dx / d, uy = dy / d, uz = dz / d;
-      const wall = firstWallDist(dim, eye, ux, uy, uz, Math.min(d, 8.5));
-      const closeClear = d <= 6.5 && wall === undefined;
+      const wall = fishing ? undefined : firstWallDist(dim, eye, ux, uy, uz, Math.min(d, 8.5));
+      const closeClear = fishing || (d <= 6.5 && wall === undefined);
       const projDist = wall !== undefined ? Math.max(0.1, wall - 0.55) : Math.min(d - 0.3, 7.5);
       const pos = closeClear
         ? { x: target.x, y: target.y + 2.05, z: target.z }
