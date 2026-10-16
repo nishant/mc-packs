@@ -622,10 +622,13 @@ const isSigil = (stack) => {
   }
 };
 
+/** The Sigil's last lore line: where it works. */
+const SIGIL_WHERE = "§7Hold it in your hand and use it";
+
 /** @param {Calling | undefined} calling */
 function sigilLore(calling) {
-  if (!calling) return ["§7A Calling Sigil, waiting for a Calling."];
-  return [`§e${calling.name}: ${calling.active.name}`, `§7${activeText(calling)}`.slice(0, 60), "§8Use it. /realm:skills_calling"];
+  if (!calling) return ["§7A Calling Sigil, waiting for a Calling.", SIGIL_WHERE];
+  return [`§e${calling.name}: ${calling.active.name}`, `§7${activeText(calling)}`.slice(0, 60), "§8Menu: /realm:skills_calling", SIGIL_WHERE];
 }
 
 function makeSigil(/** @type {Calling | undefined} */ calling) {

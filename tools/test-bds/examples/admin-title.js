@@ -56,7 +56,7 @@ export default async function (t) {
     form.answer(answer);
     return f;
   };
-  let f = await next(await main, "Quick Actions");
+  let f = await next(await main, "Operator Tools");
   f = await next(f, "Show a Title");
   t.log("form:", JSON.stringify(f.elements ?? f.body));
   const ask = await next(f, { Title: "Market Day", Subtitle: "In the square", Seconds: 4 });

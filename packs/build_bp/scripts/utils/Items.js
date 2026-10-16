@@ -11,10 +11,12 @@ export const BOOK_LORE = [
     "§8> §7Hold right-click    §8| §fQuick switch",
     "§8> §7Sneak + right-click §8| §fSettings",
     "§8> §7Left-click           §8| §fBlock palette",
+    "§7Hold it in your hand and use it",
 ];
 export const TUTORIAL_BOOK_NAME = "§b§lEffortless Building Tutorial§r";
 export const TUTORIAL_BOOK_LORE = [
     "§8> §7Hold it §8| §fThe tutorial opens in front of you",
+    "§7Works in your main hand",
 ];
 
 export function isBook(itemStack) {

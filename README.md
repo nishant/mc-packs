@@ -8,7 +8,7 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 |---|---|---|---|
 | [Realm Help](docs/PACKS.md#realm-help--help_bp) | `help_bp` | One help page for every installed feature and command, with usage | `/realm:help` |
 | [Realm Settings](docs/PACKS.md#realm-settings--settings_bp) | `settings_bp` | Change every pack's settings in game: operators for everyone, each player their own preferences | `/realm:config` · `/realm:prefs` |
-| [Realm Configuration](docs/PACKS.md#realm-configuration--admin_bp) | `admin_bp` | An item every operator gets: an admin menu that runs any realm command with preset choices (townsfolk, weather, players, amounts), plus quick vanilla actions, recent commands, search, a setup checklist and titles the HUD steps aside for | `/realm:admin` · `/realm:admin_item` · `/realm:admin_title` |
+| [Realm Configuration](docs/PACKS.md#realm-configuration--admin_bp) | `admin_bp` | A menu item every player gets, with every realm command they can use and preset choices (townsfolk, weather, players, amounts), plus recent commands and search; operator commands in gold, with quick vanilla actions, a setup checklist and titles the HUD steps aside for | `/realm:admin` · `/realm:admin_item` · `/realm:admin_title` |
 | [Welcome Message](docs/PACKS.md#welcome-message--welcome_bp) | `welcome_bp` | Popup when players join: an introduction to the realm, its story and what to do, plus the rules | `/realm:welcome` · `/realm:welcome_show` · `/realm:welcome_edit` · `/realm:welcome_reset` |
 | [Low Durability Warning](docs/PACKS.md#low-durability-warning--durability_bp) | `durability_bp` | Warns at 10% and 3% durability left, for tools, weapons and armor | `/realm:durability` |
 | [AFK + Smart Sleep](docs/PACKS.md#afk--smart-sleep--afk_bp) | `afk_bp` | `[AFK]` tag after 5 min idle; the night can be skipped without waiting for AFK players | `/realm:afk` |
@@ -81,7 +81,7 @@ Minecraft Bedrock add-ons for my Realm. Each folder in `packs/` is a self-contai
 | [Silly Enchants Sounds](docs/PACKS.md#silly-enchants-sounds--silly_rp) | `silly_rp` | **Resource pack**, in Realm Resources. Silly Enchants' confetti, disco floor and lights, rainbow trail, bubbles in the air and the Grunt Birthday cheer | none |
 | [Translucent Tools Switch](docs/PACKS.md#translucent-tools-switch--translucent_bp) | `translucent_bp` | Each player chooses see-through or solid tools for Translucent Tools in `/realm:prefs`, with a realm default | none |
 
-Commands that set things up for everyone, hand out items or start events (`/realm:config`, `/realm:admin`, and names like `_edit`, `_reset`, `_add`, `_remove`, `_give`, `_spawn`, `_set` or `_now`) are ops-only; the Commands tables in the docs, and `/realm:help`, mark each one. None of the commands need cheats. In game, `/realm:help` explains every installed command, with usage.
+Commands that set things up for everyone, hand out items or start events (`/realm:config`, and names like `_edit`, `_reset`, `_add`, `_remove`, `_give`, `_spawn`, `_set` or `_now`) are ops-only; the Commands tables in the docs, and `/realm:help`, mark each one. None of the commands need cheats. In game, `/realm:help` explains every installed command, with usage.
 
 ## Quick start
 

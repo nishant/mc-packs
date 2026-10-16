@@ -16,8 +16,11 @@ import { BlockPermutation, LiquidType } from "@minecraft/server";
  * size: the box the build covers (x and z odd, centered on the origin); below: how many of the
  * size.y layers lie under the origin; y: fixed origin height for underground and sky places;
  * minDepth: water depth a water site needs; slope: most height difference a land site may have;
- * wet: a land site may be shallow water (a swamp).
- * @typedef {{ label: string, size: V3, site: Site, minDist: number, maxDist: number, y?: number, features: Record<string, V3>, below?: number, minDepth?: number, slope?: number, wet?: boolean }} PrefabInfo
+ * wet: a land site may be shallow water (a swamp); footing: the foundation goes on down to solid ground (at most this
+ * many blocks more) where the land under it falls away, so the build never floats over a cliff, slope or the water;
+ * rev: the build's revision, and stale: blocks an older revision had that it doesn't (local offsets, with the block
+ * id): a place built with an older revision is touched up once a player comes near (touchUp in places.js).
+ * @typedef {{ label: string, size: V3, site: Site, minDist: number, maxDist: number, y?: number, features: Record<string, V3>, below?: number, minDepth?: number, slope?: number, wet?: boolean, footing?: number, rev?: number, stale?: { at: V3, id: string }[] }} PrefabInfo
  */
 /** @typedef {Record<string, string | number | boolean>} States */
 /** @typedef {{ id: string, s?: States }} B */
@@ -27,7 +30,9 @@ import { BlockPermutation, LiquidType } from "@minecraft/server";
 /** @type {Record<string, PrefabInfo>} */
 export const PREFABS = {
   lighthouse: {
-    label: "Lighthouse", size: { x: 9, y: 25, z: 9 }, below: 3, site: "coast", minDist: 80, maxDist: 250,
+    label: "Lighthouse", size: { x: 9, y: 25, z: 9 }, below: 3, site: "coast", minDist: 80, maxDist: 250, footing: 32, rev: 1,
+    // revision 1: the balcony is a walkway outside the lantern room (the rail used to stand right against it)
+    stale: ring(3).map(([x, z]) => ({ at: v(x, 16, z), id: "minecraft:iron_bars" })),
     features: { door: v(0, 1, -2), ladder: v(0, 1, 1), lamp: v(0, 17, 0), balcony: v(0, 16, -3), top: v(0, 16, 1) },
   },
   sunken_bell: {
@@ -121,6 +126,14 @@ export const prefabInfo = (name) => PREFABS[name] ?? CAMPS[name];
 /** @param {number} x @param {number} y @param {number} z @returns {V3} */
 function v(x, y, z) {
   return { x, y, z };
+}
+
+/** The cells of a square ring, |x| or |z| = r. @param {number} r @returns {[number, number][]} */
+function ring(r) {
+  /** @type {[number, number][]} */
+  const out = [];
+  for (let x = -r; x <= r; x++) for (let z = -r; z <= r; z++) if (Math.abs(x) === r || Math.abs(z) === r) out.push([x, z]);
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -480,18 +493,19 @@ const BUILD = {
     p.box(-1, 8, -1, 1, 8, 1, slab("spruce_slab", true));
     p.door(0, 1, -2, "spruce_door", "n");
     for (const [x, y, z] of [[0, 6, -2], [0, 11, -2], [2, 7, 0], [-2, 7, 0], [2, 12, 0], [-2, 12, 0]]) p.set(x, y, z, "glass_pane");
-    // balcony on corbels, iron rail, glass lantern room
+    // balcony on corbels: a walkway (ring 3) round the glass lantern room, the iron rail on its edge (ring 4)
     p.box(-3, 15, -3, 3, 15, 3, "stone_bricks");
     p.box(-1, 15, -1, 1, 15, 1, "smooth_stone");
-    for (let x = -3; x <= 3; x++)
-      for (let z = -3; z <= 3; z++) {
-        if (Math.abs(x) !== 3 && Math.abs(z) !== 3) continue;
-        const corner = Math.abs(x) === 3 && Math.abs(z) === 3;
-        /** @type {Dir} */
-        const toward = z === -3 ? "s" : z === 3 ? "n" : x === -3 ? "e" : "w";
-        p.set(x, 14, z, corner ? slab("stone_brick_slab", true) : stair("stone_brick_stairs", toward, true));
-        p.set(x, 16, z, "iron_bars");
-      }
+    for (const [x, z] of ring(3)) {
+      const corner = Math.abs(x) === 3 && Math.abs(z) === 3;
+      /** @type {Dir} */
+      const toward = z === -3 ? "s" : z === 3 ? "n" : x === -3 ? "e" : "w";
+      p.set(x, 14, z, corner ? slab("stone_brick_slab", true) : stair("stone_brick_stairs", toward, true));
+    }
+    for (const [x, z] of ring(4)) {
+      p.set(x, 15, z, slab("stone_brick_slab", true));
+      p.set(x, 16, z, "iron_bars");
+    }
     for (let y = 16; y <= 18; y++)
       for (let x = -2; x <= 2; x++)
         for (let z = -2; z <= 2; z++) {
@@ -1379,18 +1393,45 @@ function perm(blk) {
 const FALLING = /^minecraft:(sand|red_sand|gravel|suspicious_sand|suspicious_gravel|[a-z_]+_concrete_powder)$/;
 const SOFT_GROUND = /grass$|fern|flower|bush|tulip|orchid|poppy|dandelion|allium|bluet|daisy|lily_of|cornflower|snow_layer|petals|leaf_litter|sapling|vine|seagrass|kelp|deadbush|lilac|peony|sunflower|leaves|mushroom$/;
 
+/** Can a foundation go into this block (air, liquid, a plant, or sand and gravel that would fall)? @param {Block} block */
+const soft = (block) => block.isAir || block.isLiquid || SOFT_GROUND.test(block.typeId) || FALLING.test(block.typeId);
+/** What a footing fills: open space under it (air, water, plants), never sand or gravel that is ground already. @param {Block} block */
+const open = (block) => block.isAir || block.isLiquid || SOFT_GROUND.test(block.typeId);
+
 /**
  * Places a prefab, a few hundred blocks per step: run it with system.runJob. Chunks that aren't
- * loaded are skipped (logged once); nothing throws.
- * @param {string} name @param {Dimension} dimension @param {V3} origin @param {number} facing
+ * loaded are skipped (logged once); nothing throws. With `touch` (a place built with an older revision)
+ * nothing standing is replaced: blocks go only into air (and liquid or plants for the foundation), the
+ * prefab's stale blocks are cleared, and the footing is filled down.
+ * @param {string} name @param {Dimension} dimension @param {V3} origin @param {number} facing @param {{ touch?: boolean }} [opts]
  * @returns {Generator<void, void, void>}
  */
-export function* buildSteps(name, dimension, origin, facing) {
+export function* buildSteps(name, dimension, origin, facing, opts = {}) {
   let skipped = 0, failed = 0, n = 0;
   try {
     const f = ((facing % 4) + 4) % 4;
-    const wet = prefabInfo(name).site === "water";
+    const info = prefabInfo(name);
+    const wet = info.site === "water";
+    const touch = !!opts.touch;
     const { entries, entities } = blueprint(name, origin);
+    if (touch)
+      for (const st of info.stale ?? []) {
+        const o = rotate(st.at, f);
+        try {
+          const block = dimension.getBlock({ x: origin.x + o.x, y: origin.y + st.at.y, z: origin.z + o.z });
+          if (block?.typeId === st.id) block.setPermutation(BlockPermutation.resolve("minecraft:air"));
+        } catch {
+          skipped++;
+        }
+      }
+    /** The lowest entry of each column, if it's a foundation (SOFT): where the footing goes on down. @type {Map<string, Entry>} */
+    const feet = new Map();
+    if (info.footing)
+      for (const e of entries) {
+        const k = `${e.x},${e.z}`;
+        const low = feet.get(k);
+        if (!low || e.y < low.y) feet.set(k, e);
+      }
     for (const e of entries) {
       if (++n % 200 === 0) yield;
       const o = rotate(e, f);
@@ -1403,9 +1444,14 @@ export function* buildSteps(name, dimension, origin, facing) {
         }
         const id = block.typeId;
         const wasWater = block.isLiquid && id.includes("water");
-        if (e.k === AIR && (block.isAir || block.isLiquid)) continue;
-        if (e.k === WATER && (block.isAir || wasWater)) continue;
-        if (e.k === SOFT && !(block.isAir || block.isLiquid || SOFT_GROUND.test(id) || FALLING.test(id))) continue;
+        if (e.k === AIR && (block.isAir || block.isLiquid || touch)) continue;
+        if (e.k === WATER && (block.isAir || wasWater || touch)) continue;
+        if (e.k === SOFT && !soft(block)) continue;
+        if (touch && e.k === SOLID && !block.isAir) continue;
+        if (touch && e.up) {
+          const top = dimension.getBlock({ x: at.x, y: at.y + 1, z: at.z });
+          if (!top?.isAir) continue;
+        }
         const pm = perm({ id: e.b.id, s: rotStates(e.b.s, f) });
         if (!pm) continue;
         block.setPermutation(pm);
@@ -1429,6 +1475,39 @@ export function* buildSteps(name, dimension, origin, facing) {
         }
       }
     }
+    // Footing: under each foundation column, on down while the land under it is open (a cliff, a slope, water).
+    if (info.footing)
+      for (const e of feet.values()) {
+        if (e.k !== SOFT) continue;
+        const o = rotate(e, f);
+        const x = origin.x + o.x, z = origin.z + o.z;
+        const pm = perm({ id: e.b.id, s: rotStates(e.b.s, f) });
+        if (!pm) continue;
+        try {
+          const foot = dimension.getBlock({ x, y: origin.y + e.y, z });
+          // Only under our own foundation block (placed now or by the first build), never under a cave's roof.
+          if (!foot || foot.typeId !== pm.type.id) continue;
+          const min = dimension.heightRange.min;
+          for (let d = 1; d <= info.footing; d++) {
+            const y = origin.y + e.y - d;
+            if (y < min) break;
+            const block = dimension.getBlock({ x, y, z });
+            if (!block) {
+              skipped++;
+              break;
+            }
+            if (!open(block)) break;
+            block.setPermutation(pm);
+            if (++n % 200 === 0) yield;
+          }
+        } catch (err) {
+          if (/unloaded/i.test(String(err))) skipped++;
+          else {
+            failed++;
+            warnOnce(`prefab ${name} footing: ${err}`);
+          }
+        }
+      }
     for (const en of entities) {
       const o = rotate(en.at, f);
       const at = { x: origin.x + o.x + 0.5, y: origin.y + en.at.y, z: origin.z + o.z + 0.5 };

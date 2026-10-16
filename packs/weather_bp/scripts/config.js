@@ -16,9 +16,9 @@ export const CONFIG = {
 
   clear: {
     /** Shortest clear spell, in real minutes. */
-    minMinutes: 20,
+    minMinutes: 30,
     /** Longest clear spell, in real minutes. */
-    maxMinutes: 60,
+    maxMinutes: 90,
   },
 
   rain: {

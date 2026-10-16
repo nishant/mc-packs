@@ -13,26 +13,30 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { ACTIONS, TITLE_MAX_SECONDS, showTitle } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
-import { CATEGORIES, LINE, NAMES, OPS_MARK, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
+import { GROUPS, LINE, NAMES, OP_COLOR, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
 import { get } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
 
-// Realm Configuration: one item, one menu, every realm: command. The commands come from catalog.js
-// (generated from every pack's registrations); picking one asks for its options with preset choices,
-// then runs it as the operator with player.runCommand, so the command's own checks and menus apply.
+// Realm Configuration: one item, one menu, every realm: command. Every player gets the item and sees the
+// commands they may use; operators see everything, their own entries in gold. The commands come from
+// catalog.js (generated from every pack's registrations); picking one asks for its options with preset
+// choices, then runs it as the player with player.runCommand, so the command's own checks and menus
+// apply. Operator commands and quick actions are checked again right before they run, never only hidden.
 // This pack holds no other pack's data: it only runs their commands.
 
 /**
  * @typedef {import("./catalog.js").Command & { folder: string, pack: string }} Cmd
  * @typedef {import("./actions.js").Action} Action
  * @typedef {{ t: string, l?: string, a?: string, v?: import("./actions.js").Values }} Recent
- * @typedef {{ label: string, open: () => Promise<unknown> }} Entry
+ * @typedef {{ label: string, open: () => Promise<unknown> } | { header: string } | { text: string }} Entry a button, a heading or a line of text
  */
 
 const TITLE = "Realm Configuration";
 const RECENT_PROP = "admin:recent";
-const LORE = ["§r§7Use it to open the admin menu:", "§r§7every realm command in one place,", "§r§7with preset choices.", "§r§8Operators only"];
+const LORE = ["§r§7Hold it in your hand and use it", "§r§7to open the realm menu:", "§r§7every realm command you can use,", "§r§7in one place.", "§r§8Gold entries: operators only"];
 const MARK = /** @type {string} */ (LORE.at(-1));
+/** The last lore line of items handed out before the menu was for everyone: still the real item. */
+const OLD_MARK = "§r§8Operators only";
 const RANK = { any: 0, op: 1, admin: 2, host: 3, owner: 4 };
 
 /** @type {Cmd[]} every command in the catalog */
@@ -40,6 +44,15 @@ const ALL = PACKS.flatMap((p) => p.commands.map((c) => ({ ...c, folder: p.folder
 
 /** @param {Player} p */
 const isOp = (p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+/** Whether the item goes to every player (otherwise only to operators). */
+const forEveryone = () => get("giveToPlayers") !== false;
+/** The permission rank a command needs (an unknown one: operator). @param {string} name */
+const needs = (name) => {
+  const c = ALL.find((x) => x.name === name);
+  return c ? (RANK[c.permission] ?? 1) : 1;
+};
+/** @param {Cmd} c */
+const isOpCmd = (c) => (RANK[c.permission] ?? 1) > 0;
 /** @param {unknown} s */
 const plain = (s) => String(s ?? "").replace(/§./g, "");
 /** A button line cut to what fits (LINE pixels), so Bedrock doesn't cut it somewhere worse. @param {string} s @param {number} [room] */
@@ -131,7 +144,7 @@ const resumed = new Set();
 async function resume(player, back) {
   if (!back) return;
   await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10) * 2 + 5); // Realm Settings pings twice before it opens
-  if (!player.isValid || !isOp(player)) return;
+  if (!player.isValid) return;
   resumed.add(player.id);
   try {
     return await back();
@@ -140,14 +153,33 @@ async function resume(player, back) {
   }
 }
 
-/** A list of buttons; picking one opens it. @param {Player} player @param {string} title @param {string} body @param {Entry[]} entries @param {(() => Promise<unknown>) | undefined} back */
+/**
+ * One scrolling page of buttons, with headings and lines of text between them; picking a button opens it.
+ * @param {Player} player @param {string} title @param {string} body @param {Entry[]} entries @param {(() => Promise<unknown>) | undefined} back
+ */
 async function list(player, title, body, entries, back) {
   const form = new ActionFormData().title(title).body(body);
-  for (const e of entries) form.button(e.label);
-  if (back) form.button("Back");
+  /** @type {(() => Promise<unknown>)[]} */
+  const opens = [];
+  let gap = false;
+  for (const e of entries) {
+    if ("header" in e) {
+      if (gap) form.divider();
+      form.header(e.header);
+    } else if ("text" in e) form.label(e.text);
+    else {
+      form.button(e.label);
+      opens.push(e.open);
+    }
+    gap = true;
+  }
+  if (back) {
+    if (gap) form.divider();
+    form.button("Back\n§8To the page before");
+  }
   const res = await show(player, form);
   if (res?.selection === undefined) return;
-  if (res.selection < entries.length) return entries[res.selection].open();
+  if (res.selection < opens.length) return opens[res.selection]();
   if (back) return back();
 }
 
@@ -199,9 +231,11 @@ function remember(player, entry) {
 function exec(player, line, title) {
   let ok = false;
   let why = "";
-  // The menu can stay open a while: someone who stopped being an operator meanwhile runs nothing.
-  if (!isOp(player)) {
-    player.sendMessage(`§c[${TITLE}] /${line} didn't run: you aren't an operator any more.`);
+  // Checked here, not only by hiding: an operator command never runs for someone below its level (the
+  // menu can stay open a while, and someone who stopped being an operator meanwhile runs nothing).
+  const name = line.split(" ")[0];
+  if (Number(player.commandPermissionLevel) < needs(name)) {
+    player.sendMessage(`§c[${TITLE}] /${name} didn't run: it's for operators${isOp(player) ? " of a higher level" : ""}.`);
     return false;
   }
   try {
@@ -244,7 +278,7 @@ function paramForm(player, cmd, note) {
   const isInput = [];
   /** @type {{ count: number, read: (v: any[]) => string | { error: string } }[]} */
   const readers = [];
-  form.label(`§7/${cmd.name}§r\n${cmd.description}${note ? `\n\n§7${note}` : ""}`);
+  form.label(`§7/${cmd.name}${isOpCmd(cmd) ? ` ${OP_COLOR}(operators only)` : ""}§r\n${cmd.description}${note ? `\n\n§7${note}` : ""}`);
   isInput.push(false);
   const loc = player.location;
 
@@ -371,6 +405,10 @@ async function openCommand(player, cmd, note, back) {
  * @param {Player} player @param {Action} action @param {() => Promise<unknown>} [back]
  */
 async function openAction(player, action, back) {
+  if (!isOp(player)) {
+    player.sendMessage(`§c[${TITLE}] ${action.title} is for operators.`);
+    return back?.();
+  }
   if (action.use) {
     const cmd = (await available(player)).find((c) => c.name === action.use);
     if (cmd) return openCommand(player, cmd, `${action.title}: the ${cmd.pack} pack owns this, so its command does it.`, back);
@@ -426,54 +464,87 @@ function whatItDoes(c) {
 /** A command's name for what it does ("Find Container"); the command name for one presets.js doesn't know. @param {Cmd} c */
 const nameOf = (c) => NAMES[c.name]?.[0] ?? `/${c.name}`;
 
+/** A button's two lines: the name (gold when only operators can use it) and what it does. @param {string} name @param {string} hint @param {boolean} op */
+const button = (name, hint, op) => `${op ? OP_COLOR : ""}${fit(name)}\n§8${fit(hint)}`;
+
 /** @param {Cmd} c */
-const cmdLabel = (c) => {
-  const mark = c.permission === "any" ? "" : OPS_MARK;
-  return `${fit(nameOf(c), LINE - textWidth(mark))}${mark}\n§8${fit(NAMES[c.name]?.[1] ?? whatItDoes(c))}`;
-};
+const cmdLabel = (c) => button(nameOf(c), NAMES[c.name]?.[1] ?? whatItDoes(c), isOpCmd(c));
 
 /** The buttons of a list of commands; each comes back to `back` (the list) once it has run. @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
 const cmdEntries = (player, cmds, back) => cmds.map((c) => /** @type {Entry} */ ({ label: cmdLabel(c), open: () => openCommand(player, c, undefined, back) }));
 
+/** The top line of every page for operators: what the colors mean. @param {Player} player @param {string} rest */
+const legend = (player, rest) => (isOp(player) ? `${OP_COLOR}Gold§r = operators only. The rest is for every player.\n${rest}` : rest);
+
+/** @type {Set<string>} packs that sit on a page of their own (Realm Configuration's commands are on Operator Tools) */
+const OWN_PAGE = new Set(["admin_bp"]);
+
+/**
+ * The groups with the commands this player may use, sections in order, empty ones left out. A pack no
+ * group lists lands in "Other".
+ * @param {Cmd[]} cmds
+ * @returns {{ id: string, title: string, hint: string, sections: { title: string, cmds: Cmd[] }[] }[]}
+ */
+function grouped(cmds) {
+  const placed = new Set(OWN_PAGE);
+  const rank = (/** @type {Cmd} */ c) => [isOpCmd(c) ? 1 : 0, c.name.includes("_") ? 1 : 0];
+  const out = [];
+  for (const g of GROUPS) {
+    const sections = [];
+    for (const sec of g.sections) {
+      sec.packs.forEach((f) => placed.add(f));
+      const inSec = cmds
+        .filter((c) => sec.packs.includes(c.folder))
+        .sort((a, b) => {
+          const ra = rank(a), rb = rank(b);
+          return sec.packs.indexOf(a.folder) - sec.packs.indexOf(b.folder) || ra[0] - rb[0] || ra[1] - rb[1] || a.name.localeCompare(b.name);
+        });
+      if (inSec.length) sections.push({ title: sec.title, cmds: inSec });
+    }
+    if (sections.length) out.push({ id: g.id, title: g.title, hint: g.hint, sections });
+  }
+  const other = cmds.filter((c) => !placed.has(c.folder)).sort((a, b) => a.pack.localeCompare(b.pack) || a.name.localeCompare(b.name));
+  if (other.length) out.push({ id: "other", title: "Other", hint: "Packs the menu doesn't sort yet", sections: [{ title: "Other packs", cmds: other }] });
+  return out;
+}
+
 /** @param {Player} player */
 async function mainMenu(player) {
   const cmds = await available(player);
+  const op = isOp(player);
   const home = () => mainMenu(player);
-  const rec = recents(player);
+  const rec = shownRecents(player, cmds);
+  const has = (/** @type {string} */ name) => cmds.some((c) => c.name === name);
   /** @type {Entry[]} */
-  const entries = [
-    { label: `Recent (${rec.length})\n§8Repeat one of your last commands`, open: () => recentPage(player, home) },
-    { label: "Search Commands\n§8By name or what they do", open: () => searchPage(player, cmds, home) },
-    { label: "Quick Actions\n§8Time, weather, teleport, give...", open: () => actionsPage(player, home) },
-  ];
+  const entries = [];
+  if (has("realm:prefs")) entries.push({ label: button("My Preferences", "Your own settings, every pack", false), open: async () => exec(player, "realm:prefs", "My Preferences") });
+  if (op && has("realm:config")) entries.push({ label: button("Realm Settings", "Every pack's settings, for all", true), open: async () => exec(player, "realm:config", "Realm Settings") });
+  entries.push({ label: button(`Recent (${rec.length})`, "Run one of your last again", false), open: () => recentPage(player, home) });
+  entries.push({ label: button("Search", "Find a command by any word", false), open: () => searchPage(player, cmds, home) });
 
-  const placed = new Set();
-  for (const cat of CATEGORIES) {
-    const inCat = cmds.filter((c) => cat.packs.includes(c.folder));
-    inCat.forEach((c) => placed.add(c.name));
-    if (inCat.length) entries.push({ label: `${cat.title}\n§8${inCat.length} command${inCat.length === 1 ? "" : "s"}`, open: () => categoryPage(player, cat.title, inCat, home) });
-  }
-  const other = cmds.filter((c) => !placed.has(c.name));
-  if (other.length) entries.push({ label: `Other\n§8${other.length} command${other.length === 1 ? "" : "s"}`, open: () => categoryPage(player, "Other", other, home) });
-
-  entries.push({ label: "Server Setup Checklist\n§8One-time jobs across the packs", open: () => setupPage(player, cmds, home) });
-  if (cmds.some((c) => c.name === "realm:config")) entries.push({ label: "Realm Settings\n§8Every pack's settings", open: async () => exec(player, "realm:config", "Realm Settings") });
+  entries.push({ header: "What do you want to do?" });
+  for (const g of grouped(cmds)) entries.push({ label: button(g.title, g.hint, false), open: () => groupPage(player, g.id, home) });
+  if (op) entries.push({ label: button("Operator Tools", "Quick actions, setup checklist", true), open: () => opsPage(player, home) });
 
   const packCount = new Set(cmds.map((c) => c.folder)).size;
-  await list(player, `§l${TITLE}`, `${cmds.length} commands from ${packCount} packs, in one place. Pick a category, search, or repeat a recent one. Options come with preset choices; commands that have their own menu open it.`, entries, undefined);
+  const body = `${cmds.length} commands${op ? "" : " you can use"} from ${packCount} packs. Each page scrolls; the second line of a button says what it does.`;
+  await list(player, `§l${TITLE}`, legend(player, body), entries, undefined);
 }
 
-/** @param {Player} player @param {string} title @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
-async function categoryPage(player, title, cmds, back) {
-  const again = () => categoryPage(player, title, cmds, back);
-  const packs = [...new Set(cmds.map((c) => c.pack))].sort();
-  const sorted = [...cmds].sort((a, b) => a.pack.localeCompare(b.pack) || a.name.localeCompare(b.name));
-  await list(player, title, `From: ${packs.join(", ")}.`, cmdEntries(player, sorted, again), back);
+/** One group: every command of its packs on one scrolling page, a heading per section. @param {Player} player @param {string} id @param {() => Promise<unknown>} back */
+async function groupPage(player, id, back) {
+  const again = () => groupPage(player, id, back);
+  const group = grouped(await available(player)).find((g) => g.id === id);
+  if (!group) return back();
+  /** @type {Entry[]} */
+  const entries = [];
+  for (const sec of group.sections) entries.push({ header: sec.title }, ...cmdEntries(player, sec.cmds, again));
+  await list(player, group.title, legend(player, "Tap one to run it. Its options, if it has any, come with preset choices."), entries, back);
 }
 
 /** @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
 async function searchPage(player, cmds, back) {
-  const res = await show(player, new ModalFormData().title("Search Commands").textField("Search for", "weather, npc, give...", { defaultValue: "" }).submitButton("Search"));
+  const res = await show(player, new ModalFormData().title("Search").textField("Search for", "weather, party, sort...", { defaultValue: "" }).submitButton("Search"));
   if (!res) return back();
   const q = String(inputsOf(res.formValues ?? [], [true])[0] ?? "").trim().toLowerCase();
   return resultsPage(player, cmds, q, back);
@@ -484,31 +555,34 @@ async function resultsPage(player, cmds, q, back) {
   const words = q.split(/\s+/).filter(Boolean);
   const hit = (/** @type {string} */ s) => words.every((w) => s.toLowerCase().includes(w));
   const found = cmds.filter((c) => hit(`${c.name} ${c.description} ${c.pack} ${(NAMES[c.name] ?? []).join(" ")}`));
-  const actions = ACTIONS.filter((a) => hit(`${a.title} ${a.hint} ${a.help}`));
+  const actions = isOp(player) ? ACTIONS.filter((a) => hit(`${a.title} ${a.hint} ${a.help}`)) : [];
   const again = () => resultsPage(player, cmds, q, back);
   const search = () => searchPage(player, cmds, back);
   /** @type {Entry[]} */
   const entries = [
-    ...actions.map((a) => ({ label: `${fit(a.title)}\n§8${fit(`Quick action: ${a.hint}`)}`, open: () => openAction(player, a, again) })),
+    ...actions.map((a) => ({ label: button(a.title, `Quick action: ${a.hint}`, true), open: () => openAction(player, a, again) })),
     ...cmdEntries(player, found, again),
   ];
-  if (!entries.length) return list(player, "Search Commands", `Nothing matches "${q}".`, [{ label: "Search again", open: search }], back);
-  entries.push({ label: "Search again\n§8Another word", open: search });
-  await list(player, "Search Commands", `${entries.length - 1} match${entries.length === 2 ? "" : "es"} for "${q}".`, entries, back);
+  const n = entries.length;
+  entries.push({ label: button("Search again", "Another word", false), open: search });
+  await list(player, "Search", legend(player, n ? `${n} match${n === 1 ? "" : "es"} for "${q}".` : `Nothing matches "${q}".`), entries, back);
 }
+
+/** This player's recent commands that they may still run (a former operator's operator ones are left out). @param {Player} player @param {Cmd[]} cmds */
+const shownRecents = (player, cmds) => recents(player).filter((e) => (e.a ? isOp(player) : cmds.some((c) => c.name === String(e.l ?? "").split(" ")[0])));
 
 /** @param {Player} player @param {() => Promise<unknown>} back */
 async function recentPage(player, back) {
-  const rec = recents(player);
   const cmds = await available(player);
+  const rec = shownRecents(player, cmds);
   const again = () => recentPage(player, back);
   /** @type {Entry[]} */
   const entries = rec.map((e) => ({
-    label: `${fit(e.t)}\n§8${e.a ? fit(`Quick action${e.v && Object.keys(e.v).length ? `: ${Object.values(e.v).join(", ")}` : ""}`) : fit(`/${e.l ?? ""}`)}`,
+    label: button(e.t, e.a ? `Quick action${e.v && Object.keys(e.v).length ? `: ${Object.values(e.v).join(", ")}` : ""}` : `/${e.l ?? ""}`, e.a ? true : needs(String(e.l ?? "").split(" ")[0]) > 0),
     open: async () => {
       if (e.a) {
         const action = ACTIONS.find((a) => a.id === e.a);
-        if (action) return runAction(player, action, e.v ?? {}, again);
+        if (action && isOp(player)) return runAction(player, action, e.v ?? {}, again);
         return again();
       }
       const name = String(e.l ?? "").split(" ")[0];
@@ -523,40 +597,43 @@ async function recentPage(player, back) {
       return resume(player, again);
     },
   }));
-  await list(player, "Recent", rec.length ? "Your last commands, newest first. Tap one to run it again right away, with the same options (shown under its name)." : "Nothing yet: commands you run from this menu show up here.", entries, back);
+  const body = rec.length ? "Your last commands, newest first. Tap one to run it again right away, with the same options (shown under its name)." : "Nothing yet: commands you run from this menu show up here.";
+  await list(player, "Recent", legend(player, body), entries, back);
 }
 
-/** @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */
-async function setupPage(player, cmds, back) {
+/**
+ * Operator Tools: the quick actions, the server setup checklist and Realm Configuration's own commands,
+ * on one scrolling page. Only operators see it; every button checks again before it runs.
+ * @param {Player} player @param {() => Promise<unknown>} back
+ */
+async function opsPage(player, back) {
+  if (!isOp(player)) return back();
+  const cmds = await available(player);
   pingZones();
   await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10));
+  if (!player.isValid) return;
   const zones = allZones();
   const count = { zones: zones.filter((z) => z.src === "zones").length, towns: zones.filter((z) => z.src === "town").length };
-  const again = () => setupPage(player, cmds, back);
+  const again = () => opsPage(player, back);
   /** @type {Entry[]} */
-  const entries = [];
+  const entries = [{ header: "Quick actions" }, { text: "§7Vanilla things you would otherwise type. They work without cheats." }];
+  for (const a of ACTIONS) entries.push({ label: button(a.title, a.hint, true), open: () => openAction(player, a, again) });
+
+  /** @type {Entry[]} */
+  const setup = [];
   for (const item of SETUP) {
     const cmd = cmds.find((c) => c.name === item.cmd);
     if (!cmd) continue;
     const n = item.done ? count[item.done] : undefined;
-    const mark = n === undefined ? "§8[ ]§r" : n > 0 ? "§2[x]§r" : "§c[ ]§r";
+    const mark = n === undefined ? "§8[ ]" : n > 0 ? "§2[x]" : "§c[ ]";
     const extra = n === undefined ? "" : ` §8(${n})`;
-    entries.push({ label: `${mark} ${item.title}${extra}\n§8${fit(item.hint)}`, open: () => openCommand(player, cmd, item.help, again) });
+    setup.push({ label: `${mark} ${OP_COLOR}${item.title}${extra}\n§8${fit(item.hint)}`, open: () => openCommand(player, cmd, item.help, again) });
   }
-  await list(
-    player,
-    "Server Setup Checklist",
-    "One-time jobs across the packs. Tap one to do it. §2[x]§r means its pack says it's done; the others can't be checked from here, so it's up to you.",
-    entries,
-    back
-  );
-}
+  if (setup.length) entries.push({ header: "Server setup checklist" }, { text: "§7One-time jobs across the packs. §2[x]§7 means its pack says it's done; the others can't be checked from here." }, ...setup);
 
-/** @param {Player} player @param {() => Promise<unknown>} back */
-async function actionsPage(player, back) {
-  const again = () => actionsPage(player, back);
-  const entries = ACTIONS.map((a) => /** @type {Entry} */ ({ label: `${a.title}\n§8${fit(a.hint)}`, open: () => openAction(player, a, again) }));
-  await list(player, "Quick Actions", "Vanilla things you would otherwise type as commands. They work without cheats.", entries, back);
+  const own = cmds.filter((c) => OWN_PAGE.has(c.folder) && !ACTIONS.some((a) => a.title === nameOf(c))); // Show a Title is a quick action already
+  if (own.length) entries.push({ header: TITLE }, ...cmdEntries(player, own, again));
+  await list(player, "Operator Tools", `${OP_COLOR}Gold§r = operators only: everything on this page is.`, entries, back);
 }
 
 /** @type {Set<string>} players with the menu open */
@@ -571,10 +648,6 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 /** @param {Player} player */
 function openMenu(player) {
   if (open.has(player.id)) return;
-  if (!isOp(player)) {
-    player.sendMessage(`§7${TITLE} is for operators. Your own options: /realm:prefs`);
-    return;
-  }
   open.add(player.id);
   mainMenu(player)
     .catch((e) => console.warn(`[admin] ${e}`))
@@ -588,7 +661,11 @@ function openMenu(player) {
 /** @param {ItemStack | undefined} it named Realm Configuration (also one renamed on an anvil) */
 const isConfigItem = (it) => !!it && it.typeId === CONFIG.itemType && plain(it.nameTag) === TITLE;
 /** @param {ItemStack | undefined} it the real item, made by this pack */
-const isRealItem = (it) => isConfigItem(it) && /** @type {ItemStack} */ (it).getLore().includes(MARK);
+const isRealItem = (it) => {
+  if (!isConfigItem(it)) return false;
+  const lore = /** @type {ItemStack} */ (it).getLore();
+  return lore.includes(MARK) || lore.includes(OLD_MARK);
+};
 
 function makeItem() {
   const it = new ItemStack(CONFIG.itemType, 1);
@@ -610,9 +687,26 @@ const inventory = (player) => player.getComponent(EntityComponentTypes.Inventory
 function carries(player) {
   const inv = inventory(player);
   if (!inv) return true; // can't tell: don't hand out another
-  for (let i = 0; i < inv.size; i++) if (isConfigItem(inv.getItem(i))) return true;
+  for (let i = 0; i < inv.size; i++) {
+    const it = inv.getItem(i);
+    if (!isConfigItem(it)) continue;
+    // An item from before the menu was for everyone says "Operators only": give it today's lore.
+    const item = /** @type {ItemStack} */ (it);
+    if (item.getLore().includes(OLD_MARK)) {
+      try {
+        item.setLore(LORE);
+        inv.setItem(i, item);
+      } catch {
+        // locked or changed meanwhile: it still works
+      }
+    }
+    return true;
+  }
   return false;
 }
+
+/** Players told their inventory was too full for the item (the 30 s check doesn't repeat it). @type {Set<string>} */
+const toldFull = new Set();
 
 /** Gives the item unless they carry one. @param {Player} player @param {boolean} tell say so if they already have one */
 function giveItem(player, tell) {
@@ -622,14 +716,16 @@ function giveItem(player, tell) {
   }
   const rest = inventory(player)?.addItem(makeItem());
   if (rest) {
-    player.sendMessage(`§e[${TITLE}] Your inventory is full: make room for the ${TITLE} item, or run /realm:admin_item.`);
+    // The 30 s check would say it again and again: once per player until the realm restarts, unless asked.
+    if (tell || !toldFull.has(player.id)) player.sendMessage(`§e[${TITLE}] Your inventory is full: make room for the ${TITLE} item, or run /realm:admin_item.`);
+    toldFull.add(player.id);
     return false;
   }
-  player.sendMessage(`§6[${TITLE}] §rYou have the §6${TITLE}§r item: use it to run any realm command from one menu.`);
+  player.sendMessage(`§6[${TITLE}] §rYou have the §6${TITLE}§r item: use it for every realm command you can use, in one menu.`);
   return true;
 }
 
-/** Takes the real item from someone who isn't an operator. @param {Player} player */
+/** Takes the real item from someone who isn't an operator (only while the item is for operators only). @param {Player} player */
 function takeItem(player) {
   const inv = inventory(player);
   if (!inv) return;
@@ -639,14 +735,15 @@ function takeItem(player) {
     inv.setItem(i, undefined);
     took++;
   }
-  if (took) player.sendMessage(`§7The ${TITLE} item is for operators, so it was put away.`);
+  if (took) player.sendMessage(`§7The ${TITLE} item is for operators here, so it was put away.`);
 }
 
 /** @param {Player} player */
 function check(player) {
   if (!player.isValid) return;
-  if (isOp(player)) {
-    if (get("giveToOperators") === true && !carries(player)) giveItem(player, false);
+  const all = forEveryone();
+  if (all || isOp(player)) {
+    if ((all || get("giveToOperators") === true) && !carries(player)) giveItem(player, false);
   } else if (get("removeFromOthers") === true) takeItem(player);
 }
 
@@ -675,10 +772,11 @@ system.runInterval(() => {
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
   if (!isConfigItem(itemStack)) return;
-  if (!isOp(source)) {
+  // With the item for operators only (giveToPlayers off), someone else's real item is put away instead.
+  if (!isOp(source) && !forEveryone() && get("removeFromOthers") === true && isRealItem(itemStack)) {
     system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: source.id, ticks: 60, from: "admin_bp" })); // other bar writers wait
-    source.onScreenDisplay.setActionBar(`§7${TITLE} is for operators. Your own options: /realm:prefs`);
-    if (get("removeFromOthers") === true) system.run(() => takeItem(source));
+    source.onScreenDisplay.setActionBar(`§7The ${TITLE} item is for operators here. /realm:admin opens the menu`);
+    system.run(() => takeItem(source));
     return;
   }
   openMenu(source);
@@ -726,14 +824,13 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:admin",
-      description: "Realm Configuration: the operators' menu that runs every realm command, with preset choices",
-      permissionLevel: CommandPermissionLevel.GameDirectors,
+      description: "Realm Configuration: one menu for every realm command you can use, with preset choices (operators: theirs in gold)",
+      permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },
     (origin) => {
       const player = originPlayer(origin);
       if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
-      if (!isOp(player)) return { status: CustomCommandStatus.Failure, message: "Realm Configuration is for operators." };
       system.run(() => openMenu(player));
       return { status: CustomCommandStatus.Success };
     }
@@ -742,21 +839,23 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:admin_item",
-      description: "Realm Configuration: get the admin menu item (or give it to other operators)",
-      permissionLevel: CommandPermissionLevel.GameDirectors,
+      description: "Realm Configuration: get the menu item again (operators: give it to other players too)",
+      permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
       optionalParameters: [{ name: "player", type: CustomCommandParamType.PlayerSelector }],
     },
     (origin, /** @type {Player[] | undefined} */ targets) => {
       const player = originPlayer(origin);
-      if (player && !isOp(player)) return { status: CustomCommandStatus.Failure, message: "Realm Configuration is for operators." };
+      const op = !player || isOp(player);
       const list = targets?.length ? targets : player ? [player] : [];
       if (!list.length) return { status: CustomCommandStatus.Failure, message: "Name a player." };
+      if (!op && list.some((p) => p.id !== player?.id)) return { status: CustomCommandStatus.Failure, message: "Only operators can give the item to other players." };
+      if (!op && !forEveryone()) return { status: CustomCommandStatus.Failure, message: "The Realm Configuration item is for operators here. /realm:admin opens the menu." };
       system.run(() => {
         for (const p of list) {
           if (!p.isValid) continue;
-          if (!isOp(p)) {
-            player?.sendMessage(`§c${p.name} isn't an operator, so they can't have the ${TITLE} item.`);
+          if (!isOp(p) && !forEveryone()) {
+            player?.sendMessage(`§c${p.name} isn't an operator, and the ${TITLE} item is for operators here.`);
             continue;
           }
           giveItem(p, p === player);

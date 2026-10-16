@@ -242,7 +242,7 @@ const CARD_DISH = "§8Recipe: ";
 function cardStack(d, n) {
   const s = new ItemStack("minecraft:paper", n);
   s.nameTag = `${CARD_PREFIX}${d.name}`;
-  s.setLore([CARD_LORE, "§7Open a cooking pot or /realm:cooking", "§7to learn it.", `${CARD_DISH}${d.name}`]);
+  s.setLore([CARD_LORE, "§7Open a cooking pot or /realm:cooking", "§7to learn it.", `${CARD_DISH}${d.name}`, "§7Works anywhere in your inventory"]);
   return s;
 }
 

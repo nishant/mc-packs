@@ -1,19 +1,21 @@
-import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, Dimension, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
-import { SPREAD, antisolarAngle } from "./sky.js";
+import { COLORS, SPREAD, antisolarAngle, arcDots } from "./sky.js";
 import { get } from "./settings.js";
 
-// World property "rainbow:pot": JSON { id, x, z, y?, low?, until, expires, placed, missed?, found? }
+// World property "rainbow:pot": JSON { id, x, z, y?, low?, until, expires, placed, wet?, missed?, found? }
 // for the current rainbow and its pot of gold (until / expires: Date.now() ms when the rainbow fades / the pot
-// can no longer be found; placed: its chest is in the world; missed: no safe spot for a chest, so the
-// finder gets the loot straight into their inventory). Cleared once the pot expires. Pots saved by older
-// versions also have ang, by and ground (the drawn arc's plane and ground height): ignored.
+// can no longer be found; placed: its chest is in the world; wet: that chest floats on water, which comes back
+// when it's removed; missed: no safe spot for a chest, so the finder gets the loot straight into their
+// inventory). Cleared once the pot expires. Pots saved by versions before 1.4.0 also have ang, by and ground
+// (the old sky arc's plane and ground height): ignored.
 //
-// The rainbow isn't drawn in the sky: the Minimap shows it on its compass. While a pot is up and not found,
+// The way there is the Minimap's compass; near the end (ARC_SEE) a small rainbow of vanilla colored flame
+// particles stands over it, one foot on the pot, until the pot is found or expires. While a pot is up and not found,
 // realm:rainbow_pot { dim, x, z } says where it is (when it appears, when its chest moves it, on
 // realm:rainbow_ping and once after world load); realm:rainbow_pot {} says there is none.
 const PROP_POT = "rainbow:pot";
-// World property "rainbow:left": JSON [{ x, y, z }], pot chests that were still in the world when their pot expired
+// World property "rainbow:left": JSON [{ x, y, z, wet? }], pot chests that were still in the world when their pot expired
 // but couldn't be checked (no one near: their chunk wasn't loaded). Each is removed, if it's still an empty chest,
 // once a player comes near; one with items is left. At most MAX_LEFT.
 const PROP_LEFT = "rainbow:left";
@@ -22,6 +24,9 @@ const PROP_STORY = "rainbow:story";
 const STORY_GAP = 30 * 60000; // at most one story rainbow per 30 real minutes
 const MAX_LEFT = 20;
 const OVERWORLD = "minecraft:overworld";
+const ARC_SEE = 96; // the rainbow over the end is drawn while a player is this close to it
+const ARC_TICKS = 10; // and redrawn this often (the flame dots fade fast)
+const ARC_PARTICLE = "minecraft:colored_flame_particle"; // vanilla: takes variable.color, needs no resource pack
 const MAX_SEE = 512; // players farther than this from the rainbow's end don't see it (no Journal entry)
 const PLACE_DISTANCE = 40; // the pot's chest is placed when a player comes this close (its chunk is loaded then)
 const FIND_DISTANCE = 3;
@@ -40,13 +45,13 @@ const BUILT =
   /planks|glass|chest|barrel|sign|_bed$|^minecraft:bed$|torch|lantern|door|fence|wool|carpet|concrete|glazed|crafting_table|furnace|smoker|brick|stairs|slab|_wall$|bookshelf|ladder|rail|hopper|anvil|lectern|loom|composter|_table$|grindstone|stonecutter|brewing_stand|beacon|button|lever|pressure_plate|redstone_wire|repeater|comparator|piston|observer|dispenser|dropper|flower_pot|candle|scaffolding|iron_bars|chain|stripped_|polished_|smooth_|cut_|chiseled_|frame|jukebox|noteblock|shulker_box|campfire|bell|banner|farmland|hay_block|cobblestone|_path$|waxed_|copper_block|quartz_block|purpur|lamp|cauldron|crafter|beehive|_head$|_skull$|pot$|terracotta|(iron|gold|diamond|emerald|lapis|redstone|coal|netherite|amethyst)_block|raw_/;
 const NATURAL_EXCEPTIONS = /^minecraft:(moss_carpet|torchflower|(white|orange|yellow|brown|red|light_gray)?_?terracotta)$/;
 
-/** @typedef {{ id: number, x: number, z: number, y?: number, low?: number, until: number, expires: number, placed: boolean, missed?: boolean, found?: string }} Pot */
+/** @typedef {{ id: number, x: number, z: number, y?: number, low?: number, until: number, expires: number, placed: boolean, wet?: boolean, missed?: boolean, found?: string }} Pot */
 
 /** @type {Pot | undefined} */
 let pot;
 let loaded = false;
 let busy = false; // looking for the chest's spot
-/** Expired pots' chests still to check (see PROP_LEFT). @type {{ x: number, y: number, z: number }[]} */
+/** Expired pots' chests still to check (see PROP_LEFT). @type {{ x: number, y: number, z: number, wet?: boolean }[]} */
 let left = [];
 /** @type {Set<string>} players who saw this rainbow (journal sent) */
 const saw = new Set();
@@ -353,6 +358,66 @@ system.runInterval(() => {
   }
 }, 20);
 
+// ---------------------------------------------------------------------------
+// The rainbow over the end: while the pot is up and unfound and a player is within ARC_SEE, a small rainbow of
+// colored flame dots stands at its real spot, its outer foot on the pot (the chest once it's placed). It stands
+// across the line from the first player who comes near, so they see it face on. Before the chest is placed its
+// foot is the surface at the end (the water's surface on water), read once the land there is loaded.
+// ---------------------------------------------------------------------------
+
+/** The current arc: for which pot and spot, and its dots. @type {{ key: string, ang: number, dots: { x: number, y: number, z: number, band: number }[] } | undefined} */
+let arc;
+/** One color per band, made on first use (a MolangVariableMap can't be made while the scripts load). @type {MolangVariableMap[] | undefined} */
+let arcColors;
+
+/** @param {Pot} p0 */
+function drawArc(p0) {
+  if (p0.found || Date.now() >= p0.expires) return;
+  const dim = overworld();
+  const cx = p0.x + 0.5, cz = p0.z + 0.5;
+  let near;
+  let nearD = Infinity;
+  for (const pl of dim.getPlayers()) {
+    const d = Math.hypot(pl.location.x - cx, pl.location.z - cz);
+    if (d < nearD) [near, nearD] = [pl, d];
+  }
+  if (!near || nearD > ARC_SEE) return;
+  let y = p0.y;
+  if (typeof y !== "number") {
+    const top = surfaceAt(dim, p0.x, p0.z); // undefined while the end's land isn't loaded
+    if (!top) return;
+    y = top.y + 1;
+  }
+  const key = `${p0.id}|${p0.x}|${y}|${p0.z}`;
+  if (arc?.key !== key) {
+    // Keep the plane when only the foot moved (the chest went up to 12 blocks away): across the first viewer's line.
+    const ang = arc && arc.key.startsWith(`${p0.id}|`) ? arc.ang : Math.atan2(cz - near.location.z, cx - near.location.x) + (p0.id % 2 ? Math.PI / 2 : -Math.PI / 2);
+    arc = { key, ang, dots: arcDots({ x: cx, y: y + (p0.placed ? 0.9 : 0.2), z: cz }, ang) };
+  }
+  arcColors ??= COLORS.map(([red, green, blue]) => {
+    const m = new MolangVariableMap();
+    m.setColorRGB("variable.color", { red, green, blue });
+    return m;
+  });
+  for (const d of arc.dots) {
+    try {
+      dim.spawnParticle(ARC_PARTICLE, d, arcColors[d.band]);
+    } catch {
+      // that part isn't loaded
+    }
+  }
+}
+
+system.runInterval(() => {
+  const p0 = pot;
+  if (!loaded || !p0) return;
+  try {
+    drawArc(p0);
+  } catch (e) {
+    console.warn(`[rainbow] arc: ${e}`);
+  }
+}, ARC_TICKS);
+
 /**
  * Looks for a safe spot for the chest: the rainbow's end first, then nearby. Natural ground with air
  * (or a low plant) on it, not near spawn, and no player-made block in the 9 x 9 columns around it.
@@ -404,6 +469,45 @@ function* placePot(p0) {
       savePot();
       broadcastPot(); // the chest may stand up to SPOT_RADIUS from the end
       return;
+    }
+    // The end is out on the water (getTopmostBlock answers the sea bed there, and the spot over it is water, so no
+    // land spot above was taken): the chest floats at the water's surface, under the open sky, where it can be seen.
+    if (pot === p0 && !unloaded) {
+      const top = surfaceAt(dim, p0.x, p0.z);
+      const water = top?.wet ? dim.getBlock({ x: Math.floor(p0.x), y: top.y, z: Math.floor(p0.z) }) : undefined;
+      // Not in a player's moat, pool or harbor: nothing player-made on top of the 9 x 9 columns around it, or
+      // at the water's level and up to SCAN blocks above it.
+      let built = false;
+      if (top && water) {
+        for (let dx = -SCAN; dx <= SCAN && !built; dx++) {
+          for (let dz = -SCAN; dz <= SCAN && !built; dz++) {
+            const c = topAt(dim, p0.x + dx, p0.z + dz);
+            if (c && isBuilt(c.typeId)) built = true;
+            for (let y = top.y; y <= top.y + SCAN && !built; y++) {
+              try {
+                const b = dim.getBlock({ x: Math.floor(p0.x) + dx, y, z: Math.floor(p0.z) + dz });
+                if (b && isBuilt(b.typeId)) built = true;
+              } catch {
+                // unloaded: judged by the rest
+              }
+            }
+            yield;
+          }
+        }
+      }
+      if (top && water && !built && pot === p0 && water.typeId === "minecraft:water" && water.above()?.isAir && fromSpawn(p0.x, p0.z) >= get("avoidSpawn") && !inZone(p0.x, p0.z)) {
+        water.setType("minecraft:chest");
+        fill(water.getComponent("minecraft:inventory")?.container);
+        p0.x = Math.floor(p0.x);
+        p0.z = Math.floor(p0.z);
+        p0.y = top.y;
+        p0.low = top.floor + 1; // a swimmer under it finds it too
+        p0.placed = true;
+        p0.wet = true;
+        savePot();
+        broadcastPot();
+        return;
+      }
     }
     // No safe spot: the pot of gold is still there to find, and its loot goes straight to the finder. Its height
     // is the surface at its end, so flying high over it doesn't count as reaching it.
@@ -458,6 +562,7 @@ function find(p0, player) {
       const left = inv ? inv.addItem(item) : item;
       if (left) player.dimension.spawnItem(left, player.location);
     }
+    player.sendMessage("§eNo chest could stand here: the pot's gold is in your inventory.");
   }
   const relics = CONFIG.relics;
   if (relics.length && Math.random() < get("relicChance")) {
@@ -468,15 +573,15 @@ function find(p0, player) {
 }
 
 /**
- * Removes the pot chest at x, y, z if it's still an empty chest (one with items is left).
- * @param {number} x @param {number} y @param {number} z @returns {boolean} false when that spot isn't loaded
+ * Removes the pot chest at x, y, z if it's still an empty chest (one with items is left); one on water leaves water.
+ * @param {number} x @param {number} y @param {number} z @param {boolean} [wet] @returns {boolean} false when that spot isn't loaded
  */
-function clearChest(x, y, z) {
+function clearChest(x, y, z, wet) {
   try {
     const block = overworld().getBlock({ x, y, z });
     if (!block) return false;
     const container = block.typeId === "minecraft:chest" ? block.getComponent("minecraft:inventory")?.container : undefined;
-    if (container && container.emptySlotsCount === container.size) block.setType("minecraft:air");
+    if (container && container.emptySlotsCount === container.size) block.setType(wet ? "minecraft:water" : "minecraft:air");
     return true;
   } catch {
     return false; // unloaded
@@ -488,7 +593,7 @@ function sweepLeft() {
   try {
     const players = overworld().getPlayers();
     const before = left.length;
-    left = left.filter((c) => !players.some((p) => Math.hypot(p.location.x - (c.x + 0.5), p.location.z - (c.z + 0.5)) <= PLACE_DISTANCE) || !clearChest(c.x, c.y, c.z));
+    left = left.filter((c) => !players.some((p) => Math.hypot(p.location.x - (c.x + 0.5), p.location.z - (c.z + 0.5)) <= PLACE_DISTANCE) || !clearChest(c.x, c.y, c.z, c.wet));
     if (left.length !== before) saveLeft();
   } catch (e) {
     console.warn(`[rainbow] ${e}`);
@@ -497,9 +602,9 @@ function sweepLeft() {
 
 /** The pot can't be found any more: an empty chest of ours is removed, one with items is left. @param {Pot} p0 */
 function expire(p0) {
-  if (p0.placed && typeof p0.y === "number" && !clearChest(p0.x, p0.y, p0.z)) {
+  if (p0.placed && typeof p0.y === "number" && !clearChest(p0.x, p0.y, p0.z, p0.wet)) {
     // Unloaded: removed (if still empty) when a player next comes near.
-    left = [...left, { x: p0.x, y: p0.y, z: p0.z }].slice(-MAX_LEFT);
+    left = [...left, { x: p0.x, y: p0.y, z: p0.z, ...(p0.wet ? { wet: true } : {}) }].slice(-MAX_LEFT);
     saveLeft();
   }
   if (pot === p0) {
@@ -524,7 +629,7 @@ function describe(player) {
   const dir = compass(p0.x + 0.5 - player.location.x, p0.z + 0.5 - player.location.z);
   return now < p0.until
     ? `§eA rainbow is up! Its pot of gold is somewhere to the ${dir} (the rainbow on your compass).`
-    : `§eThe rainbow has faded, but its pot of gold is still out there, somewhere to the ${dir} (the rainbow on your compass).`;
+    : `§eThe rainbow still stands over its pot of gold, somewhere to the ${dir} (the rainbow on your compass).`;
 }
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {

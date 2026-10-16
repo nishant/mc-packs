@@ -6,6 +6,16 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## A friendlier realm menu, less rain, softer rain indoors
+
+- Everyone now gets the Realm Configuration item (the nether star with a gold name). Use it for every realm command you can use, sorted into six scrolling pages: My Screen & Toggles, Items & Building, Story & Adventure, Friends, Crowns & Fun, World & Events, and Towns & Townsfolk. Every button says what it does on its second line. Operators see their own commands in gold, plus Operator Tools.
+- It rains about a quarter less: clear spells now last 30 to 90 minutes.
+- Step inside and the rain fades to a soft, muffled version of itself instead of cutting out to a whoosh.
+- You can see a small rainbow over the pot of gold when you get close. If the rainbow ends out at sea, the chest floats on the water instead of the pot vanishing as you swim by.
+- The Lighthouse stands on solid ground and has an open balcony to keep watch from. Old lighthouses fix themselves when you come near.
+- Stop tracking a quest from its page in the Story Log, and track it again when you want it.
+- Special items say on their last description line where they work: in your hand, in your hotbar or offhand, worn, or anywhere in your inventory.
+
 ## Champions are back
 
 - Champions spawn in the wild again. A few dropped items had been mistaken for champions, which used up the limit of 8 at once. They are cleared out now.
