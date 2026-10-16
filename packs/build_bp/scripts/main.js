@@ -828,7 +828,7 @@ system.runInterval(() => {
             const slot = player.selectedSlotIndex;
             const item = inv.getItem(slot);
             if (!isBook(item)) continue;
-            if (item.nameTag === BOOK_NAME) continue;
+            if (item.nameTag === BOOK_NAME && item.getLore().join("\n") === BOOK_LORE.join("\n")) continue;
             item.nameTag = BOOK_NAME;
             item.setLore(BOOK_LORE);
             inv.setItem(slot, item);

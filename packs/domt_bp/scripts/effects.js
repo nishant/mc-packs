@@ -1838,7 +1838,7 @@ export const CARDS = [
           attempt(() => dim.playSound("random.explode", at, { volume: 0.8, pitch: 1.4 }));
         } else dim.createExplosion(at, power, { breaksBlocks: false, causesFire: false });
       };
-      give(player, "minecraft:potato", 1, { name: "§c§lHot Potato", lore: ["§7Explodes in 30 seconds.", "§7Drop it near a friend!", mark] });
+      give(player, "minecraft:potato", 1, { name: "§c§lHot Potato", lore: ["§7Explodes in 30 seconds.", "§7Drop it near a friend!", "§7Goes off anywhere in your inventory", mark] });
       sound(player, "random.fuse");
       const isIt = (/** @type {ItemStack | undefined} */ it) => !!it && it.typeId === "minecraft:potato" && it.getLore().includes(mark);
       // Its own clock, not the drawer's: the potato goes off on time even if they passed it on and left.

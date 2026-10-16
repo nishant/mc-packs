@@ -51,6 +51,8 @@ const RABBIT_TAG = "silly_rabbit";
 const PROP_RABBIT_UNTIL = "silly:until"; // rabbit entity: time (ms) it vanishes
 const PROP_APPLIED = "silly:applied"; // player: how many silly enchants they applied
 
+/** Where a silly enchant works, on a book's last lore line. */
+const WORKS = { hand: "Works in your main hand", feet: "Works on boots you wear", head: "Works on a helmet you wear", armor: "Works on any armor you wear" };
 const SLOT_NAMES = { hand: "a held item (tool, weapon, fish...)", feet: "boots", head: "a helmet", armor: "any armor piece" };
 
 /** @param {string} s */
@@ -113,7 +115,10 @@ function makeBook(what) {
   const stack = new ItemStack(BOOK_ITEM, 1);
   const name = what === "random" ? RANDOM : what.name;
   stack.nameTag = BOOK_NAME;
-  stack.setLore([`§d${BOOK_PREFIX}${name}`, `§7${what === "random" ? "A surprise silly enchant" : what.what}`, "§8Apply it with /realm:silly"]);
+  const lore = [`§d${BOOK_PREFIX}${name}`, `§7${what === "random" ? "A surprise silly enchant" : what.what}`, "§8Apply it with /realm:silly"];
+  // Last: where the enchant works once it's on an item.
+  if (what !== "random") lore.push(`§7${WORKS[what.slot]}`);
+  stack.setLore(lore);
   return stack;
 }
 
