@@ -87,7 +87,8 @@ Close 500, Confidant 900.
 - Confidant: title `<Name>'s Confidant` (`realm:title_unlock`), a trail (`realm:trail_unlock`, the first
   sender; titles_bp may need new trail kinds), a weekly keepsake item with lore.
 
-**Schedules** (no pathfinding):
+**Schedules** (no pathfinding). *Superseded in `npc_bp` 1.7.0: schedules, night homes, strolling and
+`/realm:npc_home` / `/realm:npc_post` are gone; each townsfolk stays at its post inside its own house.*
 
 | Slot | Ticks | Where |
 |---|---|---|
@@ -172,7 +173,7 @@ scatter Hal's ash-salt at the graveyard (`use` bone meal). Reward: 5 levels, 60 
   Candle Lit, The Unvisited Grave, Clover's Foal (Wren's mare is Clover: Biscuit is a cow in Lost Lambs), The Last
   Ship's Supper. Tobin's sets `g:gull = sailed` at the end: section 5's Hal's Compass +3 can read it (or Tobin at
   Confidant via `realm:affinity` level 4).
-- Schedules: only lunch/evening moves wait for the 16-block rule; going home at night and back at dawn stays
+- Schedules (removed in 1.7.0, see above): only lunch/evening moves wait for the 16-block rule; going home at night and back at dawn stays
   instant, as before. `/realm:npc_post <id> <noon|evening>` plus two menu buttons. Slots live in memory; a restart
   puts NPCs straight into the slot of the time.
 - Gossip: the same kind about the same player within 30 min replaces the older one; the subject's Crowned state is

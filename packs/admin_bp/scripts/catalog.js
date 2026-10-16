@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 168 commands in 64 packs */
+/** @type {Pack[]} 166 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -344,12 +344,10 @@ export const PACKS = [
     folder: "npc_bp",
     pack: "Townsfolk",
     commands: [
-      {"name":"realm:npc","description":"Townsfolk: menu (who lives here; operators: add, move, home, remove)","permission":"any","params":[]},
-      {"name":"realm:npc_add","description":"Townsfolk: place an NPC here, facing you (moves it if it is already placed)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"}]},
-      {"name":"realm:npc_home","description":"Townsfolk: the NPC goes here at night (run it at their post to clear)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"}]},
-      {"name":"realm:npc_houses","description":"Townsfolk: give each NPC a house of the town around you (outside the door by day, inside at night), after a preview","permission":"op","params":[{"name":"radius","type":"Integer","optional":true}]},
-      {"name":"realm:npc_list","description":"Townsfolk: every placed NPC with its coordinates and home","permission":"op","params":[]},
-      {"name":"realm:npc_post","description":"Townsfolk: the NPC spends lunch (noon) or the evening here (run it at their post to clear)","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"},{"name":"realm:npc_slot","type":"Enum","optional":false,"enum":"realm:npc_slot"}]},
+      {"name":"realm:npc","description":"Townsfolk: menu (who lives here; operators: add, move, houses, remove)","permission":"any","params":[]},
+      {"name":"realm:npc_add","description":"Townsfolk: the NPC lives here (inside its house), facing your way; moves it if already placed","permission":"op","params":[{"name":"realm:npc_id","type":"Enum","optional":false,"enum":"realm:npc_id"}]},
+      {"name":"realm:npc_houses","description":"Townsfolk: give each NPC a house of its own in the town around you (inside, facing the door), after a preview","permission":"op","params":[{"name":"radius","type":"Integer","optional":true}]},
+      {"name":"realm:npc_list","description":"Townsfolk: every placed NPC with where it lives","permission":"op","params":[]},
       {"name":"realm:npc_remove","description":"Townsfolk: remove the nearest townsfolk NPC within 5 blocks","permission":"op","params":[]},
       {"name":"realm:npc_undo","description":"Townsfolk: put every NPC back where it was before the last move to houses","permission":"op","params":[]},
       {"name":"realm:npc_who","description":"Townsfolk: who lives on the realm and where they are","permission":"any","params":[]},
@@ -569,7 +567,6 @@ export const ENUMS = {
   "realm:help_topic": [],
   "realm:moon_state": ["blood","harvest","normal"],
   "realm:npc_id": ["mara","tobin","reyes","elsie","bram","quill","ida","sol","hollis","moss","wren","bea"],
-  "realm:npc_slot": ["noon","evening"],
   "realm:relic_id": ["storm_staff","rain_charm","tide_boots","lantern_deep","storm_meter","compass_echoes","frost_band","sun_pendant","miners_lamp","wayfarer_boots","lantern_shard","choir_mask","hal_compass","vesna_charm","singing_blade","hollow_crown","keeper_lamp"],
   "realm:saga_place_name": ["lighthouse","sunken_bell","old_chapel","graveyard","observatory","sea_cave","choir_ring","witch_hut","old_mine","watchtower","meadow","starfall","seal_tide","seal_stone","seal_sky","hollow_gate"],
   "realm:sidebar_stat": ["playtime","deaths","mobkills","pvpkills","mined","placed","travelled","flown","joins","cycle","off"],
