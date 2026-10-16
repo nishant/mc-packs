@@ -410,7 +410,7 @@
                 "$slot_align": "center",
                 "$slot_max": [
                   440,
-                  30
+                  40
                 ],
                 "$slot_alpha": 0.3
               }

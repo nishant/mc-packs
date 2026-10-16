@@ -6,6 +6,10 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Tidy compass
+
+- Compass: the place name under the strip no longer runs through the line. It sits just below it now.
+
 ## Bring the whole party
 
 - Expeditions: starting one now asks your whole party, wherever they are. Everyone online gets a Join popup, even far away or in the Nether, and goes back to their own spot afterward.
