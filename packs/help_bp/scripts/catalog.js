@@ -789,10 +789,10 @@ export const PACKS = [
     "folder": "map_bp",
     "topic": "map",
     "name": "Minimap",
-    "summary": "A compass strip across the top of your screen shows which way you're facing, the region you're in and what's around: your destination (a gold star with its distance), townsfolk, wanderers, party mates, wanderer camps, the Atlas sites you found, and nearby mobs in red. An optional radar shows the same things as a small grid around you. §lMara's Field Map§r, Minecraft's own locator map, shows the land itself. The strip, radar and icons are drawn by Side HUD, part of §lRealm Resources§r.",
+    "summary": "A compass strip across the top of your screen shows which way you're facing, the region you're in and what's around: your destination (a gold star with its distance), townsfolk, wanderers, party mates, wanderer camps, the Atlas sites you found, the nearest town, your bed, a rainbow's pot of gold, and nearby mobs in red. An optional radar shows the same things as a small grid around you. §lMara's Field Map§r, Minecraft's own locator map, shows the land itself. The strip, radar and icons are drawn by Side HUD, part of §lRealm Resources§r.",
     "steps": [
       {
-        "text": "Look at the top of your screen. The compass strip shows N, E, S and W with a tick every 15 degrees (60 degrees to each side of where you face) and, under it, the Atlas region you're in. Icons on the strip: a §lgold star§r is your destination, §lyellow dots§r are townsfolk, §lgreen dots§r are wanderers, §lblue dots§r are party mates, §lred dots§r are mobs within 24 blocks, a §ltent§r is a wanderer camp and a §lpurple diamond§r is an Atlas site you found. Your destination, party mates and mobs that are out of view (behind you) show as arrows at the ends of the strip.",
+        "text": "Look at the top of your screen. The compass strip shows N, E, S and W with a tick every 15 degrees (60 degrees to each side of where you face) and, under it, the Atlas region you're in. Icons on the strip: a §lgold star§r is your destination, §lyellow dots§r are townsfolk, §lgreen dots§r are wanderers, §lblue dots§r are party mates, §lred dots§r are mobs within 24 blocks, a §ltent§r is a wanderer camp, a §lpurple diamond§r is an Atlas site you found, a §lhouse§r is the nearest town (Town Projects), a §lred bed§r is where you respawn (your bed or respawn anchor) and a §lrainbow§r is where an unfound pot of gold is. Your destination, party mates, mobs and the rainbow show as arrows in their color at the ends of the strip when they're out of view (behind you); the rainbow's arrows are striped like a rainbow.",
         "ops": false
       },
       {
@@ -800,7 +800,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Want to go somewhere? Run §e/realm:map§r, pick §lPick a destination§r, then choose from §lTownsfolk§r, §lWaystones I know§r, §lWanderer camps§r, §lAtlas sites I found§r, §lWhere I died§r, §lParty mates§r or §lMy marked spots§r (each list is nearest first, with the direction and distance). The star points there. When you get within 8 blocks (§earriveDistance§r), chat says §eArrived at ...§r and the destination clears.",
+        "text": "Want to go somewhere? Run §e/realm:map§r, pick §lPick a destination§r, then choose from §lTownsfolk§r, §lWaystones I know§r, §lTowns§r, §lWanderer camps§r, §lAtlas sites I found§r, §lWhere I died§r, §lParty mates§r or §lMy marked spots§r (each list is nearest first, with the direction and distance). The star points there. When you get within 8 blocks (§earriveDistance§r), chat says §eArrived at ...§r and the destination clears.",
         "ops": false
       },
       {
@@ -812,7 +812,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Change it in §e/realm:prefs§r -> §lMinimap§r: §lCompass strip§r (enabled by default), §lRadar§r (disabled by default; a 7 x 7 grid above the left side boxes with you in the middle), §lRadar keeps north up§r (disabled: the radar turns with you, so ahead is always up), §lShow mobs on my minimap§r and §lMy mob and radar range§r (default 24 blocks, §emobRadius§r).",
+        "text": "Change it in §e/realm:prefs§r -> §lMinimap§r: §lCompass strip§r (enabled by default), §lRadar§r (disabled by default; a 7 x 7 grid above the left side boxes with you in the middle), §lRadar keeps north up§r (disabled: the radar turns with you, so ahead is always up), §lShow mobs on my minimap§r, §lShow the nearest town§r and §lShow my bed§r (both enabled by default, §eshowTown§r and §eshowHome§r) and §lMy mob and radar range§r (default 24 blocks, §emobRadius§r).",
         "ops": false
       },
       {
@@ -1680,7 +1680,7 @@ export const PACKS = [
     "folder": "elite_bp",
     "topic": "elite",
     "name": "Champions",
-    "summary": "About one in 40 monsters that spawn in the overworld at night becomes a champion: a named, tougher monster with a trait, such as §eGerald the Stormcaller§r, who calls lightning in thunderstorms. A badge before the name, a helmet and a small aura in the trait's color tell them apart from ordinary mobs. Champions stay until someone deals with them, and defeating one drops Relic Shards and a burst of XP. A Blood Moon makes them three times as common, and the Bounty Board sends players after named ones.",
+    "summary": "About one in 40 monsters that spawn in the overworld at night becomes a champion: a named, tougher monster with a trait, such as §eGerald the Stormcaller§r, who calls lightning in thunderstorms. A badge before the name, a helmet and a small aura in the trait's color tell them apart from ordinary mobs. Champions roam until someone deals with them (or until they despawn far from everyone), and defeating one drops Relic Shards and a burst of XP. A Blood Moon makes them three times as common, and the Bounty Board sends players after named ones.",
     "steps": [
       {
         "text": "Play at night: when a champion appears within 48 blocks of you, chat says §eA champion stirs nearby: Gerald the Stormcaller§r, and you may hear a spell being cast. Champions are easy to spot: a red name with a colored badge in front (§e[/] Gerald the Stormcaller§r), a helmet in the trait's color on zombies and skeletons, and a small sparkling aura.",
@@ -3030,30 +3030,30 @@ export const PACKS = [
     "folder": "rainbow_bp",
     "topic": "rainbow",
     "name": "Rainbows & the Pot of Gold",
-    "summary": "When rain clears in the morning or the evening, a big rainbow often arches across the sky, and it really does end somewhere: a pot of gold waits at its foot, 150 to 300 blocks away. Race your friends to it. The first one there gets Crowns, the chest of gold and dyes, and sometimes a relic. The rainbow is a real thing in the world: one fixed arc, one foot standing on the pot of gold under a golden light beam, so walking toward it brings you closer. It's drawn with particles from Realm Skies: without that resource pack there's no rainbow or beam to see, but the chat hint, §e/realm:rainbow§r and the pot of gold still work.",
+    "summary": "When rain clears in the morning or the evening, a rainbow often comes out, and it really does end somewhere: a pot of gold waits at its end, 150 to 300 blocks away. Race your friends to it. The first one there gets Crowns, the chest of gold and dyes, and sometimes a relic. The way there is a §lrainbow icon on the Minimap's compass strip§r: it sits at the pot's bearing, and when the pot is behind you, rainbow-striped arrows at the strip's ends say which way to turn. Before 1.4.0 the rainbow was drawn in the sky with particles, with a golden beam over the pot; it didn't look right (big blobs from far away, and wrong up close), so the compass replaced it.",
     "steps": [
       {
-        "text": "When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (§echance§r, 0.7) of a rainbow. Chat says where its end is, for example §e&eA rainbow! Its end is somewhere to the NE: look for the golden beam where it touches the ground.§r",
+        "text": "When the rain stops in the morning (time 0-3000) or the evening (9000-12000), there's a good chance (§echance§r, 0.7) of a rainbow. Chat says which way its end is, for example §e&eA rainbow! Its pot of gold is somewhere to the NE: follow the rainbow on your compass.§r",
         "ops": false
       },
       {
-        "text": "Look that way, with the sun at your back: the rainbow stands on the horizon, and a golden beam of light rises from the foot that ends at the pot. The rainbow stays up for 2.5 minutes (§edurationSeconds§r); the beam stays as long as the pot can be found. Run §e/realm:rainbow§r any time to see which way its end is from where you stand (a direction only, no distance, so it stays a race).",
+        "text": "Look at the compass strip at the top of your screen and turn until the §lrainbow§r icon is in the middle (an arrow at an end of the strip means it's behind you on that side). It shows a direction only, no distance, so it stays a race. Run §e/realm:rainbow§r any time to hear which way its end is from where you stand.",
         "ops": false
       },
       {
-        "text": "Head for the beam. The rainbow doesn't move: it grows as you get closer, and you can walk around it. Within 40 blocks a §lchest§r appears at the foot of the beam.",
+        "text": "Head that way. Within 40 blocks of the end a §lchest§r appears on the ground there.",
         "ops": false
       },
       {
-        "text": "The first player to get within 3 blocks of it wins: §e&6+50 Crowns &7(Pot of gold)§r and everyone reads §e&6Ann found the pot of gold at the rainbow's end!§r The chest is yours to empty: gold ingots and nuggets, rare dyes, maybe a golden apple or emeralds. Sometimes (§erelicChance§r, 0.1) a relic comes with it.",
+        "text": "The first player to get within 3 blocks of it wins: §e&6+50 Crowns &7(Pot of gold)§r and everyone reads §e&6Ann found the pot of gold at the rainbow's end!§r The chest is yours to empty: gold ingots and nuggets, rare dyes, maybe a golden apple or emeralds. Sometimes (§erelicChance§r, 0.1) a relic comes with it. The rainbow leaves everyone's compass.",
         "ops": false
       },
       {
-        "text": "Missed the rainbow? The pot stays findable for 15 minutes (§epotMinutes§r) after it appeared: §e/realm:rainbow§r says §eThe rainbow has faded, but its pot of gold is still out there, somewhere to the NE, under a golden beam.§r Follow the beam.",
+        "text": "Missed the rainbow? The pot stays findable (and on the compass) for 15 minutes (§epotMinutes§r) after it appeared: §e/realm:rainbow§r says §eThe rainbow has faded, but its pot of gold is still out there, somewhere to the NE (the rainbow on your compass).§r",
         "ops": false
       },
       {
-        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the rainbow. §e/realm:rainbow_now§r puts a rainbow up right away, with its pot of gold 150 to 300 blocks from you. §e/realm:config§r -> §lRainbows & the Pot of Gold§r enables or disables rainbows after rain and sets the chance, how long rainbows and pots last, the Crowns and relic chance, the distance kept from spawn and the rainbow's size.",
+        "text": "§lOperators:§r the compass needs the Minimap (in the Realm Bundle) and Side HUD (in §lRealm Resources§r) for its icons. §e/realm:rainbow_now§r puts a rainbow up right away, with its pot of gold 150 to 300 blocks from you. §e/realm:config§r -> §lRainbows & the Pot of Gold§r enables or disables rainbows after rain and sets the chance, how long rainbows and pots last, the Crowns and relic chance and the distance kept from spawn.",
         "ops": true
       }
     ],
@@ -3062,7 +3062,7 @@ export const PACKS = [
         "usage": "/realm:rainbow",
         "ops": false,
         "who": "Everyone",
-        "text": "Whether a rainbow is up, and which way its end is from you (§e&eA rainbow is up! Its end is somewhere to the NE, under a golden beam.§r); after it fades, whether its pot of gold is still out there and which way, or who found it"
+        "text": "Whether a rainbow is up, and which way its end is from you (§e&eA rainbow is up! Its pot of gold is somewhere to the NE (the rainbow on your compass).§r); after it fades, whether its pot of gold is still out there and which way, or who found it"
       },
       {
         "usage": "/realm:rainbow_now",

@@ -390,7 +390,7 @@ function makeChampion(e, opts = {}) {
   if (opts.tag) e.addTag(opts.tag);
   e.setDynamicProperty(PROP_NAME, name);
   e.setDynamicProperty(PROP_HITS, 0);
-  // A named mob doesn't despawn, so champions stay until someone deals with them.
+  // The name doesn't make it persistent (BDS 1.26): far from every player it can still despawn.
   e.nameTag = tagFor(e, trait, name);
   applyEffects(e, trait, true);
   try {
@@ -729,8 +729,9 @@ const detours = new Map();
 
 /**
  * Where a step of `step` blocks at angle `a` lands, if the mob's whole body fits: its center's column
- * and the columns its leading edge reaches (straight ahead and both corners) must all take it. A step
- * up that only the body reaches lifts it (it stands on the edge); otherwise it keeps the center's height.
+ * and the columns its leading edge reaches (straight ahead and both corners) must all take it (a corner
+ * its body already presses against is left out). A step up that only the body reaches lifts it (it
+ * stands on the edge); otherwise it keeps the center's height.
  * @param {Dimension} dim @param {Vector3} at @param {number} a @param {number} step
  */
 function bodyStep(dim, at, a, step) {
@@ -743,6 +744,8 @@ function bodyStep(dim, at, a, step) {
   let y = center.y;
   const lead = step + BODY;
   for (const off of [0, SIDE, -SIDE]) {
+    // A side its body already presses into (the game let it overlap a wall a little) can't stop it going along.
+    if (off && !stepTo(dim, at, at.x - cz * off, at.z + cx * off)) continue;
     const probe = stepTo(dim, at, at.x + cx * lead - cz * off, at.z + cz * lead + cx * off);
     if (!probe) return undefined;
     y = Math.max(y, probe.y);
@@ -750,12 +753,33 @@ function bodyStep(dim, at, a, step) {
   return { x, y, z };
 }
 
+/**
+ * Where a champion stands for a step: its location, or, in a small hop (a mob pressing on toward its
+ * target keeps jumping at a wall, and a step waited for it to land, so it could stand there for good),
+ * the ground under it. Undefined while it falls, flies or is knocked back: it lands first.
+ * @param {Entity} e
+ */
+function feet(e) {
+  const at = e.location;
+  if (e.isOnGround) return at;
+  const v = e.getVelocity();
+  if (v.y < -0.5 || Math.hypot(v.x, v.z) > 0.4) return undefined;
+  for (let y = Math.floor(at.y + 0.01); y >= Math.floor(at.y) - 2; y--) {
+    const b = e.dimension.getBlock({ x: Math.floor(at.x), y: y - 1, z: Math.floor(at.z) });
+    if (!b || b.isLiquid) return undefined;
+    if (ground(b)) return at.y - y <= 1.3 ? { x: at.x, y, z: at.z } : undefined;
+    if (!open(b)) return undefined;
+  }
+  return undefined;
+}
+
 /** One champion's step toward the nearest player in range, if any. @param {Entity} e @param {number} step */
 function approachStep(e, step) {
   if (!e.isValid || ownedElsewhere(e)) return;
-  if (e.isInWater || !e.isOnGround) return;
+  if (e.isInWater) return;
   const dim = e.dimension;
-  const at = e.location;
+  const at = feet(e);
+  if (!at) return;
   const range = Number(get("approach.range")) || CONFIG.approach.range;
   const stop = CONFIG.approach.stopDistance;
   // Players in a safe zone, land claim or town are left alone (no crowd of champions at its edge).

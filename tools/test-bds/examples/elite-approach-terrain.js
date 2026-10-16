@@ -8,8 +8,9 @@
 // must stay within 33 blocks: a champion more than about 32 blocks from every player may despawn (its
 // name tag set by a script doesn't keep it; past about 44 it goes at once), so a detour that leads
 // away could lose it.
-// Before the fix (1.3.0) the steps, trees and walls stopped their champion for good, its body
-// against the obstacle (20.8 to 22.8 blocks away), and the pocket's never got out (36.8).
+// Before the fix (1.3.0) the trees and both walls stopped their champion for good with its body
+// against the obstacle (17.8 blocks away), the pocket's never got out (26.8), and a 1-block step
+// stopped it too whenever its center hadn't reached the step's column when its body touched it.
 // Run: node tools/test-bds/run.mjs --quiet --flat --only elite_bp --scenario tools/test-bds/examples/elite-approach-terrain.js --timeout 600
 export default async function (t) {
   t.server("/time set noon");
