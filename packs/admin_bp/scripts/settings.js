@@ -10,8 +10,9 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "giveToOperators", type: "bool", scope: "world", label: "Give operators the Realm Configuration item", help: "When they join or respawn without one, and soon after someone becomes an operator" },
-  { key: "removeFromOthers", type: "bool", scope: "world", label: "Take the item from players who aren't operators" },
+  { key: "giveToPlayers", type: "bool", scope: "world", label: "Give every player the Realm Configuration item", help: "When they join or respawn without one. Players who aren't operators see only the commands they can use; operator ones are gold" },
+  { key: "giveToOperators", type: "bool", scope: "world", label: "Give operators the item (when it isn't for everyone)", help: "With the item for every player off: when operators join or respawn without one, and soon after someone becomes an operator" },
+  { key: "removeFromOthers", type: "bool", scope: "world", label: "Take the item from others (when it isn't for everyone)", help: "With the item for every player off: take the real item from players who aren't operators" },
   { key: "checkSeconds", type: "int", scope: "world", label: "Check who carries the item every (seconds)", min: 5, max: 300, step: 5 },
   { key: "recentSize", type: "int", scope: "world", label: "Commands kept in Recent", min: 1, max: 20, step: 1 },
 ];

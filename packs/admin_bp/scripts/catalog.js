@@ -13,7 +13,7 @@ export const PACKS = [
     folder: "admin_bp",
     pack: "Realm Configuration",
     commands: [
-      {"name":"realm:admin_item","description":"Realm Configuration: get the admin menu item (or give it to other operators)","permission":"op","params":[{"name":"player","type":"PlayerSelector","optional":true}]},
+      {"name":"realm:admin_item","description":"Realm Configuration: get the menu item again (operators: give it to other players too)","permission":"any","params":[{"name":"player","type":"PlayerSelector","optional":true}]},
       {"name":"realm:admin_title","description":"Show a title (and subtitle) that the Minimap compass and the side boxes leave alone: use it instead of /title. Default everyone online, 5 seconds","permission":"op","params":[{"name":"title","type":"String","optional":false},{"name":"subtitle","type":"String","optional":true},{"name":"seconds","type":"Integer","optional":true},{"name":"player","type":"PlayerSelector","optional":true}]},
     ],
   },
