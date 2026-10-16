@@ -9,7 +9,7 @@ entries below as a changelog.
 ## Townsfolk stay home
 
 - Every townsfolk now lives in a house of their own and stays inside it, day and night. No more wandering off, no more lunch or evening trips: knock on their door and they are there, facing you.
-- The town grew: five new houses went up, so all twelve townsfolk have a home of their own.
+- The town grew east, past the end of the main road: Sol's observatory, Wren's stable, Brother Hollis's chapel, Moss's cottage by the graveyard and Old Tobin's fishing hut by the pond. All twelve townsfolk now have a home of their own.
 - /realm:npc_who still shows the way to each of them.
 
 ## Your finished quests
