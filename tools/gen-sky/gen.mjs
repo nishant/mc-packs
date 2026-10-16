@@ -191,10 +191,34 @@ function mistSheet() {
   return img;
 }
 
-/** Four 16x16 dust puffs side by side (64x16); the tornado picks one at random. */
+/** Four 32x32 swirling vortex cloud puffs side by side (128x32); the tornado picks one at random. */
 function dust() {
-  const img = blank(64, 16);
-  for (let i = 0; i < 4; i++) puff(16, 60 + i * 7, 0.55, i * 16, img);
+  const n = 32, cells = 4, img = blank(n * cells, n);
+  for (let c = 0; c < cells; c++) {
+    const seed = 60 + c * 11;
+    const ox = c * n;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const dx = (x + 0.5 - n / 2) / (n / 2);
+        const dy = (y + 0.5 - n / 2) / (n / 2);
+        const r = Math.hypot(dx, dy);
+        // Slightly wider horizontal oval with spiral shear so overlapping billboards form continuous swirling bands
+        const er = Math.hypot(dx * 0.88, dy * 1.08);
+        const ang = Math.atan2(dy, dx) + r * 2.1;
+        const sx = Math.cos(ang) * r * 1.8 + 2;
+        const sy = Math.sin(ang) * r * 1.8 + 2;
+        const swirl = fbm(sx, sy, seed, 4);
+        const detail = fbm((x / n) * 5.5, (y / n) * 4.5, seed + 5, 3);
+        const body = Math.exp(-((er / 0.68) ** 2));
+        const rim = 1 - smooth(0.78, 0.99, er);
+        const a = clamp((body * 0.78 + (swirl - 0.32) * 0.55) * rim * (0.7 + 0.45 * detail));
+        // Volumetric shading: brighter silver-white cloud ridges on top/outer swirl, deeper storm shadow in hollows
+        const ridge = clamp(0.45 * swirl + 0.35 * detail + 0.2 * (1 - dy * 0.5));
+        const shade = 195 + 60 * ridge;
+        put(img, ox + x, y, [shade, shade, shade, clamp(a * 1.25) * 255]);
+      }
+    }
+  }
   return img;
 }
 
@@ -629,58 +653,63 @@ const PARTICLES = {
     "minecraft:particle_appearance_tinting": { color: [0.88, 0.9, 0.92, `${fade(4, 5)} * 0.26`] },
   }),
 
-  // One ring of a tornado: dust circling the point at variable.radius, spinning at variable.spin rad/s and climbing.
-  // Positions are set directly (parametric), so the ring turns around the emitter point.
+  // One ring of a tornado: dense inner condensation core + fast-whipping outer vortex bands circling at variable.radius,
+  // spinning at variable.spin rad/s and climbing. Billboard size scales with variable.radius so rings form a solid,
+  // seamless twisting funnel from the ground dust skirt up to the dark mesocyclone storm collar.
   sky_tornado: effect("realm:sky_tornado", "dust", "particles_blend", {
-    ...burst(`Math.clamp(${or("radius", 2)} * 5, 8, 40)`),
+    ...burst(`Math.clamp(${or("radius", 2)} * 8 + 16, 24, 68)`),
     ...once(),
     "minecraft:emitter_shape_point": {},
-    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(0.9, 1.4)" },
+    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(0.85, 1.35)" },
     "minecraft:particle_motion_parametric": {
       relative_position: [
-        `Math.cos(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 4)} * 57.2958) * ${or("radius", 2)} * (0.9 + 0.2 * variable.particle_random_2)`,
-        "variable.particle_age * (0.6 + variable.particle_random_3 * 0.8) + (variable.particle_random_2 - 0.5) * 0.8",
-        `Math.sin(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 4)} * 57.2958) * ${or("radius", 2)} * (0.9 + 0.2 * variable.particle_random_2)`,
+        `Math.cos(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 5)} * 57.2958 * (variable.particle_random_2 < 0.42 ? 1.2 : 0.92)) * ${or("radius", 2)} * (variable.particle_random_2 < 0.42 ? (0.28 + 0.52 * variable.particle_random_2) : (0.78 + 0.36 * variable.particle_random_2))`,
+        "variable.particle_age * (1.2 + variable.particle_random_3 * 1.5) + (variable.particle_random_2 - 0.5) * 1.1",
+        `Math.sin(variable.particle_random_1 * 360 + variable.particle_age * ${or("spin", 5)} * 57.2958 * (variable.particle_random_2 < 0.42 ? 1.2 : 0.92)) * ${or("radius", 2)} * (variable.particle_random_2 < 0.42 ? (0.28 + 0.52 * variable.particle_random_2) : (0.78 + 0.36 * variable.particle_random_2))`,
       ],
     },
-    "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-120, 120)" },
+    "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-180, 180)" },
     "minecraft:particle_appearance_billboard": {
-      size: [`(0.35 + variable.particle_random_3 * 0.4) * (1 + 0.5 * ${T})`, `(0.35 + variable.particle_random_3 * 0.4) * (1 + 0.5 * ${T})`],
+      size: [
+        `(0.72 + ${or("radius", 2)} * 0.28 + variable.particle_random_3 * 0.45) * (1 + 0.35 * ${T})`,
+        `(0.54 + ${or("radius", 2)} * 0.19 + variable.particle_random_3 * 0.32) * (1 + 0.28 * ${T})`,
+      ],
       facing_camera_mode: "lookat_xyz",
-      uv: uv("dust", ["Math.floor(variable.particle_random_4 * 4) * 16", 0], [16, 16]),
+      uv: uv("dust", ["Math.floor(variable.particle_random_4 * 4) * 32", 0], [32, 32]),
     },
     "minecraft:particle_appearance_lighting": {},
     "minecraft:particle_appearance_tinting": {
       color: [
-        "0.45 + 0.12 * variable.particle_random_2",
-        "0.42 + 0.1 * variable.particle_random_2",
-        "0.38 + 0.08 * variable.particle_random_2",
-        `${fade(0.2, 0.4)} * 0.75`,
+        "variable.particle_random_2 < 0.42 ? (0.24 + 0.08 * variable.particle_random_3) : (0.48 + 0.16 * variable.particle_random_3 - 0.08 * variable.height)",
+        "variable.particle_random_2 < 0.42 ? (0.26 + 0.08 * variable.particle_random_3) : (0.51 + 0.16 * variable.particle_random_3 - 0.07 * variable.height)",
+        "variable.particle_random_2 < 0.42 ? (0.30 + 0.09 * variable.particle_random_3) : (0.56 + 0.17 * variable.particle_random_3 - 0.05 * variable.height)",
+        `${fade(0.16, 0.36)} * (variable.particle_random_2 < 0.42 ? 0.92 : 0.78)`,
       ],
     },
   }),
 
-  // Debris flung out of a tornado: a few dark leaves and clods thrown outward and up, tumbling, then falling.
+  // Debris whipped around the base and lower trunk of a tornado: dark leaves and dirt clods spiraling upward and outward.
   sky_debris: effect("realm:sky_debris", "bits", "particles_alpha", {
-    ...burst(5),
+    ...burst(12),
     ...once(),
-    "minecraft:emitter_shape_disc": { plane_normal: "y", radius: or("radius", 2), direction: "outwards", surface_only: true },
-    "minecraft:particle_initial_speed": "Math.random(3, 7)",
-    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(1.5, 2.5)" },
-    "minecraft:particle_motion_dynamic": {
-      linear_acceleration: [0, "variable.particle_age < 0.35 ? 22 : -14", 0],
-      linear_drag_coefficient: 0.6,
+    "minecraft:emitter_shape_point": {},
+    "minecraft:particle_lifetime_expression": { max_lifetime: "Math.random(1.2, 2.1)" },
+    "minecraft:particle_motion_parametric": {
+      relative_position: [
+        `Math.cos(variable.particle_random_1 * 360 + variable.particle_age * 380) * (${or("radius", 2.5)} + variable.particle_age * (1.8 + variable.particle_random_2 * 2.4))`,
+        "variable.particle_age * (3.2 + variable.particle_random_3 * 3.5) - variable.particle_age * variable.particle_age * 1.1",
+        `Math.sin(variable.particle_random_1 * 360 + variable.particle_age * 380) * (${or("radius", 2.5)} + variable.particle_age * (1.8 + variable.particle_random_2 * 2.4))`,
+      ],
     },
-    "minecraft:particle_motion_collision": { collision_radius: 0.08, collision_drag: 6, coefficient_of_restitution: 0.2 },
-    "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-500, 500)" },
+    "minecraft:particle_initial_spin": { rotation: "Math.random(0, 360)", rotation_rate: "Math.random(-640, 640)" },
     "minecraft:particle_appearance_billboard": {
-      size: ["0.1 + variable.particle_random_2 * 0.08", "0.1 + variable.particle_random_2 * 0.08"],
+      size: ["0.15 + variable.particle_random_2 * 0.12", "0.15 + variable.particle_random_2 * 0.12"],
       facing_camera_mode: "lookat_xyz",
       uv: uv("bits", ["variable.particle_random_3 < 0.5 ? 0 : 8", 0], [8, 8]),
     },
     "minecraft:particle_appearance_lighting": {},
     "minecraft:particle_appearance_tinting": {
-      color: ["variable.particle_random_3 < 0.5 ? 0.3 : 0.38", "variable.particle_random_3 < 0.5 ? 0.38 : 0.28", 0.18, fade(0.05, 0.4)],
+      color: ["variable.particle_random_3 < 0.5 ? 0.32 : 0.42", "variable.particle_random_3 < 0.5 ? 0.42 : 0.30", 0.20, fade(0.08, 0.35)],
     },
   }),
 
@@ -849,10 +878,10 @@ const MANIFEST = {
     name: "Realm Skies",
     description: "Auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 2, 1],
+    version: [1, 3, 0],
     min_engine_version: [1, 21, 100],
   },
-  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 1, 0] }],
+  modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 2, 0] }],
 };
 
 // ---------------------------------------------------------------------------

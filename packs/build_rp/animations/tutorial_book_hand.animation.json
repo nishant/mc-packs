@@ -1,0 +1,59 @@
+{
+    "format_version": "1.8.0",
+    "animations": {
+        "animation.eb_tutorial_book_hand.hold_first": {
+            "loop": true,
+            "bones": {
+                "book": {
+                    "rotation": [
+                        0,
+                        70,
+                        180
+                    ],
+                    "position": [
+                        0,
+                        4,
+                        0
+                    ],
+                    "scale": 0.42
+                }
+            }
+        },
+        "animation.eb_tutorial_book_hand.hold_third": {
+            "loop": true,
+            "bones": {
+                "book": {
+                    "rotation": [
+                        91.5,
+                        2.3,
+                        -90.1
+                    ],
+                    "position": [
+                        0,
+                        -2.25,
+                        0
+                    ],
+                    "scale": 0.38
+                }
+            }
+        },
+        "animation.eb_tutorial_book_hand.fly": {
+            "loop": true,
+            "bones": {
+                "flight": {
+                    "position": [
+                        "6 * v.fly",
+                        "1.5 * v.lift + 14 * v.fly",
+                        "-12 * v.fly"
+                    ],
+                    "rotation": [
+                        0,
+                        "360 * v.fly",
+                        "20 * v.fly"
+                    ],
+                    "scale": "(1 + 0.12 * v.lift) * (1 - v.fly)"
+                }
+            }
+        }
+    }
+}

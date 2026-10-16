@@ -1,0 +1,1 @@
+{"format_version":"1.10.0","render_controllers":{"controller.render.eb_panel_ring":{"geometry":"Geometry.default","textures":["Texture.default"],"materials":[{"*":"Material.default"},{"shadow":"Material.glass"},{"glass":"Material.glass"},{"back":"Material.back"}]}}}

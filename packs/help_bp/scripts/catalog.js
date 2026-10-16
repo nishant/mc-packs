@@ -761,18 +761,22 @@ export const PACKS = [
     "folder": "elytra_bp",
     "topic": "elytra",
     "name": "Elytra HUD",
-    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
+    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and §lNOS Rockets§r you carry. This pack also adds the §lNOS Rocket§r (§ecustom:nos_rocket§r), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles.",
     "steps": [
       {
-        "text": "Put on an elytra and glide. In the second box on the right side of the screen (§lRight 2§r) you see something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12§r, updated 4 times a second. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
+        "text": "Put on an elytra and glide. In the second box on the right side of the screen (§lRight 2§r) you see something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12  NOS 4§r, updated 4 times a second. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
-        "text": "Don't want it? Run §e/realm:elytra§r, or disable §lElytra HUD while gliding§r in §e/realm:prefs§r. Chat says §eElytra HUD: Disabled. Run /realm:elytra again to enable it.§r The choice is remembered.",
+        "text": "Craft a §lNOS Rocket§r (§ecustom:nos_rocket§r) at a crafting table by placing §l1 Firework Rocket§r in the center and §l8 Gunpowder§r around it (§eGGG / GFG / GGG§r). Right-click / use a NOS Rocket while gliding with an elytra for a hard 3.5x nitrous acceleration burst in the direction you're looking, complete with blue/cyan + orange flame particles and pressurized boost audio. (Using it on the ground does not consume it.)",
         "ops": false
       },
       {
-        "text": "§lOperators:§r to turn it off for everyone, disable §lElytra HUD§r in §e/realm:config§r -> §lElytra HUD§r. The same page sets when durability turns red.",
+        "text": "Don't want the HUD? Run §e/realm:elytra§r, or disable §lElytra HUD while gliding§r in §e/realm:prefs§r. Chat says §eElytra HUD: Disabled. Run /realm:elytra again to enable it.§r The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r run §e/realm:elytra_nos [count]§r to give yourself NOS Rockets directly. To turn the HUD or NOS Rockets off, or tune the NOS boost multiplier (§enosMultiplier§r) and max flight speed cap (§enosMaxSpeed§r), open §e/realm:config§r -> §lElytra HUD§r.",
         "ops": true
       }
     ],
@@ -782,6 +786,12 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Enables or disables the gliding HUD §lfor yourself§r (enabled by default). Remembered between sessions. Works while the HUD is enabled for the realm (default enabled, §eenabled§r)"
+      },
+      {
+        "usage": "/realm:elytra_nos [count]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Gives yourself §ecount§r (1 to 64, default 16) §lNOS Rockets§r (§ecustom:nos_rocket§r)"
       }
     ]
   },
@@ -2658,70 +2668,54 @@ export const PACKS = [
     "folder": "build_bp",
     "topic": "build",
     "name": "Easy Building",
-    "summary": "Build a whole wall, floor, tower, dome, roof, curve or bridge in one go, like the Effortless Building add-on: pick a shape and its size in a menu, then place one block and the shape appears there, made of the block you placed. Mirror, radial and array modifiers copy every build around a center, a palette spreads your blocks in patterns, Air Build builds in midair, copy, cut and paste move whole regions (with 19 saved copies), destroy mode breaks a shape with your tool, and block guides outline exactly where it will go. Survival builds use blocks from your inventory, and undo (which survives a restart) gives them back. Everything is in §e/realm:build§r, or in the §lBuilding Book§r.",
+    "summary": "Effortless Building v5.0 ported directly into the Realm: build lines, walls, floors, diagonal lines and walls, sloped floors, cubes, circles, semicircles (flat, arch or dome), cylinders, spheres, cones and Bezier splines by clicking two or three anchor points in the world with a live 3D block outline preview. Includes floating 3D in-world UI panels, a hold-right-click radial Quick Switch Wheel, Mirror/Array/Radial modifiers (which also work on single hand-placed and broken blocks), multi-block Palettes with noise/gradient/structural patterns, Air Build and Infinite Reach, Copy/Cut/Paste with a multi-slot Clipboard, Destroy mode with digging tools, Undo/Redo, a 48-page illustrated 3D Tutorial Book, and an interactive Live Coach in 13 languages.",
     "steps": [
       {
-        "text": "Run §e/realm:build§r (or use the §lBuilding Book§r) and pick §lChoose a shape§r, then a shape (the list is below). Set its size and options in the form (sliders for width, height, depth, radius, thickness...) and tap §lUse this shape§r. That turns §lbuild mode§r on and brings the menu back, with what you picked at the top. The menus stay open while you switch things on or off, save settings or go §lBack§r; close them with the §lX§r when you're done. Only a step that needs you to look at the world closes them for you: §lBuild here now§r, §lPaste here now§r, §lDestroy here now§r, §lSelect a region§r and finishing a curve. Closing a settings form (or §lCancel§r) goes back to the menu it came from.",
+        "text": "Hold the §lBuilding Book§r (§e/realm:build_book§r, or craft one from a book and paper or a brick):\n  - §lRight-click (tap):§r opens the floating 3D §lMode Menu§r (or §e/realm:build§r). Aim at any tile and click to pick a mode, toggle options (filled/hollow/skeleton, even/uneven, straight/bezier, horizontal/arch/dome), pin favorite modes, or open Tools.\n  - §lHold right-click:§r opens the floating §lQuick Switch Wheel§r right in front of you; aim at a slice and release right-click to switch modes on the fly.\n  - §lLeft-click (swing):§r opens the §lBlock Palette§r (§e/realm:build_palette§r).\n  - §lSneak + left-click:§r opens §lModifiers§r (§e/realm:build_modifiers§r: Mirror, Array, Radial).\n  - §lSneak + right-click:§r opens §lSettings§r (§e/realm:build_settings§r).\n  - §lDouble-sneak while holding the book:§r toggles between your active build mode and §eDisable§r.",
         "ops": false
       },
       {
-        "text": "Hold a block and place it as usual: the shape is built where the block went, made of that block. Facing matters: a wall runs across your view, depth goes away from you, and stairs, slopes and roofs climb away from you. Looking along a diagonal, the shape keeps the way you faced until you turn 10 degrees past it, so it doesn't flip back and forth. Sneak while placing to place just one block.",
+        "text": "§lTwo-click shapes§r (Line, Diagonal Line, Wall, Floor, Circle, Semicircle, Sphere): hold any block and right-click to set the §lfirst anchor§r (§eAnchor set§r). As you look around, the live 3D outline preview stretches to your aim and shows the dimensions and block count above the hotbar. Right-click again to place the entire shape.",
         "ops": false
       },
       {
-        "text": "While build mode is on and you hold a block (or the Building Book), the §lblock guide§r outlines every block the shape would fill at the spot you look at, modifiers included, and the bar above the hotbar says what placing will build (§eBuild: Wall 5 x 3 x 1 - place a block (sneak: just one)§r). Gold outlines mark the modifier center, a start block and curve points.",
+        "text": "§lThree-click shapes§r (Cube, Cylinder, Cone, Diagonal Wall, Slope Floor): right-click to set the first anchor, right-click a second time to lock the horizontal §lXZ footprint§r, then look up or down to stretch the height and right-click a third time to build.",
         "ops": false
       },
       {
-        "text": "§lBetween two blocks:§r most shapes can take their size from two blocks instead (§lSize§r -> §lFrom two blocks you place§r). Place the start block, then the end block: the shape fills the box between them, and a line or a wall goes straight from one to the other, diagonals too. With both blocks at the same height, the shape keeps the height from its settings (a 3-high wall along the ground).",
+        "text": "§lBezier curves:§r select §lLine§r or §lDiagonal Line§r and set §lCurve§r to §eBezier§r. Right-click to add curve waypoints through the world, then §lSneak + right-click§r to place the smooth Catmull-Rom spline through all points.",
         "ops": false
       },
       {
-        "text": "§lCurves:§r pick §lCurved line§r or §lCurved wall or path§r, then place a block at each point the curve should pass through (or look and use §e/realm:build_here§r). Finish with §lFinish the curve§r at the top of §e/realm:build§r or §e/realm:build_finish§r.",
+        "text": "§lDestroy mode:§r while any shape mode is active, hold a §lpickaxe, axe or shovel§r and right-click a block to set a red §lDestroy anchor§r. Right-click again (or a third time for 3-step shapes) to mine the entire shape with tool tier checks, Unbreaking wear, Fortune/Silk Touch drops, and spare-tool swapping.",
         "ops": false
       },
       {
-        "text": "§lModifiers§r (in §e/realm:build§r) copy every build: mirror on X, Y and/or Z, turn it around a center in 2 to 16 slices (radial), or repeat it in a row (array). Pick §lCenter here§r in the same form to set the center at the block you look at or where you stand.",
+        "text": "§lAir Build and Infinite Reach:§r choose §lAir Build§r mode to place single blocks in midair in front of you (§eairBuildReach§r, default 4 blocks), or enable §lInfinite Reach§r in §e/realm:build_settings§r (§eallowInfiniteReach§r) to set anchors and build shapes at a distance in midair (§emaxReachCap§r, default 64 blocks).",
         "ops": false
       },
       {
-        "text": "§lPalette§r (in §e/realm:build§r) builds with a mix of your blocks: from your hotbar, your inventory or both, spread at random, weighted, or in a pattern (checkerboard, stripes, gradient, brick, noise, marble, border, wave, spiral, dissolve).",
+        "text": "§lModifiers§r (§e/realm:build_modifiers§r or Sneak + left-click with the Building Book): enable §lMirror§r (X, Y, Z axes, odd/even center, radius), §lArray§r (offset X/Y/Z and copy count), and/or §lRadial§r (2 to 16 slices around a center, optional alternate slice mirroring). Colored guide planes mark your active mirror and radial axes, and modifiers also copy single blocks you place or break by hand when build mode is §eDisable§r.",
         "ops": false
       },
       {
-        "text": "§lBlocks and placing§r picks the main block (the block you place, your palette, or a block id you type such as §eminecraft:stone_bricks§r), the second block for patterns, posts and trim (by default the block in the hotbar slot right of your hand), what may be replaced, where the shape sits, and quick copies: mirrored, turned four ways around the block, or repeated in a row.",
+        "text": "§lPalette§r (§e/realm:build_palette§r or left-click with the Building Book): mix blocks from your §lHotbar§r, §lInventory§r, or §lBoth§r, weighted by item count, slot count, or unique block types, using Random, Spread, Gradients (X, Y, Z, Radial, Diagonal), Concentric Rings, Checkerboard, Noise (Value/Worley), Bricks, Pillars, or Frame patterns, plus smart Glazed Terracotta pinwheel tiling.",
         "ops": false
       },
       {
-        "text": "Made a mistake? §e/realm:build_undo§r takes back your last build, paste, cut or destroy and gives survival blocks back; §e/realm:build_redo§r does it again. Your last 5 steps can be undone (§eundoSteps§r), and the newest 10 of up to 2000 blocks each are kept when the server restarts (§eundoSaveSteps§r, §eundoSaveBlocks§r).",
+        "text": "§lCopy, Cut and Paste:§r select §lCopy / Paste§r mode. Right-click corner 1, corner 2, and height (corner 3) to open the §lCopy / Cut§r prompt. Once copied or cut, aim to preview the rotated bounding box (or full ghost preview) and right-click to paste; §lSneak + right-click§r clears the clipboard to select a new region. Manage saved slots in §e/realm:build_clipboard§r.",
         "ops": false
       },
       {
-        "text": "No block to place, or want a look first? Look at a spot and pick §lBuild here now§r in §e/realm:build§r: the guide shows for 3 seconds (§epreviewSeconds§r), then a box lists the cost and asks §lBuild it§r. §e/realm:build_here§r builds at the block you look at straight away.",
+        "text": "§lUndo and Redo:§r run §e/realm:build_undo§r and §e/realm:build_redo§r (or click §lUndo§r / §lRedo§r in the Mode Menu Tools row) to step backward or forward up to 10 actions; survival builds refund placed blocks to your inventory on undo.",
         "ops": false
       },
       {
-        "text": "§lGuides, reach and Air Build§r (in §e/realm:build§r, also in §e/realm:prefs§r) picks the guide style, color and refresh, how far away you build at a look, §lAir Build§r (build in midair in front of you) and whether your modifiers also copy blocks you place and break by hand.",
+        "text": "§lTutorial Book and Live Coach:§r run §e/realm:build_tutorial§r for the 48-page illustrated 3D §lEffortless Building Tutorial§r book, §e/realm:build_guide§r to start the interactive §lLive Coach§r walkthrough, and §e/realm:build_language§r to switch between 13 languages.",
         "ops": false
       },
       {
-        "text": "§e/realm:build_mode§r turns build mode on or off without the menu; so does sneaking and using the Building Book. §e/realm:build_book§r gives you a Building Book.",
-        "ops": false
-      },
-      {
-        "text": "§lCopy, cut and paste:§r in §e/realm:build§r pick §lCopy, cut and paste§r, then §lSelect a region§r. Use (right-click or long-press) a block for the first corner and another for the opposite corner; a third block sets the height (using an item in the air sets a corner in front of you, at your Air Build distance, 4 blocks by default). Then pick §lCopy§r (or §e/realm:build_copy§r) or §lCut§r (§e/realm:build_cut§r, which takes the blocks away without drops). Look at a spot and pick §lPaste here now§r (the paste ghost for 3 seconds, §epreviewSeconds§r, then the cost and §lPaste it§r), or use §e/realm:build_paste§r. Pastes turn to face the way you look.",
-        "ops": false
-      },
-      {
-        "text": "§lPaste mode§r (same menu): placing a block pastes your copy there, like build mode builds a shape. §lSaved copies§r keeps up to 19 named copies (§eclipboardSlots§r) besides §lLast copy§r; they stay after a restart.",
-        "ops": false
-      },
-      {
-        "text": "§lDestroy mode:§r §e/realm:build_destroy§r (or §lDestroy mode§r in §e/realm:build§r). Break a block with a pickaxe, axe or shovel and your shape breaks there (sneak to break just one). §lDestroy here now§r shows what would break at the block you look at and asks first.",
-        "ops": false
-      },
-      {
-        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r sets the limits (most blocks per build, largest size, blocks placed per tick, longest reach, guide particles), whether survival builds use items, Air Build, hand modifiers, destroy mode, saved copies and undo after a restart, and who may build where.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lEasy Building§r (or the §lAdmin§r tab in §e/realm:build_settings§r) sets realm-wide limits and permissions. Prefer standard menus instead of 3D floating panels? Switch §lMenu Style§r to §lPlain§r under Controls in §e/realm:build_settings§r (or enable §eplainMenusForAll§r for everyone).",
         "ops": true
       }
     ],
@@ -2730,67 +2724,79 @@ export const PACKS = [
         "usage": "/realm:build",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens Easy Building: build mode on or off, §lChoose a shape§r (26 shapes, sizes up to 64 blocks, §emaxSize§r), the current shape's settings, §lBlocks and placing§r, §lBuild here now§r (the guide for 3 seconds, §epreviewSeconds§r, then the cost and §lBuild it§r), §lModifiers§r, §lPalette§r, §lGuides, reach and Air Build§r, §lCopy, cut and paste§r, §lDestroy mode§r, §lGet a Building Book§r, finishing or forgetting a curve, undo and redo"
-      },
-      {
-        "usage": "/realm:build_here",
-        "ops": false,
-        "who": "Everyone",
-        "text": "Builds your shape at the block you look at (within your reach, default 16 blocks, §ereach§r; or in midair with Air Build), no questions. In two-block mode the first use sets the start and the second builds; for a curve, each use adds a point"
-      },
-      {
-        "usage": "/realm:build_mode",
-        "ops": false,
-        "who": "Everyone",
-        "text": "Turns build mode on or off: while on, placing a block builds your shape there (sneak to place just one)"
-      },
-      {
-        "usage": "/realm:build_finish",
-        "ops": false,
-        "who": "Everyone",
-        "text": "Builds your curve through the points you placed (at least 2, up to 32)"
+        "text": "Opens the Effortless Building mode menu (3D floating panel or plain menu)"
       },
       {
         "usage": "/realm:build_book",
         "ops": false,
         "who": "Everyone",
-        "text": "Gives you a Building Book (one at a time): use it to open §e/realm:build§r, sneak and use it to turn build mode on or off"
+        "text": "Gives you an Effortless Building §eBuilding Book§r"
+      },
+      {
+        "usage": "/realm:build_tutorial",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Gives you the 48-page illustrated §eEffortless Building Tutorial§r book"
+      },
+      {
+        "usage": "/realm:build_guide",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Starts or stops the interactive Live Coach tutorial"
+      },
+      {
+        "usage": "/realm:build_palette",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the Block Palette (source, weighting, distribution patterns, glazed terracotta tiling)"
+      },
+      {
+        "usage": "/realm:build_modifiers",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens Modifiers: Mirror (X/Y/Z), Array, and Radial symmetry"
+      },
+      {
+        "usage": "/realm:build_clipboard",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the Clipboard Manager (auto-saved copy and named saved slots)"
+      },
+      {
+        "usage": "/realm:build_settings",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens Effortless Building Settings (Setup, Building, Preview, Controls, and Admin for operators)"
+      },
+      {
+        "usage": "/realm:build_preview",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the Preview Settings tab directly (outline style, refresh quality, defer shape, flick mode)"
+      },
+      {
+        "usage": "/realm:build_setup",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the device performance preset picker (Low-end, Mid-end, High-end)"
+      },
+      {
+        "usage": "/realm:build_language",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Opens the 13-language picker for floating panels, coach, and tutorial book"
       },
       {
         "usage": "/realm:build_undo",
         "ops": false,
         "who": "Everyone",
-        "text": "Undoes your last build, paste, cut or destroy: what was there comes back, and survival blocks are given back. Up to 5 steps (§eundoSteps§r); the newest 10 of up to 2000 blocks each survive a restart (§eundoSaveSteps§r, §eundoSaveBlocks§r)"
+        "text": "Undoes your last Effortless Building placement (restores blocks and refunds survival items)"
       },
       {
         "usage": "/realm:build_redo",
         "ops": false,
         "who": "Everyone",
-        "text": "Does again what you last undid"
-      },
-      {
-        "usage": "/realm:build_copy",
-        "ops": false,
-        "who": "Everyone",
-        "text": "Copies the region you selected into §lLast copy§r (up to 64 blocks across and 32768 blocks, §ecopyMaxBlocks§r). With nothing selected, starts selecting: use a block for each corner"
-      },
-      {
-        "usage": "/realm:build_cut",
-        "ops": false,
-        "who": "Everyone",
-        "text": "Like copy, but takes the blocks away (no drops). In survival the next paste of it is free"
-      },
-      {
-        "usage": "/realm:build_paste",
-        "ops": false,
-        "who": "Everyone",
-        "text": "Pastes your copy at the block you look at (within your reach, default 16 blocks, §ereach§r), turned to face your way, with your modifier copies. Survival pastes cost the blocks"
-      },
-      {
-        "usage": "/realm:build_destroy",
-        "ops": false,
-        "who": "Everyone",
-        "text": "Turns destroy mode on or off: breaking a block with a pickaxe, axe or shovel breaks your shape (sneak to break just one). Needs §edestroyMode§r (default enabled)"
+        "text": "Redoes the last undone Effortless Building placement"
       }
     ]
   },
@@ -2978,7 +2984,7 @@ export const PACKS = [
     "folder": "tornado_bp",
     "topic": "tornado",
     "name": "Tornadoes",
-    "summary": "Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wanders across open country for a couple of minutes, sweeping up mobs and dropped items and flinging players who get too close. It never breaks or places a single block, so builds are safe even when it passes right by them, and it leaves a few Storm Glass behind where it dies down. The funnel is drawn with particles from Realm Skies: without that resource pack the tornado still pulls, throws and warns, but you can't see it.",
+    "summary": "Some thunderstorms spin up a tornado: a tall, dense, swirling vortex funnel with a churning ground dust skirt and dark upper storm collar that wanders across open country for a couple of minutes. It sucks up nearby players (in any gamemode), spins them rapidly up the funnel for a few seconds, and shoots them high into the sky out the top before cushioning their landing with Slow Falling. It never breaks or places a single block and never touches mobs or dropped items, so builds, pets, villagers and farms are completely untouched, and it leaves a few Storm Glass behind where it dies down. The funnel is drawn with particles from Realm Skies: without that resource pack the tornado still pulls, launches and warns, but you can't see it.",
     "steps": [
       {
         "text": "When a thunderstorm starts, there's a chance (§echance§r, 0.2) that a tornado touches down during it, 1 to 4 minutes in, somewhere 80 to 160 blocks from one of the players in the Overworld, on open grass, dirt or sand.",
@@ -2993,7 +2999,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Want a closer look? Mobs and items near the funnel circle it and get lifted; get within about 6 blocks and you're thrown a few blocks up and out, then float down with Slow Falling, so it's a ride, not a death trap. Creative and spectator players are left alone.",
+        "text": "Want to ride the vortex? Step within §epullRadius§r (14 blocks) of the funnel in §lany gamemode§r (Survival, Creative, Adventure): the wind sucks you into the core, spins you around up the twisting funnel for a few seconds, and shoots you high into the sky out the top, granting Slow Falling near the apex so you float down safely. Mobs, NPCs, items and blocks are left completely alone.",
         "ops": false
       },
       {
@@ -3001,7 +3007,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the funnel. §e/realm:tornado§r -> §lSpawn one§r (or §e/realm:tornado_spawn§r) makes a tornado 40 blocks in front of you right away, in any weather; §lEnd the tornado§r stops it. §e/realm:config§r -> §lTornadoes§r enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are thrown.",
+        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the funnel. §e/realm:tornado§r -> §lSpawn one§r (or §e/realm:tornado_spawn§r) makes a tornado 40 blocks in front of you right away, in any weather; §lEnd the tornado§r stops it. §e/realm:config§r -> §lTornadoes§r enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are sucked up and launched.",
         "ops": true
       }
     ],

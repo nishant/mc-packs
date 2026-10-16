@@ -13,6 +13,13 @@ entries below as a changelog.
 - Rain no longer cuts out and comes back as you pass under an awning, a doorway or a lamp. It goes muffled only once you've been under a roof for about 2 seconds.
 - On phones and tablets, the indoor rain, wind and thunderstorm sounds no longer drop out for 20 seconds at a time.
 
+## Effortless Building v5.0, NOS Rockets & Tornado Vortex
+
+- Easy Building is now the full Effortless Building v5.0 experience: pick a mode, right-click to set your first anchor, watch the live 3D block outline stretch as you aim, and right-click again to build (or a third time for 3D height on cubes, cylinders, cones and slopes).
+- Hold the Building Book (/realm:build_book): tap right-click for the floating 3D Mode Menu, hold right-click for the Quick Switch Wheel, left-click for the Block Palette, Sneak + left-click for Mirror/Array/Radial Modifiers, and Sneak + right-click for Settings.
+- Craft NOS Rockets (1 firework rocket surrounded by 8 gunpowder) and use one while gliding with an elytra for a 3.5x nitrous speed burst with blue/cyan and orange flames.
+- Tornadoes now have a dense, swirling multi-layered vortex funnel with a ground dust skirt and storm collar: step close in any gamemode and it sucks you in, spins you up the funnel and shoots you high out the top into the sky (leaving mobs, items and blocks untouched).
+
 ## Townsfolk stay home
 
 - Every townsfolk now lives in a house of their own and stays inside it, day and night. No more wandering off, no more lunch or evening trips: knock on their door and they are there, facing you.

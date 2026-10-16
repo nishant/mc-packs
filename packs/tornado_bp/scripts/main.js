@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, GameMode, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, Dimension, ItemStack, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -9,17 +9,18 @@ const PROP_WEATHER = "tornado:weather"; // world: overworld weather from the las
 const OVERWORLD = "minecraft:overworld";
 const RING = "realm:sky_tornado"; // particles come from the Realm Skies resource pack
 const DEBRIS = "realm:sky_debris";
-const FRAME_TICKS = 2; // the funnel is redrawn every 2 ticks
+const SPARK = "realm:sky_spark";
+const FRAME_TICKS = 2; // the funnel is redrawn and players are spun every 2 ticks
 const FRAMES_PER_SECOND = 20 / FRAME_TICKS;
 const NEAR = 64; // beyond this, players get half the rings
-const REDRAW_FRAMES = 5; // each ring is redrawn every 5 frames (half a second)
+const REDRAW_FRAMES = 4; // each ring is redrawn every 4 frames (0.4 s) so the funnel stays dense and cohesive
 const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
 const WIND_EVERY = 5; // seconds
 const RUMBLE_EVERY = 6;
-const MAX_PULLED = 40; // entities moved per run, so a mob farm next to it can't make it expensive
-const THROW_COOLDOWN = 80; // ticks between throws of one player
-const PULL_EVERY = 6; // frames (12 ticks) between the gentle tugs on players at the edge
+const CAPTURE_RADIUS = 5.5; // once pulled within this distance of the funnel axis, the player spins up inside the vortex
+const SPIN_TICKS = 56; // ticks (~2.8 s) spent spiraling up the funnel before shooting out the top into the sky
+const LAUNCH_COOLDOWN = 110; // ticks (~5.5 s) after being shot out the top before the funnel can grab the same player again
 const PATH_POINTS = 20; // the last positions, one a second: Storm Glass drops along them
 const FORM_TRIES = 16; // candidate spots per attempt to form
 const RETRY_TICKS = 200; // a failed attempt to form tries again 10 s later...
@@ -29,23 +30,15 @@ const CLEAR_FADE_TICKS = 200; // a natural tornado dies down within 10 s once th
 const OPEN_GROUND = new Set(["minecraft:grass_block", "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:sand", "minecraft:red_sand"]);
 // Low plants on top of the ground: look at the block under them.
 const PLANT = /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|lily_of_the_valley|bush|petals|sapling|leaf_litter|dry_grass|snow_layer|_roots$/;
-// Entities a tornado leaves alone: townsfolk, decorations and vehicles (minecarts and boats are "inanimate").
-// Also falling blocks (moving one would set it down somewhere else), primed TNT, projectiles that teleport or explode,
-// and effect clouds and lightning.
-const LEAVE_ALONE = [
-  "minecraft:npc", "minecraft:armor_stand", "minecraft:painting", "minecraft:leash_knot", "minecraft:ender_crystal", "minecraft:fishing_hook",
-  "minecraft:falling_block", "minecraft:tnt", "minecraft:ender_pearl", "minecraft:eye_of_ender_signal", "minecraft:fireworks_rocket",
-  "minecraft:fireball", "minecraft:small_fireball", "minecraft:wither_skull", "minecraft:wither_skull_dangerous", "minecraft:dragon_fireball",
-  "minecraft:wind_charge_projectile", "minecraft:breeze_wind_charge_projectile", "minecraft:area_effect_cloud", "minecraft:lightning_bolt",
-  "minecraft:evocation_fang", "minecraft:shulker_bullet", "minecraft:llama_spit",
-];
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
+/** @typedef {{ startTick: number, angle: number }} SpinState */
 /**
  * @typedef {{ x: number, y: number, z: number, groundY: number, heading: number, speed: number, lean: number,
  *   endsAt: number, natural: boolean, frame: number, path: Vector3[], viewers: { player: Player, dist: number }[],
- *   warned: Set<string>, seen: Set<string>, thrown: Map<string, number>, hornIn: number, windIn: number, rumbleIn: number }} Tornado
+ *   warned: Set<string>, seen: Set<string>, spinning: Map<string, SpinState>, thrown: Map<string, number>,
+ *   hornIn: number, windIn: number, rumbleIn: number }} Tornado
  */
 
 /** @type {WeatherType} */
@@ -165,7 +158,7 @@ system.runInterval(() => {
 /** Looks for open ground near a random player in the Overworld and starts a tornado there. @returns {boolean} */
 function formNatural() {
   const dim = overworld();
-  const players = dim.getPlayers().filter((p) => p.getGameMode() !== GameMode.Spectator);
+  const players = dim.getPlayers();
   if (!players.length) return false;
   for (let i = 0; i < FORM_TRIES; i++) {
     const p = players[Math.floor(Math.random() * players.length)];
@@ -205,6 +198,7 @@ function start(at, natural) {
     viewers: [],
     warned: new Set(),
     seen: new Set(),
+    spinning: new Map(),
     thrown: new Map(),
     hornIn: 0,
     windIn: 0,
@@ -250,7 +244,7 @@ function frame() {
     move(t);
     if (t.frame % FRAMES_PER_SECOND === 0) everySecond(t, dim);
     draw(t);
-    if (t.frame % 2 === 0) pull(t, dim);
+    pull(t, dim);
   } catch (e) {
     console.warn(`[tornado] ${e}`);
   }
@@ -353,30 +347,77 @@ function soundToward(player, t, dist, id, volume, pitch, range) {
   player.playSound(id, { location, volume: Math.max(0.15, volume * (1 - dist / range)), pitch });
 }
 
+/**
+ * Funnel radius at normalized height `f` (0 at ground, 1 at top):
+ * a flared ground dust skirt at the foot, a sleek curving trumpet trunk, and a broad dark storm collar at the top.
+ * @param {number} f
+ */
+function funnelRadius(f) {
+  const trunk = 1.35 + 4.8 * f ** 1.55;
+  const skirt = f < 0.09 ? (1 - f / 0.09) ** 1.4 * 2.1 : 0;
+  const collar = f > 0.76 ? ((f - 0.76) / 0.24) ** 1.5 * 5.2 : 0;
+  return trunk + skirt + collar;
+}
+
+/**
+ * Funnel centerline at normalized height `f` (0..1), including 3D rope sway.
+ * @param {Tornado} t @param {number} f @param {number} top
+ */
+function funnelAxis(t, f, top) {
+  const time = t.frame / FRAMES_PER_SECOND;
+  const swayA = Math.sin(time * 0.65 + f * 3.2) * f * 3.6;
+  const swayB = Math.cos(time * 0.45 + f * 2.4) * f * (1 - f) * 2.2;
+  const perp = t.lean + Math.PI / 2;
+  return {
+    x: t.x + Math.cos(t.lean) * swayA + Math.cos(perp) * swayB,
+    y: t.y + f * top,
+    z: t.z + Math.sin(t.lean) * swayA + Math.sin(perp) * swayB,
+  };
+}
+
 /** The funnel, for each player near it (Player.spawnParticle: each player gets only their own). @param {Tornado} t */
 function draw(t) {
   const density = get("density");
-  const time = t.frame / FRAMES_PER_SECOND;
-  const top = Math.min(CONFIG.height, 318 - t.y);
+  const top = Math.max(12, Math.min(CONFIG.height, 318 - t.y));
   for (const { player, dist } of t.viewers) {
     if (!player.isValid) continue;
-    // Each ring lives about 1.2 s, so each frame redraws a slice of the funnel: every ring once in REDRAW_FRAMES.
-    const rings = Math.max(4, Math.round(get("rings") * density * (dist > NEAR ? 0.5 : 1)));
+    const rings = Math.max(6, Math.round(get("rings") * density * (dist > NEAR ? 0.55 : 1)));
     const slice = Math.ceil(rings / REDRAW_FRAMES);
     try {
       for (let k = 0; k < slice; k++) {
         const i = (t.frame * slice + k) % rings;
-        const f = (i + Math.random()) / rings; // 0 at the ground, 1 at the top
-        const sway = Math.sin(time * 0.6 + f * 3) * f * 4; // the funnel bends and sways
-        molang().setFloat("variable.radius", 1 + 10 * f ** 1.7);
-        molang().setFloat("variable.spin", 5 - 3 * f);
-        player.spawnParticle(RING, { x: t.x + Math.cos(t.lean) * sway, y: t.y + f * top, z: t.z + Math.sin(t.lean) * sway }, molang());
+        const f = (i + Math.random() * 0.75) / rings; // 0 at the ground, 1 at the top
+        const axis = funnelAxis(t, f, top);
+        molang().setFloat("variable.radius", funnelRadius(f));
+        molang().setFloat("variable.spin", 8.5 - 4.8 * f);
+        molang().setFloat("variable.height", f);
+        player.spawnParticle(RING, axis, molang());
       }
-      if (dist <= NEAR && t.frame % 2 === 0) {
-        const bits = Math.max(1, Math.round(density));
+      // Keep the ground contact dust whirl and upper storm collar anchored and dense
+      if (t.frame % 2 === 0) {
+        molang().setFloat("variable.radius", 3.4);
+        molang().setFloat("variable.spin", 9.2);
+        molang().setFloat("variable.height", 0.02);
+        player.spawnParticle(RING, { x: t.x, y: t.y + 0.35, z: t.z }, molang());
+      } else {
+        const topAxis = funnelAxis(t, 0.95, top);
+        molang().setFloat("variable.radius", funnelRadius(0.95));
+        molang().setFloat("variable.spin", 3.6);
+        molang().setFloat("variable.height", 0.95);
+        player.spawnParticle(RING, topAxis, molang());
+      }
+      if (dist <= NEAR) {
+        const bits = Math.max(1, Math.round(density * 1.5));
         for (let i = 0; i < bits; i++) {
-          molang().setFloat("variable.radius", rand(2, 5));
-          player.spawnParticle(DEBRIS, { x: t.x + rand(-3, 3), y: t.y + rand(0.3, 2), z: t.z + rand(-3, 3) }, molang());
+          molang().setFloat("variable.radius", rand(1.8, 4.2));
+          player.spawnParticle(DEBRIS, { x: t.x + rand(-1.5, 1.5), y: t.y + rand(0.2, 2.5), z: t.z + rand(-1.5, 1.5) }, molang());
+        }
+        // Occasional internal storm lightning flickers inside the upper wall cloud collar
+        if (t.frame % 5 === 0) {
+          const collarAxis = funnelAxis(t, rand(0.78, 0.96), top);
+          const ang = Math.random() * Math.PI * 2;
+          const r = rand(1.5, 5.5);
+          player.spawnParticle(SPARK, { x: collarAxis.x + Math.cos(ang) * r, y: collarAxis.y, z: collarAxis.z + Math.sin(ang) * r });
         }
       }
     } catch {
@@ -386,99 +427,163 @@ function draw(t) {
 }
 
 // ---------------------------------------------------------------------------
-// Pulling mobs, items and players
+// Sucking up players, spinning them around the funnel, and shooting them out the top
 // ---------------------------------------------------------------------------
 
-/** @param {Tornado} t @param {Dimension} dim */
+/**
+ * Only affects actual players (in ANY gamemode); never touches mobs, NPCs, items or blocks.
+ * @param {Tornado} t @param {Dimension} dim
+ */
 function pull(t, dim) {
+  if (!get("throwPlayers")) {
+    t.spinning.clear();
+    return;
+  }
   const radius = get("pullRadius");
-  const lift = CONFIG.liftHeight;
-  const center = { x: t.x, y: t.y + 4, z: t.z };
-  const reach = radius + 8;
-  /** @type {Map<string, Entity>} */
-  const found = new Map();
-  try {
-    for (const e of dim.getEntities({ location: center, maxDistance: reach, excludeFamilies: ["player", "inanimate"], excludeTypes: LEAVE_ALONE, excludeTags: ["realm:npc"] })) found.set(e.id, e);
-    for (const e of dim.getEntities({ location: center, maxDistance: reach, type: "minecraft:item" })) found.set(e.id, e);
-  } catch {
-    return; // unloaded around the funnel
-  }
-  let moved = 0;
-  for (const e of found.values()) {
-    if (moved >= MAX_PULLED) break;
-    if (!e.isValid || !e.typeId.startsWith("minecraft:")) continue; // other packs' helper entities (seats...)
-    const l = e.location;
-    const dx = l.x - t.x, dz = l.z - t.z;
-    const d = Math.hypot(dx, dz);
-    const above = l.y - t.y;
-    if (d > radius || above < -3 || above > lift + 4) continue;
-    if (calmAt(l.x, l.z)) continue; // in a safe zone: left alone
-    moved++;
-    try {
-      spin(e, dx, dz, d, radius, above < lift);
-    } catch {
-      // some entities can't be pushed
-    }
-  }
-  if (!get("throwPlayers")) return;
+  const top = Math.max(12, Math.min(CONFIG.height, 318 - t.y));
+  const center = { x: t.x, y: t.y + top * 0.4, z: t.z };
+  const reach = Math.max(radius + 12, top);
   const now = system.currentTick;
-  for (const p of dim.getPlayers({ location: center, maxDistance: reach })) {
+  const seenIds = new Set();
+
+  let players;
+  try {
+    players = dim.getPlayers({ location: center, maxDistance: reach });
+  } catch {
+    return;
+  }
+
+  for (const p of players) {
+    if (!p.isValid) continue;
+    seenIds.add(p.id);
     try {
-      const mode = p.getGameMode();
-      if (mode === GameMode.Creative || mode === GameMode.Spectator) continue;
       const l = p.location;
-      const dx = l.x - t.x, dz = l.z - t.z;
-      const d = Math.max(0.1, Math.hypot(dx, dz));
-      if (d > radius || l.y < t.y - 3 || l.y > t.y + CONFIG.height) continue;
-      if (calmAt(l.x, l.z)) continue;
-      const last = t.thrown.get(p.id) ?? -Infinity;
-      if (now - last < THROW_COOLDOWN) continue;
-      if (d <= radius / 2) throwPlayer(p, dx / d, dz / d, t);
-      else if (t.frame % PULL_EVERY === 0) p.applyKnockback({ x: (-dx / d) * 0.5, z: (-dz / d) * 0.5 }, 0.1); // a tug toward the funnel
+      if (calmAt(l.x, l.z)) {
+        t.spinning.delete(p.id);
+        continue;
+      }
+      const lastLaunched = t.thrown.get(p.id) ?? -Infinity;
+      if (now - lastLaunched < LAUNCH_COOLDOWN) {
+        t.spinning.delete(p.id);
+        continue;
+      }
+
+      let state = t.spinning.get(p.id);
+      const relY = Math.max(0, Math.min(1, (l.y - t.y) / top));
+      const axis = funnelAxis(t, relY, top);
+      const dx = l.x - axis.x;
+      const dz = l.z - axis.z;
+      const d = Math.max(0.05, Math.hypot(dx, dz));
+
+      if (!state) {
+        if (d > radius || l.y < t.y - 4 || l.y > t.y + top + 6) continue;
+        const captureR = Math.min(radius * 0.55, CAPTURE_RADIUS);
+        if (d <= captureR) {
+          state = { startTick: now, angle: Math.atan2(dz, dx) };
+          t.spinning.set(p.id, state);
+          p.playSound("mob.breeze.wind_burst", { location: l, volume: 0.75, pitch: 0.85 });
+        } else {
+          // Outer suction zone: pull the player inward toward the funnel with a counterclockwise swirl
+          const inX = -dx / d;
+          const inZ = -dz / d;
+          const tanX = -inZ;
+          const tanZ = inX;
+          const pullStrength = 0.65 + 0.55 * (1 - d / radius);
+          const vx = (inX * 0.78 + tanX * 0.42) * pullStrength;
+          const vz = (inZ * 0.78 + tanZ * 0.42) * pullStrength;
+          const vy = l.y < t.y + 1.2 ? 0.24 : 0.08;
+          p.applyKnockback({ x: vx, z: vz }, vy);
+          // Fallback for Creative flight / Spectator where applyKnockback may be ignored by client physics
+          const vel = p.getVelocity();
+          if (Math.hypot(vel.x, vel.z) < 0.04) {
+            p.teleport({ x: l.x + vx * 0.85, y: Math.max(t.y, l.y + 0.1), z: l.z + vz * 0.85 }, { keepVelocity: false });
+          }
+          continue;
+        }
+      }
+
+      // Inside the vortex funnel: spin the player around as they climb to the top
+      const elapsed = now - state.startTick;
+      if (elapsed >= SPIN_TICKS) {
+        t.spinning.delete(p.id);
+        t.thrown.set(p.id, now);
+        launchOutTop(p, state.angle, t, top);
+        continue;
+      }
+
+      const progress = Math.min(1, elapsed / SPIN_TICKS);
+      state.angle += 0.62; // ~5 full revolutions up the funnel over SPIN_TICKS
+      const targetAxis = funnelAxis(t, progress * 0.88, top);
+      const orbitR = Math.min(4.2, funnelRadius(progress * 0.8) * 0.72);
+      const targetX = targetAxis.x + Math.cos(state.angle) * orbitR;
+      const targetZ = targetAxis.z + Math.sin(state.angle) * orbitR;
+      const targetY = t.y + 1.5 + progress * (top * 0.86);
+
+      const tanX = -Math.sin(state.angle);
+      const tanZ = Math.cos(state.angle);
+      const stepX = targetX - l.x;
+      const stepZ = targetZ - l.z;
+      const stepY = targetY - l.y;
+
+      const vx = Math.max(-1.8, Math.min(1.8, stepX * 0.58 + tanX * 0.88));
+      const vz = Math.max(-1.8, Math.min(1.8, stepZ * 0.58 + tanZ * 0.88));
+      const vy = Math.max(0.38, Math.min(1.15, stepY * 0.36 + 0.52));
+
+      p.applyKnockback({ x: vx, z: vz }, vy);
+      // Ensure Creative-flying or Spectator players still spiral smoothly up the funnel
+      if (elapsed >= 4 && (l.y < targetY - 3.0 || Math.hypot(stepX, stepZ) > orbitR + 4.5)) {
+        p.teleport({ x: targetX, y: targetY, z: targetZ }, { keepVelocity: false });
+      }
     } catch (e) {
       console.warn(`[tornado] ${e}`);
     }
   }
-}
 
-/**
- * Circles an entity around the funnel, a little inward, and lifts it up to liftHeight. Speeds are
- * capped (blocks per tick), and mobs get Slow Falling so nothing dies from the drop.
- * @param {Entity} e @param {number} dx @param {number} dz @param {number} d @param {number} radius @param {boolean} rise
- */
-function spin(e, dx, dz, d, radius, rise) {
-  const inX = d > 0.3 ? -dx / d : 0, inZ = d > 0.3 ? -dz / d : 0;
-  const tanX = -inZ, tanZ = inX; // counterclockwise seen from above
-  const inward = 0.1 * (0.3 + d / radius);
-  const want = { x: inX * inward + tanX * 0.3, y: rise ? 0.2 : 0.02, z: inZ * inward + tanZ * 0.3 };
-  const v = e.getVelocity();
-  const clamp = (/** @type {number} */ n) => Math.max(-0.25, Math.min(0.25, n));
-  const imp = { x: clamp((want.x - v.x) * 0.4), y: clamp((want.y - v.y) * 0.4), z: clamp((want.z - v.z) * 0.4) };
-  // Never faster than 0.6 blocks per tick sideways or 0.35 upward.
-  const nx = v.x + imp.x, nz = v.z + imp.z;
-  const h = Math.hypot(nx, nz);
-  if (h > 0.6) {
-    imp.x = (nx * 0.6) / h - v.x;
-    imp.z = (nz * 0.6) / h - v.z;
+  for (const id of t.spinning.keys()) {
+    if (!seenIds.has(id)) t.spinning.delete(id);
   }
-  if (v.y + imp.y > 0.35) imp.y = 0.35 - v.y;
-  e.applyImpulse(imp);
-  if (e.typeId !== "minecraft:item" && !e.getEffect("slow_falling")) e.addEffect("slow_falling", 120, { showParticles: false });
 }
 
 /**
- * Flings a player a few blocks up and out, then gives Slow Falling near the top of the throw (giving it
- * at once would carry them far higher).
- * @param {Player} p @param {number} outX @param {number} outZ unit vector from the funnel to the player @param {Tornado} t
+ * Shoots a player high into the sky out the top of the tornado after spinning them up the funnel,
+ * then grants Slow Falling near the apex so they float down safely.
+ * @param {Player} p @param {number} angle @param {Tornado} t @param {number} top
  */
-function throwPlayer(p, outX, outZ, t) {
-  const tanX = -outZ, tanZ = outX;
-  let x = tanX * 0.8 + outX * 0.6, z = tanZ * 0.8 + outZ * 0.6;
-  const n = Math.hypot(x, z) || 1;
-  x /= n;
-  z /= n;
-  p.applyKnockback({ x: x * 2.4, z: z * 2.4 }, 1.0);
-  t.thrown.set(p.id, system.currentTick);
+function launchOutTop(p, angle, t, top) {
+  const outX = Math.cos(angle);
+  const outZ = Math.sin(angle);
+  const boostScale = Math.max(1, CONFIG.liftHeight / 12);
+  const horiz = 1.35 * boostScale;
+  const vert = Math.min(3.8, 2.8 * boostScale);
+
+  p.applyKnockback({ x: outX * horiz, z: outZ * horiz }, vert);
+  p.playSound("mob.breeze.shoot", { location: p.location, volume: 1.2, pitch: 0.75 });
+  try {
+    molang().setFloat("variable.radius", 4.5);
+    p.spawnParticle(DEBRIS, p.location, molang());
+  } catch {
+    // ignore particle error
+  }
+
+  // Multi-stage vertical boost pulses over the first 8 ticks so the player rockets high into the sky in every gamemode
+  const apexY = t.y + top + Math.max(18, CONFIG.liftHeight * 1.6);
+  for (const delay of [2, 4, 6, 8]) {
+    system.runTimeout(() => {
+      try {
+        if (!p.isValid) return;
+        const l = p.location;
+        p.applyKnockback({ x: outX * 0.95, z: outZ * 0.95 }, 2.2);
+        // Fallback if Creative flight prevents knockback from lifting the player out the top
+        if (p.getVelocity().y < 0.15 && l.y < apexY) {
+          const stepUp = Math.min(apexY, l.y + 4.5);
+          p.teleport({ x: l.x + outX * 1.1, y: stepUp, z: l.z + outZ * 1.1 }, { keepVelocity: false });
+        }
+      } catch {
+        // ignore if player left
+      }
+    }, delay);
+  }
+
   const seconds = CONFIG.slowFallingSeconds;
   system.runTimeout(() => {
     try {
@@ -486,7 +591,7 @@ function throwPlayer(p, outX, outZ, t) {
     } catch (e) {
       console.warn(`[tornado] ${e}`);
     }
-  }, 10);
+  }, 28);
 }
 
 // ---------------------------------------------------------------------------

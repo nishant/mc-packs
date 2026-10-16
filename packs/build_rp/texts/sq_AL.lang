@@ -1,0 +1,498 @@
+eb.join.admin_granted=§6[Effortless Building] §rJu keni marrë §6akses administratori§r si lojtar i parë në këtë botë.\n§7Hapni Cilësimet (Zvarritje + Klikim i djathtë) për opsionet e administratorit.
+eb.join.no_left_click=§e[Effortless Building] §rKlikimi i majtë (lëvizja) §cNUK mbështetet§r në versionin tuaj të Minecraft.\n§7Përdorni §f/palette§7 në vend të klikimit të majtë mbi §6Librin e Ndërtimit§7 për të hapur paletën e blloqeve.
+eb.join.received_book=§a[Effortless Building] §rKeni marrë një §6Libër Ndërtimi§r!\n§7Klikim i djathtë §r- hap mënyrat e ndërtimit §7| §rZvarritje + Klikim i djathtë §r- cilësimet.\n§c§l❗ §r§cE humbët? §fShkruani §a/getbook §f(kushton §e5 nivele XP§f).
+
+eb.getbook.already_have=§c[EB] Ju e keni tashmë Librin e Ndërtimit.
+eb.getbook.not_enough_xp=§c[EB] Ju duhen të paktën %1 nivele XP për të marrë një libër të ri. (Ju keni %2)
+
+eb.place.no_blocks=§c[EB] §rNuk ka blloqe në inventar!
+eb.place.limited_blocks=§e[EB] §rVetëm %1 blloqe - vendos ato që keni.
+eb.place.no_palette_blocks=§c[EB] §rNuk ka blloqe palete në inventar!
+eb.place.limited_palette_blocks=§e[EB] §rBlloqe palete të kufizuara - vendos %1.
+eb.place.undo_disabled=§e[EB] §7Zhbërja çaktivizohet.
+eb.place.too_large_to_undo=§e[EB] §7Shumë i madh për t'u zhbërë (>%1 blloqe).
+
+eb.destroy.pickaxe_broke=§c[EB] §rMjeti juaj u thye!
+eb.destroy.no_mode=§c[EB] §rMënyra e shkatërrimit nuk funksionon me Air Build. Zgjidhni fillimisht një mënyrë forme (Vijë, Mur, Dysheme, etj.).
+eb.destroy.disabled=§c[EB] §rMënyra e shkatërrimit është §cçaktivizuar§r në këtë server.
+eb.destroy.creative_only=§c[EB] §rMënyra e shkatërrimit kërkon modalitetin §eKreativ§r në këtë server.
+eb.destroy.wrong_tool=§c[EB] §rMjeti juaj nuk mund të thyejë këtë bllok.
+
+eb.tag.required=§c[EB] §rKeni nevojë për etiketën §e%1§r për të përdorur Effortless Building.
+eb.getbook.no_tag=§c[EB] §rKeni nevojë për etiketën §e%1§r për të përdorur /getbook.
+
+eb.undo.nothing=§c[EB] Asgjë për t'u zhbërë.
+eb.undo.done=§a[EB] U zhbë §7- %1 blloqe u rikthyen.
+eb.redo.nothing=§c[EB] Asgjë për t'u ribërë.
+eb.redo.done=§a[EB] U ribë §7- %1 blloqe u vendosën.
+
+eb.bar.xz_set_destroy=§c[EB] §fGama XZ u caktua §8- §7klikim i djathtë për të konfirmuar §elartësinë§7 & §cshkatërrimin
+eb.bar.xz_set_place=§a[EB] §fGama XZ u caktua §8- §7klikim i djathtë për të konfirmuar §elartësinë§7 & §avendosjen
+eb.bar.destroyed=%1 blloqe §cshkatërruar §8(§7%2§8)
+eb.bar.destroying=§c[EB] §rDuke shkatërruar... mbeten §e%1§7
+eb.bar.toggle_disabled=§7[EB] §rMënyra u §8çaktivizua§7. Zvarrituni dy herë për ta rikthyer.
+eb.bar.toggle_restored=§a[EB] §rMënyra u rikthye: §b§l%1
+eb.bar.placed=%1 blloqe §7vendosur §8(§7%2§8)
+eb.bar.placed_one=§f1 bllok §7vendosur §8(§7air build§8)
+eb.bar.destroy_anchor_set=§c[EB] §rPika e shkatërrimit u caktua §7(%1, %2, %3)
+eb.bar.anchor_set=§a[EB] §rPika e ankorimit u caktua §7(%1, %2, %3)
+eb.bar.copy_corner1=§a[EB] §rKënd 1 i kopjimit u caktua §7(%1, %2, %3) - klikim i djathtë për këndin 2
+eb.bar.copy_corner2=§a[EB] §rKënd 2 i kopjimit u caktua §7(%1, %2, %3) - klikim i djathtë për zgjedhjen e lartësisë
+eb.bar.copy_done=§a[EB] §r§e%1§r blloqe u kopjuan - klikim i djathtë për ngjitje
+eb.bar.cut_done=§6[EB] §r§e%1§r blloqe të prerë - kliko djathtas për ngjitje §7(një herë në mbijetesë)
+eb.bar.copy_empty=§c[EB] §rNuk u gjetën blloqe në zgjedhje.
+eb.bar.copy_cleared=§7[EB] Të dhënat e kopjuara u fshinë - klikim i djathtë për këndin 1
+eb.bar.copy_cancelled=§7[EB] Zgjedhja u anulua - klikim i djathtë për këndin 1
+eb.first_open=§b[EB] §fI ri këtu? Mbani librin §6Tutorial§f për të lexuar udhëzuesin, ose shkruani §a/guide§f për një hyrje të shpejtë.
+item.eb:building_book.name=§b§lLibri i Ndërtimit
+eb.bar.pasted=%1 blloqe §au ngjitën
+eb.bar.paste_empty=§e[EB] §7Asgjë në clipboard për t'u ngjitur.
+
+eb.queue.waiting=§e⏳ %1 blloqe në radhë §7- ecni te\n§f(%2, %3, %4) §7për të ngarkuar copëzat
+eb.queue.waiting_one=§e⏳ 1 bllok në radhë §7- ecni te\n§f(%1, %2, %3) §7për të ngarkuar copëzat
+
+eb.preview.air_build=§7Air Build  §8·  §7Klikim i djathtë për §avendosje §8(%1, %2, %3)
+eb.preview.no_anchor_destroy=§7%1 (Gamë e Pafundme)  §8·  §7Klikim i djathtë për të caktuar §cpikën e shkatërrimit §8(%2, %3, %4)
+eb.preview.no_anchor_build=§7%1 (Gamë e Pafundme)  §8·  §7Klikim i djathtë për të caktuar §apikën e ankorimit §8(%2, %3, %4)
+eb.preview.hint_destroy=§7Klikim i djathtë për §cshkatërruar
+eb.preview.hint_place=§7Klikim i djathtë për §avendosur
+eb.preview.step2=§8[2/3] §7Klikim i djathtë për të caktuar §egamën XZ
+eb.preview.step3_destroy=§8[3/3] §7Klikim i djathtë për §elartësinë§7 & §cshkatërrimin
+eb.preview.step3_place=§8[3/3] §7Klikim i djathtë për §elartësinë§7 & §avendosjen
+
+eb.dir.ew=Lindje-Perëndim
+eb.dir.ns=Veri-Jug
+eb.dir.ud=Lart-Poshtë
+eb.dir.single=-
+
+eb.mode.normal=Normale
+eb.mode.normal_plus=Normale+
+eb.mode.line=Vijë
+eb.mode.wall=Mur
+eb.mode.floor=Dysheme
+eb.mode.cube=Kub
+eb.mode.circle=Rreth
+eb.mode.cylinder=Cilindër
+eb.mode.sphere=Sferë
+eb.mode.diagonal_line=Vijë Diagonale
+eb.mode.diagonal_wall=Mur Diagonal
+eb.mode.diagonal_floor=Dysheme Diagonale
+eb.mode.slope=Pjerrësi
+eb.mode.slope_floor=Dysheme me Pjerrësi
+eb.mode.air_build=Ndërtim në Ajër
+eb.mode.semicircle=Gjysmërreth
+eb.mode.cone=Kon
+eb.mode.destroy=Shkatërrimi
+eb.mode.copy_paste=Kopjo / Ngjit
+
+eb.mode_select.body=Zgjidhni një mënyrë ndërtimi.\nKlikim i djathtë mbi një bllok për të caktuar §epikën e ankorimit§r, pastaj klikim i djathtë për të konfirmuar vendosjen.\n§8Mbani një §7kazmë §8dhe klikim i djathtë për të §cshkatërruar §8në formën e zgjedhur.\n§8New? Type §7/tutorial §8for a full guide.
+eb.mode_select.mode_set=§a[EB] §rMënyra u caktua në §e%1§r.
+
+eb.mode_select.options_title=§l%1§r §8- Opsionet
+eb.mode_select.quick_access=§l§dHyrje e Shpejtë§r
+eb.mode_select.btn.clipboard=§lKlipbordin§r
+eb.mode_select.btn.palette=§lPaleta§r
+eb.mode_select.btn.settings=§lCilësimet§r
+eb.mode_select.btn.undo=§lZhbëj§r
+eb.mode_select.btn.redo=§lRibëj§r
+eb.mode_select.btn.done=§cU krye§r
+eb.mode_select.btn.modifiers=§lModifikuesit§r
+
+eb.modifiers.btn.mirror=§lPasqyrë§r  [%1]
+eb.modifiers.btn.array=§lVarg§r  [%1]
+eb.modifiers.btn.radial=§lRadial§r  [%1]
+eb.modifiers.btn.close=Mbyll
+
+eb.modifiers.mirror.body=Status: %1\nCenter: %2, %3, %4\nAxes: %5  %6  %7\nRadius: %8  Mode: %9
+eb.modifiers.mirror.btn.set_pos=Vendos Qendrën te Pozicioni Im
+eb.modifiers.mirror.btn.configure=Konfiguro...
+eb.modifiers.mirror.config.title=Cilësimet e Pasqyrës
+eb.modifiers.mirror.center_x=Qendra X
+eb.modifiers.mirror.center_y=Qendra Y
+eb.modifiers.mirror.center_z=Qendra Z
+eb.modifiers.mirror.radius=Rrezja (blloqe)
+eb.modifiers.mirror.pos_set=§e[EB] Qendra e pasqyrës u vendos te %1, %2, %3
+
+eb.modifiers.array.body=Gjendja: %1\nZhvendosja: %2, %3, %4\nNumri: %5
+eb.modifiers.array.btn.configure=Konfiguro...
+eb.modifiers.array.config.title=Cilësimet e Vargut
+eb.modifiers.array.offset_x=Zhvendosja X
+eb.modifiers.array.offset_y=Zhvendosja Y
+eb.modifiers.array.offset_z=Zhvendosja Z
+eb.modifiers.array.count=Numri (kopje)
+
+eb.modifiers.radial.body=Gjendja: %1\nQendra: %2, %3\nFeta: %4\nRrezja: %5\nAlterno: %6
+eb.modifiers.radial.btn.set_pos=Vendos Qendrën te Pozicioni Im
+eb.modifiers.radial.btn.configure=Konfiguro...
+eb.modifiers.radial.config.title=Cilësimet e Pasqyrës Radiale
+eb.modifiers.radial.center_x=Qendra X
+eb.modifiers.radial.center_z=Qendra Z
+eb.modifiers.radial.slices=Feta
+eb.modifiers.radial.radius=Rrezja (blloqe)
+eb.modifiers.radial.alternate=Alterno (pasqyro çdo fetë të dytë)
+eb.modifiers.radial.pos_set=§e[EB] Qendra radiale u vendos te %1, %2, %3
+
+eb.settings.player.preview_style=Stili i Parapamjes\n§7Stili vizual i shfaqur gjatë përzgjedhjes
+eb.settings.player.replace_blocks=Zëvendëso Blloket Ekzistues\n§7Lejo vendosjen që të shkruajë mbi blloket\n§7ekzistues
+eb.settings.player.build_speed=Shpejtësia e Ndërtimit\n§7Sa shpejt vendosen blloket në sekuencë
+eb.settings.player.destroy_drops=Rënia e Bllokeve të Prishur\n§7Nëse blloket e prishur lëshojnë artikujt e tyre
+eb.settings.player.selection_zoom=Zmadhimi i Përzgjedhjes\n§7Zmadhoni ndërsa një përzgjedhje është aktive
+eb.settings.player.zoom_start=Distanca e Fillimit të Zmadhimit (blloke)\n§7Distanca në të cilën fillon zmadhimi
+eb.settings.player.zoom_max=Distanca e Zmadhimit të Plotë (blloke)\n§7Distanca në të cilën arrihet zmadhimi maksimal
+eb.settings.player.air_reach=Arritja e Ndërtimit në Ajër (blloke)\n§7Arritja maksimale kur vendoset në ajër të hapur
+eb.settings.player.infinite_reach=Arritja e Pafundme\n§7Ndërtoni përtej distancës normale të arritjes
+eb.settings.player.inf_reach_dist=Distanca e Arritjes së Pafundme (blloke)\n§7Sa larg shtrihet arritja e pafundme
+eb.settings.player.swap_book_actions=Ndrysho Veprimet e Librit\n§7Klik i djathtë hap Paletën, Klik i majtë hap Menunë
+eb.settings.player.undo_limit=Kufiri i Zhbërjes\n§7Blloket maksimale të gjurmuara për zhbërje pas prishjes
+eb.settings.player.max_blocks=Blloket Maksimale (1 – %1)\n§7Blloket maksimale për operacion të vetëm
+
+eb.settings.title=§l§6Cilësimet EB§r
+eb.settings.admin_require_tag=§cAdministrues§r - Kërko Etiketë për EB\n§7Vetëm lojtarët me etiketën mund të ndërtojnë
+eb.settings.admin_tag=§cAdministrues§r - Etiketa e Kërkuar\n§7Aktuale: §e%1
+eb.settings.admin_allow_destroy=§cAdministrues§r - Lejo Mënyrën e Shkatërrimit\n§7Joaktiv: asnjë lojtar nuk mund të përdorë Shkatërrimin
+eb.settings.admin_destroy_creative=§cAdministrues§r - Shkatërrimi: Vetëm Kreativ\n§7Aktiv: Shkatërrimi kërkon modalitetin Kreativ
+eb.settings.admin_allow_inf_reach=§cAdministrues§r - Lejo Gamën e Pafundme\n§7Joaktiv: Gama e Pafundme çaktivizohet globalisht
+eb.settings.admin_max_reach_cap=§cAdministrues§r - Distanca Max. e Gamës së Pafundme\n§7Aktuale: §e%1  §70 = pa kufi
+eb.settings.admin_max_blocks_cap=§cAdmin§r - Tavani i Blloqeve (për lojtar)\n§7Aktual: §e%1  §7Maksimumi: §e%2
+eb.settings.admin_auto_give_book=§cAdministrues§r - Jep Automatikisht Librin e Ndërtimit\n§7Aktiv: lojtarët marrin librin kur hyjnë
+eb.settings.admin_config_tag=Kufizo /config në etiketën e kërkuar\n§7Nëse është AKTIV, vetëm lojtarët me etiketën e kërkuar mund të përdorin /config.
+
+eb.config.restricted=§c[EB] /config është e kufizuar. Ju duhet etiketa §e%1§c.
+eb.config.done=§cU krye§r
+eb.config.quality.smooth.label=E Butë
+eb.config.quality.smooth.desc=Përditësohet çdo tick. Parapamje shumë e butë në përgjigje të plotë. Më e mira për pajisje të shpejta.
+eb.config.quality.sharp.label=E Mprehtë
+eb.config.quality.sharp.desc=Përditësohet çdo 2 tick. Pothuajse po aq e butë sa E Butë me një fitim të vogël të performancës.
+eb.config.quality.crisp.label=E Qartë
+eb.config.quality.crisp.desc=Përditësohet çdo 3 tick. Vonesë e vogël në lëvizje të shpejta, ndjesi solide në ndërtim normal.
+eb.config.quality.balanced.label=E Balancuar
+eb.config.quality.balanced.desc=Përditësohet çdo 4 tick. Rrugë e mirë e mesme midis cilësisë vizuale dhe performancës.
+eb.config.quality.responsive.label=E Përgjegjshme
+eb.config.quality.responsive.desc=Përditësohet çdo 5 tick. Rekomandohet për pajisje të mesme ose parapamje të mëdha.
+eb.config.quality.lite.label=E Lehtë
+eb.config.quality.lite.desc=Përditësohet çdo 10 tick (~2×/sek). Vonesë e dukshme por dukshëm më e lehtë.
+eb.config.quality.minimal.label=Minimale
+eb.config.quality.minimal.desc=Përditësohet çdo 20 tick (1×/sek). Performanca maksimale - parapamja ndihet e ngadaltë por e qëndrueshme.
+
+eb.clipboard.slot.empty=§8Sloti %1: (bosh)§r
+eb.clipboard.slot.empty_active=§fSloti %1:§r §7(bosh)§r
+eb.clipboard.slot.filled=§fSloti %1:§r §7%2§r
+eb.clipboard.slot.filled_active=§l§eSloti %1:§r §e%2§r
+eb.clipboard.tip.dims=%1 i gjerë × %2 i lartë × %3 i thellë - %4 blloke
+eb.clipboard.tip.dims_named="%1" · %2 i gjerë × %3 i lartë × %4 i thellë - %5 blloke
+eb.clipboard.tip.empty=Slot bosh - kopjoni diçka së pari!
+eb.clipboard.btn.paste=§lNgjit§r
+eb.clipboard.btn.paste_empty=§8Ngjit§r
+eb.clipboard.btn.rename=§lRiemërto§r
+eb.clipboard.btn.rename_empty=§8Riemërto§r
+eb.clipboard.btn.delete=§lFshi§r
+eb.clipboard.btn.delete_empty=§8Fshi§r
+eb.clipboard.btn.done=U krye
+eb.clipboard.load_failed=§c[EB] Dështoi ngarkimi i slotit.
+eb.clipboard.loaded=§a[EB] §7Sloti %1 u ngarkua - synoni dhe ndërveproni për të ngjitur!
+eb.clipboard.rename_title=Riemërto Slotin e Klipbordit
+eb.clipboard.rename_label=Emri
+eb.clipboard.rename_placeholder=Vendosni një emër…
+eb.clipboard.cleared=§7[EB] Sloti %1 u pastrua.
+
+eb.palette.bar=§a[EB] §fPaleta: %1 §8· §f%2 §8· §f%3
+
+§7After turning off, also select the §e"No Custom UI"§7 subpack in
+§7your RP and BP pack settings to fully remove the panels.
+
+§7§8Admins can force-disable Custom UI for all players - see Admin Settings.
+
+§eDefault §8(OFF)§e:
+§7  §eRight-click§7 → opens Mode Selector
+§7  §eLeft-click §8(swing)§7 → opens Block Palette
+
+§eSwapped §8(ON)§e:
+§7  §eRight-click§7 → opens Block Palette
+§7  §eLeft-click §8(swing)§7 → opens Mode Selector
+
+§7Enable this in §ePlayer Settings§7 if you prefer fast palette access on right-click.
+
+§7After disabling, also select the §e"No Custom UI"§7 subpack in both your
+§eRP§7 and §eBP§7 pack settings to fully remove the panels for everyone.
+
+eb.common.on=§aNDEZUR§r
+eb.common.off=§cFIKUR§r
+
+eb.bar.bezier=§7Bézier: §f%1 pika të vendosura  §8·  §fZvarritje+klikim §7për të vendosur  §8·  §7Klikoni për më shumë
+eb.bar.bezier_one=§7Bézier: §f1 pikë e vendosur  §8·  §fZvarritje+klikim §7për të vendosur  §8·  §7Klikoni për më shumë
+
+eb.modifiers.overview_body=Pasqyrë: %1\nVarg:  %2\nRadial: %3
+eb.modifiers.btn.mirror_active=§l§ePasqyrë§r  [%1]
+eb.modifiers.btn.array_active=§l§eVarg§r  [%1]
+eb.modifiers.btn.radial_active=§l§eRadial§r  [%1]
+eb.modifiers.mirror.btn.enable=§a■ Aktivizo Pasqyrën§r
+eb.modifiers.mirror.btn.disable=§c■ Çaktivizo Pasqyrën§r
+eb.modifiers.mirror.axis_x_toggle=Boshti X: %1
+eb.modifiers.mirror.axis_y_toggle=Boshti Y: %1
+eb.modifiers.mirror.axis_z_toggle=Boshti Z: %1
+eb.modifiers.mirror.odd_toggle=Zhvendosje teke: %1
+eb.modifiers.array.btn.enable=§a■ Aktivizo Vargun§r
+eb.modifiers.array.btn.disable=§c■ Çaktivizo Vargun§r
+eb.modifiers.radial.btn.enable=§a■ Aktivizo Radialin§r
+eb.modifiers.radial.btn.disable=§c■ Çaktivizo Radialin§r
+
+eb.palette.cat.source=Burimi
+eb.palette.cat.dist=Shpërndarja
+eb.palette.cat.weight=Pesha
+eb.palette.source.disable=Fikur
+eb.palette.source.hotbar=Përziej nga Shiriti i Shpejtë
+eb.palette.source.inventory=Përziej nga Inventari
+eb.palette.source.hotbar_inventory=Përziej nga Shiriti + Inventari
+eb.palette.source.disable.desc=§aNdërtim normal.§r Përdoret vetëm blloku që klikuat.\n§7Kjo është e paracaktuara. Zgjidhni një nga opsionet e përzierjes më poshtë për të përzier disa lloje blloqesh në një ndërtim.
+eb.palette.source.hotbar.desc=§ePërzierja është NDEZUR.§r Ndërtimet përziejnë §eçdo bllok në shiritin tuaj të shpejtë§r, jo vetëm atë që klikuat.\n§7Ktheni Burimin te §fFikur§7 për ndërtim me një bllok.
+eb.palette.source.inventory.desc=§ePërzierja është NDEZUR.§r Ndërtimet përziejnë §eçdo bllok në inventarin tuaj§r, jo vetëm atë që klikuat.\n§7Ktheni Burimin te §fFikur§7 për ndërtim me një bllok.
+eb.palette.source.hotbar_inventory.desc=§ePërzierja është NDEZUR.§r Ndërtimet përziejnë §eçdo bllok në shiritin e shpejtë dhe inventar§r, jo vetëm atë që klikuat.\n§7Ktheni Burimin te §fFikur§7 për ndërtim me një bllok.
+eb.palette.dist.random=Rastësore
+eb.palette.dist.spread=E Shpërndarë
+eb.palette.dist.grad_x=Gradient X
+eb.palette.dist.grad_y=Gradient Y
+eb.palette.dist.grad_z=Gradient Z
+eb.palette.dist.grad_radial=Gradient Radial
+eb.palette.dist.grad_diagonal=Gradient Diagonal
+eb.palette.dist.concentric=Koncentrike
+eb.palette.dist.checker=Tabelë Shahu
+eb.palette.dist.stripes_h=Vija H
+eb.palette.dist.stripes_v=Vija V
+eb.palette.dist.stripes_d=Vija D
+eb.palette.dist.brick=Tullë
+eb.palette.dist.herringbone=Halë Peshku
+eb.palette.dist.noise=Përzierje Zhurme
+eb.palette.dist.cell=Qeliza / Voronoi
+eb.palette.dist.marble=Mermer
+eb.palette.dist.border=Kufi
+eb.palette.dist.wave=Valë
+eb.palette.dist.spiral=Spirale
+eb.palette.best_tag= §a(më e mira)
+eb.palette.dist.dissolve=Tretje
+eb.palette.dist.random.desc=Çdo bllok zgjidhet rastësisht në mënyrë të pavarur.
+eb.palette.dist.spread.desc=I shpërndan blloqet njëtrajtësisht me pak grumbullim.
+eb.palette.dist.grad_x.desc=Gradient i butë përgjatë boshtit X.
+eb.palette.dist.grad_y.desc=Gradient i butë përgjatë boshtit Y.
+eb.palette.dist.grad_z.desc=Gradient i butë përgjatë boshtit Z.
+eb.palette.dist.grad_radial.desc=Gradient radial që përhapet nga qendra jashtë.
+eb.palette.dist.grad_diagonal.desc=Gradient diagonal përmes strukturës.
+eb.palette.dist.concentric.desc=Unaza koncentrike që zgjerohen nga qendra.
+eb.palette.dist.checker.desc=Blloqe të alternuara në model tabele shahu.
+eb.palette.dist.stripes_h.desc=Vija horizontale përmes strukturës.
+eb.palette.dist.stripes_v.desc=Vija vertikale përgjatë lartësisë së strukturës.
+eb.palette.dist.stripes_d.desc=Vija diagonale përmes strukturës.
+eb.palette.dist.brick.desc=Rreshta të zhvendosur që imitojnë murin me tulla.
+eb.palette.dist.herringbone.desc=Rreshta në formë V me thurje halë peshku.
+eb.palette.dist.noise.desc=Përzierje organike mes blloqeve bazuar në zhurmë.
+eb.palette.dist.cell.desc=Zona qelizash Voronoi, secila e mbushur me një bllok.
+eb.palette.dist.marble.desc=Damarë të rrjedhshëm si mermer përmes ndërtimit.
+eb.palette.dist.border.desc=Bllok konturi në skaje, bllok mbushës brenda.
+eb.palette.dist.wave.desc=Model vale sinusoidale përmes ndërtimit.
+eb.palette.dist.spiral.desc=Model spiral që mbështjell strukturën.
+eb.palette.dist.dissolve.desc=Tretje e shpërndarë mbi faqe - blloqet përzihen rastësisht te kalimi.
+eb.palette.weight.amount=Sasia
+eb.palette.weight.slots=Vendet
+eb.palette.weight.unique=Unike
+eb.palette.weight.amount.desc=E peshuar sipas numrit total të blloqeve në të gjitha grumbujt.
+eb.palette.weight.slots.desc=Çdo vend i zënë i inventarit numërohet njësoj.
+eb.palette.weight.unique.desc=Çdo lloj blloku numërohet me peshë të barabartë.
+eb.palette.tile_pattern_on=Përsërit Modelin §a[NDEZUR]§r
+eb.palette.tile_pattern_off=Përsërit Modelin §c[FIKUR]§r
+eb.palette.btn.done=§cU krye§r
+
+eb.settings.admin_custom_ui_toggle=§cAdmin§r - Menu të thjeshta për të gjithë\n§7Kur është ndezur, çdo lojtar merr menutë standarde të lojës
+eb.ui.title.mode_select=Effortless Building
+eb.ui.title.palette=Paleta e Blloqeve
+eb.ui.title.clipboard=Klipbordi
+eb.ui.title.modifiers=Modifikuesit e Ndërtimit
+
+eb.preview.copy_corner1=§7Mënyra kopjo  §8·  §7Klikim i djathtë për të vendosur këndin 1
+eb.preview.copy_corner1_sneak=§7Mënyra kopjo  §8·  §7Klikim i djathtë për të vendosur këndin 1 §8(brenda bllokut)
+
+eb.settings.player.hints_enabled=Këshilla Kontekstuale\n§7Një këshillë me një rresht në bisedë herën e parë\n§7që hapni një panel ose zgjidhni një mënyrë
+eb.hint.defer_shape=§a[EB] §r§7Këshillë: §fKutia që shihni ndërsa synoni është §eShty Llogaritjen e Formës§f - forma e plotë llogaritet vetëm kur ndaloni së lëvizuri, që loja të mbetet e rrjedhshme. Qëndroni pak palëvizur për të parë formën e vërtetë; vendosja e ndërton gjithmonë saktë. §7Preferoni parapamjen e drejtpërdrejtë? Fikeni te §eCilësimet §8> §eCilësimet e Lojtarit§7.
+eb.hint.panel.mode_menu=§a[EB] §r§7Këshillë: §fKjo është menuja - zgjidhni një formë majtas, pastaj klikoni blloqe për të ndërtuar. §eMenu§f në krye të listës përmban Paletën, Modifikuesit, Klipbordin, Zhbëjen, Cilësimet dhe Ndihmën.
+eb.hint.panel.palette=§a[EB] §r§7Këshillë: §fKjo është Paleta e Blloqeve - zgjidhni cilat blloqe përdoren kur ndërtoni (blloku spirancë, shiriti i shpejtë ose i gjithë inventari).
+eb.hint.panel.modifiers=§a[EB] §r§7Këshillë: §fModifikuesit përsërisin çfarëdo që ndërtoni më pas - Pasqyrë, Varg ose Radial. Aktivizoni një këtu para se të vendosni një formë.
+eb.hint.panel.settings=§a[EB] §r§7Këshillë: §fPrekni një cilësim për ta ndryshuar; këshilla poshtë e shpjegon. §eKonfigurimi i Shpejtë§f rregullon gjithçka për pajisjen tuaj me një prekje.
+eb.hint.panel.clipboard=§a[EB] §r§7Këshillë: §fKlipbordi ruan disa përzgjedhje të kopjuara ose të prera, që të ngjitni cilëndo më vonë.
+eb.hint.mode.air_build=§a[EB] §r§7Këshillë: §fNdërtimi në Ajër vendos blloqe në ajër, pa sipërfaqe - synoni ku e doni bllokun dhe përdorni mjetin.
+eb.hint.mode.line=§a[EB] §r§7Këshillë: §fVijë: klikimi i parë vendos fillimin, i dyti fundin.
+eb.hint.mode.wall=§a[EB] §r§7Këshillë: §fMur: klikimi i parë vendos një kënd, i dyti lartësinë dhe gjerësinë.
+eb.hint.mode.floor=§a[EB] §r§7Këshillë: §fDysheme: klikimi i parë vendos një kënd, i dyti këndin përballë.
+eb.hint.mode.diagonal_line=§a[EB] §r§7Këshillë: §fVijë Diagonale: si Vija, por ndjek çdo kënd - klikimi i parë fillimi, i dyti fundi.
+eb.hint.mode.diagonal_wall=§a[EB] §r§7Këshillë: §fMur Diagonal: klikimi i parë vendos vijën bazë, i dyti lartësinë.
+eb.hint.mode.slope_floor=§a[EB] §r§7Këshillë: §fDysheme me Pjerrësi: klikimi i parë vendos këndin e ulët, i dyti këndin e lartë.
+eb.hint.mode.cube=§a[EB] §r§7Këshillë: §fKub: klikimi i parë vendos një kënd, i dyti këndin përballë.
+eb.hint.mode.circle=§a[EB] §r§7Këshillë: §fRreth: klikimi i parë vendos qendrën, i dyti rrezen.
+eb.hint.mode.cylinder=§a[EB] §r§7Këshillë: §fCilindër: klikimi i parë vendos qendrën, i dyti rrezen, i treti lartësinë.
+eb.hint.mode.sphere=§a[EB] §r§7Këshillë: §fSferë: klikimi i parë vendos qendrën, i dyti rrezen.
+eb.hint.mode.semicircle=§a[EB] §r§7Këshillë: §fGjysmërreth: klikimi i parë vendos qendrën, i dyti rrezen.
+eb.hint.mode.cone=§a[EB] §r§7Këshillë: §fKon: qendra e bazës, pastaj rrezja e bazës, pastaj lartësia. Vendosni Boshtin te Diagonal në opsionet e mënyrës për ta drejtuar majën lirisht dhe për ta anuar konin.
+eb.hint.mode.copy_paste=§a[EB] §r§7Këshillë: §fKopjo/Ngjit: zgjidhni dy kënde për të kopjuar ose prerë, pastaj përdorni Ngjit nga opsionet e mënyrës.
+
+item.eb:tutorial_book.name=§b§lTutoriali i Effortless Building
+
+eb.settings.player.destroy_preview_style=Stili i Parapamjes së Shkatërrimit\n§7Stili vizual që shfaqet gjatë shkatërrimit
+
+eb.preview.deferred_head=§7Zona §f%1
+eb.preview.exceeds_limit=§c[EB] §rPërzgjedhja e kalon kufirin tuaj të blloqeve §7(%1)§r. Afrohuni ose zvogëloni përzgjedhjen.
+
+eb.settings.player.defer_shape=Shty Llogaritjen e Formës\n§7Vizaton një kuti të shpejtë ndërsa synoni dhe\n§7e llogarit formën e vërtetë vetëm kur\n§7qëndroni palëvizur ose vendosni\n§ePajisje e dobët: shumë e rekomanduar\n§ePajisje mesatare: e rekomanduar
+eb.settings.player.flick_preview=Parapamje me Lëvizje\n§7E rivizaton parapamjen vetëm kur synimi juaj\n§7lëviz - ndriçon te ndryshimi në vend që\n§7të shfaqet vazhdimisht (kursen performancë)
+
+eb.onboarding.title=§l§6Effortless Building - Konfigurimi§r
+eb.onboarding.welcome.body=§fNë çfarë pajisjeje po luani?\n\n§7Kjo e përshtat parapamjen dhe kufirin e blloqeve me pajisjen tuaj. Mund ta ndryshoni kurdo te §eCilësimet > Konfigurimi i Shpejtë§7.
+eb.onboarding.btn.low=§ePajisje e dobët\n§8Telefon / tablet / PC i vjetër
+eb.onboarding.btn.mid=§ePajisje mesatare\n§8Shumica e telefonave, laptopëve, konsolave\n§eE rekomanduar
+eb.onboarding.btn.high=§ePajisje e fuqishme\n§8PC për lojëra / pajisje e fuqishme
+eb.onboarding.btn.skip=§8Kapërce
+eb.onboarding.tier.low=E dobët
+eb.onboarding.tier.mid=Mesatare
+eb.onboarding.tier.high=E fuqishme
+eb.onboarding.tier_applied=§a[EB] §rParacaktimi %1 u zbatua. Gjithçka mund ta rregulloni te §eCilësimet§r kurdo.
+eb.onboarding.capped_by_admin=§e[EB] §rMaksimumi juaj i blloqeve u kufizua në §f%1§r nga kufiri i administratorit të serverit.
+eb.onboarding.complete=§a[EB] §rGati! Klikim i djathtë me §6Librin e Ndërtimit§r për të nisur. Mbani librin §6Tutorial§r për udhëzuesin, ose shkruani §a/guide§r për tutorialin e drejtpërdrejtë.
+
+eb.mode_select.btn.more_modes=§b+ Më Shumë Mënyra§r
+eb.mode_select.btn.fewer_modes=§8- Më Pak Mënyra§r
+eb.mode_select.simple_on=§a[EB] §rPo shfaqen mënyrat §efillestare§r. Përdorni §e+ Më Shumë Mënyra§r në menu për listën e plotë.
+eb.mode_select.simple_off=§a[EB] §rPo shfaqen §etë gjitha§r mënyrat e ndërtimit.
+eb.settings.player.simple_modes=Listë e Thjeshtë Mënyrash\n§7Shfaq vetëm Vijë, Mur, Dysheme dhe Kub.\n§7Fikeni për të parë çdo mënyrë ndërtimi
+eb.settings.admin_mode_complexity=§cAdmin§r - Lista e mënyrave të ndërtimit\n§7Lërini lojtarët të zgjedhin, ose detyroni të gjithë\n§7në listën e thjeshtë ose të plotë
+eb.preview.step_of=Hapi %1/%2
+eb.preview.idle_start=§7%1  §8·  §7Hapi %2/%3  §8·  §fKlikim i djathtë mbi një bllok për të nisur
+eb.preview.idle_need_item=§7%1  §8·  §eMbani një bllok për të nisur ndërtimin
+
+eb.bar.book_controls=§6§lLibri i Ndërtimit§r  §8|  §7Klikim i djathtë §fMenu§r  §8·  §7Mbaj shtypur §fNdërrim i shpejtë§r  §8·  §7Klikim i majtë §fPaleta\n§7Zvarritje+Djathtas §fCilësimet§r  §8·  §7Zvarritje+Majtas §fModifikuesit§r  §8·  §7Zvarritje dy herë §fMënyra ndez/fik
+eb.bar.book_controls_swapped=§6§lLibri i Ndërtimit§r  §8|  §7Klikim i djathtë §fPaleta§r  §8·  §7Mbaj shtypur §fNdërrim i shpejtë§r  §8·  §7Klikim i majtë §fMenu\n§7Zvarritje+Djathtas §fCilësimet§r  §8·  §7Zvarritje+Majtas §fModifikuesit§r  §8·  §7Zvarritje dy herë §fMënyra ndez/fik
+eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Klikim i djathtë §fFaqja tjetër§r  §8·  §7Godit librin §fPrapa§r  §8·  §7Zvarritje §fKapërce një kapitull
+
+eb.palette.enabled_notice=§e[EB] §fPaleta e Blloqeve §eNDEZUR§f - §6%1§f.\n§7Ndërtimet tuaja tani §epërziejnë disa lloje blloqesh§7 në vend të vetëm bllokut që klikoni.\n§7Për ta fikur: §eLibri > Paleta > Burimi > Fikur§7.
+eb.palette.disabled_notice=§a[EB] §fPaleta e Blloqeve §afikur§f. Ndërtimet përdorin vetëm bllokun që klikoni.
+eb.preview.palette_active=§6Paleta: %1 §8(%2)§r §7- ndërtimet do të përziejnë blloqe
+
+eb.preview.copy_step2=§7Hapi 2/3  §8·  §fKlikim i djathtë te këndi 2
+eb.preview.copy_step3=§7Hapi 3/3  §8·  §fKlikim i djathtë për të vendosur lartësinë
+eb.clipboard.action.title=§l§6Zona u zgjodh§r
+eb.clipboard.action.body=§fÇfarë doni të bëni me të?\n\n§7§lKopjo§r§7 i lë blloqet aty ku janë.\n§7§lPrit§r§7 i heq dhe i mbani me vete.
+eb.clipboard.action.copy=§a§lKopjo§r\n§7Lëre origjinalin në vend
+eb.clipboard.action.cut=§6§lPrit§r\n§7Hiq blloqet dhe merri me vete
+eb.clipboard.action.cancel=§8Anulo
+eb.clipboard.slot.auto=§bKopja e Fundit:§r §7%1§r
+eb.clipboard.slot.auto_active=§l§eKopja e Fundit:§r §e%1§r
+eb.clipboard.slot.auto_empty=§8Kopja e Fundit: (bosh)§r
+eb.clipboard.slot.auto_empty_active=§fKopja e Fundit:§r §7(bosh)§r
+eb.clipboard.tip.auto_empty=Ende asgjë e kopjuar. Kopjoni diçka dhe vjen këtu automatikisht.
+eb.clipboard.btn.save=§lRuaj një Kopje§r
+eb.clipboard.btn.save_empty=§8Ruaj një Kopje§r
+eb.clipboard.saved=§a[EB] §7U ruajt te vendi %1. Kopjet e ardhshme nuk do ta mbishkruajnë.
+eb.clipboard.save_full=§c[EB] §7Të gjitha vendet e ruajtjes janë plot. Fshini një më parë.
+eb.clipboard.loaded_auto=§a[EB] §7Kopja e Fundit u ngarkua - synoni dhe ndërveproni për të ngjitur!
+eb.clipboard.cleared_auto=§7[EB] Kopja e Fundit u pastrua.
+eb.clipboard.restored_cut=§6[EB] §fKeni ende një përzgjedhje të §6prerë§f që pret të ngjitet.\n§7Hapni §eKlipbordin§7 ose synoni dhe ndërveproni për ta vendosur.
+
+eb.set.custom_ui=Menu të Personalizuara
+eb.join.welcome=§a[Effortless Building] §rMorët §6Librin e Ndërtimit§r dhe librin §6Tutorial§r.\n§7Mbani librin §fTutorial§7 për të mësuar gjithçka. Klikim i djathtë me §fLibrin e Ndërtimit§7 për të nisur.
+eb.help.title=Ndihmë
+eb.help.body=§fLibri §6Tutorial§f shpjegon gjithçka me figura. Mbajeni në dorë dhe hapet para jush.
+eb.help.btn.book=§lLibri Tutorial§r\n§8Merreni, ose shihni si hapet
+eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
+eb.help.btn.setup=§lKonfigurimi i Shpejtë§r\n§8Përshtateni addon-in me pajisjen tuaj
+eb.help.book_hold=§a[EB] §rE keni tashmë librin §6Tutorial§r. Mbajeni në dorë dhe hapet para jush.
+eb.help.book_given=§a[EB] §rJa libri §6Tutorial§r. Mbajeni në dorë dhe hapet para jush.
+eb.help.book_no_room=§c[EB] §rNuk ka vend në inventar për librin Tutorial.
+eb.mode_select.btn.help=§lNdihmë§r
+eb.mode_select.btn.tools=§lMenu§r
+eb.mode_select.btn.tools_active=§l§eMenu§r
+eb.mode_select.disabled_body=§7Format janë fikur§r
+eb.set.cat.setup=Konfigurimi i Shpejtë
+eb.set.cat.building=Ndërtimi
+eb.set.cat.preview=Parapamja
+eb.set.cat.controls=Kontrollet
+eb.set.cat.admin=Admin
+eb.set.cat.setup.desc=Zgjidh llojin e pajisjes. Një prekje vendos stilin dhe cilësinë e pamjes paraprake dhe kufirin e blloqeve.
+eb.set.cat.building.desc=Si vendosen format: shpejtësia, kufiri i madhësisë, arritja dhe çfarë jep thyerja.\n§7Prekni një cilësim për ta ndryshuar.
+eb.set.cat.preview.desc=Si shfaqet një formë para se ta vendosni. Stilet më të lehta dhe cilësia më e ulët ecin më rrjedhshëm.\n§7Prekni një cilësim për ta ndryshuar.
+eb.set.cat.controls.desc=Klikimet e librit, zmadhimi i kamerës, këshillat dhe pamja e menuve.\n§7Prekni një cilësim për ta ndryshuar.
+eb.set.cat.admin.desc=§cAdmin§r - rregulla për çdo lojtar në këtë botë.\n§7Prekni një cilësim për ta ndryshuar.
+eb.set.simple_modes=Vetëm Format Fillestare
+eb.set.build_speed=Shpejtësia e Ndërtimit
+eb.set.max_blocks=Blloqe Maksimale
+eb.set.replace_blocks=Zëvendëso Blloqet
+eb.set.infinite_reach=Arritje e Pafundme
+eb.set.inf_reach_dist=Distanca e Arritjes
+eb.set.air_reach=Arritja në Ajër
+eb.set.destroy_drops=Sende nga Thyerja
+eb.set.undo_limit=Kufiri i Zhbërjes
+eb.set.preview_style=Parapamja e Ndërtimit
+eb.set.destroy_preview_style=Parapamja e Thyerjes
+eb.set.preview_quality=Cilësia e Parapamjes
+eb.set.defer_shape=Shty Formën
+eb.set.flick_preview=Parapamje me Lëvizje
+eb.set.swap_book_actions=Ndërro Klikimet e Librit
+eb.set.selection_zoom=Zmadhimi i Përzgjedhjes
+eb.set.zoom_start=Zmadhimi Nis Te
+eb.set.zoom_max=Zmadhimi i Plotë Te
+eb.set.hints=Këshilla
+eb.set.menu_style=Stili i Menusë
+eb.set.menu_style.tip=Stili i Menusë\n§fPluskuese§7: menutë varen në ajër para jush\n§fE thjeshtë§7: menutë standarde të lojës
+eb.set.admin_mode_list=Lista e Formave
+eb.set.admin_require_tag=Kërko Etiketë
+eb.set.admin_tag=Etiketa
+eb.set.admin_allow_destroy=Lejo Thyerjen
+eb.set.admin_destroy_creative=Thyerje Vetëm në Kreativ
+eb.set.admin_allow_inf_reach=Lejo Arritjen e Pafundme
+eb.set.admin_reach_cap=Tavani i Arritjes
+eb.set.admin_blocks_cap=Tavani i Blloqeve
+eb.set.admin_auto_give_book=Jep Librat në Hyrje
+eb.set.admin_lock_quality=Kyç Cilësinë e Parapamjes
+eb.set.admin_vanilla_menus=Menu të Thjeshta për të Gjithë
+eb.set.book_language=Gjuha e Librit
+eb.set.book_language.tip=Gjuha e Librit\n§7Gjuha e librit Tutorial dhe e\n§7këshillave e mësimeve në menutë pluskuese.
+eb.help.btn.language=§lGjuha e Librit§r\n§8English, Español, Deutsch, 日本語 ...
+entity.eb:language_picker.name=Gjuha
+eb.palette.dist.dissolve_x=Tretje X
+eb.palette.dist.dissolve_y=Tretje Y
+eb.palette.dist.dissolve_z=Tretje Z
+eb.palette.dist.dissolve_x.desc=Tretje e shpërndarë përgjatë boshtit X.
+eb.palette.dist.dissolve_y.desc=Tretje e shpërndarë përgjatë boshtit Y, nga poshtë lart.
+eb.palette.dist.dissolve_z.desc=Tretje e shpërndarë përgjatë boshtit Z.
+eb.coach.started=§a[EB] §rTrajneri juaj është këtu. Ndiqni kartën pranë jush, një hap pas tjetrit. §eX§r-i i saj e largon.
+eb.coach.stopped=§7[EB] Trajneri u largua. §a/guide§7 ose §eNdihma§7 e rikthen aty ku e latë.
+eb.coach.done=§a[EB] §rTutoriali përfundoi! Gjithçka që përdorët është në menu. Ndërtim të mbarë.
+entity.eb:panel_ring.name=Ndërrim i Shpejtë
+eb.set.cursor=Kursori
+eb.set.cursor.tip=Kursori\n§7Një shigjetë e vogël që tregon ku po synoni\n§7në menutë pluskuese. E dobishme në ekrane me prekje.
+eb.cursor.turned_off=§a[EB] §rKursori u fik. Ndizeni sërish te §eCilësimet > Kontrollet > Kursori§r.
+eb.set.panel_size=Madhësia e Panelit
+eb.set.panel_size.tip=Madhësia e Panelit\n§7Sa të mëdha janë menutë pluskuese.\n§7E madhe është më e lehtë në telefon.
+eb.set.coach_side=Ana e Kartës së Trajnerit
+eb.set.coach_side.tip=Ana e Kartës së Trajnerit\n§7Në cilën anë tuajën varet karta e tutorialit.
+eb.set.panel_sounds=Tingujt e Menusë
+eb.set.panel_sounds.tip=Tingujt e Menusë\n§7Sa të forta janë klikimet dhe tingëllimat\n§7e menuve pluskuese.
+entity.eb:panel_wheel.name=Rrota e Ndërrimit të Shpejtë
+entity.eb:panel_mirror_config.name=Pasqyrë
+entity.eb:panel_array_config.name=Varg
+entity.eb:panel_radial_config.name=Radial
+entity.eb:panel_menu.name=Menu
+entity.eb:panel_palette.name=Paleta e Blloqeve
+entity.eb:panel_modifiers.name=Modifikuesit e Ndërtimit
+entity.eb:panel_clipboard.name=Klipbordi
+entity.eb:panel_coach.name=Trajneri
+entity.eb:panel_lessons.name=Mësimet
+entity.eb:coach_marker.name=Shënuesi
+entity.eb:panel_help.name=Ndihmë
+entity.eb:panel_setup.name=Konfigurimi i Shpejtë
+entity.eb:panel_copycut.name=Zona u Zgjodh
+entity.eb:panel_settings_setup.name=Cilësimet
+entity.eb:panel_settings_building.name=Cilësimet
+entity.eb:panel_settings_preview.name=Cilësimet
+entity.eb:panel_settings_controls.name=Cilësimet
+entity.eb:panel_settings_admin.name=Cilësimet
+eb.hint.panel.mode_menu_floating=§a[EB] §r§7Këshillë: §fKjo është menuja - shikoni një formë dhe klikoni për ta zgjedhur. Opsionet e saj janë djathtas, mjetet poshtë. Ndërroni vendin në shiritin e shpejtë ose klikoni jashtë saj për ta mbyllur.
+action.interact.eb_picker_select=Zgjidh
+entity.eb:guide_book.name=Tutorial
+action.interact.eb_guide_turn=Faqja tjetër
+eb.set.book_language.tip=Gjuha e Librit\n§7Gjuha e librit Tutorial dhe e\n§7këshillave e mësimeve në menutë pluskuese.
+eb.help.btn.guided=§lTutorial i Drejtpërdrejtë§r\n§8Mësoni duke bërë, një hap pas tjetrit

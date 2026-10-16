@@ -2,16 +2,16 @@
   "format_version": 2,
   "header": {
     "name": "Easy Building Guides",
-    "description": "How Easy Building's block guides look (outlines, corner outlines and dots that show where a shape, paste or destroy goes) and the Building Book's icon. Goes with the Easy Building behavior pack.",
+    "description": "Effortless Building 3D floating panels, radial quick-switch wheel, tutorial book, live coach, UI sounds, and block outline particles. Goes with the Easy Building behavior pack.",
     "uuid": "e4166196-a525-46ea-aaaa-4a6fd77408ba",
-    "version": [1, 0, 0],
+    "version": [2, 1, 0],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
     {
       "type": "resources",
       "uuid": "f0d7e10d-de07-4b9e-b9d7-6f41d63bd401",
-      "version": [1, 0, 0]
+      "version": [2, 1, 0]
     }
   ]
 }

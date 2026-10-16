@@ -1,0 +1,498 @@
+eb.join.admin_granted=§6[Effortless Building] §rJe hebt §6beheerderstoegang§r gekregen als eerste speler op deze wereld.\n§7Open Instellingen (Sluipen + Rechtermuisklik) voor beheeropties.
+eb.join.no_left_click=§e[Effortless Building] §rLinkermuisklik (zwaaien) wordt §cniet ondersteund§r in jouw Minecraft-versie.\n§7Gebruik §f/palette§7 in plaats van linkermuisklik op het §6Bouwboek§7 om het blokpalet te openen.
+eb.join.received_book=§a[Effortless Building] §rJe hebt een §6Bouwboek§r ontvangen!\n§7Rechtermuisklik §rom bouwmodi te openen §7| §rSluipen + Rechtermuisklik §rvoor instellingen.\n§c§l❗ §r§cKwijt? §fTik §a/getbook §f(kost §e5 XP-niveaus§f).
+
+eb.getbook.already_have=§c[EB] Je hebt het Bouwboek al.
+eb.getbook.not_enough_xp=§c[EB] Je hebt minimaal %1 XP-levels nodig om een nieuw boek te krijgen. (Je hebt er %2)
+
+eb.place.no_blocks=§c[EB] §rGeen blokken in inventaris!
+eb.place.limited_blocks=§e[EB] §rSlechts %1 blokken – plaatst wat je hebt.
+eb.place.no_palette_blocks=§c[EB] §rGeen paletblokken in inventaris!
+eb.place.limited_palette_blocks=§e[EB] §rBeperkte paletblokken - plaatst %1.
+eb.place.undo_disabled=§e[EB] §7Ongedaan maken uitgeschakeld.
+eb.place.too_large_to_undo=§e[EB] §7Te groot om ongedaan te maken (>%1 blokken).
+
+eb.destroy.pickaxe_broke=§c[EB] §rJe gereedschap is gebroken!
+eb.destroy.no_mode=§c[EB] §rVernietigmodus werkt niet met Air Build. Selecteer eerst een vormmodus (Lijn, Muur, Vloer, enz.).
+eb.destroy.disabled=§c[EB] §rVernietigmodus is §cuitgeschakeld§r op deze server.
+eb.destroy.creative_only=§c[EB] §rVernietigmodus vereist §eCreatieve §rmodus op deze server.
+eb.destroy.wrong_tool=§c[EB] §rJe gereedschap kan dit blok niet breken.
+
+eb.tag.required=§c[EB] §rJe hebt de tag §e%1§r nodig om Effortless Building te gebruiken.
+eb.getbook.no_tag=§c[EB] §rJe hebt de tag §e%1§r nodig om /getbook te gebruiken.
+
+eb.undo.nothing=§c[EB] Niets om ongedaan te maken.
+eb.undo.done=§a[EB] Ongedaan §7- %1 blokken hersteld.
+eb.redo.nothing=§c[EB] Niets om opnieuw te doen.
+eb.redo.done=§a[EB] Opnieuw §7- %1 blokken geplaatst.
+
+eb.bar.xz_set_destroy=§c[EB] §fXZ-bereik ingesteld §8- §7rechtermuisklik om §ehoogte §7& §cvernielen te bevestigen
+eb.bar.xz_set_place=§a[EB] §fXZ-bereik ingesteld §8- §7rechtermuisklik om §ehoogte §7& §aplaatsen te bevestigen
+eb.bar.destroyed=%1 blokken §cvernield §8(§7%2§8)
+eb.bar.destroying=§c[EB] §rAan het slopen... nog §e%1§7
+eb.bar.toggle_disabled=§7[EB] §rModus §8uitgeschakeld§7. Sluip twee keer om hem te herstellen.
+eb.bar.toggle_restored=§a[EB] §rModus hersteld: §b§l%1
+eb.bar.placed=%1 blokken §7geplaatst §8(§7%2§8)
+eb.bar.placed_one=§f1 blok §7geplaatst §8(§7air build§8)
+eb.bar.destroy_anchor_set=§c[EB] §rVernietig-ankerpunt ingesteld §7(%1, %2, %3)
+eb.bar.anchor_set=§a[EB] §rAnkerpunt ingesteld §7(%1, %2, %3)
+eb.bar.copy_corner1=§a[EB] §rHoek 1 ingesteld §7(%1, %2, %3) - rechtermuisklik voor hoek 2
+eb.bar.copy_corner2=§a[EB] §rHoek 2 ingesteld §7(%1, %2, %3) - rechtermuisklik om hoogte te selecteren
+eb.bar.copy_done=§a[EB] §r§e%1§r blokken gekopieerd - rechtermuisklik om te plakken
+eb.bar.cut_done=§6[EB] §r§e%1§r blokken geknipt - rechtermuisklik om te plakken §7(eenmalig gebruik in overleving)
+eb.bar.copy_empty=§c[EB] §rGeen blokken gevonden in selectie.
+eb.bar.copy_cleared=§7[EB] Klembord gewist - rechtermuisklik om hoek 1 in te stellen
+eb.bar.copy_cancelled=§7[EB] Selectie geannuleerd - rechtermuisklik om hoek 1 in te stellen
+eb.first_open=§b[EB] §fNieuw hier? Houd het §6Tutorial§f-boek vast om de gids te lezen, of typ §a/guide§f voor een korte rondleiding.
+item.eb:building_book.name=§b§lBouwboek
+eb.bar.pasted=%1 blokken §ageplakt
+eb.bar.paste_empty=§e[EB] §7Niets in klembord om te plakken.
+
+eb.queue.waiting=§e⏳ %1 blokken in wachtrij §7- loop naar\n§f(%2, %3, %4) §7om chunks te laden
+eb.queue.waiting_one=§e⏳ 1 blok in wachtrij §7- loop naar\n§f(%1, %2, %3) §7om chunks te laden
+
+eb.preview.air_build=§7Air Build  §8·  §7Rechtermuisklik om §ate plaatsen §8(%1, %2, %3)
+eb.preview.no_anchor_destroy=§7%1 (Oneindig Bereik)  §8·  §7Rechtermuisklik om §cvernietig-anker in te stellen §8(%2, %3, %4)
+eb.preview.no_anchor_build=§7%1 (Oneindig Bereik)  §8·  §7Rechtermuisklik om §aanker in te stellen §8(%2, %3, %4)
+eb.preview.hint_destroy=§7Rechtermuisklik om §cte vernietigen
+eb.preview.hint_place=§7Rechtermuisklik om §ate plaatsen
+eb.preview.step2=§8[2/3] §7Rechtermuisklik om §eXZ-bereik §7in te stellen
+eb.preview.step3_destroy=§8[3/3] §7Rechtermuisklik om §ehoogte §7& §cte vernietigen
+eb.preview.step3_place=§8[3/3] §7Rechtermuisklik om §ehoogte §7& §ate plaatsen
+
+eb.dir.ew=Oost-West
+eb.dir.ns=Noord-Zuid
+eb.dir.ud=Boven-Onder
+eb.dir.single=-
+
+eb.mode.normal=Normaal
+eb.mode.normal_plus=Normaal+
+eb.mode.line=Lijn
+eb.mode.wall=Muur
+eb.mode.floor=Vloer
+eb.mode.cube=Kubus
+eb.mode.circle=Cirkel
+eb.mode.cylinder=Cilinder
+eb.mode.sphere=Bol
+eb.mode.diagonal_line=Diagonale Lijn
+eb.mode.diagonal_wall=Diagonale Muur
+eb.mode.diagonal_floor=Diagonale Vloer
+eb.mode.slope=Helling
+eb.mode.slope_floor=Schuine Vloer
+eb.mode.air_build=Luchtbouw
+eb.mode.semicircle=Halve Cirkel
+eb.mode.cone=Kegel
+eb.mode.destroy=Vernietigen
+eb.mode.copy_paste=Kopiëren / Plakken
+
+eb.mode_select.body=Selecteer een bouwmodus.\nRechtermuisklik op een blok om het §eankerpunt§r in te stellen, daarna rechtermuisklik om plaatsing te bevestigen.\n§8Houd een §7houweel §8vast en rechtermuisklik om §cte vernietigen §8in de geselecteerde vorm.\n§8New? Type §7/tutorial §8for a full guide.
+eb.mode_select.mode_set=§a[EB] §rModus ingesteld op §e%1§r.
+
+eb.mode_select.options_title=§l%1§r §8- Opties
+eb.mode_select.quick_access=§l§dSnelle Toegang§r
+eb.mode_select.btn.clipboard=§lKlembord§r
+eb.mode_select.btn.palette=§lPalet§r
+eb.mode_select.btn.settings=§lInstellingen§r
+eb.mode_select.btn.undo=§lOngedaan maken§r
+eb.mode_select.btn.redo=§lOpnieuw uitvoeren§r
+eb.mode_select.btn.done=§cGereed§r
+eb.mode_select.btn.modifiers=§lModifiers§r
+
+eb.modifiers.btn.mirror=§lSpiegel§r  [%1]
+eb.modifiers.btn.array=§lReeks§r  [%1]
+eb.modifiers.btn.radial=§lRadiaal§r  [%1]
+eb.modifiers.btn.close=Sluiten
+
+eb.modifiers.mirror.body=Status: %1\nCenter: %2, %3, %4\nAxes: %5  %6  %7\nRadius: %8  Mode: %9
+eb.modifiers.mirror.btn.set_pos=Midden op mijn positie zetten
+eb.modifiers.mirror.btn.configure=Instellen...
+eb.modifiers.mirror.config.title=Spiegelinstellingen
+eb.modifiers.mirror.center_x=Midden X
+eb.modifiers.mirror.center_y=Midden Y
+eb.modifiers.mirror.center_z=Midden Z
+eb.modifiers.mirror.radius=Straal (blokken)
+eb.modifiers.mirror.pos_set=§e[EB] Spiegelmidden gezet op %1, %2, %3
+
+eb.modifiers.array.body=Status: %1\nVerschuiving: %2, %3, %4\nAantal: %5
+eb.modifiers.array.btn.configure=Instellen...
+eb.modifiers.array.config.title=Reeksinstellingen
+eb.modifiers.array.offset_x=Verschuiving X
+eb.modifiers.array.offset_y=Verschuiving Y
+eb.modifiers.array.offset_z=Verschuiving Z
+eb.modifiers.array.count=Aantal (kopieën)
+
+eb.modifiers.radial.body=Status: %1\nMidden: %2, %3\nSegmenten: %4\nStraal: %5\nAfwisselend: %6
+eb.modifiers.radial.btn.set_pos=Midden op mijn positie zetten
+eb.modifiers.radial.btn.configure=Instellen...
+eb.modifiers.radial.config.title=Instellingen radiale spiegel
+eb.modifiers.radial.center_x=Midden X
+eb.modifiers.radial.center_z=Midden Z
+eb.modifiers.radial.slices=Segmenten
+eb.modifiers.radial.radius=Straal (blokken)
+eb.modifiers.radial.alternate=Afwisselend (elk 2e segment spiegelen)
+eb.modifiers.radial.pos_set=§e[EB] Radiaal midden gezet op %1, %2, %3
+
+eb.settings.player.preview_style=Voorbeeldstijl\n§7Visuele stijl die getoond wordt tijdens het selecteren
+eb.settings.player.replace_blocks=Bestaande blokken vervangen\n§7Toestaan dat plaatsing bestaande blokken\n§7overschrijft
+eb.settings.player.build_speed=Bouwsnelheid\n§7Hoe snel blokken achter elkaar worden geplaatst
+eb.settings.player.destroy_drops=Slopen Drops\n§7Of gebroken blokken hun items laten vallen
+eb.settings.player.selection_zoom=Selectie-zoom\n§7Inzoomen terwijl een selectie actief is
+eb.settings.player.zoom_start=Zoom-startafstand (blokken)\n§7Afstand waarop zoom begint
+eb.settings.player.zoom_max=Volledige zoomafstand (blokken)\n§7Afstand waarop maximale zoom wordt bereikt
+eb.settings.player.air_reach=Luchtbouwbewerksbereik (blokken)\n§7Maximaal bereik bij plaatsen in de open lucht
+eb.settings.player.infinite_reach=Oneindig Bereik\n§7Bouwen buiten de normale bereikafstand
+eb.settings.player.inf_reach_dist=Oneindig Bereik Afstand (blokken)\n§7Hoe ver het oneindige bereik reikt
+eb.settings.player.swap_book_actions=Boekacties omwisselen\n§7Rechtermuisklik opent Palet, Linkermuisklik opent Menu
+eb.settings.player.undo_limit=Ongedaan maken Limiet\n§7Maximaal aantal blokken bijgehouden voor ongedaan maken
+eb.settings.player.max_blocks=Max Blokken (1 – %1)\n§7Maximaal aantal blokken per enkele operatie
+
+eb.settings.title=§l§6EB Instellingen§r
+eb.settings.admin_require_tag=§cBeheer§r - Tag vereist voor EB\n§7Alleen spelers met de tag kunnen bouwen
+eb.settings.admin_tag=§cBeheer§r - Vereiste tag\n§7Huidig: §e%1
+eb.settings.admin_allow_destroy=§cBeheer§r - Vernietigmodus toestaan\n§7Uit: geen speler kan Vernietigmodus gebruiken
+eb.settings.admin_destroy_creative=§cBeheer§r - Vernietigmodus: Alleen Creatief\n§7Aan: Vernietigmodus vereist Creatieve modus
+eb.settings.admin_allow_inf_reach=§cBeheer§r - Oneindig Bereik toestaan\n§7Uit: Oneindig Bereik is globaal uitgeschakeld
+eb.settings.admin_max_reach_cap=§cBeheer§r - Max. Oneindig Bereik Afstand\n§7Huidig: §e%1  §70 = geen limiet
+eb.settings.admin_max_blocks_cap=§cAdmin§r - Blokkenplafond (per speler)\n§7Huidig: §e%1  §7Maximum: §e%2
+eb.settings.admin_auto_give_book=§cBeheer§r - Bouwboek automatisch geven\n§7Aan: spelers ontvangen het boek bij deelname
+eb.settings.admin_config_tag=Beperk /config tot vereiste tag\n§7Indien AAN kunnen alleen spelers met de tag /config gebruiken.
+
+eb.config.restricted=§c[EB] /config is beperkt. Je hebt de tag §e%1§c nodig.
+eb.config.done=§cGereed§r
+eb.config.quality.smooth.label=Vloeiend
+eb.config.quality.smooth.desc=Elke tick bijgewerkt. Vlijmscherpe en vloeiende preview. Beste voor snelle pc's.
+eb.config.quality.sharp.label=Scharp
+eb.config.quality.sharp.desc=Elke 2 ticks bijgewerkt. Bijna net zo vloeiend als Vloeiend met kleine prestatiewinst.
+eb.config.quality.crisp.label=Helder
+eb.config.quality.crisp.desc=Elke 3 ticks bijgewerkt. Lichte vertraging bij snelle bewegingen, solide gevoel bij normaal bouwen.
+eb.config.quality.balanced.label=Gebalanceerd
+eb.config.quality.balanced.desc=Elke 4 ticks bijgewerkt. Goede middenweg tussen visuele kwaliteit en prestaties.
+eb.config.quality.responsive.label=Responsief
+eb.config.quality.responsive.desc=Elke 5 ticks bijgewerkt. Aanbevolen voor middenklasse apparaten of grote voorbeelden.
+eb.config.quality.lite.label=Licht
+eb.config.quality.lite.desc=Elke 10 ticks bijgewerkt (~2×/sec). Merkbare vertraging, maar aanzienlijk lichter.
+eb.config.quality.minimal.label=Minimaal
+eb.config.quality.minimal.desc=Elke 20 ticks bijgewerkt (1×/sec). Maximale prestaties - voorbeeld voelt traag maar stabiel.
+
+eb.clipboard.slot.empty=§8Slot %1: (leeg)§r
+eb.clipboard.slot.empty_active=§fSlot %1:§r §7(leeg)§r
+eb.clipboard.slot.filled=§fVak %1:§r §7%2§r
+eb.clipboard.slot.filled_active=§l§eVak %1:§r §e%2§r
+eb.clipboard.tip.dims=%1 breed × %2 hoog × %3 diep - %4 blokken
+eb.clipboard.tip.dims_named="%1" · %2 breed × %3 hoog × %4 diep - %5 blokken
+eb.clipboard.tip.empty=Leeg slot - kopieer eerst iets!
+eb.clipboard.btn.paste=§lPlakken§r
+eb.clipboard.btn.paste_empty=§8Plakken§r
+eb.clipboard.btn.rename=§lHernoemen§r
+eb.clipboard.btn.rename_empty=§8Hernoemen§r
+eb.clipboard.btn.delete=§lVerwijderen§r
+eb.clipboard.btn.delete_empty=§8Verwijderen§r
+eb.clipboard.btn.done=Gereed
+eb.clipboard.load_failed=§c[EB] Laden van slot mislukt.
+eb.clipboard.loaded=§a[EB] §7Slot %1 geladen - richt en klik om te plakken!
+eb.clipboard.rename_title=Klembordslot hernoemen
+eb.clipboard.rename_label=Naam
+eb.clipboard.rename_placeholder=Voer een naam in…
+eb.clipboard.cleared=§7[EB] Slot %1 gewist.
+
+eb.palette.bar=§a[EB] §fPalet: %1 §8· §f%2 §8· §f%3
+
+§7After turning off, also select the §e"No Custom UI"§7 subpack in
+§7your RP and BP pack settings to fully remove the panels.
+
+§7§8Admins can force-disable Custom UI for all players - see Admin Settings.
+
+§eDefault §8(OFF)§e:
+§7  §eRight-click§7 → opens Mode Selector
+§7  §eLeft-click §8(swing)§7 → opens Block Palette
+
+§eSwapped §8(ON)§e:
+§7  §eRight-click§7 → opens Block Palette
+§7  §eLeft-click §8(swing)§7 → opens Mode Selector
+
+§7Enable this in §ePlayer Settings§7 if you prefer fast palette access on right-click.
+
+§7After disabling, also select the §e"No Custom UI"§7 subpack in both your
+§eRP§7 and §eBP§7 pack settings to fully remove the panels for everyone.
+
+eb.common.on=§aAAN§r
+eb.common.off=§cUIT§r
+
+eb.bar.bezier=§7Bézier: §f%1 punten gezet  §8·  §fSluipen+klik §7om te plaatsen  §8·  §7Klik voor meer
+eb.bar.bezier_one=§7Bézier: §f1 punt gezet  §8·  §fSluipen+klik §7om te plaatsen  §8·  §7Klik voor meer
+
+eb.modifiers.overview_body=Spiegel: %1\nReeks:  %2\nRadiaal: %3
+eb.modifiers.btn.mirror_active=§l§eSpiegel§r  [%1]
+eb.modifiers.btn.array_active=§l§eReeks§r  [%1]
+eb.modifiers.btn.radial_active=§l§eRadiaal§r  [%1]
+eb.modifiers.mirror.btn.enable=§a■ Spiegel inschakelen§r
+eb.modifiers.mirror.btn.disable=§c■ Spiegel uitschakelen§r
+eb.modifiers.mirror.axis_x_toggle=As X: %1
+eb.modifiers.mirror.axis_y_toggle=As Y: %1
+eb.modifiers.mirror.axis_z_toggle=As Z: %1
+eb.modifiers.mirror.odd_toggle=Oneven verschuiving: %1
+eb.modifiers.array.btn.enable=§a■ Reeks inschakelen§r
+eb.modifiers.array.btn.disable=§c■ Reeks uitschakelen§r
+eb.modifiers.radial.btn.enable=§a■ Radiaal inschakelen§r
+eb.modifiers.radial.btn.disable=§c■ Radiaal uitschakelen§r
+
+eb.palette.cat.source=Bron
+eb.palette.cat.dist=Verdeling
+eb.palette.cat.weight=Gewicht
+eb.palette.source.disable=Uit
+eb.palette.source.hotbar=Mengen uit de hotbar
+eb.palette.source.inventory=Mengen uit de inventaris
+eb.palette.source.hotbar_inventory=Mengen uit hotbar + inventaris
+eb.palette.source.disable.desc=§aNormaal bouwen.§r Alleen het blok waarop je klikte wordt gebruikt.\n§7Dit is de standaard. Kies hieronder een mengoptie om meerdere bloksoorten in één bouwsel te mengen.
+eb.palette.source.hotbar.desc=§eMengen staat AAN.§r Bouwsels mengen §eelk blok in je hotbar§r, niet alleen het aangeklikte.\n§7Zet Bron terug op §fUit§7 om weer met één blok te bouwen.
+eb.palette.source.inventory.desc=§eMengen staat AAN.§r Bouwsels mengen §eelk blok in je inventaris§r, niet alleen het aangeklikte.\n§7Zet Bron terug op §fUit§7 om weer met één blok te bouwen.
+eb.palette.source.hotbar_inventory.desc=§eMengen staat AAN.§r Bouwsels mengen §eelk blok in je hotbar en inventaris§r, niet alleen het aangeklikte.\n§7Zet Bron terug op §fUit§7 om weer met één blok te bouwen.
+eb.palette.dist.random=Willekeurig
+eb.palette.dist.spread=Verspreid
+eb.palette.dist.grad_x=Verloop X
+eb.palette.dist.grad_y=Verloop Y
+eb.palette.dist.grad_z=Verloop Z
+eb.palette.dist.grad_radial=Radiaal verloop
+eb.palette.dist.grad_diagonal=Diagonaal verloop
+eb.palette.dist.concentric=Concentrisch
+eb.palette.dist.checker=Dambord
+eb.palette.dist.stripes_h=Strepen H
+eb.palette.dist.stripes_v=Strepen V
+eb.palette.dist.stripes_d=Strepen D
+eb.palette.dist.brick=Baksteen
+eb.palette.dist.herringbone=Visgraat
+eb.palette.dist.noise=Ruismenging
+eb.palette.dist.cell=Cellen / Voronoi
+eb.palette.dist.marble=Marmer
+eb.palette.dist.border=Rand
+eb.palette.dist.wave=Golf
+eb.palette.dist.spiral=Spiraal
+eb.palette.best_tag= §a(beste)
+eb.palette.dist.dissolve=Oplossen
+eb.palette.dist.random.desc=Elk blok wordt los van de rest willekeurig gekozen.
+eb.palette.dist.spread.desc=Verdeelt de blokken gelijkmatig met weinig klontering.
+eb.palette.dist.grad_x.desc=Vloeiend verloop langs de X-as.
+eb.palette.dist.grad_y.desc=Vloeiend verloop langs de Y-as.
+eb.palette.dist.grad_z.desc=Vloeiend verloop langs de Z-as.
+eb.palette.dist.grad_radial.desc=Radiaal verloop dat vanuit het midden naar buiten loopt.
+eb.palette.dist.grad_diagonal.desc=Diagonaal verloop over het bouwsel.
+eb.palette.dist.concentric.desc=Concentrische ringen die vanuit het midden uitdijen.
+eb.palette.dist.checker.desc=Afwisselende blokken in een dambordpatroon.
+eb.palette.dist.stripes_h.desc=Horizontale strepen over het bouwsel.
+eb.palette.dist.stripes_v.desc=Verticale strepen langs het bouwsel omhoog.
+eb.palette.dist.stripes_d.desc=Diagonale strepen over het bouwsel.
+eb.palette.dist.brick.desc=Verspringende rijen zoals in een bakstenen muur.
+eb.palette.dist.herringbone.desc=V-vormige rijen in een visgraatpatroon.
+eb.palette.dist.noise.desc=Organische menging van blokken op basis van ruis.
+eb.palette.dist.cell.desc=Voronoi-cellen, elk gevuld met één blok.
+eb.palette.dist.marble.desc=Vloeiende, marmerachtige aders door het bouwsel.
+eb.palette.dist.border.desc=Randblok op de randen, vulblok aan de binnenkant.
+eb.palette.dist.wave.desc=Sinusvormig golfpatroon over het bouwsel.
+eb.palette.dist.spiral.desc=Spiraalpatroon dat om het bouwsel heen draait.
+eb.palette.dist.dissolve.desc=Verspreid oplossen over het vlak - blokken mengen willekeurig bij de overgang.
+eb.palette.weight.amount=Hoeveelheid
+eb.palette.weight.slots=Vakken
+eb.palette.weight.unique=Uniek
+eb.palette.weight.amount.desc=Gewogen naar het totale aantal blokken in alle stapels.
+eb.palette.weight.slots.desc=Elk bezet inventarisvak telt even zwaar.
+eb.palette.weight.unique.desc=Elke bloksoort telt met gelijk gewicht.
+eb.palette.tile_pattern_on=Patroon herhalen §a[AAN]§r
+eb.palette.tile_pattern_off=Patroon herhalen §c[UIT]§r
+eb.palette.btn.done=§cGereed§r
+
+eb.settings.admin_custom_ui_toggle=§cAdmin§r - Gewone menu's voor iedereen\n§7Indien aan krijgt elke speler de standaardmenu's van het spel
+eb.ui.title.mode_select=Effortless Building
+eb.ui.title.palette=Blokkenpalet
+eb.ui.title.clipboard=Klembord
+eb.ui.title.modifiers=Bouwmodifiers
+
+eb.preview.copy_corner1=§7Kopieermodus  §8·  §7Rechtsklik om hoek 1 te zetten
+eb.preview.copy_corner1_sneak=§7Kopieermodus  §8·  §7Rechtsklik om hoek 1 te zetten §8(in het blok)
+
+eb.settings.player.hints_enabled=Contexttips\n§7Een tip van één regel in de chat de eerste keer dat je\n§7een paneel opent of een bouwmodus kiest
+eb.hint.defer_shape=§a[EB] §r§7Tip: §fDe doos die je ziet bij het mikken is §eVormberekening uitstellen§f - de volledige vorm wordt pas berekend als je stilstaat, zodat het spel soepel blijft. Sta even stil om de echte vorm te zien; bij het plaatsen wordt hij altijd exact gebouwd. §7Liever het live voorbeeld? Zet het uit in §eInstellingen §8> §eSpelerinstellingen§7.
+eb.hint.panel.mode_menu=§a[EB] §r§7Tip: §fDit is het menu - kies links een vorm en klik dan op blokken om te bouwen. §eMenu§f bovenaan de lijst bevat Palet, Modifiers, Klembord, Ongedaan maken, Instellingen en Help.
+eb.hint.panel.palette=§a[EB] §r§7Tip: §fDit is het Blokkenpalet - kies welke blokken bij het bouwen worden gebruikt (ankerblok, hotbar of je hele inventaris).
+eb.hint.panel.modifiers=§a[EB] §r§7Tip: §fModifiers herhalen wat je hierna bouwt - Spiegel, Reeks of Radiaal. Schakel er hier een in voordat je een vorm plaatst.
+eb.hint.panel.settings=§a[EB] §r§7Tip: §fTik op een instelling om hem te wijzigen; de tip onderaan legt hem uit. §eSnelle setup§f stelt alles in één tik in voor jouw apparaat.
+eb.hint.panel.clipboard=§a[EB] §r§7Tip: §fHet Klembord bewaart meerdere gekopieerde of geknipte selecties, zodat je ze later kunt plakken.
+eb.hint.mode.air_build=§a[EB] §r§7Tip: §fLuchtbouw plaatst blokken midden in de lucht, zonder ondergrond - mik waar je het blok wilt en gebruik je gereedschap.
+eb.hint.mode.line=§a[EB] §r§7Tip: §fLijn: de eerste klik zet het begin, de tweede het einde.
+eb.hint.mode.wall=§a[EB] §r§7Tip: §fMuur: de eerste klik zet één hoek, de tweede de hoogte en breedte.
+eb.hint.mode.floor=§a[EB] §r§7Tip: §fVloer: de eerste klik zet één hoek, de tweede de tegenoverliggende hoek.
+eb.hint.mode.diagonal_line=§a[EB] §r§7Tip: §fDiagonale lijn: zoals Lijn, maar in elke hoek - eerste klik begin, tweede klik einde.
+eb.hint.mode.diagonal_wall=§a[EB] §r§7Tip: §fDiagonale muur: de eerste klik zet de basislijn, de tweede de hoogte.
+eb.hint.mode.slope_floor=§a[EB] §r§7Tip: §fSchuine vloer: de eerste klik zet de lage hoek, de tweede de hoge hoek.
+eb.hint.mode.cube=§a[EB] §r§7Tip: §fKubus: de eerste klik zet één hoek, de tweede de tegenoverliggende hoek.
+eb.hint.mode.circle=§a[EB] §r§7Tip: §fCirkel: de eerste klik zet het midden, de tweede de straal.
+eb.hint.mode.cylinder=§a[EB] §r§7Tip: §fCilinder: de eerste klik zet het midden, de tweede de straal, de derde de hoogte.
+eb.hint.mode.sphere=§a[EB] §r§7Tip: §fBol: de eerste klik zet het midden, de tweede de straal.
+eb.hint.mode.semicircle=§a[EB] §r§7Tip: §fHalve cirkel: de eerste klik zet het midden, de tweede de straal.
+eb.hint.mode.cone=§a[EB] §r§7Tip: §fKegel: midden van de basis, dan de straal, dan de hoogte. Zet As op Diagonaal in de modusopties om de punt vrij te richten en de kegel te laten hellen.
+eb.hint.mode.copy_paste=§a[EB] §r§7Tip: §fKopiëren/Plakken: kies twee hoeken om te kopiëren of te knippen en gebruik dan Plakken in de modusopties.
+
+item.eb:tutorial_book.name=§b§lEffortless Building Tutorial
+
+eb.settings.player.destroy_preview_style=Stijl sloopvoorbeeld\n§7Visuele stijl die je ziet tijdens het slopen
+
+eb.preview.deferred_head=§7Gebied §f%1
+eb.preview.exceeds_limit=§c[EB] §rDe selectie is groter dan je blokkenlimiet §7(%1)§r. Ga dichterbij staan of maak de selectie kleiner.
+
+eb.settings.player.defer_shape=Vormberekening uitstellen\n§7Tekent een snelle doos terwijl je mikt en\n§7berekent de echte vorm pas wanneer\n§7je stilstaat of plaatst\n§eZwak apparaat: sterk aanbevolen\n§eGemiddeld apparaat: aanbevolen
+eb.settings.player.flick_preview=Voorbeeld bij beweging\n§7Tekent het voorbeeld alleen opnieuw als je mikpunt\n§7beweegt - flitst bij verandering in plaats van\n§7steeds zichtbaar te zijn (bespaart prestaties)
+
+eb.onboarding.title=§l§6Effortless Building - Setup§r
+eb.onboarding.welcome.body=§fWaar speel je op?\n\n§7Hiermee worden het voorbeeld en de blokkenlimiet op je apparaat afgestemd. Je kunt het altijd wijzigen in §eInstellingen > Snelle setup§7.
+eb.onboarding.btn.low=§eZwak apparaat\n§8Telefoon / tablet / oudere pc
+eb.onboarding.btn.mid=§eGemiddeld apparaat\n§8De meeste telefoons, laptops, consoles\n§eAanbevolen
+eb.onboarding.btn.high=§eKrachtig apparaat\n§8Game-pc / krachtig apparaat
+eb.onboarding.btn.skip=§8Overslaan
+eb.onboarding.tier.low=Zwak
+eb.onboarding.tier.mid=Gemiddeld
+eb.onboarding.tier.high=Krachtig
+eb.onboarding.tier_applied=§a[EB] §rVoorinstelling %1 toegepast. Je kunt alles altijd bijstellen in §eInstellingen§r.
+eb.onboarding.capped_by_admin=§e[EB] §rJe blokkenlimiet is door de adminlimiet van de server begrensd op §f%1§r.
+eb.onboarding.complete=§a[EB] §rHelemaal klaar! Rechtsklik met het §6Bouwboek§r om te beginnen. Houd het §6Tutorial§r-boek vast voor de gids, of typ §a/guide§r voor de live tutorial.
+
+eb.mode_select.btn.more_modes=§b+ Meer modi§r
+eb.mode_select.btn.fewer_modes=§8- Minder modi§r
+eb.mode_select.simple_on=§a[EB] §rDe §estartmodi§r worden getoond. Gebruik §e+ Meer modi§r in het menu voor de volledige lijst.
+eb.mode_select.simple_off=§a[EB] §r§eAlle§r bouwmodi worden getoond.
+eb.settings.player.simple_modes=Eenvoudige moduslijst\n§7Toont alleen Lijn, Muur, Vloer en Kubus.\n§7Zet uit om elke bouwmodus te zien
+eb.settings.admin_mode_complexity=§cAdmin§r - Lijst met bouwmodi\n§7Laat spelers kiezen, of leg iedereen\n§7de eenvoudige of de volledige lijst op
+eb.preview.step_of=Stap %1/%2
+eb.preview.idle_start=§7%1  §8·  §7Stap %2/%3  §8·  §fRechtsklik op een blok om te beginnen
+eb.preview.idle_need_item=§7%1  §8·  §eHoud een blok vast om te gaan bouwen
+
+eb.bar.book_controls=§6§lBouwboek§r  §8|  §7Rechtsklik §fMenu§r  §8·  §7Vasthouden §fSnel wisselen§r  §8·  §7Linksklik §fPalet\n§7Sluipen+Rechts §fInstellingen§r  §8·  §7Sluipen+Links §fModifiers§r  §8·  §72× sluipen §fModus aan/uit
+eb.bar.book_controls_swapped=§6§lBouwboek§r  §8|  §7Rechtsklik §fPalet§r  §8·  §7Vasthouden §fSnel wisselen§r  §8·  §7Linksklik §fMenu\n§7Sluipen+Rechts §fInstellingen§r  §8·  §7Sluipen+Links §fModifiers§r  §8·  §72× sluipen §fModus aan/uit
+eb.bar.tutorial_book_controls=§6§lTutorial§r  §8|  §7Rechtsklik §fVolgende pagina§r  §8·  §7Boek slaan §fTerug§r  §8·  §7Sluipen §fHoofdstuk overslaan
+
+eb.palette.enabled_notice=§e[EB] §fBlokkenpalet §eAAN§f - §6%1§f.\n§7Je bouwsels §emengen nu meerdere bloksoorten§7 in plaats van alleen het blok waarop je klikt.\n§7Uitzetten: §eBoek > Palet > Bron > Uit§7.
+eb.palette.disabled_notice=§a[EB] §fBlokkenpalet §auit§f. Bouwsels gebruiken alleen het blok waarop je klikt.
+eb.preview.palette_active=§6Palet: %1 §8(%2)§r §7- bouwsels mengen blokken
+
+eb.preview.copy_step2=§7Stap 2/3  §8·  §fRechtsklik op hoek 2
+eb.preview.copy_step3=§7Stap 3/3  §8·  §fRechtsklik om de hoogte te zetten
+eb.clipboard.action.title=§l§6Gebied geselecteerd§r
+eb.clipboard.action.body=§fWat wil je ermee doen?\n\n§7§lKopiëren§r§7 laat de blokken staan waar ze zijn.\n§7§lKnippen§r§7 haalt ze weg en je draagt ze mee.
+eb.clipboard.action.copy=§a§lKopiëren§r\n§7Laat het origineel staan
+eb.clipboard.action.cut=§6§lKnippen§r\n§7Haal de blokken weg en neem ze mee
+eb.clipboard.action.cancel=§8Annuleren
+eb.clipboard.slot.auto=§bLaatste kopie:§r §7%1§r
+eb.clipboard.slot.auto_active=§l§eLaatste kopie:§r §e%1§r
+eb.clipboard.slot.auto_empty=§8Laatste kopie: (leeg)§r
+eb.clipboard.slot.auto_empty_active=§fLaatste kopie:§r §7(leeg)§r
+eb.clipboard.tip.auto_empty=Nog niets gekopieerd. Kopieer iets en het komt hier vanzelf terecht.
+eb.clipboard.btn.save=§lKopie opslaan§r
+eb.clipboard.btn.save_empty=§8Kopie opslaan§r
+eb.clipboard.saved=§a[EB] §7Opgeslagen in vak %1. Latere kopieën overschrijven het niet.
+eb.clipboard.save_full=§c[EB] §7Alle opslagvakken zijn vol. Verwijder er eerst een.
+eb.clipboard.loaded_auto=§a[EB] §7Laatste kopie geladen - mik en gebruik om te plakken!
+eb.clipboard.cleared_auto=§7[EB] Laatste kopie gewist.
+eb.clipboard.restored_cut=§6[EB] §fJe hebt nog een §6geknipte§f selectie die geplakt wil worden.\n§7Open het §eKlembord§7 of mik en gebruik om hem te plaatsen.
+
+eb.set.custom_ui=Eigen menu's
+eb.join.welcome=§a[Effortless Building] §rJe hebt het §6Bouwboek§r en het §6Tutorial§r-boek ontvangen.\n§7Houd het §fTutorial§7-boek vast om alles te leren. Rechtsklik met het §fBouwboek§7 om te beginnen.
+eb.help.title=Help
+eb.help.body=§fHet §6Tutorial§f-boek legt alles uit met plaatjes. Houd het in je hand en het opent zich voor je.
+eb.help.btn.book=§lTutorialboek§r\n§8Haal het, of zie hoe je het opent
+eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
+eb.help.btn.setup=§lSnelle setup§r\n§8Stem de addon af op je apparaat
+eb.help.book_hold=§a[EB] §rJe hebt het §6Tutorial§r-boek al. Houd het in je hand en het opent zich voor je.
+eb.help.book_given=§a[EB] §rHier is het §6Tutorial§r-boek. Houd het in je hand en het opent zich voor je.
+eb.help.book_no_room=§c[EB] §rGeen ruimte in je inventaris voor het Tutorialboek.
+eb.mode_select.btn.help=§lHelp§r
+eb.mode_select.btn.tools=§lMenu§r
+eb.mode_select.btn.tools_active=§l§eMenu§r
+eb.mode_select.disabled_body=§7Vormen staan uit§r
+eb.set.cat.setup=Snelle setup
+eb.set.cat.building=Bouwen
+eb.set.cat.preview=Voorbeeld
+eb.set.cat.controls=Besturing
+eb.set.cat.admin=Admin
+eb.set.cat.setup.desc=Kies je soort apparaat. Eén tik stelt de stijl en kwaliteit van de preview en de bloklimiet in.
+eb.set.cat.building.desc=Hoe vormen worden geplaatst: snelheid, groottelimiet, bereik en wat slopen oplevert.\n§7Tik op een instelling om hem te wijzigen.
+eb.set.cat.preview.desc=Hoe een vorm wordt getoond voordat je hem plaatst. Lichtere stijlen en lagere kwaliteit lopen soepeler.\n§7Tik op een instelling om hem te wijzigen.
+eb.set.cat.controls.desc=Boekklikken, camerazoom, tips en het uiterlijk van de menu's.\n§7Tik op een instelling om hem te wijzigen.
+eb.set.cat.admin.desc=§cAdmin§r - regels voor elke speler in deze wereld.\n§7Tik op een instelling om hem te wijzigen.
+eb.set.simple_modes=Alleen startvormen
+eb.set.build_speed=Bouwsnelheid
+eb.set.max_blocks=Max. blokken
+eb.set.replace_blocks=Blokken vervangen
+eb.set.infinite_reach=Oneindig bereik
+eb.set.inf_reach_dist=Bereikafstand
+eb.set.air_reach=Bereik luchtbouw
+eb.set.destroy_drops=Drops bij slopen
+eb.set.undo_limit=Limiet ongedaan maken
+eb.set.preview_style=Bouwvoorbeeld
+eb.set.destroy_preview_style=Sloopvoorbeeld
+eb.set.preview_quality=Voorbeeldkwaliteit
+eb.set.defer_shape=Vorm uitstellen
+eb.set.flick_preview=Voorbeeld bij beweging
+eb.set.swap_book_actions=Boekklikken omwisselen
+eb.set.selection_zoom=Selectiezoom
+eb.set.zoom_start=Zoom begint bij
+eb.set.zoom_max=Volledige zoom bij
+eb.set.hints=Tips
+eb.set.menu_style=Menustijl
+eb.set.menu_style.tip=Menustijl\n§fZwevend§7: menu's hangen voor je in de lucht\n§fGewoon§7: de standaardmenu's van het spel
+eb.set.admin_mode_list=Vormenlijst
+eb.set.admin_require_tag=Tag vereisen
+eb.set.admin_tag=Tag
+eb.set.admin_allow_destroy=Slopen toestaan
+eb.set.admin_destroy_creative=Slopen alleen in Creatief
+eb.set.admin_allow_inf_reach=Oneindig bereik toestaan
+eb.set.admin_reach_cap=Bereikplafond
+eb.set.admin_blocks_cap=Blokkenplafond
+eb.set.admin_auto_give_book=Boeken geven bij binnenkomst
+eb.set.admin_lock_quality=Voorbeeldkwaliteit vergrendelen
+eb.set.admin_vanilla_menus=Gewone menu's voor iedereen
+eb.set.book_language=Boektaal
+eb.set.book_language.tip=Boektaal\n§7De taal van het Tutorialboek en van de\n§7tips en lessen op de zwevende menu's.
+eb.help.btn.language=§lBoektaal§r\n§8English, Español, Deutsch, 日本語 ...
+entity.eb:language_picker.name=Taal
+eb.palette.dist.dissolve_x=Oplossen X
+eb.palette.dist.dissolve_y=Oplossen Y
+eb.palette.dist.dissolve_z=Oplossen Z
+eb.palette.dist.dissolve_x.desc=Verspreid oplossen langs de X-as.
+eb.palette.dist.dissolve_y.desc=Verspreid oplossen langs de Y-as, van onder naar boven.
+eb.palette.dist.dissolve_z.desc=Verspreid oplossen langs de Z-as.
+eb.coach.started=§a[EB] §rJe coach is er. Volg de kaart naast je, stap voor stap. Met de §eX§r berg je hem op.
+eb.coach.stopped=§7[EB] De coach is opgeborgen. §a/guide§7 of §eHelp§7 haalt hem terug waar je gebleven was.
+eb.coach.done=§a[EB] §rTutorial voltooid! Alles wat je hebt gebruikt staat in het menu. Veel bouwplezier.
+entity.eb:panel_ring.name=Snel wisselen
+eb.set.cursor=Cursor
+eb.set.cursor.tip=Cursor\n§7Een pijltje dat laat zien waar je op mikt\n§7op de zwevende menu's. Handig op aanraakschermen.
+eb.cursor.turned_off=§a[EB] §rCursor uit. Zet hem weer aan in §eInstellingen > Besturing > Cursor§r.
+eb.set.panel_size=Paneelgrootte
+eb.set.panel_size.tip=Paneelgrootte\n§7Hoe groot de zwevende menu's zijn.\n§7Groot is prettiger op een telefoon.
+eb.set.coach_side=Kant van de coachkaart
+eb.set.coach_side.tip=Kant van de coachkaart\n§7Aan welke kant van je de kaart van de tutorial hangt.
+eb.set.panel_sounds=Menugeluiden
+eb.set.panel_sounds.tip=Menugeluiden\n§7Hoe luid de klikken en belletjes\n§7van de zwevende menu's zijn.
+entity.eb:panel_wheel.name=Snelwisselwiel
+entity.eb:panel_mirror_config.name=Spiegel
+entity.eb:panel_array_config.name=Reeks
+entity.eb:panel_radial_config.name=Radiaal
+entity.eb:panel_menu.name=Menu
+entity.eb:panel_palette.name=Blokkenpalet
+entity.eb:panel_modifiers.name=Bouwmodifiers
+entity.eb:panel_clipboard.name=Klembord
+entity.eb:panel_coach.name=Coach
+entity.eb:panel_lessons.name=Lessen
+entity.eb:coach_marker.name=Markering
+entity.eb:panel_help.name=Help
+entity.eb:panel_setup.name=Snelle setup
+entity.eb:panel_copycut.name=Gebied geselecteerd
+entity.eb:panel_settings_setup.name=Instellingen
+entity.eb:panel_settings_building.name=Instellingen
+entity.eb:panel_settings_preview.name=Instellingen
+entity.eb:panel_settings_controls.name=Instellingen
+entity.eb:panel_settings_admin.name=Instellingen
+eb.hint.panel.mode_menu_floating=§a[EB] §r§7Tip: §fDit is het menu - kijk naar een vorm en klik om hem te kiezen. De opties staan rechts, de gereedschappen onderaan. Wissel van hotbarvak of klik ernaast om het te sluiten.
+action.interact.eb_picker_select=Selecteren
+entity.eb:guide_book.name=Tutorial
+action.interact.eb_guide_turn=Volgende pagina
+eb.set.book_language.tip=Boektaal\n§7De taal van het Tutorialboek en van de\n§7tips en lessen op de zwevende menu's.
+eb.help.btn.guided=§lLive tutorial§r\n§8Leer door te doen, stap voor stap

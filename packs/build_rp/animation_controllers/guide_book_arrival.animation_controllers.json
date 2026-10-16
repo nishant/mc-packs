@@ -1,0 +1,1 @@
+{"format_version":"1.10.0","animation_controllers":{"controller.animation.eb_guide_book.arrival":{"initial_state":"arriving","states":{"arriving":{"animations":["intro"],"transitions":[{"settled":"q.life_time > 1.5"}]},"settled":{}}}}}

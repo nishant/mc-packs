@@ -1,5 +1,5 @@
 // What Realm Settings (/realm:config, /realm:prefs) can change in this pack. The pack reads these
-// options with get() / getFor() instead of config.js directly, so changes apply without a restart.
+// options with get() / getFor() and shares the same eb:* dynamic properties used by Effortless Building's in-game settings.
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 
@@ -8,67 +8,212 @@ const PREFIX = "build";
 const TITLE = "Easy Building";
 const BASE = CONFIG;
 
+/** @param {string} prop */
+const readWorld = (prop) => () => {
+  try {
+    return world.getDynamicProperty(prop);
+  } catch {
+    return undefined;
+  }
+};
+/** @param {string} prop */
+const writeWorld = (prop) => (/** @type {any} */ v) => {
+  try {
+    world.setDynamicProperty(prop, v);
+  } catch {}
+};
+
 /** @type {Option[]} */
 const OPTIONS = [
-  { key: "enabled", type: "bool", scope: "world", label: "Easy Building", help: "Disabled: /realm:build only says so and placing blocks builds nothing extra" },
+  { key: "enabled", type: "bool", scope: "world", label: "Easy Building", help: "Disabled: commands only say so and placing blocks builds nothing extra" },
   { key: "operatorsOnly", type: "bool", scope: "world", label: "Only operators can build with the tools" },
-  { key: "maxBlocks", type: "int", scope: "world", label: "Most blocks per build (survival)", min: 64, max: 16384, step: 64 },
-  { key: "maxBlocksCreative", type: "int", scope: "world", label: "Most blocks per build (creative)", min: 256, max: 65536, step: 256 },
-  { key: "maxSize", type: "int", scope: "world", label: "Largest size in the menus (blocks)", min: 8, max: 128, step: 8 },
-  { key: "blocksPerTick", type: "int", scope: "world", label: "Blocks placed per tick", help: "Lower it if big builds make the realm stutter", min: 50, max: 2000, step: 50 },
-  { key: "requireItems", type: "bool", scope: "world", label: "Survival builds use blocks from your inventory" },
-  { key: "partialBuilds", type: "bool", scope: "world", label: "Build part of a shape when short of blocks", help: "Disabled: a survival build you can't pay for in full builds nothing" },
-  { key: "survivalReplaceAll", type: "bool", scope: "world", label: "Survival players can replace solid blocks", help: "Replace everything destroys blocks without drops" },
+  {
+    key: "maxBlocksCap",
+    type: "int",
+    scope: "world",
+    label: "Most blocks per build cap",
+    min: 64,
+    max: 300000,
+    step: 64,
+    read: readWorld("eb:adminMaxBlocksCap"),
+    write: writeWorld("eb:adminMaxBlocksCap"),
+  },
+  {
+    key: "modeComplexity",
+    type: "enum",
+    scope: "world",
+    label: "Mode list complexity",
+    choices: ["player", "simple", "advanced"],
+    names: ["Players choose", "Force Simple", "Force Advanced"],
+    read: readWorld("eb:adminModeComplexity"),
+    write: writeWorld("eb:adminModeComplexity"),
+  },
+  {
+    key: "tagRequired",
+    type: "bool",
+    scope: "world",
+    label: "Require a tag to use Easy Building",
+    read: readWorld("eb:tagRequired"),
+    write: writeWorld("eb:tagRequired"),
+  },
+  {
+    key: "requiredTag",
+    type: "text",
+    scope: "world",
+    label: "Required tag name",
+    read: readWorld("eb:requiredTag"),
+    write: writeWorld("eb:requiredTag"),
+  },
+  {
+    key: "allowDestroy",
+    type: "bool",
+    scope: "world",
+    label: "Destroy mode with digging tools",
+    read: readWorld("eb:allowDestroy"),
+    write: writeWorld("eb:allowDestroy"),
+  },
+  {
+    key: "destroyCreativeOnly",
+    type: "bool",
+    scope: "world",
+    label: "Destroy mode in Creative only",
+    read: readWorld("eb:destroyCreativeOnly"),
+    write: writeWorld("eb:destroyCreativeOnly"),
+  },
+  {
+    key: "allowInfiniteReach",
+    type: "bool",
+    scope: "world",
+    label: "Allow Infinite Reach",
+    read: readWorld("eb:allowInfiniteReach"),
+    write: writeWorld("eb:allowInfiniteReach"),
+  },
+  {
+    key: "maxReachCap",
+    type: "int",
+    scope: "world",
+    label: "Longest reach cap (blocks, 0 = no cap)",
+    min: 0,
+    max: 256,
+    step: 4,
+    read: readWorld("eb:maxReachCap"),
+    write: writeWorld("eb:maxReachCap"),
+  },
+  {
+    key: "autoGiveBook",
+    type: "bool",
+    scope: "world",
+    label: "Give books automatically on first join",
+    read: readWorld("eb:autoGiveBook"),
+    write: writeWorld("eb:autoGiveBook"),
+  },
+  {
+    key: "configTagRequired",
+    type: "bool",
+    scope: "world",
+    label: "Restrict preview quality to required tag",
+    read: readWorld("eb:configTagRequired"),
+    write: writeWorld("eb:configTagRequired"),
+  },
+  {
+    key: "plainMenusForAll",
+    type: "bool",
+    scope: "world",
+    label: "Plain menus for everyone",
+    help: "Use standard menus instead of floating 3D panels for all players",
+    read: () => {
+      try {
+        const v = world.getDynamicProperty("eb:globalCustomUI");
+        return typeof v === "boolean" ? !v : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    write: (v) => {
+      try {
+        world.setDynamicProperty("eb:globalCustomUI", typeof v === "boolean" ? !v : undefined);
+      } catch {}
+    },
+  },
   { key: "inOthersClaims", type: "bool", scope: "world", label: "Builds can reach into other players' claims" },
-  { key: "safeZonesOperatorsOnly", type: "bool", scope: "world", label: "Only operators build in safe zones", help: "Zones made with /realm:zones. Towns and claims don't count here" },
-  { key: "undoSteps", type: "int", scope: "world", label: "Builds each player can undo", min: 1, max: 20, step: 1 },
-  { key: "reach", type: "int", scope: "world", label: "Longest reach players can pick (blocks)", help: "Build mode guides, /realm:build_here and Air Build", min: 4, max: 64, step: 1 },
-  { key: "previewSeconds", type: "int", scope: "world", label: "Outline seconds before Build here now asks", min: 0, max: 10, step: 1 },
-  { key: "airBuild", type: "bool", scope: "world", label: "Players can use Air Build", help: "Building in midair in front of you" },
-  { key: "handModifiers", type: "bool", scope: "world", label: "Modifiers can copy blocks placed and broken by hand" },
-  { key: "guideMax", type: "int", scope: "world", label: "Most guide particles per player", help: "Bigger shapes are thinned evenly", min: 50, max: 2000, step: 50 },
-  { key: "guideFastest", type: "int", scope: "world", label: "Fastest guide refresh players can pick (ticks)", min: 1, max: 20, step: 1 },
+  { key: "safeZonesOperatorsOnly", type: "bool", scope: "world", label: "Only operators build in safe zones", help: "Zones made with /realm:zones" },
   {
-    key: "guideStyle",
+    key: "previewMode",
     type: "enum",
     scope: "player",
+    prop: "eb:previewMode",
     default: "outline",
-    label: "Block guides",
-    help: "What shows where your shape, paste or destroy would go",
-    choices: ["outline", "corners", "dots", "box", "off"],
-    names: ["Outline", "Corner outline", "Particles (a dot per block)", "Box edges (sparkles)", "Off"],
+    label: "Build preview style",
+    choices: ["particle", "outline", "corner_outline", "disable"],
+    names: ["Particles", "Outline", "Outline (Corner)", "Disabled"],
   },
   {
-    key: "guideColor",
+    key: "destroyPreviewMode",
     type: "enum",
     scope: "player",
-    default: "white",
-    label: "Guide color",
-    choices: ["white", "green", "cyan", "yellow", "orange", "purple"],
-    names: ["White", "Green", "Cyan", "Yellow", "Orange", "Purple"],
+    prop: "eb:destroyPreviewMode",
+    default: "outline",
+    label: "Destroy preview style",
+    choices: ["outline", "corner_outline", "disable"],
+    names: ["Outline", "Outline (Corner)", "Disabled"],
   },
-  { key: "guideRate", type: "int", scope: "player", default: 4, label: "Guide refresh (ticks)", help: "1 is every tick; 20 is once a second", min: 1, max: 20, step: 1 },
   {
-    key: "particle",
+    key: "previewQuality",
+    type: "int",
+    scope: "player",
+    prop: "eb:previewQuality",
+    default: 1,
+    label: "Preview refresh interval (ticks)",
+    min: 1,
+    max: 20,
+    step: 1,
+  },
+  { key: "deferShapeCalc", type: "bool", scope: "player", prop: "eb:deferShapeCalc", default: true, label: "Defer shape calculation while aiming" },
+  { key: "flickPreview", type: "bool", scope: "player", prop: "eb:flickPreview", default: false, label: "Flick preview (only flash when aim moves)" },
+  { key: "simpleModes", type: "bool", scope: "player", prop: "eb:simpleModes", default: false, label: "Simple mode list (Line, Wall, Floor, Cube)" },
+  { key: "buildSpeed", type: "int", scope: "player", prop: "eb:buildSpeed", default: 20, label: "Build speed (wave ticks, 1 = instant)", min: 1, max: 100, step: 1 },
+  { key: "maxBlocks", type: "int", scope: "player", prop: "eb:maxBlocks", base: "maxBlocksCap", label: "My max blocks per build", min: 64, max: 300000, step: 64 },
+  { key: "replaceBlocks", type: "bool", scope: "player", prop: "eb:replaceBlocks", default: true, label: "Replace blocks in Creative mode" },
+  { key: "infiniteReach", type: "bool", scope: "player", prop: "eb:infiniteReach", default: false, label: "Infinite Reach" },
+  { key: "infiniteReachDistance", type: "int", scope: "player", prop: "eb:infiniteReachDistance", default: 64, label: "Infinite Reach distance (blocks)", min: 4, max: 256, step: 4 },
+  { key: "airBuildReach", type: "int", scope: "player", prop: "eb:airBuildReach", default: 4, label: "Air Build distance (blocks)", min: 1, max: 64, step: 1 },
+  { key: "destroyDrops", type: "bool", scope: "player", prop: "eb:destroyDrops", default: true, label: "Collect drops in Destroy mode" },
+  { key: "undoThreshold", type: "int", scope: "player", prop: "eb:undoThreshold", default: 200, label: "Undo block limit (0 = disabled)", min: 0, max: 1000, step: 50 },
+  { key: "floatingUI", type: "bool", scope: "player", prop: "eb:floatingUI", default: true, label: "Floating 3D panels" },
+  { key: "cursor", type: "bool", scope: "player", prop: "eb:cursor", default: true, label: "Aim cursor on floating panels" },
+  {
+    key: "panelSize",
     type: "enum",
     scope: "player",
-    default: "minecraft:villager_happy",
-    label: "Box edges sparkles",
-    choices: ["minecraft:villager_happy", "minecraft:endrod", "minecraft:basic_flame_particle", "minecraft:blue_flame_particle"],
-    names: ["Green", "White", "Flame", "Blue flame"],
+    prop: "eb:panelSize",
+    default: "normal",
+    label: "Floating panel size",
+    choices: ["small", "normal", "large"],
+    names: ["Small", "Normal", "Large"],
   },
-  { key: "myReach", type: "int", scope: "player", base: "reach", label: "My reach (blocks)", help: "How far away you can build at a look; never past the realm's longest reach", min: 4, max: 64, step: 1 },
-  { key: "airMode", type: "bool", scope: "player", default: false, label: "Air Build", help: "With nothing in reach, using a block in the air builds in midair in front of you" },
-  { key: "airDistance", type: "int", scope: "player", default: 4, label: "Air Build distance (blocks)", min: 1, max: 64, step: 1 },
-  { key: "modsByHand", type: "bool", scope: "player", default: false, label: "Modifiers copy blocks I place and break by hand", help: "Mirror, radial and array also work on single blocks" },
-  { key: "hint", type: "bool", scope: "player", default: true, label: "Build mode line above the hotbar", help: "Which shape is set and what placing a block will build" },
-  { key: "undoSaveSteps", type: "int", scope: "world", label: "Undo steps kept over a restart", help: "The newest steps of each player, saved on the player", min: 0, max: 10, step: 1 },
-  { key: "undoSaveBlocks", type: "int", scope: "world", label: "Most blocks in an undo step kept over a restart", help: "Bigger steps are kept in memory only", min: 250, max: 4000, step: 250 },
-  { key: "clipboardSlots", type: "int", scope: "world", label: "Saved copies per player", help: "Besides Last copy. Each one is a structure saved in the world", min: 0, max: 19, step: 1 },
-  { key: "copyMaxBlocks", type: "int", scope: "world", label: "Largest region to copy or cut (blocks)", help: "Air included; each side at most 64 across", min: 1024, max: 65536, step: 1024 },
-  { key: "destroyMode", type: "bool", scope: "world", label: "Destroy mode", help: "Breaking a block with a pickaxe, axe or shovel breaks the whole shape" },
-  { key: "destroyPreview", type: "bool", scope: "player", default: true, label: "Outline in destroy mode", help: "Shows what breaking the block you look at would break" },
-  { key: "pastePreview", type: "bool", scope: "player", default: true, label: "Paste preview in paste mode", help: "Shows where your copy would go at the block you look at" },
+  {
+    key: "coachSide",
+    type: "enum",
+    scope: "player",
+    prop: "eb:coachSide",
+    default: "right",
+    label: "Live Coach side",
+    choices: ["right", "left"],
+    names: ["Right", "Left"],
+  },
+  {
+    key: "panelSounds",
+    type: "enum",
+    scope: "player",
+    prop: "eb:panelSounds",
+    default: "normal",
+    label: "Floating panel sounds",
+    choices: ["normal", "quiet", "off"],
+    names: ["Normal", "Quiet", "Off"],
+  },
+  { key: "swapBookActions", type: "bool", scope: "player", prop: "eb:swapBookActions", default: false, label: "Swap Building Book right-click and left-click" },
+  { key: "fovZoomEnabled", type: "bool", scope: "player", prop: "eb:fovZoomEnabled", default: true, label: "Selection FOV zoom when aiming far away" },
+  { key: "hintsEnabled", type: "bool", scope: "player", prop: "eb:hintsEnabled", default: true, label: "Show gameplay hints" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

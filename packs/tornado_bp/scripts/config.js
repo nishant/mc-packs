@@ -22,9 +22,9 @@ export const CONFIG = {
 
   /**
    * Safe zones (Safe Zones, protected towns and claims). A tornado never breaks blocks anywhere; this is about
-   * what it moves. "pass": it goes through safe zones like anywhere else; "calm": inside a safe zone it pulls,
-   * lifts and throws nothing (mobs, items and players there are left alone); "avoid": it never forms near
-   * one and turns away from them (and is calm inside one, if an operator spawns it there).
+   * whether it pulls players inside a zone. "pass": it goes through safe zones like anywhere else; "calm": inside a
+   * safe zone it leaves players alone; "avoid": it never forms near one and turns away from them (and is calm
+   * inside one, if an operator spawns it there).
    */
   zoneMode: "pass",
 
@@ -32,28 +32,28 @@ export const CONFIG = {
   viewDistance: 128,
 
   /** Height of the funnel in blocks. */
-  height: 40,
+  height: 42,
 
   /**
-   * Rings of dust stacked from the ground to the top of the funnel, for each player near it (half as many
-   * beyond 64 blocks). The funnel is redrawn in slices every 2 ticks, each ring every half second.
+   * Rings of vortex cloud stacked from the ground to the top of the funnel, for each player near it (half as many
+   * beyond 64 blocks). The funnel is redrawn in slices every 2 ticks, plus a churning ground dust skirt and storm collar.
    */
-  rings: 16,
+  rings: 24,
 
   /** Multiplies `rings` and the debris: lower it if the funnel slows devices down, 0.25 to 1.5. */
   density: 1,
 
-  /** Mobs, dropped items and players within this many blocks of the funnel are pulled in and lifted. */
-  pullRadius: 12,
+  /** Players within this many blocks of the funnel are sucked in, spun around up the vortex, and shot out the top. */
+  pullRadius: 14,
 
-  /** Mobs and items are lifted up to this many blocks above the ground (they get Slow Falling, so they land safely). */
-  liftHeight: 8,
+  /** Extra height boost above the funnel top when shooting a player into the sky. */
+  liftHeight: 16,
 
-  /** Players close to the funnel are thrown a few blocks, then get Slow Falling so they land safely. */
+  /** Players close to the funnel are sucked in, spun up the funnel, and shot high out the top (in any gamemode). */
   throwPlayers: true,
 
-  /** Seconds of Slow Falling after being thrown. */
-  slowFallingSeconds: 6,
+  /** Seconds of Slow Falling given after being shot out the top of the funnel so players land safely. */
+  slowFallingSeconds: 8,
 
   /** Players within this many blocks get a chat warning (once per tornado) and hear the warning horn. */
   warnDistance: 150,

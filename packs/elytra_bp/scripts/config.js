@@ -15,4 +15,19 @@ export const CONFIG = {
 
   /** Elytra durability left (percent) at or below which the HUD shows it in red. */
   lowPercent: 10,
+
+  /** Allow using NOS Rockets (custom:nos_rocket) while gliding with an elytra. */
+  nosEnabled: true,
+
+  /** NOS Rocket boost multiplier relative to normal firework baseline (3.0 to 4.0). */
+  nosMultiplier: 3.5,
+
+  /** Normal firework rocket impulse baseline in blocks/tick. */
+  nosBaseline: 0.75,
+
+  /** Maximum total flight speed cap in blocks/tick (~72 blocks/s) so repeated NOS Rockets do not compound infinitely. */
+  nosMaxSpeed: 3.6,
+
+  /** Short hard nitrous burst duration in ticks. */
+  nosBurstTicks: 6,
 };
