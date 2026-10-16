@@ -849,7 +849,7 @@ const MANIFEST = {
     name: "Realm Skies",
     description: "Auroras, shooting stars, meteors, tornadoes, sandstorms, blizzards, fog banks and moon glows for the realm's sky packs. Put it at the top of Resource Packs.",
     uuid: "c9dba129-e60f-4f08-919b-0d4901bea43a",
-    version: [1, 2, 0],
+    version: [1, 2, 1],
     min_engine_version: [1, 21, 100],
   },
   modules: [{ type: "resources", uuid: "dfab3445-c4b0-42a7-9185-a93ecb664518", version: [1, 1, 0] }],
