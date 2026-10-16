@@ -49,6 +49,8 @@ const OFFER_TICKS = 4; // how long other packs have to answer realm:npc_talk
 const MAX_OFFERS = 16;
 const TAP_COOLDOWN = 10;
 const MOVE_DISTANCE = 1.5; // farther than this from where it belongs, an NPC is teleported back
+const SPOT_SHARED = 1.5; // two townsfolk's spots closer than this at the same time of day: operators are warned
+const SPOT_CLEAR = 0.9; // someone within this of an NPC's spot: it isn't put back there until they move off
 const TURN_STEP = 45; // degrees an NPC turns per loop at most, so it turns rather than snaps
 const TURN_MIN = 4; // smaller differences aren't worth a teleport
 
@@ -576,6 +578,21 @@ function checkMissing(rec, t) {
 // Behavior: turning, idle lines, the routine
 // ---------------------------------------------------------------------------
 
+/**
+ * Is someone else standing on an NPC's spot (a player, another townsfolk, a mob)? Putting the NPC back there would
+ * push them apart and pop it up, again and again, so it waits beside the spot until they move off.
+ * @param {Entity} entity @param {Vector3} at
+ */
+function occupied(entity, at) {
+  try {
+    return entity.dimension
+      .getEntities({ location: at, maxDistance: SPOT_CLEAR })
+      .some((e) => e.id !== entity.id && Math.abs(e.location.y - at.y) < 2 && e.hasComponent("minecraft:health"));
+  } catch {
+    return false;
+  }
+}
+
 /** Turns (a step) toward `yaw`, staying where it belongs. @param {Entity} entity @param {State} st @param {Vector3} at @param {number} yaw @param {boolean} snap */
 function turn(entity, st, at, yaw, snap) {
   const current = st.yaw ?? entity.getRotation().y;
@@ -586,7 +603,7 @@ function turn(entity, st, at, yaw, snap) {
   // Nudged a little: back onto its spot while turning. Far from it (home not loaded yet): turn in place, never
   // teleport into a spot that may not be loaded.
   const d = dist(loc, at);
-  entity.teleport(d > 0.3 && d <= MOVE_DISTANCE ? at : loc, { rotation: { x: 0, y: next } });
+  entity.teleport(d > 0.3 && d <= MOVE_DISTANCE && !occupied(entity, at) ? at : loc, { rotation: { x: 0, y: next } });
   st.yaw = next;
 }
 
@@ -617,8 +634,8 @@ function behave(rec, t, entity, lively) {
   const dim = world.getDimension(rec.dim);
   const at = anchorOf(rec);
   if (entity.dimension.id !== rec.dim || dist(entity.location, at) > MOVE_DISTANCE) {
-    // Pushed, moved by someone, or time to go home or back to its post. Only into a loaded spot.
-    if (loaded(dim, at)) {
+    // Pushed, moved by someone, or time to go home or back to its post. Only into a loaded spot nobody stands on.
+    if (loaded(dim, at) && !occupied(entity, at)) {
       const up = liftSaved(rec) ? anchorOf(rec) : at;
       entity.teleport(up, { dimension: dim, rotation: { x: 0, y: rec.yaw } });
       st.yaw = rec.yaw;
@@ -1525,7 +1542,7 @@ function addNpc(player, id) {
   }
   // Not loaded (or couldn't move): a new one here; the old one is removed when its chunk loads.
   if (!moved) spawn(rec, t, at);
-  player.sendMessage(`§aPlaced ${plainName(t)} at ${coords(at)}.§7 Sneak and tap them in creative mode to pick a skin.${note}`);
+  player.sendMessage(`§aPlaced ${plainName(t)} at ${coords(at)}.§7 Sneak and tap them in creative mode to pick a skin.${note}${sharedNote(rec)}`);
   return undefined;
 }
 
@@ -1570,7 +1587,47 @@ function setHome(player, id) {
   save();
   const far = dist(at, rec) > 96 ? " §eTip: a home close to the post (under 96 blocks) loads together with it, so they never miss the walk." : "";
   const off = get("nightRoutine") === true ? "" : " §7(Go home at night is disabled in /realm:config.)";
-  player.sendMessage(`§a${plainName(t)} now goes home to ${coords(at)} at night.${off}${far}`);
+  player.sendMessage(`§a${plainName(t)} now goes home to ${coords(at)} at night.${off}${far}${sharedNote(rec)}`);
+}
+
+/** When each townsfolk stands where (a slot without a spot of its own is the post), and how chat says it. */
+const WHEN = /** @type {const} */ ([
+  ["work", "by day"],
+  ["lunch", "at lunch"],
+  ["evening", "in the evening"],
+  ["night", "at night"],
+]);
+
+/** A townsfolk's saved spot for a slot, falling back to its post. @param {Placed} r @param {string} slot @returns {Vector3} */
+function savedSpot(r, slot) {
+  const post = { x: r.x, y: r.y, z: r.z };
+  if (slot === "night") return r.home ?? post;
+  if (slot === "lunch") return r.posts?.noon ?? post;
+  if (slot === "evening") return r.posts?.evening ?? post;
+  return post;
+}
+
+/**
+ * Other townsfolk standing on the same spot as this one at the same time of day ("Elsie the Innkeeper at lunch"):
+ * two on one spot push each other off it, so operators are told.
+ * @param {Placed} rec
+ */
+function sharedSpots(rec) {
+  /** @type {string[]} */
+  const out = [];
+  for (const r of list) {
+    if (r.id === rec.id || r.dim !== rec.dim) continue;
+    const when = WHEN.filter(([slot]) => dist(savedSpot(rec, slot), savedSpot(r, slot)) < SPOT_SHARED).map(([, w]) => w);
+    const t = folk.get(r.id);
+    if (when.length) out.push(`${t ? plainName(t) : r.id} ${when.join(", ")}`);
+  }
+  return out;
+}
+
+/** The chat warning for spots shared with other townsfolk, or "". @param {Placed} rec */
+function sharedNote(rec) {
+  const shared = sharedSpots(rec);
+  return shared.length ? `\n§eHeads up: they share a spot with ${shared.join("; ")}. Townsfolk on one spot push each other: move one at least 2 blocks away.` : "";
 }
 
 /** A lunch (`noon`) or evening spot where the operator stands; at the post it clears it. @param {Player} player @param {string} id @param {string} slot */
@@ -1595,7 +1652,7 @@ function setPost(player, id, slot) {
   save();
   const far = dist(at, rec) > 96 ? " §eTip: a spot close to the post (under 96 blocks) loads together with it, so they keep their skin when they move." : "";
   const off = get("schedules") === true ? "" : " §7(Daily schedule is disabled in /realm:config.)";
-  player.sendMessage(`§a${plainName(t)} now spends ${what} (time ${when}) at ${coords(at)}, moving when nobody is within ${CONFIG.scheduleRange} blocks.${off}${far}`);
+  player.sendMessage(`§a${plainName(t)} now spends ${what} (time ${when}) at ${coords(at)}, moving when nobody is within ${CONFIG.scheduleRange} blocks.${off}${far}${sharedNote(rec)}`);
 }
 
 /** @param {Player} player */
@@ -1604,7 +1661,8 @@ function listForOps(player) {
     const t = folk.get(r.id);
     const home = `${r.home ? ` §7home ${coords(r.home)}` : ""}${r.posts?.noon ? ` §7lunch ${coords(r.posts.noon)}` : ""}${r.posts?.evening ? ` §7evening ${coords(r.posts.evening)}` : ""}`;
     const state = entityOf(r) ? "§a(loaded)" : "§8(not loaded)";
-    return `§e${r.id}§f ${t ? plainName(t) : ""}: ${coords(r)} in ${dimName(r.dim)}${home} ${state}`;
+    const shared = sharedSpots(r);
+    return `§e${r.id}§f ${t ? plainName(t) : ""}: ${coords(r)} in ${dimName(r.dim)}${home} ${state}${shared.length ? ` §c(same spot as ${shared.join("; ")})` : ""}`;
   });
   const missing = CONFIG.townsfolk.filter((t) => !placedOf(t.id)).map((t) => t.id);
   player.sendMessage(

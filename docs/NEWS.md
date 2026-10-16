@@ -16,6 +16,12 @@ entries below as a changelog.
 - Wanderers on the road no longer turn invisible when a monster comes near.
 - Fen Charm: Poison really can't touch you now.
 
+## Townsfolk stay put
+
+- Townsfolk no longer hop up and down when you, or another townsfolk, stand in their spot: they wait beside it until it is free.
+- Operators: /realm:npc_list marks townsfolk that share a spot, and placing one on another's spot warns you. Spread them out so the town feels lived in.
+- The story tracker box never gets cut off: long steps end with "..." and extra steps show as "+2 more". /realm:saga has the full text.
+
 ## Counting down
 
 Quests now show how many are left:
