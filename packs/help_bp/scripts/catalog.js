@@ -761,18 +761,22 @@ export const PACKS = [
     "folder": "elytra_bp",
     "topic": "elytra",
     "name": "Elytra HUD",
-    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.",
+    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and §lNOS Rockets§r you carry. This pack also adds the §lNOS Rocket§r (§ecustom:nos_rocket§r), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles.",
     "steps": [
       {
-        "text": "Put on an elytra and glide. In the second box on the right side of the screen (§lRight 2§r) you see something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12§r, updated 4 times a second. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
+        "text": "Put on an elytra and glide. In the second box on the right side of the screen (§lRight 2§r) you see something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12  NOS 4§r, updated 4 times a second. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
-        "text": "Don't want it? Run §e/realm:elytra§r, or disable §lElytra HUD while gliding§r in §e/realm:prefs§r. Chat says §eElytra HUD: Disabled. Run /realm:elytra again to enable it.§r The choice is remembered.",
+        "text": "Craft a §lNOS Rocket§r (§ecustom:nos_rocket§r) at a crafting table by placing §l1 Firework Rocket§r in the center and §l8 Gunpowder§r around it (§eGGG / GFG / GGG§r). Right-click / use a NOS Rocket while gliding with an elytra for a hard 3.5x nitrous acceleration burst in the direction you're looking, complete with blue/cyan + orange flame particles and pressurized boost audio. (Using it on the ground does not consume it.)",
         "ops": false
       },
       {
-        "text": "§lOperators:§r to turn it off for everyone, disable §lElytra HUD§r in §e/realm:config§r -> §lElytra HUD§r. The same page sets when durability turns red.",
+        "text": "Don't want the HUD? Run §e/realm:elytra§r, or disable §lElytra HUD while gliding§r in §e/realm:prefs§r. Chat says §eElytra HUD: Disabled. Run /realm:elytra again to enable it.§r The choice is remembered.",
+        "ops": false
+      },
+      {
+        "text": "§lOperators:§r run §e/realm:elytra_nos [count]§r to give yourself NOS Rockets directly. To turn the HUD or NOS Rockets off, or tune the NOS boost multiplier (§enosMultiplier§r) and max flight speed cap (§enosMaxSpeed§r), open §e/realm:config§r -> §lElytra HUD§r.",
         "ops": true
       }
     ],
@@ -782,6 +786,12 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Enables or disables the gliding HUD §lfor yourself§r (enabled by default). Remembered between sessions. Works while the HUD is enabled for the realm (default enabled, §eenabled§r)"
+      },
+      {
+        "usage": "/realm:elytra_nos [count]",
+        "ops": false,
+        "who": "Operators",
+        "text": "Gives yourself §ecount§r (1 to 64, default 16) §lNOS Rockets§r (§ecustom:nos_rocket§r)"
       }
     ]
   },
@@ -2974,7 +2984,7 @@ export const PACKS = [
     "folder": "tornado_bp",
     "topic": "tornado",
     "name": "Tornadoes",
-    "summary": "Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wanders across open country for a couple of minutes, sweeping up mobs and dropped items and flinging players who get too close. It never breaks or places a single block, so builds are safe even when it passes right by them, and it leaves a few Storm Glass behind where it dies down. The funnel is drawn with particles from Realm Skies: without that resource pack the tornado still pulls, throws and warns, but you can't see it.",
+    "summary": "Some thunderstorms spin up a tornado: a tall, dense, swirling vortex funnel with a churning ground dust skirt and dark upper storm collar that wanders across open country for a couple of minutes. It sucks up nearby players (in any gamemode), spins them rapidly up the funnel for a few seconds, and shoots them high into the sky out the top before cushioning their landing with Slow Falling. It never breaks or places a single block and never touches mobs or dropped items, so builds, pets, villagers and farms are completely untouched, and it leaves a few Storm Glass behind where it dies down. The funnel is drawn with particles from Realm Skies: without that resource pack the tornado still pulls, launches and warns, but you can't see it.",
     "steps": [
       {
         "text": "When a thunderstorm starts, there's a chance (§echance§r, 0.2) that a tornado touches down during it, 1 to 4 minutes in, somewhere 80 to 160 blocks from one of the players in the Overworld, on open grass, dirt or sand.",
@@ -2989,7 +2999,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Want a closer look? Mobs and items near the funnel circle it and get lifted; get within about 6 blocks and you're thrown a few blocks up and out, then float down with Slow Falling, so it's a ride, not a death trap. Creative and spectator players are left alone.",
+        "text": "Want to ride the vortex? Step within §epullRadius§r (14 blocks) of the funnel in §lany gamemode§r (Survival, Creative, Adventure): the wind sucks you into the core, spins you around up the twisting funnel for a few seconds, and shoots you high into the sky out the top, granting Slow Falling near the apex so you float down safely. Mobs, NPCs, items and blocks are left completely alone.",
         "ops": false
       },
       {
@@ -2997,7 +3007,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the funnel. §e/realm:tornado§r -> §lSpawn one§r (or §e/realm:tornado_spawn§r) makes a tornado 40 blocks in front of you right away, in any weather; §lEnd the tornado§r stops it. §e/realm:config§r -> §lTornadoes§r enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are thrown.",
+        "text": "§lOperators:§r add Realm Skies under §lResource Packs§r so players can see the funnel. §e/realm:tornado§r -> §lSpawn one§r (or §e/realm:tornado_spawn§r) makes a tornado 40 blocks in front of you right away, in any weather; §lEnd the tornado§r stops it. §e/realm:config§r -> §lTornadoes§r enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are sucked up and launched.",
         "ops": true
       }
     ],

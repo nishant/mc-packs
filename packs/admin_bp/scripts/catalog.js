@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 168 commands in 64 packs */
+/** @type {Pack[]} 169 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -173,6 +173,7 @@ export const PACKS = [
     pack: "Elytra HUD",
     commands: [
       {"name":"realm:elytra","description":"Enable or disable the elytra HUD (speed, height, durability, rockets) for yourself","permission":"any","params":[]},
+      {"name":"realm:elytra_nos","description":"Give yourself NOS Rockets (custom:nos_rocket) for an elytra nitrous boost","permission":"op","params":[{"name":"count","type":"Integer","optional":true}]},
     ],
   },
   {

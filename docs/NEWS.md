@@ -6,11 +6,12 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
-## Effortless Building v5.0
+## Effortless Building v5.0, NOS Rockets & Tornado Vortex
 
 - Easy Building is now the full Effortless Building v5.0 experience: pick a mode, right-click to set your first anchor, watch the live 3D block outline stretch as you aim, and right-click again to build (or a third time for 3D height on cubes, cylinders, cones and slopes).
 - Hold the Building Book (/realm:build_book): tap right-click for the floating 3D Mode Menu, hold right-click for the Quick Switch Wheel, left-click for the Block Palette, Sneak + left-click for Mirror/Array/Radial Modifiers, and Sneak + right-click for Settings.
-- Read the 48-page illustrated 3D Tutorial Book (/realm:build_tutorial) or start the interactive Live Coach walkthrough (/realm:build_guide) in 13 languages.
+- Craft NOS Rockets (1 firework rocket surrounded by 8 gunpowder) and use one while gliding with an elytra for a 3.5x nitrous speed burst with blue/cyan and orange flames.
+- Tornadoes now have a dense, swirling multi-layered vortex funnel with a ground dust skirt and storm collar: step close in any gamemode and it sucks you in, spins you up the funnel and shoots you high out the top into the sky (leaving mobs, items and blocks untouched).
 
 ## Townsfolk stay home
 

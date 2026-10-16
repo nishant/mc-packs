@@ -17,6 +17,11 @@ const OPTIONS = [
   { key: "off", type: "bool", scope: "player", default: false, invert: true, label: "Elytra HUD while gliding", help: "The same switch as /realm:elytra" },
   { key: "showAt", type: "enum", scope: "world", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where the Elytra HUD shows (realm default)", help: "Right and Left 1-4 are boxes from Side HUD (Realm Resources); each pack can take its own, so they show at once. Other add-ons that use the line above the hotbar cannot cover them" },
   { key: "where", type: "enum", scope: "player", base: "showAt", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where my Elytra HUD shows", help: "Pick a box no other pack uses so they show at once" },
+  { key: "nosEnabled", type: "bool", scope: "world", label: "NOS Rockets", help: "Allow using NOS Rockets (custom:nos_rocket) for a nitrous boost while gliding" },
+  { key: "nosMultiplier", type: "float", scope: "world", label: "NOS Rocket boost multiplier (x)", help: "Relative to normal firework baseline (default 3.5x)", min: 1, max: 6, step: 0.25 },
+  { key: "nosBaseline", type: "float", scope: "world", label: "NOS Rocket baseline impulse (blocks/tick)", help: "Normal firework rocket impulse baseline", min: 0.25, max: 2, step: 0.05 },
+  { key: "nosMaxSpeed", type: "float", scope: "world", label: "NOS Rocket max speed (blocks/tick)", help: "Maximum flight speed cap (3.6 = 72 blocks/s) so repeated boosts do not compound infinitely", min: 1.5, max: 6, step: 0.1 },
+  { key: "nosBurstTicks", type: "int", scope: "world", label: "NOS Rocket burst duration (ticks)", help: "Ticks the nitrous thrust continues along your look direction", min: 1, max: 20, step: 1 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

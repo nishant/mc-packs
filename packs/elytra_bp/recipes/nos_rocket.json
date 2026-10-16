@@ -1,0 +1,30 @@
+{
+  "format_version": "1.21.60",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "custom:nos_rocket"
+    },
+    "tags": ["crafting_table"],
+    "pattern": [
+      "GGG",
+      "GFG",
+      "GGG"
+    ],
+    "key": {
+      "G": {
+        "item": "minecraft:gunpowder"
+      },
+      "F": {
+        "item": "minecraft:firework_rocket"
+      }
+    },
+    "unlock": [
+      { "item": "minecraft:gunpowder" },
+      { "item": "minecraft:firework_rocket" }
+    ],
+    "result": {
+      "item": "custom:nos_rocket",
+      "count": 1
+    }
+  }
+}

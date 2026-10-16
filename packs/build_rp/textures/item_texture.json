@@ -4,6 +4,7 @@
   "texture_data": {
     "building_book": { "textures": "textures/items/building_book" },
     "tutorial_book": { "textures": "textures/items/tutorial_book" },
-    "realm_building_book": { "textures": "textures/items/realm_building_book" }
+    "realm_building_book": { "textures": "textures/items/realm_building_book" },
+    "nos_rocket": { "textures": "textures/items/nos_rocket" }
   }
 }

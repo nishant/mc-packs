@@ -1357,17 +1357,19 @@ Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt`
 
 ## Elytra HUD — `elytra_bp`
 
-While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets you carry.
+While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and **NOS Rockets** you carry. This pack also adds the **NOS Rocket** (`custom:nos_rocket`), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles.
 
 ### How to use
 
-1. Put on an elytra and glide. In the second box on the right side of the screen (**Right 2**) you see something like `31.4 blocks/s  Y 142` and under it `Elytra 87%  Rockets 12`, updated 4 times a second. Prefer another place? **Where my Elytra HUD shows** in `/realm:prefs`.
-2. Don't want it? Run `/realm:elytra`, or disable **Elytra HUD while gliding** in `/realm:prefs`. Chat says `Elytra HUD: Disabled. Run /realm:elytra again to enable it.` The choice is remembered.
-3. **Operators:** to turn it off for everyone, disable **Elytra HUD** in `/realm:config` → **Elytra HUD**. The same page sets when durability turns red.
+1. Put on an elytra and glide. In the second box on the right side of the screen (**Right 2**) you see something like `31.4 blocks/s  Y 142` and under it `Elytra 87%  Rockets 12  NOS 4`, updated 4 times a second. Prefer another place? **Where my Elytra HUD shows** in `/realm:prefs`.
+2. Craft a **NOS Rocket** (`custom:nos_rocket`) at a crafting table by placing **1 Firework Rocket** in the center and **8 Gunpowder** around it (`GGG / GFG / GGG`). Right-click / use a NOS Rocket while gliding with an elytra for a hard 3.5x nitrous acceleration burst in the direction you're looking, complete with blue/cyan + orange flame particles and pressurized boost audio. (Using it on the ground does not consume it.)
+3. Don't want the HUD? Run `/realm:elytra`, or disable **Elytra HUD while gliding** in `/realm:prefs`. Chat says `Elytra HUD: Disabled. Run /realm:elytra again to enable it.` The choice is remembered.
+4. **Operators:** run `/realm:elytra_nos [count]` to give yourself NOS Rockets directly. To turn the HUD or NOS Rockets off, or tune the NOS boost multiplier (`nosMultiplier`) and max flight speed cap (`nosMaxSpeed`), open `/realm:config` → **Elytra HUD**.
 
 ### What players see
 
-- **Speed** in blocks per second (your total speed, diving included), **Y** (your height), **Elytra** durability left in percent and **Rockets**: firework rockets in your inventory and offhand.
+- **Speed** in blocks per second (your total speed, diving included), **Y** (your height), **Elytra** durability left in percent, **Rockets** (firework rockets in your inventory and offhand) and **NOS** (NOS Rockets carried, when at least 1).
+- **NOS Rocket** (`custom:nos_rocket`, stack size 64, 128x128 `nos_rocket` icon in `build_rp`): when activated while gliding, consumes 1 item (outside Creative), adds a `nosMultiplier` (`3.5`x) forward impulse over `nosBurstTicks` (`6` ticks) clamped to `nosMaxSpeed` (`3.6` blocks/tick, ~72 blocks/s) so consecutive boosts stay steerable and never compound infinitely. Normal vanilla firework rockets remain completely unchanged.
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
 - It only shows while you're gliding: the box goes away as you land (above the hotbar, the bar fades a moment after). Nothing is shown for players who aren't gliding.
 - When it shows above the hotbar and the [Coordinates HUD](#coordinates-hud--hud_bp) is on, the coordinates pause while you glide, so the two don't take turns on the bar; they come back a second or two after you land. In a side box, both show at once.
@@ -1378,6 +1380,7 @@ While you glide, a small box on the right side of your screen (or another box, o
 | Command | Who | What it does |
 |---|---|---|
 | `/realm:elytra` | Everyone | Enables or disables the gliding HUD **for yourself** (enabled by default). Remembered between sessions. Works while the HUD is enabled for the realm (default enabled, `enabled`) |
+| `/realm:elytra_nos [count]` | Operators | Gives yourself `count` (1 to 64, default 16) **NOS Rockets** (`custom:nos_rocket`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -1387,8 +1390,13 @@ While you glide, a small box on the right side of your screen (or another box, o
 | `intervalTicks` | `5` | Ticks between HUD updates while gliding (5 = 4 times a second) |
 | `lowPercent` | `10` | Elytra durability left (percent) at or below which it shows in red (1 to 50 in game) |
 | `showAt` | `"right2"` | Where it shows for players who haven't chosen: a [Side HUD](#side-hud--hud_rp) box, `right1` to `right4` or `left1` to `left4` (top to bottom) or `middle` (under the crosshair), or `hotbar` (the line above the hotbar). Other add-ons can cover only `hotbar` |
+| `nosEnabled` | `true` | Allow using NOS Rockets (`custom:nos_rocket`) while gliding with an elytra |
+| `nosMultiplier` | `3.5` | NOS Rocket boost multiplier relative to a normal firework rocket baseline (2.0 to 5.0 in game) |
+| `nosBaseline` | `0.75` | Normal firework rocket impulse baseline in blocks/tick |
+| `nosMaxSpeed` | `3.6` | Maximum total flight speed cap in blocks/tick (~72 blocks/s) so repeated NOS Rockets stay steerable and do not compound infinitely |
+| `nosBurstTicks` | `6` | Duration in ticks of the short nitrous thrust and particle trail burst |
 
-Operators can change `enabled`, `lowPercent` and `showAt` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`, and pick where it shows (**Where my Elytra HUD shows**).
+Operators can change `enabled`, `lowPercent`, `showAt`, `nosEnabled`, `nosMultiplier`, `nosBaseline`, `nosMaxSpeed` and `nosBurstTicks` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`, and pick where it shows (**Where my Elytra HUD shows**).
 
 ### Saved data
 
@@ -5616,24 +5624,23 @@ Operators can change `enabled`, `lightning`, `avoidZones`, `gapSeconds` and `for
 
 ## Tornadoes — `tornado_bp`
 
-Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wanders across open country for a couple of minutes, sweeping up mobs and dropped items and flinging players who get too close. It never breaks or places a single block, so builds are safe even when it passes right by them, and it leaves a few Storm Glass behind where it dies down. The funnel is drawn with particles from [Realm Skies](#realm-skies--sky_rp): without that resource pack the tornado still pulls, throws and warns, but you can't see it.
+Some thunderstorms spin up a tornado: a tall, dense, swirling vortex funnel with a churning ground dust skirt and dark upper storm collar that wanders across open country for a couple of minutes. It sucks up nearby players (in any gamemode), spins them rapidly up the funnel for a few seconds, and shoots them high into the sky out the top before cushioning their landing with Slow Falling. It never breaks or places a single block and never touches mobs or dropped items, so builds, pets, villagers and farms are completely untouched, and it leaves a few Storm Glass behind where it dies down. The funnel is drawn with particles from [Realm Skies](#realm-skies--sky_rp): without that resource pack the tornado still pulls, launches and warns, but you can't see it.
 
 ### How to use
 
 1. When a thunderstorm starts, there's a chance (`chance`, 0.2) that a tornado touches down during it, 1 to 4 minutes in, somewhere 80 to 160 blocks from one of the players in the Overworld, on open grass, dirt or sand.
 2. Anyone within 150 blocks gets a warning in chat, such as `§cTornado! 140m to the SW, moving NE.`, and hears a warning horn every 20 seconds while it lasts. Closer in you hear the wind roar and the storm rumble from its direction.
 3. Run `/realm:tornado` → **Where is the tornado?** (or `/realm:tornado_info`) any time to see where it is and which way it's heading, or `No tornado right now.`
-4. Want a closer look? Mobs and items near the funnel circle it and get lifted; get within about 6 blocks and you're thrown a few blocks up and out, then float down with Slow Falling, so it's a ride, not a death trap. Creative and spectator players are left alone.
+4. Want to ride the vortex? Step within `pullRadius` (14 blocks) of the funnel in **any gamemode** (Survival, Creative, Adventure): the wind sucks you into the core, spins you around up the twisting funnel for a few seconds, and shoots you high into the sky out the top, granting Slow Falling near the apex so you float down safely. Mobs, NPCs, items and blocks are left completely alone.
 5. When it dies down (after 1.5 to 3 minutes), chat says `§7The tornado has died down.` and 2 to 5 **Storm Glass** lie on the ground at the end of its path. Go pick them up.
-6. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the funnel. `/realm:tornado` → **Spawn one** (or `/realm:tornado_spawn`) makes a tornado 40 blocks in front of you right away, in any weather; **End the tornado** stops it. `/realm:config` → **Tornadoes** enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are thrown.
+6. **Operators:** add [Realm Skies](#realm-skies--sky_rp) under **Resource Packs** so players can see the funnel. `/realm:tornado` → **Spawn one** (or `/realm:tornado_spawn`) makes a tornado 40 blocks in front of you right away, in any weather; **End the tornado** stops it. `/realm:config` → **Tornadoes** enables or disables tornadoes in storms and sets the chance, the distance kept from spawn, what a tornado does in safe zones, the funnel's density and view distance, the pull radius and whether players are sucked up and launched.
 
 ### What players see
 
-- **The funnel:** rings of spinning dust stacked 40 blocks (`height`) up from the ground, narrow at the bottom and about 11 blocks wide at the top, bending and swaying, with dirt and leaf bits flung out at its base. Each player within `viewDistance` (128) blocks gets their own copy (`rings`, 16 rings, half as many beyond 64 blocks; `density` scales both), so players far away cost nothing.
+- **The funnel:** a dense, multi-layered swirling vortex stacked 42 blocks (`height`) up from the ground—flaring into a churning dust and debris skirt at the base, tapering through a dark inner condensation core wrapped in silver-gray spiral cloud bands, and spreading into a brooding storm collar with lightning sparks at the top. Each player within `viewDistance` (128) blocks gets their own copy (`rings`, 24 rings, roughly half beyond 64 blocks; `density` scales both), so players far away cost nothing.
 - **Where it goes:** it drifts 2 to 4 blocks a second (`speed`) on a slowly wandering heading, follows the ground over hills, and turns away rather than come within `avoidSpawn` (64) blocks of the world spawn. It may pass by builds: it never changes a block.
-- **Safe zones** ([Safe Zones](#safe-zones--zones_bp), protected towns and claims), by **Tornadoes and safe zones** (`zoneMode`): `pass` (default) goes through them like anywhere else, since it breaks nothing; `calm` pulls, lifts and throws nothing that is inside a zone (pens, farms and item sorters stay as they are); `avoid` never forms within `pullRadius` + 16 blocks of a zone and turns away before its pull reaches one (and is calm inside one, if an operator spawns it there).
-- **Pull:** mobs and dropped items within `pullRadius` (12) blocks of the funnel circle it, drift inward and rise up to `liftHeight` (8) blocks. Mobs get Slow Falling while they're in it, so pets, villagers and farm animals land safely. Townsfolk (`minecraft:npc`), armor stands, paintings, minecarts, boats, falling sand and gravel, primed TNT, ender pearls and other projectiles, and other packs' helper entities are never moved.
-- **Players:** at the edge of the pull radius you feel a tug toward the funnel; within half of it you're thrown a few blocks up and sideways (at most once every 4 seconds), and get Slow Falling for `slowFallingSeconds` (6) seconds near the top of the throw. `throwPlayers` disabled leaves players alone.
+- **Safe zones** ([Safe Zones](#safe-zones--zones_bp), protected towns and claims), by **Tornadoes and safe zones** (`zoneMode`): `pass` (default) goes through them like anywhere else, since it breaks nothing; `calm` leaves players inside a zone alone; `avoid` never forms within `pullRadius` + 16 blocks of a zone and turns away before its pull reaches one (and is calm inside one, if an operator spawns it there).
+- **Players only (any gamemode):** mobs, pets, villagers, townsfolk and dropped items are never pulled or harmed. Players within `pullRadius` (14) blocks feel the vortex suck them inward toward the base; once inside the funnel core they spiral rapidly around and up the vortex for ~2.8 seconds before being shot high into the sky out the top (boosted by `liftHeight`, 16) and receiving Slow Falling for `slowFallingSeconds` (8) seconds near the apex of their sky launch. Works in Survival, Creative, Adventure and Spectator alike. `throwPlayers` disabled leaves players alone.
 - **Warnings and sounds:** within `warnDistance` (150) blocks, a chat warning once per tornado with its distance, direction and heading (`§cTornado! 140m to the SW, moving NE.`), and the raid horn every `hornEvery` (20) seconds. Within 100 blocks a deep thunder rumble every 6 s; within 48 blocks the roar of wind every 5 s. Sounds come from the tornado's direction.
 - **When it ends:** chat says `§7The tornado has died down.` to everyone who was warned (also when an operator ends it), and 2 to 5 (`stormGlass`) Storm Glass drop along the last part of its path: prismarine crystals named `Storm Glass` with the lore `Charged by a lightning strike`, the same item other packs use. A natural tornado dies down within 10 seconds once the thunderstorm ends.
 - **Journal:** players who see it (within `viewDistance`) get the **Tornado** page in their journal (Journal pack), and innkeepers' **Hear the news** ([Waystones & Inns](#waystones--inns--waystone_bp)) passes on `A tornado touched down` (the `realm:sky_event` script event).
@@ -5661,15 +5668,15 @@ Some thunderstorms spin up a tornado: a tall, swaying funnel of dust that wander
 | `formDistance.min` | `80` | Closest it forms to the chosen player, in blocks |
 | `formDistance.max` | `160` | Farthest it forms from the chosen player, in blocks |
 | `avoidSpawn` | `64` | It never forms or travels closer than this many blocks to the world spawn |
-| `zoneMode` | `"pass"` | Safe zones: `pass` goes through them as usual (it never breaks blocks anyway), `calm` moves nothing inside them, `avoid` never forms near one and turns away from them |
+| `zoneMode` | `"pass"` | Safe zones: `pass` goes through them as usual (it never breaks blocks anyway), `calm` leaves players inside them alone, `avoid` never forms near one and turns away from them |
 | `viewDistance` | `128` | Players within this many blocks see the funnel (and get the journal page) |
-| `height` | `40` | Height of the funnel, in blocks |
-| `rings` | `16` | Rings of dust stacked up the funnel for each player near it (half as many beyond 64 blocks); each is redrawn every half second |
+| `height` | `42` | Height of the funnel, in blocks |
+| `rings` | `24` | Rings of vortex clouds stacked up the funnel for each player near it (roughly half beyond 64 blocks) |
 | `density` | `1` | Multiplies `rings` and the debris, 0.25 to 1.5: lower it if the funnel slows devices down |
-| `pullRadius` | `12` | Mobs, items and players within this many blocks of the funnel are pulled in |
-| `liftHeight` | `8` | Mobs and items are lifted up to this many blocks above the ground |
-| `throwPlayers` | `true` | Players close to the funnel are thrown a few blocks and land with Slow Falling |
-| `slowFallingSeconds` | `6` | Seconds of Slow Falling after being thrown |
+| `pullRadius` | `14` | Players within this many blocks of the funnel are sucked in, spun up the vortex and shot out the top |
+| `liftHeight` | `16` | Extra sky launch boost height above the top of the funnel |
+| `throwPlayers` | `true` | Players close to the funnel (in any gamemode) are sucked in, spun up the funnel and shot high out the top with Slow Falling |
+| `slowFallingSeconds` | `8` | Seconds of Slow Falling after being shot out the top |
 | `warnDistance` | `150` | Players within this many blocks get the chat warning and the horn |
 | `hornEvery` | `20` | Seconds between warning horns; `0` = no horn |
 | `stormGlass.min` | `2` | Fewest Storm Glass dropped where it dies down |
@@ -6222,8 +6229,8 @@ Particles, each spawned by a behavior pack with `player.spawnParticle(id, locati
 | `realm:sky_sand` | 20 sand grains in an 8 x 3 x 8 box around the location, blown by the wind | `variable.wx`, `variable.wz` wind in blocks/s | [Regional Weather](#regional-weather--climate_bp) |
 | `realm:sky_snow` | 20 snow streaks in an 8 x 4 x 8 box, driven by the wind and falling | `variable.wx`, `variable.wz` | [Regional Weather](#regional-weather--climate_bp) |
 | `realm:sky_fogbank` | 2 wide, faint, wispy sheets of pale mist (a 128 by 32 noise texture, no round outline) lying low within 6 blocks, about 10 to 15 blocks across, fading in over 4 s and out over 5 s, for 12 to 16 s | none | [Regional Weather](#regional-weather--climate_bp) |
-| `realm:sky_tornado` | One ring of dust circling the location and climbing for about a second (8 to 40 puffs, 5 per block of radius) | `variable.radius` blocks (2), `variable.spin` radians/s (4) | [Tornadoes](#tornadoes--tornado_bp) |
-| `realm:sky_debris` | 5 dark leaves and clods thrown outward and up from the ring, tumbling | `variable.radius` (2) | [Tornadoes](#tornadoes--tornado_bp) |
+| `realm:sky_tornado` | One ring of swirling vortex clouds (inner condensation core + outer spiral bands, 24 to 68 puffs) circling the location and climbing for about a second | `variable.radius` blocks (2), `variable.spin` radians/s (5), `variable.height` 0..1 (0) | [Tornadoes](#tornadoes--tornado_bp) |
+| `realm:sky_debris` | 12 dark leaves and dirt clods spiraling upward and outward around the lower funnel | `variable.radius` (2.5) | [Tornadoes](#tornadoes--tornado_bp) |
 | `realm:sky_blood` | 6 slow red motes rising in an 8 x 2 x 8 box, 4 to 6.5 s | none | [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) |
 | `realm:sky_harvest` | The same, golden | none | [Blood Moon & Harvest Moon](#blood-moon--harvest-moon--moon_bp) |
 | `realm:sky_spark` | 4 blue zigzag sparks, a quarter second | none | [Storm Chasing](#storm-chasing--storm_bp) |
@@ -6261,9 +6268,9 @@ Everything in `packs/sky_rp/` is generated by `npm run gen:sky` (`tools/gen-sky/
 |---|---|
 | `particles/*.json` | The 18 particles above (format 1.10.0) |
 | `fogs/*.json` | The 5 fogs above (`distance.air` and `distance.weather`) |
-| `textures/particle/realm_sky_*.png` | Aurora flipbook (8 frames of 32x128), glow, meteor fireball, smoke, fog puff, 4 dust puffs, sand grain, snow streak, leaf and clod, 2 sparks, sparkle, cloud and raindrop |
+| `textures/particle/realm_sky_*.png` | Aurora flipbook (8 frames of 32x128), glow, meteor fireball, smoke, fog puff, 4 swirling 32x32 vortex cloud puffs, sand grain, snow streak, leaf and clod, 2 sparks, sparkle, cloud and raindrop |
 | `pack_icon.png` | A night sky with stars, an aurora, a shooting star and dark hills (128x128) |
-| `manifest.json` | Fixed uuids, version 1.1.0 |
+| `manifest.json` | Fixed uuids, version 1.3.0 |
 
 `npm run check` runs `node tools/gen-sky/gen.mjs --check`, which fails if any file in the pack differs from what the generator makes, is missing, or is left over in its folders. It also fails if a particle names a texture the generator doesn't make.
 

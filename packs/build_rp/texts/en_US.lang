@@ -49,6 +49,7 @@ eb.bar.copy_cancelled=§7[EB] Selection cancelled - right-click to set corner 1
 eb.first_open=§b[EB] §fNew here? Hold the §6Tutorial§f book to read the guide, or type §a/realm:build_guide§f for a quick walkthrough.
 item.eb:building_book.name=§b§lBuilding Book
 item.eb:tutorial_book.name=§b§lEffortless Building Tutorial
+item.custom:nos_rocket.name=NOS Rocket
 eb.bar.pasted=%1 blocks §apasted
 eb.bar.paste_empty=§e[EB] §7Nothing in clipboard to paste.
 eb.bar.bezier=§7Bezier: §f%1 points set  §8·  §fSneak+click §7to place  §8·  §7Click to add more
