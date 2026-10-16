@@ -19,7 +19,7 @@ export const CONFIG = {
   mist: {
     /** Low mist near the ground around each player during thunderstorms, when outdoors. */
     enabled: true,
-    /** Mist puffs per second per player. Each puff is 4 soft sprites that live about 4 s (2 → about 32 on screen). */
+    /** Mist puffs per second per player. Each puff is 2 wide, faint sheets of mist that live about 6 s (2 → about 24 on screen). */
     puffsPerSecond: 2,
   },
 
