@@ -1176,7 +1176,7 @@ export const PACKS = [
         "usage": "/realm:npc_add <id>",
         "ops": false,
         "who": "Operators",
-        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed); if you're flying, on top of the floor under you (a slab's or path's real top)"
+        "text": "Places that townsfolk where you stand, facing you (moves it there if it's already placed); if you're flying, on top of the floor under you (a slab's or path's real top). Warns when that puts it on another townsfolk's spot (within 1.5 blocks at the same time of day): two on one spot push each other"
       },
       {
         "usage": "/realm:npc_remove",
@@ -1188,19 +1188,19 @@ export const PACKS = [
         "usage": "/realm:npc_home <id>",
         "ops": false,
         "who": "Operators",
-        "text": "Where that townsfolk goes at night (time 13000 to 23000, §enightStart§r/§enightEnd§r); in the same dimension as its post (on the ground under you if you're flying). Run it within 2 blocks of the post to clear the home"
+        "text": "Where that townsfolk goes at night (time 13000 to 23000, §enightStart§r/§enightEnd§r); in the same dimension as its post (on the ground under you if you're flying). Run it within 2 blocks of the post to clear the home. Warns when the spot is on another townsfolk's spot at that time of day"
       },
       {
         "usage": "/realm:npc_post <id> <noon\\|evening>",
         "ops": false,
         "who": "Operators",
-        "text": "Where that townsfolk spends lunch (from time 6000, §elunchStart§r) or the evening (from 9000, §eeveningStart§r, until night), where you stand; same dimension as its post. Run it within 2 blocks of the post to clear that spot"
+        "text": "Where that townsfolk spends lunch (from time 6000, §elunchStart§r) or the evening (from 9000, §eeveningStart§r, until night), where you stand; same dimension as its post. Run it within 2 blocks of the post to clear that spot. Warns when the spot is on another townsfolk's spot at that time of day"
       },
       {
         "usage": "/realm:npc_list",
         "ops": false,
         "who": "Operators",
-        "text": "Every placed townsfolk with its coordinates, dimension, home, lunch and evening spots and whether it's loaded, and the ids not placed yet"
+        "text": "Every placed townsfolk with its coordinates, dimension, home, lunch and evening spots and whether it's loaded, and the ids not placed yet. A townsfolk whose spot is within 1.5 blocks of another's at the same time of day is marked in red (§e(same spot as Elsie the Innkeeper at lunch)§r)"
       }
     ]
   },
