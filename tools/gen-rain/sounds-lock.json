@@ -122,14 +122,24 @@
       "volume": 0.16
     },
     "rain_inside1": {
-      "recipe": "2a8958162c4c540531583b5569377dc04a0793b62bb3ffc9f791135fb14036f4",
-      "ogg": "2866da8a699af4aa7f546b9cf12e4814e9c2393323a5335b9498867bee930cd3",
-      "volume": 0.064
+      "recipe": "2e2d8259a4cce40c509587306e10e002c75a51d3e08b77c9858259e1f8d12e50",
+      "ogg": "910de551d778544bb6d172d373ec319d0634b2a79fc09f023e4b63e50d36413f",
+      "volume": 0.069
     },
     "rain_inside2": {
-      "recipe": "c6858e6f70c6aa485f259a9eaba27f93757602b8c76fade27b4e9bd98f31dd9c",
-      "ogg": "6abd31407114235f6f5280c46f27e1e08a2c1eda115d9a857dd95377860be721",
+      "recipe": "b4b1716edf9debf7c943fa46d6b1c5efbe75bcce0934c59ca085236030e5a68b",
+      "ogg": "0a9860a181bdeca3a87a7d1bb407355dd59fa4cefeab38b09762e51e0a0346e5",
+      "volume": 0.069
+    },
+    "rain_enter1": {
+      "recipe": "21612d0670c3c668acf3343e61509df2f1691b8ddb07765fa905c8b44d365295",
+      "ogg": "d67048d0449be5f2efa29c81f4338e39e8ff58cfb950def537cf3c7a111004aa",
       "volume": 0.064
+    },
+    "rain_enter2": {
+      "recipe": "5a945bab0cac70043e3771cddf82a4047214387e5242bb59231a01dc20f5b882",
+      "ogg": "52dc1ffb7b9cc3024861bacc589028be37f38fc7f7bd523d440f48b98e73d708",
+      "volume": 0.067
     },
     "wind1": {
       "recipe": "f8de2b001ec54618b083c31a734510e2d48bed2cbaffb5de898f066161743693",
@@ -147,34 +157,34 @@
       "volume": 0.204
     },
     "wind_inside1": {
-      "recipe": "bd835ca5a9c57ce44a28b90244c8c0d3d8ba6e42eca85427197cacf4121916bd",
+      "recipe": "6cb0b170df7bd78a4371aeded551569ba7ab2440436d6acba4c97b025cbd9035",
       "ogg": "9bddb6316776931b9b8ce70b3d513b3003dbfcbc2489158ad8e8d41f8165b65d",
-      "volume": 0.18
+      "volume": 0.127
     },
     "wind_inside2": {
-      "recipe": "e3a559f5fa740a8ed6f2846fb5d6bffda55689f28c9b473e8ed7cb6d2a653530",
+      "recipe": "674bf9643853e1e2dbcfe1b682a06c33eda155fcdb32f5ebded4154a49279265",
       "ogg": "90620c23818aff80db4769f8f639ab59d970e4d67e97234cd36876e0790facd2",
-      "volume": 0.182
+      "volume": 0.129
     },
     "roof1": {
-      "recipe": "2470de89fccbd447aab449093a0c7672ade2aae5d2b83185183c017ea22b41a2",
+      "recipe": "d00c4fff27fc513ba6d50c7e76220bab9d6704b3c53696306a81e873b3b06ceb",
       "ogg": "18f6ac56b3b45bafd6cfa3c334ae0e1a61c79299d20442312b24cad0e9cce3ec",
-      "volume": 0.18
+      "volume": 0.038
     },
     "roof2": {
-      "recipe": "86cbd883078e39ace61f0f7fc526079e112c378b6ecf276759be75ab9060cdea",
+      "recipe": "1e96719dc5141d325cdcd6529ecb5ca171e0efd8943d76be9533d73c744c1feb",
       "ogg": "d5761291f38c3fdfe69dbe7da0bba43e48bf4f210ba70fc5c8d9c404154630d4",
-      "volume": 0.18
+      "volume": 0.038
     },
     "roof3": {
-      "recipe": "a347fd4445ee6a34a6153ee840083f2beeddf57ed5ce7ad8c50412cfa7a66d40",
+      "recipe": "e486f0687587cea7517a972c6a2e83f3c732ab2356efee501988271b213d4ef4",
       "ogg": "a263715a3d8afde895259d668c316fe02b12ace26a4ef72a30678231c8965899",
-      "volume": 0.182
+      "volume": 0.039
     },
     "roof4": {
-      "recipe": "5c2b9390dfa0db165148bb37f3e17649146ad499e4628dd57cf9b66459c4d546",
+      "recipe": "d83fe6e10b58e03b0d37f0016f17a695cd796ae1678722e473a6f2812a7b3c0d",
       "ogg": "131a08a3196e527cd430402552825ff02d2da684bcb4968706a97fa806b3d82f",
-      "volume": 0.18
+      "volume": 0.038
     }
   }
 }

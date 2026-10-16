@@ -1,8 +1,11 @@
 export const CONFIG = {
-  /** Operators who don't carry a Realm Configuration item get one when they join or respawn, and within `checkSeconds` of becoming an operator. */
+  /** Every player who doesn't carry a Realm Configuration item gets one when they join or respawn. Players who aren't operators see only the commands they can use. */
+  giveToPlayers: true,
+
+  /** With giveToPlayers off: operators who don't carry a Realm Configuration item get one when they join or respawn, and within `checkSeconds` of becoming an operator. */
   giveToOperators: true,
 
-  /** Take the item away from players who aren't operators (only the real item, not something renamed on an anvil). */
+  /** With giveToPlayers off: take the item away from players who aren't operators (only the real item, not something renamed on an anvil). */
   removeFromOthers: true,
 
   /** How often to check who carries the item, in seconds (5 to 300). */

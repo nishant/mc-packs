@@ -43,7 +43,7 @@ import {
   today,
   wanderShape,
 } from "./data.js";
-import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, ownUntil, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weatherWait } from "./objectives.js";
+import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, outdoors, ownUntil, progressed, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weatherWait } from "./objectives.js";
 import { canTake, partyMates, partyTick, reporters, takers } from "./party.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
@@ -329,15 +329,43 @@ function trackQuest(player, e) {
   const id = e.story.id;
   const saga = sagaOf(player);
   saga.tr = id;
+  showAgain(saga, id);
   markDirty(player);
   player.sendMessage(`§b[Story] Tracking ${e.story.title}.`);
   if (e.fav) return;
   for (const mate of partyMates(player)) {
     if (!entries(mate).some((x) => x.story.id === id && !x.fav)) continue;
-    sagaOf(mate).tr = id;
+    const ms = sagaOf(mate);
+    ms.tr = id;
+    showAgain(ms, id);
     markDirty(mate);
     mate.sendMessage(`§b[Party] ${player.name} set the party's tracked quest: ${e.story.title}.`);
   }
+}
+
+/** Is this quest off the tracker (Stop tracking)? @param {Saga} saga @param {string} id */
+export const untracked = (saga, id) => !!saga.ut?.includes(id);
+
+/** Takes a quest off the untracked list. @param {Saga} saga @param {string} id */
+function showAgain(saga, id) {
+  if (!saga.ut?.includes(id)) return;
+  saga.ut = saga.ut.filter((x) => x !== id);
+  if (!saga.ut.length) delete saga.ut;
+}
+
+/**
+ * Stops tracking a quest: it stays in the Story Log and still counts, but the tracker and the Minimap skip it until
+ * the player picks Track this quest again (or starts its next chapter). Personal, also in a party.
+ * @param {Player} player @param {Entry} e
+ */
+function untrackQuest(player, e) {
+  const id = e.story.id;
+  const saga = sagaOf(player);
+  if (saga.tr === id) delete saga.tr;
+  if (!untracked(saga, id)) saga.ut = [...(saga.ut ?? []), id].slice(-40);
+  markDirty(player);
+  progressed.add(player.id);
+  player.sendMessage(`§7[Story] Stopped tracking ${e.story.title}. It stays in your Story Log and still counts; pick Track this quest there to show it again.`);
 }
 
 /**
@@ -355,8 +383,19 @@ export function trackedFirst(player, list) {
   return sorted;
 }
 
-/** The track button's label. @param {Player} player @param {Entry} e */
-const trackLabel = (player, e) => (sagaOf(player).tr === e.story.id ? "Tracked\n§8The tracker follows this quest" : "Track this quest\n§8The tracker follows it" + (!e.fav && partyMates(player).length ? ", for your party too" : ""));
+/**
+ * The track buttons for a quest's page: Track this quest (unless it's the tracked one) and Stop tracking (unless it's
+ * off the tracker already). @param {Player} player @param {Entry} e @returns {[string, () => void][]}
+ */
+function trackButtons(player, e) {
+  const saga = sagaOf(player);
+  /** @type {[string, () => void][]} */
+  const out = [];
+  if (saga.tr !== e.story.id)
+    out.push([`Track this quest\n§8${untracked(saga, e.story.id) ? "Show it in the tracker again" : "The tracker follows it"}${!e.fav && partyMates(player).length ? ", for your party too" : ""}`, () => trackQuest(player, e)]);
+  if (!untracked(saga, e.story.id)) out.push(["Stop tracking\n§8Hide it from the tracker and map", () => untrackQuest(player, e)]);
+  return out;
+}
 
 /** A choice's button: its label, and what it costs. @param {import("./types.js").Choice} c */
 const choiceLabel = (c) => (c.cost?.crowns ? `${c.label} (${c.cost.crowns} Crowns)` : c.label);
@@ -598,6 +637,7 @@ async function accept(player, story, chapter, saga, st, choice, heard = () => {}
   delete st.x;
   delete st.h;
   st.t = Date.now();
+  showAgain(saga, story.id); // a new chapter the player took on shows again
   invalidate(player.id);
   markDirty(player, true);
   if (story.kind === "main") {
@@ -721,7 +761,7 @@ export async function chapterInfo(player, story) {
       const cost = hintCost(e);
       /** @type {[string, () => Promise<unknown>][]} */
       const actions = [];
-      actions.push([trackLabel(player, e), async () => trackQuest(player, e)]);
+      for (const [label, fn] of trackButtons(player, e)) actions.push([label, async () => fn()]);
       actions.push([
         e.st.h ? "Read the hint again" : cost.levels + cost.crowns > 0 ? `Ask for a hint\n§8Costs ${cost.levels} level${cost.levels === 1 ? "" : "s"}, ${cost.crowns} Crowns` : "Ask for a hint\n§8Free",
         () => showHint(player, e),
@@ -896,6 +936,7 @@ async function favorStart(player, npc) {
     if (pick !== 0 || !player.isValid) return;
     saga.fv ??= {};
     saga.fv[npc] = { id: f.id, d: day, a: 1, o: [], t: Date.now() };
+    showAgain(saga, `fv:${npc}`);
     invalidate(player.id);
     markDirty(player, true);
     player.sendMessage(`§6[Story] Daily favor for ${npcName(npc)}: §e${f.objective.label}`);
@@ -911,8 +952,11 @@ async function favorInfo(player, npc) {
     const e = entries(player).find((x) => x.fav === npc);
     if (!e) return;
     const lines = [chapterHeader(saga, e.story, 0), "", ...objectiveLines(player, e, saga)];
-    const res = await show(player, new ActionFormData().title(e.story.title).body(lines.join("\n")).button("OK").button("Give up this favor").button(trackLabel(player, e)));
-    if (res && !res.canceled && res.selection === 2) trackQuest(player, e);
+    const tb = trackButtons(player, e);
+    const form = new ActionFormData().title(e.story.title).body(lines.join("\n")).button("OK").button("Give up this favor");
+    for (const [label] of tb) form.button(label);
+    const res = await show(player, form);
+    if (res && !res.canceled && res.selection !== undefined && res.selection >= 2) tb[res.selection - 2]?.[1]();
     if (res && !res.canceled && res.selection === 1) {
       const fs = saga.fv?.[npc];
       if (fs) {
@@ -991,6 +1035,7 @@ async function wanderStart(player, wid) {
     wv.t = Date.now();
     delete wv.x;
     delete wv.h;
+    if (saga.ut) saga.ut = saga.ut.filter((x) => !x.startsWith("wv:"));
     invalidate(player.id);
     markDirty(player, true);
     send("realm:wander_done", { player: player.id, wid: wv.w, how: "accepted" });
@@ -1011,11 +1056,13 @@ async function wanderInfo(player) {
     if (!wv || !e) return;
     const lines = [chapterHeader(saga, e.story, 0), "", `§fCurrent step: §e${stepLine(player, e, saga)}§r`, "", ...objectiveLines(player, e, saga)];
     if (e.chapter.hint) lines.push("", `§7${e.chapter.hint}`);
-    const form = new ActionFormData().title(wv.nm).body(lines.join("\n")).button("OK").button(trackLabel(player, e));
+    const tb = trackButtons(player, e);
+    const form = new ActionFormData().title(wv.nm).body(lines.join("\n")).button("OK");
+    for (const [label] of tb) form.button(label);
     if (!wv.tn) form.button("Give up this job");
     const res = await show(player, form);
-    if (res && !res.canceled && res.selection === 1) return void trackQuest(player, e);
-    if (!res || res.canceled || res.selection !== 2 || wv.tn || saga.wv !== wv) return;
+    if (res && !res.canceled && res.selection !== undefined && res.selection >= 1 && res.selection <= tb.length) return void tb[res.selection - 1][1]();
+    if (!res || res.canceled || res.selection !== tb.length + 1 || wv.tn || saga.wv !== wv) return;
     e.chapter.objectives.forEach((_, i) => endScene(player.id, objKey(e, i)));
     delete saga.wv;
     invalidate(player.id);
@@ -1180,7 +1227,7 @@ function pointAt(player, e, saga, optional) {
     const d = loc.dim === player.dimension.id ? across(player.location, loc) : 1e9;
     if (d < bestD) {
       bestD = d;
-      best = `§f${loc.label} ${bearing(player, loc, radiusOf(obj))}${watchText(e, i, obj)}`;
+      best = `§f${loc.label} ${bearing(player, loc, radiusOf(obj))}${watchText(player, e, i, obj, d <= radiusOf(obj))}`;
       bestAt = { label: loc.label, dim: loc.dim, x: loc.x, z: loc.z };
     }
   });
@@ -1190,13 +1237,14 @@ function pointAt(player, e, saga, optional) {
 
 /**
  * A survive or vigil step's seconds so far and, while the weather is wrong, what it waits for:
- * " 83 s left" or " 120 s left - wait for a thunderstorm (due in about 6 min)".
- * @param {Entry} e @param {number} i @param {Objective} obj
+ * " 83 s left" or " 120 s left - wait for a thunderstorm (due in about 6 min)"; at the place under a roof (a step
+ * that needs the open sky), " 83 s left - step out under the open sky".
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj @param {boolean} here
  */
-function watchText(e, i, obj) {
+function watchText(player, e, i, obj, here) {
   if (obj.type !== "survive" && obj.type !== "vigil") return "";
   const left = target(obj) - progressOf(e, i);
-  const wait = weatherWait(obj);
+  const wait = weatherWait(obj) ?? (left > 0 && here && (obj.type === "survive" || obj.outdoors) && !outdoors(player) ? "step out under the open sky" : undefined);
   return `${left > 0 ? ` §e${left} s left` : ""}${wait ? ` §7- ${wait}` : ""}`;
 }
 
@@ -1235,7 +1283,7 @@ export function resendTracks(playerId) {
  */
 export function track(player, list, shown = true) {
   const saga = sagaOf(player);
-  const sorted = trackedFirst(player, list);
+  const sorted = trackedFirst(player, saga.ut?.length ? list.filter((e) => !untracked(saga, e.story.id)) : list);
   /** @type {string | undefined} */
   let line;
   /** @type {Entry | undefined} */
@@ -1419,7 +1467,8 @@ export async function showMenu(player) {
     const lines = [];
     if (get("enabled") !== true) lines.push("§cStories are paused by an operator: nothing counts for now.§r", "");
     const tr = saga.tr ? active.find((e) => e.story.id === saga.tr) : undefined;
-    const main = tr ?? active.find((e) => e.story.kind === "main") ?? active[0];
+    const shown = active.filter((e) => !untracked(saga, e.story.id));
+    const main = tr ?? shown.find((e) => e.story.kind === "main") ?? shown[0] ?? active[0];
     if (main) lines.push(`§fNow: §e${main.story.title}§r`, `§7Current step: ${stepLine(player, main, saga)}`);
     else lines.push(available.length ? `§7Talk to ${npcName(available[0].giver)} to start ${available[0].title}.` : "§7No story in progress.");
     /** @type {[string, () => Promise<unknown>][]} */
@@ -1456,11 +1505,11 @@ export async function currentPage(player) {
       await show(player, new ActionFormData().title("Current quests").body("No story in progress. See Available for stories you can start.").button("Back"));
       return;
     }
-    const form = new ActionFormData().title("Current quests").body("Pick one for its objectives, Track this quest, a hint, and the intro again.");
+    const form = new ActionFormData().title("Current quests").body("Pick one for its objectives, Track this quest or Stop tracking, a hint, and the intro again.");
     /** @type {(() => Promise<unknown>)[]} */
     const acts = [];
     /** @param {string} id */
-    const mark = (id) => (saga.tr === id && list.some((x) => x.story.id === id) ? "§b[Tracked]§r " : "");
+    const mark = (id) => (saga.tr === id && list.some((x) => x.story.id === id) ? "§b[Tracked]§r " : untracked(saga, id) && list.some((x) => x.story.id === id) ? "§8[Not tracked]§r " : "");
     for (const story of stories) {
       const e = list.find((x) => x.story.id === story.id);
       const cur = currentChapter(saga, story);

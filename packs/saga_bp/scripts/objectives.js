@@ -2,7 +2,7 @@
 // (story characters, guards, escorts, wisps, defenses, visions, riddles).
 import { EquipmentSlot, GameMode, ItemStack, MolangVariableMap, Player, system, world } from "@minecraft/server";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
-import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor } from "./actors.js";
+import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, spawnFresh } from "./actors.js";
 import {
   active,
   applyChoice,
@@ -836,7 +836,12 @@ for (const s of STORIES) for (const c of s.chapters) for (const o of c.objective
 /** Is a champion with this tag loaded anywhere in the dimension? @param {string} tag @param {Dimension} dim */
 function championAlive(tag, dim) {
   try {
-    return dim.getEntities({ tags: [tag] }).length > 0;
+    // Only a living mob counts: an item that got the tag (a world whose entity ids repeat) loses it.
+    return dim.getEntities({ tags: [tag] }).some((e) => {
+      if (e.getComponent("minecraft:health")) return true;
+      e.removeTag(tag);
+      return false;
+    });
   } catch {
     return false;
   }
@@ -927,8 +932,10 @@ function championNear(player, obj) {
   // No Champions pack (or a mob it can't make)? Spawn a tougher named mob ourselves, so the story can still be finished.
   system.runTimeout(() => {
     try {
-      if ((viaPack && get("championFallback") !== true) || championAlive(champ.tag, dim)) return;
-      const mob = dim.spawnEntity(/** @type {any} */ (champ.mob), spawnAt);
+      if (championAlive(champ.tag, dim)) return;
+      // Nothing came: ask again in 5 seconds rather than after championRetrySeconds.
+      if (viaPack && get("championFallback") !== true) return void championNext.set(champ.tag, Date.now() + 5000);
+      const mob = spawnFresh(dim, champ.mob, spawnAt);
       mob.nameTag = `§c${champ.name}`;
       mob.addTag(CHAMPION_TAG);
       mob.addTag(champ.tag);
@@ -949,6 +956,7 @@ function championNear(player, obj) {
       }, 2);
     } catch (e) {
       console.warn(`[saga] champion fallback: ${e}`);
+      championNext.set(champ.tag, Date.now() + 5000);
     }
   }, 60);
 }

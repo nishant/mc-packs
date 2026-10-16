@@ -21,6 +21,7 @@ const BED = "realm.storm.bed";
 const BED_INSIDE = "realm.storm.bed_inside";
 const RAIN = "ambient.weather.rain"; // the game's own rain sound (Realistic Rain's clips)
 const RAIN_INSIDE = "realm.rain.inside";
+const RAIN_ENTER = "realm.rain.enter"; // the open rain closing down to the muffled one: played when the game's rain is stopped
 const WIND_EVERY = 8; // seconds between wind plays: the clips are 10 s with 2 s crossfades
 const ROOF_EVERY = 3; // the roof clips are 3.6 s
 const BED_EVERY = 18; // the thunderstorm clips are 20 s with 2 s crossfades
@@ -42,8 +43,9 @@ const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]
 /** @typedef {"out" | "in" | "none"} Place where the player hears the weather from: outdoors (or under a tree), indoors, or out of its reach */
 /**
  * @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number,
- *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean, covered: number }} State muffle: stop the game's rain
- *   for this player; covered: updates in a row with a roof overhead
+ *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean, open: boolean, covered: number }} State muffle: stop the game's rain
+ *   for this player; open: the game's rain played unmuffled for them at the last update (it rained and they were in its
+ *   reach); covered: updates in a row with a roof overhead
  */
 /** @typedef {{ level: number, stepIn: number }} Roll a fog that rolls in or out in steps */
 
@@ -69,7 +71,7 @@ function extrasOff(player) {
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let st = players.get(player.id);
-  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false, covered: 0 }));
+  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false, open: false, covered: 0 }));
   return st;
 }
 
@@ -163,7 +165,9 @@ function step(roll, /** @type {number} */ target, /** @type {number} */ steps, /
 
 /** One player's second: fogs, then mist, drips and sounds around them. @param {Player} player @param {State} st */
 function update(player, st) {
+  const wasOpen = st.open;
   st.muffle = false;
+  st.open = false;
   const off = extrasOff(player);
   const overworld = player.dimension.id === OVERWORLD;
   const raining = weather !== WeatherType.Clear;
@@ -209,7 +213,8 @@ function update(player, st) {
   st.covered = outdoors || underTree ? 0 : st.covered + 1;
   const place = st.covered >= 2 || (st.covered > 0 && st.place === "in") ? "in" : "out";
   st.muffle = place === "in" && get("roof.muffleRain");
-  sounds(player, st, place, !outdoors && !underTree && above <= CONFIG.roof.maxHeadroom);
+  st.open = !st.muffle;
+  sounds(player, st, place, !outdoors && !underTree && above <= CONFIG.roof.maxHeadroom, wasOpen);
 }
 
 /** Out of the rain's reach (another dimension, underground, a desert, extras off): no haze, no weather sounds. @param {Player} player @param {State} st */
@@ -292,8 +297,11 @@ function setHaze(player, st, level) {
 // Wind and rain on the roof (Player.playSound: only that player hears them)
 // ---------------------------------------------------------------------------
 
-/** @param {Player} player @param {State} st @param {Place} place @param {boolean} roofNear a roof low enough to hear the rain on it */
-function sounds(player, st, place, roofNear) {
+/**
+ * @param {Player} player @param {State} st @param {Place} place @param {boolean} roofNear a roof low enough to hear the rain on it
+ * @param {boolean} rainWasOpen the game's rain was playing for this player, unmuffled, until now
+ */
+function sounds(player, st, place, roofNear, rainWasOpen) {
   if (place !== st.place) {
     // Walking in or out: cut the wind and storm sound you were hearing and start the other ones now.
     if (st.place !== "none") stopSounds(player, st);
@@ -307,9 +315,11 @@ function sounds(player, st, place, roofNear) {
   st.roofIn -= UPDATE_SECONDS;
   st.bedIn -= UPDATE_SECONDS;
   st.insideIn -= UPDATE_SECONDS;
-  if (st.muffle && st.insideIn <= 0) {
+  if (st.muffle && (rainWasOpen || st.insideIn <= 0)) {
+    // The game's rain stops this tick (in tick()), all at once. Walking in, the muffled rain starts as the open rain at the
+    // same level and closes down to the muffled one over about 1.5 s, so the rain never cuts off; then 20 s clips crossfade.
     const volume = get("roof.volume");
-    if (volume > 0) player.playSound(RAIN_INSIDE, { volume });
+    if (volume > 0) player.playSound(rainWasOpen ? RAIN_ENTER : RAIN_INSIDE, { volume });
     st.insideIn = INSIDE_EVERY;
   }
   if (weather === WeatherType.Thunder && get("stormSound.enabled") && st.bedIn <= 0) {
@@ -331,7 +341,7 @@ function sounds(player, st, place, roofNear) {
 
 /** @param {Player} player @param {State} st */
 function stopSounds(player, st) {
-  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE, RAIN_INSIDE]) stopSound(player, id);
+  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE, RAIN_INSIDE, RAIN_ENTER]) stopSound(player, id);
   st.place = "none";
 }
 

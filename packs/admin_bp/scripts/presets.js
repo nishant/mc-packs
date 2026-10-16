@@ -1,6 +1,6 @@
 // Hand-written extras for the Realm Configuration menu. The commands themselves come from catalog.js
 // (generated: every registered realm: command); this file only makes them nicer to pick: which menu
-// category a pack sits in, friendlier labels, ranges and defaults for parameters, which commands ask
+// group and section a pack sits in, friendlier labels, ranges and defaults for parameters, which commands ask
 // before they run, and the server setup checklist. A command or pack missing here still shows up
 // (under "Other", with plain inputs), so new commands never need this file to appear.
 
@@ -18,17 +18,74 @@
  * @property {Record<string, string>} [names] enum: how each value reads
  */
 
-/** Menu categories, in the order the main menu shows them (after Recent, Search and Quick Actions). A pack not listed here lands in "Other". */
-export const CATEGORIES = [
-  { id: "world", title: "World & Weather", packs: ["weather_bp", "climate_bp", "storm_bp", "tornado_bp", "rainbow_bp", "night_bp", "meteor_bp", "moon_bp", "rain_bp", "zones_bp", "guard_bp"] },
-  { id: "story", title: "Story & Townsfolk", packs: ["saga_bp", "npc_bp", "wander_bp", "atlas_bp", "calendar_bp", "journal_bp", "quests_bp", "milestones_bp"] },
-  { id: "towns", title: "Towns & Places", packs: ["town_bp", "build_bp", "waystone_bp", "caravan_bp", "claims_bp", "farm_bp"] },
-  { id: "economy", title: "Economy", packs: ["crowns_bp", "bounty_bp", "guilds_bp", "slots_bp"] },
-  { id: "players", title: "Players", packs: ["stats_bp", "titles_bp", "nick_bp", "party_bp", "skills_bp", "mail_bp", "afk_bp", "death_bp"] },
-  { id: "dungeons", title: "Dungeons & Loot", packs: ["expedition_bp", "elite_bp", "relics_bp", "maps_bp"] },
-  { id: "fun", title: "Fun", packs: ["domt_bp", "silly_bp", "dolphin_bp", "cooking_bp", "chairs_bp", "platypus_bp"] },
-  { id: "utilities", title: "Utilities", packs: ["help_bp", "settings_bp", "admin_bp", "stash_bp", "find_bp", "cleanup_bp", "hud_bp", "map_bp", "mobhp_bp", "elytra_bp", "durability_bp", "refill_bp", "phantom_bp", "translucent_bp", "harvest_bp", "leaves_bp"] },
-  { id: "events", title: "Events & News", packs: ["fishing_bp", "goals_bp", "news_bp", "welcome_bp"] },
+/**
+ * The menu's groups, in the order the main menu shows them (after My Preferences, Realm Settings,
+ * Recent and Search). Each group is one scrolling page with a heading per section; a section lists
+ * the commands of its packs, the pack's own menu first, then the others, operator ones (gold) last.
+ * A pack not listed here lands in "Other". Realm Configuration's own commands are on Operator Tools.
+ * `title` and `hint` are the group button's two lines (each must fit in LINE).
+ * @type {{ id: string, title: string, hint: string, sections: { title: string, packs: string[] }[] }[]}
+ */
+export const GROUPS = [
+  {
+    id: "me",
+    title: "My Screen & Toggles",
+    hint: "HUD, map, warnings, name, help",
+    sections: [
+      { title: "Help and preferences", packs: ["help_bp", "settings_bp", "afk_bp", "chairs_bp"] },
+      { title: "On your screen", packs: ["hud_bp", "map_bp", "mobhp_bp", "elytra_bp"] },
+      { title: "Your own switches", packs: ["durability_bp", "refill_bp", "phantom_bp", "rain_bp", "climate_bp"] },
+      { title: "Your name and look", packs: ["nick_bp", "titles_bp"] },
+    ],
+  },
+  {
+    id: "items",
+    title: "Items & Building",
+    hint: "Sort, find chests, build tools",
+    sections: [
+      { title: "Inventory and chests", packs: ["stash_bp", "find_bp", "death_bp", "cleanup_bp"] },
+      { title: "Easy Building", packs: ["build_bp"] },
+      { title: "Enchants", packs: ["silly_bp"] },
+    ],
+  },
+  {
+    id: "adventure",
+    title: "Story & Adventure",
+    hint: "Quests, dungeons, relics, maps",
+    sections: [
+      { title: "Story and quests", packs: ["saga_bp", "quests_bp", "milestones_bp", "journal_bp", "atlas_bp", "calendar_bp"] },
+      { title: "Dungeons and loot", packs: ["expedition_bp", "elite_bp", "relics_bp", "maps_bp"] },
+    ],
+  },
+  {
+    id: "people",
+    title: "Friends, Crowns & Fun",
+    hint: "Party, mail, money, games, pets",
+    sections: [
+      { title: "Friends", packs: ["party_bp", "mail_bp", "guilds_bp"] },
+      { title: "Crowns and games", packs: ["crowns_bp", "bounty_bp", "slots_bp", "domt_bp"] },
+      { title: "Stats and skills", packs: ["stats_bp", "skills_bp"] },
+      { title: "Animals and food", packs: ["dolphin_bp", "platypus_bp", "cooking_bp"] },
+    ],
+  },
+  {
+    id: "world",
+    title: "World & Events",
+    hint: "Weather, sky, news, contests",
+    sections: [
+      { title: "Weather and sky", packs: ["weather_bp", "storm_bp", "tornado_bp", "rainbow_bp", "night_bp", "meteor_bp", "moon_bp"] },
+      { title: "Events and news", packs: ["fishing_bp", "goals_bp", "news_bp", "welcome_bp"] },
+    ],
+  },
+  {
+    id: "towns",
+    title: "Towns & Townsfolk",
+    hint: "Towns, claims, zones, travelers",
+    sections: [
+      { title: "Townsfolk and travelers", packs: ["npc_bp", "wander_bp", "caravan_bp", "waystone_bp"] },
+      { title: "Towns and land", packs: ["town_bp", "claims_bp", "zones_bp", "guard_bp", "farm_bp"] },
+    ],
+  },
 ];
 
 /**
@@ -41,8 +98,8 @@ export const LINE = 168;
 const GLYPH = { " ": 4, i: 2, l: 3, I: 4, t: 4, f: 5, k: 5, "!": 2, ".": 2, ",": 2, ":": 2, ";": 2, "'": 2, "`": 3, '"': 4, "(": 5, ")": 5, "[": 4, "]": 4, "<": 5, ">": 5, "*": 5, "|": 2, "@": 7, "~": 7 };
 /** The width of a line of text in font pixels, without its § codes. @param {string} s */
 export const textWidth = (s) => [...s.replace(/§./g, "")].reduce((n, c) => n + (GLYPH[c] ?? 6), 0);
-/** What an operator command adds to its name. */
-export const OPS_MARK = " §8(ops)";
+/** The color of everything only operators can use (commands, quick actions, the setup checklist); the rest is the button's default dark text. */
+export const OP_COLOR = "§6";
 
 /**
  * Every command's button: a name for what it does, then a short hint (both must fit in LINE). The
@@ -51,7 +108,7 @@ export const OPS_MARK = " §8(ops)";
  * @type {Record<string, [string, string]>}
  */
 export const NAMES = {
-  "realm:admin_item": ["Get Admin Menu Item", "For you or other operators"],
+  "realm:admin_item": ["Get the Menu Item", "Yours again, or for others"],
   "realm:admin_title": ["Show a Title", "Big text the HUD won't cover"],
   "realm:afk": ["Go AFK", "Move to come back"],
   "realm:bounty": ["Bounty Board Menu", "Today's bounties and boards"],

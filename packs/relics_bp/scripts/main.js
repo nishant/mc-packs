@@ -97,7 +97,7 @@ const RARITY = {
 };
 const WHERE = {
   hand: "Works in your main hand",
-  carry: "Works anywhere in your hotbar or off hand",
+  carry: "Works anywhere in your hotbar or offhand",
   head: "Works worn on your head",
   feet: "Works worn on your feet",
 };
@@ -274,7 +274,7 @@ function nextSerial() {
   return n;
 }
 
-/** A relic's lore lines: rarity and stage, ability, cooldown, then what its stage adds. @param {Relic} def @param {number} [asc] */
+/** A relic's lore lines: rarity and stage, ability, cooldown, what its stage adds, then where it works. @param {Relic} def @param {number} [asc] */
 function loreFor(def, asc = 0) {
   const rarity = RARITY[def.rarity] ?? RARITY.common;
   const lore = [`${rarity.color}${rarity.label} relic${asc ? ` +${asc} ${STAGES[asc]}` : ""}`, ...wrap(def.ability).map((l) => `§7${l}`)];
@@ -282,7 +282,10 @@ function loreFor(def, asc = 0) {
   if (asc >= 1) lore.push(...wrap(stageText(def, asc)).map((l) => `§b${l}`));
   if (asc >= 2) lore.push(...wrap(ASC[def.id]?.flavor ?? "").map((l) => `§3${l}`));
   if (asc >= 3) lore.push(...wrap(`Starlit: ${ASC[def.id]?.star ?? ""}`).map((l) => `§6${l}`));
-  return lore;
+  // Last: where it has to be to work (the game takes at most 20 lore lines).
+  const where = WHERE[def.where];
+  if (where) lore.push(`§7${where}`);
+  return lore.length > 20 ? [...lore.slice(0, 19), /** @type {string} */ (lore.at(-1))] : lore;
 }
 
 /** A relic's name: its rarity color, then gold once Starlit. @param {Relic} def @param {number} asc */
@@ -1667,7 +1670,7 @@ async function showRelics(player, atSmith) {
   if (rest.length) lines.push(`§7Still to find: ${rest.join(", ")}`);
   lines.push(`§fStory relics: ${foundStory.length} of ${storyRelics.length}§7 (rewards from the story, never forged)`);
   for (const def of foundStory) lines.push(relicLines(def, on, best.get(def.id)));
-  if (get("setsEnabled") === true) lines.push(`§fRelic sets§7 (all three in your hotbar, off hand or worn):\n${setLines(on)}`);
+  if (get("setsEnabled") === true) lines.push(`§fRelic sets§7 (all three in your hotbar, offhand or worn):\n${setLines(on)}`);
   lines.push(
     canForge
       ? `§fYou have ${shards} Relic Shard${shards === 1 ? "" : "s"}. Forging a relic takes ${cost}.`

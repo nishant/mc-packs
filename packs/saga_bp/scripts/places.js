@@ -36,6 +36,8 @@ import { WANDERERS } from "./stories/index.js";
  * @property {number} [yh] a camp: the height it was asked for (deep camps are carved there)
  * @property {Record<string, number>} [u] a camp: players on that wanderer's chain (id -> when they last needed it)
  * @property {number} [v] a camp: when a player was last near it (ms)
+ * @property {number} [pv] the prefab revision it was built (or last touched up) with; missing = 0
+ * @property {number} [fd] 1 = the snapshot covers the ground under the box too, where the footing goes
  */
 /** Where something is for the tracker. @typedef {{ dim: string, x: number, y?: number, z: number, label: string, pending?: boolean }} Loc */
 
@@ -307,13 +309,13 @@ function boxOf(name, origin, facing) {
  * Saves the blocks of a box as world structures (tiles of at most 64 x 64), so they can be put back.
  * @param {string} name @param {Dimension} dim @param {{ min: Vector3, max: Vector3 }} box @returns {[string, number, number, number][]}
  */
-function snapshot(name, dim, box) {
+function snapshot(name, dim, box, tag = "") {
   /** @type {[string, number, number, number][]} */
   const out = [];
   const sm = world.structureManager;
   // Named for this build: the snapshot of an earlier spot is deleted a moment after it is put back (restore), and
   // must not take this one with it.
-  const stamp = Date.now().toString(36);
+  const stamp = Date.now().toString(36) + tag;
   let k = 0;
   for (let x = box.min.x; x <= box.max.x; x += TILE)
     for (let z = box.min.z; z <= box.max.z; z += TILE) {
@@ -358,16 +360,23 @@ function restore(rec) {
   return ok;
 }
 
+/** The ground under a footprint box where a footing may go (undefined when the prefab has none). @param {string} name @param {{ min: Vector3, max: Vector3 }} box */
+function footBox(name, box) {
+  const depth = prefabInfo(pfOf(name))?.footing ?? 0;
+  if (!depth || box.min.y <= -64) return undefined;
+  return { min: { ...box.min, y: Math.max(-64, box.min.y - depth) }, max: { ...box.max, y: box.min.y - 1 } };
+}
+
 /**
  * Runs a prefab's build as a job; resolves true when done, false on an error.
- * @param {string} name @param {Dimension} dim @param {Vector3} origin @param {number} facing
+ * @param {string} name @param {Dimension} dim @param {Vector3} origin @param {number} facing @param {{ touch?: boolean }} [opts]
  */
-function runBuild(name, dim, origin, facing) {
+function runBuild(name, dim, origin, facing, opts) {
   return new Promise((resolve) => {
     /** @returns {Generator<void, void, void>} */
     function* job() {
       try {
-        const steps = buildSteps(pfOf(name), dim, origin, facing);
+        const steps = buildSteps(pfOf(name), dim, origin, facing, opts);
         while (true) {
           let r;
           try {
@@ -406,7 +415,8 @@ export async function buildAt(name, dim, origin, facing, extra) {
   if (!prefabInfo(pfOf(name))) return "it has no building";
   const o = { x: Math.floor(origin.x), y: Math.floor(origin.y), z: Math.floor(origin.z) };
   const box = boxOf(name, o, facing);
-  if (!boxLoaded(dim, box)) return "part of the area isn't loaded; stand closer";
+  const under = footBox(name, box);
+  if (!boxLoaded(dim, box) || (under && !boxLoaded(dim, under))) return "part of the area isn't loaded; stand closer";
   building.add(name);
   try {
     const old = placesOf()[name];
@@ -414,13 +424,22 @@ export async function buildAt(name, dim, origin, facing, extra) {
     if (old?.b && old.s && !same) restore(old);
     // Built again on the same spot: the terrain from before the first build stays the one to put back.
     let snap = same ? old?.s : undefined;
+    // The footing can reach under the box: the ground there is saved too, so Remove puts it back.
+    let fd = same ? old?.fd : undefined;
     try {
-      snap ??= snapshot(name, dim, box);
+      if (!snap) {
+        snap = snapshot(name, dim, under ? { min: under.min, max: box.max } : box);
+        fd = under ? 1 : undefined;
+      } else if (under && !fd) {
+        snap = [...snap, ...snapshot(name, dim, under, "f")];
+        fd = 1;
+      }
     } catch (e) {
       return `the terrain couldn't be saved (${e})`;
     }
     const ok = await runBuild(name, dim, o, facing);
-    setPlace(name, { ...extra, dim: dim.id, x: o.x, y: o.y, z: o.z, f: facing, b: 1, s: snap });
+    const pv = prefabInfo(pfOf(name))?.rev;
+    setPlace(name, { ...extra, dim: dim.id, x: o.x, y: o.y, z: o.z, f: facing, b: 1, s: snap, ...(fd ? { fd } : {}), ...(pv ? { pv } : {}) });
     if (isCamp(name)) campSign(name);
     return ok ? undefined : "the build stopped part way (an unloaded chunk?); use Rebuild";
   } finally {
@@ -428,23 +447,58 @@ export async function buildAt(name, dim, origin, facing, extra) {
   }
 }
 
-/** Rebuilds a built place in the same spot (repairs it). @param {string} name */
-export async function rebuild(name) {
+/**
+ * Before a build over an existing one: saves the ground under the box where the footing may go, when the place's
+ * snapshot doesn't cover it yet (built before footings). Returns the snapshot fields to keep, or an error.
+ * @param {string} name @param {SavedPlace} rec @param {Dimension} dim @param {{ min: Vector3, max: Vector3 }} box
+ * @returns {{ s?: SavedPlace["s"], fd?: number } | string}
+ */
+function footingSnap(name, rec, dim, box) {
+  const under = footBox(name, box);
+  if (!under || rec.fd || !rec.s?.length) return {};
+  if (!boxLoaded(dim, under)) return "part of the area isn't loaded; stand closer";
+  try {
+    return { s: [...rec.s, ...snapshot(name, dim, under, "f")], fd: 1 };
+  } catch (e) {
+    return `the terrain couldn't be saved (${e})`;
+  }
+}
+
+/**
+ * Builds over a built place in the same spot: a full rebuild (repairs it), or with `touch` a touch-up for a place
+ * built with an older revision of its prefab (only into air, stale blocks cleared, footing filled down).
+ * @param {string} name @param {boolean} touch
+ */
+async function buildOver(name, touch) {
   const rec = placesOf()[name];
   if (!rec || !rec.b || rec.y === undefined) return "it isn't built";
   if (building.has(name)) return "it is being built already";
   const dim = world.getDimension(rec.dim);
   const o = { x: rec.x, y: rec.y, z: rec.z };
-  if (!boxLoaded(dim, boxOf(name, o, rec.f ?? 0))) return "part of the area isn't loaded; stand closer";
+  const box = boxOf(name, o, rec.f ?? 0);
+  if (!boxLoaded(dim, box)) return "part of the area isn't loaded; stand closer";
   building.add(name);
   try {
-    const ok = await runBuild(name, dim, o, rec.f ?? 0);
+    const snap = footingSnap(name, rec, dim, box);
+    if (typeof snap === "string") return snap;
+    const ok = await runBuild(name, dim, o, rec.f ?? 0, { touch });
+    const pv = prefabInfo(pfOf(name))?.rev;
+    const now = placesOf()[name];
+    // Saved unless the place changed meanwhile (moved or removed).
+    if (now && now.b && now.x === rec.x && now.y === rec.y && now.z === rec.z && now.dim === rec.dim && (snap.s || (ok && pv && (now.pv ?? 0) < pv)))
+      setPlace(name, { ...now, ...snap, ...(ok && pv ? { pv } : {}) });
     if (isCamp(name)) campSign(name);
     return ok ? undefined : "the build stopped part way";
   } finally {
     building.delete(name);
   }
 }
+
+/** Rebuilds a built place in the same spot (repairs it). @param {string} name */
+export const rebuild = (name) => buildOver(name, false);
+
+/** Places built with an older revision of their prefab, touched up once a player is near. @param {SavedPlace} rec @param {string} name */
+const stale = (name, rec) => !!rec.b && (rec.pv ?? 0) < (prefabInfo(pfOf(name))?.rev ?? 0);
 
 /** Removes a place: puts the terrain back (when it was built) and forgets the spot. @param {string} name */
 export function removePlace(name) {
@@ -464,6 +518,15 @@ export function relocate(name) {
   const spot = pickSpot(name, near);
   setPlace(name, { dim: OVERWORLD, x: spot.x, z: spot.z, a: 1, p: 1 });
   return spot;
+}
+
+/**
+ * The ground block's y at x/z (a build's origin y: groundAt answers the open spot to stand on, one above it), or
+ * undefined when the column isn't loaded. @param {Dimension} dim @param {number} x @param {number} z @param {boolean} bed
+ */
+function groundBlock(dim, x, z, bed) {
+  const y = groundAt(dim, x, z, undefined, false, bed);
+  return y === undefined ? undefined : y - 1;
 }
 
 /**
@@ -492,7 +555,7 @@ function search(name, rec, relaxed) {
           else if (site.reason === "not loaded") {
             unloaded++;
             continue;
-          } else if (relaxed && site.reason !== "water" && site.reason !== "lava" && prefabInfo(pfOf(name))?.site !== "deep") y = PREFABS[name]?.y ?? groundAt(dim, x, z, undefined, false, prefabInfo(pfOf(name))?.site === "water"); // underground and sky places keep their height; land places never on a lake or sea bed
+          } else if (relaxed && site.reason !== "water" && site.reason !== "lava" && prefabInfo(pfOf(name))?.site !== "deep") y = PREFABS[name]?.y ?? groundBlock(dim, x, z, prefabInfo(pfOf(name))?.site === "water"); // underground and sky places keep their height; land places never on a lake or sea bed
         } catch {
           unloaded++;
           continue;
@@ -684,10 +747,22 @@ export function campUpkeep(days) {
 /** Every 2 seconds: picked places with a player close enough get built. */
 export function autoTick() {
   const all = placesOf();
-  const pending = Object.entries(all).filter(([, r]) => r.p);
-  if (!pending.length) return;
   const range = Number(get("buildRange")) || 64;
   const now = Date.now();
+  // A place built with an older revision of its prefab (a lighthouse from before its balcony and footing): touch it up.
+  for (const [name, rec] of Object.entries(all)) {
+    if (!stale(name, rec) || building.has(name) || (retryAt.get(name) ?? 0) > now) continue;
+    if (!world.getAllPlayers().some((p) => p.dimension.id === rec.dim && across(p.location, rec) <= range)) continue;
+    retryAt.set(name, now + 30000);
+    buildOver(name, true)
+      .then((err) => {
+        if (err) console.warn(`[saga] touch up ${name}: ${err}`);
+        else console.warn(`[saga] touched up ${name} at ${rec.x} ${rec.y} ${rec.z} (prefab revision ${prefabInfo(pfOf(name))?.rev})`);
+      })
+      .catch((e) => console.warn(`[saga] touch up ${name}: ${e}`));
+  }
+  const pending = Object.entries(all).filter(([, r]) => r.p);
+  if (!pending.length) return;
   for (const [name, rec] of pending) {
     if (building.has(name) || (retryAt.get(name) ?? 0) > now) continue;
     const near = world.getAllPlayers().find((p) => p.dimension.id === rec.dim && across(p.location, rec) <= range);

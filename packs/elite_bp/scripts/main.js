@@ -883,12 +883,26 @@ function shards(n) {
   return s;
 }
 
+/**
+ * Spawns a mob and checks what came back: a world whose entity ids repeat (an old level.dat put back) can hand back
+ * an entity that already exists (a dropped item), and tagging that one would make a champion that isn't there.
+ * Spawns again (the next id is usually free); throws if it never gets the mob.
+ * @param {Dimension} dim @param {string} type @param {Vector3} loc @param {any} [opts]
+ */
+function spawnFresh(dim, type, loc, opts) {
+  for (let k = 0; k < 8; k++) {
+    const e = opts ? dim.spawnEntity(/** @type {any} */ (type), loc, opts) : dim.spawnEntity(/** @type {any} */ (type), loc);
+    if (e.typeId === type) return e;
+  }
+  throw new Error(`spawnEntity(${type}) kept returning another entity`);
+}
+
 /** Copies a Splitting champion leaves behind. @param {Dimension} dim @param {Vector3} at @param {string} mob */
 function split(dim, at, mob) {
   for (let i = 0; i < CONFIG.traits.splitting.copies; i++) {
     try {
       const loc = { x: at.x + rand(-1, 1), y: at.y + 0.2, z: at.z + rand(-1, 1) };
-      const copy = HAS_BABY.has(mob) ? dim.spawnEntity(mob, loc, { spawnEvent: "minecraft:as_baby" }) : dim.spawnEntity(mob, loc);
+      const copy = spawnFresh(dim, mob, loc, HAS_BABY.has(mob) ? { spawnEvent: "minecraft:as_baby" } : undefined);
       copy.addTag(SPLIT);
       if (!HAS_BABY.has(mob)) {
         const health = copy.getComponent("minecraft:health");
@@ -1027,12 +1041,29 @@ function upkeep(e) {
   live.set(e.id, e);
 }
 
+/** Takes the champion tags and name off an entity that isn't a mob. @param {import("@minecraft/server").Entity} e */
+function unChampion(e) {
+  try {
+    for (const t of e.getTags()) if (t === CHAMP || t.startsWith(TRAIT_TAG) || t.startsWith("realm:")) e.removeTag(t);
+    e.nameTag = "";
+    e.setDynamicProperty(PROP_NAME, undefined);
+  } catch {
+    // gone
+  }
+}
+
 function refresh() {
   let n = 0;
   const seen = new Set();
   for (const id of DIMS) {
     try {
       for (const e of world.getDimension(id).getEntities({ tags: [CHAMP] })) {
+        // Not a mob (an item tagged by mistake when the game handed back the wrong entity): no champion, and it
+        // doesn't take a place under maxAlive.
+        if (!e.getComponent("minecraft:health")) {
+          unChampion(e);
+          continue;
+        }
         n++;
         seen.add(e.id);
         try {
@@ -1062,7 +1093,10 @@ system.runInterval(refresh, 100);
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
-    if (entity.isValid && entity.hasTag(CHAMP)) upkeep(entity);
+    if (entity.isValid && entity.hasTag(CHAMP)) {
+      if (entity.getComponent("minecraft:health")) upkeep(entity);
+      else unChampion(entity);
+    }
   } catch (e) {
     console.warn(`[elite] load: ${e}`);
   }
@@ -1090,7 +1124,7 @@ function spawnRequested(req) {
   const mob = typeof req.mob === "string" && mobSet.has(req.mob) ? req.mob : mobFor(trait);
   const tag = typeof req.tag === "string" && /^realm:[\w:.-]{1,60}$/.test(req.tag) ? req.tag : undefined;
   try {
-    const e = world.getDimension(dimId).spawnEntity(mob, { x, y, z });
+    const e = spawnFresh(world.getDimension(dimId), mob, { x, y, z });
     makeChampion(e, { trait, name: cleanName(req.name) || undefined, tag });
   } catch (e) {
     console.warn(`[elite] champion_spawn at ${x}, ${y}, ${z}: ${e}`);
@@ -1312,7 +1346,7 @@ function spawnAt(player, trait, mobId) {
   } catch {
     // unloaded: use the player's spot
   }
-  const e = player.dimension.spawnEntity(mob, loc);
+  const e = spawnFresh(player.dimension, mob, loc);
   const name = makeChampion(e, { trait: t });
   player.sendMessage(`§7Spawned §c${name}§7.`);
 }
