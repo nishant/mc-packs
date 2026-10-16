@@ -705,6 +705,9 @@ function carries(player) {
   return false;
 }
 
+/** Players told their inventory was too full for the item (the 30 s check doesn't repeat it). @type {Set<string>} */
+const toldFull = new Set();
+
 /** Gives the item unless they carry one. @param {Player} player @param {boolean} tell say so if they already have one */
 function giveItem(player, tell) {
   if (carries(player)) {
@@ -713,7 +716,9 @@ function giveItem(player, tell) {
   }
   const rest = inventory(player)?.addItem(makeItem());
   if (rest) {
-    player.sendMessage(`§e[${TITLE}] Your inventory is full: make room for the ${TITLE} item, or run /realm:admin_item.`);
+    // The 30 s check would say it again and again: once per player until the realm restarts, unless asked.
+    if (tell || !toldFull.has(player.id)) player.sendMessage(`§e[${TITLE}] Your inventory is full: make room for the ${TITLE} item, or run /realm:admin_item.`);
+    toldFull.add(player.id);
     return false;
   }
   player.sendMessage(`§6[${TITLE}] §rYou have the §6${TITLE}§r item: use it for every realm command you can use, in one menu.`);

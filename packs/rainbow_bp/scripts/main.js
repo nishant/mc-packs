@@ -475,7 +475,27 @@ function* placePot(p0) {
     if (pot === p0 && !unloaded) {
       const top = surfaceAt(dim, p0.x, p0.z);
       const water = top?.wet ? dim.getBlock({ x: Math.floor(p0.x), y: top.y, z: Math.floor(p0.z) }) : undefined;
-      if (top && water && water.typeId === "minecraft:water" && water.above()?.isAir && fromSpawn(p0.x, p0.z) >= get("avoidSpawn") && !inZone(p0.x, p0.z)) {
+      // Not in a player's moat, pool or harbor: nothing player-made on top of the 9 x 9 columns around it, or
+      // at the water's level and up to SCAN blocks above it.
+      let built = false;
+      if (top && water) {
+        for (let dx = -SCAN; dx <= SCAN && !built; dx++) {
+          for (let dz = -SCAN; dz <= SCAN && !built; dz++) {
+            const c = topAt(dim, p0.x + dx, p0.z + dz);
+            if (c && isBuilt(c.typeId)) built = true;
+            for (let y = top.y; y <= top.y + SCAN && !built; y++) {
+              try {
+                const b = dim.getBlock({ x: Math.floor(p0.x) + dx, y, z: Math.floor(p0.z) + dz });
+                if (b && isBuilt(b.typeId)) built = true;
+              } catch {
+                // unloaded: judged by the rest
+              }
+            }
+            yield;
+          }
+        }
+      }
+      if (top && water && !built && pot === p0 && water.typeId === "minecraft:water" && water.above()?.isAir && fromSpawn(p0.x, p0.z) >= get("avoidSpawn") && !inZone(p0.x, p0.z)) {
         water.setType("minecraft:chest");
         fill(water.getComponent("minecraft:inventory")?.container);
         p0.x = Math.floor(p0.x);

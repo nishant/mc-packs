@@ -1395,6 +1395,8 @@ const SOFT_GROUND = /grass$|fern|flower|bush|tulip|orchid|poppy|dandelion|allium
 
 /** Can a foundation go into this block (air, liquid, a plant, or sand and gravel that would fall)? @param {Block} block */
 const soft = (block) => block.isAir || block.isLiquid || SOFT_GROUND.test(block.typeId) || FALLING.test(block.typeId);
+/** What a footing fills: open space under it (air, water, plants), never sand or gravel that is ground already. @param {Block} block */
+const open = (block) => block.isAir || block.isLiquid || SOFT_GROUND.test(block.typeId);
 
 /**
  * Places a prefab, a few hundred blocks per step: run it with system.runJob. Chunks that aren't
@@ -1494,7 +1496,7 @@ export function* buildSteps(name, dimension, origin, facing, opts = {}) {
               skipped++;
               break;
             }
-            if (!soft(block)) break;
+            if (!open(block)) break;
             block.setPermutation(pm);
             if (++n % 200 === 0) yield;
           }
