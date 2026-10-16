@@ -883,12 +883,26 @@ function shards(n) {
   return s;
 }
 
+/**
+ * Spawns a mob and checks what came back: a world whose entity ids repeat (an old level.dat put back) can hand back
+ * an entity that already exists (a dropped item), and tagging that one would make a champion that isn't there.
+ * Spawns again (the next id is usually free); throws if it never gets the mob.
+ * @param {Dimension} dim @param {string} type @param {Vector3} loc @param {any} [opts]
+ */
+function spawnFresh(dim, type, loc, opts) {
+  for (let k = 0; k < 8; k++) {
+    const e = opts ? dim.spawnEntity(/** @type {any} */ (type), loc, opts) : dim.spawnEntity(/** @type {any} */ (type), loc);
+    if (e.typeId === type) return e;
+  }
+  throw new Error(`spawnEntity(${type}) kept returning another entity`);
+}
+
 /** Copies a Splitting champion leaves behind. @param {Dimension} dim @param {Vector3} at @param {string} mob */
 function split(dim, at, mob) {
   for (let i = 0; i < CONFIG.traits.splitting.copies; i++) {
     try {
       const loc = { x: at.x + rand(-1, 1), y: at.y + 0.2, z: at.z + rand(-1, 1) };
-      const copy = HAS_BABY.has(mob) ? dim.spawnEntity(mob, loc, { spawnEvent: "minecraft:as_baby" }) : dim.spawnEntity(mob, loc);
+      const copy = spawnFresh(dim, mob, loc, HAS_BABY.has(mob) ? { spawnEvent: "minecraft:as_baby" } : undefined);
       copy.addTag(SPLIT);
       if (!HAS_BABY.has(mob)) {
         const health = copy.getComponent("minecraft:health");
@@ -1090,7 +1104,7 @@ function spawnRequested(req) {
   const mob = typeof req.mob === "string" && mobSet.has(req.mob) ? req.mob : mobFor(trait);
   const tag = typeof req.tag === "string" && /^realm:[\w:.-]{1,60}$/.test(req.tag) ? req.tag : undefined;
   try {
-    const e = world.getDimension(dimId).spawnEntity(mob, { x, y, z });
+    const e = spawnFresh(world.getDimension(dimId), mob, { x, y, z });
     makeChampion(e, { trait, name: cleanName(req.name) || undefined, tag });
   } catch (e) {
     console.warn(`[elite] champion_spawn at ${x}, ${y}, ${z}: ${e}`);
@@ -1312,7 +1326,7 @@ function spawnAt(player, trait, mobId) {
   } catch {
     // unloaded: use the player's spot
   }
-  const e = player.dimension.spawnEntity(mob, loc);
+  const e = spawnFresh(player.dimension, mob, loc);
   const name = makeChampion(e, { trait: t });
   player.sendMessage(`§7Spawned §c${name}§7.`);
 }

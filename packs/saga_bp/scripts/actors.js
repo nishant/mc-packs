@@ -59,6 +59,21 @@ function dress(ent, look) {
 const dressed = (ent, look) => ent.matches({ families: [look.replace("minecraft:become_", "").replace("sheperd", "shepherd")] });
 
 /**
+ * Spawns a mob and checks what came back: a world whose entity ids repeat (an old level.dat put back) can hand back
+ * an entity that already exists (a dropped item), and tagging that one would make a story mob that isn't there.
+ * Spawns again (the next id is usually free); throws if it never gets the mob.
+ * @param {Dimension} dim @param {string} type @param {Vector3} at @param {any} [opts]
+ * @returns {Entity}
+ */
+export function spawnFresh(dim, type, at, opts) {
+  for (let k = 0; k < 8; k++) {
+    const e = opts ? dim.spawnEntity(/** @type {any} */ (type), at, opts) : dim.spawnEntity(/** @type {any} */ (type), at);
+    if (e.typeId === type) return e;
+  }
+  throw new Error(`spawnEntity(${type}) kept returning another entity`);
+}
+
+/**
  * Spawns a story character or mob for a player's scene. Named, so it never despawns on its own.
  * Invulnerable characters can't be hurt, don't wander and can't hurt anyone. A villager comes as a village's
  * newcomer (no job yet, a random skin, the biome's clothes; the default spawn would pick a random job that a later
@@ -69,7 +84,7 @@ const dressed = (ent, look) => ent.matches({ families: [look.replace("minecraft:
 export function spawnActor(dim, type, at, o) {
   try {
     const villager = type === VILLAGER;
-    const ent = dim.spawnEntity(/** @type {any} */ (type), at, villager ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
+    const ent = spawnFresh(dim, type, at, villager ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
     if (villager) {
       // Also grows up a baby (1 in 20 spawn as one). tendActors checks it took.
       const look = o.look || "minecraft:become_unskilled";
