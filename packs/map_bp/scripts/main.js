@@ -57,7 +57,10 @@ const REFRESH = 30; // an unchanged readout is sent again after this many ticks 
 const OTHERS_RANGE = 128;
 const ARRIVED_TICKS = 60;
 const NAME_MAX = 24;
-const LINE2_BYTES = 159 - CELLS * 3 - 1; // what the strip's second line may take of the slot
+// The strip's icons are about 16 units tall but a text line is about 10, so a line right under the strip is drawn
+// over its baseline: a spacer line (one space) goes between them, and under a strip on its own so the box covers it.
+const SPACER = "\n ";
+const LINE2_BYTES = 159 - CELLS * 3 - SPACER.length - 1; // what the strip's second line may take of the slot
 const MENU_MAX = 40;
 
 /** Strip glyphs and drawing order (higher wins a cell) by marker kind. */
@@ -642,7 +645,7 @@ function render(player, v, now, refresh) {
   const strip = v.compass ? stripOf(heading, v.markers, at) : "";
   const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at) : "";
   lastText.set(player.id, { strip, line2: v.second, radar, dest: v.dest });
-  const compassText = v.second ? `${strip}\n${v.second}` : strip;
+  const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
   const key = `${compassText}|${radar}`;
   const sent = lastSent.get(player.id);
   if (side.held(player) || (sent && sent.key === key && (!refresh || now - sent.at < REFRESH))) return false;
