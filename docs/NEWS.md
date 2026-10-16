@@ -6,6 +6,10 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+## Story bosses on time
+
+- The Bell Warden and other story champions now come within seconds of you reaching their place. A spawn that went wrong used to leave you waiting 2 minutes for another try.
+
 ## Names across town
 
 - Townsfolk, wanderers and caravan traders have floating names from up to 120 blocks away, even behind house walls and roofs. You don't have to aim directly at them.
