@@ -23,6 +23,15 @@ const EVERYONE = "Everyone online";
 /** Online players, the operator first. @param {Player} me */
 export const playerNames = (me) => [me.name, ...world.getAllPlayers().filter((p) => p.id !== me.id).map((p) => p.name)];
 
+/** Every other online player, nearest first (same dimension first). @param {Player} me */
+const otherNames = (me) =>
+  world
+    .getAllPlayers()
+    .filter((p) => p.id !== me.id)
+    .map((p) => ({ n: p.name, d: p.dimension.id === me.dimension.id ? Math.hypot(p.location.x - me.location.x, p.location.y - me.location.y, p.location.z - me.location.z) : Infinity }))
+    .sort((a, b) => a.d - b.d)
+    .map((e) => e.n);
+
 /** @param {string} name */
 const online = (name) => world.getAllPlayers().find((p) => p.name === name);
 
@@ -155,13 +164,17 @@ export const ACTIONS = [
     id: "tp_to",
     title: "Teleport to a Player",
     hint: "Go to where they are",
-    help: "Go to where they are, in their dimension.",
+    help: "Pick any online player (nearest first) and go to where they are, in their dimension.",
     form(me) {
-      const f = new ModalFormData().title("Teleport me to a player");
-      playerDropdown(f, me, "Player");
-      return f;
+      const names = otherNames(me);
+      return new ModalFormData()
+        .title("Teleport me to a player")
+        .dropdown(`Player (${names.length} online besides you)`, names.length ? names : ["(nobody else is online)"], { defaultValueIndex: 0 });
     },
-    read: (me, [p]) => ({ player: pickName(me, p) }),
+    read: (me, [p]) => {
+      const name = otherNames(me)[Number(p) || 0];
+      return name ? { player: name } : "Nobody else is online.";
+    },
     run(me, v) {
       const p = online(String(v.player));
       if (!p) return `${v.player} isn't online.`;

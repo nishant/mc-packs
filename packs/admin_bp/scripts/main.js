@@ -504,7 +504,7 @@ async function recentPage(player, back) {
   const again = () => recentPage(player, back);
   /** @type {Entry[]} */
   const entries = rec.map((e) => ({
-    label: `${fit(e.t)}\n§8${e.a ? "Quick action" : fit(`/${e.l ?? ""}`)}`,
+    label: `${fit(e.t)}\n§8${e.a ? fit(`Quick action${e.v && Object.keys(e.v).length ? `: ${Object.values(e.v).join(", ")}` : ""}`) : fit(`/${e.l ?? ""}`)}`,
     open: async () => {
       if (e.a) {
         const action = ACTIONS.find((a) => a.id === e.a);
@@ -523,7 +523,7 @@ async function recentPage(player, back) {
       return resume(player, again);
     },
   }));
-  await list(player, "Recent", rec.length ? "Your last commands, newest first. Tap one to run it again with the same options." : "Nothing yet: commands you run from this menu show up here.", entries, back);
+  await list(player, "Recent", rec.length ? "Your last commands, newest first. Tap one to run it again right away, with the same options (shown under its name)." : "Nothing yet: commands you run from this menu show up here.", entries, back);
 }
 
 /** @param {Player} player @param {Cmd[]} cmds @param {() => Promise<unknown>} back */

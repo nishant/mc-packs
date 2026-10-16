@@ -24,8 +24,8 @@ export const CONFIG = {
   /** Most players in one expedition: the leader plus party members (1 to 4). */
   maxParty: 4,
 
-  /** Party members must be within this many blocks of the leader to be asked along. */
-  partyRadius: 32,
+  /** Party members within this many blocks of the leader (same dimension) are asked along; 0 asks every member online, wherever they are. */
+  partyRadius: 0,
 
   /** Seconds party members have to answer "Join the expedition?". */
   confirmSeconds: 20,

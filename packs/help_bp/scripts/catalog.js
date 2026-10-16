@@ -97,11 +97,11 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lRecent§r keeps your last 8 commands with their options (§erecentSize§r), each with the exact command under it: tap one to run it again. §lSearch Commands§r finds commands and quick actions by any word of their name, hint, command or description; the results end with §lSearch again§r.",
+        "text": "§lOperators:§r §lRecent§r keeps your last 8 commands with their options (§erecentSize§r), each with the exact command under it (a quick action shows its choices, like §eQuick action: Steve§r): tap one to run it again right away, with no form. §lSearch Commands§r finds commands and quick actions by any word of their name, hint, command or description; the results end with §lSearch again§r.",
         "ops": true
       },
       {
-        "text": "§lOperators:§r §lQuick Actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (a title and an optional subtitle in the middle of the screen, 1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects, teleport or a title for everyone online ask §lAre you sure?§r first.",
+        "text": "§lOperators:§r §lQuick Actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player (a list of everyone else online, nearest first) or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (a title and an optional subtitle in the middle of the screen, 1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. Set the time, set the weather, game rules, and give, heal, clear effects, teleport or a title for everyone online ask §lAre you sure?§r first.",
         "ops": true
       },
       {
@@ -2517,7 +2517,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "The last screen shows what the run is like: rooms, time limit, waves, how strong the mobs are, the §laffixes§r (Nightmare only) and the rewards. Tap §lStart§r, or §lReroll affixes§r (costs 25 Crowns, §ererollCost§r) for a different set. If you're in a party, your party members within 32 blocks are asked §eAnn is starting an expedition: Crypt (Nightmare 5). ... Join?§r and have 20 seconds to tap §lJoin§r.",
+        "text": "The last screen shows what the run is like: rooms, time limit, waves, how strong the mobs are, the §laffixes§r (Nightmare only) and the rewards. Tap §lStart§r, or §lReroll affixes§r (costs 25 Crowns, §ererollCost§r) for a different set. If you're in a party, every party member online is asked, wherever they are (any distance, any dimension; §epartyRadius§r): a popup on their screen says §eAnn is starting an expedition: Crypt (Nightmare 5). ... Join?§r, and they have 20 seconds to tap §lJoin§r (§econfirmSeconds§r).",
         "ops": false
       },
       {
