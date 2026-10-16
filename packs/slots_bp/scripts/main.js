@@ -559,7 +559,7 @@ export function selfBlock(p, ms) {
 function makeItem() {
   const stack = new ItemStack(ITEM, 1);
   stack.nameTag = ITEM_NAME;
-  stack.setLore([ITEM_LORE]);
+  stack.setLore([ITEM_LORE, "§7Hold it in your hand and use it"]);
   stack.setDynamicProperty(ITEM_PROP, true);
   return stack;
 }

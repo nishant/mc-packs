@@ -1014,7 +1014,7 @@ function makeSigil(d, tier, affixes) {
   const lore = [`§r§7${d.name}, Nightmare ${tier}`];
   for (let k = 0; k < names.length; k += 2) lore.push(`§r${names.slice(k, k + 2).map((a) => `${a?.color}${a?.name}`).join("§7, ")}`);
   if (!names.length) lore.push("§r§7No affixes");
-  lore.push("§r§8Use it to open the run");
+  lore.push("§r§8Opens this run, used up as it starts", "§r§7Hold it in your hand and use it");
   lore.push(`§8#${d.id}/${tier}/${names.map((a) => a?.code).join(".")}`);
   it.setLore(lore);
   return it;

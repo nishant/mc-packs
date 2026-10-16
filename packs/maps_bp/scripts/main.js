@@ -392,7 +392,10 @@ function mapStack(hunt) {
   stack.nameTag = MAP_NAME;
   const lore = wrap(hunt.clue, LORE_WIDTH).map((l) => `§7${l}`);
   if (hunt.near) lore.push(...wrap(hunt.near, LORE_WIDTH).map((l) => `§e${l}`));
-  lore.push(`§8Clue ${hunt.leg + 1} of ${hunt.pts.length}`, `${MAP_ID_PREFIX}${hunt.id}`);
+  lore.push(`§8Clue ${hunt.leg + 1} of ${hunt.pts.length}`);
+  // Where the map works, as the last line players read; the id line stays last (mapIdOf reads it).
+  if (get("warmth") === true) lore.push("§7Hold it in your hand to sense warmth");
+  lore.push(`${MAP_ID_PREFIX}${hunt.id}`);
   stack.setLore(lore.slice(-20));
   return stack;
 }
