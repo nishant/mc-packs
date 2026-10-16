@@ -7,6 +7,11 @@
 //   crack1-4        4.5 s of its sharpest hits, played only when a bolt strikes near you.
 //   bed1-4          20 s stretches of the thunderstorm recording, which Rain Extras plays back to back during thunderstorms;
 //                   bed_inside1-2 is the same heard through walls (low-passed).
+//   rain_inside1-2  20 s of the game's rain as Rain Extras hears it from indoors: rain1-8 stacked the way the game stacks
+//                   them, through a warm low-pass (INDOORS), about 10 dB under the rain outdoors. rain_enter1-2 is the
+//                   same, but it starts as the open rain at the outdoor level and closes down to the muffled rain over
+//                   INDOORS.closeSeconds: Rain Extras plays it the moment it stops the game's rain, so walking in never
+//                   cuts the rain off.
 //   wind1-3         10 s storm gusts with a faint whistle, played by Rain Extras; wind_inside1-2 is the same heard
 //                   through walls. roof1-4: 3.6 s of rain on the roof above, muffled, also played by Rain Extras.
 //                   These are synthesized.
@@ -377,6 +382,73 @@ function layered(/** @type {Float64Array[]} */ clips, seconds = 20) {
 const VANILLA_RAIN_LAYERED = -41.3;
 /** Seconds each rain clip fades in over (see the rain event). */
 const RAIN_FADE_IN = 0.8;
+/** The game's rain in game, layered: vanilla's plus 25%. */
+const RAIN_LEVEL = VANILLA_RAIN_LAYERED + 20 * Math.log10(1.25);
+
+/**
+ * The rain heard from indoors (Rain Extras): the same rain stack through a warm low-pass (a gentle 12 dB/octave roll-off
+ * from `lowpass` Hz, a second one higher up, and a little more body below `shelfHz`), `db` under the rain outdoors in
+ * game. The drumming on the roof sits `roofDb` under the rain outdoors, below the muffled rain, so the rain leads.
+ * Rain Extras plays these at `roof.volume` (`volume`, its default), which the levels make up for. rain_enter closes from
+ * the open rain to the muffled one over `closeSeconds`, after `holdSeconds`.
+ */
+const INDOORS = { db: -10, roofDb: -13, volume: 0.8, lowpass: 1300, lowpass2: 3200, shelfHz: 220, shelfDb: 3, holdSeconds: 0.15, closeSeconds: 1.6 };
+const indoorLevel = (/** @type {number} */ db) => RAIN_LEVEL + db - 20 * Math.log10(INDOORS.volume);
+/** The rain as heard through walls and a roof: warm, not thin. */
+const throughWalls = (/** @type {Float64Array} */ x) => biquad(biquad(biquad(x, "lp", INDOORS.lowpass, 0.6), "lp", INDOORS.lowpass2), "lowshelf", INDOORS.shelfHz, 0.707, INDOORS.shelfDb);
+const RAIN_CLIPS = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => `rain${i}`);
+
+/**
+ * Files made from the game's rain clips (rain1-8, decoded as committed, so it's the same rain the game plays): 20 s
+ * stacks, muffled (`enter`: closing down from the open rain). `make` needs the rain clips decoded first (`made`); the
+ * recipe is the rain clips' sha256 and the same steps run over a test signal.
+ */
+function fromRain(/** @type {string} */ name, /** @type {number[]} */ seeds, enter = false) {
+  /** @param {Float64Array[]} clips @param {number} seed @param {(x: Float64Array) => number} lufs */
+  const shape = (clips, seed, lufs) => {
+    const open = stack(clips, seed, 20);
+    const shut = throughWalls(Float64Array.from(open));
+    if (!enter) return fades(shut, 2, 2, true);
+    // The muffled rain `db` under the open rain (by loudness), and a smooth close from one to the other.
+    scale(shut, Math.pow(10, (lufs(open) + INDOORS.db - lufs(shut)) / 20));
+    const hold = INDOORS.holdSeconds * SR, close = INDOORS.closeSeconds * SR;
+    const out = Float64Array.from(open, (v, i) => {
+      const k = i < hold ? 0 : i < hold + close ? (i - hold) / close : 1;
+      const w = Math.cos((k * Math.PI) / 2); // equal power
+      return v * w + shut[i] * Math.sqrt(1 - w * w);
+    });
+    return fades(out, 0.02, 2, true);
+  };
+  return seeds.map((seed, i) => ({
+    name: `${name}${i + 1}`,
+    make: () => shape(RAIN_CLIPS.map((c) => /** @type {Float64Array} */ (made.get(c))), seed, measureLufs),
+    recipe: () => {
+      const probe = [0, 1].map((k) => scale(pink(mulberry32(seed + k), Math.round(2.4 * SR)), 0.3));
+      const tilt = (/** @type {Float64Array} */ x) => 10 * Math.log10(x.reduce((s, v) => s + v * v, 0) / x.length);
+      return [JSON.stringify({ from: RAIN_CLIPS.map((c) => (existsSync(join(outDir, `${c}.ogg`)) ? sha256File(join(outDir, `${c}.ogg`)) : "missing")), seed, enter, INDOORS }), pcmHash(shape(probe, seed, tilt))];
+    },
+  }));
+}
+
+/** Rain clips started every 2-4 ticks, as the game does, `seconds` long (layered() with its own seed). */
+function stack(/** @type {Float64Array[]} */ clips, /** @type {number} */ seed, /** @type {number} */ seconds) {
+  const rnd = mulberry32(seed), mix = new Float64Array(seconds * SR);
+  // Start a few seconds early, so the stack is full from the first sample.
+  for (let t = -3; t < seconds; t += (2 + Math.floor(rnd() * 3)) / 20) mixIn(mix, clips[Math.floor(rnd() * clips.length)], Math.round(t * SR));
+  return mix;
+}
+
+/** Integrated loudness of samples (through a temporary WAV). */
+function measureLufs(/** @type {Float64Array} */ x) {
+  const dir = mkdtempSync(join(tmpdir(), "gen-rain-lufs-"));
+  try {
+    const wav = join(dir, "x.wav");
+    writeWav(x, wav);
+    return summary(wav).lufs;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /**
  * Excerpts of a recording as an event's files: `${name}1`, `${name}2`, ... from each [start, seconds]. Each excerpt has
@@ -439,7 +511,7 @@ function synth(/** @type {() => Float64Array} */ fn) {
 
 const EVENTS = [
   {
-    event: "ambient.weather.rain", subtitle: "subtitles.weather.rain", target: -23, ceiling: -1.5, layered: VANILLA_RAIN_LAYERED + 20 * Math.log10(1.25),
+    event: "ambient.weather.rain", subtitle: "subtitles.weather.rain", target: -23, ceiling: -1.5, layered: RAIN_LEVEL,
     // A slow fade-in, so a clip Rain Extras stops early (to muffle the rain indoors) has barely started; in the stack the
     // clips overlap anyway, so the rain sounds the same.
     files: cuts("rain", "rain", [30, 95, 160, 225, 290, 355, 420, 485].map((t) => [t, 2.4]), RAIN_FADE_IN, 0.15),
@@ -461,21 +533,27 @@ const EVENTS = [
     files: cuts("bed_inside", "thunder", [40, 360].map((t) => [t, 20]), 2, 2, muffled),
   },
   {
-    // The rain heard through a roof, for Rain Extras to play while it stops the game's rain indoors: about 9 dB under the
-    // rain outdoors, and dull.
-    event: "realm.rain.inside", subtitle: "subtitles.weather.rain", target: -24, ceiling: -1, level: -48,
-    files: cuts("rain_inside", "rain", [60, 300].map((t) => [t, 20]), 2, 2, muffled),
+    // The rain heard through walls and a roof, for Rain Extras to play while it stops the game's rain indoors (INDOORS).
+    event: "realm.rain.inside", subtitle: "subtitles.weather.rain", target: -24, ceiling: -1, level: indoorLevel(INDOORS.db),
+    files: fromRain("rain_inside", [301, 302]),
+  },
+  {
+    // The first of those after walking in: the open rain closing down to the muffled one. Its volume is set by the muffled
+    // part (from `levelFrom` seconds on), so it plays on into rain_inside at the same level.
+    event: "realm.rain.enter", subtitle: "subtitles.weather.rain", target: -22, ceiling: -1, level: indoorLevel(INDOORS.db), levelFrom: 4,
+    files: fromRain("rain_enter", [311, 312], true),
   },
   {
     event: "realm.storm.wind", target: -20, ceiling: -3, level: -34,
     files: [0, 1, 2].map((i) => ({ name: `wind${i + 1}`, ...synth(() => wind(4100 + i, 10)) })),
   },
   {
-    event: "realm.storm.wind_inside", target: -26, ceiling: -3, level: -41,
+    // 3.7 dB under the muffled rain in plain rain (as the breeze is under the rain outdoors), so indoors the rain leads.
+    event: "realm.storm.wind_inside", target: -26, ceiling: -3, level: -44,
     files: [0, 1].map((i) => ({ name: `wind_inside${i + 1}`, ...synth(() => wind(4200 + i, 10, true)) })),
   },
   {
-    event: "realm.rain.roof", subtitle: "subtitles.weather.rain", target: -22, ceiling: -3, level: -37,
+    event: "realm.rain.roof", subtitle: "subtitles.weather.rain", target: -22, ceiling: -3, level: indoorLevel(INDOORS.roofDb),
     files: [0, 1, 2, 3].map((i) => ({ name: `roof${i + 1}`, ...synth(() => roof(5100 + i, 3.6)) })),
   },
 ];
@@ -524,7 +602,7 @@ const PIPELINE = (() => {
 /** A clip's recipe hash: everything that decides its .ogg, from its event's settings down to its samples. */
 function recipeOf(/** @type {typeof EVENTS[number]} */ e, /** @type {typeof EVENTS[number]["files"][number]} */ f) {
   const i = e.files.indexOf(f);
-  const settings = { event: e.event, target: e.target, ceiling: e.ceiling, level: e.level, layered: e.layered, thunder: e.thunder?.[i] };
+  const settings = { event: e.event, target: e.target, ceiling: e.ceiling, level: e.level, levelFrom: e.levelFrom, layered: e.layered, thunder: e.thunder?.[i] };
   return createHash("sha256").update([PIPELINE, JSON.stringify(settings), ...f.recipe()].join("\n")).digest("hex");
 }
 
@@ -545,7 +623,7 @@ function measureVolumes(decoded, lufsOf, tmpDir, log = false) {
   const out = new Map();
   for (const e of EVENTS) {
     e.files.forEach((f, i) => {
-      if (e.level !== undefined) out.set(f.name, toVolume(e.level - lufsOf(f.name)));
+      if (e.level !== undefined) out.set(f.name, toVolume(e.level - (e.levelFrom ? measureLufs(/** @type {Float64Array} */ (decoded.get(f.name)).subarray(Math.round(e.levelFrom * SR))) : lufsOf(f.name))));
       if (e.thunder) out.set(f.name, toVolume(e.thunder[i] - thunderBand(/** @type {Float64Array} */ (decoded.get(f.name)))));
     });
     if (e.layered !== undefined) {
@@ -602,7 +680,7 @@ async function runCheck() {
       try {
         // Only what measureVolumes reads: the decoded thunder and rain clips, the loudness of the rest; all at once.
         const ogg = (/** @type {string} */ name) => join(outDir, `${name}.ogg`);
-        const decode = expected.filter(({ e }) => e.thunder || e.layered !== undefined).map(({ f }) => f.name);
+        const decode = expected.filter(({ e }) => e.thunder || e.layered !== undefined || e.levelFrom).map(({ f }) => f.name);
         const measure = expected.filter(({ e }) => e.level !== undefined).map(({ f }) => f.name);
         const [samples, lufs] = await Promise.all([Promise.all(decode.map((n) => decodeFileAsync(ogg(n)))), Promise.all(measure.map((n) => summaryAsync(ogg(n))))]);
         const decoded = new Map(decode.map((n, i) => [n, samples[i]]));
@@ -648,10 +726,11 @@ const AUDITION = {
   extras: {
     seconds: 34,
     indoors: [10, 19], // the game's rain stopped as Rain Extras does it (see MUFFLE)
+    // [event, clip, start, volume, cut at]: walking in (10.5 s, when Rain Extras notices) and out (19 s) stops what was playing.
     play: [
-      ["realm.storm.wind", "wind1", 0, 0.35], ["realm.storm.wind", "wind2", 8, 0.35],
-      ["realm.rain.roof", "roof1", 10, 0.8], ["realm.rain.roof", "roof2", 13, 0.8], ["realm.rain.roof", "roof3", 16, 0.8], ["realm.storm.wind_inside", "wind_inside1", 10, 0.35],
-      ["realm.rain.inside", "rain_inside1", 10, 0.8],
+      ["realm.storm.wind", "wind1", 0, 0.35], ["realm.storm.wind", "wind2", 8, 0.35, 10.5],
+      ["realm.rain.enter", "rain_enter1", 10.5, 0.8, 19],
+      ["realm.rain.roof", "roof1", 10.5, 0.8], ["realm.rain.roof", "roof2", 13.5, 0.8], ["realm.rain.roof", "roof3", 16.5, 0.8, 19], ["realm.storm.wind_inside", "wind_inside1", 10.5, 0.35, 19],
       ["realm.storm.bed", "bed1", 19, 1], ["realm.storm.wind", "wind3", 19, 0.7], ["realm.storm.wind", "wind1", 27, 0.7],
     ],
   },
@@ -755,7 +834,11 @@ function writeAudition(/** @type {string} */ dir, /** @type {string} */ tmpDir) 
     const wav = join(tmpDir, `${name}-audition.wav`);
     writeWav(mix, wav);
     const gain = Math.pow(10, (RAIN_AT - summary(wav).lufs) / 20);
-    for (const [event, clip, at, g = 1] of /** @type {[string, string, number, number?][]} */ (scene.play)) mixIn(mix, /** @type {Float64Array} */ (made.get(clip)), Math.round(at * SR), vol(event, clip) * g);
+    for (const [event, clip, at, g = 1, until] of /** @type {[string, string, number, number?, number?][]} */ (scene.play)) {
+      let x = /** @type {Float64Array} */ (made.get(clip));
+      if (until !== undefined) x = fades(x.slice(0, Math.round((until - at) * SR)), 0, 0.01); // /stopsound
+      mixIn(mix, x, Math.round(at * SR), vol(event, clip) * g);
+    }
     scale(mix, gain);
     fades(mix, 0.5, 1.5);
     const limited = limit(mix, Math.pow(10, -1.5 / 20));
