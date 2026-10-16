@@ -209,36 +209,36 @@ function spawnNosParticles(player, forward, phase) {
 
 /**
  * Plays the custom RB26 turbo spool + wastegate flutter ("stu-tu-tu-tu") audio (`realm.nos.boost`),
- * timed with an afterburner punch at tick 7 when full boost kicks in.
+ * timed with an afterburner punch at tick 11 when full boost kicks in.
  * @param {Player} player
  */
 function playNosAudio(player) {
   const dim = player.dimension;
   try {
-    player.playSound("realm.nos.boost", { volume: 1.0, pitch: 1.0 });
+    player.playSound("realm.nos.boost", { volume: 0.65, pitch: 1.0 });
   } catch {
     // ignore audio error
   }
   try {
-    dim.playSound("realm.nos.boost_world", player.location, { volume: 1.3, pitch: 1.0 });
+    dim.playSound("realm.nos.boost_world", player.location, { volume: 0.85, pitch: 1.0 });
   } catch {
     // ignore audio error
   }
   try {
-    player.playSound("random.fizz", { volume: 0.55, pitch: 1.65 });
+    player.playSound("random.fizz", { volume: 0.36, pitch: 1.65 });
   } catch {
     // ignore audio error
   }
-  // At tick 7 (0.35s), right as the turbo finishes spooling up, hit the afterburner kick sound
+  // At tick 11 (0.55s), right as the turbo finishes spooling up, hit the afterburner kick sound
   system.runTimeout(() => {
     if (!player.isValid || !player.isGliding) return;
     try {
-      player.playSound("firework.launch", { volume: 0.9, pitch: 0.85 });
-      player.playSound("mob.breeze.wind_burst", { volume: 0.85, pitch: 1.2 });
+      player.playSound("firework.launch", { volume: 0.58, pitch: 0.85 });
+      player.playSound("mob.breeze.wind_burst", { volume: 0.55, pitch: 1.2 });
     } catch {
       // ignore audio error
     }
-  }, 7);
+  }, 11);
 }
 
 /**
@@ -265,36 +265,47 @@ function triggerNosRocket(player) {
   const multiplier = Math.max(1, Number(get("nosMultiplier")) || CONFIG.nosMultiplier);
   const maxSpeed = Math.max(1, Number(get("nosMaxSpeed")) || CONFIG.nosMaxSpeed);
   const burstTicks = Math.max(1, Math.floor(Number(get("nosBurstTicks")) || CONFIG.nosBurstTicks));
-  const boostStrength = baseline * multiplier;
 
   playNosAudio(player);
 
-  // 3-stage turbo curve (60 ticks / 3.0s total):
-  //   - Spool-up: ticks 1..7 (0.35s)
-  //   - Sustained full 3.5x boost hold: ticks 8..(7 + burstTicks) (default 30 ticks = 1.5s at peak speed)
-  //   - Wastegate flutter ("stu-tu-tu-tu") & smooth momentum taper: 22 ticks (1.1s)
+  // 3-stage turbo curve (default 151 ticks / 7.55s total):
+  //   - Spool-up: ticks 1..11 (0.55s) at regular firework rocket speed while the turbo whine builds
+  //   - Full boost: ticks 12..(11 + burstTicks) (default 50 ticks = 2.5s), kicking up to peak speed then holding it
+  //   - Wastegate flutter ("stu-tu-tu-tu") & slow momentum taper: 90 ticks (4.5s)
   const currentVelocity = player.getVelocity();
   const forward = normalize3(player.getViewDirection());
+  const curSpeed = Math.hypot(currentVelocity.x, currentVelocity.y, currentVelocity.z);
+  const regularSpeed = Math.min(maxSpeed, Math.max(curSpeed, baseline * 2.15));
+  const peakSpeed = Math.min(maxSpeed, Math.max(baseline * multiplier * 1.37, maxSpeed * Math.min(1, multiplier / 3.5)));
+  const endGlideSpeed = Math.min(peakSpeed, baseline * 2.05);
+  const blendDir = normalize3({
+    x: currentVelocity.x * 0.25 + forward.x * 0.75,
+    y: currentVelocity.y * 0.25 + forward.y * 0.75,
+    z: currentVelocity.z * 0.25 + forward.z * 0.75,
+  });
   const spoolInitial = clampFlightVelocity(
     {
-      x: currentVelocity.x + forward.x * (baseline * 0.45),
-      y: currentVelocity.y + forward.y * (baseline * 0.45),
-      z: currentVelocity.z + forward.z * (baseline * 0.45),
+      x: blendDir.x * regularSpeed,
+      y: blendDir.y * regularSpeed,
+      z: blendDir.z * regularSpeed,
     },
     maxSpeed
   );
   applyPropulsion(player, currentVelocity, spoolInitial);
   spawnNosParticles(player, forward, "spool");
 
-  const spoolTicks = 7;
+  const spoolTicks = 11;
   const boostEndTick = spoolTicks + Math.max(10, burstTicks);
+  const taperTicks = 90;
   activeNosBursts.set(player.id, {
     tick: 1,
     spoolTicks,
     boostEndTick,
-    totalTicks: boostEndTick + 22,
+    totalTicks: boostEndTick + taperTicks,
     maxSpeed,
-    boostStrength,
+    regularSpeed,
+    peakSpeed,
+    endGlideSpeed,
     baseline,
   });
 }
@@ -330,9 +341,9 @@ world.afterEvents.itemUse.subscribe((event) => {
 });
 
 // Choreograph the 3-stage turbo curve:
-//   1. Spool-up (ticks 1..7): smooth intake pressure ramp + blue sparks
-//   2. Full Boost Hold (ticks 8..boostEndTick): sustained 3.5x nitrous speed + blazing cyan/orange plume
-//   3. Wastegate Flutter & Taper (boostEndTick+1..totalTicks): smooth speed taper + "stu-tu-tu-tu" flame pops
+//   1. Spool-up (ticks 1..11): regular firework rocket speed + blue sparks while the turbo whine builds
+//   2. Full Boost (ticks 12..boostEndTick): quick kick to peak speed, then hold + blazing cyan/orange plume
+//   3. Wastegate Flutter & Taper (boostEndTick+1..totalTicks): very slow speed taper + "stu-tu-tu-tu" flame pops
 system.runInterval(() => {
   if (!activeNosBursts.size) return;
   for (const [playerId, burst] of activeNosBursts) {
@@ -344,55 +355,73 @@ system.runInterval(() => {
     try {
       const forward = normalize3(player.getViewDirection());
       const currentVelocity = player.getVelocity();
+      const curSpeed = Math.hypot(currentVelocity.x, currentVelocity.y, currentVelocity.z);
+      const blendDir = normalize3({
+        x: currentVelocity.x * 0.22 + forward.x * 0.78,
+        y: currentVelocity.y * 0.22 + forward.y * 0.78,
+        z: currentVelocity.z * 0.22 + forward.z * 0.78,
+      });
       if (burst.tick <= burst.spoolTicks) {
-        // Stage 1: Turbo spooling up (gentle progressive pull)
-        const ramp = (burst.tick / burst.spoolTicks) * (burst.baseline * 0.38);
+        // Stage 1: hold regular firework speed while the turbo spools up
+        const spoolFrac = burst.tick / burst.spoolTicks;
+        const targetSpeed = Math.min(burst.maxSpeed, Math.max(curSpeed, burst.regularSpeed * (1 + 0.12 * spoolFrac)));
         const nextVel = clampFlightVelocity(
           {
-            x: currentVelocity.x + forward.x * ramp,
-            y: currentVelocity.y + forward.y * ramp,
-            z: currentVelocity.z + forward.z * ramp,
+            x: blendDir.x * targetSpeed,
+            y: blendDir.y * targetSpeed,
+            z: blendDir.z * targetSpeed,
           },
           burst.maxSpeed
         );
         applyPropulsion(player, currentVelocity, nextVel);
         spawnNosParticles(player, forward, "spool");
       } else if (burst.tick <= burst.boostEndTick) {
-        // Stage 2: Full turbo boost kicks in and holds peak speed against Elytra drag
-        const isKickTick = burst.tick <= burst.spoolTicks + 3;
-        const stepAdd = isKickTick ? burst.boostStrength * 0.65 : burst.boostStrength * 0.35;
-        const curSpeed = Math.hypot(currentVelocity.x, currentVelocity.y, currentVelocity.z);
-        const targetSpeed = Math.min(burst.maxSpeed, Math.max(curSpeed, burst.boostStrength));
-        const steered = clampFlightVelocity(
+        // Stage 2: quick kick up to peak speed, then hold it against Elytra drag
+        const kickTicks = 6;
+        const intoBoost = burst.tick - burst.spoolTicks;
+        const kickFrac = Math.min(1, intoBoost / kickTicks);
+        const kickEase = 1 - Math.pow(1 - kickFrac, 2);
+        const startBoostSpeed = burst.regularSpeed * 1.12;
+        const targetSpeed = Math.min(
+          burst.maxSpeed,
+          startBoostSpeed + (burst.peakSpeed - startBoostSpeed) * kickEase
+        );
+        const nextVel = clampFlightVelocity(
           {
-            x: currentVelocity.x * 0.32 + forward.x * (targetSpeed * 0.68 + stepAdd),
-            y: currentVelocity.y * 0.32 + forward.y * (targetSpeed * 0.68 + stepAdd),
-            z: currentVelocity.z * 0.32 + forward.z * (targetSpeed * 0.68 + stepAdd),
+            x: blendDir.x * targetSpeed,
+            y: blendDir.y * targetSpeed,
+            z: blendDir.z * targetSpeed,
           },
           burst.maxSpeed
         );
-        applyPropulsion(player, currentVelocity, steered);
+        applyPropulsion(player, currentVelocity, nextVel);
         spawnNosParticles(player, forward, "boost");
       } else {
-        // Stage 3: Wastegate flutter ("stu-tu-tu-tu") + gradual momentum taper so speed carries much longer
+        // Stage 3: slow momentum taper, countering Elytra air drag every tick, with wastegate flutter
         const taperTick = burst.tick - burst.boostEndTick;
         const taperTotal = Math.max(1, burst.totalTicks - burst.boostEndTick);
-        const taperFrac = Math.max(0, 1 - taperTick / taperTotal);
-        const holdSpeed = burst.boostStrength * (0.45 + 0.55 * taperFrac);
-        const curSpeed = Math.hypot(currentVelocity.x, currentVelocity.y, currentVelocity.z);
-        if (curSpeed < holdSpeed) {
-          const steered = clampFlightVelocity(
-            {
-              x: currentVelocity.x * 0.6 + forward.x * (holdSpeed * 0.4),
-              y: currentVelocity.y * 0.6 + forward.y * (holdSpeed * 0.4),
-              z: currentVelocity.z * 0.6 + forward.z * (holdSpeed * 0.4),
-            },
-            burst.maxSpeed
-          );
-          applyPropulsion(player, currentVelocity, steered);
-        }
-        if (taperTick % 3 === 1) {
+        const taperProgress = Math.min(1, taperTick / taperTotal);
+        const ease = Math.pow(1 - taperProgress, 1.25);
+        const holdSpeed = burst.endGlideSpeed + (burst.peakSpeed - burst.endGlideSpeed) * ease;
+        const targetSpeed = Math.min(burst.maxSpeed, Math.max(curSpeed, holdSpeed));
+        const taperDir = normalize3({
+          x: currentVelocity.x * 0.35 + forward.x * 0.65,
+          y: currentVelocity.y * 0.35 + forward.y * 0.65,
+          z: currentVelocity.z * 0.35 + forward.z * 0.65,
+        });
+        const nextVel = clampFlightVelocity(
+          {
+            x: taperDir.x * targetSpeed,
+            y: taperDir.y * targetSpeed,
+            z: taperDir.z * targetSpeed,
+          },
+          burst.maxSpeed
+        );
+        applyPropulsion(player, currentVelocity, nextVel);
+        if (taperTick <= 28 && taperTick % 3 === 1) {
           spawnNosParticles(player, forward, "flutter");
+        } else if (taperTick > 28 && taperTick % 6 === 0) {
+          spawnNosParticles(player, forward, "spool");
         }
       }
     } catch {

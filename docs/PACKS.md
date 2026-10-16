@@ -1369,7 +1369,7 @@ While you glide, a small box on the right side of your screen (or another box, o
 ### What players see
 
 - **Speed** in blocks per second (your total speed, diving included), **Y** (your height), **Elytra** durability left in percent, **Rockets** (firework rockets in your inventory and offhand) and **NOS** (NOS Rockets carried, when at least 1).
-- **NOS Rocket** (`custom:nos_rocket`, stack size 64, 128x128 `nos_rocket` icon in `build_rp`): when activated while gliding, consumes 1 item (outside Creative), spools up the turbo for ~0.35s, hits and holds a `nosMultiplier` (`3.5`x) forward nitrous boost over `nosBurstTicks` (`30` ticks = 1.5s at peak speed, clamped to `nosMaxSpeed` = `3.6` blocks/tick, ~72 blocks/s), and tapers off gradually over the next 1.1s with a `"stu-tu-tu-tu"` wastegate turbo flutter (`realm.nos.boost`) and cyan-blue + orange slipstream flames. Normal vanilla firework rockets remain completely unchanged.
+- **NOS Rocket** (`custom:nos_rocket`, stack size 64, 128x128 `nos_rocket` icon in `build_rp`): when activated while gliding, consumes 1 item (outside Creative), spools up the turbo for 0.55s at regular firework-rocket speed (~32 to 36 blocks/s), kicks up to and holds a `nosMultiplier` (`3.5`x) forward nitrous boost over `nosBurstTicks` (`50` ticks = 2.5s at peak speed, clamped to `nosMaxSpeed` = `3.6` blocks/tick, ~72 blocks/s), and then carries its momentum through a slow 4.5s taper down to ~31 blocks/s with a `"stu-tu-tu-tu"` wastegate turbo flutter (`realm.nos.boost`) and cyan-blue + orange slipstream flames. Normal vanilla firework rockets remain completely unchanged.
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
 - It only shows while you're gliding: the box goes away as you land (above the hotbar, the bar fades a moment after). Nothing is shown for players who aren't gliding.
 - When it shows above the hotbar and the [Coordinates HUD](#coordinates-hud--hud_bp) is on, the coordinates pause while you glide, so the two don't take turns on the bar; they come back a second or two after you land. In a side box, both show at once.
@@ -1394,7 +1394,7 @@ While you glide, a small box on the right side of your screen (or another box, o
 | `nosMultiplier` | `3.5` | NOS Rocket boost multiplier relative to a normal firework rocket baseline (2.0 to 5.0 in game) |
 | `nosBaseline` | `0.75` | Normal firework rocket impulse baseline in blocks/tick |
 | `nosMaxSpeed` | `3.6` | Maximum total flight speed cap in blocks/tick (~72 blocks/s) so repeated NOS Rockets stay steerable and do not compound infinitely |
-| `nosBurstTicks` | `30` | Sustained full-boost turbo hold duration in ticks (1.5s at peak speed before the wastegate flutter taper) |
+| `nosBurstTicks` | `50` | Sustained full-boost turbo hold duration in ticks (2.5s at peak speed, preceded by a 0.55s regular-speed spool-up and followed by a 4.5s slow momentum taper with wastegate flutter) |
 
 Operators can change `enabled`, `lowPercent`, `showAt`, `nosEnabled`, `nosMultiplier`, `nosBaseline`, `nosMaxSpeed` and `nosBurstTicks` in game with `/realm:config`; `intervalTicks` shows there but is read when the world starts, so change it in `config.js`. Each player can disable the HUD for themselves in `/realm:prefs` (**Elytra HUD while gliding**), the same switch as `/realm:elytra`, and pick where it shows (**Where my Elytra HUD shows**).
 

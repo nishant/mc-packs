@@ -21,7 +21,7 @@ const OPTIONS = [
   { key: "nosMultiplier", type: "float", scope: "world", label: "NOS Rocket boost multiplier (x)", help: "Relative to normal firework baseline (default 3.5x)", min: 1, max: 6, step: 0.25 },
   { key: "nosBaseline", type: "float", scope: "world", label: "NOS Rocket baseline impulse (blocks/tick)", help: "Normal firework rocket impulse baseline", min: 0.25, max: 2, step: 0.05 },
   { key: "nosMaxSpeed", type: "float", scope: "world", label: "NOS Rocket max speed (blocks/tick)", help: "Maximum flight speed cap (3.6 = 72 blocks/s) so repeated boosts do not compound infinitely", min: 1.5, max: 6, step: 0.1 },
-  { key: "nosBurstTicks", type: "int", scope: "world", label: "NOS Rocket full-boost hold (ticks)", help: "Ticks held at peak turbo boost before tapering off with wastegate flutter", min: 6, max: 80, step: 2 },
+  { key: "nosBurstTicks", type: "int", scope: "world", label: "NOS Rocket full-boost hold (ticks)", help: "Ticks held at peak turbo boost before tapering off with wastegate flutter", min: 6, max: 120, step: 2 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
