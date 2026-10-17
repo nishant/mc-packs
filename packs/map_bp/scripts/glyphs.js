@@ -265,4 +265,12 @@ export const G = {
   Q_MESA_LO: "",
   /** U+F3CF radar terrain: sunlit mesa plateau */
   Q_MESA_HI: "",
+  /** U+F3D0 radar terrain: pale sandstone masonry, not beach sand */
+  Q_SANDSTONE: "",
+  /** U+F3D1 radar terrain: shadowed sandstone wall */
+  Q_SANDSTONE_LO: "",
+  /** U+F3D2 radar terrain: sunlit sandstone roof */
+  Q_SANDSTONE_HI: "",
+  /** U+F3D3 radar terrain: planted green and gold crop rows */
+  Q_CROP: "",
 };

@@ -4,8 +4,8 @@ import { StructureSaveMode, world } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").ItemStack} ItemStack */
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {{ s: number, item: ItemStack }} Entry */
-/** @typedef {{ id: string, slots: number[] }} Ref */
-/** @typedef {{ v: 1, cur: number, pages: Record<string, Ref>, pending?: { before: Ref, after: Ref } }} State */
+/** @typedef {{ id: string, slots: number[], layout?: 2 }} Ref */
+/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, pending?: { before: Ref, after: Ref } }} State */
 const STATE = "stash:native";
 const NEXT = "stash:snapshot_next";
 const ENTITY = "realm:stash_page_store";
@@ -23,6 +23,10 @@ export function stateOf(player) {
   if (typeof raw !== "string") throw new Error("invalid native page index");
   const state = /** @type {State} */ (JSON.parse(raw));
   if (state.v !== 1 || !Number.isInteger(state.cur) || state.cur < 1 || state.cur > 25 || !state.pages || typeof state.pages !== "object") throw new Error("invalid native page index");
+  if (state.layout !== undefined && state.layout !== 2) throw new Error("unsupported inventory layout");
+  for (const ref of Object.values(state.pages)) {
+    if (!ref || (ref.layout !== undefined && ref.layout !== 2)) throw new Error("unsupported saved page layout");
+  }
   return state;
 }
 

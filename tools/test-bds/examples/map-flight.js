@@ -25,13 +25,16 @@ export default async function (t) {
   const radarOf = async (p) => {
     const since = t.tick;
     last[p.id] = undefined;
-    sys.sendScriptEvent("realm:map_debug", JSON.stringify({ player: p.id, action: "state" }));
+    const at = p.location;
+    const samples = [-24, 24].flatMap((dx) => [-24, 24].map((dz) => ({ x: at.x + dx, z: at.z + dz, resolution: 4 })));
+    sys.sendScriptEvent("realm:map_debug", JSON.stringify({ player: p.id, action: "state", samples }));
     await t.waitUntil(() => last[p.id] !== undefined, { timeout: 20, message: "realm:map_state" });
     return last[p.id].radar ?? "";
   };
   await t.server("/gamerule domobspawning false");
   const a = await t.player("Flier", { op: true, x: 0, z: 0, gameMode: "creative" });
   const b = await t.player("Caver", { op: true, x: 0, z: 100, gameMode: "creative" });
+  await t.loadArea(0, 100, { radius: 4 }); // Keep the entire stationary radar loaded after the flier leaves.
   await t.wait(60);
 
   // Roof over Caver, high enough to count as roofed terrain.
@@ -65,4 +68,52 @@ export default async function (t) {
   t.check(!CAVE.some((c) => ra.includes(c)), "the roofed player's cave terrain never reaches the flier's radar");
   const rb2 = await radarOf(b);
   t.check(!rb2.includes(SAND), "the flier's sand is not drawn for the player far away under the roof");
+
+  // Reach the real cache cap through native flight, then stop beneath a roof: detail must not churn forever.
+  let area;
+  for (let i = 0; i < 2200; i++) {
+    const x = 0.1 + (i + 1) * 3.2;
+    if (i % 10 === 0) {
+      const next = await t.loadArea(x, 300, { radius: 4 });
+      if (area) await t.server(`/tickingarea remove ${area}`);
+      area = next.name;
+    }
+    a.teleport({ x, y: 128, z: 300 }, { rotation: { x: 0, y: 270 } });
+    await t.wait(1);
+  }
+  await radarOf(a);
+  t.log(`native saturated surface ${JSON.stringify(last[a.id].terrain.surface)}`);
+  t.check(last[a.id].terrain.surface.columns === 6000 && last[a.id].terrain.surface.fine >= 100, "native flight saturates6000 while retaining a useful fine working set");
+  const x = Math.floor(a.location.x);
+  await t.server(`/fill ${x - 8} 63 292 ${x + 8} 63 308 stone`);
+  await t.server(`/fill ${x - 8} 80 292 ${x + 8} 80 308 stone`);
+  a.teleport({ x: x + 0.1, y: 64, z: 300 }, { rotation: { x: 0, y: 270 } });
+  await t.wait(130); // The existing surface sample refreshes within100 ticks after a command-built roof.
+  await radarOf(a);
+  t.check(last[a.id].terrain.store.endsWith("|layer64"), "saturated native cache keeps roof80/player64 in its cave");
+  await radarOf(b);
+  t.log(`stationary native misses: flier=${last[a.id].terrain.misses}, caver=${last[b.id].terrain.misses}`);
+  t.check(last[a.id].terrain.misses === 0 && last[b.id].terrain.misses === 0, "stationary cost excludes legitimate unloaded-chunk retries");
+  // The 2200-tick flight plus setup crosses the other viewer's intentional 2400-tick freshness boundary.
+  // Observe that age refresh explicitly before measuring idle eviction churn; keep both viewers scanning.
+  const expiring = last[b.id].terrain.samples.filter((s) => s.data && sys.currentTick - s.data.tick >= 2300);
+  t.log(`Caver coarse sample ages before idle: ${last[b.id].terrain.samples.map((s) => s.data ? sys.currentTick - s.data.tick : "missing").join(",")}`);
+  t.check(expiring.length > 0, "long flight reaches the stationary caver's existing age-refresh cohort");
+  const refreshed = () => expiring.every((old) => last[b.id].terrain.samples.some((s) => s.x === old.x && s.z === old.z && s.data?.tick > old.data.tick));
+  for (let i = 0; i < 48 && !refreshed(); i++) {
+    await t.wait(5);
+    await radarOf(b);
+  }
+  t.check(refreshed(), "old coarse samples actually refresh before the steady idle window");
+  await t.wait(12);
+  await radarOf(b);
+  t.log(`Caver coarse sample ages after refresh: ${last[b.id].terrain.samples.map((s) => s.data ? sys.currentTick - s.data.tick : "missing").join(",")}`);
+  sys.sendScriptEvent("realm:map_debug", JSON.stringify({ player: a.id, action: "cost" }));
+  await t.wait(2);
+  await t.wait(50);
+  await radarOf(a);
+  const cost = last[a.id].cost;
+  t.log(`saturated stop: ${cost.scanReads} real reads/${cost.scanTicks} ticks, scanner ${cost.scanMs}ms (${(cost.scanMs / Math.max(1, cost.scanTicks)).toFixed(3)}ms/tick), redraw ${cost.turnMs}ms/${cost.turnTicks}ticks, periodic ${cost.ms}ms; peaks ${cost.scanPeak}/${cost.scanEachPeak}`);
+  t.check(cost.scanReads <= 4, "saturated stationary native viewers do not keep rereading their fine detail");
+  t.check(cost.scanPeak <= 96 && cost.scanEachPeak <= 48, "saturated native flight and cave retain unchanged96/48 operation limits");
 }

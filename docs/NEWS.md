@@ -7,6 +7,14 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Inventory controls and clearer terrain
+
+- Inventory page controls sit together in the last three slots of the top row: previous, current page/menu, next. Old pages migrate without rebuilding native item data.
+- Delayed inventory events no longer request extra page changes. A busy inventory menu rebuilds its page labels and actions before retrying.
+- Minimap terrain samples include river water and visible roofs, with clearer elevation, masonry, and crop colors. The compass and radar keep using the same pose, destination, and region.
+- The radar geometry is about 15 percent larger, and the scoreboard uses a right-anchored slot below the other right-side readouts.
+- Physical inventory clicks and client HUD placement are not yet verified. The test-only name-range prototype is disabled; native name visibility is unchanged and 20-block readability is not claimed.
+
 ## Safer inventory pages and steadier realm tools
 
 - Inventory pages now save native items, including filled shulker boxes, potions, and enchanted gear, across page changes, logout, and clean server restarts. Items that do not fit when pages shrink stay saved instead of dropping on the ground.

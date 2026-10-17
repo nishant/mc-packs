@@ -64,7 +64,7 @@ export const CONFIG = {
    */
   pages: 5,
 
-  /** Expansive Inventory: the three page buttons in the top row of the inventory (slots 9, 13 and 17). Each player can change it in /realm:prefs. */
+  /** Expansive Inventory: the three page buttons in the top row's last three slots (15, 16 and 17). Each player can change it in /realm:prefs. */
   invButtons: true,
 
   /** Expansive Inventory: when a page is full, new stacks are stored on another page. Each player can change it in /realm:prefs. */

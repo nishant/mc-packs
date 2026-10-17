@@ -110,6 +110,9 @@ export default async function (t) {
   // a send is a title command, which dominates the cost, so the bound is per send and the per-tick total follows the budget.
   const perSend = c.turnMs / Math.max(1, c.turnSends);
   t.log(`per send: ${perSend.toFixed(2)} ms`);
+  t.log(`title/side draw ${c.drawMs} ms; terrain scanner ${c.scanMs ?? "baseline-unmetered"} ms, ${c.scanReads ?? "?"} real operations, peaks ${c.scanPeak ?? "?"}/${c.scanEachPeak ?? "?"}`);
+  if (c.scanTicks) t.log(`scanner ${(c.scanMs / c.scanTicks).toFixed(3)} ms/tick; accounted scanner+redraw+periodic work ${((c.scanMs + c.turnMs + c.ms) / Math.max(1, c.turnTicks)).toFixed(3)} ms/tick (not whole-server CPU; drawMs is already included)`);
+  if (c.scanPeak !== undefined) t.check(c.scanPeak <= 96 && c.scanEachPeak <= 48, "rotating viewers retain the shared real-operation budget");
   t.check(perSend < 4, `each strip sent costs under 4 ms with 10 players turning nonstop (${perSend.toFixed(2)} ms)`);
 
   // The same 10 players standing still (after the last of them got their final strip): the per-tick check only

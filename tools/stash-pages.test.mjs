@@ -33,6 +33,11 @@ const mc = {
   failLoad: false,
   metadataThrow: new Set(),
   loads: 0,
+  eventDelay: 0,
+  changes: [],
+  prefs: new Map(),
+  forms: [],
+  formResponses: new Map(),
 };
 globalThis.__mc = mc;
 
@@ -146,7 +151,12 @@ class Container {
     return this.slots[s];
   }
   setItem(s, item) {
+    const before = this.slots[s]?.clone();
     this.slots[s] = item;
+    if (this.player && mc.eventDelay) mc.changes.push({
+      tick: mc.tick + mc.eventDelay,
+      event: { player: this.player, inventoryType: "Inventory", slot: s, beforeItemStack: before, itemStack: item?.clone() },
+    });
   }
   getSlot(s) {
     const slots = this.slots;
@@ -211,6 +221,7 @@ function makePlayer() {
       return mc.entities.filter((e) => e.dimension === this && (!query.type || query.type === e.typeId));
     },
   };
+  container.player = player;
   mc.players.push(player);
   return player;
 }
@@ -222,6 +233,7 @@ const subscribable = (name) => ({
 });
 mc.server = {
   CommandPermissionLevel: { GameDirectors: 2 },
+  PlayerInventoryType: { Inventory: "Inventory", Hotbar: "Hotbar" },
   EnchantmentType,
   ItemLockMode: { inventory: "inventory", slot: "slot", none: "none" },
   ItemStack,
@@ -265,34 +277,43 @@ mc.server = {
   },
 };
 class Form {
-  title() { return this; }
-  body() { return this; }
-  button() { return this; }
+  constructor() { this.buttons = []; }
+  title(text) { this.heading = text; return this; }
+  body(text) { this.text = text; return this; }
+  button(text) { this.buttons.push(text); return this; }
   toggle() { return this; }
   slider() { return this; }
-  show() { return Promise.resolve({ canceled: true }); }
+  show(player) {
+    mc.forms.push({ player, form: this });
+    const response = mc.formResponses.get(player.id)?.shift();
+    return Promise.resolve(response ?? { canceled: true });
+  }
 }
 mc.ui = {
   ActionFormData: Form,
   ModalFormData: Form,
   FormCancelationReason: { UserBusy: "UserBusy" },
 };
-mc.settings = { get: (k) => (k === "pages" ? mc.pages : undefined), getFor: () => undefined, setFor() {} };
+mc.settings = { get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
 
 /** One engine tick: queued system.run callbacks first, then (every other tick) the script's interval. */
 function advance(ticks = 1) {
   for (let i = 0; i < ticks; i++) {
     mc.tick++;
+    const due = mc.changes.filter((e) => e.tick <= mc.tick);
+    mc.changes = mc.changes.filter((e) => e.tick > mc.tick);
+    for (const { event } of due) fire("playerInventoryItemChange", event);
     const q = mc.queue.splice(0);
     for (const fn of q) fn();
     if (mc.tick % 2 === 0) for (const fn of mc.intervals) fn();
   }
 }
 function fire(name, event) {
+  if (name === "playerInventoryItemChange" && event.inventoryType === undefined) event.inventoryType = "Inventory";
   for (const fn of mc.after[name] ?? []) fn(event);
 }
 
-const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, StructureSaveMode, system, world } = m;`);
+const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, StructureSaveMode, system, world } = m;`);
 const uiUrl = dataUrl(`const m = globalThis.__mc.ui; export const { ActionFormData, FormCancelationReason, ModalFormData } = m;`);
 const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, setFor } = m;`);
 const storeSource = readFileSync(new URL("../packs/stash_bp/scripts/page-store.js", import.meta.url), "utf8")
@@ -316,7 +337,7 @@ const PAGE_ITEMS = ["minecraft:redstone", "minecraft:emerald", "minecraft:iron_i
 /** A player whose buttons are in place (the interval puts them there; the next tick ends the script-write mark). */
 function joined() {
   const p = makePlayer();
-  while (!p.container.getItem(9)) advance(1);
+  while (!p.container.getItem(BUTTON_SLOTS[0])) advance(1);
   advance(1);
   return p;
 }
@@ -329,6 +350,311 @@ function pickUpButton(p, slot) {
   p.container.setItem(slot, undefined);
   fire("playerInventoryItemChange", { player: p, slot, beforeItemStack: button, itemStack: undefined });
 }
+
+for (const autoStore of [false, true]) test(`delayed script echoes and consecutive gestures agree (auto-store ${autoStore})`, (t) => {
+  const p = joined();
+  mc.prefs.set(`${p.id}:autoStore`, autoStore);
+  const all = mc.players;
+  mc.players = [p];
+  mc.eventDelay = 3;
+  try {
+    for (let page = 1; page <= 5; page++) {
+      assert.equal(switchPage(p, page), true);
+      if (page !== 4) p.container.setItem(18, stack(PAGE_ITEMS[page - 1], page));
+    }
+    assert.equal(switchPage(p, 1), true);
+    advance(10);
+    const check = (expected) => {
+      const label = p.container.getItem(BUTTON_SLOTS[1])?.nameTag;
+      const trace = { tick: mc.tick, requested: expected, committed: curPage(p), label, visible: p.container.getItem(18)?.typeId ?? "empty", cursor: p.cursor.item?.typeId ?? "empty" };
+      t.diagnostic(JSON.stringify(trace));
+      assert.equal(curPage(p), expected);
+      assert.match(label, new RegExp(`Page ${expected}/5`));
+      assert.equal(p.container.getItem(18)?.typeId, expected === 4 ? undefined : PAGE_ITEMS[expected - 1]);
+      assert.equal(p.cursor.item, undefined);
+    };
+    for (const expected of [2, 3, 4, 5, 1, 2]) {
+      pickUpButton(p, BUTTON_SLOTS[2]);
+      advance(1);
+      check(expected);
+    }
+    advance(10);
+    check(2);
+    for (const expected of [1, 5, 4, 3, 2, 1]) {
+      pickUpButton(p, BUTTON_SLOTS[0]);
+      advance(1);
+      check(expected);
+    }
+    advance(10);
+    check(1);
+    // A shift-click produces a removal plus a stray in the shared hotbar, not two requests.
+    const button = p.container.getItem(BUTTON_SLOTS[2]);
+    p.container.setItem(BUTTON_SLOTS[2], undefined);
+    p.container.setItem(1, button);
+    fire("playerInventoryItemChange", { player: p, slot: BUTTON_SLOTS[2], beforeItemStack: button });
+    advance(5);
+    check(2);
+    assert.equal(p.container.getItem(1), undefined);
+    // A cursor return before reconciliation is still one gesture, never a replay from the event.
+    pickUpButton(p, BUTTON_SLOTS[0]);
+    p.container.setItem(BUTTON_SLOTS[0], p.cursor.item);
+    advance(5);
+    check(1);
+  } finally {
+    mc.eventDelay = 0;
+    mc.changes = [];
+    mc.players = all;
+  }
+});
+
+test("menu active marker, committed page and visible items agree after button navigation", async () => {
+  const p = joined();
+  p.container.setItem(18, stack("minecraft:diamond", 9));
+  pickUpButton(p, 17);
+  advance(1);
+  pickUpButton(p, 16);
+  advance(1);
+  await Promise.resolve();
+  const shown = mc.forms.filter((e) => e.player === p).at(-1).form;
+  assert.match(shown.text, /^Page #2 of 5/);
+  assert.ok(shown.buttons.some((text) => text.startsWith("Page #2 (Active)")));
+  assert.equal(p.container.getItem(18), undefined);
+});
+
+test("wrong inventory type and invalid slots never consume a cursor or enqueue a request", () => {
+  const p = joined();
+  p.cursor.item = stack(BTN_NEXT);
+  const pending = mc.queue.length;
+  for (const [inventoryType, slot] of [["Hotbar", 17], ["Armor", 17], ["Inventory", -1], ["Inventory", 36], ["Inventory", 0]]) {
+    fire("playerInventoryItemChange", { player: p, inventoryType, slot, beforeItemStack: stack(BTN_NEXT) });
+  }
+  assert.equal(mc.queue.length, pending);
+  assert.equal(p.cursor.item.typeId, BTN_NEXT);
+  assert.equal(curPage(p), 1);
+  p.cursor.clear();
+});
+
+test("a failed click repairs the old committed controls without retrying the request", () => {
+  const p = joined();
+  p.setDynamicProperty("stash:page:2", "corrupt");
+  p.container.setItem(18, stack("minecraft:diamond", 3));
+  pickUpButton(p, 17);
+  advance(1);
+  assert.equal(curPage(p), 1);
+  assert.equal(p.container.getItem(18).amount, 3);
+  assert.match(p.container.getItem(16).nameTag, /Page 1\/5/);
+  assert.equal(p.container.getItem(17)?.typeId, BTN_NEXT);
+  const failures = p.bar.length;
+  advance(6);
+  assert.equal(p.bar.length, failures, "stale request was consumed even on failure");
+});
+
+test("two distinct gestures before reconciliation retain their order instead of dropping one", () => {
+  const p = joined();
+  const notes = p.bar.length;
+  const next = p.container.getItem(17);
+  p.container.setItem(17, undefined);
+  p.container.setItem(1, next);
+  fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: next });
+  const prev = p.container.getItem(15);
+  p.container.setItem(15, undefined);
+  p.container.setItem(2, prev);
+  fire("playerInventoryItemChange", { player: p, slot: 15, beforeItemStack: prev });
+  assert.equal(curPage(p), 1, "events themselves are read-only");
+  advance(1);
+  assert.equal(curPage(p), 1, "next then previous returns to page one");
+  assert.deepEqual(p.bar.slice(notes).map((line) => /Page #(\d+)/.exec(line)?.[1]), ["2", "1"]);
+  assert.equal(p.container.getItem(1), undefined);
+  assert.equal(p.container.getItem(2), undefined);
+});
+
+test("three sequential queued gestures Next Prev Menu are not a co-observed clear", async () => {
+  const p = joined();
+  const notes = p.bar.length;
+  for (const [slot, hotbar] of [[17, 1], [15, 2], [16, 3]]) {
+    const button = p.container.getItem(slot);
+    p.container.setItem(slot, undefined);
+    p.container.setItem(hotbar, button);
+    fire("playerInventoryItemChange", { player: p, slot, beforeItemStack: button });
+  }
+  advance(1);
+  await Promise.resolve();
+  const commits = p.bar.slice(notes).map((line) => /Page #(\d+)\//.exec(line)?.[1]).filter(Boolean);
+  assert.deepEqual(commits, ["2", "1"]);
+  const menus = mc.forms.filter((e) => e.player === p);
+  assert.equal(menus.length, 1, "the third genuine gesture opens one menu");
+  assert.match(menus[0].form.text, /^Page #1 of 5/);
+  assert.equal(curPage(p), 1);
+  for (const slot of [1, 2, 3]) assert.equal(p.container.getItem(slot), undefined);
+});
+
+test("restoring an old active layout into a joined player is migration, not queued gestures", () => {
+  const p = joined();
+  p.setDynamicProperty("stash:native", JSON.stringify({ v: 1, cur: 5, pages: {} }));
+  for (const slot of BUTTON_SLOTS) p.container.setItem(slot, undefined);
+  for (const slot of [10, 11, 12, 14, 15, 16, ...Array.from({ length: 18 }, (_, i) => i + 18)]) {
+    p.container.setItem(slot, stack("minecraft:diamond", slot));
+  }
+  p.container.setItem(9, stack(BTN_PREV));
+  p.container.setItem(13, stack(BTN_MENU));
+  p.container.setItem(17, stack(BTN_NEXT));
+  const notes = p.bar.length;
+  fire("playerInventoryItemChange", { player: p, slot: 15, beforeItemStack: stack(BTN_PREV), itemStack: p.container.getItem(15) });
+  advance(3);
+  assert.equal(curPage(p), 5);
+  assert.equal(JSON.parse(p.getDynamicProperty("stash:native")).layout, 2);
+  assert.ok(!p.bar.slice(notes).some((line) => /Page #\d+\//.test(line)), "migration never commits a navigation request");
+  assert.equal(mc.forms.filter((e) => e.player === p).length, 0);
+  assert.equal(p.container.getItem(13)?.amount, 15);
+  assert.equal(p.container.getItem(14)?.amount, 16);
+});
+
+test("UserBusy menu retries rebuild committed page, usage and active marker after navigation", async () => {
+  const p = joined();
+  p.container.setItem(18, stack("minecraft:redstone", 1));
+  mc.formResponses.set(p.id, [{ canceled: true, cancelationReason: "UserBusy" }, { canceled: true }]);
+  const opening = pages.openInvMenu(p);
+  await Promise.resolve();
+  pickUpButton(p, 17);
+  advance(1);
+  p.container.setItem(18, stack("minecraft:emerald", 2));
+  advance(20);
+  await opening;
+  const attempts = mc.forms.filter((e) => e.player === p).map((e) => e.form);
+  assert.equal(attempts.length, 2);
+  assert.match(attempts[0].text, /^Page #1 of 5/);
+  assert.match(attempts[1].text, /^Page #2 of 5/);
+  assert.match(attempts[1].text, /2 of 120 slots used/);
+  assert.ok(attempts[1].buttons.some((text) => text.startsWith("Page #2 (Active)")));
+  assert.ok(!attempts[1].buttons.some((text) => text.startsWith("Page #1 (Active)")));
+  assert.match(p.container.getItem(16).nameTag, /Page 2\/5/);
+});
+
+test("UserBusy retry actions stay aligned with a rebuilt page-count-dependent button list", async () => {
+  const p = joined();
+  const all = mc.players;
+  mc.players = [p];
+  let sorted = 0;
+  pages.initPages({ bar: (player, text) => player.bar.push(text), sort: () => sorted++, stash() {} });
+  try {
+    mc.formResponses.set(p.id, [{ canceled: true, cancelationReason: "UserBusy" }, { canceled: false, selection: 4 }]);
+    const opening = pages.openInvMenu(p);
+    await Promise.resolve();
+    mc.pages = 2;
+    advance(20);
+    await opening;
+    const shown = mc.forms.filter((e) => e.player === p).at(-1).form;
+    assert.match(shown.buttons[4], /^Sort this page/);
+    assert.equal(sorted, 1, "new Sort button must not execute the old Page #4 action");
+    assert.equal(curPage(p), 1);
+  } finally {
+    mc.pages = 5;
+    mc.players = all;
+    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
+  }
+});
+
+test("an unavailable cursor component cannot block a visible slot request", () => {
+  const p = joined();
+  const original = p.getComponent.bind(p);
+  p.getComponent = (name) => {
+    if (name === "minecraft:cursor_inventory") throw new Error("cursor unavailable");
+    return original(name);
+  };
+  p.container.setItem(17, undefined);
+  fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: stack(BTN_NEXT) });
+  advance(2);
+  assert.equal(curPage(p), 2);
+});
+
+test("batched live slot changes retain the first event's gesture order without replaying its payload", () => {
+  const p = joined();
+  const notes = p.bar.length;
+  const next = p.container.getItem(17);
+  const prev = p.container.getItem(15);
+  p.container.setItem(17, undefined);
+  p.container.setItem(15, undefined);
+  fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: next });
+  fire("playerInventoryItemChange", { player: p, slot: 15, beforeItemStack: prev });
+  advance(1);
+  assert.deepEqual(p.bar.slice(notes).map((line) => /Page #(\d+)/.exec(line)?.[1]), ["2", "1"]);
+  fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: next });
+  advance(4);
+  assert.equal(curPage(p), 1, "later stale payload is not another gesture");
+});
+
+const OLD_STORAGE = [10, 11, 12, 14, 15, 16, ...Array.from({ length: 18 }, (_, i) => i + 18)];
+
+test("old active layout and lazy native refs migrate by ordinal exactly once", async () => {
+  const p = makePlayer();
+  const storage = await import(storeUrl);
+  const old = OLD_STORAGE.map((s) => {
+    const item = stack("minecraft:white_shulker_box");
+    item.contents = [`old-${s}`];
+    return { s, item };
+  });
+  for (const e of old) p.container.setItem(e.s, e.item);
+  p.container.setItem(0, stack("minecraft:apple", 3));
+  p.container.setItem(9, stack(BTN_PREV));
+  p.container.setItem(13, stack(BTN_MENU));
+  p.container.setItem(17, stack(BTN_NEXT));
+  const ref = storage.saveSnapshot(p, old);
+  p.setDynamicProperty("stash:native", JSON.stringify({ v: 1, cur: 1, pages: { 2: ref } }));
+  advance(4);
+  assert.deepEqual(BUTTON_SLOTS, [15, 16, 17]);
+  for (let i = 0; i < 24; i++) assert.deepEqual(p.container.getItem(STORAGE_SLOTS[i])?.contents, [`old-${OLD_STORAGE[i]}`]);
+  assert.equal(JSON.parse(p.getDynamicProperty("stash:native")).layout, 2);
+  assert.equal(JSON.parse(p.getDynamicProperty("stash:native")).pages[2].layout, undefined, "inactive image stays explicitly legacy until used");
+  assert.equal(switchPage(p, 2), true);
+  for (let i = 0; i < 24; i++) assert.deepEqual(p.container.getItem(STORAGE_SLOTS[i])?.contents, [`old-${OLD_STORAGE[i]}`]);
+  assert.equal(JSON.parse(p.getDynamicProperty("stash:native")).pages[1].layout, 2);
+  assert.equal(switchPage(p, 1), true);
+  assert.equal(p.container.getItem(0).amount, 3);
+});
+
+test("full normal inventory migration permutes all 27 main slots without requiring free space", () => {
+  const p = makePlayer();
+  mc.pages = 1;
+  try {
+    for (let s = 9; s < 36; s++) {
+      const item = stack("minecraft:white_shulker_box");
+      item.contents = [`normal-${s}`];
+      p.container.setItem(s, item);
+    }
+    advance(4);
+    assert.equal(JSON.parse(p.getDynamicProperty("stash:native")).layout, 2);
+    for (let i = 0; i < 24; i++) assert.deepEqual(p.container.getItem(STORAGE_SLOTS[i]).contents, [`normal-${OLD_STORAGE[i]}`]);
+    for (const [old, next] of [[9, 15], [13, 16], [17, 17]]) assert.deepEqual(p.container.getItem(next).contents, [`normal-${old}`]);
+    advance(4);
+    assert.equal(new Set(p.container.slots.slice(9).map((e) => e.contents[0])).size, 27);
+  } finally { mc.pages = 5; mc.players = mc.players.filter((e) => e !== p); }
+});
+
+test("failed active layout transaction leaves old slots and layout unchanged for retry", () => {
+  const p = makePlayer();
+  p.container.setItem(15, stack("minecraft:potion"));
+  const original = p.container.setItem.bind(p.container);
+  p.container.setItem = () => { throw new Error("layout write failure"); };
+  advance(2);
+  p.container.setItem = original;
+  assert.equal(p.container.getItem(15)?.typeId, "minecraft:potion");
+  const state = p.getDynamicProperty("stash:native");
+  assert.ok(!state || JSON.parse(state).layout !== 2);
+  // A failed rollback is quarantined, not retried or replayed.
+  assert.ok(JSON.parse(state).pending);
+});
+
+test("legacy JSON validates old slot indices before mapping new reserved slots 15 and 16", () => {
+  const p = joined();
+  p.setDynamicProperty("stash:page:2", JSON.stringify([
+    { s: 15, id: "minecraft:potion", n: 1 }, { s: 16, id: "minecraft:emerald", n: 6 },
+  ]));
+  assert.equal(switchPage(p, 2), true);
+  assert.equal(p.container.getItem(13)?.typeId, "minecraft:potion");
+  assert.equal(p.container.getItem(14)?.amount, 6);
+  p.setDynamicProperty("stash:page:3", JSON.stringify([{ s: 9, id: "minecraft:diamond", n: 1 }]));
+  assert.equal(switchPage(p, 3), false, "new slot 9 is invalid in unversioned legacy JSON");
+});
 
 // ---------------------------------------------------------------------------
 // Bug 1: items must change when the page changes
@@ -564,16 +890,16 @@ test("legacy JSON is migrated once, including chunked records; corrupt records a
   p.setDynamicProperty("stash:page:2:0", raw.slice(0, 40));
   p.setDynamicProperty("stash:page:2:1", raw.slice(40));
   assert.equal(switchPage(p, 2), true);
-  assert.equal(p.container.getItem(10).amount, 23);
-  assert.equal(p.container.getItem(11).damage, 87);
-  p.container.setItem(10, undefined);
+  assert.equal(p.container.getItem(9).amount, 23);
+  assert.equal(p.container.getItem(10).damage, 87);
+  p.container.setItem(9, undefined);
   assert.equal(switchPage(p, 1), true);
   assert.equal(switchPage(p, 2), true);
-  assert.equal(p.container.getItem(10), undefined, "stale legacy JSON must not resurrect consumed items");
+  assert.equal(p.container.getItem(9), undefined, "stale legacy JSON must not resurrect consumed items");
   p.setDynamicProperty("stash:page:3", JSON.stringify([{ s: 10, id: "minecraft:emerald", n: 3 }, { s: 11, id: "minecraft:diamond", n: -1 }]));
   assert.equal(switchPage(p, 3), false);
   assert.equal(curPage(p), 2);
-  assert.equal(p.container.getItem(11).damage, 87);
+  assert.equal(p.container.getItem(10).damage, 87);
 });
 
 test("shrinking with no room keeps overflow durable and never drops or duplicates it", () => {
@@ -763,37 +1089,40 @@ test("a real cursor stack is never cleared while switching pages", () => {
 
 test("the buttons are locked to their slots and kept on death", () => {
   const p = joined();
-  for (const [slot, id] of [[9, BTN_PREV], [13, BTN_MENU], [17, BTN_NEXT]]) {
+  for (const [slot, id] of [[15, BTN_PREV], [16, BTN_MENU], [17, BTN_NEXT]]) {
     const b = p.container.getItem(slot);
     assert.equal(b.typeId, id);
     assert.equal(b.lockMode, "inventory");
     assert.equal(b.keepOnDeath, true);
   }
-  assert.deepEqual(BUTTON_SLOTS, [9, 13, 17]);
+  assert.deepEqual(BUTTON_SLOTS, [15, 16, 17]);
 });
 
-test("clicking > picks the button up, which switches the page and clears the cursor at once", () => {
+test("clicking > defers until the transaction finishes, switches once and clears the cursor", () => {
   const p = joined();
   p.container.setItem(10, stack("minecraft:redstone", 4));
   pickUpButton(p, 17);
+  assert.equal(curPage(p), 1, "never mutate inventory inside the engine event dispatch");
+  advance(1);
   assert.equal(p.cursor.item, undefined, "the button never stays on the cursor");
   assert.equal(curPage(p), 2);
   assert.equal(filled(p).length, 0);
   assert.equal(p.container.getItem(17).typeId, BTN_NEXT, "the button is back in its slot");
-  assert.match(p.container.getItem(9).nameTag, /Page 1\/5/);
+  assert.match(p.container.getItem(15).nameTag, /Page 1\/5/);
 });
 
 test("clicking < from page 1 wraps to the last page", () => {
   const p = joined();
-  pickUpButton(p, 9);
+  pickUpButton(p, 15);
+  advance(1);
   assert.equal(curPage(p), 5);
 });
 
 test("clicks on consecutive ticks each switch the page", () => {
   const p = joined();
   for (let expected = 2; expected <= 5; expected++) {
-    advance(1);
     pickUpButton(p, 17);
+    advance(1);
     assert.equal(curPage(p), expected);
     assert.equal(p.cursor.item, undefined);
   }
@@ -806,9 +1135,10 @@ test("two events from one click switch only once", () => {
   p.cursor.item = button;
   p.container.setItem(17, undefined);
   fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: button, itemStack: undefined });
-  p.cursor.item = p.container.getItem(17);
-  p.container.setItem(17, undefined);
   fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: button, itemStack: undefined });
+  advance(1);
+  fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: button, itemStack: undefined });
+  advance(4);
   assert.equal(curPage(p), 2);
 });
 
@@ -817,7 +1147,7 @@ test("the script's own button writes are not clicks", () => {
   switchPage(p, 2);
   const button = p.container.getItem(17);
   fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: button, itemStack: button });
-  fire("playerInventoryItemChange", { player: p, slot: 9, beforeItemStack: undefined, itemStack: p.container.getItem(9) });
+  fire("playerInventoryItemChange", { player: p, slot: 15, beforeItemStack: undefined, itemStack: p.container.getItem(15) });
   advance(3);
   assert.equal(curPage(p), 2);
 });
@@ -833,9 +1163,10 @@ test("a button left on the cursor is cleared by the next tick even without an ev
 test("clearing all three buttons (like /clear) refreshes them without switching pages", () => {
   const p = joined();
   for (const s of BUTTON_SLOTS) p.container.setItem(s, undefined);
-  fire("playerInventoryItemChange", { player: p, slot: 9, beforeItemStack: stack(BTN_PREV), itemStack: undefined });
+  fire("playerInventoryItemChange", { player: p, slot: 15, beforeItemStack: stack(BTN_PREV), itemStack: undefined });
+  advance(1);
   assert.equal(curPage(p), 1);
-  assert.equal(p.container.getItem(13).typeId, BTN_MENU);
+  assert.equal(p.container.getItem(16).typeId, BTN_MENU);
 });
 
 test("a real item dropped into a button slot is rescued, not overwritten", () => {
@@ -843,6 +1174,7 @@ test("a real item dropped into a button slot is rescued, not overwritten", () =>
   advance(1);
   p.container.setItem(17, stack("minecraft:diamond", 5));
   fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: stack(BTN_NEXT), itemStack: p.container.getItem(17) });
+  advance(1);
   assert.equal(p.container.getItem(17).typeId, BTN_NEXT, "the button slot holds its button again");
   if (curPage(p) !== 1) switchPage(p, 1);
   const held = [...slotTypes(p), ...[0, 1, 2, 3, 4, 5, 6, 7, 8].map((s) => p.container.getItem(s)?.typeId)];

@@ -29,7 +29,7 @@ import { CONFIG } from "./config.js";
 import { G } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
-import { cellWorld, glyphAt, planScan, scanMemo, spendBudget, TerrainWorld } from "./terrain.js";
+import { cellWorld, colKey, glyphAt, MISS_RETRY, planScan, readColumn, sampleResolution, scanMemo, spendBudget, TerrainWorld } from "./terrain.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -326,7 +326,7 @@ onChange((_key, player) => {
 
 /** What was last sent to each player: the text and when. @type {Map<string, { key: string, at: number, compass: boolean, radar: boolean }>} */
 const lastSent = new Map();
-/** The last strip, its second line and the radar per player (realm:map_debug). @type {Map<string, { strip: string, line2: string, radar: string, dest?: string }>} */
+/** One shared render snapshot drives both compass and radar (realm:map_debug). @type {Map<string, { strip: string, line2: string, radar: string, dest?: string, target?: Spot, pose: Vector3 & { dim: string, heading: number, radius: number, north: boolean } }>} */
 const lastText = new Map();
 let costMs = 0;
 /** Of costMs, the time spent sending the title (side.js: two realm:side events and setTitle). */
@@ -544,86 +544,14 @@ const terrainVerOf = (id, dimId) => {
   return `${s.id}#${s.ver}`;
 };
 
-/** @param {string} id */
-const isWaterBlock = (id) => id.includes("water") || id.includes("kelp") || id.includes("seagrass") || id.includes("bubble_column");
-
-/**
- * What a column looks like from underground at height `py`: wall (solid at head height), lava, water or floor.
- * @param {import("@minecraft/server").Dimension} dim @param {number} bx @param {number} bz @param {number} py
- * @returns {{ kind: string, y: number, depth: number }}
- */
-function classifyCave(dim, bx, bz, py) {
-  try {
-    const here = dim.getBlock({ x: bx, y: py + 1, z: bz });
-    const floor = dim.getBlock({ x: bx, y: py - 1, z: bz });
-    if (here && !here.isAir && !isWaterBlock(here.typeId.toLowerCase()) && !here.typeId.includes("lava")) return { kind: "cave_wall", y: py, depth: 0 };
-    if (floor) {
-      const fid = floor.typeId.toLowerCase();
-      if (fid.includes("lava") || fid.includes("magma")) return { kind: "lava", y: py - 1, depth: 0 };
-      if (isWaterBlock(fid)) return { kind: "water", y: py - 1, depth: 1 };
-    }
-    return { kind: "cave_floor", y: py - 1, depth: 0 };
-  } catch {
-    return { kind: "cave", y: py, depth: 0 };
-  }
-}
-
-/**
- * Classifies a surface block into terrain kind, surface height, and water depth. Depends only on the world, never on who looks.
- * @param {import("@minecraft/server").Block | undefined} block @param {number} [step]
- * @returns {{ kind: string, y: number, depth: number }}
- */
-function classifyTerrainKind(block, step = 0) {
-  if (!block) return { kind: "empty", y: 0, depth: 0 };
-  const y = Math.floor(block.location.y);
-  const id = block.typeId.toLowerCase();
-  if (isWaterBlock(id)) {
-    let depth = 2;
-    try {
-      const b1 = block.below(1);
-      if (b1 && !isWaterBlock(b1.typeId.toLowerCase())) {
-        depth = 1;
-      } else {
-        const b3 = block.below(3);
-        if (b3 && isWaterBlock(b3.typeId.toLowerCase())) depth = 3;
-      }
-    } catch {
-      // unloaded or out of bounds
-    }
-    return { kind: "water", y, depth };
-  }
-  if (/lava|magma/.test(id)) return { kind: "lava", y, depth: 0 };
-  if (/cherry_leaves|pink_petals|cherry_/.test(id)) return { kind: "cherry", y, depth: 0 };
-  if (/birch_leaves|azalea/.test(id)) return { kind: "birch", y, depth: 0 };
-  if (/spruce_leaves|podzol/.test(id)) return { kind: "spruce", y, depth: 0 };
-  if (/mangrove|mud|swamp|lily_pad/.test(id)) return { kind: "swamp", y, depth: 0 };
-  if (/acacia|hay_block|dry_grass|dead_bush/.test(id)) return { kind: "savanna", y, depth: 0 };
-  if (/warped_/.test(id)) return { kind: "warped", y, depth: 0 };
-  if (/netherrack|nylium|nyllium|wart_block|crimson|soul_/.test(id)) return { kind: "nether", y, depth: 0 };
-  if (/end_stone|purpur|chorus/.test(id)) return { kind: "end", y, depth: 0 };
-  if (/packed_ice|blue_ice|frosted_ice/.test(id)) return { kind: "ice", y, depth: 0 };
-  if (/deepslate|obsidian|basalt|blackstone|bedrock|tuff/.test(id)) return { kind: "deepslate", y, depth: 0 };
-  if (/brick|copper|shingle|tile/.test(id)) return { kind: "brick", y, depth: 0 };
-  if (/terracotta|red_sand/.test(id)) return { kind: "mesa", y, depth: 0 };
-  if (/snow|ice/.test(id)) return { kind: "snow", y, depth: 0 };
-  if (/sand|gravel|sandstone/.test(id)) return { kind: "sand", y, depth: 0 };
-  if (/leaves|_log|bamboo|vine/.test(id)) return { kind: "forest", y, depth: 0 };
-  if (/path|planks|cobble|stairs|slab|wool|concrete|lantern|glass|fence|door|trapdoor|iron_block|gold_block/.test(id)) return { kind: "path", y, depth: 0 };
-  if (/stone|andesite|diorite|granite|calcite|dripstone|ore/.test(id)) return { kind: "stone", y, depth: 0 };
-  if (step < 1 && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily|rose|peony|lilac|bush/.test(id)) {
-    try {
-      const below = block.below(1);
-      if (below) return classifyTerrainKind(below, step + 1);
-    } catch {
-      // unloaded chunk
-    }
-  }
-  return { kind: "grass", y, depth: 0 };
-}
+/** In-progress readers are shared by store/key just like completed samples. */
+const pendingTerrain = new Map();
 
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
     terrain.invalidate(block.dimension.id, block.location.x, block.location.z);
+    pendingTerrain.clear();
+    scanDone.clear();
   } catch {
     // ignore
   }
@@ -631,6 +559,8 @@ world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
 world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
   try {
     terrain.invalidate(block.dimension.id, block.location.x, block.location.z);
+    pendingTerrain.clear();
+    scanDone.clear();
   } catch {
     // ignore
   }
@@ -649,11 +579,13 @@ let scanReads = 0;
 let scanTicks = 0;
 let scanMs = 0;
 let scanFirst = 0;
+let scanPeak = 0;
+let scanEachPeak = 0;
 system.runInterval(() => {
   if (get("enabled") !== true) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** @type {{ id: string, store: import("./terrain.js").Store, picks: { wx: number, wz: number, key: number }[], dim: import("@minecraft/server").Dimension, py: number, roof: boolean, memo: string }[]} */
+  /** @type {{ id: string, store: import("./terrain.js").Store, picks: import("./terrain.js").Pick[], dim: import("@minecraft/server").Dimension, py: number, roof: boolean, memo: string }[]} */
   const plans = [];
   for (const player of world.getAllPlayers()) {
     try {
@@ -665,21 +597,36 @@ system.runInterval(() => {
   }
   if (plans.length) {
     scanFirst = (scanFirst + 1) % plans.length;
-    spendBudget(plans, SCAN_TOTAL, SCAN_EACH, scanFirst, now, (plan, pick) => {
+    const spent = spendBudget(plans, SCAN_TOTAL, SCAN_EACH, scanFirst, now, (plan, pick) => {
+      const store = pick.store ?? plan.store;
+      const key = `${store.id}|${pick.key}`;
       try {
         scanReads++;
-        const bx = Math.floor(pick.wx);
-        const bz = Math.floor(pick.wz);
-        const top = plan.dim.getTopmostBlock({ x: bx, z: bz });
-        const cave = plan.roof && (plan.dim.id === "minecraft:nether" || (!!top && plan.py < Math.floor(top.location.y) - 8));
-        terrain.put(plan.store, pick.wx, pick.wz, cave ? classifyCave(plan.dim, bx, bz, plan.py) : classifyTerrainKind(top), now);
+        let job = pendingTerrain.get(key);
+        if (!job) {
+          const reader = readColumn(plan.dim, pick.wx, pick.wz, store.id.includes("|surface") ? undefined : plan.py);
+          job = { reader, next: reader.next(), tick: now };
+          pendingTerrain.set(key, job);
+        }
+        const next = job.reader.next(job.next.value());
+        job.tick = now;
+        if (!next.done) {
+          job.next = next;
+          return false;
+        }
+        terrain.put(store, pick.wx, pick.wz, next.value, now, pick.resolution);
+        pendingTerrain.delete(key);
       } catch {
         // unloaded chunk: keep what was known, ask again in a few ticks
-        terrain.miss(plan.store, pick.wx, pick.wz, now);
+        pendingTerrain.delete(key);
+        terrain.miss(store, pick.wx, pick.wz, now, pick.resolution);
       }
     });
+    scanPeak = Math.max(scanPeak, [...spent.values()].reduce((a, b) => a + b, 0));
+    scanEachPeak = Math.max(scanEachPeak, ...spent.values());
     for (const p of plans) if (!p.picks.length && !p.store.miss.size) scanDone.set(p.id, p.memo);
   }
+  for (const [key, job] of pendingTerrain) if (now - job.tick > 20) pendingTerrain.delete(key);
   scanMs += Date.now() - t0;
   scanTicks++;
 }, 1);
@@ -694,8 +641,9 @@ function planFor(player, now) {
   }
   const dim = player.dimension;
   const at = player.location;
-  const top = dim.getTopmostBlock({ x: Math.floor(at.x), z: Math.floor(at.z) });
-  const roof = dim.id === "minecraft:nether" || (!!top && top.location.y > at.y + 6);
+  const surface = terrain.store(dim.id, undefined);
+  const top = terrain.get(surface, at.x, at.z, 1, true);
+  const roof = dim.id === "minecraft:nether" || (!!top && top.kind !== "water" && top.y > at.y + 6);
   const py = Math.floor(at.y);
   const store = terrain.store(dim.id, roof ? py : undefined);
   playerStore.set(player.id, store);
@@ -703,8 +651,13 @@ function planFor(player, now) {
   const vel = player.getVelocity?.() ?? { x: 0, z: 0 };
   const lead = { x: Math.max(-28, Math.min(28, vel.x * 8)), z: Math.max(-28, Math.min(28, vel.z * 8)) };
   const memo = scanMemo({ storeId: store.id, ver: store.ver, at, heading, north: pr.north, radius: pr.radius, now, lead });
-  if (scanDone.get(player.id) === memo) return undefined;
+  // Roof detection uses an exact surface sample from this same budget, never an extra per-viewer native read.
+  const origin = colKey(at.x, at.z, 1);
+  const missed = surface.miss.get(origin);
+  const probe = (!top || now - top.tick > 100) && (missed === undefined || now - missed >= MISS_RETRY);
+  if (!probe && scanDone.get(player.id) === memo) return undefined;
   const picks = planScan({ world: terrain, store, at, heading, north: pr.north, radius: pr.radius, half: R, lead, now, maxAge: SCAN_MAX_AGE });
+  if (probe) picks.unshift({ wx: Math.floor(at.x), wz: Math.floor(at.z), key: origin, resolution: 1, store: surface });
   return { id: player.id, store, picks, dim, py, roof, memo };
 }
 
@@ -741,7 +694,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
       for (let row = -R; row <= R; row++) {
         for (let col = -R; col <= R; col++) {
           const w = cellWorld(at, cos, sin, north, col * cell, row * cell);
-          base[idx] = glyphAt(terrain, store, w.x, w.z);
+          base[idx] = glyphAt(terrain, store, w.x, w.z, sampleResolution(col * cell, row * cell));
           gridBuf[idx] = base[idx];
           idx++;
         }
@@ -841,7 +794,7 @@ function line2Of(region, dest) {
 /**
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, dim: string, px: number, pz: number, heading: number, x: number, z: number, tv?: string }} View
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
@@ -891,7 +844,7 @@ function pass(player, all, seen, now) {
   const dimId = player.dimension.id;
   const region = dimId === OVERWORLD ? regions.get(player.id) ?? "" : `In ${DIM_NAMES[dimId] ?? "another dimension"}`;
   /** @type {View} */
-  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, z: 0 };
+  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, target: dest?.spot, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, y: 0, z: 0 };
   views.set(player.id, view);
   render(player, view, now, true);
   costMs += Date.now() - t0;
@@ -908,11 +861,12 @@ function render(player, v, now, refresh) {
   const at = player.location;
   v.heading = heading;
   v.x = at.x;
+  v.y = at.y;
   v.z = at.z;
   v.tv = terrainVerOf(player.id, v.dim);
   const strip = v.compass ? stripOf(heading, v.markers, at) : "";
   const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id) : "";
-  lastText.set(player.id, { strip, line2: v.second, radar, dest: v.dest });
+  lastText.set(player.id, { strip, line2: v.second, radar, dest: v.dest, target: v.target, pose: { ...at, dim: v.dim, heading, radius: v.radius, north: v.north } });
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
   const key = `${compassText}|${radar}`;
   const sent = lastSent.get(player.id);
@@ -963,7 +917,7 @@ system.runInterval(() => {
       }
       const at = p.location;
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
-      if (Math.abs(wrap(headingOf(p) - v.heading)) < TURN_MIN && Math.abs(at.x - v.x) + Math.abs(at.z - v.z) < MOVE_MIN && v.tv === terrainVerOf(p.id, v.dim)) continue;
+      if (Math.abs(wrap(headingOf(p) - v.heading)) < TURN_MIN && Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) < MOVE_MIN && v.tv === terrainVerOf(p.id, v.dim)) continue;
       due.push({ p, v, at: lastSent.get(p.id)?.at ?? 0 });
     } catch (e) {
       console.warn(`[map] turn: ${e}`);
@@ -1349,14 +1303,26 @@ function onEvent(id, m, source) {
       if (source instanceof Player && !isOp(source)) return;
       const player = world.getAllPlayers().find((p) => p.id === pid || p.name === pid);
       const t = player ? lastText.get(player.id) : undefined;
+      const surface = player ? terrain.store(player.dimension.id, undefined) : undefined;
       send("realm:map_state", {
         player: player?.id,
         strip: t?.strip,
         line2: t?.line2,
         radar: t?.radar,
         dest: t?.dest,
+        pose: t?.pose,
+        target: t?.target,
         wp: player ? waypointOf(player) ?? null : null,
-        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends },
+        terrain: player ? {
+          store: storeFor(player.id, player.dimension.id).id,
+          surface: surface ? { columns: surface.cols.size, fine: surface.fine.size } : undefined,
+          misses: storeFor(player.id, player.dimension.id).miss.size,
+          samples: Array.isArray(m.samples) ? m.samples.slice(0, 4).filter((/** @type {any} */ s) => isNum(s?.x) && isNum(s?.z)).map((/** @type {any} */ s) => ({
+            x: s.x, z: s.z, resolution: s.resolution === 1 ? 1 : 4,
+            data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === 1 ? 1 : 4) ?? null,
+          })) : [],
+        } : undefined,
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak },
         known: { folk: folk.size, camps: camps.size, towns: towns.size, pot: pot ?? null, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
       });
       if (m.action === "cost") {
@@ -1368,6 +1334,11 @@ function onEvent(id, m, source) {
         turnTicks = 0;
         turnDraws = 0;
         turnSends = 0;
+        scanReads = 0;
+        scanTicks = 0;
+        scanMs = 0;
+        scanPeak = 0;
+        scanEachPeak = 0;
       }
       return;
     }

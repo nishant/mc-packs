@@ -1,6 +1,7 @@
 // Townsfolk, caravan traders, wanderers, and story characters now use only native entity name tags. Legacy helper
 // label entities are still defined only so upgraded worlds can load and clean them up. Server assertions cannot verify
-// the client's exact native name-tag draw distance.
+// the client's exact native name-tag draw distance. npc-name-capability.js is a separate, unreleased helper probe;
+// its type must never be spawned by ordinary character loops.
 // node tools/test-bds/run.mjs --quiet --flat --only npc_bp,caravan_bp,wander_bp,saga_bp,build_rp --scenario tools/test-bds/examples/npc-far-names.js --timeout 400
 export default async function (t) {
   const p = await t.player("NameTester", { op: true, gameMode: "creative", x: 0, z: 0 });
@@ -64,5 +65,6 @@ export default async function (t) {
   const wanderers = dim.getEntities({ tags: ["realm:npc_owner:wander_bp"] });
   t.check(wanderers.some((entity) => (entity.nameTag ?? "").trim().length > 0), "wanderers keep native names");
   t.check(labels("realm:wander_label").length === 0, "wanderers no longer spawn projected helper labels");
+  t.check(labels("realm:npc_name_probe").length === 0, "ordinary packs never enable the unproven capability helper");
   t.log("Native-name mode verified server-side for townsfolk, caravan traders, and wanderers.");
 }

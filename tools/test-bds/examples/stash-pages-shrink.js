@@ -4,9 +4,9 @@ export default async function (t) {
   const mc = t.mc;
   const p = await t.player("Shrinker", { op: true });
   const inv = p.getComponent("minecraft:inventory").container;
-  const STORAGE = [10, 11, 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
+  const STORAGE = [9, 10, 11, 12, 13, 14, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
   const mk = (id, n = 1) => new mc.ItemStack(id, n);
-  const pageNow = () => Number(/Page (\d+)\//.exec(inv.getItem(13)?.nameTag ?? "")?.[1] ?? 0);
+  const pageNow = () => Number(/Page (\d+)\//.exec(inv.getItem(16)?.nameTag ?? "")?.[1] ?? 0);
   const click = async (slot, page) => {
     await t.wait(8);
     inv.setItem(slot, undefined);
@@ -31,7 +31,7 @@ export default async function (t) {
   STORAGE.forEach((s, i) => inv.setItem(s, heavy(i)));
   await click(17, 2);
   t.assert(STORAGE.every((s) => !inv.getItem(s)), "page 2 is empty");
-  await click(9, 1);
+  await click(15, 1);
   let same = 0;
   STORAGE.forEach((s, i) => {
     const it = inv.getItem(s);
@@ -53,7 +53,7 @@ export default async function (t) {
   t.assert(t.cmd(p, "/realm:inv_pages 2").ok, "/realm:inv_pages 2 ran");
   await t.waitUntil(() => pageNow() === 1 && inv.getItem(17)?.nameTag?.includes("Page 2/2"), { timeout: 80, message: "page 1 of 2" });
   await t.wait(10);
-  t.log(`buttons: ${inv.getItem(9)?.nameTag} | ${inv.getItem(13)?.nameTag}`);
+  t.log(`buttons: ${inv.getItem(15)?.nameTag} | ${inv.getItem(16)?.nameTag}`);
 
   const scan = t.waitForm(p, { timeout: 100 });
   t.assert(t.cmd(p, "/realm:inv").ok, "/realm:inv ran");
@@ -74,12 +74,12 @@ export default async function (t) {
   const disabling = t.waitForm(p);
   t.cmd(p, "/realm:inv");
   (await disabling).answer("Use normal inventory");
-  await t.waitUntil(() => inv.getItem(13)?.typeId !== "custom:inv_menu", { timeout: 80, message: "normal inventory has no buttons" });
+  await t.waitUntil(() => inv.getItem(16)?.typeId !== "custom:inv_menu", { timeout: 80, message: "normal inventory has no buttons" });
   let diamonds = 0;
   for (let s = 0; s < inv.size; s++) if (inv.getItem(s)?.typeId === "minecraft:diamond") diamonds += inv.getItem(s).amount;
   t.assert(diamonds === 3, "disabling extra pages returns native saved items exactly once");
   const enabling = t.waitForm(p);
   t.cmd(p, "/realm:inv");
   (await enabling).answer("Enable Expansive Inventory");
-  await t.waitUntil(() => inv.getItem(13)?.nameTag?.includes("Page 1/5"), { timeout: 80, message: "extra pages re-enabled" });
+  await t.waitUntil(() => inv.getItem(16)?.nameTag?.includes("Page 1/5"), { timeout: 80, message: "extra pages re-enabled" });
 }

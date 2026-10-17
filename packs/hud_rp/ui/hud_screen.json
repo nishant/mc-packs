@@ -286,7 +286,7 @@
     "type": "panel",
     "size": [
       "100%",
-      94
+      108.1
     ],
     "$radar_empty|default": "~§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
     "controls": [
@@ -296,8 +296,8 @@
           "anchor_from": "top_right",
           "anchor_to": "top_right",
           "size": [
-            98,
-            92
+            112.7,
+            105.8
           ],
           "controls": [
             {
@@ -306,8 +306,8 @@
                 "texture": "textures/ui/Black",
                 "alpha": 0.85,
                 "size": [
-                  84,
-                  78
+                  96.6,
+                  89.7
                 ],
                 "anchor_from": "center",
                 "anchor_to": "center",
@@ -318,8 +318,8 @@
               "radar_clip": {
                 "type": "panel",
                 "size": [
-                  84,
-                  78
+                  96.6,
+                  89.7
                 ],
                 "clips_children": true,
                 "anchor_from": "center",
@@ -334,8 +334,8 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.48,
-                      "line_padding": 5.9,
+                      "font_scale_factor": 0.552,
+                      "line_padding": 6.785,
                       "shadow": false,
                       "localize": false,
                       "color": [
@@ -373,8 +373,8 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.48,
-                      "line_padding": 5.9,
+                      "font_scale_factor": 0.552,
+                      "line_padding": 6.785,
                       "shadow": false,
                       "localize": false,
                       "color": [
@@ -386,7 +386,7 @@
                       "anchor_from": "top_left",
                       "anchor_to": "top_left",
                       "offset": [
-                        0.45,
+                        0.5175,
                         0
                       ],
                       "layer": 3,
@@ -411,8 +411,8 @@
                 "type": "image",
                 "texture": "textures/ui/radar_shade",
                 "size": [
-                  98,
-                  92
+                  112.7,
+                  105.8
                 ],
                 "anchor_from": "center",
                 "anchor_to": "center",
@@ -424,8 +424,8 @@
                 "type": "image",
                 "texture": "textures/ui/radar_frame",
                 "size": [
-                  98,
-                  92
+                  112.7,
+                  105.8
                 ],
                 "anchor_from": "center",
                 "anchor_to": "center",
@@ -449,6 +449,32 @@
         "binding_type": "view",
         "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (('%.1351s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) = $radar_empty)))",
         "target_property_name": "#visible"
+      }
+    ]
+  },
+  "realm_sidebar_slot": {
+    "type": "panel",
+    "size": ["100%", "100%c"],
+    "anchor_from": "top_right",
+    "anchor_to": "top_right",
+    "controls": [
+      {
+        "sidebar@scoreboard.scoreboard_sidebar": {
+          "anchor_from": "top_right",
+          "anchor_to": "top_right",
+          "bindings": [
+            {
+              "binding_name": "#scoreboard_sidebar_visible",
+              "binding_name_override": "#visible"
+            }
+          ]
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "binding_name": "#scoreboard_sidebar_visible",
+        "binding_name_override": "#visible"
       }
     ]
   },
@@ -477,6 +503,7 @@
   },
   "realm_side_area": {
     "type": "panel",
+    "clips_children": true,
     "size": [
       "100%",
       "100%"
@@ -487,6 +514,8 @@
         "realm_side_right": {
           "type": "stack_panel",
           "orientation": "vertical",
+          "use_child_anchors": true,
+          "max_size": ["100% - 8px", "100% - 8px"],
           "size": [
             "50%",
             "100%c"
@@ -527,16 +556,7 @@
               }
             },
             {
-              "realm_sidebar@scoreboard.scoreboard_sidebar": {
-                "anchor_from": "top_right",
-                "anchor_to": "top_right",
-                "bindings": [
-                  {
-                    "binding_name": "#scoreboard_sidebar_visible",
-                    "binding_name_override": "#visible"
-                  }
-                ]
-              }
+              "realm_sidebar@hud.realm_sidebar_slot": {}
             }
           ]
         }

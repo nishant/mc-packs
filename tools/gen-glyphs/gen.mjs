@@ -362,10 +362,10 @@ glyph("Q_PATH", 0xb0, "radar terrain: town road/wood/cobble warm brown", (img, o
   terrainSquare(img, ox, oy, [136, 102, 68, 255], [162, 124, 86, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
 );
 glyph("Q_GRASS_LO", 0xb1, "radar terrain: shadowed grass slope", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [42, 98, 36, 255], [52, 114, 44, 255], (x, y) => (x * 5 + y * 9) % 11 === 0),
+  terrainSquare(img, ox, oy, [32, 78, 28, 255], [44, 96, 36, 255], (x, y) => (x * 5 + y * 9) % 11 === 0),
 );
 glyph("Q_GRASS_HI", 0xb2, "radar terrain: sunlit grass hill", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [76, 158, 62, 255], [94, 178, 76, 255], (x, y) => (x * 5 + y * 9) % 11 === 0),
+  terrainSquare(img, ox, oy, [96, 180, 78, 255], [116, 200, 94, 255], (x, y) => (x * 5 + y * 9) % 11 === 0),
 );
 glyph("Q_FOREST_LO", 0xb3, "radar terrain: shadowed forest", (img, ox, oy) =>
   terrainSquare(img, ox, oy, [24, 66, 26, 255], [34, 84, 36, 255], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
@@ -386,10 +386,10 @@ glyph("Q_SAND_HI", 0xb8, "radar terrain: sunlit sand/dune", (img, ox, oy) =>
   terrainSquare(img, ox, oy, [224, 202, 128, 255], [240, 220, 148, 255], (x, y) => (x * 7 + y * 3) % 13 === 0),
 );
 glyph("Q_STONE_LO", 0xb9, "radar terrain: shadowed cliff/rock", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [82, 86, 94, 255], [98, 104, 112, 255], (x, y) => (x * 3 + y * 7) % 9 === 0),
+  terrainSquare(img, ox, oy, [62, 66, 74, 255], [78, 84, 92, 255], (x, y) => (x * 3 + y * 7) % 9 === 0),
 );
 glyph("Q_STONE_HI", 0xba, "radar terrain: sunlit mountain peak/rock", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [142, 148, 158, 255], [164, 170, 180, 255], (x, y) => (x * 3 + y * 7) % 9 === 0),
+  terrainSquare(img, ox, oy, [170, 176, 186, 255], [190, 196, 206, 255], (x, y) => (x * 3 + y * 7) % 9 === 0),
 );
 glyph("Q_SNOW_LO", 0xbb, "radar terrain: shadowed snow slope", (img, ox, oy) =>
   terrainSquare(img, ox, oy, [174, 194, 212, 255], [192, 212, 228, 255], (x, y) => (x * 11 + y * 5) % 14 === 0),
@@ -398,10 +398,10 @@ glyph("Q_SNOW_HI", 0xbc, "radar terrain: sunlit snow peak", (img, ox, oy) =>
   terrainSquare(img, ox, oy, [238, 246, 255, 255], [250, 252, 255, 255], (x, y) => (x * 11 + y * 5) % 14 === 0),
 );
 glyph("Q_PATH_LO", 0xbd, "radar terrain: shadowed road/roof", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [108, 78, 50, 255], [126, 94, 62, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+  terrainSquare(img, ox, oy, [84, 58, 36, 255], [104, 76, 48, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
 );
 glyph("Q_PATH_HI", 0xbe, "radar terrain: sunlit road/roof", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [168, 128, 88, 255], [190, 148, 104, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+  terrainSquare(img, ox, oy, [192, 148, 100, 255], [212, 170, 118, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
 );
 glyph("Q_MESA", 0xbf, "radar terrain: terracotta/badlands/brick", (img, ox, oy) =>
   terrainSquare(img, ox, oy, [178, 92, 58, 255], [202, 112, 74, 255], (x, y) => y % 4 === 1 || (x * 5 + y * 3) % 13 === 0),
@@ -454,6 +454,18 @@ glyph("Q_MESA_LO", 0xce, "radar terrain: shadowed mesa canyon", (img, ox, oy) =>
 );
 glyph("Q_MESA_HI", 0xcf, "radar terrain: sunlit mesa plateau", (img, ox, oy) =>
   terrainSquare(img, ox, oy, [208, 114, 74, 255], [226, 130, 88, 255], (x, y) => y % 4 === 1 || (x * 5 + y * 3) % 13 === 0),
+);
+glyph("Q_SANDSTONE", 0xd0, "radar terrain: pale sandstone masonry, not beach sand", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [202, 190, 150, 255], [228, 216, 176, 255], (x, y) => y % 5 === 0 || (x + (y >> 2) * 3) % 8 === 0),
+);
+glyph("Q_SANDSTONE_LO", 0xd1, "radar terrain: shadowed sandstone wall", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [146, 136, 104, 255], [172, 162, 126, 255], (x, y) => y % 5 === 0 || (x + (y >> 2) * 3) % 8 === 0),
+);
+glyph("Q_SANDSTONE_HI", 0xd2, "radar terrain: sunlit sandstone roof", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [236, 226, 190, 255], [250, 242, 210, 255], (x, y) => y % 5 === 0 || (x + (y >> 2) * 3) % 8 === 0),
+);
+glyph("Q_CROP", 0xd3, "radar terrain: planted green and gold crop rows", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [100, 132, 44, 255], [174, 164, 74, 255], (x, y) => x % 6 < 2),
 );
 
 // ---------------------------------------------------------------------------
@@ -651,9 +663,11 @@ function packIcon() {
   return img;
 }
 
-/** The radar's frame: a dark band around the 84 x 78 map window, a light inner line and corner brackets. Original art, drawn from the palette above. */
+const RADAR_SCALE = 1.15;
+const RADAR_W = Math.round(98 * RADAR_SCALE), RADAR_H = Math.round(92 * RADAR_SCALE), RADAR_MARGIN = Math.round(7 * RADAR_SCALE);
+/** The radar's enlarged frame, retaining the original art and palette. */
 function radarFrame() {
-  const W = 98, H = 92, M = 7;
+  const W = RADAR_W, H = RADAR_H, M = RADAR_MARGIN;
   const img = blank(W, H);
   const inWindow = (x, y) => x >= M && x < W - M && y >= M && y < H - M;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!inWindow(x, y)) put(img, x, y, [18, 20, 22, 238]);
@@ -680,7 +694,7 @@ function radarFrame() {
 
 /** A soft dark vignette over the map window so the glyph edge fades into the frame. */
 function radarShade() {
-  const W = 98, H = 92, M = 7;
+  const W = RADAR_W, H = RADAR_H, M = RADAR_MARGIN;
   const img = blank(W, H);
   const hw = (W - 2 * M) / 2, hh = (H - 2 * M) / 2;
   for (let y = M; y < H - M; y++) {

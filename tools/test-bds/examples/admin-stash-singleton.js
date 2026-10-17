@@ -6,7 +6,7 @@ export default async function (t) {
   const inv = p.getComponent("minecraft:inventory").container;
   const plain = (s) => String(s ?? "").replace(/§./g, "");
   const slots = () => Array.from({ length: inv.size }, (_, s) => ({ s, item: inv.getItem(s) }));
-  const page = () => Number(/Page (\d+)\//.exec(inv.getItem(13)?.nameTag ?? "")?.[1] ?? 0);
+  const page = () => Number(/Page (\d+)\//.exec(inv.getItem(16)?.nameTag ?? "")?.[1] ?? 0);
   await t.waitUntil(() => page() === 1 && slots().some(({ item }) => item?.typeId === "minecraft:nether_star" && plain(item.nameTag) === "Realm Configuration"), {
     timeout: 120, message: "page controls and initial genuine menu tool",
   });
@@ -24,7 +24,7 @@ export default async function (t) {
     await t.wait(4);
   };
   const controls = () => {
-    for (const [slot, id] of [[9, "custom:inv_prev"], [13, "custom:inv_menu"], [17, "custom:inv_next"]]) {
+    for (const [slot, id] of [[15, "custom:inv_prev"], [16, "custom:inv_menu"], [17, "custom:inv_next"]]) {
       t.assert(inv.getItem(slot)?.typeId === id && inv.getItem(slot).amount === 1, `${id} remains in its distinct control slot`);
     }
   };
@@ -58,14 +58,14 @@ export default async function (t) {
   };
   await t.wait(6);
   preserved();
-  await go(9, 1);
+  await go(15, 1);
   await t.waitUntil(() => realTools().length === 1 && realTools()[0].s === 0 && !inv.getItem(22), {
     timeout: 12, message: "automatic page-restore reconciliation without a cleanup command",
   });
   t.assert(realTools()[0].item.amount === 1, "canonical carried replacement retained exactly once");
   preserved();
   await go(17, 2);
-  await go(9, 1);
+  await go(15, 1);
   t.assert(realTools().length === 1 && realTools()[0].s === 0 && !inv.getItem(22), "revisiting the saved page does not resurrect its removed duplicate");
   preserved();
   t.log("Native page snapshots, automatic duplicate cleanup, canonical hotbar retention, ordinary items and all three page controls verified.");

@@ -3,14 +3,17 @@
 //   node --test tools/map-terrain.test.mjs
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
+import vm from "node:vm";
 import { G } from "../packs/map_bp/scripts/glyphs.js";
-import { cellWorld, colKey, glyphAt, planScan, spendBudget, TerrainWorld } from "../packs/map_bp/scripts/terrain.js";
+import { cellWorld, colKey, glyphAt, planScan, sampleResolution, spendBudget, TerrainWorld } from "../packs/map_bp/scripts/terrain.js";
+import * as terrain from "../packs/map_bp/scripts/terrain.js";
 
 const HALF = 10;
 const OW = "minecraft:overworld";
 /** The ground at a column: grass, with a lake from x = 200 on and a stone ridge for z > 300. */
 const ground = (x, z) => (x >= 200 ? { kind: "water", y: 62, depth: 2 } : z > 300 ? { kind: "stone", y: 90, depth: 0 } : { kind: "grass", y: 70, depth: 0 });
-const read = (world, store, now) => (_plan, p) => world.put(store, p.wx, p.wz, ground(p.wx, p.wz), now);
+const read = (world, store, now) => (_plan, p) => world.put(store, p.wx, p.wz, ground(p.wx, p.wz), now, p.resolution);
 /** Every column the radar shows from here, by its own grid. */
 function viewColumns(at, heading, north, radius) {
   const h = (heading * Math.PI) / 180;
@@ -18,6 +21,7 @@ function viewColumns(at, heading, north, radius) {
   for (let r = -HALF; r <= HALF; r++) for (let c = -HALF; c <= HALF; c++) {
     const p = cellWorld(at, Math.cos(h), Math.sin(h), north, (c * radius) / HALF, (r * radius) / HALF);
     set.add(colKey(p.x, p.z));
+    if (sampleResolution(c * radius / HALF, r * radius / HALF) === 1) set.add(colKey(p.x, p.z, 1));
   }
   return set;
 }
@@ -26,7 +30,7 @@ const unknownIn = (world, store, at, heading, north, radius) => {
   let n = 0;
   for (let r = -HALF; r <= HALF; r++) for (let c = -HALF; c <= HALF; c++) {
     const p = cellWorld(at, Math.cos(h), Math.sin(h), north, (c * radius) / HALF, (r * radius) / HALF);
-    if (glyphAt(world, store, p.x, p.z) === G.Q_EMPTY) n++;
+    if (glyphAt(world, store, p.x, p.z, sampleResolution(c * radius / HALF, r * radius / HALF)) === G.Q_EMPTY) n++;
   }
   return n;
 };
@@ -199,7 +203,7 @@ test("two fliers and a cave walker share the budget and never see each other's g
       return { id: f.id, store: surface, picks: planScan({ world: w, store: surface, at: f, heading: f.h, north: false, radius, half: HALF, lead: { x: f.dx * 8, z: f.dz * 8 }, now: tick, maxAge: 2400 }) };
     });
     plans.push({ id: "c", store: cave, picks: planScan({ world: w, store: cave, at: { x: 0, z: 0 }, heading: 0, north: false, radius, half: HALF, lead: { x: 0, z: 0 }, now: tick, maxAge: 2400 }) });
-    spendBudget(plans, 96, 48, tick, tick, (plan, p) => w.put(plan.store, p.wx, p.wz, plan.store === cave ? { kind: "cave_floor", y: 19, depth: 0 } : ground(p.wx, p.wz), tick));
+    spendBudget(plans, 96, 48, tick, tick, (plan, p) => { w.put(plan.store, p.wx, p.wz, plan.store === cave ? { kind: "cave_floor", y: 19, depth: 0 } : ground(p.wx, p.wz), tick, p.resolution); });
     if (tick > 40) for (const f of fliers) worst = Math.max(worst, unknownIn(w, surface, f, f.h, false, radius));
   }
   assert.ok(worst <= 12, `both fliers keep a full picture (worst ${worst} unknown)`);
@@ -225,7 +229,7 @@ test("a failed read stores nothing, keeps old data, retries in a few ticks and l
   const first = planScan({ ...o, now: 100 });
   assert.ok(first.length > 0);
   w.put(s, 0, 0, { kind: "stone", y: 70, depth: 0 }, 100);
-  const k = first.find((p) => p.wx !== 0 || p.wz !== 0);
+  const k = first.find((p) => p.key !== colKey(0, 0));
   w.miss(s, k.wx, k.wz, 100);
   assert.equal(s.cols.size, 1, "a miss stores no column");
   assert.ok(!planScan({ ...o, now: 100 + MISS_RETRY - 1 }).some((p) => p.key === k.key), "waits for the retry");
@@ -233,4 +237,190 @@ test("a failed read stores nothing, keeps old data, retries in a few ticks and l
   w.put(s, k.wx, k.wz, { kind: "grass", y: 65, depth: 0 }, 106);
   assert.equal(w.get(s, k.wx, k.wz).kind, "grass", "real data right after the chunk loads");
   assert.equal(s.miss.size, 0);
+});
+
+test("nearby one-block roofs have separate cache identities and deterministic samples", () => {
+  assert.notEqual(colKey(2, 2, 1), colKey(3, 2, 1), "adjacent thin roofs cannot share a sample");
+  assert.notEqual(colKey(2, 2, 1), colKey(2, 2, 4), "resolution is part of cache identity");
+  const w = new TerrainWorld();
+  const s = w.store(OW);
+  const plan = planScan({ world: w, store: s, at: { x: 0.1, z: 0.1 }, heading: 0, north: true, radius: 24, half: HALF, lead: { x: 0, z: 0 }, now: 1, maxAge: 2400 });
+  for (const p of plan) {
+    assert.equal(p.wx, Math.floor(p.wx));
+    assert.equal(p.wz, Math.floor(p.wz));
+    assert.equal(colKey(p.wx, p.wz, p.resolution), p.key);
+    if (p.resolution === 4) {
+      assert.equal(((p.wx % 4) + 4) % 4, 2, "coarse samples always use the cell center");
+      assert.equal(((p.wz % 4) + 4) % 4, 2);
+    }
+  }
+  w.put(s, 2, 2, { kind: "path", y: 80, depth: 0 }, 1, 1);
+  w.put(s, 3, 2, { kind: "brick", y: 90, depth: 0 }, 1, 1);
+  assert.equal(w.get(s, 2, 2, 1).y, 80);
+  assert.equal(w.get(s, 3, 2, 1).y, 90);
+  assert.equal(w.invalidate(OW, 3, 2), 1);
+  assert.equal(w.get(s, 3, 2, 1), undefined);
+  assert.equal(w.get(s, 2, 2, 1).y, 80);
+});
+
+test("reusing shaded glyphs still responds to neighbor edits and removal at both resolutions", () => {
+  for (const resolution of [1, 4]) {
+    const w = new TerrainWorld();
+    const s = w.store(OW);
+    w.put(s, 0, 0, { kind: "stone", y: 80, depth: 0 }, 1, resolution);
+    assert.equal(glyphAt(w, s, 0, 0, resolution), G.Q_STONE);
+    w.put(s, -resolution, 0, { kind: "stone", y: 70, depth: 0 }, 2, resolution);
+    assert.equal(glyphAt(w, s, 0, 0, resolution), G.Q_STONE_HI);
+    w.put(s, -resolution, 0, { kind: "stone", y: 90, depth: 0 }, 3, resolution);
+    assert.equal(glyphAt(w, s, 0, 0, resolution), G.Q_STONE_LO);
+    w.invalidate(OW, -resolution, 0);
+    assert.equal(glyphAt(w, s, 0, 0, resolution), G.Q_STONE);
+  }
+});
+
+test("one budget turn is one real operation, including unfinished multi-operation columns", () => {
+  const w = new TerrainWorld();
+  const s = w.store(OW);
+  const picks = Array.from({ length: 100 }, (_, i) => ({ key: colKey(i * 4, 0), wx: i * 4, wz: 0 }));
+  const plans = ["a", "b", "c"].map((id) => ({ id, store: s, picks }));
+  const stages = new Map();
+  let operations = 0;
+  const used = spendBudget(plans, 96, 48, 0, 10, (plan, p) => {
+    operations++;
+    const stage = (stages.get(p.key) ?? 0) + 1;
+    stages.set(p.key, stage);
+    if (stage < 3) return false;
+    w.put(plan.store, p.wx, p.wz, { kind: "water", y: 64, depth: 3 }, 10);
+    return true;
+  });
+  assert.equal(operations, 96);
+  assert.deepEqual([...used.values()], [32, 32, 32]);
+  assert.equal(s.cols.size, 32, "sharing includes partially completed columns");
+  let n = 0;
+  const single = { id: "single", store: w.store(OW, 12), picks: picks.slice(0, 1) };
+  spendBudget([single], 48, 48, 0, 11, () => ++n >= 3);
+  assert.equal(n, 3, "unfinished picks stay in the plan until their operations finish");
+});
+
+test("native-equivalent column reader yields each ray/block operation and visible materials", () => {
+  assert.equal(typeof terrain.readColumn, "function", "surface reader is independently testable");
+  const block = (id, y) => ({ typeId: `minecraft:${id}`, location: { y }, isAir: id === "air" });
+  const run = (top, below = new Map(), layer) => {
+    let operations = 0;
+    const dim = {
+      heightRange: { min: -64, max: 320 },
+      getBlockFromRay(at, dir, opts) {
+        operations++;
+        assert.equal(opts.includeLiquidBlocks, true);
+        assert.equal(opts.includePassableBlocks, true);
+        assert.ok(opts.maxDistance <= 384);
+        return { block: top };
+      },
+      getTopmostBlock() { operations++; return top; },
+      getBlock(p) { operations++; return below.get(p.y); },
+    };
+    const reader = terrain.readColumn(dim, 2, 2, layer);
+    let step = reader.next();
+    while (!step.done) step = reader.next(step.value());
+    return { value: step.value, operations };
+  };
+  assert.deepEqual(run(block("water", 64), new Map([[63, block("sand", 63)]])), { value: { kind: "water", y: 64, depth: 1 }, operations: 2 });
+  assert.deepEqual(run(block("flowing_water", 64), new Map([[63, block("water", 63)], [61, block("seagrass", 61)]])), { value: { kind: "water", y: 64, depth: 3 }, operations: 3 });
+  for (const id of ["seagrass", "kelp", "bubble_column"]) assert.equal(run(block(id, 64), new Map([[63, block("sand", 63)]])).value.kind, "water");
+  assert.equal(run(block("sandstone", 80)).value.kind, "sandstone");
+  assert.equal(run(block("red_sandstone", 80)).value.kind, "sandstone");
+  assert.equal(run(block("sand", 64)).value.kind, "sand");
+  assert.equal(run(block("gravel", 64)).value.kind, "stone");
+  assert.equal(run(block("stone_brick_slab", 80)).value.kind, "brick");
+  assert.equal(run(block("cherry_planks", 80)).value.kind, "path", "wood roofs are not blossom canopy");
+  assert.equal(run(block("oak_slab", 64)).value.kind, "path", "waterlogged structure keeps its visible material");
+  assert.equal(run(block("farmland", 64)).value.kind, "path");
+  for (const id of ["wheat", "carrots", "potatoes", "beetroot"]) assert.equal(run(block(id, 65)).value.kind, "crop");
+  assert.equal(run(block("white_concrete", 80)).value.kind, "snow");
+  assert.equal(run(block("black_concrete", 80)).value.kind, "deepslate");
+  assert.equal(run(block("gray_concrete", 80)).value.kind, "stone");
+  assert.equal(run(block("short_grass", 65), new Map([[64, block("sand", 64)]])).value.kind, "sand");
+  assert.equal(run(block("stone", 90), new Map([[21, block("air", 21)], [19, block("stone", 19)]]), 20).value.kind, "cave_floor");
+  assert.throws(() => run(block("water", 64)), /unavailable/, "failed depth reads must retry, not invent depth");
+});
+
+test("the actual viewer planner retains its roof probe and stops reading after a saturated flight", (t) => {
+  const w = new TerrainWorld();
+  const source = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
+  const planner = source.match(/function planFor\(player, now\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(planner, "exercise production planFor, not a second implementation of roof selection");
+  const playerStore = new Map();
+  const scanDone = new Map();
+  const planFor = vm.runInNewContext(`(${planner})`, {
+    terrain: w, playerStore, scanDone, prefsOf: () => ({ radar: true, terrain: true, north: false, radius: 24 }),
+    headingOf: () => 90, scanMemo: terrain.scanMemo, planScan, colKey, MISS_RETRY: terrain.MISS_RETRY, SCAN_MAX_AGE: 2400, R: HALF,
+  });
+  let moving = true;
+  const player = {
+    id: "saturated", isValid: true, dimension: { id: OW }, location: { x: 0.1, y: 128, z: 40 },
+    getVelocity: () => ({ x: moving ? 3.2 : 0, z: 0 }),
+  };
+  let peak = 0;
+  const tick = (now) => {
+    const plan = planFor(player, now);
+    if (!plan) return 0;
+    const spent = spendBudget([plan], 96, 48, 0, now, (p, pick) => {
+      const store = pick.store ?? p.store;
+      w.put(store, pick.wx, pick.wz, { kind: store.id.includes("|layer") ? "cave_floor" : "stone", y: store.id.includes("|layer") ? 63 : 80, depth: 0 }, now, pick.resolution);
+    }).get(player.id) ?? 0;
+    peak = Math.max(peak, spent);
+    if (!plan.picks.length && !plan.store.miss.size) scanDone.set(player.id, plan.memo);
+    assert.ok(w.store(OW).cols.size <= 6000);
+    return spent;
+  };
+  for (let now = 1; now <= 2200; now++) {
+    player.location.x += 3.2;
+    tick(now);
+  }
+  const surface = w.store(OW);
+  assert.equal(surface.cols.size, 6000, "the regression reaches the real default capacity");
+  moving = false;
+  player.location.y = 64;
+  for (let now = 2201; now <= 2224; now++) tick(now);
+  const idle = Array.from({ length: 12 }, (_, i) => tick(2225 + i));
+  t.diagnostic(`saturated ${surface.cols.size} columns (${surface.fine.size} fine); stopped reads ${idle.join(",")}; peak ${peak}`);
+  assert.equal(playerStore.get(player.id).id, `${OW}|layer64`, "roof80/player64 stays in its cave after saturation");
+  assert.ok(surface.fine.size >= 100, "fine detail cannot shrink to a one-entry revolving door");
+  assert.deepEqual(idle, Array(12).fill(0), "stationary detail and its exact roof probe remain cached");
+  assert.ok(peak <= 48, "the fix cannot increase the real-operation allowance");
+});
+
+test("flowering and ordinary azalea leaves retain the same real canopy height", () => {
+  for (const id of ["azalea_leaves", "flowering_azalea_leaves", "azalea_leaves_flowered"]) {
+    let operations = 0;
+    const reader = terrain.readColumn({
+      heightRange: { min: -64, max: 320 },
+      getBlockFromRay() { operations++; return { block: { typeId: `minecraft:${id}`, location: { y: 80 } } }; },
+      getBlock() { operations++; return { typeId: "minecraft:air", location: { y: 79 } }; },
+    }, 0, 0);
+    let step = reader.next();
+    while (!step.done) step = reader.next(step.value());
+    assert.deepEqual(step.value, { kind: "birch", y: 80, depth: 0 }, id);
+    assert.equal(operations, 1, "a solid canopy is not stripped as a passable flower");
+  }
+});
+
+test("another viewer's detail cannot evict an active exact roof at saturation", () => {
+  const w = new TerrainWorld();
+  const surface = w.store(OW);
+  const roof = { kind: "stone", y: 80, depth: 0 };
+  w.put(surface, 0, 0, roof, 1, 1);
+  for (let i = 1; i < 2000; i++) w.put(surface, i + 10000, 10000, roof, 1, 1);
+  for (let i = 0; i < 4000; i++) w.put(surface, i * 4 + 100000, 100000, roof, 1);
+  const source = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8").match(/function planFor\(player, now\) \{[\s\S]*?\n\}/)[0];
+  const planFor = vm.runInNewContext(`(${source})`, {
+    terrain: w, playerStore: new Map(), scanDone: new Map(), prefsOf: () => ({ radar: true, terrain: true, north: false, radius: 24 }),
+    headingOf: () => 90, scanMemo: terrain.scanMemo, planScan, colKey, MISS_RETRY: terrain.MISS_RETRY, SCAN_MAX_AGE: 2400, R: HALF,
+  });
+  const player = { id: "caver", isValid: true, dimension: { id: OW }, location: { x: 0, y: 64, z: 0 }, getVelocity: () => ({ x: 0, z: 0 }) };
+  for (let now = 2; now <= 40; now++) {
+    assert.equal(planFor(player, now).roof, true, "a different moving viewer cannot make this caver briefly surface");
+    w.put(surface, now + 5000, 5000, roof, now, 1);
+    assert.equal(surface.cols.size, 6000);
+  }
 });

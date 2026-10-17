@@ -3,7 +3,7 @@
 //
 // The active page lives in the real inventory. Inactive pages are native World structure snapshots;
 // the player holds only their committed index. Old JSON pages are read once and migrated on use.
-import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, setFor } from "./settings.js";
 import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, stateOf } from "./page-store.js";
@@ -12,23 +12,24 @@ export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
 export const BTN_NEXT = "custom:inv_next";
 
-/** The three buttons, by the main-inventory slot they live in (9 = top left, 13 = top middle, 17 = top right). */
+/** The top row's last three slots, left to right: previous, current page/menu, next. */
 const BUTTONS = /** @type {const} */ ([
-  { kind: "prev", id: BTN_PREV, slot: 9 },
-  { kind: "menu", id: BTN_MENU, slot: 13 },
+  { kind: "prev", id: BTN_PREV, slot: 15 },
+  { kind: "menu", id: BTN_MENU, slot: 16 },
   { kind: "next", id: BTN_NEXT, slot: 17 },
 ]);
 const BUTTON_IDS = new Set([BTN_PREV, BTN_MENU, BTN_NEXT]);
-export const BUTTON_SLOTS = [9, 13, 17];
+export const BUTTON_SLOTS = [15, 16, 17];
 /** The 24 slots of a page: slots 9-35 without the buttons. */
-export const STORAGE_SLOTS = [10, 11, 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
+export const STORAGE_SLOTS = [9, 10, 11, 12, 13, 14, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
+const OLD_STORAGE_SLOTS = [10, 11, 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
+const OLD_BUTTON_SLOTS = [9, 13, 17];
 const HOTBAR = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 const PAGE_SIZE = STORAGE_SLOTS.length;
 
 const MAX_PAGES = 25;
 const PAGE_PROP = "stash:page:";
 const OP_PROP = "stash:op_pages";
-const CLICK_DEBOUNCE = 1;
 const SCAN_ROWS = 100;
 
 /**
@@ -38,6 +39,7 @@ const SCAN_ROWS = 100;
  *   place?: string[], destroy?: string[], item?: ItemStack }} Rec
  */
 /** @typedef {{ bar: (player: Player, text: string) => void, sort: (player: Player) => void, stash: (player: Player) => void }} Hooks */
+/** @typedef {"prev" | "menu" | "next"} ButtonKind */
 
 /** @type {Hooks} */
 let hooks = { bar: (p, t) => p.onScreenDisplay.setActionBar(t), sort: () => {}, stash: () => {} };
@@ -169,6 +171,35 @@ function pretty(typeId) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Absent layout metadata always means the old grid, even when no buttons are visible.
+ * Permute all 27 slots so full normal inventories and real items in old control slots also fit.
+ * The native transaction commits the active image and layout together; inactive refs retain their
+ * own old layout until rewritten. A recovery journal is never interpreted as proof of custody.
+ * @param {Player} player
+ */
+function ensureLayout(player) {
+  const old = stateOf(player);
+  if (old.pending) throw new Error("inventory recovery is pending; tell an operator");
+  if (old.layout === 2) return;
+  const inv = invOf(player);
+  if (!inv) throw new Error("player inventory is unavailable");
+  const after = carried(inv).filter((e) => !isButton(e.item)).map(({ s, item }) => {
+    const ordinal = OLD_STORAGE_SLOTS.indexOf(s);
+    const control = OLD_BUTTON_SLOTS.indexOf(s);
+    return { s: ordinal >= 0 ? STORAGE_SLOTS[ordinal] : control >= 0 ? BUTTON_SLOTS[control] : s, item };
+  });
+  commitInventory(player, old, { ...old, layout: 2 }, after);
+}
+
+/** @param {number} slot @param {2 | undefined} layout */
+function pageSlot(slot, layout) {
+  const slots = layout === 2 ? STORAGE_SLOTS : OLD_STORAGE_SLOTS;
+  const ordinal = slots.indexOf(slot);
+  if (ordinal < 0) throw new Error("invalid saved page slot");
+  return STORAGE_SLOTS[ordinal];
+}
+
+/**
  * The stacks saved for a page, or undefined when the saved data can't be read (then nothing is written to it).
  * @param {Player} player @param {number} page @returns {Rec[] | undefined}
  */
@@ -177,7 +208,7 @@ function readPage(player, page) {
     const state = stateOf(player);
     if (state.pending) throw new Error("inventory recovery is pending; tell an operator");
     const ref = state.pages[page];
-    if (ref) return loadSnapshot(player, ref).map(({ s, item }) => ({ s, ...toRecord(item) }));
+    if (ref) return loadSnapshot(player, ref).map(({ s, item }) => ({ s: pageSlot(s, ref.layout), ...toRecord(item) }));
     const key = PAGE_PROP + page;
     const raw = player.getDynamicProperty(key);
     if (raw === undefined) return [];
@@ -198,13 +229,13 @@ function readPage(player, page) {
     if (!Array.isArray(list)) return undefined;
     const used = new Set();
     for (const e of list) {
-      if (!e || typeof e.id !== "string" || !Number.isInteger(e.n) || e.n < 1 || !STORAGE_SLOTS.includes(e.s) || used.has(e.s)) throw new Error("invalid legacy saved stack");
+      if (!e || typeof e.id !== "string" || !Number.isInteger(e.n) || e.n < 1 || !OLD_STORAGE_SLOTS.includes(e.s) || used.has(e.s)) throw new Error("invalid legacy saved stack");
       used.add(e.s);
       const item = deserializeStack(e);
       if (!item || item.amount !== e.n) throw new Error(`cannot reconstruct legacy ${e.id}`);
       e.item = item;
     }
-    return list;
+    return list.map((e) => ({ ...e, s: pageSlot(e.s, undefined) }));
   } catch (e) {
     console.warn(`[stash] reading page ${page}: ${e}`);
     return undefined;
@@ -234,6 +265,7 @@ function commitPages(player, edits, after, cur = curPage(player)) {
   try {
     for (const [page, entries] of edits) {
       const ref = saveSnapshot(player, nativeEntries(entries));
+      ref.layout = 2;
       created.push(ref);
       next.pages[page] = ref;
     }
@@ -397,6 +429,11 @@ export function switchPage(player, target) {
   const id = player.id;
   const inv = invOf(player);
   if (!inv || switching.has(id)) return false;
+  try { ensureLayout(player); }
+  catch (e) {
+    hooks.bar(player, `§cPage not switched: ${e}`);
+    return false;
+  }
   const total = totalPages(player);
   const cur = curPage(player);
   if (!Number.isInteger(target) || target < 1 || target > MAX_PAGES || (target > total && cur <= total)) return false;
@@ -438,6 +475,16 @@ export function switchPage(player, target) {
       if (!item) throw new Error(`can't restore ${e.id}`);
       after.push({ s: e.s, item });
     }
+    if (buttonsWanted(player)) for (const b of BUTTONS) {
+      const have = after.find((e) => e.s === b.slot);
+      // Never overwrite a real stack in a reserved slot; button repair must rescue it first.
+      if (have && !isButton(have.item)) throw new Error("move the item out of the button slot before switching");
+      const index = after.findIndex((e) => e.s === b.slot);
+      if (index >= 0) after.splice(index, 1);
+      const item = makeButton(b.kind, target, total);
+      if (!item) throw new Error("page controls are unavailable");
+      after.push({ s: b.slot, item });
+    }
     commitPages(player, new Map([[cur, leaving], [target, []]]), after, target);
     snapshots.delete(id);
     refreshButtons(player);
@@ -461,6 +508,7 @@ export function switchPage(player, target) {
 export function enforcePageCount(player) {
   const inv = invOf(player);
   if (!inv) return false;
+  ensureLayout(player);
   const total = totalPages(player);
   if (curPage(player) > total && !switchPage(player, 1)) return false;
   const items = new Map(carried(inv).map((e) => [e.s, e.item]));
@@ -503,17 +551,6 @@ export function enforcePageCount(player) {
 
 let buttonsMissing = false;
 
-/** @type {Set<string>} players whose button slots were just written by this script, so the change events they cause aren't clicks */
-const updatingButtons = new Set();
-
-/** Marks a button-slot write about to happen; its change events arrive after the code finishes, so the mark stays until the next tick. @param {Player} player */
-function markUpdating(player) {
-  const id = player.id;
-  if (updatingButtons.has(id)) return;
-  updatingButtons.add(id);
-  system.run(() => updatingButtons.delete(id));
-}
-
 /** @param {"prev" | "menu" | "next"} kind @param {number} cur @param {number} total @returns {ItemStack | undefined} */
 function makeButton(kind, cur, total) {
   const prev = prevOf(cur, total);
@@ -546,6 +583,7 @@ function makeButton(kind, cur, total) {
  * @param {Player} player
  */
 function refreshButtons(player) {
+  ensureLayout(player);
   const inv = invOf(player);
   if (!inv) return;
   const cur = curPage(player);
@@ -555,7 +593,6 @@ function refreshButtons(player) {
     if (!want) return;
     const have = inv.getItem(b.slot);
     if (have?.typeId === b.id && have.nameTag === want.nameTag) continue;
-    markUpdating(player);
     if (have) {
       if (!isButton(have) && !rescueItem(player, inv, have, b.slot)) return;
     }
@@ -569,7 +606,6 @@ function removeButtons(player) {
   if (!inv) return;
   for (const s of [...HOTBAR, ...BUTTON_SLOTS, ...STORAGE_SLOTS]) {
     if (!isButton(inv.getItem(s))) continue;
-    markUpdating(player);
     inv.setItem(s, undefined);
   }
 }
@@ -578,7 +614,6 @@ function removeButtons(player) {
 function sweepStrays(player, inv) {
   for (const s of [...HOTBAR, ...STORAGE_SLOTS]) {
     if (!isButton(inv.getItem(s))) continue;
-    markUpdating(player);
     inv.setItem(s, undefined);
   }
 }
@@ -610,8 +645,10 @@ function removeDropped(player) {
   }
 }
 
-/** @type {Map<string, number>} player id → tick of the last button action */
-const lastClick = new Map();
+/** @type {Map<string, { kinds: ButtonKind[], wipe: boolean }>} live observations before deferred reconciliation */
+const queuedButtons = new Map();
+/** @type {Set<string>} only synchronous script mutations; never a whole-tick input lock */
+const reconciling = new Set();
 /** @type {Map<string, boolean>} player id → whether the buttons are in place (false: taken out) */
 const buttonState = new Map();
 /** @type {Set<string>} */
@@ -620,9 +657,9 @@ const dead = new Set();
 /**
  * A button was clicked (it left its slot): save anything real that took its place, put the buttons back,
  * and do what the button says, at most once per click.
- * @param {Player} player @param {readonly ("prev" | "menu" | "next")[]} kinds
+ * @param {Player} player @param {readonly ("prev" | "menu" | "next")[]} kinds @param {boolean} [wipe]
  */
-function clicked(player, kinds) {
+function clicked(player, kinds, wipe = false) {
   const inv = invOf(player);
   if (!inv) return;
   const onCursor = clearCursorButton(player);
@@ -630,59 +667,96 @@ function clicked(player, kinds) {
   for (const b of BUTTONS) {
     const have = inv.getItem(b.slot);
     if (!have || have.typeId === b.id) continue;
-    markUpdating(player);
     if (!isButton(have) && !rescueItem(player, inv, have, b.slot)) return;
   }
   sweepStrays(player, inv);
   removeDropped(player);
-  const now = system.currentTick;
-  const kind = kinds.includes("prev") ? "prev" : kinds.includes("next") ? "next" : kinds[0];
-  // All three gone at once is a wipe (/clear, a respawn), not a click.
-  if (!kind || kinds.length === BUTTONS.length || now - (lastClick.get(player.id) ?? -1000) < CLICK_DEBOUNCE) {
+  // A co-observed wipe is not the same as three separately observed genuine gestures.
+  if (!kinds.length || wipe) {
     refreshButtons(player);
     return;
   }
-  lastClick.set(player.id, now);
-  const cur = curPage(player);
-  const total = totalPages(player);
-  if (kind === "prev") switchPage(player, prevOf(cur, total));
-  else if (kind === "next") switchPage(player, nextOf(cur, total));
-  else {
-    refreshButtons(player);
-    hooks.bar(player, "§bClose inventory to open the Inventory Pages menu");
-    openInvMenu(player).catch((e) => console.warn(`[stash] ${e}`));
+  // Restore all consumed controls before processing possibly several distinct queued gestures.
+  refreshButtons(player);
+  for (const kind of kinds) {
+    const cur = curPage(player);
+    const total = totalPages(player);
+    if (kind === "prev" || kind === "next") {
+      if (!switchPage(player, kind === "prev" ? prevOf(cur, total) : nextOf(cur, total))) refreshButtons(player);
+    } else {
+      hooks.bar(player, "§bClose inventory to open the Inventory Pages menu");
+      openInvMenu(player).catch((e) => console.warn(`[stash] ${e}`));
+    }
   }
 }
 
-/** Looks at the three slots: a missing button is a click. @param {Player} player */
-function pollButtons(player) {
+/** Observe live slots/cursor, never historical event payloads. @param {Player} player @returns {{ kinds: ButtonKind[], wipe: boolean }} */
+function observedButtons(player) {
   const inv = invOf(player);
-  if (!inv) return;
-  const onCursor = clearCursorButton(player);
+  if (!inv) return { kinds: [], wipe: false };
+  /** @type {ButtonKind | undefined} */
+  let onCursor;
+  try { onCursor = kindOf(player.getComponent("minecraft:cursor_inventory")?.item); }
+  catch { /* A slot request is still observable when the cursor is unavailable. */ }
   const missing = BUTTONS.filter((b) => inv.getItem(b.slot)?.typeId !== b.id).map((b) => b.kind);
+  const wipe = missing.length === BUTTONS.length && !onCursor &&
+    ![...HOTBAR, ...STORAGE_SLOTS].some((s) => isButton(inv.getItem(s)));
   if (onCursor && !missing.includes(onCursor)) missing.push(onCursor);
-  if (missing.length) clicked(player, missing);
+  return { kinds: missing, wipe };
 }
 
-// A button picked up in the inventory screen, or any change in its slot, counts as the click right away.
+/** @param {Player} player */
+function pollButtons(player) {
+  if (reconciling.has(player.id) || switching.has(player.id)) return;
+  const observed = observedButtons(player);
+  const request = queuedButtons.get(player.id) ?? observed;
+  for (const kind of observed.kinds) if (!request.kinds.includes(kind)) request.kinds.push(kind);
+  queuedButtons.delete(player.id);
+  if (!request.kinds.length) return;
+  reconciling.add(player.id);
+  try { clicked(player, request.kinds, request.wipe); }
+  finally { reconciling.delete(player.id); }
+}
+
+// Event payloads may arrive several ticks after our writes, or after a newer gesture. They are wakeups,
+// not requests. Only the current slot/cursor transaction can request a switch. Reconcile outside the
+// engine's inventory event dispatch so a client transaction finishes before we replace its slots.
 world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
   try {
     const player = event.player;
-    if (!player?.isValid || dead.has(player.id) || updatingButtons.has(player.id) || switching.has(player.id)) return;
-    if (!buttonsWanted(player)) return;
-    const cursorKind = clearCursorButton(player);
+    if (event.inventoryType !== PlayerInventoryType.Inventory || !Number.isInteger(event.slot) || event.slot < 9 || event.slot > 35) return;
+    if (!player?.isValid || dead.has(player.id) || reconciling.has(player.id) || switching.has(player.id)) return;
+    if (!buttonsWanted(player) || !BUTTON_SLOTS.includes(event.slot) && !isButton(event.beforeItemStack) && !isButton(event.itemStack)) return;
+    if (buttonState.get(player.id) !== true || !inventoryReady(player)) return;
+    // Old control positions are storage in layout 2; finish migration before interpreting gestures.
+    if (stateOf(player).layout !== 2) return;
+    const request = observedButtons(player);
+    const observed = request.kinds;
+    if (!observed.length) return;
+    // Several slots may already be updated when the first event arrives. Use its slot only to order
+    // gestures that are independently visible now; an old payload can never add a missing gesture.
     const own = BUTTONS.find((b) => b.slot === event.slot);
-    // The script putting a button into its own slot (a rename after a switch) is not a click.
-    if (!cursorKind && own && event.itemStack?.typeId === own.id) return;
-    if (!cursorKind && !isButton(event.beforeItemStack) && !isButton(event.itemStack) && !own) return;
-    const inv = invOf(player);
-    const gone = inv ? BUTTONS.filter((b) => inv.getItem(b.slot)?.typeId !== b.id).map((b) => b.kind) : [];
-    if (gone.length === BUTTONS.length) {
-      clicked(player, gone);
+    const first = own ? observed.indexOf(own.kind) : -1;
+    if (own && first > 0 && event.beforeItemStack?.typeId === own.id && event.itemStack?.typeId !== own.id) {
+      observed.unshift(...observed.splice(first, 1));
+    }
+    const pending = queuedButtons.get(player.id);
+    if (pending) {
+      for (const kind of observed) if (!pending.kinds.includes(kind)) pending.kinds.push(kind);
       return;
     }
-    const kind = cursorKind ?? kindOf(event.beforeItemStack) ?? kindOf(event.itemStack) ?? own?.kind;
-    if (kind) clicked(player, [kind]);
+    queuedButtons.set(player.id, request);
+    system.run(() => {
+      if (queuedButtons.get(player.id) !== request) return;
+      try {
+        if (!player.isValid || dead.has(player.id) || !buttonsWanted(player) || !inventoryReady(player)) {
+          queuedButtons.delete(player.id);
+          return;
+        }
+        ensureLayout(player);
+        pollButtons(player);
+      } catch (e) { console.warn(`[stash] ${e}`); }
+    });
   } catch (e) {
     console.warn(`[stash] ${e}`);
   }
@@ -738,17 +812,20 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
   dead.add(deadEntity.id);
   buttonState.delete(deadEntity.id);
   snapshots.delete(deadEntity.id);
+  queuedButtons.delete(deadEntity.id);
 });
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
   dead.delete(player.id);
   buttonState.delete(player.id);
   snapshots.delete(player.id);
+  queuedButtons.delete(player.id);
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [lastClick, buttonState, snapshots, lastTotal, lastEnforce]) m.delete(playerId);
+  for (const m of [buttonState, snapshots, lastTotal, lastEnforce]) m.delete(playerId);
   recoveryWarned.delete(playerId);
   dead.delete(playerId);
-  updatingButtons.delete(playerId);
+  queuedButtons.delete(playerId);
+  reconciling.delete(playerId);
   menuOpen.delete(playerId);
   switching.delete(playerId);
 });
@@ -857,6 +934,7 @@ function tickPlayer(player, withAutoStore) {
     return;
   }
   recoveryWarned.delete(player.id);
+  ensureLayout(player);
   const total = totalPages(player);
   const attempt = lastEnforce.get(player.id);
   if (lastTotal.get(player.id) !== total && (!attempt || attempt.total !== total || system.currentTick - attempt.tick >= 20)) {
@@ -927,13 +1005,17 @@ const menuOpen = new Set();
 
 /**
  * Shows a form, retrying while another screen (the inventory, chat) is still open.
- * @template R @param {Player} player @param {{ show: (p: Player) => Promise<R> }} form @param {number} [attempts] one a second
+ * @template R @param {Player} player
+ * @param {{ show: (p: Player) => Promise<R> } | (() => { show: (p: Player) => Promise<R> } | undefined)} form
+ * @param {number} [attempts] one a second
  * @returns {Promise<R | undefined>}
  */
 async function showForm(player, form, attempts = 30) {
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (!player.isValid) return undefined;
-    const res = /** @type {any} */ (await form.show(player));
+    const current = typeof form === "function" ? form() : form;
+    if (!current) return undefined;
+    const res = /** @type {any} */ (await current.show(player));
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await new Promise((r) => system.runTimeout(() => r(undefined), 20));
   }
@@ -972,11 +1054,9 @@ function scanItems(player, inv) {
   return [...found.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-/** @param {Player} player */
-export async function openInvMenu(player) {
-  if (menuOpen.has(player.id)) return;
-  menuOpen.add(player.id);
-  try {
+/** Build display and action indices together from the currently committed inventory. @param {Player} player */
+function inventoryMenu(player) {
+  if (player.isValid) {
     const inv = invOf(player);
     if (!inv) return;
     const total = totalPages(player);
@@ -1027,7 +1107,22 @@ export async function openInvMenu(player) {
     form.button("Inventory settings\n§8Page buttons, auto-store" + (isOp(player) ? ", your page count" : ""));
     actions.push(() => settingsMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
 
-    const res = await showForm(player, form);
+    return { form, actions };
+  }
+}
+
+/** @param {Player} player */
+export async function openInvMenu(player) {
+  if (menuOpen.has(player.id)) return;
+  menuOpen.add(player.id);
+  try {
+    /** @type {(() => void)[]} */
+    let actions = [];
+    const res = await showForm(player, () => {
+      const current = inventoryMenu(player);
+      actions = current?.actions ?? [];
+      return current?.form;
+    });
     if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
     menuOpen.delete(player.id);
     actions[res.selection]?.();

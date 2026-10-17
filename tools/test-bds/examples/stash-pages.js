@@ -4,17 +4,18 @@ export default async function (t) {
   const mc = t.mc;
   const p = await t.player("Pager", { op: true });
   const inv = p.getComponent("minecraft:inventory").container;
-  const STORAGE = [10, 11, 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
+  const STORAGE = [9, 10, 11, 12, 13, 14, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
   const mk = (id, n = 1) => new mc.ItemStack(id, n);
   // Dynamic properties are per pack, so the page the player is on is read from the menu button.
-  const pageNow = () => Number(/Page (\d+)\//.exec(inv.getItem(13)?.nameTag ?? "")?.[1] ?? 0);
+  const pageNow = () => Number(/Page (\d+)\//.exec(inv.getItem(16)?.nameTag ?? "")?.[1] ?? 0);
 
-  // 1. Buttons appear with their names, in slots 9, 13 and 17
-  await t.waitUntil(() => inv.getItem(9)?.typeId === "custom:inv_prev", { timeout: 100, message: "buttons placed" });
-  t.assert(inv.getItem(13)?.typeId === "custom:inv_menu", "menu button in slot 13");
+  // These are native slot transactions, not physical GUI clicks.
+  // 1. Buttons appear together in the top row's last three slots.
+  await t.waitUntil(() => inv.getItem(15)?.typeId === "custom:inv_prev", { timeout: 100, message: "buttons placed" });
+  t.assert(inv.getItem(16)?.typeId === "custom:inv_menu", "menu button in slot 16");
   t.assert(inv.getItem(17)?.typeId === "custom:inv_next", "next button in slot 17");
-  t.log(inv.getItem(9).nameTag + " | " + inv.getItem(13).nameTag + " | " + inv.getItem(17).nameTag);
-  t.assert(inv.getItem(9).nameTag === "§r§8[§b<§8] §fPage 5/5 §7(Prev)", "prev name");
+  t.log(inv.getItem(15).nameTag + " | " + inv.getItem(16).nameTag + " | " + inv.getItem(17).nameTag);
+  t.assert(inv.getItem(15).nameTag === "§r§8[§b<§8] §fPage 5/5 §7(Prev)", "prev name");
   t.assert(inv.getItem(17).nameTag === "§r§8[§b>§8] §fPage 2/5 §7(Next)", "next name");
 
   // 2. Items on page 1, including awkward ones
@@ -35,14 +36,14 @@ export default async function (t) {
   await t.wait(8);
   t.assert(inv.getItem(17)?.typeId === "custom:inv_next", "next button restored");
   t.assert(inv.getItem(17).nameTag.includes("Page 3/5"), "next button now points at page 3");
-  t.assert(inv.getItem(13).nameTag.includes("Page 2/5"), "menu button shows page 2");
+  t.assert(inv.getItem(16).nameTag.includes("Page 2/5"), "menu button shows page 2");
   t.assert(!inv.getItem(10) && !inv.getItem(11), "page 2 starts empty");
   t.assert(!inv.getItem(12), "shulker box belongs to page 1");
   t.assert(!inv.getItem(14), "potion belongs to page 1");
   t.assert(inv.getItem(0)?.typeId === "minecraft:apple", "hotbar untouched");
 
   // 4. Back to page 1 with the prev button: everything returns exactly
-  inv.setItem(9, undefined);
+  inv.setItem(15, undefined);
   await t.waitUntil(() => pageNow() === 1, { timeout: 60, message: "back on page 1" });
   await t.wait(8);
   const back = inv.getItem(10);
@@ -56,12 +57,12 @@ export default async function (t) {
 
   // 5. A real item dropped onto a button slot is rescued, never lost
   const menu = t.waitForm(p, { timeout: 100 }).catch(() => undefined);
-  inv.setItem(13, mk("minecraft:emerald", 7)); // swapped onto the menu button's slot
+  inv.setItem(16, mk("minecraft:emerald", 7)); // swapped onto the menu button's slot
   await t.wait(6);
   let emeralds = 0;
   for (let i = 0; i < 36; i++) if (inv.getItem(i)?.typeId === "minecraft:emerald") emeralds += inv.getItem(i).amount;
   t.assert(emeralds === 7, `emeralds rescued (found ${emeralds})`);
-  t.assert(inv.getItem(13)?.typeId === "custom:inv_menu", "menu button restored");
+  t.assert(inv.getItem(16)?.typeId === "custom:inv_menu", "menu button restored");
   const m = await menu;
   t.check(m !== undefined, "the inventory menu opened");
   if (m) {
@@ -75,7 +76,7 @@ export default async function (t) {
   await t.wait(6);
   t.assert(!inv.getItem(1), "stray button cleared from the hotbar");
   t.assert(pageNow() === 2, "one click, one switch");
-  inv.setItem(9, undefined);
+  inv.setItem(15, undefined);
   await t.wait(10);
   t.assert(pageNow() === 1, "back to page 1");
 
@@ -88,7 +89,7 @@ export default async function (t) {
   const left = p.dimension.getEntities({ type: "minecraft:item", location: p.location, maxDistance: 8 }).filter((en) => en.getComponent("minecraft:item").itemStack.typeId.startsWith("custom:inv_"));
   t.assert(left.length === 0, "the dropped button is gone");
   await t.wait(8);
-  inv.setItem(9, undefined);
+  inv.setItem(15, undefined);
   await t.waitUntil(() => pageNow() === 1, { timeout: 40, message: "back to page 1" });
   await t.wait(8);
 
@@ -98,14 +99,14 @@ export default async function (t) {
   await t.waitUntil(() => pageNow() === 2, { timeout: 40, message: "using the button in hand switched" });
   t.assert(!inv.getItem(2), "the button left the hotbar");
   await t.wait(8);
-  inv.setItem(9, undefined);
+  inv.setItem(15, undefined);
   await t.waitUntil(() => pageNow() === 1, { timeout: 40, message: "back to page 1 again" });
   await t.wait(8);
   // 6d. Sorting leaves the buttons where they are
   inv.setItem(35, mk("minecraft:apple", 2));
   t.assert(t.cmd(p, "/realm:sort").ok, "/realm:sort ran");
   await t.wait(10);
-  t.assert(inv.getItem(9)?.typeId === "custom:inv_prev" && inv.getItem(13)?.typeId === "custom:inv_menu" && inv.getItem(17)?.typeId === "custom:inv_next", "buttons survive /realm:sort");
+  t.assert(inv.getItem(15)?.typeId === "custom:inv_prev" && inv.getItem(16)?.typeId === "custom:inv_menu" && inv.getItem(17)?.typeId === "custom:inv_next", "buttons survive /realm:sort");
   t.assert(pageNow() === 1, "sorting is not a click");
   inv.setItem(35, undefined);
   // 7. Auto-store: a page down to its last free slot sends the newest stack to another page
@@ -131,12 +132,12 @@ export default async function (t) {
   const dropped = p.dimension.getEntities({ type: "minecraft:item", location: p.location, maxDistance: 6 }).filter((en) => en.getComponent("minecraft:item").itemStack.typeId === "minecraft:iron_ingot");
   t.log(`iron in inventory ${gold}, on the floor ${dropped.length}`);
   t.assert(gold + dropped.reduce((a, en) => a + en.getComponent("minecraft:item").itemStack.amount, 0) === 5, "no iron lost");
-  t.assert(!inv.getItem(9) || inv.getItem(9).typeId !== "custom:inv_prev", "buttons removed with one page");
-  t.assert(!inv.getItem(13) || inv.getItem(13).typeId !== "custom:inv_menu", "menu button removed too");
+  t.assert(!inv.getItem(15) || inv.getItem(15).typeId !== "custom:inv_prev", "buttons removed with one page");
+  t.assert(!inv.getItem(16) || inv.getItem(16).typeId !== "custom:inv_menu", "menu button removed too");
 
   // 9. Back to the realm default: the buttons return
   t.assert(t.cmd(p, "/realm:inv_pages 0").ok, "inv_pages 0 ran");
-  await t.waitUntil(() => inv.getItem(9)?.typeId === "custom:inv_prev", { timeout: 60, message: "buttons back" });
+  await t.waitUntil(() => inv.getItem(15)?.typeId === "custom:inv_prev", { timeout: 60, message: "buttons back" });
 
   // 10. /realm:inv scan
   const scan = t.waitForm(p, { timeout: 100 });
@@ -149,4 +150,106 @@ export default async function (t) {
   t.log(`scan: ${list.buttons.slice(0, 6).join(" / ")}`);
   t.assert(list.buttons.some((b) => /Cobblestone x/.test(b)), "cobblestone listed");
   list.answer(null);
+
+  // Native event ordering/echo coverage. setItem is NOT proof of physical inventory UI interaction.
+  const rapid = await t.player("EventPager", { op: true });
+  const grid = rapid.getComponent("minecraft:inventory").container;
+  const current = () => Number(/Page (\d+)\//.exec(grid.getItem(16)?.nameTag ?? "")?.[1] ?? 0);
+  await t.waitUntil(() => current() === 1, { timeout: 100, message: "event test controls" });
+  let events = 0;
+  const listener = mc.world.afterEvents.playerInventoryItemChange.subscribe((event) => {
+    if (event.player.id !== rapid.id || ![15, 16, 17].includes(event.slot)) return;
+    if (++events <= 8) t.log(`native event tick=${t.tick} inventory=${event.inventoryType} slot=${event.slot} committed-label=${current()}`);
+  });
+  const go = async (slot, expected) => {
+    grid.setItem(slot, undefined);
+    await t.waitUntil(() => current() === expected, { timeout: 60, message: `event page ${expected}` });
+  };
+  const types = ["minecraft:redstone", "minecraft:emerald", "minecraft:iron_ingot", undefined, "minecraft:nether_star"];
+  try {
+    for (let page = 1; page <= 5; page++) {
+      if (page > 1) await go(17, page);
+      if (types[page - 1]) grid.setItem(18, mk(types[page - 1], page));
+    }
+    await go(17, 1);
+    for (const autoStore of [false, true]) {
+      const opening = t.waitForm(rapid);
+      t.cmd(rapid, "/realm:inv");
+      (await opening).answer("Inventory settings");
+      const settings = await t.waitForm(rapid);
+      settings.answer({ "Auto-store pickups": autoStore });
+      await t.wait(4);
+      for (const [slot, expected] of [[17, 2], [17, 3], [15, 2], [17, 3], [17, 4], [17, 5], [17, 1], [15, 5], [17, 1]]) {
+        await go(slot, expected);
+        t.assert(grid.getItem(18)?.typeId === types[expected - 1], `event page ${expected} contents agree (auto=${autoStore})`);
+        t.log(`native request slot=${slot} committed-label=${current()} item=${grid.getItem(18)?.typeId ?? "empty"}`);
+      }
+      await t.wait(12);
+      t.assert(current() === 1 && grid.getItem(18)?.typeId === types[0], "settled native echoes never add a switch");
+      const menu = t.waitForm(rapid);
+      t.cmd(rapid, "/realm:inv");
+      const form = await menu;
+      t.assert(form.buttons.some((b) => /Page #1 \(Active\)/.test(b)), "native menu active marker agrees");
+      form.answer(null);
+      await t.wait(2);
+      const since = t.tick;
+      grid.setItem(17, undefined);
+      grid.setItem(15, undefined);
+      await t.wait(8);
+      const commits = t.messages(rapid, { kind: "actionbar", pack: "stash_bp", since })
+        .map((message) => /Page #(\d+)\/5/.exec(message.plain)?.[1]).filter(Boolean);
+      t.assert(commits.join(",") === "2,1" && current() === 1, `batched genuine requests keep order and commit once each (${commits})`);
+      t.assert(grid.getItem(18)?.typeId === types[0], "batched requests return exact page one content");
+    }
+    const tripleSince = t.tick;
+    const tripleMenu = t.waitForm(rapid);
+    for (const [slot, hotbar] of [[17, 1], [15, 2], [16, 3]]) {
+      const button = grid.getItem(slot);
+      grid.setItem(slot, undefined);
+      grid.setItem(hotbar, button);
+    }
+    const triple = await tripleMenu;
+    const tripleCommits = t.messages(rapid, { kind: "actionbar", pack: "stash_bp", since: tripleSince })
+      .map((message) => /Page #(\d+)\/5/.exec(message.plain)?.[1]).filter(Boolean);
+    t.assert(tripleCommits.join(",") === "2,1", "three genuine queued gestures commit Next, Prev and open Menu");
+    t.assert(triple.buttons.some((b) => /Page #1 \(Active\)/.test(b)), "third queued gesture shows the committed page one menu");
+    triple.answer(null);
+    await t.wait(2);
+    const wipeSince = t.tick;
+    for (const slot of [15, 16, 17]) grid.setItem(slot, undefined);
+    await t.wait(8);
+    t.assert(current() === 1 && [15, 16, 17].every((slot) => grid.getItem(slot)?.typeId.startsWith("custom:inv_")), "actual co-observed clear restores all controls");
+    t.assert(!t.messages(rapid, { kind: "actionbar", pack: "stash_bp", since: wipeSince })
+      .some((message) => /Page #\d+\/5/.test(message.plain)), "actual clear never commits queued gestures");
+
+    const busyOpening = t.waitForm(rapid);
+    t.cmd(rapid, "/realm:inv");
+    const busy = await busyOpening;
+    t.assert(/^Page #1 of 5/.test(busy.body), "busy menu initially describes committed page one");
+    busy.answer("busy");
+    const retryOpening = t.waitForm(rapid);
+    await go(17, 2);
+    grid.setItem(19, mk("minecraft:diamond", 3));
+    const retry = await retryOpening;
+    t.assert(/^Page #2 of 5/.test(retry.body) && /5 of 120 slots used/.test(retry.body), "UserBusy retry rebuilds current page and current usage");
+    t.assert(retry.buttons.some((b) => /Page #2 \(Active\)/.test(b)) && !retry.buttons.some((b) => /Page #1 \(Active\)/.test(b)), "UserBusy retry active marker agrees with controls");
+    retry.answer(null);
+    await t.wait(2);
+
+    const countOpening = t.waitForm(rapid);
+    t.cmd(rapid, "/realm:inv");
+    (await countOpening).answer("busy");
+    const countRetryOpening = t.waitForm(rapid);
+    t.assert(t.cmd(rapid, "/realm:inv_pages 2").ok, "change page count while menu is UserBusy");
+    const countRetry = await countRetryOpening;
+    t.assert(/^Page #2 of 2/.test(countRetry.body) && countRetry.buttons[4].startsWith("Sort this page"), "busy retry rebuilds page-count-dependent action indices");
+    const sorted = t.waitMessage(rapid, /Sorted .* in your inventory/, { kind: "actionbar", pack: "stash_bp" });
+    countRetry.answer(4);
+    await sorted;
+    t.assert(current() === 2, "rebuilt Sort selection executes Sort, not stale Page #4");
+    t.assert(events > 0, "engine actually emitted native control-slot change events");
+    t.log(`Native event/control coverage: ${events} events, one committed label/content change per slot request; GUI clicks still require a client.`);
+  } finally {
+    mc.world.afterEvents.playerInventoryItemChange.unsubscribe(listener);
+  }
 }
