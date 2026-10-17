@@ -3,8 +3,8 @@ import { readFileSync, existsSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 
-const packs = ["npc_bp", "wander_bp", "caravan_bp", "saga_bp"];
-const helperPath = new URL("../packs/npc_bp/scripts/name-labels.js", import.meta.url);
+const packs = ["wander_bp", "caravan_bp", "saga_bp"];
+const helperPath = new URL("../packs/caravan_bp/scripts/name-labels.js", import.meta.url);
 const helper = existsSync(helperPath) ? await import(helperPath) : undefined;
 
 function setup() {
@@ -79,7 +79,7 @@ function setup() {
   };
 }
 
-test("all four packs ship identical label helpers and 20-block defaults", () => {
+test("wanderers, caravans and story actors still ship identical projected-label helpers", () => {
   assert.ok(helper, "name-label helper exists");
   const source = readFileSync(helperPath, "utf8");
   for (const pack of packs) {
@@ -98,9 +98,24 @@ test("all four packs ship identical label helpers and 20-block defaults", () => 
   }
 });
 
-test("runtime readers migrate legacy saved 120-block ranges down to 20 blocks", () => {
+test("npc townsfolk no longer ship projected-label assets or settings", () => {
+  const npcMain = readFileSync(new URL("../packs/npc_bp/scripts/main.js", import.meta.url), "utf8");
+  const npcConfig = readFileSync(new URL("../packs/npc_bp/scripts/config.js", import.meta.url), "utf8");
+  const npcSettings = readFileSync(new URL("../packs/npc_bp/scripts/settings.js", import.meta.url), "utf8");
+  assert.doesNotMatch(npcMain, /updateNameLabels/);
+  assert.doesNotMatch(npcMain, /labelType:/);
+  assert.doesNotMatch(npcConfig, /farNameRange:/);
+  assert.doesNotMatch(npcSettings, /key: "farNameRange"/);
+  assert.match(npcMain, /const LEGACY_LABEL_TYPE = "realm:npc_label";/);
+  assert.match(npcMain, /function removeLegacyLabel\(entity\)/);
+  assert.match(npcMain, /getEntities\(\{ type: LEGACY_LABEL_TYPE \}\)/);
+  assert.equal(existsSync(new URL("../packs/npc_bp/scripts/name-labels.js", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../packs/npc_bp/entities/npc_label.json", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../packs/build_rp/entity/npc_label.entity.json", import.meta.url)), false);
+});
+
+test("projected-label packs still migrate legacy saved 120-block ranges down to 20 blocks", () => {
   const readers = [
-    "../packs/npc_bp/scripts/main.js",
     "../packs/wander_bp/scripts/main.js",
     "../packs/caravan_bp/scripts/main.js",
     "../packs/saga_bp/scripts/actors.js",
@@ -109,8 +124,12 @@ test("runtime readers migrate legacy saved 120-block ranges down to 20 blocks", 
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.match(source, /rawRange === 120 \? 20 : rawRange/);
   }
+});
+
+test("townsfolk still resend their native names for near viewers within 20 blocks", () => {
   const npcMain = readFileSync(new URL("../packs/npc_bp/scripts/main.js", import.meta.url), "utf8");
   assert.match(npcMain, /const NAME_RANGE = 20;/);
+  assert.match(npcMain, /getPlayers\(\{ location: entity\.location, maxDistance: NAME_RANGE \}\)/);
 });
 
 test("all label entities have zero collision and an underground zero-sized hitbox", () => {
@@ -240,7 +259,7 @@ test("the townsfolk idle loop skips entity and block work beyond its active rang
   let entityReads = 0;
   const state = { missing: 2, viewers: new Set(["player"]) };
   const context = {
-    get: (key) => ({ enabled: true, farNameRange: 20, faceRange: 8 })[key],
+    get: (key) => ({ enabled: true, faceRange: 8 })[key],
     NAME_RANGE: 20,
     CONFIG: { respawnRange: 24, idleRange: 12 },
     MISSING_EVERY: 4,

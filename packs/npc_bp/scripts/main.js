@@ -17,7 +17,6 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
 import { get } from "./settings.js";
-import { removeOrphanLabel, updateNameLabels } from "./name-labels.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
 // the game's skins in its NPC editor). Each one lives inside its own house and stays there: its one spot (its
@@ -43,9 +42,7 @@ const OWNER_TAG = "realm:npc_owner:npc_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
 const ROLE_TAG = "realm:npc_role:";
-const LABEL_TYPE = "realm:npc_label";
-const LABEL_TAG = "realm:npc_label";
-const LABEL_ID_TAG = "realm:npc_label_id:";
+const LEGACY_LABEL_TYPE = "realm:npc_label";
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
 
@@ -84,24 +81,6 @@ let loadFailed = false; // a corrupt list: leave the NPCs alone rather than remo
 let weather = WeatherType.Clear;
 /** @type {Map<string, State>} townsfolk id -> runtime state */
 const states = new Map();
-/** @type {Map<string, Entity>} townsfolk id -> label entity */
-const labels = new Map();
-
-function updateLabels() {
-  if (!ready) return;
-  const rawRange = Number(get("farNameRange"));
-  const maxRange = Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
-  updateNameLabels({
-    labels,
-    targets: list.flatMap((rec) => {
-      const t = folk.get(rec.id);
-      return t ? [{ ...rec, name: displayName(t) }] : [];
-    }),
-    players: world.getAllPlayers(), maxRange,
-    labelType: LABEL_TYPE, ownerTag: OWNER_TAG, labelTag: LABEL_TAG, labelIdTag: LABEL_ID_TAG,
-    dimension: (id) => world.getDimension(id),
-  });
-}
 
 /** @param {Townsfolk} t "§eMara §7the Cartographer": the name above its head */
 const displayName = (t) => `§e${t.name}${t.title ? ` §7${t.title}` : ""}`;
@@ -457,6 +436,17 @@ function spawn(rec, t, at) {
 }
 
 /**
+ * Old projected helper labels are no longer used for townsfolk. Keep removing them while worlds upgrade so old
+ * shared labels do not linger in saved chunks.
+ * @param {Entity} entity
+ */
+function removeLegacyLabel(entity) {
+  if (entity.typeId !== LEGACY_LABEL_TYPE) return false;
+  if (entity.isValid) entity.remove();
+  return true;
+}
+
+/**
  * Checks one of our NPC entities: a townsfolk no longer placed (or no longer in config.js) is removed, a second
  * one of the same townsfolk is removed, and an NPC found while its saved entity isn't loaded becomes the one.
  * @param {Entity} entity
@@ -491,7 +481,7 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
-    if (removeOrphanLabel(entity, labels, LABEL_TYPE)) return;
+    if (removeLegacyLabel(entity)) return;
     if (entity.typeId !== NPC_TYPE) return;
     audit(entity);
     const id = entity.isValid ? idOf(entity) : undefined;
@@ -506,7 +496,7 @@ function auditAll() {
     try {
       const dim = world.getDimension(id);
       for (const e of dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] })) audit(e);
-      for (const e of dim.getEntities({ type: LABEL_TYPE })) removeOrphanLabel(e, labels, LABEL_TYPE);
+      for (const e of dim.getEntities({ type: LEGACY_LABEL_TYPE })) removeLegacyLabel(e);
     } catch (e) {
       console.warn(`[npc] audit: ${e}`);
     }
@@ -649,9 +639,7 @@ function loop() {
     }
   }
   const lively = get("enabled") === true;
-  const rawRange = Number(get("farNameRange"));
-  const maxRange = Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
-  const activeRange = Math.max(NAME_RANGE, CONFIG.respawnRange, maxRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
+  const activeRange = Math.max(NAME_RANGE, CONFIG.respawnRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
   const players = world.getAllPlayers();
   for (const rec of list) {
     const t = folk.get(rec.id);
@@ -695,7 +683,6 @@ world.afterEvents.worldLoad.subscribe(() => {
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
   system.runInterval(loop, LOOP_TICKS);
-  system.runInterval(updateLabels, 2);
   system.runInterval(auditAll, AUDIT_TICKS);
   // Other packs are loaded by now: the calendar, and each online player's affinity (after a /reload).
   system.runTimeout(() => {
