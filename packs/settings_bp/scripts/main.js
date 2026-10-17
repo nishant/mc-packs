@@ -434,7 +434,7 @@ async function allSettings(player) {
       slots.push("nav");
     }
     for (const pack of pages[page]) {
-      form.header(pack.title);
+      form.label(`§l§6${pack.title}`);
       slots.push(null);
       addWorldOptions(form, slots, pack);
     }
@@ -513,7 +513,7 @@ async function prefsForm(player) {
   /** @type {(Slot | null)[]} */
   const slots = [];
   for (const pack of packs) {
-    form.header(pack.title);
+    form.label(`§l§6${pack.title}`);
     slots.push(null);
     for (const option of pack.options.filter((o) => o.scope === "player")) {
       addControl(form, option);

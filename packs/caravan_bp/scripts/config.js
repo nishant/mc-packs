@@ -48,8 +48,8 @@ export const CONFIG = {
   /** Chat warns this many minutes before the caravan leaves. 0 = no warning. */
   warnMinutes: 5,
 
-  /** Goods for sale per visit, picked at random from `goods`. */
-  stockSize: 8,
+  /** Goods each trader sells per visit, picked at random from `goods` (no two traders sell the same good). */
+  stockSize: 5,
 
   /** Names of the traders (one NPC each). */
   traders: ["Zahir the Spice Merchant", "Old Marisol", "Fennick the Peddler"],
@@ -67,7 +67,7 @@ export const CONFIG = {
   removeRange: 32,
 
   /**
-   * What the traders may sell. Each visit picks `stockSize` of these. Goods whose item can't be made (an unknown
+   * What the traders may sell. Each visit picks `stockSize` of these for each trader. Goods whose item can't be made (an unknown
    * id, or an enchantment the game refuses) are skipped.
    * @type {Good[]}
    */

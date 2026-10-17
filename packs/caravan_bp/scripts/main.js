@@ -7,6 +7,7 @@ import {
   GameMode,
   ItemStack,
   Player,
+  StructureSaveMode,
   system,
   world,
 } from "@minecraft/server";
@@ -18,7 +19,8 @@ import { get } from "./settings.js";
 // in stock. The traders are vanilla minecraft:npc entities with this pack as their owner tag (the Townsfolk
 // pack leaves those alone), so taps on them open this pack's shop. Every entity a visit brings carries
 // `realm:caravan` and `realm:caravan_v:<visit>`, so anything left over from an earlier visit, or found after
-// the caravan left, is removed as soon as its chunk loads.
+// the caravan left, is removed as soon as its chunk loads. Each trader has its own goods, and the skin an operator
+// picks for one in the game's NPC editor is saved as a small structure and brought back on every later visit.
 
 const PROP_SPOTS = "caravan:spots"; // world: JSON Spot[], arrival spots set by operators
 const PROP_VISIT = "caravan:visit"; // world: JSON Visit while a caravan is here
@@ -62,7 +64,8 @@ const OFFSETS = [
 /** @typedef {typeof CONFIG.goods[number]} Good */
 /** @typedef {typeof CONFIG.buys[number]} BuyBack */
 /** @typedef {{ name: string, dim: string, x: number, y: number, z: number }} Spot */
-/** @typedef {{ name: string, eid?: string, at?: Vector3 }} Trader */
+/** @typedef {{ id: string, left: number }} Stock */
+/** @typedef {{ name: string, eid?: string, at?: Vector3, stock: Stock[] }} Trader */
 /**
  * @typedef {object} Visit
  * @property {number} v unique id (its start time)
@@ -72,7 +75,6 @@ const OFFSETS = [
  * @property {boolean} placed the spot's height is known
  * @property {Trader[]} traders
  * @property {string[] | undefined} llamas entity ids, once spawned
- * @property {{ id: string, left: number }[]} stock
  * @property {boolean} warned the "leaves soon" note was sent
  */
 
@@ -83,7 +85,7 @@ let ready = false;
 let spots = [];
 /** @type {Visit | undefined} */
 let visit;
-/** @type {Map<number, { missing: number, yaw?: number }>} trader index -> runtime state */
+/** @type {Map<number, { missing: number, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }>} trader index -> runtime state */
 const traderState = new Map();
 
 /** @param {unknown} v */
@@ -203,16 +205,24 @@ function load() {
   try {
     const raw = world.getDynamicProperty(PROP_VISIT);
     const v = typeof raw === "string" ? JSON.parse(raw) : undefined;
-    if (v && isNum(v.v) && isNum(v.until) && isSpot(v.spot) && Array.isArray(v.traders) && Array.isArray(v.stock)) {
+    if (v && isNum(v.v) && isNum(v.until) && isSpot(v.spot) && Array.isArray(v.traders)) {
+      /** @param {any} list @returns {Stock[]} */
+      const stockOf = (list) => (Array.isArray(list) ? list.filter((/** @type {any} */ s) => s && typeof s.id === "string" && isNum(s.left)) : []);
+      /** @type {Trader[]} */
+      const traders = v.traders
+        .filter((/** @type {any} */ t) => t && typeof t.name === "string")
+        .map((/** @type {any} */ t) => ({ name: t.name, eid: typeof t.eid === "string" ? t.eid : undefined, at: t.at, stock: stockOf(t.stock) }));
+      // Before 1.2.0 a visit had one stock list that every trader sold: deal it out between them.
+      const shared = stockOf(v.stock);
+      if (shared.length && traders.length && traders.every((t) => !t.stock.length)) shared.forEach((s, n) => traders[n % traders.length].stock.push(s));
       visit = {
         v: v.v,
         until: v.until,
         spot: v.spot,
         surface: v.surface === true,
         placed: v.placed !== false,
-        traders: v.traders.filter((/** @type {any} */ t) => t && typeof t.name === "string"),
+        traders,
         llamas: Array.isArray(v.llamas) ? v.llamas.filter((/** @type {any} */ x) => typeof x === "string") : undefined,
-        stock: v.stock.filter((/** @type {any} */ s) => s && typeof s.id === "string" && isNum(s.left)),
         warned: v.warned === true,
       };
     }
@@ -299,11 +309,24 @@ function makeable(g) {
   }
 }
 
-/** This visit's stock: `stockSize` goods at random. */
-function rollStock() {
-  const n = Math.max(1, Math.floor(Number(get("stockSize")) || 8));
+/**
+ * This visit's goods: `stockSize` for each of `traders` traders, picked at random so no two traders sell the same
+ * good (a good comes twice only when there are fewer goods than traders times `stockSize`).
+ * @param {number} traders @returns {Stock[][]}
+ */
+function rollStocks(traders) {
+  const n = Math.max(1, Math.floor(Number(get("stockSize")) || 5));
   const pool = CONFIG.goods.filter((g) => g.stock > 0 && makeable(g)).sort(() => Math.random() - 0.5);
-  return pool.slice(0, n).map((g) => ({ id: g.id, left: Math.floor(g.stock) }));
+  /** @type {Stock[][]} */
+  const lists = Array.from({ length: traders }, () => []);
+  if (!pool.length) return lists;
+  const each = Math.min(n, pool.length);
+  for (let k = 0; k < traders * each; k++) {
+    const g = pool[k % pool.length];
+    const list = lists[k % traders];
+    if (!list.some((s) => s.id === g.id)) list.push({ id: g.id, left: Math.floor(g.stock) });
+  }
+  return lists;
 }
 
 /** @param {Good} g */
@@ -345,16 +368,16 @@ function arrive(slot) {
     spot = { name: "world spawn", dim: OVERWORLD, x: Math.floor(s.x) + 0.5, y: s.y, z: Math.floor(s.z) + 0.5 };
     surface = true;
   }
-  const names = CONFIG.traders.length ? CONFIG.traders : ["Traveling Merchant"];
+  const names = (CONFIG.traders.length ? CONFIG.traders : ["Traveling Merchant"]).slice(0, OFFSETS.length);
+  const stocks = rollStocks(names.length);
   visit = {
     v: now,
     until: now + stayMs(),
     spot,
     surface,
     placed: !surface,
-    traders: names.slice(0, OFFSETS.length).map((name) => ({ name })),
+    traders: names.map((name, i) => ({ name, stock: stocks[i] })),
     llamas: undefined,
-    stock: rollStock(),
     warned: false,
   };
   traderState.clear();
@@ -413,16 +436,21 @@ function standable(dim, base) {
   return undefined;
 }
 
+/** The name above trader `i`'s head. @param {Visit} vis @param {number} i */
+const traderTag = (vis, i) => `§6${vis.traders[i].name}`;
+
 /** @param {Entity} entity @param {number} i @param {Visit} vis */
 function dressTrader(entity, i, vis) {
+  // A trader placed from its saved skin still carries the tags of the visit it was saved in.
+  for (const tag of entity.getTags()) if ((tag.startsWith(VISIT_TAG) && tag !== VISIT_TAG + vis.v) || (tag.startsWith(TRADER_TAG) && tag !== TRADER_TAG + i)) entity.removeTag(tag);
   for (const tag of [TAG, VISIT_TAG + vis.v, TRADER_TAG + i, NPC_TAG, OWNER_TAG]) if (!entity.hasTag(tag)) entity.addTag(tag);
-  const name = `§6${vis.traders[i].name}`;
-  if (entity.nameTag !== name) entity.nameTag = name;
+  const name = traderTag(vis, i);
+  if (entity.nameTag !== name && entity.nameTag !== `${name}§r`) entity.nameTag = name;
 }
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */
 function spawnTrader(vis, i, dim, at) {
-  const entity = dim.spawnEntity(NPC_TYPE, at);
+  const entity = fromSkin(vis, i, dim, at) ?? dim.spawnEntity(NPC_TYPE, at);
   dressTrader(entity, i, vis);
   vis.traders[i].eid = entity.id;
   saveVisit();
@@ -493,6 +521,94 @@ function auditAll() {
       console.warn(`[caravan] audit: ${e}`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Skins: the stable API can't read or set an NPC's skin, but a structure keeps the whole entity (as Townsfolk does).
+// Trader `i` is saved as `realm_caravan:<i>` (no blocks, just the NPC) 5 s, 30 s and 2 min after an operator opens
+// its NPC editor, and every later visit places it from there, skin and all, instead of a new default NPC.
+// ---------------------------------------------------------------------------
+
+const SKIN_PREFIX = "realm_caravan:";
+const SKIN_SAVE_AFTER = [100, 600, 2400]; // ticks after an operator opens the NPC editor (5 s, 30 s, 2 min)
+
+/**
+ * Saves `entity` as trader `i`'s skin. Not while any other entity but a player is within 2 blocks: it would be
+ * saved (and placed again) with it. @param {Entity} entity @param {number} i
+ */
+function saveSkin(entity, i) {
+  try {
+    if (!entity.isValid) return false;
+    const dim = entity.dimension;
+    const loc = entity.location;
+    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player")) return false;
+    const from = { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) };
+    const sm = world.structureManager;
+    if (sm.get(SKIN_PREFIX + i)) sm.delete(SKIN_PREFIX + i);
+    sm.createFromWorld(SKIN_PREFIX + i, dim, from, { ...from, y: from.y + 1 }, { includeBlocks: false, includeEntities: true, saveMode: StructureSaveMode.World });
+    return true;
+  } catch (e) {
+    console.warn(`[caravan] save skin ${i}: ${e}`);
+    return false;
+  }
+}
+
+/** After an operator opened the editor: saves the skin if this is still trader `i` of this visit. @param {Entity} entity @param {number} i */
+function skinAfterEdit(entity, i) {
+  try {
+    if (entity.isValid && visit && visit.traders[i]?.eid === entity.id) saveSkin(entity, i);
+  } catch (e) {
+    console.warn(`[caravan] skin ${i}: ${e}`);
+  }
+}
+
+/** Trader `i` placed from its saved skin at `at`, or undefined (none saved, or it didn't work). @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */
+function fromSkin(vis, i, dim, at) {
+  try {
+    if (!world.structureManager.get(SKIN_PREFIX + i)) return undefined;
+    const before = new Set(dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] }).map((e) => e.id));
+    world.structureManager.place(SKIN_PREFIX + i, dim, { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) }, { includeBlocks: false, includeEntities: true });
+    const fresh = dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG], location: at, maxDistance: 4 }).filter((e) => !before.has(e.id));
+    if (!fresh.length) return undefined;
+    for (const e of fresh.slice(1)) e.remove();
+    const entity = fresh[0];
+    vis.traders[i].eid = entity.id; // before its load event: the audit must see it as this visit's trader
+    entity.teleport(at);
+    return entity;
+  } catch (e) {
+    console.warn(`[caravan] place skin ${i}: ${e}`);
+    return undefined;
+  }
+}
+
+// The name above a trader's head: a player's game can show a minecraft:npc as "NPC" (its default name) although its
+// name was set, until the name changes again while they watch. So when a player comes near, the name is sent again
+// a moment later, switching between two forms that look the same (as Townsfolk does).
+const NAME_RANGE = 20; // players this close count as watching
+const RENAME_TICKS = [20, 60]; // resends after a player comes near: 1 s, then 3 s more
+
+/** Every loop: a player new within NAME_RANGE of a trader gets its name sent again. @param {Visit} vis */
+function watchNames(vis) {
+  vis.traders.forEach((tr, i) => {
+    const entity = entityById(tr.eid);
+    if (!entity) return;
+    let st = traderState.get(i);
+    if (!st) traderState.set(i, (st = { missing: 0 }));
+    const ids = new Set(entity.dimension.getPlayers({ location: entity.location, maxDistance: NAME_RANGE }).map((p) => p.id));
+    const seen = st.viewers;
+    if (!seen || [...ids].some((id) => !seen.has(id))) {
+      st.renameAt = system.currentTick + RENAME_TICKS[0];
+      st.renames = 0;
+    }
+    st.viewers = ids;
+    if (st.renameAt !== undefined && system.currentTick >= st.renameAt) {
+      const name = traderTag(vis, i);
+      entity.nameTag = entity.nameTag === name ? `${name}§r` : name;
+      const n = (st.renames ?? 0) + 1;
+      st.renames = n;
+      st.renameAt = n < RENAME_TICKS.length ? system.currentTick + RENAME_TICKS[n] : undefined;
+    }
+  });
 }
 
 /** Places the caravan once its spot is loaded, and brings back missing traders. Runs every 2 s during a visit. @param {Visit} vis */
@@ -640,6 +756,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     try {
       if (loops % KEEP_EVERY === 0) upkeep();
       else if (visit) faceTraders(visit);
+      if (visit) watchNames(visit);
     } catch (e) {
       console.warn(`[caravan] ${e}`);
     }
@@ -702,7 +819,12 @@ world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
     } catch {
       creative = false;
     }
-    if (player.isSneaking && creative && isOp(player)) return; // the game's NPC editor
+    if (player.isSneaking && creative && isOp(player)) {
+      // The game's NPC editor, to pick a skin: snapshot it a few times while the operator may still be choosing.
+      const i = traderIndex(target);
+      if (i !== undefined) for (const ticks of SKIN_SAVE_AFTER) system.runTimeout(() => skinAfterEdit(target, i), ticks);
+      return;
+    }
     ev.cancel = true;
     system.run(() => {
       try {
@@ -733,7 +855,8 @@ async function shop(player, i) {
     const vis = visit;
     if (!vis || !player.isValid) return player.isValid ? player.sendMessage("§7The caravan has left.") : undefined;
     const trader = vis.traders[i]?.name ?? "Merchant";
-    const items = vis.stock.map((s) => ({ s, g: goods.get(s.id) })).filter((x) => x.g);
+    const stock = vis.traders[i]?.stock ?? [];
+    const items = stock.map((s) => ({ s, g: goods.get(s.id) })).filter((x) => x.g);
     const form = new ActionFormData()
       .title(trader)
       .body(`§e${trader}:§r "${greeting}"\n\nYou have §6${crownsText(crownsOf(player))}§r. The caravan leaves in ${duration(vis.until - Date.now())}.`);
@@ -752,14 +875,14 @@ async function shop(player, i) {
     }
     const chosen = items[res.selection];
     if (!chosen) return; // Goodbye
-    await buy(player, vis, chosen.s.id, trader);
+    await buy(player, vis, stock, chosen.s.id, trader);
   }
 }
 
-/** @param {Player} player @param {Visit} vis @param {string} id @param {string} trader */
-async function buy(player, vis, id, trader) {
+/** @param {Player} player @param {Visit} vis @param {Stock[]} stock this trader's goods @param {string} id @param {string} trader */
+async function buy(player, vis, stock, id, trader) {
   const g = goods.get(id);
-  const entry = vis.stock.find((s) => s.id === id);
+  const entry = stock.find((s) => s.id === id);
   if (!g || !entry) return;
   if (entry.left <= 0) return player.sendMessage(`§c${goodName(g)} is sold out.`);
   const price = Math.max(0, Math.floor(g.price));
