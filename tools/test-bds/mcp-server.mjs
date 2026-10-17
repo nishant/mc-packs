@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { HERE, IS_WIN, releasePortPair } from "./lib/server.mjs";
+import { HERE, IS_WIN, releasePortPair, isPidAlive, getProcessBirthId } from "./lib/server.mjs";
 
 export const ALLOWLISTED_STEPS = /** @type {const} */ ([
   "overview",
@@ -172,57 +172,64 @@ function extractScenarioMsg(rawLine) {
   return null;
 }
 
+function consumeQaLogLine(state, rawLine, lineNo, maxEvents = Infinity) {
+  if (!rawLine) return;
+  const msg = extractScenarioMsg(rawLine);
+  if (msg) {
+    const m = /^(QA_FIXTURE_READY|QA_CLIENT_JOINED|QA_CLIENT_JOIN_ERROR|QA_STEP_APPLIED|QA_STEP_ERROR)\s+(\{.*\})$/.exec(msg);
+    if (m) {
+      try {
+        const type = m[1];
+        const data = JSON.parse(m[2]);
+        if (type === "QA_FIXTURE_READY") {
+          state.fixtureManifest = data;
+        } else if (type === "QA_CLIENT_JOINED" && data.player) {
+          state.joinedPlayers.set(data.player, data);
+        } else if (type === "QA_STEP_APPLIED") {
+          state.lastStepAck = { ok: true, ...data };
+        } else if (type === "QA_STEP_ERROR") {
+          state.lastStepAck = { ok: false, ...data };
+        }
+        state.events.push({ type, line: lineNo, data });
+        if (state.events.length > maxEvents) state.events.shift();
+        return;
+      } catch {}
+    }
+  }
+  if (/\[Scripting\]\[error\]/i.test(rawLine) || /\[ContentLog\]\[error\]/i.test(rawLine) || /\bERROR\]\s*\[Scripting\]/i.test(rawLine)) {
+    state.events.push({ type: "SERVER_ERROR", line: lineNo, text: redactLogLine(rawLine) });
+    if (state.events.length > maxEvents) state.events.shift();
+    return;
+  }
+  const discMatch = /Player disconnected:\s*([^,\r\n]+)/i.exec(rawLine);
+  if (discMatch) {
+    const leftName = discMatch[1].trim();
+    if (leftName) state.joinedPlayers.delete(leftName);
+  }
+}
+
 /**
  * Parses structured QA events from a harness log file.
  * @param {string} logText
  */
 export function parseQaLogEvents(logText) {
   const lines = logText.split(/\r?\n/);
-  const events = [];
-  let fixtureManifest = null;
-  const joinedPlayers = new Map();
-  let lastStepAck = null;
+  const state = {
+    events: [],
+    fixtureManifest: null,
+    joinedPlayers: new Map(),
+    lastStepAck: null,
+  };
 
   for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i];
-    if (!rawLine) continue;
-    const msg = extractScenarioMsg(rawLine);
-    if (msg) {
-      const m = /^(QA_FIXTURE_READY|QA_CLIENT_JOINED|QA_CLIENT_JOIN_ERROR|QA_STEP_APPLIED|QA_STEP_ERROR)\s+(\{.*\})$/.exec(msg);
-      if (m) {
-        try {
-          const type = m[1];
-          const data = JSON.parse(m[2]);
-          if (type === "QA_FIXTURE_READY") {
-            fixtureManifest = data;
-          } else if (type === "QA_CLIENT_JOINED" && data.player) {
-            joinedPlayers.set(data.player, data);
-          } else if (type === "QA_STEP_APPLIED") {
-            lastStepAck = { ok: true, ...data };
-          } else if (type === "QA_STEP_ERROR") {
-            lastStepAck = { ok: false, ...data };
-          }
-          events.push({ type, line: i + 1, data });
-          continue;
-        } catch {}
-      }
-    }
-    if (/\[Scripting\]\[error\]/i.test(rawLine) || /\[ContentLog\]\[error\]/i.test(rawLine) || /\bERROR\]\s*\[Scripting\]/i.test(rawLine)) {
-      events.push({ type: "SERVER_ERROR", line: i + 1, text: redactLogLine(rawLine) });
-      continue;
-    }
-    const discMatch = /Player disconnected:\s*([^,\r\n]+)/i.exec(rawLine);
-    if (discMatch) {
-      const leftName = discMatch[1].trim();
-      if (leftName) joinedPlayers.delete(leftName);
-    }
+    consumeQaLogLine(state, lines[i], i + 1);
   }
 
   return {
-    events,
-    fixtureManifest,
-    joinedPlayers: [...joinedPlayers.values()],
-    lastStepAck,
+    events: state.events,
+    fixtureManifest: state.fixtureManifest,
+    joinedPlayers: [...state.joinedPlayers.values()],
+    lastStepAck: state.lastStepAck,
   };
 }
 
@@ -231,6 +238,7 @@ export class BedrockQaMcpController {
    * @param {{
    *   packsDir?: string,
    *   logsDir?: string,
+   *   getProcessBirthId?: (pid: number) => string | null,
    *   spawnRunner?: (args: string[], opts: { logFile: string, evidenceFile: string, commandInboxFile: string }) => { pid: number, exitCode: number | null, kill: () => void, on: (ev: string, fn: (...a: any[]) => void) => void }
    * }} [options]
    */
@@ -239,12 +247,14 @@ export class BedrockQaMcpController {
     this.packsDir = path.resolve(options.packsDir || defaultPacks);
     this.logsDir = path.resolve(options.logsDir || process.env.BDS_HARNESS_LOGS || path.join(HERE, "logs"));
     this.spawnRunner = options.spawnRunner || null;
+    this.getProcessBirthId = options.getProcessBirthId || getProcessBirthId;
     /** @type {null | {
      *   runId: string,
      *   startedAt: number,
      *   proc: any,
      *   runnerPid: number | null,
      *   bdsPid: number | null,
+     *   bdsBirthId?: string | null,
      *   port: number | null,
      *   portV6: number | null,
      *   serverDir: string | null,
@@ -253,8 +263,18 @@ export class BedrockQaMcpController {
      *   commandInboxFile: string,
      *   status: string,
      *   exitCode: number | null,
+     *   terminated?: boolean,
      *   stepSeq: number,
      *   lastStepAck: any,
+     *   logState?: {
+     *     offset: number,
+     *     lineNo: number,
+     *     events: any[],
+     *     fixtureManifest: any,
+     *     joinedPlayers: Map<string, any>,
+     *     lastStepAck: any,
+     *     tailLines: string[],
+     *   },
      * }} */
     this.currentRun = null;
   }
@@ -279,33 +299,97 @@ export class BedrockQaMcpController {
     }
   }
 
-  _readLog(run = this.currentRun, maxTailBytes = 256 * 1024) {
-    if (!run || !fs.existsSync(run.logFile)) return "";
+  _syncLogState(run = this.currentRun) {
+    if (!run) {
+      return { events: [], fixtureManifest: null, joinedPlayers: [], lastStepAck: null, tailLines: [] };
+    }
+    if (!run.logState) {
+      run.logState = {
+        offset: 0,
+        lineNo: 0,
+        events: [],
+        fixtureManifest: null,
+        joinedPlayers: new Map(),
+        lastStepAck: null,
+        tailLines: [],
+      };
+    }
+    const stState = run.logState;
+    if (!fs.existsSync(run.logFile)) {
+      return {
+        events: stState.events,
+        fixtureManifest: stState.fixtureManifest,
+        joinedPlayers: [...stState.joinedPlayers.values()],
+        lastStepAck: stState.lastStepAck,
+        tailLines: stState.tailLines,
+      };
+    }
     let fd = null;
     try {
       const st = fs.statSync(run.logFile);
-      const headBytes = 64 * 1024;
-      if (st.size <= headBytes + maxTailBytes) {
-        return fs.readFileSync(run.logFile, "utf8");
+      if (st.size < stState.offset) {
+        stState.offset = 0;
+        stState.lineNo = 0;
+        stState.events = [];
+        stState.fixtureManifest = null;
+        stState.joinedPlayers.clear();
+        stState.lastStepAck = null;
+        stState.tailLines = [];
       }
-      fd = fs.openSync(run.logFile, "r");
-      const headBuf = Buffer.allocUnsafe(headBytes);
-      const headRead = fs.readSync(fd, headBuf, 0, headBytes, 0);
-      const tailBuf = Buffer.allocUnsafe(maxTailBytes);
-      const tailOffset = Math.max(headRead, st.size - maxTailBytes);
-      const tailRead = fs.readSync(fd, tailBuf, 0, maxTailBytes, tailOffset);
-      return (
-        headBuf.subarray(0, headRead).toString("utf8") +
-        "\n" +
-        tailBuf.subarray(0, tailRead).toString("utf8")
-      );
-    } catch {
-      return "";
-    } finally {
+      if (st.size > stState.offset) {
+        fd = fs.openSync(run.logFile, "r");
+        const chunkBuf = Buffer.allocUnsafe(64 * 1024);
+        while (stState.offset < st.size) {
+          const toRead = Math.min(chunkBuf.length, st.size - stState.offset);
+          const bytesRead = fs.readSync(fd, chunkBuf, 0, toRead, stState.offset);
+          if (bytesRead <= 0) break;
+          const slice = chunkBuf.subarray(0, bytesRead);
+          const lastNl = slice.lastIndexOf(0x0a); // '\n'
+          if (lastNl < 0) {
+            if (stState.offset + bytesRead < st.size) {
+              // Single line longer than 64KB without newline: consume chunk to prevent stall
+              const text = slice.toString("utf8").replace(/\r$/, "");
+              stState.offset += bytesRead;
+              stState.lineNo += 1;
+              if (text) {
+                stState.tailLines.push(text);
+                if (stState.tailLines.length > 200) stState.tailLines.shift();
+              }
+              consumeQaLogLine(stState, text, stState.lineNo, 500);
+            }
+            break;
+          }
+          const completeSlice = slice.subarray(0, lastNl + 1);
+          stState.offset += completeSlice.length;
+          const lines = completeSlice.toString("utf8").split("\n");
+          // Last element after split("\n") on buffer ending in "\n" is ""
+          lines.pop();
+          for (const raw of lines) {
+            const clean = raw.replace(/\r$/, "");
+            stState.lineNo += 1;
+            if (clean) {
+              stState.tailLines.push(clean);
+              if (stState.tailLines.length > 200) stState.tailLines.shift();
+            }
+            consumeQaLogLine(stState, clean, stState.lineNo, 500);
+          }
+          if (lastNl + 1 < bytesRead && stState.offset >= st.size) {
+            break;
+          }
+        }
+      }
+    } catch {} finally {
       if (fd !== null) {
         try { fs.closeSync(fd); } catch {}
       }
     }
+    return {
+      events: stState.events,
+      fixtureManifest: stState.fixtureManifest,
+      joinedPlayers: [...stState.joinedPlayers.values()],
+      lastStepAck: stState.lastStepAck,
+      tailLines: stState.tailLines,
+    };
   }
 
   _deriveGates(run, ev) {
@@ -313,7 +397,8 @@ export class BedrockQaMcpController {
     if (!run || !ev || !ev.gates || typeof ev.gates !== "object") {
       return unverified;
     }
-    if (!this._isActiveRun(run) && ev.status !== "ready_waiting_for_client" && ev.status !== "completed") {
+    const completedOk = ev.status === "completed" && (ev.exitCode === 0 || ev.verdict === "PASS");
+    if (!this._isActiveRun(run) && !completedOk) {
       return unverified;
     }
     return {
@@ -331,7 +416,12 @@ export class BedrockQaMcpController {
     if (!fs.existsSync(idFile)) return false;
     try {
       const idData = JSON.parse(fs.readFileSync(idFile, "utf8"));
-      return idData.bdsPid === run.bdsPid && idData.runnerPid === run.runnerPid && idData.status !== "stopped";
+      if (idData.status === "stopped") return false;
+      if (idData.bdsPid !== run.bdsPid || idData.runnerPid !== run.runnerPid) return false;
+      const expectedBirthId = run.bdsBirthId || idData.bdsBirthId;
+      if (typeof expectedBirthId !== "string" || !expectedBirthId) return false;
+      const actualBirthId = this.getProcessBirthId(run.bdsPid);
+      return actualBirthId !== null && actualBirthId === expectedBirthId;
     } catch {
       return false;
     }
@@ -432,6 +522,7 @@ export class BedrockQaMcpController {
       proc,
       runnerPid: proc.pid ?? null,
       bdsPid: null,
+      bdsBirthId: null,
       port: params.port ?? null,
       portV6: params.port !== undefined ? params.port + 1 : null,
       serverDir: null,
@@ -471,7 +562,18 @@ export class BedrockQaMcpController {
             throw new Error(`Staged pack verification missing required packs: ${missingStaged.join(", ")}`);
           }
           run.status = "ready_waiting_for_client";
-          const parsed = parseQaLogEvents(this._readLog(run));
+          if (!run.bdsBirthId && isOwnedTempServerDir(run.serverDir)) {
+            try {
+              const idFile = path.join(run.serverDir, "harness-process.json");
+              if (fs.existsSync(idFile)) {
+                const idData = JSON.parse(fs.readFileSync(idFile, "utf8"));
+                if (typeof idData.bdsBirthId === "string" && idData.bdsBirthId) {
+                  run.bdsBirthId = idData.bdsBirthId;
+                }
+              }
+            } catch {}
+          }
+          const parsed = this._syncLogState(run);
           return {
             runId: run.runId,
             status: run.status,
@@ -545,7 +647,7 @@ export class BedrockQaMcpController {
     }
     const active = this._isActiveRun(run);
     const ev = this._readEvidence(run);
-    const parsed = parseQaLogEvents(this._readLog(run));
+    const parsed = this._syncLogState(run);
     if (ev?.bds) {
       run.bdsPid = ev.bds.bdsPid ?? run.bdsPid;
       run.port = ev.bds.port ?? run.port;
@@ -711,7 +813,7 @@ export class BedrockQaMcpController {
       liveSnapshot = ack.results[0]?.detail ?? null;
     }
     const ev = this._readEvidence(run);
-    const parsed = parseQaLogEvents(this._readLog(run));
+    const parsed = this._syncLogState(run);
     return {
       runId: run.runId,
       active: this._isActiveRun(run),
@@ -734,8 +836,7 @@ export class BedrockQaMcpController {
     if (!run) {
       throw new Error("No owned BDS QA run has been started in this MCP session.");
     }
-    const rawLog = this._readLog(run);
-    const parsed = parseQaLogEvents(rawLog);
+    const parsed = this._syncLogState(run);
     let filteredEvents = parsed.events;
     if (kind === "errors_only") {
       filteredEvents = parsed.events.filter((e) => e.type === "QA_STEP_ERROR" || e.type === "QA_CLIENT_JOIN_ERROR" || e.type === "SERVER_ERROR");
@@ -743,8 +844,7 @@ export class BedrockQaMcpController {
       filteredEvents = parsed.events.filter((e) => e.type.startsWith("QA_") || e.type === "SERVER_ERROR");
     }
 
-    const allLines = rawLog.split(/\r?\n/).filter(Boolean);
-    const sliced = allLines.slice(-Math.max(1, Math.min(200, tailLines)));
+    const sliced = parsed.tailLines.slice(-Math.max(1, Math.min(200, tailLines)));
     const redactedTail = sliced.map((l) => redactLogLine(l));
 
     return {

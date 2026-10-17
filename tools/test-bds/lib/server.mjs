@@ -120,13 +120,45 @@ function udpFree(port, host = "0.0.0.0") {
   });
 }
 
-function isPidAlive(pid) {
+export function isPidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (e) {
-    return e && e.code === "EPERM";
+    return Boolean(e && e.code === "EPERM");
+  }
+}
+
+/**
+ * Returns an exact OS-level process creation identity (`win32:<filetimeUtc>` or `linux:<starttimeTicks>`)
+ * for `pid`, or `null` if the process is not alive or its creation identity cannot be read within the bounded timeout.
+ */
+export function getProcessBirthId(pid) {
+  if (!Number.isInteger(pid) || pid <= 0 || !isPidAlive(pid)) return null;
+  if (IS_WIN) {
+    try {
+      const r = spawnSync(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-Command", `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToFileTimeUtc()`],
+        { encoding: "utf8", timeout: 2500, windowsHide: true }
+      );
+      if (r.status !== 0) return null;
+      const val = (r.stdout || "").trim();
+      return /^\d+$/.test(val) ? `win32:${val}` : null;
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    const closeParen = stat.lastIndexOf(")");
+    if (closeParen < 0) return null;
+    const fields = stat.slice(closeParen + 1).trim().split(/\s+/);
+    const startTimeTicks = fields[19];
+    return startTimeTicks && /^\d+$/.test(startTimeTicks) ? `linux:${startTimeTicks}` : null;
+  } catch {
+    return null;
   }
 }
 
@@ -214,7 +246,35 @@ export async function freePort() {
 
 export function writeProcessIdentity(dir, info) {
   const file = path.join(dir, "harness-process.json");
-  fs.writeFileSync(file, JSON.stringify({ pid: process.pid, runnerPid: process.pid, updatedAt: new Date().toISOString(), ...info }, null, 2));
+  let prev = null;
+  if (fs.existsSync(file)) {
+    try {
+      prev = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {}
+  }
+  const targetBdsPid = info?.bdsPid ?? prev?.bdsPid ?? null;
+  const bdsBirthId =
+    info?.bdsBirthId !== undefined
+      ? info.bdsBirthId
+      : prev && prev.bdsPid === targetBdsPid && prev.bdsBirthId
+        ? prev.bdsBirthId
+        : Number.isInteger(targetBdsPid) && targetBdsPid > 0
+          ? getProcessBirthId(targetBdsPid)
+          : null;
+  fs.writeFileSync(
+    file,
+    JSON.stringify(
+      {
+        pid: process.pid,
+        runnerPid: process.pid,
+        updatedAt: new Date().toISOString(),
+        ...info,
+        bdsBirthId,
+      },
+      null,
+      2
+    )
+  );
   return file;
 }
 

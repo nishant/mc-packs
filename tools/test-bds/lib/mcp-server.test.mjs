@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -14,7 +15,7 @@ import {
   redactLogLine,
   parseQaLogEvents,
 } from "../mcp-server.mjs";
-import { HERE } from "./server.mjs";
+import { HERE, writeProcessIdentity } from "./server.mjs";
 
 async function connectInMemoryMcp(controllerOptions = {}) {
   const controller = new BedrockQaMcpController(controllerOptions);
@@ -420,6 +421,167 @@ test("review regressions: PID ownership/graceful stop, retainOnFailure + serverD
   const secondStop = await guardClient.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: false } });
   assert.ok(!secondStop.isError);
   assert.equal(activeKillCount, 1, "repeated bds_qa_stop must not re-signal already terminated process");
+
+  // 4. Crashed runner with retained bds-run-* + matching harness-process.json:
+  //    (a) Dead runner while ev.status === "ready_waiting_for_client" must report unverified gates (not verified).
+  //    (b) Recycled PID (mismatched bdsBirthId) on first stop after crash must be REFUSED (must not kill process.pid).
+  //    (c) Live owned orphan process with matching OS birth identity must be stopped cleanly and its bds-run-* dir removed.
+  //    (d) Large log (>370 KB) must preserve middle QA_CLIENT_JOINED + true line index across incremental reads.
+  const crashedServerDir = fs.mkdtempSync(path.join(os.tmpdir(), "bds-run-crashed-"));
+  const recycledServerDir = fs.mkdtempSync(path.join(os.tmpdir(), "bds-run-recycled-"));
+  const orphanChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true });
+  t.after(() => {
+    try { orphanChild.kill(); } catch {}
+    fs.rmSync(crashedServerDir, { recursive: true, force: true });
+    fs.rmSync(recycledServerDir, { recursive: true, force: true });
+  });
+
+  // 4a + 4b + 4d: Runner crashes after writing >370KB log (with middle join) and harness-process.json with recycled PID (process.pid, mismatched birthId)
+  let crashedProcRef = null;
+  const { client: recycledClient } = await connectInMemoryMcp({
+    logsDir: tmpLogs,
+    spawnRunner: (_cliArgs, { logFile, evidenceFile }) => {
+      const proc = new EventEmitter();
+      proc.pid = 77702;
+      proc.exitCode = null;
+      proc.stderr = new EventEmitter();
+      proc.kill = () => { proc.exitCode = 0; proc.emit("exit", 0); };
+      crashedProcRef = proc;
+
+      // Build >370KB log: line 1 = QA_FIXTURE_READY, line 2 = old QA_STEP_APPLIED, lines 3..1001 = 70KB filler, line 1002 = QA_CLIENT_JOINED MiddleHero, lines 1003..5002 = 300KB filler
+      const filler70k = Array.from({ length: 999 }, (_, i) => `[2026-10-17 18:00:00:000 INFO] filler head line ${i} ${"x".repeat(55)}`).join("\n");
+      const filler300k = Array.from({ length: 4000 }, (_, i) => `[2026-10-17 18:00:01:000 INFO] filler tail line ${i} ${"y".repeat(60)}`).join("\n");
+      fs.writeFileSync(
+        logFile,
+        `[2026-10-17 18:00:00:000 WARN] [Scripting] HARNESS {"type":"log","msg":"QA_FIXTURE_READY {\\"fixtureReady\\":true}"}\n` +
+          `[2026-10-17 18:00:00:100 WARN] [Scripting] HARNESS {"type":"log","msg":"QA_STEP_APPLIED {\\"step\\":\\"npc_5m\\",\\"player\\":\\"QAFixtureBot\\",\\"correlationId\\":\\"req_1_old\\",\\"targetIndex\\":0,\\"targetCount\\":1}"}\n` +
+          filler70k + "\n" +
+          `[2026-10-17 18:00:00:500 WARN] [Scripting] HARNESS {"type":"log","msg":"QA_CLIENT_JOINED {\\"player\\":\\"MiddleHero\\",\\"isSimulated\\":false}"}\n` +
+          filler300k + "\n",
+        "utf8"
+      );
+      fs.writeFileSync(
+        path.join(recycledServerDir, "harness-process.json"),
+        JSON.stringify({
+          runnerPid: 77702,
+          bdsPid: process.pid,
+          bdsBirthId: "win32:999999999999999999",
+          status: "ready_waiting_for_client",
+        }),
+        "utf8"
+      );
+      fs.writeFileSync(
+        evidenceFile,
+        JSON.stringify({
+          status: "ready_waiting_for_client",
+          verdict: "READY_WAITING_FOR_CLIENT",
+          exitCode: null,
+          git: { commit: "deadbeef", branch: "test", dirty: false },
+          bds: { runnerPid: 77702, bdsPid: process.pid, port: 44100, portV6: 44101, serverDir: recycledServerDir },
+          stagedPacks: [
+            { folder: "map_bp", verified: true },
+            { folder: "stash_bp", verified: true },
+            { folder: "npc_bp", verified: true },
+            { folder: "hud_rp", verified: true },
+            { folder: "build_rp", verified: true },
+          ],
+          gates: { server: "verified", network: "nethernet_listening", visual: "unverified" },
+        }),
+        "utf8"
+      );
+      return proc;
+    },
+  });
+
+  const recStart = await recycledClient.callTool({ name: "bds_qa_start", arguments: { readyDeadlineMs: 2000 } });
+  assert.ok(!recStart.isError, recStart.content[0].text);
+
+  // Check >370KB log preserved middle QA_CLIENT_JOINED and its exact line number (1002)
+  const bigStatus = JSON.parse((await recycledClient.callTool({ name: "bds_qa_status", arguments: {} })).content[0].text);
+  assert.equal(bigStatus.joinedPlayers.length, 1, "middle QA_CLIENT_JOINED in >370KB log must not be lost");
+  assert.equal(bigStatus.joinedPlayers[0].player, "MiddleHero");
+  const bigEvents = JSON.parse((await recycledClient.callTool({ name: "bds_qa_events", arguments: { tailLines: 10 } })).content[0].text);
+  const joinEv = bigEvents.events.find((e) => e.type === "QA_CLIENT_JOINED");
+  assert.ok(joinEv, "QA_CLIENT_JOINED event must be retained in parsed events across >370KB log");
+  assert.equal(joinEv.line, 1002, "QA_CLIENT_JOINED line index must be exact (1002), not shifted by head+tail splice");
+
+  // Old ACK at line 2 must NOT satisfy a new step request
+  const stepNoReplay = await recycledClient.callTool({ name: "bds_qa_step", arguments: { step: "npc_5m", deadlineMs: 120 } });
+  assert.equal(stepNoReplay.isError, true, "old ACK in >370KB log must not be replayed for new step");
+
+  // Simulate runner crash while evidence still says ready_waiting_for_client
+  crashedProcRef.exitCode = 1;
+  crashedProcRef.emit("exit", 1);
+
+  const crashedStatus = JSON.parse((await recycledClient.callTool({ name: "bds_qa_status", arguments: {} })).content[0].text);
+  assert.equal(crashedStatus.active, false);
+  assert.equal(crashedStatus.gates.server, "unverified", "dead runner with ready_waiting_for_client evidence must report server=unverified");
+  assert.equal(crashedStatus.gates.network, "unverified", "dead runner with ready_waiting_for_client evidence must report network=unverified");
+
+  // First stop after crash with recycled PID (process.pid with wrong bdsBirthId): must NOT kill process.pid!
+  const recStop = await recycledClient.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: false, retainServerDir: false } });
+  assert.ok(!recStop.isError, recStop.content[0].text);
+  assert.equal(fs.existsSync(recycledServerDir), false, "owned bds-run-* dir should still be cleaned up when retainServerDir=false");
+
+  // 4c: Runner crashes leaving actual owned orphan child process with matching OS birth identity in bds-run-crashed-*
+  let orphanRunnerRef = null;
+  const { client: orphanClient } = await connectInMemoryMcp({
+    logsDir: tmpLogs,
+    spawnRunner: (_cliArgs, { logFile, evidenceFile }) => {
+      const proc = new EventEmitter();
+      proc.pid = 77703;
+      proc.exitCode = null;
+      proc.stderr = new EventEmitter();
+      proc.kill = () => { proc.exitCode = 0; proc.emit("exit", 0); };
+      orphanRunnerRef = proc;
+
+      fs.writeFileSync(
+        logFile,
+        `[2026-10-17 18:00:00:000 WARN] [Scripting] HARNESS {"type":"log","msg":"QA_FIXTURE_READY {\\"fixtureReady\\":true}"}\n`,
+        "utf8"
+      );
+      writeProcessIdentity(crashedServerDir, {
+        runnerPid: 77703,
+        bdsPid: orphanChild.pid,
+        status: "ready_waiting_for_client",
+      });
+      fs.writeFileSync(
+        evidenceFile,
+        JSON.stringify({
+          status: "ready_waiting_for_client",
+          verdict: "READY_WAITING_FOR_CLIENT",
+          exitCode: null,
+          git: { commit: "deadbeef", branch: "test", dirty: false },
+          bds: { runnerPid: 77703, bdsPid: orphanChild.pid, port: 44102, portV6: 44103, serverDir: crashedServerDir },
+          stagedPacks: [
+            { folder: "map_bp", verified: true },
+            { folder: "stash_bp", verified: true },
+            { folder: "npc_bp", verified: true },
+            { folder: "hud_rp", verified: true },
+            { folder: "build_rp", verified: true },
+          ],
+          gates: { server: "verified", network: "nethernet_listening", visual: "unverified" },
+        }),
+        "utf8"
+      );
+      return proc;
+    },
+  });
+
+  const orphStart = await orphanClient.callTool({ name: "bds_qa_start", arguments: { readyDeadlineMs: 2000 } });
+  assert.ok(!orphStart.isError, orphStart.content[0].text);
+  orphanRunnerRef.exitCode = 1;
+  orphanRunnerRef.emit("exit", 1);
+
+  const orphStop = await orphanClient.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: false, retainServerDir: false } });
+  assert.ok(!orphStop.isError, orphStop.content[0].text);
+  assert.equal(fs.existsSync(crashedServerDir), false, "crashed bds-run-* dir must be cleaned up on stop(retainServerDir=false)");
+  let orphanStillAlive = false;
+  try {
+    process.kill(orphanChild.pid, 0);
+    orphanStillAlive = true;
+  } catch {}
+  assert.equal(orphanStillAlive, false, "verified owned orphan bdsPid with matching OS birth identity must be terminated by stop()");
 });
 
 test("live stdio MCP server starts private BDS fixture, executes correlated steps, reads live state, and stops cleanly", async (t) => {
