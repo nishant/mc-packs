@@ -1,4 +1,4 @@
-// Expansive Inventory: big pages (saved in chunks), and shrinking an operator's pages keeps every item.
+// Expansive Inventory: 24 full native stacks, and shrinking an operator's pages keeps every item.
 // Run: node tools/test-bds/run.mjs --quiet --only stash_bp --scenario tools/test-bds/examples/stash-pages-shrink.js
 export default async function (t) {
   const mc = t.mc;
@@ -13,8 +13,14 @@ export default async function (t) {
     await t.waitUntil(() => pageNow() === page, { timeout: 60, message: `on page ${page}` });
   };
   await t.waitUntil(() => inv.getItem(17)?.typeId === "custom:inv_next", { timeout: 100, message: "buttons placed" });
+  const opening = t.waitForm(p);
+  t.cmd(p, "/realm:inv");
+  (await opening).answer("Inventory settings");
+  const settings = await t.waitForm(p);
+  settings.answer({ "Auto-store pickups": false });
+  await t.wait(4);
 
-  // 1. 24 heavy stacks (long names and lore) force the saved page into several chunks
+  // 1. Every slot has substantial metadata; disable auto-store to isolate full-page switching.
   const heavy = (i) => {
     const it = mk("minecraft:iron_sword");
     it.nameTag = `Blade ${i} ` + "n".repeat(100);
@@ -65,4 +71,15 @@ export default async function (t) {
   await t.waitUntil(() => inv.getItem(17)?.nameTag?.includes("/5"), { timeout: 80, message: "5 pages again" });
   // Out of range is refused
   t.assert(!t.cmd(p, "/realm:inv_pages 99").ok, "99 pages refused");
+  const disabling = t.waitForm(p);
+  t.cmd(p, "/realm:inv");
+  (await disabling).answer("Use normal inventory");
+  await t.waitUntil(() => inv.getItem(13)?.typeId !== "custom:inv_menu", { timeout: 80, message: "normal inventory has no buttons" });
+  let diamonds = 0;
+  for (let s = 0; s < inv.size; s++) if (inv.getItem(s)?.typeId === "minecraft:diamond") diamonds += inv.getItem(s).amount;
+  t.assert(diamonds === 3, "disabling extra pages returns native saved items exactly once");
+  const enabling = t.waitForm(p);
+  t.cmd(p, "/realm:inv");
+  (await enabling).answer("Enable Expansive Inventory");
+  await t.waitUntil(() => inv.getItem(13)?.nameTag?.includes("Page 1/5"), { timeout: 80, message: "extra pages re-enabled" });
 }

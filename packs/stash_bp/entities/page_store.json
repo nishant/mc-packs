@@ -1,0 +1,22 @@
+{
+  "format_version": "1.21.40",
+  "minecraft:entity": {
+    "description": {
+      "identifier": "realm:stash_page_store",
+      "is_spawnable": false,
+      "is_summonable": true,
+      "is_experimental": false
+    },
+    "components": {
+      "minecraft:type_family": { "family": ["realm_stash_storage", "inanimate"] },
+      "minecraft:collision_box": { "width": 0, "height": 0 },
+      "minecraft:custom_hit_test": { "hitboxes": [{ "pivot": [0, 0, 0], "width": 0, "height": 0 }] },
+      "minecraft:inventory": { "inventory_size": 36, "container_type": "inventory", "private": true, "can_be_siphoned_from": false },
+      "minecraft:physics": { "has_gravity": false, "has_collision": false },
+      "minecraft:pushable": { "is_pushable": false, "is_pushable_by_piston": false },
+      "minecraft:damage_sensor": { "triggers": { "cause": "all", "deals_damage": "no" } },
+      "minecraft:fire_immune": {},
+      "minecraft:persistent": {}
+    }
+  }
+}

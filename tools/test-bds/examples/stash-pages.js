@@ -37,8 +37,8 @@ export default async function (t) {
   t.assert(inv.getItem(17).nameTag.includes("Page 3/5"), "next button now points at page 3");
   t.assert(inv.getItem(13).nameTag.includes("Page 2/5"), "menu button shows page 2");
   t.assert(!inv.getItem(10) && !inv.getItem(11), "page 2 starts empty");
-  t.assert(inv.getItem(12)?.typeId === "minecraft:white_shulker_box", "shulker box stays with the player");
-  t.assert(inv.getItem(14)?.typeId === "minecraft:potion", "potion stays with the player");
+  t.assert(!inv.getItem(12), "shulker box belongs to page 1");
+  t.assert(!inv.getItem(14), "potion belongs to page 1");
   t.assert(inv.getItem(0)?.typeId === "minecraft:apple", "hotbar untouched");
 
   // 4. Back to page 1 with the prev button: everything returns exactly

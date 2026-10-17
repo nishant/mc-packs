@@ -1,14 +1,12 @@
 // Expansive Inventory: extra pages of the main inventory (slots 9-35), switched with three buttons that
 // sit inside the inventory grid, with the menu from /realm:inv, and with items auto-stored when a page fills.
 //
-// The active page lives in the player's real inventory. Every other page is saved in the player's dynamic
-// properties (`stash:page:<n>`, split into `stash:page:<n>:<k>` when it is large) as one JSON record per
-// stack. Nothing is ever cleared before its copy is saved and read back. An item that can't be copied exactly
-// (shulker boxes, bundles, potions, banners, maps, fireworks, trimmed armor...) is parked as an ItemStack clone
-// in memory while its page isn't showing, and put back when the page is opened again.
+// The active page lives in the real inventory. Inactive pages are native World structure snapshots;
+// the player holds only their committed index. Old JSON pages are read once and migrated on use.
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, setFor } from "./settings.js";
+import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -29,11 +27,7 @@ const PAGE_SIZE = STORAGE_SLOTS.length;
 
 const MAX_PAGES = 25;
 const PAGE_PROP = "stash:page:";
-const CUR_PROP = "stash:cur";
 const OP_PROP = "stash:op_pages";
-/** A saved page is split above this many UTF-8 bytes (a dynamic property holds up to 32 KB). */
-const PROP_LIMIT = 28000;
-const CHUNK_CHARS = 9000;
 const CLICK_DEBOUNCE = 1;
 const SCAN_ROWS = 100;
 
@@ -41,7 +35,7 @@ const SCAN_ROWS = 100;
  * One saved stack: `s` is its slot on the page, the rest rebuilds the ItemStack.
  * @typedef {{ s: number, id: string, n: number, name?: string, lore?: string[], keep?: 1, lock?: string, dmg?: number,
  *   ench?: [string, number][], color?: { red: number, green: number, blue: number }, props?: Record<string, any>,
- *   place?: string[], destroy?: string[] }} Rec
+ *   place?: string[], destroy?: string[], item?: ItemStack }} Rec
  */
 /** @typedef {{ bar: (player: Player, text: string) => void, sort: (player: Player) => void, stash: (player: Player) => void }} Hooks */
 
@@ -91,13 +85,7 @@ export function totalPages(player) {
 
 /** @param {Player} player */
 export function curPage(player) {
-  try {
-    const v = player.getDynamicProperty(CUR_PROP);
-    if (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_PAGES) return v;
-  } catch {
-    // unreadable: page 1
-  }
-  return 1;
+  return stateOf(player).cur;
 }
 
 /** @param {number} cur @param {number} total */
@@ -109,71 +97,17 @@ const nextOf = (cur, total) => (cur >= total ? 1 : cur + 1);
 const buttonsWanted = (player) => !buttonsMissing && totalPages(player) > 1 && getFor(player, "invButtons") !== false;
 
 // ---------------------------------------------------------------------------
-// Copying a stack to JSON and back
+// Reading old JSON pages (new saves always use native ItemStacks)
 // ---------------------------------------------------------------------------
-
-// Items whose data the API can't read all of, so a copy would lose something. They are never copied.
-const OPAQUE_ID =
-  /shulker_box|bundle|banner|shield|firework|filled_map|written_book|writable_book|potion|tipped_arrow|ominous_bottle|goat_horn|player_head|suspicious_stew|axolotl_bucket|cod_bucket|salmon_bucket|pufferfish_bucket|tropical_fish_bucket|tadpole_bucket|crossbow|decorated_pot|bee_nest|beehive|lodestone_compass|armor_stand|command_block|structure_block|jigsaw/;
-
-/** True when a copy of this item could lose data, so it must stay where it is. @param {ItemStack} item */
-export function isOpaque(item) {
-  if (OPAQUE_ID.test(item.typeId)) return true;
-  // An unreadable tag or component means "not that kind of item", never "opaque": returning true here made every item opaque.
-  try {
-    if (item.hasTag("minecraft:trimmable_armors")) return true;
-  } catch {
-    // no tags on this item
-  }
-  try {
-    if (item.getComponent("minecraft:potion")) return true;
-  } catch {
-    // no potion component on this item
-  }
-  return false;
-}
-
-/** Reads one optional part of a stack: undefined when the API throws (e.g. dynamic properties on a stackable item). @template T @param {() => T} read @returns {T | undefined} */
-function attempt(read) {
-  try {
-    return read();
-  } catch {
-    return undefined;
-  }
-}
-
-/** @param {ItemStack} item @returns {Omit<Rec, "s">} */
-function serializeStack(item) {
-  /** @type {Omit<Rec, "s">} */
-  const rec = { id: item.typeId, n: item.amount };
-  if (item.nameTag !== undefined) rec.name = item.nameTag;
-  const lore = attempt(() => item.getLore());
-  if (lore?.length) rec.lore = lore;
-  if (attempt(() => item.keepOnDeath)) rec.keep = 1;
-  const lock = attempt(() => item.lockMode);
-  if (lock !== undefined && lock !== ItemLockMode.none) rec.lock = lock;
-  const place = attempt(() => item.getCanPlaceOn());
-  if (place?.length) rec.place = place;
-  const destroy = attempt(() => item.getCanDestroy());
-  if (destroy?.length) rec.destroy = destroy;
-  const dmg = attempt(() => item.getComponent("minecraft:durability")?.damage);
-  if (dmg) rec.dmg = dmg;
-  const ench = attempt(() => item.getComponent("minecraft:enchantable")?.getEnchantments());
-  if (ench?.length) rec.ench = ench.map((e) => /** @type {[string, number]} */ ([e.type.id, e.level])).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  const color = attempt(() => item.getComponent("minecraft:dyeable")?.color);
-  if (color) rec.color = { red: color.red, green: color.green, blue: color.blue };
-  // Dynamic properties exist only on unstackable items; the call throws on a stack.
-  const ids = attempt(() => item.getDynamicPropertyIds().sort());
-  if (ids?.length) {
-    const props = Object.fromEntries(ids.map((k) => [k, attempt(() => item.getDynamicProperty(k))]));
-    rec.props = props;
-  }
-  return rec;
-}
 
 /** @param {Omit<Rec, "s">} rec @param {number} [amount] @returns {ItemStack | undefined} undefined when it can't be rebuilt exactly */
 function deserializeStack(rec, amount = rec.n) {
   try {
+    if (rec.item) {
+      const copy = rec.item.clone();
+      copy.amount = amount;
+      return copy;
+    }
     const item = new ItemStack(rec.id, amount);
     if (rec.name !== undefined) item.nameTag = rec.name;
     if (rec.lore?.length) item.setLore(rec.lore);
@@ -203,21 +137,9 @@ function deserializeStack(rec, amount = rec.n) {
   }
 }
 
-/**
- * The copy of this item, but only when rebuilding it gives back exactly the same record.
- * @param {ItemStack} item @returns {Omit<Rec, "s"> | undefined}
- */
+/** Native clones preserve even metadata stable scripts cannot inspect. @param {ItemStack} item @returns {Omit<Rec, "s">} */
 function toRecord(item) {
-  try {
-    if (isOpaque(item)) return undefined;
-    const rec = serializeStack(item);
-    const text = JSON.stringify(rec);
-    if (text.length > 6000) return undefined;
-    const back = deserializeStack(rec);
-    return back && back.typeId === item.typeId && JSON.stringify(serializeStack(back)) === text ? rec : undefined;
-  } catch {
-    return undefined;
-  }
+  return { id: item.typeId, n: item.amount, name: item.nameTag, item: item.clone() };
 }
 
 /** @type {Map<string, number>} */
@@ -236,9 +158,6 @@ function maxOf(id) {
   return m;
 }
 
-/** What makes two records the same item, whatever the amount and slot. @param {Omit<Rec, "s">} r */
-const sigOf = (r) => JSON.stringify([r.id, r.name, r.lore, r.keep, r.lock, r.dmg, r.ench, r.color, r.props, r.place, r.destroy]);
-
 /** "diamond_pickaxe" → "Diamond pickaxe". @param {string} typeId */
 function pretty(typeId) {
   const s = typeId.replace(/^[^:]*:/, "").replaceAll("_", " ");
@@ -249,22 +168,16 @@ function pretty(typeId) {
 // Saved pages
 // ---------------------------------------------------------------------------
 
-/** @param {string} s */
-function byteLength(s) {
-  let n = 0;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c >= 0xd800 && c < 0xdc00 ? 4 : c >= 0xdc00 && c < 0xe000 ? 0 : 3;
-  }
-  return n;
-}
-
 /**
  * The stacks saved for a page, or undefined when the saved data can't be read (then nothing is written to it).
  * @param {Player} player @param {number} page @returns {Rec[] | undefined}
  */
 function readPage(player, page) {
   try {
+    const state = stateOf(player);
+    if (state.pending) throw new Error("inventory recovery is pending; tell an operator");
+    const ref = state.pages[page];
+    if (ref) return loadSnapshot(player, ref).map(({ s, item }) => ({ s, ...toRecord(item) }));
     const key = PAGE_PROP + page;
     const raw = player.getDynamicProperty(key);
     if (raw === undefined) return [];
@@ -283,34 +196,52 @@ function readPage(player, page) {
     }
     const list = JSON.parse(json);
     if (!Array.isArray(list)) return undefined;
-    return list.filter((e) => e && typeof e.id === "string" && Number.isInteger(e.n) && e.n > 0 && Number.isInteger(e.s));
-  } catch {
+    const used = new Set();
+    for (const e of list) {
+      if (!e || typeof e.id !== "string" || !Number.isInteger(e.n) || e.n < 1 || !STORAGE_SLOTS.includes(e.s) || used.has(e.s)) throw new Error("invalid legacy saved stack");
+      used.add(e.s);
+      const item = deserializeStack(e);
+      if (!item || item.amount !== e.n) throw new Error(`cannot reconstruct legacy ${e.id}`);
+      e.item = item;
+    }
+    return list;
+  } catch (e) {
+    console.warn(`[stash] reading page ${page}: ${e}`);
     return undefined;
   }
 }
 
-/** Saves a page (nothing left removes it). @param {Player} player @param {number} page @param {Rec[]} entries @returns {boolean} */
-function writePage(player, page, entries) {
+/** @param {Rec[]} entries @returns {import("./page-store.js").Entry[]} */
+function nativeEntries(entries) {
+  return entries.map((e) => {
+    const item = deserializeStack(e);
+    if (!item) throw new Error(`can't restore ${e.id}; page left unchanged`);
+    return { s: e.s, item };
+  });
+}
+
+/**
+ * Builds immutable page images, then commits them together with the inventory.
+ * Empty snapshots intentionally shadow legacy JSON so it can never be restored twice.
+ * @param {Player} player @param {Map<number, Rec[]>} edits @param {import("./page-store.js").Entry[]} after @param {number} [cur]
+ */
+function commitPages(player, edits, after, cur = curPage(player)) {
+  const old = stateOf(player);
+  if (old.pending) throw new Error("inventory recovery is pending; tell an operator");
+  const next = { ...old, cur, pages: { ...old.pages } };
+  /** @type {import("./page-store.js").Ref[]} */
+  const created = [];
   try {
-    const key = PAGE_PROP + page;
-    const old = player.getDynamicProperty(key);
-    const oldChunks = typeof old === "string" && old.startsWith("#") ? Number.parseInt(old.slice(1), 10) || 0 : 0;
-    let chunks = 0;
-    if (!entries.length) player.setDynamicProperty(key, undefined);
-    else {
-      const json = JSON.stringify(entries);
-      if (byteLength(json) <= PROP_LIMIT) player.setDynamicProperty(key, json);
-      else {
-        chunks = Math.ceil(json.length / CHUNK_CHARS);
-        for (let i = 0; i < chunks; i++) player.setDynamicProperty(`${key}:${i}`, json.slice(i * CHUNK_CHARS, (i + 1) * CHUNK_CHARS));
-        player.setDynamicProperty(key, `#${chunks}`);
-      }
+    for (const [page, entries] of edits) {
+      const ref = saveSnapshot(player, nativeEntries(entries));
+      created.push(ref);
+      next.pages[page] = ref;
     }
-    for (let i = chunks; i < oldChunks; i++) player.setDynamicProperty(`${key}:${i}`, undefined);
-    return true;
+    commitInventory(player, old, next, after);
   } catch (e) {
-    console.warn(`[stash] saving page ${page}: ${e}`);
-    return false;
+    const live = stateOf(player);
+    if (!(e instanceof InventoryRecoveryError) && !live.pending) for (const ref of created) if (!Object.values(live.pages).some((r) => r.id === ref.id)) discardSnapshot(ref);
+    throw e;
   }
 }
 
@@ -322,10 +253,11 @@ function addToEntries(entries, rec, mode) {
   let left = rec.n;
   const max = maxOf(rec.id);
   if (max > 1) {
-    const sig = sigOf(rec);
+    const item = deserializeStack(rec);
     for (const e of entries) {
       if (!left) break;
-      if (e.n >= max || e.id !== rec.id || sigOf(e) !== sig) continue;
+      const have = deserializeStack(e);
+      if (e.n >= max || !item || !have?.isStackableWith(item)) continue;
       const take = Math.min(max - e.n, left);
       e.n += take;
       left -= take;
@@ -345,41 +277,34 @@ function addToEntries(entries, rec, mode) {
 /**
  * Puts a stack onto saved pages: matching stacks first, then empty slots. Returns what didn't fit.
  * @param {Player} player @param {ItemStack} item @param {number[]} pages
- * @returns {{ rem: ItemStack | undefined, moved: Map<number, number> }}
+ * @param {Map<number, Rec[]>} [edits]
+ * @returns {{ rem: ItemStack | undefined, moved: Map<number, number>, edits: Map<number, Rec[]> }}
  */
-function storeOnPages(player, item, pages) {
+function storeOnPages(player, item, pages, edits = new Map()) {
   /** @type {Map<number, number>} */
   const moved = new Map();
   const rec = toRecord(item);
-  if (!rec || !pages.length) return { rem: item, moved };
+  if (!pages.length) return { rem: item, moved, edits };
   /** @type {Map<number, Rec[] | undefined>} */
   const loaded = new Map();
-  /** @type {Set<number>} */
-  const dirty = new Set();
   let left = item.amount;
   for (const mode of /** @type {const} */ (["merge", "fill"])) {
     for (const p of pages) {
       if (!left) break;
-      if (!loaded.has(p)) loaded.set(p, readPage(player, p));
+      if (!loaded.has(p)) loaded.set(p, edits.get(p) ?? readPage(player, p));
       const entries = loaded.get(p);
-      if (!entries) continue;
+      if (!entries) throw new Error(`page ${p} can't be read; nothing moved`);
       const n = addToEntries(entries, { ...rec, n: left }, mode);
       if (!n) continue;
       left -= n;
-      dirty.add(p);
+      edits.set(p, entries);
       moved.set(p, (moved.get(p) ?? 0) + n);
     }
   }
-  for (const p of dirty) {
-    if (writePage(player, p, /** @type {Rec[]} */ (loaded.get(p)))) continue;
-    // not saved: hand those back instead of losing them
-    left += moved.get(p) ?? 0;
-    moved.delete(p);
-  }
-  if (!left) return { rem: undefined, moved };
+  if (!left) return { rem: undefined, moved, edits };
   const rem = item.clone();
   rem.amount = left;
-  return { rem, moved };
+  return { rem, moved, edits };
 }
 
 // ---------------------------------------------------------------------------
@@ -388,26 +313,28 @@ function storeOnPages(player, item, pages) {
 
 /**
  * Puts a stack into some slots of a container: matching stacks first, then an empty slot. Returns what didn't fit.
- * @param {import("@minecraft/server").Container} inv @param {ItemStack} item @param {number[]} slots @returns {ItemStack | undefined}
+ * @param {Map<number, ItemStack>} items @param {ItemStack} item @param {number[]} slots @returns {ItemStack | undefined}
  */
-function placeIn(inv, item, slots) {
+function placeIn(items, item, slots) {
   let left = item.amount;
   const max = item.maxAmount;
   if (max > 1) {
     for (const s of slots) {
-      const have = inv.getItem(s);
+      const have = items.get(s);
       if (!have || have.amount >= max || !have.isStackableWith(item)) continue;
       const take = Math.min(max - have.amount, left);
-      inv.getSlot(s).amount = have.amount + take;
+      const copy = have.clone();
+      copy.amount = have.amount + take;
+      items.set(s, copy);
       left -= take;
       if (!left) return undefined;
     }
   }
   for (const s of slots) {
-    if (inv.getItem(s)) continue;
+    if (items.get(s)) continue;
     const put = item.clone();
     put.amount = left;
-    inv.setItem(s, put);
+    items.set(s, put);
     return undefined;
   }
   const rem = item.clone();
@@ -417,20 +344,31 @@ function placeIn(inv, item, slots) {
 
 /**
  * Finds a home for an item that mustn't stay where it is: this page, then the hotbar, then the other
- * pages, and at the player's feet when everything is full. Nothing is ever destroyed.
- * @param {Player} player @param {import("@minecraft/server").Container} inv @param {ItemStack} item @param {number} [limit] pages the player has
+ * pages. If all storage is full, the original stays in its button slot instead of being overwritten.
+ * @param {Player} player @param {import("@minecraft/server").Container} inv @param {ItemStack} item @param {number} sourceSlot
  */
-export function rescueItem(player, inv, item, limit = totalPages(player)) {
+export function rescueItem(player, inv, item, sourceSlot) {
+  const items = new Map(carried(inv).map((e) => [e.s, e.item]));
+  items.delete(sourceSlot);
   // Without the buttons, their three slots are free too.
-  let rem = placeIn(inv, item, buttonsWanted(player) ? STORAGE_SLOTS : [...STORAGE_SLOTS, ...BUTTON_SLOTS].sort((a, b) => a - b));
-  if (rem) rem = placeIn(inv, rem, HOTBAR);
+  let rem = placeIn(items, item, STORAGE_SLOTS);
+  if (rem) rem = placeIn(items, rem, HOTBAR);
+  /** @type {Map<number, Rec[]>} */
+  let edits = new Map();
   if (rem) {
     const cur = curPage(player);
     const others = [];
-    for (let p = 1; p <= limit; p++) if (p !== cur) others.push(p);
-    rem = storeOnPages(player, rem, others).rem;
+    for (let p = 1; p <= totalPages(player); p++) if (p !== cur) others.push(p);
+    const planned = storeOnPages(player, rem, others);
+    rem = planned.rem;
+    edits = planned.edits;
   }
-  if (rem) player.dimension.spawnItem(rem, player.location);
+  if (rem) {
+    hooks.bar(player, "§cInventory is full. Move the item out of the button slot to use pages");
+    return false;
+  }
+  commitPages(player, edits, [...items].map(([s, item]) => ({ s, item })));
+  return true;
 }
 
 /** @param {import("@minecraft/server").Container} inv */
@@ -446,32 +384,10 @@ function usedOnPage(inv) {
 
 /** @type {Set<string>} */
 const switching = new Set();
+/** @type {Set<string>} */
+const recoveryWarned = new Set();
 /** @type {Map<string, { page: number, keys: Map<string, number> }>} what each player's page held at the last auto-store look */
 const snapshots = new Map();
-/**
- * Stacks that can't be copied to JSON (filled shulker boxes, potions, bundles, trimmed armor...) and sit on a
- * page that isn't showing: exact ItemStack clones, per player id and page. They live in memory only.
- * @type {Map<string, Map<number, { s: number, item: ItemStack }[]>>}
- */
-const memOpaque = new Map();
-/** @type {Map<string, { dimension: import("@minecraft/server").Dimension, location: import("@minecraft/server").Vector3 }>} where a player was last seen, for items parked in memory when they leave */
-const lastSeen = new Map();
-
-/** @param {string} id @param {number} page @returns {{ s: number, item: ItemStack }[]} */
-const memOf = (id, page) => memOpaque.get(id)?.get(page) ?? [];
-
-/** @param {string} id @param {number} page @param {{ s: number, item: ItemStack }[]} list */
-function setMem(id, page, list) {
-  let pages = memOpaque.get(id);
-  if (!list.length) {
-    pages?.delete(page);
-    if (pages && !pages.size) memOpaque.delete(id);
-    return;
-  }
-  if (!pages) memOpaque.set(id, (pages = new Map()));
-  pages.set(page, list);
-}
-
 /**
  * Saves the active page and shows another. The page being left is saved and read back before anything
  * is cleared; whatever of the new page doesn't fit (a carried item is in its slot) stays saved on that page.
@@ -490,6 +406,10 @@ export function switchPage(player, target) {
   }
   switching.add(id);
   try {
+    if (!inventoryReady(player)) {
+      hooks.bar(player, "§cInventory recovery is safely saved and needs an operator");
+      return false;
+    }
     const incoming = readPage(player, target);
     const stayed = readPage(player, cur);
     if (!incoming || !stayed) {
@@ -497,63 +417,36 @@ export function switchPage(player, target) {
       return false;
     }
 
-    // Leaving: copy every stack that copies exactly; an opaque stack is cloned into memory. Both leave the slot.
     /** @type {Rec[]} */
     const leaving = [];
-    /** @type {{ s: number, item: ItemStack }[]} */
-    const parked = [];
-    /** @type {number[]} */
-    const copied = [];
     for (const s of STORAGE_SLOTS) {
       const item = inv.getItem(s);
       if (!item || isButton(item)) continue;
-      const rec = toRecord(item);
-      if (rec) leaving.push({ s, ...rec });
-      else parked.push({ s, item: item.clone() });
-      copied.push(s);
+      leaving.push({ s, ...toRecord(item) });
     }
-    const saved = [...leaving, ...stayed];
-    if (!writePage(player, cur, saved) || readPage(player, cur)?.length !== saved.length) {
-      hooks.bar(player, "§cCouldn't save this page, so it wasn't switched");
-      return false;
+    // A legacy active-page remainder has to fit before it can migrate. Never append duplicate slots.
+    const used = new Set(leaving.map((e) => e.s));
+    for (const e of stayed) {
+      const s = STORAGE_SLOTS.find((slot) => !used.has(slot));
+      if (s === undefined) throw new Error("legacy active page has overflow; make room before switching");
+      used.add(s);
+      leaving.push({ ...e, s });
     }
-    setMem(id, cur, [...memOf(id, cur), ...parked]);
-    if (parked.length) lastSeen.set(id, { dimension: player.dimension, location: player.location });
-    for (const s of copied) inv.setItem(s, undefined);
-    player.setDynamicProperty(CUR_PROP, target === 1 ? undefined : target);
-
-    // Arriving: parked stacks first, then each saved stack to its slot, else the first free one;
-    // what doesn't fit stays saved (or parked) on that page.
-    const freeSlot = (/** @type {number} */ want) => (STORAGE_SLOTS.includes(want) && !inv.getItem(want) ? want : STORAGE_SLOTS.find((s) => !inv.getItem(s)));
-    /** @type {{ s: number, item: ItemStack }[]} */
-    const memLeft = [];
-    for (const e of memOf(id, target)) {
-      const slot = freeSlot(e.s);
-      if (slot === undefined) memLeft.push(e);
-      else inv.setItem(slot, e.item);
-    }
-    setMem(id, target, memLeft);
-    /** @type {Rec[]} */
-    const unplaced = [];
+    const after = carried(inv).filter((e) => !STORAGE_SLOTS.includes(e.s));
     for (const e of incoming) {
       const item = deserializeStack(e);
-      if (!item) {
-        unplaced.push(e);
-        continue;
-      }
-      const slot = freeSlot(e.s);
-      if (slot === undefined) unplaced.push(e);
-      else inv.setItem(slot, item);
+      if (!item) throw new Error(`can't restore ${e.id}`);
+      after.push({ s: e.s, item });
     }
-    if (!writePage(player, target, unplaced)) console.warn(`[stash] page ${target} kept its saved copy`);
+    commitPages(player, new Map([[cur, leaving], [target, []]]), after, target);
     snapshots.delete(id);
     refreshButtons(player);
-    const stuck = unplaced.length + memLeft.length;
-    hooks.bar(player, `§8[§bPage #${target}/${total}§8] §7${usedOnPage(inv)}/${PAGE_SIZE} slots used${stuck ? ` §e(${stuck} more stack${stuck === 1 ? "" : "s"} wait here for room)` : ""}`);
+    hooks.bar(player, `§8[§bPage #${target}/${total}§8] §7${usedOnPage(inv)}/${PAGE_SIZE} slots used`);
     player.playSound("random.click", { pitch: 1.2, volume: 0.6 });
     return true;
   } catch (e) {
     console.warn(`[stash] switching page: ${e}`);
+    hooks.bar(player, `§cPage not switched: ${e}`);
     return false;
   } finally {
     switching.delete(id);
@@ -562,43 +455,46 @@ export function switchPage(player, target) {
 
 /**
  * Makes the saved pages fit the player's page count: leaves a page that no longer exists and moves
- * everything saved on the removed pages into the pages that are left (or the hotbar, or the floor).
+ * everything saved on removed pages into the remaining inventory. Overflow stays durably saved.
  * @param {Player} player
  */
 export function enforcePageCount(player) {
   const inv = invOf(player);
-  if (!inv) return;
+  if (!inv) return false;
   const total = totalPages(player);
-  if (curPage(player) > total && !switchPage(player, 1)) return;
+  if (curPage(player) > total && !switchPage(player, 1)) return false;
+  const items = new Map(carried(inv).map((e) => [e.s, e.item]));
+  /** @type {Map<number, Rec[]>} */
+  const edits = new Map();
   let moved = 0;
+  let waiting = false;
   for (let p = total + 1; p <= MAX_PAGES; p++) {
     const entries = readPage(player, p);
-    if (!entries?.length) continue;
+    if (!entries) return false;
+    if (!entries.length) continue;
     /** @type {Rec[]} */
     const left = [];
     for (const e of entries) {
       const item = deserializeStack(e);
-      if (!item) {
-        left.push(e);
-        continue;
+      if (!item) throw new Error(`can't restore ${e.id}`);
+      const slots = buttonsWanted(player) ? STORAGE_SLOTS : [...STORAGE_SLOTS, ...BUTTON_SLOTS].sort((a, b) => a - b);
+      let rem = placeIn(items, item, slots);
+      if (rem) rem = placeIn(items, rem, HOTBAR);
+      if (rem) {
+        const others = [];
+        for (let n = 1; n <= total; n++) if (n !== curPage(player)) others.push(n);
+        rem = storeOnPages(player, rem, others, edits).rem;
       }
-      rescueItem(player, inv, item, total);
-      moved += e.n;
+      moved += e.n - (rem?.amount ?? 0);
+      if (rem) left.push({ s: e.s, ...toRecord(rem) });
     }
-    writePage(player, p, left);
+    if (left.length) waiting = true;
+    if (left.length !== entries.length || left.some((e, i) => e.n !== entries[i].n)) edits.set(p, left);
   }
-  const parkedPages = memOpaque.get(player.id);
-  if (parkedPages) {
-    for (const [p, list] of [...parkedPages]) {
-      if (p <= total) continue;
-      setMem(player.id, p, []);
-      for (const e of list) {
-        rescueItem(player, inv, e.item, total);
-        moved += e.item.amount;
-      }
-    }
-  }
+  if (moved) commitPages(player, edits, [...items].map(([s, item]) => ({ s, item })));
   if (moved) hooks.bar(player, `§7Moved ${moved} item${moved === 1 ? "" : "s"} from removed inventory pages into your inventory`);
+  if (waiting) hooks.bar(player, "§eRemoved pages are safely saved. Make room in your inventory to receive them");
+  return !waiting;
 }
 
 // ---------------------------------------------------------------------------
@@ -661,8 +557,7 @@ function refreshButtons(player) {
     if (have?.typeId === b.id && have.nameTag === want.nameTag) continue;
     markUpdating(player);
     if (have) {
-      inv.setItem(b.slot, undefined);
-      if (!isButton(have)) rescueItem(player, inv, have);
+      if (!isButton(have) && !rescueItem(player, inv, have, b.slot)) return;
     }
     inv.setItem(b.slot, want);
   }
@@ -722,24 +617,6 @@ const buttonState = new Map();
 /** @type {Set<string>} */
 const dead = new Set();
 
-/** Parked items can't outlive the session (memory only), so when a player leaves they are dropped where they were last seen. @param {string} playerId */
-function dropParked(playerId) {
-  const parked = memOpaque.get(playerId);
-  const at = lastSeen.get(playerId);
-  memOpaque.delete(playerId);
-  lastSeen.delete(playerId);
-  if (!parked || !at) return;
-  for (const list of parked.values()) {
-    for (const e of list) {
-      try {
-        at.dimension.spawnItem(e.item, at.location);
-      } catch (err) {
-        console.warn(`[stash] couldn't return a parked ${e.item.typeId}: ${err}`);
-      }
-    }
-  }
-}
-
 /**
  * A button was clicked (it left its slot): save anything real that took its place, put the buttons back,
  * and do what the button says, at most once per click.
@@ -754,8 +631,7 @@ function clicked(player, kinds) {
     const have = inv.getItem(b.slot);
     if (!have || have.typeId === b.id) continue;
     markUpdating(player);
-    inv.setItem(b.slot, undefined);
-    if (!isButton(have)) rescueItem(player, inv, have);
+    if (!isButton(have) && !rescueItem(player, inv, have, b.slot)) return;
   }
   sweepStrays(player, inv);
   removeDropped(player);
@@ -869,8 +745,8 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   snapshots.delete(player.id);
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [lastClick, buttonState, snapshots, lastTotal]) m.delete(playerId);
-  dropParked(playerId);
+  for (const m of [lastClick, buttonState, snapshots, lastTotal, lastEnforce]) m.delete(playerId);
+  recoveryWarned.delete(playerId);
   dead.delete(playerId);
   updatingButtons.delete(playerId);
   menuOpen.delete(playerId);
@@ -883,6 +759,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 
 /** @type {Map<string, number>} player id → page count seen last */
 const lastTotal = new Map();
+/** @type {Map<string, { total: number, tick: number }>} */
+const lastEnforce = new Map();
 
 /** What a stack counts as when looking for new pickups: its item and name, not its amount. @param {ItemStack} item */
 const keyOf = (item) => `${item.typeId}|${item.nameTag ?? ""}|${item.getLore().join("/")}`;
@@ -905,7 +783,7 @@ function freeEverywhere(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   let free = PAGE_SIZE - usedOnPage(inv);
-  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, (readPage(player, p)?.length ?? PAGE_SIZE) + memOf(player.id, p).length);
+  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, readPage(player, p)?.length ?? PAGE_SIZE);
   return free;
 }
 
@@ -946,14 +824,16 @@ function autoStore(player) {
     if (!want) continue;
     extra.set(key, want - 1);
     if (want - 1 <= 0) extra.delete(key);
-    const { rem, moved } = storeOnPages(player, item, others);
+    const { rem, moved, edits } = storeOnPages(player, item, others);
     let n = 0;
     for (const [p, c] of moved) {
       n += c;
       perPage.set(p, (perPage.get(p) ?? 0) + c);
     }
     if (!n) continue;
-    inv.setItem(s, rem);
+    const after = carried(inv).filter((e) => e.s !== s);
+    if (rem) after.push({ s, item: rem });
+    commitPages(player, edits, after);
     if (!rem) empty++;
     movedCount += n;
     name = item.nameTag ?? pretty(item.typeId);
@@ -969,11 +849,19 @@ function tickPlayer(player, withAutoStore) {
   if (!player.isValid || dead.has(player.id)) return;
   const inv = invOf(player);
   if (!inv) return;
-  if (memOpaque.has(player.id)) lastSeen.set(player.id, { dimension: player.dimension, location: player.location });
+  if (!inventoryReady(player)) {
+    if (!recoveryWarned.has(player.id)) {
+      recoveryWarned.add(player.id);
+      player.sendMessage("§cInventory pages are paused: a failed save needs operator recovery. Original inventory images are safely saved.");
+    }
+    return;
+  }
+  recoveryWarned.delete(player.id);
   const total = totalPages(player);
-  if (lastTotal.get(player.id) !== total) {
-    enforcePageCount(player);
-    lastTotal.set(player.id, total);
+  const attempt = lastEnforce.get(player.id);
+  if (lastTotal.get(player.id) !== total && (!attempt || attempt.total !== total || system.currentTick - attempt.tick >= 20)) {
+    lastEnforce.set(player.id, { total, tick: system.currentTick });
+    if (enforcePageCount(player)) lastTotal.set(player.id, total);
   }
   if (!buttonsWanted(player)) {
     if (buttonState.get(player.id) !== false) {
@@ -1018,8 +906,8 @@ export function setOpPages(player, count) {
   if (!isOp(player)) return { ok: false, message: "§cOnly operators can set their own page count." };
   if (!Number.isInteger(count) || count < 0 || count > MAX_PAGES) return { ok: false, message: `§cChoose a page count from 0 to ${MAX_PAGES} (0 = the realm's ${get("pages")}).` };
   player.setDynamicProperty(OP_PROP, count === 0 ? undefined : count);
-  enforcePageCount(player);
-  lastTotal.set(player.id, totalPages(player));
+  if (enforcePageCount(player)) lastTotal.set(player.id, totalPages(player));
+  else lastTotal.delete(player.id);
   buttonState.delete(player.id);
   return {
     ok: true,
@@ -1057,7 +945,7 @@ function pageUsage(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   const usage = [];
-  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, (readPage(player, p)?.length ?? 0) + memOf(player.id, p).length));
+  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, readPage(player, p)?.length ?? 0));
   return usage;
 }
 
@@ -1080,7 +968,6 @@ function scanItems(player, inv) {
   }
   for (let p = 1; p <= total; p++) {
     for (const e of readPage(player, p) ?? []) add(`${e.id}|${e.name ?? ""}`, e.name ?? pretty(e.id), e.n, p);
-    for (const e of memOf(player.id, p)) add(`${e.item.typeId}|${e.item.nameTag ?? ""}`, e.item.nameTag ?? pretty(e.item.typeId), e.item.amount, p);
   }
   return [...found.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }

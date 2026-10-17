@@ -26,6 +26,13 @@ const mc = {
   throwing: new Set(),
   /** @type {any[]} */
   spawned: [],
+  entities: [],
+  structures: new Map(),
+  worldProps: new Map(),
+  failSave: false,
+  failLoad: false,
+  metadataThrow: new Set(),
+  loads: 0,
 };
 globalThis.__mc = mc;
 
@@ -61,7 +68,8 @@ class ItemStack {
     return c;
   }
   isStackableWith(o) {
-    return o.typeId === this.typeId && o.nameTag === this.nameTag;
+    return this.maxAmount > 1 && o.typeId === this.typeId && o.nameTag === this.nameTag &&
+      JSON.stringify([o.lore, o.props, o.contents]) === JSON.stringify([this.lore, this.props, this.contents]);
   }
   getLore() {
     return [...this.lore];
@@ -98,6 +106,7 @@ class ItemStack {
     this.props.set(k, v);
   }
   getComponent(name) {
+    if (mc.metadataThrow.has(this.typeId)) throw new Error("injected metadata read failure");
     const self = this;
     if (name === "minecraft:potion") {
       if (mc.throwing.has(this.typeId)) throw new Error("components unavailable");
@@ -129,6 +138,7 @@ class Container {
   constructor() {
     this.slots = new Array(36).fill(undefined);
   }
+
   get size() {
     return 36;
   }
@@ -144,6 +154,20 @@ class Container {
   }
 }
 
+function storageEntity(dimension, location, typeId = "realm:stash_page_store") {
+  const container = new Container();
+  const entity = {
+    id: `storage-${nextId++}`,
+    typeId,
+    dimension,
+    location,
+    getComponent: () => ({ container }),
+    remove() { mc.entities = mc.entities.filter((e) => e !== entity); },
+  };
+  mc.entities.push(entity);
+  return entity;
+}
+
 let nextId = 1;
 function makePlayer() {
   const container = new Container();
@@ -156,6 +180,7 @@ function makePlayer() {
   };
   const player = {
     id: `p${nextId++}`,
+    typeId: "minecraft:player",
     isValid: true,
     commandPermissionLevel: 0,
     location: { x: 1, y: 64, z: 1 },
@@ -178,8 +203,13 @@ function makePlayer() {
   };
   player.dimension = {
     id: "minecraft:overworld",
+    heightRange: { min: -64, max: 320 },
+    getBlock: () => ({}),
     spawnItem: (item, location) => mc.spawned.push({ item, location }),
-    getEntities: () => [],
+    spawnEntity(type, at) { return storageEntity(this, at, type); },
+    getEntities(query = {}) {
+      return mc.entities.filter((e) => e.dimension === this && (!query.type || query.type === e.typeId));
+    },
   };
   mc.players.push(player);
   return player;
@@ -195,6 +225,7 @@ mc.server = {
   EnchantmentType,
   ItemLockMode: { inventory: "inventory", slot: "slot", none: "none" },
   ItemStack,
+  StructureSaveMode: { World: "World" },
   Player: class {},
   system: {
     get currentTick() {
@@ -208,6 +239,29 @@ mc.server = {
     afterEvents: new Proxy({}, { get: (_, name) => subscribable(String(name)) }),
     beforeEvents: new Proxy({}, { get: (_, name) => subscribable("before:" + String(name)) }),
     getAllPlayers: () => mc.players,
+    getDynamicProperty: (key) => mc.worldProps.get(key),
+    setDynamicProperty: (key, value) => mc.worldProps.set(key, value),
+    structureManager: {
+      get: (id) => mc.structures.get(id),
+      delete: (id) => mc.structures.delete(id),
+      createFromWorld(id, dim, from, to, options) {
+        if (mc.failSave) throw new Error("injected snapshot write failure");
+        assert.equal(options.saveMode, "World", "snapshots must be restart durable");
+        const entities = mc.entities.filter((e) => e.dimension === dim);
+        mc.structures.set(id, entities.map((e) => ({
+          typeId: e.typeId,
+          items: e.getComponent().container.slots.map((i) => i?.clone()),
+        })));
+      },
+      place(id, dim, at) {
+        mc.loads++;
+        if (mc.failLoad) throw new Error("injected snapshot read failure");
+        for (const saved of mc.structures.get(id)) {
+          const entity = storageEntity(dim, at, saved.typeId);
+          saved.items.forEach((item, s) => entity.getComponent().container.setItem(s, item?.clone()));
+        }
+      },
+    },
   },
 };
 class Form {
@@ -238,15 +292,19 @@ function fire(name, event) {
   for (const fn of mc.after[name] ?? []) fn(event);
 }
 
-const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, system, world } = m;`);
+const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, StructureSaveMode, system, world } = m;`);
 const uiUrl = dataUrl(`const m = globalThis.__mc.ui; export const { ActionFormData, FormCancelationReason, ModalFormData } = m;`);
 const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, setFor } = m;`);
+const storeSource = readFileSync(new URL("../packs/stash_bp/scripts/page-store.js", import.meta.url), "utf8")
+  .replace('"@minecraft/server"', JSON.stringify(serverUrl));
+const storeUrl = dataUrl(storeSource);
 const source = readFileSync(new URL("../packs/stash_bp/scripts/pages.js", import.meta.url), "utf8")
   .replace('"@minecraft/server"', JSON.stringify(serverUrl))
   .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
-  .replace('"./settings.js"', JSON.stringify(settingsUrl));
+  .replace('"./settings.js"', JSON.stringify(settingsUrl))
+  .replace('"./page-store.js"', JSON.stringify(storeUrl));
 const pages = await import(dataUrl(source));
-const { STORAGE_SLOTS, BUTTON_SLOTS, BTN_PREV, BTN_MENU, BTN_NEXT, switchPage, curPage, isOpaque, enforcePageCount } = pages;
+const { STORAGE_SLOTS, BUTTON_SLOTS, BTN_PREV, BTN_MENU, BTN_NEXT, switchPage, curPage, enforcePageCount } = pages;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -276,15 +334,18 @@ function pickUpButton(p, slot) {
 // Bug 1: items must change when the page changes
 // ---------------------------------------------------------------------------
 
-test("isOpaque never answers true because a read threw", () => {
-  mc.throwing.add("minecraft:glowstone");
-  assert.equal(isOpaque(stack("minecraft:glowstone", 5)), false);
-  mc.throwing.delete("minecraft:glowstone");
-  assert.equal(isOpaque(stack("minecraft:redstone", 5)), false);
-  assert.equal(isOpaque(stack("minecraft:enchanted_book")), false);
-  assert.equal(isOpaque(stack("minecraft:leather_helmet")), false);
-  assert.equal(isOpaque(stack("minecraft:potion")), true);
-  assert.equal(isOpaque(stack("minecraft:white_shulker_box")), true);
+test("metadata read errors fail closed instead of silently erasing damage or enchantments", () => {
+  const p = joined();
+  const pick = stack("minecraft:diamond_pickaxe");
+  pick.damage = 77;
+  pick.enchants.push({ id: "efficiency", level: 5 });
+  p.container.setItem(10, pick);
+  mc.metadataThrow.add(pick.typeId);
+  try { assert.equal(switchPage(p, 2), false); }
+  finally { mc.metadataThrow.clear(); }
+  assert.equal(curPage(p), 1);
+  assert.equal(p.container.getItem(10).damage, 77);
+  assert.equal(p.container.getItem(10).enchants[0].level, 5);
 });
 
 test("stackable items (dynamic properties throw) leave the live inventory and come back", () => {
@@ -397,14 +458,303 @@ test("shrinking the page count returns parked items instead of losing them", () 
   assert.ok(where.includes("minecraft:yellow_shulker_box"));
 });
 
-test("a player who leaves has parked items dropped where they stood", () => {
+test("a player who leaves keeps inactive items saved, never dropped", () => {
   const p = joined();
   p.container.setItem(10, stack("minecraft:blue_shulker_box"));
   switchPage(p, 2);
   mc.spawned.length = 0;
   fire("playerLeave", { playerId: p.id });
-  assert.equal(mc.spawned.length, 1);
-  assert.equal(mc.spawned[0].item.typeId, "minecraft:blue_shulker_box");
+  assert.equal(mc.spawned.length, 0);
+});
+
+test("inactive opaque stacks survive losing the complete script heap", async () => {
+  const p = joined();
+  const box = stack("minecraft:red_shulker_box");
+  box.contents = ["diamond", "written book"];
+  p.container.setItem(10, box);
+  assert.equal(switchPage(p, 2), true);
+  // Importing a fresh script instance discards every module-local map, as a server restart does.
+  const after = structuredClone(Object.fromEntries(Object.entries(mc.after).map(([k, v]) => [k, v.length])));
+  const intervals = mc.intervals.length;
+  try {
+    const restarted = await import(dataUrl(source + "\n// fresh script heap"));
+    assert.equal(restarted.switchPage(p, 1), true);
+    assert.deepEqual(p.container.getItem(10)?.contents, ["diamond", "written book"]);
+  } finally {
+    mc.intervals.length = intervals;
+    for (const k of Object.keys(mc.after)) mc.after[k].length = after[k] ?? 0;
+  }
+});
+
+test("full 24-slot opaque pages round-trip without touching the hotbar", () => {
+  const p = joined();
+  p.container.setItem(0, stack("minecraft:apple", 3));
+  for (const s of STORAGE_SLOTS) {
+    const item = stack("minecraft:white_shulker_box");
+    item.contents = [`unique-${s}`];
+    p.container.setItem(s, item);
+  }
+  assert.equal(switchPage(p, 5), true);
+  assert.equal(filled(p).length, 0);
+  assert.equal(switchPage(p, 1), true);
+  for (const s of STORAGE_SLOTS) assert.deepEqual(p.container.getItem(s).contents, [`unique-${s}`]);
+  assert.equal(p.container.getItem(0).amount, 3);
+});
+
+test("snapshot write and restore failures never clear the source inventory", () => {
+  const p = joined();
+  p.container.setItem(10, stack("minecraft:potion"));
+  mc.failSave = true;
+  try { assert.equal(switchPage(p, 2), false); }
+  finally { mc.failSave = false; }
+  assert.equal(curPage(p), 1);
+  assert.equal(p.container.getItem(10).typeId, "minecraft:potion");
+  assert.equal(switchPage(p, 2), true);
+  mc.failLoad = true;
+  try { assert.equal(switchPage(p, 1), false); }
+  finally { mc.failLoad = false; }
+  assert.equal(curPage(p), 2);
+  assert.equal(filled(p).length, 0);
+  assert.equal(switchPage(p, 1), true);
+  assert.equal(p.container.getItem(10).typeId, "minecraft:potion");
+});
+
+test("inventory setItem failure rolls back all prior writes and page pointers", () => {
+  const p = joined();
+  for (const s of STORAGE_SLOTS) p.container.setItem(s, stack("minecraft:emerald", 7));
+  const original = p.container.setItem.bind(p.container);
+  let calls = 0;
+  p.container.setItem = (s, item) => {
+    if (++calls === 5) throw new Error("injected inventory write failure");
+    original(s, item);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.container.setItem = original;
+  assert.equal(curPage(p), 1);
+  for (const s of STORAGE_SLOTS) assert.equal(p.container.getItem(s).amount, 7);
+  assert.equal(switchPage(p, 2), true);
+  assert.equal(filled(p).length, 0);
+  assert.equal(switchPage(p, 1), true);
+  assert.equal(filled(p).length, 24);
+});
+
+test("failed final index commit restores source items without duplicating a destination", () => {
+  const p = joined();
+  p.container.setItem(10, stack("minecraft:potion"));
+  const original = p.setDynamicProperty.bind(p);
+  let calls = 0;
+  p.setDynamicProperty = (k, v) => {
+    if (k === "stash:native" && ++calls === 2) throw new Error("injected index write failure");
+    original(k, v);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.setDynamicProperty = original;
+  assert.equal(curPage(p), 1);
+  assert.equal(p.container.getItem(10).typeId, "minecraft:potion");
+  assert.equal(switchPage(p, 2), true);
+  assert.equal(filled(p).length, 0);
+  assert.equal(switchPage(p, 1), true);
+  assert.equal(filled(p).length, 1);
+});
+
+test("legacy JSON is migrated once, including chunked records; corrupt records are never filtered out", () => {
+  const p = joined();
+  const raw = JSON.stringify([{ s: 10, id: "minecraft:emerald", n: 23 }, { s: 11, id: "minecraft:diamond_pickaxe", n: 1, dmg: 87, ench: [["efficiency", 4]] }]);
+  p.setDynamicProperty("stash:page:2", "#2");
+  p.setDynamicProperty("stash:page:2:0", raw.slice(0, 40));
+  p.setDynamicProperty("stash:page:2:1", raw.slice(40));
+  assert.equal(switchPage(p, 2), true);
+  assert.equal(p.container.getItem(10).amount, 23);
+  assert.equal(p.container.getItem(11).damage, 87);
+  p.container.setItem(10, undefined);
+  assert.equal(switchPage(p, 1), true);
+  assert.equal(switchPage(p, 2), true);
+  assert.equal(p.container.getItem(10), undefined, "stale legacy JSON must not resurrect consumed items");
+  p.setDynamicProperty("stash:page:3", JSON.stringify([{ s: 10, id: "minecraft:emerald", n: 3 }, { s: 11, id: "minecraft:diamond", n: -1 }]));
+  assert.equal(switchPage(p, 3), false);
+  assert.equal(curPage(p), 2);
+  assert.equal(p.container.getItem(11).damage, 87);
+});
+
+test("shrinking with no room keeps overflow durable and never drops or duplicates it", () => {
+  const p = joined();
+  assert.equal(switchPage(p, 5), true);
+  const box = stack("minecraft:blue_shulker_box");
+  box.contents = ["overflow treasure"];
+  p.container.setItem(10, box);
+  assert.equal(switchPage(p, 1), true);
+  for (let s = 0; s < 36; s++) p.container.setItem(s, stack("minecraft:stone", 64));
+  const drops = mc.spawned.length;
+  mc.pages = 1;
+  try {
+    assert.equal(enforcePageCount(p), false, "full inventory leaves native overflow saved");
+    p.container.setItem(10, undefined);
+    assert.equal(enforcePageCount(p), true, "overflow is returned when a slot becomes free");
+    assert.deepEqual(p.container.getItem(10).contents, ["overflow treasure"]);
+    p.container.setItem(11, undefined);
+    assert.equal(enforcePageCount(p), true);
+    assert.equal(p.container.getItem(11), undefined, "overflow must not be delivered twice");
+  } finally { mc.pages = 5; }
+  assert.equal(mc.spawned.length, drops);
+});
+
+test("native stackable auxiliary data is not mistaken for an identical item on another page", () => {
+  const p = joined();
+  const poison = stack("minecraft:tipped_arrow", 12);
+  poison.contents = ["poison"];
+  p.container.setItem(10, poison);
+  assert.equal(switchPage(p, 2), true);
+  const healing = stack("minecraft:tipped_arrow", 12);
+  healing.contents = ["healing"];
+  p.container.setItem(10, healing);
+  assert.equal(switchPage(p, 1), true);
+  assert.deepEqual(p.container.getItem(10).contents, ["poison"]);
+  assert.equal(switchPage(p, 2), true);
+  assert.deepEqual(p.container.getItem(10).contents, ["healing"]);
+});
+
+test("page index readback failure after writing is rolled back, not treated as success", () => {
+  const p = joined();
+  p.container.setItem(10, stack("minecraft:emerald", 19));
+  const originalGet = p.getDynamicProperty;
+  const originalSet = p.setDynamicProperty.bind(p);
+  let nativeWrites = 0;
+  let unreadable = false;
+  p.setDynamicProperty = (k, v) => {
+    originalSet(k, v);
+    if (k === "stash:native" && ++nativeWrites === 2) unreadable = true;
+  };
+  p.getDynamicProperty = (k) => {
+    if (k === "stash:native" && unreadable) {
+      unreadable = false;
+      throw new Error("injected index readback failure after a successful write");
+    }
+    return originalGet(k);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.getDynamicProperty = originalGet;
+  p.setDynamicProperty = originalSet;
+  assert.equal(curPage(p), 1);
+  assert.equal(p.container.getItem(10).amount, 19);
+  assert.equal(switchPage(p, 2), true);
+  assert.equal(filled(p).length, 0);
+});
+
+test("death quarantines an interrupted rollback instead of resurrecting dropped active items", async () => {
+  const p = joined();
+  for (const s of STORAGE_SLOTS) p.container.setItem(s, stack("minecraft:emerald", 7));
+  const original = p.container.setItem.bind(p.container);
+  let calls = 0;
+  p.container.setItem = (s, item) => {
+    if (++calls >= 5) throw new Error("persistent inventory write failure");
+    original(s, item);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.container.setItem = original;
+  fire("entityDie", { deadEntity: p });
+  for (const s of STORAGE_SLOTS) p.container.setItem(s, undefined);
+  fire("playerSpawn", { player: p });
+  const storage = await import(storeUrl);
+  assert.equal(storage.inventoryReady(p), false);
+  assert.equal(filled(p).length, 0);
+  const state = JSON.parse(p.getDynamicProperty("stash:native"));
+  assert.ok(state.pending);
+  assert.ok(mc.structures.has(state.pending.before.id), "operator still has the recovery image");
+});
+
+test("repeated write failure retains durable recovery images but never speculatively replays them", async () => {
+  const p = joined();
+  for (const s of STORAGE_SLOTS) p.container.setItem(s, stack("minecraft:emerald", 7));
+  const original = p.container.setItem.bind(p.container);
+  let calls = 0;
+  p.container.setItem = (s, item) => {
+    if (++calls >= 5) throw new Error("persistent inventory write failure");
+    original(s, item);
+  };
+  assert.equal(switchPage(p, 2), false);
+  const pending = JSON.parse(p.getDynamicProperty("stash:native")).pending;
+  assert.ok(mc.structures.has(pending.before.id));
+  assert.ok(mc.structures.has(pending.after.id));
+  p.container.setItem = original;
+  const storage = await import(storeUrl);
+  const actual = slotTypes(p);
+  assert.equal(storage.inventoryReady(p), false);
+  assert.deepEqual(slotTypes(p), actual);
+  assert.equal(switchPage(p, 2), false);
+});
+
+function journaledPlayer(id = "minecraft:diamond") {
+  const p = joined();
+  p.container.setItem(10, stack(id));
+  const original = p.setDynamicProperty.bind(p);
+  let writes = 0;
+  p.setDynamicProperty = (k, v) => {
+    if (k === "stash:native" && [2, 3].includes(++writes)) throw new Error("failed final commit and rollback index");
+    original(k, v);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.setDynamicProperty = original;
+  assert.ok(JSON.parse(p.getDynamicProperty("stash:native")).pending);
+  assert.equal(p.container.getItem(10).typeId, id);
+  return p;
+}
+
+test("dropping a pending before-item into the allowed after-empty image never recreates it", async () => {
+  const p = journaledPlayer();
+  const diamond = p.container.getItem(10);
+  p.dimension.spawnItem(diamond, p.location);
+  p.container.setItem(10, undefined);
+  const storage = await import(storeUrl);
+  assert.equal(storage.inventoryReady(p), false);
+  assert.equal(p.container.getItem(10), undefined);
+  assert.ok(mc.spawned.some((e) => e.item === diamond), "original drop still exists; never create its duplicate");
+});
+
+test("opaque native contents changed during pending recovery are never overwritten by visible signatures", async () => {
+  const p = journaledPlayer("minecraft:white_shulker_box");
+  const changed = stack("minecraft:white_shulker_box");
+  changed.contents = ["new real contents, not in the recovery image"];
+  p.container.setItem(10, changed);
+  const storage = await import(storeUrl);
+  assert.equal(storage.inventoryReady(p), false);
+  assert.deepEqual(p.container.getItem(10).contents, changed.contents);
+});
+
+test("full 25-to-1 overflow retries have a bounded native snapshot read budget", (t) => {
+  mc.pages = 25;
+  const p = joined();
+  const allPlayers = mc.players;
+  mc.players = [p];
+  try {
+    for (let page = 1; page <= 25; page++) {
+      assert.equal(switchPage(p, page), true);
+      for (const s of STORAGE_SLOTS) p.container.setItem(s, stack("minecraft:stone", 64));
+    }
+    assert.equal(switchPage(p, 1), true);
+    for (let s = 0; s < 36; s++) p.container.setItem(s, stack("minecraft:stone", 64));
+    const before = mc.loads;
+    const notes = p.bar.length;
+    mc.pages = 1;
+    advance(200);
+    t.diagnostic(`25-to-1 overflow: ${mc.loads - before} snapshot reads across 200 ticks`);
+    assert.ok(mc.loads - before <= 24 * 11, `at most one 24-page retry per 20 ticks, got ${mc.loads - before} reads`);
+    assert.ok(p.bar.length - notes <= 11, "overflow warnings follow the same retry budget");
+    p.container.setItem(10, undefined);
+    advance(20);
+    assert.equal(p.container.getItem(10)?.amount, 64, "making room returns exactly one full stack");
+  } finally {
+    mc.pages = 5;
+    mc.players = allPlayers.filter((player) => player !== p);
+  }
+});
+
+test("a real cursor stack is never cleared while switching pages", () => {
+  const p = joined();
+  p.cursor.item = stack("minecraft:diamond", 9);
+  p.container.setItem(17, undefined);
+  fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: stack(BTN_NEXT), itemStack: undefined });
+  assert.equal(p.cursor.item.typeId, "minecraft:diamond");
+  assert.equal(p.cursor.item.amount, 9);
 });
 
 // ---------------------------------------------------------------------------
