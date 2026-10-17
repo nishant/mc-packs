@@ -179,6 +179,11 @@
     "modifications": [
       {
         "array_name": "controls",
+        "operation": "remove",
+        "control_name": "sidebar"
+      },
+      {
+        "array_name": "controls",
         "operation": "insert_after",
         "control_name": "hud_title_text_area",
         "value": [
@@ -447,6 +452,29 @@
       }
     ]
   },
+  "realm_reserve": {
+    "type": "panel",
+    "size": [
+      1,
+      "$reserve_h|default"
+    ],
+    "$reserve_h|default": 40,
+    "bindings": [
+      {
+        "binding_name": "#hud_title_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_name": "#hud_subtitle_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_type": "view",
+        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (('%.159s' * (#hud_subtitle_text_string - ('%.1450s' * #hud_subtitle_text_string))) = '§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r')))",
+        "target_property_name": "#visible"
+      }
+    ]
+  },
   "realm_side_area": {
     "type": "panel",
     "size": [
@@ -471,6 +499,11 @@
           ],
           "controls": [
             {
+              "realm_reserve_r@hud.realm_reserve": {
+                "$reserve_h": 40
+              }
+            },
+            {
               "realm_radar@hud.realm_radar_panel": {}
             },
             {
@@ -492,6 +525,18 @@
               "realm_right4@hud.realm_slot": {
                 "$skip": "%.490s"
               }
+            },
+            {
+              "realm_sidebar@scoreboard.scoreboard_sidebar": {
+                "anchor_from": "top_right",
+                "anchor_to": "top_right",
+                "bindings": [
+                  {
+                    "binding_name": "#scoreboard_sidebar_visible",
+                    "binding_name_override": "#visible"
+                  }
+                ]
+              }
             }
           ]
         }
@@ -508,9 +553,14 @@
           "anchor_to": "top_left",
           "offset": [
             4,
-            24
+            4
           ],
           "controls": [
+            {
+              "realm_reserve_l@hud.realm_reserve": {
+                "$reserve_h": 40
+              }
+            },
             {
               "realm_left1@hud.realm_slot": {
                 "$skip": "%.650s",
@@ -549,11 +599,11 @@
             "50%",
             "100%c"
           ],
-          "anchor_from": "center",
+          "anchor_from": "top_middle",
           "anchor_to": "top_middle",
           "offset": [
             0,
-            14
+            44
           ],
           "controls": [
             {

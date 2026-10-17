@@ -651,10 +651,55 @@ function packIcon() {
   return img;
 }
 
+/** The radar's frame: a dark band around the 84 x 78 map window, a light inner line and corner brackets. Original art, drawn from the palette above. */
+function radarFrame() {
+  const W = 98, H = 92, M = 7;
+  const img = blank(W, H);
+  const inWindow = (x, y) => x >= M && x < W - M && y >= M && y < H - M;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!inWindow(x, y)) put(img, x, y, [18, 20, 22, 238]);
+  rect(img, 0, 0, W - 1, 0, [8, 8, 8, 255]);
+  rect(img, 0, H - 1, W - 1, H - 1, [8, 8, 8, 255]);
+  rect(img, 0, 0, 0, H - 1, [8, 8, 8, 255]);
+  rect(img, W - 1, 0, W - 1, H - 1, [8, 8, 8, 255]);
+  rect(img, 2, 2, W - 3, 2, [120, 124, 128, 200]);
+  rect(img, 2, H - 3, W - 3, H - 3, [60, 62, 66, 220]);
+  rect(img, 2, 2, 2, H - 3, [120, 124, 128, 200]);
+  rect(img, W - 3, 2, W - 3, H - 3, [60, 62, 66, 220]);
+  rect(img, M - 1, M - 1, W - M, M - 1, LINE);
+  rect(img, M - 1, H - M, W - M, H - M, LINE);
+  rect(img, M - 1, M - 1, M - 1, H - M, LINE);
+  rect(img, W - M, M - 1, W - M, H - M, LINE);
+  for (const [cx, cy, sx, sy] of [[M - 1, M - 1, 1, 1], [W - M, M - 1, -1, 1], [M - 1, H - M, 1, -1], [W - M, H - M, -1, -1]]) {
+    for (let k = 0; k < 6; k++) {
+      put(img, cx + sx * k, cy, WHITE);
+      put(img, cx, cy + sy * k, WHITE);
+    }
+  }
+  return img;
+}
+
+/** A soft dark vignette over the map window so the glyph edge fades into the frame. */
+function radarShade() {
+  const W = 98, H = 92, M = 7;
+  const img = blank(W, H);
+  const hw = (W - 2 * M) / 2, hh = (H - 2 * M) / 2;
+  for (let y = M; y < H - M; y++) {
+    for (let x = M; x < W - M; x++) {
+      const nx = Math.abs(x + 0.5 - W / 2) / hw, ny = Math.abs(y + 0.5 - H / 2) / hh;
+      const e = Math.max(nx, ny);
+      const a = e <= 0.7 ? 0 : Math.round(110 * ((e - 0.7) / 0.3) ** 2);
+      put(img, x, y, [0, 0, 0, a]);
+    }
+  }
+  return img;
+}
+
 const sheet = page();
 /** @type {Map<string, Image | string>} */
 const outputs = new Map();
 outputs.set("packs/hud_rp/font/glyph_F3.png", sheet);
+outputs.set("packs/hud_rp/textures/ui/radar_frame.png", radarFrame());
+outputs.set("packs/hud_rp/textures/ui/radar_shade.png", radarShade());
 outputs.set("packs/hud_rp/pack_icon.png", packIcon());
 outputs.set("packs/map_bp/scripts/glyphs.js", glyphsJs());
 outputs.set("docs/media/map/map-hud.png", render(sheet));
