@@ -7,6 +7,14 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Safer inventory pages and steadier realm tools
+
+- Inventory pages now save native items, including filled shulker boxes, potions, and enchanted gear, across page changes, logout, and clean server restarts. Items that do not fit when pages shrink stay saved instead of dropping on the ground.
+- Extra Realm Configuration items are removed automatically when carried, including old copies restored from another inventory page. Ordinary Nether Stars and the three page controls are left alone.
+- Minimap terrain stays separate above and below ground, fills the rotated view while flying, and retries unloaded ground promptly. Off-map party and friend arrows are no longer hidden by compass badges.
+- The scoreboard sidebar joins the bottom of the right HUD stack, with space reserved below the compass. The radar uses original generated frame art.
+- Character names stay over their real heads using Minecraft's native names. Old floating helper labels are removed on upgrade; exact native name visibility remains controlled by Minecraft.
+
 ## Character names stay on the characters
 
 - Townsfolk, caravan traders, wanderers, and story characters now use the game's own close-up names over the real character instead of a shared floating helper label that could drift toward another player.

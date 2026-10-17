@@ -524,7 +524,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lSettings:§r in §e/realm:prefs§r or §lInventory settings§r, turn the in-inventory buttons (§einvButtons§r) and auto-store (§eautoStore§r) off for yourself. With the buttons off you still switch pages with §e/realm:inv§r. §lExpansive inventory (5 pages)§r (§einvOff§r, on by default) switches the extra pages off entirely: you get a normal 27-slot inventory with no buttons, and the items on pages 2 and up move back to page 1, your hotbar or your feet, so nothing is lost. §e/realm:inv§r has a one-click §lUse normal inventory (turn off pages)§r button, and §lEnable Expansive Inventory (5 pages)§r brings the pages and buttons back. Operators' personal page count (§e/realm:inv_pages§r, or the slider in §lInventory settings§r) also takes §e1§r for a normal inventory.",
+        "text": "§lSettings:§r in §e/realm:prefs§r or §lInventory settings§r, turn the in-inventory buttons (§einvButtons§r) and auto-store (§eautoStore§r) off for yourself. With the buttons off you still switch pages with §e/realm:inv§r. §lExpansive inventory (5 pages)§r (§einvOff§r, on by default) switches the extra pages off entirely: you get a normal 27-slot inventory with no buttons, and the items on pages 2 and up move back to page 1 or your hotbar. If there is no room, overflow stays safely saved until you make room or re-enable those pages; it is not dropped on the ground. §e/realm:inv§r has a one-click §lUse normal inventory (turn off pages)§r button, and §lEnable Expansive Inventory (5 pages)§r brings the pages and buttons back. Operators' personal page count (§e/realm:inv_pages§r, or the slider in §lInventory settings§r) also takes §e1§r for a normal inventory.",
         "ops": false
       },
       {
@@ -1187,7 +1187,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Their overhead names help you find them once you come within 20 blocks (§efarNameRange§r), without aiming directly at them. Walk up to one: they turn to face you, and now and then say something above their head (§eWhere did I leave my compass?§r).",
+        "text": "Their own NPC names appear once you are close enough for Minecraft to draw native NPC name tags. Walk up to one: they turn to face you, and now and then say something above their head (§eWhere did I leave my compass?§r).",
         "ops": false
       },
       {
