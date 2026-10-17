@@ -364,3 +364,13 @@ test("run.mjs writes structured evidence manifest on setup failure (exit 4)", as
   assert.match(ev.errors.setupError, /not free/);
 });
 
+test("client-qa-fixture places Mara via /realm:npc_add, parks QAFixtureBot off-axis, and rejects failed/unknown steps", () => {
+  const fixtureSrc = fs.readFileSync(path.join(harnessDir, "examples", "client-qa-fixture.js"), "utf8");
+  assert.match(fixtureSrc, /\/realm:npc_add mara/, "fixture must place real npc_bp Mara townsfolk");
+  assert.doesNotMatch(fixtureSrc, /\/realm:npc_name_probe/, "fixture must not invoke non-existent /realm:npc_name_probe slash command");
+  assert.match(fixtureSrc, /spawnEntity\("realm:npc_name_probe"/, "npc_probe_always must spawn test-only realm:npc_name_probe helper entity");
+  assert.match(fixtureSrc, /Math\.abs\(sim\.location\.z - \(cz \+ 0\.5\)\) >= 10/, "QAFixtureBot must be parked off the 25m -> NPC sightline axis");
+  assert.match(fixtureSrc, /detail\.ok === false[\s\S]*throw new Error/, "failed step results must throw and log QA_STEP_ERROR instead of QA_STEP_APPLIED");
+});
+
+

@@ -96,15 +96,18 @@ node tools/test-bds/run.mjs --only help_bp --ticks 20 --bot-qa --quiet
   `--scenario tools/test-bds/examples/client-qa-fixture.js` over `transport=nethernet` with
   `default-player-permission-level=operator`, `texturepack-required=true`, and `enable-lan-visibility=true`.
   Once the fixture scenario verifies its terrain cache-age precondition (`>210` ticks), unobstructed
-  NPC sightline corridor (`25m` to `Archivist Mara`), and two populated `stash_bp` pages, it writes
+  NPC sightline corridor (`25m` to `Mara the Cartographer` placed via `/realm:npc_add mara`, with
+  `QAFixtureBot` parked off-axis at `cx - 12.5, cz - 12.5`), test-only `realm:npc_name_probe` toggle
+  (`npc_probe_always` / `npc_probe_looked_at`), and two populated `stash_bp` pages, it writes
   `<log>.evidence.json` (`status: "ready_waiting_for_client"`) and stays alive until `SIGINT`/`SIGTERM`
   or `--timeout`. Joining real players are automatically placed in Creative at the 10 m NPC stop with
   long-name Side HUD boxes and two populated `stash_bp` pages (`QA_CLIENT_JOINED`). Step transitions can
   be triggered in game, via stdin, or by appending a line to `<log>.commands.txt` (polled every 200 ms):
   `scriptevent qa:cmd <step>` (`map_bridge`, `map_roof`, `map_spire`, `map_cave`, `sidebar_long`,
   `stash_fill`, `stash_next`, `stash_prev`, `stash_open`, `npc_5m`, `npc_10m`, `npc_15m`, `npc_20m`,
-  `npc_25m`, `npc_probe_always`, `npc_probe_looked_at`).
-- **Windows client feasibility (`clientFeasibility` in evidence JSON)**:
+  `npc_25m`, `npc_probe_always`, `npc_probe_looked_at`). Any unknown or failed step logs `QA_STEP_ERROR`
+  (never a false `QA_STEP_APPLIED`).
+- **Windows client feasibility & empirical visual QA qualifications (`clientFeasibility` in evidence JSON)**:
   1. Retail `Microsoft.MinecraftUWP` is a single-instance packaged UWP app per Windows user session; Windows
      cannot launch a second concurrent retail `Minecraft.Windows.exe` instance (`canRunSecondRetailInstance: false`).
   2. `Minecraft.Windows.exe` renders a DirectX/GameInput UWP canvas where coordinate clicks report `done`
@@ -112,7 +115,16 @@ node tools/test-bds/run.mjs --only help_bp --ticks 20 --bot-qa --quiet
      `Return`, `Space` on modal warnings, `[` and `]` for Play tabs) plus `type_text` targeted at window
      `element_index: 0` navigate menus after fresh screenshot verification without shell focus workarounds.
   3. UWP AppContainer `CheckNetIsolation LoopbackExempt` status (`uwpLoopbackExempt`) is recorded separately;
-     empirically, local NetherNet connections to `127.0.0.1` succeed without `LoopbackExempt`.
+     empirically, local NetherNet connections to `127.0.0.1:19132` with `texturepack-required=true` download
+     and attach candidate resource packs (`7.1 MB`) without `LoopbackExempt`.
+  4. **Qualified visual outcomes (no blanket visual PASS)**: real-client screenshots via `--client-qa` and
+     `<log>.commands.txt` verified the blue horizontal river + bridge radar cells, South compass bearing,
+     right-edge scoreboard sidebar below the radar with vanilla long-name truncation, and unobstructed 5 m /
+     10 m NPC body sightline. Physical in-game inventory mouse clicks remain unverified under Computer Use
+     because foreground `press_key("e")` restores the prior foreground window afterward, triggering Bedrock's
+     focus-loss auto-pause (`ctrl_lost_focus_pause`); two-page `stash_bp` contents on real client join are
+     verified server-side (`QA_CLIENT_JOINED`), and 20 m NPC nameplate readability remains an unverified
+     client visual gate.
 - **`--bot-qa` (`lib/bot-adapter.mjs`)**: evaluates the Bedrock protocol bot approach from
   `AIKUSAN/minecraft-agent-skills-bundle` (`.agents/skills/minecraft-bot-qa`, MIT License, `bedrock-protocol@3.60.1`).
   Empirically, native BDS `1.26.52.3` enforces `transport=nethernet` (`In this release, NetherNet is the only

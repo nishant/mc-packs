@@ -72,14 +72,19 @@ export default async function (t) {
   }, { timeout: 60, message: "terrain/water/bridge/thin-roof fixture blocks and clear NPC sightline corridor ready" });
 
   // 2. NPC fixture at (cx + 20, baseY + 1, cz) facing west (-X, yaw 90) with 5/10/15/20/25m pads along X.
+  // Place real npc_bp townsfolk "mara" ("Mara the Cartographer") via /realm:npc_add mara so npc_bp's watchName()
+  // resends nameTag (switching between name and name+"§r") when a real client watches.
   const npcPos = { x: cx + 20.5, y: baseY + 1, z: cz + 0.5 };
   for (const e of dim.getEntities({ location: npcPos, maxDistance: 30, type: "minecraft:npc" })) {
     try { e.remove(); } catch {}
   }
-  const npc = dim.spawnEntity("minecraft:npc", npcPos);
-  npc.nameTag = "§eArchivist Mara\n§7Keeper of the Western Reach";
-  npc.addTag("npc:managed");
-  npc.addTag("npc:id:qa_archivist_mara");
+  for (const e of dim.getEntities({ type: "realm:npc_name_probe" })) {
+    try { e.remove(); } catch {}
+  }
+  sim.teleport(npcPos, { rotation: { x: 0, y: 90 } });
+  await t.wait(5);
+  const addMara = t.cmd(sim, "/realm:npc_add mara");
+  t.assert(addMara.ok, `place Mara via /realm:npc_add mara (${addMara.error ?? "ok"})`);
 
   const stops = [5, 10, 15, 20, 25];
   for (const dist of stops) {
@@ -87,10 +92,13 @@ export default async function (t) {
     dim.runCommand(`setblock ${sx} ${baseY} ${cz} sea_lantern`);
   }
 
+  const findMara = () => dim.getEntities({ type: "minecraft:npc", tags: ["realm:npc_id:mara"] })[0]
+    ?? dim.getEntities({ location: npcPos, maxDistance: 4, type: "minecraft:npc" })[0];
+
   await t.waitUntil(() => {
-    const found = dim.getEntities({ location: npcPos, maxDistance: 4, type: "minecraft:npc" });
-    return found.length === 1 && found[0].nameTag.includes("Archivist Mara");
-  }, { timeout: 40, message: "NPC Archivist Mara spawned with nameplate" });
+    const npc = findMara();
+    return Boolean(npc && npc.nameTag.includes("Mara"));
+  }, { timeout: 60, message: "NPC Mara the Cartographer spawned via /realm:npc_add mara with nameplate" });
 
   // 3. Helper to push long-name Side HUD boxes + scoreboard sidebar to a player.
   function applyLongSidebarAndHud(player) {
@@ -215,11 +223,38 @@ export default async function (t) {
     } else if (/^npc_(5|10|15|20|25)m$/.test(step)) {
       const dist = Number(step.match(/^npc_(\d+)m$/)[1]);
       player.teleport({ x: cx + 20.5 - dist, y: baseY + 1, z: cz + 0.5 }, { rotation: lookEast });
-      return { view: `npc_${dist}m`, distanceMeters: dist };
+      await t.wait(5);
+      const npc = findMara();
+      if (npc?.isValid) {
+        const baseName = "§eMara §7the Cartographer";
+        npc.nameTag = npc.nameTag === baseName ? `${baseName}§r` : baseName;
+      }
+      return { view: `npc_${dist}m`, distanceMeters: dist, npcNameTag: npc?.nameTag ?? null };
     } else if (step === "npc_probe_always") {
-      return t.cmd(player, "/realm:npc_name_probe always");
+      const npc = findMara();
+      if (!npc || !npc.isValid) throw new Error("NPC Mara not found for npc_probe_always");
+      for (const e of dim.getEntities({ type: "realm:npc_name_probe" })) {
+        try { if (e.isValid) e.remove(); } catch {}
+      }
+      const head = npc.getHeadLocation();
+      const anchor = { x: head.x, y: head.y + 0.4, z: head.z };
+      const helper = dim.spawnEntity("realm:npc_name_probe", anchor);
+      helper.nameTag = npc.nameTag || "§eMara §7the Cartographer";
+      helper.addTag(`realm:name_probe_target:${npc.id}`);
+      await t.waitUntil(() => dim.getEntities({ type: "realm:npc_name_probe" }).length === 1, {
+        timeout: 40,
+        message: "spawned realm:npc_name_probe helper entity above Mara",
+      });
+      return { ok: true, mode: "always", probeType: "realm:npc_name_probe", count: 1, anchor, nameTag: helper.nameTag };
     } else if (step === "npc_probe_looked_at") {
-      return t.cmd(player, "/realm:npc_name_probe looked_at");
+      for (const e of dim.getEntities({ type: "realm:npc_name_probe" })) {
+        try { if (e.isValid) e.remove(); } catch {}
+      }
+      await t.waitUntil(() => dim.getEntities({ type: "realm:npc_name_probe" }).length === 0, {
+        timeout: 40,
+        message: "removed realm:npc_name_probe helper entities",
+      });
+      return { ok: true, mode: "looked_at_native_only", probeType: "realm:npc_name_probe", count: 0 };
     } else if (step === "sidebar_long") {
       applyLongSidebarAndHud(player);
       return { sidebar: "qa_sidebar_long" };
@@ -242,20 +277,38 @@ export default async function (t) {
       return { activeButton: inv.getItem(16)?.nameTag ?? null, firstSlot: inv.getItem(STORAGE_SLOTS[0])?.typeId ?? null };
     } else if (step === "stash_fill") {
       return await seedPlayerStashPages(player);
-    } else {
-      // default spawn overview pad (10m from NPC, unobstructed sightline along z = cz)
+    } else if (step === "overview") {
       player.teleport({ x: cx + 10.5, y: baseY + 1, z: cz + 0.5 }, { rotation: lookEast });
-      return { view: "npc_10m_default" };
+      await t.wait(5);
+      const npc = findMara();
+      if (npc?.isValid) {
+        const baseName = "§eMara §7the Cartographer";
+        npc.nameTag = npc.nameTag === baseName ? `${baseName}§r` : baseName;
+      }
+      return { view: "npc_10m_default", npcNameTag: npc?.nameTag ?? null };
+    } else {
+      throw new Error(`Unknown qa:cmd step "${step}"`);
     }
   }
 
-  await movePlayerToStep(sim, "npc_10m");
+  // Verify npc_probe_always / npc_probe_looked_at toggle cleanly before returning to native-only baseline.
+  const probeOn = await movePlayerToStep(sim, "npc_probe_always");
+  t.assert(probeOn.ok === true && probeOn.count === 1, "npc_probe_always spawns realm:npc_name_probe helper");
+  const probeOff = await movePlayerToStep(sim, "npc_probe_looked_at");
+  t.assert(probeOff.ok === true && probeOff.count === 0, "npc_probe_looked_at removes realm:npc_name_probe helper");
+
+  // Park QAFixtureBot well outside the 25m -> NPC sightline corridor (z = cz - 12.5) so it never occludes NPC views.
+  const simParkPos = { x: cx - 12.5, y: baseY + 1, z: cz - 12.5 };
+  sim.teleport(simParkPos, { rotation: { x: 0, y: 0 } });
+  await t.wait(5);
+  t.assert(Math.abs(sim.location.z - (cz + 0.5)) >= 10, "QAFixtureBot parked outside 25m -> NPC sightline axis");
 
   const fixtureManifest = {
     fixtureReady: true,
     visualGate: "unverified",
     center: { x: cx, y: baseY + 1, z: cz },
-    npc: { name: "Archivist Mara", location: npcPos, distanceStopsMeters: stops },
+    simParkedAt: simParkPos,
+    npc: { id: "mara", name: "Mara the Cartographer", location: npcPos, distanceStopsMeters: stops },
     commands: [
       "scriptevent qa:cmd map_bridge",
       "scriptevent qa:cmd map_roof",
@@ -292,6 +345,9 @@ export default async function (t) {
       for (const p of targets) {
         try {
           const detail = await movePlayerToStep(p, step);
+          if (detail && typeof detail === "object" && detail.ok === false) {
+            throw new Error(detail.error || `step ${step} returned ok=false`);
+          }
           t.log(`QA_STEP_APPLIED ${JSON.stringify({ step, player: p.name, location: p.location, detail: detail ?? null })}`);
         } catch (err) {
           t.log(`QA_STEP_ERROR ${JSON.stringify({ step, player: p?.name ?? "unknown", error: String(err?.message ?? err) })}`);
