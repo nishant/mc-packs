@@ -1,4 +1,4 @@
-// Expansive Inventory: big pages (saved in chunks), and shrinking an operator's pages keeps every item.
+// Expansive Inventory: 24 full native stacks, and shrinking an operator's pages keeps every item.
 // Run: node tools/test-bds/run.mjs --quiet --only stash_bp --scenario tools/test-bds/examples/stash-pages-shrink.js
 export default async function (t) {
   const mc = t.mc;
@@ -13,8 +13,14 @@ export default async function (t) {
     await t.waitUntil(() => pageNow() === page, { timeout: 60, message: `on page ${page}` });
   };
   await t.waitUntil(() => inv.getItem(17)?.typeId === "custom:inv_next", { timeout: 100, message: "buttons placed" });
+  const opening = t.waitForm(p);
+  t.cmd(p, "/realm:inv");
+  (await opening).answer("Inventory settings");
+  const settings = await t.waitForm(p);
+  settings.answer({ "Auto-store pickups": false });
+  await t.wait(4);
 
-  // 1. 24 heavy stacks (long names and lore) force the saved page into several chunks
+  // 1. Every slot has substantial metadata; disable auto-store to isolate full-page switching.
   const heavy = (i) => {
     const it = mk("minecraft:iron_sword");
     it.nameTag = `Blade ${i} ` + "n".repeat(100);
