@@ -286,6 +286,27 @@ export default async function (t) {
         npc.nameTag = npc.nameTag === baseName ? `${baseName}§r` : baseName;
       }
       return { view: "npc_10m_default", npcNameTag: npc?.nameTag ?? null };
+    } else if (step === "state_snapshot") {
+      const npc = findMara();
+      const probes = dim.getEntities({ type: "realm:npc_name_probe" });
+      const inv = player.getComponent("minecraft:inventory")?.container;
+      const allPlayers = world.getAllPlayers().map((pl) => ({
+        name: pl.name,
+        isSimulated: pl.name === "QAFixtureBot",
+        location: pl.location,
+        rotation: pl.getRotation(),
+      }));
+      return {
+        ok: true,
+        view: "state_snapshot",
+        npc: npc?.isValid ? { id: npc.id, nameTag: npc.nameTag, location: npc.location } : null,
+        probeCount: probes.length,
+        stash: {
+          activeButton: inv?.getItem(16)?.nameTag ?? null,
+          firstStorageSlot: inv?.getItem(STORAGE_SLOTS[0])?.typeId ?? null,
+        },
+        allPlayers,
+      };
     } else {
       throw new Error(`Unknown qa:cmd step "${step}"`);
     }
@@ -326,31 +347,72 @@ export default async function (t) {
       "scriptevent qa:cmd npc_25m",
       "scriptevent qa:cmd npc_probe_always",
       "scriptevent qa:cmd npc_probe_looked_at",
+      "scriptevent qa:cmd state_snapshot",
     ],
   };
   t.log(`QA_FIXTURE_READY ${JSON.stringify(fixtureManifest)}`);
   t.check(true, "server-side QA fixture preconditions verified (visual gate remains unverified until real client capture)");
 
-  // Listen for `/scriptevent qa:cmd <step> [playerName]` and auto-stage joining real players.
+  // Listen for `/scriptevent qa:cmd <step> [playerNameOrStar] [correlationId]` and auto-stage joining real players.
   const stagedPlayers = new Set([sim.name]);
   system.afterEvents.scriptEventReceive.subscribe((ev) => {
     if (ev.id !== "qa:cmd") return;
-    const [step = "overview", targetName = ""] = ev.message.trim().split(/\s+/);
+    const tokens = ev.message.trim().split(/\s+/).filter(Boolean);
+    const step = tokens[0] || "overview";
+    let targetName = "";
+    let correlationId = null;
+    if (tokens.length === 2) {
+      if (tokens[1].startsWith("req_")) {
+        correlationId = tokens[1];
+      } else if (tokens[1] !== "*") {
+        targetName = decodeURIComponent(tokens[1]);
+      }
+    } else if (tokens.length >= 3) {
+      targetName = tokens[1] === "*" ? "" : decodeURIComponent(tokens[1]);
+      correlationId = tokens[2] || null;
+    }
     const all = world.getAllPlayers();
     const realPlayers = all.filter((p) => p.name !== "QAFixtureBot");
     const targets = targetName
       ? all.filter((p) => p.name.toLowerCase() === targetName.toLowerCase())
       : (realPlayers.length ? realPlayers : [sim]);
     system.run(async () => {
-      for (const p of targets) {
+      if (targets.length === 0) {
+        t.log(`QA_STEP_ERROR ${JSON.stringify({
+          step,
+          player: targetName || "unknown",
+          correlationId,
+          targetIndex: 0,
+          targetCount: 1,
+          error: `Target player "${targetName}" not found`,
+        })}`);
+        return;
+      }
+      for (let i = 0; i < targets.length; i++) {
+        const p = targets[i];
         try {
           const detail = await movePlayerToStep(p, step);
           if (detail && typeof detail === "object" && detail.ok === false) {
             throw new Error(detail.error || `step ${step} returned ok=false`);
           }
-          t.log(`QA_STEP_APPLIED ${JSON.stringify({ step, player: p.name, location: p.location, detail: detail ?? null })}`);
+          t.log(`QA_STEP_APPLIED ${JSON.stringify({
+            step,
+            player: p.name,
+            correlationId,
+            targetIndex: i,
+            targetCount: targets.length,
+            location: p.location,
+            detail: detail ?? null,
+          })}`);
         } catch (err) {
-          t.log(`QA_STEP_ERROR ${JSON.stringify({ step, player: p?.name ?? "unknown", error: String(err?.message ?? err) })}`);
+          t.log(`QA_STEP_ERROR ${JSON.stringify({
+            step,
+            player: p?.name ?? "unknown",
+            correlationId,
+            targetIndex: i,
+            targetCount: targets.length,
+            error: String(err?.message ?? err),
+          })}`);
         }
       }
     });

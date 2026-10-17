@@ -1,0 +1,385 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { EventEmitter } from "node:events";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  ALLOWLISTED_STEPS,
+  BedrockQaMcpController,
+  createBedrockQaMcpServer,
+  redactLogLine,
+  parseQaLogEvents,
+} from "../mcp-server.mjs";
+import { HERE } from "./server.mjs";
+
+async function connectInMemoryMcp(controllerOptions = {}) {
+  const controller = new BedrockQaMcpController(controllerOptions);
+  const { server } = createBedrockQaMcpServer(controller);
+  const client = new Client({ name: "mcp-test-client", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return { controller, server, client, clientTransport, serverTransport };
+}
+
+test("redactLogLine scrubs XUIDs, PFIDs, JWT tokens, secrets, and external IPs while preserving loopback and versions", () => {
+  const raw =
+    '[2026-10-17 INFO] Player connected: MytGFX, xuid: 2535412345678901, "pfid":"9988776655443322", addr 203.0.113.42:54321 -> 127.0.0.1:19132 BDS 1.26.52.3 token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c session_token=my_secret_123';
+  const redacted = redactLogLine(raw);
+  assert.doesNotMatch(redacted, /2535412345678901/);
+  assert.doesNotMatch(redacted, /9988776655443322/);
+  assert.doesNotMatch(redacted, /203\.0\.113\.42/);
+  assert.doesNotMatch(redacted, /eyJhbGciOi/);
+  assert.doesNotMatch(redacted, /my_secret_123/);
+  assert.match(redacted, /\[REDACTED_XUID\]/);
+  assert.match(redacted, /\[REDACTED_PFID\]/);
+  assert.match(redacted, /\[REDACTED_IP\]:54321/);
+  assert.match(redacted, /127\.0\.0\.1:19132/);
+  assert.match(redacted, /1\.26\.52\.3/);
+  assert.match(redacted, /\[REDACTED_TOKEN\]/);
+  assert.match(redacted, /\[REDACTED_SECRET\]/);
+});
+
+test("MCP initialize, listTools, schema validation, correlated ACKs, deadlines, and error handling work with mock runner", async (t) => {
+  const tmpLogs = fs.mkdtempSync(path.join(os.tmpdir(), "bds-mcp-unit-"));
+  t.after(() => fs.rmSync(tmpLogs, { recursive: true, force: true }));
+
+  let mockBehaviour = "normal"; // "normal" | "hang_start" | "hang_step"
+  let watchTimer = null;
+
+  const { client, controller } = await connectInMemoryMcp({
+    logsDir: tmpLogs,
+    spawnRunner(_cliArgs, { logFile, evidenceFile, commandInboxFile }) {
+      const proc = new EventEmitter();
+      proc.pid = 999991;
+      proc.exitCode = null;
+      proc.stderr = new EventEmitter();
+      proc.kill = () => {
+        proc.exitCode = 0;
+        if (watchTimer) clearInterval(watchTimer);
+        proc.emit("exit", 0);
+      };
+
+      fs.writeFileSync(commandInboxFile, "", "utf8");
+      if (mockBehaviour === "hang_start") {
+        fs.writeFileSync(logFile, "[harness] starting...\n", "utf8");
+        return proc;
+      }
+
+      const fixtureManifest = {
+        fixtureReady: true,
+        visualGate: "unverified",
+        center: { x: 200, y: 69, z: 200 },
+        commands: ALLOWLISTED_STEPS.map((s) => `scriptevent qa:cmd ${s}`),
+      };
+      fs.writeFileSync(
+        logFile,
+        `[2026-10-17 INFO] Player Spawned: MytGFX xuid: 2535499999999999 from 198.51.100.7:61234\n` +
+          `[scenario] log: QA_FIXTURE_READY ${JSON.stringify(fixtureManifest)}\n` +
+          `[scenario] log: QA_CLIENT_JOINED ${JSON.stringify({ player: "MytGFX", location: { x: 210.5, y: 69, z: 200.5 } })}\n`,
+        "utf8"
+      );
+      fs.writeFileSync(
+        evidenceFile,
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            status: "ready_waiting_for_client",
+            verdict: "READY",
+            exitCode: null,
+            git: { commit: "deadbeef1234", branch: "test-branch", dirty: false, dirtyFiles: [] },
+            bds: {
+              bdsPid: 999992,
+              runnerPid: 999991,
+              port: 29132,
+              portV6: 29133,
+              serverDir: path.join(tmpLogs, "fake-server"),
+              transport: "nethernet",
+            },
+            stagedPacks: [
+              {
+                folder: "npc_bp",
+                kind: "bp",
+                uuid: "11111111-2222-3333-4444-555555555555",
+                version: [1, 0, 0],
+                shimmed: true,
+                fileCount: 3,
+                sourceSha256: "aaa111",
+                stagedSha256: "bbb222",
+              },
+            ],
+            gates: {
+              server: "verified",
+              network: "nethernet_listening",
+              visual: "unverified",
+            },
+            timings: { stagingMs: 12, serverBootMs: 100, readinessMs: 150, totalMs: 262 },
+            errors: { setupError: null, scriptErrors: [], warnErrors: [], contentErrors: [], watchdog: [] },
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+
+      let inboxOffset = 0;
+      watchTimer = setInterval(() => {
+        if (mockBehaviour === "hang_step" || !fs.existsSync(commandInboxFile)) return;
+        const buf = fs.readFileSync(commandInboxFile);
+        if (buf.length <= inboxOffset) return;
+        const chunk = buf.subarray(inboxOffset).toString("utf8");
+        inboxOffset = buf.length;
+        for (const line of chunk.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)) {
+          const m = line.match(/^scriptevent\s+qa:cmd\s+(\S+)\s+(\S+)\s+(\S+)$/);
+          if (!m) continue;
+          const [, step, targetToken, correlationId] = m;
+          const target = targetToken === "*" ? "MytGFX" : decodeURIComponent(targetToken);
+          if (target === "GhostPlayer") {
+            fs.appendFileSync(
+              logFile,
+              `[scenario] log: QA_STEP_ERROR ${JSON.stringify({
+                step,
+                player: target,
+                correlationId,
+                targetIndex: 0,
+                targetCount: 1,
+                error: `Target player "${target}" not found`,
+              })}\n`,
+              "utf8"
+            );
+          } else {
+            fs.appendFileSync(
+              logFile,
+              `[scenario] log: QA_STEP_APPLIED ${JSON.stringify({
+                step,
+                player: target,
+                correlationId,
+                targetIndex: 0,
+                targetCount: 1,
+                location: { x: 215.5, y: 69, z: 200.5 },
+                detail: { ok: true, view: step },
+              })}\n`,
+              "utf8"
+            );
+          }
+        }
+      }, 20);
+
+      return proc;
+    },
+  });
+  t.after(async () => {
+    if (watchTimer) clearInterval(watchTimer);
+    await controller.stop({ retainArtifacts: false });
+  });
+
+  // 1. Verify tools list and annotations
+  const { tools } = await client.listTools();
+  const toolNames = tools.map((tl) => tl.name).sort();
+  assert.deepEqual(toolNames, [
+    "bds_qa_events",
+    "bds_qa_read_state",
+    "bds_qa_start",
+    "bds_qa_status",
+    "bds_qa_step",
+    "bds_qa_stop",
+  ]);
+  const statusTool = tools.find((tl) => tl.name === "bds_qa_status");
+  assert.equal(statusTool.annotations?.readOnlyHint, true);
+  const stopTool = tools.find((tl) => tl.name === "bds_qa_stop");
+  assert.equal(stopTool.annotations?.destructiveHint, true);
+
+  // 2. Verify schema / bad args rejection before start
+  const badFolderRes = await client.callTool({
+    name: "bds_qa_start",
+    arguments: { only: ["nonexistent_pack_bp"] },
+  });
+  assert.equal(badFolderRes.isError, true);
+  assert.match(badFolderRes.content[0].text, /does not exist/);
+
+  // 3. Startup deadline timeout
+  mockBehaviour = "hang_start";
+  const timeoutStartRes = await client.callTool({
+    name: "bds_qa_start",
+    arguments: { only: ["npc_bp"], readyDeadlineMs: 500 },
+  });
+  assert.equal(timeoutStartRes.isError, true);
+  assert.match(timeoutStartRes.content[0].text, /Timed out after 500ms/);
+
+  // 4. Normal start + single-active-instance guard
+  mockBehaviour = "normal";
+  const startRes = await client.callTool({
+    name: "bds_qa_start",
+    arguments: { only: ["npc_bp"], readyDeadlineMs: 5000 },
+  });
+  assert.ok(!startRes.isError, startRes.content[0].text);
+  const startData = JSON.parse(startRes.content[0].text);
+  assert.equal(startData.status, "ready_waiting_for_client");
+  assert.equal(startData.git.commit, "deadbeef1234");
+  assert.equal(startData.gates.server, "verified");
+  assert.equal(startData.gates.visual, "unverified");
+  assert.equal(startData.stagedPacks[0].sourceSha256, "aaa111");
+
+  const dupStartRes = await client.callTool({
+    name: "bds_qa_start",
+    arguments: { only: ["npc_bp"] },
+  });
+  assert.equal(dupStartRes.isError, true);
+  assert.match(dupStartRes.content[0].text, /already active/);
+
+  // 5. Correlated step ACK
+  const stepRes = await client.callTool({
+    name: "bds_qa_step",
+    arguments: { step: "npc_5m", deadlineMs: 2000 },
+  });
+  assert.ok(!stepRes.isError, stepRes.content[0].text);
+  const stepData = JSON.parse(stepRes.content[0].text);
+  assert.equal(stepData.ok, true);
+  assert.equal(stepData.step, "npc_5m");
+  assert.match(stepData.correlationId, /^req_1_/);
+  assert.equal(stepData.results[0].player, "MytGFX");
+  assert.equal(stepData.gates.visual, "unverified");
+
+  // 6. Correlated QA_STEP_ERROR on missing player
+  const errStepRes = await client.callTool({
+    name: "bds_qa_step",
+    arguments: { step: "npc_5m", player: "GhostPlayer", deadlineMs: 2000 },
+  });
+  assert.equal(errStepRes.isError, true);
+  const errStepData = JSON.parse(errStepRes.content[0].text);
+  assert.equal(errStepData.ok, false);
+  assert.match(errStepData.results[0].error, /Target player "GhostPlayer" not found/);
+
+  // 7. Step deadline timeout
+  mockBehaviour = "hang_step";
+  const hangStepRes = await client.callTool({
+    name: "bds_qa_step",
+    arguments: { step: "npc_20m", deadlineMs: 250 },
+  });
+  assert.equal(hangStepRes.isError, true);
+  assert.match(hangStepRes.content[0].text, /Timed out after 250ms/);
+  mockBehaviour = "normal";
+
+  // 8. Events + redaction verification
+  const eventsRes = await client.callTool({
+    name: "bds_qa_events",
+    arguments: { tailLines: 20, kind: "all" },
+  });
+  assert.ok(!eventsRes.isError);
+  const eventsData = JSON.parse(eventsRes.content[0].text);
+  assert.ok(eventsData.events.some((e) => e.type === "QA_FIXTURE_READY"));
+  assert.ok(eventsData.events.some((e) => e.type === "QA_CLIENT_JOINED"));
+  assert.ok(eventsData.logTail.some((l) => l.includes("[REDACTED_XUID]") && l.includes("[REDACTED_IP]:61234")));
+
+  // 9. Stop cleans up active state
+  const stopRes = await client.callTool({
+    name: "bds_qa_stop",
+    arguments: { retainArtifacts: false },
+  });
+  assert.ok(!stopRes.isError);
+  const stopData = JSON.parse(stopRes.content[0].text);
+  assert.equal(stopData.stopped, true);
+  assert.equal(stopData.wasActive, true);
+});
+
+test("live stdio MCP server starts private BDS fixture, executes correlated steps, reads live state, and stops cleanly", async (t) => {
+  const tmpLogs = fs.mkdtempSync(path.join(os.tmpdir(), "bds-mcp-live-"));
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [path.join(HERE, "mcp-server.mjs"), "--logs", tmpLogs],
+    cwd: path.resolve(HERE, "..", ".."),
+    stderr: "pipe",
+  });
+  const client = new Client({ name: "mcp-live-integration-test", version: "1.0.0" });
+  await client.connect(transport);
+
+  t.after(async () => {
+    try {
+      await client.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: false } });
+    } catch {}
+    try {
+      await client.close();
+    } catch {}
+    fs.rmSync(tmpLogs, { recursive: true, force: true });
+  });
+
+  // 1. Start live private BDS fixture (random free port pair)
+  const startRes = await client.callTool({
+    name: "bds_qa_start",
+    arguments: {
+      readyDeadlineMs: 120000,
+    },
+  });
+  assert.ok(!startRes.isError, `bds_qa_start failed: ${startRes.content[0]?.text}`);
+  const startInfo = JSON.parse(startRes.content[0].text);
+  assert.equal(startInfo.status, "ready_waiting_for_client");
+  assert.ok(Number.isInteger(startInfo.port) && startInfo.port >= 1024);
+  assert.ok(Number.isInteger(startInfo.bdsPid) && startInfo.bdsPid > 0);
+  assert.equal(startInfo.gates.server, "verified");
+  assert.equal(startInfo.gates.network, "nethernet_listening");
+  assert.equal(startInfo.gates.visual, "unverified");
+  assert.equal(startInfo.fixtureManifest?.fixtureReady, true);
+  assert.ok(startInfo.stagedPacks.length >= 5);
+
+  // 2. Step: npc_20m -> npc_probe_always -> npc_5m -> npc_probe_looked_at -> map_bridge
+  const stepProbeOn = await client.callTool({
+    name: "bds_qa_step",
+    arguments: { step: "npc_probe_always", deadlineMs: 10000 },
+  });
+  assert.ok(!stepProbeOn.isError, stepProbeOn.content[0]?.text);
+  const probeOnAck = JSON.parse(stepProbeOn.content[0].text);
+  assert.equal(probeOnAck.ok, true);
+  assert.equal(probeOnAck.results[0].player, "QAFixtureBot");
+  assert.equal(probeOnAck.results[0].detail.count, 1);
+
+  const step5m = await client.callTool({
+    name: "bds_qa_step",
+    arguments: { step: "npc_5m", deadlineMs: 10000 },
+  });
+  assert.ok(!step5m.isError, step5m.content[0]?.text);
+  const step5mAck = JSON.parse(step5m.content[0].text);
+  assert.equal(step5mAck.ok, true);
+  assert.equal(step5mAck.results[0].detail.distanceMeters, 5);
+
+  const stepProbeOff = await client.callTool({
+    name: "bds_qa_step",
+    arguments: { step: "npc_probe_looked_at", deadlineMs: 10000 },
+  });
+  assert.ok(!stepProbeOff.isError, stepProbeOff.content[0]?.text);
+  const probeOffAck = JSON.parse(stepProbeOff.content[0].text);
+  assert.equal(probeOffAck.ok, true);
+  assert.equal(probeOffAck.results[0].detail.count, 0);
+
+  // 3. Read in-world live state snapshot
+  const stateRes = await client.callTool({
+    name: "bds_qa_read_state",
+    arguments: { refreshInWorld: true, deadlineMs: 10000 },
+  });
+  assert.ok(!stateRes.isError, stateRes.content[0]?.text);
+  const stateData = JSON.parse(stateRes.content[0].text);
+  assert.equal(stateData.active, true);
+  assert.equal(stateData.liveSnapshot?.view, "state_snapshot");
+  assert.equal(stateData.liveSnapshot?.probeCount, 0);
+  assert.ok(stateData.liveSnapshot?.npc?.nameTag?.includes("Mara"));
+
+  // 4. Stop server and verify BDS PID exits
+  const stopRes = await client.callTool({
+    name: "bds_qa_stop",
+    arguments: { retainArtifacts: false },
+  });
+  assert.ok(!stopRes.isError, stopRes.content[0]?.text);
+  const stopData = JSON.parse(stopRes.content[0].text);
+  assert.equal(stopData.stopped, true);
+  assert.equal(stopData.wasActive, true);
+
+  await new Promise((r) => setTimeout(r, 300));
+  let bdsAlive = false;
+  try {
+    process.kill(startInfo.bdsPid, 0);
+    bdsAlive = true;
+  } catch {}
+  assert.equal(bdsAlive, false, `Expected owned BDS PID ${startInfo.bdsPid} to be terminated after bds_qa_stop`);
+});

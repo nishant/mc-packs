@@ -132,6 +132,52 @@ node tools/test-bds/run.mjs --only help_bp --ticks 20 --bot-qa --quiet
   timeouts (`gate: "failed"`) from observed native BDS RakNet rejection (`gate: "unsupported"`), and leaves
   unperformed network operations (`modalFormResponse`, `nativeInventoryRequest`) as `"unverified"`.
 
+## Bedrock QA MCP server (`tools/test-bds/mcp-server.mjs`)
+
+`node tools/test-bds/mcp-server.mjs` exposes a local stdio Model Context Protocol (MCP) server built on
+`@modelcontextprotocol/sdk` (`^1.32.1`, MIT) that manages one MCP-owned private `--client-qa` BDS
+instance at a time (`--packs <dir>`, `--logs <dir>`). It never connects to or modifies external servers,
+Realms, or non-owned processes, and automatically terminates its owned `bdsPid` / `runnerPid` and
+releases its host-wide port lock pair on MCP stdio disconnect or `SIGINT`/`SIGTERM`.
+
+```bash
+# Register in GitHub Copilot CLI
+copilot mcp add bedrock-bds-qa -- node C:\Code\mc-packs\tools\test-bds\mcp-server.mjs
+
+# Run MCP protocol + live BDS fixture tests
+node --test tools/test-bds/lib/mcp-server.test.mjs
+```
+
+Copilot CLI MCP configuration (`~/.copilot/mcp-config.json`):
+
+```json
+{
+  "mcpServers": {
+    "bedrock-bds-qa": {
+      "type": "local",
+      "command": "node",
+      "args": ["C:\\Code\\mc-packs\\tools\\test-bds\\mcp-server.mjs"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+Tools:
+
+- `bds_qa_start` (`{ port?, only?, seed?, flat?, timeoutSeconds?, readyDeadlineMs?, retainOnFailure? }`):
+  starts one owned private `--client-qa` server, waits up to `readyDeadlineMs` for `QA_FIXTURE_READY` and
+  `<log>.evidence.json` (`status: "ready_waiting_for_client"`), and returns `{ runId, port, portV6, bdsPid, runnerPid, git, stagedPacks, gates, fixtureManifest }`.
+- `bds_qa_step` (`{ step, player?, deadlineMs? }`): appends an allowlisted `scriptevent qa:cmd <step> <target> <correlationId>`
+  line (`overview`, `map_bridge`, `map_roof`, `map_spire`, `map_cave`, `sidebar_long`, `stash_fill`,
+  `stash_next`, `stash_prev`, `stash_open`, `npc_5m`, `npc_10m`, `npc_15m`, `npc_20m`, `npc_25m`,
+  `npc_probe_always`, `npc_probe_looked_at`, `state_snapshot`) and waits for the correlated per-player
+  `QA_STEP_APPLIED` or `QA_STEP_ERROR` ACK in a single call before client image capture.
+- `bds_qa_status` (`{}`): read-only status of the owned run (`active`, `bdsPid`, `port`, `git`, `stagedPacks`, `gates`, `joinedPlayers`, `lastStepAck`).
+- `bds_qa_read_state` (`{ refreshInWorld?, deadlineMs? }`): reads structured fixture state and optionally dispatches a correlated `state_snapshot` step to inspect live player locations, `Mara` NPC state, active `realm:npc_name_probe` count, and stash page indicator.
+- `bds_qa_events` (`{ tailLines?, kind? }`): returns structured QA events plus a bounded log tail with `xuid`, `pfid`, auth tokens, and external client IPs redacted.
+- `bds_qa_stop` (`{ retainArtifacts?, retainServerDir? }`): stops the owned `bdsPid`/`runnerPid`, cleans up the temp server folder, and releases the host-wide port lock pair.
+
 ## Inventory persistence regression
 
 `node tools/test-bds/stash-persistence.mjs` stages a test-only copy of `stash_bp` and runs
