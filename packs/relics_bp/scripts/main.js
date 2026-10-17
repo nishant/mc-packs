@@ -1703,8 +1703,8 @@ async function showMenu(player) {
   const actions = [{ label: "Your relics\n§8What you've found and what each does", run: () => showRelics(player, false) }];
   if (canForge) actions.push({ label: `Forge a relic\n§8${Math.max(1, idaOffPrice(player, get("shardsPerForge")))} Relic Shards`, run: () => forge(player) });
   if (op) {
-    actions.push({ label: "Give a relic\n§8Operators", run: () => showGive(player) });
-    actions.push({ label: "Place a relicsmith here\n§8Operators: needs the Townsfolk pack", run: () => placeSmith(player) });
+    actions.push({ label: "§4Give a relic\n§8Operators", run: () => showGive(player) });
+    actions.push({ label: "§4Place a relicsmith here\n§8Operators: needs the Townsfolk pack", run: () => placeSmith(player) });
   }
   const form = new ActionFormData()
     .title("§lRelics")

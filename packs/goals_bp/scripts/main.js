@@ -286,7 +286,7 @@ async function showGoal(player, id) {
   if (isOp(player)) {
     if (!g.done) {
       actions.push({
-        text: "Mark finished (operator)\n§8No more donations",
+        text: "§4Mark finished (operator)\n§8No more donations",
         run: () => {
           if (!stillOp(player)) return;
           const now = goals().get(g.id);
@@ -320,7 +320,7 @@ async function showGoal(player, id) {
       });
     }
     actions.push({
-      text: "§cRemove this goal (operator)",
+      text: "§4Remove this goal (operator)",
       run: () =>
         menu(player, "§lRemove this goal?", `${g.n}: ${fmt(g.got)} / ${fmt(g.target)} ${itemName(g.item)}. The items in its chest stay where they are.`, [
           {
@@ -363,9 +363,9 @@ async function mainMenu(player) {
   const actions = list.map((g) => ({ text: goalButton(g), run: () => showGoal(player, g.id) }));
   if (done) actions.push({ text: `Finished goals\n§8${done} goal${done === 1 ? "" : "s"}`, run: () => finished(player) });
   if (isOp(player)) {
-    actions.push({ text: "Add a goal\n§8Operators", run: () => addForm(player) });
+    actions.push({ text: "§4Add a goal\n§8Operators", run: () => addForm(player) });
     actions.push({
-      text: "Settings\n§8Operators",
+      text: "§4Settings\n§8Operators",
       run: () =>
         menu(
           player,

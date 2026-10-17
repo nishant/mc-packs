@@ -1181,12 +1181,12 @@ async function mainMenu(player) {
   }
   if (allTowns().size > (near ? 1 : 0)) actions.push({ text: "Other towns\n§8Every town on the realm", run: () => townList(player) });
   if (op) {
-    if (!here) actions.push({ text: "Add a town here\n§8Operators", run: () => addTownForm(player) });
+    if (!here) actions.push({ text: "§4Add a town here\n§8Operators", run: () => addTownForm(player) });
     else {
-      actions.push({ text: "Set a project spot\n§8Operators: with a preview", run: () => pickProject(player, here.id, "spot") });
-      if (Object.keys(here.spots).length) actions.push({ text: "Manage spots\n§8Operators: remove, rebuild, relocate", run: () => pickProject(player, here.id, "manage") });
-      actions.push({ text: `Protect from world events\n§8Operators: ${isProtected(here) ? "Enabled" : "Disabled"}`, run: () => protectForm(player, here.id) });
-      actions.push({ text: "Remove town\n§8Operators", run: () => removeTown(player) });
+      actions.push({ text: "§4Set a project spot\n§8Operators: with a preview", run: () => pickProject(player, here.id, "spot") });
+      if (Object.keys(here.spots).length) actions.push({ text: "§4Manage spots\n§8Operators: remove, rebuild, relocate", run: () => pickProject(player, here.id, "manage") });
+      actions.push({ text: `§4Protect from world events\n§8Operators: ${isProtected(here) ? "Enabled" : "Disabled"}`, run: () => protectForm(player, here.id) });
+      actions.push({ text: "§4Remove town\n§8Operators", run: () => removeTown(player) });
     }
   }
   actions.push({ text: "Close", run: () => undefined });

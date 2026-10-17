@@ -166,7 +166,7 @@ async function openMenu(player) {
   const entries = [];
   if (edit) entries.push({ text: `Add a farm here\n§8${list.length}/${get("maxAreas")} in use`, run: () => addForm(player) });
   if (edit) for (const f of list) entries.push({ text: `Remove ${f.name}`, run: () => confirmRemove(player, f) });
-  if (isOp(player)) entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
+  if (isOp(player)) entries.push({ text: "§4Settings\n§8Operators", run: () => settingsInfo(player) });
   const form = new ActionFormData()
     .title("Farm Loader")
     .body(list.length ? `${list.length}/${get("maxAreas")} in use.\n\n${list.map(describe).join("\n")}` : "No farms are kept loaded. Stand in a farm and add it.");

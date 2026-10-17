@@ -2015,7 +2015,7 @@ async function mainMenu(player) {
   }
   actions.push({ text: "The Realm Year\n§8Seasons and festivals", run: () => yearMenu(player) });
   actions.push({ text: "Sieges\n§8History and the towns", run: () => siegeMenu(player) });
-  if (isOp(player)) actions.push({ text: "Operators\n§8Day, siege, regatta course", run: () => opMenu(player) });
+  if (isOp(player)) actions.push({ text: "§4Operators\n§8Day, siege, regatta course", run: () => opMenu(player) });
   actions.push({ text: "Close", run: () => undefined });
   await menu(player, "Realm Calendar", lines.join("\n\n"), actions);
 }
@@ -2078,7 +2078,7 @@ async function siegeMenu(player) {
   const body = [`§lHistory§r\n${hist}`, `§lTowns§r\n${tl}`, `§7Choir Cairns silenced in the Atlas: ${meta.cairns.length}${meta.cairns.length >= 18 ? "+" : ""} (the Choir comes ${red} fewer).`].join("\n\n");
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [];
-  if (isOp(player)) for (const t of list) actions.push({ text: `${t.n}: sieges ${siegesAt(t.id) ? "Enabled" : "Disabled"}\n§8Operators: switch`, run: () => toggleTown(player, t.id) });
+  if (isOp(player)) for (const t of list) actions.push({ text: `§4${t.n}: sieges ${siegesAt(t.id) ? "Enabled" : "Disabled"}\n§8Operators: switch`, run: () => toggleTown(player, t.id) });
   actions.push({ text: "Back", run: () => mainMenu(player) });
   await menu(player, "Sieges", body, actions);
 }

@@ -680,7 +680,7 @@ async function menu(p) {
     { label: "Pay table\n§8What wins and how often", run: () => payTable(p) },
     { label: "Limits and breaks\n§8Daily limits, block yourself", run: () => limitsPage(p) },
   ];
-  if (isOp(p)) items.push({ label: "Operator tools", run: () => opMenu(p) });
+  if (isOp(p)) items.push({ label: "§4Operator tools", run: () => opMenu(p) });
   items.push({ label: "Close", run: () => undefined });
   const body = get("enabled") === true ? limitsLine(p) || "No currency is enabled." : "§7The slot machines are closed.";
   await choose(p, new ActionFormData().title("§lSlot Machine").body(body), items);

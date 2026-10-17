@@ -704,7 +704,7 @@ async function openMenu(player, dimension, at) {
     actions.push({ text: `Share or unlock\n§8${l.s.length ? `Shared with ${l.s.length} player${l.s.length === 1 ? "" : "s"}` : "Only you can open it"}`, run: (p) => lockMenu(p, dimension, at).catch((e) => console.warn(`[stash] ${e}`)), free: true });
   } else if (l && isOp(player)) {
     actions.push({
-      text: `Remove the lock (operator)\n§8Locked by ${l.n}`,
+      text: `§4Remove the lock (operator)\n§8Locked by ${l.n}`,
       run: (p) => {
         const b = dimension.getBlock(at);
         if (b) updateLock(b, () => undefined);

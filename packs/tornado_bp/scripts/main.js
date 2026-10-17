@@ -676,7 +676,7 @@ async function mainMenu(player) {
   const actions = [{ text: "Where is the tornado?\n§8Distance and heading", run: () => player.sendMessage(describe(player)) }];
   if (isOp(player)) {
     actions.push({
-      text: "Spawn one (operator)\n§840 blocks in front of you",
+      text: "§4Spawn one (operator)\n§840 blocks in front of you",
       run: () => {
         const why = spawnInFront(player);
         player.sendMessage(why ? `§c${why}` : "A tornado forms 40 blocks in front of you.");
@@ -684,7 +684,7 @@ async function mainMenu(player) {
     });
     if (tornado) {
       actions.push({
-        text: "End the tornado (operator)\n§8It dies down now, no Storm Glass",
+        text: "§4End the tornado (operator)\n§8It dies down now, no Storm Glass",
         run: () => {
           if (tornado) end(tornado, true);
           player.sendMessage("§7The tornado is gone.");

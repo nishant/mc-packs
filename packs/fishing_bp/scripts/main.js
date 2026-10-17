@@ -1193,7 +1193,7 @@ async function mainMenu(player) {
     [`Make my fish stackable\n§8${measured ? `${measured} measured raw fish` : "No measured raw fish"}`, () => stackMenu(player)],
     [`Fishing settings\n§8Separate named items: ${getFor(player, "measure") === true ? "Enabled" : "Disabled"}`, () => settingsMenu(player)],
   ];
-  if (isOp(player)) actions.push([`Start a tournament now\n§8Operators, ${get("tournamentMinutes")} minutes`, () => opStartTournament(player)]);
+  if (isOp(player)) actions.push([`§4Start a tournament now\n§8Operators, ${get("tournamentMinutes")} minutes`, () => opStartTournament(player)]);
   const form = new ActionFormData().title("§lFishing 2.0").body(tournamentStatus());
   for (const [label] of actions) form.button(label);
   form.button("Close");

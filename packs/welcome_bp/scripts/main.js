@@ -300,9 +300,9 @@ async function packMenu(player) {
   /** @type {{ text: string, run: () => Promise<void> }[]} */
   const entries = [{ text: "Show the welcome message", run: () => showWelcome(player) }];
   if (isOp(player)) {
-    entries.push({ text: "Edit the welcome message\n§8Operators", run: () => openEditor(player) });
-    entries.push({ text: "Reset to the defaults\n§8Operators", run: () => resetWelcome(player) });
-    entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
+    entries.push({ text: "§4Edit the welcome message\n§8Operators", run: () => openEditor(player) });
+    entries.push({ text: "§4Reset to the defaults\n§8Operators", run: () => resetWelcome(player) });
+    entries.push({ text: "§4Settings\n§8Operators", run: () => settingsInfo(player) });
   }
   if (entries.length === 1) return entries[0].run();
   const form = new ActionFormData().title("§lWelcome Message").body("The message new players see when they join.");

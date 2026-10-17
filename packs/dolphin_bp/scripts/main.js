@@ -530,7 +530,7 @@ async function menu(p) {
     { label: "My dolphins", run: () => listMine(p) },
     { label: "Call the nearest\n§8It swims to you", run: () => callNearest(p) },
   ];
-  if (isOp(p)) items.push({ label: "Operator tools", run: () => opMenu(p) });
+  if (isOp(p)) items.push({ label: "§4Operator tools", run: () => opMenu(p) });
   items.push({ label: "Close", run: () => undefined });
   const form = new ActionFormData().title("§lDolphin Friends").body(body);
   for (const it of items) form.button(it.label);

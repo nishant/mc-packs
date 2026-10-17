@@ -301,7 +301,7 @@ async function mainMenu(player) {
     { text: "Pay a player\n§8From your balance", run: () => payForm(player) },
   ];
   if (get("marketEnabled") === true && get("marketAnywhere") === true) actions.push({ text: "Market\n§8Buy and sell", run: () => market(player) });
-  if (isOp(player)) actions.push({ text: "Give Crowns\n§8Operators: or take them", run: () => giveForm(player) });
+  if (isOp(player)) actions.push({ text: "§4Give Crowns\n§8Operators: or take them", run: () => giveForm(player) });
   const form = new ActionFormData().title("§lCrowns").body(`Your balance: §6${crowns(crownsOf(player))}`);
   for (const a of actions) form.button(a.text);
   form.button("Close");

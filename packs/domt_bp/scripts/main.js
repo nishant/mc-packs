@@ -289,9 +289,9 @@ async function menu(p) {
     actions.push(["My draws\n§8Your last cards", async () => showHistory(p)]);
     actions.push(["The odds\n§8Every card and its chance", async () => showOdds(p)]);
     if (op) {
-      actions.push(["Draw for a player\n§8Operators", async () => drawFor(p)]);
-      actions.push(["Cards on/off\n§8Operators", async () => cardsMenu(p)]);
-      actions.push(["Reset a cooldown\n§8Operators", async () => resetCooldown(p)]);
+      actions.push(["§4Draw for a player\n§8Operators", async () => drawFor(p)]);
+      actions.push(["§4Cards on/off\n§8Operators", async () => cardsMenu(p)]);
+      actions.push(["§4Reset a cooldown\n§8Operators", async () => resetCooldown(p)]);
     }
     actions.push(["Close", async () => true]);
     const body = opsOnly

@@ -7,6 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+
+## Operator buttons in red everywhere
+
+- Operator-only buttons in every pack's own menu (stats, towns, caravan, news and more) are now red, like in the Realm Configuration menu. Players who aren't operators still never see them.
 ## Easier to read realm menu
 
 - Operator entries in the Realm Configuration menu are now red instead of gold, which was hard to read on the gray buttons.

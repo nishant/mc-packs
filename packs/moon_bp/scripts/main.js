@@ -767,7 +767,7 @@ async function mainMenu(player) {
   const actions = [{ text: "Tonight's moon\n§8Phase and the next full moon", run: () => player.sendMessage(report()) }];
   if (player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors) {
     for (const state of /** @type {State[]} */ (["blood", "harvest", "normal"])) {
-      actions.push({ text: `Make tonight ${{ blood: "a Blood Moon", harvest: "a Harvest Moon", normal: "an ordinary moon" }[state]} (operator)\n§8Now, if it's night`, run: () => player.sendMessage(`§7${setMoon(state)}`) });
+      actions.push({ text: `§4Make tonight ${{ blood: "a Blood Moon", harvest: "a Harvest Moon", normal: "an ordinary moon" }[state]} (operator)\n§8Now, if it's night`, run: () => player.sendMessage(`§7${setMoon(state)}`) });
     }
   }
   const form = new ActionFormData().title("§lBlood Moon & Harvest Moon").body(report());

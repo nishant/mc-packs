@@ -253,7 +253,7 @@ async function mainMenu(player) {
     .title("§lNicknames")
     .body(mine ? `Your nickname: §${mine.c}${mine.n}§r` : "You have no nickname.")
     .button("My nickname\n§8Set, change or remove it")
-    .button(`Players' nicknames (operator)\n§8${nicks().size} saved, clear any`);
+    .button(`§4Players' nicknames (operator)\n§8${nicks().size} saved, clear any`);
   const res = await show(player, form);
   if (!res || res.canceled || !player.isValid) return;
   if (res.selection === 0) await editMine(player);

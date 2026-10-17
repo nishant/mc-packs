@@ -403,7 +403,7 @@ async function mainMenu(player) {
     .button(`Choose a title\n§8${d.t.length} unlocked`)
     .button(`Choose a trail\n§8${d.r.length} unlocked`);
   const op = player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
-  if (op) form.button("Give a title or trail\n§8Operators").button("Settings\n§8Operators");
+  if (op) form.button("§4Give a title or trail\n§8Operators").button("§4Settings\n§8Operators");
   form.button("Close");
   const res = await show(player, form);
   if (!res || res.canceled || !player.isValid) return;
