@@ -62,8 +62,9 @@ logout/rejoin and death while the shulker is on an inactive page.
 
 The wrapper transfers the exact saved test handle and active inventory image to a fresh simulated
 player, because simulated IDs change on restart; it does not change production identity handling.
-It reserves ports 19362/19363 and keeps its mutable cache inside `tools/test-bds/.cache/`.
-Run it separately from another inventory BDS run using those ports.
+It defaults to ports 19362/19363 and keeps its mutable cache inside `tools/test-bds/.cache/`.
+Use `node tools/test-bds/stash-persistence.mjs --port 19372` to reserve 19372/19373 instead.
+Run it separately from another BDS run using the same ports.
 
 `node --test tools/stash-pages.test.mjs` covers injected storage/index/inventory-write failures,
 rollback journals, legacy migration, cursor/button echoes, and overflow without a client.
