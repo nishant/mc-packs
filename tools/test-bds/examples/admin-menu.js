@@ -61,7 +61,7 @@ export default async function (t) {
   anvilStar.nameTag = "Realm Configuration";
   guestInv.setItem(15, legacyGold);
   guestInv.setItem(16, legacyOp);
-  guestInv.setItem(17, anvilStar);
+  guestInv.setItem(18, anvilStar);
   await t.wait(5);
   t.assert(t.cmd(guest, "/realm:admin_item").ok, "/realm:admin_item deduplicates extra copies");
   await t.wait(5);
@@ -69,8 +69,8 @@ export default async function (t) {
     .filter((it) => it && it.typeId === "minecraft:nether_star" && it.getLore().length > 0)
     .reduce((sum, it) => sum + it.amount, 0);
   t.check(realCount === 1, `three real copies (amount 4 total) collapsed to 1 (got ${realCount})`);
-  t.check(guestInv.getItem(17)?.amount === 3 && guestInv.getItem(17)?.getLore().length === 0, "anvil-renamed ordinary Nether Star in slot 17 untouched");
-  guestInv.setItem(17, undefined);
+  t.check(guestInv.getItem(18)?.amount === 3 && guestInv.getItem(18)?.getLore().length === 0, "anvil-renamed ordinary Nether Star in slot 18 untouched");
+  guestInv.setItem(18, undefined);
   await t.wait(2);
 
   // 2. The guest's menu: no operator entries anywhere.

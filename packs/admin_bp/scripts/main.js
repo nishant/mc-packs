@@ -645,7 +645,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   open.delete(playerId);
   resumed.delete(playerId);
   toldFull.delete(playerId);
+  toldFailed.delete(playerId);
   updatingItem.delete(playerId);
+  dirtyWhileUpdating.delete(playerId);
   scheduledItem.delete(playerId);
 });
 
@@ -664,49 +666,47 @@ function openMenu(player) {
 
 /** @type {Set<string>} players whose inventory slots are being written by this script */
 const updatingItem = new Set();
+/** @type {Set<string>} players who received an external inventory change while updatingItem was active */
+const dirtyWhileUpdating = new Set();
 /** @type {Set<string>} players with a reconcile already queued for the next tick */
 const scheduledItem = new Set();
+/** @type {Set<string>} players already warned about a failed duplicate removal or normalization */
+const toldFailed = new Set();
 
 /** @param {Player} player */
 function markUpdating(player) {
   const id = player.id;
   if (updatingItem.has(id)) return;
   updatingItem.add(id);
-  system.run(() => updatingItem.delete(id));
+  system.run(() => {
+    updatingItem.delete(id);
+    if (dirtyWhileUpdating.has(id)) {
+      dirtyWhileUpdating.delete(id);
+      if (player.isValid) scheduleReconcile(player);
+    }
+  });
 }
 
-const REAL_LORE_LINES = new Set(
-  [
-    ...LORE,
-    ...OLD_MARKS,
-    "Use it to open the admin menu:",
-    "every realm command in one place,",
-    "with preset choices.",
-  ].map((l) => plain(l).trim())
-);
+const REAL_MARKS = new Set([MARK, ...OLD_MARKS].map((m) => plain(m).trim()));
+const KNOWN_LORE_PREFIXES = [
+  ["Hold it in your hand and use it", "to open the realm menu:"],
+  ["Use it to open the realm menu:", "every realm command you can use,"],
+  ["Use it to open the admin menu:", "every realm command in one place,"],
+];
 
-/** @param {ItemStack | undefined} it whether the item carries Realm Configuration's current or legacy lore */
-const hasRealLore = (it) => {
+/** @param {ItemStack | undefined} it the real item, made by this pack (current or legacy pack marker/fingerprint, even if recolored or anvil-renamed) */
+const isRealItem = (it) => {
   if (!it || it.typeId !== CONFIG.itemType) return false;
   try {
     const lore = it.getLore();
-    return lore.some((l) => REAL_LORE_LINES.has(plain(l).trim()));
+    if (!lore.length) return false;
+    if (lore.includes(MARK) || OLD_MARKS.some((m) => lore.includes(m))) return true;
+    const stripped = lore.map((l) => plain(l).trim());
+    if (stripped.some((l) => REAL_MARKS.has(l))) return true;
+    return KNOWN_LORE_PREFIXES.some((prefix) => prefix.every((line, idx) => stripped[idx] === line));
   } catch {
     return false;
   }
-};
-
-/** @param {ItemStack | undefined} it the real item, made by this pack (current, legacy, recolored or anvil-renamed with real lore, or locked Realm Configuration) */
-const isRealItem = (it) => {
-  if (!it || it.typeId !== CONFIG.itemType) return false;
-  if (hasRealLore(it)) return true;
-  if (plain(it.nameTag).trim() !== TITLE) return false;
-  try {
-    if (it.keepOnDeath && it.lockMode === ItemLockMode.inventory && it.getLore().length > 0) return true;
-  } catch {
-    // ignore unreadable lock/keepOnDeath
-  }
-  return false;
 };
 
 /** @param {ItemStack | undefined} it named Realm Configuration (also one renamed on an anvil) or the real item */
@@ -767,9 +767,10 @@ function slotPriority(player, slot) {
  * Ensures the player carries at most one real Realm Configuration item (amount 1, normalized lore/lock/keepOnDeath),
  * removing any extra real copies across the inventory, offhand and cursor while leaving anvil-renamed items alone.
  * @param {Player} player
+ * @param {boolean} [tellFailure] always tell the player if a removal or normalization failed
  * @returns {{ hasItem: boolean, hasReal: boolean, removedExtras: number, failedRemovals: number }}
  */
-function reconcileItems(player) {
+function reconcileItems(player, tellFailure = false) {
   const inv = inventory(player);
   if (!inv) return { hasItem: true, hasReal: true, removedExtras: 0, failedRemovals: 0 };
   /** @type {number[]} */
@@ -798,15 +799,18 @@ function reconcileItems(player) {
         inv.setItem(keptSlot, normalizedItem(kept));
         const after = inv.getItem(keptSlot);
         if (!after || !isRealItem(after)) {
-          failedRemovals += extraInKept;
+          failedRemovals += Math.max(1, extraInKept);
         } else if (after.amount > 1) {
           removedExtras += Math.max(0, kept.amount - after.amount);
           failedRemovals += after.amount - 1;
+        } else if (needsNormalize(after)) {
+          removedExtras += extraInKept;
+          failedRemovals += 1;
         } else {
           removedExtras += extraInKept;
         }
       } catch {
-        failedRemovals += extraInKept;
+        failedRemovals += Math.max(1, extraInKept);
       }
     }
     for (let j = 1; j < realSlots.length; j++) {
@@ -826,20 +830,30 @@ function reconcileItems(player) {
   }
 
   // Also check offhand for a duplicate or stray real item.
+  let eq;
+  let offItem;
   try {
-    const eq = equippable(player);
-    const offItem = eq?.getEquipment(EquipmentSlot.Offhand);
-    if (eq && offItem && isRealItem(offItem)) {
-      if (keptReal) {
-        const count = offItem.amount;
+    eq = equippable(player);
+    offItem = eq?.getEquipment(EquipmentSlot.Offhand);
+  } catch {
+    // equippable unavailable
+  }
+  if (eq && offItem && isRealItem(offItem)) {
+    if (keptReal) {
+      const count = offItem.amount;
+      try {
         markUpdating(player);
         eq.setEquipment(EquipmentSlot.Offhand, undefined);
         const rem = eq.getEquipment(EquipmentSlot.Offhand);
         if (rem && isRealItem(rem)) failedRemovals += rem.amount;
         else removedExtras += count;
-      } else {
-        keptReal = true;
-        const extra = Math.max(0, offItem.amount - 1);
+      } catch {
+        failedRemovals += count;
+      }
+    } else {
+      keptReal = true;
+      const extra = Math.max(0, offItem.amount - 1);
+      try {
         markUpdating(player);
         const rest = inv.addItem(normalizedItem(offItem));
         if (!rest) {
@@ -850,48 +864,70 @@ function reconcileItems(player) {
         } else if (needsNormalize(offItem)) {
           eq.setEquipment(EquipmentSlot.Offhand, normalizedItem(offItem));
           const rem = eq.getEquipment(EquipmentSlot.Offhand);
-          if (rem && rem.amount > 1) failedRemovals += rem.amount - 1;
+          if (!rem || !isRealItem(rem)) failedRemovals += Math.max(1, extra);
+          else if (rem.amount > 1) failedRemovals += rem.amount - 1;
+          else if (needsNormalize(rem)) failedRemovals += 1;
           else removedExtras += extra;
         }
+      } catch {
+        failedRemovals += Math.max(1, extra);
       }
-    } else if (offItem && isConfigItem(offItem)) {
-      hasAnvilConfig = true;
     }
-  } catch {
-    // equippable unavailable
+  } else if (offItem && isConfigItem(offItem)) {
+    hasAnvilConfig = true;
   }
 
   // Also check cursor inventory for a duplicate or stray real item.
+  let cursor;
+  let cItem;
   try {
-    const cursor = player.getComponent("minecraft:cursor_inventory");
-    const cItem = cursor?.item;
-    if (cItem && isRealItem(cItem)) {
-      if (keptReal) {
-        const count = cItem.amount;
+    cursor = player.getComponent("minecraft:cursor_inventory");
+    cItem = cursor?.item;
+  } catch {
+    // cursor_inventory unavailable
+  }
+  if (cursor && cItem && isRealItem(cItem)) {
+    if (keptReal) {
+      const count = cItem.amount;
+      try {
         markUpdating(player);
         cursor.clear();
         if (cursor.item && isRealItem(cursor.item)) failedRemovals += cursor.item.amount;
         else removedExtras += count;
-      } else {
-        keptReal = true;
-        const extra = Math.max(0, cItem.amount - 1);
-        if (needsNormalize(cItem)) {
+      } catch {
+        failedRemovals += count;
+      }
+    } else {
+      keptReal = true;
+      const extra = Math.max(0, cItem.amount - 1);
+      if (needsNormalize(cItem)) {
+        try {
           markUpdating(player);
           const rest = inv.addItem(normalizedItem(cItem));
           if (!rest) {
             cursor.clear();
             if (cursor.item && isRealItem(cursor.item)) failedRemovals += cursor.item.amount;
             else removedExtras += extra;
-          } else if (extra > 0) {
-            failedRemovals += extra;
+          } else {
+            failedRemovals += Math.max(1, extra);
           }
+        } catch {
+          failedRemovals += Math.max(1, extra);
         }
       }
-    } else if (cItem && isConfigItem(cItem)) {
-      hasAnvilConfig = true;
     }
-  } catch {
-    // cursor_inventory unavailable
+  } else if (cItem && isConfigItem(cItem)) {
+    hasAnvilConfig = true;
+  }
+
+  if (failedRemovals > 0) {
+    console.warn(`[admin] could not remove or normalize ${failedRemovals} ${TITLE} item(s) for ${player.name}`);
+    if (tellFailure || !toldFailed.has(player.id)) {
+      player.sendMessage(`§cCould not remove ${failedRemovals} extra ${TITLE} item(s).`);
+      toldFailed.add(player.id);
+    }
+  } else {
+    toldFailed.delete(player.id);
   }
 
   return { hasItem: keptReal || hasAnvilConfig, hasReal: keptReal, removedExtras, failedRemovals };
@@ -907,12 +943,10 @@ const toldFull = new Set();
 
 /** Gives the item unless they carry one. @param {Player} player @param {boolean} tell say so if they already have one */
 function giveItem(player, tell) {
-  const before = reconcileItems(player);
+  const before = reconcileItems(player, tell);
   if (before.hasItem) {
-    if (tell) {
-      if (before.failedRemovals > 0) {
-        player.sendMessage(`§cCould not remove ${before.failedRemovals} extra ${TITLE} item(s).`);
-      } else if (before.removedExtras > 0) {
+    if (tell && before.failedRemovals === 0) {
+      if (before.removedExtras > 0) {
         player.sendMessage(`§7Removed ${before.removedExtras} extra ${TITLE} item${before.removedExtras === 1 ? "" : "s"}; you carry one.`);
       } else {
         player.sendMessage(`§7You already carry the ${TITLE} item.`);
@@ -931,7 +965,7 @@ function giveItem(player, tell) {
     return false;
   }
   toldFull.delete(player.id);
-  const after = reconcileItems(player);
+  const after = reconcileItems(player, tell);
   if (!after.hasItem || after.failedRemovals > 0) return false;
   player.sendMessage(`§6[${TITLE}] §rYou have the §6${TITLE}§r item: use it for every realm command you can use, in one menu.`);
   return true;
@@ -956,31 +990,53 @@ function takeItem(player) {
       failed += count;
     }
   }
+  let eq;
+  let offItem;
   try {
-    const eq = equippable(player);
-    const offItem = eq?.getEquipment(EquipmentSlot.Offhand);
-    if (eq && offItem && isRealItem(offItem)) {
-      const count = offItem.amount;
+    eq = equippable(player);
+    offItem = eq?.getEquipment(EquipmentSlot.Offhand);
+  } catch {
+    // equippable unavailable
+  }
+  if (eq && offItem && isRealItem(offItem)) {
+    const count = offItem.amount;
+    try {
       markUpdating(player);
       eq.setEquipment(EquipmentSlot.Offhand, undefined);
       const rem = eq.getEquipment(EquipmentSlot.Offhand);
       if (rem && isRealItem(rem)) failed += rem.amount;
       else took += count;
+    } catch {
+      failed += count;
     }
-  } catch {
-    // equippable unavailable
   }
+  let cursor;
+  let cItem;
   try {
-    const cursor = player.getComponent("minecraft:cursor_inventory");
-    if (cursor?.item && isRealItem(cursor.item)) {
-      const count = cursor.item.amount;
+    cursor = player.getComponent("minecraft:cursor_inventory");
+    cItem = cursor?.item;
+  } catch {
+    // cursor_inventory unavailable
+  }
+  if (cursor && cItem && isRealItem(cItem)) {
+    const count = cItem.amount;
+    try {
       markUpdating(player);
       cursor.clear();
       if (cursor.item && isRealItem(cursor.item)) failed += cursor.item.amount;
       else took += count;
+    } catch {
+      failed += count;
     }
-  } catch {
-    // cursor_inventory unavailable
+  }
+  if (failed > 0) {
+    console.warn(`[admin] could not remove ${failed} ${TITLE} item(s) from non-operator ${player.name}`);
+    if (!toldFailed.has(player.id)) {
+      player.sendMessage(`§cCould not remove ${failed} ${TITLE} item(s).`);
+      toldFailed.add(player.id);
+    }
+  } else {
+    toldFailed.delete(player.id);
   }
   if (took && !failed) player.sendMessage(`§7The ${TITLE} item is for operators here, so it was put away.`);
   return { took, failed };
@@ -1008,7 +1064,11 @@ function scheduleReconcile(player) {
   system.run(() => {
     scheduledItem.delete(id);
     try {
-      if (!player.isValid || updatingItem.has(id)) return;
+      if (!player.isValid) return;
+      if (updatingItem.has(id)) {
+        dirtyWhileUpdating.add(id);
+        return;
+      }
       if (!forEveryone() && !isOp(player) && get("removeFromOthers") === true) takeItem(player);
       else reconcileItems(player);
     } catch (e) {
@@ -1030,10 +1090,14 @@ onChange(() => {
 world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
   try {
     const player = event.player;
-    if (!player?.isValid || updatingItem.has(player.id)) return;
+    if (!player?.isValid) return;
     if (!isRealItem(event.itemStack) && !isRealItem(event.beforeItemStack)) {
       const cursor = player.getComponent("minecraft:cursor_inventory");
       if (!isRealItem(cursor?.item)) return;
+    }
+    if (updatingItem.has(player.id)) {
+      dirtyWhileUpdating.add(player.id);
+      return;
     }
     scheduleReconcile(player);
   } catch (e) {
