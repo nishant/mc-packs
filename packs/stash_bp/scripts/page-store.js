@@ -5,7 +5,7 @@ import { StructureSaveMode, world } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {{ s: number, item: ItemStack }} Entry */
 /** @typedef {{ id: string, slots: number[] }} Ref */
-/** @typedef {{ v: 1, cur: number, pages: Record<string, Ref>, pending?: { before: Ref, after: Ref, blocked?: boolean } }} State */
+/** @typedef {{ v: 1, cur: number, pages: Record<string, Ref>, pending?: { before: Ref, after: Ref } }} State */
 const STATE = "stash:native";
 const NEXT = "stash:snapshot_next";
 const ENTITY = "realm:stash_page_store";
@@ -219,41 +219,11 @@ export function commitInventory(player, old, next, after) {
 }
 
 /**
- * Retry an interrupted rollback only if every slot is still one of the two journaled images.
- * An intervening player change is never overwritten automatically.
- * @param {Player} player @returns {boolean}
+ * A persisted journal means rollback failed or execution stopped between commit points. Inventory
+ * signatures cannot prove custody (a drop can look exactly like the empty after-image), nor compare
+ * opaque metadata. Keep both native images quarantined; never replay them speculatively.
+ * @param {Player} player
  */
-export function recoverInventory(player) {
-  const state = stateOf(player);
-  if (!state.pending) return true;
-  if (state.pending.blocked) return false;
-  const inv = player.getComponent("minecraft:inventory")?.container;
-  if (!inv) return false;
-  const before = loadSnapshot(player, state.pending.before);
-  const after = loadSnapshot(player, state.pending.after);
-  const oldItems = new Map(before.map((e) => [e.s, e.item]));
-  const newItems = new Map(after.map((e) => [e.s, e.item]));
-  for (let s = 0; s < inv.size; s++) {
-    const actual = signature(inv.getItem(s));
-    if (actual !== signature(oldItems.get(s)) && actual !== signature(newItems.get(s))) {
-      state.pending.blocked = true;
-      writeState(player, state);
-      throw new InventoryRecoveryError("inventory changed during recovery; original images are safely saved, tell an operator");
-    }
-  }
-  replaceInventory(inv, before);
-  const next = { ...state };
-  delete next.pending;
-  writeState(player, next);
-  discardSnapshot(state.pending.before);
-  discardSnapshot(state.pending.after);
-  return true;
-}
-
-/** Death must not replay an interrupted pre-death inventory and duplicate its drops. @param {Player} player */
-export function holdRecovery(player) {
-  const state = stateOf(player);
-  if (!state.pending) return;
-  state.pending.blocked = true;
-  writeState(player, state);
+export function inventoryReady(player) {
+  return !stateOf(player).pending;
 }

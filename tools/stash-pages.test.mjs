@@ -32,6 +32,7 @@ const mc = {
   failSave: false,
   failLoad: false,
   metadataThrow: new Set(),
+  loads: 0,
 };
 globalThis.__mc = mc;
 
@@ -253,6 +254,7 @@ mc.server = {
         })));
       },
       place(id, dim, at) {
+        mc.loads++;
         if (mc.failLoad) throw new Error("injected snapshot read failure");
         for (const saved of mc.structures.get(id)) {
           const entity = storageEntity(dim, at, saved.typeId);
@@ -653,14 +655,14 @@ test("death quarantines an interrupted rollback instead of resurrecting dropped 
   for (const s of STORAGE_SLOTS) p.container.setItem(s, undefined);
   fire("playerSpawn", { player: p });
   const storage = await import(storeUrl);
-  assert.equal(storage.recoverInventory(p), false);
+  assert.equal(storage.inventoryReady(p), false);
   assert.equal(filled(p).length, 0);
   const state = JSON.parse(p.getDynamicProperty("stash:native"));
-  assert.equal(state.pending.blocked, true);
+  assert.ok(state.pending);
   assert.ok(mc.structures.has(state.pending.before.id), "operator still has the recovery image");
 });
 
-test("repeated write failure retains durable recovery images and safely retries once writes work", async () => {
+test("repeated write failure retains durable recovery images but never speculatively replays them", async () => {
   const p = joined();
   for (const s of STORAGE_SLOTS) p.container.setItem(s, stack("minecraft:emerald", 7));
   const original = p.container.setItem.bind(p.container);
@@ -675,10 +677,75 @@ test("repeated write failure retains durable recovery images and safely retries 
   assert.ok(mc.structures.has(pending.after.id));
   p.container.setItem = original;
   const storage = await import(storeUrl);
-  assert.equal(storage.recoverInventory(p), true);
-  for (const s of STORAGE_SLOTS) assert.equal(p.container.getItem(s).amount, 7);
-  assert.equal(switchPage(p, 2), true);
-  assert.equal(filled(p).length, 0);
+  const actual = slotTypes(p);
+  assert.equal(storage.inventoryReady(p), false);
+  assert.deepEqual(slotTypes(p), actual);
+  assert.equal(switchPage(p, 2), false);
+});
+
+function journaledPlayer(id = "minecraft:diamond") {
+  const p = joined();
+  p.container.setItem(10, stack(id));
+  const original = p.setDynamicProperty.bind(p);
+  let writes = 0;
+  p.setDynamicProperty = (k, v) => {
+    if (k === "stash:native" && [2, 3].includes(++writes)) throw new Error("failed final commit and rollback index");
+    original(k, v);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.setDynamicProperty = original;
+  assert.ok(JSON.parse(p.getDynamicProperty("stash:native")).pending);
+  assert.equal(p.container.getItem(10).typeId, id);
+  return p;
+}
+
+test("dropping a pending before-item into the allowed after-empty image never recreates it", async () => {
+  const p = journaledPlayer();
+  const diamond = p.container.getItem(10);
+  p.dimension.spawnItem(diamond, p.location);
+  p.container.setItem(10, undefined);
+  const storage = await import(storeUrl);
+  assert.equal(storage.inventoryReady(p), false);
+  assert.equal(p.container.getItem(10), undefined);
+  assert.ok(mc.spawned.some((e) => e.item === diamond), "original drop still exists; never create its duplicate");
+});
+
+test("opaque native contents changed during pending recovery are never overwritten by visible signatures", async () => {
+  const p = journaledPlayer("minecraft:white_shulker_box");
+  const changed = stack("minecraft:white_shulker_box");
+  changed.contents = ["new real contents, not in the recovery image"];
+  p.container.setItem(10, changed);
+  const storage = await import(storeUrl);
+  assert.equal(storage.inventoryReady(p), false);
+  assert.deepEqual(p.container.getItem(10).contents, changed.contents);
+});
+
+test("full 25-to-1 overflow retries have a bounded native snapshot read budget", (t) => {
+  mc.pages = 25;
+  const p = joined();
+  const allPlayers = mc.players;
+  mc.players = [p];
+  try {
+    for (let page = 1; page <= 25; page++) {
+      assert.equal(switchPage(p, page), true);
+      for (const s of STORAGE_SLOTS) p.container.setItem(s, stack("minecraft:stone", 64));
+    }
+    assert.equal(switchPage(p, 1), true);
+    for (let s = 0; s < 36; s++) p.container.setItem(s, stack("minecraft:stone", 64));
+    const before = mc.loads;
+    const notes = p.bar.length;
+    mc.pages = 1;
+    advance(200);
+    t.diagnostic(`25-to-1 overflow: ${mc.loads - before} snapshot reads across 200 ticks`);
+    assert.ok(mc.loads - before <= 24 * 11, `at most one 24-page retry per 20 ticks, got ${mc.loads - before} reads`);
+    assert.ok(p.bar.length - notes <= 11, "overflow warnings follow the same retry budget");
+    p.container.setItem(10, undefined);
+    advance(20);
+    assert.equal(p.container.getItem(10)?.amount, 64, "making room returns exactly one full stack");
+  } finally {
+    mc.pages = 5;
+    mc.players = allPlayers.filter((player) => player !== p);
+  }
 });
 
 test("a real cursor stack is never cleared while switching pages", () => {

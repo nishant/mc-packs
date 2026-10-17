@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, holdRecovery, InventoryRecoveryError, loadSnapshot, recoverInventory, saveSnapshot, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -384,6 +384,8 @@ function usedOnPage(inv) {
 
 /** @type {Set<string>} */
 const switching = new Set();
+/** @type {Set<string>} */
+const recoveryWarned = new Set();
 /** @type {Map<string, { page: number, keys: Map<string, number> }>} what each player's page held at the last auto-store look */
 const snapshots = new Map();
 /**
@@ -404,7 +406,7 @@ export function switchPage(player, target) {
   }
   switching.add(id);
   try {
-    if (!recoverInventory(player)) {
+    if (!inventoryReady(player)) {
       hooks.bar(player, "§cInventory recovery is safely saved and needs an operator");
       return false;
     }
@@ -733,11 +735,6 @@ world.beforeEvents.itemUse.subscribe((event) => {
 
 world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
   if (deadEntity.typeId !== "minecraft:player") return;
-  try {
-    holdRecovery(/** @type {Player} */ (deadEntity));
-  } catch (e) {
-    console.warn(`[stash] preserving inventory recovery on death: ${e}`);
-  }
   dead.add(deadEntity.id);
   buttonState.delete(deadEntity.id);
   snapshots.delete(deadEntity.id);
@@ -748,7 +745,8 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   snapshots.delete(player.id);
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [lastClick, buttonState, snapshots, lastTotal]) m.delete(playerId);
+  for (const m of [lastClick, buttonState, snapshots, lastTotal, lastEnforce]) m.delete(playerId);
+  recoveryWarned.delete(playerId);
   dead.delete(playerId);
   updatingButtons.delete(playerId);
   menuOpen.delete(playerId);
@@ -761,6 +759,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 
 /** @type {Map<string, number>} player id → page count seen last */
 const lastTotal = new Map();
+/** @type {Map<string, { total: number, tick: number }>} */
+const lastEnforce = new Map();
 
 /** What a stack counts as when looking for new pickups: its item and name, not its amount. @param {ItemStack} item */
 const keyOf = (item) => `${item.typeId}|${item.nameTag ?? ""}|${item.getLore().join("/")}`;
@@ -849,9 +849,18 @@ function tickPlayer(player, withAutoStore) {
   if (!player.isValid || dead.has(player.id)) return;
   const inv = invOf(player);
   if (!inv) return;
-  if (!recoverInventory(player)) return;
+  if (!inventoryReady(player)) {
+    if (!recoveryWarned.has(player.id)) {
+      recoveryWarned.add(player.id);
+      player.sendMessage("§cInventory pages are paused: a failed save needs operator recovery. Original inventory images are safely saved.");
+    }
+    return;
+  }
+  recoveryWarned.delete(player.id);
   const total = totalPages(player);
-  if (lastTotal.get(player.id) !== total) {
+  const attempt = lastEnforce.get(player.id);
+  if (lastTotal.get(player.id) !== total && (!attempt || attempt.total !== total || system.currentTick - attempt.tick >= 20)) {
+    lastEnforce.set(player.id, { total, tick: system.currentTick });
     if (enforcePageCount(player)) lastTotal.set(player.id, total);
   }
   if (!buttonsWanted(player)) {
