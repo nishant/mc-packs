@@ -77,6 +77,4 @@ export const CONFIG = {
   /** Wanderers of the Wilds: a Recurring Wanderer's camp nobody comes near for this many real days is taken down (terrain put back). */
   campDays: 7,
 
-  /** Show story character names floating in 3D from up to this many blocks away (0 = only up close). */
-  farNameRange: 20,
 };

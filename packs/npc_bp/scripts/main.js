@@ -42,7 +42,6 @@ const OWNER_TAG = "realm:npc_owner:npc_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
 const ROLE_TAG = "realm:npc_role:";
-const LEGACY_LABEL_TYPE = "realm:npc_label";
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
 
@@ -436,17 +435,6 @@ function spawn(rec, t, at) {
 }
 
 /**
- * Old projected helper labels are no longer used for townsfolk. Keep removing them while worlds upgrade so old
- * shared labels do not linger in saved chunks.
- * @param {Entity} entity
- */
-function removeLegacyLabel(entity) {
-  if (entity.typeId !== LEGACY_LABEL_TYPE) return false;
-  if (entity.isValid) entity.remove();
-  return true;
-}
-
-/**
  * Checks one of our NPC entities: a townsfolk no longer placed (or no longer in config.js) is removed, a second
  * one of the same townsfolk is removed, and an NPC found while its saved entity isn't loaded becomes the one.
  * @param {Entity} entity
@@ -481,7 +469,6 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
-    if (removeLegacyLabel(entity)) return;
     if (entity.typeId !== NPC_TYPE) return;
     audit(entity);
     const id = entity.isValid ? idOf(entity) : undefined;
@@ -496,7 +483,6 @@ function auditAll() {
     try {
       const dim = world.getDimension(id);
       for (const e of dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] })) audit(e);
-      for (const e of dim.getEntities({ type: LEGACY_LABEL_TYPE })) removeLegacyLabel(e);
     } catch (e) {
       console.warn(`[npc] audit: ${e}`);
     }

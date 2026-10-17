@@ -19,7 +19,6 @@ import { CONFIG } from "./config.js";
 import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOKS, NAMED, NAMED_GREETINGS, SAILOR_LOOK } from "./lines.js";
 import { get, getFor } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
-import { removeOrphanLabel, updateNameLabels } from "./name-labels.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -35,9 +34,6 @@ const PROP_WEATHER = "wander:weather"; // world: overworld weather at the last c
 const OWNER_TAG = "realm:npc_owner:wander_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
-const LABEL_TYPE = "realm:wander_label";
-const LABEL_TAG = "realm:wander_label";
-const LABEL_ID_TAG = "realm:wander_label_id:";
 const ROAD_TAG = "wander:k:"; // + wid: on the road
 const CAMP_TAG = "wander:c:"; // + wid: at their camp
 const OVERWORLD = "minecraft:overworld";
@@ -166,35 +162,6 @@ const finalLegs = new Map();
 const hasOffer = new Map();
 /** Camp wanderers with nobody near, since (ms). @type {Map<string, number>} */
 const campIdle = new Map();
-/** @type {Map<string, Entity>} */
-const labels = new Map();
-
-function updateLabels() {
-  if (!ready) return;
-  /** @type {import("./name-labels.js").LabelTarget[]} */
-  const targets = [];
-  for (const rec of Object.values(live)) {
-    const entity = entityById(rec.e);
-    const at = entity?.location ?? rec;
-    targets.push({ id: `road:${rec.w}`, dim: entity?.dimension.id ?? rec.d, ...at, name: `${NAMED_BY_ID.has(rec.w) ? "§6" : "§e"}${rec.n}` });
-  }
-  for (const [id, camp] of Object.entries(camps)) {
-    const entity = entityById(camp.e);
-    if (!entity) continue;
-    targets.push({ id: `camp:${id}`, dim: entity.dimension.id, ...entity.location, name: entity.nameTag });
-  }
-  updateNameLabels({
-    labels,
-    targets,
-    players: world.getAllPlayers(),
-    maxRange: (() => {
-      const rawRange = Number(get("farNameRange"));
-      return Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
-    })(),
-    labelType: LABEL_TYPE, ownerTag: OWNER_TAG, labelTag: LABEL_TAG, labelIdTag: LABEL_ID_TAG,
-    dimension: (id) => world.getDimension(id),
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Small helpers
@@ -1151,7 +1118,6 @@ function audit(ent) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
-    if (removeOrphanLabel(entity, labels, LABEL_TYPE)) return;
     if (TYPES.includes(entity.typeId)) audit(entity);
   } catch (e) {
     console.warn(`[wander] ${e}`);
@@ -1162,8 +1128,7 @@ function sweep() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
-      for (const ent of dim.getEntities({ tags: [OWNER_TAG], excludeTypes: [LABEL_TYPE] })) audit(ent);
-      for (const ent of dim.getEntities({ type: LABEL_TYPE })) removeOrphanLabel(ent, labels, LABEL_TYPE);
+      for (const ent of dim.getEntities({ tags: [OWNER_TAG] })) audit(ent);
     } catch (e) {
       console.warn(`[wander] sweep: ${e}`);
     }
@@ -1464,7 +1429,6 @@ world.afterEvents.worldLoad.subscribe(() => {
   }
   ready = true;
   sweep();
-  system.runInterval(updateLabels, 2);
   system.runInterval(sweep, 200);
   pingZones();
   system.runTimeout(() => {
