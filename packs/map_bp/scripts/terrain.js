@@ -7,7 +7,10 @@ import { G } from "./glyphs.js";
 
 export const COL = 4;
 /** @typedef {{ kind: string, y: number, depth: number, tick: number }} Col */
-/** @typedef {{ id: string, cols: Map<number, Col>, ver: number, used: number }} Store */
+/** @typedef {{ id: string, cols: Map<number, Col>, ver: number, used: number, miss: Map<number, number> }} Store */
+
+/** Ticks before a column whose chunk wasn't loaded is read again. */
+export const MISS_RETRY = 5;
 
 const BIAS = 2 ** 24; // the world is 60 million blocks wide: 7.5 million columns a side, far less than 2^24
 const SPAN = 2 ** 25;
@@ -37,7 +40,7 @@ export class TerrainWorld {
     let s = this.stores.get(id);
     if (!s) {
       if (layer !== undefined) this.#dropOldLayer();
-      s = { id, cols: new Map(), ver: 0, used: 0 };
+      s = { id, cols: new Map(), ver: 0, used: 0, miss: new Map() };
       this.stores.set(id, s);
     }
     s.used = ++this.clock;
@@ -67,6 +70,7 @@ export class TerrainWorld {
     const k = colKey(wx, wz);
     if (k < 0) return false;
     const old = s.cols.get(k);
+    s.miss.delete(k);
     if (old && old.kind === d.kind && old.y === d.y && old.depth === d.depth) {
       old.tick = tick;
       return false;
@@ -75,6 +79,17 @@ export class TerrainWorld {
     s.cols.set(k, { kind: d.kind, y: d.y, depth: d.depth, tick });
     s.ver++;
     return true;
+  }
+  /**
+   * A read failed (the chunk isn't loaded): nothing is stored, what was known stays, and the column is asked again
+   * in MISS_RETRY ticks.
+   * @param {Store} s @param {number} wx @param {number} wz @param {number} tick
+   */
+  miss(s, wx, wz, tick) {
+    const k = colKey(wx, wz);
+    if (k < 0) return;
+    if (s.miss.size > 4000) s.miss.clear();
+    s.miss.set(k, tick);
   }
   /** A block changed: forget its column in the dimension's surface and in every layer, so every viewer redraws it. @param {string} dimId @param {number} wx @param {number} wz */
   invalidate(dimId, wx, wz) {
@@ -127,6 +142,8 @@ export function planScan({ world, store, at, heading, north, radius, half, lead,
         seen.add(key);
         const have = store.cols.get(key);
         if (have && now - have.tick <= maxAge) continue;
+        const missed = store.miss.get(key);
+        if (missed !== undefined && now - missed < MISS_RETRY) continue;
         list.push({ wx: p.x, wz: p.z, key, d: (p.x - at.x) ** 2 + (p.z - at.z) ** 2, a: (p.x - lx) ** 2 + (p.z - lz) ** 2, stale: !!have });
       }
     }
@@ -238,4 +255,13 @@ export function glyphAt(world, store, wx, wz) {
   const dh = cur.y - (north?.y ?? cur.y) + (cur.y - (west?.y ?? cur.y));
   const set = LIT[cur.kind] ?? LIT.grass;
   return dh >= 2 ? set[2] : dh <= -2 ? set[1] : set[0];
+}
+
+/**
+ * What a finished scan depended on. It uses the radar's own geometry (half blocks, whole degrees), so any move or
+ * turn that draws different columns plans the scan again.
+ * @param {{ storeId: string, ver: number, at: { x: number, z: number }, heading: number, north: boolean, radius: number, now: number, lead: { x: number, z: number } }} s
+ */
+export function scanMemo(s) {
+  return `${s.storeId}#${s.ver}|${Math.round(s.at.x * 2)}|${Math.round(s.at.z * 2)}|${s.north ? 0 : Math.round(s.heading)}|${s.radius}|${Math.floor(s.now / 100)}|${Math.round(s.lead.x / 4)}|${Math.round(s.lead.z / 4)}`;
 }

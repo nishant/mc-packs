@@ -29,7 +29,7 @@ import { CONFIG } from "./config.js";
 import { G } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
-import { cellWorld, glyphAt, planScan, spendBudget, TerrainWorld } from "./terrain.js";
+import { cellWorld, glyphAt, planScan, scanMemo, spendBudget, TerrainWorld } from "./terrain.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -674,11 +674,11 @@ system.runInterval(() => {
         const cave = plan.roof && (plan.dim.id === "minecraft:nether" || (!!top && plan.py < Math.floor(top.location.y) - 8));
         terrain.put(plan.store, pick.wx, pick.wz, cave ? classifyCave(plan.dim, bx, bz, plan.py) : classifyTerrainKind(top), now);
       } catch {
-        // unloaded chunk: unknown until it loads; asked again in 100 ticks
-        terrain.put(plan.store, pick.wx, pick.wz, { kind: "empty", y: 0, depth: 0 }, now - SCAN_MAX_AGE + 100);
+        // unloaded chunk: keep what was known, ask again in a few ticks
+        terrain.miss(plan.store, pick.wx, pick.wz, now);
       }
     });
-    for (const p of plans) if (!p.picks.length) scanDone.set(p.id, p.memo);
+    for (const p of plans) if (!p.picks.length && !p.store.miss.size) scanDone.set(p.id, p.memo);
   }
   scanMs += Date.now() - t0;
   scanTicks++;
@@ -702,7 +702,7 @@ function planFor(player, now) {
   const heading = headingOf(player);
   const vel = player.getVelocity?.() ?? { x: 0, z: 0 };
   const lead = { x: Math.max(-28, Math.min(28, vel.x * 8)), z: Math.max(-28, Math.min(28, vel.z * 8)) };
-  const memo = `${store.id}#${store.ver}|${Math.round(at.x)}|${Math.round(at.z)}|${Math.round(heading / 2)}|${pr.north}|${pr.radius}|${Math.floor(now / 100)}|${Math.round(lead.x / 4)}|${Math.round(lead.z / 4)}`;
+  const memo = scanMemo({ storeId: store.id, ver: store.ver, at, heading, north: pr.north, radius: pr.radius, now, lead });
   if (scanDone.get(player.id) === memo) return undefined;
   const picks = planScan({ world: terrain, store, at, heading, north: pr.north, radius: pr.radius, half: R, lead, now, maxAge: SCAN_MAX_AGE });
   return { id: player.id, store, picks, dim, py, roof, memo };
@@ -781,7 +781,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     [-radius * 2, 0, G.Q_WEST],
   ])) {
     const [sx, sy] = screen(dx, dz);
-    place(sx, sy, g, 25, true);
+    place(sx, sy, g, 1, true);
   }
   const star = markers.find((m) => m.kind === "star");
   if (star) {

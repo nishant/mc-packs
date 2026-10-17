@@ -206,3 +206,31 @@ test("two fliers and a cave walker share the budget and never see each other's g
   for (const f of fliers) for (const g of [0, 45, 90]) assert.notEqual(glyphAt(w, surface, f.x - g, f.z), G.Q_CAVE_FLOOR);
   assert.equal(glyphAt(w, surface, 0, 0), G.Q_GRASS, "the cave walker's floor did not replace the surface where they stand");
 });
+
+test("a finished scan is planned again after sub-block or sub-2-degree motion that the radar draws", async () => {
+  const { scanMemo } = await import("../packs/map_bp/scripts/terrain.js");
+  const base = { storeId: "d|s", ver: 1, at: { x: 3.8, z: 0 }, heading: 0, north: false, radius: 64, now: 10, lead: { x: 0, z: 0 } };
+  assert.notEqual(scanMemo(base), scanMemo({ ...base, at: { x: 4.3, z: 0 } }));
+  assert.notEqual(scanMemo(base), scanMemo({ ...base, heading: 0.6 }));
+  assert.equal(scanMemo({ ...base, heading: 5 }), scanMemo({ ...base, north: false, heading: 5 }));
+  assert.equal(scanMemo({ ...base, heading: 5 }) === scanMemo({ ...base, north: true, heading: 40 }), false);
+  assert.equal(scanMemo({ ...base, north: true, heading: 5 }), scanMemo({ ...base, north: true, heading: 40 }));
+});
+
+test("a failed read stores nothing, keeps old data, retries in a few ticks and loads next tick", async () => {
+  const { MISS_RETRY } = await import("../packs/map_bp/scripts/terrain.js");
+  const w = new TerrainWorld(6000, 4);
+  const s = w.store("minecraft:overworld", undefined);
+  const o = { world: w, store: s, at: { x: 0, z: 0 }, heading: 0, north: true, radius: 64, half: 10, lead: { x: 0, z: 0 }, maxAge: 2400 };
+  const first = planScan({ ...o, now: 100 });
+  assert.ok(first.length > 0);
+  w.put(s, 0, 0, { kind: "stone", y: 70, depth: 0 }, 100);
+  const k = first.find((p) => p.wx !== 0 || p.wz !== 0);
+  w.miss(s, k.wx, k.wz, 100);
+  assert.equal(s.cols.size, 1, "a miss stores no column");
+  assert.ok(!planScan({ ...o, now: 100 + MISS_RETRY - 1 }).some((p) => p.key === k.key), "waits for the retry");
+  assert.ok(planScan({ ...o, now: 100 + MISS_RETRY }).some((p) => p.key === k.key), "asked again");
+  w.put(s, k.wx, k.wz, { kind: "grass", y: 65, depth: 0 }, 106);
+  assert.equal(w.get(s, k.wx, k.wz).kind, "grass", "real data right after the chunk loads");
+  assert.equal(s.miss.size, 0);
+});
