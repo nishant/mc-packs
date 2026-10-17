@@ -17,6 +17,7 @@ import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, GameMode, P
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOKS, NAMED, NAMED_GREETINGS, SAILOR_LOOK } from "./lines.js";
+import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
 import { get, getFor } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
 
@@ -34,12 +35,23 @@ const PROP_WEATHER = "wander:weather"; // world: overworld weather at the last c
 const OWNER_TAG = "realm:npc_owner:wander_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
-const LEGACY_LABEL_TYPES = new Set(["realm:wander_label"]);
+const LABEL_TYPE = "realm:wander_label";
+const LABEL_TAG = "realm:wander_label";
+const LABEL_ID_TAG = "realm:wander_label_id:";
+const LEGACY_LABEL_TYPES = new Set([LABEL_TYPE]);
 const ROAD_TAG = "wander:k:"; // + wid: on the road
 const CAMP_TAG = "wander:c:"; // + wid: at their camp
 const OVERWORLD = "minecraft:overworld";
 const NETHER = "minecraft:nether";
 const DIMENSIONS = [OVERWORLD, NETHER, "minecraft:the_end"];
+
+const nameLabels = createNameLabels({
+  labelType: LABEL_TYPE,
+  ownerTag: OWNER_TAG,
+  labelTag: LABEL_TAG,
+  labelIdTag: LABEL_ID_TAG,
+  observerRange: 36,
+});
 
 const LOOP_TICKS = 20; // upkeep: timers, camps, sparkles, keep ghosts in place
 const TETHER_TICKS = 10; // walkers: back home past TETHER_MAX, out of water, lava or a hole; protection re-applied
@@ -640,7 +652,8 @@ function spawnWanderer(dim, rec, type, camp, look) {
     // A villager starts as a village's newcomer (no job yet, a random skin, the biome's clothes), then takes their look.
     const ent = dim.spawnEntity(/** @type {any} */ (type), { x: rec.x, y: rec.y, z: rec.z }, type === VILLAGER ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
     for (const tag of [OWNER_TAG, NPC_TAG, ID_TAG + `w_${rec.w}`, (camp ? CAMP_TAG : ROAD_TAG) + rec.w]) ent.addTag(tag);
-    ent.nameTag = `${NAMED_BY_ID.has(rec.w) ? "§6" : "§e"}${rec.n}`;
+    const key = `${camp ? "camp" : "road"}:${rec.w}`;
+    ent.nameTag = `${wandererLabel(rec.w, rec.n)}${wandererMarker(key)}`;
     if (type === VILLAGER) {
       // Also grows up a baby (1 in 20 spawn as one). The event applies a tick later; `tether` checks it took.
       dress(ent, look || "minecraft:become_unskilled");
@@ -649,11 +662,42 @@ function spawnWanderer(dim, rec, type, camp, look) {
     if (type !== OLD_NPC) protect(ent);
     if (camp) camps[rec.w].e = ent.id;
     else rec.e = ent.id;
+    updateLabels();
     return ent;
   } catch (e) {
     console.warn(`[wander] spawn ${type}: ${e}`);
     return undefined;
   }
+}
+
+/** @param {string} wid @param {string} name */
+const wandererLabel = (wid, name) => `${NAMED_BY_ID.has(wid) ? "§6" : "§e"}${name}`;
+/** Unique invisible format-code marker for a road or camp wanderer (`§r§b§4...§r`), preserved across transformations. @param {string} key */
+const wandererMarker = (key) => encodeHiddenMarker("b4", key);
+
+/** Syncs all active road and camp wanderer nameplate helpers with active observers. */
+function updateLabels() {
+  if (!ready) return;
+  const dims = DIMENSIONS.flatMap((id) => {
+    try {
+      return [world.getDimension(id)];
+    } catch {
+      return [];
+    }
+  });
+  const targets = [];
+  for (const rec of Object.values(live)) {
+    const ent = entityById(rec.e);
+    const id = `road:${rec.w}`;
+    if (ent) targets.push({ id, entity: ent, name: wandererLabel(rec.w, rec.n), suppressedName: wandererMarker(id) });
+  }
+  for (const [wid, c] of Object.entries(camps)) {
+    const ent = entityById(c.e);
+    const n = NAMED_BY_ID.get(wid);
+    const id = `camp:${wid}`;
+    if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
+  }
+  nameLabels.sync(targets, world.getAllPlayers(), dims);
 }
 
 /**
@@ -665,6 +709,7 @@ function leave(wid, why, tell = true) {
   if (!rec) return;
   delete live[wid];
   saveLive();
+  nameLabels.removeFor(`road:${wid}`);
   const ent = entityById(rec.e);
   if (ent) poof(ent);
   if (rec.e) for (const k of [...hasOffer.keys()]) if (k.startsWith(`${rec.e}|`)) hasOffer.delete(k);
@@ -685,6 +730,7 @@ function turn(rec, accused) {
   const at = ent ? ent.location : rec;
   delete live[rec.w];
   saveLive();
+  nameLabels.removeFor(`road:${rec.w}`);
   if (ent) poof(ent);
   if (!p) return;
   const pd = pdata(p);
@@ -1023,7 +1069,7 @@ async function accuseForm(player, wid) {
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
   const { player, target } = ev;
   try {
-    if (!target.hasTag(OWNER_TAG)) return;
+    if (!target.hasTag(OWNER_TAG) || target.typeId === LABEL_TYPE) return;
     ev.cancel = true; // no trading, no allay taking your items, no name tag or lead, no NPC editor
     system.run(() => {
       if (player.isValid && target.isValid) tapped(player, target).catch((e) => console.warn(`[wander] ${e}`));
@@ -1073,6 +1119,28 @@ function ourNames() {
   return out;
 }
 
+/** True when a transformed entity carries the unique per-wanderer format-code marker of one of our road or camp wanderers whose entity just turned. @param {Entity} entity */
+function isOurTurnedWanderer(entity) {
+  const name = entity.nameTag;
+  if (!name || name === SUPPRESSED_NAME || name === `${SUPPRESSED_NAME}§r`) return false;
+  if (ourNames().has(name) && !isSuppressedName(name)) return true;
+  const dimId = entity.dimension.id;
+  for (const rec of Object.values(live)) {
+    if (rec.d !== dimId || (rec.e && entityById(rec.e))) continue;
+    const key = `road:${rec.w}`;
+    const m = wandererMarker(key);
+    if (matchesHiddenMarker(name, m, wandererLabel(rec.w, rec.n))) return true;
+  }
+  for (const [wid, c] of Object.entries(camps)) {
+    if (c.d !== dimId || (c.e && entityById(c.e))) continue;
+    const n = NAMED_BY_ID.get(wid);
+    const key = `camp:${wid}`;
+    const m = wandererMarker(key);
+    if (matchesHiddenMarker(name, m, n ? wandererLabel(wid, n.name) : undefined)) return true;
+  }
+  return false;
+}
+
 // A trader's two llamas, and a wanderer struck by lightning (a witch) or by a zombie (a zombie villager, which the
 // protection should prevent): removed; the wanderer is spawned again (`again`) or comes back to their camp.
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
@@ -1085,9 +1153,9 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
           // gone
         }
       });
-    } else if (cause === "Transformed" && /witch|zombie_villager/.test(entity.typeId) && entity.nameTag && ourNames().has(entity.nameTag)) {
+    } else if (cause === "Transformed" && /witch|zombie_villager/.test(entity.typeId) && entity.nameTag) {
       system.run(() => {
-        if (entity.isValid) poof(entity);
+        if (entity.isValid && isOurTurnedWanderer(entity)) poof(entity);
       });
     }
   } catch (e) {
@@ -1119,6 +1187,7 @@ function audit(ent) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (nameLabels.loaded(entity)) return;
     if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
       if (entity.isValid) entity.remove();
       return;
@@ -1133,12 +1202,12 @@ function sweep() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
-      for (const type of LEGACY_LABEL_TYPES) for (const ent of dim.getEntities({ type })) if (ent.isValid) ent.remove();
-      for (const ent of dim.getEntities({ tags: [OWNER_TAG] })) audit(ent);
+      for (const ent of dim.getEntities({ tags: [OWNER_TAG] })) if (ent.typeId !== LABEL_TYPE) audit(ent);
     } catch (e) {
       console.warn(`[wander] sweep: ${e}`);
     }
   }
+  updateLabels();
 }
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
@@ -1435,6 +1504,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   }
   ready = true;
   sweep();
+  system.runInterval(updateLabels, 2);
   system.runInterval(sweep, 200);
   pingZones();
   system.runTimeout(() => {

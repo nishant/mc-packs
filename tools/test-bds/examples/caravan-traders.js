@@ -17,21 +17,28 @@ export default async function (t) {
   t.assert(t.cmd(p, "/realm:caravan_call").ok, "caravan_call ran");
   await t.waitMessage(p, /caravan has arrived/, { since, timeout: 100 });
   const first = await t.waitUntil(() => (traders().length === 3 ? traders() : undefined), { timeout: 400, interval: 20, message: "3 traders" });
-  t.log(`traders: ${first.map((e) => e.nameTag).join(", ")}`);
+  const labels = () => t.dimension.getEntities({ type: "realm:caravan_label" });
+  const labelFor = (i) => labels().find((e) => e.hasTag(`realm:caravan_label_id:${i}`));
+  t.log(`traders: ${first.map((e, i) => `${e.nameTag}->${labelFor(i)?.nameTag}`).join(", ")}`);
 
-  // Names: walk up and watch the name tags for 6 s.
+  // Names: walk up and watch the world-fixed helper name tags for 6 s while native NPC nameTag stays "§r".
   p.teleport({ x: spawn.x + 4, y, z: spawn.z + 4 });
-  /** @type {Map<string, Set<string>>} */
-  const seen = new Map(first.map((e) => [e.id, new Set()]));
+  /** @type {Map<number, Set<string>>} */
+  const seen = new Map([0, 1, 2].map((i) => [i, new Set()]));
   for (let k = 0; k < 120; k++) {
-    for (const e of first) if (e.isValid) seen.get(e.id)?.add(e.nameTag);
+    for (let i = 0; i < 3; i++) {
+      const h = labelFor(i);
+      if (h?.isValid) seen.get(i)?.add(h.nameTag);
+    }
     await t.wait(1);
   }
-  for (const e of first) {
-    const tags = [...(seen.get(e.id) ?? [])];
+  for (let i = 0; i < first.length; i++) {
+    const e = first[i];
+    t.check(e.nameTag === "§r", `trader ${i} suppresses its native nameplate with §r (${JSON.stringify(e.nameTag)})`);
+    const tags = [...(seen.get(i) ?? [])];
     const base = tags.find((n) => !n.endsWith("§r")) ?? "";
-    t.check(/Zahir|Marisol|Fennick/.test(base), `a trader is named (${base})`);
-    t.check(tags.includes(base) && tags.includes(`${base}§r`), `${base}: the name was sent again when Ann came near (${tags.length} forms seen)`);
+    t.check(/Zahir|Marisol|Fennick/.test(base), `a trader helper is named (${base})`);
+    t.check(tags.includes(base) && tags.includes(`${base}§r`), `${base}: the helper name was sent again when Ann came near (${tags.length} forms seen)`);
   }
 
   // Goods: tap each trader and read the shop's buttons.

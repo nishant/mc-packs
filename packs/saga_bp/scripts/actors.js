@@ -1,6 +1,7 @@
 // Story characters and story mobs the pack spawns for one player's scene: who they belong to, keeping
 // them where they should be, and cleaning them up. Imports only util.js.
 import { system, world } from "@minecraft/server";
+import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
 import { DIMENSIONS, dist3, hash } from "./util.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -11,11 +12,21 @@ import { DIMENSIONS, dist3, hash } from "./util.js";
 export const ACTOR = "saga:actor";
 /** Hostile story mobs (ambushes, waves, wrong answers, champion adds): real fights, cleaned up later. */
 export const ADD = "saga:add";
-const LEGACY_LABEL_TYPES = new Set(["realm:saga_label"]);
+const LABEL_TYPE = "realm:saga_label";
+const LABEL_TAG = "realm:saga_label";
+const LABEL_ID_TAG = "realm:saga_label_id:";
+const LEGACY_LABEL_TYPES = new Set([LABEL_TYPE]);
 const LONG = 20000000; // effect ticks: as long as the game allows
 const VILLAGER = "minecraft:villager_v2";
 /** What a story character turns into: lightning makes a villager a witch, a zombie's fatal hit a zombie villager. */
 const TURNED = /^minecraft:(witch|zombie_villager|zombie_villager_v2)$/;
+
+const nameLabels = createNameLabels({
+  labelType: LABEL_TYPE,
+  ownerTag: ACTOR,
+  labelTag: LABEL_TAG,
+  labelIdTag: LABEL_ID_TAG,
+});
 
 /**
  * @typedef {object} Actor
@@ -25,6 +36,7 @@ const TURNED = /^minecraft:(witch|zombie_villager|zombie_villager_v2)$/;
  * @property {"meet" | "escort" | "ward" | "guard" | "lead" | "add"} role
  * @property {boolean} invul
  * @property {Vector3} [anchor] kept here (teleported back when it strays)
+ * @property {string} marker unique invisible format-code marker identifying this actor across transformations
  * @property {string} dim
  * @property {number} born tick
  * @property {string} type what was spawned
@@ -42,6 +54,8 @@ export const actors = new Map();
 export const ownerTag = (owner) => `saga:o:${hash(owner).toString(36)}`;
 /** @param {string} key */
 export const keyTag = (key) => `saga:k:${hash(key).toString(36)}`;
+/** Unique invisible format-code marker for a story actor (`§r§7§a...§r`), preserved across villager -> witch/zombie_villager transformations. @param {string | number} id */
+export const actorMarker = (id) => encodeHiddenMarker("7a", id);
 
 /** Names of the characters spawned since the world loaded: what a turned one (a witch, a zombie villager) still wears. @type {Set<string>} */
 const names = new Set();
@@ -95,12 +109,13 @@ export function spawnActor(dim, type, at, o) {
     ent.addTag(o.role === "add" ? ADD : ACTOR);
     ent.addTag(ownerTag(o.owner));
     ent.addTag(keyTag(o.key));
+    const marker = actorMarker(ent.id);
     if (o.name) {
-      ent.nameTag = o.name;
+      ent.nameTag = o.role === "add" ? o.name : `${o.name}${marker}`;
       names.delete(o.name);
       names.add(o.name);
       if (names.size > 200) names.delete(/** @type {string} */ (names.values().next().value));
-    } else if (o.role !== "add") ent.nameTag = " ";
+    }
     if (o.invul) {
       ent.addEffect("resistance", LONG, { amplifier: 4, showParticles: false });
       ent.addEffect("weakness", LONG, { amplifier: 250, showParticles: false });
@@ -110,7 +125,8 @@ export function spawnActor(dim, type, at, o) {
       ent.addEffect("fire_resistance", LONG, { amplifier: 0, showParticles: false });
       ent.addEffect("water_breathing", LONG, { amplifier: 0, showParticles: false });
     }
-    actors.set(ent.id, { ent, owner: o.owner, key: o.key, role: o.role, invul: !!o.invul, anchor: o.anchor ? { ...at } : undefined, dim: dim.id, born: system.currentTick, type, opts: o });
+    actors.set(ent.id, { ent, owner: o.owner, key: o.key, role: o.role, invul: !!o.invul, anchor: o.anchor ? { ...at } : undefined, marker, dim: dim.id, born: system.currentTick, type, opts: o });
+    if (o.name && o.role !== "add") updateActorLabels();
     return ent;
   } catch (e) {
     console.warn(`[saga] spawn ${type}: ${e}`);
@@ -132,6 +148,7 @@ function poof(ent) {
 export function removeActor(id, effect = false) {
   const a = actors.get(id);
   actors.delete(id);
+  nameLabels.removeFor(id);
   if (!a) return;
   try {
     if (a.ent.isValid) {
@@ -141,6 +158,23 @@ export function removeActor(id, effect = false) {
   } catch {
     // gone already; an unloaded leftover is removed when its chunk loads
   }
+}
+
+/** Syncs all active story character nameplate helpers with active observers. */
+export function updateActorLabels() {
+  const dims = DIMENSIONS.flatMap((id) => {
+    try {
+      return [world.getDimension(id)];
+    } catch {
+      return [];
+    }
+  });
+  const targets = [];
+  for (const [id, a] of actors) {
+    if (a.role === "add" || !a.opts.name || !a.ent.isValid) continue;
+    targets.push({ id, entity: a.ent, name: a.opts.name, suppressedName: a.marker ?? actorMarker(id) });
+  }
+  nameLabels.sync(targets, world.getAllPlayers(), dims);
 }
 
 /** Removes every actor matching. @param {{ owner?: string, key?: string, role?: Actor["role"] }} f @param {boolean} [effect] */
@@ -171,6 +205,7 @@ export function tendActors() {
       if (!a.ent.isValid) {
         actors.delete(id); // unloaded or dead: the scene spawns a new one when needed
         dressing.delete(id);
+        nameLabels.removeFor(id);
         continue;
       }
       const look = dressing.get(id);
@@ -197,30 +232,47 @@ export const setLostHandler = (fn) => {
 };
 
 // A story villager struck by lightning becomes a witch, one killed by a zombie a zombie villager: the new mob keeps
-// the name tag but none of our tags, so it would stay in the world for good. It is removed; a witch's character is
-// spawned again where it stood (lightning isn't the player's fault), a zombie villager's counts as hurt.
+// the name tag (including its unique invisible per-actor format-code marker) but none of our tags, so it would stay in
+// the world for good. It is matched by its exact per-actor marker (or explicit story name), removed, and respawned
+// where it stood for lightning or reported to `onLost` for a zombie hit. Unowned "§r" entities are never touched.
 world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
   try {
     if (cause !== "Transformed" || !TURNED.test(entity.typeId)) return;
     const name = entity.nameTag;
-    if (!name || !names.has(name)) return;
+    if (!name || name === SUPPRESSED_NAME || name === `${SUPPRESSED_NAME}§r`) return;
+    const hasStoryName = names.has(name);
+    const hasActorMarker = [...actors.entries()].some(
+      ([id, a]) => a.opts.name && matchesHiddenMarker(name, a.marker ?? actorMarker(id), a.opts.name),
+    );
+    if (!hasStoryName && !hasActorMarker) return;
     system.run(() => {
       try {
         if (!entity.isValid) return;
         const at = entity.location;
         const dim = entity.dimension;
         const witch = entity.typeId === "minecraft:witch";
-        poof(entity);
-        entity.remove();
-        for (const [id, a] of [...actors]) {
-          if (a.opts.name !== name || a.ent.isValid || a.dim !== dim.id) continue;
+        /** @type {[string, Actor][]} */
+        const matched = [...actors.entries()].filter(([id, a]) => {
+          if (!a.opts.name || a.ent.isValid || a.dim !== dim.id) return false;
+          const m = a.marker ?? actorMarker(id);
+          return matchesHiddenMarker(name, m, a.opts.name);
+        });
+        if (matched.length === 1) {
+          const [id, a] = matched[0];
+          poof(entity);
+          entity.remove();
           actors.delete(id);
           dressing.delete(id);
+          nameLabels.removeFor(id);
           // The scene may have spawned its character again meanwhile (it looks once a second): then only the witch goes.
           const again = [...actors.values()].some((b) => b.owner === a.owner && b.key === a.key && b.role === a.role && b.ent.isValid);
           if (witch && !again) spawnActor(dim, a.type, at, a.opts);
           else if (!witch) onLost(a);
           return;
+        }
+        if (matched.length === 0 && hasStoryName && !isSuppressedName(name)) {
+          poof(entity);
+          entity.remove();
         }
       } catch {
         // gone
@@ -235,6 +287,7 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
 // scene moved on) is removed when it loads.
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (nameLabels.loaded(entity)) return;
     if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
       if (entity.isValid) entity.remove();
       return;
@@ -251,13 +304,25 @@ export function sweep() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
-      for (const type of LEGACY_LABEL_TYPES) for (const ent of dim.getEntities({ type })) if (ent.isValid) ent.remove();
-      for (const tag of [ACTOR, ADD]) for (const ent of dim.getEntities({ tags: [tag] })) if (!actors.has(ent.id)) ent.remove();
+      for (const tag of [ACTOR, ADD]) {
+        for (const ent of dim.getEntities({ tags: [tag] })) {
+          if (ent.typeId !== LABEL_TYPE && !actors.has(ent.id)) ent.remove();
+        }
+      }
     } catch (e) {
       console.warn(`[saga] sweep: ${e}`);
     }
   }
+  updateActorLabels();
 }
+
+system.runInterval(() => {
+  try {
+    updateActorLabels();
+  } catch {
+    // ignore
+  }
+}, 2);
 
 /** Test hook (realm:saga_debug `age_adds`): every story mob as if spawned `ticks` earlier. @param {number} ticks */
 export function ageAdds(ticks) {

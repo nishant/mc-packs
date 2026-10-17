@@ -27,7 +27,10 @@ export default async function (t) {
   const of = (id, f = () => true, since = 0) => ev.filter((e) => e.id === id && e.tick >= since && f(e.m)).map((e) => e.m);
   const wdebug = (m) => sys.sendScriptEvent("realm:wander_debug", JSON.stringify(m));
   const sdebug = (m) => sys.sendScriptEvent("realm:saga_debug", JSON.stringify(m));
-  const pells = () => t.dimension.getEntities({ tags: ["saga:actor"] }).filter((e) => e.nameTag === "§ePell the Pilgrim");
+  const pells = () =>
+    t.dimension
+      .getEntities({ tags: ["saga:actor"], type: "minecraft:villager_v2" })
+      .filter((e) => t.dimension.getEntities({ type: "realm:saga_label", tags: [`realm:saga_label_id:${e.id}`] }).some((h) => h.nameTag === "§ePell the Pilgrim"));
   const walk = async (p, final) => {
     for (let i = 0; i < 12; i++) {
       const f = await t.waitForm(p, { timeout: 200 });
@@ -97,6 +100,7 @@ export default async function (t) {
   await t.wait(5);
   const hp = pell.getComponent("minecraft:health");
   t.check(pell.isValid && hp && hp.currentValue >= hp.effectiveMax - 0.01, `Pell can't be hurt (health ${hp?.currentValue}/${hp?.effectiveMax})`);
+  t.check(/^§r(?:§[0-9a-f]){10}§r$/i.test(pell.nameTag), `Pell carries a unique invisible format-code marker (${JSON.stringify(pell.nameTag)})`);
 
   // Walk up to him, then east to the chapel at about walking pace; sample his position every 2 ticks.
   since = t.tick;
@@ -115,14 +119,33 @@ export default async function (t) {
     const now = pells()[0];
     if (now) seen.push({ ...now.location, yaw: now.getRotation().y });
     if (!lightning && i === Math.floor(steps / 2) && now) {
-      // Lightning: a villager becomes a witch. The witch goes, Pell comes back where it stood.
+      // Lightning: a villager becomes a witch.
+      // Also place a foreign adult villager 1.2m away with bare "§r": the lightning bolt transforms BOTH Pell and the
+      // adjacent foreign villager at the same time. saga_bp must remove/respawn ONLY Pell (by his unique per-actor
+      // format-code marker) and leave the adjacent 1.2m foreign "§r" witch untouched.
       lightning = true;
-      t.server(`/summon lightning_bolt ${now.location.x} ${now.location.y} ${now.location.z}`);
+      const adjVillager = t.dimension.spawnEntity("minecraft:villager_v2", {
+        x: now.location.x + 1.2,
+        y: now.location.y,
+        z: now.location.z,
+      }, { spawnEvent: "minecraft:spawn_from_village" });
+      adjVillager.triggerEvent("minecraft:become_cleric");
+      adjVillager.nameTag = "§r";
+      adjVillager.addEffect("resistance", 2000, { amplifier: 4, showParticles: false });
+      adjVillager.addEffect("fire_resistance", 2000, { amplifier: 0, showParticles: false });
+      t.server(`/summon lightning_bolt ${now.location.x + 0.6} ${now.location.y} ${now.location.z}`);
       await t.waitUntil(() => !now.isValid, { timeout: 60, message: "lightning turns the villager" });
       await t.wait(5);
       t.log("transformed:", JSON.stringify(turned));
-      t.check(turned.some((x) => x.startsWith("minecraft:witch")), "the lightning made a witch of him");
-      t.check(t.dimension.getEntities({ type: "minecraft:witch" }).filter((w) => w.nameTag === "§ePell the Pilgrim").length === 0, "no witch named Pell stays");
+      t.check(turned.some((x) => x.startsWith("minecraft:witch §r§7§a")), "the lightning made a witch of Pell with his actor marker");
+      const foreignWitches = t.dimension.getEntities({ type: "minecraft:witch" }).filter((w) => w.nameTag === "§r");
+      t.check(foreignWitches.length === 1, `adjacent 1.2m foreign §r witch is NOT removed by saga_bp (found ${foreignWitches.length})`);
+      for (const w of foreignWitches) if (w.isValid) w.remove();
+      if (adjVillager.isValid) adjVillager.remove();
+      t.check(
+        t.dimension.getEntities({ type: "minecraft:witch" }).filter((w) => w.nameTag === "§ePell the Pilgrim" || /^§r§7§a/.test(w.nameTag)).length === 0,
+        "no witch named Pell stays",
+      );
       await t.waitUntil(() => pells().length === 1 && pells()[0].typeId === "minecraft:villager_v2", { timeout: 60, message: "Pell is back after the lightning" });
     }
     if (t.messages(p, { since }).some((m) => /Pell the Pilgrim is safe/.test(m.plain))) break;

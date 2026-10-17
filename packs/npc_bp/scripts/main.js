@@ -16,6 +16,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
+import { createNameLabels, isSuppressedName, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -42,9 +43,19 @@ const OWNER_TAG = "realm:npc_owner:npc_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
 const ROLE_TAG = "realm:npc_role:";
-const LEGACY_LABEL_TYPES = new Set(["realm:npc_label"]);
+const LABEL_TYPE = "realm:npc_label";
+const LABEL_TAG = "realm:npc_label";
+const LABEL_ID_TAG = "realm:npc_label_id:";
+const LEGACY_LABEL_TYPES = new Set([LABEL_TYPE]);
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
+
+const nameLabels = createNameLabels({
+  labelType: LABEL_TYPE,
+  ownerTag: OWNER_TAG,
+  labelTag: LABEL_TAG,
+  labelIdTag: LABEL_ID_TAG,
+});
 
 const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot
 const MISSING_EVERY = 4; // loops between checks for a missing NPC (2 s)
@@ -68,7 +79,7 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
  * (ids stay the same across loads), so any other entity with its tags is a duplicate or a leftover.
  * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string }} Placed
  */
-/** @typedef {{ missing: number, nextIdle: number, speech: number, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }} State */
+/** @typedef {{ missing: number, nextIdle: number, speech: number, speechLine?: string, labelForm?: string, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
 const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
@@ -386,20 +397,52 @@ function dress(entity, t) {
   }
   for (const tag of want) if (!entity.hasTag(tag)) entity.addTag(tag);
   const st = stateOf(t.id);
-  if (system.currentTick >= st.speech && !isName(entity.nameTag, t)) entity.nameTag = displayName(t);
+  if (system.currentTick >= st.speech) st.speechLine = undefined;
+  if (!st.labelForm || !isName(st.labelForm, t)) st.labelForm = displayName(t);
+  const wantText = labelTextFor(t);
+  if (!isSuppressedName(entity.nameTag) && entity.nameTag !== wantText) entity.nameTag = wantText;
 }
 
-// The name above an NPC's head: a player's game can show a minecraft:npc as "NPC" (its default name) although its
-// name was set, until the name changes again while they watch. So when a player comes near (or the NPC loads or
-// spawns), the name is sent again a moment later, switching between two forms that look the same.
+// The name above an NPC's head: a world-fixed helper entity (realm:npc_label, always_show=true) carries the
+// canonical name or speech line at headLocation + 0.4y while the native NPC's nameTag is "§r" (suppressing the
+// native 5-block label and "NPC" fallback). When a player comes near, the helper name is resent a moment later.
 const NAME_RANGE = 20; // players this close count as watching
 const RENAME_TICKS = [20, 60]; // resends after a player comes near: 1 s, then 3 s more
 
+/** Current text for the townsfolk's world-fixed nameplate helper. @param {Townsfolk} t */
+function labelTextFor(t) {
+  const st = stateOf(t.id);
+  if (system.currentTick < st.speech && st.speechLine) return st.speechLine;
+  return st.labelForm && isName(st.labelForm, t) ? st.labelForm : displayName(t);
+}
+
+/** Syncs all placed townsfolk nameplate helpers with active observers. */
+function updateLabels() {
+  if (!ready) return;
+  const dims = DIMENSIONS.flatMap((id) => {
+    try {
+      return [world.getDimension(id)];
+    } catch {
+      return [];
+    }
+  });
+  const targets = [];
+  for (const rec of list) {
+    const t = folk.get(rec.id);
+    const entity = entityOf(rec);
+    if (!t || !entity) continue;
+    targets.push({ id: rec.id, entity, name: labelTextFor(t) });
+  }
+  nameLabels.sync(targets, world.getAllPlayers(), dims);
+}
+
 /** Sends the name again (when no idle line is showing). @param {Entity} entity @param {Townsfolk} t */
 function resendName(entity, t) {
-  if (system.currentTick < stateOf(t.id).speech) return; // a line is up: its end puts the name back, a change too
+  const st = stateOf(t.id);
+  if (system.currentTick < st.speech) return; // a line is up: its end puts the name back, a change too
   const name = displayName(t);
-  entity.nameTag = entity.nameTag === name ? `${name}§r` : name;
+  st.labelForm = st.labelForm === name ? `${name}§r` : name;
+  updateLabels();
 }
 
 /** Every loop: a player new within NAME_RANGE gets the name sent again. @param {Entity} entity @param {Townsfolk} t */
@@ -470,6 +513,7 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (nameLabels.loaded(entity)) return;
     if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
       if (entity.isValid) entity.remove();
       return;
@@ -487,12 +531,12 @@ function auditAll() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
-      for (const type of LEGACY_LABEL_TYPES) for (const e of dim.getEntities({ type })) if (e.isValid) e.remove();
       for (const e of dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] })) audit(e);
     } catch (e) {
       console.warn(`[npc] audit: ${e}`);
     }
   }
+  updateLabels();
 }
 
 // An NPC that dies anyway (/kill) is spawned again at the next missing check, if anyone is around. (BDS 1.26 never
@@ -571,10 +615,14 @@ function say(entity, t, line) {
   const st = stateOf(t.id);
   const ticks = Math.max(1, Math.round(CONFIG.speechSeconds * 20));
   st.speech = system.currentTick + ticks;
-  entity.nameTag = `§f${line}`;
+  st.speechLine = `§f${line}`;
+  updateLabels();
   system.runTimeout(() => {
     try {
-      if (entity.isValid && system.currentTick >= st.speech) entity.nameTag = displayName(t);
+      if (system.currentTick >= st.speech) {
+        st.speechLine = undefined;
+        updateLabels();
+      }
     } catch {
       // unloaded meanwhile: the audit puts the name back
     }
@@ -675,6 +723,7 @@ world.afterEvents.worldLoad.subscribe(() => {
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
   system.runInterval(loop, LOOP_TICKS);
+  system.runInterval(updateLabels, 2);
   system.runInterval(auditAll, AUDIT_TICKS);
   // Other packs are loaded by now: the calendar, and each online player's affinity (after a /reload).
   system.runTimeout(() => {
@@ -1506,6 +1555,7 @@ function addNpc(player, id) {
   }
   // Not loaded (or couldn't move): a new one here; the old one is removed when its chunk loads.
   if (!moved) spawn(rec, t, at);
+  updateLabels();
   player.sendMessage(`§a${plainName(t)} now lives at ${coords(at)} and stays there.§7 Sneak and tap them in creative mode to pick a skin.${sharedNote(rec)}`);
   return undefined;
 }
@@ -1531,6 +1581,7 @@ async function removeNpc(player) {
   list = list.filter((r) => r.id !== id);
   if (list.length !== before) save();
   if (id) states.delete(id);
+  if (id) nameLabels.removeFor(id);
   if (id) dropSkin(id);
   entity.remove();
   player.sendMessage(`§aRemoved ${t ? plainName(t) : "that NPC"}. §7Place them again with /realm:npc_add ${id ?? "<id>"}.`);
@@ -1584,9 +1635,13 @@ function hasSkin(id) {
 function saveSkin(entity, id) {
   try {
     if (!entity.isValid) return false;
+    nameLabels.removeFor(id);
     const dim = entity.dimension;
     const loc = entity.location;
-    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player")) return false; // players aren't saved
+    for (const e of dim.getEntities({ type: LABEL_TYPE, location: loc, maxDistance: 3 })) {
+      if (e.isValid) e.remove();
+    }
+    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player" && e.typeId !== LABEL_TYPE)) return false; // players aren't saved
     const from = { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) };
     const sm = world.structureManager;
     if (sm.get(SKIN_PREFIX + id)) sm.delete(SKIN_PREFIX + id);
