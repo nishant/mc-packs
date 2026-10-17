@@ -157,6 +157,7 @@ export const NAMES = {
   "realm:durability": ["Low Durability Warning", "On or off, for you"],
   "realm:elytra": ["Elytra HUD", "Speed, height, rockets"],
   "realm:elytra_nos": ["Get NOS Rockets", "Nitrous elytra boost rockets"],
+  "realm:disc": ["Run Away Music Disc", "Get the custom red music disc"],
   "realm:expedition": ["Expeditions", "Start a dungeon run"],
   "realm:expedition_gauntlet": ["Start a Gauntlet", "A long run, pick boons"],
   "realm:expedition_leave": ["Leave Expedition", "Back to where you started"],

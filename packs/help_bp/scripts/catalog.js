@@ -785,7 +785,7 @@ export const PACKS = [
     "folder": "elytra_bp",
     "topic": "elytra",
     "name": "Elytra HUD",
-    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and §lNOS Rockets§r you carry. This pack also adds the §lNOS Rocket§r (§ecustom:nos_rocket§r), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles.",
+    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and §lNOS Rockets§r you carry. This pack also adds the §lNOS Rocket§r (§ecustom:nos_rocket§r), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles. It also adds the §lMusic Disc - Run Away§r (§ecustom:music_disc_run_away§r), a custom music disc that plays in a Jukebox or in your hand.",
     "steps": [
       {
         "text": "Put on an elytra and glide. In the second box on the right side of the screen (§lRight 2§r) you see something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12  NOS 4§r, updated 4 times a second. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
@@ -802,6 +802,10 @@ export const PACKS = [
       {
         "text": "§lOperators:§r run §e/realm:elytra_nos [count]§r to give yourself NOS Rockets directly. To turn the HUD or NOS Rockets off, or tune the NOS boost multiplier (§enosMultiplier§r) and max flight speed cap (§enosMaxSpeed§r), open §e/realm:config§r -> §lElytra HUD§r.",
         "ops": true
+      },
+      {
+        "text": "Craft a §lMusic Disc - Run Away§r (§ecustom:music_disc_run_away§r, a red CD with a gold and black center) at a crafting table with §l1 Gold Ingot§r in the center, §l4 Redstone§r on the edges and §l4 Coal§r in the corners (§eCRC / RGR / CRC§r), or run §e/realm:disc§r to get one. Right-click a Jukebox with it to play the song for everyone nearby (it's taken from your hand outside Creative); right-click the Jukebox again, or break it, to pop the disc back out and stop the song. Right-click the disc in the air to listen on your own, and again to stop.",
+        "ops": false
       }
     ],
     "commands": [
@@ -816,6 +820,12 @@ export const PACKS = [
         "ops": false,
         "who": "Operators",
         "text": "Gives yourself §ecount§r (1 to 64, default 16) §lNOS Rockets§r (§ecustom:nos_rocket§r)"
+      },
+      {
+        "usage": "/realm:disc",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Gives yourself 1 §lMusic Disc - Run Away§r (§ecustom:music_disc_run_away§r)"
       }
     ]
   },

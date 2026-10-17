@@ -1377,7 +1377,7 @@ Operators can change `enabled`, `defaultOn`, `players`, `barLength` and `showAt`
 
 ## Elytra HUD — `elytra_bp`
 
-While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and **NOS Rockets** you carry. This pack also adds the **NOS Rocket** (`custom:nos_rocket`), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles.
+While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and **NOS Rockets** you carry. This pack also adds the **NOS Rocket** (`custom:nos_rocket`), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles. It also adds the **Music Disc - Run Away** (`custom:music_disc_run_away`), a custom music disc that plays in a Jukebox or in your hand.
 
 ### How to use
 
@@ -1385,11 +1385,13 @@ While you glide, a small box on the right side of your screen (or another box, o
 2. Craft a **NOS Rocket** (`custom:nos_rocket`) at a crafting table by placing **1 Firework Rocket** in the center and **8 Gunpowder** around it (`GGG / GFG / GGG`). Right-click / use a NOS Rocket while gliding with an elytra for a hard 3.5x nitrous acceleration burst in the direction you're looking, complete with blue/cyan + orange flame particles and pressurized boost audio. (Using it on the ground does not consume it.)
 3. Don't want the HUD? Run `/realm:elytra`, or disable **Elytra HUD while gliding** in `/realm:prefs`. Chat says `Elytra HUD: Disabled. Run /realm:elytra again to enable it.` The choice is remembered.
 4. **Operators:** run `/realm:elytra_nos [count]` to give yourself NOS Rockets directly. To turn the HUD or NOS Rockets off, or tune the NOS boost multiplier (`nosMultiplier`) and max flight speed cap (`nosMaxSpeed`), open `/realm:config` → **Elytra HUD**.
+5. Craft a **Music Disc - Run Away** (`custom:music_disc_run_away`, a red CD with a gold and black center) at a crafting table with **1 Gold Ingot** in the center, **4 Redstone** on the edges and **4 Coal** in the corners (`CRC / RGR / CRC`), or run `/realm:disc` to get one. Right-click a Jukebox with it to play the song for everyone nearby (it's taken from your hand outside Creative); right-click the Jukebox again, or break it, to pop the disc back out and stop the song. Right-click the disc in the air to listen on your own, and again to stop.
 
 ### What players see
 
 - **Speed** in blocks per second (your total speed, diving included), **Y** (your height), **Elytra** durability left in percent, **Rockets** (firework rockets in your inventory and offhand) and **NOS** (NOS Rockets carried, when at least 1).
 - **NOS Rocket** (`custom:nos_rocket`, stack size 64, 128x128 `nos_rocket` icon in `build_rp`): when activated while gliding, consumes 1 item (outside Creative), spools up the turbo for 0.55s at regular firework-rocket speed (~32 to 36 blocks/s), kicks up to and holds a `nosMultiplier` (`3.5`x) forward nitrous boost over `nosBurstTicks` (`50` ticks = 2.5s at peak speed, clamped to `nosMaxSpeed` = `3.6` blocks/tick, ~72 blocks/s), and then carries its momentum through a slow 4.5s taper down to ~31 blocks/s with a `"stu-tu-tu-tu"` wastegate turbo flutter (`realm.nos.boost`) and cyan-blue + orange slipstream flames: a four-point slipstream ring streams past the corners of your view well ahead of the camera (it leads by your speed, so it stays in front even at ~72 blocks/s) and a continuous, gap-free afterburner ribbon trails behind you. Even without a NOS Rocket, gliding at 24+ blocks/s (`1.2` blocks/tick) shows faint wingtip sparks ahead and a puff of smoke behind. Normal vanilla firework rockets remain completely unchanged.
+- **Music Disc - Run Away** (`custom:music_disc_run_away`, stack size 1, `music_disc_run_away` icon and `realm.disc.run_away` / `realm.disc.run_away_personal` sounds in `build_rp`): the song lasts 5m 50s. In a Jukebox it plays in 3D for players nearby with note particles above the Jukebox and a `Now Playing: Run Away` note on the bar; any Jukebox disc already inside is popped out first. Right-clicking the Jukebox or breaking it drops the disc and stops the song. In Creative the disc stays in your hand when you put it in a Jukebox. Using the disc in the air plays the song only for you (`Now Playing`) and using it again stops it (`Stopped`).
 - The speed readout is a 3-sample moving average, so it doesn't flicker from tick to tick. **Elytra** shows `--` when you wear nothing in the chest slot or the item has no durability; vanilla and armored elytras show their percentage.
 - Durability shows green, yellow at 30 percent or less, and red at 10 percent or less (`lowPercent`). An elytra stops working at 1 durability left, which shows as 0%.
 - It only shows while you're gliding: the box goes away as you land (above the hotbar, the bar fades a moment after). Nothing is shown for players who aren't gliding.
@@ -1402,6 +1404,7 @@ While you glide, a small box on the right side of your screen (or another box, o
 |---|---|---|
 | `/realm:elytra` | Everyone | Enables or disables the gliding HUD **for yourself** (enabled by default). Remembered between sessions. Works while the HUD is enabled for the realm (default enabled, `enabled`) |
 | `/realm:elytra_nos [count]` | Operators | Gives yourself `count` (1 to 64, default 16) **NOS Rockets** (`custom:nos_rocket`) |
+| `/realm:disc` | Everyone | Gives yourself 1 **Music Disc - Run Away** (`custom:music_disc_run_away`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -1425,6 +1428,7 @@ Operators can change `enabled`, `lowPercent`, `showAt`, `nosEnabled`, `nosMultip
 |---|---|---|
 | `elytra:pref` | Player | JSON of the player's own choices: `"off": true` when they disabled the HUD (`/realm:elytra` or `/realm:prefs`), and `where` when they picked where it shows |
 | `elytra:cfg` | World | Settings changed in `/realm:config` |
+| `elytra:jukeboxes` | World | JSON list of Jukebox positions (`"dimension|x|y|z"`) that hold a Run Away disc, so the discs survive restarts |
 
 ### How it works
 

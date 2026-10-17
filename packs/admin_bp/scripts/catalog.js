@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 171 commands in 64 packs */
+/** @type {Pack[]} 172 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -172,6 +172,7 @@ export const PACKS = [
     folder: "elytra_bp",
     pack: "Elytra HUD",
     commands: [
+      {"name":"realm:disc","description":"Elytra HUD: get the custom Run Away music disc","permission":"any","params":[]},
       {"name":"realm:elytra","description":"Enable or disable the elytra HUD (speed, height, durability, rockets) for yourself","permission":"any","params":[]},
       {"name":"realm:elytra_nos","description":"Give yourself NOS Rockets (custom:nos_rocket) for an elytra nitrous boost","permission":"op","params":[{"name":"count","type":"Integer","optional":true}]},
     ],

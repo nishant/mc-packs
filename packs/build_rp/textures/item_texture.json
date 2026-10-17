@@ -6,6 +6,7 @@
     "tutorial_book": { "textures": "textures/items/tutorial_book" },
     "realm_building_book": { "textures": "textures/items/realm_building_book" },
     "nos_rocket": { "textures": "textures/items/nos_rocket" },
+    "music_disc_run_away": { "textures": "textures/items/music_disc_run_away" },
     "inv_prev": { "textures": "textures/items/inv_prev" },
     "inv_menu": { "textures": "textures/items/inv_menu" },
     "inv_next": { "textures": "textures/items/inv_next" }

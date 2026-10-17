@@ -22,6 +22,13 @@ const ROCKET = "minecraft:firework_rocket";
 const NOS_ROCKET = "custom:nos_rocket";
 const NOS_COOLDOWN_TICKS = 4;
 
+const DISC_RUN_AWAY = "custom:music_disc_run_away";
+const DISC_SOUND_3D = "realm.disc.run_away";
+const DISC_SOUND_2D = "realm.disc.run_away_personal";
+const DISC_DURATION_TICKS = 350 * 20; // 5m 50s (350s)
+const DISC_DEBOUNCE_TICKS = 6;
+const PROP_JUKEBOXES = "elytra:jukeboxes"; // world dynamic property storing active jukebox keys ["dim|x|y|z"] so discs inside jukeboxes survive restarts
+
 /** @param {Player} player */
 const hudOff = (player) => getFor(player, "off") === true;
 
@@ -376,6 +383,189 @@ world.afterEvents.itemUse.subscribe((event) => {
   triggerNosRocket(event.source);
 });
 
+// ---- Music Disc - Run Away (custom:music_disc_run_away): Jukebox + portable playback ----
+/** @type {Map<string, { dimId: string, x: number, y: number, z: number, startTick: number }>} */
+const activeJukeboxes = new Map();
+/** Players currently listening to the disc in hand (player id -> start tick). @type {Map<string, number>} */
+const personalDiscPlaying = new Map();
+/** @type {Map<string, number>} */
+const discDebounce = new Map();
+
+function makeRunAwayDisc() {
+  const stack = new ItemStack(DISC_RUN_AWAY, 1);
+  stack.setLore(["§7Run Away", "§8Use on a Jukebox or right-click in hand"]);
+  return stack;
+}
+
+function saveJukeboxes() {
+  try {
+    world.setDynamicProperty(PROP_JUKEBOXES, JSON.stringify([...activeJukeboxes.keys()]));
+  } catch (e) {
+    console.warn(`[elytra] ${e}`);
+  }
+}
+
+// Jukeboxes holding a disc survive restarts; their song is treated as finished (the sound stopped with the restart).
+system.run(() => {
+  try {
+    const raw = world.getDynamicProperty(PROP_JUKEBOXES);
+    const keys = typeof raw === "string" ? JSON.parse(raw) : [];
+    for (const key of Array.isArray(keys) ? keys : []) {
+      const [dimId, x, y, z] = String(key).split("|");
+      if (dimId && [x, y, z].every((n) => Number.isFinite(Number(n)))) {
+        activeJukeboxes.set(key, { dimId, x: Number(x), y: Number(y), z: Number(z), startTick: system.currentTick - DISC_DURATION_TICKS });
+      }
+    }
+  } catch (e) {
+    console.warn(`[elytra] ${e}`);
+  }
+});
+
+/** @param {Player} player */
+function stopDiscSounds(player) {
+  try {
+    player.runCommand("stopsound @s realm.disc.run_away");
+    player.runCommand("stopsound @s realm.disc.run_away_personal");
+  } catch {}
+}
+
+/** Removes a custom disc from a jukebox, stops its song nearby and optionally drops the disc. */
+function ejectCustomJukebox(/** @type {string} */ key, /** @type {boolean} */ drop) {
+  const jb = activeJukeboxes.get(key);
+  if (!jb) return;
+  activeJukeboxes.delete(key);
+  saveJukeboxes();
+  try {
+    const dim = world.getDimension(jb.dimId);
+    for (const p of dim.getPlayers({ location: { x: jb.x + 0.5, y: jb.y + 0.5, z: jb.z + 0.5 }, maxDistance: 72 })) stopDiscSounds(p);
+    if (drop) dim.spawnItem(makeRunAwayDisc(), { x: jb.x + 0.5, y: jb.y + 1.1, z: jb.z + 0.5 });
+  } catch (e) {
+    console.warn(`[elytra] ${e}`);
+  }
+}
+
+/** @param {Player} player @returns {boolean} true if a disc was taken from the hand (Creative keeps it) */
+function consumeRunAwayDisc(player) {
+  const equip = player.getComponent("minecraft:equippable");
+  if (!equip) return false;
+  for (const slot of [EquipmentSlot.Mainhand, EquipmentSlot.Offhand]) {
+    const item = equip.getEquipment(slot);
+    if (item?.typeId !== DISC_RUN_AWAY || item.amount <= 0) continue;
+    if (player.getGameMode() !== GameMode.Creative) {
+      if (item.amount > 1) {
+        item.amount -= 1;
+        equip.setEquipment(slot, item);
+      } else {
+        equip.setEquipment(slot, undefined);
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+/** @param {Player} player @param {string} text */
+function announceDisc(player, text) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 60, from: "elytra_bp" }));
+  player.onScreenDisplay.setActionBar(text);
+}
+
+/** @param {Player} player @param {import("@minecraft/server").Block} block */
+function insertDisc(player, block) {
+  const key = `${block.dimension.id}|${block.location.x}|${block.location.y}|${block.location.z}`;
+  const rp = block.getComponent("minecraft:record_player");
+  if (rp?.getRecord()) rp.ejectRecord();
+  if (!consumeRunAwayDisc(player)) return;
+  activeJukeboxes.set(key, { dimId: block.dimension.id, x: block.location.x, y: block.location.y, z: block.location.z, startTick: system.currentTick });
+  saveJukeboxes();
+  const center = { x: block.location.x + 0.5, y: block.location.y + 0.5, z: block.location.z + 0.5 };
+  block.dimension.playSound(DISC_SOUND_3D, center, { volume: 4.0, pitch: 1.0 });
+  for (const p of block.dimension.getPlayers({ location: center, maxDistance: 64 })) {
+    try {
+      announceDisc(p, "§dNow Playing: §bRun Away");
+    } catch {}
+  }
+}
+
+world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+  const block = event.block;
+  if (block.typeId !== "minecraft:jukebox") return;
+  const player = event.player;
+  const key = `${block.dimension.id}|${block.location.x}|${block.location.y}|${block.location.z}`;
+  const holding = activeJukeboxes.has(key);
+  if (!holding && event.itemStack?.typeId !== DISC_RUN_AWAY) return;
+  event.cancel = true;
+  const now = system.currentTick;
+  if (now - (discDebounce.get(player.id) ?? -Infinity) < DISC_DEBOUNCE_TICKS) return;
+  discDebounce.set(player.id, now);
+  system.run(() => {
+    try {
+      if (holding) ejectCustomJukebox(key, true);
+      else insertDisc(player, block);
+    } catch (e) {
+      console.warn(`[elytra] ${e}`);
+    }
+  });
+});
+
+world.afterEvents.playerBreakBlock.subscribe((event) => {
+  const loc = event.block.location;
+  const key = `${event.block.dimension.id}|${loc.x}|${loc.y}|${loc.z}`;
+  if (event.brokenBlockPermutation.type.id === "minecraft:jukebox" || activeJukeboxes.has(key)) ejectCustomJukebox(key, true);
+});
+
+/** Toggles the in-hand song for a player; ignored right after a Jukebox interaction. @param {Player} player */
+function togglePortableDisc(player) {
+  const now = system.currentTick;
+  if (now - (discDebounce.get(player.id) ?? -Infinity) < DISC_DEBOUNCE_TICKS) return;
+  discDebounce.set(player.id, now);
+  try {
+    const started = personalDiscPlaying.get(player.id);
+    if (started !== undefined && now - started < DISC_DURATION_TICKS) {
+      personalDiscPlaying.delete(player.id);
+      stopDiscSounds(player);
+      player.onScreenDisplay.setActionBar("§7Stopped: §fRun Away");
+    } else {
+      personalDiscPlaying.set(player.id, now);
+      player.playSound(DISC_SOUND_2D, { volume: 0.85, pitch: 1.0 });
+      announceDisc(player, "§dNow Playing: §bRun Away §7(use disc again to stop)");
+    }
+  } catch (e) {
+    console.warn(`[elytra] ${e}`);
+  }
+}
+
+world.beforeEvents.itemUse.subscribe((event) => {
+  if (event.itemStack?.typeId !== DISC_RUN_AWAY) return;
+  const source = event.source;
+  if (!(source instanceof Player)) return;
+  // Deferred so a Jukebox interaction in the same tick can claim the click first.
+  system.run(() => togglePortableDisc(source));
+});
+
+world.afterEvents.itemStartUse.subscribe((event) => {
+  if (event.itemStack?.typeId !== DISC_RUN_AWAY) return;
+  if (!(event.source instanceof Player)) return;
+  togglePortableDisc(event.source);
+});
+
+// Note particles while a song plays; forget jukeboxes that were destroyed without a break event (explosions, pistons).
+system.runInterval(() => {
+  const now = system.currentTick;
+  for (const [key, jb] of [...activeJukeboxes]) {
+    try {
+      const dim = world.getDimension(jb.dimId);
+      const block = dim.getBlock({ x: jb.x, y: jb.y, z: jb.z });
+      if (!block) continue; // chunk not loaded
+      if (block.typeId !== "minecraft:jukebox") {
+        ejectCustomJukebox(key, true);
+        continue;
+      }
+      if (now - jb.startTick < DISC_DURATION_TICKS) dim.spawnParticle("minecraft:note_particle", { x: jb.x + 0.5, y: jb.y + 1.2, z: jb.z + 0.5 });
+    } catch {}
+  }
+}, 15);
+
 // Choreograph the 3-stage turbo curve:
 //   1. Spool-up (ticks 1..11): regular firework rocket speed + blue sparks while the turbo whine builds
 //   2. Full Boost (ticks 12..boostEndTick): quick kick to peak speed, then hold + blazing cyan/orange plume
@@ -575,6 +765,8 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   lastNosTick.delete(playerId);
   activeNosBursts.delete(playerId);
   speedHistory.delete(playerId);
+  personalDiscPlaying.delete(playerId);
+  discDebounce.delete(playerId);
 });
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
@@ -624,6 +816,32 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
       return {
         status: CustomCommandStatus.Success,
         message: `Gave ${amount} NOS Rocket${amount === 1 ? "" : "s"}.`,
+      };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:disc",
+      description: "Elytra HUD: get the custom Run Away music disc",
+      permissionLevel: CommandPermissionLevel.Any,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => {
+        try {
+          const stack = makeRunAwayDisc();
+          const inv = player.getComponent("minecraft:inventory")?.container;
+          const rest = inv ? inv.addItem(stack) : stack;
+          if (rest) player.dimension.spawnItem(rest, player.location);
+        } catch (e) {
+          console.warn(`[elytra] ${e}`);
+        }
+      });
+      return {
+        status: CustomCommandStatus.Success,
+        message: "§aGave 1 Music Disc - Run Away. Put it in a Jukebox or right-click to play!",
       };
     }
   );

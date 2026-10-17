@@ -1,0 +1,33 @@
+{
+  "format_version": "1.20.10",
+  "minecraft:recipe_shaped": {
+    "description": {
+      "identifier": "custom:music_disc_run_away"
+    },
+    "tags": ["crafting_table"],
+    "pattern": [
+      "CRC",
+      "RGR",
+      "CRC"
+    ],
+    "key": {
+      "C": {
+        "item": "minecraft:coal"
+      },
+      "R": {
+        "item": "minecraft:redstone"
+      },
+      "G": {
+        "item": "minecraft:gold_ingot"
+      }
+    },
+    "unlock": [
+      { "item": "minecraft:gold_ingot" },
+      { "item": "minecraft:jukebox" }
+    ],
+    "result": {
+      "item": "custom:music_disc_run_away",
+      "count": 1
+    }
+  }
+}

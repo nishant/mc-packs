@@ -1,8 +1,8 @@
 // Generates the pictures of the Easy Building Guides resource pack (packs/build_rp): the guide particle
 // textures (textures/particle/realm_guide.png: a one-block outline and a corner outline side by side;
 // realm_guide_dot.png), the Building Book icon (textures/items/realm_building_book.png), inventory page
-// buttons (textures/items/inv_{prev,menu,next}.png), and pack_icon.png.
-// The particles, item_texture.json and the manifest are hand-written.
+// buttons (textures/items/inv_{prev,menu,next}.png), the Run Away music disc, and pack_icon.png.
+// The particles, item_texture.json, sound definitions, locale files and manifest are hand-written.
 // Deterministic (no Math.random), so the same code always writes the same files.
 //
 //   node tools/gen-build/gen.mjs           write them
@@ -206,6 +206,70 @@ function inventoryIcon(kind) {
 }
 
 // ---------------------------------------------------------------------------
+// Run Away: vanilla 16 x 16 disc silhouette, red vinyl with a gold label and black spindle.
+// Each source texel becomes an exact 8 x 8 block in the 128 x 128 item texture.
+// ---------------------------------------------------------------------------
+
+function musicDiscRunAway() {
+  const disc = blank(16, 16);
+  /** @type {Record<string, RGBA>} */
+  const colors = {
+    R_OUT: [92, 12, 18, 255],
+    R_BOT: [44, 5, 9, 255],
+    R_SHD: [125, 18, 26, 255],
+    R_MID: [186, 26, 36, 255],
+    R_BRI: [232, 46, 56, 255],
+    R_pec: [255, 96, 104, 255],
+    G_BRM: [150, 93, 55, 255],
+    G_TOP: [253, 245, 95, 255],
+    G_MID: [249, 177, 34, 255],
+    G_DP: [233, 125, 21, 255],
+    BLK: [14, 14, 18, 255],
+    INNER: [24, 24, 30, 255],
+  };
+  /** @type {Record<string, RGBA>} */
+  const palette = {
+    A: colors.R_OUT, B: colors.R_MID, C: colors.R_BRI,
+    D: colors.G_TOP, E: colors.R_SHD, F: colors.G_MID, G: colors.R_BOT,
+  };
+  // The vanilla record's exact rows at y = 3..12; dots stay transparent.
+  const rows = [
+    ".....AAAAA......",
+    "..AAABBBBBAAA...",
+    ".ABBBBCBCCBBBA..",
+    "ABBCCBDDDBBCBBA.",
+    "ABCBBDDEFFBBCBA.",
+    "ABBCBBFFFBCCBBA.",
+    "AEBBBCCBCBBBBEA.",
+    ".GEEEBBBBBEEEG..",
+    "..GGGEEEEEGGG...",
+    ".....GGGGG......",
+  ];
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] !== ".") put(disc, x, y + 3, palette[row[x]]);
+    }
+  });
+  for (const [x, y] of [[6, 5], [4, 6], [2, 7]]) put(disc, x, y, colors.R_pec);
+  for (const [x, y] of [[5, 6], [9, 6], [5, 8], [9, 8]]) put(disc, x, y, colors.G_BRM);
+  for (const [x, y] of [[6, 6], [7, 6], [8, 6], [5, 7], [7, 8]]) put(disc, x, y, colors.G_TOP);
+  for (const [x, y] of [[9, 7], [6, 8], [8, 8]]) put(disc, x, y, colors.G_MID);
+  rect(disc, 6, 9, 8, 9, colors.G_DP);
+  rect(disc, 6, 7, 8, 7, colors.INNER);
+  put(disc, 7, 7, colors.BLK);
+
+  const img = blank(128, 128);
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const i = (y * 16 + x) * 4;
+      const color = /** @type {RGBA} */ (Array.from(disc.data.subarray(i, i + 4)));
+      rect(img, x * 8, y * 8, x * 8 + 7, y * 8 + 7, color);
+    }
+  }
+  return img;
+}
+
+// ---------------------------------------------------------------------------
 // pack_icon.png (128 x 128): outlined blocks of a wall going up on a dark blue background.
 // ---------------------------------------------------------------------------
 
@@ -273,6 +337,7 @@ outputs.set(`${RP}/textures/items/realm_building_book.png`, bookIcon());
 outputs.set(`${RP}/textures/items/inv_prev.png`, inventoryIcon("prev"));
 outputs.set(`${RP}/textures/items/inv_menu.png`, inventoryIcon("menu"));
 outputs.set(`${RP}/textures/items/inv_next.png`, inventoryIcon("next"));
+outputs.set(`${RP}/textures/items/music_disc_run_away.png`, musicDiscRunAway());
 outputs.set(`${RP}/pack_icon.png`, packIcon());
 
 if (check) {

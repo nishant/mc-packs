@@ -140,6 +140,33 @@
         }
       ]
     },
+    "realm.disc.run_away": {
+      "category": "record",
+      "max_distance": 64.0,
+      "sounds": [
+        {
+          "name": "sounds/records/run_away",
+          "stream": true,
+          "volume": 1.0,
+          "pitch": 1.0,
+          "is3D": true,
+          "load_on_low_memory": true
+        }
+      ]
+    },
+    "realm.disc.run_away_personal": {
+      "category": "record",
+      "sounds": [
+        {
+          "name": "sounds/records/run_away",
+          "stream": true,
+          "volume": 0.85,
+          "pitch": 1.0,
+          "is3D": false,
+          "load_on_low_memory": true
+        }
+      ]
+    },
     "realm.nos.boost": {
       "category": "player",
       "sounds": [
