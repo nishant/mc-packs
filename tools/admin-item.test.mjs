@@ -390,19 +390,25 @@ function makeRealTool(amount = 1) {
 }
 
 function countRealTools(player) {
+  const realMarks = new Set(["Red entries: operators only", "Gold entries: operators only", "Operators only"]);
+  const isReal = (it) => {
+    if (!it || it.typeId !== "minecraft:nether_star") return false;
+    const stripped = it.getLore().map((l) => String(l).replace(/§./g, "").trim());
+    return stripped.some((l) => realMarks.has(l));
+  };
   let count = 0;
   const slots = [];
   for (let i = 0; i < player.container.size; i++) {
     const it = player.container.getItem(i);
-    if (it && it.typeId === "minecraft:nether_star" && it.getLore().length > 0) {
+    if (isReal(it)) {
       count += it.amount;
       slots.push(i);
     }
   }
   const off = player.equippable.getEquipment(EquipmentSlot.Offhand);
-  if (off && off.typeId === "minecraft:nether_star" && off.getLore().length > 0) count += off.amount;
+  if (isReal(off)) count += off.amount;
   const cur = player.cursor.item;
-  if (cur && cur.typeId === "minecraft:nether_star" && cur.getLore().length > 0) count += cur.amount;
+  if (isReal(cur)) count += cur.amount;
   return { count, slots };
 }
 
@@ -620,6 +626,111 @@ test("respects giveToPlayers, giveToOperators, and removeFromOthers settings", a
     system.flushRuns();
     system.flushTimeouts();
     assert.equal(countRealTools(op).count, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("regression: preserves locked/keepOnDeath Realm Configuration star with unrelated lore and differently named star with generic overlapping lore line", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const player = new MockPlayer("p6", "Collector", true);
+    // 1. Ordinary same-type locked/keepOnDeath star named "Realm Configuration" with unrelated lore ["My keepsake"]
+    const keepsake = new MockItemStack("minecraft:nether_star", 1);
+    keepsake.nameTag = "Realm Configuration";
+    keepsake.keepOnDeath = true;
+    keepsake.lockMode = ItemLockMode.inventory;
+    keepsake.setLore(["My keepsake"]);
+    player.container.setItem(1, keepsake);
+
+    // 2. Differently named star with one generic overlapping lore line ("in one place.")
+    const genericLoreStar = new MockItemStack("minecraft:nether_star", 2);
+    genericLoreStar.nameTag = "Wayfinder Star";
+    genericLoreStar.keepOnDeath = true;
+    genericLoreStar.lockMode = ItemLockMode.inventory;
+    genericLoreStar.setLore(["§r§7in one place."]);
+    player.container.setItem(2, genericLoreStar);
+
+    // 3. Genuine canonical tool in slot 0 and duplicate real tool in slot 8
+    player.container.setItem(0, makeRealTool(1));
+    player.container.setItem(8, makeRealTool(1));
+
+    world.players.push(player);
+    world._onSpawn({ player });
+    system.flushRuns();
+
+    // Real duplicate in slot 8 removed; canonical tool in slot 0 kept
+    const { count, slots } = countRealTools(player);
+    assert.equal(count, 1);
+    assert.deepEqual(slots, [0]);
+
+    // Both ordinary items with lore in slots 1 and 2 are preserved untouched
+    const s1 = player.container.getItem(1);
+    assert.ok(s1);
+    assert.equal(s1.nameTag, "Realm Configuration");
+    assert.deepEqual(s1.getLore(), ["My keepsake"]);
+    assert.equal(s1.keepOnDeath, true);
+    assert.equal(s1.lockMode, ItemLockMode.inventory);
+
+    const s2 = player.container.getItem(2);
+    assert.ok(s2);
+    assert.equal(s2.nameTag, "Wayfinder Star");
+    assert.equal(s2.amount, 2);
+    assert.deepEqual(s2.getLore(), ["§r§7in one place."]);
+  } finally {
+    cleanup();
+  }
+});
+
+test("regression: external real copy inserted while updatingItem guard is active is queued and deduplicated on guard clear without event loops", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const player = new MockPlayer("p7", "RaceTester", true);
+    // Start with a legacy tool in slot 0 so reconcileItems writes slot 0 and activates updatingItem
+    const legacy = makeRealTool(1);
+    legacy.setLore(["§r§8Gold entries: operators only"]);
+    player.container.setItem(0, legacy);
+    world.players.push(player);
+    player.container.emitEvents = true;
+
+    // Trigger spawn; take only the first queued callback (which runs reconcileItems and queues markUpdating's clear callback)
+    world._onSpawn({ player });
+    const firstBatch = system.queue.splice(0, 1);
+    for (const fn of firstBatch) fn();
+
+    // At this exact moment, updatingItem is active for player, and markUpdating's clear callback is still in system.queue.
+    // Simulate stash_bp restoring a page with another real tool into slot 20 before the guard clears!
+    player.container.setItem(20, makeRealTool(1));
+    assert.equal(countRealTools(player).count, 2, "2 copies present immediately before guard clear flushes");
+
+    // Now flush remaining queued runs (markUpdating clear -> schedules follow-up reconcile -> removes slot 20)
+    system.flushRuns();
+
+    const { count, slots } = countRealTools(player);
+    assert.equal(count, 1, "follow-up reconcile after guard clear removed the concurrently restored copy");
+    assert.deepEqual(slots, [0]);
+    assert.equal(system.queue.length, 0, "converged cleanly with no infinite event loop");
+  } finally {
+    cleanup();
+  }
+});
+
+test("regression: automatic check/event paths report failed removals across inventory, offhand, and cursor", async () => {
+  const { world, system, cleanup } = await createAdminHarness();
+  try {
+    const player = new MockPlayer("p8", "FailCheck", true);
+    player.container.setItem(0, makeRealTool(1));
+    player.equippable.setEquipment(EquipmentSlot.Offhand, makeRealTool(1));
+    player.equippable.refuseClear = true;
+    world.players.push(player);
+
+    // Automatic spawn check (not manual giveItem) must surface the failed offhand removal
+    world._onSpawn({ player });
+    system.flushRuns();
+    assert.ok(
+      player.messages.some((m) => m.includes("Could not remove 1 extra Realm Configuration item")),
+      `expected automatic failure message, got ${JSON.stringify(player.messages)}`
+    );
   } finally {
     cleanup();
   }
