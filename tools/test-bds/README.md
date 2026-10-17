@@ -117,14 +117,27 @@ node tools/test-bds/run.mjs --only help_bp --ticks 20 --bot-qa --quiet
   3. UWP AppContainer `CheckNetIsolation LoopbackExempt` status (`uwpLoopbackExempt`) is recorded separately;
      empirically, local NetherNet connections to `127.0.0.1:19132` with `texturepack-required=true` download
      and attach candidate resource packs (`7.1 MB`) without `LoopbackExempt`.
-  4. **Qualified visual outcomes (no blanket visual PASS)**: real-client screenshots via `--client-qa` and
-     `<log>.commands.txt` verified the blue horizontal river + bridge radar cells, South compass bearing,
-     right-edge scoreboard sidebar below the radar with vanilla long-name truncation, and unobstructed 5 m /
-     10 m NPC body sightline. Physical in-game inventory mouse clicks remain unverified under Computer Use
-     because foreground `press_key("e")` restores the prior foreground window afterward, triggering Bedrock's
-     focus-loss auto-pause (`ctrl_lost_focus_pause`); two-page `stash_bp` contents on real client join are
-     verified server-side (`QA_CLIENT_JOINED`), and 20 m NPC nameplate readability remains an unverified
-     client visual gate.
+  4. **Reusable `inbox -> ACK -> CU screenshot / keyboard form` workflow & qualified visual outcomes**:
+     - Appending `scriptevent qa:cmd <step>` to `<log>.commands.txt`, waiting for `QA_STEP_APPLIED` in `<log>`,
+       and capturing via `get_window_state(capture_mode="image")` exercises world poses and server-opened UI
+       forms without triggering focus-restore auto-pause (`ctrl_lost_focus_pause`).
+     - **Minimap & Side HUD**: real-client screenshots verified the blue horizontal river + stone bridge radar
+       cells, South compass bearing consistency (`map_bridge`), and right-edge scoreboard sidebar positioned
+       below the radar with expected vanilla long-name truncation.
+     - **NPC 5 m / 20 m native vs. `realm:npc_name_probe` comparison (`Mara the Cartographer`)**:
+       - `npc_20m` (native only): NPC body visible, native overhead nameplate not drawn at 20 m.
+       - `npc_probe_always` (`count=1`) at 20 m: `realm:npc_name_probe` overhead text is visible at 20 m (small).
+       - `npc_5m` with `npc_probe_always` active: native nameplate and `realm:npc_name_probe` helper render an
+         overlapping double label at 5 m (confirming the close-range duplicate-text gate).
+       - `npc_probe_looked_at` (`count=0`) at 5 m: removes the helper and renders a single clear
+         `Mara the Cartographer` native nameplate.
+     - **Inventory Stash (`stash_bp`)**: `QA_CLIENT_JOINED` seeds two 12-item pages (`24/120` total). Sending
+       `stash_open` via `<log>.commands.txt` opens the real `Inventory Pages` GUI form on the client showing
+       `24/120` total usage and `12/24` on Page 1 and Page 2; bare keyboard `Down`, `Down`, `Return` on window
+       `element_index: 0` switches to Page 2, and a second `stash_open` confirms `Page #2` / `Page 2 (Active)`
+       (whereas coordinate clicks on the form report `done` without activating). Raw vanilla inventory-slot
+       mouse drag/click UI remains untested under Computer Use because `press_key("e")` focus restoration
+       triggers Bedrock's focus-loss pause screen.
 - **`--bot-qa` (`lib/bot-adapter.mjs`)**: evaluates the Bedrock protocol bot approach from
   `AIKUSAN/minecraft-agent-skills-bundle` (`.agents/skills/minecraft-bot-qa`, MIT License, `bedrock-protocol@3.60.1`).
   Empirically, native BDS `1.26.52.3` enforces `transport=nethernet` (`In this release, NetherNet is the only
