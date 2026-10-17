@@ -128,12 +128,14 @@ test("writes process identity and verifies staged pack SHA-256 hashes", (t) => {
     modules: [{ type: "script", language: "javascript", uuid: "11111111-2222-3333-4444-555555555556", version: [1, 0, 0], entry: "scripts/main.js" }],
     dependencies: [{ module_name: "@minecraft/server", version: "2.1.0" }],
   };
-  fs.writeFileSync(path.join(srcPack, "manifest.json"), JSON.stringify(manifest, null, 2));
+  const manifestTextWithComments = `// Bedrock manifest with comments\n/* header block */\n${JSON.stringify(manifest, null, 2)}\n`;
+  fs.writeFileSync(path.join(srcPack, "manifest.json"), manifestTextWithComments);
   fs.writeFileSync(path.join(srcPack, "scripts", "main.js"), 'console.log("hi");\n');
 
   const serverDir = path.join(tmp, "server");
   fs.mkdirSync(path.join(serverDir, "development_behavior_packs"), { recursive: true });
-  const packObj = { folder: "sample_bp", dir: srcPack, manifest, kind: "bp", name: "Sample" };
+  const parsedManifest = packs.readJson(path.join(srcPack, "manifest.json"));
+  const packObj = { folder: "sample_bp", dir: srcPack, manifest: parsedManifest, kind: "bp", name: "Sample" };
   packs.installBehaviorPack(packObj, serverDir, { shim: true });
   assert.equal(packObj.stagedInfo.verified, true);
   assert.equal(packObj.stagedInfo.shimApplied, true);

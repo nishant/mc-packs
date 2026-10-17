@@ -155,8 +155,8 @@ export function inspectStagedPack(pack, dest, shimApplied = false) {
   const expectedMap = new Map(srcHash.files.map((f) => [f.path, f.sha256]));
 
   if (shimApplied) {
-    const srcManifestRaw = fs.readFileSync(path.join(pack.dir, "manifest.json"), "utf8");
-    const expectedShim = buildExpectedShimmedManifest(JSON.parse(srcManifestRaw));
+    const srcManifest = readJson(path.join(pack.dir, "manifest.json"));
+    const expectedShim = buildExpectedShimmedManifest(srcManifest);
     if (!expectedShim) {
       throw new Error(`Pack ${pack.folder} marked shimApplied=true but has no script module entry`);
     }
