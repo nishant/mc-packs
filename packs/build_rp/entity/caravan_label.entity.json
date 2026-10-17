@@ -1,0 +1,21 @@
+{
+  "format_version": "1.10.0",
+  "minecraft:client_entity": {
+    "description": {
+      "identifier": "realm:caravan_label",
+      "materials": {
+        "default": "entity_alphatest"
+      },
+      "textures": {
+        "default": "textures/entity/panels/marker"
+      },
+      "geometry": {
+        "default": "geometry.realm_npc_label"
+      },
+      "render_controllers": [
+        "controller.render.default"
+      ],
+      "enable_attachables": false
+    }
+  }
+}

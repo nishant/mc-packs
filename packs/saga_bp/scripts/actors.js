@@ -11,6 +11,7 @@ import { DIMENSIONS, dist3, hash } from "./util.js";
 export const ACTOR = "saga:actor";
 /** Hostile story mobs (ambushes, waves, wrong answers, champion adds): real fights, cleaned up later. */
 export const ADD = "saga:add";
+const LEGACY_LABEL_TYPES = new Set(["realm:saga_label"]);
 const LONG = 20000000; // effect ticks: as long as the game allows
 const VILLAGER = "minecraft:villager_v2";
 /** What a story character turns into: lightning makes a villager a witch, a zombie's fatal hit a zombie villager. */
@@ -234,6 +235,10 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
 // scene moved on) is removed when it loads.
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
+      if (entity.isValid) entity.remove();
+      return;
+    }
     if (actors.has(entity.id)) return;
     if (entity.hasTag(ACTOR) || entity.hasTag(ADD)) entity.remove();
   } catch {
@@ -246,6 +251,7 @@ export function sweep() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
+      for (const type of LEGACY_LABEL_TYPES) for (const ent of dim.getEntities({ type })) if (ent.isValid) ent.remove();
       for (const tag of [ACTOR, ADD]) for (const ent of dim.getEntities({ tags: [tag] })) if (!actors.has(ent.id)) ent.remove();
     } catch (e) {
       console.warn(`[saga] sweep: ${e}`);

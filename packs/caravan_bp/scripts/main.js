@@ -32,6 +32,7 @@ const TRADER_TAG = "realm:caravan_trader:";
 const LLAMA_TAG = "realm:caravan_llama";
 const OWNER_TAG = "realm:npc_owner:caravan_bp";
 const NPC_TAG = "realm:npc";
+const LEGACY_LABEL_TYPES = new Set(["realm:caravan_label"]);
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
 
@@ -472,6 +473,10 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
+      if (entity.isValid) entity.remove();
+      return;
+    }
     audit(entity);
   } catch (e) {
     console.warn(`[caravan] ${e}`);
@@ -481,7 +486,9 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
 function auditAll() {
   for (const id of DIMENSIONS) {
     try {
-      for (const e of world.getDimension(id).getEntities({ tags: [TAG] })) audit(e);
+      const dim = world.getDimension(id);
+      for (const type of LEGACY_LABEL_TYPES) for (const e of dim.getEntities({ type })) if (e.isValid) e.remove();
+      for (const e of dim.getEntities({ tags: [TAG] })) audit(e);
     } catch (e) {
       console.warn(`[caravan] audit: ${e}`);
     }
