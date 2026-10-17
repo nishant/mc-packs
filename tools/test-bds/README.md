@@ -39,11 +39,17 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--timeout <s>` | 180 | Total time limit, setup and boot included. |
 | `--seed <n>` | 1 | World seed. Each seed's world is generated once and cached in `.cache/`. |
 | `--flat` | off | Superflat world (grass at y -61). |
+| `--port <n>` | random free pair | Reserve explicit IPv4 port `<n>` and IPv6 `<n>+1` across TCP+UDP (`.cache/ports/`). |
+| `--transport <mode>` | `nethernet` | Transport mode (`nethernet` default; `raknet` default for `--bot-qa`). |
 | `--prop key=value` | | Extra `server.properties` line, repeatable (e.g. `--prop difficulty=hard`). |
 | `--allow-error <regex>` | | Do not fail on script errors matching this, repeatable. |
 | `--strict` | off | Also fail on content log errors and on caught errors that packs log as warnings. |
 | `--no-shim` | off | Install packs unmodified (simulated players are then invisible to them; see below). |
 | `--keep` | off | Keep the temp server folder (path printed at the end). |
+| `--retain-on-failure` | off | Keep the temp server folder only when the run fails (`exitCode !== 0`). |
+| `--evidence <file>` | `<log>.evidence.json` | Write structured JSON evidence manifest (git SHA, staged pack SHA-256 digests, gates, timings). |
+| `--client-qa` | off | Start interactive private client QA server (`nethernet`, `examples/client-qa-fixture.js`) and stay alive. |
+| `--bot-qa` | off | Run the native BDS network-bot capability probe (`lib/bot-adapter.mjs`) against the live server. |
 | `--log <file>` | `logs/...` | Where to write the full log. |
 | `--quiet` | off | Print only harness lines, warnings and errors. Recommended. |
 | `-h`, `--help` | | Print the usage and exit. |
@@ -51,6 +57,61 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or `/home/user/bds` on Linux; downloaded by `setup.mjs` if
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
 `logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
+
+## Evidence manifest, staging hashes, and verification gates
+
+Every `run.mjs` invocation writes `<log>.evidence.json` (or `--evidence <file>`) and records
+`<serverDir>/harness-process.json` (`runnerPid`, `bdsPid`, `port`, `portV6`, `transport`, `status`).
+During staging, `lib/packs.mjs` computes SHA-256 digests for every source file and verifies the
+staged copy in `development_behavior_packs/` and `development_resource_packs/` before BDS starts.
+Port pairs (`port`, `port + 1`) are verified free across IPv4 and IPv6 TCP+UDP (`0.0.0.0`, `127.0.0.1`,
+`::`, `::1`) and locked in `.cache/ports/` (including during `ensureTemplate` world generation).
+
+The evidence manifest separates three verification gates so headless runs never produce false visual passes:
+
+- `gates.server`: `"verified"` when the BDS scenario and script error checks pass, else `"failed"`.
+- `gates.network`: `"unverified"` (default headless), `"nethernet_listening"` (`--client-qa`), or the
+  `--bot-qa` probe status (`"verified"`, `"unsupported"`, or `"failed"`).
+- `gates.visual`: always `"unverified"` from headless BDS or protocol-bot runs; visual UI, terrain
+  pixels, and entity nameplate visibility require a real Minecraft client capture.
+
+## Interactive private client QA (`--client-qa`) and network probe (`--bot-qa`)
+
+```bash
+# Start private interactive server on 127.0.0.1:19132 with river/bridge/roof/spire/cave, long sidebar, stash pages, and NPC stops
+node tools/test-bds/run.mjs --client-qa --port 19132 --quiet
+
+# Probe native BDS network-bot capabilities (AIKUSAN MIT minecraft-bot-qa evaluation)
+node tools/test-bds/run.mjs --only help_bp --ticks 20 --bot-qa --quiet
+```
+
+- **`--client-qa`** defaults to `--only map_bp,stash_bp,npc_bp,hud_rp,build_rp` and
+  `--scenario tools/test-bds/examples/client-qa-fixture.js` over `transport=nethernet` with
+  `default-player-permission-level=operator`, `texturepack-required=true`, and `enable-lan-visibility=true`.
+  Once the fixture scenario verifies its terrain cache-age precondition (`>210` ticks) and spawns
+  `Archivist Mara` with 5/10/15/20/25 m stops, it writes `<log>.evidence.json` (`status: "ready_waiting_for_client"`)
+  and stays alive until `SIGINT`/`SIGTERM` or `--timeout`. Joining real players are automatically placed in
+  Creative at the 10 m NPC stop with long-name Side HUD boxes and two populated `stash_bp` pages. Step
+  transitions can be triggered in game or from the server console via `scriptevent qa:cmd <step>`
+  (`map_bridge`, `map_roof`, `map_spire`, `map_cave`, `sidebar_long`, `stash_fill`, `stash_next`,
+  `stash_prev`, `stash_open`, `npc_5m`, `npc_10m`, `npc_15m`, `npc_20m`, `npc_25m`, `npc_probe_always`,
+  `npc_probe_looked_at`).
+- **Windows client feasibility (`clientFeasibility` in evidence JSON)**:
+  1. Retail `Microsoft.MinecraftUWP` is a single-instance packaged UWP app per Windows user session; Windows
+     cannot launch a second concurrent retail `Minecraft.Windows.exe` instance (`canRunSecondRetailInstance: false`).
+  2. `Minecraft.Windows.exe` renders a DirectX/GameInput UWP canvas with no UI Automation control tree
+     (`uiInputNote`); background synthetic click/key dispatch without a foreground input lease cannot actuate
+     in-game menus.
+  3. UWP AppContainer `CheckNetIsolation LoopbackExempt` status (`uwpLoopbackExempt`) is recorded separately
+     from UI input dispatch.
+- **`--bot-qa` (`lib/bot-adapter.mjs`)**: evaluates the Bedrock protocol bot approach from
+  `AIKUSAN/minecraft-agent-skills-bundle` (`.agents/skills/minecraft-bot-qa`, MIT License, `bedrock-protocol@3.60.1`).
+  Empirically, native BDS `1.26.52.3` enforces `transport=nethernet` (`In this release, NetherNet is the only
+  supported transport type. Players will not be able to connect to your game without NetherNet`) and drops
+  legacy RakNet UDP `0x01 UnconnectedPing` packets, whereas `bedrock-protocol@3.60.1` is RakNet-only, targets
+  Geyser/Floodgate `1.21.x`, and requires Node `>=24`. `--bot-qa` proves the live RakNet state machine against
+  RakNet responders (covered in `lib/server.test.mjs`) and reports `gates.network = "unsupported"` with exact
+  transport/protocol diagnostics against native BDS `1.26.52.3`.
 
 ## Inventory persistence regression
 

@@ -1,6 +1,8 @@
 // Finding packs and installing them (plus the harness shim and test pack) into a server copy.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { HERE } from "./server.mjs";
 
 const GAMETEST = { module_name: "@minecraft/server-gametest", version: "1.0.0-beta" };
@@ -19,6 +21,48 @@ export function readJson(file) {
     // Bedrock tolerates comments in manifests.
     return JSON.parse(text.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, ""));
   }
+}
+
+/** Deterministic SHA-256 digest and per-file hash list for a pack directory. */
+export function hashPackDir(dir) {
+  const files = [];
+  function walk(cur, relPrefix = "") {
+    for (const entry of fs.readdirSync(cur, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const rel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      const full = path.join(cur, entry.name);
+      if (entry.isDirectory()) walk(full, rel);
+      else if (entry.isFile()) {
+        const sha256 = crypto.createHash("sha256").update(fs.readFileSync(full)).digest("hex");
+        files.push({ path: rel, sha256 });
+      }
+    }
+  }
+  if (fs.existsSync(dir)) walk(dir);
+  const combined = crypto.createHash("sha256");
+  for (const f of files) combined.update(`${f.path}:${f.sha256}\n`);
+  return { sha256: combined.digest("hex"), fileCount: files.length, files };
+}
+
+/** Queries git commit, branch and working tree status for the directory containing packsDir. */
+export function gitSourceInfo(packsDir) {
+  const cwd = fs.existsSync(packsDir) ? packsDir : HERE;
+  const run = (args) => {
+    const r = spawnSync("git", ["--no-pager", ...args], { cwd, encoding: "utf8" });
+    return r.status === 0 ? r.stdout.trim() : "";
+  };
+  const gitCommit = run(["rev-parse", "HEAD"]) || "unknown";
+  const gitBranch = run(["rev-parse", "--abbrev-ref", "HEAD"]) || "unknown";
+  const statusOut = run(["status", "--porcelain"]);
+  const dirtyFiles = statusOut ? statusOut.split(/\r?\n/).map((l) => l.trim()).filter(Boolean) : [];
+  return {
+    commit: gitCommit,
+    branch: gitBranch,
+    dirty: dirtyFiles.length > 0,
+    gitCommit,
+    gitBranch,
+    gitDirty: dirtyFiles.length > 0,
+    dirtyFiles,
+  };
 }
 
 /** Every folder in dir with a manifest.json, classified as behavior or resource pack. */
@@ -50,12 +94,13 @@ function shimSource(folder, hasUi) {
     .replace("const HAS_UI = __HAS_UI__;", `const HAS_UI = ${hasUi ? "true" : "false"};`);
 }
 
-/** Copies a behavior pack and wraps its script entry with the shim. Returns notes. */
+/** Copies a behavior pack and wraps its script entry with the shim. Returns world_behavior_packs entry. */
 export function installBehaviorPack(pack, serverDir, { shim = true } = {}) {
   const dest = path.join(serverDir, "development_behavior_packs", pack.folder);
   fs.cpSync(pack.dir, dest, { recursive: true });
   const manifest = JSON.parse(JSON.stringify(pack.manifest));
   const script = (manifest.modules || []).find((m) => m.type === "script");
+  let shimApplied = false;
   if (shim && script && script.entry) {
     const deps = (manifest.dependencies ||= []);
     if (!deps.some((d) => d.module_name === GAMETEST.module_name)) deps.push({ ...GAMETEST });
@@ -66,15 +111,52 @@ export function installBehaviorPack(pack, serverDir, { shim = true } = {}) {
     fs.writeFileSync(path.join(dest, entryDir, "__harness_entry.js"), `import "./__harness_shim.js";\nimport "./${base}";\n`);
     script.entry = path.posix.join(entryDir, "__harness_entry.js");
     fs.writeFileSync(path.join(dest, "manifest.json"), JSON.stringify(manifest, null, 2));
+    shimApplied = true;
   }
+  pack.stagedInfo = inspectStagedPack(pack, dest, shimApplied);
   return { pack_id: manifest.header.uuid, version: manifest.header.version };
 }
 
 export function installResourcePack(pack, serverDir) {
   const dest = path.join(serverDir, "development_resource_packs", pack.folder);
   fs.cpSync(pack.dir, dest, { recursive: true });
+  pack.stagedInfo = inspectStagedPack(pack, dest, false);
   return { pack_id: pack.manifest.header.uuid, version: pack.manifest.header.version };
 }
+
+/** Verifies that every source file in pack.dir matches its staged copy in dest (excluding harness shim files). */
+export function inspectStagedPack(pack, dest, shimApplied = false) {
+  const srcHash = hashPackDir(pack.dir);
+  const stagedHash = hashPackDir(dest);
+  const stagedMap = new Map(stagedHash.files.map((f) => [f.path, f.sha256]));
+  for (const f of srcHash.files) {
+    if (f.path === "manifest.json" && shimApplied) continue;
+    if (stagedMap.get(f.path) !== f.sha256) {
+      throw new Error(`Staged file hash mismatch in ${pack.folder}/${f.path}: expected ${f.sha256}, got ${stagedMap.get(f.path) ?? "missing"}`);
+    }
+  }
+  const deps = (pack.manifest.dependencies || []).map((d) => ({
+    module_name: d.module_name,
+     uuid: d.uuid,
+    version: d.version,
+  }));
+  return {
+    folder: pack.folder,
+    name: pack.name,
+    kind: pack.kind,
+    uuid: pack.manifest.header?.uuid,
+    version: pack.manifest.header?.version,
+    minEngineVersion: pack.manifest.header?.min_engine_version,
+    dependencies: deps,
+    shimApplied,
+    verified: true,
+    sourceSha256: srcHash.sha256,
+    stagedSha256: stagedHash.sha256,
+    fileCount: srcHash.fileCount,
+    files: srcHash.files,
+  };
+}
+
 
 /** Builds the harness test pack with the given scenario file. */
 export function installHarnessPack(serverDir, scenarioFile) {

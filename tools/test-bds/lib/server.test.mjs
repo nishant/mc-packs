@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import dgram from "node:dgram";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import * as server from "./server.mjs";
+import * as packs from "./packs.mjs";
+import * as botAdapter from "./bot-adapter.mjs";
 import { BDS_URL, setup } from "../setup.mjs";
 
 const isWin = process.platform === "win32";
@@ -87,4 +90,132 @@ test("isolates writable server files while sharing runtime assets", async (t) =>
     fs.rmSync(copied, { recursive: true, force: true });
     assert.equal(fs.readFileSync(path.join(src, "data", "asset"), "utf8"), "data");
   });
+});
+
+test("reserves and releases IPv4/IPv6 TCP+UDP port pairs and detects occupied ports", async (t) => {
+  const port = await server.reservePortPair();
+  t.after(() => server.releasePortPair(port));
+  assert.ok(Number.isInteger(port) && port >= 1024 && port <= 65534);
+
+  // While locked in .cache/ports, a second reservation for the same port must fail.
+  await assert.rejects(() => server.reservePortPair(port), /not free|reserved/);
+  server.releasePortPair(port);
+
+  // Occupying UDP port+1 (the IPv6 companion port) must cause portPairFree(port) to return false.
+  const udp6 = dgram.createSocket("udp4");
+  await new Promise((resolve) => udp6.bind(port + 1, "127.0.0.1", resolve));
+  t.after(() => { try { udp6.close(); } catch {} });
+  assert.equal(await server.portPairFree(port), false);
+});
+
+test("writes process identity and verifies staged pack SHA-256 hashes", (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "bds-pack-hash-"));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+  const idFile = server.writeProcessIdentity(tmp, { bdsPid: 12345, port: 29132, transport: "nethernet" });
+  const idDoc = JSON.parse(fs.readFileSync(idFile, "utf8"));
+  assert.equal(idDoc.runnerPid, process.pid);
+  assert.equal(idDoc.bdsPid, 12345);
+  assert.equal(idDoc.port, 29132);
+
+  const srcPack = path.join(tmp, "sample_bp");
+  fs.mkdirSync(path.join(srcPack, "scripts"), { recursive: true });
+  const manifest = {
+    format_version: 2,
+    header: { name: "Sample", uuid: "11111111-2222-3333-4444-555555555555", version: [1, 0, 0], min_engine_version: [1, 21, 100] },
+    modules: [{ type: "script", language: "javascript", uuid: "11111111-2222-3333-4444-555555555556", version: [1, 0, 0], entry: "scripts/main.js" }],
+    dependencies: [{ module_name: "@minecraft/server", version: "2.1.0" }],
+  };
+  fs.writeFileSync(path.join(srcPack, "manifest.json"), JSON.stringify(manifest, null, 2));
+  fs.writeFileSync(path.join(srcPack, "scripts", "main.js"), 'console.log("hi");\n');
+
+  const serverDir = path.join(tmp, "server");
+  fs.mkdirSync(path.join(serverDir, "development_behavior_packs"), { recursive: true });
+  const packObj = { folder: "sample_bp", dir: srcPack, manifest, kind: "bp", name: "Sample" };
+  packs.installBehaviorPack(packObj, serverDir, { shim: true });
+  assert.equal(packObj.stagedInfo.verified, true);
+  assert.equal(packObj.stagedInfo.shimApplied, true);
+  assert.equal(packObj.stagedInfo.fileCount, 2);
+
+  // Tampering with a staged file must throw a SHA-256 verification error.
+  const stagedMain = path.join(serverDir, "development_behavior_packs", "sample_bp", "scripts", "main.js");
+  fs.writeFileSync(stagedMain, 'console.log("stale");\n');
+  assert.throws(
+    () => packs.inspectStagedPack(packObj, path.join(serverDir, "development_behavior_packs", "sample_bp"), true),
+    /Staged file hash mismatch/
+  );
+});
+
+test("bot-adapter verifies RakNet + NetworkSettings handshake when server speaks RakNet and reports unsupported on NetherNet-only BDS", async (t) => {
+  // 1. Mock RakNet UDP responder speaking UnconnectedPong -> OCR1 -> OCR2 -> ConnReqAccepted -> NetworkSettings (0x8f)
+  const mockServer = dgram.createSocket("udp4");
+  await new Promise((resolve) => mockServer.bind(0, "127.0.0.1", resolve));
+  t.after(() => { try { mockServer.close(); } catch {} });
+  const mockPort = mockServer.address().port;
+
+  mockServer.on("message", (msg, rinfo) => {
+    const id = msg[0];
+    if (id === 0x01) {
+      const ad = "MCPE;Dedicated Server;944;1.26.52;0;10;123456789;world;Survival;1;19132;19133;";
+      const adBuf = Buffer.from(ad, "utf8");
+      const pong = Buffer.alloc(35 + adBuf.length);
+      pong[0] = 0x1c;
+      pong.writeBigInt64BE(1n, 1);
+      pong.writeBigUInt64BE(0x123456789abcdef0n, 9);
+      botAdapter.RAKNET_MAGIC.copy(pong, 17);
+      pong.writeUInt16BE(adBuf.length, 33);
+      adBuf.copy(pong, 35);
+      mockServer.send(pong, rinfo.port, rinfo.address);
+    } else if (id === 0x05) {
+      const reply1 = Buffer.alloc(28);
+      reply1[0] = 0x06;
+      botAdapter.RAKNET_MAGIC.copy(reply1, 1);
+      reply1.writeBigUInt64BE(0x123456789abcdef0n, 17);
+      reply1[25] = 0;
+      reply1.writeUInt16BE(1400, 26);
+      mockServer.send(reply1, rinfo.port, rinfo.address);
+    } else if (id === 0x07) {
+      const reply2 = Buffer.alloc(35);
+      reply2[0] = 0x08;
+      botAdapter.RAKNET_MAGIC.copy(reply2, 1);
+      reply2.writeBigUInt64BE(0x123456789abcdef0n, 17);
+      reply2.writeUInt16BE(1400, 31);
+      mockServer.send(reply2, rinfo.port, rinfo.address);
+    } else if (id === 0x84) {
+      const innerId = msg[10];
+      if (innerId === 0x09) {
+        // Frame wrapping 0x10 ConnectionRequestAccepted
+        const frame = Buffer.from([0x84, 0x00, 0x00, 0x00, 0x40, 0x00, 0x08, 0x00, 0x00, 0x00, 0x10]);
+        mockServer.send(frame, rinfo.port, rinfo.address);
+      } else if (innerId === 0xfe) {
+        // Frame wrapping 0xfe + len(8) + VarInt(0x8f = 0x8f, 0x01) + threshold(1) + algo(0) + throttle(0)
+        const game = Buffer.from([0xfe, 0x08, 0x8f, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        const hdr = Buffer.from([0x84, 0x01, 0x00, 0x00, 0x40, 0x00, game.length * 8, 0x01, 0x00, 0x00]);
+        mockServer.send(Buffer.concat([hdr, game]), rinfo.port, rinfo.address);
+      }
+    }
+  });
+
+  const okProbe = await botAdapter.probeNativeBedrockBot({ host: "127.0.0.1", port: mockPort, transport: "raknet", timeoutMs: 1000 });
+  assert.equal(okProbe.capabilities.raknetPing, "verified");
+  assert.equal(okProbe.capabilities.raknetOpenConnection, "verified");
+  assert.equal(okProbe.capabilities.raknetSessionAccepted, "verified");
+  assert.equal(okProbe.capabilities.bedrockNetworkSettings, "verified");
+  assert.equal(okProbe.advertisement.protocol, 944);
+  assert.equal(okProbe.gate, "unsupported");
+  assert.equal(okProbe.capabilities.visualRendering, "unsupported_by_protocol_bot");
+
+  // 2. Non-RakNet port (simulating NetherNet-only BDS 1.26.52.3)
+  const silentSock = dgram.createSocket("udp4");
+  await new Promise((resolve) => silentSock.bind(0, "127.0.0.1", resolve));
+  t.after(() => { try { silentSock.close(); } catch {} });
+  const nethernetProbe = await botAdapter.probeNativeBedrockBot({
+    host: "127.0.0.1",
+    port: silentSock.address().port,
+    transport: "nethernet",
+    transportErrorLogged: true,
+    timeoutMs: 250,
+  });
+  assert.equal(nethernetProbe.gate, "unsupported");
+  assert.equal(nethernetProbe.capabilities.raknetPing, "unsupported_nethernet_only_bds");
 });

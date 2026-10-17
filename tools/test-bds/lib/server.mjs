@@ -100,26 +100,184 @@ export function baseProps(port, extra = {}) {
   };
 }
 
-function tcpFree(port) {
+function tcpFree(port, host = "0.0.0.0") {
+  const isV6 = host.includes(":");
   return new Promise((resolve) => {
     const s = net.createServer();
-    s.once("error", () => resolve(false));
-    s.listen(port, "0.0.0.0", () => s.close(() => resolve(true)));
+    s.once("error", (err) => resolve(isV6 && (err.code === "EAFNOSUPPORT" || err.code === "EADDRNOTAVAIL")));
+    s.listen({ port, host, exclusive: true, ipv6Only: isV6 }, () => s.close(() => resolve(true)));
   });
 }
-function udpFree(port) {
+function udpFree(port, host = "0.0.0.0") {
+  const isV6 = host.includes(":");
   return new Promise((resolve) => {
-    const s = dgram.createSocket("udp4");
-    s.once("error", () => resolve(false));
-    s.bind(port, "0.0.0.0", () => s.close(() => resolve(true)));
+    const s = dgram.createSocket({ type: isV6 ? "udp6" : "udp4", reuseAddr: false, ipv6Only: isV6 });
+    s.once("error", (err) => {
+      try { s.close(); } catch {}
+      resolve(isV6 && (err.code === "EAFNOSUPPORT" || err.code === "EADDRNOTAVAIL"));
+    });
+    s.bind({ port, address: host, exclusive: true }, () => s.close(() => resolve(true)));
   });
 }
-export async function freePort() {
-  for (let i = 0; i < 200; i++) {
-    const p = 20000 + 2 * Math.floor(Math.random() * 19000);
-    if ((await tcpFree(p)) && (await udpFree(p)) && (await tcpFree(p + 1)) && (await udpFree(p + 1))) return p;
+
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e && e.code === "EPERM";
   }
-  throw new Error("no free port found");
+}
+
+function portLockDir() {
+  const dir = path.join(cacheDir(), "ports");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function tryLockPortPair(port) {
+  const dir = portLockDir();
+  const files = [path.join(dir, `port-${port}.lock`), path.join(dir, `port-${port + 1}.lock`)];
+  for (const f of files) {
+    if (fs.existsSync(f)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(f, "utf8"));
+        if (isPidAlive(data.pid)) return false;
+      } catch {}
+      try { fs.rmSync(f, { force: true }); } catch {}
+    }
+  }
+  const payload = JSON.stringify({ pid: process.pid, port, portV6: port + 1, at: new Date().toISOString() });
+  try {
+    for (const f of files) fs.writeFileSync(f, payload, { flag: "wx" });
+    return true;
+  } catch {
+    for (const f of files) {
+      try {
+        const data = JSON.parse(fs.readFileSync(f, "utf8"));
+        if (data.pid === process.pid) fs.rmSync(f, { force: true });
+      } catch {}
+    }
+    return false;
+  }
+}
+
+export function releasePortPair(port) {
+  if (!Number.isInteger(port)) return;
+  const dir = portLockDir();
+  for (const p of [port, port + 1]) {
+    const f = path.join(dir, `port-${p}.lock`);
+    try {
+      if (fs.existsSync(f)) {
+        const data = JSON.parse(fs.readFileSync(f, "utf8"));
+        if (!data.pid || data.pid === process.pid || !isPidAlive(data.pid)) fs.rmSync(f, { force: true });
+      }
+    } catch {
+      try { fs.rmSync(f, { force: true }); } catch {}
+    }
+  }
+}
+
+export async function portPairFree(port) {
+  if (!Number.isInteger(port) || port < 1024 || port > 65534) return false;
+  for (const p of [port, port + 1]) {
+    for (const host of ["0.0.0.0", "127.0.0.1", "::", "::1"]) {
+      if (!(await tcpFree(p, host))) return false;
+      if (!(await udpFree(p, host))) return false;
+    }
+  }
+  return true;
+}
+
+export async function reservePortPair(requestedPort) {
+  if (requestedPort !== undefined && requestedPort !== null) {
+    const p = Number(requestedPort);
+    if (!Number.isInteger(p) || p < 1024 || p > 65534) {
+      throw new Error(`Invalid port ${requestedPort}: must be an integer in 1024..65534 (reserves port and port+1)`);
+    }
+    if (!(await portPairFree(p)) || !tryLockPortPair(p)) {
+      throw new Error(`Port pair ${p}/${p + 1} is not free (TCP/UDP IPv4/IPv6 or reserved by another harness run)`);
+    }
+    return p;
+  }
+  for (let i = 0; i < 300; i++) {
+    const p = 20000 + 2 * Math.floor(Math.random() * 19000);
+    if ((await portPairFree(p)) && tryLockPortPair(p)) return p;
+  }
+  throw new Error("no free TCP/UDP port pair found");
+}
+
+export async function freePort() {
+  return reservePortPair();
+}
+
+export function writeProcessIdentity(dir, info) {
+  const file = path.join(dir, "harness-process.json");
+  fs.writeFileSync(file, JSON.stringify({ pid: process.pid, runnerPid: process.pid, updatedAt: new Date().toISOString(), ...info }, null, 2));
+  return file;
+}
+
+/**
+ * Read-only feasibility check for local Windows Bedrock client visual QA.
+ * Never launches Minecraft, never disconnects an active session, and never modifies OS/UWP settings.
+ */
+export function checkClientFeasibility() {
+  if (!IS_WIN) {
+    return {
+      platform: process.platform,
+      supported: false,
+      multiInstanceSupported: false,
+      reason: "Windows Bedrock client (Microsoft.MinecraftUWP) requires win32",
+    };
+  }
+  const runPs = (cmd) => {
+    const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", cmd], { encoding: "utf8", timeout: 8000 });
+    return r.status === 0 ? r.stdout.trim() : "";
+  };
+  let packages = [];
+  try {
+    const raw = runPs("Get-AppxPackage *Minecraft* | Select-Object Name,Version,PackageFullName | ConvertTo-Json -Compress");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      packages = Array.isArray(parsed) ? parsed : [parsed];
+    }
+  } catch {}
+  let runningPids = [];
+  try {
+    const raw = runPs("Get-Process -Name 'Minecraft.Windows' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id | ConvertTo-Json -Compress");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      runningPids = (Array.isArray(parsed) ? parsed : [parsed]).map(Number).filter(Number.isInteger);
+    }
+  } catch {}
+  let loopbackExempt = false;
+  try {
+    const lo = spawnSync("CheckNetIsolation.exe", ["LoopbackExempt", "-s"], { encoding: "utf8", timeout: 5000 });
+    const text = (lo.stdout || "") + (lo.stderr || "");
+    loopbackExempt = /minecraftuwp|S-1-15-2-2551677095/i.test(text);
+  } catch {}
+  const uwp = packages.find((p) => p.Name === "Microsoft.MinecraftUWP");
+  const preview = packages.find((p) => /MinecraftWindowsBeta/i.test(p.Name || ""));
+  return {
+    platform: "win32",
+    uwpInstalled: !!uwp,
+    uwpVersion: uwp?.Version ?? null,
+    previewInstalled: !!preview,
+    previewVersion: preview?.Version ?? null,
+    runningPids,
+    activeClientRunning: runningPids.length > 0,
+    multiInstanceSupported: !!preview,
+    multiInstanceReason: preview
+      ? "Retail UWP and Preview UWP are separate AppX packages, though each package is single-instance per Windows user session."
+      : "Microsoft.MinecraftUWP is a single-instance packaged UWP app per Windows user session; Windows cannot launch a second concurrent retail Minecraft.Windows.exe instance in the same user session.",
+    uiInputNote:
+      "Minecraft.Windows.exe renders a DirectX/GameInput UWP canvas without UI Automation elements; background synthetic click/key delivery (e.g. Return/Save & Quit without foreground input lease) cannot actuate in-game menus without foreground input or physical user click.",
+    uwpLoopbackExempt: loopbackExempt,
+    loopbackNote: loopbackExempt
+      ? "UWP loopback exemption detected for Minecraft.Windows."
+      : "Microsoft.MinecraftUWP is not in CheckNetIsolation LoopbackExempt; Windows AppContainer network isolation is a separate OS check from UI input dispatch.",
+  };
 }
 
 /**
@@ -184,34 +342,61 @@ export async function ensureTemplate({ seed, flat, log = () => {} }) {
   const key = flat ? "flat" : `seed-${seed}`;
   const dest = path.join(cacheDir(), "worlds", `${BDS_VERSION}-${key}`);
   if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
-  log(`[harness] generating world template ${key} (once; cached in ${dest})`);
-  const dir = makeServerDir("bds-template-");
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const lockFile = `${dest}.lock`;
+  // Wait if another process is generating the same template.
+  for (let w = 0; w < 150 && fs.existsSync(lockFile); w++) {
+    if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
+    try {
+      const holder = JSON.parse(fs.readFileSync(lockFile, "utf8"));
+      if (!isPidAlive(holder.pid)) fs.rmSync(lockFile, { force: true });
+    } catch {}
+    if (fs.existsSync(lockFile)) await new Promise((r) => setTimeout(r, 200));
+  }
+  if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
   try {
-    const port = await freePort();
-    writeProps(dir, baseProps(port, { "level-seed": flat ? "" : String(seed) }));
-    let started = false, failed = "";
-    const bds = startBds(dir, (line) => {
-      if (line.includes("Server started.")) started = true;
-      if (/ERROR\].*(Exiting program|may be in use)/.test(line)) failed = line;
-    });
-    const t0 = Date.now();
-    while (!started && !failed && Date.now() - t0 < 120000 && bds.proc.exitCode === null) await new Promise((r) => setTimeout(r, 200));
-    if (!started) {
-      try { IS_WIN ? bds.proc.kill() : bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ }
-      await bds.exited;
-      throw new Error(`template server did not start ${failed}`);
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, key, at: new Date().toISOString() }), { flag: "wx" });
+  } catch {}
+  log(`[harness] generating world template ${key} (once; cached in ${dest})`);
+  let lastErr;
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const dir = makeServerDir("bds-template-");
+      let port;
+      try {
+        port = await reservePortPair();
+        writeProps(dir, baseProps(port, { "level-seed": flat ? "" : String(seed) }));
+        let started = false, failed = "";
+        const bds = startBds(dir, (line) => {
+          if (line.includes("Server started.")) started = true;
+          if (/ERROR\].*(Exiting program|may be in use| occupied|bind)/i.test(line)) failed = line;
+        });
+        writeProcessIdentity(dir, { bdsPid: bds.proc.pid, port, portV6: port + 1, role: "template", key, attempt });
+        const t0 = Date.now();
+        while (!started && !failed && Date.now() - t0 < 120000 && bds.proc.exitCode === null) await new Promise((r) => setTimeout(r, 200));
+        if (!started) {
+          try { IS_WIN ? bds.proc.kill() : bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ }
+          await bds.exited;
+          throw new Error(`template server did not start (attempt ${attempt}, port ${port}): ${failed}`);
+        }
+        await stopBds(bds);
+        const world = path.join(dir, "worlds", "world");
+        patchLevelDat(path.join(world, "level.dat"), { flat });
+        fs.rmSync(path.join(world, "level.dat_old"), { force: true });
+        if (flat) fs.rmSync(path.join(world, "db"), { recursive: true, force: true });
+        const staging = `${dest}.tmp-${process.pid}`;
+        fs.cpSync(world, staging, { recursive: true });
+        try { fs.renameSync(staging, dest); } catch (e) { fs.rmSync(staging, { recursive: true, force: true }); if (!fs.existsSync(dest)) throw e; }
+        return dest;
+      } catch (e) {
+        lastErr = e;
+      } finally {
+        if (port !== undefined) releasePortPair(port);
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     }
-    await stopBds(bds);
-    const world = path.join(dir, "worlds", "world");
-    patchLevelDat(path.join(world, "level.dat"), { flat });
-    fs.rmSync(path.join(world, "level.dat_old"), { force: true });
-    if (flat) fs.rmSync(path.join(world, "db"), { recursive: true, force: true });
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    const staging = `${dest}.tmp-${process.pid}`;
-    fs.cpSync(world, staging, { recursive: true });
-    try { fs.renameSync(staging, dest); } catch (e) { fs.rmSync(staging, { recursive: true, force: true }); if (!fs.existsSync(dest)) throw e; }
-    return dest;
+    throw lastErr;
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    try { fs.rmSync(lockFile, { force: true }); } catch {}
   }
 }
