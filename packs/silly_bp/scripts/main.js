@@ -755,7 +755,7 @@ async function menu(p) {
     { label: "Remove a silly enchant\n§8From the item in your hand, free", run: () => removeMenu(p) },
     { label: "All silly enchants\n§8What each one does", run: () => listPage(p) },
   ];
-  if (isOp(p)) items.push({ label: "Give Silly Books\n§8Operators", run: () => giveMenu(p) });
+  if (isOp(p)) items.push({ label: "§4Give Silly Books\n§8Operators", run: () => giveMenu(p) });
   items.push({ label: "Close", run: () => undefined });
   const form = new ActionFormData().title("§lSilly Enchants").body(body);
   for (const it of items) form.button(it.label);

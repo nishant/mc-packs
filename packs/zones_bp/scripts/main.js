@@ -429,7 +429,7 @@ async function zoneMenu(player, id) {
       },
     });
   }
-  if (isOp(player)) actions.push({ text: "Teleport (operator)\n§8To its center", run: () => teleport(player, z) });
+  if (isOp(player)) actions.push({ text: "§4Teleport (operator)\n§8To its center", run: () => teleport(player, z) });
   if (canEdit(player, z)) {
     actions.push({
       text: "§cRemove",
@@ -487,7 +487,7 @@ async function otherList(player) {
       run: () => {
         /** @type {{ text: string, run: () => unknown }[]} */
         const actions = [{ text: "Show outline\n§8For a few seconds", run: () => showOutline(player, z) }];
-        if (isOp(player)) actions.push({ text: "Teleport (operator)\n§8To its center", run: () => teleport(player, { dim: z.dim, x: Math.floor(z.x), z: Math.floor(z.z) }) });
+        if (isOp(player)) actions.push({ text: "§4Teleport (operator)\n§8To its center", run: () => teleport(player, { dim: z.dim, x: Math.floor(z.x), z: Math.floor(z.z) }) });
         const size = z.shape === "square" ? `${2 * z.r + 1} x ${2 * z.r + 1} blocks` : `radius ${z.r}`;
         return menu(player, `§l${SOURCE_NAME[z.src] ?? z.src}`, `§e${z.name}§r: ${size} around ${Math.round(z.x)}, ${Math.round(z.z)} (${shortDim(z.dim)}). ${away(player, z)}.`, actions);
       },

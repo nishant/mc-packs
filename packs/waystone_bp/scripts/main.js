@@ -788,7 +788,7 @@ async function mainMenu(player) {
   ].join(" ");
   /** @type {{ text: string, run: () => Promise<void> | void }[]} */
   const actions = [{ text: anywhere ? "Travel\n§8To a waystone you've discovered" : "My waystones\n§8Where they are", run: () => listMenu(player) }];
-  if (isOp(player)) actions.push({ text: "Remove a waystone\n§8Operators", run: () => removeMenu(player) });
+  if (isOp(player)) actions.push({ text: "§4Remove a waystone\n§8Operators", run: () => removeMenu(player) });
   const form = new ActionFormData().title("§lWaystones").body(body);
   for (const a of actions) form.button(a.text);
   form.button("Close");

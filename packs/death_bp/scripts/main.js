@@ -467,7 +467,7 @@ async function packMenu(player) {
       run: () => player.sendMessage(goBack(player).message.replace(/^(?!§)/, "§c")),
     });
   }
-  if (isOp(player)) entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
+  if (isOp(player)) entries.push({ text: "§4Settings\n§8Operators", run: () => settingsInfo(player) });
   if (entries.length === 1) return entries[0].run();
   const form = new ActionFormData().title("§lDeath Point").body(infoText(player));
   for (const e of entries) form.button(e.text);

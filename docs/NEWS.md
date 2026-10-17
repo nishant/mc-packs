@@ -12,6 +12,10 @@ entries below as a changelog.
 - Townsfolk, caravan traders, wanderers, and story characters now use the game's own close-up names over the real character instead of a shared floating helper label that could drift toward another player.
 - The extra far-name sliders are gone from /realm:config because stable Bedrock does not let packs set a true per-player distance for native names.
 
+## Operator buttons in red everywhere
+
+- Operator-only buttons in every pack's own menu (stats, towns, caravan, news and more) are now red, like in the Realm Configuration menu. Players who aren't operators still never see them.
+
 ## Easier to read realm menu
 
 - Operator entries in the Realm Configuration menu are now red instead of gold, which was hard to read on the gray buttons.

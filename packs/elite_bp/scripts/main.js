@@ -1234,9 +1234,9 @@ async function menu(player) {
   /** @type {(() => Promise<void>)[]} */
   const actions = [() => near(player), () => guide(player)];
   if (op) {
-    form.button("Spawn a champion");
+    form.button("§4Spawn a champion\n§8Operators");
     actions.push(() => spawnForm(player));
-    form.button("Remove champions near you");
+    form.button("§4Remove champions near you\n§8Operators");
     actions.push(() => removeForm(player));
     form.button("Aura cost");
     actions.push(() => costForm(player));

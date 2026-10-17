@@ -855,10 +855,10 @@ async function mainMenu(player) {
       lectern = undefined;
     }
     // Checked again when picked: the player may have been de-opped while the menu was open.
-    if (lectern && boardAt(lectern.dimension.id, lectern.location)) actions.push({ text: "Make this board a lectern again\n§8Operators: the board you're looking at", run: () => stillOp(player) && unregister(player) });
-    else if (lectern) actions.push({ text: "Make this lectern a bounty board\n§8Operators: the lectern you're looking at", run: () => stillOp(player) && register(player) });
+    if (lectern && boardAt(lectern.dimension.id, lectern.location)) actions.push({ text: "§4Make this board a lectern again\n§8Operators: the board you're looking at", run: () => stillOp(player) && unregister(player) });
+    else if (lectern) actions.push({ text: "§4Make this lectern a bounty board\n§8Operators: the lectern you're looking at", run: () => stillOp(player) && register(player) });
     else lines.push("§7Operators: look at a lectern when you open this menu to make it a bounty board.");
-    if (boards().length) actions.push({ text: "Remove a bounty board\n§8Operators", run: () => removeBoardMenu(player) });
+    if (boards().length) actions.push({ text: "§4Remove a bounty board\n§8Operators", run: () => removeBoardMenu(player) });
   }
   const form = new ActionFormData().title("§lBounty Board").body(lines.join("\n\n"));
   for (const a of actions) form.button(a.text);

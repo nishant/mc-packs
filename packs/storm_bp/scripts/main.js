@@ -531,11 +531,11 @@ async function mainMenu(player) {
       const why = startCell(player, forced);
       player.sendMessage(why ? `§c${why}` : "A storm cell is forming near you.");
     };
-    if (weather === WeatherType.Thunder) actions.push({ text: "Start a storm cell (operator)\n§8Near you", run: () => start(false) });
-    actions.push({ text: "Start a storm cell anyway (operator)\n§8Even without a thunderstorm", run: () => start(true) });
+    if (weather === WeatherType.Thunder) actions.push({ text: "§4Start a storm cell (operator)\n§8Near you", run: () => start(false) });
+    actions.push({ text: "§4Start a storm cell anyway (operator)\n§8Even without a thunderstorm", run: () => start(true) });
     if (cell) {
       actions.push({
-        text: "End the storm cell (operator)",
+        text: "§4End the storm cell (operator)",
         run: () => {
           if (cell) end();
           player.sendMessage("§7The storm cell is gone.");

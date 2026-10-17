@@ -1312,8 +1312,8 @@ async function packMenu(player) {
   /** @type {{ text: string, run: () => Promise<void> }[]} */
   const entries = [{ text: `Your treasure hunts\n§8${huntsOf(player).length} going`, run: () => showHunts(player) }];
   if (isOp(player)) {
-    entries.push({ text: "Give a treasure map\n§8Operators", run: () => giveMapForm(player) });
-    entries.push({ text: "Settings\n§8Operators", run: () => settingsInfo(player) });
+    entries.push({ text: "§4Give a treasure map\n§8Operators", run: () => giveMapForm(player) });
+    entries.push({ text: "§4Settings\n§8Operators", run: () => settingsInfo(player) });
   }
   if (entries.length === 1) return entries[0].run();
   const form = new ActionFormData().title("§lTreasure Maps").body("Buy treasure maps from a cartographer, then follow the clues to the buried chest.");

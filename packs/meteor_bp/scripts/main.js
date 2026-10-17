@@ -817,15 +817,15 @@ async function mainMenu(player) {
   const actions = [{ text: "Last meteors\n§8Where they fell, who found them", run: () => lastMeteors(player) }];
   if (isOp(player)) {
     actions.push({
-      text: "Drop one now (operator)\n§8In front of you, after the warning",
+      text: "§4Drop one now (operator)\n§8In front of you, after the warning",
       op: true,
       run: () => {
         const why = dropNow(player);
         if (why) player.sendMessage(`§c${why}`);
       },
     });
-    actions.push({ text: "Meteor settings (operator)\n§8Chance, craters, spawn, safe zones", op: true, run: () => settingsForm(player) });
-    actions.push({ text: "Protect this area from meteors\n§8Add a safe zone here (operator)", op: true, run: () => protectHere(player) });
+    actions.push({ text: "§4Meteor settings (operator)\n§8Chance, craters, spawn, safe zones", op: true, run: () => settingsForm(player) });
+    actions.push({ text: "§4Protect this area from meteors\n§8Add a safe zone here (operator)", op: true, run: () => protectHere(player) });
   }
   await menu(player, "§lMeteor Strikes", body, actions);
 }

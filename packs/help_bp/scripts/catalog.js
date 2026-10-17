@@ -97,7 +97,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r you see everything, and the top of each page says §eRed = operators only. The rest is for every player.§r Red buttons are operator commands; the plain dark ones are what every player sees too. The main menu adds §lRealm Settings§r (right after §lMy Preferences§r; opens §e/realm:config§r) and, last, §lOperator Tools§r.",
+        "text": "§lOperators:§r you see everything, and the top of each page says §eRed = operators only. The rest is for every player.§r Red buttons are operator commands; the plain dark ones are what every player sees too. Each pack's own menu (for example §e/realm:stats§r, §e/realm:town§r or §e/realm:caravan§r) marks its operator buttons the same way, in red, and shows them only to operators. The main menu adds §lRealm Settings§r (right after §lMy Preferences§r; opens §e/realm:config§r) and, last, §lOperator Tools§r.",
         "ops": true
       },
       {
