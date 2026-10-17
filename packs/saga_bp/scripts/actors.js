@@ -193,7 +193,10 @@ system.runInterval(() => {
       labels: actorLabels,
       targets,
       players: world.getAllPlayers(),
-      maxRange: Math.max(0, Number(get("farNameRange")) || 0),
+      maxRange: (() => {
+        const rawRange = Number(get("farNameRange"));
+        return Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
+      })(),
       labelType: LABEL_TYPE,
       ownerTag: "realm:npc_owner:saga_bp",
       labelTag: "realm:saga_label",

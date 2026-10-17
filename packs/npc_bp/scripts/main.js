@@ -89,7 +89,8 @@ const labels = new Map();
 
 function updateLabels() {
   if (!ready) return;
-  const maxRange = Math.max(0, Number(get("farNameRange")) || 0);
+  const rawRange = Number(get("farNameRange"));
+  const maxRange = Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
   updateNameLabels({
     labels,
     targets: list.flatMap((rec) => {
@@ -412,7 +413,7 @@ function dress(entity, t) {
 // The name above an NPC's head: a player's game can show a minecraft:npc as "NPC" (its default name) although its
 // name was set, until the name changes again while they watch. So when a player comes near (or the NPC loads or
 // spawns), the name is sent again a moment later, switching between two forms that look the same.
-const NAME_RANGE = 64; // players this close count as watching
+const NAME_RANGE = 20; // players this close count as watching
 const RENAME_TICKS = [20, 60]; // resends after a player comes near: 1 s, then 3 s more
 
 /** Sends the name again (when no idle line is showing). @param {Entity} entity @param {Townsfolk} t */
@@ -648,7 +649,8 @@ function loop() {
     }
   }
   const lively = get("enabled") === true;
-  const maxRange = Math.max(0, Number(get("farNameRange")) || 0);
+  const rawRange = Number(get("farNameRange"));
+  const maxRange = Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
   const activeRange = Math.max(NAME_RANGE, CONFIG.respawnRange, maxRange, Number(get("faceRange")) || 0, CONFIG.idleRange) + 16;
   const players = world.getAllPlayers();
   for (const rec of list) {

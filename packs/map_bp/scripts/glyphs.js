@@ -93,8 +93,14 @@ export const G = {
   Q_OTHER: "",
   /** U+F338 radar: empty */
   Q_EMPTY: "",
-  /** U+F339 radar: which way north is (when it turns with you) */
+  /** U+F339 radar: compass N, on the edge, turning as you turn */
   Q_NORTH: "",
+  /** U+F33A radar: compass E, on the edge, turning as you turn */
+  Q_EAST: "",
+  /** U+F33B radar: compass S, on the edge, turning as you turn */
+  Q_SOUTH: "",
+  /** U+F33C radar: compass W, on the edge, turning as you turn */
+  Q_WEST: "",
   /** U+F340 radar: you, facing N */
   Q_YOU_0: "",
   /** U+F341 radar: you, facing NE */

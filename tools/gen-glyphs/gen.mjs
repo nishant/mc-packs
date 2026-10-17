@@ -221,12 +221,17 @@ MARKS.forEach(([name, what, draw], i) => {
   });
 });
 glyph("Q_EMPTY", 0x38, "radar: empty", (img, ox, oy) => square(img, ox, oy));
-glyph("Q_NORTH", 0x39, "radar: which way north is (when it turns with you)", (img, ox, oy) => {
-  square(img, ox, oy);
-  letter(img, ox, oy, BIG.N, 2, 0, 2, RIM);
-  letter(img, ox, oy, BIG.N, 4, 2, 2, RIM);
-  letter(img, ox, oy, BIG.N, 3, 1, 2, NORTH);
-});
+// Compass badges on the radar's edge: a dark rimmed disc with a bold letter, N in red, the rest warm white.
+const COMPASS_WHITE = /** @type {RGBA} */ ([245, 240, 220, 255]);
+for (const [i, l] of ["N", "E", "S", "W"].entries()) {
+  const name = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" }[l];
+  glyph(`Q_${name}`, 0x39 + i, `radar: compass ${l}, on the edge, turning as you turn`, (img, ox, oy) => {
+    square(img, ox, oy);
+    disc(img, ox, oy, 8, 8, 7.8, [235, 235, 235, 120]);
+    disc(img, ox, oy, 8, 8, 7.2, [18, 20, 26, 235]);
+    letter(img, ox, oy, BIG[l], 3, 1, 2, l === "N" ? [255, 85, 75, 255] : COMPASS_WHITE);
+  });
+}
 // Row 4: the player in the radar's middle, facing N, NE, E, SE, S, SW, W, NW.
 for (let k = 0; k < 8; k++)
   glyph(`Q_YOU_${k}`, 0x40 + k, `radar: you, facing ${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][k]}`, (img, ox, oy) => {

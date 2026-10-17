@@ -100,7 +100,13 @@ function updateLabels() {
     return at ? [{ id: `${vis.v}:${i}`, dim: entity?.dimension.id ?? vis.spot.dim, ...at, name: `§6${tr.name}` }] : [];
   }) : [];
   updateNameLabels({
-    labels, targets, players: world.getAllPlayers(), maxRange: Math.max(0, Number(get("farNameRange")) || 0),
+    labels,
+    targets,
+    players: world.getAllPlayers(),
+    maxRange: (() => {
+      const rawRange = Number(get("farNameRange"));
+      return Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
+    })(),
     labelType: LABEL_TYPE, ownerTag: OWNER_TAG, labelTag: LABEL_TAG, labelIdTag: LABEL_ID_TAG,
     dimension: (id) => world.getDimension(id),
   });

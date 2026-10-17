@@ -531,7 +531,7 @@ const terrainCache = new Map();
 /** Per-player terrain version, bumped only when a player's full grid finishes scanning or a block changes. @type {Map<string, number>} */
 const playerTerrainVer = new Map();
 let globalTerrainVer = 0;
-let scanCursor = 0;
+const terrainVerOf = (/** @type {string} */ id) => (playerTerrainVer.get(id) ?? 0) + globalTerrainVer;
 /** Per-player memoized 441-cell terrain base array so stationary/slow players do 0 trig or Map lookups in radarOf. @type {Map<string, { key: string, base: string[] }>} */
 const terrainBaseMemo = new Map();
 
@@ -550,13 +550,13 @@ const isWaterBlock = (id) => id.includes("water") || id.includes("kelp") || id.i
 /**
  * Classifies a surface block into terrain kind, surface height, and water depth.
  * @param {import("@minecraft/server").Block | undefined} block @param {number} playerY @param {import("@minecraft/server").Dimension} [dim]
- * @param {number} [wx] @param {number} [wz] @param {number} [step]
+ * @param {number} [wx] @param {number} [wz] @param {number} [step] @param {boolean} [isRoofed] the player is under a roof (or in the Nether), so high ground may be cave
  * @returns {{ kind: string, y: number, depth: number }}
  */
-function classifyTerrainKind(block, playerY, dim, wx = 0, wz = 0, step = 0) {
+function classifyTerrainKind(block, playerY, dim, wx = 0, wz = 0, step = 0, isRoofed = false) {
   if (!block && dim?.id !== "minecraft:nether") return { kind: "empty", y: Math.floor(playerY), depth: 0 };
   const y = block ? Math.floor(block.location.y) : Math.floor(playerY + 16);
-  if ((playerY < y - 8 || dim?.id === "minecraft:nether") && dim) {
+  if (((isRoofed && playerY < y - 8) || dim?.id === "minecraft:nether") && dim) {
     try {
       const bx = Math.floor(wx ?? block?.location.x ?? 0);
       const bz = Math.floor(wz ?? block?.location.z ?? 0);
@@ -613,7 +613,7 @@ function classifyTerrainKind(block, playerY, dim, wx = 0, wz = 0, step = 0) {
   if (step < 1 && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily|rose|peony|lilac|bush/.test(id)) {
     try {
       const below = block.below(1);
-      if (below) return classifyTerrainKind(below, playerY, dim, wx, wz, step + 1);
+      if (below) return classifyTerrainKind(below, playerY, dim, wx, wz, step + 1, isRoofed);
     } catch {
       // unloaded chunk
     }
@@ -680,14 +680,18 @@ world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
   }
 });
 
-// Background terrain scanner: scans one player's uncached 4x4 terrain columns at a time outside the HUD pass,
-// and bumps that player's terrain version only once their surrounding cells are ready.
+// Terrain scanner, every tick like the compass: each player's uncached 4x4 columns around them, nearest the
+// player (and where they are heading) first. The cache is world data keyed by dimension and block position, so
+// what one player scans is already there for everyone else. A player's terrain version bumps as soon as any
+// column was added, so a fast flier sees the ground fill in without lag.
 system.runInterval(() => {
   if (get("enabled") !== true) return;
   const now = system.currentTick;
-  const all = world.getAllPlayers();
-  if (!all.length) return;
-  const player = all[scanCursor++ % all.length];
+  for (const player of world.getAllPlayers()) scanTerrain(player, now);
+}, 1);
+
+/** @param {Player} player @param {number} now */
+function scanTerrain(player, now) {
   try {
     if (!player || !player.isValid) return;
     const pr = prefsOf(player);
@@ -696,36 +700,59 @@ system.runInterval(() => {
     const dimId = dim.id;
     const at = player.location;
     const step = Math.max(2, Math.round(pr.radius / R));
-    let budget = 16;
-    let changed = false;
-    let remaining = 0;
-    for (let dz = -R; dz <= R; dz += 2) {
-      for (let dx = -R; dx <= R; dx += 2) {
+    /** @type {{ wx: number, wz: number, key: number, d: number }[]} */
+    const todo = [];
+    /** @type {Set<number>} */
+    const seenKeys = new Set();
+    const vel = player.getVelocity?.() ?? { x: 0, z: 0 };
+    const leadX = Math.max(-28, Math.min(28, vel.x * 8));
+    const leadZ = Math.max(-28, Math.min(28, vel.z * 8));
+    const cx = at.x + leadX;
+    const cz = at.z + leadZ;
+    for (let dz = -R; dz <= R; dz++) {
+      for (let dx = -R; dx <= R; dx++) {
         const wx = at.x + dx * step;
         const wz = at.z + dz * step;
         const key = terrainKey(dimId, wx, wz);
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
         const entry = terrainCache.get(key);
         if (entry && now - entry.tick <= 2400) continue;
-        if (budget <= 0) {
-          remaining++;
-          continue;
-        }
-        budget--;
-        const block = dim.getTopmostBlock({ x: Math.floor(wx), z: Math.floor(wz) });
-        if (terrainCache.size > 6000) terrainCache.delete(/** @type {number} */ (terrainCache.keys().next().value));
-        const info = classifyTerrainKind(block, at.y, dim, wx, wz);
-        const g = bakeTerrainGlyph(dimId, wx, wz, info);
-        terrainCache.set(key, { ...info, g, tick: now });
-        changed = true;
+        todo.push({ wx, wz, key, d: (wx - cx) * (wx - cx) + (wz - cz) * (wz - cz) });
       }
     }
-    if (changed && remaining === 0) {
-      playerTerrainVer.set(player.id, (playerTerrainVer.get(player.id) ?? 0) + 1);
+    if (Math.hypot(leadX, leadZ) >= 4) {
+      for (let dz = -R; dz <= R; dz += 2) {
+        for (let dx = -R; dx <= R; dx += 2) {
+          const wx = cx + dx * step;
+          const wz = cz + dz * step;
+          const key = terrainKey(dimId, wx, wz);
+          if (seenKeys.has(key)) continue;
+          seenKeys.add(key);
+          const entry = terrainCache.get(key);
+          if (entry && now - entry.tick <= 2400) continue;
+          todo.push({ wx, wz, key, d: (wx - cx) * (wx - cx) + (wz - cz) * (wz - cz) });
+        }
+      }
     }
+    if (!todo.length) return;
+    const topAtPlayer = dim.getTopmostBlock({ x: Math.floor(at.x), z: Math.floor(at.z) });
+    const isRoofed = dimId === "minecraft:nether" || (!!topAtPlayer && topAtPlayer.location.y > at.y + 6);
+    todo.sort((a, b) => a.d - b.d);
+    let changed = false;
+    for (const { wx, wz, key } of todo.slice(0, 48)) {
+      const block = dim.getTopmostBlock({ x: Math.floor(wx), z: Math.floor(wz) });
+      if (terrainCache.size > 6000) terrainCache.delete(/** @type {number} */ (terrainCache.keys().next().value));
+      const info = classifyTerrainKind(block, at.y, dim, wx, wz, 0, isRoofed);
+      const g = bakeTerrainGlyph(dimId, wx, wz, info);
+      terrainCache.set(key, { ...info, g, tick: now });
+      changed = true;
+    }
+    if (changed) playerTerrainVer.set(player.id, (playerTerrainVer.get(player.id) ?? 0) + 1);
   } catch {
     // unloaded chunk or player left
   }
-}, 6);
+}
 
 const RADAR_SIZE = 2 * R + 1;
 const RADAR_CELLS = RADAR_SIZE * RADAR_SIZE;
@@ -733,6 +760,21 @@ const EMPTY_BASE = /** @type {string[]} */ (Array(RADAR_CELLS).fill(G.Q_EMPTY));
 const gridBuf = /** @type {string[]} */ (Array(RADAR_CELLS));
 const prioBuf = new Float64Array(RADAR_CELLS);
 const rowStrs = /** @type {string[]} */ (Array(RADAR_SIZE));
+
+/**
+ * The cached glyph at a place; if that 4x4 isn't scanned yet (a fast flier outruns the scanner), a neighbor's, then
+ * the dimension's ground, so the radar never shows holes.
+ * @param {string} dimId @param {number} wx @param {number} wz
+ */
+function terrainGlyphAt(dimId, wx, wz) {
+  const hit = terrainCache.get(terrainKey(dimId, wx, wz))?.g;
+  if (hit) return hit;
+  for (const [ox, oz] of [[4, 0], [-4, 0], [0, 4], [0, -4], [4, 4], [-4, -4], [4, -4], [-4, 4]]) {
+    const near = terrainCache.get(terrainKey(dimId, wx + ox, wz + oz))?.g;
+    if (near) return near;
+  }
+  return dimId === OVERWORLD ? G.Q_GRASS : dimId === "minecraft:nether" ? G.Q_NETHER : G.Q_END;
+}
 
 /**
  * The radar: 21 x 21 cells, the player in the middle, `radius` blocks to the edge; north up or turned so ahead is up.
@@ -763,7 +805,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
           const sx = col * cell;
           const dx = north ? sx : sx * cos - sy * sin;
           const dz = north ? sy : sx * sin + sy * cos;
-          base[idx] = terrainCache.get(terrainKey(dimId, at.x + dx, at.z + dz))?.g ?? G.Q_EMPTY;
+          base[idx] = terrainGlyphAt(dimId, at.x + dx, at.z + dz);
           gridBuf[idx] = base[idx];
           idx++;
         }
@@ -795,7 +837,16 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     gridBuf[idx] = glyph;
     prioBuf[idx] = p;
   };
-  if (!north) place(-sin * radius * 2, -cos * radius * 2, G.Q_NORTH, 1, true);
+  // The four compass points sit on the edge and turn with the view (fixed up/right/down/left when north is up).
+  for (const [dx, dz, g] of /** @type {[number, number, string][]} */ ([
+    [0, -radius * 2, G.Q_NORTH],
+    [radius * 2, 0, G.Q_EAST],
+    [0, radius * 2, G.Q_SOUTH],
+    [-radius * 2, 0, G.Q_WEST],
+  ])) {
+    const [sx, sy] = screen(dx, dz);
+    place(sx, sy, g, 25, true);
+  }
   const star = markers.find((m) => m.kind === "star");
   if (star) {
     const [sx, sy] = screen(star.x - at.x, star.z - at.z);
@@ -854,7 +905,7 @@ function line2Of(region, dest) {
 /**
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, dim: string, px: number, pz: number, heading: number, x: number, z: number }} View
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, dim: string, px: number, pz: number, heading: number, x: number, z: number, tv?: number }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
@@ -922,6 +973,7 @@ function render(player, v, now, refresh) {
   v.heading = heading;
   v.x = at.x;
   v.z = at.z;
+  v.tv = terrainVerOf(player.id);
   const strip = v.compass ? stripOf(heading, v.markers, at) : "";
   const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id) : "";
   lastText.set(player.id, { strip, line2: v.second, radar, dest: v.dest });
@@ -944,13 +996,13 @@ function render(player, v, now, refresh) {
 const TURN_MIN = 0.5;
 const MOVE_MIN = 0.25;
 /** Moved farther than this (blocks) since the pass: a teleport, so the markers wait for the next pass. */
-const FAR_MOVE = 16;
+const FAR_MOVE = 256;
 /**
  * Titles sent per tick at most by the per-tick redraw. Each one is also a realm:side message that every other pack
  * with side boxes reads (about 0.06 ms each, measured), so with many players turning at once the ones drawn longest
  * ago go first and the rest follow a tick later.
  */
-const TURN_BUDGET = 2;
+const TURN_BUDGET = 8;
 let turnMs = 0;
 let turnTicks = 0;
 let turnDraws = 0;
@@ -975,7 +1027,7 @@ system.runInterval(() => {
       }
       const at = p.location;
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
-      if (Math.abs(wrap(headingOf(p) - v.heading)) < TURN_MIN && Math.abs(at.x - v.x) + Math.abs(at.z - v.z) < MOVE_MIN) continue;
+      if (Math.abs(wrap(headingOf(p) - v.heading)) < TURN_MIN && Math.abs(at.x - v.x) + Math.abs(at.z - v.z) < MOVE_MIN && v.tv === terrainVerOf(p.id)) continue;
       due.push({ p, v, at: lastSent.get(p.id)?.at ?? 0 });
     } catch (e) {
       console.warn(`[map] turn: ${e}`);

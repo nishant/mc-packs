@@ -3,9 +3,9 @@
 //
 // The active page lives in the player's real inventory. Every other page is saved in the player's dynamic
 // properties (`stash:page:<n>`, split into `stash:page:<n>:<k>` when it is large) as one JSON record per
-// stack. Nothing is ever cleared before its copy is saved and read back, and an item that can't be copied
-// exactly (shulker boxes, bundles, potions, banners, maps, fireworks, trimmed armor...) isn't copied at all:
-// it stays in its slot and travels with the player from page to page, like the hotbar does.
+// stack. Nothing is ever cleared before its copy is saved and read back. An item that can't be copied exactly
+// (shulker boxes, bundles, potions, banners, maps, fireworks, trimmed armor...) is parked as an ItemStack clone
+// in memory while its page isn't showing, and put back when the page is opened again.
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, setFor } from "./settings.js";
@@ -34,7 +34,7 @@ const OP_PROP = "stash:op_pages";
 /** A saved page is split above this many UTF-8 bytes (a dynamic property holds up to 32 KB). */
 const PROP_LIMIT = 28000;
 const CHUNK_CHARS = 9000;
-const CLICK_DEBOUNCE = 6;
+const CLICK_DEBOUNCE = 1;
 const SCAN_ROWS = 100;
 
 /**
@@ -114,17 +114,32 @@ const buttonsWanted = (player) => !buttonsMissing && totalPages(player) > 1 && g
 
 // Items whose data the API can't read all of, so a copy would lose something. They are never copied.
 const OPAQUE_ID =
-  /shulker_box|bundle|banner|shield|firework|filled_map|written_book|writable_book|enchanted_book|potion|tipped_arrow|ominous_bottle|goat_horn|player_head|suspicious_stew|axolotl_bucket|cod_bucket|salmon_bucket|pufferfish_bucket|tropical_fish_bucket|tadpole_bucket|crossbow|decorated_pot|bee_nest|beehive|lodestone_compass|leather_|armor_stand|command_block|structure_block|jigsaw/;
+  /shulker_box|bundle|banner|shield|firework|filled_map|written_book|writable_book|potion|tipped_arrow|ominous_bottle|goat_horn|player_head|suspicious_stew|axolotl_bucket|cod_bucket|salmon_bucket|pufferfish_bucket|tropical_fish_bucket|tadpole_bucket|crossbow|decorated_pot|bee_nest|beehive|lodestone_compass|armor_stand|command_block|structure_block|jigsaw/;
 
 /** True when a copy of this item could lose data, so it must stay where it is. @param {ItemStack} item */
 export function isOpaque(item) {
   if (OPAQUE_ID.test(item.typeId)) return true;
+  // An unreadable tag or component means "not that kind of item", never "opaque": returning true here made every item opaque.
   try {
-    if (item.hasTag("minecraft:trimmable_armors") || item.getComponent("minecraft:potion")) return true;
+    if (item.hasTag("minecraft:trimmable_armors")) return true;
   } catch {
-    return true;
+    // no tags on this item
+  }
+  try {
+    if (item.getComponent("minecraft:potion")) return true;
+  } catch {
+    // no potion component on this item
   }
   return false;
+}
+
+/** Reads one optional part of a stack: undefined when the API throws (e.g. dynamic properties on a stackable item). @template T @param {() => T} read @returns {T | undefined} */
+function attempt(read) {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
 }
 
 /** @param {ItemStack} item @returns {Omit<Rec, "s">} */
@@ -132,22 +147,27 @@ function serializeStack(item) {
   /** @type {Omit<Rec, "s">} */
   const rec = { id: item.typeId, n: item.amount };
   if (item.nameTag !== undefined) rec.name = item.nameTag;
-  const lore = item.getLore();
-  if (lore.length) rec.lore = lore;
-  if (item.keepOnDeath) rec.keep = 1;
-  if (item.lockMode !== ItemLockMode.none) rec.lock = item.lockMode;
-  const place = item.getCanPlaceOn();
-  if (place.length) rec.place = place;
-  const destroy = item.getCanDestroy();
-  if (destroy.length) rec.destroy = destroy;
-  const dmg = item.getComponent("minecraft:durability")?.damage;
+  const lore = attempt(() => item.getLore());
+  if (lore?.length) rec.lore = lore;
+  if (attempt(() => item.keepOnDeath)) rec.keep = 1;
+  const lock = attempt(() => item.lockMode);
+  if (lock !== undefined && lock !== ItemLockMode.none) rec.lock = lock;
+  const place = attempt(() => item.getCanPlaceOn());
+  if (place?.length) rec.place = place;
+  const destroy = attempt(() => item.getCanDestroy());
+  if (destroy?.length) rec.destroy = destroy;
+  const dmg = attempt(() => item.getComponent("minecraft:durability")?.damage);
   if (dmg) rec.dmg = dmg;
-  const ench = item.getComponent("minecraft:enchantable")?.getEnchantments();
+  const ench = attempt(() => item.getComponent("minecraft:enchantable")?.getEnchantments());
   if (ench?.length) rec.ench = ench.map((e) => /** @type {[string, number]} */ ([e.type.id, e.level])).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  const color = item.getComponent("minecraft:dyeable")?.color;
+  const color = attempt(() => item.getComponent("minecraft:dyeable")?.color);
   if (color) rec.color = { red: color.red, green: color.green, blue: color.blue };
-  const ids = item.getDynamicPropertyIds().sort();
-  if (ids.length) rec.props = Object.fromEntries(ids.map((k) => [k, item.getDynamicProperty(k)]));
+  // Dynamic properties exist only on unstackable items; the call throws on a stack.
+  const ids = attempt(() => item.getDynamicPropertyIds().sort());
+  if (ids?.length) {
+    const props = Object.fromEntries(ids.map((k) => [k, attempt(() => item.getDynamicProperty(k))]));
+    rec.props = props;
+  }
   return rec;
 }
 
@@ -428,6 +448,29 @@ function usedOnPage(inv) {
 const switching = new Set();
 /** @type {Map<string, { page: number, keys: Map<string, number> }>} what each player's page held at the last auto-store look */
 const snapshots = new Map();
+/**
+ * Stacks that can't be copied to JSON (filled shulker boxes, potions, bundles, trimmed armor...) and sit on a
+ * page that isn't showing: exact ItemStack clones, per player id and page. They live in memory only.
+ * @type {Map<string, Map<number, { s: number, item: ItemStack }[]>>}
+ */
+const memOpaque = new Map();
+/** @type {Map<string, { dimension: import("@minecraft/server").Dimension, location: import("@minecraft/server").Vector3 }>} where a player was last seen, for items parked in memory when they leave */
+const lastSeen = new Map();
+
+/** @param {string} id @param {number} page @returns {{ s: number, item: ItemStack }[]} */
+const memOf = (id, page) => memOpaque.get(id)?.get(page) ?? [];
+
+/** @param {string} id @param {number} page @param {{ s: number, item: ItemStack }[]} list */
+function setMem(id, page, list) {
+  let pages = memOpaque.get(id);
+  if (!list.length) {
+    pages?.delete(page);
+    if (pages && !pages.size) memOpaque.delete(id);
+    return;
+  }
+  if (!pages) memOpaque.set(id, (pages = new Map()));
+  pages.set(page, list);
+}
 
 /**
  * Saves the active page and shows another. The page being left is saved and read back before anything
@@ -454,17 +497,19 @@ export function switchPage(player, target) {
       return false;
     }
 
-    // Leaving: copy every stack that copies exactly; the rest stay in their slots.
+    // Leaving: copy every stack that copies exactly; an opaque stack is cloned into memory. Both leave the slot.
     /** @type {Rec[]} */
     const leaving = [];
+    /** @type {{ s: number, item: ItemStack }[]} */
+    const parked = [];
     /** @type {number[]} */
     const copied = [];
     for (const s of STORAGE_SLOTS) {
       const item = inv.getItem(s);
       if (!item || isButton(item)) continue;
       const rec = toRecord(item);
-      if (!rec) continue;
-      leaving.push({ s, ...rec });
+      if (rec) leaving.push({ s, ...rec });
+      else parked.push({ s, item: item.clone() });
       copied.push(s);
     }
     const saved = [...leaving, ...stayed];
@@ -472,10 +517,22 @@ export function switchPage(player, target) {
       hooks.bar(player, "§cCouldn't save this page, so it wasn't switched");
       return false;
     }
+    setMem(id, cur, [...memOf(id, cur), ...parked]);
+    if (parked.length) lastSeen.set(id, { dimension: player.dimension, location: player.location });
     for (const s of copied) inv.setItem(s, undefined);
     player.setDynamicProperty(CUR_PROP, target === 1 ? undefined : target);
 
-    // Arriving: each stack to its slot, else the first free one; what doesn't fit stays saved on that page.
+    // Arriving: parked stacks first, then each saved stack to its slot, else the first free one;
+    // what doesn't fit stays saved (or parked) on that page.
+    const freeSlot = (/** @type {number} */ want) => (STORAGE_SLOTS.includes(want) && !inv.getItem(want) ? want : STORAGE_SLOTS.find((s) => !inv.getItem(s)));
+    /** @type {{ s: number, item: ItemStack }[]} */
+    const memLeft = [];
+    for (const e of memOf(id, target)) {
+      const slot = freeSlot(e.s);
+      if (slot === undefined) memLeft.push(e);
+      else inv.setItem(slot, e.item);
+    }
+    setMem(id, target, memLeft);
     /** @type {Rec[]} */
     const unplaced = [];
     for (const e of incoming) {
@@ -484,14 +541,14 @@ export function switchPage(player, target) {
         unplaced.push(e);
         continue;
       }
-      const slot = STORAGE_SLOTS.includes(e.s) && !inv.getItem(e.s) ? e.s : STORAGE_SLOTS.find((s) => !inv.getItem(s));
+      const slot = freeSlot(e.s);
       if (slot === undefined) unplaced.push(e);
       else inv.setItem(slot, item);
     }
     if (!writePage(player, target, unplaced)) console.warn(`[stash] page ${target} kept its saved copy`);
     snapshots.delete(id);
     refreshButtons(player);
-    const stuck = unplaced.length;
+    const stuck = unplaced.length + memLeft.length;
     hooks.bar(player, `§8[§bPage #${target}/${total}§8] §7${usedOnPage(inv)}/${PAGE_SIZE} slots used${stuck ? ` §e(${stuck} more stack${stuck === 1 ? "" : "s"} wait here for room)` : ""}`);
     player.playSound("random.click", { pitch: 1.2, volume: 0.6 });
     return true;
@@ -530,6 +587,17 @@ export function enforcePageCount(player) {
     }
     writePage(player, p, left);
   }
+  const parkedPages = memOpaque.get(player.id);
+  if (parkedPages) {
+    for (const [p, list] of [...parkedPages]) {
+      if (p <= total) continue;
+      setMem(player.id, p, []);
+      for (const e of list) {
+        rescueItem(player, inv, e.item, total);
+        moved += e.item.amount;
+      }
+    }
+  }
   if (moved) hooks.bar(player, `§7Moved ${moved} item${moved === 1 ? "" : "s"} from removed inventory pages into your inventory`);
 }
 
@@ -538,6 +606,17 @@ export function enforcePageCount(player) {
 // ---------------------------------------------------------------------------
 
 let buttonsMissing = false;
+
+/** @type {Set<string>} players whose button slots were just written by this script, so the change events they cause aren't clicks */
+const updatingButtons = new Set();
+
+/** Marks a button-slot write about to happen; its change events arrive after the code finishes, so the mark stays until the next tick. @param {Player} player */
+function markUpdating(player) {
+  const id = player.id;
+  if (updatingButtons.has(id)) return;
+  updatingButtons.add(id);
+  system.run(() => updatingButtons.delete(id));
+}
 
 /** @param {"prev" | "menu" | "next"} kind @param {number} cur @param {number} total @returns {ItemStack | undefined} */
 function makeButton(kind, cur, total) {
@@ -556,6 +635,7 @@ function makeButton(kind, cur, total) {
       item.setLore([`§7Viewing Page #${cur} of ${total}`, "§7Click (then close inventory) or run", "§b/realm:inv §7for all pages & item scan", "§8Expansive Inventory"]);
     }
     item.keepOnDeath = true;
+    item.lockMode = ItemLockMode.inventory;
     return item;
   } catch (e) {
     if (!buttonsMissing) console.warn(`[stash] the page button items aren't installed (${e}): add stash_bp's items and the build_rp textures`);
@@ -579,6 +659,7 @@ function refreshButtons(player) {
     if (!want) return;
     const have = inv.getItem(b.slot);
     if (have?.typeId === b.id && have.nameTag === want.nameTag) continue;
+    markUpdating(player);
     if (have) {
       inv.setItem(b.slot, undefined);
       if (!isButton(have)) rescueItem(player, inv, have);
@@ -591,12 +672,36 @@ function refreshButtons(player) {
 function removeButtons(player) {
   const inv = invOf(player);
   if (!inv) return;
-  for (const s of [...HOTBAR, ...BUTTON_SLOTS, ...STORAGE_SLOTS]) if (isButton(inv.getItem(s))) inv.setItem(s, undefined);
+  for (const s of [...HOTBAR, ...BUTTON_SLOTS, ...STORAGE_SLOTS]) {
+    if (!isButton(inv.getItem(s))) continue;
+    markUpdating(player);
+    inv.setItem(s, undefined);
+  }
 }
 
-/** Clears buttons the player moved or shift-clicked out of their slots. @param {import("@minecraft/server").Container} inv */
-function sweepStrays(inv) {
-  for (const s of [...HOTBAR, ...STORAGE_SLOTS]) if (isButton(inv.getItem(s))) inv.setItem(s, undefined);
+/** Clears buttons the player moved or shift-clicked out of their slots. @param {Player} player @param {import("@minecraft/server").Container} inv */
+function sweepStrays(player, inv) {
+  for (const s of [...HOTBAR, ...STORAGE_SLOTS]) {
+    if (!isButton(inv.getItem(s))) continue;
+    markUpdating(player);
+    inv.setItem(s, undefined);
+  }
+}
+
+/** @param {ItemStack | undefined} item @returns {"prev" | "menu" | "next" | undefined} */
+const kindOf = (item) => BUTTONS.find((b) => b.id === item?.typeId)?.kind;
+
+/** A button on the cursor is deleted, so it can never stay stuck to the mouse. @param {Player} player @returns {"prev" | "menu" | "next" | undefined} which button it was */
+function clearCursorButton(player) {
+  try {
+    const cursor = player.getComponent("minecraft:cursor_inventory");
+    const kind = kindOf(cursor?.item);
+    if (!kind) return undefined;
+    cursor?.clear();
+    return kind;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Removes buttons that were dropped on the ground near a player. @param {Player} player */
@@ -617,6 +722,24 @@ const buttonState = new Map();
 /** @type {Set<string>} */
 const dead = new Set();
 
+/** Parked items can't outlive the session (memory only), so when a player leaves they are dropped where they were last seen. @param {string} playerId */
+function dropParked(playerId) {
+  const parked = memOpaque.get(playerId);
+  const at = lastSeen.get(playerId);
+  memOpaque.delete(playerId);
+  lastSeen.delete(playerId);
+  if (!parked || !at) return;
+  for (const list of parked.values()) {
+    for (const e of list) {
+      try {
+        at.dimension.spawnItem(e.item, at.location);
+      } catch (err) {
+        console.warn(`[stash] couldn't return a parked ${e.item.typeId}: ${err}`);
+      }
+    }
+  }
+}
+
 /**
  * A button was clicked (it left its slot): save anything real that took its place, put the buttons back,
  * and do what the button says, at most once per click.
@@ -625,13 +748,16 @@ const dead = new Set();
 function clicked(player, kinds) {
   const inv = invOf(player);
   if (!inv) return;
+  const onCursor = clearCursorButton(player);
+  if (onCursor && !kinds.includes(onCursor)) kinds = [...kinds, onCursor];
   for (const b of BUTTONS) {
     const have = inv.getItem(b.slot);
     if (!have || have.typeId === b.id) continue;
+    markUpdating(player);
     inv.setItem(b.slot, undefined);
     if (!isButton(have)) rescueItem(player, inv, have);
   }
-  sweepStrays(inv);
+  sweepStrays(player, inv);
   removeDropped(player);
   const now = system.currentTick;
   const kind = kinds.includes("prev") ? "prev" : kinds.includes("next") ? "next" : kinds[0];
@@ -656,9 +782,35 @@ function clicked(player, kinds) {
 function pollButtons(player) {
   const inv = invOf(player);
   if (!inv) return;
+  const onCursor = clearCursorButton(player);
   const missing = BUTTONS.filter((b) => inv.getItem(b.slot)?.typeId !== b.id).map((b) => b.kind);
+  if (onCursor && !missing.includes(onCursor)) missing.push(onCursor);
   if (missing.length) clicked(player, missing);
 }
+
+// A button picked up in the inventory screen, or any change in its slot, counts as the click right away.
+world.afterEvents.playerInventoryItemChange?.subscribe((event) => {
+  try {
+    const player = event.player;
+    if (!player?.isValid || dead.has(player.id) || updatingButtons.has(player.id) || switching.has(player.id)) return;
+    if (!buttonsWanted(player)) return;
+    const cursorKind = clearCursorButton(player);
+    const own = BUTTONS.find((b) => b.slot === event.slot);
+    // The script putting a button into its own slot (a rename after a switch) is not a click.
+    if (!cursorKind && own && event.itemStack?.typeId === own.id) return;
+    if (!cursorKind && !isButton(event.beforeItemStack) && !isButton(event.itemStack) && !own) return;
+    const inv = invOf(player);
+    const gone = inv ? BUTTONS.filter((b) => inv.getItem(b.slot)?.typeId !== b.id).map((b) => b.kind) : [];
+    if (gone.length === BUTTONS.length) {
+      clicked(player, gone);
+      return;
+    }
+    const kind = cursorKind ?? kindOf(event.beforeItemStack) ?? kindOf(event.itemStack) ?? own?.kind;
+    if (kind) clicked(player, [kind]);
+  } catch (e) {
+    console.warn(`[stash] ${e}`);
+  }
+});
 
 // A button dropped from the inventory screen is removed at once, and counts as the click.
 world.afterEvents.entitySpawn.subscribe(({ entity }) => {
@@ -697,7 +849,7 @@ world.beforeEvents.itemUse.subscribe((event) => {
         removeButtons(player);
         return;
       }
-      for (const s of [...HOTBAR, ...STORAGE_SLOTS]) if (isButton(inv.getItem(s))) inv.setItem(s, undefined);
+      sweepStrays(player, inv);
       clicked(player, [type === BTN_PREV ? "prev" : type === BTN_NEXT ? "next" : "menu"]);
     } catch (e) {
       console.warn(`[stash] ${e}`);
@@ -718,7 +870,9 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   for (const m of [lastClick, buttonState, snapshots, lastTotal]) m.delete(playerId);
+  dropParked(playerId);
   dead.delete(playerId);
+  updatingButtons.delete(playerId);
   menuOpen.delete(playerId);
   switching.delete(playerId);
 });
@@ -751,7 +905,7 @@ function freeEverywhere(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   let free = PAGE_SIZE - usedOnPage(inv);
-  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, readPage(player, p)?.length ?? PAGE_SIZE);
+  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, (readPage(player, p)?.length ?? PAGE_SIZE) + memOf(player.id, p).length);
   return free;
 }
 
@@ -815,6 +969,7 @@ function tickPlayer(player, withAutoStore) {
   if (!player.isValid || dead.has(player.id)) return;
   const inv = invOf(player);
   if (!inv) return;
+  if (memOpaque.has(player.id)) lastSeen.set(player.id, { dimension: player.dimension, location: player.location });
   const total = totalPages(player);
   if (lastTotal.get(player.id) !== total) {
     enforcePageCount(player);
@@ -828,12 +983,12 @@ function tickPlayer(player, withAutoStore) {
     // Without buttons there is nothing to click, but auto-store still keeps the page from clogging.
   } else if (buttonState.get(player.id) !== true) {
     refreshButtons(player);
-    sweepStrays(inv);
+    sweepStrays(player, inv);
     buttonState.set(player.id, true);
     return;
   } else {
     pollButtons(player);
-    if (withAutoStore) sweepStrays(inv);
+    if (withAutoStore) sweepStrays(player, inv);
   }
   if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) autoStore(player);
 }
@@ -902,7 +1057,7 @@ function pageUsage(player, inv) {
   const total = totalPages(player);
   const cur = curPage(player);
   const usage = [];
-  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, readPage(player, p)?.length ?? 0));
+  for (let p = 1; p <= total; p++) usage.push(p === cur ? usedOnPage(inv) : Math.min(PAGE_SIZE, (readPage(player, p)?.length ?? 0) + memOf(player.id, p).length));
   return usage;
 }
 
@@ -925,6 +1080,7 @@ function scanItems(player, inv) {
   }
   for (let p = 1; p <= total; p++) {
     for (const e of readPage(player, p) ?? []) add(`${e.id}|${e.name ?? ""}`, e.name ?? pretty(e.id), e.n, p);
+    for (const e of memOf(player.id, p)) add(`${e.item.typeId}|${e.item.nameTag ?? ""}`, e.item.nameTag ?? pretty(e.item.typeId), e.item.amount, p);
   }
   return [...found.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }

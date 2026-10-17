@@ -19,7 +19,7 @@ export const CONFIG = {
   faceRange: 8,
 
   /** Show townsfolk names floating in 3D from up to this many blocks away (even through house roofs/walls). 0 = vanilla close-up only. */
-  farNameRange: 120,
+  farNameRange: 20,
 
   /** An NPC says an idle line only while a player is within this many blocks. */
   idleRange: 12,

@@ -78,5 +78,5 @@ export const CONFIG = {
   campDays: 7,
 
   /** Show story character names floating in 3D from up to this many blocks away (0 = only up close). */
-  farNameRange: 120,
+  farNameRange: 20,
 };

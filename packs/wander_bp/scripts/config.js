@@ -3,7 +3,7 @@ export const CONFIG = {
   enabled: true,
 
   /** Show floating names from this far away, even behind walls. 0 = vanilla close-up only. */
-  farNameRange: 120,
+  farNameRange: 20,
 
   /** Ticks between rolls for each player (1200 = once a minute). Read when the world starts. */
   scheduleTicks: 1200,

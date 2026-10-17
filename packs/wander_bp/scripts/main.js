@@ -184,7 +184,13 @@ function updateLabels() {
     targets.push({ id: `camp:${id}`, dim: entity.dimension.id, ...entity.location, name: entity.nameTag });
   }
   updateNameLabels({
-    labels, targets, players: world.getAllPlayers(), maxRange: Math.max(0, Number(get("farNameRange")) || 0),
+    labels,
+    targets,
+    players: world.getAllPlayers(),
+    maxRange: (() => {
+      const rawRange = Number(get("farNameRange"));
+      return Math.max(0, (rawRange === 120 ? 20 : rawRange) || 0);
+    })(),
     labelType: LABEL_TYPE, ownerTag: OWNER_TAG, labelTag: LABEL_TAG, labelIdTag: LABEL_ID_TAG,
     dimension: (id) => world.getDimension(id),
   });

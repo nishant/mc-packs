@@ -89,7 +89,7 @@ for (const [id, name] of buttons) {
 test("inventory packs have the required versions and standalone data module", () => {
   assert.deepEqual(json("packs/build_rp/manifest.json").header.version, [2, 1, 7]);
   const stash = json("packs/stash_bp/manifest.json");
-  assert.deepEqual(stash.header.version, [1, 6, 1]);
+  assert.deepEqual(stash.header.version, [1, 6, 2]);
   assert.deepEqual(stash.modules.filter((module) => module.type === "data"), [{
     type: "data",
     uuid: "a6d37198-47d6-4f63-91b7-36e98962a418",
