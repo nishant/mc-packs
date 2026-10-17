@@ -1,3 +1,5 @@
+import { ItemLockMode, ItemStack } from "@minecraft/server";
+
 // Realm Configuration menu (admin_bp) for everyone: every player gets the item once; a player who isn't an
 // operator sees the same menu minus the operator entries (no Realm Settings, no Operator Tools, no operator
 // commands on the group pages or in search); an operator sees everything; an operator command picked
@@ -35,13 +37,41 @@ export default async function (t) {
     return next;
   }
 
-  // 1. Everyone gets the item, once.
+  // 1. Everyone gets the item, once, and any extra real copies are removed while ordinary/anvil-renamed items stay untouched.
   t.check(items(guest) === 1, `the player who isn't an operator got one item (has ${items(guest)})`);
   t.check(items(op) === 1, `the operator got one item (has ${items(op)})`);
   t.assert(t.cmd(guest, "/realm:admin_item").ok, "/realm:admin_item works for a player who isn't an operator");
   await t.waitMessage(guest, /already carry/, { pack: "admin_bp" });
   t.check(items(guest) === 1, `still one item after /realm:admin_item (has ${items(guest)})`);
   t.check(!t.cmd(guest, "/realm:admin_item Tester").ok, "giving the item to someone else needs an operator");
+
+  // Seed 2 extra real copies (legacy lore + stack amount 2) plus an anvil-renamed ordinary Nether Star on the guest.
+  const guestInv = guest.getComponent("inventory").container;
+  const legacyGold = new ItemStack("minecraft:nether_star", 2);
+  legacyGold.nameTag = "§r§bRealm Configuration";
+  legacyGold.setLore(["§r§7Hold it in your hand and use it", "§r§8Gold entries: operators only"]);
+  legacyGold.keepOnDeath = true;
+  legacyGold.lockMode = ItemLockMode.inventory;
+  const legacyOp = new ItemStack("minecraft:nether_star", 1);
+  legacyOp.nameTag = "§r§6Realm Configuration";
+  legacyOp.setLore(["§r§8Operators only"]);
+  legacyOp.keepOnDeath = true;
+  legacyOp.lockMode = ItemLockMode.inventory;
+  const anvilStar = new ItemStack("minecraft:nether_star", 3);
+  anvilStar.nameTag = "Realm Configuration";
+  guestInv.setItem(15, legacyGold);
+  guestInv.setItem(16, legacyOp);
+  guestInv.setItem(17, anvilStar);
+  await t.wait(5);
+  t.assert(t.cmd(guest, "/realm:admin_item").ok, "/realm:admin_item deduplicates extra copies");
+  await t.wait(5);
+  const realCount = Array.from({ length: guestInv.size }, (_, i) => guestInv.getItem(i))
+    .filter((it) => it && it.typeId === "minecraft:nether_star" && it.getLore().length > 0)
+    .reduce((sum, it) => sum + it.amount, 0);
+  t.check(realCount === 1, `three real copies (amount 4 total) collapsed to 1 (got ${realCount})`);
+  t.check(guestInv.getItem(17)?.amount === 3 && guestInv.getItem(17)?.getLore().length === 0, "anvil-renamed ordinary Nether Star in slot 17 untouched");
+  guestInv.setItem(17, undefined);
+  await t.wait(2);
 
   // 2. The guest's menu: no operator entries anywhere.
   let main = await open(guest);
@@ -50,7 +80,7 @@ export default async function (t) {
   t.log("guest main:", order.join(" | "));
   t.check(order[0] === "My Preferences" && order[1].startsWith("Recent (") && order[2] === "Search", `My Preferences, Recent, Search first (${JSON.stringify(order.slice(0, 3))})`);
   t.check(!order.includes("Realm Settings") && !order.includes("Operator Tools"), "no Realm Settings or Operator Tools for the guest");
-  t.check(!/Gold/.test(main.body), `no color legend for the guest (body: ${main.body})`);
+  t.check(!/Red = operators only|Gold = operators only/.test(String(main.body).replace(/§./g, "")), `no color legend for the guest (body: ${main.body})`);
   let page = await tap(guest, main, "World & Events");
   t.assert(title(page) === "World & Events", `World & Events opened (got "${title(page)}")`);
   t.check(firstLines(page).includes("Weather Forecast") && !firstLines(page).includes("Set Weather"), `the guest sees Weather Forecast but not Set Weather (${JSON.stringify(firstLines(page))})`);
@@ -70,7 +100,7 @@ export default async function (t) {
   order = firstLines(main);
   t.log("operator main:", order.join(" | "));
   t.check(order.includes("Realm Settings") && order.at(-1) === "Operator Tools", `Realm Settings and Operator Tools for the operator (${JSON.stringify(order)})`);
-  t.check(/Gold = operators only/.test(String(main.body).replace(/§./g, "")), `the legend is at the top (body: ${main.body})`);
+  t.check(/Red = operators only/.test(String(main.body).replace(/§./g, "")), `the legend is at the top (body: ${main.body})`);
   page = await tap(op, main, "World & Events");
   t.check(firstLines(page).includes("Set Weather"), "the operator sees Set Weather");
   let f = await tap(op, page, "Set Weather");
