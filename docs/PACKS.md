@@ -1036,7 +1036,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 
 1. Open chests as usual. The pack quietly remembers what's in them.
 2. Run `/realm:find iron`, or just `/realm:find` while holding the item. A menu lists the containers that have it, nearest first, for example `Chest - 23 Iron Ingot` with `35 blocks NE - seen 2h ago` under it.
-3. Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark. A container in another dimension only gets its coordinates in chat.
+3. Tap a result: an outline of green sparkles around the container, and a column of particles over it, mark it for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark. A container in another dimension only gets its coordinates in chat.
 
 ### What players see
 
@@ -1061,7 +1061,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 | `liveScanRadius` | `16` | Containers this close (blocks) are read live at search time, so nearby results are always current |
 | `maxContainers` | `2000` | Most containers remembered; the ones seen longest ago are forgotten first |
 | `maxResults` | `20` | Rows in the results menu |
-| `highlightSeconds` | `10` | How long the particle column shows |
+| `highlightSeconds` | `10` | How long the mark (the sparkle outline and the particle column) shows |
 | `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched. Ids this game version doesn't have are skipped |
 
 Operators can change `liveScanRadius`, `maxResults` and `highlightSeconds` in game with `/realm:config`; they apply to the next search.
@@ -2261,27 +2261,28 @@ Operators can change `dailyBonus`, `startBalance`, `marketAnywhere` and `marketE
 
 ## Merchant Caravan — `caravan_bp`
 
-Once a week a merchant caravan comes to town: three traders and their pack llamas set up at one of the arrival spots operators picked, stay for 40 real minutes (about two in-game days) and sell rare goods for [Crowns](#crowns--crowns_bp): a Mending book, a totem, music discs, armor trims, pottery sherds, golden apples, Storm Glass and more, a different selection each visit and only a few of each. They also buy Storm Glass and Relic Shards. Chat announces when the caravan arrives and when it leaves, and `/realm:caravan` tells you when the next one comes.
+Once a week a merchant caravan comes to town: three traders and their pack llamas set up at one of the arrival spots operators picked, stay for 40 real minutes (about two in-game days) and sell rare goods for [Crowns](#crowns--crowns_bp): a Mending book, a totem, music discs, armor trims, pottery sherds, golden apples, Storm Glass and more, a different selection each visit, each trader with goods of their own, and only a few of each. They also buy Storm Glass and Relic Shards. Chat announces when the caravan arrives and when it leaves, and `/realm:caravan` tells you when the next one comes.
 
 ### How to use
 
 1. Run `/realm:caravan` for the caravan menu; it and its **Caravan info** button (also `/realm:caravan_info`, in chat) say when the next caravan comes (`The next merchant caravan comes in 3d 5h (Saturday 18:00 UTC), and stays 40m.`) or, while it's here, where it is (`at Market Square (120, -45), 240m NE of you. It leaves in 23m.`).
 2. When it arrives, chat says `A merchant caravan has arrived at Market Square (120, -45)! It stays 40m. Tap a trader to buy rare goods for Crowns.` Go there.
-3. Tap any trader. The shop lists this visit's goods with their price and how many are left; pick one and choose how many. Chat confirms: `-60 Crowns (Caravan: bought 1 Enchanted Book (Mending))`.
+3. Tap a trader. Each one sells different goods, so visit all three. The shop lists that trader's goods for this visit with their price and how many are left; pick one and choose how many. Chat confirms: `-60 Crowns (Caravan: bought 1 Enchanted Book (Mending))`.
 4. Have Storm Glass or Relic Shards? Pick **Sell to the caravan** in the shop.
 5. Five minutes before it leaves, chat warns you; then it packs up and is gone until next time.
-6. **Operators:** stand where the caravan should set up and pick **Add an arrival spot here** in `/realm:caravan` (or run `/realm:caravan_spot [name]`, for example `/realm:caravan_spot "Market Square"`); add a few and each visit picks one at random. **Remove an arrival spot** lists them to pick from (`/realm:caravan_spot_remove` removes the nearest one). **Bring the caravan now** (or `/realm:caravan_call`) brings it now. `/realm:config` → **Merchant Caravan** sets how often it comes, which day, the hour, how long it stays and how many goods it brings. The goods are `goods` in `config.js`.
+6. **Operators:** stand where the caravan should set up and pick **Add an arrival spot here** in `/realm:caravan` (or run `/realm:caravan_spot [name]`, for example `/realm:caravan_spot "Market Square"`); add a few and each visit picks one at random. **Remove an arrival spot** lists them to pick from (`/realm:caravan_spot_remove` removes the nearest one). **Bring the caravan now** (or `/realm:caravan_call`) brings it now. `/realm:config` → **Merchant Caravan** sets how often it comes, which day, the hour, how long it stays and how many goods each trader brings. The goods are `goods` in `config.js`. To give a trader a skin, sneak and tap it in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from `config.js`). The skin is kept for that trader on every later visit.
 
 ### What players see
 
 - **When:** every 7 days (`everyDays`) at 18:00 UTC (`hourUtc`). The day is counted from 1 January 1970, a Thursday, shifted by `offsetDays`: with 7 days, `0` is Thursday and the default `2` is Saturday. If nobody is online when it's due, it comes when someone joins within 24 hours (`lateHours`) and stays its full time. The first caravan after installing the pack is the next one due.
 - **Where:** at a random one of the operators' spots (`/realm:caravan_spot`). With no spots, it comes to world spawn, on the surface. Arrival happens even far from everyone: the traders appear once a player comes near enough for the spot to load. The caravan places and breaks no blocks.
 - **The caravan:** three traders (`traders`: Zahir the Spice Merchant, Old Marisol and Fennick the Peddler), one at the spot and the others about 3 blocks to the sides where there's room, with their names in gold. Two pack llamas (`llamas`, `Caravan Llama`) come along and are brought back if they stray more than 10 blocks. Traders turn to face the nearest player within 8 blocks (`faceRange`), can't be hurt, and go back to their place if pushed.
-- **Native names only:** traders use the game's own close-up NPC names over their real heads. Stable Bedrock does not expose a truthful per-player far-name range for those native names, so this pack no longer creates a second floating helper label or a name-range slider.
-- **The shop:** `You have 140 Crowns. The caravan leaves in 23m.`, then one button per good (`Enchanted Book (Mending)` / `60 Crowns, 1 left`, or `Sold out`), **Sell to the caravan** and **Goodbye**. Stock is shared: what one player buys, others can't. A purchase can be up to 16 at once, as far as the stock and your Crowns go. Goods that don't fit in your inventory drop at your feet.
+- **Native names only:** traders use the game's own close-up NPC names over their real heads. Stable Bedrock does not expose a truthful per-player far-name range for those native names, so this pack no longer creates a second floating helper label or a name-range slider. A game can show a `minecraft:npc` as `NPC` until its name changes while the player watches, so when a player comes within 20 blocks of a trader its name is sent again 1 and 3 seconds later (switching between the name and the same name ending in `§r`), as Townsfolk does.
+- **Skins are kept:** scripts can't read an NPC's skin, but a structure keeps the whole NPC. 5 seconds, 30 seconds and 2 minutes after an operator opens a trader's NPC editor, that trader is saved as a small structure in the world (`realm_caravan:<n>`, no blocks; not while another mob is within 2 blocks), and every later visit, or a missing trader spawned again, is placed from it with its skin. A trader with no saved skin is a new NPC with the default skin.
+- **The shop:** `You have 140 Crowns. The caravan leaves in 23m.`, then one button per good that trader sells (`Enchanted Book (Mending)` / `60 Crowns, 1 left`, or `Sold out`), **Sell to the caravan** and **Goodbye**. Each trader has goods of their own (5 each, `stockSize`), and no two traders sell the same good while there are enough goods to go around (24 goods, 3 traders). Stock is shared between players: what one player buys, others can't. A purchase can be up to 16 at once, as far as the stock and your Crowns go. Goods that don't fit in your inventory drop at your feet.
 - **Selling to the caravan:** Storm Glass for 18 Crowns and Relic Shards for 5 Crowns each (`buys`), recognized by their lore; better than the market's prices.
 - **Leaving:** `The merchant caravan leaves in 5m.` (`warnMinutes`), then `The merchant caravan has packed up and left. Next visit in 6d 23h.` Traders and llamas are removed; any that were in an unloaded chunk are removed when it loads.
-- **Default goods** (each visit picks 8, `stockSize`; price in Crowns, then stock per visit): Enchanted Book (Mending) 60, 1; Enchanted Book (Unbreaking III) 30, 2; Totem of Undying 80, 1; Heart of the Sea 45, 1; 2 Golden Apples 20, 3; Enchanted Golden Apple 150, 1; Name Tag 12, 4; music discs Pigstep 40, Otherside 35 and Relic 35, 1 each; armor trims Silence 90, 1, Wayfinder 20, 2, Coast 20, 2 and Spire 40, 1; Netherite Upgrade 70, 1; Prize, Heart, Skull and Archer pottery sherds 8, 2 each; Sniffer Egg 40, 1; 2 Echo Shards 20, 2; 2 Nautilus Shells 8, 3; Storm Glass 25, 2; 2 Relic Shards 10, 4.
+- **Default goods** (each visit picks 5 for each trader, `stockSize`; price in Crowns, then stock per visit): Enchanted Book (Mending) 60, 1; Enchanted Book (Unbreaking III) 30, 2; Totem of Undying 80, 1; Heart of the Sea 45, 1; 2 Golden Apples 20, 3; Enchanted Golden Apple 150, 1; Name Tag 12, 4; music discs Pigstep 40, Otherside 35 and Relic 35, 1 each; armor trims Silence 90, 1, Wayfinder 20, 2, Coast 20, 2 and Spire 40, 1; Netherite Upgrade 70, 1; Prize, Heart, Skull and Archer pottery sherds 8, 2 each; Sniffer Egg 40, 1; 2 Echo Shards 20, 2; 2 Nautilus Shells 8, 3; Storm Glass 25, 2; 2 Relic Shards 10, 4.
 
 ### Commands
 
@@ -2304,7 +2305,7 @@ Once a week a merchant caravan comes to town: three traders and their pack llama
 | `stayMinutes` | `40` | How long it stays, in real minutes (40 = two in-game days) |
 | `lateHours` | `24` | If nobody is online when it's due, it comes when someone joins within this many hours, else that visit is skipped |
 | `warnMinutes` | `5` | Chat warns this many minutes before it leaves. `0` = no warning |
-| `stockSize` | `8` | Goods for sale per visit, picked at random from `goods` |
+| `stockSize` | `5` | Goods each trader sells per visit (1-8 in game), picked at random from `goods` so no two traders sell the same good |
 | `traders` | 3 names | One trader NPC per name (up to 6) |
 | `llamas` | `2` | Pack llamas that come along |
 | `faceRange` | `8` | Traders turn toward the nearest player within this many blocks. `0` = never |
@@ -2320,7 +2321,8 @@ Operators can change `enabled`, `everyDays`, `offsetDays`, `hourUtc`, `stayMinut
 | Key | Scope | Contents |
 |---|---|---|
 | `caravan:spots` | World | JSON `[{ name, dim, x, y, z }]`: the arrival spots |
-| `caravan:visit` | World | JSON of the caravan while it's here: `{ v, until, spot, surface, placed, traders: [{ name, eid, at }], llamas, stock: [{ id, left }], warned }` |
+| `caravan:visit` | World | JSON of the caravan while it's here: `{ v, until, spot, surface, placed, traders: [{ name, eid, at, stock: [{ id, left }] }], llamas, warned }` (before 1.2.0 one `stock` list for all traders; a visit saved that way is dealt out between them) |
+| `realm_caravan:<n>` | World structure | Trader `n`'s saved NPC (its skin and data, no blocks), placed again on every later visit |
 | `caravan:last` | World | Arrival time (ms) of the last scheduled visit already handled |
 | `caravan:cfg` | World | Settings changed in `/realm:config` |
 

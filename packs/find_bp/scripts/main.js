@@ -437,9 +437,29 @@ async function pick(player, form, hits) {
 const marks = new Map();
 world.afterEvents.playerLeave.subscribe(({ playerId }) => marks.delete(playerId));
 
+// The mark's outline: points along the 12 edges of the container's block, 0.15 outside it on every side, so in a
+// wall of chests the front outline sits in the air in front of the wall (a column over the chest alone ends up
+// inside the chest above it). Each edge gets its ends and 3 points between: 8 corners + 36 = 44 points.
+const OUTLINE = (() => {
+  const lo = -0.15;
+  const hi = 1.15;
+  /** @type {{ x: number, y: number, z: number }[]} */
+  const pts = [];
+  const steps = [0.25, 0.5, 0.75].map((t) => lo + (hi - lo) * t);
+  for (const x of [lo, hi]) for (const y of [lo, hi]) for (const z of [lo, hi]) pts.push({ x, y, z });
+  for (const a of [lo, hi]) {
+    for (const b of [lo, hi]) {
+      for (const t of steps) {
+        pts.push({ x: t, y: a, z: b }, { x: a, y: t, z: b }, { x: a, y: b, z: t });
+      }
+    }
+  }
+  return pts;
+})();
+
 /**
- * A particle column over the container, every 10 ticks, that only this player sees. A new mark
- * replaces the player's previous one.
+ * An outline of green sparkles around the container and a particle column over it, every 10 ticks, that only this
+ * player sees. A new mark replaces the player's previous one.
  * @param {Player} player @param {Hit} h
  */
 function highlight(player, h) {
@@ -460,12 +480,11 @@ function highlight(player, h) {
       if (marks.get(id) === run) marks.delete(id);
       return;
     }
-    for (let k = 0; k < 8; k++) {
-      try {
-        player.spawnParticle("minecraft:endrod", { x: h.x + 0.5, y: h.y + 1.2 + k * 0.5, z: h.z + 0.5 });
-      } catch {
-        // spot not loaded for this player
-      }
+    try {
+      for (const p of OUTLINE) player.spawnParticle("minecraft:villager_happy", { x: h.x + p.x, y: h.y + p.y, z: h.z + p.z });
+      for (let k = 0; k < 8; k++) player.spawnParticle("minecraft:endrod", { x: h.x + 0.5, y: h.y + 1.2 + k * 0.5, z: h.z + 0.5 });
+    } catch {
+      // spot not loaded for this player
     }
   }, 10);
   marks.set(id, run);

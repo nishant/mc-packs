@@ -87,7 +87,7 @@ async function allCommands(player, packs) {
   for (const pack of packs) {
     const { commands } = visible(pack, ops);
     if (!commands.length) continue;
-    form.divider().header(pack.name).label(commands.map(commandText).join("\n\n"));
+    form.divider().label(`§l§6${pack.name}`).label(commands.map(commandText).join("\n\n"));
   }
   form.button("Back").button("Close");
   const res = await show(player, form);
@@ -99,9 +99,9 @@ async function packPage(player, pack) {
   const { commands, steps } = visible(pack, seesOps(player));
   const form = new ActionFormData().title(`§l${pack.name}`).body(pack.summary);
   if (steps.length) {
-    form.divider().header("How to use").label(steps.map((s, i) => `${i + 1}. ${s.text}`).join("\n\n"));
+    form.divider().label("§l§6How to use").label(steps.map((s, i) => `${i + 1}. ${s.text}`).join("\n\n"));
   }
-  form.divider().header("Commands");
+  form.divider().label("§l§6Commands");
   if (commands.length) {
     form.label(commands.map(commandText).join("\n\n"));
     if (commands.some((c) => /[<[]/.test(c.usage))) form.label(PARAMS_NOTE);

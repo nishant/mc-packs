@@ -803,7 +803,7 @@ async function showHelp(player) {
     .body("Sort your storage with one tap, and empty your inventory into the chests that already hold each item.");
 
   if (tap !== "off") {
-    form.divider().header("Sneak-tap");
+    form.divider().label("§l§6Sneak-tap");
     form.label(
       tap === "menu"
         ? [
@@ -818,7 +818,7 @@ async function showHelp(player) {
   }
 
   if (locksOn() && tap === "menu") {
-    form.divider().header("Chest locks");
+    form.divider().label("§l§6Chest locks");
     form.label(
       [
         "§e- Lock this chest§r (or barrel, shulker box...) in the sneak-tap menu: only you can open, sort, break or quick stack into it. Both halves of a double chest are locked.",
@@ -829,7 +829,7 @@ async function showHelp(player) {
     );
   }
 
-  form.divider().header("/realm:stash");
+  form.divider().label("§l§6/realm:stash");
   form.label(
     [
       "§7Usage:§r §e/realm:stash",
@@ -849,7 +849,7 @@ async function showHelp(player) {
     ].join("\n")
   );
 
-  form.divider().header("/realm:sort");
+  form.divider().label("§l§6/realm:sort");
   form.label(
     [
       "§7Usage:§r §e/realm:sort",
@@ -859,7 +859,7 @@ async function showHelp(player) {
   );
 
   const pages = get("pages");
-  form.divider().header("Expansive Inventory");
+  form.divider().label("§l§6Expansive Inventory");
   form.label(
     pages > 1
       ? [
@@ -871,10 +871,10 @@ async function showHelp(player) {
       : "§7Extra inventory pages are off: this realm uses the vanilla inventory (operators can raise the page count in /realm:config)."
   );
 
-  form.divider().header("/realm:stash_help");
+  form.divider().label("§l§6/realm:stash_help");
   form.label("§7Usage:§r §e/realm:stash_help\nShows this page.");
 
-  form.divider().header("Good to know");
+  form.divider().label("§l§6Good to know");
   form.label(
     [
       `- One sort or stash per ${seconds} s per player.`,

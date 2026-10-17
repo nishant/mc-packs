@@ -15,7 +15,7 @@ const OPTIONS = [
   { key: "offsetDays", type: "int", scope: "world", label: "Day shift", help: "Moves the visit day: with every 7 days, 0 = Thursday, 2 = Saturday", min: 0, max: 29, step: 1 },
   { key: "hourUtc", type: "int", scope: "world", label: "Arrives at (hour, UTC)", min: 0, max: 23, step: 1 },
   { key: "stayMinutes", type: "int", scope: "world", label: "Stays for (real minutes)", min: 5, max: 240, step: 5 },
-  { key: "stockSize", type: "int", scope: "world", label: "Goods for sale per visit", min: 1, max: 16, step: 1 },
+  { key: "stockSize", type: "int", scope: "world", label: "Goods for sale per trader", help: "Each trader sells different goods", min: 1, max: 8, step: 1 },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----

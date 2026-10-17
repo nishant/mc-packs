@@ -1562,10 +1562,10 @@ async function finishedPage(player) {
     const going = ORDERED.filter((s) => !done.includes(s) && s.chapters.some((c) => saga.s[s.id]?.dn.includes(c.id)));
     const quests = questsDone(saga);
     const form = new ActionFormData().title("Finished").body(`${done.length} ${done.length === 1 ? "story" : "stories"} and ${quests} quest${quests === 1 ? "" : "s"} finished.${saga.wn ? ` Strangers' requests done: ${saga.wn}.` : ""}`);
-    form.header(`Stories (${done.length})`);
+    form.label(`§l§6Stories (${done.length})`);
     if (!done.length) form.label("§7No story finished to the end yet.");
     for (const s of done) form.button(`${s.title}\n§8${choicesMade(s, saga.s[s.id]).length} choices made`);
-    form.header(`Quests (${quests})`);
+    form.label(`§l§6Quests (${quests})`);
     if (!going.length && !done.length) form.label("§7No quest finished yet. Each chapter of a story you finish shows here.");
     else if (!going.length) form.label("§7Every quest you finished is part of a story above.");
     for (const s of going) {
