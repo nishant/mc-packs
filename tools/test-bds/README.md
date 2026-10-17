@@ -52,6 +52,23 @@ Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
 `logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
 
+## Inventory persistence regression
+
+`node tools/test-bds/stash-persistence.mjs` stages a test-only copy of `stash_bp` and runs
+`examples/stash-pages-persistence.js` through an actual BDS stop/start. It checks five full 24-slot
+pages, names, damage, enchantments, shared hotbar contents, native filled-shulker contents (by placing
+the restored box), and a potion's hidden auxiliary data with vanilla `hasitem`. It also checks
+logout/rejoin and death while the shulker is on an inactive page.
+
+The wrapper transfers the exact saved test handle and active inventory image to a fresh simulated
+player, because simulated IDs change on restart; it does not change production identity handling.
+It reserves ports 19362/19363 and keeps its mutable cache inside `tools/test-bds/.cache/`.
+Run it separately from another inventory BDS run using those ports.
+
+`node --test tools/stash-pages.test.mjs` covers injected storage/index/inventory-write failures,
+rollback journals, legacy migration, cursor/button echoes, and overflow without a client.
+These are model tests, not proof of client mouse/touch behavior.
+
 ## Writing a scenario
 
 A scenario is an ES module with a default async function. It runs inside the harness test pack,

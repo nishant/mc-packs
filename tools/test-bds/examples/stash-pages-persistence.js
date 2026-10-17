@@ -96,5 +96,8 @@ export default async function (t) {
   const placed = p.dimension.getBlock(blockAt).getComponent("minecraft:inventory")?.container;
   t.assert(placed?.getItem(0)?.amount === 37 && placed.getItem(0).nameTag === "Inside, not outside", "filled shulker's hidden first stack survived restart");
   t.assert(placed?.getItem(26)?.amount === 11, "filled shulker's hidden last stack survived restart");
+  inv.swapItems(12, 2, inv);
+  const potion = t.cmd(p, "testfor @s[hasitem={item=potion,data=14,location=slot.hotbar,slot=2}]");
+  t.assert(potion.ok && potion.successCount === 1, "restored potion retains hidden auxiliary data 14, not a default water bottle");
   t.log("PASS: 120 slots across five pages, World restart, native hidden shulker contents, damage/enchantments, logout/rejoin, death, shared hotbar");
 }

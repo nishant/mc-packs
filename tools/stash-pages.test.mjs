@@ -179,6 +179,7 @@ function makePlayer() {
   };
   const player = {
     id: `p${nextId++}`,
+    typeId: "minecraft:player",
     isValid: true,
     commandPermissionLevel: 0,
     location: { x: 1, y: 64, z: 1 },
@@ -580,15 +581,83 @@ test("shrinking with no room keeps overflow durable and never drops or duplicate
   box.contents = ["overflow treasure"];
   p.container.setItem(10, box);
   assert.equal(switchPage(p, 1), true);
-  for (const s of [...STORAGE_SLOTS, 0, 1, 2, 3, 4, 5, 6, 7, 8]) p.container.setItem(s, stack("minecraft:stone", 64));
+  for (let s = 0; s < 36; s++) p.container.setItem(s, stack("minecraft:stone", 64));
   const drops = mc.spawned.length;
-  mc.pages = 2;
+  mc.pages = 1;
   try {
-    assert.equal(enforcePageCount(p), true, "page 2 has room for overflow");
-    assert.equal(switchPage(p, 2), true);
+    assert.equal(enforcePageCount(p), false, "full inventory leaves native overflow saved");
+    p.container.setItem(10, undefined);
+    assert.equal(enforcePageCount(p), true, "overflow is returned when a slot becomes free");
     assert.deepEqual(p.container.getItem(10).contents, ["overflow treasure"]);
+    p.container.setItem(11, undefined);
+    assert.equal(enforcePageCount(p), true);
+    assert.equal(p.container.getItem(11), undefined, "overflow must not be delivered twice");
   } finally { mc.pages = 5; }
   assert.equal(mc.spawned.length, drops);
+});
+
+test("native stackable auxiliary data is not mistaken for an identical item on another page", () => {
+  const p = joined();
+  const poison = stack("minecraft:tipped_arrow", 12);
+  poison.contents = ["poison"];
+  p.container.setItem(10, poison);
+  assert.equal(switchPage(p, 2), true);
+  const healing = stack("minecraft:tipped_arrow", 12);
+  healing.contents = ["healing"];
+  p.container.setItem(10, healing);
+  assert.equal(switchPage(p, 1), true);
+  assert.deepEqual(p.container.getItem(10).contents, ["poison"]);
+  assert.equal(switchPage(p, 2), true);
+  assert.deepEqual(p.container.getItem(10).contents, ["healing"]);
+});
+
+test("page index readback failure after writing is rolled back, not treated as success", () => {
+  const p = joined();
+  p.container.setItem(10, stack("minecraft:emerald", 19));
+  const originalGet = p.getDynamicProperty;
+  const originalSet = p.setDynamicProperty.bind(p);
+  let nativeWrites = 0;
+  let unreadable = false;
+  p.setDynamicProperty = (k, v) => {
+    originalSet(k, v);
+    if (k === "stash:native" && ++nativeWrites === 2) unreadable = true;
+  };
+  p.getDynamicProperty = (k) => {
+    if (k === "stash:native" && unreadable) {
+      unreadable = false;
+      throw new Error("injected index readback failure after a successful write");
+    }
+    return originalGet(k);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.getDynamicProperty = originalGet;
+  p.setDynamicProperty = originalSet;
+  assert.equal(curPage(p), 1);
+  assert.equal(p.container.getItem(10).amount, 19);
+  assert.equal(switchPage(p, 2), true);
+  assert.equal(filled(p).length, 0);
+});
+
+test("death quarantines an interrupted rollback instead of resurrecting dropped active items", async () => {
+  const p = joined();
+  for (const s of STORAGE_SLOTS) p.container.setItem(s, stack("minecraft:emerald", 7));
+  const original = p.container.setItem.bind(p.container);
+  let calls = 0;
+  p.container.setItem = (s, item) => {
+    if (++calls >= 5) throw new Error("persistent inventory write failure");
+    original(s, item);
+  };
+  assert.equal(switchPage(p, 2), false);
+  p.container.setItem = original;
+  fire("entityDie", { deadEntity: p });
+  for (const s of STORAGE_SLOTS) p.container.setItem(s, undefined);
+  fire("playerSpawn", { player: p });
+  const storage = await import(storeUrl);
+  assert.equal(storage.recoverInventory(p), false);
+  assert.equal(filled(p).length, 0);
+  const state = JSON.parse(p.getDynamicProperty("stash:native"));
+  assert.equal(state.pending.blocked, true);
+  assert.ok(mc.structures.has(state.pending.before.id), "operator still has the recovery image");
 });
 
 test("repeated write failure retains durable recovery images and safely retries once writes work", async () => {

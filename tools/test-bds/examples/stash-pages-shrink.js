@@ -71,4 +71,15 @@ export default async function (t) {
   await t.waitUntil(() => inv.getItem(17)?.nameTag?.includes("/5"), { timeout: 80, message: "5 pages again" });
   // Out of range is refused
   t.assert(!t.cmd(p, "/realm:inv_pages 99").ok, "99 pages refused");
+  const disabling = t.waitForm(p);
+  t.cmd(p, "/realm:inv");
+  (await disabling).answer("Use normal inventory");
+  await t.waitUntil(() => inv.getItem(13)?.typeId !== "custom:inv_menu", { timeout: 80, message: "normal inventory has no buttons" });
+  let diamonds = 0;
+  for (let s = 0; s < inv.size; s++) if (inv.getItem(s)?.typeId === "minecraft:diamond") diamonds += inv.getItem(s).amount;
+  t.assert(diamonds === 3, "disabling extra pages returns native saved items exactly once");
+  const enabling = t.waitForm(p);
+  t.cmd(p, "/realm:inv");
+  (await enabling).answer("Enable Expansive Inventory");
+  await t.waitUntil(() => inv.getItem(13)?.nameTag?.includes("Page 1/5"), { timeout: 80, message: "extra pages re-enabled" });
 }
