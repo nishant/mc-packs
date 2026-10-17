@@ -351,6 +351,62 @@ glyph("Q_CAVE", 0xaf, "radar terrain: dark underground cavern slate", (img, ox, 
 glyph("Q_PATH", 0xb0, "radar terrain: town road/wood/cobble warm brown", (img, ox, oy) =>
   terrainSquare(img, ox, oy, [136, 102, 68, 185], [162, 124, 86, 200], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
 );
+// Rows 11-12: 3D topographic elevation-shaded terrain variants, extra biomes, and route breadcrumbs.
+glyph("Q_GRASS_LO", 0xb1, "radar terrain: shadowed grass slope", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [42, 98, 36, 190], [52, 114, 44, 205], (x, y) => (x * 5 + y * 9) % 11 === 0),
+);
+glyph("Q_GRASS_HI", 0xb2, "radar terrain: sunlit grass hill", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [76, 158, 62, 190], [94, 178, 76, 205], (x, y) => (x * 5 + y * 9) % 11 === 0),
+);
+glyph("Q_FOREST_LO", 0xb3, "radar terrain: shadowed forest", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [24, 66, 26, 195], [34, 84, 36, 210], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
+);
+glyph("Q_FOREST_HI", 0xb4, "radar terrain: sunlit forest", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [48, 114, 48, 195], [64, 136, 62, 210], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
+);
+glyph("Q_WATER_DEEP", 0xb5, "radar terrain: deep ocean/lake water", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [22, 64, 142, 195], [34, 84, 168, 210], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
+);
+glyph("Q_WATER_SHALLOW", 0xb6, "radar terrain: shallow coastal/river water", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [58, 138, 218, 190], [88, 168, 240, 205], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
+);
+glyph("Q_SAND_LO", 0xb7, "radar terrain: shadowed sand/dune", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [166, 144, 82, 190], [184, 160, 96, 205], (x, y) => (x * 7 + y * 3) % 13 === 0),
+);
+glyph("Q_SAND_HI", 0xb8, "radar terrain: sunlit sand/dune", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [224, 202, 128, 190], [240, 220, 148, 205], (x, y) => (x * 7 + y * 3) % 13 === 0),
+);
+glyph("Q_STONE_LO", 0xb9, "radar terrain: shadowed cliff/rock", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [82, 86, 94, 190], [98, 104, 112, 205], (x, y) => (x * 3 + y * 7) % 9 === 0),
+);
+glyph("Q_STONE_HI", 0xba, "radar terrain: sunlit mountain peak/rock", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [142, 148, 158, 190], [164, 170, 180, 205], (x, y) => (x * 3 + y * 7) % 9 === 0),
+);
+glyph("Q_SNOW_LO", 0xbb, "radar terrain: shadowed snow slope", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [174, 194, 212, 190], [192, 212, 228, 205], (x, y) => (x * 11 + y * 5) % 14 === 0),
+);
+glyph("Q_SNOW_HI", 0xbc, "radar terrain: sunlit snow peak", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [238, 246, 255, 195], [250, 252, 255, 210], (x, y) => (x * 11 + y * 5) % 14 === 0),
+);
+glyph("Q_PATH_LO", 0xbd, "radar terrain: shadowed road/roof", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [108, 78, 50, 190], [126, 94, 62, 205], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+);
+glyph("Q_PATH_HI", 0xbe, "radar terrain: sunlit road/roof", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [168, 128, 88, 190], [190, 148, 104, 205], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+);
+glyph("Q_MESA", 0xbf, "radar terrain: terracotta/badlands/brick", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [178, 92, 58, 190], [202, 112, 74, 205], (x, y) => y % 4 === 1 || (x * 5 + y * 3) % 13 === 0),
+);
+glyph("Q_NETHER", 0xc0, "radar terrain: crimson/netherrack", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [118, 32, 32, 195], [148, 46, 42, 210], (x, y) => (x * 5 + y * 7) % 9 === 0),
+);
+glyph("Q_END", 0xc1, "radar terrain: pale end stone", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [206, 210, 152, 190], [224, 228, 174, 205], (x, y) => (x * 7 + y * 5) % 11 === 0),
+);
+glyph("Q_ROUTE", 0xc2, "radar: gold route breadcrumb dot", (img, ox, oy) => {
+  terrainSquare(img, ox, oy, [56, 128, 48, 185], [72, 150, 60, 200], (x, y) => (x * 5 + y * 9) % 11 === 0);
+  rimmedDisc(img, ox, oy, 8, 8, 2.2, COLOR.star);
+});
 
 // ---------------------------------------------------------------------------
 // The outputs
@@ -379,9 +435,10 @@ function glyphsJs() {
   return lines.join("\n");
 }
 
-/** A render of the HUD (not a screenshot): the strip facing east-northeast with markers, and the radar. @param {Image} sheet */
+/** A render of the HUD (not a screenshot): the strip facing east-northeast with markers, and the 15x15 radar. @param {Image} sheet */
 function render(sheet) {
-  const W = 25 * CELL + 24, H = 7 * CELL + 2 * CELL + 36;
+  const MINI = CELL / 2;
+  const W = 25 * CELL + 24, H = 15 * MINI + 2 * CELL + 36;
   const img = blank(W, H);
   // Sky over grass, roughly what's behind the HUD.
   for (let y = 0; y < H; y++)
@@ -401,6 +458,25 @@ function render(sheet) {
         put(img, x + i, y + j, [sheet.data[k], sheet.data[k + 1], sheet.data[k + 2], sheet.data[k + 3]]);
       }
   };
+  /** @param {string} name @param {number} x @param {number} y */
+  const blitMini = (name, x, y) => {
+    const cell = /** @type {number} */ (byName.get(name));
+    const sx = (cell % 16) * CELL, sy = Math.floor(cell / 16) * CELL;
+    for (let j = 0; j < MINI; j++)
+      for (let i = 0; i < MINI; i++) {
+        let r = 0, g = 0, b = 0, a = 0;
+        for (let dy = 0; dy < 2; dy++)
+          for (let dx = 0; dx < 2; dx++) {
+            const k = ((sy + j * 2 + dy) * sheet.width + sx + i * 2 + dx) * 4;
+            const pa = sheet.data[k + 3];
+            r += sheet.data[k] * pa;
+            g += sheet.data[k + 1] * pa;
+            b += sheet.data[k + 2] * pa;
+            a += pa;
+          }
+        if (a > 0) put(img, x + i, y + j, [Math.round(r / a), Math.round(g / a), Math.round(b / a), Math.round(a / 4)]);
+      }
+  };
   // Facing 70 degrees: 5 degrees a cell, so N sits 14 cells left of the middle (off the strip) and E 4 cells right.
   const strip = Array(25).fill("S_BLANK");
   for (let i = 0; i < 25; i++) if ((70 + (i - 12) * 5) % 15 === 0) strip[i] = "S_TICK";
@@ -411,19 +487,27 @@ function render(sheet) {
   const dim = /** @type {RGBA} */ ([0, 0, 0, 120]);
   rect(img, 9, 3, 9 + 25 * CELL + 5, 3 + CELL + 3, dim);
   strip.forEach((g, i) => blit(g, 12 + i * CELL, 5));
-  // The radar on the upper right below the compass strip, turning with the player: terrain tiles behind the townsfolk, mobs, quest arrow and friend arrow.
+  // The 15x15 radar on the upper right below the compass strip (at half scale 8x8 per cell = 120x120 px).
   const grid = [
-    ["Q_FOREST", "Q_FOREST", "Q_GRASS", "Q_STAR_0", "Q_GRASS", "Q_WATER", "Q_WATER"],
-    ["Q_NORTH", "Q_FOREST", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_WATER"],
-    ["Q_GRASS", "Q_PATH", "Q_PATH", "Q_YOU_0", "Q_PATH", "Q_MOB", "Q_FRIEND_2"],
-    ["Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_MOB"],
-    ["Q_FOREST", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_WANDER", "Q_GRASS", "Q_GRASS"],
-    ["Q_FOREST", "Q_FOREST", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS"],
+    ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_STAR_0", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
+    ["Q_FOREST_HI", "Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP"],
+    ["Q_FOREST", "Q_NORTH", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
+    ["Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
+    ["Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_TOWN", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_YOU_0", "Q_PATH", "Q_PATH", "Q_GRASS", "Q_MOB", "Q_SAND", "Q_WATER_SHALLOW", "Q_FRIEND_2"],
+    ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
+    ["Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_WANDER", "Q_GRASS", "Q_MOB", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW"],
+    ["Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW"],
+    ["Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND"],
+    ["Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS"],
+    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO"],
+    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO"],
   ];
-  const rx0 = W - 12 - 7 * CELL;
-  rect(img, rx0 - 3, CELL + 27, rx0 + 7 * CELL + 2, CELL + 30 + 7 * CELL + 2, dim);
-  grid.forEach((row, r) => row.forEach((g, c) => blit(g, rx0 + c * CELL, CELL + 30 + r * CELL)));
+  const rx0 = W - 12 - 15 * MINI;
+  rect(img, rx0 - 3, CELL + 27, rx0 + 15 * MINI + 2, CELL + 30 + 15 * MINI + 2, dim);
+  grid.forEach((row, r) => row.forEach((g, c) => blitMini(g, rx0 + c * MINI, CELL + 30 + r * MINI)));
   return img;
 }
 

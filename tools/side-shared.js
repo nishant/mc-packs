@@ -8,7 +8,7 @@
 // title and the subtitle, so every slot travels in one subtitle:
 //
 //   title    = MARK                                     ("§s§2§r": color codes only, invisible on its own)
-//   subtitle = MARK + seg(right1) + ... + seg(radar)     (in ALL_SLOTS order: 11 segments, 1769 bytes)
+//   subtitle = MARK + seg(right1) + ... + seg(radar)     (in ALL_SLOTS order: 11 segments, 2313 bytes)
 //   seg      = sep (1 byte: " " or "\n") + text + "~" * (0..2) + "§r" * n    exactly SEG_BYTES UTF-8 bytes
 //   empty    = " " + "§r" * 53
 //
@@ -42,6 +42,8 @@ export const SLOT_NAMES = ["Right 1 (top)", "Right 2", "Right 3", "Right 4 (bott
 const SEG_BYTES = 160;
 /** Bytes of readout text a slot holds (the separator takes one). */
 export const TEXT_BYTES = SEG_BYTES - 1;
+const RADAR_SEG_BYTES = 704;
+export const RADAR_TEXT_BYTES = RADAR_SEG_BYTES - 1;
 const MAX_TICKS = 1200;
 /** Longest real title a hold covers (a story scene line can stay 20 seconds). */
 const MAX_HOLD = 600;
@@ -68,17 +70,20 @@ export function byteLength(s) {
 }
 
 /**
- * Readout text as it can travel: no "~" (the filler), no MARK, no carriage returns, at most TEXT_BYTES bytes
+ * Readout text as it can travel: no "~" (the filler), no MARK, no carriage returns, at most maxBytes bytes
  * cut on a whole character, and no "§" left dangling at the end.
- * @param {string} text
+ * @param {string} text @param {number} [maxBytes]
  */
-export function clean(text) {
-  let s = String(text).split(MARK).join("").replace(/[~\r]/g, "");
+export function clean(text, maxBytes = TEXT_BYTES) {
+  const raw = String(text);
+  if (raw.length * 3 <= maxBytes && !raw.includes("~") && !raw.includes("\r") && !raw.includes("§")) return raw;
+  let s = raw.split(MARK).join("").replace(/[~\r]/g, "");
+  if (s.length * 3 <= maxBytes && !s.endsWith("§")) return s;
   let out = "";
   let n = 0;
   for (const ch of s) {
     const b = bytesOf(ch);
-    if (n + b > TEXT_BYTES) break;
+    if (n + b > maxBytes) break;
     out += ch;
     n += b;
   }
@@ -86,11 +91,18 @@ export function clean(text) {
   return out;
 }
 
-/** One slot's segment, exactly SEG_BYTES bytes. @param {string} text cleaned @param {string} sep " " or "\n" */
-export function segment(text, sep) {
-  const free = TEXT_BYTES - byteLength(text);
-  return sep + text + "~".repeat(free % 3) + "§r".repeat(Math.floor(free / 3));
+const PAD_R = "§r".repeat(235);
+
+/** One slot's segment, exactly segBytes bytes. @param {string} text cleaned @param {string} sep " " or "\n" @param {number} [segBytes] */
+export function segment(text, sep, segBytes = SEG_BYTES) {
+  const maxText = segBytes - 1;
+  const free = maxText - byteLength(text);
+  const tilde = free % 3 === 0 ? "" : free % 3 === 1 ? "~" : "~~";
+  return sep + text + tilde + PAD_R.slice(0, Math.floor(free / 3) * 2);
 }
+
+const EMPTY_SEG = segment("", " ", SEG_BYTES);
+const EMPTY_RADAR_SEG = segment("", " ", RADAR_SEG_BYTES);
 
 /** The subtitle for a set of slot texts. @param {Record<string, string>} texts slot -> cleaned text */
 export function compose(texts) {
@@ -98,9 +110,10 @@ export function compose(texts) {
   let first = true;
   for (const slot of ALL_SLOTS) {
     const text = texts[slot] ?? "";
-    if (!text) out += segment("", " ");
+    const segBytes = slot === "radar" ? RADAR_SEG_BYTES : SEG_BYTES;
+    if (!text) out += slot === "radar" ? EMPTY_RADAR_SEG : EMPTY_SEG;
     else {
-      out += segment(text, first ? " " : "\n");
+      out += segment(text, first ? " " : "\n", segBytes);
       first = false;
     }
   }
@@ -220,7 +233,7 @@ export function sideBoxes(from) {
     show(player, slot, text, ticks, part = "", now = true) {
       if (!isAnySlot(slot)) return;
       const from = part ? `${me}/${part}` : me;
-      const t = clean(text);
+      const t = clean(text, slot === "radar" ? RADAR_TEXT_BYTES : TEXT_BYTES);
       const span = Math.min(Math.max(Math.round(ticks), 1), MAX_TICKS);
       const tick = system.currentTick;
       apply(player.id, from, slot, t, tick + span);
@@ -278,7 +291,7 @@ system.afterEvents.scriptEventReceive.subscribe(
       if (!m || typeof m.player !== "string" || typeof m.from !== "string" || mine(m.from) || typeof m.slot !== "string") return;
       const ticks = Math.min(Math.max(Number(m.ticks) || 0, 0), MAX_TICKS);
       const sent = typeof m.tick === "number" ? m.tick : system.currentTick;
-      apply(m.player, m.from, m.slot, typeof m.text === "string" ? clean(m.text) : "", system.currentTick + ticks);
+      apply(m.player, m.from, m.slot, typeof m.text === "string" ? clean(m.text, m.slot === "radar" ? RADAR_TEXT_BYTES : TEXT_BYTES) : "", system.currentTick + ticks);
       // Our last title may have crossed theirs (events arrive a little later): draw again with both.
       if ((drewAt.get(m.player) ?? -Infinity) >= sent - CROSS_TICKS) {
         const p = playerById(m.player);

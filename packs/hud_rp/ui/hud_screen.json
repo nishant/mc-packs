@@ -192,6 +192,9 @@
   "realm_slot_text": {
     "type": "label",
     "text": "#text",
+    "$slot_slice|default": "%.159s",
+    "$slot_scale|default": 1.0,
+    "font_scale_factor": "$slot_scale",
     "size": [
       "default",
       "default"
@@ -216,7 +219,7 @@
       },
       {
         "binding_type": "view",
-        "source_property_name": "((('%.159s' * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) - '~~') - '~')",
+        "source_property_name": "((($slot_slice * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) - '~~') - '~')",
         "target_property_name": "#text"
       }
     ]
@@ -251,6 +254,7 @@
     ],
     "$slot_alpha|default": 0.55,
     "$skip|default": "%.10s",
+    "$slot_slice|default": "%.159s",
     "$slot_empty|default": "§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
     "controls": [
       {
@@ -268,7 +272,7 @@
       },
       {
         "binding_type": "view",
-        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (('%.159s' * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $slot_empty)))",
+        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (($slot_slice * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $slot_empty)))",
         "target_property_name": "#visible"
       }
     ]
@@ -435,13 +439,16 @@
             {
               "realm_radar@hud.realm_slot": {
                 "$skip": "%.1610s",
+                "$slot_slice": "%.703s",
+                "$slot_scale": 0.52,
+                "$slot_empty": "~§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
                 "$slot_anchor": "top_right",
                 "$slot_align": "right",
                 "$slot_max": [
-                  132,
-                  132
+                  140,
+                  140
                 ],
-                "$slot_alpha": 0.35
+                "$slot_alpha": 0.45
               }
             }
           ]

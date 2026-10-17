@@ -197,4 +197,40 @@ export const G = {
   Q_CAVE: "",
   /** U+F3B0 radar terrain: town road/wood/cobble warm brown */
   Q_PATH: "",
+  /** U+F3B1 radar terrain: shadowed grass slope */
+  Q_GRASS_LO: "",
+  /** U+F3B2 radar terrain: sunlit grass hill */
+  Q_GRASS_HI: "",
+  /** U+F3B3 radar terrain: shadowed forest */
+  Q_FOREST_LO: "",
+  /** U+F3B4 radar terrain: sunlit forest */
+  Q_FOREST_HI: "",
+  /** U+F3B5 radar terrain: deep ocean/lake water */
+  Q_WATER_DEEP: "",
+  /** U+F3B6 radar terrain: shallow coastal/river water */
+  Q_WATER_SHALLOW: "",
+  /** U+F3B7 radar terrain: shadowed sand/dune */
+  Q_SAND_LO: "",
+  /** U+F3B8 radar terrain: sunlit sand/dune */
+  Q_SAND_HI: "",
+  /** U+F3B9 radar terrain: shadowed cliff/rock */
+  Q_STONE_LO: "",
+  /** U+F3BA radar terrain: sunlit mountain peak/rock */
+  Q_STONE_HI: "",
+  /** U+F3BB radar terrain: shadowed snow slope */
+  Q_SNOW_LO: "",
+  /** U+F3BC radar terrain: sunlit snow peak */
+  Q_SNOW_HI: "",
+  /** U+F3BD radar terrain: shadowed road/roof */
+  Q_PATH_LO: "",
+  /** U+F3BE radar terrain: sunlit road/roof */
+  Q_PATH_HI: "",
+  /** U+F3BF radar terrain: terracotta/badlands/brick */
+  Q_MESA: "",
+  /** U+F3C0 radar terrain: crimson/netherrack */
+  Q_NETHER: "",
+  /** U+F3C1 radar terrain: pale end stone */
+  Q_END: "",
+  /** U+F3C2 radar: gold route breadcrumb dot */
+  Q_ROUTE: "",
 };
