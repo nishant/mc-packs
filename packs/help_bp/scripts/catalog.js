@@ -580,7 +580,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Tap a result: a column of particles marks that container for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark. A container in another dimension only gets its coordinates in chat.",
+        "text": "Tap a result: an outline of green sparkles around the container, and a column of particles over it, mark it for 10 seconds. Only you see it, and chat gives its coordinates. Marking another container replaces the first mark. A container in another dimension only gets its coordinates in chat.",
         "ops": false
       }
     ],
@@ -1324,7 +1324,7 @@ export const PACKS = [
     "folder": "caravan_bp",
     "topic": "caravan",
     "name": "Merchant Caravan",
-    "summary": "Once a week a merchant caravan comes to town: three traders and their pack llamas set up at one of the arrival spots operators picked, stay for 40 real minutes (about two in-game days) and sell rare goods for Crowns: a Mending book, a totem, music discs, armor trims, pottery sherds, golden apples, Storm Glass and more, a different selection each visit and only a few of each. They also buy Storm Glass and Relic Shards. Chat announces when the caravan arrives and when it leaves, and §e/realm:caravan§r tells you when the next one comes.",
+    "summary": "Once a week a merchant caravan comes to town: three traders and their pack llamas set up at one of the arrival spots operators picked, stay for 40 real minutes (about two in-game days) and sell rare goods for Crowns: a Mending book, a totem, music discs, armor trims, pottery sherds, golden apples, Storm Glass and more, a different selection each visit, each trader with goods of their own, and only a few of each. They also buy Storm Glass and Relic Shards. Chat announces when the caravan arrives and when it leaves, and §e/realm:caravan§r tells you when the next one comes.",
     "steps": [
       {
         "text": "Run §e/realm:caravan§r for the caravan menu; it and its §lCaravan info§r button (also §e/realm:caravan_info§r, in chat) say when the next caravan comes (§eThe next merchant caravan comes in 3d 5h (Saturday 18:00 UTC), and stays 40m.§r) or, while it's here, where it is (§eat Market Square (120, -45), 240m NE of you. It leaves in 23m.§r).",
@@ -1335,7 +1335,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Tap any trader. The shop lists this visit's goods with their price and how many are left; pick one and choose how many. Chat confirms: §e-60 Crowns (Caravan: bought 1 Enchanted Book (Mending))§r.",
+        "text": "Tap a trader. Each one sells different goods, so visit all three. The shop lists that trader's goods for this visit with their price and how many are left; pick one and choose how many. Chat confirms: §e-60 Crowns (Caravan: bought 1 Enchanted Book (Mending))§r.",
         "ops": false
       },
       {
@@ -1347,7 +1347,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r stand where the caravan should set up and pick §lAdd an arrival spot here§r in §e/realm:caravan§r (or run §e/realm:caravan_spot [name]§r, for example §e/realm:caravan_spot \"Market Square\"§r); add a few and each visit picks one at random. §lRemove an arrival spot§r lists them to pick from (§e/realm:caravan_spot_remove§r removes the nearest one). §lBring the caravan now§r (or §e/realm:caravan_call§r) brings it now. §e/realm:config§r -> §lMerchant Caravan§r sets how often it comes, which day, the hour, how long it stays and how many goods it brings. The goods are §egoods§r in §econfig.js§r.",
+        "text": "§lOperators:§r stand where the caravan should set up and pick §lAdd an arrival spot here§r in §e/realm:caravan§r (or run §e/realm:caravan_spot [name]§r, for example §e/realm:caravan_spot \"Market Square\"§r); add a few and each visit picks one at random. §lRemove an arrival spot§r lists them to pick from (§e/realm:caravan_spot_remove§r removes the nearest one). §lBring the caravan now§r (or §e/realm:caravan_call§r) brings it now. §e/realm:config§r -> §lMerchant Caravan§r sets how often it comes, which day, the hour, how long it stays and how many goods each trader brings. The goods are §egoods§r in §econfig.js§r. To give a trader a skin, sneak and tap it in creative mode: that opens the game's NPC editor (only the skin matters; the name comes from §econfig.js§r). The skin is kept for that trader on every later visit.",
         "ops": true
       }
     ],

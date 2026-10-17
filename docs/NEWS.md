@@ -7,6 +7,15 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Caravan traders, chest marks and menu titles
+
+- Each caravan trader now sells goods of their own: 5 each, and no two traders sell the same thing, so visit all three.
+- Caravan traders show their real names (Zahir, Old Marisol, Fennick) instead of NPC when you walk up to them.
+- Operators can give a caravan trader a skin: sneak and tap it in creative mode. The skin comes back on every later visit.
+- /realm:find now outlines the chest it found with green sparkles for 10 seconds, so you can spot it in a wall of chests.
+- Section titles in menus (My preferences, Realm Help, Quick Stack help, finished stories) are normal size now instead of huge.
+
+
 ## Inventory controls and clearer terrain
 
 - Inventory page controls sit together in the last three slots of the top row: previous, current page/menu, next. Old pages migrate without rebuilding native item data.
