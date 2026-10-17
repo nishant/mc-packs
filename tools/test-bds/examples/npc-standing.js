@@ -9,6 +9,7 @@
 export default async function (t) {
   const dim = t.dimension;
   const npc = (id) => dim.getEntities({ type: "minecraft:npc", tags: [`realm:npc_id:${id}`] })[0];
+  const label = (id) => dim.getEntities({ type: "realm:npc_label", tags: [`realm:npc_label_id:${id}`] })[0];
   const yOf = (id) => {
     const e = npc(id);
     return e ? Math.round(e.location.y * 1000) / 1000 : NaN;
@@ -16,8 +17,9 @@ export default async function (t) {
   const NAMES = { bea: "§eBea §7the Cook", mara: "§eMara §7the Cartographer", tobin: "§eOld Tobin §7the Fisherman", quill: "§eQuill §7the Trader" };
   const named = (id) => {
     const e = npc(id);
+    const h = label(id);
     const want = NAMES[id];
-    return !!e && (want ? e.nameTag === want || e.nameTag === `${want}§r` : !!e.nameTag && e.nameTag !== "NPC");
+    return !!e && e.nameTag === "§r" && !!h && (want ? h.nameTag === want || h.nameTag === `${want}§r` : !!h.nameTag && h.nameTag !== "NPC");
   };
 
   if (t.phase === 1) {
@@ -70,7 +72,7 @@ export default async function (t) {
     p.stopFlying();
     p.teleport({ x: sx + 6, y: c.y + 4, z: sz - 4 });
 
-    for (const id of ["bea", "mara", "tobin", "quill"]) t.check(named(id), `${id} has its name right after spawning (${JSON.stringify(npc(id)?.nameTag)})`);
+    for (const id of ["bea", "mara", "tobin", "quill"]) t.check(named(id), `${id} has its helper name right after spawning (${JSON.stringify(label(id)?.nameTag)})`);
 
     const ys = { bea: [], mara: [] };
     for (let i = 0; i < 12; i++) {
@@ -111,18 +113,19 @@ export default async function (t) {
   await t.wait(60);
   t.log(`after restart: tobin y ${tobinY} -> ${yOf("tobin")}, quill y ${yOf("quill")}`);
   t.check(yOf("tobin") === tobinY, "tobin's lifted spot was saved: not moved back down after the restart");
-  for (const id of ["bea", "mara", "tobin", "quill"]) t.check(named(id), `${id} has its name after the restart (${JSON.stringify(npc(id)?.nameTag)})`);
+  for (const id of ["bea", "mara", "tobin", "quill"]) t.check(named(id), `${id} has its helper name after the restart (${JSON.stringify(label(id)?.nameTag)})`);
 
-  // A player who comes near gets the name sent again (the tag switches between its two look-alike forms).
+  // A player who comes near gets the helper name sent again (the tag switches between its two look-alike forms).
   const far = { x: e.location.x + 200, y: 120, z: e.location.z };
   p2.teleport(far);
   await t.wait(40);
-  const before = npc("tobin")?.nameTag;
   p2.teleport({ x: e.location.x + 3, y: e.location.y + 1, z: e.location.z });
-  const flipped = await t.waitUntil(() => npc("tobin")?.nameTag !== before && named("tobin") && npc("tobin").nameTag, {
+  await t.waitUntil(() => !!label("tobin"), { timeout: 40, interval: 2, message: "tobin helper spawned when player came near" });
+  const before = label("tobin")?.nameTag;
+  const flipped = await t.waitUntil(() => label("tobin")?.nameTag !== before && named("tobin") && label("tobin")?.nameTag, {
     timeout: 120,
     interval: 2,
-    message: `tobin's name sent again when a player came near (still ${JSON.stringify(npc("tobin")?.nameTag)})`,
+    message: `tobin's helper name sent again when a player came near (still ${JSON.stringify(label("tobin")?.nameTag)})`,
   });
   t.log(`name resent: ${JSON.stringify(before)} -> ${JSON.stringify(flipped)}`);
 }

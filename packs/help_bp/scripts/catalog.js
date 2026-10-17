@@ -1187,7 +1187,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Their own NPC names appear once you are close enough for Minecraft to draw native NPC name tags. Walk up to one: they turn to face you, and now and then say something above their head (§eWhere did I leave my compass?§r).",
+        "text": "Their names stay pinned above their heads from across the street (about 20 blocks out), shrinking naturally with distance. Walk up to one: they turn to face you, and now and then say something above their head (§eWhere did I leave my compass?§r).",
         "ops": false
       },
       {

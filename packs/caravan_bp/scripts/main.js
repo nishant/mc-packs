@@ -13,6 +13,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { createNameLabels, isSuppressedName, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
 
 // A visit is one saved object: where the caravan is, until when, its traders' entity ids and what's left
@@ -34,9 +35,19 @@ const TRADER_TAG = "realm:caravan_trader:";
 const LLAMA_TAG = "realm:caravan_llama";
 const OWNER_TAG = "realm:npc_owner:caravan_bp";
 const NPC_TAG = "realm:npc";
-const LEGACY_LABEL_TYPES = new Set(["realm:caravan_label"]);
+const LABEL_TYPE = "realm:caravan_label";
+const LABEL_TAG = "realm:caravan_label";
+const LABEL_ID_TAG = "realm:caravan_label_id:";
+const LEGACY_LABEL_TYPES = new Set([LABEL_TYPE]);
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
+
+const nameLabels = createNameLabels({
+  labelType: LABEL_TYPE,
+  ownerTag: OWNER_TAG,
+  labelTag: LABEL_TAG,
+  labelIdTag: LABEL_ID_TAG,
+});
 
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
@@ -85,7 +96,7 @@ let ready = false;
 let spots = [];
 /** @type {Visit | undefined} */
 let visit;
-/** @type {Map<number, { missing: number, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }>} trader index -> runtime state */
+/** @type {Map<number, { missing: number, labelForm?: string, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }>} trader index -> runtime state */
 const traderState = new Map();
 
 /** @param {unknown} v */
@@ -415,6 +426,15 @@ function depart(quiet) {
   traderState.clear();
   saveVisit();
   clearEntities();
+  nameLabels.clear(
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    }),
+  );
   if (quiet) return;
   const next = get("enabled") === true ? ` §8Next visit in ${duration(nextSlot(Date.now()) - Date.now())}.` : "";
   broadcast(`§7The merchant caravan has packed up and left.${next}`);
@@ -445,7 +465,35 @@ function dressTrader(entity, i, vis) {
   for (const tag of entity.getTags()) if ((tag.startsWith(VISIT_TAG) && tag !== VISIT_TAG + vis.v) || (tag.startsWith(TRADER_TAG) && tag !== TRADER_TAG + i)) entity.removeTag(tag);
   for (const tag of [TAG, VISIT_TAG + vis.v, TRADER_TAG + i, NPC_TAG, OWNER_TAG]) if (!entity.hasTag(tag)) entity.addTag(tag);
   const name = traderTag(vis, i);
-  if (entity.nameTag !== name && entity.nameTag !== `${name}§r`) entity.nameTag = name;
+  let st = traderState.get(i);
+  if (!st) traderState.set(i, (st = { missing: 0 }));
+  if (!st.labelForm || (st.labelForm !== name && st.labelForm !== `${name}§r`)) st.labelForm = name;
+  if (!isSuppressedName(entity.nameTag) && entity.nameTag !== st.labelForm) entity.nameTag = st.labelForm;
+}
+
+/** Syncs all active caravan trader nameplate helpers with active observers. */
+function updateLabels() {
+  if (!ready) return;
+  const dims = DIMENSIONS.flatMap((id) => {
+    try {
+      return [world.getDimension(id)];
+    } catch {
+      return [];
+    }
+  });
+  /** @type {import("./name-labels.js").LabelTarget[]} */
+  const targets = [];
+  if (visit) {
+    visit.traders.forEach((tr, i) => {
+      const entity = entityById(tr.eid);
+      if (!entity) return;
+      const base = traderTag(/** @type {Visit} */ (visit), i);
+      const st = traderState.get(i);
+      const name = st?.labelForm && (st.labelForm === base || st.labelForm === `${base}§r`) ? st.labelForm : base;
+      targets.push({ id: String(i), entity, name });
+    });
+  }
+  nameLabels.sync(targets, world.getAllPlayers(), dims);
 }
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */
@@ -501,6 +549,7 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (nameLabels.loaded(entity)) return;
     if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
       if (entity.isValid) entity.remove();
       return;
@@ -515,12 +564,12 @@ function auditAll() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
-      for (const type of LEGACY_LABEL_TYPES) for (const e of dim.getEntities({ type })) if (e.isValid) e.remove();
       for (const e of dim.getEntities({ tags: [TAG] })) audit(e);
     } catch (e) {
       console.warn(`[caravan] audit: ${e}`);
     }
   }
+  updateLabels();
 }
 
 // ---------------------------------------------------------------------------
@@ -539,9 +588,13 @@ const SKIN_SAVE_AFTER = [100, 600, 2400]; // ticks after an operator opens the N
 function saveSkin(entity, i) {
   try {
     if (!entity.isValid) return false;
+    nameLabels.removeFor(String(i));
     const dim = entity.dimension;
     const loc = entity.location;
-    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player")) return false;
+    for (const e of dim.getEntities({ type: LABEL_TYPE, location: loc, maxDistance: 3 })) {
+      if (e.isValid) e.remove();
+    }
+    if (dim.getEntities({ location: loc, maxDistance: 2 }).some((e) => e.id !== entity.id && e.typeId !== "minecraft:player" && e.typeId !== LABEL_TYPE)) return false;
     const from = { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) };
     const sm = world.structureManager;
     if (sm.get(SKIN_PREFIX + i)) sm.delete(SKIN_PREFIX + i);
@@ -603,7 +656,8 @@ function watchNames(vis) {
     st.viewers = ids;
     if (st.renameAt !== undefined && system.currentTick >= st.renameAt) {
       const name = traderTag(vis, i);
-      entity.nameTag = entity.nameTag === name ? `${name}§r` : name;
+      st.labelForm = st.labelForm === name ? `${name}§r` : name;
+      updateLabels();
       const n = (st.renames ?? 0) + 1;
       st.renames = n;
       st.renameAt = n < RENAME_TICKS.length ? system.currentTick + RENAME_TICKS[n] : undefined;
@@ -728,6 +782,7 @@ function upkeep() {
       broadcast(`§6The merchant caravan leaves in ${duration(visit.until - now)}. §7Last chance to trade at ${visit.spot.name}.`);
     }
     keepCaravan(visit);
+    updateLabels();
     return;
   }
   if (get("enabled") !== true || !world.getAllPlayers().length) return;
@@ -761,6 +816,7 @@ world.afterEvents.worldLoad.subscribe(() => {
       console.warn(`[caravan] ${e}`);
     }
   }, LOOP_TICKS);
+  system.runInterval(updateLabels, 2);
   system.runInterval(auditAll, AUDIT_TICKS);
 });
 

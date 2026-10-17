@@ -2,7 +2,7 @@
 // (story characters, guards, escorts, wisps, defenses, visions, riddles).
 import { EquipmentSlot, GameMode, ItemStack, MolangVariableMap, Player, system, world } from "@minecraft/server";
 import { ActionFormData, ModalFormData } from "@minecraft/server-ui";
-import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, spawnFresh } from "./actors.js";
+import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, spawnFresh, updateActorLabels } from "./actors.js";
 import {
   active,
   applyChoice,
@@ -1950,6 +1950,7 @@ function escortFast(s, player) {
   const yaw = Math.abs(dx) + Math.abs(dz) > 0.01 ? (Math.atan2(-dx, dz) * 180) / Math.PI : a.ent.getRotation().y;
   try {
     a.ent.teleport(pos, { rotation: { x: 0, y: yaw } });
+    updateActorLabels();
   } catch {
     // unloaded
   }
