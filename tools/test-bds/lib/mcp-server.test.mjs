@@ -109,7 +109,12 @@ test("MCP initialize, listTools, schema validation, correlated ACKs, deadlines, 
                 fileCount: 3,
                 sourceSha256: "aaa111",
                 stagedSha256: "bbb222",
+                verified: true,
               },
+              { folder: "map_bp", kind: "bp", uuid: "22222222-2222-3333-4444-555555555555", version: [1, 0, 0], shimmed: true, fileCount: 3, sourceSha256: "a2", stagedSha256: "b2", verified: true },
+              { folder: "stash_bp", kind: "bp", uuid: "33333333-2222-3333-4444-555555555555", version: [1, 0, 0], shimmed: true, fileCount: 3, sourceSha256: "a3", stagedSha256: "b3", verified: true },
+              { folder: "hud_rp", kind: "rp", uuid: "44444444-2222-3333-4444-555555555555", version: [1, 0, 0], shimmed: false, fileCount: 3, sourceSha256: "a4", stagedSha256: "a4", verified: true },
+              { folder: "build_rp", kind: "rp", uuid: "55555555-2222-3333-4444-555555555555", version: [1, 0, 0], shimmed: false, fileCount: 3, sourceSha256: "a5", stagedSha256: "a5", verified: true },
             ],
             gates: {
               server: "verified",
@@ -198,13 +203,20 @@ test("MCP initialize, listTools, schema validation, correlated ACKs, deadlines, 
     arguments: { only: ["nonexistent_pack_bp"] },
   });
   assert.equal(badFolderRes.isError, true);
-  assert.match(badFolderRes.content[0].text, /does not exist/);
+  assert.match(badFolderRes.content[0].text, /does not exist|Missing required client-QA fixture packs/);
+
+  const missingRequiredPacksRes = await client.callTool({
+    name: "bds_qa_start",
+    arguments: { only: ["npc_bp"] },
+  });
+  assert.equal(missingRequiredPacksRes.isError, true);
+  assert.match(missingRequiredPacksRes.content[0].text, /Missing required client-QA fixture packs/);
 
   // 3. Startup deadline timeout
   mockBehaviour = "hang_start";
   const timeoutStartRes = await client.callTool({
     name: "bds_qa_start",
-    arguments: { only: ["npc_bp"], readyDeadlineMs: 500 },
+    arguments: { readyDeadlineMs: 500 },
   });
   assert.equal(timeoutStartRes.isError, true);
   assert.match(timeoutStartRes.content[0].text, /Timed out after 500ms/);
@@ -213,7 +225,7 @@ test("MCP initialize, listTools, schema validation, correlated ACKs, deadlines, 
   mockBehaviour = "normal";
   const startRes = await client.callTool({
     name: "bds_qa_start",
-    arguments: { only: ["npc_bp"], readyDeadlineMs: 5000 },
+    arguments: { readyDeadlineMs: 5000 },
   });
   assert.ok(!startRes.isError, startRes.content[0].text);
   const startData = JSON.parse(startRes.content[0].text);
@@ -225,7 +237,7 @@ test("MCP initialize, listTools, schema validation, correlated ACKs, deadlines, 
 
   const dupStartRes = await client.callTool({
     name: "bds_qa_start",
-    arguments: { only: ["npc_bp"] },
+    arguments: {},
   });
   assert.equal(dupStartRes.isError, true);
   assert.match(dupStartRes.content[0].text, /already active/);
@@ -285,11 +297,135 @@ test("MCP initialize, listTools, schema validation, correlated ACKs, deadlines, 
   assert.equal(stopData.wasActive, true);
 });
 
+test("review regressions: PID ownership/graceful stop, retainOnFailure + serverDir containment, unverified gate fallback, and disconnect tracking", async (t) => {
+  const tmpLogs = fs.mkdtempSync(path.join(os.tmpdir(), "bds-mcp-reg-"));
+  const ownedServerDir = fs.mkdtempSync(path.join(os.tmpdir(), "bds-run-regtest-"));
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "not-a-bds-dir-"));
+  const outsideSentinel = path.join(outsideDir, "keep.txt");
+  fs.writeFileSync(outsideSentinel, "do-not-delete", "utf8");
+
+  t.after(() => {
+    fs.rmSync(tmpLogs, { recursive: true, force: true });
+    fs.rmSync(ownedServerDir, { recursive: true, force: true });
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  // 1. Setup failure with retainOnFailure: true must retain owned bds-run-* serverDir
+  let killSignals = 0;
+  const { client: failClient } = await connectInMemoryMcp({
+    logsDir: tmpLogs,
+    spawnRunner(_cliArgs, { evidenceFile }) {
+      const proc = new EventEmitter();
+      proc.pid = 888881;
+      proc.exitCode = 4;
+      proc.stderr = new EventEmitter();
+      proc.kill = () => {
+        killSignals += 1;
+      };
+      fs.writeFileSync(
+        evidenceFile,
+        JSON.stringify({
+          schemaVersion: 1,
+          status: "setup_failed",
+          verdict: "SETUP FAILED: synthetic failure",
+          exitCode: 4,
+          bds: { serverDir: ownedServerDir, runnerPid: 888881, bdsPid: null, port: 29990, portV6: 29991 },
+          errors: { setupError: "synthetic failure" },
+        }),
+        "utf8"
+      );
+      return proc;
+    },
+  });
+
+  const failStart = await failClient.callTool({
+    name: "bds_qa_start",
+    arguments: { retainOnFailure: true, readyDeadlineMs: 1000 },
+  });
+  assert.equal(failStart.isError, true);
+  assert.equal(fs.existsSync(ownedServerDir), true, "retainOnFailure: true must preserve owned bds-run-* serverDir on setup failure");
+  assert.equal(killSignals, 0, "stop() must not signal a runner process whose exitCode is already non-null");
+
+  // 2. Containment guard: tampered evidence.json pointing outside bds-run-* must never be deleted by stop()
+  let activeKillCount = 0;
+  const { client: guardClient, controller: guardCtrl } = await connectInMemoryMcp({
+    logsDir: tmpLogs,
+    spawnRunner(_cliArgs, { logFile, evidenceFile, commandInboxFile }) {
+      const proc = new EventEmitter();
+      proc.pid = 888882;
+      proc.exitCode = null;
+      proc.stderr = new EventEmitter();
+      proc.kill = () => {
+        activeKillCount += 1;
+        setTimeout(() => {
+          proc.exitCode = 0;
+          proc.emit("exit", 0);
+        }, 30);
+      };
+      fs.writeFileSync(commandInboxFile, "", "utf8");
+      fs.writeFileSync(
+        logFile,
+        `[scenario] log: QA_FIXTURE_READY {"fixtureReady":true}\n` +
+          `[scenario] log: QA_CLIENT_JOINED {"player":"MytGFX","location":{"x":200,"y":69,"z":200}}\n` +
+          `[2026-10-17 INFO] Player disconnected: MytGFX, xuid: 2535411111111111\n`,
+        "utf8"
+      );
+      fs.writeFileSync(
+        evidenceFile,
+        JSON.stringify({
+          schemaVersion: 1,
+          status: "ready_waiting_for_client",
+          bds: { serverDir: outsideDir, runnerPid: 888882, bdsPid: process.pid, port: 29992, portV6: 29993 },
+          stagedPacks: [
+            { folder: "map_bp", verified: true },
+            { folder: "stash_bp", verified: true },
+            { folder: "npc_bp", verified: true },
+            { folder: "hud_rp", verified: true },
+            { folder: "build_rp", verified: true },
+          ],
+          gates: { server: "verified", network: "nethernet_listening", visual: "unverified" },
+        }),
+        "utf8"
+      );
+      return proc;
+    },
+  });
+
+  const guardStart = await guardClient.callTool({ name: "bds_qa_start", arguments: { readyDeadlineMs: 2000 } });
+  assert.ok(!guardStart.isError, guardStart.content[0].text);
+
+  // Verify disconnected player was removed from joinedPlayers
+  const statusAfterLeave = await guardClient.callTool({ name: "bds_qa_status", arguments: {} });
+  const statusData = JSON.parse(statusAfterLeave.content[0].text);
+  assert.equal(statusData.joinedPlayers.length, 0, "disconnected player must be removed from joinedPlayers");
+
+  // Delete evidence file and trigger step timeout: gates must fall back to "unverified", never fabricated "verified"
+  fs.rmSync(guardCtrl.currentRun.evidenceFile, { force: true });
+  const noEvTimeout = await guardClient.callTool({
+    name: "bds_qa_step",
+    arguments: { step: "npc_5m", deadlineMs: 150 },
+  });
+  assert.equal(noEvTimeout.isError, true);
+  const noEvData = JSON.parse(noEvTimeout.content[0].text);
+  assert.equal(noEvData.gates.server, "unverified", "missing evidence must not fabricate gates.server=verified");
+  assert.equal(noEvData.gates.network, "unverified", "missing evidence must not fabricate gates.network=nethernet_listening");
+  assert.equal(noEvData.stepGate, "failed");
+
+  // Stop: must NOT delete outsideDir (not matching bds-run-*), must NOT kill bdsPid=process.pid (no matching harness-process.json), and repeated stop() must not re-signal
+  const firstStop = await guardClient.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: false, retainServerDir: false } });
+  assert.ok(!firstStop.isError);
+  assert.equal(fs.existsSync(outsideSentinel), true, "containment guard must refuse to delete directory not matching <tmpRoot>/bds-run-*");
+  assert.equal(activeKillCount, 1);
+
+  const secondStop = await guardClient.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: false } });
+  assert.ok(!secondStop.isError);
+  assert.equal(activeKillCount, 1, "repeated bds_qa_stop must not re-signal already terminated process");
+});
+
 test("live stdio MCP server starts private BDS fixture, executes correlated steps, reads live state, and stops cleanly", async (t) => {
-  const tmpLogs = fs.mkdtempSync(path.join(os.tmpdir(), "bds-mcp-live-"));
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [path.join(HERE, "mcp-server.mjs"), "--logs", tmpLogs],
+    args: [path.join(HERE, "mcp-server.mjs")],
     cwd: path.resolve(HERE, "..", ".."),
     stderr: "pipe",
   });
@@ -298,12 +434,11 @@ test("live stdio MCP server starts private BDS fixture, executes correlated step
 
   t.after(async () => {
     try {
-      await client.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: false } });
+      await client.callTool({ name: "bds_qa_stop", arguments: { retainArtifacts: true, retainServerDir: false } });
     } catch {}
     try {
       await client.close();
     } catch {}
-    fs.rmSync(tmpLogs, { recursive: true, force: true });
   });
 
   // 1. Start live private BDS fixture (random free port pair)
@@ -332,6 +467,7 @@ test("live stdio MCP server starts private BDS fixture, executes correlated step
   assert.ok(!stepProbeOn.isError, stepProbeOn.content[0]?.text);
   const probeOnAck = JSON.parse(stepProbeOn.content[0].text);
   assert.equal(probeOnAck.ok, true);
+  assert.equal(probeOnAck.stepGate, "verified");
   assert.equal(probeOnAck.results[0].player, "QAFixtureBot");
   assert.equal(probeOnAck.results[0].detail.count, 1);
 
@@ -365,15 +501,18 @@ test("live stdio MCP server starts private BDS fixture, executes correlated step
   assert.equal(stateData.liveSnapshot?.probeCount, 0);
   assert.ok(stateData.liveSnapshot?.npc?.nameTag?.includes("Mara"));
 
-  // 4. Stop server and verify BDS PID exits
+  // 4. Stop server and verify BDS PID exits while retaining log + evidence JSON
   const stopRes = await client.callTool({
     name: "bds_qa_stop",
-    arguments: { retainArtifacts: false },
+    arguments: { retainArtifacts: true, retainServerDir: false },
   });
   assert.ok(!stopRes.isError, stopRes.content[0]?.text);
   const stopData = JSON.parse(stopRes.content[0].text);
   assert.equal(stopData.stopped, true);
   assert.equal(stopData.wasActive, true);
+  assert.equal(stopData.serverDirRetained, false);
+  assert.ok(stopData.logFile && fs.existsSync(stopData.logFile), "Expected retained logFile on disk");
+  assert.ok(stopData.evidenceFile && fs.existsSync(stopData.evidenceFile), "Expected retained evidenceFile on disk");
 
   await new Promise((r) => setTimeout(r, 300));
   let bdsAlive = false;

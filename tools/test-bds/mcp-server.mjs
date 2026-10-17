@@ -4,6 +4,7 @@
 // single-owned-instance lifecycle, exact git/staged pack SHA-256 provenance,
 // correlated qa:cmd step ACKs, and redacted event/log tails.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { parseArgs } from "node:util";
@@ -94,6 +95,61 @@ async function waitForPidExit(pid, timeoutMs = 1500) {
   }
 }
 
+async function waitForProcExit(proc, timeoutMs = 1200) {
+  if (!proc || (proc.exitCode !== null && proc.exitCode !== undefined)) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (proc.exitCode !== null && proc.exitCode !== undefined) return true;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  return proc.exitCode !== null && proc.exitCode !== undefined;
+}
+
+/**
+ * Strict containment check ensuring `dir` is a harness-created `<tmpRoot>/bds-run-*` folder.
+ * @param {string | null | undefined} dir
+ * @returns {boolean}
+ */
+export function isOwnedTempServerDir(dir) {
+  if (typeof dir !== "string" || !dir.trim()) return false;
+  const tmpRoot = path.resolve(process.env.BDS_HARNESS_TMP || os.tmpdir());
+  const resolved = path.resolve(dir);
+  const parent = path.dirname(resolved);
+  const base = path.basename(resolved);
+  const sameParent = IS_WIN ? parent.toLowerCase() === tmpRoot.toLowerCase() : parent === tmpRoot;
+  return sameParent && base.startsWith("bds-run-") && base.length > "bds-run-".length;
+}
+
+/**
+ * Reads newly appended bytes from `filePath` starting at `offset` (up to `maxBytes` per call).
+ * @param {string} filePath
+ * @param {number} offset
+ * @param {number} [maxBytes]
+ * @returns {{ text: string, nextOffset: number }}
+ */
+function readLogIncremental(filePath, offset, maxBytes = 64 * 1024) {
+  if (!fs.existsSync(filePath)) return { text: "", nextOffset: offset };
+  let fd = null;
+  try {
+    const st = fs.statSync(filePath);
+    if (st.size <= offset) return { text: "", nextOffset: offset };
+    const toRead = Math.min(st.size - offset, maxBytes);
+    const buf = Buffer.allocUnsafe(toRead);
+    fd = fs.openSync(filePath, "r");
+    const bytesRead = fs.readSync(fd, buf, 0, toRead, offset);
+    return {
+      text: buf.subarray(0, bytesRead).toString("utf8"),
+      nextOffset: offset + bytesRead,
+    };
+  } catch {
+    return { text: "", nextOffset: offset };
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch {}
+    }
+  }
+}
+
 /**
  * Extracts a `QA_* {...}` message from either a BDS `[Scripting] HARNESS {"type":"log","msg":"..."}` line
  * or a formatted `[scenario] (log: )?QA_* {...}` line.
@@ -153,6 +209,12 @@ export function parseQaLogEvents(logText) {
     }
     if (/\[Scripting\]\[error\]/i.test(rawLine) || /\[ContentLog\]\[error\]/i.test(rawLine) || /\bERROR\]\s*\[Scripting\]/i.test(rawLine)) {
       events.push({ type: "SERVER_ERROR", line: i + 1, text: redactLogLine(rawLine) });
+      continue;
+    }
+    const discMatch = /Player disconnected:\s*([^,\r\n]+)/i.exec(rawLine);
+    if (discMatch) {
+      const leftName = discMatch[1].trim();
+      if (leftName) joinedPlayers.delete(leftName);
     }
   }
 
@@ -217,12 +279,61 @@ export class BedrockQaMcpController {
     }
   }
 
-  _readLog(run = this.currentRun) {
+  _readLog(run = this.currentRun, maxTailBytes = 256 * 1024) {
     if (!run || !fs.existsSync(run.logFile)) return "";
+    let fd = null;
     try {
-      return fs.readFileSync(run.logFile, "utf8");
+      const st = fs.statSync(run.logFile);
+      const headBytes = 64 * 1024;
+      if (st.size <= headBytes + maxTailBytes) {
+        return fs.readFileSync(run.logFile, "utf8");
+      }
+      fd = fs.openSync(run.logFile, "r");
+      const headBuf = Buffer.allocUnsafe(headBytes);
+      const headRead = fs.readSync(fd, headBuf, 0, headBytes, 0);
+      const tailBuf = Buffer.allocUnsafe(maxTailBytes);
+      const tailOffset = Math.max(headRead, st.size - maxTailBytes);
+      const tailRead = fs.readSync(fd, tailBuf, 0, maxTailBytes, tailOffset);
+      return (
+        headBuf.subarray(0, headRead).toString("utf8") +
+        "\n" +
+        tailBuf.subarray(0, tailRead).toString("utf8")
+      );
     } catch {
       return "";
+    } finally {
+      if (fd !== null) {
+        try { fs.closeSync(fd); } catch {}
+      }
+    }
+  }
+
+  _deriveGates(run, ev) {
+    const unverified = { server: "unverified", network: "unverified", visual: "unverified" };
+    if (!run || !ev || !ev.gates || typeof ev.gates !== "object") {
+      return unverified;
+    }
+    if (!this._isActiveRun(run) && ev.status !== "ready_waiting_for_client" && ev.status !== "completed") {
+      return unverified;
+    }
+    return {
+      server: ev.gates.server || "unverified",
+      network: ev.gates.network || "unverified",
+      visual: ev.gates.visual || "unverified",
+      ...(ev.gates.visualNote ? { visualNote: ev.gates.visualNote } : {}),
+    };
+  }
+
+  _isVerifiedOwnedBdsPid(run) {
+    if (!run || !Number.isInteger(run.bdsPid) || run.bdsPid <= 0) return false;
+    if (!isOwnedTempServerDir(run.serverDir)) return false;
+    const idFile = path.join(run.serverDir, "harness-process.json");
+    if (!fs.existsSync(idFile)) return false;
+    try {
+      const idData = JSON.parse(fs.readFileSync(idFile, "utf8"));
+      return idData.bdsPid === run.bdsPid && idData.runnerPid === run.runnerPid && idData.status !== "stopped";
+    } catch {
+      return false;
     }
   }
 
@@ -259,6 +370,12 @@ export class BedrockQaMcpController {
       if (!fs.existsSync(candidate)) {
         throw new Error(`Pack folder "${folder}" does not exist under ${this.packsDir}`);
       }
+    }
+    const missingRequired = DEFAULT_CLIENT_QA_PACKS.filter((req) => !onlyList.includes(req));
+    if (missingRequired.length > 0) {
+      throw new Error(
+        `Missing required client-QA fixture packs in "only": ${missingRequired.join(", ")} (client-qa-fixture.js requires ${DEFAULT_CLIENT_QA_PACKS.join(", ")})`
+      );
     }
 
     const seed = params.seed ?? 1;
@@ -323,6 +440,7 @@ export class BedrockQaMcpController {
       commandInboxFile,
       status: "starting",
       exitCode: null,
+      terminated: false,
       stepSeq: 0,
       lastStepAck: null,
     };
@@ -344,6 +462,14 @@ export class BedrockQaMcpController {
         run.portV6 = ev.bds?.portV6 ?? run.portV6;
         run.serverDir = ev.bds?.serverDir ?? run.serverDir;
         if (ev.status === "ready_waiting_for_client") {
+          const stagedList = Array.isArray(ev.stagedPacks) ? ev.stagedPacks : [];
+          const stagedFolders = new Set(stagedList.filter((p) => p.verified !== false).map((p) => p.folder));
+          const missingStaged = onlyList.filter((req) => !stagedFolders.has(req));
+          if (missingStaged.length > 0) {
+            run.status = "failed";
+            await this.stop({ retainArtifacts: true, retainServerDir: retainOnFailure });
+            throw new Error(`Staged pack verification missing required packs: ${missingStaged.join(", ")}`);
+          }
           run.status = "ready_waiting_for_client";
           const parsed = parseQaLogEvents(this._readLog(run));
           return {
@@ -359,7 +485,7 @@ export class BedrockQaMcpController {
             evidenceFile: run.evidenceFile,
             commandInboxFile: run.commandInboxFile,
             git: ev.git,
-            stagedPacks: (ev.stagedPacks || []).map((p) => ({
+            stagedPacks: stagedList.map((p) => ({
               folder: p.folder,
               kind: p.kind,
               uuid: p.uuid,
@@ -369,14 +495,14 @@ export class BedrockQaMcpController {
               sourceSha256: p.sourceSha256,
               stagedSha256: p.stagedSha256,
             })),
-            gates: ev.gates,
+            gates: this._deriveGates(run, ev),
             timings: ev.timings,
             fixtureManifest: this._getFixtureManifest(ev, parsed),
           };
         }
         if (ev.status === "setup_failed" || (ev.status === "completed" && ev.exitCode !== 0)) {
           run.status = "failed";
-          await this.stop({ retainArtifacts: true });
+          await this.stop({ retainArtifacts: true, retainServerDir: retainOnFailure });
           throw new Error(
             `BDS QA startup failed (${ev.verdict || ev.status}, exitCode=${ev.exitCode}): ${ev.errors?.setupError || ev.scenario?.message || stderrText.trim() || "see log"}`
           );
@@ -384,8 +510,14 @@ export class BedrockQaMcpController {
       }
       if (proc.exitCode !== null && proc.exitCode !== undefined) {
         const finalEv = this._readEvidence(run);
+        if (finalEv?.bds) {
+          run.bdsPid = finalEv.bds.bdsPid ?? run.bdsPid;
+          run.port = finalEv.bds.port ?? run.port;
+          run.portV6 = finalEv.bds.portV6 ?? run.portV6;
+          run.serverDir = finalEv.bds.serverDir ?? run.serverDir;
+        }
         run.status = "failed";
-        await this.stop({ retainArtifacts: true });
+        await this.stop({ retainArtifacts: true, retainServerDir: retainOnFailure });
         throw new Error(
           `BDS QA runner exited prematurely with code ${proc.exitCode}: ${finalEv?.errors?.setupError || stderrText.trim() || "see logFile"}`
         );
@@ -394,7 +526,7 @@ export class BedrockQaMcpController {
     }
 
     run.status = "failed";
-    await this.stop({ retainArtifacts: true });
+    await this.stop({ retainArtifacts: true, retainServerDir: retainOnFailure });
     throw new Error(`Timed out after ${readyDeadlineMs}ms waiting for BDS QA server readiness (runId=${runId}, logFile=${logFile})`);
   }
 
@@ -444,7 +576,7 @@ export class BedrockQaMcpController {
         sourceSha256: p.sourceSha256,
         stagedSha256: p.stagedSha256,
       })),
-      gates: ev?.gates ?? { server: "unverified", network: "unverified", visual: "unverified" },
+      gates: this._deriveGates(run, ev),
       joinedPlayers: parsed.joinedPlayers,
       lastStepAck: run.lastStepAck ?? parsed.lastStepAck,
       errors: ev?.errors ?? null,
@@ -472,7 +604,8 @@ export class BedrockQaMcpController {
     run.stepSeq += 1;
     const correlationId = `req_${run.stepSeq}_${Date.now()}`;
     const targetToken = player ? encodeURIComponent(player.trim()) : "*";
-    const startOffset = fs.existsSync(run.logFile) ? fs.statSync(run.logFile).size : 0;
+    let readOffset = fs.existsSync(run.logFile) ? fs.statSync(run.logFile).size : 0;
+    let carry = "";
     const cmdLine = `scriptevent qa:cmd ${step} ${targetToken} ${correlationId}\n`;
     const tStart = Date.now();
     fs.appendFileSync(run.commandInboxFile, cmdLine, "utf8");
@@ -486,33 +619,37 @@ export class BedrockQaMcpController {
         throw new Error(`BDS QA server exited while waiting for step "${step}" (correlationId=${correlationId})`);
       }
       if (fs.existsSync(run.logFile)) {
-        const buf = fs.readFileSync(run.logFile);
-        const tailText = buf.subarray(Math.min(startOffset, buf.length)).toString("utf8");
-        const lines = tailText.split(/\r?\n/);
-        for (const line of lines) {
-          const msg = extractScenarioMsg(line);
-          if (!msg) continue;
-          const m = /^(QA_STEP_APPLIED|QA_STEP_ERROR)\s+(\{.*\})$/.exec(msg);
-          if (!m) continue;
-          try {
-            const isApplied = m[1] === "QA_STEP_APPLIED";
-            const payload = JSON.parse(m[2]);
-            if (payload.correlationId !== correlationId) continue;
-            const idx = Number.isInteger(payload.targetIndex) ? payload.targetIndex : resultsByIndex.size;
-            if (Number.isInteger(payload.targetCount) && payload.targetCount > 0) {
-              expectedCount = payload.targetCount;
-            } else if (expectedCount === null) {
-              expectedCount = 1;
-            }
-            resultsByIndex.set(idx, {
-              ok: isApplied,
-              step: payload.step,
-              player: payload.player,
-              location: payload.location ?? null,
-              detail: payload.detail ?? null,
-              error: payload.error ?? null,
-            });
-          } catch {}
+        const { text: newChunk, nextOffset } = readLogIncremental(run.logFile, readOffset);
+        readOffset = nextOffset;
+        if (newChunk) {
+          const combined = carry + newChunk;
+          const parts = combined.split(/\r?\n/);
+          carry = parts.pop() ?? "";
+          for (const line of parts) {
+            const msg = extractScenarioMsg(line);
+            if (!msg) continue;
+            const m = /^(QA_STEP_APPLIED|QA_STEP_ERROR)\s+(\{.*\})$/.exec(msg);
+            if (!m) continue;
+            try {
+              const isApplied = m[1] === "QA_STEP_APPLIED";
+              const payload = JSON.parse(m[2]);
+              if (payload.correlationId !== correlationId) continue;
+              const idx = Number.isInteger(payload.targetIndex) ? payload.targetIndex : resultsByIndex.size;
+              if (Number.isInteger(payload.targetCount) && payload.targetCount > 0) {
+                expectedCount = payload.targetCount;
+              } else if (expectedCount === null) {
+                expectedCount = 1;
+              }
+              resultsByIndex.set(idx, {
+                ok: isApplied,
+                step: payload.step,
+                player: payload.player,
+                location: payload.location ?? null,
+                detail: payload.detail ?? null,
+                error: payload.error ?? null,
+              });
+            } catch {}
+          }
         }
         if (expectedCount !== null && resultsByIndex.size >= expectedCount) {
           const ordered = [...resultsByIndex.entries()]
@@ -525,12 +662,9 @@ export class BedrockQaMcpController {
             step,
             correlationId,
             elapsedMs: Date.now() - tStart,
+            stepGate: allOk ? "verified" : "failed",
             results: ordered,
-            gates: ev?.gates ?? {
-              server: "verified",
-              network: "nethernet_listening",
-              visual: "unverified",
-            },
+            gates: this._deriveGates(run, ev),
           };
           run.lastStepAck = ack;
           if (!allOk) {
@@ -546,18 +680,16 @@ export class BedrockQaMcpController {
     }
 
     const partial = [...resultsByIndex.values()];
+    const ev = this._readEvidence(run);
     const timeoutAck = {
       ok: false,
       step,
       correlationId,
       elapsedMs: Date.now() - tStart,
+      stepGate: "failed",
       results: partial,
       error: `Timed out after ${deadlineMs}ms waiting for correlated QA_STEP_APPLIED/QA_STEP_ERROR ACK (${correlationId})`,
-      gates: {
-        server: "verified",
-        network: "nethernet_listening",
-        visual: "unverified",
-      },
+      gates: this._deriveGates(run, ev),
     };
     run.lastStepAck = timeoutAck;
     const err = new Error(timeoutAck.error);
@@ -585,7 +717,7 @@ export class BedrockQaMcpController {
       active: this._isActiveRun(run),
       status: ev?.status || run.status,
       git: ev?.git ?? null,
-      gates: ev?.gates ?? { server: "unverified", network: "unverified", visual: "unverified" },
+      gates: this._deriveGates(run, ev),
       fixtureManifest: this._getFixtureManifest(ev, parsed),
       joinedPlayers: parsed.joinedPlayers,
       liveSnapshot,
@@ -649,14 +781,43 @@ export class BedrockQaMcpController {
     const wasActive = this._isActiveRun(run);
     run.status = "stopped";
 
-    if (run.proc && typeof run.proc.kill === "function") {
-      try {
-        run.proc.kill("SIGTERM");
-      } catch {}
+    if (!run.terminated) {
+      const procRunning = run.proc && (run.proc.exitCode === null || run.proc.exitCode === undefined);
+      if (procRunning && typeof run.proc.kill === "function") {
+        if (run.commandInboxFile) {
+          try {
+            fs.appendFileSync(run.commandInboxFile, "stop\n", "utf8");
+          } catch {}
+        }
+        if (process.platform !== "win32" || this.spawnRunner) {
+          try {
+            run.proc.kill("SIGTERM");
+          } catch {}
+        }
+        const exitedGracefully = await waitForProcExit(run.proc, this.spawnRunner ? 1200 : 2500);
+        if (!exitedGracefully) {
+          try {
+            run.proc.kill("SIGTERM");
+          } catch {}
+          killOwnedPid(run.runnerPid);
+          await waitForPidExit(run.runnerPid, 1500);
+        }
+      }
+      if (this._isVerifiedOwnedBdsPid(run) && isPidAlive(run.bdsPid)) {
+        killOwnedPid(run.bdsPid);
+        await waitForPidExit(run.bdsPid, 1500);
+      }
+      if (isOwnedTempServerDir(run.serverDir)) {
+        const idFile = path.join(run.serverDir, "harness-process.json");
+        if (fs.existsSync(idFile)) {
+          try {
+            const idData = JSON.parse(fs.readFileSync(idFile, "utf8"));
+            fs.writeFileSync(idFile, JSON.stringify({ ...idData, status: "stopped", stoppedAt: new Date().toISOString() }, null, 2));
+          } catch {}
+        }
+      }
+      run.terminated = true;
     }
-    killOwnedPid(run.bdsPid);
-    killOwnedPid(run.runnerPid);
-    await Promise.all([waitForPidExit(run.bdsPid, 1500), waitForPidExit(run.runnerPid, 1500)]);
 
     if (run.port !== null && run.port !== undefined) {
       try {
@@ -668,7 +829,7 @@ export class BedrockQaMcpController {
         fs.rmSync(run.commandInboxFile, { force: true });
       } catch {}
     }
-    if (!retainServerDir && run.serverDir && fs.existsSync(run.serverDir)) {
+    if (!retainServerDir && isOwnedTempServerDir(run.serverDir) && fs.existsSync(run.serverDir)) {
       try {
         fs.rmSync(run.serverDir, { recursive: true, force: true });
       } catch {}
@@ -689,10 +850,10 @@ export class BedrockQaMcpController {
       bdsPid: run.bdsPid,
       port: run.port,
       portV6: run.portV6,
-      serverDirRetained: Boolean(retainServerDir && run.serverDir && fs.existsSync(run.serverDir)),
+      serverDirRetained: Boolean(isOwnedTempServerDir(run.serverDir) && fs.existsSync(run.serverDir)),
       logFile: retainArtifacts ? run.logFile : null,
       evidenceFile: retainArtifacts ? run.evidenceFile : null,
-      gates: ev?.gates ?? { server: "unverified", network: "unverified", visual: "unverified" },
+      gates: this._deriveGates(run, ev),
     };
   }
 }
@@ -819,7 +980,7 @@ export function createBedrockQaMcpServer(controller = new BedrockQaMcpController
         deadlineMs: z.number().int().min(100).max(15000).optional().describe("Deadline in ms for in-world snapshot step (default 5000)."),
       },
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
@@ -935,9 +1096,15 @@ if (isMain) {
     process.exit(0);
   });
   process.on("exit", () => {
-    if (controller.currentRun) {
-      killOwnedPid(controller.currentRun.bdsPid);
-      killOwnedPid(controller.currentRun.runnerPid);
+    const r = controller.currentRun;
+    if (r && !r.terminated) {
+      if (controller._isVerifiedOwnedBdsPid(r)) {
+        killOwnedPid(r.bdsPid);
+      }
+      if (r.proc && (r.proc.exitCode === null || r.proc.exitCode === undefined)) {
+        killOwnedPid(r.runnerPid);
+      }
+      r.terminated = true;
     }
   });
 
