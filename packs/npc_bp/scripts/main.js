@@ -42,6 +42,7 @@ const OWNER_TAG = "realm:npc_owner:npc_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
 const ROLE_TAG = "realm:npc_role:";
+const LEGACY_LABEL_TYPES = new Set(["realm:npc_label"]);
 const OVERWORLD = "minecraft:overworld";
 const DIMENSIONS = [OVERWORLD, "minecraft:nether", "minecraft:the_end"];
 
@@ -469,6 +470,10 @@ function audit(entity) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
+      if (entity.isValid) entity.remove();
+      return;
+    }
     if (entity.typeId !== NPC_TYPE) return;
     audit(entity);
     const id = entity.isValid ? idOf(entity) : undefined;
@@ -482,6 +487,7 @@ function auditAll() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
+      for (const type of LEGACY_LABEL_TYPES) for (const e of dim.getEntities({ type })) if (e.isValid) e.remove();
       for (const e of dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] })) audit(e);
     } catch (e) {
       console.warn(`[npc] audit: ${e}`);

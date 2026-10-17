@@ -34,6 +34,7 @@ const PROP_WEATHER = "wander:weather"; // world: overworld weather at the last c
 const OWNER_TAG = "realm:npc_owner:wander_bp";
 const NPC_TAG = "realm:npc";
 const ID_TAG = "realm:npc_id:";
+const LEGACY_LABEL_TYPES = new Set(["realm:wander_label"]);
 const ROAD_TAG = "wander:k:"; // + wid: on the road
 const CAMP_TAG = "wander:c:"; // + wid: at their camp
 const OVERWORLD = "minecraft:overworld";
@@ -1118,6 +1119,10 @@ function audit(ent) {
 
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    if (LEGACY_LABEL_TYPES.has(entity.typeId)) {
+      if (entity.isValid) entity.remove();
+      return;
+    }
     if (TYPES.includes(entity.typeId)) audit(entity);
   } catch (e) {
     console.warn(`[wander] ${e}`);
@@ -1128,6 +1133,7 @@ function sweep() {
   for (const id of DIMENSIONS) {
     try {
       const dim = world.getDimension(id);
+      for (const type of LEGACY_LABEL_TYPES) for (const ent of dim.getEntities({ type })) if (ent.isValid) ent.remove();
       for (const ent of dim.getEntities({ tags: [OWNER_TAG] })) audit(ent);
     } catch (e) {
       console.warn(`[wander] sweep: ${e}`);

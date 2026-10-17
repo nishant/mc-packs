@@ -10,21 +10,18 @@ const nativeNamePacks = [
   { pack: "saga_bp", main: "../packs/saga_bp/scripts/actors.js" },
 ];
 
-test("npc, caravan, wander, and saga packs no longer ship projected-label helpers or sliders", () => {
+test("npc, caravan, wander, and saga keep only legacy label definitions for upgrade cleanup", () => {
   for (const { pack, main } of nativeNamePacks) {
     const mainSource = readFileSync(new URL(main, import.meta.url), "utf8");
     const config = readFileSync(new URL(`../packs/${pack}/scripts/config.js`, import.meta.url), "utf8");
     const settings = readFileSync(new URL(`../packs/${pack}/scripts/settings.js`, import.meta.url), "utf8");
-    assert.doesNotMatch(mainSource, /updateNameLabels|removeOrphanLabel|realm:[a-z_]+_label/);
+    assert.doesNotMatch(mainSource, /updateNameLabels/);
+    assert.match(mainSource, /LEGACY_LABEL_TYPES/);
     assert.doesNotMatch(config, /farNameRange:/);
     assert.doesNotMatch(settings, /key: "farNameRange"/);
   }
 
   for (const path of [
-    "../packs/npc_bp/scripts/name-labels.js",
-    "../packs/caravan_bp/scripts/name-labels.js",
-    "../packs/wander_bp/scripts/name-labels.js",
-    "../packs/saga_bp/scripts/name-labels.js",
     "../packs/npc_bp/entities/npc_label.json",
     "../packs/caravan_bp/entities/caravan_label.json",
     "../packs/wander_bp/entities/wander_label.json",
@@ -35,7 +32,7 @@ test("npc, caravan, wander, and saga packs no longer ship projected-label helper
     "../packs/build_rp/entity/saga_label.entity.json",
     "../packs/build_rp/models/entity/npc_label.geo.json",
   ]) {
-    assert.equal(existsSync(new URL(path, import.meta.url)), false, path);
+    assert.equal(existsSync(new URL(path, import.meta.url)), true, path);
   }
 });
 

@@ -10,6 +10,7 @@ entries below as a changelog.
 ## Character names stay on the characters
 
 - Townsfolk, caravan traders, wanderers, and story characters now use the game's own close-up names over the real character instead of a shared floating helper label that could drift toward another player.
+- Old floating helper labels from upgraded worlds are loaded only long enough to be removed cleanly.
 - The extra far-name sliders are gone from /realm:config because stable Bedrock does not let packs set a true per-player distance for native names.
 
 ## Easier to read realm menu
