@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 172 commands in 64 packs */
+/** @type {Pack[]} 174 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -272,9 +272,11 @@ export const PACKS = [
     folder: "map_bp",
     pack: "Minimap",
     commands: [
+      {"name":"realm:compass","description":"Toggle your top compass strip on or off","permission":"any","params":[]},
       {"name":"realm:map","description":"Minimap: get Mara's Field Map, pick a destination for your compass strip, mark spots","permission":"any","params":[]},
       {"name":"realm:map_clear","description":"Clear your destination (the strip follows your story again)","permission":"any","params":[]},
       {"name":"realm:map_mark","description":"Mark the spot where you stand, to pick it as a destination later","permission":"any","params":[{"name":"name","type":"String","optional":true}]},
+      {"name":"realm:minimap","description":"Toggle your minimap radar on or off","permission":"any","params":[]},
     ],
   },
   {

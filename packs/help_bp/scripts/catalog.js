@@ -833,10 +833,10 @@ export const PACKS = [
     "folder": "map_bp",
     "topic": "map",
     "name": "Minimap",
-    "summary": "A compass strip across the top of your screen shows which way you're facing, the region you're in and what's around: your destination (a gold star with its distance), townsfolk, wanderers, party mates, wanderer camps, the Atlas sites you found, the nearest town, your bed, a rainbow's pot of gold, and nearby mobs in red. An optional radar shows the same things as a small grid around you. §lMara's Field Map§r, Minecraft's own locator map, shows the land itself. The strip, radar and icons are drawn by Side HUD, part of §lRealm Resources§r.",
+    "summary": "A compass strip across the top of your screen shows which way you're facing, the region you're in and what's around: your destination or quest target (a gold star with its distance), party mates, other online friends, wanderer camps, the Atlas sites you found, the nearest town, your bed, a rainbow's pot of gold, and nearby mobs in red. A 7 x 7 minimap radar at the top right below the compass strip (above the Elytra speed HUD) shows the terrain colors around you together with nearby townsfolk, friendly wanderers, mobs, camps, sites, your destination, and directional arrows at the edge pointing toward off-map party mates, online friends, and your destination. §lMara's Field Map§r, Minecraft's own locator map, shows the land itself. The strip, radar and icons are drawn by Side HUD, part of §lRealm Resources§r.",
     "steps": [
       {
-        "text": "Look at the top of your screen. The compass strip shows N, E, S and W with a tick every 15 degrees (60 degrees to each side of where you face) and, under it, the Atlas region you're in. Icons on the strip: a §lgold star§r is your destination, §lyellow dots§r are townsfolk, §lgreen dots§r are wanderers, §lblue dots§r are party mates, §lred dots§r are mobs within 24 blocks, a §ltent§r is a wanderer camp, a §lpurple diamond§r is an Atlas site you found, a §lhouse§r is the nearest town (Town Projects), a §lred bed§r is where you respawn (your bed or respawn anchor) and a §lrainbow§r is where an unfound pot of gold is. Your destination, party mates, mobs and the rainbow show as arrows in their color at the ends of the strip when they're out of view (behind you); the rainbow's arrows are striped like a rainbow.",
+        "text": "Look at the top of your screen and the top right below it. The compass strip shows N, E, S and W with a tick every 15 degrees (60 degrees to each side of where you face) and, under it, the Atlas region you're in. Icons on the strip: a §lgold star§r is your destination (or active quest target), §lblue dots§r are party mates, §lwhite dots§r are other online players (§eshowOthers§r, enabled by default), §lred dots§r are mobs within 24 blocks, a §ltent§r is a wanderer camp, a §lpurple diamond§r is an Atlas site you found, a §lhouse§r is the nearest town (Town Projects), a §lred bed§r is where you respawn (your bed or respawn anchor) and a §lrainbow§r is where an unfound pot of gold is. Your destination, party mates, other online players, mobs and the rainbow show as arrows in their color at the ends of the strip when they're out of view (behind you); the rainbow's arrows are striped like a rainbow. Ordinary townsfolk (§lyellow dots§r) and friendly wanderers (§lgreen dots§r) show only on the 7 x 7 minimap radar so they don't clutter the compass strip, unless you picked one as your destination or have an active quest reporting to them (when the gold star points to them on both the strip and the minimap).",
         "ops": false
       },
       {
@@ -848,7 +848,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "With no destination picked, the star follows your story tracker's current goal (the place to go or the townsfolk to report to). That one never clears on its own: it moves on with the story. During a Choir siege the star points to the siege instead, for everyone in the Overworld: the besieged town during the warning (§eSiege: Lanternford§r), then the nearest Ritual Circle still singing (§eChoir circle (3 left)§r); after the siege it goes back to the story. A destination you picked still wins.",
+        "text": "With no destination picked, the star follows your story tracker's current goal (the place to go or the townsfolk or wanderer to report to). That one never clears on its own: it moves on with the story. During a Choir siege the star points to the siege instead, for everyone in the Overworld: the besieged town during the warning (§eSiege: Lanternford§r), then the nearest Ritual Circle still singing (§eChoir circle (3 left)§r); after the siege it goes back to the story. A destination you picked still wins.",
         "ops": false
       },
       {
@@ -856,11 +856,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Change it in §e/realm:prefs§r -> §lMinimap§r: §lCompass strip§r (enabled by default), §lRadar§r (disabled by default; a 7 x 7 grid above the left side boxes with you in the middle), §lRadar keeps north up§r (disabled: the radar turns with you, so ahead is always up), §lShow mobs on my minimap§r, §lShow the nearest town§r and §lShow my bed§r (both enabled by default, §eshowTown§r and §eshowHome§r) and §lMy mob and radar range§r (default 24 blocks, §emobRadius§r).",
+        "text": "Toggle your minimap radar at any time with §e/realm:minimap§r and your compass strip with §e/realm:compass§r (or use the quick toggles in §e/realm:map§r). Change your settings in §e/realm:prefs§r -> §lMinimap§r: §lCompass strip§r (enabled by default), §lRadar§r (enabled by default; a 7 x 7 minimap at the top right below the compass strip and above the Elytra speed HUD, with you in the middle), §lTerrain colors on my minimap§r (enabled by default, §eradarTerrain§r / §eterrain§r), §lRadar keeps north up§r (disabled: the radar turns with you, so ahead is always up), §lShow mobs on my minimap§r, §lShow the nearest town§r and §lShow my bed§r (both enabled by default, §eshowTown§r and §eshowHome§r) and §lMy mob and radar range§r (default 24 blocks, §emobRadius§r).",
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with, the largest mob range anyone may pick (default 32, §emobRadiusMax§r) and whether players outside your party show as white dots (§lShow players outside your party§r, disabled by default, §eshowOthers§r). To show everyone a title, use §e/realm:admin_title \"Text\" \"Subtitle\" 5§r instead of §e/title§r: the strip draws over a plain §e/title§r within about 1.5 seconds.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with (§ecompassDefault§r, §eradarDefault§r, §eradarTerrain§r), the largest mob range anyone may pick (default 32, §emobRadiusMax§r) and whether players outside your party show (§lShow players outside your party§r, enabled by default, §eshowOthers§r). To show everyone a title, use §e/realm:admin_title \"Text\" \"Subtitle\" 5§r instead of §e/title§r: the strip draws over a plain §e/title§r within about 1.5 seconds.",
         "ops": true
       }
     ],
@@ -869,7 +869,19 @@ export const PACKS = [
         "usage": "/realm:map",
         "ops": false,
         "who": "Everyone",
-        "text": "The §lMinimap§r menu: your destination, §lGet Mara's Field Map§r (an empty locator map), §lPick a destination§r, §lMark this spot§r and §lClear destination§r"
+        "text": "The §lMinimap§r menu: your destination, §lGet Mara's Field Map§r (an empty locator map), §lPick a destination§r, §lMark this spot§r, §lClear destination§r, and quick toggles for the Minimap and Compass strip"
+      },
+      {
+        "usage": "/realm:minimap",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows or hides your minimap radar at the top right below the compass strip"
+      },
+      {
+        "usage": "/realm:compass",
+        "ops": false,
+        "who": "Everyone",
+        "text": "Shows or hides your compass strip at the top of the screen"
       },
       {
         "usage": "/realm:map_mark [name]",

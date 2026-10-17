@@ -131,4 +131,70 @@ export const G = {
   Q_HOME: "",
   /** U+F382 radar: the rainbow's pot of gold (rainbow) */
   Q_RAINBOW: "",
+  /** U+F390 radar: off-map friend arrow, facing N */
+  Q_FRIEND_0: "",
+  /** U+F391 radar: off-map friend arrow, facing NE */
+  Q_FRIEND_1: "",
+  /** U+F392 radar: off-map friend arrow, facing E */
+  Q_FRIEND_2: "",
+  /** U+F393 radar: off-map friend arrow, facing SE */
+  Q_FRIEND_3: "",
+  /** U+F394 radar: off-map friend arrow, facing S */
+  Q_FRIEND_4: "",
+  /** U+F395 radar: off-map friend arrow, facing SW */
+  Q_FRIEND_5: "",
+  /** U+F396 radar: off-map friend arrow, facing W */
+  Q_FRIEND_6: "",
+  /** U+F397 radar: off-map friend arrow, facing NW */
+  Q_FRIEND_7: "",
+  /** U+F398 radar: off-map party arrow, facing N */
+  Q_PARTY_0: "",
+  /** U+F399 radar: off-map party arrow, facing NE */
+  Q_PARTY_1: "",
+  /** U+F39A radar: off-map party arrow, facing E */
+  Q_PARTY_2: "",
+  /** U+F39B radar: off-map party arrow, facing SE */
+  Q_PARTY_3: "",
+  /** U+F39C radar: off-map party arrow, facing S */
+  Q_PARTY_4: "",
+  /** U+F39D radar: off-map party arrow, facing SW */
+  Q_PARTY_5: "",
+  /** U+F39E radar: off-map party arrow, facing W */
+  Q_PARTY_6: "",
+  /** U+F39F radar: off-map party arrow, facing NW */
+  Q_PARTY_7: "",
+  /** U+F3A0 radar: off-map destination arrow, facing N */
+  Q_STAR_0: "",
+  /** U+F3A1 radar: off-map destination arrow, facing NE */
+  Q_STAR_1: "",
+  /** U+F3A2 radar: off-map destination arrow, facing E */
+  Q_STAR_2: "",
+  /** U+F3A3 radar: off-map destination arrow, facing SE */
+  Q_STAR_3: "",
+  /** U+F3A4 radar: off-map destination arrow, facing S */
+  Q_STAR_4: "",
+  /** U+F3A5 radar: off-map destination arrow, facing SW */
+  Q_STAR_5: "",
+  /** U+F3A6 radar: off-map destination arrow, facing W */
+  Q_STAR_6: "",
+  /** U+F3A7 radar: off-map destination arrow, facing NW */
+  Q_STAR_7: "",
+  /** U+F3A8 radar terrain: lush meadow green */
+  Q_GRASS: "",
+  /** U+F3A9 radar terrain: ocean/river blue */
+  Q_WATER: "",
+  /** U+F3AA radar terrain: desert/beach gold */
+  Q_SAND: "",
+  /** U+F3AB radar terrain: crisp snow/ice */
+  Q_SNOW: "",
+  /** U+F3AC radar terrain: rocky mountain gray */
+  Q_STONE: "",
+  /** U+F3AD radar terrain: deep canopy green */
+  Q_FOREST: "",
+  /** U+F3AE radar terrain: glowing magma/nether orange-red */
+  Q_LAVA: "",
+  /** U+F3AF radar terrain: dark underground cavern slate */
+  Q_CAVE: "",
+  /** U+F3B0 radar terrain: town road/wood/cobble warm brown */
+  Q_PATH: "",
 };

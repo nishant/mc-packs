@@ -182,6 +182,8 @@ export const NAMES = {
   "realm:help": ["Realm Help", "Every feature and command"],
   "realm:hud": ["Coordinates HUD", "Position, facing and time"],
   "realm:map": ["Minimap Menu", "Field map, destinations, spots"],
+  "realm:minimap": ["Toggle Minimap", "Show or hide the 7x7 radar"],
+  "realm:compass": ["Toggle Compass", "Show or hide the compass strip"],
   "realm:map_clear": ["Clear Destination", "The strip follows the story"],
   "realm:map_mark": ["Mark This Spot", "Pick it as a destination later"],
   "realm:journal": ["Field Journal", "Everything you've found"],

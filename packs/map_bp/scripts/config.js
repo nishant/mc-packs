@@ -5,11 +5,14 @@ export const CONFIG = {
   /** The compass strip at the top of the screen, for players who haven't chosen in /realm:prefs. */
   compassDefault: true,
 
-  /** The radar (a 7 x 7 grid above the left side boxes), for players who haven't chosen. */
-  radarDefault: false,
+  /** The radar (a 7 x 7 grid at the top right below the compass strip), for players who haven't chosen. */
+  radarDefault: true,
 
   /** The radar keeps north up for players who haven't chosen. false: it turns with the player, so ahead is always up. */
   radarNorthUp: false,
+
+  /** The radar colors empty cells by the land around you (grass, water, sand, forest, stone, snow, paths, caves). */
+  radarTerrain: true,
 
   /** Mobs show as red dots, for players who haven't chosen. */
   showMobs: true,
@@ -29,8 +32,8 @@ export const CONFIG = {
   /** Your bed or respawn anchor shows as a bed on the strip and the radar, for players who haven't chosen. */
   showHome: true,
 
-  /** Players who aren't in your party show as white dots (within 128 blocks). Party mates always show. */
-  showOthers: false,
+  /** Players who aren't in your party show as white dots and arrows. Party mates always show. */
+  showOthers: true,
 
   /** Townsfolk and wanderers this close show on the strip and the radar (blocks). */
   npcRange: 64,

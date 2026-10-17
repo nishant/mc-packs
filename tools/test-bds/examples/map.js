@@ -1,18 +1,26 @@
 // Minimap (map_bp) and the broadcasts it reads. On a flat world: the compass strip facing north shows N in the
-// middle, a townsfolk to the north-east on the right half and in the radar's upper right, mobs in red (one behind
-// as an arrow at the strip's edge), mobs hidden by the player's switch; a destination picked in /realm:map (Mara)
-// with the star and its name, then Arrived and cleared when walked to; a marked spot picked from the menu; the
-// story tracker's target (a Stranger's "report back") as the fallback; a friendly wanderer shown in green and a
-// hostile in disguise never; party mates in blue at the edge, other players only with showOthers; Death Point,
-// Waystones, Atlas and Townsfolk broadcasts and their pings; the HUD title (top and radar slots decoded byte for
-// byte as hud_rp cuts them); compass and radar switched off clear the slots; the cost with 10 players.
+// middle, a townsfolk to the north-east in the radar's upper right (without cluttering the strip), mobs in red
+// (one behind as an arrow at the strip's edge), mobs hidden by the player's switch; a destination picked in
+// /realm:map (Mara) with the star and its name, then Arrived and cleared when walked to; a marked spot picked from
+// the menu; the story tracker's target (a Stranger's "report back") as the fallback; a friendly wanderer shown in
+// green on the radar and a hostile in disguise never; party mates in blue at the strip edge and as directional edge
+// arrows on the radar, other online friends shown by default (showOthers) on the strip and as directional edge arrows
+// on the radar; Death Point, Waystones, Atlas and Townsfolk broadcasts and their pings; the HUD title (top and radar
+// slots decoded byte for byte as hud_rp cuts them); /realm:minimap and /realm:compass toggles; compass and radar
+// switched off clear the slots; the cost with 10 players.
 //   node tools/test-bds/run.mjs --quiet --flat --only map_bp,npc_bp,death_bp,party_bp,wander_bp,saga_bp,atlas_bp,waystone_bp,mail_bp --scenario tools/test-bds/examples/map.js --timeout 900
 const MARK = "§s§2§r";
 const g = (n) => String.fromCodePoint(0xf300 + n);
 const S = { N: g(0x03), FOLK: g(0x11), MOB: g(0x10), STAR: g(0x14), PARTY: g(0x13), WANDER: g(0x12), OTHER: g(0x17) };
 const L = { MOB: g(0x20), PARTY: g(0x23) };
 const R = { MOB: g(0x28), PARTY: g(0x2b), STAR: g(0x2c) };
-const Q = { MOB: g(0x30), FOLK: g(0x31), WANDER: g(0x32), PARTY: g(0x33), STAR: g(0x34) };
+const Q = { MOB: g(0x30), FOLK: g(0x31), WANDER: g(0x32), PARTY: g(0x33), STAR: g(0x34), OTHER: g(0x37) };
+const PARTY_ARROWS = Array.from({ length: 8 }, (_, i) => g(0x98 + i));
+const FRIEND_ARROWS = Array.from({ length: 8 }, (_, i) => g(0x90 + i));
+const STAR_ARROWS = Array.from({ length: 8 }, (_, i) => g(0xa0 + i));
+const hasPartyRadar = (radar) => (radar ?? "").includes(Q.PARTY) || PARTY_ARROWS.some((a) => (radar ?? "").includes(a));
+const hasFriendRadar = (radar) => (radar ?? "").includes(Q.OTHER) || FRIEND_ARROWS.some((a) => (radar ?? "").includes(a));
+const hasStarRadar = (radar) => (radar ?? "").includes(Q.STAR) || STAR_ARROWS.some((a) => (radar ?? "").includes(a));
 
 function utf8(s) {
   const out = [];
@@ -101,15 +109,15 @@ export default async function (t) {
   t.log("mara at", mara.x, mara.z);
   await t.waitUntil(() => of("realm:atlas_region", (m) => m.player === p.id).length > 0, { timeout: 200, message: "atlas_bp sends the region" });
 
-  // --- Facing north: N in the middle. Mara north-east: right half of the strip, upper right of the radar.
+  // --- Facing north: N in the middle. Mara north-east: in the radar's upper right, not cluttering the compass strip.
   stand(p, mara.x - 10, mara.z + 17);
   cfg("radar", true, p);
-  let st = await until(p, (s) => s.strip && [...s.strip].indexOf(S.FOLK) > 12, "Mara on the right half of the strip");
+  let st = await until(p, (s) => s.strip?.length === 25 && rows(s.radar)[1]?.[4] === Q.FOLK, "Mara in the radar's upper right");
   const strip0 = [...st.strip];
   t.log("strip:", strip0.map((c) => (c.codePointAt(0) - 0xf300).toString(16)).join(" "), "| line2:", st.line2);
   t.check(strip0.length === 25, `25 cells (${strip0.length})`);
   t.check(strip0[12] === S.N, "facing north: N in the middle");
-  t.check(strip0.indexOf(S.FOLK) === 18, `Mara (bearing 30) in cell 18 (${strip0.indexOf(S.FOLK)})`);
+  t.check(!strip0.includes(S.FOLK), "ordinary NPCs do not clutter the compass strip");
   t.check(rows(st.radar)[1]?.[4] === Q.FOLK, "Mara in the radar's upper right (row 1, column 4)");
   t.check(st.line2.includes("§7The ") || st.line2.length > 0, `the region on the second line (${st.line2})`);
   t.check(st.known.folk >= 1 && st.known.region, `map_bp heard the townsfolk and the region (${JSON.stringify(st.known)})`);
@@ -203,7 +211,9 @@ export default async function (t) {
   send("realm:wander_debug", { player: p.id, action: "spawn", archetype: "traveler", stranger: true });
   await t.waitUntil(() => of("realm:wander_spawn", (m) => m.player === p.id, since).length > 0, { timeout: 100, message: "a stranger appears" });
   const s1 = of("realm:wander_spawn", (m) => m.player === p.id, since)[0];
-  st = await until(p, (s) => s.strip.includes(S.WANDER) || s.radar.includes(Q.WANDER) || [...s.strip].some((c) => c === g(0x22) || c === g(0x2a)), "the friendly stranger in green", 200);
+  stand(p, s1.x - 4, s1.z - 12, 0);
+  st = await until(p, (s) => s.radar.includes(Q.WANDER), "the friendly stranger in green on the minimap", 200);
+  t.check(!st.strip.includes(S.WANDER), "ordinary friendly wanderer stays on the minimap only");
   const talk = async (label) => {
     const fm = t.waitForm(p, { timeout: 200 });
     send("realm:wander_debug", { player: p.id, action: "tap", wid: s1.wid });
@@ -231,6 +241,7 @@ export default async function (t) {
   t.log("track:", JSON.stringify(tr));
   t.check(tr.npc === `w_${s1.wid}` && typeof tr.x === "number", "the target names the stranger and where they stand");
   st = await until(p, (s) => s.line2.includes("Report to") && (s.strip.includes(S.STAR) || s.strip.includes(R.STAR) || s.strip.includes(g(0x24))), "the story target is the destination (no pick)");
+  t.check(hasStarRadar(st.radar), "the quest NPC star also shows on the minimap");
   t.check(st.wp === null, "the quest target isn't a picked waypoint");
   // A quest target never says Arrived.
   const sl = of("realm:wander_spawn", (m) => m.wid === s1.wid)[0];
@@ -265,7 +276,7 @@ export default async function (t) {
   he.remove();
   p.setGameMode(t.mc.GameMode.Creative);
 
-  // --- Party mates: blue at the edge (east of a player facing north); others only with showOthers.
+  // --- Party mates: blue at the edge (east of a player facing north); online friends shown by default (showOthers).
   stand(p, 0, -300);
   const mate = await t.player("Mate", { x: 30, z: -300 });
   stand(mate, 30, -300);
@@ -274,11 +285,18 @@ export default async function (t) {
   t.cmd(p, "/realm:party_invite Mate");
   await t.wait(5);
   t.cmd(mate, "/realm:party_accept");
-  st = await until(p, (s) => s.strip.endsWith(R.PARTY) && s.radar.includes(Q.PARTY), "the party mate east: a blue arrow at the right edge, blue on the radar", 120);
-  t.check(!st.strip.includes(S.OTHER), "another player doesn't show by default");
-  cfg("showOthers", true);
-  st = await until(p, (s) => s.strip.includes(S.OTHER), "showOthers: the other player in white");
+  st = await until(
+    p,
+    (s) => s.strip.endsWith(R.PARTY) && hasPartyRadar(s.radar) && s.strip.includes(S.OTHER) && hasFriendRadar(s.radar),
+    "the party mate east (blue edge arrow on strip and radar) and other online friend north-west by default",
+    120,
+  );
+  t.check(st.radar.includes(g(0x9a)) || hasPartyRadar(st.radar), "off-map party mate east shows east-pointing party arrow on radar edge");
+  t.check(FRIEND_ARROWS.some((a) => st.radar.includes(a)), "off-map online friend shows directional friend arrow on radar edge");
   cfg("showOthers", false);
+  st = await until(p, (s) => !s.strip.includes(S.OTHER) && !hasFriendRadar(s.radar), "showOthers false hides the other player");
+  cfg("showOthers", true);
+  st = await until(p, (s) => s.strip.includes(S.OTHER) && hasFriendRadar(s.radar), "showOthers true restores the other player");
   // Picking the party mate.
   form = t.waitForm(p, { timeout: 60 });
   t.cmd(p, "/realm:map");
@@ -292,7 +310,7 @@ export default async function (t) {
   f.answer("Mate");
   st = await until(p, (s) => s.wp?.k === "party" && s.line2.includes("Mate"), "the party mate as destination");
   stand(mate, 0, -340);
-  st = await until(p, (s) => [...s.strip][12] === S.STAR, "the star follows the mate (now due north)");
+  st = await until(p, (s) => [...s.strip][12] === S.STAR && hasStarRadar(s.radar), "the star follows the mate (now due north)");
 
   // --- Death Point and its ping.
   since = t.tick;
@@ -327,6 +345,16 @@ export default async function (t) {
   st = await state(p);
   t.check(st.known.waystones >= 1, `map_bp knows the waystone (${JSON.stringify(st.known)})`);
 
+  // --- /realm:minimap and /realm:compass toggle commands.
+  t.check(t.cmd(p, "/realm:minimap").ok, "/realm:minimap hides the minimap radar");
+  st = await until(p, (s) => s.radar === "" && s.strip.length === 25, "minimap toggled off while compass stays on");
+  t.check(t.cmd(p, "/realm:minimap").ok, "/realm:minimap shows the minimap radar again");
+  st = await until(p, (s) => rows(s.radar).length === 7 && s.strip.length === 25, "minimap toggled back on");
+  t.check(t.cmd(p, "/realm:compass").ok, "/realm:compass hides the compass strip");
+  st = await until(p, (s) => s.strip === "" && rows(s.radar).length === 7, "compass toggled off while minimap stays on");
+  t.check(t.cmd(p, "/realm:compass").ok, "/realm:compass shows the compass strip again");
+  st = await until(p, (s) => s.strip.length === 25 && rows(s.radar).length === 7, "compass toggled back on");
+
   // --- Both off: the top and radar slots go empty.
   cfg("compass", false, p);
   cfg("radar", false, p);
@@ -336,6 +364,7 @@ export default async function (t) {
   t.log("titles after off:", after.length, JSON.stringify(lastOff?.text));
   t.check(!lastOff || lastOff.text !== MARK || (!slot(lastOff.subtitle, 9) && !slot(lastOff.subtitle, 10)), "the slots are cleared");
   cfg("compass", true, p);
+  cfg("radar", true, p);
 
   // --- Cost: 10 players with the strip and the radar, 8 mobs around each of a few.
   cfg("radarDefault", true);

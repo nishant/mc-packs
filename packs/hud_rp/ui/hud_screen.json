@@ -290,10 +290,10 @@
             "100%c"
           ],
           "anchor_from": "right_middle",
-          "anchor_to": "bottom_right",
+          "anchor_to": "top_right",
           "offset": [
             -1,
-            -60
+            18
           ],
           "controls": [
             {
@@ -425,23 +425,23 @@
             "50%",
             "100%c"
           ],
-          "anchor_from": "left_middle",
-          "anchor_to": "bottom_left",
+          "anchor_from": "top_right",
+          "anchor_to": "top_right",
           "offset": [
-            1,
-            -26
+            -4,
+            26
           ],
           "controls": [
             {
               "realm_radar@hud.realm_slot": {
                 "$skip": "%.1610s",
-                "$slot_anchor": "bottom_left",
-                "$slot_align": "left",
+                "$slot_anchor": "top_right",
+                "$slot_align": "right",
                 "$slot_max": [
                   132,
                   132
                 ],
-                "$slot_alpha": 0.0
+                "$slot_alpha": 0.35
               }
             }
           ]

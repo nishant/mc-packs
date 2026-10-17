@@ -84,7 +84,7 @@ const WHITE = /** @type {RGBA} */ ([245, 245, 245, 255]);
 const LINE = /** @type {RGBA} */ ([210, 210, 210, 150]);
 const TICK = /** @type {RGBA} */ ([210, 210, 210, 210]);
 const NORTH = /** @type {RGBA} */ ([255, 90, 80, 255]);
-const BG = /** @type {RGBA} */ ([10, 14, 18, 150]);
+const BG = /** @type {RGBA} */ ([28, 56, 34, 185]);
 const RING = /** @type {RGBA} */ ([255, 255, 255, 34]);
 /** Marker colors. */
 const COLOR = /** @type {Record<string, RGBA>} */ ({
@@ -132,6 +132,23 @@ const baseline = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type 
 /** Radar cells: a dark see-through square with a faint grid line. */
 const square = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {number} */ oy) => {
   rect(img, ox, oy, ox + 15, oy + 15, BG);
+  rect(img, ox, oy, ox + 15, oy, RING);
+  rect(img, ox, oy + 1, ox, oy + 15, RING);
+};
+/**
+ * Radar terrain cell: a vibrant ground tile with deterministic pixel accents and a 1px top/left grid line.
+ * @param {Image} img
+ * @param {number} ox
+ * @param {number} oy
+ * @param {RGBA} baseRGBA
+ * @param {RGBA} accentRGBA
+ * @param {(x: number, y: number) => boolean} patternFn
+ */
+const terrainSquare = (img, ox, oy, baseRGBA, accentRGBA, patternFn) => {
+  rect(img, ox, oy, ox + 15, oy + 15, baseRGBA);
+  for (let y = 1; y < 15; y++)
+    for (let x = 1; x < 15; x++)
+      if (patternFn(x, y)) put(img, ox + x, oy + y, accentRGBA);
   rect(img, ox, oy, ox + 15, oy, RING);
   rect(img, ox, oy + 1, ox, oy + 15, RING);
 };
@@ -288,6 +305,53 @@ glyph("R_RAINBOW", 0x71, "strip edge, right: the rainbow's pot of gold", (img, o
   rainbowArrow(img, ox, oy, RIGHT);
 });
 
+// Rows 9-10: 8-way directional arrows on a radar square for off-map friends, party mates, and quest destinations.
+const DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const FRIEND_ARROW = /** @type {RGBA} */ ([110, 235, 255, 255]);
+for (let k = 0; k < 8; k++) {
+  glyph(`Q_FRIEND_${k}`, 0x90 + k, `radar: off-map friend arrow, facing ${DIRS[k]}`, (img, ox, oy) => {
+    square(img, ox, oy);
+    rimmedPoly(img, ox, oy, arrow(k * 45), FRIEND_ARROW);
+  });
+  glyph(`Q_PARTY_${k}`, 0x98 + k, `radar: off-map party arrow, facing ${DIRS[k]}`, (img, ox, oy) => {
+    square(img, ox, oy);
+    rimmedPoly(img, ox, oy, arrow(k * 45), COLOR.party);
+  });
+  glyph(`Q_STAR_${k}`, 0xa0 + k, `radar: off-map destination arrow, facing ${DIRS[k]}`, (img, ox, oy) => {
+    square(img, ox, oy);
+    rimmedPoly(img, ox, oy, arrow(k * 45), COLOR.star);
+  });
+}
+
+// Rows 10-11: terrain background radar tiles.
+glyph("Q_GRASS", 0xa8, "radar terrain: lush meadow green", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [56, 128, 48, 185], [72, 150, 60, 200], (x, y) => (x * 5 + y * 9) % 11 === 0),
+);
+glyph("Q_WATER", 0xa9, "radar terrain: ocean/river blue", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [36, 98, 185, 190], [64, 132, 218, 205], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
+);
+glyph("Q_SAND", 0xaa, "radar terrain: desert/beach gold", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [198, 174, 102, 185], [216, 192, 120, 200], (x, y) => (x * 7 + y * 3) % 13 === 0),
+);
+glyph("Q_SNOW", 0xab, "radar terrain: crisp snow/ice", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [210, 228, 240, 185], [235, 245, 255, 200], (x, y) => (x * 11 + y * 5) % 14 === 0),
+);
+glyph("Q_STONE", 0xac, "radar terrain: rocky mountain gray", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [108, 114, 122, 185], [132, 138, 146, 200], (x, y) => (x * 3 + y * 7) % 9 === 0),
+);
+glyph("Q_FOREST", 0xad, "radar terrain: deep canopy green", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [34, 88, 36, 190], [48, 112, 48, 205], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
+);
+glyph("Q_LAVA", 0xae, "radar terrain: glowing magma/nether orange-red", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [195, 68, 28, 195], [240, 120, 35, 215], (x, y) => (x * 5 + y * 3) % 8 < 2),
+);
+glyph("Q_CAVE", 0xaf, "radar terrain: dark underground cavern slate", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [32, 36, 46, 185], [48, 52, 66, 200], (x, y) => (x * 7 + y * 11) % 15 === 0),
+);
+glyph("Q_PATH", 0xb0, "radar terrain: town road/wood/cobble warm brown", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [136, 102, 68, 185], [162, 124, 86, 200], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+);
+
 // ---------------------------------------------------------------------------
 // The outputs
 // ---------------------------------------------------------------------------
@@ -343,20 +407,23 @@ function render(sheet) {
   strip[12] = "S_CENTER";
   strip[3] = "S_NE";
   strip[16] = "S_E";
-  Object.assign(strip, { 0: "L_MOB", 5: "S_TOWN", 7: "S_FOLK", 10: "S_STAR", 14: "S_MOB", 19: "S_WANDER", 21: "S_SITE", 22: "S_HOME", 24: "R_RAINBOW" });
+  Object.assign(strip, { 0: "L_MOB", 5: "S_TOWN", 7: "S_PARTY", 10: "S_STAR", 14: "S_MOB", 19: "S_OTHER", 21: "S_SITE", 22: "S_HOME", 24: "R_RAINBOW" });
   const dim = /** @type {RGBA} */ ([0, 0, 0, 120]);
   rect(img, 9, 3, 9 + 25 * CELL + 5, 3 + CELL + 3, dim);
   strip.forEach((g, i) => blit(g, 12 + i * CELL, 5));
-  // The radar, turning with the player: the townsfolk ahead and to the left, a mob to the right, the star ahead.
-  const grid = Array.from({ length: 7 }, () => Array(7).fill("Q_EMPTY"));
-  grid[3][3] = "Q_YOU_0";
-  grid[0][3] = "Q_STAR";
-  grid[2][1] = "Q_FOLK";
-  grid[3][5] = "Q_MOB";
-  grid[4][6] = "Q_MOB";
-  grid[5][4] = "Q_WANDER";
-  grid[1][0] = "Q_NORTH";
-  grid.forEach((row, r) => row.forEach((g, c) => blit(g, 12 + c * CELL, CELL + 30 + r * CELL)));
+  // The radar on the upper right below the compass strip, turning with the player: terrain tiles behind the townsfolk, mobs, quest arrow and friend arrow.
+  const grid = [
+    ["Q_FOREST", "Q_FOREST", "Q_GRASS", "Q_STAR_0", "Q_GRASS", "Q_WATER", "Q_WATER"],
+    ["Q_NORTH", "Q_FOREST", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_WATER"],
+    ["Q_GRASS", "Q_PATH", "Q_PATH", "Q_YOU_0", "Q_PATH", "Q_MOB", "Q_FRIEND_2"],
+    ["Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_MOB"],
+    ["Q_FOREST", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_WANDER", "Q_GRASS", "Q_GRASS"],
+    ["Q_FOREST", "Q_FOREST", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS"],
+  ];
+  const rx0 = W - 12 - 7 * CELL;
+  rect(img, rx0 - 3, CELL + 27, rx0 + 7 * CELL + 2, CELL + 30 + 7 * CELL + 2, dim);
+  grid.forEach((row, r) => row.forEach((g, c) => blit(g, rx0 + c * CELL, CELL + 30 + r * CELL)));
   return img;
 }
 

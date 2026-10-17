@@ -27,7 +27,7 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Pl
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { G } from "./glyphs.js";
-import { get, getFor, onChange } from "./settings.js";
+import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -82,6 +82,9 @@ const KINDS = /** @type {Record<string, { s: string, l: string, r: string, q: st
 const PLACE_NEAR = { town: 24, home: 4 };
 const LETTERS = [G.S_N, G.S_NE, G.S_E, G.S_SE, G.S_S, G.S_SW, G.S_W, G.S_NW];
 const YOU = [G.Q_YOU_0, G.Q_YOU_1, G.Q_YOU_2, G.Q_YOU_3, G.Q_YOU_4, G.Q_YOU_5, G.Q_YOU_6, G.Q_YOU_7];
+const FRIEND_ARR = [G.Q_FRIEND_0, G.Q_FRIEND_1, G.Q_FRIEND_2, G.Q_FRIEND_3, G.Q_FRIEND_4, G.Q_FRIEND_5, G.Q_FRIEND_6, G.Q_FRIEND_7];
+const PARTY_ARR = [G.Q_PARTY_0, G.Q_PARTY_1, G.Q_PARTY_2, G.Q_PARTY_3, G.Q_PARTY_4, G.Q_PARTY_5, G.Q_PARTY_6, G.Q_PARTY_7];
+const STAR_ARR = [G.Q_STAR_0, G.Q_STAR_1, G.Q_STAR_2, G.Q_STAR_3, G.Q_STAR_4, G.Q_STAR_5, G.Q_STAR_6, G.Q_STAR_7];
 
 const side = sideBoxes("map");
 const isOp = (/** @type {Player} */ p) => p.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
@@ -287,7 +290,7 @@ function markHere(player, name) {
 // One pass for one player
 // ---------------------------------------------------------------------------
 
-/** What each player's preferences are (cached until /realm:prefs or /realm:config changes them). @type {Map<string, { compass: boolean, radar: boolean, north: boolean, mobs: boolean, radius: number, town: boolean, home: boolean }>} */
+/** What each player's preferences are (cached until /realm:prefs or /realm:config changes them). @type {Map<string, { compass: boolean, radar: boolean, north: boolean, terrain: boolean, mobs: boolean, radius: number, town: boolean, home: boolean }>} */
 const prefCache = new Map();
 /** @param {Player} player */
 function prefsOf(player) {
@@ -298,6 +301,7 @@ function prefsOf(player) {
     compass: getFor(player, "compass") === true,
     radar: getFor(player, "radar") === true,
     north: getFor(player, "radarNorthUp") === true,
+    terrain: getFor(player, "terrain") === true,
     mobs: getFor(player, "showMobs") === true,
     radius: Math.min(cap, Math.max(8, Number(getFor(player, "mobRadius")) || 24)),
     town: getFor(player, "showTown") === true,
@@ -310,10 +314,11 @@ onChange((_key, player) => {
   if (player) prefCache.delete(player.id);
   else prefCache.clear();
   if (player) {
-    lastSent.delete(player.id);
+    const s = lastSent.get(player.id);
+    if (s) s.key = "";
     views.delete(player.id); // drawn again from scratch at the next pass
   } else {
-    lastSent.clear();
+    for (const s of lastSent.values()) s.key = "";
     views.clear();
   }
 });
@@ -356,14 +361,9 @@ function destination(player, all, liveFolk) {
     }
     if (wp.k === "camp" && wp.id) return { spot: camps.get(wp.id) ? { ...(/** @type {Spot} */ (camps.get(wp.id))), n: wp.n } : wp, picked: true };
     if (wp.k === "death") return { spot: deaths.get(player.id) ? { ...(/** @type {Spot} */ (deaths.get(player.id))), n: wp.n } : wp, picked: true };
-    if (wp.k === "party" && wp.id) {
+    if ((wp.k === "party" || wp.k === "friend") && wp.id) {
       const mate = onlineById(wp.id, all);
       if (!mate) return { picked: true, off: `${wp.n} is offline` };
-      const tag = partyTag(player);
-      if (!tag || !mate.hasTag(tag)) {
-        setWaypoint(player, undefined);
-        return undefined;
-      }
       const l = mate.location;
       return { spot: { n: wp.n, dim: mate.dimension.id, x: Math.floor(l.x), z: Math.floor(l.z) }, picked: true };
     }
@@ -456,7 +456,7 @@ function gather(player, seen, pr) {
   for (const s of seen) {
     if (s.id === player.id || s.dim !== dim.id) continue;
     if (tag && s.party === tag) add("party", s.x, s.z, true);
-    else if (others && Math.hypot(s.x - at.x, s.z - at.z) <= OTHERS_RANGE) add("other", s.x, s.z, false);
+    else if (others) add("other", s.x, s.z, true);
   }
   const range = Number(get("placeRange")) || 256;
   for (const c of camps.values()) if (c.dim === dim.id && Math.abs(c.x - at.x) <= range && Math.abs(c.z - at.z) <= range) add("camp", c.x + 0.5, c.z + 0.5, false);
@@ -503,6 +503,7 @@ function stripOf(heading, markers, at) {
     prio[i] = p;
   }
   for (const m of markers) {
+    if (m.kind === "folk" || m.kind === "wander") continue;
     const k = KINDS[m.kind];
     if (!k) continue;
     const dx = m.x - at.x;
@@ -524,33 +525,112 @@ function stripOf(heading, markers, at) {
   return cells.join("");
 }
 
+/** Cached 4x4 terrain glyph by `${dimId}:${qx}:${qz}`. @type {Map<string, { g: string, tick: number }>} */
+const terrainCache = new Map();
+let terrainBudget = 6;
+
+/**
+ * Classifies a surface block into a radar terrain glyph.
+ * @param {import("@minecraft/server").Block | undefined} block @param {number} playerY
+ */
+function classifyTerrain(block, playerY) {
+  if (!block) return G.Q_EMPTY;
+  if (playerY < block.location.y - 14) return G.Q_CAVE ?? G.Q_EMPTY;
+  const id = block.typeId.toLowerCase();
+  if (id.includes("water") || id.includes("kelp") || id.includes("seagrass") || id.includes("bubble_column")) return G.Q_WATER ?? G.Q_EMPTY;
+  if (id.includes("snow") || id.includes("ice")) return G.Q_SNOW ?? G.Q_EMPTY;
+  if (id.includes("lava") || id.includes("magma") || id.includes("netherrack") || id.includes("nylium") || id.includes("nyllium") || id.includes("wart") || id.includes("basalt") || id.includes("blackstone") || id.includes("soul")) return G.Q_LAVA ?? G.Q_EMPTY;
+  if (id.includes("sand") || id.includes("terracotta") || id.includes("gravel")) return G.Q_SAND ?? G.Q_EMPTY;
+  if (id.includes("leaves") || id.includes("_log") || id.includes("mangrove_roots") || id.includes("bamboo")) return G.Q_FOREST ?? G.Q_EMPTY;
+  if (id.includes("path") || id.includes("planks") || id.includes("brick") || id.includes("cobble") || id.includes("stairs") || id.includes("slab") || id.includes("wool") || id.includes("concrete") || id.includes("lantern") || id.includes("glass")) return G.Q_PATH ?? G.Q_EMPTY;
+  if (id.includes("stone") || id.includes("deepslate") || id.includes("andesite") || id.includes("diorite") || id.includes("granite") || id.includes("tuff") || id.includes("calcite") || id.includes("dripstone") || id.includes("obsidian") || id.includes("bedrock")) return G.Q_STONE ?? G.Q_EMPTY;
+  return G.Q_GRASS ?? G.Q_EMPTY;
+}
+
+/**
+ * Samples up to 4 uncached or stale 4x4 terrain cells for the player's 7x7 radar grid.
+ * @param {Player} player @param {number} radius @param {boolean} north @param {number} now
+ */
+function sampleTerrain(player, radius, north, now) {
+  if (terrainBudget <= 0) return;
+  const dim = player.dimension;
+  const dimId = dim.id;
+  const at = player.location;
+  const h = (headingOf(player) * Math.PI) / 180;
+  const cos = Math.cos(h);
+  const sin = Math.sin(h);
+  const cell = radius / R;
+  let count = 0;
+  for (let r = -R; r <= R && count < 4 && terrainBudget > 0; r++) {
+    for (let c = -R; c <= R && count < 4 && terrainBudget > 0; c++) {
+      const sx = c * cell;
+      const sy = r * cell;
+      const dx = north ? sx : sx * cos - sy * sin;
+      const dz = north ? sy : sx * sin + sy * cos;
+      const wx = at.x + dx;
+      const wz = at.z + dz;
+      const qx = Math.floor(wx / 4);
+      const qz = Math.floor(wz / 4);
+      const key = `${dimId}:${qx}:${qz}`;
+      const entry = terrainCache.get(key);
+      if (entry && now - entry.tick <= 200) continue;
+      count++;
+      terrainBudget--;
+      try {
+        const block = dim.getTopmostBlock({ x: Math.floor(wx), z: Math.floor(wz) });
+        if (terrainCache.size > 4000) terrainCache.delete(/** @type {string} */ (terrainCache.keys().next().value));
+        terrainCache.set(key, { g: classifyTerrain(block, at.y), tick: now });
+      } catch {
+        // unloaded chunk
+      }
+    }
+  }
+}
+
 /**
  * The radar: 7 x 7 cells, the player in the middle, `radius` blocks to the edge; north up or turned so ahead is up.
- * The destination and party mates beyond the edge sit on it.
+ * The destination, party mates and online friends beyond the edge sit on it as directional arrows.
  * @param {number} heading @param {Marker[]} markers @param {number} radius @param {boolean} north @param {{ x: number, z: number }} at the player
+ * @param {string} [dimId] @param {boolean} [useTerrain]
  */
-function radarOf(heading, markers, radius, north, at) {
-  const grid = Array.from({ length: 2 * R + 1 }, () => Array(2 * R + 1).fill(G.Q_EMPTY));
-  const prio = Array.from({ length: 2 * R + 1 }, () => Array(2 * R + 1).fill(0));
+function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerrain = false) {
   const h = (heading * Math.PI) / 180;
   const cos = Math.cos(h);
   const sin = Math.sin(h);
+  const cell = radius / R;
+  const grid = Array.from({ length: 2 * R + 1 }, (_, row) =>
+    Array.from({ length: 2 * R + 1 }, (__, col) => {
+      if (!useTerrain) return G.Q_EMPTY;
+      const sx = (col - R) * cell;
+      const sy = (row - R) * cell;
+      const dx = north ? sx : sx * cos - sy * sin;
+      const dz = north ? sy : sx * sin + sy * cos;
+      const qx = Math.floor((at.x + dx) / 4);
+      const qz = Math.floor((at.z + dz) / 4);
+      return terrainCache.get(`${dimId}:${qx}:${qz}`)?.g ?? G.Q_EMPTY;
+    })
+  );
+  const prio = Array.from({ length: 2 * R + 1 }, () => Array(2 * R + 1).fill(0));
   /** Screen offset (right, down) of a world offset. @param {number} dx @param {number} dz */
   const screen = (dx, dz) => (north ? [dx, dz] : [dx * cos + dz * sin, -dx * sin + dz * cos]);
-  const cell = radius / R;
-  /** @param {number} sx @param {number} sy @param {string} g @param {number} p @param {boolean} clamp */
-  const place = (sx, sy, g, p, clamp) => {
+  /** @param {number} sx @param {number} sy @param {string} g @param {number} p @param {boolean} clamp @param {string} [kind] */
+  const place = (sx, sy, g, p, clamp, kind) => {
     let c = Math.round(sx / cell);
     let r = Math.round(sy / cell);
+    let glyph = g;
     if (Math.max(Math.abs(c), Math.abs(r)) > R) {
       if (!clamp) return;
       const m = Math.max(Math.abs(sx), Math.abs(sy));
       c = Math.round((sx * R) / m);
       r = Math.round((sy * R) / m);
+      const dirIdx = ((Math.round((Math.atan2(sx, -sy) * 180) / Math.PI / 45) % 8) + 8) % 8;
+      if (kind === "star") glyph = STAR_ARR[dirIdx] ?? g;
+      else if (kind === "party") glyph = PARTY_ARR[dirIdx] ?? g;
+      else if (kind === "other") glyph = FRIEND_ARR[dirIdx] ?? g;
     }
     if (c === 0 && r === 0) return; // the player's own cell
     if (p <= prio[r + R][c + R]) return;
-    grid[r + R][c + R] = g;
+    grid[r + R][c + R] = glyph;
     prio[r + R][c + R] = p;
   };
   if (!north) place(-sin * radius * 2, -cos * radius * 2, G.Q_NORTH, 1, true);
@@ -560,7 +640,7 @@ function radarOf(heading, markers, radius, north, at) {
     const dx = m.x - at.x;
     const dz = m.z - at.z;
     const [sx, sy] = screen(dx, dz);
-    place(sx, sy, k.q, 10 + k.p - Math.min(Math.hypot(dx, dz), 999) / 1000, m.kind === "star" || m.kind === "party" || m.kind === "rainbow");
+    place(sx, sy, k.q, 10 + k.p - Math.min(Math.hypot(dx, dz), 999) / 1000, m.kind === "star" || m.kind === "party" || m.kind === "other" || m.kind === "rainbow", m.kind);
   }
   grid[R][R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
   return grid.map((row) => row.join("")).join("\n");
@@ -595,7 +675,7 @@ function line2Of(region, dest) {
 /**
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, dest?: string, dim: string, px: number, pz: number, heading: number, x: number, z: number }} View
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, dim: string, px: number, pz: number, heading: number, x: number, z: number }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
@@ -612,6 +692,7 @@ function pass(player, all, seen, now) {
   const sent = lastSent.get(player.id);
   if (!showCompass && !showRadar) {
     views.delete(player.id);
+    lastText.delete(player.id);
     if (sent) {
       side.clear(player, "", false);
       side.clear(player, "radar", false);
@@ -622,6 +703,7 @@ function pass(player, all, seen, now) {
     return;
   }
   const t0 = Date.now();
+  if (showRadar && pr.terrain) sampleTerrain(player, pr.radius, pr.north, now);
   const { markers, liveFolk } = gather(player, seen, pr);
   const dest = destination(player, all, liveFolk);
   const reached = arrival(player, dest);
@@ -644,7 +726,7 @@ function pass(player, all, seen, now) {
   const dimId = player.dimension.id;
   const region = dimId === OVERWORLD ? regions.get(player.id) ?? "" : `In ${DIM_NAMES[dimId] ?? "another dimension"}`;
   /** @type {View} */
-  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, dest: dest?.spot?.n, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, z: 0 };
+  const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, z: 0 };
   views.set(player.id, view);
   render(player, view, now, true);
   costMs += Date.now() - t0;
@@ -663,7 +745,7 @@ function render(player, v, now, refresh) {
   v.x = at.x;
   v.z = at.z;
   const strip = v.compass ? stripOf(heading, v.markers, at) : "";
-  const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at) : "";
+  const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain) : "";
   lastText.set(player.id, { strip, line2: v.second, radar, dest: v.dest });
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
   const key = `${compassText}|${radar}`;
@@ -760,6 +842,7 @@ function arrival(player, dest) {
 
 system.runInterval(() => {
   const now = system.currentTick;
+  terrainBudget = 6;
   const all = world.getAllPlayers();
   /** Every player's place and party once a pass, for the others' markers. @type {Seen[]} */
   const seen = [];
@@ -828,6 +911,20 @@ function giveMap(player) {
   player.sendMessage("§a[Map] Mara's Field Map is in your inventory. §7Use it once to draw the land around you, then hold it in your offhand to keep it in view.");
 }
 
+/** Toggles the player's minimap radar on or off. @param {Player} player */
+function toggleMinimap(player) {
+  const nowOn = getFor(player, "radar") === true;
+  setFor(player, "radar", !nowOn);
+  player.sendMessage(!nowOn ? "§a[Map] Minimap: Enabled." : "§7[Map] Minimap: Disabled. Run /realm:minimap again to enable it.");
+}
+
+/** Toggles the player's top compass strip on or off. @param {Player} player */
+function toggleCompass(player) {
+  const nowOn = getFor(player, "compass") === true;
+  setFor(player, "compass", !nowOn);
+  player.sendMessage(!nowOn ? "§a[Map] Compass strip: Enabled." : "§7[Map] Compass strip: Disabled. Run /realm:compass again to enable it.");
+}
+
 /** @param {Player} player */
 async function menu(player) {
   const all = world.getAllPlayers();
@@ -850,6 +947,10 @@ async function menu(player) {
     [`Mark this spot\n§8${marksOf(player).length} of ${max} kept`, () => markMenu(player)],
   ];
   if (wp) actions.push([`Clear destination\n§8${wp.n}`, () => (setWaypoint(player, undefined), player.sendMessage("§7[Map] Destination cleared."))]);
+  actions.push(
+    [`Minimap: ${prefsOf(player).radar ? "On" : "Off"}\n§8Tap to switch`, () => toggleMinimap(player)],
+    [`Compass strip: ${prefsOf(player).compass ? "On" : "Off"}\n§8Tap to switch`, () => toggleCompass(player)]
+  );
   const form = new ActionFormData().title("§lMinimap").body(lines.join("\n"));
   for (const [label] of actions) form.button(label);
   form.button("Close");
@@ -881,11 +982,15 @@ function choices(player) {
     ["Where I died", deaths.get(player.id) ? [{ ...(/** @type {Spot} */ (deaths.get(player.id))), n: "Where I died", k: "death" }] : []],
     [
       "Party mates",
-      tag
-        ? all
-            .filter((p) => p.id !== player.id && p.hasTag(tag))
-            .map((p) => ({ n: plain(p.name), dim: p.dimension.id, x: Math.floor(p.location.x), z: Math.floor(p.location.z), k: "party", id: p.id }))
-        : [],
+      all
+        .filter((p) => p.id !== player.id && (tag ? p.hasTag(tag) : true))
+        .map((p) => ({ n: plain(p.name), dim: p.dimension.id, x: Math.floor(p.location.x), z: Math.floor(p.location.z), k: "party", id: p.id })),
+    ],
+    [
+      "Online friends",
+      all
+        .filter((p) => p.id !== player.id)
+        .map((p) => ({ n: plain(p.name), dim: p.dimension.id, x: Math.floor(p.location.x), z: Math.floor(p.location.z), k: "party", id: p.id })),
     ],
     ["My marked spots", marksOf(player).map((m) => ({ ...m, k: "mark" }))],
   ];
@@ -1189,6 +1294,28 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         const had = waypointOf(player);
         setWaypoint(player, undefined);
         player.sendMessage(had ? `§7[Map] Destination cleared (${had.n}).` : "§7[Map] You had no destination.");
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    { name: "realm:minimap", description: "Toggle your minimap radar on or off", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    (origin) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => {
+        if (player.isValid) toggleMinimap(player);
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    { name: "realm:compass", description: "Toggle your top compass strip on or off", permissionLevel: CommandPermissionLevel.Any, cheatsRequired: false },
+    (origin) => {
+      const player = playerOf(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => {
+        if (player.isValid) toggleCompass(player);
       });
       return { status: CustomCommandStatus.Success };
     }
