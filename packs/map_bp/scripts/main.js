@@ -52,7 +52,7 @@ const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const CELLS = 25; // the strip: 25 cells of 5 degrees, 60 degrees each side of where you face
 const MID = 12;
 const DEG = 5;
-const R = 7; // the radar: 15 x 15 cells (225 pixels), you in the middle
+const R = 10; // the radar: 21 x 21 cells (441 pixels), you in the middle
 const HOLD = 40; // a readout stays this long without an update (ticks)
 const REFRESH = 30; // an unchanged readout is sent again after this many ticks (before HOLD runs out)
 const OTHERS_RANGE = 128;
@@ -532,7 +532,7 @@ const terrainCache = new Map();
 const playerTerrainVer = new Map();
 let globalTerrainVer = 0;
 let scanCursor = 0;
-/** Per-player memoized 225-cell terrain base array so stationary/slow players do 0 trig or Map lookups in radarOf. @type {Map<string, { key: string, base: string[] }>} */
+/** Per-player memoized 441-cell terrain base array so stationary/slow players do 0 trig or Map lookups in radarOf. @type {Map<string, { key: string, base: string[] }>} */
 const terrainBaseMemo = new Map();
 
 /** @param {string} dimId */
@@ -549,13 +549,33 @@ const isWaterBlock = (id) => id.includes("water") || id.includes("kelp") || id.i
 
 /**
  * Classifies a surface block into terrain kind, surface height, and water depth.
- * @param {import("@minecraft/server").Block | undefined} block @param {number} playerY @param {import("@minecraft/server").Dimension} [dim] @param {number} [step]
+ * @param {import("@minecraft/server").Block | undefined} block @param {number} playerY @param {import("@minecraft/server").Dimension} [dim]
+ * @param {number} [wx] @param {number} [wz] @param {number} [step]
  * @returns {{ kind: string, y: number, depth: number }}
  */
-function classifyTerrainKind(block, playerY, dim, step = 0) {
+function classifyTerrainKind(block, playerY, dim, wx = 0, wz = 0, step = 0) {
+  if (!block && dim?.id !== "minecraft:nether") return { kind: "empty", y: Math.floor(playerY), depth: 0 };
+  const y = block ? Math.floor(block.location.y) : Math.floor(playerY + 16);
+  if ((playerY < y - 8 || dim?.id === "minecraft:nether") && dim) {
+    try {
+      const bx = Math.floor(wx ?? block?.location.x ?? 0);
+      const bz = Math.floor(wz ?? block?.location.z ?? 0);
+      const here = dim.getBlock({ x: bx, y: Math.floor(playerY + 1), z: bz });
+      const floor = dim.getBlock({ x: bx, y: Math.floor(playerY - 1), z: bz });
+      if (here && !here.isAir && !isWaterBlock(here.typeId.toLowerCase()) && !here.typeId.includes("lava")) {
+        return { kind: "cave_wall", y: Math.floor(playerY), depth: 0 };
+      }
+      if (floor) {
+        const fid = floor.typeId.toLowerCase();
+        if (fid.includes("lava") || fid.includes("magma")) return { kind: "lava", y: Math.floor(playerY - 1), depth: 0 };
+        if (isWaterBlock(fid)) return { kind: "water", y: Math.floor(playerY - 1), depth: 1 };
+      }
+      return { kind: "cave_floor", y: Math.floor(playerY - 1), depth: 0 };
+    } catch {
+      return { kind: "cave", y: Math.floor(playerY), depth: 0 };
+    }
+  }
   if (!block) return { kind: "empty", y: Math.floor(playerY), depth: 0 };
-  const y = Math.floor(block.location.y);
-  if (playerY < y - 14) return { kind: "cave", y: Math.floor(playerY), depth: 0 };
   const id = block.typeId.toLowerCase();
   if (isWaterBlock(id)) {
     let depth = 2;
@@ -573,18 +593,27 @@ function classifyTerrainKind(block, playerY, dim, step = 0) {
     return { kind: "water", y, depth };
   }
   if (/lava|magma/.test(id)) return { kind: "lava", y, depth: 0 };
-  if (/netherrack|nylium|nyllium|wart_block|crimson|warped|soul_/.test(id)) return { kind: "nether", y, depth: 0 };
+  if (/cherry_leaves|pink_petals|cherry_/.test(id)) return { kind: "cherry", y, depth: 0 };
+  if (/birch_leaves|azalea/.test(id)) return { kind: "birch", y, depth: 0 };
+  if (/spruce_leaves|podzol/.test(id)) return { kind: "spruce", y, depth: 0 };
+  if (/mangrove|mud|swamp|lily_pad/.test(id)) return { kind: "swamp", y, depth: 0 };
+  if (/acacia|hay_block|dry_grass|dead_bush/.test(id)) return { kind: "savanna", y, depth: 0 };
+  if (/warped_/.test(id)) return { kind: "warped", y, depth: 0 };
+  if (/netherrack|nylium|nyllium|wart_block|crimson|soul_/.test(id)) return { kind: "nether", y, depth: 0 };
   if (/end_stone|purpur|chorus/.test(id)) return { kind: "end", y, depth: 0 };
-  if (/terracotta|red_sand|mud_bricks/.test(id)) return { kind: "mesa", y, depth: 0 };
+  if (/packed_ice|blue_ice|frosted_ice/.test(id)) return { kind: "ice", y, depth: 0 };
+  if (/deepslate|obsidian|basalt|blackstone|bedrock|tuff/.test(id)) return { kind: "deepslate", y, depth: 0 };
+  if (/brick|copper|shingle|tile/.test(id)) return { kind: "brick", y, depth: 0 };
+  if (/terracotta|red_sand/.test(id)) return { kind: "mesa", y, depth: 0 };
   if (/snow|ice/.test(id)) return { kind: "snow", y, depth: 0 };
   if (/sand|gravel|sandstone/.test(id)) return { kind: "sand", y, depth: 0 };
-  if (/leaves|_log|mangrove_roots|bamboo|vine|azalea/.test(id)) return { kind: "forest", y, depth: 0 };
-  if (/path|planks|brick|cobble|stairs|slab|wool|concrete|lantern|glass|fence|door|trapdoor|copper|iron_block|gold_block/.test(id)) return { kind: "path", y, depth: 0 };
-  if (/stone|deepslate|andesite|diorite|granite|tuff|calcite|dripstone|obsidian|bedrock|ore|basalt|blackstone/.test(id)) return { kind: "stone", y, depth: 0 };
-  if (step < 1 && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily|rose|peony|lilac|bush|dead_bush/.test(id)) {
+  if (/leaves|_log|bamboo|vine/.test(id)) return { kind: "forest", y, depth: 0 };
+  if (/path|planks|cobble|stairs|slab|wool|concrete|lantern|glass|fence|door|trapdoor|iron_block|gold_block/.test(id)) return { kind: "path", y, depth: 0 };
+  if (/stone|andesite|diorite|granite|calcite|dripstone|ore/.test(id)) return { kind: "stone", y, depth: 0 };
+  if (step < 1 && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|cornflower|lily|rose|peony|lilac|bush/.test(id)) {
     try {
       const below = block.below(1);
-      if (below) return classifyTerrainKind(below, playerY, dim, step + 1);
+      if (below) return classifyTerrainKind(below, playerY, dim, wx, wz, step + 1);
     } catch {
       // unloaded chunk
     }
@@ -601,13 +630,25 @@ function bakeTerrainGlyph(dimId, wx, wz, cur) {
   if (cur.kind === "water") return cur.depth <= 1 ? G.Q_WATER_SHALLOW : cur.depth >= 3 ? G.Q_WATER_DEEP : G.Q_WATER;
   if (cur.kind === "lava") return G.Q_LAVA;
   if (cur.kind === "cave") return G.Q_CAVE;
-  if (cur.kind === "mesa") return G.Q_MESA;
+  if (cur.kind === "cave_floor") return G.Q_CAVE_FLOOR;
+  if (cur.kind === "cave_wall") return G.Q_CAVE_WALL;
+  if (cur.kind === "cherry") return G.Q_CHERRY;
+  if (cur.kind === "birch") return G.Q_BIRCH;
+  if (cur.kind === "spruce") return G.Q_SPRUCE;
+  if (cur.kind === "savanna") return G.Q_SAVANNA;
+  if (cur.kind === "swamp") return G.Q_SWAMP;
+  if (cur.kind === "deepslate") return G.Q_DEEPSLATE;
+  if (cur.kind === "brick") return G.Q_BRICK;
+  if (cur.kind === "warped") return G.Q_WARPED;
+  if (cur.kind === "ice") return G.Q_ICE;
   if (cur.kind === "nether") return G.Q_NETHER;
   if (cur.kind === "end") return G.Q_END;
   const north = terrainCache.get(terrainKey(dimId, wx, wz - 4));
   const west = terrainCache.get(terrainKey(dimId, wx - 4, wz));
   const dh = (cur.y - (north?.y ?? cur.y)) + (cur.y - (west?.y ?? cur.y));
   switch (cur.kind) {
+    case "mesa":
+      return dh >= 2 ? G.Q_MESA_HI : dh <= -2 ? G.Q_MESA_LO : G.Q_MESA;
     case "forest":
       return dh >= 2 ? G.Q_FOREST_HI : dh <= -2 ? G.Q_FOREST_LO : G.Q_FOREST;
     case "sand":
@@ -672,7 +713,7 @@ system.runInterval(() => {
         budget--;
         const block = dim.getTopmostBlock({ x: Math.floor(wx), z: Math.floor(wz) });
         if (terrainCache.size > 6000) terrainCache.delete(/** @type {number} */ (terrainCache.keys().next().value));
-        const info = classifyTerrainKind(block, at.y, dim);
+        const info = classifyTerrainKind(block, at.y, dim, wx, wz);
         const g = bakeTerrainGlyph(dimId, wx, wz, info);
         terrainCache.set(key, { ...info, g, tick: now });
         changed = true;
@@ -694,7 +735,7 @@ const prioBuf = new Float64Array(RADAR_CELLS);
 const rowStrs = /** @type {string[]} */ (Array(RADAR_SIZE));
 
 /**
- * The radar: 15 x 15 cells, the player in the middle, `radius` blocks to the edge; north up or turned so ahead is up.
+ * The radar: 21 x 21 cells, the player in the middle, `radius` blocks to the edge; north up or turned so ahead is up.
  * The destination, party mates and online friends beyond the edge sit on it as directional arrows.
  * @param {number} heading @param {Marker[]} markers @param {number} radius @param {boolean} north @param {{ x: number, z: number }} at the player
  * @param {string} [dimId] @param {boolean} [useTerrain] @param {string} [playerId]
@@ -760,7 +801,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     const [sx, sy] = screen(star.x - at.x, star.z - at.z);
     const d = Math.hypot(sx, sy);
     if (d > 0) {
-      for (const step of [2, 4, 6]) {
+      for (const step of [2, 4, 6, 8]) {
         if (step * cell >= d - cell * 0.5) break;
         place((sx / d) * step * cell, (sy / d) * step * cell, G.Q_ROUTE, 2, false);
       }

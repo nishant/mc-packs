@@ -84,8 +84,8 @@ const WHITE = /** @type {RGBA} */ ([245, 245, 245, 255]);
 const LINE = /** @type {RGBA} */ ([210, 210, 210, 150]);
 const TICK = /** @type {RGBA} */ ([210, 210, 210, 210]);
 const NORTH = /** @type {RGBA} */ ([255, 90, 80, 255]);
-const BG = /** @type {RGBA} */ ([28, 56, 34, 185]);
-const RING = /** @type {RGBA} */ ([255, 255, 255, 34]);
+const BG = /** @type {RGBA} */ ([56, 128, 48, 255]);
+const BG_ACCENT = /** @type {RGBA} */ ([72, 150, 60, 255]);
 /** Marker colors. */
 const COLOR = /** @type {Record<string, RGBA>} */ ({
   mob: [235, 55, 45, 255],
@@ -129,14 +129,15 @@ const RIGHT = [[14, 8], [4, 2.5], [4, 13.5]];
 
 /** Strip cells: a thin baseline across the bottom, so every cell is full width. */
 const baseline = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {number} */ oy) => rect(img, ox, oy + 15, ox + 15, oy + 15, LINE);
-/** Radar cells: a dark see-through square with a faint grid line. */
+/** Radar cells: a seamless grass-toned ground tile with zero grid lines. */
 const square = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {number} */ oy) => {
   rect(img, ox, oy, ox + 15, oy + 15, BG);
-  rect(img, ox, oy, ox + 15, oy, RING);
-  rect(img, ox, oy + 1, ox, oy + 15, RING);
+  for (let y = 0; y < CELL; y++)
+    for (let x = 0; x < CELL; x++)
+      if ((x * 5 + y * 7) % 11 === 0) put(img, ox + x, oy + y, BG_ACCENT);
 };
 /**
- * Radar terrain cell: a vibrant ground tile with deterministic pixel accents and a 1px top/left grid line.
+ * Radar terrain cell: an opaque, seamless borderless ground tile with deterministic pixel accents.
  * @param {Image} img
  * @param {number} ox
  * @param {number} oy
@@ -145,12 +146,14 @@ const square = (/** @type {Image} */ img, /** @type {number} */ ox, /** @type {n
  * @param {(x: number, y: number) => boolean} patternFn
  */
 const terrainSquare = (img, ox, oy, baseRGBA, accentRGBA, patternFn) => {
-  rect(img, ox, oy, ox + 15, oy + 15, baseRGBA);
-  for (let y = 1; y < 15; y++)
-    for (let x = 1; x < 15; x++)
-      if (patternFn(x, y)) put(img, ox + x, oy + y, accentRGBA);
-  rect(img, ox, oy, ox + 15, oy, RING);
-  rect(img, ox, oy + 1, ox, oy + 15, RING);
+  /** @type {RGBA} */
+  const base = [baseRGBA[0], baseRGBA[1], baseRGBA[2], 255];
+  /** @type {RGBA} */
+  const accent = [accentRGBA[0], accentRGBA[1], accentRGBA[2], 255];
+  rect(img, ox, oy, ox + 15, oy + 15, base);
+  for (let y = 0; y < CELL; y++)
+    for (let x = 0; x < CELL; x++)
+      if (patternFn(x, y)) put(img, ox + x, oy + y, accent);
 };
 
 /**
@@ -220,6 +223,8 @@ MARKS.forEach(([name, what, draw], i) => {
 glyph("Q_EMPTY", 0x38, "radar: empty", (img, ox, oy) => square(img, ox, oy));
 glyph("Q_NORTH", 0x39, "radar: which way north is (when it turns with you)", (img, ox, oy) => {
   square(img, ox, oy);
+  letter(img, ox, oy, BIG.N, 2, 0, 2, RIM);
+  letter(img, ox, oy, BIG.N, 4, 2, 2, RIM);
   letter(img, ox, oy, BIG.N, 3, 1, 2, NORTH);
 });
 // Row 4: the player in the radar's middle, facing N, NE, E, SE, S, SW, W, NW.
@@ -323,90 +328,128 @@ for (let k = 0; k < 8; k++) {
   });
 }
 
-// Rows 10-11: terrain background radar tiles.
+// Rows 10-12: opaque, borderless terrain radar tiles and 3D topographic elevation-shaded variants.
 glyph("Q_GRASS", 0xa8, "radar terrain: lush meadow green", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [56, 128, 48, 185], [72, 150, 60, 200], (x, y) => (x * 5 + y * 9) % 11 === 0),
+  terrainSquare(img, ox, oy, [56, 128, 48, 255], [72, 150, 60, 255], (x, y) => (x * 5 + y * 9) % 11 === 0),
 );
 glyph("Q_WATER", 0xa9, "radar terrain: ocean/river blue", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [36, 98, 185, 190], [64, 132, 218, 205], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
+  terrainSquare(img, ox, oy, [36, 98, 185, 255], [64, 132, 218, 255], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
 );
 glyph("Q_SAND", 0xaa, "radar terrain: desert/beach gold", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [198, 174, 102, 185], [216, 192, 120, 200], (x, y) => (x * 7 + y * 3) % 13 === 0),
+  terrainSquare(img, ox, oy, [198, 174, 102, 255], [216, 192, 120, 255], (x, y) => (x * 7 + y * 3) % 13 === 0),
 );
 glyph("Q_SNOW", 0xab, "radar terrain: crisp snow/ice", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [210, 228, 240, 185], [235, 245, 255, 200], (x, y) => (x * 11 + y * 5) % 14 === 0),
+  terrainSquare(img, ox, oy, [210, 228, 240, 255], [235, 245, 255, 255], (x, y) => (x * 11 + y * 5) % 14 === 0),
 );
 glyph("Q_STONE", 0xac, "radar terrain: rocky mountain gray", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [108, 114, 122, 185], [132, 138, 146, 200], (x, y) => (x * 3 + y * 7) % 9 === 0),
+  terrainSquare(img, ox, oy, [108, 114, 122, 255], [132, 138, 146, 255], (x, y) => (x * 3 + y * 7) % 9 === 0),
 );
 glyph("Q_FOREST", 0xad, "radar terrain: deep canopy green", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [34, 88, 36, 190], [48, 112, 48, 205], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
+  terrainSquare(img, ox, oy, [34, 88, 36, 255], [48, 112, 48, 255], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
 );
 glyph("Q_LAVA", 0xae, "radar terrain: glowing magma/nether orange-red", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [195, 68, 28, 195], [240, 120, 35, 215], (x, y) => (x * 5 + y * 3) % 8 < 2),
+  terrainSquare(img, ox, oy, [195, 68, 28, 255], [240, 120, 35, 255], (x, y) => (x * 5 + y * 3) % 8 < 2),
 );
 glyph("Q_CAVE", 0xaf, "radar terrain: dark underground cavern slate", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [32, 36, 46, 185], [48, 52, 66, 200], (x, y) => (x * 7 + y * 11) % 15 === 0),
+  terrainSquare(img, ox, oy, [32, 36, 46, 255], [48, 52, 66, 255], (x, y) => (x * 7 + y * 11) % 15 === 0),
 );
 glyph("Q_PATH", 0xb0, "radar terrain: town road/wood/cobble warm brown", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [136, 102, 68, 185], [162, 124, 86, 200], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+  terrainSquare(img, ox, oy, [136, 102, 68, 255], [162, 124, 86, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
 );
-// Rows 11-12: 3D topographic elevation-shaded terrain variants, extra biomes, and route breadcrumbs.
 glyph("Q_GRASS_LO", 0xb1, "radar terrain: shadowed grass slope", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [42, 98, 36, 190], [52, 114, 44, 205], (x, y) => (x * 5 + y * 9) % 11 === 0),
+  terrainSquare(img, ox, oy, [42, 98, 36, 255], [52, 114, 44, 255], (x, y) => (x * 5 + y * 9) % 11 === 0),
 );
 glyph("Q_GRASS_HI", 0xb2, "radar terrain: sunlit grass hill", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [76, 158, 62, 190], [94, 178, 76, 205], (x, y) => (x * 5 + y * 9) % 11 === 0),
+  terrainSquare(img, ox, oy, [76, 158, 62, 255], [94, 178, 76, 255], (x, y) => (x * 5 + y * 9) % 11 === 0),
 );
 glyph("Q_FOREST_LO", 0xb3, "radar terrain: shadowed forest", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [24, 66, 26, 195], [34, 84, 36, 210], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
+  terrainSquare(img, ox, oy, [24, 66, 26, 255], [34, 84, 36, 255], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
 );
 glyph("Q_FOREST_HI", 0xb4, "radar terrain: sunlit forest", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [48, 114, 48, 195], [64, 136, 62, 210], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
+  terrainSquare(img, ox, oy, [48, 114, 48, 255], [64, 136, 62, 255], (x, y) => (x + y) % 4 === 0 && (x * 3 + y) % 5 < 2),
 );
 glyph("Q_WATER_DEEP", 0xb5, "radar terrain: deep ocean/lake water", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [22, 64, 142, 195], [34, 84, 168, 210], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
+  terrainSquare(img, ox, oy, [22, 64, 142, 255], [34, 84, 168, 255], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
 );
 glyph("Q_WATER_SHALLOW", 0xb6, "radar terrain: shallow coastal/river water", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [58, 138, 218, 190], [88, 168, 240, 205], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
+  terrainSquare(img, ox, oy, [58, 138, 218, 255], [88, 168, 240, 255], (x, y) => y % 4 === 2 && (x + (y >> 1)) % 4 < 2),
 );
 glyph("Q_SAND_LO", 0xb7, "radar terrain: shadowed sand/dune", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [166, 144, 82, 190], [184, 160, 96, 205], (x, y) => (x * 7 + y * 3) % 13 === 0),
+  terrainSquare(img, ox, oy, [166, 144, 82, 255], [184, 160, 96, 255], (x, y) => (x * 7 + y * 3) % 13 === 0),
 );
 glyph("Q_SAND_HI", 0xb8, "radar terrain: sunlit sand/dune", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [224, 202, 128, 190], [240, 220, 148, 205], (x, y) => (x * 7 + y * 3) % 13 === 0),
+  terrainSquare(img, ox, oy, [224, 202, 128, 255], [240, 220, 148, 255], (x, y) => (x * 7 + y * 3) % 13 === 0),
 );
 glyph("Q_STONE_LO", 0xb9, "radar terrain: shadowed cliff/rock", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [82, 86, 94, 190], [98, 104, 112, 205], (x, y) => (x * 3 + y * 7) % 9 === 0),
+  terrainSquare(img, ox, oy, [82, 86, 94, 255], [98, 104, 112, 255], (x, y) => (x * 3 + y * 7) % 9 === 0),
 );
 glyph("Q_STONE_HI", 0xba, "radar terrain: sunlit mountain peak/rock", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [142, 148, 158, 190], [164, 170, 180, 205], (x, y) => (x * 3 + y * 7) % 9 === 0),
+  terrainSquare(img, ox, oy, [142, 148, 158, 255], [164, 170, 180, 255], (x, y) => (x * 3 + y * 7) % 9 === 0),
 );
 glyph("Q_SNOW_LO", 0xbb, "radar terrain: shadowed snow slope", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [174, 194, 212, 190], [192, 212, 228, 205], (x, y) => (x * 11 + y * 5) % 14 === 0),
+  terrainSquare(img, ox, oy, [174, 194, 212, 255], [192, 212, 228, 255], (x, y) => (x * 11 + y * 5) % 14 === 0),
 );
 glyph("Q_SNOW_HI", 0xbc, "radar terrain: sunlit snow peak", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [238, 246, 255, 195], [250, 252, 255, 210], (x, y) => (x * 11 + y * 5) % 14 === 0),
+  terrainSquare(img, ox, oy, [238, 246, 255, 255], [250, 252, 255, 255], (x, y) => (x * 11 + y * 5) % 14 === 0),
 );
 glyph("Q_PATH_LO", 0xbd, "radar terrain: shadowed road/roof", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [108, 78, 50, 190], [126, 94, 62, 205], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+  terrainSquare(img, ox, oy, [108, 78, 50, 255], [126, 94, 62, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
 );
 glyph("Q_PATH_HI", 0xbe, "radar terrain: sunlit road/roof", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [168, 128, 88, 190], [190, 148, 104, 205], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
+  terrainSquare(img, ox, oy, [168, 128, 88, 255], [190, 148, 104, 255], (x, y) => (x + (y >> 1) * 2) % 5 === 0 && y % 3 === 1),
 );
 glyph("Q_MESA", 0xbf, "radar terrain: terracotta/badlands/brick", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [178, 92, 58, 190], [202, 112, 74, 205], (x, y) => y % 4 === 1 || (x * 5 + y * 3) % 13 === 0),
+  terrainSquare(img, ox, oy, [178, 92, 58, 255], [202, 112, 74, 255], (x, y) => y % 4 === 1 || (x * 5 + y * 3) % 13 === 0),
 );
 glyph("Q_NETHER", 0xc0, "radar terrain: crimson/netherrack", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [118, 32, 32, 195], [148, 46, 42, 210], (x, y) => (x * 5 + y * 7) % 9 === 0),
+  terrainSquare(img, ox, oy, [118, 32, 32, 255], [148, 46, 42, 255], (x, y) => (x * 5 + y * 7) % 9 === 0),
 );
 glyph("Q_END", 0xc1, "radar terrain: pale end stone", (img, ox, oy) =>
-  terrainSquare(img, ox, oy, [206, 210, 152, 190], [224, 228, 174, 205], (x, y) => (x * 7 + y * 5) % 11 === 0),
+  terrainSquare(img, ox, oy, [206, 210, 152, 255], [224, 228, 174, 255], (x, y) => (x * 7 + y * 5) % 11 === 0),
 );
 glyph("Q_ROUTE", 0xc2, "radar: gold route breadcrumb dot", (img, ox, oy) => {
-  terrainSquare(img, ox, oy, [56, 128, 48, 185], [72, 150, 60, 200], (x, y) => (x * 5 + y * 9) % 11 === 0);
-  rimmedDisc(img, ox, oy, 8, 8, 2.2, COLOR.star);
+  terrainSquare(img, ox, oy, [56, 128, 48, 255], [72, 150, 60, 255], (x, y) => (x * 5 + y * 9) % 11 === 0);
+  rimmedDisc(img, ox, oy, 8, 8, 2.6, COLOR.star);
 });
+glyph("Q_CHERRY", 0xc3, "radar terrain: cherry blossom pink canopy", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [232, 132, 168, 255], [246, 156, 190, 255], (x, y) => (x + y) % 3 === 0 && (x * 3 + y * 5) % 7 < 3),
+);
+glyph("Q_BIRCH", 0xc4, "radar terrain: birch/olive forest", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [98, 136, 62, 255], [114, 154, 74, 255], (x, y) => (x + y) % 4 === 0 && (x * 5 + y) % 5 < 2),
+);
+glyph("Q_SPRUCE", 0xc5, "radar terrain: dark pine/taiga canopy", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [42, 74, 52, 255], [54, 90, 66, 255], (x, y) => (x * 3 + y * 5) % 8 < 2),
+);
+glyph("Q_SAVANNA", 0xc6, "radar terrain: dry savanna/hay gold-olive", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [146, 138, 66, 255], [164, 156, 78, 255], (x, y) => (x * 5 + y * 7) % 11 === 0),
+);
+glyph("Q_SWAMP", 0xc7, "radar terrain: dark marsh/mangrove green", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [58, 78, 44, 255], [72, 94, 56, 255], (x, y) => (x + y * 3) % 7 === 0),
+);
+glyph("Q_DEEPSLATE", 0xc8, "radar terrain: dark deepslate/basalt/obsidian", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [56, 58, 66, 255], [70, 72, 82, 255], (x, y) => (x * 5 + y * 3) % 9 === 0),
+);
+glyph("Q_BRICK", 0xc9, "radar terrain: red brick/copper/terracotta roof", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [164, 76, 56, 255], [186, 92, 68, 255], (x, y) => y % 4 === 0 || (x + (y >> 2) * 3) % 6 === 0),
+);
+glyph("Q_WARPED", 0xca, "radar terrain: warped nylium/stem teal", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [28, 134, 128, 255], [42, 158, 150, 255], (x, y) => (x * 3 + y * 7) % 9 < 2),
+);
+glyph("Q_ICE", 0xcb, "radar terrain: packed/blue glacial ice", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [132, 178, 238, 255], [158, 200, 250, 255], (x, y) => (x + y) % 6 === 0),
+);
+glyph("Q_CAVE_FLOOR", 0xcc, "radar terrain: walkable underground cavern floor", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [68, 72, 82, 255], [82, 86, 98, 255], (x, y) => (x * 5 + y * 9) % 12 === 0),
+);
+glyph("Q_CAVE_WALL", 0xcd, "radar terrain: solid underground rock wall", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [24, 26, 34, 255], [32, 36, 46, 255], (x, y) => (x * 7 + y * 11) % 15 === 0),
+);
+glyph("Q_MESA_LO", 0xce, "radar terrain: shadowed mesa canyon", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [144, 72, 44, 255], [160, 82, 52, 255], (x, y) => y % 4 === 1 || (x * 5 + y * 3) % 13 === 0),
+);
+glyph("Q_MESA_HI", 0xcf, "radar terrain: sunlit mesa plateau", (img, ox, oy) =>
+  terrainSquare(img, ox, oy, [208, 114, 74, 255], [226, 130, 88, 255], (x, y) => y % 4 === 1 || (x * 5 + y * 3) % 13 === 0),
+);
 
 // ---------------------------------------------------------------------------
 // The outputs
@@ -435,10 +478,10 @@ function glyphsJs() {
   return lines.join("\n");
 }
 
-/** A render of the HUD (not a screenshot): the strip facing east-northeast with markers, and the 15x15 radar. @param {Image} sheet */
+/** A render of the HUD (not a screenshot): the strip facing east-northeast with markers, and the 21x21 radar. @param {Image} sheet */
 function render(sheet) {
-  const MINI = CELL / 2;
-  const W = 25 * CELL + 24, H = 15 * MINI + 2 * CELL + 36;
+  const MINI = 6;
+  const W = 25 * CELL + 24, H = 21 * MINI + 2 * CELL + 48;
   const img = blank(W, H);
   // Sky over grass, roughly what's behind the HUD.
   for (let y = 0; y < H; y++)
@@ -465,16 +508,18 @@ function render(sheet) {
     for (let j = 0; j < MINI; j++)
       for (let i = 0; i < MINI; i++) {
         let r = 0, g = 0, b = 0, a = 0;
-        for (let dy = 0; dy < 2; dy++)
-          for (let dx = 0; dx < 2; dx++) {
-            const k = ((sy + j * 2 + dy) * sheet.width + sx + i * 2 + dx) * 4;
+        for (let dy = 0; dy < 3; dy++)
+          for (let dx = 0; dx < 3; dx++) {
+            const px = Math.min(CELL - 1, Math.floor(((i * 3 + dx + 0.5) * CELL) / (MINI * 3)));
+            const py = Math.min(CELL - 1, Math.floor(((j * 3 + dy + 0.5) * CELL) / (MINI * 3)));
+            const k = ((sy + py) * sheet.width + sx + px) * 4;
             const pa = sheet.data[k + 3];
             r += sheet.data[k] * pa;
             g += sheet.data[k + 1] * pa;
             b += sheet.data[k + 2] * pa;
             a += pa;
           }
-        if (a > 0) put(img, x + i, y + j, [Math.round(r / a), Math.round(g / a), Math.round(b / a), Math.round(a / 4)]);
+        if (a > 0) put(img, x + i, y + j, [Math.round(r / a), Math.round(g / a), Math.round(b / a), Math.round(a / 9)]);
       }
   };
   // Facing 70 degrees: 5 degrees a cell, so N sits 14 cells left of the middle (off the strip) and E 4 cells right.
@@ -487,27 +532,40 @@ function render(sheet) {
   const dim = /** @type {RGBA} */ ([0, 0, 0, 120]);
   rect(img, 9, 3, 9 + 25 * CELL + 5, 3 + CELL + 3, dim);
   strip.forEach((g, i) => blit(g, 12 + i * CELL, 5));
-  // The 15x15 radar on the upper right below the compass strip (at half scale 8x8 per cell = 120x120 px).
+  // The 21x21 radar on the upper right below the compass strip (at 6x6 px per cell = 126x126 px inside a sleek dark frame).
   const grid = [
-    ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_STAR_0", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
-    ["Q_FOREST_HI", "Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP"],
-    ["Q_FOREST", "Q_NORTH", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
-    ["Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
-    ["Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_TOWN", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
-    ["Q_GRASS", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_YOU_0", "Q_PATH", "Q_PATH", "Q_GRASS", "Q_MOB", "Q_SAND", "Q_WATER_SHALLOW", "Q_FRIEND_2"],
-    ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
-    ["Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_WANDER", "Q_GRASS", "Q_MOB", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW"],
-    ["Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW"],
-    ["Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND"],
-    ["Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS"],
-    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO"],
-    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO"],
+    ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_STAR_0", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
+    ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
+    ["Q_FOREST_HI", "Q_NORTH", "Q_FOREST", "Q_CHERRY", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP"],
+    ["Q_FOREST", "Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP"],
+    ["Q_FOREST", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
+    ["Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
+    ["Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_PATH", "Q_TOWN", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_PATH", "Q_PATH", "Q_PATH", "Q_ROUTE", "Q_PATH", "Q_PATH", "Q_PATH", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_PATH", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER", "Q_WATER_DEEP"],
+    ["Q_GRASS", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_PATH", "Q_YOU_0", "Q_PATH", "Q_PATH", "Q_PATH", "Q_GRASS", "Q_MOB", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_FRIEND_2"],
+    ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER"],
+    ["Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_FOLK", "Q_GRASS", "Q_BRICK", "Q_BRICK", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS_HI", "Q_WANDER", "Q_GRASS", "Q_MOB", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
+    ["Q_FOREST", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
+    ["Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER"],
+    ["Q_FOREST", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
+    ["Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_CHERRY", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS_HI", "Q_STONE_HI", "Q_STONE_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER"],
+    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_SAND", "Q_WATER_SHALLOW"],
+    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_SAND", "Q_WATER_SHALLOW"],
+    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_SAND", "Q_SAND"],
+    ["Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST_LO", "Q_FOREST", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_PATH", "Q_GRASS", "Q_GRASS", "Q_GRASS", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS_LO", "Q_GRASS", "Q_SAND"],
   ];
-  const rx0 = W - 12 - 15 * MINI;
-  rect(img, rx0 - 3, CELL + 27, rx0 + 15 * MINI + 2, CELL + 30 + 15 * MINI + 2, dim);
-  grid.forEach((row, r) => row.forEach((g, c) => blitMini(g, rx0 + c * MINI, CELL + 30 + r * MINI)));
+  const rx0 = W - 12 - 21 * MINI, ry0 = CELL + 24;
+  const frame = /** @type {RGBA} */ ([10, 14, 18, 210]);
+  rect(img, rx0 - 4, ry0 - 4, rx0 + 21 * MINI + 3, ry0 + 21 * MINI + 19, frame);
+  grid.forEach((row, r) => row.forEach((g, c) => blitMini(g, rx0 + c * MINI, ry0 + r * MINI)));
+  // 2-line coordinates and biome info plate below the 21x21 minimap inside the frame.
+  rect(img, rx0, ry0 + 21 * MINI + 2, rx0 + 21 * MINI - 1, ry0 + 21 * MINI + 2, [45, 52, 62, 255]);
+  rect(img, rx0 + 2, ry0 + 21 * MINI + 5, rx0 + 6, ry0 + 21 * MINI + 8, COLOR.star);
+  rect(img, rx0 + 10, ry0 + 21 * MINI + 5, rx0 + 78, ry0 + 21 * MINI + 8, WHITE);
+  rect(img, rx0 + 2, ry0 + 21 * MINI + 12, rx0 + 6, ry0 + 21 * MINI + 15, [232, 132, 168, 255]);
+  rect(img, rx0 + 10, ry0 + 21 * MINI + 12, rx0 + 96, ry0 + 21 * MINI + 15, [180, 190, 202, 255]);
   return img;
 }
 

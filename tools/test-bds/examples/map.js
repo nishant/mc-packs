@@ -52,7 +52,7 @@ function fromUtf8(b) {
 /** Slot k of the subtitle, as hud_rp cuts it (9 = top, 10 = radar). */
 function slot(sub, k) {
   const b = utf8(sub ?? "");
-  const len = k === 10 ? 704 : 160;
+  const len = k === 10 ? 1352 : 160;
   return fromUtf8(b.slice(9 + 160 * k + 1, 9 + 160 * k + len)).replace(/~/g, "").replace(/(§r)+$/, "");
 }
 
@@ -114,13 +114,13 @@ export default async function (t) {
   // --- Facing north: N in the middle. Mara north-east: in the radar's upper right, not cluttering the compass strip.
   stand(p, mara.x - 10, mara.z + 17);
   cfg("radar", true, p);
-  let st = await until(p, (s) => s.strip?.length === 25 && rows(s.radar)[2]?.[10] === Q.FOLK, "Mara in the 15x15 radar's upper right");
+  let st = await until(p, (s) => s.strip?.length === 25 && rows(s.radar)[3]?.[14] === Q.FOLK, "Mara in the 21x21 radar's upper right");
   const strip0 = [...st.strip];
   t.log("strip:", strip0.map((c) => (c.codePointAt(0) - 0xf300).toString(16)).join(" "), "| line2:", st.line2);
   t.check(strip0.length === 25, `25 cells (${strip0.length})`);
   t.check(strip0[12] === S.N, "facing north: N in the middle");
   t.check(!strip0.includes(S.FOLK), "ordinary NPCs do not clutter the compass strip");
-  t.check(rows(st.radar)[2]?.[10] === Q.FOLK, "Mara in the 15x15 radar's upper right (row 2, column 10)");
+  t.check(rows(st.radar)[3]?.[14] === Q.FOLK, "Mara in the 21x21 radar's upper right (row 3, column 14)");
   t.check(st.line2.includes("§7The ") || st.line2.length > 0, `the region on the second line (${st.line2})`);
   t.check(st.known.folk >= 1 && st.known.region, `map_bp heard the townsfolk and the region (${JSON.stringify(st.known)})`);
 
@@ -132,9 +132,9 @@ export default async function (t) {
   if (!last) t.log("titles seen:", JSON.stringify(t.messages(p, { kind: "title", since }).slice(-2)).slice(0, 600));
   t.check(!!last, "map_bp draws the Side HUD title");
   if (last) {
-    t.check(utf8(last.subtitle).length === 9 + 10 * 160 + 704, `subtitle is 2313 bytes (${utf8(last.subtitle).length})`);
+    t.check(utf8(last.subtitle).length === 9 + 10 * 160 + 1352, `subtitle is 2961 bytes (${utf8(last.subtitle).length})`);
     t.check(slot(last.subtitle, 9).startsWith([...st.strip].slice(0, 5).join("")), "the strip is in the top slot");
-    t.check(slot(last.subtitle, 10).split("\n").length === 15, "the radar (15 rows) is in the radar slot");
+    t.check(slot(last.subtitle, 10).split("\n").length === 21, "the radar (21 rows) is in the radar slot");
   }
 
   // --- Mobs: one ahead-left in red, one behind as an arrow at the edge; then the player's switch hides them.
@@ -352,11 +352,11 @@ export default async function (t) {
   t.check(t.cmd(p, "/realm:minimap").ok, "/realm:minimap hides the minimap radar");
   st = await until(p, (s) => s.radar === "" && s.strip.length === 25, "minimap toggled off while compass stays on");
   t.check(t.cmd(p, "/realm:minimap").ok, "/realm:minimap shows the minimap radar again");
-  st = await until(p, (s) => rows(s.radar).length === 15 && s.strip.length === 25, "minimap toggled back on");
+  st = await until(p, (s) => rows(s.radar).length === 21 && s.strip.length === 25, "minimap toggled back on");
   t.check(t.cmd(p, "/realm:compass").ok, "/realm:compass hides the compass strip");
-  st = await until(p, (s) => s.strip === "" && rows(s.radar).length === 15, "compass toggled off while minimap stays on");
+  st = await until(p, (s) => s.strip === "" && rows(s.radar).length === 21, "compass toggled off while minimap stays on");
   t.check(t.cmd(p, "/realm:compass").ok, "/realm:compass shows the compass strip again");
-  st = await until(p, (s) => s.strip.length === 25 && rows(s.radar).length === 15, "compass toggled back on");
+  st = await until(p, (s) => s.strip.length === 25 && rows(s.radar).length === 21, "compass toggled back on");
 
   // --- Both off: the top and radar slots go empty.
   cfg("compass", false, p);

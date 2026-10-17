@@ -233,4 +233,30 @@ export const G = {
   Q_END: "",
   /** U+F3C2 radar: gold route breadcrumb dot */
   Q_ROUTE: "",
+  /** U+F3C3 radar terrain: cherry blossom pink canopy */
+  Q_CHERRY: "",
+  /** U+F3C4 radar terrain: birch/olive forest */
+  Q_BIRCH: "",
+  /** U+F3C5 radar terrain: dark pine/taiga canopy */
+  Q_SPRUCE: "",
+  /** U+F3C6 radar terrain: dry savanna/hay gold-olive */
+  Q_SAVANNA: "",
+  /** U+F3C7 radar terrain: dark marsh/mangrove green */
+  Q_SWAMP: "",
+  /** U+F3C8 radar terrain: dark deepslate/basalt/obsidian */
+  Q_DEEPSLATE: "",
+  /** U+F3C9 radar terrain: red brick/copper/terracotta roof */
+  Q_BRICK: "",
+  /** U+F3CA radar terrain: warped nylium/stem teal */
+  Q_WARPED: "",
+  /** U+F3CB radar terrain: packed/blue glacial ice */
+  Q_ICE: "",
+  /** U+F3CC radar terrain: walkable underground cavern floor */
+  Q_CAVE_FLOOR: "",
+  /** U+F3CD radar terrain: solid underground rock wall */
+  Q_CAVE_WALL: "",
+  /** U+F3CE radar terrain: shadowed mesa canyon */
+  Q_MESA_LO: "",
+  /** U+F3CF radar terrain: sunlit mesa plateau */
+  Q_MESA_HI: "",
 };

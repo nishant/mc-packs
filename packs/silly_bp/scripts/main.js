@@ -14,6 +14,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { initLibrarianBookLock } from "./librarian.js";
 import { get, getFor } from "./settings.js";
 
 // Silly enchants are lore lines on gear ("Silly: Hyper Jump"). They only make particles, sounds and
@@ -958,3 +959,11 @@ system.afterEvents.scriptEventReceive.subscribe(
   },
   { namespaces: ["realm"] },
 );
+
+initLibrarianBookLock({
+  bookOf,
+  makeBookById: (id) => {
+    const e = enchantById(id);
+    return e ? makeBook(e) : undefined;
+  },
+});

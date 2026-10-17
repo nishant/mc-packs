@@ -122,7 +122,7 @@ export default async function (t) {
     await hit(a);
     let m = await t.waitUntil(() => boxes(a, since).find((x) => x.pack === "mobhp_bp"), { timeout: 20, message: `mobhp draws in ${slot}` });
     let d = decode(m.subtitle);
-    t.check(d.bytes === 2313, `subtitle is 2313 bytes: nine boxes, the minimap's strip and 15x15 radar (${d.bytes})`);
+    t.check(d.bytes === 2961, `subtitle is 2961 bytes: nine boxes, the minimap's strip and 21x21 radar (${d.bytes})`);
     t.check(/Cow\s+§f\d+\/10/.test(d.out[slot]), `mobhp in ${slot}: "${d.out[slot]}"`);
     // Warmer / Colder
     await set("maps_bp", "where", slot, a);

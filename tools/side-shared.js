@@ -8,7 +8,7 @@
 // title and the subtitle, so every slot travels in one subtitle:
 //
 //   title    = MARK                                     ("§s§2§r": color codes only, invisible on its own)
-//   subtitle = MARK + seg(right1) + ... + seg(radar)     (in ALL_SLOTS order: 11 segments, 2313 bytes)
+//   subtitle = MARK + seg(right1) + ... + seg(radar)     (in ALL_SLOTS order: 11 segments, 2961 bytes)
 //   seg      = sep (1 byte: " " or "\n") + text + "~" * (0..2) + "§r" * n    exactly SEG_BYTES UTF-8 bytes
 //   empty    = " " + "§r" * 53
 //
@@ -42,7 +42,7 @@ export const SLOT_NAMES = ["Right 1 (top)", "Right 2", "Right 3", "Right 4 (bott
 const SEG_BYTES = 160;
 /** Bytes of readout text a slot holds (the separator takes one). */
 export const TEXT_BYTES = SEG_BYTES - 1;
-const RADAR_SEG_BYTES = 704;
+const RADAR_SEG_BYTES = 1352;
 export const RADAR_TEXT_BYTES = RADAR_SEG_BYTES - 1;
 const MAX_TICKS = 1200;
 /** Longest real title a hold covers (a story scene line can stay 20 seconds). */
@@ -91,7 +91,7 @@ export function clean(text, maxBytes = TEXT_BYTES) {
   return out;
 }
 
-const PAD_R = "§r".repeat(235);
+const PAD_R = "§r".repeat(455);
 
 /** One slot's segment, exactly segBytes bytes. @param {string} text cleaned @param {string} sep " " or "\n" @param {number} [segBytes] */
 export function segment(text, sep, segBytes = SEG_BYTES) {

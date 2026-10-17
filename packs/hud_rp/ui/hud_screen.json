@@ -277,6 +277,143 @@
       }
     ]
   },
+  "realm_radar_panel": {
+    "type": "panel",
+    "size": [
+      "100%",
+      "100%c + 2px"
+    ],
+    "$radar_empty|default": "~§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
+    "controls": [
+      {
+        "radar_frame": {
+          "type": "image",
+          "texture": "textures/ui/Black",
+          "alpha": 0.78,
+          "anchor_from": "top_right",
+          "anchor_to": "top_right",
+          "size": [
+            "100%c + 8px",
+            "100%c + 8px"
+          ],
+          "controls": [
+            {
+              "radar_content": {
+                "type": "panel",
+                "anchor_from": "center",
+                "anchor_to": "center",
+                "size": [
+                  "100%c",
+                  "100%c"
+                ],
+                "controls": [
+                  {
+                    "radar_mesh_0": {
+                      "type": "label",
+                      "text": "#text",
+                      "size": [
+                        "default",
+                        "default"
+                      ],
+                      "max_size": [
+                        148,
+                        148
+                      ],
+                      "font_scale_factor": 0.38,
+                      "line_padding": -1.5,
+                      "shadow": false,
+                      "localize": false,
+                      "color": [
+                        1,
+                        1,
+                        1
+                      ],
+                      "locked_alpha": 1.0,
+                      "anchor_from": "top_left",
+                      "anchor_to": "top_left",
+                      "offset": [
+                        0,
+                        0
+                      ],
+                      "layer": 1,
+                      "bindings": [
+                        {
+                          "binding_name": "#hud_subtitle_text_string",
+                          "binding_type": "global"
+                        },
+                        {
+                          "binding_type": "view",
+                          "source_property_name": "((('%.1351s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
+                          "target_property_name": "#text"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "radar_mesh_1": {
+                      "type": "label",
+                      "text": "#text",
+                      "size": [
+                        "default",
+                        "default"
+                      ],
+                      "max_size": [
+                        148,
+                        148
+                      ],
+                      "font_scale_factor": 0.38,
+                      "line_padding": -1.5,
+                      "shadow": false,
+                      "localize": false,
+                      "color": [
+                        1,
+                        1,
+                        1
+                      ],
+                      "locked_alpha": 1.0,
+                      "anchor_from": "top_left",
+                      "anchor_to": "top_left",
+                      "offset": [
+                        0.45,
+                        0
+                      ],
+                      "layer": 1,
+                      "bindings": [
+                        {
+                          "binding_name": "#hud_subtitle_text_string",
+                          "binding_type": "global"
+                        },
+                        {
+                          "binding_type": "view",
+                          "source_property_name": "((('%.1351s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) - '~~') - '~')",
+                          "target_property_name": "#text"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "binding_name": "#hud_title_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_name": "#hud_subtitle_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_type": "view",
+        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (('%.1351s' * (#hud_subtitle_text_string - ('%.1610s' * #hud_subtitle_text_string))) = $radar_empty)))",
+        "target_property_name": "#visible"
+      }
+    ]
+  },
   "realm_side_area": {
     "type": "panel",
     "size": [
@@ -437,19 +574,7 @@
           ],
           "controls": [
             {
-              "realm_radar@hud.realm_slot": {
-                "$skip": "%.1610s",
-                "$slot_slice": "%.703s",
-                "$slot_scale": 0.52,
-                "$slot_empty": "~§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
-                "$slot_anchor": "top_right",
-                "$slot_align": "right",
-                "$slot_max": [
-                  140,
-                  140
-                ],
-                "$slot_alpha": 0.45
-              }
+              "realm_radar@hud.realm_radar_panel": {}
             }
           ]
         }

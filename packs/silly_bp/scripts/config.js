@@ -27,4 +27,7 @@ export const CONFIG = {
 
   /** Hat Trick: seconds before the rabbit vanishes again. */
   hatTrickRabbitSeconds: 10,
+
+  /** Using an Enchanted Book on an ordinary villager offers to turn them into a Novice Librarian locked to trading that book. */
+  librarianBookLock: true,
 };

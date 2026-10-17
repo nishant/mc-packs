@@ -14,6 +14,7 @@ const OPTIONS = [
   { key: "maxPerItem", type: "int", scope: "world", label: "Silly enchants per item", min: 1, max: 5, step: 1 },
   { key: "hyperJumpCooldownSeconds", type: "int", scope: "world", label: "Hyper Jump cooldown (seconds)", min: 1, max: 30, step: 1 },
   { key: "hyperJumpSoftLanding", type: "bool", scope: "world", label: "Hyper Jump soft landing", help: "A puff of slow falling just above the ground, so landings don't hurt" },
+  { key: "librarianBookLock", type: "bool", scope: "world", label: "Lock a villager to an Enchanted Book as a Novice Librarian", help: "Use an Enchanted Book on a villager to open a confirmation popup and lock them to trading that book" },
   { key: "effects", type: "bool", scope: "player", label: "My silly effects", help: "Your own silly enchants play (they stay on your gear either way)", default: true },
 ];
 
