@@ -35,6 +35,7 @@ export function getPaletteBlocks(player) {
     for (let i = start; i < end; i++) {
         const item = inv.getItem(i);
         if (!item) continue;
+        if (item.typeId.startsWith("custom:") || item.typeId.startsWith("eb:")) continue;
         try { BlockPermutation.resolve(item.typeId); } catch { continue; }
         const prev = blockMap.get(item.typeId) ?? 0;
         if (weightMode === "slots") {

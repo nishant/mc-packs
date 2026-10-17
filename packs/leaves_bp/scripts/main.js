@@ -123,8 +123,9 @@ function* runCheck(check) {
     /** @type {Pos[]} */
     const starts = [];
     for (const s of check.seeds) {
-      for (const [dx, dy, dz] of SIDES) if (leafy(kindAt(s.x + dx, s.y + dy, s.z + dz))) starts.push({ x: s.x + dx, y: s.y + dy, z: s.z + dz });
-      for (let dy = 1; dy <= CONFIG.fellHeight; dy++) {
+      if (reads >= maxBlocks) break;
+      for (const [dx, dy, dz] of SIDES) if (reads < maxBlocks && leafy(kindAt(s.x + dx, s.y + dy, s.z + dz))) starts.push({ x: s.x + dx, y: s.y + dy, z: s.z + dz });
+      for (let dy = 1; dy <= CONFIG.fellHeight && reads < maxBlocks; dy++) {
         const y = s.y + dy;
         const k = kindAt(s.x, y, s.z);
         if (leafy(k)) {
@@ -132,7 +133,7 @@ function* runCheck(check) {
           break;
         }
         if (k !== AIR) break; // a log still stands above (its leaves are held), or the column ends
-        for (const [dx, , dz] of SIDES) if ((dx || dz) && leafy(kindAt(s.x + dx, y, s.z + dz))) starts.push({ x: s.x + dx, y, z: s.z + dz });
+        for (const [dx, , dz] of SIDES) if ((dx || dz) && reads < maxBlocks && leafy(kindAt(s.x + dx, y, s.z + dz))) starts.push({ x: s.x + dx, y, z: s.z + dz });
         if (dy % 8 === 0) yield;
       }
       yield;

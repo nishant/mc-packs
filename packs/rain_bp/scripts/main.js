@@ -341,7 +341,7 @@ function sounds(player, st, place, roofNear, rainWasOpen) {
 
 /** @param {Player} player @param {State} st */
 function stopSounds(player, st) {
-  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE, RAIN_INSIDE, RAIN_ENTER]) stopSound(player, id);
+  for (const id of [WIND, WIND_INSIDE, BED, BED_INSIDE, RAIN_INSIDE, RAIN_ENTER, ROOF]) stopSound(player, id);
   st.place = "none";
 }
 

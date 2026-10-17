@@ -1,11 +1,12 @@
 // @ts-nocheck
-import { world, BlockPermutation } from "@minecraft/server";
+import { world, system, BlockPermutation } from "@minecraft/server";
 import { coachEvent } from "../utils/CoachEvents.js";
 import { enqueue } from "./PlacementQueue.js";
 import { getUndoThreshold } from "./Settings.js";
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 const MAX_HISTORY = 10;
+const UNDO_CHUNK_SIZE = 64;
 const tempStacks = {
     undo: new Map(),
     redo: new Map(),
@@ -131,7 +132,7 @@ export function recordSnapshot(player, snapshot) {
     routeClear(player, "redo");
 }
 function applyBlocks(dim, playerId, blocks) {
-    for (const b of blocks) {
+    const applyOne = (b) => {
         const pos = { x: b.x, y: b.y, z: b.z };
         try {
             const permutation = BlockPermutation.resolve(unpack(b.t), b.s ?? {});
@@ -147,7 +148,16 @@ function applyBlocks(dim, playerId, blocks) {
                 if (block) block.setPermutation(BlockPermutation.resolve("minecraft:air"));
             } catch {}
         }
-    }
+    };
+    const firstBatch = Math.min(blocks.length, UNDO_CHUNK_SIZE);
+    for (let i = 0; i < firstBatch; i++) applyOne(blocks[i]);
+    if (blocks.length <= UNDO_CHUNK_SIZE) return;
+    let idx = UNDO_CHUNK_SIZE;
+    const runId = system.runInterval(() => {
+        const end = Math.min(idx + UNDO_CHUNK_SIZE, blocks.length);
+        for (; idx < end; idx++) applyOne(blocks[idx]);
+        if (idx >= blocks.length) system.clearRun(runId);
+    }, 1);
 }
 export function performUndo(player) {
     const entry = routePop(player, "undo");
@@ -156,6 +166,7 @@ export function performUndo(player) {
         return;
     }
     const dim = world.getDimension(entry.dim);
+    let toApply = entry.bef ?? [];
     if (entry.destroy && entry.survival && !isCreative(player) && entry.bef?.length) {
         const needed = new Map();
         for (const b of entry.bef) {
@@ -171,25 +182,31 @@ export function performUndo(player) {
             }
         }
         for (const [tid, count] of needed) removeBlocks(player, tid, count);
-    } else if (entry.survival && !isCreative(player) && entry.aft?.length) {
+    } else if (!entry.destroy && entry.aft?.length && entry.bef?.length === entry.aft.length) {
         const refund = new Map();
+        const filteredBef = [];
+        const checkRefund = entry.survival && !isCreative(player);
         for (let i = 0; i < entry.aft.length; i++) {
             const a = entry.aft[i];
-            const b = entry.bef?.[i];
+            const b = entry.bef[i];
             const aftId = unpack(a.t);
-            if (aftId === "minecraft:air") continue;
-            if (b && unpack(b.t) === aftId) continue;
+            let unchangedSinceBuild = true;
             try {
                 const cur = dim.getBlock({ x: a.x, y: a.y, z: a.z });
-                if (cur && cur.typeId !== aftId) continue;
+                if (cur && cur.typeId !== aftId) unchangedSinceBuild = false;
             } catch {}
-            refund.set(aftId, (refund.get(aftId) ?? 0) + 1);
+            if (!unchangedSinceBuild) continue;
+            filteredBef.push(b);
+            if (checkRefund && aftId !== "minecraft:air" && unpack(b.t) !== aftId) {
+                refund.set(aftId, (refund.get(aftId) ?? 0) + 1);
+            }
         }
         for (const [tid, count] of refund) giveBlocks(player, tid, count);
+        toApply = filteredBef;
     }
-    applyBlocks(dim, player.id, entry.bef);
+    applyBlocks(dim, player.id, toApply);
     routePush(player, "redo", entry);
-    const n = entry.bef.length;
+    const n = toApply.length;
     player.onScreenDisplay.setActionBar(t("eb.undo.done", n));
     coachEvent(player, "undo");
 }

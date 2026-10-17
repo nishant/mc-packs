@@ -2,7 +2,7 @@
 import { system, BlockPermutation } from "@minecraft/server";
 import { getFlippedStates } from "../modifiers/MirrorModifier.js";
 import { getMaxBlocks, getBuildSpeed, getUndoThreshold, getReplaceBlocks } from "./Settings.js";
-import { isCreative, countBlocks, removeBlocks } from "../utils/InventoryUtils.js";
+import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
 import { enqueue } from "./PlacementQueue.js";
 import { captureSnapshot, recordSnapshot } from "./UndoRedo.js";
@@ -263,14 +263,26 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                 }
             }
             const shellList     = [...shellMap.keys()].sort((a, b) => a - b).map(k => shellMap.get(k));
-            const numShells     = shellList.length;
-            const shellsPerTick = Math.max(1, Math.ceil(numShells / waveTicks));
-            let si = 0;
+            const ordered       = shellList.flat();
+            const perTick       = Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks)));
+            let idx             = 0;
             const runId = system.runInterval(() => {
-                const end = Math.min(si + shellsPerTick, numShells);
-                for (; si < end; si++)
-                    for (const pos of shellList[si]) placeOne(pos);
-                if (si >= numShells) system.clearRun(runId);
+                try {
+                    const end = Math.min(idx + perTick, ordered.length);
+                    for (; idx < end; idx++) placeOne(ordered[idx]);
+                    if (idx >= ordered.length) system.clearRun(runId);
+                } catch {
+                    system.clearRun(runId);
+                    if (survival && idx < ordered.length && player.isValid) {
+                        const refund = new Map();
+                        for (let r = idx; r < ordered.length; r++) {
+                            const p = ordered[r];
+                            const tid = assignments ? (posTypeMap.get(`${p.x},${p.y},${p.z}`) ?? typeId) : typeId;
+                            refund.set(tid, (refund.get(tid) ?? 0) + 1);
+                        }
+                        for (const [tid, cnt] of refund) giveBlocks(player, tid, cnt);
+                    }
+                }
             }, 1);
         }
     }

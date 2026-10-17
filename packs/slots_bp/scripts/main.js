@@ -593,13 +593,21 @@ world.beforeEvents.itemUse.subscribe((ev) => {
   }
 });
 
+/** @type {Machine[] | undefined} */
+let machinesCache;
 /** @returns {Machine[]} */
 const machines = () => {
-  const list = readJson(world, PROP_MACHINES, /** @type {Machine[]} */ ([]));
-  return Array.isArray(list) ? list : [];
+  if (!machinesCache) {
+    const list = readJson(world, PROP_MACHINES, /** @type {Machine[]} */ ([]));
+    machinesCache = Array.isArray(list) ? list : [];
+  }
+  return machinesCache;
 };
 /** @param {Machine[]} list */
-const saveMachines = (list) => world.setDynamicProperty(PROP_MACHINES, list.length ? JSON.stringify(list) : undefined);
+const saveMachines = (list) => {
+  machinesCache = list;
+  world.setDynamicProperty(PROP_MACHINES, list.length ? JSON.stringify(list) : undefined);
+};
 /** @param {string} d @param {import("@minecraft/server").Vector3} at */
 const machineAt = (d, at) => machines().find((m) => m.d === d && m.x === at.x && m.y === at.y && m.z === at.z);
 

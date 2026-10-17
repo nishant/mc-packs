@@ -318,11 +318,17 @@ export function startPreviewLoop() {
 
                 if (aimingAtPanel(player) || aimingAtCoach(player) || aimingAtPicker(player)) continue;
 
+                const state      = getState(player);
+                if (state.mode === "disable" || (state.anchor && !state.blockTypeId)) {
+                    lastPreviewTarget.delete(player.id);
+                    previewCache.delete(player.id);
+                    continue;
+                }
+
                 const quality    = getPreviewQuality(player);
                 const tick       = (previewTicks.get(player.id) ?? 0) + 1;
                 previewTicks.set(player.id, tick);
                 const autoTier   = previewTierQ.get(player.id) ?? 1;
-                const state      = getState(player);
 
                 const pastePositioning = state.mode === "copy_paste" && !!state.clipboard;
                 const isCursorPreview  = !pastePositioning

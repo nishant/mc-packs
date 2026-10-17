@@ -185,6 +185,8 @@ function removeSeat(seat) {
 // Empty seats, and seats whose stair or slab is gone, are removed. This also clears seats left
 // over from before a restart as soon as their chunk loads.
 system.runInterval(() => {
+  const now = system.currentTick;
+  for (const [id, at] of born) if (now - at >= GRACE_TICKS) born.delete(id);
   for (const id of DIMENSIONS) {
     const dim = world.getDimension(id);
     for (const seat of dim.getEntities({ type: SEAT })) {
