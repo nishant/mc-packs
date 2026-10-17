@@ -15,45 +15,61 @@ export default async function (t) {
   const sim = await t.player("QAFixtureBot", { op: true, gameMode: "creative" });
   const cx = 200;
   const cz = 200;
-  const { top } = await t.loadArea(cx, cz, { radius: 36 });
-  const baseY = typeof top === "number" ? top : top.location.y;
+  const { top } = await t.loadArea(cx, cz, { radius: 4 });
+  const baseY = Math.min(typeof top === "number" ? top : top.location.y, 72);
 
-  // 1. Build deterministic flat lawn + river channel + stone-brick bridge + thin roof + high spire + cave.
+  // Move sim into the target chunks and wait 15 ticks so chunks cx-24..cx+28, cz-16..cz+16 are ticking before fill().
+  sim.teleport({ x: cx + 8.5, y: baseY + 2, z: cz + 0.5 }, { rotation: { x: 0, y: -90 } });
+  await t.wait(15);
+
+  // 1. Build deterministic flat lawn + clear all trees/canopy up to baseY+30 + river + bridge + thin roof + spire + cave.
   const fill = (x1, y1, z1, x2, y2, z2, block) => {
     dim.runCommand(`fill ${x1} ${y1} ${z1} ${x2} ${y2} ${z2} ${block}`);
   };
 
-  fill(cx - 20, baseY - 5, cz - 16, cx + 22, baseY, cz + 16, "grass_block");
-  fill(cx - 20, baseY + 1, cz - 16, cx + 22, baseY + 12, cz + 16, "air");
+  fill(cx - 24, baseY - 5, cz - 16, cx + 28, baseY, cz + 16, "grass_block");
+  fill(cx - 24, baseY + 1, cz - 16, cx + 28, baseY + 10, cz + 16, "air");
+  fill(cx - 24, baseY + 11, cz - 16, cx + 28, baseY + 20, cz + 16, "air");
+  fill(cx - 24, baseY + 21, cz - 16, cx + 28, baseY + 30, cz + 16, "air");
 
   // Deep river channel (north of center: z - 12 .. z - 6, 5 blocks deep)
   fill(cx - 18, baseY - 4, cz - 12, cx + 18, baseY, cz - 6, "water");
   // Bridge over river (x - 1 .. x + 1, z - 12 .. z - 6, y = baseY + 1)
   fill(cx - 1, baseY + 1, cz - 12, cx + 1, baseY + 1, cz - 6, "stone_bricks");
 
-  // Thin 1-block roof canopy (east of center: x + 6 .. x + 12, z - 3 .. z + 3, y = baseY + 4)
-  fill(cx + 6, baseY + 4, cz - 3, cx + 12, baseY + 4, cz + 3, "stone_slab");
+  // Thin 1-block roof canopy (south of NPC sightline lane: x + 4 .. x + 10, z + 6 .. z + 12, y = baseY + 4)
+  fill(cx + 4, baseY + 4, cz + 6, cx + 10, baseY + 4, cz + 12, "stone_slab");
 
-  // High spire for elevation rendering (x + 10, z + 10, height +10)
-  fill(cx + 9, baseY + 1, cz + 9, cx + 11, baseY + 10, cz + 11, "gold_block");
+  // High spire for elevation rendering (x + 14 .. x + 16, z + 8 .. z + 10, height +10)
+  fill(cx + 14, baseY + 1, cz + 8, cx + 16, baseY + 10, cz + 10, "gold_block");
 
-  // Sealed subterranean cave chamber for cave/underground mode (x - 10, baseY - 5, z + 10)
+  // Sealed subterranean cave chamber for cave/underground mode (x - 13 .. x - 7, baseY - 5 .. baseY - 1, z + 7 .. z + 13)
   fill(cx - 13, baseY - 5, cz + 7, cx - 7, baseY - 1, cz + 13, "stone");
   fill(cx - 12, baseY - 4, cz + 8, cx - 8, baseY - 2, cz + 12, "air");
   fill(cx - 10, baseY - 4, cz + 10, cx - 10, baseY - 4, cz + 10, "sea_lantern");
 
   // Explicit cache-age precondition: move sim across the staged area and wait >210 ticks
   // so map_bp's column cache (CACHE_REFRESH_TICKS = 200) scans the fresh terrain rather than stale ground.
-  sim.teleport({ x: cx + 0.5, y: baseY + 1, z: cz + 0.5 }, { rotation: { x: 0, y: 180 } });
+  sim.teleport({ x: cx + 5.5, y: baseY + 1, z: cz + 0.5 }, { rotation: { x: 0, y: -90 } });
   await t.wait(215);
 
-  // Verify terrain blocks are in place via waitUntil state precondition.
+  // Verify terrain blocks AND unobstructed NPC sightline corridor (x = cx - 5 .. cx + 21, z = cz - 1 .. cz + 1) via waitUntil.
   await t.waitUntil(() => {
     const bridge = dim.getBlock({ x: cx, y: baseY + 1, z: cz - 9 })?.typeId;
     const water = dim.getBlock({ x: cx + 5, y: baseY, z: cz - 9 })?.typeId;
-    const roof = dim.getBlock({ x: cx + 9, y: baseY + 4, z: cz })?.typeId;
-    return bridge === "minecraft:stone_bricks" && water === "minecraft:water" && Boolean(roof?.includes("slab"));
-  }, { timeout: 60, message: "terrain/water/bridge/thin-roof fixture blocks ready" });
+    const roof = dim.getBlock({ x: cx + 7, y: baseY + 4, z: cz + 9 })?.typeId;
+    if (bridge !== "minecraft:stone_bricks" || water !== "minecraft:water" || !roof?.includes("slab")) return false;
+    for (let x = cx - 5; x <= cx + 21; x++) {
+      const ground = dim.getBlock({ x, y: baseY, z: cz })?.typeId;
+      if (ground !== "minecraft:grass_block" && ground !== "minecraft:sea_lantern") return false;
+      for (let z = cz - 1; z <= cz + 1; z++) {
+        for (let y = baseY + 1; y <= baseY + 4; y++) {
+          if (dim.getBlock({ x, y, z })?.typeId !== "minecraft:air") return false;
+        }
+      }
+    }
+    return true;
+  }, { timeout: 60, message: "terrain/water/bridge/thin-roof fixture blocks and clear NPC sightline corridor ready" });
 
   // 2. NPC fixture at (cx + 20, baseY + 1, cz) facing west (-X, yaw 90) with 5/10/15/20/25m pads along X.
   const npcPos = { x: cx + 20.5, y: baseY + 1, z: cz + 0.5 };
@@ -129,9 +145,19 @@ export default async function (t) {
 
   async function seedPlayerStashPages(player) {
     const inv = player.getComponent("minecraft:inventory")?.container;
-    if (!inv) return false;
+    if (!inv) throw new Error(`inventory container unavailable for ${player.name}`);
     const pageNow = () => Number(/Page (\d+)\//.exec(inv.getItem(16)?.nameTag ?? "")?.[1] ?? 0);
-    await t.waitUntil(() => inv.getItem(15)?.typeId === "custom:inv_prev", { timeout: 100, message: "stash_bp paging buttons placed in slots 15-17" });
+    await t.waitUntil(() => inv.getItem(15)?.typeId === "custom:inv_prev" && inv.getItem(17)?.typeId === "custom:inv_next", {
+      timeout: 120,
+      message: `stash_bp paging buttons placed in slots 15-17 for ${player.name}`,
+    });
+
+    // Ensure starting on Page 1
+    if (pageNow() !== 1) {
+      inv.setItem(15, undefined);
+      await t.waitUntil(() => pageNow() === 1, { timeout: 60, message: `reset ${player.name} to stash page 1` });
+      await t.wait(6);
+    }
 
     // Populate Page 1 storage slots (12 distinct items) + hotbar items
     for (let i = 0; i < 12; i++) {
@@ -142,69 +168,88 @@ export default async function (t) {
 
     // Switch to Page 2 via Next button (slot 17)
     inv.setItem(17, undefined);
-    await t.waitUntil(() => pageNow() === 2, { timeout: 60, message: "switched to stash page 2" });
+    await t.waitUntil(() => pageNow() === 2, { timeout: 60, message: `switched ${player.name} to stash page 2` });
     await t.wait(8);
 
     // Populate Page 2 storage slots (12 more distinct items)
     for (let i = 0; i < 12; i++) {
       inv.setItem(STORAGE_SLOTS[i], new ItemStack(STASH_ITEMS[i + 12], (i % 16) + 1));
     }
+    const page2Sample = inv.getItem(STORAGE_SLOTS[0])?.typeId ?? null;
 
     // Switch back to Page 1 via Prev button (slot 15)
     inv.setItem(15, undefined);
-    await t.waitUntil(() => pageNow() === 1, { timeout: 60, message: "returned to stash page 1" });
+    await t.waitUntil(() => pageNow() === 1 && inv.getItem(STORAGE_SLOTS[0])?.typeId === STASH_ITEMS[0], {
+      timeout: 60,
+      message: `returned ${player.name} to stash page 1 with restored items`,
+    });
     await t.wait(8);
-    return true;
+    return {
+      ok: true,
+      activePage: pageNow(),
+      page1FirstItem: inv.getItem(STORAGE_SLOTS[0])?.typeId ?? null,
+      page2FirstItem: page2Sample,
+      page1Count: 12,
+      page2Count: 12,
+    };
   }
 
   applyLongSidebarAndHud(sim);
   await seedPlayerStashPages(sim);
 
-  // Teleport helper for any player (real client or simulated)
-  function movePlayerToStep(player, step) {
+  // Teleport / action helper for any player (real client or simulated)
+  async function movePlayerToStep(player, step) {
     const lookEast = { x: 0, y: -90 }; // Facing +X toward NPC at cx + 20.5
     if (step === "map_bridge") {
       player.teleport({ x: cx + 0.5, y: baseY + 2, z: cz - 9 + 0.5 }, { rotation: { x: 25, y: 0 } });
+      return { view: "bridge_over_river" };
     } else if (step === "map_roof") {
-      player.teleport({ x: cx + 9.5, y: baseY + 1, z: cz + 0.5 }, { rotation: { x: 0, y: 90 } });
+      player.teleport({ x: cx + 7.5, y: baseY + 1, z: cz + 9.5 }, { rotation: { x: 0, y: 180 } });
+      return { view: "under_thin_roof" };
     } else if (step === "map_spire") {
-      player.teleport({ x: cx + 10.5, y: baseY + 11, z: cz + 10.5 }, { rotation: { x: 35, y: 135 } });
+      player.teleport({ x: cx + 15.5, y: baseY + 11, z: cz + 9.5 }, { rotation: { x: 35, y: 135 } });
+      return { view: "high_spire" };
     } else if (step === "map_cave") {
       player.teleport({ x: cx - 10 + 0.5, y: baseY - 4, z: cz + 10 + 0.5 }, { rotation: { x: 0, y: 0 } });
+      return { view: "sealed_cave" };
     } else if (/^npc_(5|10|15|20|25)m$/.test(step)) {
       const dist = Number(step.match(/^npc_(\d+)m$/)[1]);
       player.teleport({ x: cx + 20.5 - dist, y: baseY + 1, z: cz + 0.5 }, { rotation: lookEast });
+      return { view: `npc_${dist}m`, distanceMeters: dist };
     } else if (step === "npc_probe_always") {
-      t.cmd(player, "/realm:npc_name_probe always");
+      return t.cmd(player, "/realm:npc_name_probe always");
     } else if (step === "npc_probe_looked_at") {
-      t.cmd(player, "/realm:npc_name_probe looked_at");
+      return t.cmd(player, "/realm:npc_name_probe looked_at");
     } else if (step === "sidebar_long") {
       applyLongSidebarAndHud(player);
+      return { sidebar: "qa_sidebar_long" };
     } else if (step === "stash_open") {
       const inv = player.getComponent("minecraft:inventory")?.container;
-      if (inv) inv.setItem(16, undefined);
+      if (!inv) throw new Error(`inventory unavailable for ${player.name}`);
+      inv.setItem(16, undefined);
+      return { action: "open_inv_menu" };
     } else if (step === "stash_next") {
       const inv = player.getComponent("minecraft:inventory")?.container;
-      if (inv) inv.setItem(17, undefined);
+      if (!inv) throw new Error(`inventory unavailable for ${player.name}`);
+      inv.setItem(17, undefined);
+      await t.wait(8);
+      return { activeButton: inv.getItem(16)?.nameTag ?? null, firstSlot: inv.getItem(STORAGE_SLOTS[0])?.typeId ?? null };
     } else if (step === "stash_prev") {
       const inv = player.getComponent("minecraft:inventory")?.container;
-      if (inv) inv.setItem(15, undefined);
+      if (!inv) throw new Error(`inventory unavailable for ${player.name}`);
+      inv.setItem(15, undefined);
+      await t.wait(8);
+      return { activeButton: inv.getItem(16)?.nameTag ?? null, firstSlot: inv.getItem(STORAGE_SLOTS[0])?.typeId ?? null };
     } else if (step === "stash_fill") {
-      const inv = player.getComponent("minecraft:inventory")?.container;
-      if (inv) {
-        for (let i = 0; i < Math.min(12, STORAGE_SLOTS.length); i++) {
-          inv.setItem(STORAGE_SLOTS[i], new ItemStack(STASH_ITEMS[i], (i % 16) + 1));
-        }
-        inv.setItem(0, new ItemStack("minecraft:diamond_sword", 1));
-        inv.setItem(1, new ItemStack("minecraft:golden_apple", 8));
-      }
+      return await seedPlayerStashPages(player);
     } else {
-      // default spawn overview pad (10m from NPC, overlooking river/bridge/roof)
+      // default spawn overview pad (10m from NPC, unobstructed sightline along z = cz)
       player.teleport({ x: cx + 10.5, y: baseY + 1, z: cz + 0.5 }, { rotation: lookEast });
+      return { view: "npc_10m_default" };
     }
   }
 
-  movePlayerToStep(sim, "npc_10m");
+  await movePlayerToStep(sim, "npc_10m");
 
   const fixtureManifest = {
     fixtureReady: true,
@@ -218,6 +263,8 @@ export default async function (t) {
       "scriptevent qa:cmd map_cave",
       "scriptevent qa:cmd sidebar_long",
       "scriptevent qa:cmd stash_fill",
+      "scriptevent qa:cmd stash_next",
+      "scriptevent qa:cmd stash_prev",
       "scriptevent qa:cmd stash_open",
       "scriptevent qa:cmd npc_5m",
       "scriptevent qa:cmd npc_10m",
@@ -241,25 +288,34 @@ export default async function (t) {
     const targets = targetName
       ? all.filter((p) => p.name.toLowerCase() === targetName.toLowerCase())
       : (realPlayers.length ? realPlayers : [sim]);
-    for (const p of targets) {
-      movePlayerToStep(p, step);
-      t.log(`QA_STEP_APPLIED ${JSON.stringify({ step, player: p.name, location: p.location })}`);
-    }
+    system.run(async () => {
+      for (const p of targets) {
+        try {
+          const detail = await movePlayerToStep(p, step);
+          t.log(`QA_STEP_APPLIED ${JSON.stringify({ step, player: p.name, location: p.location, detail: detail ?? null })}`);
+        } catch (err) {
+          t.log(`QA_STEP_ERROR ${JSON.stringify({ step, player: p?.name ?? "unknown", error: String(err?.message ?? err) })}`);
+        }
+      }
+    });
   });
 
   world.afterEvents.playerSpawn.subscribe((ev) => {
     const p = ev.player;
     if (!p || p.name === "QAFixtureBot" || stagedPlayers.has(p.name)) return;
     stagedPlayers.add(p.name);
-    system.runTimeout(() => {
+    system.runTimeout(async () => {
       try {
         dim.runCommand(`gamemode creative "${p.name}"`);
-        movePlayerToStep(p, "npc_10m");
+        await movePlayerToStep(p, "npc_10m");
         applyLongSidebarAndHud(p);
-        movePlayerToStep(p, "stash_fill");
-        p.sendMessage("§a[QA Fixture] Staged at NPC 10m stop with river/bridge/roof, long sidebar, and 36 stash items.");
-        t.log(`QA_CLIENT_JOINED ${JSON.stringify({ player: p.name, location: p.location })}`);
-      } catch {}
+        const stashPages = await seedPlayerStashPages(p);
+        p.sendMessage("§a[QA Fixture] Staged at NPC 10m stop with clear sightline, river/bridge/roof, long sidebar, and 2 populated stash pages.");
+        t.log(`QA_CLIENT_JOINED ${JSON.stringify({ player: p.name, location: p.location, stashPages })}`);
+      } catch (err) {
+        stagedPlayers.delete(p.name);
+        t.log(`QA_CLIENT_JOIN_ERROR ${JSON.stringify({ player: p?.name ?? "unknown", error: String(err?.message ?? err) })}`);
+      }
     }, 20);
   });
 }

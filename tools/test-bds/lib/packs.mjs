@@ -124,20 +124,61 @@ export function installResourcePack(pack, serverDir) {
   return { pack_id: pack.manifest.header.uuid, version: pack.manifest.header.version };
 }
 
-/** Verifies that every source file in pack.dir matches its staged copy in dest (excluding harness shim files). */
+function sha256Text(text) {
+  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function buildExpectedShimmedManifest(srcManifest) {
+  const manifest = JSON.parse(JSON.stringify(srcManifest));
+  const script = (manifest.modules || []).find((m) => m.type === "script");
+  if (!script || !script.entry) return null;
+  const deps = (manifest.dependencies ||= []);
+  if (!deps.some((d) => d.module_name === GAMETEST.module_name)) deps.push({ ...GAMETEST });
+  const hasUi = deps.some((d) => d.module_name === "@minecraft/server-ui");
+  const entryDir = path.posix.dirname(script.entry);
+  const base = path.posix.basename(script.entry);
+  script.entry = path.posix.join(entryDir, "__harness_entry.js");
+  return {
+    manifestText: JSON.stringify(manifest, null, 2),
+    shimPath: path.posix.join(entryDir, "__harness_shim.js"),
+    entryPath: path.posix.join(entryDir, "__harness_entry.js"),
+    hasUi,
+    base,
+  };
+}
+
+/** Verifies that every source file in pack.dir matches its staged copy in dest (including exact shimmed manifest & generated shim files). */
 export function inspectStagedPack(pack, dest, shimApplied = false) {
   const srcHash = hashPackDir(pack.dir);
   const stagedHash = hashPackDir(dest);
   const stagedMap = new Map(stagedHash.files.map((f) => [f.path, f.sha256]));
-  for (const f of srcHash.files) {
-    if (f.path === "manifest.json" && shimApplied) continue;
-    if (stagedMap.get(f.path) !== f.sha256) {
-      throw new Error(`Staged file hash mismatch in ${pack.folder}/${f.path}: expected ${f.sha256}, got ${stagedMap.get(f.path) ?? "missing"}`);
+  const expectedMap = new Map(srcHash.files.map((f) => [f.path, f.sha256]));
+
+  if (shimApplied) {
+    const srcManifestRaw = fs.readFileSync(path.join(pack.dir, "manifest.json"), "utf8");
+    const expectedShim = buildExpectedShimmedManifest(JSON.parse(srcManifestRaw));
+    if (!expectedShim) {
+      throw new Error(`Pack ${pack.folder} marked shimApplied=true but has no script module entry`);
+    }
+    expectedMap.set("manifest.json", sha256Text(expectedShim.manifestText));
+    expectedMap.set(expectedShim.shimPath, sha256Text(shimSource(pack.folder, expectedShim.hasUi)));
+    expectedMap.set(expectedShim.entryPath, sha256Text(`import "./__harness_shim.js";\nimport "./${expectedShim.base}";\n`));
+  }
+
+  for (const [relPath, expectedSha] of expectedMap) {
+    if (stagedMap.get(relPath) !== expectedSha) {
+      throw new Error(`Staged file hash mismatch in ${pack.folder}/${relPath}: expected ${expectedSha}, got ${stagedMap.get(relPath) ?? "missing"}`);
     }
   }
+  for (const f of stagedHash.files) {
+    if (!expectedMap.has(f.path)) {
+      throw new Error(`Unexpected extra file in staged pack ${pack.folder}/${f.path}`);
+    }
+  }
+
   const deps = (pack.manifest.dependencies || []).map((d) => ({
     module_name: d.module_name,
-     uuid: d.uuid,
+    uuid: d.uuid,
     version: d.version,
   }));
   return {

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import dgram from "node:dgram";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import * as server from "./server.mjs";
 import * as packs from "./packs.mjs";
@@ -12,7 +13,8 @@ import { BDS_URL, setup } from "../setup.mjs";
 
 const isWin = process.platform === "win32";
 const binary = isWin ? "bedrock_server.exe" : "bedrock_server";
-const harnessDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const harnessDir = path.dirname(HERE);
 
 test("uses native file paths for the harness directory", () => {
   assert.equal(server.HERE, harnessDir);
@@ -137,13 +139,79 @@ test("writes process identity and verifies staged pack SHA-256 hashes", (t) => {
   assert.equal(packObj.stagedInfo.shimApplied, true);
   assert.equal(packObj.stagedInfo.fileCount, 2);
 
+  // Tampering with shimmed manifest.json must throw a SHA-256 verification error.
+  const destDir = path.join(serverDir, "development_behavior_packs", "sample_bp");
+  const stagedManifestPath = path.join(destDir, "manifest.json");
+  const origStagedManifest = fs.readFileSync(stagedManifestPath, "utf8");
+  const tamperedManifest = JSON.parse(origStagedManifest);
+  tamperedManifest.header.uuid = "99999999-9999-9999-9999-999999999999";
+  fs.writeFileSync(stagedManifestPath, JSON.stringify(tamperedManifest, null, 2));
+  assert.throws(
+    () => packs.inspectStagedPack(packObj, destDir, true),
+    /Staged file hash mismatch.*manifest\.json/
+  );
+  fs.writeFileSync(stagedManifestPath, origStagedManifest);
+
+  // Injecting an unexpected extra file into the staged pack must be rejected.
+  const extraFile = path.join(destDir, "scripts", "injected.js");
+  fs.writeFileSync(extraFile, "export const hacked = true;\n");
+  assert.throws(
+    () => packs.inspectStagedPack(packObj, destDir, true),
+    /Unexpected extra file in staged pack/
+  );
+  fs.rmSync(extraFile, { force: true });
+
   // Tampering with a staged file must throw a SHA-256 verification error.
-  const stagedMain = path.join(serverDir, "development_behavior_packs", "sample_bp", "scripts", "main.js");
+  const stagedMain = path.join(destDir, "scripts", "main.js");
   fs.writeFileSync(stagedMain, 'console.log("stale");\n');
   assert.throws(
-    () => packs.inspectStagedPack(packObj, path.join(serverDir, "development_behavior_packs", "sample_bp"), true),
+    () => packs.inspectStagedPack(packObj, destDir, true),
     /Staged file hash mismatch/
   );
+});
+
+test("shares port locks across different BDS_HARNESS_CACHE directories and enforces ensureTemplate lock ownership", async (t) => {
+  const tmpA = fs.mkdtempSync(path.join(os.tmpdir(), "bds-cache-a-"));
+  const tmpB = fs.mkdtempSync(path.join(os.tmpdir(), "bds-cache-b-"));
+  const oldCache = process.env.BDS_HARNESS_CACHE;
+  t.after(() => {
+    if (oldCache === undefined) delete process.env.BDS_HARNESS_CACHE;
+    else process.env.BDS_HARNESS_CACHE = oldCache;
+    fs.rmSync(tmpA, { recursive: true, force: true });
+    fs.rmSync(tmpB, { recursive: true, force: true });
+  });
+
+  process.env.BDS_HARNESS_CACHE = tmpA;
+  const port = await server.reservePortPair();
+  t.after(() => server.releasePortPair(port));
+
+  // Switching BDS_HARNESS_CACHE to a second worktree/cache directory must still see the same host-wide port lock.
+  const child = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import { reservePortPair } from ${JSON.stringify(pathToFileURL(path.join(HERE, "server.mjs")).href)};
+       process.env.BDS_HARNESS_CACHE = ${JSON.stringify(tmpB)};
+       try { await reservePortPair(${port}); process.exit(0); } catch { process.exit(42); }`,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(child.status, 42, `expected cross-cache port lock contention exit 42, got ${child.status}: ${child.stderr}`);
+
+  // ensureTemplate lock held by a live PID must time out rather than building unlocked or deleting owner's lock.
+  process.env.BDS_HARNESS_CACHE = tmpA;
+  const worldsDir = path.join(tmpA, "worlds");
+  fs.mkdirSync(worldsDir, { recursive: true });
+  const lockFile = path.join(worldsDir, `${server.BDS_VERSION}-seed-99999.lock`);
+  const ownerPayload = JSON.stringify({ pid: process.pid, token: "owner-token-1", key: "seed-99999", at: new Date().toISOString() });
+  fs.writeFileSync(lockFile, ownerPayload);
+  await assert.rejects(
+    () => server.ensureTemplate({ seed: 99999, flat: false, lockTimeoutMs: 120 }),
+    /Timed out.*waiting for world template lock/
+  );
+  assert.equal(fs.existsSync(lockFile), true, "contender must not delete active owner's template lock");
+  assert.equal(fs.readFileSync(lockFile, "utf8"), ownerPayload);
 });
 
 test("bot-adapter verifies RakNet + NetworkSettings handshake when server speaks RakNet and reports unsupported on NetherNet-only BDS", async (t) => {
@@ -201,11 +269,15 @@ test("bot-adapter verifies RakNet + NetworkSettings handshake when server speaks
   assert.equal(okProbe.capabilities.raknetOpenConnection, "verified");
   assert.equal(okProbe.capabilities.raknetSessionAccepted, "verified");
   assert.equal(okProbe.capabilities.bedrockNetworkSettings, "verified");
+  assert.equal(okProbe.capabilities.raknetHandshake, "verified");
+  assert.equal(okProbe.capabilities.modalFormResponse, "unverified");
+  assert.equal(okProbe.capabilities.nativeInventoryRequest, "unverified");
+  assert.equal(okProbe.bedrockProtocolStatus.bdsRejectsRaknet, false);
   assert.equal(okProbe.advertisement.protocol, 944);
   assert.equal(okProbe.gate, "unsupported");
   assert.equal(okProbe.capabilities.visualRendering, "unsupported_by_protocol_bot");
 
-  // 2. Non-RakNet port (simulating NetherNet-only BDS 1.26.52.3)
+  // 2. Non-RakNet port with observed BDS TRANSPORT TYPE ERROR (NetherNet-only BDS 1.26.52.3)
   const silentSock = dgram.createSocket("udp4");
   await new Promise((resolve) => silentSock.bind(0, "127.0.0.1", resolve));
   t.after(() => { try { silentSock.close(); } catch {} });
@@ -214,8 +286,79 @@ test("bot-adapter verifies RakNet + NetworkSettings handshake when server speaks
     port: silentSock.address().port,
     transport: "nethernet",
     transportErrorLogged: true,
-    timeoutMs: 250,
+    timeoutMs: 200,
   });
   assert.equal(nethernetProbe.gate, "unsupported");
+  assert.equal(nethernetProbe.bedrockProtocolStatus.bdsRejectsRaknet, true);
   assert.equal(nethernetProbe.capabilities.raknetPing, "unsupported_nethernet_only_bds");
+  assert.equal(nethernetProbe.capabilities.modalFormResponse, "unverified");
+  assert.equal(nethernetProbe.capabilities.nativeInventoryRequest, "unverified");
+
+  // 3. Silent RakNet UDP timeout WITHOUT transportErrorLogged must report gate="failed" and bdsRejectsRaknet=false
+  const timeoutProbe = await botAdapter.probeNativeBedrockBot({
+    host: "127.0.0.1",
+    port: silentSock.address().port,
+    transport: "raknet",
+    transportErrorLogged: false,
+    timeoutMs: 200,
+  });
+  assert.equal(timeoutProbe.gate, "failed");
+  assert.equal(timeoutProbe.bedrockProtocolStatus.bdsRejectsRaknet, false);
+  assert.equal(timeoutProbe.capabilities.raknetPing, "unverified");
+  assert.equal(timeoutProbe.capabilities.raknetHandshake, "failed_timeout");
+
+  // 4. Partial responder that answers only UnconnectedPong (0x1c) must NOT claim full handshake verified
+  const pingOnlyServer = dgram.createSocket("udp4");
+  await new Promise((resolve) => pingOnlyServer.bind(0, "127.0.0.1", resolve));
+  t.after(() => { try { pingOnlyServer.close(); } catch {} });
+  pingOnlyServer.on("message", (msg, rinfo) => {
+    if (msg[0] === 0x01) {
+      const ad = "MCPE;Dedicated Server;944;1.26.52;0;10;123456789;world;Survival;1;19132;19133;";
+      const adBuf = Buffer.from(ad, "utf8");
+      const pong = Buffer.alloc(35 + adBuf.length);
+      pong[0] = 0x1c;
+      pong.writeBigInt64BE(1n, 1);
+      pong.writeBigUInt64BE(0x123456789abcdef0n, 9);
+      botAdapter.RAKNET_MAGIC.copy(pong, 17);
+      pong.writeUInt16BE(adBuf.length, 33);
+      adBuf.copy(pong, 35);
+      pingOnlyServer.send(pong, rinfo.port, rinfo.address);
+    }
+  });
+  const partialProbe = await botAdapter.probeNativeBedrockBot({
+    host: "127.0.0.1",
+    port: pingOnlyServer.address().port,
+    transport: "raknet",
+    transportErrorLogged: false,
+    timeoutMs: 250,
+  });
+  assert.equal(partialProbe.capabilities.raknetPing, "verified");
+  assert.equal(partialProbe.capabilities.raknetOpenConnection, "unverified");
+  assert.equal(partialProbe.capabilities.raknetHandshake, "partial_failed");
+  assert.equal(partialProbe.gate, "failed");
 });
+
+test("run.mjs writes structured evidence manifest on setup failure (exit 4)", async (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "bds-setup-fail-"));
+  const port = await server.reservePortPair();
+  t.after(() => {
+    server.releasePortPair(port);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+  const logFile = path.join(tmp, "setup-fail.log");
+  const evFile = path.join(tmp, "setup-fail.evidence.json");
+  const runScript = path.join(harnessDir, "run.mjs");
+  const child = spawnSync(
+    process.execPath,
+    [runScript, "--only", "help_bp", "--port", String(port), "--log", logFile, "--evidence", evFile, "--quiet"],
+    { encoding: "utf8" },
+  );
+  assert.equal(child.status, 4);
+  assert.equal(fs.existsSync(evFile), true, "expected setup failure to write evidence JSON");
+  const ev = JSON.parse(fs.readFileSync(evFile, "utf8"));
+  assert.equal(ev.status, "setup_failed");
+  assert.equal(ev.exitCode, 4);
+  assert.equal(ev.gates.server, "failed");
+  assert.match(ev.errors.setupError, /not free/);
+});
+

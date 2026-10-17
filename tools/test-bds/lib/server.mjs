@@ -130,8 +130,8 @@ function isPidAlive(pid) {
   }
 }
 
-function portLockDir() {
-  const dir = path.join(cacheDir(), "ports");
+export function portLockDir(env = process.env) {
+  const dir = env.BDS_PORT_LOCK_DIR || path.join(os.tmpdir(), "bds-harness-port-locks");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -272,11 +272,11 @@ export function checkClientFeasibility() {
       ? "Retail UWP and Preview UWP are separate AppX packages, though each package is single-instance per Windows user session."
       : "Microsoft.MinecraftUWP is a single-instance packaged UWP app per Windows user session; Windows cannot launch a second concurrent retail Minecraft.Windows.exe instance in the same user session.",
     uiInputNote:
-      "Minecraft.Windows.exe renders a DirectX/GameInput UWP canvas without UI Automation elements; background synthetic click/key delivery (e.g. Return/Save & Quit without foreground input lease) cannot actuate in-game menus without foreground input or physical user click.",
+      "Minecraft.Windows.exe renders a DirectX/GameInput UWP canvas where coordinate clicks report done without actuating controls; bare keyboard keys (Tab, Left/Right/Up/Down, Return, Space on modal warnings, [ and ] for Play tabs) plus type_text targeted at window element_index 0 navigate menus after fresh screenshot verification without shell focus workarounds.",
     uwpLoopbackExempt: loopbackExempt,
     loopbackNote: loopbackExempt
       ? "UWP loopback exemption detected for Minecraft.Windows."
-      : "Microsoft.MinecraftUWP is not in CheckNetIsolation LoopbackExempt; Windows AppContainer network isolation is a separate OS check from UI input dispatch.",
+      : "Microsoft.MinecraftUWP is not in CheckNetIsolation LoopbackExempt; empirically, local NetherNet connections to 127.0.0.1 succeed without LoopbackExempt.",
   };
 }
 
@@ -338,36 +338,63 @@ export function patchLevelDat(file, { flat = false } = {}) {
   fs.writeFileSync(file, writeLevelDat(d));
 }
 
-export async function ensureTemplate({ seed, flat, log = () => {} }) {
+export async function ensureTemplate({ seed, flat, retainOnFailure = false, lockTimeoutMs = 30000, log = () => {} }) {
   const key = flat ? "flat" : `seed-${seed}`;
   const dest = path.join(cacheDir(), "worlds", `${BDS_VERSION}-${key}`);
   if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   const lockFile = `${dest}.lock`;
-  // Wait if another process is generating the same template.
-  for (let w = 0; w < 150 && fs.existsSync(lockFile); w++) {
+  const lockToken = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  const deadline = Date.now() + lockTimeoutMs;
+  let ownsLock = false;
+  while (!ownsLock) {
+    if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
+    try {
+      fs.writeFileSync(
+        lockFile,
+        JSON.stringify({ pid: process.pid, token: lockToken, key, at: new Date().toISOString() }),
+        { flag: "wx" },
+      );
+      ownsLock = true;
+      break;
+    } catch (err) {
+      if (err && err.code !== "EEXIST") throw err;
+    }
     if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
     try {
       const holder = JSON.parse(fs.readFileSync(lockFile, "utf8"));
-      if (!isPidAlive(holder.pid)) fs.rmSync(lockFile, { force: true });
+      if (holder && holder.pid && !isPidAlive(holder.pid)) {
+        fs.rmSync(lockFile, { force: true });
+        continue;
+      }
     } catch {}
-    if (fs.existsSync(lockFile)) await new Promise((r) => setTimeout(r, 200));
+    if (Date.now() >= deadline) {
+      if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
+      throw new Error(`Timed out after ${lockTimeoutMs}ms waiting for world template lock: ${lockFile}`);
+    }
+    await new Promise((r) => setTimeout(r, Math.min(200, Math.max(10, deadline - Date.now()))));
   }
-  if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
-  try {
-    fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, key, at: new Date().toISOString() }), { flag: "wx" });
-  } catch {}
+  if (fs.existsSync(path.join(dest, "level.dat"))) {
+    try {
+      const cur = JSON.parse(fs.readFileSync(lockFile, "utf8"));
+      if (cur.token === lockToken) fs.rmSync(lockFile, { force: true });
+    } catch {}
+    return dest;
+  }
   log(`[harness] generating world template ${key} (once; cached in ${dest})`);
   let lastErr;
   try {
     for (let attempt = 1; attempt <= 3; attempt++) {
       const dir = makeServerDir("bds-template-");
+      const templateLogFile = path.join(dir, "template-server.log");
       let port;
+      let keepFailedDir = false;
       try {
         port = await reservePortPair();
         writeProps(dir, baseProps(port, { "level-seed": flat ? "" : String(seed) }));
         let started = false, failed = "";
         const bds = startBds(dir, (line) => {
+          try { fs.appendFileSync(templateLogFile, line + "\n"); } catch {}
           if (line.includes("Server started.")) started = true;
           if (/ERROR\].*(Exiting program|may be in use| occupied|bind)/i.test(line)) failed = line;
         });
@@ -389,14 +416,24 @@ export async function ensureTemplate({ seed, flat, log = () => {} }) {
         try { fs.renameSync(staging, dest); } catch (e) { fs.rmSync(staging, { recursive: true, force: true }); if (!fs.existsSync(dest)) throw e; }
         return dest;
       } catch (e) {
+        if (retainOnFailure && attempt === 3) {
+          keepFailedDir = true;
+          e.retainedTemplateDir = dir;
+          e.templateLogFile = templateLogFile;
+        }
         lastErr = e;
       } finally {
         if (port !== undefined) releasePortPair(port);
-        fs.rmSync(dir, { recursive: true, force: true });
+        if (!keepFailedDir) fs.rmSync(dir, { recursive: true, force: true });
       }
     }
     throw lastErr;
   } finally {
-    try { fs.rmSync(lockFile, { force: true }); } catch {}
+    if (ownsLock) {
+      try {
+        const cur = JSON.parse(fs.readFileSync(lockFile, "utf8"));
+        if (cur.token === lockToken) fs.rmSync(lockFile, { force: true });
+      } catch {}
+    }
   }
 }

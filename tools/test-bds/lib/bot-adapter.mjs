@@ -210,6 +210,7 @@ export async function probeNativeBedrockBot({
       raknetOpenConnection: "unverified",
       raknetSessionAccepted: "unverified",
       bedrockNetworkSettings: "unverified",
+      raknetHandshake: "unverified",
       bedrockProtocolClientLoginSpawn: "unverified",
       modalFormResponse: "unverified",
       nativeInventoryRequest: "unverified",
@@ -217,7 +218,8 @@ export async function probeNativeBedrockBot({
     },
     advertisement: null,
     handshake: {
-      transportErrorLogged,
+      transportErrorLogged: Boolean(transportErrorLogged),
+      stage: "ping",
     },
     bedrockProtocolStatus: null,
     gate: "unverified",
@@ -229,8 +231,11 @@ export async function probeNativeBedrockBot({
 
   try {
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`No RakNet UDP UnconnectedPong (0x1c) from ${host}:${port} within ${timeoutMs}ms (server transport=${transport})`)), timeoutMs);
       let step = "ping";
+      const timer = setTimeout(
+        () => reject(new Error(`RakNet UDP probe timed out at stage '${step}' on ${host}:${port} after ${timeoutMs}ms (server transport=${transport})`)),
+        timeoutMs,
+      );
       let mtu = 1400;
 
       sock.on("error", (err) => {
@@ -247,16 +252,19 @@ export async function probeNativeBedrockBot({
             result.advertisement = pong;
             result.capabilities.raknetPing = "verified";
             step = "ocr1";
+            result.handshake.stage = step;
             await send(buildOpenConnectionRequest1(mtu, 11));
           } else if (id === 0x06 && step === "ocr1") {
             mtu = msg.length >= 28 ? msg.readUInt16BE(26) : 1400;
             result.handshake.openConnectionReply1 = { mtu, serverGuid: msg.subarray(17, 25).toString("hex") };
             step = "ocr2";
+            result.handshake.stage = step;
             await send(buildOpenConnectionRequest2(host, port, mtu, clientGuid));
           } else if (id === 0x08 && step === "ocr2") {
             result.capabilities.raknetOpenConnection = "verified";
             result.handshake.openConnectionReply2 = { mtu: msg.length >= 33 ? msg.readUInt16BE(31) : mtu };
             step = "conn_req";
+            result.handshake.stage = step;
             await send(buildReliableFrame(0, 0, buildConnectionRequest(clientGuid)));
           } else if (id >= 0x80 && id <= 0x8f) {
             const frames = parseRakNetFrames(msg);
@@ -265,6 +273,7 @@ export async function probeNativeBedrockBot({
                 result.capabilities.raknetSessionAccepted = "verified";
                 result.handshake.connectionAccepted = true;
                 step = "net_settings";
+                result.handshake.stage = step;
                 const proto = result.advertisement?.protocol || 944;
                 await send(buildRequestNetworkSettingsFrame(1, 1, proto));
               } else if (body[0] === 0xfe) {
@@ -272,8 +281,10 @@ export async function probeNativeBedrockBot({
                 result.handshake.gamePacket = decoded;
                 if (decoded?.packetName === "network_settings") {
                   result.capabilities.bedrockNetworkSettings = "verified";
+                  result.handshake.stage = "network_settings_verified";
                 } else if (decoded?.packetName === "play_status") {
                   result.capabilities.bedrockNetworkSettings = `play_status_${decoded.status}`;
+                  result.handshake.stage = `play_status_${decoded.status}`;
                 }
                 clearTimeout(timer);
                 resolve();
@@ -300,6 +311,13 @@ export async function probeNativeBedrockBot({
 
   const bdsProto = result.advertisement?.protocol ?? null;
   const bdsVer = result.advertisement?.version || bdsVersion;
+  const rejectsRaknet = Boolean(transportErrorLogged);
+  const fullHandshakeVerified =
+    result.capabilities.raknetPing === "verified" &&
+    result.capabilities.raknetOpenConnection === "verified" &&
+    result.capabilities.raknetSessionAccepted === "verified" &&
+    result.capabilities.bedrockNetworkSettings === "verified";
+
   result.bedrockProtocolStatus = {
     installed: false,
     evaluatedVersion: "3.60.1",
@@ -308,34 +326,42 @@ export async function probeNativeBedrockBot({
     bdsVersion: bdsVer,
     bdsProtocol: bdsProto,
     bdsTransport: transport,
-    bdsRejectsRaknet: transportErrorLogged || true,
-    reason:
-      `Native BDS ${bdsVer} logs 'In this release, NetherNet is the only supported transport type. Players will not be able to connect to your game without NetherNet' ` +
-      `when transport=raknet, and speaks NetherNet WebRTC signaling rather than legacy RakNet UDP on port ${port}. ` +
-      `AIKUSAN's pinned bedrock-protocol@3.60.1 requires RakNet UDP, Node >=24 (current ${process.version}), and targets Geyser/Floodgate 1.21.x.`,
+    bdsRejectsRaknet: rejectsRaknet,
+    reason: rejectsRaknet
+      ? `Native BDS ${bdsVer} logged TRANSPORT TYPE ERROR ('In this release, NetherNet is the only supported transport type') when transport=${transport}, and ignored RakNet UDP on port ${port}.`
+      : fullHandshakeVerified
+        ? `RakNet + Bedrock NetworkSettings (0x8f) succeeded on ${host}:${port} (protocol ${bdsProto}); AIKUSAN's pinned bedrock-protocol@3.60.1 requires Node >=24 (current ${process.version}) and targets Geyser/Floodgate 1.21.x.`
+        : `RakNet UDP probe did not complete handshake (stopped at stage '${result.handshake.stage}', transportErrorLogged=false).`,
   };
 
-  if (result.capabilities.raknetPing === "verified") {
+  if (fullHandshakeVerified) {
+    result.capabilities.raknetHandshake = "verified";
     result.capabilities.bedrockProtocolClientLoginSpawn = "unsupported_protocol_version";
-    result.capabilities.modalFormResponse = "verified_via_gametest_shim_only";
-    result.capabilities.nativeInventoryRequest = "verified_via_gametest_container_only";
     result.gate = "unsupported";
     result.summary =
-      `RakNet UDP handshake verified on ${host}:${port} (protocol ${bdsProto}, compression=${result.handshake.gamePacket?.compressionAlgorithm ?? "n/a"}); ` +
-      `full post-encryption Login/ModalFormResponse/ItemStackRequest via bedrock-protocol@3.60.1 is unsupported on protocol ${bdsProto}.`;
-  } else {
+      `RakNet + NetworkSettings (0x8f) handshake verified on ${host}:${port} (protocol ${bdsProto}, compression=${result.handshake.gamePacket?.compressionAlgorithm ?? "n/a"}); ` +
+      `post-encryption Login/ModalFormResponse/ItemStackRequest via bedrock-protocol@3.60.1 is unsupported on protocol ${bdsProto} (modalFormResponse and nativeInventoryRequest remain unverified).`;
+  } else if (result.capabilities.raknetPing === "verified") {
+    result.capabilities.raknetHandshake = "partial_failed";
+    result.gate = "failed";
+    result.summary =
+      `RakNet UnconnectedPong (0x1c) received on ${host}:${port}, but handshake failed at stage '${result.handshake.stage}': ${result.handshake.error || "incomplete session"}.`;
+  } else if (rejectsRaknet) {
     result.capabilities.raknetPing = "unsupported_nethernet_only_bds";
     result.capabilities.raknetOpenConnection = "unsupported_nethernet_only_bds";
     result.capabilities.raknetSessionAccepted = "unsupported_nethernet_only_bds";
     result.capabilities.bedrockNetworkSettings = "unsupported_nethernet_only_bds";
+    result.capabilities.raknetHandshake = "unsupported_nethernet_only_bds";
     result.capabilities.bedrockProtocolClientLoginSpawn = "unsupported_nethernet_only_bds";
-    result.capabilities.modalFormResponse = "verified_via_gametest_shim_only";
-    result.capabilities.nativeInventoryRequest = "verified_via_gametest_container_only";
     result.gate = "unsupported";
     result.summary =
-      `Native BDS ${bdsVer} requires transport=nethernet (rejects RakNet with TRANSPORT TYPE ERROR and ignores RakNet 0x01 UnconnectedPing on UDP ${port}). ` +
-      `AIKUSAN bedrock-protocol@3.60.1 (RakNet-only, Node >=24, Geyser 1.21.x) cannot connect to native BDS ${bdsVer}; ` +
-      `use SimulatedPlayer for script/form/container QA and --client-qa (NetherNet) for real client visual/UI QA.`;
+      `Native BDS ${bdsVer} logged TRANSPORT TYPE ERROR (NetherNet-only release) and ignored RakNet 0x01 UnconnectedPing on UDP ${port}. ` +
+      `AIKUSAN bedrock-protocol@3.60.1 (RakNet-only, Node >=24, Geyser 1.21.x) is unsupported on native BDS ${bdsVer}.`;
+  } else {
+    result.capabilities.raknetHandshake = "failed_timeout";
+    result.gate = "failed";
+    result.summary =
+      `RakNet UDP probe failed on ${host}:${port} (stage='${result.handshake.stage}', transport=${transport}, transportErrorLogged=false): ${result.handshake.error || "timeout"}.`;
   }
   return result;
 }

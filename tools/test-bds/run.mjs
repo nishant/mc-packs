@@ -105,14 +105,110 @@ say(`[harness] evidence ${evidenceFile}`);
 let serverDir, bds, port;
 let retainedDir = false;
 let cleaned = false;
+let cmdPollTimer = null;
+const commandInboxFile = isClientQa ? `${logFile}.commands.txt` : null;
+if (commandInboxFile) {
+  fs.writeFileSync(commandInboxFile, "", "utf8");
+}
 const stagedPacks = [];
 let botQaResult = null;
 const clientFeasibility = isClientQa ? checkClientFeasibility() : null;
 const phaseTimestamps = { t0 };
 
+const scriptErrors = []; // {phase, pack, text}
+const contentErrors = [];
+const warnErrors = []; // [Scripting] WARN lines that report a caught error
+const watchdog = [];
+const scenarioLines = [];
+const allowPatterns = args["allow-error"].map((s) => new RegExp(s));
+let phase = "startup";
+let serverStarted = false, ready = false, startSent = false;
+let done = null; // {ok, msg}
+let lastRecord = null;
+let fatal = "";
+const timings = {};
+
+function buildEvidence({ status, exitCode, verdict, setupError = null, retainedTemplateDir = null, templateLogFile = null }) {
+  const allowed = (e) => allowPatterns.some((r) => r.test(e.text));
+  const errs = scriptErrors.filter((e) => !allowed(e));
+  const serverPassed = Boolean(
+    done?.ok &&
+    errs.length === 0 &&
+    (!args.strict || (!contentErrors.length && !warnErrors.length))
+  );
+  return {
+    schemaVersion: 1,
+    timestamp: new Date().toISOString(),
+    status,
+    verdict,
+    exitCode,
+    mode: isClientQa ? "client-qa" : (isBotQa ? "bot-qa" : "headless"),
+    git: gitInfo,
+    bds: {
+      version: BDS_VERSION,
+      dir: bdsDir(),
+      serverDir: serverDir ?? null,
+      retained: retainedDir,
+      retainedTemplateDir,
+      templateLogFile,
+      commandInboxFile,
+      runnerPid: process.pid,
+      bdsPid: bds?.proc?.pid ?? null,
+      transport,
+      shimEnabled,
+      host: "127.0.0.1",
+      port: port ?? null,
+      portV6: port !== undefined ? port + 1 : null,
+    },
+    scenario: {
+      file: scenarioFile,
+      ok: done ? Boolean(done.ok) : false,
+      message: done?.msg ?? null,
+      lines: scenarioLines,
+    },
+    stagedPacks,
+    gates: {
+      server: serverPassed && (status === "completed" || status === "ready_waiting_for_client") ? "verified" : "failed",
+      network: botQaResult ? botQaResult.gate : (isClientQa && serverStarted ? "nethernet_listening" : "unverified"),
+      visual: "unverified",
+      visualNote: "Headless BDS and RakNet protocol probes never render JSON UI, terrain pixels, or entity nameplates; visual gate requires real client capture.",
+    },
+    timings: {
+      stagingMs: phaseTimestamps.stagingMs ?? null,
+      serverBootMs: phaseTimestamps.serverBootMs ?? null,
+      readinessMs: phaseTimestamps.readinessMs ?? null,
+      scenarioMs: phaseTimestamps.scenarioMs ?? null,
+      botProbeMs: phaseTimestamps.botProbeMs ?? null,
+      teardownMs: phaseTimestamps.teardownMs ?? null,
+      totalMs: Date.now() - t0,
+    },
+    errors: {
+      setupError,
+      scriptErrors: errs,
+      warnErrors,
+      contentErrors,
+      watchdog,
+    },
+    botQa: botQaResult,
+    clientFeasibility,
+    logFile,
+    evidenceFile,
+  };
+}
+
+function writeEvidence(info) {
+  const doc = buildEvidence(info);
+  fs.writeFileSync(evidenceFile, JSON.stringify(doc, null, 2));
+  return doc;
+}
+
 async function cleanup(exitCode = 0) {
   if (cleaned) return;
   cleaned = true;
+  if (cmdPollTimer) {
+    clearInterval(cmdPollTimer);
+    cmdPollTimer = null;
+  }
   const tStop = Date.now();
   if (bds && bds.proc.exitCode === null) {
     await stopBds(bds);
@@ -139,7 +235,8 @@ try {
     say(`[harness] no BDS at ${bdsDir()}: downloading it first`);
     (await import("./setup.mjs")).setup();
   }
-  const template = await ensureTemplate({ seed: args.seed, flat: args.flat, log: say });
+  const retainFlag = Boolean(args.keep || args["retain-on-failure"]);
+  const template = await ensureTemplate({ seed: args.seed, flat: args.flat, retainOnFailure: retainFlag, log: say });
   serverDir = makeServerDir();
   const extra = {};
   if (args.transport || isClientQa || isBotQa) extra["transport"] = transport;
@@ -179,7 +276,19 @@ try {
   phaseTimestamps.stagingDone = Date.now();
   phaseTimestamps.stagingMs = phaseTimestamps.stagingDone - t0;
 } catch (e) {
+  fatal = String(e?.message ?? e);
+  retainedDir = Boolean((args.keep || args["retain-on-failure"]) && (serverDir || e?.retainedTemplateDir));
+  writeEvidence({
+    status: "setup_failed",
+    exitCode: 4,
+    verdict: `SETUP FAILED: ${fatal}`,
+    setupError: String(e?.stack || e),
+    retainedTemplateDir: e?.retainedTemplateDir ?? null,
+    templateLogFile: e?.templateLogFile ?? null,
+  });
   say(`[harness] setup failed: ${e.stack || e}`);
+  say(`[harness] evidence: ${evidenceFile}`);
+  if (e?.retainedTemplateDir) say(`[harness] retained failed template folder: ${e.retainedTemplateDir}`);
   await cleanup(4);
   process.exit(4);
 }
@@ -188,19 +297,6 @@ say(`[harness] server ${serverDir} port ${port}/${port + 1} (${transport}, prepa
 // ---------------------------------------------------------------------------
 // Run
 // ---------------------------------------------------------------------------
-
-const scriptErrors = []; // {phase, pack, text}
-const contentErrors = [];
-const warnErrors = []; // [Scripting] WARN lines that report a caught error
-const watchdog = [];
-const scenarioLines = [];
-const allowPatterns = args["allow-error"].map((s) => new RegExp(s));
-let phase = "startup";
-let serverStarted = false, ready = false, startSent = false;
-let done = null; // {ok, msg}
-let lastRecord = null;
-let fatal = "";
-const timings = {};
 
 const LINE = /^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d:\d+) (\w+)\] ?(.*)$/;
 const NOISE = [/TELEMETRY|Telemetry is currently|emit-server-telemetry|telemetry helps|to the server\.properties file in the handheld|^=+$/i];
@@ -227,71 +323,6 @@ async function maybeRunBotProbe() {
   });
   phaseTimestamps.botProbeMs = Date.now() - tProbe;
   say(`[bot-qa] gate=${botQaResult.gate} | ${botQaResult.summary}`);
-}
-
-function buildEvidence({ status, exitCode, verdict }) {
-  const allowed = (e) => allowPatterns.some((r) => r.test(e.text));
-  const errs = scriptErrors.filter((e) => !allowed(e));
-  return {
-    schemaVersion: 1,
-    timestamp: new Date().toISOString(),
-    status,
-    verdict,
-    exitCode,
-    mode: isClientQa ? "client-qa" : (isBotQa ? "bot-qa" : "headless"),
-    git: gitInfo,
-    bds: {
-      version: BDS_VERSION,
-      dir: bdsDir(),
-      serverDir,
-      retained: retainedDir,
-      runnerPid: process.pid,
-      bdsPid: bds?.proc?.pid ?? null,
-      transport,
-      shimEnabled,
-      host: "127.0.0.1",
-      port,
-      portV6: port + 1,
-    },
-    scenario: {
-      file: scenarioFile,
-      ok: done ? Boolean(done.ok) : false,
-      message: done?.msg ?? null,
-      lines: scenarioLines,
-    },
-    stagedPacks,
-    gates: {
-      server: exitCode === 0 && done?.ok ? "verified" : (status === "ready_waiting_for_client" && done?.ok ? "verified" : "failed"),
-      network: botQaResult ? botQaResult.gate : (isClientQa && serverStarted ? "nethernet_listening" : "unverified"),
-      visual: "unverified",
-      visualNote: "Headless BDS and RakNet protocol probes never render JSON UI, terrain pixels, or entity nameplates; visual gate requires real client capture.",
-    },
-    timings: {
-      stagingMs: phaseTimestamps.stagingMs ?? null,
-      serverBootMs: phaseTimestamps.serverBootMs ?? null,
-      readinessMs: phaseTimestamps.readinessMs ?? null,
-      scenarioMs: phaseTimestamps.scenarioMs ?? null,
-      botProbeMs: phaseTimestamps.botProbeMs ?? null,
-      teardownMs: phaseTimestamps.teardownMs ?? null,
-      totalMs: Date.now() - t0,
-    },
-    errors: {
-      scriptErrors: errs,
-      warnErrors,
-      contentErrors,
-      watchdog,
-    },
-    botQa: botQaResult,
-    clientFeasibility,
-    logFile,
-    evidenceFile,
-  };
-}
-
-function writeEvidence(info) {
-  const doc = buildEvidence(info);
-  fs.writeFileSync(evidenceFile, JSON.stringify(doc, null, 2));
-  return doc;
 }
 
 function onHarness(obj) {
@@ -337,11 +368,13 @@ function onHarness(obj) {
               transport,
               logFile,
               evidenceFile,
+              commandInboxFile,
               scenarioFile,
             });
             writeEvidence({ status: "ready_waiting_for_client", exitCode: 0, verdict: "CLIENT_QA_READY" });
             say(`[client-qa] READY on 127.0.0.1:${port} (IPv6 ${port + 1}, transport=${transport}) | BDS PID ${bds?.proc?.pid} | Runner PID ${process.pid}`);
             say(`[client-qa] live evidence manifest: ${evidenceFile}`);
+            say(`[client-qa] command inbox: ${commandInboxFile}`);
             if (clientFeasibility && !clientFeasibility.uwpLoopbackExempt) {
               say(`[client-qa] NOTE: ${clientFeasibility.loopbackNote}`);
             }
@@ -440,17 +473,38 @@ function launch() {
     if (!finished && !restarting && bds === me) { fatal ||= `server exited unexpectedly (code ${code})`; finish("exit"); }
   });
 }
-if (isClientQa && process.stdin.readable) {
-  let stdinBuf = "";
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (chunk) => {
-    stdinBuf += chunk;
-    const parts = stdinBuf.split(/\r?\n/);
-    stdinBuf = parts.pop();
-    for (const cmd of parts) {
-      if (cmd.trim() && bds && bds.proc.exitCode === null) bds.send(cmd.trim());
-    }
-  });
+if (isClientQa) {
+  let inboxOffset = 0;
+  cmdPollTimer = setInterval(() => {
+    if (!commandInboxFile || !fs.existsSync(commandInboxFile) || !bds || bds.proc.exitCode !== null) return;
+    try {
+      const content = fs.readFileSync(commandInboxFile, "utf8");
+      if (content.length <= inboxOffset) return;
+      const chunk = content.slice(inboxOffset);
+      const lastNewline = chunk.lastIndexOf("\n");
+      if (lastNewline < 0) return;
+      inboxOffset += lastNewline + 1;
+      for (const rawLine of chunk.slice(0, lastNewline).split(/\r?\n/)) {
+        const cmd = rawLine.trim();
+        if (cmd) {
+          say(`[client-qa] inbox -> ${cmd}`);
+          bds.send(cmd);
+        }
+      }
+    } catch {}
+  }, 200);
+  if (process.stdin.readable) {
+    let stdinBuf = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      stdinBuf += chunk;
+      const parts = stdinBuf.split(/\r?\n/);
+      stdinBuf = parts.pop();
+      for (const cmd of parts) {
+        if (cmd.trim() && bds && bds.proc.exitCode === null) bds.send(cmd.trim());
+      }
+    });
+  }
 }
 async function restartServer() {
   restarting = true;
@@ -484,6 +538,15 @@ function summary(reason) {
   else if (!done.ok) { code = 1; verdict = "FAIL (scenario)"; }
   if (code === 0 && errs.length) { code = 2; verdict = "FAIL (script errors)"; }
   if (code === 0 && args.strict && (contentErrors.length || warnErrors.length)) { code = 2; verdict = "FAIL (strict: content errors or caught errors)"; }
+  if (code === 0 && isBotQa && botQaResult?.gate !== "verified") {
+    if (botQaResult?.gate === "unsupported") {
+      code = 4;
+      verdict = "UNSUPPORTED (network gate unsupported on native BDS; server gate verified)";
+    } else {
+      code = 1;
+      verdict = "FAIL (network bot probe failed; server gate verified)";
+    }
+  }
 
   retainedDir = Boolean(args.keep || (args["retain-on-failure"] && code !== 0));
   const evidenceDoc = writeEvidence({ status: "completed", exitCode: code, verdict });
