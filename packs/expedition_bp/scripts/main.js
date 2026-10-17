@@ -4028,7 +4028,7 @@ async function mainMenu(player) {
     actions.push(() => sendBack(player));
   }
   if (isOp(player)) {
-    form.button("Operator tools\n§8Site, reset, sigils");
+    form.button("§4Operator tools\n§8Site, reset, sigils");
     actions.push(() => opMenu(player));
   }
   form.button("Close");

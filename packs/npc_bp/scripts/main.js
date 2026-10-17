@@ -2026,11 +2026,11 @@ async function menu(player) {
   /** @type {[string, () => unknown][]} */
   const actions = [["Who lives here?", () => whoMenu(player)]];
   if (op) {
-    actions.push(["Add or move a townsfolk here\n§8Operators", () => pickAndRun(player, "Add or move here", "They live where you stand (inside their house) and stay there, facing the way you face.", (id) => addNpc(player, id))]);
-    actions.push(["Move them into the houses around me\n§8Operators", () => houseNpcs(player)]);
-    actions.push(["Undo the last move\n§8Operators", () => undoMove(player)]);
-    actions.push(["Remove the nearest townsfolk\n§8Operators", () => removeNpc(player)]);
-    actions.push(["List with coordinates\n§8Operators", () => listForOps(player)]);
+    actions.push(["§4Add or move a townsfolk here\n§8Operators", () => pickAndRun(player, "Add or move here", "They live where you stand (inside their house) and stay there, facing the way you face.", (id) => addNpc(player, id))]);
+    actions.push(["§4Move them into the houses around me\n§8Operators", () => houseNpcs(player)]);
+    actions.push(["§4Undo the last move\n§8Operators", () => undoMove(player)]);
+    actions.push(["§4Remove the nearest townsfolk\n§8Operators", () => removeNpc(player)]);
+    actions.push(["§4List with coordinates\n§8Operators", () => listForOps(player)]);
   }
   const form = new ActionFormData().title("Townsfolk").body(op ? "Who lives on the realm, and the townsfolk tools." : "Who lives on the realm. Tap a townsfolk to talk.");
   for (const [label] of actions) form.button(label);

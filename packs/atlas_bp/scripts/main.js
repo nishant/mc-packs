@@ -1622,7 +1622,7 @@ async function menu(player) {
   form.button("The Nearest Site Ahead\n§8Which way to go");
   acts2.push(() => nearestPage(player));
   if (isOp(player)) {
-    form.button("Sites Near Here\n§8Operators: teleport");
+    form.button("§4Sites Near Here\n§8Operators: teleport");
     acts2.push(() => opSites(player));
   }
   const res = await show(player, form);

@@ -1480,8 +1480,8 @@ export async function showMenu(player) {
     ];
     if (favorsOn) actions.push(["Daily favors", () => favorsPage(player)]);
     if (isOp(player)) {
-      actions.push(["Story places\n§8Operators", () => placesMenu(player)]);
-      actions.push(["Operator tools\n§8Operators", () => opTools(player)]);
+      actions.push(["§4Story places\n§8Operators", () => placesMenu(player)]);
+      actions.push(["§4Operator tools\n§8Operators", () => opTools(player)]);
     }
     const form = new ActionFormData().title("§lStory Log").body(lines.join("\n"));
     for (const [label] of actions) form.button(label);

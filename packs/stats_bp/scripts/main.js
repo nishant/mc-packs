@@ -424,7 +424,7 @@ async function mainMenu(player) {
       .button("Leaderboards")
       .button(tickerAllowed ? `Stats ticker: ${state(getFor(player, "ticker") === true)}\n§8Tap to switch` : "Stats ticker\n§8Disabled on this realm")
       .button("My ticker settings\n§8Which stats, speed, colors");
-    if (op) form.button("Sidebar (everyone)\n§8Operators");
+    if (op) form.button("§4Sidebar (everyone)\n§8Operators");
     const res = await show(player, form);
     if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
     if (res.selection === 0 && !(await myStats(player))) return;

@@ -663,7 +663,7 @@ async function mainMenu(player) {
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [
     { text: "Forecast\n§8The next few hours", run: () => showForecast(player) },
-    { text: "Set the weather (operator)\n§8Clear, rain or thunder, for a while", run: () => setForm(player) },
+    { text: "§4Set the weather (operator)\n§8Clear, rain or thunder, for a while", run: () => setForm(player) },
   ];
   const form = new ActionFormData().title("§lWeather Almanac").body(active ? summary() : "The Weather Almanac is disabled: the game runs the weather.");
   for (const a of actions) form.button(a.text);

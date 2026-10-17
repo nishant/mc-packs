@@ -461,9 +461,9 @@ async function packMenu(player) {
   /** @type {{ text: string, run: () => Promise<void> }[]} */
   const entries = [{ text: "Read the news", run: () => readNews(player) }];
   if (isOp(player)) {
-    entries.push({ text: "Edit the news\n§8Operators", run: () => editNews(player) });
+    entries.push({ text: "§4Edit the news\n§8Operators", run: () => editNews(player) });
     entries.push({
-      text: "Paste a long news body\n§8Operators",
+      text: "§4Paste a long news body\n§8Operators",
       run: () =>
         infoPage(
           player,
@@ -471,9 +471,9 @@ async function packMenu(player) {
           `Chat takes longer text than the editor's ${BODY_PART}-character boxes. Copy the text, then in chat:\n\n§e/realm:news_body "first part"§r starts a draft and opens the editor.\n§e/realm:news_add "next part"§r adds more to the draft.\n§e/realm:news_edit§r checks and saves it.\n\nWrite | for a new line.`
         ),
     });
-    entries.push({ text: `Chat tips\n§8Operators, ${getTips().length} tips`, run: () => tipsMenu(player) });
+    entries.push({ text: `§4Chat tips\n§8Operators, ${getTips().length} tips`, run: () => tipsMenu(player) });
     entries.push({
-      text: "Settings\n§8Operators",
+      text: "§4Settings\n§8Operators",
       run: () =>
         infoPage(
           player,

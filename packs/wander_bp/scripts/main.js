@@ -1370,8 +1370,8 @@ async function menu(player) {
   /** @type {[string, () => Promise<unknown> | unknown][]} */
   const acts = [];
   if (isOp(player)) {
-    acts.push(["On the road now\n§8Operators", () => opList(player)]);
-    acts.push(["Someone appears here\n§8Operators", () => opSpawn(player)]);
+    acts.push(["§4On the road now\n§8Operators", () => opList(player)]);
+    acts.push(["§4Someone appears here\n§8Operators", () => opSpawn(player)]);
   }
   for (const [label] of acts) form.button(label);
   form.button("Close");

@@ -927,9 +927,9 @@ async function mainMenu(player) {
   /** @type {{ text: string, run: () => unknown }[]} */
   const actions = [{ text: "Caravan info\n§8When it comes, or where it is", run: () => infoPage(player) }];
   if (isOp(player)) {
-    actions.push({ text: "Add an arrival spot here\n§8Operators", run: () => stillOp(player) && addSpotForm(player) });
-    if (spots.length) actions.push({ text: "Remove an arrival spot\n§8Operators", run: () => stillOp(player) && removeSpotMenu(player) });
-    if (!visit) actions.push({ text: "Bring the caravan now\n§8Operators", run: () => stillOp(player) && call(player) });
+    actions.push({ text: "§4Add an arrival spot here\n§8Operators", run: () => stillOp(player) && addSpotForm(player) });
+    if (spots.length) actions.push({ text: "§4Remove an arrival spot\n§8Operators", run: () => stillOp(player) && removeSpotMenu(player) });
+    if (!visit) actions.push({ text: "§4Bring the caravan now\n§8Operators", run: () => stillOp(player) && call(player) });
   }
   const form = new ActionFormData().title("§lMerchant Caravan").body(statusLines(player).join("\n\n"));
   for (const a of actions) form.button(a.text);

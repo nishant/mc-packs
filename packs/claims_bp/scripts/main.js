@@ -535,7 +535,7 @@ async function mainMenu(player) {
   if (!here && mine.length < max) actions.push({ text: `Claim this land\n§8${2 * r + 1} x ${2 * r + 1} blocks around you`, run: () => claimHere(player) });
   actions.push({ text: "Show claim borders\n§8Nearby, for a few seconds", run: () => showBorders(player, nearby(player)) });
   for (const c of mine) actions.push({ text: `My claim: ${c.x}, ${c.z}\n§8${shortDim(c.dim)}, shared with ${c.s.length}${c.pt === true ? " and your party" : ""}`, run: () => manage(player, c) });
-  if (isOp(player)) actions.push({ text: "All claims (operator)\n§8Remove any claim", run: () => allClaims(player) });
+  if (isOp(player)) actions.push({ text: "§4All claims (operator)\n§8Remove any claim", run: () => allClaims(player) });
   await menu(player, "§lLand Claims", body, actions);
 }
 

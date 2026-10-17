@@ -336,8 +336,8 @@ async function mainMenu(player) {
   /** @type {{ text: string, run: () => unknown, op?: boolean }[]} */
   const actions = [{ text: "Status\n§8Mode, blast sources and zones", run: () => player.sendMessage(statusText(player)) }];
   if (isOp(player)) {
-    actions.push({ text: "Protect this spot (operator)\n§8A zone around you", op: true, run: () => addForm(player) });
-    if (getZones().length) actions.push({ text: "Remove a zone (operator)", op: true, run: () => removeMenu(player) });
+    actions.push({ text: "§4Protect this spot (operator)\n§8A zone around you", op: true, run: () => addForm(player) });
+    if (getZones().length) actions.push({ text: "§4Remove a zone (operator)", op: true, run: () => removeMenu(player) });
   }
   if (zoneProviders().has("zones")) {
     actions.push({ text: "Safe zones\n§8Protect places from every world event", run: () => system.sendScriptEvent("realm:zones_open", JSON.stringify({ player: player.id, action: "menu" })) });
