@@ -7,11 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
-## Townsfolk names stay on the townsfolk
+## Character names stay on the characters
 
-- Townsfolk names are back to the game's own close-up NPC names, anchored over the NPC instead of a shared floating helper label that could drift toward another player.
-- Old floating helper labels are cleaned up automatically when an upgraded world loads those chunks.
-- The extra Townsfolk name-range slider is gone from /realm:config because stable Bedrock does not let packs set a true per-player distance for native NPC names.
+- Townsfolk, caravan traders, wanderers, and story characters now use the game's own close-up names over the real character instead of a shared floating helper label that could drift toward another player.
+- The extra far-name sliders are gone from /realm:config because stable Bedrock does not let packs set a true per-player distance for native names.
 
 ## Easier to read realm menu
 

@@ -11,7 +11,6 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "enabled", type: "bool", scope: "world", label: "Wanderers appear", help: "Disabled, nobody new appears and camps stay empty" },
-  { key: "farNameRange", type: "int", scope: "world", label: "Show names from afar (blocks)", help: "Names stay visible behind walls (0 = only up close)", min: 0, max: 200, step: 10 },
   { key: "scheduleTicks", type: "int", scope: "world", label: "Ticks between rolls (1200 = a minute)", min: 200, max: 12000, step: 200, restart: true },
   { key: "rollChance", type: "float", scope: "world", label: "Chance someone appears each minute", help: "0.07 = 7%: about 2 meetings an hour of exploring", min: 0, max: 1, step: 0.01 },
   { key: "spawnDistance", type: "int", scope: "world", label: "Nobody closer to world spawn than (blocks)", min: 0, max: 5000, step: 50 },

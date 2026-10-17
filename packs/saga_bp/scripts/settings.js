@@ -28,7 +28,6 @@ const OPTIONS = [
   { key: "actorTimeoutSeconds", type: "int", scope: "world", label: "Story characters wait for their player (seconds)", min: 60, max: 1800, step: 30 },
   { key: "favors", type: "bool", scope: "world", label: "Daily favors", help: "Questgivers offer a short job each real day" },
   { key: "campDays", type: "int", scope: "world", label: "Days before an unvisited wanderer's camp is taken down", min: 1, max: 60, step: 1 },
-  { key: "farNameRange", type: "int", scope: "world", label: "Show story character names from afar (blocks)", help: "Story characters' names stay visible from this far away (0 = only up close)", min: 0, max: 200, step: 10 },
   { key: "tracker", type: "bool", scope: "player", base: "tracker", label: "Story tracker", help: "Where to go next for your story" },
   { key: "trackerAt", type: "enum", scope: "player", base: "trackerAt", choices: [...SLOTS, "hotbar"], names: [...SLOT_NAMES, "Above the hotbar"], label: "Where my story tracker shows", help: "Pick a box no other pack uses so they show at once" },
   { key: "spotGuides", type: "bool", scope: "player", default: true, label: "Show quest spot outlines", help: "Semi-clear colored outlines on the blocks and standing boxes your quests need (drawn by the Easy Building Guides resource pack)" },
