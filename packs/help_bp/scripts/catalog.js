@@ -78,7 +78,7 @@ export const PACKS = [
     "folder": "admin_bp",
     "topic": "admin",
     "name": "Realm Configuration",
-    "summary": "Every player carries a §lRealm Configuration§r item (a nether star with a gold name, whose lore starts §eHold it in your hand and use it§r / §eto open the realm menu:§r). Using it opens one menu with §levery realm command you can use§r: pick what you want to do, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. Players who aren't operators see the same menu without the operator entries; operators see everything, with operator-only entries in §lgold§r. The commands still work as typed; this is for when you'd rather not type them while playing.",
+    "summary": "Every player carries a §lRealm Configuration§r item (a nether star with a gold name, whose lore starts §eHold it in your hand and use it§r / §eto open the realm menu:§r). Using it opens one menu with §levery realm command you can use§r: pick what you want to do, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. Players who aren't operators see the same menu without the operator entries; operators see everything, with operator-only entries in §lred§r. The commands still work as typed; this is for when you'd rather not type them while playing.",
     "steps": [
       {
         "text": "You get the §eRealm Configuration§r item when you join or respawn without one (§egiveToPlayers§r). It stays through death and can't be dropped or put in a chest, and you only ever get one. Lost it anyway? Run §e/realm:admin_item§r. §e/realm:admin§r opens the same menu.",
@@ -97,7 +97,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r you see everything, and the top of each page says §eGold = operators only. The rest is for every player.§r Gold buttons are operator commands; the plain dark ones are what every player sees too. The main menu adds §lRealm Settings§r (right after §lMy Preferences§r; opens §e/realm:config§r) and, last, §lOperator Tools§r.",
+        "text": "§lOperators:§r you see everything, and the top of each page says §eRed = operators only. The rest is for every player.§r Red buttons are operator commands; the plain dark ones are what every player sees too. The main menu adds §lRealm Settings§r (right after §lMy Preferences§r; opens §e/realm:config§r) and, last, §lOperator Tools§r.",
         "ops": true
       },
       {
@@ -118,7 +118,7 @@ export const PACKS = [
         "usage": "/realm:admin",
         "ops": false,
         "who": "Everyone",
-        "text": "Opens the Realm Configuration menu (the same as using the item): every command you can use; operators see theirs in gold"
+        "text": "Opens the Realm Configuration menu (the same as using the item): every command you can use; operators see theirs in red"
       },
       {
         "usage": "/realm:admin_item [player]",

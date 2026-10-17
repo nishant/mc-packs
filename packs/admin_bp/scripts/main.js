@@ -13,12 +13,12 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { ACTIONS, TITLE_MAX_SECONDS, showTitle } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
-import { GROUPS, LINE, NAMES, OP_COLOR, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
+import { GROUPS, LINE, NAMES, OP_COLOR, OP_TEXT, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
 import { get } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
 
 // Realm Configuration: one item, one menu, every realm: command. Every player gets the item and sees the
-// commands they may use; operators see everything, their own entries in gold. The commands come from
+// commands they may use; operators see everything, their own entries in red. The commands come from
 // catalog.js (generated from every pack's registrations); picking one asks for its options with preset
 // choices, then runs it as the player with player.runCommand, so the command's own checks and menus
 // apply. Operator commands and quick actions are checked again right before they run, never only hidden.
@@ -33,10 +33,10 @@ import { allZones, pingZones } from "./zones.js";
 
 const TITLE = "Realm Configuration";
 const RECENT_PROP = "admin:recent";
-const LORE = ["§r§7Hold it in your hand and use it", "§r§7to open the realm menu:", "§r§7every realm command you can use,", "§r§7in one place.", "§r§8Gold entries: operators only"];
+const LORE = ["§r§7Hold it in your hand and use it", "§r§7to open the realm menu:", "§r§7every realm command you can use,", "§r§7in one place.", "§r§8Red entries: operators only"];
 const MARK = /** @type {string} */ (LORE.at(-1));
-/** The last lore line of items handed out before the menu was for everyone: still the real item. */
-const OLD_MARK = "§r§8Operators only";
+/** Last lore lines of items handed out earlier (before the menu was for everyone; while operator entries were gold): still the real item. */
+const OLD_MARKS = ["§r§8Operators only", "§r§8Gold entries: operators only"];
 const RANK = { any: 0, op: 1, admin: 2, host: 3, owner: 4 };
 
 /** @type {Cmd[]} every command in the catalog */
@@ -165,7 +165,7 @@ async function list(player, title, body, entries, back) {
   for (const e of entries) {
     if ("header" in e) {
       if (gap) form.divider();
-      form.header(e.header);
+      form.label(`§l${e.header}§r`); // header() is double size: too big for a heading inside a menu
     } else if ("text" in e) form.label(e.text);
     else {
       form.button(e.label);
@@ -278,7 +278,7 @@ function paramForm(player, cmd, note) {
   const isInput = [];
   /** @type {{ count: number, read: (v: any[]) => string | { error: string } }[]} */
   const readers = [];
-  form.label(`§7/${cmd.name}${isOpCmd(cmd) ? ` ${OP_COLOR}(operators only)` : ""}§r\n${cmd.description}${note ? `\n\n§7${note}` : ""}`);
+  form.label(`§7/${cmd.name}${isOpCmd(cmd) ? ` ${OP_TEXT}(operators only)` : ""}§r\n${cmd.description}${note ? `\n\n§7${note}` : ""}`);
   isInput.push(false);
   const loc = player.location;
 
@@ -464,7 +464,7 @@ function whatItDoes(c) {
 /** A command's name for what it does ("Find Container"); the command name for one presets.js doesn't know. @param {Cmd} c */
 const nameOf = (c) => NAMES[c.name]?.[0] ?? `/${c.name}`;
 
-/** A button's two lines: the name (gold when only operators can use it) and what it does. @param {string} name @param {string} hint @param {boolean} op */
+/** A button's two lines: the name (red when only operators can use it) and what it does. @param {string} name @param {string} hint @param {boolean} op */
 const button = (name, hint, op) => `${op ? OP_COLOR : ""}${fit(name)}\n§8${fit(hint)}`;
 
 /** @param {Cmd} c */
@@ -474,7 +474,7 @@ const cmdLabel = (c) => button(nameOf(c), NAMES[c.name]?.[1] ?? whatItDoes(c), i
 const cmdEntries = (player, cmds, back) => cmds.map((c) => /** @type {Entry} */ ({ label: cmdLabel(c), open: () => openCommand(player, c, undefined, back) }));
 
 /** The top line of every page for operators: what the colors mean. @param {Player} player @param {string} rest */
-const legend = (player, rest) => (isOp(player) ? `${OP_COLOR}Gold§r = operators only. The rest is for every player.\n${rest}` : rest);
+const legend = (player, rest) => (isOp(player) ? `${OP_TEXT}Red§r = operators only. The rest is for every player.\n${rest}` : rest);
 
 /** @type {Set<string>} packs that sit on a page of their own (Realm Configuration's commands are on Operator Tools) */
 const OWN_PAGE = new Set(["admin_bp"]);
@@ -633,7 +633,7 @@ async function opsPage(player, back) {
 
   const own = cmds.filter((c) => OWN_PAGE.has(c.folder) && !ACTIONS.some((a) => a.title === nameOf(c))); // Show a Title is a quick action already
   if (own.length) entries.push({ header: TITLE }, ...cmdEntries(player, own, again));
-  await list(player, "Operator Tools", `${OP_COLOR}Gold§r = operators only: everything on this page is.`, entries, back);
+  await list(player, "Operator Tools", `${OP_TEXT}Red§r = operators only: everything on this page is.`, entries, back);
 }
 
 /** @type {Set<string>} players with the menu open */
@@ -664,7 +664,7 @@ const isConfigItem = (it) => !!it && it.typeId === CONFIG.itemType && plain(it.n
 const isRealItem = (it) => {
   if (!isConfigItem(it)) return false;
   const lore = /** @type {ItemStack} */ (it).getLore();
-  return lore.includes(MARK) || lore.includes(OLD_MARK);
+  return lore.includes(MARK) || OLD_MARKS.some((m) => lore.includes(m));
 };
 
 function makeItem() {
@@ -690,9 +690,9 @@ function carries(player) {
   for (let i = 0; i < inv.size; i++) {
     const it = inv.getItem(i);
     if (!isConfigItem(it)) continue;
-    // An item from before the menu was for everyone says "Operators only": give it today's lore.
+    // An older item says "Operators only" or "Gold entries": give it today's lore.
     const item = /** @type {ItemStack} */ (it);
-    if (item.getLore().includes(OLD_MARK)) {
+    if (!item.getLore().includes(MARK)) {
       try {
         item.setLore(LORE);
         inv.setItem(i, item);
@@ -824,7 +824,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
   customCommandRegistry.registerCommand(
     {
       name: "realm:admin",
-      description: "Realm Configuration: one menu for every realm command you can use, with preset choices (operators: theirs in gold)",
+      description: "Realm Configuration: one menu for every realm command you can use, with preset choices (operators: theirs in red)",
       permissionLevel: CommandPermissionLevel.Any,
       cheatsRequired: false,
     },

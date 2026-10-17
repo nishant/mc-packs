@@ -21,7 +21,7 @@
 /**
  * The menu's groups, in the order the main menu shows them (after My Preferences, Realm Settings,
  * Recent and Search). Each group is one scrolling page with a heading per section; a section lists
- * the commands of its packs, the pack's own menu first, then the others, operator ones (gold) last.
+ * the commands of its packs, the pack's own menu first, then the others, operator ones (red) last.
  * A pack not listed here lands in "Other". Realm Configuration's own commands are on Operator Tools.
  * `title` and `hint` are the group button's two lines (each must fit in LINE).
  * @type {{ id: string, title: string, hint: string, sections: { title: string, packs: string[] }[] }[]}
@@ -98,8 +98,10 @@ export const LINE = 168;
 const GLYPH = { " ": 4, i: 2, l: 3, I: 4, t: 4, f: 5, k: 5, "!": 2, ".": 2, ",": 2, ":": 2, ";": 2, "'": 2, "`": 3, '"': 4, "(": 5, ")": 5, "[": 4, "]": 4, "<": 5, ">": 5, "*": 5, "|": 2, "@": 7, "~": 7 };
 /** The width of a line of text in font pixels, without its § codes. @param {string} s */
 export const textWidth = (s) => [...s.replace(/§./g, "")].reduce((n, c) => n + (GLYPH[c] ?? 6), 0);
-/** The color of everything only operators can use (commands, quick actions, the setup checklist); the rest is the button's default dark text. */
-export const OP_COLOR = "§6";
+/** The color of everything only operators can use on a (light gray) button: commands, quick actions, the setup checklist; the rest is the button's default dark text. Dark red: gold was unreadable on the gray. */
+export const OP_COLOR = "§4";
+/** The same red for text on the dark page (the legend, a command's options form): dark red is too dim there. */
+export const OP_TEXT = "§c";
 
 /**
  * Every command's button: a name for what it does, then a short hint (both must fit in LINE). The

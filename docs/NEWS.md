@@ -6,6 +6,11 @@ Player-facing release notes, newest first. The newest entry is what pops up in g
 Write for players, in plain ASCII (no curly quotes, dashes or emoji), short lines. Keep older
 entries below as a changelog.
 
+
+## Easier to read realm menu
+
+- Operator entries in the Realm Configuration menu are now red instead of gold, which was hard to read on the gray buttons.
+- Headings in the menu, like "What do you want to do?", are normal size instead of huge.
 ## A friendlier realm menu, less rain, softer rain indoors
 
 - Everyone now gets the Realm Configuration item (the nether star with a gold name). Use it for every realm command you can use, sorted into six scrolling pages: My Screen & Toggles, Items & Building, Story & Adventure, Friends, Crowns & Fun, World & Events, and Towns & Townsfolk. Every button says what it does on its second line. Operators see their own commands in gold, plus Operator Tools.
