@@ -39,7 +39,7 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--timeout <s>` | 180 | Total time limit, setup and boot included. |
 | `--seed <n>` | 1 | World seed. Each seed's world is generated once and cached in `.cache/`. |
 | `--flat` | off | Superflat world (grass at y -61). |
-| `--port <n>` | random free pair | Reserve explicit IPv4 port `<n>` and IPv6 `<n>+1` across TCP+UDP (`.cache/ports/`). |
+| `--port <n>` | random free pair | Reserve explicit IPv4 port `<n>` and IPv6 `<n>+1` across TCP+UDP (`%TEMP%\bds-harness-port-locks` or `BDS_PORT_LOCK_DIR`). |
 | `--transport <mode>` | `nethernet` | Transport mode (`nethernet` default; `raknet` default for `--bot-qa`). |
 | `--prop key=value` | | Extra `server.properties` line, repeatable (e.g. `--prop difficulty=hard`). |
 | `--allow-error <regex>` | | Do not fail on script errors matching this, repeatable. |
@@ -56,7 +56,7 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 
 Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or `/home/user/bds` on Linux; downloaded by `setup.mjs` if
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
-`logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
+`logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir), `BDS_PORT_LOCK_DIR` (shared host-wide port lock dir, default `<os.tmpdir()>/bds-harness-port-locks`).
 
 ## Evidence manifest, staging hashes, and verification gates
 
@@ -107,37 +107,21 @@ node tools/test-bds/run.mjs --only help_bp --ticks 20 --bot-qa --quiet
   `stash_fill`, `stash_next`, `stash_prev`, `stash_open`, `npc_5m`, `npc_10m`, `npc_15m`, `npc_20m`,
   `npc_25m`, `npc_probe_always`, `npc_probe_looked_at`). Any unknown or failed step logs `QA_STEP_ERROR`
   (never a false `QA_STEP_APPLIED`).
-- **Windows client feasibility & empirical visual QA qualifications (`clientFeasibility` in evidence JSON)**:
-  1. Retail `Microsoft.MinecraftUWP` is a single-instance packaged UWP app per Windows user session; Windows
-     cannot launch a second concurrent retail `Minecraft.Windows.exe` instance (`canRunSecondRetailInstance: false`).
-  2. `Minecraft.Windows.exe` renders a DirectX/GameInput UWP canvas where coordinate clicks report `done`
-     without actuating controls (`uiInputNote`); bare keyboard keys (`Tab`, `Left`/`Right`/`Up`/`Down`,
-     `Return`, `Space` on modal warnings, `[` and `]` for Play tabs) plus `type_text` targeted at window
-     `element_index: 0` navigate menus after fresh screenshot verification without shell focus workarounds.
-  3. UWP AppContainer `CheckNetIsolation LoopbackExempt` status (`uwpLoopbackExempt`) is recorded separately;
-     empirically, local NetherNet connections to `127.0.0.1:19132` with `texturepack-required=true` download
-     and attach candidate resource packs (`7.1 MB`) without `LoopbackExempt`.
-  4. **Reusable `inbox -> ACK -> CU screenshot / keyboard form` workflow & qualified visual outcomes**:
-     - Appending `scriptevent qa:cmd <step>` to `<log>.commands.txt`, waiting for `QA_STEP_APPLIED` in `<log>`,
-       and capturing via `get_window_state(capture_mode="image")` exercises world poses and server-opened UI
-       forms without triggering focus-restore auto-pause (`ctrl_lost_focus_pause`).
-     - **Minimap & Side HUD**: real-client screenshots verified the blue horizontal river + stone bridge radar
-       cells, South compass bearing consistency (`map_bridge`), and right-edge scoreboard sidebar positioned
-       below the radar with expected vanilla long-name truncation.
-     - **NPC 5 m / 20 m native vs. `realm:npc_name_probe` comparison (`Mara the Cartographer`)**:
-       - `npc_20m` (native only): NPC body visible, native overhead nameplate not drawn at 20 m.
-       - `npc_probe_always` (`count=1`) at 20 m: `realm:npc_name_probe` overhead text is visible at 20 m (small).
-       - `npc_5m` with `npc_probe_always` active: native nameplate and `realm:npc_name_probe` helper render an
-         overlapping double label at 5 m (confirming the close-range duplicate-text gate).
-       - `npc_probe_looked_at` (`count=0`) at 5 m: removes the helper and renders a single clear
-         `Mara the Cartographer` native nameplate.
-     - **Inventory Stash (`stash_bp`)**: `QA_CLIENT_JOINED` seeds two 12-item pages (`24/120` total). Sending
-       `stash_open` via `<log>.commands.txt` opens the real `Inventory Pages` GUI form on the client showing
-       `24/120` total usage and `12/24` on Page 1 and Page 2; bare keyboard `Down`, `Down`, `Return` on window
-       `element_index: 0` switches to Page 2, and a second `stash_open` confirms `Page #2` / `Page 2 (Active)`
-       (whereas coordinate clicks on the form report `done` without activating). Raw vanilla inventory-slot
-       mouse drag/click UI remains untested under Computer Use because `press_key("e")` focus restoration
-       triggers Bedrock's focus-loss pause screen.
+- **Client QA workflow & caveats**:
+  - **Command inbox loop**: append `scriptevent qa:cmd <step>` to `<log>.commands.txt` and wait for
+    `QA_STEP_APPLIED` in `<log>` to drive camera poses (`map_bridge`, `npc_20m`, `npc_5m`, ...) and
+    server-opened UI forms (`stash_open`) from the server without requiring in-game chat or focus-changing
+    hotkeys.
+  - **NPC nameplate prototype finding (`Mara the Cartographer`)**: at `npc_20m`, native NPC overhead labels
+    do not render while the test-only `realm:npc_name_probe` helper (`npc_probe_always`) remains visible
+    (small); at `npc_5m`, leaving `npc_probe_always` active renders an overlapping duplicate label with the
+    native nameplate, whereas `npc_probe_looked_at` (`count=0`) leaves a single clean native label. Do not
+    ship an always-on helper entity in production.
+  - **Visual & input boundaries**: headless and `--bot-qa` runs always leave `gates.visual: "unverified"`.
+    Server-UI forms (`stash_open`) can be exercised via keyboard navigation once opened by the server,
+    while raw client inventory-slot mouse drag/click interactions remain unverified unless tested in an
+    active foreground client session. `<log>.evidence.json` also records host `clientFeasibility`
+    diagnostics (running `Minecraft.Windows.exe` processes and UWP loopback status).
 - **`--bot-qa` (`lib/bot-adapter.mjs`)**: evaluates the Bedrock protocol bot approach from
   `AIKUSAN/minecraft-agent-skills-bundle` (`.agents/skills/minecraft-bot-qa`, MIT License, `bedrock-protocol@3.60.1`).
   Empirically, native BDS `1.26.52.3` enforces `transport=nethernet` (`In this release, NetherNet is the only
