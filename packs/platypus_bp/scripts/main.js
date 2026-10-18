@@ -2,6 +2,7 @@
 // platypus_rp). This script adds what JSON can't: nausea when a platypus bites a player, a chat line when a Perry
 // spawns, hearts when you feed one, grown-up platypuses from before breeding existed, and /realm:platypus to find the
 // nearest ones.
+import "./diag.js";
 import {
   CommandPermissionLevel,
   GameMode,
@@ -72,6 +73,11 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
 // adult group yet (marked by mark_variant 1), so it couldn't breed. Give it one when it spawns or its chunk loads.
 /** @param {import("@minecraft/server").Entity} entity */
 function growUpOld(entity) {
+  try {
+    if (entity.typeId !== PLATYPUS) return; // most loads and spawns: nothing scheduled
+  } catch {
+    return;
+  }
   system.run(() => {
     try {
       if (!entity.isValid || entity.typeId !== PLATYPUS) return;

@@ -1,4 +1,5 @@
-import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import "./diag.js";
+import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -86,12 +87,13 @@ function recordOf(player) {
   return r;
 }
 
-function flush() {
-  for (const id of dirty) {
+/** Saves changed records: every one, or only these players'. @param {Iterable<string>} [ids] */
+function flush(ids = [...dirty]) {
+  for (const id of ids) {
+    if (!dirty.delete(id)) continue;
     const r = records().get(id);
     if (r) world.setDynamicProperty(RECORD_PREFIX + id, JSON.stringify(r));
   }
-  dirty.clear();
 }
 
 /** @param {Player} player @param {Stat} stat @param {number} [n] */
@@ -142,8 +144,9 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pending.delete(playerId);
+  backfilled.delete(playerId);
   try {
-    flush();
+    flush([playerId]);
   } catch (e) {
     console.warn(`[milestones] ${e}`);
   }
@@ -184,11 +187,44 @@ system.runInterval(() => {
 // Unlocks
 // ---------------------------------------------------------------------------
 
+// Town news: reaching a milestone's top tier is Townsfolk gossip (at most one piece per in-game hour from this pack,
+// each player and milestone once) and a title with the tier ("Miner III") for the Titles pack.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
+/** @param {Player} player @param {Milestone} m @param {boolean} quiet already had it when the pack was added: no gossip */
+function topTier(player, m, quiet) {
+  const name = title(m, m.tiers.length);
+  system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: name, from: "milestones_bp" }));
+  if (!quiet) gossip(`${player.id}:${m.id}`, { kind: "milestone", player: player.id, name: player.name, place: name });
+}
+
+/** Players whose earlier top tiers were sent to the Titles pack this session. @type {Set<string>} */
+const backfilled = new Set();
+
 /** @param {Player} player */
 function check(player) {
   const r = recordOf(player);
   const first = !r.g;
   const got = (r.g ??= {});
+  if (!backfilled.has(player.id)) {
+    // Once a session: top tiers reached before the titles existed (the Titles pack keeps each title once).
+    backfilled.add(player.id);
+    for (const m of milestones) if ((got[m.id] ?? 0) >= m.tiers.length) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: title(m, m.tiers.length), from: "milestones_bp" }));
+  }
   /** @type {string[]} */
   const unlocked = [];
   for (const m of milestones) {
@@ -198,6 +234,7 @@ function check(player) {
     for (let t = before + 1; t <= now; t++) unlocked.push(`${title(m, t)} (${STATS[m.stat].goal(fmt(m.tiers[t - 1]))})`);
     got[m.id] = now;
     dirty.add(player.id);
+    if (now >= m.tiers.length) topTier(player, m, first);
   }
   if (first) dirty.add(player.id);
   if (!unlocked.length) return;
@@ -214,19 +251,26 @@ function check(player) {
   player.playSound("random.levelup", { pitch: 1, volume: 0.9 });
 }
 
+// Each player is checked (and their record saved) every checkSeconds, a share of the players each second, so a full
+// server doesn't check and save everyone on the same tick.
 let elapsed = 0;
 system.runInterval(() => {
-  if (++elapsed < Math.max(1, CONFIG.checkSeconds)) return;
-  elapsed = 0;
-  for (const player of world.getAllPlayers()) {
+  const every = Math.max(1, CONFIG.checkSeconds);
+  const turn = elapsed++ % every;
+  const players = world.getAllPlayers();
+  /** @type {string[]} */
+  const ids = [];
+  for (let i = turn; i < players.length; i += every) {
+    const player = players[i];
     try {
       check(player);
+      ids.push(player.id);
     } catch (e) {
       console.warn(`[milestones] ${e}`);
     }
   }
   try {
-    flush();
+    flush(ids);
   } catch (e) {
     console.warn(`[milestones] ${e}`);
   }
@@ -291,16 +335,26 @@ async function showRecord(player, id) {
   ]);
 }
 
+/** Most players the "Whose milestones?" list shows: a big server's hundreds of names would make a list nobody can use. */
+const LIST_MAX = 50;
+
 /** @param {Player} player */
 async function pickPlayer(player) {
   const online = new Set(world.getAllPlayers().map((p) => p.id));
-  const list = [...records().entries()]
-    .filter(([id]) => id !== player.id)
-    .sort(([a, x], [b, y]) => Number(online.has(b)) - Number(online.has(a)) || x.n.localeCompare(y.n));
+  const all = [...records().entries()].filter(([id]) => id !== player.id);
+  // Online players first, then the most milestones (the ones worth a look), then by name.
+  const list = all
+    .sort(([a, x], [b, y]) => Number(online.has(b)) - Number(online.has(a)) || unlockedCount(y) - unlockedCount(x) || x.n.localeCompare(y.n))
+    .slice(0, LIST_MAX);
+  const body = !all.length
+    ? "Nobody else has played since milestones were added."
+    : all.length > list.length
+      ? `${list.length} of the ${all.length} players who have played since milestones were added: online players first, then the most milestones.`
+      : "Everyone who has played since milestones were added, online players first.";
   await menu(
     player,
     "§lWhose milestones?",
-    list.length ? "Everyone who has played since milestones were added, online players first." : "Nobody else has played since milestones were added.",
+    body,
     [
       ...list.map(([id, r]) => ({
         text: `${r.n}${online.has(id) ? " §a(online)" : ""}\n§8${unlockedCount(r)} of ${totalTiers} unlocked`,
@@ -334,6 +388,34 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Scenario tests (BDS harness): `fill` the world with that many records of players who are offline, as on a big server.
+// Only from the server console: /scriptevent realm:milestones_test {"fill":80}
+// {"player":"<name>","stat":"joins","count":400} sets an online player's own count of a stat.
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:milestones_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const m = JSON.parse(ev.message);
+      const who = typeof m?.player === "string" ? world.getAllPlayers().find((p) => p.name === m.player) : undefined;
+      if (who && typeof m.stat === "string" && STATS[/** @type {Stat} */ (m.stat)] && typeof m.count === "number") {
+        recordOf(who).c[m.stat] = m.count;
+        dirty.add(who.id);
+        return;
+      }
+      const n = Math.max(0, Math.min(2000, Math.floor(Number(m?.fill) || 0)));
+      for (let i = 0; i < n; i++) {
+        const id = `-${4294960000 - i}`;
+        records().set(id, { n: `Offline${i}`, c: { joins: i % 20 }, g: { joins: i % 20 >= 10 ? 1 : 0 } });
+        dirty.add(id);
+      }
+      flush();
+    } catch (e) {
+      console.warn(`[milestones] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

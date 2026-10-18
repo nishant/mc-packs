@@ -187,12 +187,42 @@ system.afterEvents.scriptEventReceive.subscribe((ev) => {
     if (!p) return;
     if (p.type === "msg") onMsg(p);
     else if (p.type === "form") onForm(p);
+  } else if (ev.id === "harness:profile_reset") {
+    tickMeterReset();
+  } else if (ev.id === "harness:profile_dump") {
+    tickMeterDump();
   } else if (ev.id === "harness:start") {
     let cfg = {};
     try { cfg = JSON.parse(ev.message || "{}"); } catch (e) { /* ignore */ }
     system.run(() => run(cfg));
   }
 });
+
+// ---------------------------------------------------------------------------
+// Server tick meter (run.mjs --profile): wall time between consecutive ticks, as one script sees it
+// ---------------------------------------------------------------------------
+
+let meter = null;
+function tickMeterReset() {
+  if (meter) system.clearRun(meter.id);
+  meter = { startTick: system.currentTick, startWall: Date.now(), last: Date.now(), deltas: [] };
+  const m = meter;
+  m.id = system.runInterval(() => { const n = Date.now(); m.deltas.push(n - m.last); m.last = n; }, 1);
+}
+function tickMeterDump() {
+  if (!meter) return;
+  const d = meter.deltas.slice(1);
+  const sorted = [...d].sort((a, b) => a - b);
+  const pct = (p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] : 0);
+  const ticks = system.currentTick - meter.startTick;
+  const wallMs = Date.now() - meter.startWall;
+  console.warn("PROFILE_SERVER " + JSON.stringify({
+    ticks, wallMs, tps: ticks / Math.max(0.001, wallMs / 1000),
+    tickIntervalAvgMs: d.length ? d.reduce((a, b) => a + b, 0) / d.length : 0,
+    tickIntervalP95Ms: pct(0.95), tickIntervalP99Ms: pct(0.99), tickIntervalMaxMs: sorted[sorted.length - 1] || 0,
+    ticksOver50ms: d.filter((x) => x > 55).length, ticksOver100ms: d.filter((x) => x > 100).length,
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // Scenario API
@@ -241,6 +271,8 @@ function makeT(cfg) {
   const t = {
     mc, gt, world, system,
     config: cfg,
+    /** run.mjs --arg key=value pairs (strings). */
+    args: cfg.args || {},
     packs: cfg.packs || [],
     get tick() { return system.currentTick; },
     get dimension() { return world.getDimension("overworld"); },

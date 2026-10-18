@@ -1,3 +1,4 @@
+import "./diag.js";
 import { BlockVolume, CommandPermissionLevel, CustomCommandStatus, Dimension, EquipmentSlot, GameMode, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
@@ -143,10 +144,16 @@ function tick() {
 /** Is time of day `t` in [from, to], wrapping past midnight? @param {number} t @param {number} from @param {number} to */
 const inWindow = (t, from, to) => (from <= to ? t >= from && t <= to : t >= from || t <= to);
 
-/** @param {Dimension} dimension @param {number} x @param {number} z */
+/**
+ * The topmost block of a column, or undefined. A column that isn't loaded yet (just teleported) can hand back a block
+ * that throws as soon as it's read, so its id is read here, inside the try.
+ * @param {Dimension} dimension @param {number} x @param {number} z
+ */
 function topmost(dimension, x, z) {
   try {
-    return dimension.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    const top = dimension.getTopmostBlock({ x: Math.floor(x), z: Math.floor(z) });
+    if (top) void top.typeId;
+    return top;
   } catch {
     return undefined;
   }

@@ -6,6 +6,7 @@
 //   places.js      story places, building their prefabs (prefabs.js), snapshots, the places menu
 //   ui.js          offers, dialogues, hints, rewards, tracker, the story log menu
 //   party.js       a party's shared main story (one chapter at a time, progress shared)
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ageAdds, expireAdds, sweep, tendActors } from "./actors.js";
 import { calendar, entries, finished, flagOf, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";
@@ -43,12 +44,18 @@ import { get, getFor } from "./settings.js";
 import { initFar } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS, WANDERERS, WANDER_TEMPLATES } from "./stories/index.js";
-import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
+import { choose, clearBox, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, online, send } from "./util.js";
 
 const LOOP_TICKS = 20; // the player loop runs once a second
 const TRACKER_RUNS = 2; // the tracker every 2 runs
+/** A player's fixed turn among the TRACKER_RUNS runs, from a hash (FNV-1a) of their id. @param {string} id */
+function idSlot(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return (h >>> 16) % TRACKER_RUNS;
+}
 const SAVE_RUNS = 5; // unsaved progress is written every 5 seconds
 const PACK_SCAN_TICKS = 40; // installed packs: answers to realm:help_ping are collected for 2 seconds
 const PACK_SCAN_EVERY = 12000; // ...every 10 minutes
@@ -83,14 +90,17 @@ system.runInterval(() => {
   }
   if (get("enabled") !== true) return;
   beginRun();
-  const tracking = runs % TRACKER_RUNS === 0;
   for (const player of world.getAllPlayers()) {
+    // Every 2 seconds per player, half the players each second (so a full server's tracker isn't drawn in one tick).
+    // Split by the player's id, not their place in the list, so someone joining never shifts another's turn.
+    const tracking = (runs + idSlot(player.id)) % TRACKER_RUNS === 0;
     try {
       wanderHousekeeping(player);
       wanderAuto(player);
       const list = entries(player);
       if (!list.length) {
         if (tracking) sendTrack(player, undefined);
+        clearBox(player);
         continue;
       }
       const saga = sagaOf(player);

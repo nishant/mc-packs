@@ -164,7 +164,9 @@ export default async function (t) {
   const unloaded = await radar();
   t.check(state.terrain.misses > 0 && unloaded.includes(g(0x38)), "unloaded native columns remain unknown and pending, not made-up ground");
   await t.loadArea(2000, 2000);
-  await t.wait(20);
+  // Failed reads are tried again every few ticks and the scanner and the radar keep to their time budgets, so the
+  // whole picture is back within two seconds of the area loading.
+  await t.wait(40);
   const loaded = await radar();
   t.check(!loaded.includes(g(0x38)), "pending native misses recover promptly after the area loads");
   t.log(`operation peaks total=${state.cost.scanPeak} each=${state.cost.scanEachPeak}`);

@@ -860,6 +860,10 @@ export async function previewBuild(player, name, at) {
         await wait(200);
         continue;
       }
+      if (!isOp(player)) {
+        player.sendMessage("§c[Story] Only operators can build story places.");
+        return;
+      }
       player.sendMessage(`§7[Story] Building ${named(name)}...`);
       const err = await buildAt(name, dim, origin, facing, { by: player.name });
       if (err) player.sendMessage(`§c[Story] Couldn't build ${named(name)}: ${err}.`);
@@ -921,7 +925,14 @@ export function setHere(player, name) {
 /** @param {Player} player @param {string} question */
 async function confirm(player, question) {
   const res = await show(player, new ActionFormData().title("Are you sure?").body(question).button("Yes").button("No"));
-  return !!res && !res.canceled && res.selection === 0;
+  if (!res || res.canceled || res.selection !== 0) return false;
+  // Rights may have been taken away while the question was open.
+  if (!player.isValid) return false;
+  if (!isOp(player)) {
+    player.sendMessage("§c[Story] Only operators can change story places.");
+    return false;
+  }
+  return true;
 }
 
 /** One place's page in the operators' menu. @param {Player} player @param {string} name */
@@ -987,6 +998,11 @@ async function placePage(player, name) {
     if (!res || res.canceled || res.selection === undefined) return false;
     const act = actions[res.selection];
     if (!act) return true; // Back
+    // Checked again on every press: operator rights may have been taken away while the menu was open.
+    if (!isOp(player)) {
+      player.sendMessage("§c[Story] Only operators can change story places.");
+      return false;
+    }
     await act[1]();
     if (act[0] === "Teleport" || act[0].startsWith("Build")) return false;
   }

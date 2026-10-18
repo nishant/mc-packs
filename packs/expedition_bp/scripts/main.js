@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   BlockPermutation,
   BlockTypes,
@@ -16,7 +17,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, dropStrayCart, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -267,6 +268,12 @@ const prettyId = (id) =>
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+/**
+ * Game time in milliseconds (ticks x 50): the run clock, its time limit and the clear times count game time, so a
+ * lagging server (fewer than 20 ticks a second) doesn't eat the party's time; at full speed it's the wall clock.
+ */
+const gameMs = () => system.currentTick * 50;
+
 /** 372000 -> "6:12". @param {number} ms */
 function clock(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -275,7 +282,15 @@ function clock(ms) {
 /** "Crypt (Nightmare 5)" @param {Dungeon} d @param {number} L */
 const dungeonLabel = (d, L) => `${d.name} (${levelName(L)})`;
 /** @param {string} id */
-const online = (id) => world.getAllPlayers().find((p) => p.id === id);
+/** An online player by id (one lookup, not a scan of every player). @param {string} id @returns {Player | undefined} */
+const online = (id) => {
+  try {
+    const e = world.getEntity(id);
+    return e instanceof Player && e.isValid ? e : undefined;
+  } catch {
+    return undefined;
+  }
+};
 /** @param {string} id */
 const dungeonById = (id) => CONFIG.dungeons.find((d) => d.id === id);
 const maxTier = () => clamp(Math.floor(Number(get("maxTier")) || 20), 1, 20);
@@ -865,13 +880,53 @@ function findForeign(o, size, top) {
   return undefined;
 }
 
+/**
+ * World spawn on the ground. `getDefaultSpawnLocation()` answers y 32767 for a spawn with no fixed height (most
+ * worlds): a teleport there drops a player from the top of the sky. Where its chunk isn't loaded, y 320 (see `land`).
+ */
+function worldSpawn() {
+  const s = world.getDefaultSpawnLocation();
+  if (s.y >= -64 && s.y < 320) return { x: s.x + 0.5, y: s.y, z: s.z + 0.5 };
+  try {
+    const t = overworld().getTopmostBlock({ x: s.x, z: s.z });
+    if (t && t.y < 319) return { x: s.x + 0.5, y: t.y + 1, z: s.z + 0.5 };
+  } catch {
+    // not loaded
+  }
+  return { x: s.x + 0.5, y: 320, z: s.z + 0.5 };
+}
+
+/**
+ * Sends a player to world spawn on the ground: when its chunk isn't loaded yet they wait high up with Slow Falling,
+ * and are put on the ground once it is (tried for 10 seconds).
+ * @param {Player} p
+ */
+function toWorldSpawn(p) {
+  const at = worldSpawn();
+  p.teleport(at, { dimension: overworld() });
+  if (at.y < 320) return;
+  p.addEffect("slow_falling", 300, { amplifier: 0, showParticles: false });
+  const settle = (/** @type {number} */ tries) =>
+    system.runTimeout(() => {
+      if (!p.isValid) return;
+      const here = worldSpawn();
+      if (here.y < 320) {
+        p.teleport(here, { dimension: overworld() });
+        p.removeEffect("slow_falling");
+      } else if (tries > 1) settle(tries - 1);
+    }, 10);
+  settle(20);
+}
+
 /** The surface above the site: where strays found in the box at reset are put. @param {Vector3} o @param {number} size @param {number} top */
 function surface(o, size, top) {
   const x = o.x + Math.floor(size / 2);
   const z = o.z + Math.floor(size / 2);
   try {
     const t = overworld().getTopmostBlock({ x, z });
-    if (t && t.y > o.y + top + 1) {
+    // Under the box counts as outside too: in a flat world (or over a deep valley) the ground is below the dungeon.
+    if (t && t.y < 319 && t.y < o.y - 2) return { x: x + 0.5, y: t.y + 1, z: z + 0.5 };
+    if (t && t.y < 319 && t.y > o.y + top + 1) {
       // getTopmostBlock skips water (it answers a lake or sea bed): over water, the water's surface instead.
       let s = t;
       for (let i = 0; i < 64; i++) {
@@ -884,7 +939,7 @@ function surface(o, size, top) {
   } catch {
     // unloaded
   }
-  return world.getDefaultSpawnLocation();
+  return worldSpawn();
 }
 
 /**
@@ -897,7 +952,7 @@ async function resetBox(rec) {
   const { o, size, top } = extent(rec);
   addArea(rec.slot, o, size, top); // already there unless the world restarted without it
   if (!(await waitLoaded(o, size, 60))) {
-    console.warn(`[expedition] slot ${rec.slot}: the dungeon area didn't load; it will be reset after the next restart or /realm:expedition_reset`);
+    console.warn(`[expedition] slot ${rec.slot}: the dungeon area did not load; it is tried again every minute`);
     return false;
   }
   const dim = overworld();
@@ -923,7 +978,8 @@ async function resetBox(rec) {
           teleportBack(e, ret);
           e.sendMessage("§eThe expedition dungeon was closed, so you were sent back to where you started.");
         } else {
-          e.teleport(out, { dimension: dim });
+          if (out.y >= 320) toWorldSpawn(e);
+          else e.teleport(out, { dimension: dim });
           e.sendMessage("§eThe expedition dungeon was closed, so you were moved to the surface.");
         }
       } else if (e.hasTag(MOB_TAG) || e.hasTag(PET_TAG) || LITTER.has(e.typeId) || DUNGEON_MOBS.has(e.typeId)) e.remove();
@@ -1163,7 +1219,7 @@ function runOf(playerId) {
 
 /** "Ann's party, Crypt N5, 6:12" @param {Run} run */
 function statusLine(run) {
-  const t = run.phase === "active" || run.phase === "finishing" ? `, ${clock(run.phase === "finishing" ? run.clearMs : Date.now() - run.started)}` : "";
+  const t = run.phase === "active" || run.phase === "finishing" ? `, ${clock(run.phase === "finishing" ? run.clearMs : gameMs() - run.started)}` : "";
   const what = run.phase === "gathering" || run.phase === "building" ? ", getting ready" : run.phase === "resetting" ? ", closing up" : "";
   return `${run.leaderName}'s party, ${run.dungeon.name} ${levelShort(run.level)}${t}${what}`;
 }
@@ -1208,10 +1264,43 @@ function partyMates(leader) {
     .map((e) => e.p);
 }
 
+/**
+ * Is a slot's dungeon far enough from world spawn? Slot 0 is at the site, checked when it was set; the slots east
+ * of it (`slots` above 1) can come close to a spawn east of the site, so they're checked here: even the smallest
+ * box (100 wide) must keep `avoidSpawn` from it.
+ * @param {{ x: number, z: number }} at the site @param {number} slot
+ */
+function slotFits(at, slot) {
+  if (slot === 0) return true;
+  const spawn = world.getDefaultSpawnLocation();
+  return Math.hypot(at.x + slot * SPACING - spawn.x, at.z - spawn.z) >= CONFIG.avoidSpawn + 50;
+}
+
+/** Players who wanted to start while every dungeon was taken: told when one is free. player id -> tick they asked. @type {Map<string, number>} */
+const waiting = new Map();
+
+/** A run's slot is free again (its box reset, or it never got one): anyone waiting is told. @param {number} slot */
+function freeRun(slot) {
+  runs.delete(slot);
+  system.run(slotFreed);
+}
+
+/** Tells the players waiting for a dungeon that one is free (only those who asked in the last 30 minutes). */
+function slotFreed() {
+  if (!waiting.size || freeSlot() === undefined || get("enabled") !== true) return;
+  const now = system.currentTick;
+  for (const [id, at] of [...waiting]) {
+    waiting.delete(id);
+    const p = now - at < 36000 ? online(id) : undefined;
+    if (p && !runOf(id)) p.sendMessage("§aAn expedition dungeon is free now: /realm:expedition to start one.");
+  }
+}
+
 /** @returns {number | undefined} */
 function freeSlot() {
   const slots = Math.max(1, Math.min(3, get("slots")));
-  for (let s = 0; s < slots; s++) if (!runs.has(s) && !pending.has(s)) return s;
+  const at = site();
+  for (let s = 0; s < slots; s++) if (!runs.has(s) && !pending.has(s) && (!at || slotFits(at, s))) return s;
   return undefined;
 }
 
@@ -1266,7 +1355,14 @@ function cantStart(leader) {
   if (get("enabled") !== true) return "§cNew expeditions are disabled on this realm right now.";
   if (!site()) return "§cThe operators haven't picked an expedition site yet (/realm:expedition_site).";
   if (runOf(leader.id)) return "§cYou're already on an expedition.";
-  if (freeSlot() === undefined) return `§eAn expedition is in progress (${[...runs.values()].map(statusLine).join("; ")}). Try again when it's over.`;
+  if (freeSlot() === undefined) {
+    if (!runs.size) {
+      resetPending().catch((e) => console.warn(`[expedition] ${e}`));
+      return "§eThe last expedition's dungeon is still being filled in. Try again in a minute.";
+    }
+    waiting.set(leader.id, system.currentTick);
+    return `§eAn expedition is in progress (${[...runs.values()].map(statusLine).join("; ")}). You'll be told when a dungeon is free.`;
+  }
   return "";
 }
 
@@ -1382,7 +1478,7 @@ async function start(leader, d, L, affixes, sigilLine, g) {
     });
     if (!leader.isValid) run.members.delete(leader.id);
     if (!run.members.size) {
-      runs.delete(slot);
+      freeRun(slot);
       refundSigil(run);
       return;
     }
@@ -1391,7 +1487,7 @@ async function start(leader, d, L, affixes, sigilLine, g) {
     console.warn(`[expedition] start: ${e}`);
     tell(run, "§cSomething went wrong preparing the expedition. Try again in a moment.");
     refundSigil(run);
-    if (run.phase === "gathering") runs.delete(slot);
+    if (run.phase === "gathering") freeRun(slot);
     else await endRun(run, "");
   }
 }
@@ -1409,7 +1505,8 @@ function clearBox(run) {
       if (!e.isValid) continue;
       const keep = e instanceof Player || LITTER.has(e.typeId) || !!e.nameTag || !!e.getComponent("minecraft:is_tamed");
       if (!keep) continue; // wild cave mobs are left to the rock, as any cave-in would
-      e.teleport(out, { dimension: dim });
+      if (e instanceof Player && out.y >= 320) toWorldSpawn(e);
+      else e.teleport(out, { dimension: dim });
       if (e instanceof Player) e.sendMessage("§eAn expedition dungeon is being built where you were, so you were moved to the surface.");
     }
   } catch (e) {
@@ -1431,7 +1528,7 @@ async function prepare(run) {
   if (!loaded) {
     tell(run, "§cThe dungeon area couldn't be loaded (the world may already have 10 ticking areas). Ask an operator to check /tickingarea list.");
     removeArea(run.slot);
-    runs.delete(run.slot);
+    freeRun(run.slot);
     refundSigil(run);
     return;
   }
@@ -1447,7 +1544,7 @@ async function prepare(run) {
     for (const p of world.getAllPlayers()) if (isOp(p)) p.sendMessage(`§c[Expeditions] Slot ${run.slot + 1}: found ${prettyId(foreign.type)} at ${where} in the dungeon area. Dungeons only replace natural underground blocks: pick another site with /realm:expedition_site.`);
     console.warn(`[expedition] slot ${run.slot}: ${foreign.type} at ${where}`);
     removeArea(run.slot);
-    runs.delete(run.slot);
+    freeRun(run.slot);
     refundSigil(run);
     return;
   }
@@ -1510,7 +1607,7 @@ async function prepare(run) {
   }
   run.phase = "active";
   run.sigilItem = undefined; // used up for good
-  run.started = Date.now() + 500;
+  run.started = gameMs() + 500;
   run.deadline = run.started + run.limitMin * 60000;
   saveRun(run);
   system.runTimeout(() => {
@@ -1730,7 +1827,7 @@ function teleportBack(p, ret) {
     dim = undefined;
   }
   if (dim && typeof ret.x === "number" && typeof ret.y === "number" && typeof ret.z === "number") p.teleport({ x: ret.x, y: ret.y, z: ret.z }, { dimension: dim });
-  else p.teleport(world.getDefaultSpawnLocation(), { dimension: overworld() });
+  else toWorldSpawn(p);
   p.setDynamicProperty(PROP_RETURN, undefined);
   dropBuffs(p);
   homecoming(p);
@@ -1828,7 +1925,7 @@ function dropMember(run, id) {
 /** Remembers a run that ended without a clear. @param {Run} run @param {string[]} names */
 function recordFail(run, names) {
   /** @type {HistoryEntry} */
-  const h = { d: run.dungeon.id, l: run.level, ok: false, t: Date.now() - run.started, n: names.join(", ") || run.leaderName, at: Date.now(), a: run.affixes };
+  const h = { d: run.dungeon.id, l: run.level, ok: false, t: gameMs() - run.started, n: names.join(", ") || run.leaderName, at: Date.now(), a: run.affixes };
   if (run.long) h.g = run.lay.n;
   addHistory(h);
   for (const id of run.members.keys()) {
@@ -1862,7 +1959,7 @@ async function endRun(run, why) {
   removePets(run);
   if (!wasBuilt) {
     if (wasBuilding) removeArea(run.slot);
-    runs.delete(run.slot);
+    freeRun(run.slot);
     return;
   }
   saveRun(run);
@@ -1874,10 +1971,50 @@ async function endRun(run, why) {
   } catch (e) {
     console.warn(`[expedition] reset: ${e}`);
   }
-  runs.delete(run.slot);
+  freeRun(run.slot);
   if (ok) writeJson(PROP_RUN + run.slot, undefined);
-  else pending.set(run.slot, rec); // tried again by /realm:expedition_reset or after a restart
+  else pending.set(run.slot, rec); // tried again every minute (resetPending), by /realm:expedition_reset and after a restart
 }
+
+/** The reset of the boxes still waiting for one, while it runs. @type {Promise<void> | undefined} */
+let resettingPending;
+/** Slots whose operators were told their box couldn't be filled in yet. @type {Set<number>} */
+const toldPending = new Set();
+
+/**
+ * Fills in the boxes that still wait for it (cut short by a restart, or not loaded at the end of their run): after a
+ * restart, every minute while any wait, when someone wants to start one, and from /realm:expedition_reset. A slot
+ * stays closed until its box is reset, so it's never left waiting for a restart. One reset at a time.
+ */
+function resetPending() {
+  if (resettingPending) return resettingPending;
+  if (!pending.size) return Promise.resolve();
+  resettingPending = (async () => {
+    for (const [slot, rec] of [...pending]) {
+      try {
+        if (await resetBox(rec)) {
+          writeJson(PROP_RUN + slot, undefined);
+          pending.delete(slot);
+          toldPending.delete(slot);
+          system.run(slotFreed);
+          continue;
+        }
+      } catch (e) {
+        console.warn(`[expedition] reset slot ${slot}: ${e}`);
+      }
+      if (toldPending.has(slot)) continue;
+      toldPending.add(slot);
+      for (const p of world.getAllPlayers())
+        if (isOp(p)) p.sendMessage(`§e[Expeditions] Dungeon ${slot + 1} couldn't be loaded to fill it in (the world may have its 10 ticking areas: /tickingarea list). It's tried again every minute; no run starts there until then.`);
+    }
+  })().finally(() => {
+    resettingPending = undefined;
+  });
+  return resettingPending;
+}
+system.runInterval(() => {
+  if (pending.size && !resettingPending) resetPending().catch((e) => console.warn(`[expedition] ${e}`));
+}, 1200);
 
 /** Removes a run's Wolf Pack wolves. @param {Run} run */
 function removePets(run) {
@@ -1981,7 +2118,7 @@ function buff(run, mob, opts = {}) {
  */
 function spawnMob(run, typeId, at, opts = {}) {
   try {
-    const mob = overworld().spawnEntity(/** @type {any} */ (typeId), at);
+    const mob = spawnFresh(overworld(), typeId, at);
     mob.addTag(MOB_TAG);
     mob.addTag(`realm:exp_run:${run.id}`);
     if (opts.champion) {
@@ -2078,7 +2215,7 @@ function spawnBoss(run) {
   const rm = run.lay.rooms[run.room];
   const c = wmid(run, rm, rm.bossAt ?? { u: 0, v: 2, y: 1 });
   try {
-    const boss = overworld().spawnEntity(/** @type {any} */ (d.boss.mob), c);
+    const boss = spawnFresh(overworld(), d.boss.mob, c);
     boss.nameTag = `§c${d.boss.name}`;
     boss.addTag(MOB_TAG);
     boss.addTag(`realm:exp_run:${run.id}`);
@@ -2129,7 +2266,7 @@ function bossAdds(run, count) {
 function finish(run) {
   if (run.phase !== "active") return;
   run.phase = "finishing";
-  run.clearMs = Date.now() - run.started;
+  run.clearMs = gameMs() - run.started;
   run.finishAt = system.currentTick + get("exitSeconds") * 20;
   run.finishCap = run.finishAt + 2400; // opening a chest near the end adds time, up to 2 minutes more
   for (const m of [...run.mobs, ...run.extra]) if (m.isValid) m.remove();
@@ -2566,7 +2703,7 @@ function shrineChoice(run, i, choice, who) {
     tell(run, `§a${name} took the Blessing of ${b.name}: ${b.desc.toLowerCase()}.`);
     if (b.id === "fortune") run.fortune = true;
     else {
-      const ticks = Math.max(200, Math.floor((run.deadline - Date.now()) / 50));
+      const ticks = Math.max(200, Math.floor((run.deadline - gameMs()) / 50));
       for (const p of present(run)) {
         try {
           p.addEffect(b.effect, ticks, { amplifier: b.amp, showParticles: false });
@@ -2663,7 +2800,7 @@ function takeBoon(run, p, id) {
   if (b.flag === "wolves") {
     for (let k = 0; k < 2; k++) {
       try {
-        const w = overworld().spawnEntity("minecraft:wolf", { x: p.location.x + (k ? 1 : -1), y: p.location.y, z: p.location.z });
+        const w = spawnFresh(overworld(), "minecraft:wolf", { x: p.location.x + (k ? 1 : -1), y: p.location.y, z: p.location.z });
         w.getComponent("minecraft:tameable")?.tame(p);
         w.addTag(PET_TAG);
         w.addTag(`realm:exp_run:${run.id}`);
@@ -2690,7 +2827,7 @@ function takeBoon(run, p, id) {
 
 /** (Re)applies a player's boon effects, strongest of each, until the run's time is up. @param {Run} run @param {Player} p */
 function boonBuffs(run, p) {
-  const ticks = Math.max(200, Math.floor((run.deadline - Date.now()) / 50));
+  const ticks = Math.max(200, Math.floor((run.deadline - gameMs()) / 50));
   const mine = buffs.get(p.id) ?? [];
   for (const [effect, amp] of boonEffects(run.boons.get(p.id) ?? [])) {
     try {
@@ -2902,7 +3039,7 @@ function tickTraps(run, here) {
       const side = { x: -dir.z, z: dir.x };
       for (let k = -1; k <= 1; k++) {
         try {
-          const a = overworld().spawnEntity("minecraft:arrow", { x: hz.x + dir.x * 0.6 + side.x * k * 0.9, y: hz.y + 0.2, z: hz.z + dir.z * 0.6 + side.z * k * 0.9 });
+          const a = spawnFresh(overworld(), "minecraft:arrow", { x: hz.x + dir.x * 0.6 + side.x * k * 0.9, y: hz.y + 0.2, z: hz.z + dir.z * 0.6 + side.z * k * 0.9 });
           a.applyImpulse({ x: dir.x * 1.6, y: 0.05, z: dir.z * 1.6 });
         } catch {
           // can't
@@ -2969,28 +3106,25 @@ function inZone(run, rm, p) {
 }
 
 /**
- * Mobs the room needs dead that ended up somewhere else in the dungeon (an enderman's or a shulker's teleport,
- * a vex through a wall) are brought back once they've been away from the room, and from everyone, for 3 seconds:
+ * A mob the room needs dead that ended up somewhere else in the dungeon (an enderman's or a shulker's teleport,
+ * a vex through a wall) is brought back once it has been away from the room, and from everyone, for 3 seconds:
  * otherwise one in a room behind closed bars would hold the door shut for good.
- * @param {Run} run @param {Room} rm @param {Entity[]} list @param {Player[]} all @param {{ u: number, v: number, y: number }} [to]
+ * @param {Run} run @param {Room} rm @param {Entity} m a living mob @param {Vector3} loc where it is @param {Vector3[]} locs where the members are
+ * @param {{ u: number, v: number, y: number }} [to]
  */
-function bringBack(run, rm, list, all, to) {
-  for (const m of list) {
-    if (!alive(m)) continue;
-    const loc = m.location;
-    if (inRoom(run, rm, loc) || all.some((p) => Math.hypot(p.location.x - loc.x, p.location.y - loc.y, p.location.z - loc.z) < 8)) {
-      run.strays.delete(m.id);
-      continue;
-    }
-    const t = (run.strays.get(m.id) ?? 0) + LOOP_TICKS;
-    run.strays.set(m.id, t);
-    if (t < 60 && inBox(run.o, run.size, run.top, loc, 1)) continue;
+function stray(run, rm, m, loc, locs, to) {
+  if (inRoom(run, rm, loc) || locs.some((p) => Math.hypot(p.x - loc.x, p.y - loc.y, p.z - loc.z) < 8)) {
     run.strays.delete(m.id);
-    try {
-      m.teleport(to ? wmid(run, rm, to) : spawnSpot(run, run.room));
-    } catch {
-      // gone
-    }
+    return;
+  }
+  const t = (run.strays.get(m.id) ?? 0) + LOOP_TICKS;
+  run.strays.set(m.id, t);
+  if (t < 60 && inBox(run.o, run.size, run.top, loc, 1)) return;
+  run.strays.delete(m.id);
+  try {
+    m.teleport(to ? wmid(run, rm, to) : spawnSpot(run, run.room));
+  } catch {
+    // gone
   }
 }
 
@@ -3018,20 +3152,33 @@ function tickRun(run, players) {
   if (run.phase === "finishing") {
     if (now >= run.finishAt) endRun(run, "§aThe expedition is over. Welcome back!").catch((e) => console.warn(`[expedition] ${e}`));
     else if (beat % 2 === 0) {
+      const line = `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`;
       for (const id of run.members.keys()) {
         const p = players.get(id);
-        if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`, true);
+        if (p) actionbar(p, line, true);
       }
     }
     return;
   }
-  if (Date.now() > run.deadline) {
+  if (gameMs() > run.deadline) {
     endRun(run, `§cTime's up! The ${run.dungeon.name} wasn't cleared within ${run.limitMin} minutes.`).catch((e) => console.warn(`[expedition] ${e}`));
     return;
   }
   const rm = run.lay.rooms[run.room];
-  const all = [...run.members.keys()].map((id) => players.get(id)).filter((p) => !!p && p.dimension.id === OVERWORLD);
-  const here = all.filter((p) => inRoom(run, rm, /** @type {Player} */ (p).location));
+  /** @type {Player[]} */
+  const all = [];
+  /** @type {Vector3[]} where each of `all` is, read once for this loop */
+  const locs = [];
+  /** @type {Player[]} */
+  const here = [];
+  for (const id of run.members.keys()) {
+    const p = players.get(id);
+    if (!p || p.dimension.id !== OVERWORLD) continue;
+    const loc = p.location;
+    all.push(p);
+    locs.push(loc);
+    if (inRoom(run, rm, loc)) here.push(p);
+  }
   if (!run.roomActive && here.length) {
     run.roomActive = true;
     run.hazards = [];
@@ -3075,9 +3222,18 @@ function tickRun(run, players) {
       } else if (!run.nextWaveAt && now >= run.awaitUntil) {
         // Mobs that wandered out of the dungeon (or got stuck in a wall outside it) don't hold the door shut;
         // ones elsewhere in it are brought back.
-        for (const m of run.mobs) if (alive(m) && !inBox(run.o, run.size, run.top, m.location, 1)) m.remove();
-        bringBack(run, rm, run.mobs, /** @type {Player[]} */ (all));
-        if (!run.mobs.some(alive)) {
+        let left = 0;
+        for (const m of run.mobs) {
+          if (!alive(m)) continue;
+          const loc = m.location;
+          if (!inBox(run.o, run.size, run.top, loc, 1)) {
+            m.remove();
+            continue;
+          }
+          left++;
+          stray(run, rm, m, loc, locs);
+        }
+        if (!left) {
           run.wave++;
           if (run.wave < run.waves) run.nextWaveAt = now + 40;
           else clearRoom(run);
@@ -3126,7 +3282,7 @@ function tickRun(run, players) {
         run.bossGone = boss && alive(boss) ? 0 : run.bossGone + LOOP_TICKS;
         if (run.bossGone >= 60) finish(run); // gone without a death event (removed by a command): still a win
         else if (boss && alive(boss)) {
-          bringBack(run, rm, [boss], /** @type {Player[]} */ (all), rm.bossAt ?? { u: 0, v: 2, y: 1 });
+          stray(run, rm, boss, boss.location, locs, rm.bossAt ?? { u: 0, v: 2, y: 1 });
           const hp = boss.getComponent("minecraft:health");
           if (hp && !run.bossHalf && run.level >= 1 && hp.currentValue < hp.effectiveMax / 2) {
             run.bossHalf = true;
@@ -3175,10 +3331,10 @@ function tickRun(run, players) {
   }
   tickAffixes(run, all.map((p) => /** @type {Player} */ (p)));
   if (beat % 2 === 0) {
-    const t = clock(Date.now() - run.started);
+    const line = `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(gameMs() - run.started)}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`;
     for (const id of run.members.keys()) {
       const p = players.get(id);
-      if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${t}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`, true);
+      if (p) actionbar(p, line, true);
     }
   }
 }
@@ -3201,7 +3357,14 @@ system.runInterval(() => {
   beat++;
   if (!runs.size) return;
   /** @type {Map<string, Player>} */
-  const players = new Map(world.getAllPlayers().map((p) => [p.id, p]));
+  const players = new Map();
+  for (const run of runs.values()) {
+    if (run.phase !== "active" && run.phase !== "finishing") continue;
+    for (const id of run.members.keys()) {
+      const p = online(id);
+      if (p) players.set(id, p);
+    }
+  }
   for (const run of [...runs.values()]) {
     if (run.phase !== "active" && run.phase !== "finishing") continue;
     try {
@@ -3519,8 +3682,10 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 
 // A Wolf Pack wolf that followed its owner out of a run and loads again later (an unloaded chunk then) goes away.
+// A stash or parcel cart left in the wrong dimension by an older version goes away once its items were handed over.
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    dropStrayCart(entity);
     if (entity.typeId !== "minecraft:wolf" || !entity.hasTag(PET_TAG)) return;
     const tag = entity.getTags().find((t) => t.startsWith("realm:exp_run:"));
     const run = [...runs.values()].find((r) => tag === `realm:exp_run:${r.id}`);
@@ -3556,7 +3721,8 @@ const canBuild = (run) => !!run && run.phase === "active" && run.s.build && get(
 // The dungeon's walls hold the rooms together and its blocks must all be its own for the reset: no breaking,
 // except blocks players placed themselves and decor that's meant to be cut (cobwebs).
 world.beforeEvents.playerBreakBlock.subscribe((ev) => {
-  if ((!runs.size && !pending.size) || ev.dimension.id !== OVERWORLD) return;
+  // Already canceled by a pack before us in the bundle (a claim): the block stays, so it stays one players placed.
+  if (ev.cancel || (!runs.size && !pending.size) || ev.dimension.id !== OVERWORLD) return;
   const at = dungeonAt(ev.block.location);
   if (!at || builder(ev.player)) return;
   const run = at.run;
@@ -3608,6 +3774,7 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
 // Water buckets are fine (they break nothing in a dungeon).
 const NO_BUCKET = new Set(["minecraft:bucket", "minecraft:lava_bucket", "minecraft:powder_snow_bucket"]);
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return;
   const id = ev.itemStack?.typeId;
   if (!id || !NO_BUCKET.has(id)) return;
   if ((!runs.size && !pending.size) || ev.block.dimension.id !== OVERWORLD || !dungeonAt(ev.block.location) || builder(ev.player)) return;
@@ -3675,16 +3842,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     } catch {
       // nothing loaded
     }
-    for (const [slot, rec] of [...pending]) {
-      try {
-        if (await resetBox(rec)) {
-          writeJson(PROP_RUN + slot, undefined);
-          pending.delete(slot);
-        }
-      } catch (e) {
-        console.warn(`[expedition] reset after restart: ${e}`);
-      }
-    }
+    await resetPending();
   }, 100);
 });
 
@@ -3697,7 +3855,7 @@ async function runMenu(player, run) {
   const names = [...run.members.values()].map((m) => m.name).join(", ");
   const body = [
     `§e${dungeonLabel(run.dungeon, run.level)}§r`,
-    run.phase === "active" ? `Time: ${clock(Date.now() - run.started)} of ${run.limitMin}:00\n${objective(run)}` : run.phase === "finishing" ? `Cleared in ${clock(run.clearMs)}! ${objective(run)}` : "Getting ready...",
+    run.phase === "active" ? `Time: ${clock(gameMs() - run.started)} of ${run.limitMin}:00\n${objective(run)}` : run.phase === "finishing" ? `Cleared in ${clock(run.clearMs)}! ${objective(run)}` : "Getting ready...",
     run.affixes.length ? `Affixes:\n${run.affixes.map((a) => `${affixOf(a)?.color}${affixOf(a)?.name}§r: ${affixOf(a)?.desc}`).join("\n")}` : "No affixes.",
     `Party: ${names}`,
     run.long ? `Your boons: ${(run.boons.get(player.id) ?? []).map((id) => boonOf(id)?.name ?? id).join(", ") || "none yet"}` : "",
@@ -4130,6 +4288,10 @@ function setSite(player, x, z) {
     const o = originFor({ x: sx, z: sz }, slot, size);
     const { from, to } = box(o, size, top);
     const label = slots > 1 ? `Dungeon ${slot + 1} (${from.x}, ${from.z} to ${to.x}, ${to.z})` : `The dungeon area (${from.x}, ${from.y}, ${from.z} to ${to.x}, ${to.y}, ${to.z})`;
+    if (!slotFits({ x: sx, z: sz }, slot)) {
+      notes.push(`§e${label} would come within ${avoid} blocks of world spawn, so it's never used: expeditions run in the other dungeons. To use it, pick a site farther from spawn (each next dungeon is ${SPACING} blocks east of the one before).`);
+      continue;
+    }
     let found;
     try {
       found = findForeign(o, size, top);
@@ -4145,6 +4307,15 @@ function setSite(player, x, z) {
     }
     notes.push(`§a${label}: only natural blocks.`);
   }
+  // A flat world's ground (y -61) or a deep valley is below the box: the dungeon would stand above the ground.
+  try {
+    const ground = overworld().getTopmostBlock({ x: sx, z: sz });
+    if (ground && ground.y < 319 && ground.y < FLOOR + top) {
+      notes.push(`§eThe ground here is at y ${ground.y}, below the top of the tallest dungeon (y ${FLOOR + top}): in a flat world or a deep valley the dungeon would be built above the ground, as a block of deepslate in the open. Pick a spot where the ground is higher.`);
+    }
+  } catch {
+    // not loaded from here
+  }
   writeJson(PROP_SITE, { x: sx, z: sz, by: player.name, at: Date.now() });
   player.sendMessage(`§aExpedition site set at ${sx}, ${sz}: dungeons are built at y ${FLOOR - 1} to ${FLOOR + 7} (up to ${FLOOR + top} with the tallest Nightmare rooms), up to ${size} blocks wide, sealed in deepslate, and filled back in after each run.`);
   for (const n of notes) player.sendMessage(n);
@@ -4156,13 +4327,9 @@ async function opReset(player) {
   const list = [...runs.values()];
   if (!list.length && !pending.size) return player.sendMessage("§7No expedition is running, and every dungeon area is already reset.");
   for (const run of list) await endRun(run, `§cAn operator (${player.name}) ended the expedition.`);
-  for (const [slot, rec] of [...pending]) {
-    if (await resetBox(rec)) {
-      writeJson(PROP_RUN + slot, undefined);
-      pending.delete(slot);
-    }
-  }
-  player.sendMessage(pending.size ? "§eEnded. Some dungeon areas couldn't be loaded to reset; they'll be tried again after a restart." : "§aExpeditions ended and the dungeon areas reset.");
+  await resetPending();
+  if (!player.isValid) return;
+  player.sendMessage(pending.size ? "§eEnded. Some dungeon areas couldn't be loaded to reset; they're tried again every minute." : "§aExpeditions ended and the dungeon areas reset.");
 }
 
 // ---------------------------------------------------------------------------

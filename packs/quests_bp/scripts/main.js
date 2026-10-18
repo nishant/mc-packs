@@ -1,3 +1,4 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -269,7 +270,9 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
 });
 
 // A tap that resets a grown crop to its first stage is a harvest too (the Right-click Harvest pack).
-world.beforeEvents.playerInteractWithBlock.subscribe(({ player, block, isFirstEvent }) => {
+world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return; // another pack already stopped it
+  const { player, block, isFirstEvent } = ev;
   if (!isFirstEvent || !crops.has(block.typeId)) return;
   const c = crops.get(block.typeId);
   if (!c || c.state === undefined || !ripe(block.permutation)) return;

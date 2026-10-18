@@ -111,7 +111,9 @@ export const OP_TEXT = "§c";
  */
 export const NAMES = {
   "realm:admin_item": ["Get the Menu Item", "Yours again, or for others"],
+  "realm:admin_setup": ["Set Up This World", "Guided one-time setup"],
   "realm:admin_title": ["Show a Title", "Big text the HUD won't cover"],
+  "realm:diag": ["Pack diagnostics", "Script time, saved data"],
   "realm:afk": ["Go AFK", "Move to come back"],
   "realm:bounty": ["Bounty Board Menu", "Today's bounties and boards"],
   "realm:bounty_board": ["Make Bounty Board", "From the lectern you look at"],
@@ -311,6 +313,7 @@ export const PARAMS = {
     seconds: { label: "Seconds on screen", kind: "slider", min: 1, max: 25, step: 1, default: 5 },
     player: { label: "Show it to", everyone: true },
   },
+  "realm:diag": { seconds: { label: "Seconds to measure", kind: "slider", min: 1, max: 60, step: 1, default: 10 } },
   "realm:caravan_spot": { name: { label: "Spot name (empty: Spot 1, Spot 2...)" } },
   "realm:champions_spawn": { "realm:champion_trait": { label: "Trait (leave out: random)" } },
   "realm:crowns_give": { player: { label: "Give Crowns to", everyone: true }, amount: { label: "Crowns (negative takes them)", kind: "text", default: 100 } },
@@ -376,26 +379,58 @@ export const CONFIRM = new Set([
 export const needsConfirm = (name) => CONFIRM.has(name) || /_(remove|reset)$|_remove_|_reset_/.test(name);
 
 /**
- * Server setup checklist: the one-time jobs across packs. Each shows only when its command is
- * installed. `hint`: the button's second line (must fit in LINE); `help`: the longer note its form
- * shows. `done`: how the menu can tell it's done ("zones" / "towns": a safe zone list says so).
- * @type {{ title: string, hint: string, help: string, cmd: string, done?: "zones" | "towns" }[]}
+ * Server setup checklist, in the order Set up this world walks it: what a brand-new world needs first, then the
+ * rest. Each shows only when its command is installed (`size`, Realm Configuration's own, always shows). `hint`: the
+ * button's second line (must fit in LINE); `help`: what to do (the command's form shows it too); `why`: what it's
+ * for. `cmd`: the command its Run button opens; `alt`: a second command for the same job. `done`: how the menu can
+ * tell it's done ("zones" / "towns": a safe zone list says so; "npcs": Townsfolk's placed list; "spawnZone": a safe
+ * zone covers world spawn; "spawnWaystone": a waystone the operator knows is near world spawn; "size": a server size
+ * is chosen). Without `done`, a step counts as done once its command ran from the wizard, or the operator marked it.
+ * @type {{ id: string, title: string, hint: string, help: string, why: string, cmd?: string, alt?: string,
+ *   done?: "zones" | "towns" | "npcs" | "spawnZone" | "spawnWaystone" | "size" }[]}
  */
 export const SETUP = [
-  { title: "Place the Townsfolk", hint: "Stand where each one lives", help: "Stand inside each one's house, facing the way they should face, and pick them. /realm:npc_list shows who is placed.", cmd: "realm:npc_add" },
-  { title: "Relicsmith", hint: "Where Ida works", help: "Stand where the relicsmith should work (needs the Townsfolk pack).", cmd: "realm:relics_smith" },
-  { title: "Story Places", hint: "Set, build or move them", help: "Set, build or relocate the places the stories use. Places nobody set are picked and built on their own when a story needs them.", cmd: "realm:saga_places" },
-  { title: "Add a Town", hint: "Stand at its center", help: "Stand at the center of the town and give it a name.", cmd: "realm:town_add", done: "towns" },
-  { title: "Town Project Spots", hint: "Well, lamps, dock...", help: "Stand where a project (well, lamps, dock...) should be built, facing the way it should face.", cmd: "realm:town_spot" },
-  { title: "Bounty Board", hint: "Look at a lectern first", help: "Look at a lectern within 6 blocks first.", cmd: "realm:bounty_board" },
-  { title: "Caravan Arrival Spots", hint: "Where the caravan arrives", help: "Stand where the merchant caravan should arrive.", cmd: "realm:caravan_spot" },
-  { title: "Expedition Site", hint: "Away from spawn", help: "Where the dungeons are built, deep underground. Away from spawn.", cmd: "realm:expedition_site" },
-  { title: "Waystones and Inns", hint: "See or remove them", help: "Players make waystones; here you can see and remove them.", cmd: "realm:waystones" },
-  { title: "Safe Zones", hint: "Bases events don't break", help: "Bases where meteors, tornadoes and storms break no blocks.", cmd: "realm:zones", done: "zones" },
-  { title: "Creeper Guard Zones", hint: "Only in zones mode", help: "Only needed in zones mode.", cmd: "realm:guard" },
-  { title: "Farms Kept Loaded", hint: "Stand in the farm", help: "Stand in the farm and give it a name.", cmd: "realm:farm_add" },
-  { title: "Community Goal", hint: "Look at its chest first", help: "Look at the chest it fills first.", cmd: "realm:goals_add" },
-  { title: "Welcome Message", hint: "What players see on join", help: "What players see when they join.", cmd: "realm:welcome_edit" },
-  { title: "Realm News", hint: "The news that pops up once", help: "The news that pops up once.", cmd: "realm:news_edit" },
-  { title: "Realm Settings", hint: "Every pack, for everyone", help: "Every pack's settings, for everyone.", cmd: "realm:config" },
+  { id: "npcs", title: "Place the Townsfolk", hint: "Stand where each one lives", help: "Stand inside each one's house, facing the way they should face, and pick them. Or stand in the middle of your town and let them each take a house (after a preview).", why: "They give the stories, gifts, letters and shops. Until they're placed, nobody has anyone to talk to.", cmd: "realm:npc_add", alt: "realm:npc_houses", done: "npcs" },
+  { id: "town", title: "Add a Town", hint: "Stand at its center", help: "Stand at the center of the town and give it a name.", why: "Town Projects, festivals, sieges and the Minimap's house marker need a town. A town is also a safe zone.", cmd: "realm:town_add", done: "towns" },
+  { id: "spawnZone", title: "Safe Zone at Spawn", hint: "Events break nothing there", help: "Stand at world spawn and add a safe zone that covers it.", why: "Meteors, tornadoes, storms and Blood Moon creepers break no blocks inside a safe zone. New players arrive at spawn first.", cmd: "realm:zones", done: "spawnZone" },
+  { id: "caravan", title: "Caravan Arrival Spot", hint: "Where the caravan arrives", help: "Stand where the merchant caravan should arrive, such as your market square.", why: "Without a spot the caravan picks one near the players online, which may be anywhere.", cmd: "realm:caravan_spot" },
+  { id: "bounty", title: "Bounty Board", hint: "Look at a lectern first", help: "Place a lectern in town, look at it from within 6 blocks, then run this.", why: "Players take the daily bounties at the board, and the targets are picked around it.", cmd: "realm:bounty_board" },
+  { id: "waystone", title: "First Waystone at Spawn", hint: "A lodestone and a sign", help: "At spawn, place a lodestone, put a sign next to it saying Waystone: Spawn, and tap the lodestone with an empty hand. The button lists the waystones.", why: "Players travel between waystones, and the first one at spawn gives everyone a way home.", cmd: "realm:waystones", done: "spawnWaystone" },
+  { id: "expedition", title: "Expedition Site", hint: "Away from spawn", help: "Where the dungeons are built, deep underground. Stand somewhere away from spawn, or give x and z.", why: "Expeditions can't start until the site is set.", cmd: "realm:expedition_site" },
+  { id: "size", title: "Server Size", hint: "Small Realm or Large server", help: "Pick how many players this world is for: the settings that depend on it change together, and you see each one before anything changes.", why: "Today's defaults are made for a Realm of about 10 players. A big server needs some caps and budgets changed.", done: "size" },
+  { id: "relicsmith", title: "Relicsmith", hint: "Where Ida works", help: "Stand where the relicsmith should work (needs the Townsfolk pack).", why: "Players bring her Relic Shards to forge relics.", cmd: "realm:relics_smith" },
+  { id: "places", title: "Story Places", hint: "Set, build or move them", help: "Set, build or relocate the places the stories use. Places nobody set are picked and built on their own when a story needs them.", why: "Optional: only if you want the stories' places somewhere of your choosing.", cmd: "realm:saga_places" },
+  { id: "spots", title: "Town Project Spots", hint: "Well, lamps, dock...", help: "Stand where a project (well, lamps, dock...) should be built, facing the way it should face.", why: "Finished projects are built there instead of a spot picked for you.", cmd: "realm:town_spot" },
+  { id: "guard", title: "Creeper Guard Zones", hint: "Only in zones mode", help: "Only needed in zones mode.", why: "In zones mode creepers break blocks everywhere except in these zones.", cmd: "realm:guard" },
+  { id: "farms", title: "Farms Kept Loaded", hint: "Stand in the farm", help: "Stand in the farm and give it a name.", why: "A farm keeps running while nobody is near it.", cmd: "realm:farm_add" },
+  { id: "goal", title: "Community Goal", hint: "Look at its chest first", help: "Look at the chest it fills first.", why: "Everyone fills one chest together for a shared reward.", cmd: "realm:goals_add" },
+  { id: "welcome", title: "Welcome Message", hint: "What players see on join", help: "What players see when they join.", why: "The default speaks for a generic realm: say what your world is about.", cmd: "realm:welcome_edit" },
+  { id: "news", title: "Realm News", hint: "The news that pops up once", help: "The news that pops up once.", why: "Tell players what's new on your world.", cmd: "realm:news_edit" },
+  { id: "settings", title: "Realm Settings", hint: "Every pack, for everyone", help: "Every pack's settings, for everyone.", why: "Everything else: each pack's options, for the whole world.", cmd: "realm:config" },
+];
+
+/**
+ * Server size (Set up this world, Operator Tools): two profiles. Small Realm is every option below at its config.js
+ * default (today's settings, for up to about 10 players); Large server (30 to 100+ players) sets each to `large`.
+ * Applying one goes through each pack's Realm Settings (realm:cfg_set), after a list of every change, old -> new.
+ * Why each value: see "Server size" in docs/PACKS.md (Realm Configuration).
+ * @type {{ pack: string, key: string, large: boolean | number | string, why: string }[]}
+ */
+export const SIZE_OPTIONS = [
+  { pack: "map_bp", key: "budgetLevel", large: "low", why: "the heaviest pack: its budgets are for everyone together, about 2.0 ms a tick instead of 2.9" },
+  { pack: "map_bp", key: "mobRadiusMax", large: 24, why: "each mob search covers less ground, so the budgeted searches come round sooner" },
+  { pack: "elite_bp", key: "maxAlive", large: 16, why: "8 champions for 100 players spread out is too few; each costs little" },
+  { pack: "expedition_bp", key: "slots", large: 3, why: "3 dungeons of 4 players instead of 1; about 0.1 ms a tick per run going" },
+  { pack: "build_bp", key: "maxBlocksCap", large: 10000, why: "one 50,000-block build by any player stalls the server for everyone" },
+  { pack: "cleanup_bp", key: "threshold", large: 1500, why: "more players drop more items: cleanups stay about as rare" },
+  { pack: "find_bp", key: "liveScanRadius", large: 8, why: "each search reads 7 times fewer blocks (17 x 17 x 17 instead of 33 x 33 x 33)" },
+  { pack: "admin_bp", key: "checkSeconds", large: 60, why: "the item check reads every inventory: half as often" },
+  { pack: "mail_bp", key: "sendCooldownSeconds", large: 30, why: "less letter spam among many strangers" },
+  { pack: "afk_bp", key: "sleep.percent", large: 50, why: "with 30 or more players, all of them asleep at once never happens" },
+];
+
+/** @type {{ id: "small" | "large", title: string, hint: string, help: string }[]} */
+export const SIZES = [
+  { id: "small", title: "Small Realm", hint: "Up to about 10 players", help: "Today's defaults: every setting below back to what its pack comes with." },
+  { id: "large", title: "Large server", hint: "30 to 100+ players", help: "Lower script budgets and caps where cost grows with players, more room where many players share one thing." },
 ];

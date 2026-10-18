@@ -61,6 +61,8 @@ export default async function (t) {
   // Beyond observerRange (both viewers far away): helper despawns cleanly, native nameTag falls back to canonical name, and spectators do not spawn helpers.
   q.teleport({ x: base.x + 60, y: base.y, z: base.z });
   await move(-38);
+  // Townsfolk labels sync every 10 ticks: the helper goes within half a second.
+  await t.waitUntil(() => labels("realm:npc_label").length === 0, { timeout: 20, interval: 2, message: "helper gone" }).catch(() => {});
   t.check(labels("realm:npc_label").length === 0, "townsfolk helper despawns when no observer is within 24 blocks");
   t.check((ida.nameTag ?? "").includes("Ida"), "Ida's native nameTag falls back to canonical name when no helper is active");
   p.setGameMode(t.mc.GameMode.Spectator);

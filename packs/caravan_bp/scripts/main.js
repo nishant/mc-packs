@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   CommandPermissionLevel,
   CustomCommandParamType,
@@ -8,12 +9,13 @@ import {
   ItemStack,
   Player,
   StructureSaveMode,
+  ScriptEventSource,
   system,
   world,
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { createNameLabels, isSuppressedName, SUPPRESSED_NAME } from "./name-labels.js";
+import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
 
 // A visit is one saved object: where the caravan is, until when, its traders' entity ids and what's left
@@ -47,6 +49,8 @@ const nameLabels = createNameLabels({
   ownerTag: OWNER_TAG,
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
+  spectatorsExcluded: true,
+  syncTicks: 10, // LABEL_TICKS
 });
 
 const HOUR = 3600000;
@@ -54,6 +58,7 @@ const DAY = 24 * HOUR;
 const LOOP_TICKS = 10; // traders turning to players
 const KEEP_EVERY = 4; // loops between upkeep: schedule, spawning, missing traders (2 s)
 const MISSING_CHECKS = 3; // upkeeps in a row a trader must be missing before it's spawned again
+const LABEL_TICKS = 10; // how often the name labels are synced
 const AUDIT_TICKS = 200;
 const MAX_SPOTS = 20;
 const BUY_MAX = 16;
@@ -96,7 +101,7 @@ let ready = false;
 let spots = [];
 /** @type {Visit | undefined} */
 let visit;
-/** @type {Map<number, { missing: number, labelForm?: string, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }>} trader index -> runtime state */
+/** @type {Map<number, { missing: number, yaw?: number }>} trader index -> runtime state */
 const traderState = new Map();
 
 /** @param {unknown} v */
@@ -163,6 +168,24 @@ function broadcast(msg) {
       // left meanwhile
     }
   }
+}
+
+// Town news: a caravan arriving is Townsfolk gossip about nobody in particular (no `player`), at most once per
+// in-game hour, once per visit.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -406,6 +429,7 @@ function arrive(slot) {
     "realm:sky_event",
     JSON.stringify({ kind: "caravan", dim: spot.dim, x: Math.floor(spot.x), z: Math.floor(spot.z), text: `A merchant caravan arrived at ${where}` }),
   );
+  gossip(`visit:${visit.v}`, { kind: "caravan", place: spot.name.replace(/§./g, "").slice(0, 48) });
   upkeep();
 }
 
@@ -467,38 +491,35 @@ function dressTrader(entity, i, vis) {
   const name = traderTag(vis, i);
   let st = traderState.get(i);
   if (!st) traderState.set(i, (st = { missing: 0 }));
-  if (!st.labelForm || (st.labelForm !== name && st.labelForm !== `${name}§r`)) st.labelForm = name;
-  if (!isSuppressedName(entity.nameTag) && entity.nameTag !== st.labelForm) entity.nameTag = st.labelForm;
+  if (!isSuppressedName(entity.nameTag) && entity.nameTag !== name) entity.nameTag = name;
 }
 
 /** Syncs all active caravan trader nameplate helpers with active observers. */
 function updateLabels() {
   if (!ready) return;
-  const dims = DIMENSIONS.flatMap((id) => {
-    try {
-      return [world.getDimension(id)];
-    } catch {
-      return [];
-    }
-  });
+  const dims = () =>
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    });
   /** @type {import("./name-labels.js").LabelTarget[]} */
   const targets = [];
   if (visit) {
     visit.traders.forEach((tr, i) => {
       const entity = entityById(tr.eid);
       if (!entity) return;
-      const base = traderTag(/** @type {Visit} */ (visit), i);
-      const st = traderState.get(i);
-      const name = st?.labelForm && (st.labelForm === base || st.labelForm === `${base}§r`) ? st.labelForm : base;
-      targets.push({ id: String(i), entity, name });
+      targets.push({ id: String(i), entity, name: traderTag(/** @type {Visit} */ (visit), i) });
     });
   }
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */
 function spawnTrader(vis, i, dim, at) {
-  const entity = fromSkin(vis, i, dim, at) ?? dim.spawnEntity(NPC_TYPE, at);
+  const entity = fromSkin(vis, i, dim, at) ?? spawnChecked(dim, NPC_TYPE, at);
   dressTrader(entity, i, vis);
   vis.traders[i].eid = entity.id;
   saveVisit();
@@ -620,7 +641,9 @@ function fromSkin(vis, i, dim, at) {
   try {
     if (!world.structureManager.get(SKIN_PREFIX + i)) return undefined;
     const before = new Set(dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG] }).map((e) => e.id));
-    world.structureManager.place(SKIN_PREFIX + i, dim, { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) }, { includeBlocks: false, includeEntities: true });
+    // The structure command, not world.structureManager.place(): that can put the entity into the Overworld at the
+    // same coordinates while a player is in the Nether or the End (BDS 1.26).
+    dim.runCommand(`structure load "${SKIN_PREFIX + i}" ${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)} 0_degrees none true false`);
     const fresh = dim.getEntities({ type: NPC_TYPE, tags: [OWNER_TAG], location: at, maxDistance: 4 }).filter((e) => !before.has(e.id));
     if (!fresh.length) return undefined;
     for (const e of fresh.slice(1)) e.remove();
@@ -635,35 +658,8 @@ function fromSkin(vis, i, dim, at) {
 }
 
 // The name above a trader's head: a player's game can show a minecraft:npc as "NPC" (its default name) although its
-// name was set, until the name changes again while they watch. So when a player comes near, the name is sent again
-// a moment later, switching between two forms that look the same (as Townsfolk does).
-const NAME_RANGE = 20; // players this close count as watching
-const RENAME_TICKS = [20, 60]; // resends after a player comes near: 1 s, then 3 s more
-
-/** Every loop: a player new within NAME_RANGE of a trader gets its name sent again. @param {Visit} vis */
-function watchNames(vis) {
-  vis.traders.forEach((tr, i) => {
-    const entity = entityById(tr.eid);
-    if (!entity) return;
-    let st = traderState.get(i);
-    if (!st) traderState.set(i, (st = { missing: 0 }));
-    const ids = new Set(entity.dimension.getPlayers({ location: entity.location, maxDistance: NAME_RANGE }).map((p) => p.id));
-    const seen = st.viewers;
-    if (!seen || [...ids].some((id) => !seen.has(id))) {
-      st.renameAt = system.currentTick + RENAME_TICKS[0];
-      st.renames = 0;
-    }
-    st.viewers = ids;
-    if (st.renameAt !== undefined && system.currentTick >= st.renameAt) {
-      const name = traderTag(vis, i);
-      st.labelForm = st.labelForm === name ? `${name}§r` : name;
-      updateLabels();
-      const n = (st.renames ?? 0) + 1;
-      st.renames = n;
-      st.renameAt = n < RENAME_TICKS.length ? system.currentTick + RENAME_TICKS[n] : undefined;
-    }
-  });
-}
+// name was set, until the name changes again while they watch. name-labels.js carries the name on a helper and, when
+// a player comes within 20 blocks, sends it again 1 s and 3 s later (as for the townsfolk).
 
 /** Places the caravan once its spot is loaded, and brings back missing traders. Runs every 2 s during a visit. @param {Visit} vis */
 function keepCaravan(vis) {
@@ -726,7 +722,7 @@ function keepCaravan(vis) {
       const at = standable(dim, { x: vis.spot.x + (n % 2 ? 2 : -2), y: vis.spot.y, z: vis.spot.z - 3 - n }) ?? { x: vis.spot.x, y: vis.spot.y, z: vis.spot.z };
       for (const type of LLAMA_TYPES) {
         try {
-          const llama = dim.spawnEntity(type, at);
+          const llama = spawnChecked(dim, type, at);
           for (const tag of [TAG, VISIT_TAG + vis.v, LLAMA_TAG]) llama.addTag(tag);
           llama.nameTag = "§7Caravan Llama"; // named mobs never despawn
           ids.push(llama.id);
@@ -811,12 +807,13 @@ world.afterEvents.worldLoad.subscribe(() => {
     try {
       if (loops % KEEP_EVERY === 0) upkeep();
       else if (visit) faceTraders(visit);
-      if (visit) watchNames(visit);
     } catch (e) {
       console.warn(`[caravan] ${e}`);
     }
   }, LOOP_TICKS);
-  system.runInterval(updateLabels, 2);
+  // Every half second: they stand still (a speech line or a resend redraws at once), and each sync reads every
+  // player near them (about 1 ms with 12 of them and 40 players around).
+  system.runInterval(updateLabels, LABEL_TICKS);
   system.runInterval(auditAll, AUDIT_TICKS);
 });
 
@@ -1227,6 +1224,20 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Scenario tests (BDS harness): the caravan leaves now. Only from the server console:
+// /scriptevent realm:caravan_test {"action":"depart"}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:caravan_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      if (JSON.parse(ev.message)?.action === "depart" && visit) depart(false);
+    } catch (e) {
+      console.warn(`[caravan] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

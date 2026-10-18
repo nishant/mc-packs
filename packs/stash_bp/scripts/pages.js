@@ -5,7 +5,7 @@
 // the player holds only their committed index. Old JSON pages are read once and migrated on use.
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
-import { get, getFor, setFor } from "./settings.js";
+import { get, getFor, onChange, setFor } from "./settings.js";
 import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
@@ -653,6 +653,11 @@ const reconciling = new Set();
 const buttonState = new Map();
 /** @type {Set<string>} */
 const dead = new Set();
+/**
+ * Items whose data (potion, level, pattern, color) the id, name and lore don't show: never refilled from another page.
+ * Not rockets: refilling them mid-glide is the point, even if a Flight 1 stack can stand in for a Flight 3 one.
+ */
+const HIDDEN_DATA = /^minecraft:(firework_star|arrow|ominous_bottle|[a-z_]*banner)$/;
 
 /**
  * A button was clicked (it left its slot): save anything real that took its place, put the buttons back,
@@ -821,7 +826,7 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   queuedButtons.delete(player.id);
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [buttonState, snapshots, lastTotal, lastEnforce]) m.delete(playerId);
+  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff]) m.delete(playerId);
   recoveryWarned.delete(playerId);
   dead.delete(playerId);
   queuedButtons.delete(playerId);
@@ -924,15 +929,16 @@ function autoStore(player) {
 /**
  * Hotbar Refill ran out of a stack and found none like it on this page (realm:refill_need): the fullest stack like it on
  * another page goes into the empty hotbar slot. "Like it": the same item, name and lore, as Hotbar Refill matches them.
- * @param {Player} player @param {number} slot hotbar slot 0-8 @param {{ id: string, name?: string, lore?: string[] }} want
+ * Not for items whose kind hides data the API can't compare (an arrow's potion, a banner's pattern),
+ * and not for a player who just died (the stack would drop with the death loot).
+ * @param {Player} player @param {number} slot hotbar slot 0-8 @param {{ id: string, name?: string, sameLore: (lore: string[]) => boolean }} want
  * @returns {{ n: number, page: number } | undefined} what came, from where
  */
 export function refillFromPages(player, slot, want) {
   const inv = invOf(player);
-  if (!inv || switching.has(player.id) || !inventoryReady(player) || !HOTBAR.includes(slot) || inv.getItem(slot)) return undefined;
+  if (!inv || dead.has(player.id) || HIDDEN_DATA.test(want.id) || switching.has(player.id) || !inventoryReady(player) || !HOTBAR.includes(slot) || inv.getItem(slot)) return undefined;
   const total = totalPages(player);
   const cur = curPage(player);
-  const lore = JSON.stringify(want.lore ?? []);
   /** @type {{ page: number, entries: Rec[], k: number, n: number } | undefined} */
   let best;
   for (let p = 1; p <= total; p++) {
@@ -942,7 +948,7 @@ export function refillFromPages(player, slot, want) {
     entries.forEach((e, k) => {
       if (e.id !== want.id || (e.name ?? undefined) !== (want.name ?? undefined)) return;
       const item = deserializeStack(e);
-      if (!item || item.lockMode !== ItemLockMode.none || JSON.stringify(item.getLore()) !== lore) return;
+      if (!item || item.lockMode !== ItemLockMode.none || !want.sameLore(item.getLore())) return;
       if (!best || e.n > best.n) best = { page: p, entries, k, n: e.n };
     });
   }
@@ -992,14 +998,58 @@ function tickPlayer(player, withAutoStore) {
   if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) autoStore(player);
 }
 
+/** @type {Map<string, { until: number, text: string, logged: number }>} a player whose last tick failed waits before the next try */
+const backoff = new Map();
+/** Ticks a failed player waits (a page save that can't stage here retries when they move), and how often the same warning repeats. */
+const RETRY_TICKS = 40;
+const WARN_TICKS = 1200;
+
+/**
+ * When each player's inventory (or a setting of this pack) last changed. A player whose inventory changed
+ * in the last second is looked at every 2 ticks (button clicks, and every 10 ticks pickups to auto-store);
+ * a quiet one every 5 s, spread over the ticks, without the page scan, which a quiet inventory can't need
+ * (that runs every 25 s anyway, in case an event was missed). A look costs 0.1 to 0.4 ms, so idle players
+ * have to be looked at rarely.
+ * @type {Map<string, number>}
+ */
+const changedAt = new Map();
+const ACTIVE_TICKS = 20;
+world.afterEvents.playerInventoryItemChange?.subscribe(({ player }) => {
+  if (player) changedAt.set(player.id, system.currentTick);
+});
+world.afterEvents.playerSpawn.subscribe(({ player }) => changedAt.set(player.id, system.currentTick));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => changedAt.delete(playerId));
+// A new page count or button choice shows at once, not at the next quiet look.
+onChange((key, player) => {
+  const now = system.currentTick;
+  if (player) changedAt.set(player.id, now);
+  else for (const p of world.getAllPlayers()) changedAt.set(p.id, now);
+});
+
+/** Beats (2 ticks each) between looks at a quiet player, and between a quiet player's page scans. */
+const QUIET_BEATS = 50;
+const QUIET_SCAN_BEATS = 250;
+
 let beat = 0;
 system.runInterval(() => {
-  const withAutoStore = ++beat % 5 === 0;
+  ++beat;
+  const now = system.currentTick;
+  let i = 0;
   for (const player of world.getAllPlayers()) {
+    const turn = (beat + i++) % QUIET_BEATS === 0;
+    const wait = backoff.get(player.id);
+    if (wait && now < wait.until) continue;
+    const active = now - (changedAt.get(player.id) ?? -Infinity) <= ACTIVE_TICKS || !buttonState.has(player.id);
+    if (!active && !turn) continue;
+    const withAutoStore = active ? beat % 5 === 0 : (beat + i - 1) % QUIET_SCAN_BEATS === 0;
     try {
       tickPlayer(player, withAutoStore);
+      if (wait) backoff.delete(player.id);
     } catch (e) {
-      console.warn(`[stash] ${e}`);
+      const text = String(e);
+      const repeat = wait?.text === text && now - wait.logged < WARN_TICKS;
+      if (!repeat) console.warn(`[stash] ${text}`);
+      backoff.set(player.id, { until: now + RETRY_TICKS, text, logged: repeat && wait ? wait.logged : now });
     }
   }
 }, 2);

@@ -15,20 +15,24 @@ export default async function (t) {
   await t.waitMessage(p, /A rainbow!/, { since, timeout: 100 });
   await t.waitUntil(() => ev, { timeout: 40, message: "sky_event" });
   const { top } = await t.loadArea(ev.x, ev.z, { radius: 3 });
-  const gy = Math.floor(top.location?.y ?? top.y);
+  // The end may be out on the real sea: then the "ground" is the water's surface (getTopmostBlock answers the sea bed).
+  let gy = Math.floor(top.location?.y ?? top.y);
+  for (let b = dim.getBlock({ x: ev.x, y: gy + 1, z: ev.z }); b && (b.isLiquid || /water|kelp|seagrass|bubble_column/.test(b.typeId)); b = b.above()) gy = b.location.y;
   t.log(`end ${ev.x} ${ev.z}, ground ${gy}`);
   const x1 = ev.x - 16, x2 = ev.x + 16, z1 = ev.z - 16, z2 = ev.z + 16;
   t.log(`above end: ${[1, 2, 5, 10, 16].map((k) => dim.getBlock({ x: ev.x, y: gy + k, z: ev.z })?.typeId).join(",")}`);
-  const fill = (ya, yb, id) => {
+  const fill = (ya, yb, id) => dim.fillBlocks(new t.mc.BlockVolume({ x: x1, y: ya, z: z1 }, { x: x2, y: yb, z: z2 }), id);
+  // loadArea waits for the end's own column; the rest of the 33 x 33 area can take a few more ticks to load.
+  await t.waitUntil(() => {
     try {
-      dim.fillBlocks(new t.mc.BlockVolume({ x: x1, y: ya, z: z1 }, { x: x2, y: yb, z: z2 }), id);
-    } catch (e) {
-      t.log(`fill ${id}: ${e}`);
+      fill(gy + 1, gy + 14, "minecraft:air");
+      fill(gy - 3, gy, "minecraft:water");
+      fill(gy - 4, gy - 4, "minecraft:sand");
+      return true;
+    } catch {
+      return false;
     }
-  };
-  fill(gy + 1, gy + 14, "minecraft:air");
-  fill(gy - 3, gy, "minecraft:water");
-  fill(gy - 4, gy - 4, "minecraft:sand");
+  }, { timeout: 200, interval: 5, message: "the pool around the end could be made (its chunks loaded)" });
   await t.wait(10);
   t.log(`at end: ${dim.getBlock({ x: ev.x, y: gy, z: ev.z })?.typeId}, topmost ${dim.getTopmostBlock({ x: ev.x, z: ev.z })?.typeId}`);
   p.teleport({ x: ev.x + 20.5, y: gy + 1, z: ev.z + 0.5 });

@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { syncDiag } from "./lib/diag-sync.mjs";
 
 const root = join(import.meta.dirname, "..");
 const HELP = "help_bp";
@@ -151,6 +152,7 @@ if (check) {
         process.exit(1);
       }
       writeFileSync(manifestPath, bumped);
+      syncDiag({ folders: [HELP] }); // its scripts/diag.js carries the version
       console.log(`wrote ${out.replace(root + "/", "")}; ${HELP} is now ${x}.${y}.${z + 1}`);
     } else {
       console.log(`wrote ${out.replace(root + "/", "")}`);

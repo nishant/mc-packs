@@ -1,3 +1,4 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -584,7 +585,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return { status: CustomCommandStatus.Failure, message: "Minutes must be 1 to 1440." };
       }
       const wasActive = active;
-      const by = origin.sourceEntity instanceof Player ? origin.sourceEntity.id : undefined;
+      const who = origin.initiator ?? origin.sourceEntity; // initiator: the player who talked to an NPC that ran it
+      const by = who instanceof Player ? who.id : undefined;
       system.run(() => {
         try {
           setWeatherNow(kind, minutes, by);

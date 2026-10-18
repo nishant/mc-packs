@@ -58,7 +58,7 @@ const WARDENS_OATH = {
       title: "The Drill Yard",
       intro: [
         `§eWarden Reyes§r is watching three young people swing practice swords at a hay dummy. One of them hits himself in the knee.\n\n${R}Recruits. The council gave me three. I asked for thirty.`,
-        `${R}Dace is the loud one. Tamsin is the quiet one with the bow; she's better than she thinks. Orrin used to be a baker. He's big, he's gentle, and he apologizes to the dummy.`,
+        `${R}Dace is the loud one. Brynn is the quiet one with the bow; she's better than she thinks. Orrin used to be a baker. He's big, he's gentle, and he apologizes to the dummy.`,
         { text: `${R}They've heard about you. The one who went down to the sunken bell and shut it up for good. Dace wants to shake your hand. I want you to show them what a real fight looks like.`, when: SILENCED },
         { text: `${R}They've heard about you. The one who made the old harbor bell sing again. Dace hums it on watch, badly. I want you to show them what a real fight looks like.`, when: RUNG },
         `${R}Tonight, when the dark brings the usual trouble, take down eight of them while the recruits watch. Fast: five minutes from the first, or it doesn't count. A slow fight teaches them nothing.`,
@@ -69,7 +69,7 @@ const WARDENS_OATH = {
         { type: "deliver", label: "Bring Reyes 3 shields for the recruits", npc: "reyes", item: "minecraft:shield", count: 3 },
       ],
       outro: [
-        "The recruits watch from the fence, wide-eyed. When the last one falls Dace whoops so loud a cow two fields over starts running. Tamsin writes something in a little book. Orrin claps, then apologizes for clapping.",
+        "The recruits watch from the fence, wide-eyed. When the last one falls Dace whoops so loud a cow two fields over starts running. Brynn writes something in a little book. Orrin claps, then apologizes for clapping.",
         `${R}Not bad. You fight like someone who expects to go home afterward. That's the right way to fight.`,
         `${R}Shields go to the recruits. Orrin will take his to bed, watch. Get some sleep. Tomorrow I'm sending you somewhere you won't like.`,
       ],
@@ -110,7 +110,6 @@ const WARDENS_OATH = {
             tag: "realm:saga:sergeant_vell",
             mob: "minecraft:pillager",
             name: "Sergeant Vell",
-            trait: "Never misses twice",
             warn: "A horn sounds from the outpost tower. Sergeant Vell is coming down.",
             health: 30,
             adds: { mobs: ["minecraft:pillager"], count: 3 },
@@ -132,9 +131,9 @@ const WARDENS_OATH = {
       title: "The Long Watch",
       intro: [
         `${R}The Ruined Watchtower. The wardens built it a hundred years ago to see raiders coming. We stopped manning it in the Year of the Long Storm, when every hand went down to the harbor. Nobody ever went back.`,
-        `${R}It's still the best view of the east road. Tonight we take it back: you, me and the recruits. Dace begged. Orrin brought bread. Tamsin just showed up, which is how Tamsin says yes.`,
+        `${R}It's still the best view of the east road. Tonight we take it back: you, me and the recruits. Dace begged. Orrin brought bread. Brynn just showed up, which is how Brynn says yes.`,
         `${R}The raiders will come at night, in waves, because they think the dark frightens us. Hold the tower. Then stand watch on top until first light, so they know we didn't run.`,
-        `${R}I hold the road with Dace and Tamsin. Orrin takes the lower stair. You take everything else. That's an order. Mostly.`,
+        `${R}I hold the road with Dace and Brynn. Orrin takes the lower stair. You take everything else. That's an order. Mostly.`,
       ],
       objectives: [
         {
@@ -164,7 +163,7 @@ const WARDENS_OATH = {
       ],
       outro: [
         "Dawn comes up gray over the east road. The last raider is a shape running into the trees. Dace is laughing too hard, the way people laugh when they've been afraid all night.",
-        "Then Tamsin comes up the stairs alone, and she isn't laughing.\n\nOrrin held the lower stair the whole night. Nothing got past him. He never told anyone he'd been hit. At first light he sat down against the wall, and he didn't get up again.",
+        "Then Brynn comes up the stairs alone, and she isn't laughing.\n\nOrrin held the lower stair the whole night. Nothing got past him. He never told anyone he'd been hit. At first light he sat down against the wall, and he didn't get up again.",
         "§eReyes§r takes off her helmet. For a long moment she says nothing at all. Below, Dace has stopped laughing.",
         `${R}We carry him home. All of us. Then I find out who sent them.`,
         { text: `She looks up at the last of the red moon going pale in the west.\n\n${R}The old wardens said a Blood Moon always takes one. I never believed it. You held under it anyway. Remember that, and not the rest.`, when: { red: "moon" } },
@@ -220,7 +219,7 @@ const WARDENS_OATH = {
       title: "The Red Hand",
       intro: [
         `${R}Marrow comes back to that hollow at night. Always at night. He likes the dark the way a cat likes a warm stove.`,
-        `${R}I can't go. The council wants me in town when the next wagon comes in, and I won't leave Dace and Tamsin without a captain. So it's you. I'm sorry. I'm also not sorry: you're the best I've got.`,
+        `${R}I can't go. The council wants me in town when the next wagon comes in, and I won't leave Dace and Brynn without a captain. So it's you. I'm sorry. I'm also not sorry: you're the best I've got.`,
         `${R}Wear real armor. Iron at least; I put my old coat in your pack for a reason. He hits like a falling tree, and he likes to hit the same place twice.`,
         `${R}And listen. This isn't revenge. Revenge is sloppy. This is making sure there's no next Orrin. Understood?\n\nShe holds your eye until you nod.\n\n${R}Good. I didn't understand it either, the first time.`,
       ],
@@ -238,7 +237,6 @@ const WARDENS_OATH = {
             tag: "realm:saga:red_hand",
             mob: "minecraft:vindicator",
             name: "Captain Marrow, the Red Hand",
-            trait: "Hits the same place twice",
             warn: "A war-horn sounds in the hollow. The Red Hand has come home.",
             health: 60,
             adds: { mobs: ["minecraft:vindicator", "minecraft:pillager"], count: 5 },
@@ -259,7 +257,7 @@ const WARDENS_OATH = {
       id: "orrins_stone",
       title: "Orrin's Stone",
       intro: [
-        "The whole warden company turns out in clean coats. Dace has polished his boots twice. Tamsin has spelled Orrin's name in arrowheads on a board, and she won't let anyone help her carry it.",
+        "The whole warden company turns out in clean coats. Dace has polished his boots twice. Brynn has spelled Orrin's name in arrowheads on a board, and she won't let anyone help her carry it.",
         `${R}Moss says the old graveyard has room by the east wall, under the lantern. Orrin liked lanterns. He said they were bread ovens for the night.`,
         `${R}Build him a stone. Something solid. Then ask Moss about the words, and stand the dusk watch with us. Wardens stand one sunset for their dead. It's the oldest thing we do.`,
         "Dace finds you before the service, boots shining, eyes red.\n\n§eDace:§r He always let me have the end of the loaf. The crusty bit. Said he didn't like it. He liked it. I knew he liked it. I took it anyway.",
@@ -272,7 +270,7 @@ const WARDENS_OATH = {
       outro: [
         `§eMoss§r leans on his shovel while the sun goes down.\n\n${MOSS}Carved plenty of stones. Most say 'beloved'. Bit much, if you ask me. The dead don't need flattering. They need remembering right.`,
         `${MOSS}So this one says: ORRIN. HE HELD THE STAIR. The rest you lot can carry around in your heads. That's where it keeps best.`,
-        "Dace cries without hiding it. Tamsin doesn't cry at all; she just stands closer to the stone than anyone. Reyes stays at attention until the lantern comes on, and then a little longer.",
+        "Dace cries without hiding it. Brynn doesn't cry at all; she just stands closer to the stone than anyone. Reyes stays at attention until the lantern comes on, and then a little longer.",
         `${R}Tomorrow, at the tower. Dawn. Wear something clean.`,
       ],
       reward: { levels: 3, crowns: 25, journal: { entry: "orrin", label: "Orrin's Stone" } },
@@ -283,7 +281,7 @@ const WARDENS_OATH = {
       id: "oath",
       title: "The Oath at Dawn",
       intro: [
-        "The watchtower looks different at dawn, with its banners mended. The company stands in a line on the road below: Dace, Tamsin, a dozen wardens you half know, and one empty space nobody fills.",
+        "The watchtower looks different at dawn, with its banners mended. The company stands in a line on the road below: Dace, Brynn, a dozen wardens you half know, and one empty space nobody fills.",
         `${R}The oath is short. We wrote it short so a scared nineteen-year-old can remember it at the top of a stair in the dark.`,
         `${R}It goes: 'I keep the light. I hold the line. I bring them home.' Then I ask you what a warden holds, and you answer. Get it wrong and Dace will never let you forget it.`,
         `${R}Light the fire first. Every oath on this hill has been sworn by the tower fire. Then come stand by me.`,
@@ -308,7 +306,7 @@ const WARDENS_OATH = {
           reply: [
             `${R}A shield. Orrin would have chosen that.\n\nShe pins a small iron badge to your coat. Her hands are steady. Her voice almost is.`,
             `${R}Welcome to the wardens. You're stuck with us now. Dace, stop whooping. ...Fine. One more.`,
-            "Tamsin, who never says anything, steps out of the line and shakes your hand. Then she goes back and stands very straight, next to the empty space.",
+            "Brynn, who never says anything, steps out of the line and shakes your hand. Then she goes back and stands very straight, next to the empty space.",
           ],
         },
         {
@@ -320,7 +318,7 @@ const WARDENS_OATH = {
           reply: [
             `${R}A sword. Someone has to be. I swore the same, once, on this hill.\n\nShe pins a small iron badge to your coat.`,
             `${R}Just remember who the sword is for. It's for the stair. It's for Orrin. Welcome to the wardens.`,
-            "Tamsin, who never says anything, steps out of the line and shakes your hand. Then she goes back and stands very straight, next to the empty space.",
+            "Brynn, who never says anything, steps out of the line and shakes your hand. Then she goes back and stands very straight, next to the empty space.",
           ],
         },
       ],
@@ -475,25 +473,25 @@ const SMUGGLERS_RUN = {
       title: "The Inspector Calls",
       intro: [
         `${Q}Bad news and worse news. The bad news: Bram has sent a tax inspector to my cove. Today. The worse news: he's very good at his job.`,
-        `${Q}Inspector Pell. A man made entirely of forms. If he's still at the cove when the Choir comes, he'll get hurt, and then he'll fine me for it.`,
+        `${Q}Inspector Prewitt. A man made entirely of forms. If he's still at the cove when the Choir comes, he'll get hurt, and then he'll fine me for it.`,
         `${Q}Go meet him. Answer his questions. If he asks about the barrels, the barrels are fish. Everything is fish. Then get rid of him.`,
-        `${Q}How? Pell has one weakness: goats. A goat looked at him funny when he was six and he never recovered. Wren has a goat. Wren has many goats. Borrow one. Bring it back.`,
-        { text: `${Q}And yes, I know: if Pell finds the honey, I'm back in that cell for good. You'd know all about how that goes.`, when: EXPOSED },
-        { text: `${Q}Unrelated: if you happen across a pot of gold at the end of a rainbow while you're out, I'm buying. Unrecorded gold is the only honest gold. Pell would faint.`, when: { "pack:rainbow_bp": "on" } },
+        `${Q}How? Prewitt has one weakness: goats. A goat looked at him funny when he was six and he never recovered. Wren has a goat. Wren has many goats. Borrow one. Bring it back.`,
+        { text: `${Q}And yes, I know: if Prewitt finds the honey, I'm back in that cell for good. You'd know all about how that goes.`, when: EXPOSED },
+        { text: `${Q}Unrelated: if you happen across a pot of gold at the end of a rainbow while you're out, I'm buying. Unrecorded gold is the only honest gold. Prewitt would faint.`, when: { "pack:rainbow_bp": "on" } },
       ],
       objectives: [
         {
           type: "meet",
-          label: "Meet Inspector Pell at Smugglers' Cove",
+          label: "Meet Inspector Prewitt at Smugglers' Cove",
           place: "sea_cave",
           radius: 16,
-          who: { id: "pell", name: "Inspector Pell", entity: "minecraft:villager_v2" },
+          who: { id: "prewitt", name: "Inspector Prewitt", entity: "minecraft:villager_v2" },
           pages: [
-            "§ePell:§r Inspector Pell. Office of the Mayor, Department of Tariffs, Levies and Miscellaneous. I have reason to believe this cove contains honey.",
-            "§ePell:§r I have a form. It has forty questions. Some have sub-questions. We will now begin question one.",
+            "§ePrewitt:§r Inspector Prewitt. Office of the Mayor, Department of Tariffs, Levies and Miscellaneous. I have reason to believe this cove contains honey.",
+            "§ePrewitt:§r I have a form. It has forty questions. Some have sub-questions. We will now begin question one.",
           ],
         },
-        { type: "answer", label: "Answer Inspector Pell's question about the barrels", place: "sea_cave", radius: 16, question: "§ePell:§r Question one. What, precisely, is in these barrels? Think carefully. I can smell lying. It smells like honey.", answers: ["fish", "salt fish", "salted fish", "cod", "herring", "just fish"] },
+        { type: "answer", label: "Answer Inspector Prewitt's question about the barrels", place: "sea_cave", radius: 16, question: "§ePrewitt:§r Question one. What, precisely, is in these barrels? Think carefully. I can smell lying. It smells like honey.", answers: ["fish", "salt fish", "salted fish", "cod", "herring", "just fish"] },
         { type: "lead", label: "Lead Bartholomew the goat from Wren's Meadow to the cove", mob: "minecraft:goat", name: "Bartholomew", spawnAt: { place: "meadow" }, to: { place: "sea_cave", radius: 10 } },
         {
           type: "event",
@@ -508,16 +506,16 @@ const SMUGGLERS_RUN = {
         },
       ],
       outro: [
-        "Bartholomew the goat walks onto the dock, looks Inspector Pell in the eye, and bleats once. Pell drops his clipboard and leaves at a speed the Department of Tariffs would not approve of.",
+        "Bartholomew the goat walks onto the dock, looks Inspector Prewitt in the eye, and bleats once. Prewitt drops his clipboard and leaves at a speed the Department of Tariffs would not approve of.",
         `${Q}Magnificent. A masterpiece. I've seen generals with less command presence than that goat.`,
         `${Q}Return Bartholomew to Wren with my compliments and a carrot. Then come back at sundown. Bring your sword. Bring someone else's sword too.`,
         { text: `${Q}And... thank you. I don't say that much. It tastes strange. Like a fig that's gone off.`, when: EXPOSED },
         { text: `${Q}And between us: if this goes badly tonight, tell Reyes the ledger under my floor is hers. All of it. Even the embarrassing pages.`, when: TRUSTED },
-        { text: `${Q}And you found a pot of gold! No, keep it. Keep it! If Pell ever sees me holding a pot of gold, I'll be filling in forms until I die. I'll just pay you for the pleasure of knowing it exists. Here.`, when: { pot: "found" } },
+        { text: `${Q}And you found a pot of gold! No, keep it. Keep it! If Prewitt ever sees me holding a pot of gold, I'll be filling in forms until I die. I'll just pay you for the pleasure of knowing it exists. Here.`, when: { pot: "found" } },
       ],
       reward: { levels: 3, crowns: 30, items: [{ item: "minecraft:golden_carrot", amount: 4 }] },
       rep: [{ guild: "wayfarers", amount: 5 }],
-      hint: "Pell appears at Smugglers' Cove, on the tracker. When he asks about the barrels, type that they hold fish. Then a goat waits at Wren's Meadow: put a lead on it and walk it to the cove. A leashed goat fits in a boat if there's water in the way.",
+      hint: "Prewitt appears at Smugglers' Cove, on the tracker. When he asks about the barrels, type that they hold fish. Then a goat waits at Wren's Meadow: put a lead on it and walk it to the cove. A leashed goat fits in a boat if there's water in the way.",
     },
     {
       id: "double_cross",
@@ -782,17 +780,17 @@ const MAYORS_BURDEN = {
       id: "election",
       title: "Election Day",
       intro: [
-        `${B}The count takes a full day. Inspector Pell is doing it. He has a form for counting. He has a form for the form. He asked whether the goat's ballots count. I said the goat isn't registered. He's checking.`,
+        `${B}The count takes a full day. Inspector Prewitt is doing it. He has a form for counting. He has a form for the form. He asked whether the goat's ballots count. I said the goat isn't registered. He's checking.`,
         `${B}Hattie and I shook hands on the steps this morning. She said I was a better man than I was a mayor. I said she'd be a better mayor than I am a man. We're still working out whether either of us was insulted.`,
         { text: `${B}Hattie and Garrow came in to vote together. Together! They argued the whole way, but together. That fence of yours did more for this town than my last six speeches.`, when: { feud: "split" } },
         `${B}Whoever wins, the town needs a cake. Bea says a town that doesn't celebrate its elections deserves whatever government it gets. Bring a cake, and wait with me.`,
       ],
       objectives: [
-        { type: "wait", label: "Wait one day while Pell counts the votes", days: 1 },
+        { type: "wait", label: "Wait one day while Prewitt counts the votes", days: 1 },
         { type: "deliver", label: "Bring Bram a cake for the result", npc: "bram", item: "minecraft:cake", count: 1 },
       ],
       outro: [
-        "Inspector Pell climbs onto the statue's base, clears his throat for an entire minute, and reads the result.\n\nBram wins. By one vote.",
+        "Inspector Prewitt climbs onto the statue's base, clears his throat for an entire minute, and reads the result.\n\nBram wins. By one vote.",
         `The square goes very quiet. Then everyone turns to look at Hattie Moon, who is grinning.\n\n${HAT}I voted for him. Don't look at me like that. He sat in a graveyard all night for a man who hurt him. You don't grow that in a pumpkin patch.`,
         { text: `${HAT}Besides, his helper gave me my field back. I'm not made of stone. Unlike some goats.`, when: { feud: "moon" } },
         { text: `${GAR}And I voted for Moon, just to be contrary. Don't tell her. It'll go to her head.`, when: { feud: "garrow" } },

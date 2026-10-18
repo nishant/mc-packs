@@ -10,7 +10,7 @@ import { isCreative } from "../utils/InventoryUtils.js";
 import { getPaletteMode, getDistributionMode } from "./Palette.js";
 import { getModeOption } from "../utils/ModeOptions.js";
 import { usesFloatingUI } from "../utils/CustomUI.js";
-import { isBook, isTutorialBook, heldItem } from "../utils/Items.js";
+import { isBook, isTutorialBook, heldItem, allPlayers } from "../utils/Items.js";
 import { eventCount, clearCoachEvents } from "../utils/CoachEvents.js";
 import { getWheelLayout } from "../utils/QuickWheel.js";
 import { spotBeside, liftClear, yawToward } from "../utils/InFront.js";
@@ -663,7 +663,7 @@ export function startCoachLoop() {
             try { if (isLive(gone.entity)) gone.entity.remove(); } catch {}
         }
         if (coaches.size > 0) {
-            const online = new Map(world.getAllPlayers().map(player => [player.id, player]));
+            const online = new Map(allPlayers().map(player => [player.id, player]));
             for (const [playerId, coach] of coaches) {
                 const player = online.get(playerId);
                 if (!player) { drop(playerId); continue; }

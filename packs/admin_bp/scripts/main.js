@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   CommandPermissionLevel,
   CustomCommandParamType,
@@ -14,8 +15,10 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { ACTIONS, TITLE_MAX_SECONDS, showTitle } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
+import { DEFAULT_SECONDS, MAX_SECONDS, diagnostics } from "./diagnostics.js";
 import { GROUPS, LINE, NAMES, OP_COLOR, OP_TEXT, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
 import { get, onChange } from "./settings.js";
+import { facts, markOf, remind, sizePage, state as setupState, statusOf, wizard } from "./setup.js";
 import { allZones, pingZones } from "./zones.js";
 
 // Realm Configuration: one item, one menu, every realm: command. Every player gets the item and sees the
@@ -360,12 +363,14 @@ function paramForm(player, cmd, note) {
 /**
  * Opens a command: asks for its options (if it has any), asks first if it's destructive or for everyone,
  * runs it, then goes back to the page it was picked from (`back`; so does cancelling or closing the options).
- * @param {Player} player @param {Cmd} cmd @param {string} [note] @param {() => Promise<unknown>} [back]
+ * `ran` hears whether it ran (Set up this world counts a step done that way).
+ * @param {Player} player @param {Cmd} cmd @param {string} [note] @param {() => Promise<unknown>} [back] @param {(ok: boolean) => void} [ran]
  */
-async function openCommand(player, cmd, note, back) {
+async function openCommand(player, cmd, note, back, ran) {
   if (!cmd.params.length) {
     if (needsConfirm(cmd.name) && !(await confirm(player, `${nameOf(cmd)}: run /${cmd.name}?\n\n${cmd.description}`))) return back?.();
-    exec(player, cmd.name, nameOf(cmd));
+    const ok = exec(player, cmd.name, nameOf(cmd)); // not inside ran?.(): without `ran` that would skip the call
+    ran?.(ok);
     return resume(player, back);
   }
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -394,7 +399,8 @@ async function openCommand(player, cmd, note, back) {
     const line = [cmd.name, ...args].join(" ");
     const everyone = args.includes("@a");
     if ((needsConfirm(cmd.name) || everyone) && !(await confirm(player, `${nameOf(cmd)}: run /${line}?${everyone ? "\n\nThis is for everyone online." : ""}\n\n${cmd.description}`))) return back?.();
-    exec(player, line, nameOf(cmd));
+    const ok = exec(player, line, nameOf(cmd));
+    ran?.(ok);
     return resume(player, back);
   }
   return back?.();
@@ -610,32 +616,52 @@ async function recentPage(player, back) {
 async function opsPage(player, back) {
   if (!isOp(player)) return back();
   const cmds = await available(player);
-  pingZones();
-  await system.waitTicks(Math.max(2, Number(CONFIG.answerTicks) || 10));
+  const f = await facts(setupCtx, player);
   if (!player.isValid) return;
-  const zones = allZones();
-  const count = { zones: zones.filter((z) => z.src === "zones").length, towns: zones.filter((z) => z.src === "town").length };
+  const st = setupState();
   const again = () => opsPage(player, back);
   /** @type {Entry[]} */
-  const entries = [{ header: "Quick actions" }, { text: "§7Vanilla things you would otherwise type. They work without cheats." }];
+  const entries = [
+    { label: button("Set up this world", st.f ? "Every one-time job, step by step" : "Start here on a new world", true), open: () => wizard(setupCtx, player, again) },
+    { label: button("Server size", "Small Realm or Large server", true), open: () => sizePage(setupCtx, player, again) },
+    { header: "Quick actions" },
+    { text: "§7Vanilla things you would otherwise type. They work without cheats." },
+  ];
   for (const a of ACTIONS) entries.push({ label: button(a.title, a.hint, true), open: () => openAction(player, a, again) });
+  entries.push({ label: button("Pack diagnostics", "Script time, saved data", true), open: () => diagnostics(player, diagCtx, DEFAULT_SECONDS, again) });
 
   /** @type {Entry[]} */
   const setup = [];
   for (const item of SETUP) {
-    const cmd = cmds.find((c) => c.name === item.cmd);
-    if (!cmd) continue;
-    const n = item.done ? count[item.done] : undefined;
-    const mark = n === undefined ? "§8[ ]" : n > 0 ? "§2[x]" : "§c[ ]";
-    const extra = n === undefined ? "" : ` §8(${n})`;
-    setup.push({ label: `${mark} ${OP_COLOR}${item.title}${extra}\n§8${fit(item.hint)}`, open: () => openCommand(player, cmd, item.help, again) });
+    const cmd = item.cmd ? cmds.find((c) => c.name === item.cmd) : undefined;
+    if (item.cmd && !cmd) continue;
+    const mark = markOf(statusOf(item, f, st), !!st.s[item.id]);
+    const open = cmd ? () => openCommand(player, cmd, item.help, again) : () => sizePage(setupCtx, player, again);
+    setup.push({ label: `${mark} ${OP_COLOR}${item.title}\n§8${fit(item.hint)}`, open });
   }
-  if (setup.length) entries.push({ header: "Server setup checklist" }, { text: "§7One-time jobs across the packs. §2[x]§7 means its pack says it's done; the others can't be checked from here." }, ...setup);
+  if (setup.length) entries.push({ header: "Server setup checklist" }, { text: "§7One-time jobs across the packs. §2[x]§7 done (its pack says so, or it ran from Set up this world), §8[-]§7 skipped there; §c[ ]§7 its pack says not yet." }, ...setup);
 
-  const own = cmds.filter((c) => OWN_PAGE.has(c.folder) && !ACTIONS.some((a) => a.title === nameOf(c))); // Show a Title is a quick action already
+  const own = cmds.filter((c) => OWN_PAGE.has(c.folder) && c.name !== "realm:diag" && c.name !== "realm:admin_setup" && !ACTIONS.some((a) => a.title === nameOf(c))); // Show a Title and Pack diagnostics are quick actions already
   if (own.length) entries.push({ header: TITLE }, ...cmdEntries(player, own, again));
   await list(player, "Operator Tools", `${OP_TEXT}Red§r = operators only: everything on this page is.`, entries, back);
 }
+
+/** What Set up this world (setup.js) uses from this file. @type {import("./setup.js").Ctx} */
+const setupCtx = {
+  show,
+  available,
+  openCommand,
+  nameOf,
+  button,
+  fit,
+  pingZones,
+  allZones,
+  answerTicks: () => Math.max(2, Number(CONFIG.answerTicks) || 10),
+  names: new Map(PACKS.map((p) => [p.folder, p.pack])),
+};
+
+/** What Pack diagnostics (diagnostics.js) uses from this file. @type {import("./diagnostics.js").Ctx} */
+const diagCtx = { show, installed, names: new Map(PACKS.map((p) => [p.folder, p.pack])) };
 
 /** @type {Set<string>} players with the menu open */
 const open = new Set();
@@ -694,16 +720,21 @@ const KNOWN_LORE_PREFIXES = [
   ["Use it to open the admin menu:", "every realm command in one place,"],
 ];
 
-/** @param {ItemStack | undefined} it the real item, made by this pack (current or legacy pack marker/fingerprint, even if recolored or anvil-renamed) */
+/**
+ * The real item, made by this pack (current or legacy pack marker/fingerprint, even if recolored or anvil-renamed).
+ * Also one made of another item than `itemType` (a world that changed it, or an older copy): it's locked in the
+ * inventory and can't be dropped, so it must count, be replaced and never be doubled. Only its exact lore counts then.
+ * @param {ItemStack | undefined} it
+ */
 const isRealItem = (it) => {
-  if (!it || it.typeId !== CONFIG.itemType) return false;
+  if (!it) return false;
   try {
     const lore = it.getLore();
     if (!lore.length) return false;
     if (lore.includes(MARK) || OLD_MARKS.some((m) => lore.includes(m))) return true;
     const stripped = lore.map((l) => plain(l).trim());
-    if (stripped.some((l) => REAL_MARKS.has(l))) return true;
-    return KNOWN_LORE_PREFIXES.some((prefix) => prefix.every((line, idx) => stripped[idx] === line));
+    if (KNOWN_LORE_PREFIXES.some((prefix) => prefix.every((line, idx) => stripped[idx] === line))) return true;
+    return it.typeId === CONFIG.itemType && stripped.some((l) => REAL_MARKS.has(l));
   } catch {
     return false;
   }
@@ -736,7 +767,7 @@ function needsNormalize(item) {
     const lore = item.getLore();
     const sameLore = lore.length === LORE.length && lore.every((l, idx) => l === LORE[idx]);
     const locked = item.lockMode === ItemLockMode.inventory;
-    return item.amount !== 1 || item.nameTag !== `§r§6${TITLE}` || !sameLore || !item.keepOnDeath || !locked;
+    return item.typeId !== CONFIG.itemType || item.amount !== 1 || item.nameTag !== `§r§6${TITLE}` || !sameLore || !item.keepOnDeath || !locked;
   } catch {
     return true;
   }
@@ -744,6 +775,7 @@ function needsNormalize(item) {
 
 /** @param {ItemStack} item @returns {ItemStack} */
 function normalizedItem(item) {
+  if (item.typeId !== CONFIG.itemType) return makeItem(); // made of an older itemType: a fresh one of the current
   const copy = typeof item.clone === "function" ? item.clone() : makeItem();
   copy.amount = 1;
   copy.nameTag = `§r§6${TITLE}`;
@@ -1054,6 +1086,8 @@ function check(player) {
   } else {
     reconcileItems(player);
   }
+  // Also an owner who joined first and was made an operator afterwards (usual on a new dedicated server).
+  if (isOp(player)) remind(player);
 }
 
 /** Schedules a reconcile on the next tick when a Realm Configuration item changes in the inventory. @param {Player} player */
@@ -1123,16 +1157,30 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 
 let seconds = 0;
+/** Whether the last round of checks is still going (a round never overlaps the next one). */
+let checking = false;
 system.runInterval(() => {
-  if (++seconds < Math.max(5, Number(get("checkSeconds")) || 30)) return;
+  if (++seconds < Math.max(5, Number(get("checkSeconds")) || 30) || checking) return;
   seconds = 0;
-  for (const p of world.getAllPlayers()) {
-    try {
-      check(p);
-    } catch (e) {
-      console.warn(`[admin] ${e}`);
-    }
-  }
+  checking = true;
+  // One player per tick: a check reads the whole inventory (about 0.2 ms a player), so with every player on the same
+  // tick a big server would hitch every checkSeconds.
+  system.runJob(
+    (function* () {
+      try {
+        for (const p of world.getAllPlayers()) {
+          try {
+            check(p);
+          } catch (e) {
+            console.warn(`[admin] ${e}`);
+          }
+          yield;
+        }
+      } finally {
+        checking = false;
+      }
+    })()
+  );
 }, 20);
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
@@ -1188,6 +1236,48 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         const list = targets ?? world.getAllPlayers();
         const n = showTitle(list, title, subtitle ?? "", seconds ?? 5);
         player?.sendMessage(`§7[${TITLE}] Title shown to ${n} player${n === 1 ? "" : "s"} for ${seconds ?? 5} s.`);
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:diag",
+      description: `Pack diagnostics: measure every pack's script time for a few seconds, then list the packs with their saved data; a pack's page can forget its saved data (operators). Default ${DEFAULT_SECONDS} seconds`,
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      optionalParameters: [{ name: "seconds", type: CustomCommandParamType.Integer }],
+    },
+    (origin, /** @type {number | undefined} */ seconds) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      if (!isOp(player)) return { status: CustomCommandStatus.Failure, message: "Pack diagnostics is for operators." };
+      if (seconds !== undefined && (seconds < 1 || seconds > MAX_SECONDS)) return { status: CustomCommandStatus.Failure, message: `Seconds: 1 to ${MAX_SECONDS}.` };
+      system.run(() => {
+        diagnostics(player, diagCtx, seconds ?? DEFAULT_SECONDS).catch((/** @type {unknown} */ e) => console.warn(`[admin] ${e}`));
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:admin_setup",
+      description: "Set up this world: a guided walk through the one-time setup jobs across the packs (townsfolk, a town, safe zones, server size...), each with what it's for and a button that does it (operators)",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+    },
+    (origin) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      if (!isOp(player)) return { status: CustomCommandStatus.Failure, message: "Set up this world is for operators." };
+      system.run(() => {
+        if (open.has(player.id)) return;
+        open.add(player.id);
+        wizard(setupCtx, player, undefined)
+          .catch((/** @type {unknown} */ e) => console.warn(`[admin] ${e}`))
+          .finally(() => open.delete(player.id));
       });
       return { status: CustomCommandStatus.Success };
     }

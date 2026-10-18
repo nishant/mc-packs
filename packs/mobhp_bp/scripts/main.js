@@ -1,3 +1,4 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Entity, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";

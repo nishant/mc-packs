@@ -351,6 +351,7 @@ function trackQuest(player, e) {
   for (const mate of partyMates(player)) {
     if (!entries(mate).some((x) => x.story.id === id && !x.fav)) continue;
     const ms = sagaOf(mate);
+    if (ms.tr === id && !untracked(ms, id)) continue; // follows it already
     ms.tr = id;
     showAgain(ms, id);
     markDirty(mate);
@@ -406,8 +407,11 @@ function trackButtons(player, e) {
   const saga = sagaOf(player);
   /** @type {[string, () => void][]} */
   const out = [];
+  // Tracked already, but a party mate on the same story follows another quest: tracking it again shares it with them.
+  const mateElsewhere = !e.fav && partyMates(player).some((m) => sagaOf(m).tr !== e.story.id && entries(m).some((x) => x.story.id === e.story.id && !x.fav));
   if (saga.tr !== e.story.id)
     out.push([`Track this quest\n§8${untracked(saga, e.story.id) ? "Show it in the tracker again" : "The tracker follows it"}${!e.fav && partyMates(player).length ? ", for your party too" : ""}`, () => trackQuest(player, e)]);
+  else if (mateElsewhere) out.push(["Track this quest\n§8For your party too", () => trackQuest(player, e)]);
   if (!untracked(saga, e.story.id)) out.push(["Stop tracking\n§8Hide it from the tracker and map", () => untrackQuest(player, e)]);
   return out;
 }
@@ -1286,7 +1290,32 @@ function watchText(player, e, i, obj, here) {
 
 /** What realm:track last sent for each player (JSON). @type {Map<string, string>} */
 const trackSent = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => trackSent.delete(playerId));
+/**
+ * What each player's quest box last showed and the tick it runs out: an unchanged box is sent again only shortly before
+ * it runs out, since every side-box pack parses every realm:side. @type {Map<string, { text: string, until: number }>}
+ */
+const boxSent = new Map();
+/** How long one quest box write lasts (ticks); the tracker runs every 40. */
+const BOX_TICKS = 300;
+/** An unchanged box is written again when this little of it is left (more than one tracker run). */
+const BOX_RENEW = 60;
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  trackSent.delete(playerId);
+  boxSent.delete(playerId);
+});
+// The client may drop titles on a respawn or a dimension change: draw the quest box afresh on the next tracker run.
+world.afterEvents.playerSpawn.subscribe(({ player }) => boxSent.delete(player.id));
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => boxSent.delete(player.id));
+
+/** Takes the player's quest box down, if this pack drew one. @param {Player} player */
+export function clearBox(player) {
+  if (!boxSent.delete(player.id)) return;
+  try {
+    side.clear(player);
+  } catch {
+    // left meanwhile
+  }
+}
 
 /**
  * The tracker's target for the Minimap (map_bp), when it changed: realm:track { player, label, dim?, x?, z?, npc? },
@@ -1342,13 +1371,24 @@ export function track(player, list, shown = true) {
     target = pointed ? { ...pointed, label: `${e.story.short}: ${pointed.label}` } : undefined;
   }
   sendTrack(player, target);
+  const where = getFor(player, "trackerAt");
+  if (!shown || !line || !shownE || !isSlot(where)) clearBox(player);
   if (!shown || !line || !shownE) return;
   // Our own note is showing, or (above the hotbar) another pack's (a quest, a bounty, mob health): don't write over it.
-  if (system.currentTick < (ownUntil.get(player.id) ?? 0)) return;
+  const now = system.currentTick;
+  if (now < (ownUntil.get(player.id) ?? 0)) {
+    boxSent.delete(player.id); // the note took the box's place: draw the box afresh after it
+    return;
+  }
   // Above the hotbar: wait while another pack's note holds it (realm:actionbar). The quest box is the story's own.
-  const where = getFor(player, "trackerAt");
-  if (where === "hotbar" && system.currentTick < (holdUntil.get(player.id) ?? 0)) return;
-  showLine(player, isSlot(where) ? questBox(player, shownE, saga, line, shownAt, others) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
+  if (where === "hotbar" && now < (holdUntil.get(player.id) ?? 0)) return;
+  if (!isSlot(where)) return showLine(player, `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
+  const box = questBox(player, shownE, saga, line, shownAt, others);
+  const key = `${where}|${box}`;
+  const sent = boxSent.get(player.id);
+  if (sent && sent.text === key && sent.until - now > BOX_RENEW) return;
+  boxSent.set(player.id, { text: key, until: now + BOX_TICKS });
+  showLine(player, box, BOX_TICKS, TRACKER_STEADY);
 }
 
 /**
@@ -1524,12 +1564,17 @@ function questBox(player, e, saga, first, at, others = []) {
 
 /** Text cut to a number of UTF-8 bytes on a whole character, with no dangling "§". @param {string} text @param {number} max */
 function clipTo(text, max) {
-  let out = "";
+  // Counted once, a character at a time: the box is redrawn for every player every 2 seconds.
+  if (text.length <= max / 3 || byteLength(text) <= max) return text.replace(/§$/, "");
+  let n = 0;
+  let end = 0;
   for (const ch of text) {
-    if (byteLength(out + ch) > max) break;
-    out += ch;
+    const c = /** @type {number} */ (ch.codePointAt(0));
+    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    if (n > max) break;
+    end += ch.length;
   }
-  return out.replace(/§$/, "");
+  return text.slice(0, end).replace(/§$/, "");
 }
 
 // ---------------------------------------------------------------------------
@@ -1802,8 +1847,9 @@ async function opTools(player) {
     form.button("Back");
     const r = await show(player, form);
     if (!r || r.canceled || r.selection === undefined || r.selection >= list.length) return;
-    // They may have left while the menu was open.
+    // They may have left while the menu was open, and the operator may have lost their rights.
     if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
+    if (!isOp(player)) return player.sendMessage("§c[Story] Only operators can do that; nothing was changed.");
     const ok = completeStep(target, list[r.selection]);
     player.sendMessage(ok ? `§a[Story] Finished ${name}'s current step in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
     return;
@@ -1815,6 +1861,7 @@ async function opTools(player) {
     const sure = await show(player, new ActionFormData().title("Reset stories?").body(`Start all of ${name}'s stories over? Rewards already given are kept.`).button("Reset").button("Cancel"));
     if (!sure || sure.canceled || sure.selection !== 0) return;
     if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
+    if (!isOp(player)) return player.sendMessage("§c[Story] Only operators can do that; nothing was changed.");
     resetPlayer(target, player);
   }
 }

@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   CommandPermissionLevel,
   CustomCommandParamType,
@@ -532,11 +533,12 @@ function nearBuilt(dim, x, z) {
 
 /** @param {Dimension} dim @param {number} x @param {number} z */
 function scanBuilt(dim, x, z) {
+  const floor = dim.heightRange.min; // superflat: the ground is a few blocks above it, and below it nothing can be read
   for (let dx = -4; dx <= 4; dx++) {
     for (let dz = -4; dz <= 4; dz++) {
       const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
       if (!top) return true;
-      for (let y = top.y; y >= top.y - 4; y--) {
+      for (let y = top.y; y >= Math.max(top.y - 4, floor); y--) {
         const b = dim.getBlock({ x: x + dx, y, z: z + dz });
         if (!b) return true;
         if (BUILT.test(b.typeId)) return true;
@@ -616,8 +618,10 @@ function storm(champ) {
   const at = { x: x + 0.5, y: surf.y + 1, z: z + 0.5 };
   const spawn = world.getDefaultSpawnLocation();
   const nearSpawn = Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn;
-  if (nearSpawn || nearBuilt(dim, x, z)) {
-    // Near builds (or the spawn area) it only crackles: lightning would set them on fire.
+  // Safe zones, land claims and towns are protected: lightning there would start fires and turn villagers into
+  // witches and pigs into piglins.
+  if (nearSpawn || isProtected(dim.id, x + 0.5, z + 0.5) || nearBuilt(dim, x, z)) {
+    // Near builds (or the spawn area, or in a safe zone) it only crackles: lightning would set them on fire.
     dim.playSound("ambient.weather.thunder", at, { volume: 0.6, pitch: 1.4 });
     return;
   }

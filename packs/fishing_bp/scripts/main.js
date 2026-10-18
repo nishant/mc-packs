@@ -1,3 +1,4 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";

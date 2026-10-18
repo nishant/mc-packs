@@ -22,8 +22,21 @@ const NIGHT = /** @type {[number, number]} */ ([13000, 23000]);
 const LATE_NIGHT = /** @type {[number, number]} */ ([18000, 23000]);
 const RING = { "drowned_bell.bell": "ring" };
 const SILENCE = { "drowned_bell.bell": "silence" };
-const KITCHEN = { way: "kitchen" };
+// Hearth and Table's two ways, chosen in "Rations for the Wardens". The new kitchen's dishes exist only while the
+// Kitchen pack (cooking_bp) is installed: a player who chose it and then lost the pack gets the old way's steps
+// (NO_KITCHEN), appended at the end of each chapter's objectives so saved progress keeps its indexes.
+const KITCHEN = { way: "kitchen", "pack:cooking_bp": "on" };
 const OLD_WAY = { way: "old" };
+const NO_KITCHEN = { way: "kitchen", "pack:cooking_bp": "off" };
+/** An old-way page, for the old way and for a new-kitchen player without the Kitchen pack. @param {string} text */
+const plain = (text) => [
+  { text, when: OLD_WAY },
+  { text, when: NO_KITCHEN },
+];
+/** Old-way steps again for a new-kitchen player without the Kitchen pack (see NO_KITCHEN). @param {any[]} list */
+const noKitchen = (list) => list.map((o) => ({ ...o, when: NO_KITCHEN }));
+// Champion's Hearts drop only when the Kitchen pack and the Champions pack (elite_bp) are both installed.
+const HEARTS = { "pack:cooking_bp": "on", "pack:elite_bp": "on" };
 
 /** Every wooden fence (Bedrock ids). */
 const FENCES = [
@@ -356,7 +369,7 @@ const STAR_KITTENS = {
       ],
       objectives: [
         { type: "tame", label: "Tame 2 more stray cats (Draco and Ursa)", mobs: ["minecraft:cat"], count: 2 },
-        { type: "tend", label: "Feed raw fish to 5 of your cats", mobs: ["minecraft:cat"], item: "minecraft:cod", count: 5 },
+        { type: "tend", label: "Feed raw cod to 5 of your cats", mobs: ["minecraft:cat"], item: "minecraft:cod", count: 5 },
         { type: "place", label: "Put 2 beds in Wren's Meadow for the cats", blocks: ["minecraft:bed"], count: 2, place: "meadow", radius: 20 },
       ],
       outro: [
@@ -843,11 +856,15 @@ const HEARTH_AND_TABLE = {
         { type: "deliver", label: "Bring Reyes 12 steak", npc: "reyes", item: "minecraft:cooked_beef", count: 12, when: OLD_WAY },
         { type: "deliver", label: "Bring Reyes 12 bread", npc: "reyes", item: "minecraft:bread", count: 12, when: OLD_WAY },
         { type: "defeat", label: "Fend off 10 zombies drawn by the smell", mobs: ["minecraft:zombie", "minecraft:husk", "minecraft:zombie_villager_v2"], count: 10 },
+        ...noKitchen([
+          { type: "deliver", label: "Bring Reyes 12 steak", npc: "reyes", item: "minecraft:cooked_beef", count: 12 },
+          { type: "deliver", label: "Bring Reyes 12 bread", npc: "reyes", item: "minecraft:bread", count: 12 },
+        ]),
       ],
       outro: [
         `§eWarden Reyes§r opens the basket, breathes in, and for a moment the captain of the wardens looks about nine years old.\n\n${R}Is that... hot food? Actual hot food? For us?`,
         { text: `${R}Bea's rations. Labeled and everything. One of my wardens ate half of one and walked the whole wall twice without stopping. I'm putting in a standing order.`, when: KITCHEN },
-        { text: `${R}Steak and bread. Simple. Honest. Food you can eat with one hand while the other holds a shield. That woman understands soldiers.`, when: OLD_WAY },
+        ...plain(`${R}Steak and bread. Simple. Honest. Food you can eat with one hand while the other holds a shield. That woman understands soldiers.`),
         `${R}My night watch has been eating hardtack so old it has its own rank. Tell Bea she has my gratitude. Tell her I'll stop letting the recruits steal her pies. That's an order. Mostly.`,
       ],
       reward: { levels: 3, crowns: 35, items: [{ item: "minecraft:arrow", amount: 16 }] },
@@ -870,11 +887,12 @@ const HEARTH_AND_TABLE = {
         { type: "deliver", label: "Bring Tobin 2 Harbor Chowders", npc: "tobin", name: "Harbor Chowder", count: 2, when: KITCHEN },
         { type: "deliver", label: "Bring Tobin a Fisherman's Breakfast", npc: "tobin", name: "Fisherman's Breakfast", count: 1, when: KITCHEN },
         { type: "deliver", label: "Bring Tobin 2 rabbit stews", npc: "tobin", item: "minecraft:rabbit_stew", count: 2, when: OLD_WAY },
+        ...noKitchen([{ type: "deliver", label: "Bring Tobin 2 rabbit stews", npc: "tobin", item: "minecraft:rabbit_stew", count: 2 }]),
       ],
       outro: [
         `§eOld Tobin§r looks at the bowl as if it might be a trick.\n\n${T}I'm not hungry.\n\nHe eats the whole thing in under a minute, then scrapes the bowl with his finger.`,
         { text: `${T}...Pepper. Too much pepper. Exactly the right amount of too much pepper. That's ship's chowder, that is. The Saltwife's chowder. Haven't had it in thirty years.`, when: KITCHEN },
-        { text: `${T}...Rabbit. Bea's grandmother's stew, if I know it. Not chowder, but it'll keep a man afloat. I've had worse on better days.`, when: OLD_WAY },
+        ...plain(`${T}...Rabbit. Bea's grandmother's stew, if I know it. Not chowder, but it'll keep a man afloat. I've had worse on better days.`),
         `${T}Tell Bea... tell her thank you. No. Tell her it was adequate. She'll know what I mean. She always knows what I mean, that woman. It's very annoying.`,
         `Back at the inn, when you pass on the message, Bea goes very quiet and pink, then bangs a pot so hard the windows rattle. "ADEQUATE," she bellows. "Did you hear that, everyone? ADEQUATE!" She is smiling for the rest of the day.`,
       ],
@@ -899,6 +917,7 @@ const HEARTH_AND_TABLE = {
         { type: "deliver", label: "Bring Moss a cake for the wake", npc: "moss", item: "minecraft:cake", count: 1, when: OLD_WAY },
         { type: "deliver", label: "Bring Moss 3 pumpkin pies", npc: "moss", item: "minecraft:pumpkin_pie", count: 3 },
         { type: "place", label: "Set 6 candles at the Old Graveyard", blocks: CANDLES, count: 6, place: "graveyard", radius: 16 },
+        ...noKitchen([{ type: "deliver", label: "Bring Moss a cake for the wake", npc: "moss", item: "minecraft:cake", count: 1 }]),
       ],
       outro: [
         `The whole town comes, more than the graveyard holds. They stand along the fence and out into the road, holding candles. §eMoss§r reads the words in his dry, gentle voice and doesn't make a single joke, which is how you know he loved her too.`,
@@ -924,13 +943,16 @@ const HEARTH_AND_TABLE = {
       intro: [
         `§eBea§r slams a letter on the table so hard the spoons jump.\n\n${BE}"Quill the Trader is pleased to announce the arrival of Chef Marcel Duvanne, of the Grand Kitchens of the Far Coast, for a friendly cook-off. The winner feeds the harvest festival." FRIENDLY!`,
         `${BE}Twenty years I've fed this town. And Quill ships in some fancy-trousers chef with a mustache you could moor a boat to. Fine. He wants a cook-off, he'll get one. He'll tell his grandchildren about it. Through tears.`,
-        `${BE}I need what nobody else has. A Champion's Heart: those big ugly champion beasts that roam about drop one when they fall, and it makes a stew that could wake the dead. Two, if you can.`,
+        { text: `${BE}I need what nobody else has. A Champion's Heart: those big ugly champion beasts that roam about drop one when they fall, and it makes a stew that could wake the dead. Two, if you can.`, when: HEARTS },
+        // Without the Kitchen or the Champions pack no champion drops a heart: the story brings its own beast.
+        { text: `${BE}I need what nobody else has. A champion's heart. There's a spider the size of a cart nesting at the old watchtower, Grandmother Gristle, the wardens call her. Bring her down and the heart's mine. It makes a stew that could wake the dead.`, when: { "pack:cooking_bp": "off" } },
+        { text: `${BE}I need what nobody else has. A champion's heart. There's a spider the size of a cart nesting at the old watchtower, Grandmother Gristle, the wardens call her. Bring her down and the heart's mine. It makes a stew that could wake the dead.`, when: { "pack:cooking_bp": "on", "pack:elite_bp": "off" } },
         `${BE}And Storm Eel. Old sailor's secret: any fish pulled out of the water in a thunderstorm tastes of lightning. Get out there in the next storm and fish. Wear something rubber. That's a joke. Mostly.`,
         { text: `${BE}Don't stand there waiting for clouds. The almanac will tell you when the next storm's due. Look it up. Then be at the lighthouse when it comes.\n\n§7(/realm:weather_forecast shows when the next thunderstorm comes.)`, when: { "pack:weather_bp": "on" } },
         { text: `${BE}Oh, and if you're out on a Harvest Moon night, pick me some Harvest Saffron off the ripe crops. A harvest festival dish with harvest saffron in it. Marcel's mustache will fall right off.`, when: { "pack:cooking_bp": "on", "pack:moon_bp": "on" } },
       ],
       objectives: [
-        { type: "collect", label: "Get 2 Champion's Hearts from fallen champions", name: "Champion's Heart", count: 2 },
+        { type: "collect", label: "Get 2 Champion's Hearts from fallen champions", name: "Champion's Heart", count: 2, when: HEARTS },
         { type: "survive", label: "Stay out at the lighthouse in a thunderstorm", place: "lighthouse", radius: 48, seconds: 90, weather: "thunder" },
         { type: "fish", label: "Catch 3 Storm Eels (any fish, best in a storm)", count: 3 },
         {
@@ -946,9 +968,31 @@ const HEARTH_AND_TABLE = {
           bonus: { levels: 1, crowns: 30, items: [{ item: "minecraft:golden_carrot", amount: 4 }] },
           hint: "Harvest Saffron only drops from ripe crops broken during a Harvest Moon (the Kitchen says so in chat when one rises). Bring one to Bea before you finish the chapter.",
         },
+        // The story's own champion when no champion drops a heart (two members so a `when` can say "either pack is missing").
+        { ...{
+          type: "defeat",
+          label: "Bring down Grandmother Gristle at the Ruined Watchtower",
+          place: "watchtower",
+          radius: 40,
+          count: 1,
+          set: { heart: "gristle" },
+          champion: { tag: "realm:saga:gristle", mob: "minecraft:spider", name: "Grandmother Gristle", health: 40, warn: "Something the size of a cart unfolds from the tower stones. Grandmother Gristle!", adds: { mobs: ["minecraft:spider"], count: 2 } },
+          hint: "Grandmother Gristle nests at the Ruined Watchtower; the tracker points the way, and she comes out when you get close. Bring a sword, armor and food: two ordinary spiders come with her.",
+        }, when: { "pack:cooking_bp": "off" } },
+        { ...{
+          type: "defeat",
+          label: "Bring down Grandmother Gristle at the Ruined Watchtower",
+          place: "watchtower",
+          radius: 40,
+          count: 1,
+          set: { heart: "gristle" },
+          champion: { tag: "realm:saga:gristle", mob: "minecraft:spider", name: "Grandmother Gristle", health: 40, warn: "Something the size of a cart unfolds from the tower stones. Grandmother Gristle!", adds: { mobs: ["minecraft:spider"], count: 2 } },
+          hint: "Grandmother Gristle nests at the Ruined Watchtower; the tracker points the way, and she comes out when you get close. Bring a sword, armor and food: two ordinary spiders come with her.",
+        }, when: { "pack:cooking_bp": "on", "pack:elite_bp": "off" } },
       ],
       outro: [
-        `${BE}Two hearts! Look at them. Still warm. Don't tell me how, I don't want to know, I just want to cook them.\n\nShe holds one up to the window like a jewel.`,
+        { text: `${BE}Two hearts! Look at them. Still warm. Don't tell me how, I don't want to know, I just want to cook them.\n\nShe holds one up to the window like a jewel.`, when: { heart: "!gristle" } },
+        { text: `${BE}Grandmother Gristle's heart! Look at it. Still warm. Don't tell me how, I don't want to know, I just want to cook it.\n\nShe holds it up to the window like a jewel.`, when: { heart: "gristle" } },
         `${BE}And storm fish! I can smell the lightning on them. That's not a real thing. It's completely a real thing. Don't argue with the cook, sailor. The cook has knives.`,
         { text: `${BE}And SAFFRON. Off a Harvest Moon field. Sailor, I could kiss you. I won't. I'm holding a cleaver.`, when: { saffron: "yes" } },
         `${BE}Now all I need is a secret. Something Marcel Mustache can't buy on the Far Coast. And I know exactly who has one, and she's been hiding it from me for twenty years.`,
@@ -956,7 +1000,7 @@ const HEARTH_AND_TABLE = {
         { text: `${BE}And Quill's doing this from a warden cell, if you can believe it. Booked the chef by letter. Paid in advance, too, the cheek of it. You can lock up a trader, sailor, but you can't lock up the trade.`, when: { "g:quill": "exposed" } },
       ],
       reward: { levels: 4, crowns: 45, items: [{ item: "minecraft:golden_carrot", amount: 6 }] },
-      hint: "Champions are the tougher, named monsters that roam the realm; with the Cooking pack installed, each drops a Champion's Heart when it falls. Wait for a thunderstorm and stay outdoors within 48 blocks of the lighthouse for 90 seconds. Any 3 fish count.",
+      hint: "Champions are the tougher, named monsters that roam the realm; with the Cooking pack installed, each drops a Champion's Heart when it falls; without the Kitchen and Champions packs, Grandmother Gristle at the Ruined Watchtower stands in for the hearts. Wait for a thunderstorm and stay outdoors within 48 blocks of the lighthouse for 90 seconds. Any 3 fish count.",
     },
     {
       id: "starwright",
@@ -982,6 +1026,10 @@ const HEARTH_AND_TABLE = {
         { type: "deliver", label: "Bake Starwright Bread and bring Elsie a loaf", npc: "elsie", name: "Starwright Bread", count: 1, when: KITCHEN },
         { type: "deliver", label: "Bake it the old way: bring Elsie 6 bread", npc: "elsie", item: "minecraft:bread", count: 6, when: OLD_WAY },
         { type: "deliver", label: "...and 2 honey bottles", npc: "elsie", item: "minecraft:honey_bottle", count: 2, when: OLD_WAY },
+        ...noKitchen([
+          { type: "deliver", label: "Bake it the old way: bring Elsie 6 bread", npc: "elsie", item: "minecraft:bread", count: 6 },
+          { type: "deliver", label: "...and 2 honey bottles", npc: "elsie", item: "minecraft:honey_bottle", count: 2 },
+        ]),
       ],
       outro: [
         "Elsie breaks the loaf. It's dark gold, flecked with something that glimmers faintly, and the smell fills the inn: honey and woodsmoke and something cold and clean, like the air on a high hill at night.",
@@ -1006,8 +1054,9 @@ const HEARTH_AND_TABLE = {
       end: "bram",
       intro: [
         "The whole town has turned out at Wren's Meadow, the only place big enough. Wren has strung bunting between the fence posts. Two cooking fires, two long tables, and Mayor Bram between them on a hay bale, wearing a napkin like a cape and an expression of total joy.",
-        { text: `${BE}This is it, sailor. Champion's Heart Stew, a Glow Berry Tart or two, and the Starwright loaf on the side for luck. You did the hunting and the hauling. Today we cook like the ship's sinking and the captain's hungry.`, when: KITCHEN },
-        { text: `${BE}This is it, sailor. Rabbit stew the way my grandmother made it, and a heap of golden carrots so shiny Bram will need a hat. Plain food, cooked perfectly. That's what wins.`, when: OLD_WAY },
+        { text: `${BE}This is it, sailor. Champion's Heart Stew, a Glow Berry Tart or two, and the Starwright loaf on the side for luck. You did the hunting and the hauling. Today we cook like the ship's sinking and the captain's hungry.`, when: { ...KITCHEN, "pack:elite_bp": "on" } },
+        { text: `${BE}This is it, sailor. My grandmother's rabbit stew, a Glow Berry Tart or two, and the Starwright loaf on the side for luck. You did the hunting and the hauling. Today we cook like the ship's sinking and the captain's hungry.`, when: { ...KITCHEN, "pack:elite_bp": "off" } },
+        ...plain(`${BE}This is it, sailor. Rabbit stew the way my grandmother made it, and a heap of golden carrots so shiny Bram will need a hat. Plain food, cooked perfectly. That's what wins.`),
         { text: `§eQuill§r leans on the fence, grinning.\n\n${Q}Friendly competition, friend. Good for business. Good for morale. Very good for ticket sales.`, when: { "g:quill": "!exposed" } },
         { text: `A letter came for Bea this morning from the warden lockup, in Quill's handwriting: "Couldn't come. Detained. Enjoy the show. -Q." Reyes stands guard by the chef's table, just in case.`, when: { "g:quill": "exposed" } },
         `${BE}Go and say hello to the competition. Be polite. Then come back and help me crush him like a garlic clove.`,
@@ -1030,15 +1079,22 @@ const HEARTH_AND_TABLE = {
           ],
         },
         // Dishes from the Cooking pack: `name` is what the delivery checks.
-        { type: "deliver", label: "Serve Mayor Bram a Champion's Heart Stew", npc: "bram", name: "Champion's Heart Stew", count: 1, when: KITCHEN },
+        { type: "deliver", label: "Serve Mayor Bram a Champion's Heart Stew", npc: "bram", name: "Champion's Heart Stew", count: 1, when: { ...KITCHEN, "pack:elite_bp": "on" } },
         { type: "deliver", label: "Serve Mayor Bram 2 Glow Berry Tarts", npc: "bram", name: "Glow Berry Tart", count: 2, when: KITCHEN },
         { type: "deliver", label: "Serve Mayor Bram 2 rabbit stews", npc: "bram", item: "minecraft:rabbit_stew", count: 2, when: OLD_WAY },
         { type: "deliver", label: "Serve Mayor Bram 8 golden carrots", npc: "bram", item: "minecraft:golden_carrot", count: 8, when: OLD_WAY },
+        ...noKitchen([
+          { type: "deliver", label: "Serve Mayor Bram 2 rabbit stews", npc: "bram", item: "minecraft:rabbit_stew", count: 2 },
+          { type: "deliver", label: "Serve Mayor Bram 8 golden carrots", npc: "bram", item: "minecraft:golden_carrot", count: 8 },
+        ]),
+        // No Champions pack: no hearts to make the stew with, so a plain stew stands in for it.
+        { type: "deliver", label: "Serve Mayor Bram 2 rabbit stews", npc: "bram", item: "minecraft:rabbit_stew", count: 2, when: { ...KITCHEN, "pack:elite_bp": "off" } },
       ],
       outro: [
         "§eMayor Bram§r tastes Marcel's dish first. It is a fish finger. A very large fish finger, on a silver plate, with a sprig of parsley. Bram chews politely, then reaches for your bowl.",
-        { text: `${BR}Oh. Oh my. Oh, my word. Is this the heart stew? I can feel it in my knees. I can feel it in my HAT. And this tart is glowing, it's actually glowing! Bea, I'm sorry I ever called your gravy "brave."`, when: KITCHEN },
-        { text: `${BR}Oh. Oh my. Now THIS is rabbit stew. The stew my mother made when I had a cold. And these carrots! I can see my face in them! I look wonderful!`, when: OLD_WAY },
+        { text: `${BR}Oh. Oh my. Oh, my word. Is this the heart stew? I can feel it in my knees. I can feel it in my HAT. And this tart is glowing, it's actually glowing! Bea, I'm sorry I ever called your gravy "brave."`, when: { ...KITCHEN, "pack:elite_bp": "on" } },
+        { text: `${BR}Oh. Oh my. Oh, my word. Rabbit stew, the way my mother made it. And this tart is glowing, it's actually glowing! Bea, I'm sorry I ever called your gravy "brave."`, when: { ...KITCHEN, "pack:elite_bp": "off" } },
+        ...plain(`${BR}Oh. Oh my. Now THIS is rabbit stew. The stew my mother made when I had a cold. And these carrots! I can see my face in them! I look wonderful!`),
         `${BR}The winner, by a margin I can only call humiliating, and I say that with love: Bea and her kitchen hand! They feed the harvest festival!\n\nBea lifts you clean off the ground in a hug that smells of pepper and smoke.`,
         { text: `Marcel, or rather Marty, peels off his mustache and sighs.\n\n§eMarty:§r Fair cop. Cousin Quill said nobody here would know a real chef. I do a good fish finger, though. Third stall from the left. Ask anyone.`, when: { marcel: "called" } },
         { text: `Marcel bows deeply to Bea, and his mustache falls off into the parsley. There is a long silence.\n\n§eMarcel:§r ...Marty. It's Marty. I do fish fingers. Cousin Quill said it would be fun.`, when: { marcel: "quiet" } },
@@ -1070,7 +1126,7 @@ const HEARTH_AND_TABLE = {
         journal: { entry: "hearth_and_table", label: "Hearth and Table" },
       },
       rep: [{ guild: "growers", amount: 20 }],
-      hint: "Wren's Meadow is near world spawn; meet Chef Marcel there. Then serve Mayor Bram: a Champion's Heart Stew and 2 Glow Berry Tarts from the Cooking pack's kitchen, or, the old way, 2 rabbit stews and 8 golden carrots.",
+      hint: "Wren's Meadow is {band:meadow} blocks from spawn; the tracker points the way. Meet Chef Marcel there. Then serve Mayor Bram: a Champion's Heart Stew (2 rabbit stews without the Champions pack) and 2 Glow Berry Tarts from the Cooking pack's kitchen, or, the old way, 2 rabbit stews and 8 golden carrots.",
     },
   ],
 };

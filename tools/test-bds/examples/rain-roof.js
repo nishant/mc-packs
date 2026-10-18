@@ -4,11 +4,15 @@
 //   mkdir -p /tmp/rr && rm -rf /tmp/rr/rain_bp && cp -r packs/rain_bp /tmp/rr/
 //   cat >> /tmp/rr/rain_bp/scripts/main.js <<'HOOK'
 //   const __stops = new Map();
-//   const __run = Player.prototype.runCommand;
-//   Player.prototype.runCommand = function (cmd) {
-//     if (cmd === "stopsound @s ambient.weather.rain") __stops.set(this.name, (__stops.get(this.name) ?? 0) + 1);
-//     return __run.call(this, cmd);
-//   };
+//   system.run(() => {
+//     const __dim = Object.getPrototypeOf(world.getDimension("overworld"));
+//     const __run = __dim.runCommand;
+//     __dim.runCommand = function (cmd) {
+//       if (cmd === "stopsound @a[tag=realm:rain_muffled] ambient.weather.rain")
+//         for (const p of world.getAllPlayers()) if (p.hasTag("realm:rain_muffled")) __stops.set(p.name, (__stops.get(p.name) ?? 0) + 1);
+//       return __run.call(this, cmd);
+//     };
+//   });
 //   system.afterEvents.scriptEventReceive.subscribe(({ id }) => {
 //     if (id === "rrtest:stops") system.sendScriptEvent("rrtest:stops_r", JSON.stringify(Object.fromEntries(__stops)));
 //   }, { namespaces: ["rrtest"] });

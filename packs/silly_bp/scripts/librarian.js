@@ -378,6 +378,7 @@ export function handleVillagerInteract(player, target, itemStack, hooks = {}) {
  */
 export function initLibrarianBookLock(hooks = {}) {
   world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+    if (ev.cancel) return; // another pack refused the tap
     try {
       if (handleVillagerInteract(ev.player, ev.target, ev.itemStack, hooks)) {
         ev.cancel = true;

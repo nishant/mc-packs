@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   ButtonState,
   CommandPermissionLevel,
@@ -21,7 +22,8 @@ const DOLPHIN = "minecraft:dolphin";
 const FISH = new Set(["minecraft:cod", "minecraft:salmon"]);
 const PROP_OWNER = "dolphin:owner"; // dolphin: owner's player id
 const PROP_OWNER_NAME = "dolphin:ownerName"; // dolphin: owner's name when tamed
-const PROP_INDEX = "dolphin:index"; // world: JSON { [entity id]: Known }
+const PROP_INDEX = "dolphin:index"; // world (older worlds): JSON { [entity id]: Known } of every dolphin; split into PROP_OWNED on load
+const PROP_OWNED = "dolphin:idx:"; // world: + owner's player id, JSON { [entity id]: Known } of that player's dolphins (maxPerPlayer, a few hundred chars)
 const PROP_TAMED = "dolphin:tamedCount"; // player: dolphins tamed ever
 const TAME_EVENT = "realm:dolphin_tame";
 const RELEASE_EVENT = "realm:dolphin_release";
@@ -59,18 +61,83 @@ const nameOf = (e) => (e.nameTag ? e.nameTag : "your dolphin");
 // The index of tamed dolphins (for lists while they're far away)
 // ---------------------------------------------------------------------------
 
-/** @returns {Record<string, Known>} */
-function index() {
+// One world property per owner, so the index never meets the 32 KB limit of one property however many players tame
+// dolphins (one shared property stopped taming for everyone at about 300 dolphins). Kept in memory once read; a save
+// writes only the owners whose entries changed.
+
+/** @type {Map<string, Known> | undefined} entity id -> what we know of it */
+let known;
+/** @type {Map<string, string>} owner id -> the JSON last written for them */
+const written = new Map();
+
+/** @param {unknown} v @returns {v is Known} */
+const isKnown = (v) => !!v && typeof v === "object" && typeof (/** @type {any} */ (v).o) === "string";
+
+/** Reads the index (and splits an older world's single property into per-owner ones). @returns {Map<string, Known>} */
+function loadKnown() {
+  if (known) return known;
+  const ids = world.getDynamicPropertyIds(); // may throw (too early): then `known` stays unset and the next call reads again
+  known = new Map();
+  for (const key of ids) {
+    if (!key.startsWith(PROP_OWNED)) continue;
+    try {
+      const raw = world.getDynamicProperty(key);
+      const v = typeof raw === "string" ? JSON.parse(raw) : {};
+      for (const [id, k] of Object.entries(v && typeof v === "object" ? v : {})) if (isKnown(k)) known.set(id, k);
+      if (typeof raw === "string") written.set(key.slice(PROP_OWNED.length), raw);
+    } catch {
+      // a damaged entry: that owner's list starts over (the dolphins themselves keep their owner)
+    }
+  }
   try {
     const raw = world.getDynamicProperty(PROP_INDEX);
-    const v = typeof raw === "string" ? JSON.parse(raw) : {};
-    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
+    if (typeof raw === "string") {
+      const v = JSON.parse(raw);
+      for (const [id, k] of Object.entries(v && typeof v === "object" && !Array.isArray(v) ? v : {})) if (isKnown(k) && !known.has(id)) known.set(id, k);
+      if (writeKnown()) world.setDynamicProperty(PROP_INDEX, undefined); // kept until every owner's part is written
+    }
+  } catch (e) {
+    console.warn(`[dolphin] index: ${e}`);
   }
+  return known;
+}
+
+/** Writes the owners whose entries changed. @returns {boolean} false when a write failed */
+function writeKnown() {
+  if (!known) return true;
+  let ok = true;
+  /** @type {Map<string, Record<string, Known>>} */
+  const byOwner = new Map();
+  for (const [id, k] of known) {
+    let rec = byOwner.get(k.o);
+    if (!rec) byOwner.set(k.o, (rec = {}));
+    rec[id] = k;
+  }
+  for (const owner of new Set([...written.keys(), ...byOwner.keys()])) {
+    const rec = byOwner.get(owner);
+    const json = rec ? JSON.stringify(rec) : undefined;
+    if (json === written.get(owner)) continue;
+    try {
+      world.setDynamicProperty(PROP_OWNED + owner, json);
+      if (json === undefined) written.delete(owner);
+      else written.set(owner, json);
+    } catch (e) {
+      console.warn(`[dolphin] save ${owner}: ${e}`);
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+/** Every tamed dolphin we know of (the entries are live: change one, then saveIndex). @returns {Record<string, Known>} */
+function index() {
+  return Object.fromEntries(loadKnown());
 }
 /** @param {Record<string, Known>} idx */
-const saveIndex = (idx) => world.setDynamicProperty(PROP_INDEX, Object.keys(idx).length ? JSON.stringify(idx) : undefined);
+const saveIndex = (idx) => {
+  known = new Map(Object.entries(idx));
+  writeKnown();
+};
 
 /** @param {Entity} e @param {string} owner @param {string} ownerName */
 function remember(e, owner, ownerName) {

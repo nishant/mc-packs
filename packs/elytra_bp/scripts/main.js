@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   CommandPermissionLevel,
   CustomCommandParamType,
@@ -294,7 +295,7 @@ function triggerNosRocket(player) {
   if (!player.isGliding || player.isOnGround) {
     lastNosTick.set(player.id, now);
     try {
-      player.onScreenDisplay.setActionBar("§bNOS Rocket: §7use while gliding with an elytra");
+      announceDisc(player, "§bNOS Rocket: §7use while gliding with an elytra");
     } catch {
       // ignore display error
     }
@@ -464,7 +465,7 @@ function consumeRunAwayDisc(player) {
   return false;
 }
 
-/** @param {Player} player @param {string} text */
+/** A note above the hotbar, after its realm:actionbar request. @param {Player} player @param {string} text */
 function announceDisc(player, text) {
   system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: 60, from: "elytra_bp" }));
   player.onScreenDisplay.setActionBar(text);
@@ -488,6 +489,7 @@ function insertDisc(player, block) {
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+  if (event.cancel) return; // another pack refused the tap (someone else's land claim): the disc stays in
   const block = event.block;
   if (block.typeId !== "minecraft:jukebox") return;
   const player = event.player;
@@ -524,7 +526,7 @@ function togglePortableDisc(player) {
     if (started !== undefined && now - started < DISC_DURATION_TICKS) {
       personalDiscPlaying.delete(player.id);
       stopDiscSounds(player);
-      player.onScreenDisplay.setActionBar("§7Stopped: §fRun Away");
+      announceDisc(player, "§7Stopped: §fRun Away");
     } else {
       personalDiscPlaying.set(player.id, now);
       player.playSound(DISC_SOUND_2D, { volume: 0.85, pitch: 1.0 });

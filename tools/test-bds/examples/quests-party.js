@@ -16,7 +16,8 @@ export default async function (t) {
     t.cmd(p, "/realm:quests");
     const form = await menu;
     form.answer(null);
-    const m = /Defeat 10 zombies[\s\S]*?(\d+)\/10/.exec(`${form.body} ${form.buttons.join(" ")}`.replace(/§./g, ""));
+    // Under way the label counts down ("Defeat 8 more zombies"), so match both forms.
+    const m = /Defeat (?:10|\d+ more) zombies[\s\S]*?(\d+)\/10/.exec(`${form.body} ${form.buttons.join(" ")}`.replace(/§./g, ""));
     return m ? Number(m[1]) : -1;
   };
 

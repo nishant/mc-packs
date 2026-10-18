@@ -7,6 +7,22 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## A smoother server for big crowds
+
+- Busy servers run much smoother: the minimap, the story tracker, inventory pages, Easy Building and the townsfolk name labels now cost the server a small part of what they did. With many players moving at once the minimap may update a moment later; players outside your party show within 128 blocks.
+- Expansive Inventory pages now work in the Nether and the End.
+- A dish in the cooking pot is no longer lost if the server restarts while it cooks.
+- Tornadoes no longer drop you to your death: Slow Falling now lasts until you land.
+- Expeditions: the clock counts game time, so lag no longer eats your time. Turned away because every dungeon was busy? You get a message when one is free.
+- Hearth and Table can be finished without the Kitchen or Champions pack: Bea sends you after Grandmother Gristle. Story build steps count every color of candle, glass and sapling.
+- In a party, Track this quest also works on a quest you already track, and wave notes no longer replace the quest box.
+- Parties, community goals and tamed dolphins keep saving however many a big server has. Realm Mail: type the name of anyone not in the To list.
+- Nicknames can't copy an offline player's gamertag. Closing My preferences with X just says so in chat. Lag Cleanup keeps dropped bundles. A Stormcaller's lightning no longer strikes inside safe zones, claims or towns.
+- The town talks about more now: reached goals, top milestones, bounties, treasure, caravans, tornado rides and storm hauls. Goal donors get thank-you letters, and there are new titles (Pillar of ..., Miner III, Bounty Hunter). A Blood Moon is one piece of news now, not one per survivor.
+- Away when a town project was finished? The town sends you a letter saying your Crowns wait for you.
+- Operators: Set up this world (Operator Tools, or /realm:admin_setup) walks a new world's setup step by step. Server size switches the settings that matter between a small Realm and a big server in one go, after showing every change.
+- Operators: Pack diagnostics (Operator Tools, or /realm:diag) shows how much script time and saved data each pack uses, and can make one pack forget its saved data before you remove it.
+
 ## Hotbar refill reaches every inventory page
 
 - Used your last rocket (or block, food, pearl...) in the hotbar? If the inventory page you're on has no more, Hotbar Refill now takes the fullest matching stack from your other inventory pages, and the bar says which page it came from.

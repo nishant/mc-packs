@@ -15,10 +15,22 @@ export function lockActionBar(playerId, durationMs) {
     } catch {}
 }
 
+/** player id -> tick of the last steady realm:actionbar request (each asks for `ticks`; resent a third of the way in) */
+const steadySent = new Map();
+
 export function notifySteadyActionBar(playerId, ticks = 30) {
+    const now = system.currentTick;
+    if (now - (steadySent.get(playerId) ?? -Infinity) < Math.max(1, Math.floor(ticks / 3))) return;
+    steadySent.set(playerId, now);
     try {
         system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: playerId, ticks, from: PACK, steady: STEADY }));
     } catch {}
+}
+
+/** A redrawn (steady) line above the hotbar: announced with the action bar protocol, then shown. */
+export function steadyBar(player, text) {
+    notifySteadyActionBar(player.id, 30);
+    player.onScreenDisplay.setActionBar(text);
 }
 
 export function isActionBarLocked(playerId) {
@@ -43,6 +55,7 @@ export function isExternallyLocked(playerId) {
 
 export function cleanupActionBar(playerId) {
     locks.delete(playerId);
+    steadySent.delete(playerId);
     externalLocks.delete(playerId);
 }
 

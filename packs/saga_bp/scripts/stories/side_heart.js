@@ -24,7 +24,8 @@ const NIGHT = /** @type {[number, number]} */ ([13000, 23000]);
 const MIDNIGHT = /** @type {[number, number]} */ ([17000, 20000]);
 const SQUARE = { x: 10, z: -14 };
 const FLOWERS = ["minecraft:poppy", "minecraft:dandelion", "minecraft:cornflower", "minecraft:oxeye_daisy", "minecraft:azure_bluet", "minecraft:allium", "minecraft:lily_of_the_valley", "minecraft:blue_orchid"];
-const CANDLES = ["minecraft:candle", "minecraft:white_candle", "minecraft:light_gray_candle", "minecraft:gray_candle", "minecraft:yellow_candle", "minecraft:orange_candle", "minecraft:red_candle", "minecraft:blue_candle"];
+/** Every candle color: any candle a player places counts. */
+const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 const NIGHT_MOBS = ["minecraft:zombie", "minecraft:skeleton", "minecraft:spider", "minecraft:creeper", "minecraft:husk", "minecraft:stray", "minecraft:drowned"];
 
 /** @type {Story} */
@@ -870,7 +871,7 @@ const MOSS = {
         `${MO}Stand watch in my yard one night. Put down whatever climbs out. Let them see you protect them. Maybe they'll come round. I did, mostly.`,
       ],
       objectives: [{ type: "defeat", label: "Defeat 5 monsters at the Old Graveyard at night", mobs: NIGHT_MOBS, count: 5, night: true, place: "graveyard", radius: 32 }],
-      outro: [`${MO}Mrs. Abernathy says you'll do. Old Pell wants it on record he still doesn't like you. Noted, Pell.`],
+      outro: [`${MO}Mrs. Abernathy says you'll do. Old Grimsby wants it on record he still doesn't like you. Noted, Grimsby.`],
       reward: { levels: 2, crowns: 20 },
       hint: "Defeat 5 monsters within 32 blocks of the Old Graveyard at night.",
     },
@@ -1042,7 +1043,7 @@ const BEA = {
       id: "galley",
       title: "Galley Hands",
       intro: [
-        `${BE}Last night on the Marigold. Twenty years ago. We'd come through a gale off the Serpent Rocks and everyone was alive and I cooked for sixty like it was a wedding. Best supper of my life.`,
+        `${BE}Last night on the Saltwife. Twenty years ago. We'd come through a gale off the Serpent Rocks and everyone was alive and I cooked for sixty like it was a wedding. Best supper of my life.`,
         `${BE}I want to cook it again. Once. Fish pie, potato bread, cocoa pudding. First, the basics. Cod and potatoes, eight each. Good ones. I'll know.`,
         { text: `${BE}Marty's chopping for me now. He cries at every onion. He's going to cry so much at this.`, when: { "hearth_and_table.marty": "hired" } },
       ],
@@ -1066,7 +1067,7 @@ const BEA = {
         { type: "fish", label: "Catch 5 salmon", items: ["minecraft:salmon"], count: 5 },
         { type: "deliver", label: "Bring Bea 3 cocoa beans", npc: "bea", item: "minecraft:cocoa_beans", count: 3 },
       ],
-      outro: [`${BE}Oh, these fought. I can tell. Look at the color. We're nearly there, sailor. Nearly at the Marigold.`],
+      outro: [`${BE}Oh, these fought. I can tell. Look at the color. We're nearly there, sailor. Nearly at the Saltwife.`],
       reward: { levels: 4, crowns: 40 },
       hint: "Salmon bite in rivers and cold oceans. Cocoa beans grow on jungle trees.",
     },
@@ -1082,13 +1083,13 @@ const BEA = {
       ],
       outro: [
         "Supper is loud. Tobin tells the Gnasher story. Reyes sits down, and then is too full to stand up. Elsie hums. Bea stands at the head of the table with her ladle like a captain on a deck, and for an hour the inn is a ship that made it through the storm.",
-        `${BE}There. That's the Marigold's supper. I'll never cook it again. Once is right. Here. My good ladle. NOBODY touches my good ladle. You do now. Don't make me regret it, sailor.`,
+        `${BE}There. That's the Saltwife's supper. I'll never cook it again. Once is right. Here. My good ladle. NOBODY touches my good ladle. You do now. Don't make me regret it, sailor.`,
       ],
       reward: {
         levels: 5,
         crowns: 60,
         items: [{ item: "minecraft:bowl", amount: 1, name: "Bea's Good Ladle", lore: ["NOBODY touches it.", "Except you."] }],
-        codex: { id: "marigold_supper", title: "The Marigold's Supper", text: "Bea's last night at sea, on the Marigold, after a gale off the Serpent Rocks, she cooked for sixty like it was a wedding. Twenty years later she cooked it once more, for the crew she has now, and gave away her good ladle." },
+        codex: { id: "marigold_supper", title: "The Saltwife's Supper", text: "Bea's last night at sea, on the Saltwife, after a gale off the Serpent Rocks, she cooked for sixty like it was a wedding. Twenty years later she cooked it once more, for the crew she has now, and gave away her good ladle." },
       },
       hint: "Talk to Old Tobin, Elsie and Warden Reyes, then go back to Bea.",
     },

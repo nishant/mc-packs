@@ -1,3 +1,4 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Player, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -121,6 +122,13 @@ function dataOf(player) {
   return data;
 }
 
+/**
+ * Players whose deepest, highest or farthest changed since their journal was last saved: those numbers change all the
+ * time while exploring, so they're saved with the next entry, within 30 seconds, or as the player leaves.
+ * @type {Set<string>}
+ */
+const numbersDirty = new Set();
+
 /** Saves the journal; false if it couldn't (too big for one property). @param {Player} player @param {Data} data */
 function save(player, data) {
   cache.set(player.id, data);
@@ -128,6 +136,7 @@ function save(player, data) {
   if (json.length > SAVE_LIMIT) return false;
   try {
     player.setDynamicProperty(PROP_DATA, json);
+    numbersDirty.delete(player.id);
     return true;
   } catch (e) {
     console.warn(`[journal] save: ${e}`);
@@ -135,9 +144,32 @@ function save(player, data) {
   }
 }
 
+// Player properties can still be written while the player leaves.
+world.beforeEvents.playerLeave.subscribe(({ player }) => {
+  try {
+    const data = cache.get(player.id);
+    if (data && numbersDirty.has(player.id)) save(player, data);
+  } catch (e) {
+    console.warn(`[journal] save on leave: ${e}`);
+  }
+});
+system.runInterval(() => {
+  if (!numbersDirty.size) return;
+  for (const player of world.getAllPlayers()) {
+    const data = cache.get(player.id);
+    try {
+      if (data && numbersDirty.has(player.id)) save(player, data);
+    } catch (e) {
+      console.warn(`[journal] ${e}`);
+    }
+  }
+}, 600);
+
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  numbersDirty.delete(playerId);
   cache.delete(playerId);
   firstNote.delete(playerId);
+  lastSpot.delete(playerId);
 });
 
 /** @param {Data} data @param {Page} page */
@@ -209,6 +241,8 @@ const firstNote = new Set();
  * @param {Player} player @param {string} pageId @param {string} entry @param {string} [label]
  */
 function addEntry(player, pageId, entry, label) {
+  // Most calls are for an entry the player has already (the places they stand in): that answer comes first.
+  if (cache.get(player.id)?.e[pageId]?.includes(entry)) return false;
   if (get("enabled") !== true || !player.isValid) return false;
   const p = pages.get(pageId);
   if (!p || !ENTRY_ID.test(entry)) return false;
@@ -343,11 +377,32 @@ function blockAt(dimension, at) {
   }
 }
 
-/** @param {Player} player */
-function explore(player) {
+/**
+ * Where each player was last looked at ("dim x,y,z") and how far under the surface they were: a player still on that
+ * block finds nothing new there but weather, so the block lookups are skipped.
+ * @type {Map<string, { spot: string, headroom: number }>}
+ */
+const lastSpot = new Map();
+
+/** Rain and thunder the player is out in. @param {Player} player @param {number} headroom blocks of ground over their feet */
+function weatherOver(player, headroom) {
+  if (weather !== WeatherType.Clear && headroom <= DEEP_SKY) {
+    addEntry(player, "weather", "rain");
+    if (weather === WeatherType.Thunder) addEntry(player, "weather", "thunderstorm");
+  }
+}
+
+/** @param {Player} player @param {import("@minecraft/server").Vector3} spawn the world spawn */
+function explore(player, spawn) {
   const dim = player.dimension;
   const loc = player.location;
   const x = Math.floor(loc.x), y = Math.floor(loc.y), z = Math.floor(loc.z);
+  const spot = `${dim.id} ${x},${y},${z}`;
+  const last = lastSpot.get(player.id);
+  if (last?.spot === spot) {
+    if (dim.id === OVERWORLD) weatherOver(player, last.headroom);
+    return;
+  }
   const dimName = DIMENSIONS[/** @type {keyof DIMENSIONS} */ (dim.id)];
   if (dimName) addEntry(player, "places", dimName);
   const overworld = dim.id === OVERWORLD;
@@ -365,7 +420,6 @@ function explore(player) {
   }
   let far = 0;
   if (overworld) {
-    const spawn = world.getDefaultSpawnLocation();
     far = Math.floor(Math.hypot(loc.x - spawn.x, loc.z - spawn.z));
     if (data.far === undefined || far > data.far + 9) {
       // saved in steps of 10 blocks, so walking away doesn't save every 2 seconds
@@ -373,7 +427,7 @@ function explore(player) {
       changed = true;
     }
   }
-  if (changed) save(player, data);
+  if (changed) numbersDirty.add(player.id);
   if (overworld) {
     if (y < 0) addEntry(player, "places", "below_0");
     if (y < -55) addEntry(player, "places", "bottom");
@@ -390,14 +444,17 @@ function explore(player) {
     top = undefined;
   }
   const headroom = top ? top.location.y - y : Infinity; // how far the surface is over the player's feet
+  lastSpot.set(player.id, { spot, headroom });
   const nearSurface = top !== undefined && headroom >= -3 && headroom <= 16;
-  const under = blockAt(dim, { x, y: y - 1, z });
-  const feet = blockAt(dim, { x, y, z });
+  // Each block's id read once (every read is a call into the game), not once per biome rule.
+  const topId = nearSurface && top ? top.typeId : undefined;
+  const underId = blockAt(dim, { x, y: y - 1, z })?.typeId;
+  const feetId = blockAt(dim, { x, y, z })?.typeId;
   for (const b of biomes) {
     if (b.dim && b.dim !== dim.id) continue;
     if (b.maxY !== undefined && y > b.maxY) continue;
     if (b.minY !== undefined && y < b.minY) continue;
-    const hit = b.at === "top" ? nearSurface && top && b.set.has(top.typeId) : (under && b.set.has(under.typeId)) || (feet && b.set.has(feet.typeId));
+    const hit = b.at === "top" ? topId !== undefined && b.set.has(topId) : (underId !== undefined && b.set.has(underId)) || (feetId !== undefined && b.set.has(feetId));
     if (hit) {
       addEntry(player, "places", b.entry);
       break;
@@ -405,40 +462,59 @@ function explore(player) {
   }
   // The ocean: deep water at the player's height. getTopmostBlock skips water (it answers the sea bed), so
   // climb from the bed to the water's surface.
-  if (overworld && top) {
+  // Only over a sea bed: on land the topmost block is right under the player's feet (as it is for a diver standing on
+  // the bed, so there the water at their feet counts).
+  if (overworld && top && (headroom < -1 || (headroom === -1 && feetId !== undefined && /water|kelp|seagrass/.test(feetId)))) {
     let s = top;
     try {
+      let sId = "";
       for (let i = 0; i < 64; i++) {
         const up = s.above();
-        if (!up || !(up.isLiquid || /water|kelp|seagrass|bubble_column/.test(up.typeId))) break;
+        if (!up) break;
+        const upId = up.typeId;
+        if (upId === "minecraft:air" || !(/water|kelp|seagrass|bubble_column/.test(upId) || up.isLiquid)) break;
         s = up;
+        sId = upId;
       }
-      const surface = s.location.y;
-      const near = surface - y >= -3 && surface - y <= 16;
-      const deep = blockAt(dim, { x, y: surface - 8, z });
-      if (s !== top && near && /water/.test(s.typeId) && deep && /water|kelp|seagrass|bubble_column/.test(deep.typeId)) addEntry(player, "places", "ocean");
+      if (s !== top) {
+        const surface = s.location.y;
+        const near = surface - y >= -3 && surface - y <= 16;
+        const deep = near && /water/.test(sId) ? blockAt(dim, { x, y: surface - 8, z }) : undefined;
+        if (deep && /water|kelp|seagrass|bubble_column/.test(deep.typeId)) addEntry(player, "places", "ocean");
+      }
     } catch {
       // unloaded above
     }
   }
 
   // Weather you're out in (or at least not deep underground for).
-  if (overworld && weather !== WeatherType.Clear && headroom <= DEEP_SKY) {
-    addEntry(player, "weather", "rain");
-    if (weather === WeatherType.Thunder) addEntry(player, "weather", "thunderstorm");
-  }
+  if (overworld) weatherOver(player, headroom);
 }
 
+// Each player every 4 seconds, spread over the 10 runs in between (one in 10 players a run, every 8 ticks), so a full
+// server doesn't look everyone up on the same tick. Each look is a few calls into the game, and so is the list of
+// players: it is read once a round, not every run.
+const SPREAD = 10;
+let turn = 0;
+/** @type {Player[]} */
+let round = [];
 system.runInterval(() => {
   if (get("enabled") !== true) return;
-  for (const player of world.getAllPlayers()) {
+  const first = turn++ % SPREAD;
+  if (first === 0) round = world.getAllPlayers();
+  /** @type {import("@minecraft/server").Vector3 | undefined} */
+  let spawn;
+  for (let i = first; i < round.length; i += SPREAD) {
+    const player = round[i];
     try {
-      if (player.isValid) explore(player);
+      if (!player.isValid) continue;
+      spawn ??= world.getDefaultSpawnLocation();
+      explore(player, spawn);
     } catch (e) {
       console.warn(`[journal] ${e}`);
     }
   }
-}, 40);
+}, 8);
 
 // ---------------------------------------------------------------------------
 // Fish: a hook belongs to the player nearest to it when it appears. A catch is an item that appears

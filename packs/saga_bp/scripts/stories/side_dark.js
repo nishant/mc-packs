@@ -27,23 +27,11 @@ const FLOWERS = [
   "minecraft:lily_of_the_valley",
   "minecraft:blue_orchid",
 ];
+/** Clear and every stained glass, blocks and panes: any of them mends a window. */
 const GLASS = [
   "minecraft:glass",
   "minecraft:glass_pane",
-  "minecraft:white_stained_glass",
-  "minecraft:yellow_stained_glass",
-  "minecraft:orange_stained_glass",
-  "minecraft:red_stained_glass",
-  "minecraft:blue_stained_glass",
-  "minecraft:light_blue_stained_glass",
-  "minecraft:purple_stained_glass",
-  "minecraft:green_stained_glass",
-  "minecraft:white_stained_glass_pane",
-  "minecraft:yellow_stained_glass_pane",
-  "minecraft:red_stained_glass_pane",
-  "minecraft:blue_stained_glass_pane",
-  "minecraft:light_blue_stained_glass_pane",
-  "minecraft:purple_stained_glass_pane",
+  ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].flatMap((c) => [`minecraft:${c}_stained_glass`, `minecraft:${c}_stained_glass_pane`]),
 ];
 const SILENCE = { "drowned_bell.bell": "silence" };
 const RING = { "drowned_bell.bell": "ring" };
@@ -1057,8 +1045,8 @@ const HOLLIS_FAITH = {
       npc: "hollis",
       intro: [
         `${H}Good news! I think. Someone has asked me to marry them. Not to me. In the chapel. A wedding! The first since... well. The first.\n\nHe looks terrified and delighted in exactly equal parts.`,
-        `${H}The groom is Barnaby Pike, the old sailor. The bride is Marigold, who runs the ferry. They've been courting for thirty-one years. Barnaby says he wanted to be sure.`,
-        `${H}There are two small problems. First, Marigold wants flowers. A great many poppies; red, she was very specific. Second, the ring bearer is Wren's goat, Clementine. And Clementine has eaten the rings.`,
+        `${H}The groom is Barnaby Pike, the old sailor. The bride is Rosalind, who runs the ferry. They've been courting for thirty-one years. Barnaby says he wanted to be sure.`,
+        `${H}There are two small problems. First, Rosalind wants flowers. A great many poppies; red, she was very specific. Second, the ring bearer is Wren's goat, Clementine. And Clementine has eaten the rings.`,
         `${H}Wren says Clementine will, um, return them in good time, if she's kept calm and walked gently to the chapel. Wren also says Clementine "only eats things she loves". I've decided to find that touching.`,
         { text: `${H}Quill has "found" six barrels of wine for the feast afterward. Nobody is asking where. I have been told, firmly, not to bless them.`, when: { "g:quill": "trusted" } },
         { text: `${H}Quill sent a note from his cell: congratulations to the happy couple, and the wine he promised them is "regrettably detained". I think he meant it kindly.`, when: { "g:quill": "exposed" } },
@@ -1076,10 +1064,10 @@ const HOLLIS_FAITH = {
         { type: "deliver", label: "Bring Brother Hollis 12 poppies", npc: "hollis", item: "minecraft:poppy", count: 12 },
       ],
       outro: [
-        { text: `The chapel is full. Barnaby wears a coat that almost fits. Marigold wears a crown of poppies and a look that says thirty-one years is quite long enough. Clementine stands at the altar, chewing thoughtfully.`, when: { "g:vesna": "!free" } },
-        { text: `The chapel is full. Barnaby wears a coat that almost fits. Marigold wears a crown of poppies. In the back row sits Vesna of the Fen, on dry land, in a hat with a frog on it. Nobody knows who invited her. Moss looks very pleased with himself.`, when: FREE },
+        { text: `The chapel is full. Barnaby wears a coat that almost fits. Rosalind wears a crown of poppies and a look that says thirty-one years is quite long enough. Clementine stands at the altar, chewing thoughtfully.`, when: { "g:vesna": "!free" } },
+        { text: `The chapel is full. Barnaby wears a coat that almost fits. Rosalind wears a crown of poppies. In the back row sits Vesna of the Fen, on dry land, in a hat with a frog on it. Nobody knows who invited her. Moss looks very pleased with himself.`, when: FREE },
         `${H}If anyone here knows a reason these two should not be joined, speak now, or-\n\nClementine says "MEHHH." Loudly. For quite a while. Hollis waits until she's finished, then, very solemnly, overrules the goat.`,
-        "The rings appear at the right moment, in a manner nobody discusses. Barnaby cries. Marigold cries. Moss, in the back row, cries and blames the pollen. Hollis laughs out loud at the altar, and doesn't apologize for it.",
+        "The rings appear at the right moment, in a manner nobody discusses. Barnaby cries. Rosalind cries. Moss, in the back row, cries and blames the pollen. Hollis laughs out loud at the altar, and doesn't apologize for it.",
         `${H}I laughed in chapel. Out loud. My teacher would have... no. My teacher would have laughed too. I think that was the first prayer I've meant in a year.`,
       ],
       reward: { levels: 4, crowns: 40, items: [{ item: "minecraft:cake", amount: 1 }] },

@@ -21,9 +21,10 @@ const BE = "§eBea:§r ";
 const NIGHT = /** @type {[number, number]} */ ([13000, 23000]);
 const NOON = /** @type {[number, number]} */ ([5000, 7000]);
 const SQUARE = { x: 10, z: -14 };
-const CANDLES = ["minecraft:candle", "minecraft:white_candle", "minecraft:light_gray_candle", "minecraft:gray_candle", "minecraft:yellow_candle", "minecraft:orange_candle", "minecraft:red_candle", "minecraft:blue_candle"];
+/** Every candle color: any candle a player places counts. */
+const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 const BOATS = ["minecraft:boat", "minecraft:chest_boat"];
-const HELMETS = ["minecraft:leather_helmet", "minecraft:chainmail_helmet", "minecraft:iron_helmet", "minecraft:golden_helmet", "minecraft:diamond_helmet", "minecraft:netherite_helmet", "minecraft:turtle_helmet"];
+const HELMETS = ["minecraft:leather_helmet", "minecraft:chainmail_helmet", "minecraft:iron_helmet", "minecraft:golden_helmet", "minecraft:diamond_helmet", "minecraft:netherite_helmet", "minecraft:copper_helmet", "minecraft:turtle_helmet"];
 /** @param {string} id */
 const cal = (id) => ({ pack: "calendar_bp", id: `cal:${id}` });
 /** The Realm Calendar activity objectives exist only with that pack (without it, the other way shows plainly). */

@@ -1,4 +1,5 @@
-import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import "./diag.js";
+import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
@@ -236,7 +237,10 @@ async function menu(player, title, body, actions) {
 
 /** @type {Map<string, number>} player id -> when they last sent (ms) */
 const lastSent = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => lastSent.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  // A cooldown still running stays, so leaving and rejoining doesn't skip it.
+  if (Date.now() - (lastSent.get(playerId) ?? 0) >= get("sendCooldownSeconds") * 1000) lastSent.delete(playerId);
+});
 
 /** Minecraft's text boxes keep at most this many characters, so a long letter is written over several boxes. */
 const BOX = 100;
@@ -251,24 +255,44 @@ function joinParts(parts) {
   return filled.map((p, i) => (i < filled.length - 1 && p.length < BOX ? `${p.trimEnd()}\n` : p)).join("");
 }
 
+/** Most names in the letter form's To list: a big server's roster (hundreds) would be a list nobody can scroll. */
+const TO_MAX = 60;
+
+/**
+ * The roster member a typed name means: the exact name (any case), or the only one it starts.
+ * @param {Member[]} list @param {string} typed @returns {Member | string} the member, or what's wrong
+ */
+function memberNamed(list, typed) {
+  const want = typed.trim().toLowerCase();
+  const exact = list.find((m) => m.n.toLowerCase() === want);
+  if (exact) return exact;
+  const starts = list.filter((m) => m.n.toLowerCase().startsWith(want));
+  if (starts.length === 1) return starts[0];
+  return starts.length ? `"${typed.trim()}" matches several players: type more of the name.` : `No player called "${typed.trim()}" has joined the realm.`;
+}
+
 /**
  * The letter form. `to` picks the recipient (a reply), and `draft` refills it after a problem.
- * @param {Player} player @param {{ to?: string, subject?: string, parts?: string[], problem?: string }} [draft]
+ * @param {Player} player @param {{ to?: string, typed?: string, subject?: string, parts?: string[], problem?: string }} [draft]
  */
 async function write(player, draft = {}) {
   const mates = partyMatesOf(player);
-  const others = members()
-    .filter((m) => m.i !== player.id)
-    .sort((a, b) => a.n.localeCompare(b.n));
-  if (draft.to && !others.some((m) => m.i === draft.to)) {
-    const l = [...letters().values()].find((x) => x.f === draft.to);
-    if (l) others.unshift({ i: l.f, n: l.fn, t: 0 }); // replying to someone the roster forgot
+  const here = new Set(world.getAllPlayers().map((p) => p.id));
+  const everyone = members().filter((m) => m.i !== player.id); // the most recently seen first
+  // The list: online players, then the most recently seen, TO_MAX in all; anyone else on the roster by typing a name.
+  const others = [...everyone.filter((m) => here.has(m.i)), ...everyone.filter((m) => !here.has(m.i))].slice(0, TO_MAX);
+  const more = everyone.length - others.length;
+  if (draft.to && draft.to !== PARTY && !others.some((m) => m.i === draft.to)) {
+    const known = everyone.find((m) => m.i === draft.to);
+    const l = known ? undefined : [...letters().values()].find((x) => x.f === draft.to);
+    if (known) others.push(known);
+    else if (l) others.push({ i: l.f, n: l.fn, t: 0 }); // replying to someone the roster forgot
   }
+  others.sort((a, b) => a.n.localeCompare(b.n));
   if (!others.length) {
     player.sendMessage("§eNobody else has joined the realm since mail was set up, so there's nobody to write to yet.");
     return;
   }
-  const here = new Set(world.getAllPlayers().map((p) => p.id));
   // With a party, the first choice writes to all of it (offline mates get it when they're back).
   const lead = mates.length ? [`§dMy party §r(${mates.map((m) => m.n).join(", ").slice(0, 60)})`] : [];
   const index = draft.to === PARTY && mates.length ? 0 : lead.length + Math.max(0, others.findIndex((m) => m.i === draft.to));
@@ -278,11 +302,17 @@ async function write(player, draft = {}) {
   const form = new ModalFormData()
     .title("§lWrite a letter")
     .dropdown(
-      `${draft.problem ? `§c${draft.problem}§r\n\n` : ""}To (everyone who has joined the realm; offline players get it when they're back)`,
+      `${draft.problem ? `§c${draft.problem}§r\n\n` : ""}${
+        more > 0
+          ? `To (online players and the ${others.filter((m) => !here.has(m.i)).length} seen most recently; type anyone else's name below)`
+          : "To (everyone who has joined the realm; offline players get it when they're back)"
+      }`,
       [...lead, ...others.map((m) => (here.has(m.i) ? `${m.n} §a(online)` : m.n))],
       { defaultValueIndex: index },
-    )
-    .textField(`Subject (up to ${subjectMax} characters)`, "Hello!", { defaultValue: draft.subject ?? "" });
+    );
+  // With more players than the list holds, a name typed here goes before the list.
+  if (more > 0) form.textField(`Or type their name (${more} more players have joined; offline ones get it when they're back)`, "Steve", { defaultValue: draft.typed ?? "" });
+  form.textField(`Subject (up to ${subjectMax} characters)`, "Hello!", { defaultValue: draft.subject ?? "" });
   for (let i = 0; i < boxes; i++) {
     const label =
       i === 0
@@ -293,15 +323,21 @@ async function write(player, draft = {}) {
   form.submitButton("Send");
   const res = await show(player, form);
   if (!res || res.canceled || !res.formValues || !player.isValid) return;
-  const [who, rawSubject, ...rawParts] = res.formValues;
+  const values = [...res.formValues];
+  const who = values.shift();
+  const typedValue = more > 0 ? values.shift() : undefined;
+  const typed = typeof typedValue === "string" ? typedValue.trim() : "";
+  const [rawSubject, ...rawParts] = values;
   const pick = typeof who === "number" ? who : -1;
-  const toParty = lead.length > 0 && pick === 0;
-  const to = toParty ? undefined : others[pick - lead.length];
+  const named = typed ? memberNamed(everyone, typed) : undefined;
+  const toParty = !named && lead.length > 0 && pick === 0;
+  const to = typeof named === "object" ? named : toParty ? undefined : others[pick - lead.length];
   const parts = rawParts.map((v) => (typeof v === "string" ? v : ""));
   // Color and format codes are taken out of what players type, so a letter can't pass for a realm message.
   const subject = clean(noCodes(rawSubject), subjectMax, false);
   const body = clean(noCodes(joinParts(parts)), bodyMax, true);
-  const again = { to: toParty ? PARTY : to?.i, subject: typeof rawSubject === "string" ? rawSubject : "", parts };
+  const again = { to: toParty ? PARTY : typeof named === "object" ? undefined : to?.i, typed, subject: typeof rawSubject === "string" ? rawSubject : "", parts };
+  if (typeof named === "string") return write(player, { ...again, problem: named });
   if (!to && !toParty) return;
   if (!body.text) return write(player, { ...again, problem: "Write something in the letter first." });
   if (toParty) {
@@ -476,7 +512,7 @@ async function mainMenu(player) {
   const total = inboxOf(player.id).length;
   const body = [
     n ? `§eYou have ${n} unread letter${n === 1 ? "" : "s"}.§r` : "No unread letters.",
-    "Write to anyone who has joined the realm. Letters to offline players wait for them. Letters carry words only: to send items, use the Player Mailroom build (mc.nish.software/mailroom).",
+    `Write to anyone who has joined the realm. Letters to offline players wait for them. Letters carry words only.${CONFIG.itemsHint ? ` ${CONFIG.itemsHint}` : ""}`,
   ].join("\n\n");
   await menu(player, "§lRealm Mail", body, [
     { text: `Inbox\n§8${total} letter${total === 1 ? "" : "s"}, ${n} unread`, run: () => inbox(player) },
@@ -542,6 +578,25 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     } catch (e) {
       console.warn(`[mail] mail_send: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+// Scenario tests (BDS harness): add `roster` players who joined long ago (offline), as on a big server. Only from the
+// server console: /scriptevent realm:mail_test {"roster":300}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:mail_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const n = Math.max(0, Math.min(1000, Math.floor(Number(JSON.parse(ev.message)?.roster) || 0)));
+      const old = Date.now() - 86400000;
+      const list = [...members(), ...Array.from({ length: n }, (_, i) => ({ i: `-${4294950000 - i}`, n: `Gone${i}`, t: old - i * 1000 }))];
+      list.sort((a, b) => b.t - a.t);
+      roster = list.slice(0, Math.max(1, CONFIG.maxRoster));
+      world.setDynamicProperty(PROP_ROSTER, JSON.stringify(roster));
+    } catch (e) {
+      console.warn(`[mail] test: ${e}`);
     }
   },
   { namespaces: ["realm"] },

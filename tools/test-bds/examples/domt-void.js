@@ -24,7 +24,12 @@ export default async function (t) {
   const named = put("minecraft:cow", -4, 0);
   named.nameTag = "Bessie";
   const villager = put("minecraft:villager_v2", 0, 4);
-  const horse = put("minecraft:horse", 0, -4);
+  // A horse can spawn as a foal, which can't be tamed (no tamemount): spawn again until a grown one comes.
+  let horse = put("minecraft:horse", 0, -4);
+  for (let k = 0; k < 8 && !horse.getComponent("minecraft:tamemount"); k++) {
+    horse.remove();
+    horse = put("minecraft:horse", 0, -4);
+  }
   horse.getComponent("minecraft:tamemount").tameToPlayer(true, p);
   const leashed = put("minecraft:sheep", 4, 4);
   leashed.getComponent("minecraft:leashable").leashTo(p);

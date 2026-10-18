@@ -100,7 +100,8 @@ export default async function (t) {
   await t.wait(5);
   const hp = pell.getComponent("minecraft:health");
   t.check(pell.isValid && hp && hp.currentValue >= hp.effectiveMax - 0.01, `Pell can't be hurt (health ${hp?.currentValue}/${hp?.effectiveMax})`);
-  t.check(/^§r(?:§[0-9a-f]){10}§r$/i.test(pell.nameTag), `Pell carries a unique invisible format-code marker (${JSON.stringify(pell.nameTag)})`);
+  // The name-label helper resends the marker with one more "§r" now and then (a fresh packet for the client): both count.
+  t.check(/^§r(?:§[0-9a-f]){10}§r(?:§r)?$/i.test(pell.nameTag), `Pell carries a unique invisible format-code marker (${JSON.stringify(pell.nameTag)})`);
 
   // Walk up to him, then east to the chapel at about walking pace; sample his position every 2 ticks.
   since = t.tick;

@@ -13,6 +13,7 @@ import { deleteSlot } from "../utils/ClipboardStore.js";
 import { filterSafeZonePositions, inSafeZoneAt, isBuildBlockedForPlayer } from "./Protection.js";
 import { isOp } from "../utils/Permissions.js";
 import { get } from "../settings.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 
 export function yawToFacingIndex(yaw) {
     const y = ((yaw % 360) + 360) % 360;
@@ -181,12 +182,14 @@ export function executePaste(player, origin) {
         perPosTypeIds, undoThreshold,
     );
     if (snapshot) snapshot.survival = !creative && !isCut;
-    if (!snapshot)
+    if (!snapshot) {
+        lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(
             undoThreshold === 0
                 ? t("eb.place.undo_disabled")
                 : t("eb.place.too_large_to_undo", undoThreshold),
         );
+    }
 
     for (const e of entries) {
         try {

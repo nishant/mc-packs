@@ -1,3 +1,4 @@
+import "./diag.js";
 import { ButtonState, CommandPermissionLevel, CustomCommandStatus, Dimension, InputButton, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
@@ -42,7 +43,10 @@ function stateOf(player) {
   return st;
 }
 
-world.afterEvents.playerLeave.subscribe(({ playerId }) => players.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  players.delete(playerId);
+  for (const key of journaled) if (key.endsWith(`:${playerId}`)) journaled.delete(key);
+});
 
 // ---------------------------------------------------------------------------
 // Weather and night

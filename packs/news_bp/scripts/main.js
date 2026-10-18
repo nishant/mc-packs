@@ -1,3 +1,4 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG, DEFAULTS } from "./config.js";
@@ -41,10 +42,37 @@ const writeJson = (prop, value) => world.setDynamicProperty(prop, JSON.stringify
 /** @returns {{ title: string, body: string }} */
 const getNews = () => ({ ...DEFAULTS.news, ...readJson(PROP_NEWS, {}) });
 
+/** @type {Set<string> | undefined} the pack folders that answered the last realm:help_ping (undefined: not asked yet) */
+let installedPacks;
+/** @type {Set<Set<string>>} answer sets of pings still waiting */
+const pongs = new Set();
+
+/** Asks which packs are installed (each answers /realm:help's ping with its folder). */
+async function askInstalled() {
+  /** @type {Set<string>} */
+  const got = new Set(["news_bp"]);
+  pongs.add(got);
+  try {
+    system.sendScriptEvent("realm:help_ping", "");
+    await system.waitTicks(10);
+  } finally {
+    pongs.delete(got);
+  }
+  installedPacks = got;
+}
+
+/** The default tips for the packs installed here (all of them before the first answer). */
+const defaultTips = () =>
+  DEFAULTS.tips
+    .map((t) => (typeof t === "string" ? { text: t, pack: undefined } : t))
+    .filter((t) => t && typeof t.text === "string" && t.text.trim() && (!t.pack || !installedPacks || installedPacks.has(t.pack)))
+    .map((t) => t.text);
+
 /** @returns {string[]} a copy, safe to change */
 function getTips() {
-  const tips = readJson(PROP_TIPS, DEFAULTS.tips);
-  return Array.isArray(tips) ? tips.filter((t) => typeof t === "string" && t.trim()) : [...DEFAULTS.tips];
+  /** @type {unknown} */
+  const tips = readJson(PROP_TIPS, undefined);
+  return Array.isArray(tips) ? tips.filter((/** @type {unknown} */ t) => typeof t === "string" && t.trim()) : defaultTips();
 }
 
 /**
@@ -133,7 +161,14 @@ async function showNews(player, header = "") {
 function applyRelease() {
   if (!CONFIG.releaseNews || !RELEASE.id || !RELEASE.body.trim()) return;
   try {
-    if (world.getDynamicProperty(PROP_RELEASE) === RELEASE.id) return;
+    const last = world.getDynamicProperty(PROP_RELEASE);
+    if (last === RELEASE.id) return;
+    if (last === undefined && getRevision() === 0 && world.getDynamicProperty(PROP_NEWS) === undefined) {
+      // A new world, or the pack just added: what changed since the last update means nothing here yet. The next
+      // update's news is the first to pop up.
+      world.setDynamicProperty(PROP_RELEASE, RELEASE.id);
+      return;
+    }
     writeJson(PROP_NEWS, { title: RELEASE.title ? `§l§b${RELEASE.title}` : DEFAULTS.news.title, body: RELEASE.body });
     world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
     world.setDynamicProperty(PROP_RELEASE, RELEASE.id);
@@ -211,11 +246,12 @@ system.runInterval(() => {
   const settings = getTipSettings();
   if (!settings.enabled || world.getAllPlayers().length === 0) return;
   if (++minutesSinceTip < settings.intervalMinutes) return;
-  broadcastTip();
+  broadcastTip().catch((e) => console.warn(`[news] ${e}`));
 }, 1200);
 
-function broadcastTip() {
+async function broadcastTip() {
   minutesSinceTip = 0;
+  await askInstalled(); // packs can be added or removed while the world runs
   const tips = getTips();
   if (tips.length === 0) return;
   world.sendMessage(CONFIG.tipPrefix + tips[tipIndex++ % tips.length]);
@@ -236,8 +272,10 @@ async function editNews(player) {
   let draft = "";
   /** @type {import("@minecraft/server-ui").ModalFormResponse | undefined} */
   let res;
+  /** What the editor opened with, so a save changes only what this operator changed. */
+  let opened = getNews();
   for (let attempt = 1; attempt <= 20 && player.isValid; attempt++) {
-    const news = getNews();
+    const news = (opened = getNews());
     draft = getDraft(player);
     const parts = splitBody(escapeNewlines(draft || news.body));
     const form = new ModalFormData()
@@ -278,16 +316,19 @@ async function editNews(player) {
     player.sendMessage("§7Draft discarded.§r The news is unchanged.");
     return;
   }
-  const title = strings[0];
-  const body = strings.slice(1).join("");
+  const title = typeof strings[0] === "string" && strings[0].trim() ? strings[0] : DEFAULTS.news.title;
+  const body = unescapeNewlines(strings.slice(1).join(""));
+  // Another operator may have saved news while this editor was open: keep what they wrote in the part this one
+  // left alone (a draft is always saved: that's what this editor was for).
+  const now = getNews();
   writeJson(PROP_NEWS, {
-    title: typeof title === "string" && title.trim() ? title : DEFAULTS.news.title,
-    body: unescapeNewlines(body),
+    title: title !== opened.title ? title : now.title,
+    body: draft || body !== opened.body ? body : now.body,
   });
   if (announce === true) {
     world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
     // Online players would otherwise only hear about it on their next join.
-    if (body.trim() !== "") world.sendMessage("§bRealm news updated.§r Run §b/realm:news§r to read it.");
+    if (getNews().body.trim() !== "") world.sendMessage("§bRealm news updated.§r Run §b/realm:news§r to read it.");
   }
 
   player.sendMessage(
@@ -299,6 +340,8 @@ async function editNews(player) {
 
 /** @param {Player} player */
 async function tipsMenu(player) {
+  if (!installedPacks) await askInstalled();
+  if (!player.isValid) return;
   const tips = getTips();
   const settings = getTipSettings();
   const form = new ActionFormData()
@@ -321,7 +364,7 @@ async function tipsMenu(player) {
 
   if (res.selection === 0) await editTip(player, -1);
   else if (res.selection === 1) await tipSettings(player);
-  else if (res.selection === 2) broadcastTip();
+  else if (res.selection === 2) await broadcastTip();
   else await editTip(player, res.selection - 3);
 }
 
@@ -556,8 +599,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "news_bp");
+    else if (id === "realm:help_pong") for (const got of pongs) got.add(message); // askInstalled
   },
   { namespaces: ["realm"] }
 );

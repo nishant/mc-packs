@@ -15,11 +15,12 @@ export default async function (t) {
     return e ? Math.round(e.location.y * 1000) / 1000 : NaN;
   };
   const NAMES = { bea: "§eBea §7the Cook", mara: "§eMara §7the Cartographer", tobin: "§eOld Tobin §7the Fisherman", quill: "§eQuill §7the Trader" };
+  // The native name is "§r" or, while a resend shows the look-alike forms, "§r§r" (the helper then ends in §r too).
   const named = (id) => {
     const e = npc(id);
     const h = label(id);
     const want = NAMES[id];
-    return !!e && e.nameTag === "§r" && !!h && (want ? h.nameTag === want || h.nameTag === `${want}§r` : !!h.nameTag && h.nameTag !== "NPC");
+    return !!e && (e.nameTag === "§r" || e.nameTag === "§r§r") && !!h && (want ? h.nameTag === want || h.nameTag === `${want}§r` : !!h.nameTag && h.nameTag !== "NPC");
   };
 
   if (t.phase === 1) {

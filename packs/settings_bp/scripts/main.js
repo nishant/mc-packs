@@ -1,3 +1,4 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -531,17 +532,12 @@ async function prefsForm(player) {
   const res = await show(player, form);
   if (!player.isValid) return false;
   if (!res || res.canceled) {
-    if (res?.cancelationReason !== FormCancelationReason.UserClosed) return false;
-    // Closed with X: say that nothing was saved, and offer the way back.
-    const back = await show(
-      player,
-      new MessageFormData()
-        .title("§lNothing was saved")
-        .body("You closed My preferences with X, so nothing you changed there was saved.\n\nTo change a setting, open it again, make the change and press §lSave§r at the bottom.")
-        .button1("Back to my preferences")
-        .button2("Close")
-    );
-    return !!back && !back.canceled && back.selection === 0 && player.isValid;
+    // Closed with X: the game hands back nothing, so whether anything changed can't be known. A line in chat, not a
+    // second popup: that came on every close, even after only looking.
+    if (res?.cancelationReason === FormCancelationReason.UserClosed) {
+      player.sendMessage("§7My preferences: closed with X, so nothing was saved. To change a setting, run §f/realm:prefs§7 again and press §fSave§7 at the bottom.");
+    }
+    return false;
   }
   const read = answersOf(res, slots);
   if (!read) {

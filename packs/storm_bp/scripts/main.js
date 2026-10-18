@@ -1,4 +1,5 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
+import "./diag.js";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, ScriptEventSource, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
@@ -141,6 +142,7 @@ function form(player, min, max, forced) {
     forced,
   };
   journaled = new Set();
+  cellNo++;
   nextStrike = between(CONFIG.strikeSecondsMin, CONFIG.strikeSecondsMax);
   saveCell();
   const c = cell;
@@ -218,11 +220,16 @@ function topAt(dim, x, z) {
   }
 }
 
-/** Is there anything players built around this spot? Unloaded columns count as built, to be safe. @param {Dimension} dim @param {number} x @param {number} z */
-function nearBuild(dim, x, z) {
+/**
+ * Is there anything players built around this spot? Unloaded columns count as built, to be safe. A job step per
+ * column (81 columns, up to 405 blocks), so a strike never holds up one tick.
+ * @param {Dimension} dim @param {number} x @param {number} z @returns {Generator<void, boolean, void>}
+ */
+function* nearBuild(dim, x, z) {
   const cx = Math.floor(x), cz = Math.floor(z);
   for (let dx = -SCAN; dx <= SCAN; dx++) {
     for (let dz = -SCAN; dz <= SCAN; dz++) {
+      if ((dx * (2 * SCAN + 1) + dz) % 9 === 0) yield;
       const top = topAt(dim, cx + dx, cz + dz);
       if (!top) return true;
       for (let i = 0; i <= SCAN_DEPTH; i++) {
@@ -250,8 +257,27 @@ function bolt(dim, at) {
   }
 }
 
-/** One strike near the cell: an uncharged rod sometimes, else a random spot. Skipped where the chunk isn't loaded. @param {Cell} c */
+let striking = false; // a strike's job is still running
+
+/** Starts one strike near the cell (a job over a few ticks), unless the last one is still looking. @param {Cell} c */
 function strike(c) {
+  if (striking) return;
+  striking = true;
+  system.runJob(
+    (function* () {
+      try {
+        yield* strikeJob(c);
+      } catch (e) {
+        console.warn(`[storm] lightning: ${e}`);
+      } finally {
+        striking = false;
+      }
+    })()
+  );
+}
+
+/** One strike near the cell: an uncharged rod sometimes, else a random spot. Skipped where the chunk isn't loaded. @param {Cell} c */
+function* strikeJob(c) {
   const dim = overworld();
   const r = CONFIG.strikeRadius;
   const near = rods.filter((rod) => rod[0] === 0 && !rod[4] && Math.hypot(rod[1] + 0.5 - c.x, rod[3] + 0.5 - c.z) <= r);
@@ -280,7 +306,8 @@ function strike(c) {
   if (Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn) return;
   // Safe zones (scripts/zones.js): no strike in or next to one, so no fire can start there.
   if (get("avoidZones") === true && protectedBox(OVERWORLD, { x: x - SCAN, z: z - SCAN }, { x: x + SCAN, z: z + SCAN })) return;
-  if (nearBuild(dim, x, z)) return;
+  if (yield* nearBuild(dim, x, z)) return;
+  if (cell !== c) return; // ended (or replaced) while we looked
   // getTopmostBlock skips water (it answers the bed of a lake or the sea): the bolt strikes the water's surface.
   let y = top.location.y;
   try {
@@ -386,6 +413,25 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   }
 });
 
+// Town news: Storm Glass collected from a lightning rod is Townsfolk gossip, each player once per storm cell and at
+// most one piece per in-game hour from this pack.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+let cellNo = 0; // counts the cells formed this session
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** A stack of the shared Storm Glass item. @param {number} n */
 function stormGlass(n) {
   const stack = new ItemStack("minecraft:prismarine_crystals", n);
@@ -417,6 +463,7 @@ function collect(player, rod) {
   if (rest) player.dimension.spawnItem(rest, player.location);
   player.sendMessage(`§bYou collect ${n} Storm Glass from the lightning rod${extra ? ` (${extra} more from your Calling and relics)` : ""}.${rest ? " §7It dropped at your feet: your inventory is full." : ""}`);
   player.playSound("random.orb", { pitch: 1.5 });
+  gossip(`${cellNo}:${player.id}`, { kind: "storm_haul", player: player.id, name: player.name, n });
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
@@ -655,6 +702,23 @@ world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendS
 world.afterEvents.playerLeave.subscribe(({ playerId }) => stormSet.delete(playerId));
 /** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
+
+// Scenario tests (BDS harness): a player taps a charged rod (simulated players' taps can't reach it). Only from the
+// server console: /scriptevent realm:storm_test {"action":"collect","player":"<name>","x":0,"y":64,"z":0}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:storm_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const m = JSON.parse(ev.message);
+      const player = world.getAllPlayers().find((p) => p.name === m?.player);
+      const rod = player ? rodAt(player.dimension.id, { x: Math.floor(m.x), y: Math.floor(m.y), z: Math.floor(m.z) }) : undefined;
+      if (player && rod && m.action === "collect") collect(player, rod);
+    } catch (e) {
+      console.warn(`[storm] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

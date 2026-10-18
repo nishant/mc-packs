@@ -5,6 +5,7 @@ import { enqueue } from "./PlacementQueue.js";
 import { getUndoThreshold } from "./Settings.js";
 import { isCreative, countBlocks, removeBlocks, giveBlocks } from "../utils/InventoryUtils.js";
 import { t } from "../utils/Text.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 const MAX_HISTORY = 10;
 const UNDO_CHUNK_SIZE = 64;
 const tempStacks = {
@@ -162,6 +163,7 @@ function applyBlocks(dim, playerId, blocks) {
 export function performUndo(player) {
     const entry = routePop(player, "undo");
     if (!entry) {
+        lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(t("eb.undo.nothing"));
         return;
     }
@@ -207,12 +209,14 @@ export function performUndo(player) {
     applyBlocks(dim, player.id, toApply);
     routePush(player, "redo", entry);
     const n = toApply.length;
+    lockActionBar(player.id, 1500);
     player.onScreenDisplay.setActionBar(t("eb.undo.done", n));
     coachEvent(player, "undo");
 }
 export function performRedo(player) {
     const entry = routePop(player, "redo");
     if (!entry) {
+        lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(t("eb.redo.nothing"));
         return;
     }
@@ -247,6 +251,7 @@ export function performRedo(player) {
     applyBlocks(dim, player.id, entry.aft);
     routePush(player, "undo", entry);
     const n = entry.aft.length;
+    lockActionBar(player.id, 1500);
     player.onScreenDisplay.setActionBar(t("eb.redo.done", n));
     coachEvent(player, "redo");
 }

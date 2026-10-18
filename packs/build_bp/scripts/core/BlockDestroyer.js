@@ -22,7 +22,7 @@ export const UNBREAKABLE = new Set([
     "minecraft:flowing_water",
     "minecraft:lava",
     "minecraft:flowing_lava",
-    "minecraft:light",
+    ...Array.from({ length: 16 }, (_, i) => `minecraft:light_block_${i}`),
     "minecraft:portal",
     "minecraft:mob_spawner",
     "minecraft:vault",
@@ -31,7 +31,6 @@ export const UNBREAKABLE = new Set([
     "minecraft:deny",
     "minecraft:structure_void",
     "minecraft:powder_snow",
-    "minecraft:nether_portal",
     "minecraft:bubble_column",
     "minecraft:undyed_shulker_box",
     "minecraft:white_shulker_box",
@@ -53,8 +52,8 @@ export const UNBREAKABLE = new Set([
 ]);
 
 const SHOVEL_BLOCKS = new Set([
-    "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:rooted_dirt",
-    "minecraft:grass", "minecraft:grass_block", "minecraft:mycelium", "minecraft:podzol",
+    "minecraft:dirt", "minecraft:coarse_dirt",
+    "minecraft:grass_block", "minecraft:mycelium", "minecraft:podzol",
     "minecraft:farmland", "minecraft:dirt_with_roots",
     "minecraft:sand", "minecraft:red_sand",
     "minecraft:gravel",
@@ -74,7 +73,7 @@ const AXE_MISC = new Set([
     "minecraft:smithing_table", "minecraft:loom", "minecraft:composter",
     "minecraft:beehive", "minecraft:bee_nest",
     "minecraft:pumpkin", "minecraft:carved_pumpkin", "minecraft:lit_pumpkin",
-    "minecraft:melon_block", "minecraft:jukebox", "minecraft:note_block",
+    "minecraft:melon_block", "minecraft:jukebox", "minecraft:noteblock",
     "minecraft:ladder",
 ]);
 
@@ -87,7 +86,7 @@ function isAxeBlock(typeId) {
 
 const PICKAXE_MISC = new Set([
     "minecraft:coal_ore", "minecraft:deepslate_coal_ore",
-    "minecraft:nether_quartz_ore", "minecraft:nether_gold_ore",
+    "minecraft:quartz_ore", "minecraft:nether_gold_ore",
     "minecraft:coal_block", "minecraft:gilded_blackstone",
     "minecraft:raw_iron_block", "minecraft:raw_gold_block", "minecraft:raw_copper_block",
     "minecraft:netherrack", "minecraft:nether_wart_block", "minecraft:shroomlight",
@@ -95,9 +94,8 @@ const PICKAXE_MISC = new Set([
     "minecraft:sea_lantern", "minecraft:glowstone",
     "minecraft:iron_bars", "minecraft:iron_door", "minecraft:iron_trapdoor",
     "minecraft:heavy_weighted_pressure_plate", "minecraft:light_weighted_pressure_plate",
-    "minecraft:chain", "minecraft:lantern", "minecraft:soul_lantern",
-    "minecraft:cauldron", "minecraft:lava_cauldron", "minecraft:water_cauldron",
-    "minecraft:powder_snow_cauldron", "minecraft:hopper", "minecraft:dispenser",
+    "minecraft:iron_chain", "minecraft:lantern", "minecraft:soul_lantern",
+    "minecraft:cauldron", "minecraft:hopper", "minecraft:dispenser",
     "minecraft:dropper", "minecraft:observer", "minecraft:piston", "minecraft:sticky_piston",
     "minecraft:lodestone",
 ]);
@@ -136,7 +134,7 @@ const TIER_1 = new Set([
     "minecraft:cut_copper", "minecraft:exposed_cut_copper", "minecraft:weathered_cut_copper", "minecraft:oxidized_cut_copper",
     "minecraft:cut_copper_slab", "minecraft:exposed_cut_copper_slab", "minecraft:weathered_cut_copper_slab", "minecraft:oxidized_cut_copper_slab",
     "minecraft:cut_copper_stairs", "minecraft:exposed_cut_copper_stairs", "minecraft:weathered_cut_copper_stairs", "minecraft:oxidized_cut_copper_stairs",
-    "minecraft:waxed_copper_block", "minecraft:waxed_exposed_copper", "minecraft:waxed_weathered_copper", "minecraft:waxed_oxidized_copper",
+    "minecraft:waxed_copper", "minecraft:waxed_exposed_copper", "minecraft:waxed_weathered_copper", "minecraft:waxed_oxidized_copper",
     "minecraft:waxed_cut_copper", "minecraft:waxed_exposed_cut_copper", "minecraft:waxed_weathered_cut_copper", "minecraft:waxed_oxidized_cut_copper",
     "minecraft:waxed_cut_copper_slab", "minecraft:waxed_exposed_cut_copper_slab", "minecraft:waxed_weathered_cut_copper_slab", "minecraft:waxed_oxidized_cut_copper_slab",
     "minecraft:waxed_cut_copper_stairs", "minecraft:waxed_exposed_cut_copper_stairs", "minecraft:waxed_weathered_cut_copper_stairs", "minecraft:waxed_oxidized_cut_copper_stairs",
@@ -148,7 +146,7 @@ const TIER_1 = new Set([
 const TIER_2 = new Set([
     "minecraft:gold_ore", "minecraft:deepslate_gold_ore",
     "minecraft:redstone_ore", "minecraft:lit_redstone_ore",
-    "minecraft:deepslate_redstone_ore", "minecraft:deepslate_lit_redstone_ore",
+    "minecraft:deepslate_redstone_ore", "minecraft:lit_deepslate_redstone_ore",
     "minecraft:diamond_ore", "minecraft:deepslate_diamond_ore",
     "minecraft:emerald_ore", "minecraft:deepslate_emerald_ore",
     "minecraft:gold_block", "minecraft:raw_gold_block",
@@ -167,12 +165,12 @@ function getOreXp(typeId, hasSilkTouch) {
         case "minecraft:redstone_ore":
         case "minecraft:lit_redstone_ore":
         case "minecraft:deepslate_redstone_ore":
-        case "minecraft:deepslate_lit_redstone_ore":     return rand(1, 5);
+        case "minecraft:lit_deepslate_redstone_ore":     return rand(1, 5);
         case "minecraft:diamond_ore":
         case "minecraft:deepslate_diamond_ore":          return rand(3, 7);
         case "minecraft:emerald_ore":
         case "minecraft:deepslate_emerald_ore":          return rand(3, 7);
-        case "minecraft:nether_quartz_ore":              return rand(2, 5);
+        case "minecraft:quartz_ore":                     return rand(2, 5);
         case "minecraft:nether_gold_ore":                return rand(0, 1);
         default:                                         return 0;
     }
@@ -190,7 +188,6 @@ const TIER_3 = new Set([
     "minecraft:ancient_debris",
     "minecraft:netherite_block",
     "minecraft:respawn_anchor",
-    "minecraft:glowing_obsidian",
 ]);
 
 function getToolType(typeId) {
@@ -277,12 +274,12 @@ export function getBlockDrop(block, hasSilkTouch, fortuneLevel) {
         case "minecraft:redstone_ore":
         case "minecraft:lit_redstone_ore":
         case "minecraft:deepslate_redstone_ore":
-        case "minecraft:deepslate_lit_redstone_ore":     return { typeId: "minecraft:redstone",            amount: fortuneRedstone(fortuneLevel) };
+        case "minecraft:lit_deepslate_redstone_ore":     return { typeId: "minecraft:redstone",            amount: fortuneRedstone(fortuneLevel) };
         case "minecraft:diamond_ore":
         case "minecraft:deepslate_diamond_ore":          return { typeId: "minecraft:diamond",             amount: fortuneOre(1, fortuneLevel) };
         case "minecraft:emerald_ore":
         case "minecraft:deepslate_emerald_ore":          return { typeId: "minecraft:emerald",             amount: fortuneOre(1, fortuneLevel) };
-        case "minecraft:nether_quartz_ore":              return { typeId: "minecraft:quartz",              amount: fortuneOre(1, fortuneLevel) };
+        case "minecraft:quartz_ore":                     return { typeId: "minecraft:quartz",              amount: fortuneOre(1, fortuneLevel) };
         case "minecraft:glowstone":                      return { typeId: "minecraft:glowstone_dust",      amount: rand(2, 4) };
         case "minecraft:sea_lantern":                    return { typeId: "minecraft:prismarine_crystals", amount: rand(2, 3) };
         default: {

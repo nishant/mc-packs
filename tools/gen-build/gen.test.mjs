@@ -87,9 +87,14 @@ for (const [id, name] of buttons) {
 }
 
 test("inventory packs have the required versions and standalone data module", () => {
-  assert.deepEqual(json("packs/build_rp/manifest.json").header.version, [2, 1, 7]);
+  // At least the versions that brought the inventory items (any later bump is fine).
+  const atLeast = (/** @type {number[]} */ v, /** @type {number[]} */ min, /** @type {string} */ what) => {
+    const d = v.map((x, i) => x - min[i]).find((x) => x !== 0) ?? 0;
+    assert.ok(d >= 0, `${what} ${v.join(".")} is older than ${min.join(".")}`);
+  };
+  atLeast(json("packs/build_rp/manifest.json").header.version, [2, 1, 7], "build_rp");
   const stash = json("packs/stash_bp/manifest.json");
-  assert.deepEqual(stash.header.version, [1, 6, 2]);
+  atLeast(stash.header.version, [1, 6, 2], "stash_bp");
   assert.deepEqual(stash.modules.filter((module) => module.type === "data"), [{
     type: "data",
     uuid: "a6d37198-47d6-4f63-91b7-36e98962a418",

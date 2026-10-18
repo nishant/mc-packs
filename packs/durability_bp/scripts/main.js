@@ -1,17 +1,16 @@
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 
 // Player property "durability:off" (true = warnings off) is the "off" preference in settings.js.
 
-const SLOTS = [
-  EquipmentSlot.Mainhand,
-  EquipmentSlot.Offhand,
-  EquipmentSlot.Head,
-  EquipmentSlot.Chest,
-  EquipmentSlot.Legs,
-  EquipmentSlot.Feet,
-];
+/** Held items wear down fast (mining, fighting): looked at every check. */
+const HELD = [EquipmentSlot.Mainhand, EquipmentSlot.Offhand];
+/** Armor wears down a point per hit: every ARMOR_EVERY checks is soon enough, and keeps 40 players cheap. */
+const ARMOR = [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, EquipmentSlot.Feet];
+const ARMOR_EVERY = 4;
+const ALL = [...HELD, ...ARMOR];
 
 const OK = 0;
 const WARN = 1;
@@ -22,10 +21,12 @@ const REARM = 0.02;
 /** player id → slot key → { typeId, level } of the last check */
 const state = new Map();
 
+let round = 0;
 system.runInterval(() => {
+  const slots = ++round % ARMOR_EVERY === 0 ? ALL : HELD;
   for (const player of world.getAllPlayers()) {
     try {
-      check(player);
+      check(player, slots);
     } catch (e) {
       console.warn(`[durability] ${e}`);
     }
@@ -39,8 +40,8 @@ onChange((key, player) => {
   if (player && key === "off") state.delete(player.id);
 });
 
-/** @param {Player} player */
-function check(player) {
+/** @param {Player} player @param {EquipmentSlot[]} slots */
+function check(player, slots) {
   if (getFor(player, "off") === true) return;
   const equippable = player.getComponent("minecraft:equippable");
   if (!equippable) return;
@@ -48,7 +49,7 @@ function check(player) {
   let seen = state.get(player.id);
   if (!seen) state.set(player.id, (seen = new Map()));
 
-  for (const slot of SLOTS) {
+  for (const slot of slots) {
     // Each hotbar slot counts separately, so switching to another worn tool warns again.
     const key = slot === EquipmentSlot.Mainhand ? `${slot}:${player.selectedSlotIndex}` : slot;
     const item = equippable.getEquipment(slot);

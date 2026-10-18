@@ -19,6 +19,7 @@
 //   realm:atlas_site         { player, site: [label, x, z, region] }  -> one more found site
 //   realm:atlas_ping         { player? }                              <- send the region and sites again
 // See "Atlas of the Realm" in docs/PACKS.md.
+import "./diag.js";
 import { BlockPermutation, CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -77,6 +78,24 @@ const send = (id, msg) => {
     console.warn(`[atlas] ${id}: ${e}`);
   }
 };
+// Town news: Townsfolk gossip at most once per in-game hour from this pack, each event once, so a busy server
+// doesn't flood the townsfolk.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 /** @param {number} ticks */
 const wait = (ticks) => new Promise((r) => system.runTimeout(() => r(undefined), ticks));
 
@@ -1361,6 +1380,19 @@ function noBanner(ent) {
   }
 }
 
+/**
+ * spawnEntity, but never another entity: with reused entity ids it can hand back one that already exists (a dropped
+ * item, a pet), which the fight would then tag and remove at its end. Retries, then throws.
+ * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
+ */
+function spawnFresh(dim, type, at) {
+  for (let k = 0; k < 8; k++) {
+    const e = dim.spawnEntity(/** @type {any} */ (type), at);
+    if (e.typeId === type) return e;
+  }
+  throw new Error(`spawnEntity(${type}) kept returning another entity`);
+}
+
 /** Spawns fight mobs around a site. @param {Fight} f @param {string[]} types @param {string} [name] */
 function spawnMobs(f, types, name) {
   const dim = world.getDimension(OVERWORLD);
@@ -1373,7 +1405,7 @@ function spawnMobs(f, types, name) {
         const top = topAt(dim, Math.floor(at.x), Math.floor(at.z));
         if (top && !top.id.includes("water") && Math.abs(top.y - f.rec.y) < 6) at.y = top.y + 1;
       }
-      const e = dim.spawnEntity(/** @type {any} */ (type), at);
+      const e = spawnFresh(dim, type, at);
       e.addTag(MOB_TAG);
       e.addTag(FIGHT_TAG + f.id);
       if (name) e.nameTag = name;
@@ -1449,7 +1481,7 @@ function endFight(f, won) {
   if (won) {
     earn(p, f.rec);
     p.sendMessage(f.kind === "cairn" ? "§a[Atlas] The cairn is silent. The Choir won't ring here again for you." : "§a[Atlas] The watch post holds. Whoever kept it would be proud.");
-    send("realm:gossip", { kind: "atlas_site", player: p.id, name: p.name, place: KIND_NAMES[f.kind] });
+    gossip(`${p.id}:${f.key}`, { kind: "atlas_site", player: p.id, name: p.name, place: KIND_NAMES[f.kind] });
   } else p.sendMessage(f.kind === "cairn" ? "§7[Atlas] The Choir's keepers slip away. The bell will be back in its place." : "§7[Atlas] The watch post falls again. Ring the bell to try once more.");
 }
 
@@ -1538,7 +1570,7 @@ function milestones(player, d) {
       changed = true;
       send("realm:title_unlock", { player: player.id, title });
       player.sendMessage(`§6[Atlas] ${n} ${what} found! §7Title: ${title}`);
-      send("realm:gossip", { kind: "atlas", player: player.id, name: player.name, place: title, n });
+      gossip(`${player.id}:${id}`, { kind: "atlas", player: player.id, name: player.name, place: title, n });
     }
   }
   const trail = Number(CONFIG.trailSites) || 25;

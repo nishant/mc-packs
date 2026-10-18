@@ -27,6 +27,7 @@ const OPTIONS = [
   { key: "arriveDistance", type: "int", scope: "world", min: 2, max: 32, label: "Arrived within (blocks)", help: "A picked destination clears this close. The story target never does" },
   { key: "maxMarks", type: "int", scope: "world", min: 1, max: 10, label: "Marked spots per player" },
   { key: "intervalTicks", type: "int", scope: "world", label: "Markers update every (ticks)", help: "The strip and radar still turn with you every tick", restart: true },
+  { key: "budgetLevel", type: "enum", scope: "world", choices: ["low", "normal", "high"], names: ["Low (about 2 ms a tick)", "Normal (about 2.9 ms a tick)", "High (about 4.4 ms a tick)"], label: "Minimap script time a tick", help: "For everyone together. Low costs the server less: with many players the radar's land and mob dots lag a little more. High: smoother with many players moving" },
   { key: "compass", type: "bool", scope: "player", lock: [["enabled", false]], base: "compassDefault", label: "Compass strip", help: "At the top of the screen: which way you face, your destination, townsfolk, wanderers, party mates, mobs, the nearest town, your bed and a rainbow's pot of gold (needs Realm Resources)" },
   { key: "radar", type: "bool", scope: "player", lock: [["enabled", false]], base: "radarDefault", label: "Radar", help: "At the top right below the compass strip, with you in the middle (needs Realm Resources)" },
   { key: "radarNorthUp", type: "bool", scope: "player", lock: [["enabled", false]], base: "radarNorthUp", label: "Radar keeps north up", help: "Disabled: it turns with you, so ahead is always up" },
@@ -333,7 +334,14 @@ function bytes(s) {
 }
 
 /** @param {string} id @returns {Player | undefined} */
-const online = (id) => world.getAllPlayers().find((p) => p.id === id);
+const online = (id) => {
+  try {
+    const e = world.getEntity(id); // one lookup, not a scan of every player (each pack answers every /realm:prefs open)
+    return e instanceof Player ? e : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /** @param {any} req */
 function answer(req) {

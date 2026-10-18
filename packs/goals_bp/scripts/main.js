@@ -1,4 +1,5 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, ItemLockMode, ItemTypes, Player, system, world } from "@minecraft/server";
+import "./diag.js";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, ItemLockMode, ItemTypes, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -68,10 +69,33 @@ function goals() {
   return (cache = map);
 }
 
-/** @param {Goal} g */
+/** Where the smallest contributors are added up once a goal has too many to keep by name. */
+const OTHERS = "*";
+/** A goal's property stays under this many characters (one holds about 32,000). */
+const SAVE_LIMIT = 30000;
+
+/**
+ * Saves the goal. One with so many contributors that it would pass the property's limit (hundreds, on a big server)
+ * keeps the biggest by name and adds the smallest up under "Others", so its total and top list stay right.
+ * @param {Goal} g
+ */
 function save(g) {
   goals().set(g.id, g);
-  world.setDynamicProperty(GOAL_PREFIX + g.id, JSON.stringify(g));
+  let json = JSON.stringify(g);
+  if (json.length > SAVE_LIMIT) {
+    const others = g.c[OTHERS]?.[1] ?? 0;
+    const named = Object.entries(g.c)
+      .filter(([id]) => id !== OTHERS)
+      .sort((a, b) => b[1][1] - a[1][1]);
+    // About 50 characters each: keep as many as fit in two thirds of the room, so this runs again only rarely.
+    const keep = Math.max(1, Math.floor((SAVE_LIMIT * 2) / 3 / 50));
+    let folded = others;
+    for (const [, [, n]] of named.slice(keep)) folded += n;
+    g.c = Object.fromEntries(named.slice(0, keep));
+    g.c[OTHERS] = ["Others", folded];
+    json = JSON.stringify(g);
+  }
+  world.setDynamicProperty(GOAL_PREFIX + g.id, json);
 }
 
 /** @param {number} id */
@@ -80,10 +104,11 @@ function remove(id) {
   world.setDynamicProperty(GOAL_PREFIX + id, undefined);
 }
 
-/** Highest first. @param {Goal} g @returns {[string, number][]} */
+/** Highest first, by name (without the smallest added up under "Others"). @param {Goal} g @returns {[string, number][]} */
 const ranking = (g) =>
-  Object.values(g.c)
-    .filter(([, n]) => n > 0)
+  Object.entries(g.c)
+    .filter(([id, [, n]]) => id !== OTHERS && n > 0)
+    .map(([, v]) => v)
     .sort((a, b) => b[1] - a[1]);
 
 /** "Sam 1,200, Alex 800". @param {Goal} g @param {number} n */
@@ -113,6 +138,56 @@ const collectorAt = (block, except) =>
 const LOOK = `Look at a chest, barrel or other container within ${CONFIG.linkDistance} blocks, then try again.`;
 
 // ---------------------------------------------------------------------------
+// Town news: Townsfolk gossip, Realm Mail letters and a title for a reached goal
+// ---------------------------------------------------------------------------
+
+const NEWS_GAP = 1000; // ticks (an in-game hour): at most one piece of gossip from this pack per in-game hour
+let newsAt = -NEWS_GAP;
+/** Events already gossiped about (each once). @type {Set<string>} */
+const newsSeen = new Set();
+
+/** Townsfolk gossip (Hearth & Hearsay), rate-limited and once per event. @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
+/** Plain ASCII, no color codes. @param {string} s */
+const plain = (s) => s.replace(/§./g, "").replace(/[^\x20-\x7E]/g, "").trim();
+const TITLE_MAX = 32; // the Titles pack's default maxTitleLength
+
+/**
+ * A goal was reached: the town gossips about the top contributor, who gets the title "Pillar of <goal>" (or "Pillar
+ * of the Town" when the name is too long for a title), and the top contributors get a thank-you letter through
+ * Realm Mail, offline ones too. Other packs ignore these events when they aren't installed.
+ * @param {Goal} g
+ */
+function celebrate(g) {
+  const ranked = Object.entries(g.c)
+    .filter(([id, [, n]]) => id !== OTHERS && n > 0)
+    .sort((a, b) => b[1][1] - a[1][1])
+    .slice(0, Math.max(1, Math.min(10, Number(get("topContributors")) || CONFIG.topContributors)));
+  if (!ranked.length) return;
+  const name = plain(g.n) || itemName(g.item);
+  const [topId, [topName]] = ranked[0];
+  gossip(`goal:${g.id}`, { kind: "goal", player: topId, name: topName, place: name.slice(0, 48) });
+  const title = `Pillar of ${name}`.length <= TITLE_MAX ? `Pillar of ${name}` : "Pillar of the Town";
+  system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: topId, title, from: "goals_bp" }));
+  ranked.forEach(([id, [who, n]], i) => {
+    const place = i === 0 ? "more than anyone" : `the ${["", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"][i] ?? `number ${i + 1}`} most`;
+    const body =
+      `${who},\n\nThe community goal ${name} is reached: ${fmt(g.target)} ${itemName(g.item)} in all. ` +
+      `You gave ${fmt(n)}, ${place}.${i === 0 ? ` The town calls you ${title} now.` : ""}\n\nThank you!\n\n- The town`;
+    system.sendScriptEvent("realm:mail_send", JSON.stringify({ to: id, from: "Community Goals", subject: `Thank you: ${name}`.slice(0, 40), body: body.slice(0, 600) }));
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Donating
 // ---------------------------------------------------------------------------
 
@@ -129,6 +204,11 @@ function announce(g, donor) {
     if (everyone) world.sendMessage(line);
     else donor.sendMessage(line);
     for (const p of everyone ? world.getAllPlayers() : [donor]) p.playSound("random.levelup", { pitch: 1, volume: 0.8 });
+    try {
+      celebrate(g);
+    } catch (e) {
+      console.warn(`[goals] news: ${e}`);
+    }
   } else if (get("announce") === true) {
     world.sendMessage(`§6Community goal §e${g.n}§6: ${q * 25} percent there (${fmt(g.got)} / ${fmt(g.target)} ${itemName(g.item)}). /realm:goals to help`);
     for (const p of world.getAllPlayers()) p.playSound("note.pling", { pitch: 1.2, volume: 0.6 });
@@ -515,6 +595,26 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Scenario tests (BDS harness): every open goal gets `donors` more contributors (offline players, 1 item each), as a
+// long goal on a big server does. Only from the server console: /scriptevent realm:goals_test {"donors":900}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:goals_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const n = Math.max(0, Math.min(5000, Math.floor(Number(JSON.parse(ev.message)?.donors) || 0)));
+      for (const g of goals().values()) {
+        if (g.done) continue;
+        for (let i = 0; i < n; i++) g.c[`-${4294900000 - i}`] = [`DonorWithALongName${i}`, 1];
+        g.got += n;
+        save(g);
+      }
+    } catch (e) {
+      console.warn(`[goals] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(

@@ -1,8 +1,10 @@
 // @ts-nocheck
 import { world, system } from "@minecraft/server";
+import { allPlayers } from "../utils/Items.js";
 import { getState } from "./PlayerState.js";
 import { t } from "../utils/Text.js";
 import { ensureChunkLoaders, releaseChunkLoaders } from "./ChunkLoader.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 const DEFAULT_SPEED    = 2500;
 const GLOBAL_MAX_TICK  = 50000;
 const NOTIFY_EVERY     = 20;
@@ -81,7 +83,7 @@ export function startPlacementQueue() {
             byPlayer.get(e.playerId).push(e);
         }
 
-        for (const player of world.getAllPlayers()) {
+        for (const player of allPlayers()) {
             try {
                 const mine = byPlayer.get(player.id);
                 if (!mine || mine.length === 0) continue;
@@ -96,6 +98,7 @@ export function startPlacementQueue() {
                 const cx = Math.round(sx / n);
                 const cy = Math.round(sy / n);
                 const cz = Math.round(sz / n);
+                lockActionBar(player.id, 1500);
                 player.onScreenDisplay.setActionBar(
                     n === 1
                         ? t("eb.queue.waiting_one", cx, cy, cz)

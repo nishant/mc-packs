@@ -17,6 +17,7 @@
 //   realm:gossip, realm:rep_add, realm:skill_xp, realm:title_unlock, realm:trail_unlock, realm:recipe_learn, realm:sky_request
 //   realm:calendar_debug  { action, ... } (console, scripts, operators) -> realm:calendar_state
 // See "Realm Calendar" in docs/PACKS.md.
+import "./diag.js";
 import { BlockPermutation, CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, GameMode, ItemStack, Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
@@ -930,7 +931,8 @@ function startNest(player, force = false) {
   for (let k = 0; k < n; k++) {
     try {
       const a = (k / n) * Math.PI * 2;
-      const e = dim.spawnEntity("minecraft:turtle", { x: x + Math.cos(a) * 1.5, y: y + 0.2, z: z + Math.sin(a) * 1.5 }, { spawnEvent: "minecraft:entity_born" });
+      const e = spawnFresh(dim, "minecraft:turtle", { x: x + Math.cos(a) * 1.5, y: y + 0.2, z: z + Math.sin(a) * 1.5 }, { spawnEvent: "minecraft:entity_born" });
+      if (!e) continue;
       e.addTag(FX_TAG);
       e.addTag(`realm:cal_nest_${id}`);
       e.nameTag = "Hatchling";
@@ -974,7 +976,8 @@ function nestTick() {
           const top = dim.getTopmostBlock(at);
           const water = waterOver(top) !== undefined; // a drowned on the bed under it
           const type = water ? "minecraft:drowned" : Math.random() < 0.3 ? "minecraft:husk" : "minecraft:zombie";
-          const e = dim.spawnEntity(type, { x: at.x, y: (top?.y ?? w.y) + 1, z: at.z });
+          const e = spawnFresh(dim, type, { x: at.x, y: (top?.y ?? w.y) + 1, z: at.z });
+          if (!e) continue;
           e.addTag(FX_TAG);
           e.addTag(`realm:cal_nest_${w.id}`);
         } catch {
@@ -983,6 +986,20 @@ function nestTick() {
       }
     }
   }
+}
+
+/**
+ * spawnEntity, checked: a world whose entity ids repeat (an old level.dat put back) can hand back an existing entity
+ * (a pet, a dropped item). Tagging that one would have the nest's end remove it, so it's left alone and we spawn again.
+ * @param {Dimension} dim @param {string} type @param {Vector3} at @param {import("@minecraft/server").SpawnEntityOptions} [opts]
+ */
+function spawnFresh(dim, type, at, opts) {
+  for (let k = 0; k < 4; k++) {
+    const e = dim.spawnEntity(/** @type {any} */ (type), at, opts);
+    if (e.typeId === type) return e;
+  }
+  console.warn(`[calendar] spawning ${type} kept returning another entity`);
+  return undefined;
 }
 
 /** @param {{ pid: string, id: number }} w @param {boolean} ok @param {Player | undefined} player @param {string} text */

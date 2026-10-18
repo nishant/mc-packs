@@ -451,6 +451,21 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 // ---------------------------------------------------------------------------
 
 /**
+ * spawnEntity, but never another entity: in a world with reused entity ids it can hand back one that already exists
+ * (a dropped item, a pet), and the deck tags and later removes what it spawns. Retries, then throws.
+ * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
+ * @returns {Entity}
+ */
+export function spawnFresh(dim, type, at) {
+  const want = type.includes(":") ? type : `minecraft:${type}`;
+  for (let k = 0; k < 8; k++) {
+    const e = dim.spawnEntity(/** @type {any} */ (type), at);
+    if (e.typeId === want) return e;
+  }
+  throw new Error(`spawnEntity(${type}) kept returning another entity`);
+}
+
+/**
  * Spawns `n` of a mob on safe spots `minR` to `maxR` blocks around the player, within 8 blocks of
  * their height (at their feet when there's no room).
  * @param {Player} p @param {string} type @param {number} n @param {number} [minR] @param {number} [maxR]
@@ -463,7 +478,7 @@ export function spawnAround(p, type, n, minR = 3, maxR = 6) {
     // Near the player's height (not on the ground far below a sky base, or on the surface over a cave).
     const spot = randomSpot(p, minR, maxR, 20, 8) ?? p.location;
     try {
-      const e = p.dimension.spawnEntity(type, spot);
+      const e = spawnFresh(p.dimension, type, spot);
       out.push(e);
       burst(p.dimension, "minecraft:basic_smoke_particle", spot, 6, 0.6);
     } catch (err) {

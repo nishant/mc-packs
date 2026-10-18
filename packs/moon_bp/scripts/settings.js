@@ -319,7 +319,14 @@ function bytes(s) {
 }
 
 /** @param {string} id @returns {Player | undefined} */
-const online = (id) => world.getAllPlayers().find((p) => p.id === id);
+const online = (id) => {
+  try {
+    const e = world.getEntity(id); // one lookup, not a scan of every player (each pack answers every /realm:prefs open)
+    return e instanceof Player ? e : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /** @param {any} req */
 function answer(req) {

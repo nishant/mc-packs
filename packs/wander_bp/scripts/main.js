@@ -13,11 +13,12 @@
 //   realm:place_ready  { name, state, dim, x, y?, z, wid? }                  <- story places and camps
 //   realm:poi          { kind, dim, x, z }                                   <- Atlas sites (anchors), when it comes
 // See "Wanderers of the Wilds" in docs/PACKS.md.
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, GameMode, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOKS, NAMED, NAMED_GREETINGS, SAILOR_LOOK } from "./lines.js";
-import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
+import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get, getFor } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
 
@@ -51,6 +52,7 @@ const nameLabels = createNameLabels({
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
   observerRange: 36,
+  spectatorsExcluded: true,
 });
 
 const LOOP_TICKS = 20; // upkeep: timers, camps, sparkles, keep ghosts in place
@@ -650,7 +652,7 @@ world.beforeEvents.effectAdd.subscribe((ev) => {
 function spawnWanderer(dim, rec, type, camp, look) {
   try {
     // A villager starts as a village's newcomer (no job yet, a random skin, the biome's clothes), then takes their look.
-    const ent = dim.spawnEntity(/** @type {any} */ (type), { x: rec.x, y: rec.y, z: rec.z }, type === VILLAGER ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
+    const ent = spawnChecked(dim, type, { x: rec.x, y: rec.y, z: rec.z }, type === VILLAGER ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
     for (const tag of [OWNER_TAG, NPC_TAG, ID_TAG + `w_${rec.w}`, (camp ? CAMP_TAG : ROAD_TAG) + rec.w]) ent.addTag(tag);
     const key = `${camp ? "camp" : "road"}:${rec.w}`;
     ent.nameTag = `${wandererLabel(rec.w, rec.n)}${wandererMarker(key)}`;
@@ -678,13 +680,14 @@ const wandererMarker = (key) => encodeHiddenMarker("b4", key);
 /** Syncs all active road and camp wanderer nameplate helpers with active observers. */
 function updateLabels() {
   if (!ready) return;
-  const dims = DIMENSIONS.flatMap((id) => {
-    try {
-      return [world.getDimension(id)];
-    } catch {
-      return [];
-    }
-  });
+  const dims = () =>
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    });
   const targets = [];
   for (const rec of Object.values(live)) {
     const ent = entityById(rec.e);
@@ -697,7 +700,7 @@ function updateLabels() {
     const id = `camp:${wid}`;
     if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
   }
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /**
@@ -1531,16 +1534,29 @@ system.runInterval(() => {
   }
 }, TETHER_TICKS);
 
+// Each player is rolled once per scheduleTicks, on a second of their own (from a hash of their id): a full server's
+// rolls are spread over the period instead of all landing on one tick.
+const ROLL_TICKS = Math.max(200, Math.floor(Number(CONFIG.scheduleTicks)) || 1200);
+const ROLL_SLOTS = Math.max(1, Math.round(ROLL_TICKS / 20));
+let rollRun = 0;
+/** @param {string} id */
+function rollSlot(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return (h >>> 8) % ROLL_SLOTS;
+}
 system.runInterval(() => {
+  const slot = rollRun++ % ROLL_SLOTS;
   if (!ready || get("enabled") !== true) return;
   for (const p of world.getAllPlayers()) {
+    if (rollSlot(p.id) !== slot) continue;
     try {
       roll(p);
     } catch (e) {
       console.warn(`[wander] ${e}`);
     }
   }
-}, Math.max(200, Math.floor(Number(CONFIG.scheduleTicks)) || 1200));
+}, Math.max(1, Math.round(ROLL_TICKS / ROLL_SLOTS)));
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pcache.delete(playerId);

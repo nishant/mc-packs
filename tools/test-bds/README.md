@@ -46,11 +46,82 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--keep` | off | Keep the temp server folder (path printed at the end). |
 | `--log <file>` | `logs/...` | Where to write the full log. |
 | `--quiet` | off | Print only harness lines, warnings and errors. Recommended. |
+| `--arg key=value` | | Passed to the scenario as `t.args.key` (a string), repeatable. |
+| `--no-relay` | off | The shim does not relay pack messages (`t.messages()` stays empty; forms still work). For profiling. |
+| `--profile` | off | Time every pack's callbacks during the scenario (see "Profiling" below). |
+| `--profile-every <s>` | 60 | With `--profile`: also print an interim report every s seconds (0 = off). |
+| `--profile-json <file>` | log + `.profile.json` | With `--profile`: where the JSON report goes. |
 | `-h`, `--help` | | Print the usage and exit. |
 
 Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or `/home/user/bds` on Linux; downloaded by `setup.mjs` if
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
 `logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
+
+## Profiling (`--profile`)
+
+`--profile` adds `lib/profile.js` to every shimmed behavior pack (after the shim, before the pack's
+entry, in the temp copy only). It wraps the callbacks a pack hands to the game, calls them with the
+same `this` and arguments and returns their result, so the pack behaves the same:
+`system.run`/`runTimeout`/`runInterval`, each step of a `runJob` generator, every
+`world`/`system` `beforeEvents`/`afterEvents` subscription (unsubscribe takes the pack's own function
+as before) and custom command callbacks. It also counts `setDynamicProperty` writes (world, entity,
+item, and the characters written), `setActionBar`, `setTitle` and `runCommand` calls. Each callback
+is named by its kind and the `file:line` that handed it over (`runInterval(20) @ main.js:148`). The
+window starts when the scenario starts (startup and module loading are not measured) and ends when
+it finishes; with `t.restart()` only the last phase is reported. The test pack also measures the
+wall time between ticks (TPS, tick interval p95), and on Linux `run.mjs` reads `bedrock_server`'s CPU
+time and memory from `/proc`.
+
+The summary then lists, per pack sorted by cost: ms/tick (average), the p95 and max of a tick's ms,
+calls/tick, `setDynamicProperty`, `setActionBar`, `setTitle` and `runCommand` per tick and the top
+callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, and the
+whole-bundle per-tick total (packs summed tick by tick: p50, p95, p99, max).
+
+Limits: Bedrock scripting has no high-resolution clock, so times are `Date.now()` differences: a
+single call reads 0 or 1 ms, but sums over many calls are unbiased, and per-tick p95 values are whole
+milliseconds. Code after an `await` in an async callback runs as a promise continuation and is not
+counted. A pack that triggers another pack's before-event handler synchronously is charged for it as
+well. With message relaying on, a pack's `sendMessage`/`setActionBar`/`setTitle` time includes the
+shim's relay (a script event per message), so profile with `--no-relay`. The simulated players and
+the scenario itself also cost server time that no pack is charged for.
+
+```bash
+node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
+```
+
+`examples/perf-soak.js` spreads `players` simulated players around spawn in groups (two near spawn,
+the others 240+ blocks apart, two in a pool, two in the Nether), makes them walk, look around, sneak
+and jump, and run a few common commands for `seconds` (see its header for the other arguments).
+
+## Running every example (`suite.mjs`)
+
+`node tools/test-bds/suite.mjs --jobs 2 --retry` runs every scenario in `examples/` with the command
+from its own header (the first `node tools/test-bds/run.mjs ...` line; the scenario path is always the
+file itself) and prints `scenario | result | seconds | first failure line`, then the totals. Results:
+`pass`, `fail`, `flaky` (failed, then passed when rerun alone with `--retry`), `timeout`, `skipped`.
+Headers that build a test copy with a plain shell recipe (the lines just above the command: `mkdir`,
+`cp`, `sed`, `grep`, `cat`...) get the recipe run first, with `/tmp/` moved to a folder of the suite run.
+Test hooks that a scenario needs inside a pack (packs can't read each other's dynamic properties) live in
+`hooks/` and are appended to the test copy by the recipe (`hooks/maps-rvtest.js` for maps-cleanup and
+maps-leave, `hooks/rainbow-rvtest.js` for rainbow-race, the `hooks/limit_bp` probe pack for
+harness-event-limit); a `--packs` header without a recipe is skipped ("needs hook copy"). A header whose
+command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in
+`SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the
+npc-name-capability probe, saga-lighthouse, and stash-pages-persistence through `stash-persistence.mjs`).
+Options: `--jobs N` (default 2; each run is CPU bound), `--filter <regex>` (scenario names),
+`--retry`, `--json <out>`, `--list` (print each plan and exit). Logs go to
+`logs/suite-<time>/<scenario>.out` (run.mjs output) and `.log` (full BDS log). The exit code is 1 when
+anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
+
+`node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json out]` runs
+only `perf-soak.js`, once per player count (one at a time, with `--profile`), and prints ms/tick per pack side by
+side with the budget: the whole bundle under 5 ms/tick at 40 players, a typical pack at most 0.15, the Minimap
+(`map_bp`) and HUD (`hud_bp`) at most 1. The JSON reports land in the suite's log folder.
+
+The shim also checks the script event rule: a pack that sends a `realm:` script event of 2048 characters or
+more logs a `[harness-shim] ... sent script event ... with N characters` script error, so the run fails (BDS
+1.26 delivers any length, so only a Realm would notice). Scenarios can listen for `harness:limit`
+`{pack, id, length}` too (`examples/harness-event-limit.js`).
 
 ## Inventory persistence regression
 

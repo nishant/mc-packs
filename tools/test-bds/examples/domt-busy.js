@@ -14,5 +14,8 @@ export default async function (t) {
   const since = t.tick;
   t.cmd(op, "/realm:domt_draw Buddy");
   await t.waitMessage(op, /Buddy is still drawing a card/, { since, timeout: 60 });
-  await t.waitMessage(buddy, /You drew The Comet/, { timeout: 1200 });
+  // The first card still finishes. The Comet picks 4 random spots 150 to 300 blocks away and gives up
+  // (crumbles to dust) when all of them are ocean, which the cached world around spawn often is, so
+  // either ending counts: this scenario is about the busy message, not the landing.
+  await t.waitMessage(buddy, /You drew The Comet|The Comet crumbles to dust/, { timeout: 1200 });
 }

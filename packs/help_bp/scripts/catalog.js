@@ -39,7 +39,7 @@ export const PACKS = [
     "summary": "Change the packs' settings in game: operators set them for everyone with §e/realm:config§r, and every player picks their own preferences with §e/realm:prefs§r.",
     "steps": [
       {
-        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r at the bottom: nothing applies until you do. A preference the operators have overridden for the whole realm shows as gray text instead of a switch, with its value and why, such as §eCoordinates HUD: Disabled§r / §eLocked by the operators: Coordinates HUD is Disabled for the whole realm§r (or §eEasy Building needs the tag \"builder\", which operators give§r). Close with X and a popup says §eNothing was saved§r, with §lBack to my preferences§r and §lClose§r (the game doesn't hand back what was on a form closed with X, so changes made there have to be made again). A summary pops up with how many changes were saved and each one as before -> after, for example §e1 change saved§r and §ePhantom Opt-out > Phantoms near me: Enabled -> Disabled§r (chat gets the same). Tap §lBack to my preferences§r to change more, or §lDone§r.",
+        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r at the bottom: nothing applies until you do. A preference the operators have overridden for the whole realm shows as gray text instead of a switch, with its value and why, such as §eCoordinates HUD: Disabled§r / §eLocked by the operators: Coordinates HUD is Disabled for the whole realm§r (or §eEasy Building needs the tag \"builder\", which operators give§r). Close with X and chat says §eMy preferences: closed with X, so nothing was saved. To change a setting, run /realm:prefs again and press Save at the bottom.§r (the game doesn't hand back what was on a form closed with X). A summary pops up with how many changes were saved and each one as before -> after, for example §e1 change saved§r and §ePhantom Opt-out > Phantoms near me: Enabled -> Disabled§r (chat gets the same). Tap §lBack to my preferences§r to change more, or §lDone§r.",
         "ops": false
       },
       {
@@ -81,7 +81,7 @@ export const PACKS = [
     "summary": "Every player carries a §lRealm Configuration§r item (a nether star with a gold name, whose lore starts §eHold it in your hand and use it§r / §eto open the realm menu:§r). Using it opens one menu with §levery realm command you can use§r: pick what you want to do, pick a command, choose its options from preset lists (townsfolk, weather kinds, relics, online players, sliders with sensible ranges, your position filled in), and it runs as you, with the command's own checks, messages and menus. Players who aren't operators see the same menu without the operator entries; operators see everything, with operator-only entries in §lred§r. The commands still work as typed; this is for when you'd rather not type them while playing.",
     "steps": [
       {
-        "text": "You get the §eRealm Configuration§r item when you join or respawn without one (§egiveToPlayers§r). It stays through death and can't be dropped or put in a chest, and you only ever get one. Lost it anyway? Run §e/realm:admin_item§r. §e/realm:admin§r opens the same menu.",
+        "text": "You get the §eRealm Configuration§r item when you join or respawn without one (§egiveToPlayers§r). It stays through death and can't be dropped or put in a chest, and you only ever get one. Lost it anyway? Run §e/realm:admin_item§r. §e/realm:admin§r opens the same menu. Operators: on a world whose setup isn't finished, chat says once §eNew world? Set up this world walks you through the one-time setup (townsfolk, a town, safe zones, server size...)§r; §lDon't remind operators§r on its first page stops it for every operator.",
         "ops": false
       },
       {
@@ -101,7 +101,7 @@ export const PACKS = [
         "ops": true
       },
       {
-        "text": "§lOperators: Operator Tools§r is one page (everything on it is for operators) with three headings. §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player (nearest first) or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the Townsfolk§r. §lSafe Zones§r and §lAdd a Town§r show §e[x]§r with how many exist; the others can't be checked from here. Under §lRealm Configuration§r, §lGet the Menu Item§r gives the item to other players.",
+        "text": "§lOperators: Operator Tools§r is one page (everything on it is for operators). It starts with §lSet up this world§r (see §e/realm:admin_setup§r) and §lServer size§r: §lSmall Realm§r (up to about 10 players: every setting below at its pack's default) or §lLarge server§r (30 to 100+ players). Picking one lists every change first, §ePack: Setting: old -> new§r in menu words, plus how many already match and which packs aren't installed; §lYes§r changes them all at once (chat: §eServer size: Large server. Changed 8 settings.§r). Large server sets: Minimap §ebudgetLevel§r normal -> low and §emobRadiusMax§r 32 -> 24, Champions §emaxAlive§r 8 -> 16, Expeditions §eslots§r 1 -> 3, Easy Building §emaxBlocksCap§r 50,000 -> 10,000, Lag Cleanup §ethreshold§r 500 -> 1,500, Chest Finder §eliveScanRadius§r 16 -> 8, Realm Configuration §echeckSeconds§r 30 -> 60, Realm Mail §esendCooldownSeconds§r 10 -> 30 and AFK + Smart Sleep §esleep.percent§r 100 -> 50; Small Realm puts each back to its default. Then come three headings. §lQuick actions§r are the vanilla things you'd otherwise type: set the weather (with the Weather Almanac installed this runs §e/realm:weather_set§r, because the almanac plans the weather and would undo a plain change), set the time (day, noon, sunset, night, midnight, sunrise), game mode for a player, teleport to a player (nearest first) or a player to you, give an item by id and amount, clear effects, heal, §lShow a Title§r (1 to 25 seconds, default 5, for everyone online or one player), set the world spawn where you stand, remove hostile mobs nearby (monsters only, named mobs are kept, radius 8 to 128) and game rules (day and night cycle, keep inventory, mob spawning, mob griefing). They work without cheats. §lPack diagnostics§r, after the quick actions, measures every pack's script time for 10 seconds and lists the packs, slowest first, with their saved data; a pack's page can forget its saved data (see §e/realm:diag§r). §lServer setup checklist§r lists the one-time jobs across the installed packs (place the townsfolk, the relicsmith, story places, towns and their project spots, bounty board, caravan spots, expedition site, waystones, safe zones, Creeper Guard zones, farms, a community goal, welcome message, news, settings); tap one to do it. §lRelicsmith§r (§e/realm:relics_smith§r) places Ida, exactly like picking her in §lPlace the Townsfolk§r. The marks are the same as in Set up this world: §e[x]§r done (its pack says so, or it ran from Set up this world), §e[-]§r skipped there, a red §e[ ]§r when its pack says not yet. Under §lRealm Configuration§r, §lGet the Menu Item§r gives the item to other players.",
         "ops": true
       },
       {
@@ -125,6 +125,18 @@ export const PACKS = [
         "ops": false,
         "who": "Everyone",
         "text": "Gives you the Realm Configuration item if you don't carry one. Operators can name other players to check them and give them one. With §egiveToPlayers§r off it's for operators only"
+      },
+      {
+        "usage": "/realm:admin_setup",
+        "ops": true,
+        "who": "Ops",
+        "text": "§lSet up this world§r: walks you through the one-time jobs a new world needs, one page each: what it is, why, whether it's done (the packs say so where they can: townsfolk placed, a town, a safe zone or town over world spawn, a waystone you know near spawn), a button that runs the step's own command, §lMark as done§r where no pack can tell, and §lSkip§r. Steps (only those of installed packs): place the Townsfolk, add a town, a safe zone at spawn, a caravan arrival spot, the bounty board, a first waystone at spawn, the expedition site, Server size, then the rest of the setup checklist. Ends with a summary (§eSetup finished: 3 done, 2 skipped.§r). Also the first button of §lOperator Tools§r"
+      },
+      {
+        "usage": "/realm:diag [seconds]",
+        "ops": true,
+        "who": "Ops",
+        "text": "§lPack diagnostics§r: measures every pack's script time for a few seconds (default 10, 1 to 60), then lists every pack that answered, slowest first, with its version, ms per tick and saved data. Red: over 0.5 ms per tick, or one saved entry over 24 KB (one entry can hold 32 KB). Packs that don't answer (an older version) are listed under §lNo answer§r. A pack's page shows what takes its time (its top two callbacks), its biggest saved entry, and §lForget this pack's saved data§r: after you confirm, the pack deletes everything it saved in the world (in a bundle only its own entries), including anything it kept for players there such as stored inventory pages or letters, and saves nothing more until you run §e/reload§r or restart. Scoreboards, tags, structures and data saved on players are kept. Also §lOperator Tools > Pack diagnostics§r"
       },
       {
         "usage": "/realm:admin_title <title> [subtitle] [seconds] [player]",
@@ -170,7 +182,7 @@ export const PACKS = [
         "usage": "/realm:welcome_edit",
         "ops": true,
         "who": "Ops",
-        "text": "Opens an editor: title, body (Minecraft's text boxes hold only 100 characters each, so the body is split over at least 4 boxes, joined in order with nothing between them; §e\\n§r is a new line; all boxes empty = the default text), button text, and toggles for show once, chat copy, big on-screen title and \"Show it again to players who've seen it\" (on by default; turn it off for a quiet fix). If chat or the inventory stays open, it retries for about 20 s and then says so once"
+        "text": "Opens an editor: title, body (Minecraft's text boxes hold only 100 characters each, so the body is split over at least 4 boxes, joined in order with nothing between them; §e\\n§r is a new line; all boxes empty = the default text; a body over 20000 characters isn't saved, and chat says so), button text, and toggles for show once, chat copy, big on-screen title and \"Show it again to players who've seen it\" (on by default; turn it off for a quiet fix). Saving changes only what you changed: a switch flipped in §e/realm:config§r, or another operator's edit made while your editor was open, stays. If chat or the inventory stays open, it retries for about 20 s and then says so once"
       },
       {
         "usage": "/realm:welcome_reset",
@@ -332,7 +344,7 @@ export const PACKS = [
         "usage": "/realm:news_edit",
         "ops": true,
         "who": "Ops",
-        "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If you have a draft from §e/realm:news_body§r or §e/realm:news_add§r, it shows the draft instead of the saved news, with a toggle to discard it. §lSave§r saves the news and clears the draft; closing the editor keeps the draft. Parts added with §e/realm:news_add§r while the editor waits for chat to close are included. If chat stays open for about 20 s, it says it couldn't open (with a draft: that the draft is kept)"
+        "text": "Editor: title, the body in 100-character parts (at least 10, joined in order), and the \"pop up on next join\" toggle. If you have a draft from §e/realm:news_body§r or §e/realm:news_add§r, it shows the draft instead of the saved news, with a toggle to discard it. §lSave§r saves the news and clears the draft; closing the editor keeps the draft. Parts added with §e/realm:news_add§r while the editor waits for chat to close are included. Saving changes only the title or body you changed, so news another operator saved while your editor was open stays. If chat stays open for about 20 s, it says it couldn't open (with a draft: that the draft is kept)"
       },
       {
         "usage": "/realm:news_body \"<text>\"",
@@ -520,7 +532,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lHotbar refill from other pages:§r with Hotbar Refill on, a hotbar stack you use up is refilled from another page when the page you're on has none (§erealm:refill_need§r §e{ player, slot, id, name?, lore? }§r: the fullest stack on another page with the same item, name and lore moves into that empty hotbar slot, in one saved step like a page switch).",
+        "text": "§lHotbar refill from other pages:§r with Hotbar Refill on, a hotbar stack you use up is refilled from another page when the page you're on has none (§erealm:refill_need§r §e{ player, slot, id, name?, lore?, loreHash? }§r, the lore cut to its first 1500 characters and §eloreHash§r a hash of all of it: the fullest stack on another page with the same item, name and lore moves into that empty hotbar slot, in one saved step like a page switch). Tipped arrows, ominous bottles, banners and firework stars never come from another page (what tells them apart isn't compared), and nothing is moved for a player who just died.",
         "ops": false
       },
       {
@@ -641,7 +653,7 @@ export const PACKS = [
     "folder": "death_bp",
     "topic": "death",
     "name": "Death Point",
-    "summary": "Tells you where you died once you respawn, and points you back there. The realm keeps inventories on death, so nothing is lying on the ground waiting for you: this is for finding your way back to where you were, say a cave you were exploring or a long trip through the Nether.",
+    "summary": "Tells you where you died once you respawn, and points you back there. On a world that keeps inventories nothing is lying on the ground; otherwise your items wait at the death point for 5 minutes before they despawn. Either way this is for finding your way back to where you were, say a cave you were exploring or a long trip through the Nether.",
     "steps": [
       {
         "text": "Nothing to set up: when you respawn after dying, chat says §eYou died at 120, 64, -340 in the Overworld.§r",
@@ -864,7 +876,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with (§ecompassDefault§r, §eradarDefault§r, §eradarTerrain§r), the largest mob range anyone may pick (default 32, §emobRadiusMax§r) and whether players outside your party show (§lShow players outside your party§r, enabled by default, §eshowOthers§r). To show everyone a title, use §e/realm:admin_title \"Text\" \"Subtitle\" 5§r instead of §e/title§r: the strip draws over a plain §e/title§r within about 1.5 seconds.",
+        "text": "§lOperators:§r §e/realm:config§r -> §lMinimap§r turns the strip and radar off for everyone (§eenabled§r), sets what new players start with (§ecompassDefault§r, §eradarDefault§r, §eradarTerrain§r), the largest mob range anyone may pick (default 32, §emobRadiusMax§r), whether players outside your party show (§lShow players outside your party§r, enabled by default, §eshowOthers§r) and §lMinimap script time a tick§r (default normal, §ebudgetLevel§r): on a big server, low costs the server less. §lServer size§r in Realm Configuration's Operator Tools sets it to low for a Large server. To show everyone a title, use §e/realm:admin_title \"Text\" \"Subtitle\" 5§r instead of §e/title§r: the strip draws over a plain §e/title§r within about 1.5 seconds.",
         "ops": true
       }
     ],
@@ -908,7 +920,7 @@ export const PACKS = [
     "summary": "Write letters to anyone who has played on the realm, online or not. Letters to offline players wait in their inbox, and they're told about them when they join. Letters carry words only: for items, see the Player Mailroom build.",
     "steps": [
       {
-        "text": "Run §e/realm:mail§r and pick §lWrite a letter§r. Choose who it's for (everyone who has joined since the pack was added, with §e(online)§r after the ones playing now), type a subject and the letter, and press §lSend§r. Minecraft's text boxes hold only 100 characters each, so the letter has several boxes (6 for the default 600 characters): a full box runs straight on into the next, and after a box that isn't full the next one starts a new line. You can also type §e\\n§r for a new line.",
+        "text": "Run §e/realm:mail§r and pick §lWrite a letter§r. Choose who it's for from the list (online players, with §e(online)§r after their names, and those seen most recently: 60 names at most), or, once more players have joined than the list holds, type a name in §lOr type their name§r (the whole name, or enough of it to match one player; offline players get it when they're back; a typed name wins over the list). A name nobody has brings the form back with §eNo player called \"...\" has joined the realm.§r Then type a subject and the letter, and press §lSend§r. Minecraft's text boxes hold only 100 characters each, so the letter has several boxes (6 for the default 600 characters): a full box runs straight on into the next, and after a box that isn't full the next one starts a new line. You can also type §e\\n§r for a new line.",
         "ops": false
       },
       {
@@ -1032,7 +1044,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Pick §lAnother player's milestones§r to see anyone who has played since the pack was added, online or not.",
+        "text": "Pick §lAnother player's milestones§r to see up to 50 players who have played since the pack was added: online players first, then those with the most milestones.",
         "ops": false
       },
       {
@@ -1045,7 +1057,7 @@ export const PACKS = [
         "usage": "/realm:milestones",
         "ops": false,
         "who": "Everyone",
-        "text": "Shows your milestones with progress toward the next tier, and §lAnother player's milestones§r for anyone who has played since the pack was added. Unlocks are announced to everyone (default enabled, §eannounce§r)"
+        "text": "Shows your milestones with progress toward the next tier, and §lAnother player's milestones§r (up to 50 players who have played since the pack was added, online first, then the most milestones). Unlocks are announced to everyone (default enabled, §eannounce§r)"
       }
     ]
   },
@@ -1131,7 +1143,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Items renamed on an anvil, enchanted items, items with lore, shulker boxes, elytra, nether stars, totems, enchanted books and the other items in §ekeepItems§r, items within 4 blocks of a player (§enearPlayerRadius§r), and items within 8 blocks of where a player died in the last 5 minutes (§ekeepDeathDropsMinutes§r) are never cleared.",
+        "text": "Items renamed on an anvil, enchanted items, items with lore, shulker boxes, bundles, elytra, nether stars, totems, enchanted books and the other items in §ekeepItems§r, items within 4 blocks of a player (§enearPlayerRadius§r), and items within 8 blocks of where a player died in the last 5 minutes (§ekeepDeathDropsMinutes§r) are never cleared.",
         "ops": false
       },
       {
@@ -1407,7 +1419,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Several quests going? In §e/realm:saga§r -> §lCurrent quests§r, pick one and tap §lTrack this quest§r: the tracker and the Minimap follow it (marked §e[Tracked]§r) until it's done, then the newest quest again. In a party, it sets the tracked quest for every mate online who is on the same story (a daily favor or a wanderer's job is yours alone). Don't want a quest right now? Tap §lStop tracking§r on its page: it leaves the tracker and the Minimap (it still counts, and shows §e[Not tracked]§r in §lCurrent quests§r). §lTrack this quest§r, or starting its next chapter, brings it back. Stopping is yours alone, also in a party.",
+        "text": "Several quests going? In §e/realm:saga§r -> §lCurrent quests§r, pick one and tap §lTrack this quest§r: the tracker and the Minimap follow it (marked §e[Tracked]§r) until it's done, then the newest quest again. In a party, it sets the tracked quest for every mate online who is on the same story (a daily favor or a wanderer's job is yours alone); on a quest you already track, §lTrack this quest§r (For your party too) still shows while a party mate on the same story follows another quest. Don't want a quest right now? Tap §lStop tracking§r on its page: it leaves the tracker and the Minimap (it still counts, and shows §e[Not tracked]§r in §lCurrent quests§r). §lTrack this quest§r, or starting its next chapter, brings it back. Stopping is yours alone, also in a party.",
         "ops": false
       },
       {
@@ -1452,7 +1464,7 @@ export const PACKS = [
         "usage": "/realm:saga",
         "ops": false,
         "who": "Everyone",
-        "text": "The story log menu: current quests, available and finished stories, the codex, daily favors; for operators also story places and operator tools"
+        "text": "The story log menu: current quests, available and finished stories, the codex, daily favors; for operators also story places and operator tools (your operator rights are checked again on every press, and after an Are you sure? question)"
       },
       {
         "usage": "/realm:saga_log",
@@ -1922,7 +1934,7 @@ export const PACKS = [
         "usage": "/realm:party_chat <message>",
         "ops": false,
         "who": "Everyone",
-        "text": "Sends a message only your party sees, as §e[Party] Name: message§r. Put it in double quotes for more than one word"
+        "text": "Sends a message only your party sees, as §e[Party] Name: message§r. Put it in double quotes for more than one word. One message a second at most (a faster one says §eSlow down: one party message a second.§r)"
       }
     ]
   },
@@ -2617,7 +2629,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r stand somewhere far from spawn and from anyone's builds and mines, and run §e/realm:expedition_site§r once (or §e/realm:expedition_site <x> <z>§r, or §lOperator tools§r -> §lSet the site where I stand§r). Dungeons are built deep underground around that spot (up to 120 by 120 blocks, y -41 to -8), and the site is refused if it's within 124 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. §e/realm:expedition_reset§r ends a run in progress and fills the dungeon back in (§lOperator tools§r -> §lEnd every expedition and reset§r does the same after asking, with the runs in progress listed). §lOperator tools§r also has §lCreate a Nightmare Sigil§r (any dungeon, tier and affixes) and §lUnlock every tier for me§r. §e/realm:config§r -> §lExpeditions§r sets the party size, the time limit, the time at the treasure, the highest tier, building, the reroll cost, the Gauntlet's length and boons, and more.",
+        "text": "§lOperators:§r stand somewhere far from spawn and from anyone's builds and mines, and run §e/realm:expedition_site§r once (or §e/realm:expedition_site <x> <z>§r, or §lOperator tools§r -> §lSet the site where I stand§r). Dungeons are built deep underground around that spot (up to 120 by 120 blocks, y -41 to -8), and the site is refused if it's within 124 blocks of world spawn or if anything that isn't natural rock, ore, dirt, gravel, water, lava or cave plants is in the way. With §eslots§r above 1, a second or third dungeon that would come within §eavoidSpawn§r of world spawn is never used, and setting the site says so. Where the ground at the site is below the dungeon (a flat world, a deep valley) you're warned: the dungeon would be built above the ground. Before removing the pack, end every run with §e/realm:expedition_reset§r, so nobody is left in a sealed dungeon. §e/realm:expedition_reset§r ends a run in progress and fills the dungeon back in (§lOperator tools§r -> §lEnd every expedition and reset§r does the same after asking, with the runs in progress listed). §lOperator tools§r also has §lCreate a Nightmare Sigil§r (any dungeon, tier and affixes) and §lUnlock every tier for me§r. §e/realm:config§r -> §lExpeditions§r sets the party size, the time limit, the time at the treasure, the highest tier, building, the reroll cost, the Gauntlet's length and boons, and more.",
         "ops": true
       }
     ],
@@ -2644,7 +2656,7 @@ export const PACKS = [
         "usage": "/realm:expedition_site [x] [z]",
         "ops": false,
         "who": "Operators",
-        "text": "Sets where dungeons are built: where you stand, or at x z. Refused within 124 blocks of world spawn (default 64, §eavoidSpawn§r, plus half the biggest dungeon) or where anything but natural underground blocks is in the way of the biggest dungeon, with what and where"
+        "text": "Sets where dungeons are built: where you stand, or at x z. Refused within 124 blocks of world spawn (default 64, §eavoidSpawn§r, plus half the biggest dungeon) or where anything but natural underground blocks is in the way of the biggest dungeon, with what and where. With more than one slot (§eslots§r), a dungeon that would come within §eavoidSpawn§r of spawn is left out; where the ground is below the dungeon (a flat world) it warns you"
       },
       {
         "usage": "/realm:expedition_reset",
@@ -3057,7 +3069,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Want to ride the vortex? Step within §epullRadius§r (14 blocks) of the funnel in §lany gamemode§r (Survival, Creative, Adventure): the wind sucks you into the core, spins you around up the twisting funnel for a few seconds, and shoots you high into the sky out the top, granting Slow Falling near the apex so you float down safely. Mobs, NPCs, items and blocks are left completely alone.",
+        "text": "Want to ride the vortex? Step within §epullRadius§r (14 blocks) of the funnel in §lany gamemode§r (Survival, Creative, Adventure): the wind sucks you into the core, spins you around up the twisting funnel for a few seconds, and shoots you high into the sky out the top, granting Slow Falling near the apex that lasts until you land, so you float down safely. Mobs, NPCs, items and blocks are left completely alone.",
         "ops": false
       },
       {

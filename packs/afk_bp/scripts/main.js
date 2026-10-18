@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   CommandPermissionLevel,
   CustomCommandStatus,
@@ -264,6 +265,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
       }
       system.run(() => {
+        if (!player.isValid) return; // left meanwhile
         // Already AFK: say so, since nothing else would answer (the AFK announcement went out the first time).
         if (isAfk(player)) return player.sendMessage("§7You're already AFK. Move to come back.");
         getState(player).graceUntil = system.currentTick + MANUAL_GRACE_TICKS;

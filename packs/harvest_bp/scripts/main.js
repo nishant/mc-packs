@@ -1,3 +1,4 @@
+import "./diag.js";
 import { Block, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";

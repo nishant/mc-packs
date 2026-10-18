@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ItemStack } from "@minecraft/server";
+import { ItemStack, system, world } from "@minecraft/server";
 
 export const BOOK_ID          = "eb:building_book";
 export const LEGACY_BOOK_ID   = "realm:building_book";
@@ -33,6 +33,64 @@ export function heldItem(player) {
             ?.container?.getItem(player.selectedSlotIndex) ?? null;
     } catch { return null; }
 }
+
+let playersTick = -1;
+let playersList = [];
+/**
+ * world.getAllPlayers(), read once a tick and shared by this pack's loops (it builds a fresh list of every player each
+ * call, which adds up at 40+ players with a dozen loops). Handles can go invalid within the tick: callers already
+ * guard each player with try/catch.
+ */
+export function allPlayers() {
+    const now = system.currentTick;
+    if (now !== playersTick) {
+        playersTick = now;
+        playersList = world.getAllPlayers();
+    }
+    return playersList;
+}
+
+/** player id -> the last read of the selected slot: { tick, slot, item } */
+const heldCache = new Map();
+/**
+ * The item in the player's selected slot, shared by the per-tick loops (preview, double-sneak, tutorial book) so the
+ * inventory is read once a tick at most. With maxAge, a read up to that many ticks old is reused unless it found a
+ * building or tutorial book (those stay fresh every tick); a hotbar slot change always reads again.
+ */
+export function heldItemCached(player, maxAge = 0) {
+    const now = system.currentTick;
+    const c = heldCache.get(player.id);
+    if (c && c.slot === player.selectedSlotIndex
+        && (c.tick === now || (now - c.tick <= maxAge && !isBook(c.item) && !isTutorialBook(c.item)))) return c.item;
+    const item = heldItem(player);
+    heldCache.set(player.id, { tick: now, slot: player.selectedSlotIndex, item });
+    return item;
+}
+/** player -> tick their hand last changed (slot change or an item change in the inventory) */
+const handTouched = new WeakMap();
+/** Whether the player's hand changed this tick or the one before (an idle player's loop then looks right away). */
+export function handJustChanged(player) {
+    return (handTouched.get(player) ?? -Infinity) >= system.currentTick - 1;
+}
+/**
+ * Idle players (nothing to draw, no book in hand) are looked at every IDLE_EVERY ticks only, spread over the ticks
+ * by their place in the player list, so a big server costs little while nobody builds.
+ */
+export const IDLE_EVERY = 5;
+export function idleSkip(player, index, busy) {
+    if (busy.has(player)) return false;
+    const now = playersTick; // the loops call allPlayers() first, this tick
+    return (now + index) % IDLE_EVERY !== 0 && (handTouched.get(player) ?? -Infinity) < now - 1;
+}
+const touch = (player) => {
+    heldCache.delete(player.id);
+    handTouched.set(player, system.currentTick);
+};
+try {
+    world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player }) => touch(player));
+    world.afterEvents.playerInventoryItemChange.subscribe(({ player }) => touch(player));
+    world.afterEvents.playerLeave.subscribe(({ playerId }) => heldCache.delete(playerId));
+} catch {}
 
 export function hasItem(player, typeId) {
     try {

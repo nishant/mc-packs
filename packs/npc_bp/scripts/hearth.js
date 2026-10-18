@@ -394,7 +394,7 @@ export const HEARTH = {
     ],
     idle: ["Shh. He's napping. Permanently.", "*leans on a shovel, humming*", "Soil's good this year. Rich.", "Somebody's knocking. Underground. Rude."],
     topics: [
-      { label: "Talking to the dead", text: "\"Somebody has to. They've got all the time in the world and nobody visits. I tell them the news. Mrs. Abernathy likes the weather. Old Pell only wants to hear about cheese.\"" },
+      { label: "Talking to the dead", text: "\"Somebody has to. They've got all the time in the world and nobody visits. I tell them the news. Mrs. Abernathy likes the weather. Old Grimsby only wants to hear about cheese.\"" },
       { label: "Why gravedigging?", text: "\"My father dug, his father dug. Family business. Nobody ever complains about the service. Repeat customers are rare, though.\"" },
       { label: "Are you ever scared here?", text: "\"Of the dead? No. The dead are polite. The living leave the gate open and track mud on the flowers. Scared of them, sometimes.\"" },
     ],
@@ -557,6 +557,38 @@ export const GOSSIP = {
   relic_starlit: [
     ["{name}'s {place} is Starlit. Ida hasn't stopped smiling. Ida doesn't smile.", "Your {place} is Starlit, {player}! Ida hasn't stopped smiling. That's new."],
     ["They say {name}'s {place} glows gold now. Ida worked it for days.", "A Starlit {place}! Gold right through. Let me see it, {player}."],
+  ],
+  goal: [
+    ["The town reached its goal, '{place}', and {name} gave more than anyone. Bram wants a plaque.", "You gave the most to '{place}', {player}. Bram wants a plaque. With your name spelled right, this time."],
+    ["'{place}' is done! Everybody chipped in, and {name} chipped in the most.", "'{place}' is done, and you chipped in more than anyone, {player}. Thank you."],
+  ],
+  milestone: [
+    ["{name} made {place}. Nobody even knew that was a thing you could be.", "{place}, {player}! I didn't know that was a thing you could be. It suits you."],
+    ["Have you heard? {name} is {place} now. People keep count of these things.", "{place}! People keep count of these things, {player}. I do, anyway."],
+  ],
+  bounty: [
+    ["{name} claimed the bounty on {place}. Reyes paid out without even grumbling.", "The bounty on {place} is yours, {player}. Reyes paid without grumbling. Mark the day."],
+    ["The board's one name shorter: {name} brought in {place}.", "You brought in {place}! The bounty board's one name shorter, {player}."],
+  ],
+  treasure: [
+    ["{name} dug up a buried chest, they say. Mara swears the map was one of hers.", "You found the treasure! Mara swears it was one of her maps, {player}."],
+    ["Treasure! {name} followed a map all the way to the X. People will be digging holes for weeks.", "You followed the map all the way to the X, {player}. Now everyone wants one."],
+  ],
+  tornado: [
+    ["{name} got picked up by the tornado and came down laughing. Laughing!", "You rode the tornado, {player}? And you came down laughing? Sit down."],
+    ["Did you see? The twister threw {name} over the treetops. Not a scratch.", "Over the treetops, {player}! Not a scratch on you. I'd have screamed."],
+  ],
+  storm_haul: [
+    ["{name} pulled {n} Storm Glass off a lightning rod. Ida's already asking for it.", "{n} Storm Glass from one rod, {player}! Ida will want a look."],
+    ["They say {name} waits out every storm by a lightning rod. {n} Storm Glass, last time.", "{n} Storm Glass! Waiting out the storm by a rod paid off, {player}."],
+  ],
+  caravan: [
+    ["A merchant caravan pulled in at {place}. Bring Crowns, and hold on to them.", "A merchant caravan pulled in at {place}. Bring Crowns, and hold on to them."],
+    ["The caravan's here, at {place}! Llamas everywhere. Wren has named three already.", "The caravan's here, at {place}! Llamas everywhere. Wren has named three already."],
+  ],
+  // Town news about nobody in particular, for a kind not listed here.
+  news: [
+    ["Something's going on in town. Everyone's talking about it.", "Something's going on in town. Everyone's talking about it."],
   ],
   other: [
     ["{name} has been busy. Everyone's talking about it.", "Everyone's talking about you, {player}. Good things, I think."],

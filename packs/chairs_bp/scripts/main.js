@@ -1,3 +1,4 @@
+import "./diag.js";
 import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -66,7 +67,10 @@ function sit(player, dim, at, yaw, onBlock) {
     born.delete(old.id);
     old.remove();
   }
-  const seat = dim.spawnEntity(SEAT, at);
+  // spawnEntity can hand back an entity that already exists (reused ids); never seat on, or remove, that one.
+  let seat;
+  for (let k = 0; k < 8 && seat?.typeId !== SEAT; k++) seat = dim.spawnEntity(SEAT, at);
+  if (seat?.typeId !== SEAT) return;
   born.set(seat.id, system.currentTick);
   if (onBlock) seat.addTag(BLOCK_TAG);
   if (yaw !== undefined) {
