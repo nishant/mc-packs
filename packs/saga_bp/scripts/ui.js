@@ -1303,6 +1303,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   trackSent.delete(playerId);
   boxSent.delete(playerId);
 });
+// The client may drop titles on a respawn or a dimension change: draw the quest box afresh on the next tracker run.
+world.afterEvents.playerSpawn.subscribe(({ player }) => boxSent.delete(player.id));
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => boxSent.delete(player.id));
 
 /** Takes the player's quest box down, if this pack drew one. @param {Player} player */
 export function clearBox(player) {
