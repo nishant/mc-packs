@@ -678,13 +678,14 @@ const wandererMarker = (key) => encodeHiddenMarker("b4", key);
 /** Syncs all active road and camp wanderer nameplate helpers with active observers. */
 function updateLabels() {
   if (!ready) return;
-  const dims = DIMENSIONS.flatMap((id) => {
-    try {
-      return [world.getDimension(id)];
-    } catch {
-      return [];
-    }
-  });
+  const dims = () =>
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    });
   const targets = [];
   for (const rec of Object.values(live)) {
     const ent = entityById(rec.e);
@@ -697,7 +698,7 @@ function updateLabels() {
     const id = `camp:${wid}`;
     if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
   }
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getAllPlayers(), dims);
 }
 
 /**

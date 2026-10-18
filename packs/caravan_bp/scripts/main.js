@@ -474,13 +474,14 @@ function dressTrader(entity, i, vis) {
 /** Syncs all active caravan trader nameplate helpers with active observers. */
 function updateLabels() {
   if (!ready) return;
-  const dims = DIMENSIONS.flatMap((id) => {
-    try {
-      return [world.getDimension(id)];
-    } catch {
-      return [];
-    }
-  });
+  const dims = () =>
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    });
   /** @type {import("./name-labels.js").LabelTarget[]} */
   const targets = [];
   if (visit) {
@@ -493,7 +494,7 @@ function updateLabels() {
       targets.push({ id: String(i), entity, name });
     });
   }
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getAllPlayers(), dims);
 }
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */

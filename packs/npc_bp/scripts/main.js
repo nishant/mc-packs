@@ -419,13 +419,14 @@ function labelTextFor(t) {
 /** Syncs all placed townsfolk nameplate helpers with active observers. */
 function updateLabels() {
   if (!ready) return;
-  const dims = DIMENSIONS.flatMap((id) => {
-    try {
-      return [world.getDimension(id)];
-    } catch {
-      return [];
-    }
-  });
+  const dims = () =>
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    });
   const targets = [];
   for (const rec of list) {
     const t = folk.get(rec.id);
@@ -433,7 +434,7 @@ function updateLabels() {
     if (!t || !entity) continue;
     targets.push({ id: rec.id, entity, name: labelTextFor(t) });
   }
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getAllPlayers(), dims);
 }
 
 /** Sends the name again (when no idle line is showing). @param {Entity} entity @param {Townsfolk} t */

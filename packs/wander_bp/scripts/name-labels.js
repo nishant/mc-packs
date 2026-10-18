@@ -73,6 +73,10 @@ export function spawnChecked(dim, type, at, opts) {
 }
 
 const NEAR_RESEND_RANGE = 20;
+const NEAR_RESEND_SQ = NEAR_RESEND_RANGE * NEAR_RESEND_RANGE;
+/** Syncs between scans of whole dimensions for strays (a helper the tracked list lost). Loaded strays are removed
+ * on their load event already, so this is only a backstop: every 10th sync (1 s at a sync every 2 ticks). */
+const SWEEP_EVERY = 10;
 const NEAR_RESEND_STEPS = [1, 3]; // sync steps after a new viewer enters within 20 blocks (~1 s, then ~3 s more)
 
 /**
@@ -110,6 +114,8 @@ export function createNameLabels(opts) {
   const tracked = new Map();
   /** @type {Set<string>} */
   const warned = new Set();
+  const rangeSq = observerRange * observerRange;
+  let syncs = 0;
 
   /** @param {Entity | undefined} entity */
   const remove = (entity) => {
@@ -186,7 +192,13 @@ export function createNameLabels(opts) {
    */
   const loaded = (entity) => {
     if (!entity || entity.typeId !== labelType) return false;
-    const entry = [...tracked.values()].find((r) => r.helper.id === entity.id);
+    let entry;
+    for (const r of tracked.values()) {
+      if (r.helper.id === entity.id) {
+        entry = r;
+        break;
+      }
+    }
     if (!entry) {
       remove(entity);
       return true;
@@ -205,20 +217,32 @@ export function createNameLabels(opts) {
 
   /**
    * Syncs helpers for the active targets and observers.
+   * Observers and dimensions may be given as functions, called only when they are needed (not on a sync with
+   * nothing to label).
    * @param {LabelTarget[]} targets
-   * @param {Player[]} observers
-   * @param {Dimension[]} [dimensions]
+   * @param {Player[] | (() => Player[])} observerList
+   * @param {Dimension[] | (() => Dimension[])} [dimensionList]
    */
-  const sync = (targets, observers, dimensions = []) => {
+  const sync = (targets, observerList, dimensionList = []) => {
+    const sweepNow = syncs++ % SWEEP_EVERY === 0;
+    const dims = () => (typeof dimensionList === "function" ? dimensionList() : dimensionList);
+    // Nothing to label and nothing left over (no caravan here, no townsfolk placed): no work at all.
+    if (!targets.length && !tracked.size) {
+      if (sweepNow) sweepStrays(dims());
+      return;
+    }
+    const observers = !targets.length ? [] : typeof observerList === "function" ? observerList() : observerList;
     /** @type {Set<string>} */
     const wanted = new Set();
-    /** @type {Player[]} */
+    // Each observer's dimension and place, read once per sync (native reads cost more than the math).
+    /** @type {{ dimId: string, x: number, y: number, z: number, id: string }[]} */
     const activeObservers = [];
     for (const p of observers) {
       try {
         if (!p || p.isValid === false) continue;
         if (typeof p.getGameMode === "function" && String(p.getGameMode()).toLowerCase() === "spectator") continue;
-        activeObservers.push(p);
+        const l = p.location;
+        activeObservers.push({ dimId: p.dimension.id, x: l.x, y: l.y, z: l.z, id: String(p.id ?? p.name ?? "") });
       } catch {
         // gone
       }
@@ -240,10 +264,15 @@ export function createNameLabels(opts) {
         const loc = target.location;
         const dim = target.dimension;
         const dimId = dim.id;
-        const sameDimObservers = activeObservers.filter((p) => p.dimension.id === dimId);
-        const near = sameDimObservers.some(
-          (p) => Math.hypot(p.location.x - loc.x, p.location.y - loc.y, p.location.z - loc.z) <= observerRange,
-        );
+        let near = false;
+        /** @type {Set<string>} */
+        const nearIds = new Set();
+        for (const p of activeObservers) {
+          if (p.dimId !== dimId) continue;
+          const d2 = (p.x - loc.x) ** 2 + (p.y - loc.y) ** 2 + (p.z - loc.z) ** 2;
+          if (d2 <= rangeSq) near = true;
+          if (d2 <= NEAR_RESEND_SQ) nearIds.add(p.id);
+        }
         if (!near) {
           restoreFallback(target, fallback);
           continue;
@@ -275,11 +304,6 @@ export function createNameLabels(opts) {
         // own 1 s / 3 s resend toggle: follow the caller's toggle instead of opposing it.
         const callerAlt = name.endsWith("§r");
         const baseName = callerAlt ? name.slice(0, -2) : name;
-        const nearIds = new Set(
-          sameDimObservers
-            .filter((p) => Math.hypot(p.location.x - loc.x, p.location.y - loc.y, p.location.z - loc.z) <= NEAR_RESEND_RANGE)
-            .map((p) => String(p.id ?? p.name ?? "")),
-        );
         const prevIds = entry.nearViewers;
         if (!prevIds || [...nearIds].some((id) => !prevIds.has(id))) {
           entry.resendStage = 0;
@@ -334,7 +358,7 @@ export function createNameLabels(opts) {
       remove(entry.helper);
       tracked.delete(key);
     }
-    sweepStrays(dimensions);
+    if (sweepNow) sweepStrays(dims());
   };
 
   return {

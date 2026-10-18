@@ -492,3 +492,17 @@ test("a spawn that hands back another entity (repeating entity ids) is never tag
   labels.sync([{ id: "ida", entity: target, name: "§eIda §7the Blacksmith" }], [viewer(5)], dimensions);
   assert.equal(dimensions[0].getEntities({ type: "realm:npc_label" }).length, 1, "a real helper once spawning works");
 });
+
+test("stray helpers in whole dimensions are swept only every 10th sync; loaded strays still go at once", () => {
+  const { dimensions, target, viewer } = probeWorld();
+  const labels = createNameLabels({ labelType: "realm:npc_label" });
+  let scans = 0;
+  const orig = dimensions[0].getEntities.bind(dimensions[0]);
+  dimensions[0].getEntities = (q) => {
+    scans++;
+    return orig(q);
+  };
+  for (let i = 0; i < 20; i++) labels.sync([{ id: "ida", entity: target, name: "Ida" }], [viewer(5)], dimensions);
+  assert.equal(scans, 2, "two dimension scans in 20 syncs");
+  dimensions[0].getEntities = orig;
+});
