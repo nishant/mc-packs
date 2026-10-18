@@ -217,12 +217,14 @@ world.beforeEvents.playerInteractWithEntity.subscribe((event) => {
   sayClaimed(player, c);
 });
 
-// Anything placed in a claim some way the tap didn't catch is taken back out.
+// Anything placed in a claim some way the tap didn't catch is taken back out: broken as if mined, so the block (and
+// anything inside it, like a shulker box's items) drops instead of vanishing.
 world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
   const c = closedTo(player, block.dimension.id, block.location);
   if (!c) return;
   try {
-    block.setType("minecraft:air");
+    const { x, y, z } = block.location;
+    block.dimension.runCommand(`setblock ${x} ${y} ${z} air destroy`);
     bar(player, `§cThis land is claimed by ${c.n}`);
   } catch (e) {
     console.warn(`[claims] ${e}`);
