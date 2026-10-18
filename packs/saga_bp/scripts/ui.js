@@ -1844,8 +1844,9 @@ async function opTools(player) {
     form.button("Back");
     const r = await show(player, form);
     if (!r || r.canceled || r.selection === undefined || r.selection >= list.length) return;
-    // They may have left while the menu was open.
+    // They may have left while the menu was open, and the operator may have lost their rights.
     if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
+    if (!isOp(player)) return player.sendMessage("§c[Story] Only operators can do that; nothing was changed.");
     const ok = completeStep(target, list[r.selection]);
     player.sendMessage(ok ? `§a[Story] Finished ${name}'s current step in ${list[r.selection].story.title}.` : "§7[Story] Nothing left to finish there: they can report back.");
     return;
@@ -1857,6 +1858,7 @@ async function opTools(player) {
     const sure = await show(player, new ActionFormData().title("Reset stories?").body(`Start all of ${name}'s stories over? Rewards already given are kept.`).button("Reset").button("Cancel"));
     if (!sure || sure.canceled || sure.selection !== 0) return;
     if (!target.isValid) return player.sendMessage(`§7[Story] ${name} left meanwhile; nothing was changed.`);
+    if (!isOp(player)) return player.sendMessage("§c[Story] Only operators can do that; nothing was changed.");
     resetPlayer(target, player);
   }
 }
