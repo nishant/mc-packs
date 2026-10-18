@@ -75,8 +75,9 @@ const isKnown = (v) => !!v && typeof v === "object" && typeof (/** @type {any} *
 /** Reads the index (and splits an older world's single property into per-owner ones). @returns {Map<string, Known>} */
 function loadKnown() {
   if (known) return known;
+  const ids = world.getDynamicPropertyIds(); // may throw (too early): then `known` stays unset and the next call reads again
   known = new Map();
-  for (const key of world.getDynamicPropertyIds()) {
+  for (const key of ids) {
     if (!key.startsWith(PROP_OWNED)) continue;
     try {
       const raw = world.getDynamicProperty(key);
