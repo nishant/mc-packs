@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
@@ -542,6 +542,25 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     } catch (e) {
       console.warn(`[mail] mail_send: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
+
+// Scenario tests (BDS harness): add `roster` players who joined long ago (offline), as on a big server. Only from the
+// server console: /scriptevent realm:mail_test {"roster":300}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:mail_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const n = Math.max(0, Math.min(1000, Math.floor(Number(JSON.parse(ev.message)?.roster) || 0)));
+      const old = Date.now() - 86400000;
+      const list = [...members(), ...Array.from({ length: n }, (_, i) => ({ i: `-${4294950000 - i}`, n: `Gone${i}`, t: old - i * 1000 }))];
+      list.sort((a, b) => b.t - a.t);
+      roster = list.slice(0, Math.max(1, CONFIG.maxRoster));
+      world.setDynamicProperty(PROP_ROSTER, JSON.stringify(roster));
+    } catch (e) {
+      console.warn(`[mail] test: ${e}`);
     }
   },
   { namespaces: ["realm"] },
