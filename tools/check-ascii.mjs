@@ -57,8 +57,21 @@ for (const folder of readdirSync(join(root, "packs")).sort()) {
     });
   }
 }
+// English language files are game text too (item names, the Building Book's notes): the same rule. Other
+// languages keep their own letters. Known lines waiting for a fix: LANG_KNOWN (the count may only go down).
+const LANG_KNOWN = { "build_rp/texts/en_US.lang": 31 }; // Effortless Building's port: ❗ – · ⏳ (social-world track)
+for (const folder of readdirSync(join(root, "packs")).sort()) {
+  const file = join(root, "packs", folder, "texts", "en_US.lang");
+  if (!existsSync(file)) continue;
+  const key = `${folder}/texts/en_US.lang`;
+  const bad = readFileSync(file, "utf8").split("\n").map((l, i) => [l, i + 1]).filter(([l]) => !/^\s*#/.test(String(l)) && [...String(l)].some((ch) => (ch.codePointAt(0) ?? 0) > 127 && ch !== "§"));
+  const known = /** @type {Record<string, number>} */ (LANG_KNOWN)[key] ?? 0;
+  if (bad.length > known) for (const [l, n] of bad.slice(0, 10)) problems.push(`packs/${key}:${n}: non-ASCII game text (${bad.length} lines, ${known} known): ${String(l).slice(0, 80)}`);
+  else if (bad.length < known) console.warn(`warning: packs/${key} has ${bad.length} non-ASCII lines, fewer than the ${known} known: lower LANG_KNOWN in tools/check-ascii.mjs`);
+}
+
 if (problems.length) {
   console.error(problems.join("\n"));
   process.exit(1);
 }
-console.log("Pack scripts use plain ASCII (and §) outside comments, and no form headers.");
+console.log("Pack scripts and English language files use plain ASCII (and §) outside comments, and no form headers.");
