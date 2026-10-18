@@ -170,7 +170,7 @@ function celebrate(g) {
   const ranked = Object.entries(g.c)
     .filter(([id, [, n]]) => id !== OTHERS && n > 0)
     .sort((a, b) => b[1][1] - a[1][1])
-    .slice(0, Math.max(1, Math.min(10, CONFIG.topContributors)));
+    .slice(0, Math.max(1, Math.min(10, Number(get("topContributors")) || CONFIG.topContributors)));
   if (!ranked.length) return;
   const name = plain(g.n) || itemName(g.item);
   const [topId, [topName]] = ranked[0];
@@ -178,7 +178,7 @@ function celebrate(g) {
   const title = `Pillar of ${name}`.length <= TITLE_MAX ? `Pillar of ${name}` : "Pillar of the Town";
   system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: topId, title, from: "goals_bp" }));
   ranked.forEach(([id, [who, n]], i) => {
-    const place = i === 0 ? "more than anyone" : `the ${["", "second", "third", "fourth", "fifth"][i] ?? `number ${i + 1}`} most`;
+    const place = i === 0 ? "more than anyone" : `the ${["", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"][i] ?? `number ${i + 1}`} most`;
     const body =
       `${who},\n\nThe community goal ${name} is reached: ${fmt(g.target)} ${itemName(g.item)} in all. ` +
       `You gave ${fmt(n)}, ${place}.${i === 0 ? ` The town calls you ${title} now.` : ""}\n\nThank you!\n\n- The town`;
