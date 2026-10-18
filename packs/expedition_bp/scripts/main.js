@@ -4263,6 +4263,15 @@ function setSite(player, x, z) {
     }
     notes.push(`§a${label}: only natural blocks.`);
   }
+  // A flat world's ground (y -61) or a deep valley is below the box: the dungeon would stand above the ground.
+  try {
+    const ground = overworld().getTopmostBlock({ x: sx, z: sz });
+    if (ground && ground.y < 319 && ground.y < FLOOR + top) {
+      notes.push(`§eThe ground here is at y ${ground.y}, below the top of the tallest dungeon (y ${FLOOR + top}): in a flat world or a deep valley the dungeon would be built above the ground, as a block of deepslate in the open. Pick a spot where the ground is higher.`);
+    }
+  } catch {
+    // not loaded from here
+  }
   writeJson(PROP_SITE, { x: sx, z: sz, by: player.name, at: Date.now() });
   player.sendMessage(`§aExpedition site set at ${sx}, ${sz}: dungeons are built at y ${FLOOR - 1} to ${FLOOR + 7} (up to ${FLOOR + top} with the tallest Nightmare rooms), up to ${size} blocks wide, sealed in deepslate, and filled back in after each run.`);
   for (const n of notes) player.sendMessage(n);
