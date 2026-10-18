@@ -120,7 +120,7 @@ export default async function (t) {
     if (!at.length) worstGap = Infinity;
   }
   t.log(`longest wait for a new strip while all 10 turn: ${worstGap} ticks`);
-  t.check(worstGap <= 30, `every turning player gets a new strip at least every 30 ticks (${worstGap})`);
+  t.check(worstGap <= 36, `every turning player gets a new strip before it fades (HOLD 40): at least every 36 ticks (${worstGap})`);
   // Measured 2.2 to 2.6 ms per sent strip (17 to 21 ms a tick at 8 sends) on the shared dev machine (October 2026);
   // a send is a title command, which dominates the cost, so the bound is per send and the per-tick total follows the budget.
   const perSend = c.turnMs / Math.max(1, c.turnSends);
