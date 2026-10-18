@@ -578,7 +578,6 @@ export const STORIES = [
               tag: "realm:saga:gray_hand",
               mob: "minecraft:vindicator",
               name: "The Gray Hand",
-              trait: "relentless",
               warn: "A voice outside the chapel door: Keeper. The Cantor sends for you. Come and sing.",
               health: 40,
               adds: { mobs: ["minecraft:vindicator"], count: 2 },

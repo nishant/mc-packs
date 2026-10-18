@@ -128,7 +128,7 @@ const PELL = {
       ],
       objectives: [
         { type: "place", label: "Set 4 candles around Pell's camp", blocks: CANDLES, count: 4, place: "camp:pell", radius: 10 },
-        { type: "answer", label: "Tell Pell what the stone listens for", npc: "w_pell", question: `${PE}What does the stone listen for?`, answers: ["the bell", "bell", "a bell", "the bells", "bells", "the true note", "a true note", "the note", "its note", "a note", "the bells note"] },
+        { type: "answer", label: "Tell Pell what the stone listens for", npc: "w_pell", question: `${PE}What does the stone listen for?`, answers: ["the bell", "bell", "a bell", "the bells", "bells", "the true note", "a true note", "the note", "its note", "a note", "the bells note", "the bell's note"] },
       ],
       outro: [
         `Pell sits very still in the candlelight.\n\n${PE}A bell. Of course. My teacher heard one ring the night before the storm. Maybe the stones were waiting for it. Maybe they still are.`,

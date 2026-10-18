@@ -369,7 +369,7 @@ const STAR_KITTENS = {
       ],
       objectives: [
         { type: "tame", label: "Tame 2 more stray cats (Draco and Ursa)", mobs: ["minecraft:cat"], count: 2 },
-        { type: "tend", label: "Feed raw fish to 5 of your cats", mobs: ["minecraft:cat"], item: "minecraft:cod", count: 5 },
+        { type: "tend", label: "Feed raw cod to 5 of your cats", mobs: ["minecraft:cat"], item: "minecraft:cod", count: 5 },
         { type: "place", label: "Put 2 beds in Wren's Meadow for the cats", blocks: ["minecraft:bed"], count: 2, place: "meadow", radius: 20 },
       ],
       outro: [
