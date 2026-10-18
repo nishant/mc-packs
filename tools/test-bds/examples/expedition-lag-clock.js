@@ -1,6 +1,6 @@
 // Expeditions: the run clock and time limit count game time, so a lagging server doesn't eat the party's time.
-// The test pack makes every tick take about 60 ms more (about 9 TPS). Before, the clock ran on the wall clock: after
-// 20 game seconds the bar already showed about 0:45, and a 17-minute limit was over after about 7 minutes of play.
+// The test pack makes every tick take about 150 ms (under 7 TPS). Before, the clock ran on the wall clock: after
+// 20 game seconds the bar already showed about 1:00, and a 17-minute limit was over after under 6 minutes of play.
 // node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-lag-clock.js --timeout 600
 export default async function (t) {
   t.formTimeout = 300;
@@ -14,9 +14,9 @@ export default async function (t) {
   t.answerForm(ann, "Start an expedition", "Crypt", 0, "Start");
   t.cmd(ann, "/realm:expedition");
   await t.waitUntil(async () => ((await state(t))?.phase === "active" ? true : undefined), { timeout: 1200, interval: 20, message: "run active" });
-  // Lag: every tick busy-waits 60 ms in the test pack.
+  // Lag: every tick busy-waits 150 ms in the test pack.
   const lag = t.system.runInterval(() => {
-    const until = Date.now() + 60;
+    const until = Date.now() + 150;
     while (Date.now() < until);
   }, 1);
   const t0 = t.tick;

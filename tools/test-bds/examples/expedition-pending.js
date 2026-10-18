@@ -18,9 +18,9 @@ export default async function (t) {
     t.cmd(ann, "/realm:expedition");
     await t.waitUntil(async () => ((await state(t))?.phase === "active" ? true : undefined), { timeout: 1200, interval: 20, message: "run active" });
     await t.wait(40);
-    // Every ticking area goes (the dungeon's too), and ten others take the world's whole allowance.
+    // Every ticking area goes (the dungeon's too), and ten others at world spawn take the world's whole allowance.
     t.server("/tickingarea remove_all");
-    for (let k = 0; k < 10; k++) t.server(`/tickingarea add circle ${Math.floor(ann.location.x) + k} 0 ${Math.floor(ann.location.z)} 1 dummy_${k} true`);
+    for (let k = 0; k < 10; k++) t.server(`/tickingarea add circle ${Math.floor(spawn.x) + k} 0 ${Math.floor(spawn.z)} 1 dummy_${k} true`);
     t.restart("restart mid-run with no ticking area left");
   }
   const p = await t.player("Bea", { op: true, x: Math.floor(spawn.x), z: Math.floor(spawn.z) });
