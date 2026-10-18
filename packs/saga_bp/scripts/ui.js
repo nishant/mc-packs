@@ -1524,12 +1524,17 @@ function questBox(player, e, saga, first, at, others = []) {
 
 /** Text cut to a number of UTF-8 bytes on a whole character, with no dangling "§". @param {string} text @param {number} max */
 function clipTo(text, max) {
-  let out = "";
+  // Counted once, a character at a time: the box is redrawn for every player every 2 seconds.
+  if (text.length <= max / 3 || byteLength(text) <= max) return text.replace(/§$/, "");
+  let n = 0;
+  let end = 0;
   for (const ch of text) {
-    if (byteLength(out + ch) > max) break;
-    out += ch;
+    const c = /** @type {number} */ (ch.codePointAt(0));
+    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    if (n > max) break;
+    end += ch.length;
   }
-  return out.replace(/§$/, "");
+  return text.slice(0, end).replace(/§$/, "");
 }
 
 // ---------------------------------------------------------------------------
