@@ -1,7 +1,7 @@
 // Realm Configuration's title (admin_bp): /realm:admin_title sends realm:title (the title protocol) for every target
 // before it shows the title, so the Minimap's compass strip (always on, redrawn every few ticks) steps aside until
 // it has faded, then comes back; with a player selector only that player gets it; the "Show a Title" quick action
-// does the same from the menu.
+// does the same from the menu. A title without a subtitle sends a one-space subtitle (the title protocol).
 //   node tools/test-bds/run.mjs --quiet --only admin_bp,map_bp --scenario tools/test-bds/examples/admin-title.js --timeout 300
 const MARK = "§s§2§r";
 
@@ -42,6 +42,8 @@ export default async function (t) {
   t.assert(t.cmd(p, "/realm:admin_title Hi \"\" 2 Sam").ok, "admin_title for Sam ran");
   await t.waitUntil(() => t.messages(sam, { kind: "title", pack: "admin_bp", since }).length, { timeout: 40, message: "Sam gets it" });
   await t.wait(5);
+  const lone = t.messages(sam, { kind: "title", pack: "admin_bp", since })[0];
+  t.check(lone?.subtitle === " ", `no subtitle sends a one-space subtitle, so an old one doesn't stay (${JSON.stringify(lone?.subtitle)})`);
   t.check(t.messages(p, { kind: "title", pack: "admin_bp", since }).length === 0, "Tester doesn't");
   t.check(holds.some((h) => h.player === sam.id && h.tick >= since) && !holds.some((h) => h.player === p.id && h.tick >= since && h.from === "admin_bp"), "realm:title only for Sam");
   t.check(!t.cmd(p, "/realm:admin_title Hi Sub 99").ok, "seconds past 25 are refused");
