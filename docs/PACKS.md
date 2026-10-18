@@ -1346,7 +1346,7 @@ Hit a mob and its name and health show in a small box on the left side of your s
 ### What players see
 
 - **Name:** the mob's name tag if it has one, otherwise its name made from its id (`Zombie`, `Iron Golem`; above the hotbar, in the game's language).
-- **Health** after the hit, rounded up to whole points, out of its maximum (`14/20 HP`; 2 points are one heart; `defeated` after a killing blow), then a bar of 10 `|` characters (`barLength`): green above half health, yellow above a quarter, red below that, with the lost part in dark gray. A killing blow shows `0/20`.
+- **Health** after the hit, rounded up to whole points, out of its maximum (`14/20 HP`; 2 points are one heart; `defeated` after a killing blow), then a bar of 10 `|` characters (`barLength`): green above half health, yellow above a quarter, red below that, with the lost part in dark gray.
 - Shown for melee hits and for arrows, tridents and other projectiles you fired, every time the mob is hurt by you.
 - **Other players** only when an operator enabled **Show players' health too** (`players`, disabled by default): then hurting a player shows their name and health the same way.
 - Enabled for every player until they disable it (`defaultOn`). While an operator has disabled it for the realm (`enabled`), nobody sees it.
@@ -2165,7 +2165,7 @@ Operators can change `enabled`, `faceRange`, `idleMinSeconds`, `idleMaxSeconds`,
 
 ### How it works
 
-- Each townsfolk is a vanilla `minecraft:npc` with the tags `realm:npc`, `realm:npc_id:<id>`, `realm:npc_role:<role>` (one per role) and `realm:npc_owner:npc_bp`. Its `nameTag` is its name. When a player comes within 64 blocks, or the NPC loads or spawns, the name is sent again 1 and 3 seconds later (switching between the name and the same name ending in `§r`), because a game can show a `minecraft:npc` as `NPC` until its name changes while it watches.
+- Each townsfolk is a vanilla `minecraft:npc` with the tags `realm:npc`, `realm:npc_id:<id>`, `realm:npc_role:<role>` (one per role) and `realm:npc_owner:npc_bp`. Its own `nameTag` is its name while nobody is within 24 blocks; closer, an invisible helper (`realm:npc_label`) carries the name and the NPC's own `nameTag` is `§r`. When a player comes within 20 blocks, or the NPC loads or spawns, both are sent again 1 and 3 seconds later (switching to look-alike forms ending in `§r`), because a game can show a `minecraft:npc` as `NPC` until its name changes while it watches. Labels are synced every half second, and only while there is something to label: with no townsfolk placed the label code does nothing. The label code is shared with Merchant Caravan, Wanderers of the Wilds and Story Questlines (`tools/name-labels-shared.js`, copied into each as `scripts/name-labels.js` by `node tools/sync-labels.mjs`).
 - **One of each:** the saved entity id is the real one (entity ids stay the same across loads). An NPC entity of this pack that loads (`afterEvents.entityLoad`, and a check of loaded NPCs every 10 seconds) is removed if its townsfolk isn't placed any more, or if the saved one is loaded too; if the saved one isn't loaded, the newcomer takes over. A townsfolk whose entity isn't loaded, while its spot is loaded and a player has been near it for 3 checks 2 seconds apart, is looked for by its tags and otherwise spawned again.
 - **Every 10 ticks** each loaded townsfolk with a player nearby is teleported back if it's more than 1.5 blocks from its post, and otherwise, with `enabled` on, turned up to 45 degrees toward the nearest player (not spectators) with a teleport in place (`rotation`). A tap turns it toward the player at once, in place. With no player in its dimension within the largest of the native-name, respawn, far-name, facing and idle ranges plus 16 blocks (136 by default), the loop skips that townsfolk before any entity lookup or block query. Names from afar update every 2 ticks separately, with no block reads for townsfolk outside their display range.
 - **Taps** (`beforeEvents.playerInteractWithEntity`) on an NPC with `realm:npc_owner:npc_bp` are canceled, except an operator sneaking in creative mode, who gets the game's NPC editor. Then the offer round: `realm:npc_talk` `{ req, player, npc, roles, name }` goes out, `realm:npc_offer` `{ req, pack, key, label, order? }` answers are collected for 4 ticks, the menu lists them by `order` (default 50) then label (offers with an empty label, or claiming to be from `npc_bp`, are ignored), and a pick sends `realm:npc_choose` `{ player, npc, pack, key }` to the pack that offered it. `realm:npc_talk` also tells quest packs the player talked to that NPC. NPCs of other packs (the [Merchant Caravan](#merchant-caravan--caravan_bp)'s traders) carry their own owner tag and are left to them.
@@ -3119,7 +3119,7 @@ About one in 40 monsters that spawn in the overworld at night becomes a champion
 
   | Trait | What it does |
   |---|---|
-  | Stormcaller | In thunderstorms, calls lightning down 1.5 to 3 blocks from a player within 16 blocks (on the water's surface over a lake or the sea), every 6 to 10 seconds (`traits.stormcaller`) |
+  | Stormcaller | In thunderstorms, calls lightning down 1.5 to 3 blocks from a player within 16 blocks (on the water's surface over a lake or the sea), every 6 to 10 seconds (`traits.stormcaller`). Near builds, within 64 blocks of the world spawn (`avoidSpawn`) and inside safe zones, land claims and towns it only crackles: no bolt, no fire |
   | Frostbound | Each of its hits gives Slowness II for 4 seconds (`traits.frostbound.slownessSeconds`) |
   | Vampiric | Heals half the damage it deals (`traits.vampiric.healShare`). Also has Speed I |
   | Splitting | Leaves 3 copies when it dies (`traits.splitting.copies`): baby zombies (or baby husks, drowned, zombie villagers) for the zombie kind, the same mob at half health otherwise. The copies are ordinary mobs. Also has Speed I |
@@ -4595,7 +4595,7 @@ Operators can change `enabled`, `tameChancePercent`, `maxPerPlayer`, `othersCanR
 | `dolphin:owner` | Entity | The owner's player id on a tamed dolphin |
 | `dolphin:ownerName` | Entity | The owner's name when it was tamed |
 | `dolphin:ridden` | Entity | `true` while the dolphin has the `realm:dolphin_ridden` group (its own swimming off) |
-| `dolphin:index` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: every tamed dolphin's owner, name and last known spot, for the lists while it's far away |
+| `dolphin:idx:<player id>` | World | JSON `{ entity id: { o, on, n, d, x, y, z } }`: that player's tamed dolphins (owner, name and last known spot), for the lists while they're far away. A world from an older version has one `dolphin:index` for everyone; the pack splits it into these on its first load and removes it once every part is written |
 | `dolphin:tamedCount` | Player | How many dolphins the player has tamed |
 | `dolphin:cfg` | World | Settings changed in `/realm:config` |
 
@@ -6726,7 +6726,8 @@ Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, 
 `npm run check` runs these, in order, and stops at the first that fails:
 
 - `tsc -p .`: the type check.
-- `tools/check-ascii.mjs`: every pack's script code (comments aside) is plain ASCII plus `§`, since Bedrock draws a line with `…`, `–`, `•` or an emoji in a smaller fallback font.
+- `tools/check-pipeline.mjs`: every check tool (each `tools/check-*.mjs` and every tool with a `--check`) and the unit tests are in this chain, and each test scenario's header runs its own file.
+- `tools/check-ascii.mjs`: every pack's script code (comments aside) and English lang file (`texts/en_US.lang`) is plain ASCII plus `§`, since Bedrock draws a line with `…`, `–`, `•` or an emoji in a smaller fallback font (Easy Building Guides' known lines are held as they are: more fail, fewer warn).
 - `tools/check-docs.mjs`: this file has
   - a `##` section whose heading contains `` `<folder>` `` for **every pack** in `packs/`
   - a `### How to use` section in every pack section: short numbered steps for players, operators last
@@ -6734,14 +6735,22 @@ Rain Extras needs Realistic Rain and the sky packs need Realm Skies to be seen, 
   - **every option** in a pack's `config.js`, as `` `option` ``, or `` `parent.option` `` for nested options like `` `sleep.percent` ``
 - `tools/check-commands.mjs`: every command and enum a pack registers uses the `realm:` namespace (a second namespace in one add-on throws `NamespaceMismatch`, so a bundle would lose those commands), and no two packs register the same command.
 - `tools/check-stories.mjs`: Story Questlines' story content (`packs/saga_bp/scripts/stories/`) uses known objective types and fields, places, NPC ids, unique ids, champion tags and requirements. Flags read that nothing sets are only warnings.
+- `tools/check-ids.mjs`: every `minecraft:` id in the packs' scripts and JSON is a real Bedrock id (`@minecraft/vanilla-data`, pinned to the game version the test server runs), and ids in typed places (`spawnEntity`, `ItemStack`, `setType`, `typeId ===`, `summon`/`give`/`setblock` commands...) of any namespace are vanilla or one of our packs'. Known exceptions are in `tools/check-ids.allow.json`.
+- `tools/check-events.mjs`: every script event a pack sends is `realm:`, and a payload built from a list or player text is split or capped under 2048 characters (`tools/check-events.allow.json` lists the exceptions).
+- `tools/check-actionbar.mjs`: every `setActionBar` has a `realm:actionbar` request before it, in its function or through a pack helper (the action bar protocol; exceptions such as the Coordinates HUD and the stats ticker in `tools/check-actionbar.allow.json`).
+- `npm run test`: the unit tests (`tools/**/*.test.mjs`: the Realm Configuration item, Side HUD's layout, the Minimap's terrain, the name labels, Expansive Inventory pages, Easy Building Guides, the test server tools).
+  The three `check-*` tools above take `--list` to print every case, ignoring their allow lists. Fix a listed case together with removing its line (a stale line only warns).
 - `tools/sync-settings.mjs --check`: fails if a behavior pack (other than Realm Settings) has no `scripts/settings.js`, or its copy of the shared Realm Settings helper differs from `tools/settings-shared.js`. Change the helper there, then run `node tools/sync-settings.mjs` and bump the version of every pack it updates.
 - `tools/sync-zones.mjs --check`: the same for the safe zones protocol: every pack with a `scripts/zones.js` has the same copy as `tools/zones-shared.js`. Change it there, then run `node tools/sync-zones.mjs` (with pack folders to add the file to new ones) and bump the version of every pack it updates.
+- `tools/sync-side.mjs --check` and `tools/sync-labels.mjs --check`: the same for the side boxes (`tools/side-shared.js`, each pack's `scripts/side.js`) and the townsfolk name labels (`tools/name-labels-shared.js`, the `scripts/name-labels.js` of Townsfolk, Merchant Caravan, Wanderers of the Wilds and Story Questlines). Change the shared file, never a copy, then run `node tools/sync-side.mjs` or `node tools/sync-labels.mjs`.
 - `tools/help-catalog.mjs --check`: the in-game `/realm:help` text (`packs/help_bp/scripts/catalog.js`) is generated from each pack's summary, `### How to use` and Commands table here, so after changing those, run `node tools/help-catalog.mjs` (it bumps `help_bp`'s patch version). It also fails if a behavior pack doesn't answer `/realm:help`'s `realm:help_ping` script event. Resource packs have no scripts, so they're left out of the help.
 - `tools/admin-catalog.mjs --check`: the Realm Configuration menu's list of commands (`packs/admin_bp/scripts/catalog.js`) matches what the packs register. After adding or changing a command or its parameters, run `node tools/admin-catalog.mjs` and bump `admin_bp`'s version.
 - `tools/gen-news.mjs --check`: Realm News' update popup (`packs/news_bp/scripts/release.js`) is the newest entry of `docs/NEWS.md`. After adding an entry, run `node tools/gen-news.mjs` (it bumps `news_bp`'s patch version; `npm run bundle` runs it too).
 - `tools/gen-rain/textures.mjs --check` and `tools/gen-rain/fogs.mjs --check`: Realistic Rain's textures, fogs and client biomes are what `npm run gen:rain` generates.
 - `tools/gen-sky/gen.mjs --check`: every file in Realm Skies is what `npm run gen:sky` generates, none missing or left over.
 - `tools/gen-translucent/generate.mjs --check`: Translucent Tools (all but its `manifest.json`) is what `npm run gen:translucent` generates.
+- The other generators' `--check`s, the same way: `tools/gen-rain/sounds.mjs`, `tools/gen-platypus/gen.mjs`, `tools/gen-build/gen.mjs`, `tools/gen-silly/gen.mjs` and `tools/gen-glyphs/gen.mjs`.
+- `tools/check-versions.mjs`, last: every pack whose files changed since `origin/master` (tracked or not) has a higher `header.version` in its `manifest.json` than there. Without `origin/master` it is skipped.
 
 When adding or changing a pack: update its section here, and the pack table in `README.md`, in the same commit.
 
