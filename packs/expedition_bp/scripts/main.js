@@ -3677,7 +3677,8 @@ const canBuild = (run) => !!run && run.phase === "active" && run.s.build && get(
 // The dungeon's walls hold the rooms together and its blocks must all be its own for the reset: no breaking,
 // except blocks players placed themselves and decor that's meant to be cut (cobwebs).
 world.beforeEvents.playerBreakBlock.subscribe((ev) => {
-  if ((!runs.size && !pending.size) || ev.dimension.id !== OVERWORLD) return;
+  // Already canceled by a pack before us in the bundle (a claim): the block stays, so it stays one players placed.
+  if (ev.cancel || (!runs.size && !pending.size) || ev.dimension.id !== OVERWORLD) return;
   const at = dungeonAt(ev.block.location);
   if (!at || builder(ev.player)) return;
   const run = at.run;
@@ -3729,6 +3730,7 @@ world.afterEvents.playerPlaceBlock.subscribe(({ player, block }) => {
 // Water buckets are fine (they break nothing in a dungeon).
 const NO_BUCKET = new Set(["minecraft:bucket", "minecraft:lava_bucket", "minecraft:powder_snow_bucket"]);
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return;
   const id = ev.itemStack?.typeId;
   if (!id || !NO_BUCKET.has(id)) return;
   if ((!runs.size && !pending.size) || ev.block.dimension.id !== OVERWORLD || !dungeonAt(ev.block.location) || builder(ev.player)) return;
