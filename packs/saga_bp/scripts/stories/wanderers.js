@@ -38,7 +38,7 @@ const DUSK = /** @type {[number, number]} */ ([11500, 13500]);
 const DAWN = /** @type {[number, number]} */ ([22500, 1500]);
 const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 const FLOWERS = ["minecraft:poppy", "minecraft:dandelion", "minecraft:cornflower", "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:allium", "minecraft:lily_of_the_valley", "minecraft:blue_orchid"];
-const SAPLINGS = ["minecraft:oak_sapling", "minecraft:spruce_sapling", "minecraft:birch_sapling", "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling", "minecraft:cherry_sapling"];
+const SAPLINGS = ["minecraft:oak_sapling", "minecraft:spruce_sapling", "minecraft:birch_sapling", "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling", "minecraft:cherry_sapling", "minecraft:pale_oak_sapling", "minecraft:mangrove_propagule"];
 const MONSTERS = ["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:skeleton", "minecraft:stray", "minecraft:spider", "minecraft:creeper", "minecraft:witch", "minecraft:slime", "minecraft:enderman", "minecraft:bogged"];
 
 /** @type {Story} */
@@ -128,7 +128,7 @@ const PELL = {
       ],
       objectives: [
         { type: "place", label: "Set 4 candles around Pell's camp", blocks: CANDLES, count: 4, place: "camp:pell", radius: 10 },
-        { type: "answer", label: "Tell Pell what the stone listens for", npc: "w_pell", question: `${PE}What does the stone listen for?`, answers: ["the bell", "bell", "a bell", "the bells", "bells", "the true note", "a true note", "the note", "its note", "a note", "the bells note"] },
+        { type: "answer", label: "Tell Pell what the stone listens for", npc: "w_pell", question: `${PE}What does the stone listen for?`, answers: ["the bell", "bell", "a bell", "the bells", "bells", "the true note", "a true note", "the note", "its note", "a note", "the bells note", "the bell's note"] },
       ],
       outro: [
         `Pell sits very still in the candlelight.\n\n${PE}A bell. Of course. My teacher heard one ring the night before the storm. Maybe the stones were waiting for it. Maybe they still are.`,
