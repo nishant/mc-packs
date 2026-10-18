@@ -213,25 +213,44 @@ test("the actual clip ancestor contains padded right slots and natural sidebars 
   }
 });
 
-test("radar reclaims its border for terrain without changing outer size or subtitle slices", () => {
+test("radar reclaims its border for a full native-aspect grid without changing height or subtitle slices", () => {
   const panel = ui.realm_radar_panel;
   const widget = panel.controls[0].radar_widget;
   const children = Object.fromEntries(widget.controls.map((c) => Object.entries(c)[0]));
-  assert.deepEqual(widget.size, [112.7, 105.8]);
+  assert.deepEqual(widget.size, [100.8, 105.8]);
   assert.deepEqual(children.radar_border.size, widget.size);
   assert.equal(children.radar_shade, undefined, "no vignette may darken the reclaimed edge or compass badges");
-  assert.deepEqual(children.radar_clip.size, [110.7, 102.79285714285716]);
+  assert.deepEqual(children.radar_clip.size, [98.8, 103.8]);
   assert.deepEqual(children.radar_bg.size, children.radar_clip.size);
   assert.equal(panel.size[1], 108);
-  assert.ok(children.radar_clip.size[0] * children.radar_clip.size[1] >= 1.3 * 96.6 * 89.7, "at least 30% more map area, not a larger outer frame");
-  const scale = 110.7 / 96.6;
+  assert.ok(children.radar_clip.size[0] * children.radar_clip.size[1] > 96.6 * 89.7, "more terrain area, not a larger outer frame");
+  const font = (103.8 - 2) / (20 * 9 + 8);
+  const x = (98.8 - 21 * 8.5 * font) / 2;
   for (const [i, c] of children.radar_clip.controls.entries()) {
     const mesh = c[`radar_mesh_${i}`];
-    assert.ok(Math.abs(mesh.font_scale_factor - 0.552 * scale) < 1e-9);
-    assert.ok(Math.abs(mesh.line_padding - 6.785 * scale) < 1e-9);
-    assert.ok(Math.abs(mesh.offset[0] - (i ? 0.5175 * scale : 0)) < 1e-9);
+    assert.ok(Math.abs(mesh.font_scale_factor - font) < 1e-9);
+    assert.equal(mesh.line_padding, 7.7753571428571435, "retain the line-padding path measured in the real client");
+    assert.ok(Math.abs(mesh.offset[0] - (x + (i ? font / 2 : 0))) < 1e-9);
+    assert.equal(mesh.offset[1], 1);
     assert.match(mesh.bindings.at(-1).source_property_name, /%\.1351s/);
     assert.match(mesh.bindings.at(-1).source_property_name, /%\.1610s/);
+  }
+});
+
+test("all 21 native font advances and last glyph ink fit inside the radar clip", () => {
+  const widget = ui.realm_radar_panel.controls[0].radar_widget;
+  const clip = widget.controls.find((c) => c.radar_clip).radar_clip;
+  for (const c of clip.controls) {
+    const mesh = Object.values(c)[0];
+    const scale = mesh.font_scale_factor;
+    // Private-client measurements: about 8.5px horizontally and 9px vertically, not just 8px bitmap ink.
+    for (const axis of [0, 1]) {
+      const firstInk = mesh.offset[axis];
+      const lastInk = firstInk + (20 * (axis ? 9 : 8.5) + 8) * scale;
+      assert.ok(firstInk >= 1 - 1e-9, "at least one UI unit before first ink for client rounding");
+      assert.ok(lastInk <= clip.size[axis] - 1 + 1e-9, `last row/column lacks rounding slack on axis ${axis}`);
+    }
+    assert.ok(21 * 9 * scale <= clip.size[1] + 1e-9, "full row advance budget, including spacing, fits");
   }
 });
 
@@ -270,7 +289,7 @@ test("original glyph art has stronger measured elevation contrast and proportion
   const image = (file) => decode(fs.readFileSync(new URL(`../packs/hud_rp/${file}`, import.meta.url)));
   for (const file of ["textures/ui/radar_frame.png", "textures/ui/radar_shade.png"]) {
     const png = image(file);
-    assert.deepEqual([png.width, png.height], [113, 106]);
+    assert.deepEqual([png.width, png.height], [101, 106]);
   }
   const font = image("font/glyph_F3.png");
   const luma = (cell) => {

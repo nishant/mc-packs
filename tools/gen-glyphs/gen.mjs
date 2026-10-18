@@ -666,8 +666,7 @@ function packIcon() {
   return img;
 }
 
-const RADAR_SCALE = 1.15;
-const RADAR_W = Math.round(98 * RADAR_SCALE), RADAR_H = Math.round(92 * RADAR_SCALE);
+const RADAR_W = 101, RADAR_H = 106;
 /** A single-pixel boundary leaves the interior available for map terrain. */
 function radarFrame() {
   const W = RADAR_W, H = RADAR_H;
