@@ -218,11 +218,16 @@ function topAt(dim, x, z) {
   }
 }
 
-/** Is there anything players built around this spot? Unloaded columns count as built, to be safe. @param {Dimension} dim @param {number} x @param {number} z */
-function nearBuild(dim, x, z) {
+/**
+ * Is there anything players built around this spot? Unloaded columns count as built, to be safe. A job step per
+ * column (81 columns, up to 405 blocks), so a strike never holds up one tick.
+ * @param {Dimension} dim @param {number} x @param {number} z @returns {Generator<void, boolean, void>}
+ */
+function* nearBuild(dim, x, z) {
   const cx = Math.floor(x), cz = Math.floor(z);
   for (let dx = -SCAN; dx <= SCAN; dx++) {
     for (let dz = -SCAN; dz <= SCAN; dz++) {
+      if ((dx * (2 * SCAN + 1) + dz) % 9 === 0) yield;
       const top = topAt(dim, cx + dx, cz + dz);
       if (!top) return true;
       for (let i = 0; i <= SCAN_DEPTH; i++) {
@@ -250,8 +255,27 @@ function bolt(dim, at) {
   }
 }
 
-/** One strike near the cell: an uncharged rod sometimes, else a random spot. Skipped where the chunk isn't loaded. @param {Cell} c */
+let striking = false; // a strike's job is still running
+
+/** Starts one strike near the cell (a job over a few ticks), unless the last one is still looking. @param {Cell} c */
 function strike(c) {
+  if (striking) return;
+  striking = true;
+  system.runJob(
+    (function* () {
+      try {
+        yield* strikeJob(c);
+      } catch (e) {
+        console.warn(`[storm] lightning: ${e}`);
+      } finally {
+        striking = false;
+      }
+    })()
+  );
+}
+
+/** One strike near the cell: an uncharged rod sometimes, else a random spot. Skipped where the chunk isn't loaded. @param {Cell} c */
+function* strikeJob(c) {
   const dim = overworld();
   const r = CONFIG.strikeRadius;
   const near = rods.filter((rod) => rod[0] === 0 && !rod[4] && Math.hypot(rod[1] + 0.5 - c.x, rod[3] + 0.5 - c.z) <= r);
@@ -280,7 +304,8 @@ function strike(c) {
   if (Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn) return;
   // Safe zones (scripts/zones.js): no strike in or next to one, so no fire can start there.
   if (get("avoidZones") === true && protectedBox(OVERWORLD, { x: x - SCAN, z: z - SCAN }, { x: x + SCAN, z: z + SCAN })) return;
-  if (nearBuild(dim, x, z)) return;
+  if (yield* nearBuild(dim, x, z)) return;
+  if (cell !== c) return; // ended (or replaced) while we looked
   // getTopmostBlock skips water (it answers the bed of a lake or the sea): the bolt strikes the water's surface.
   let y = top.location.y;
   try {
