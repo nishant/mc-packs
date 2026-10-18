@@ -6,10 +6,10 @@ import { getModeHandler, MODE_OPTIONS } from "../modes/ModeRegistry.js";
 import { FACE_OFFSETS, smartOutline, wireframePositions, skeletonAABB, boxEdges, sampledBoxEdges, catmullRomSpline, aabbBounds } from "../utils/GeometryUtils.js";
 import { getModeOption } from "../utils/ModeOptions.js";
 import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
-import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached } from "../utils/Items.js";
+import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
 
-/** Ticks a hand read is reused for a player whose building is off (a slot change reads again at once). */
-const IDLE_HELD_TICKS = 5;
+/** Players the preview looks at every tick: a mode on, or a book in hand. The others every IDLE_EVERY ticks. */
+const previewBusy = new WeakSet();
 import { ALWAYS_REPLACEABLE } from "./BlockPlacer.js";
 import { getPaletteMode, getDistributionMode } from "./Palette.js";
 import { isCreative } from "../utils/InventoryUtils.js";
@@ -302,12 +302,18 @@ export function startPreviewLoop() {
         recordTick();
         tpsPart.text = `  §8-  ${tpsText()}`;
 
-        for (const player of world.getAllPlayers()) {
+        const all = allPlayers();
+        for (let i = 0; i < all.length; i++) {
+            const player = all[i];
+            // Players with building off and no book in hand (most of them, most of the time) every few ticks only.
+            if (idleSkip(player, i, previewBusy)) continue;
             try {
-
-                // Players with building off (most of them, most of the time) look at their hand every few ticks only.
-                const inHand = heldItemCached(player, getState(player).mode === "disable" ? IDLE_HELD_TICKS : 0);
-                if (inHand?.typeId === BOOK_ID || inHand?.typeId === TUTORIAL_BOOK_ID) {
+                const idle   = getState(player).mode === "disable";
+                const inHand = heldItemCached(player, idle ? IDLE_EVERY : 0);
+                const book   = inHand?.typeId === BOOK_ID || inHand?.typeId === TUTORIAL_BOOK_ID;
+                if (idle && !book) previewBusy.delete(player);
+                else previewBusy.add(player);
+                if (book) {
                     if (!isActionBarLocked(player.id)) {
                         steadyBar(player,
                             inHand.typeId === TUTORIAL_BOOK_ID

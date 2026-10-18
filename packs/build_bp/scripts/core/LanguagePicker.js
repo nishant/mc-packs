@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { world, system, Player } from "@minecraft/server";
+import { allPlayers } from "../utils/Items.js";
 import { GUIDE_LANGUAGES } from "./GuideBookData.js";
 import {
     PICKER_PIXELS_PER_BLOCK, PICKER_WIDTH, PICKER_HEIGHT, PICKER_TILES, PICKER_BUTTON, PICKER_CURSOR_LIFT,
@@ -211,7 +212,7 @@ export function startLanguagePicker() {
     let ticks = 0;
     system.runInterval(() => {
         if (pickers.size > 0) {
-            const online = new Map(world.getAllPlayers().map(player => [player.id, player]));
+            const online = new Map(allPlayers().map(player => [player.id, player]));
             for (const [playerId, picker] of pickers) {
                 try {
                     const player = online.get(playerId);

@@ -40,7 +40,7 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached } from "./utils/Items.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "./utils/Items.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 
 const GETBOOK_COST = 5;
@@ -776,7 +776,7 @@ startCoachLoop();
 startHoldWheel();
 startPanelLightCleanup();
 system.run(() => {
-    for (const player of world.getAllPlayers()) {
+    for (const player of allPlayers()) {
         try {
             if (player.hasTag("eb:zooming")) {
                 player.removeTag("eb:zooming");
@@ -787,7 +787,7 @@ system.run(() => {
 });
 
 system.runInterval(() => {
-    for (const player of world.getAllPlayers()) {
+    for (const player of allPlayers()) {
         try {
             const state = getState(player);
             const selecting = state.mode !== "disable" && state.mode !== "copy_paste" && !!state.anchor && getFovZoomEnabled(player);
@@ -823,7 +823,7 @@ system.runInterval(() => {
     }
 }, 2);
 system.runInterval(() => {
-    for (const player of world.getAllPlayers()) {
+    for (const player of allPlayers()) {
         try {
             const inv = player.getComponent("minecraft:inventory")?.container;
             if (!inv) continue;
@@ -837,12 +837,17 @@ system.runInterval(() => {
         } catch { }
     }
 }, 20);
+/** Players holding the Building Book: their sneaks are watched every tick, everyone else's hand every few ticks. */
+const sneakBusy = new WeakSet();
 system.runInterval(() => {
-    for (const player of world.getAllPlayers()) {
+    const all = allPlayers();
+    for (let i = 0; i < all.length; i++) {
+        const player = all[i];
+        if (idleSkip(player, i, sneakBusy)) continue;
         try {
-            // Shared with the preview loop; a held book is read every tick, anything else every few.
-            const item = heldItemCached(player, 5);
-            if (!isBook(item)) { prevSneakState.delete(player.id); continue; }
+            const item = heldItemCached(player, IDLE_EVERY);
+            if (!isBook(item)) { sneakBusy.delete(player); prevSneakState.delete(player.id); continue; }
+            sneakBusy.add(player);
             const isSneaking  = player.isSneaking;
             const wasSneaking = prevSneakState.get(player.id) ?? false;
             prevSneakState.set(player.id, isSneaking);

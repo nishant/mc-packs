@@ -67,4 +67,19 @@ export default async function (t) {
   await t.wait(3);
   const back = t.messages(p, { kind: "actionbar", pack: "build_bp", since }).some((m) => /book_controls/.test(m.plain));
   t.check(back, "switching back to the book shows its controls within 3 ticks");
+
+  // An idle player (building off) who takes out the tutorial book still gets it opened (or the language picker).
+  t.assert(t.cmd(p, "/realm:build").ok, "/realm:build ran");
+  const menu2 = await t.waitForm(p, { timeout: 100 });
+  const offIdx = menu2.buttons.findIndex((b) => /disable|off/i.test(b));
+  if (offIdx >= 0) menu2.answer(offIdx); else menu2.answer(menu2.buttons.length - 1);
+  await t.wait(20);
+  const tutSlot = (blockSlot + 1) % 9;
+  inv.setItem(tutSlot, new ItemStack("eb:tutorial_book", 1));
+  p.selectedSlotIndex = tutSlot;
+  const opened = await t.waitUntil(
+    () => p.dimension.getEntities({ location: p.location, maxDistance: 8 }).find((e) => e.typeId === "eb:guide_book" || e.typeId === "eb:language_picker"),
+    { timeout: 60, message: "tutorial book or language picker" },
+  ).catch(() => undefined);
+  t.check(!!opened, `the tutorial book opens in front of an idle player (${opened?.typeId ?? "nothing"})`);
 }
