@@ -61,6 +61,7 @@ const DEG = 5;
 const R = 10; // the radar: 21 x 21 cells (441 pixels), you in the middle
 const HOLD = 40; // a readout stays this long without an update (ticks)
 const REFRESH = 30; // an unchanged readout is sent again after this many ticks (before HOLD runs out)
+/** Players outside your party show within this many blocks (party mates anywhere in your dimension). */
 const OTHERS_RANGE = 128;
 const ARRIVED_TICKS = 60;
 const NAME_MAX = 24;
@@ -465,7 +466,7 @@ function gather(player, seen, pr) {
   for (const s of seen) {
     if (s.id === player.id || s.dim !== dim.id) continue;
     if (tag && s.party === tag) add("party", s.x, s.z, true);
-    else if (others) add("other", s.x, s.z, true);
+    else if (others && Math.hypot(s.x - at.x, s.z - at.z) <= OTHERS_RANGE) add("other", s.x, s.z, true);
   }
   const range = Number(get("placeRange")) || 256;
   for (const c of camps.values()) if (c.dim === dim.id && Math.abs(c.x - at.x) <= range && Math.abs(c.z - at.z) <= range) add("camp", c.x + 0.5, c.z + 0.5, false);
