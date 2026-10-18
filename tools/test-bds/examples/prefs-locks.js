@@ -1,5 +1,5 @@
 // Realm Settings 1.4.0: My preferences shows a preference the operators overrode as locked text (not a control),
-// says Save applies changes, and closing with X says nothing was saved (with the way back).
+// says Save applies changes, and closing with X says in chat that nothing was saved.
 //   node tools/test-bds/run.mjs --quiet --only settings_bp,hud_bp,map_bp --scenario tools/test-bds/examples/prefs-locks.js --timeout 600
 export default async function (t) {
   const sys = t.system;
@@ -29,17 +29,10 @@ export default async function (t) {
   const toggles = (f.elements ?? []).filter((c) => c.kind === "toggle").map((c) => c.label);
   t.check(!toggles.includes("Coordinates HUD") && toggles.includes("Compass strip"), `no switch for a locked preference, switches for the rest (${toggles.slice(0, 4).join(", ")}...)`);
 
-  // 2. Closed with X: "Nothing was saved", Back reopens the preferences.
-  next = t.waitForm(p, { timeout: 100 });
+  // 2. Closed with X: chat says nothing was saved (no second popup: settings-prefs-close.js).
+  const closed = t.tick;
   f.answer(null);
-  const told = await next;
-  t.check(/Nothing was saved/.test(JSON.stringify(told)), "closing with X says nothing was saved");
-  next = t.waitForm(p, { timeout: 100 });
-  told.answer(0);
-  f = await next;
-  t.check(/My preferences/.test(JSON.stringify(f)), "Back to my preferences opens them again");
-  f.answer(null);
-  await t.waitForm(p, { timeout: 100 }).then((x) => x.answer(1));
+  await t.waitMessage(p, /nothing was saved/i, { pack: "settings_bp", since: closed });
 
   // 3. Back on for the realm: the HUD's preferences are switches again.
   await set("hud_bp", "enabled", true);
