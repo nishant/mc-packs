@@ -681,9 +681,38 @@ function sendSets(player, sets, force = false) {
   if (fresh) actionbar(player, `§d${fresh.name} set: §f${fresh.text}`, 80);
 }
 
+/**
+ * Players whose hotbar, armor or off hand may have changed since their last scan: an inventory change, a new
+ * selected slot, or 5 s since the last scan (armor put on by a dispenser fires no event). A held relic that
+ * repairs itself is scanned every second.
+ * @type {Set<string>}
+ */
+const rescan = new Set();
+/** @type {Map<string, { slot: number, tick: number }>} */
+const lastScan = new Map();
+world.afterEvents.playerInventoryItemChange?.subscribe(({ player }) => {
+  if (player) rescan.add(player.id);
+});
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  rescan.delete(playerId);
+  lastScan.delete(playerId);
+});
+
+/** @param {Player} player @returns {Carried} */
+function carriedNow(player) {
+  const c = carried.get(player.id);
+  const last = lastScan.get(player.id);
+  const now = system.currentTick;
+  const fresh = c && last && !rescan.has(player.id) && last.slot === player.selectedSlotIndex && now - last.tick < 100 && !(c.hand && get("autoRepair") === true);
+  if (fresh) return c;
+  rescan.delete(player.id);
+  lastScan.set(player.id, { slot: player.selectedSlotIndex, tick: now });
+  return scanCarried(player);
+}
+
 /** @param {Player} player */
 function passives(player) {
-  const c = scanCarried(player);
+  const c = carriedNow(player);
   /** @type {Map<string, number>} effect -> amplifier */
   const wanted = new Map();
   const want = (/** @type {string} */ type, amp = 0) => wanted.set(type, Math.max(wanted.get(type) ?? 0, amp));
