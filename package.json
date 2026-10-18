@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc -p . && node tools/check-ascii.mjs && node tools/check-docs.mjs && node tools/check-commands.mjs && node tools/check-stories.mjs && node tools/check-ids.mjs && node tools/sync-settings.mjs --check && node tools/sync-zones.mjs --check && node tools/sync-side.mjs --check && node tools/help-catalog.mjs --check && node tools/admin-catalog.mjs --check && node tools/gen-news.mjs --check && node tools/gen-rain/textures.mjs --check && node tools/gen-rain/fogs.mjs --check && node tools/gen-rain/sounds.mjs --check && node tools/gen-sky/gen.mjs --check && node tools/gen-translucent/generate.mjs --check && node tools/gen-platypus/gen.mjs --check && node tools/gen-build/gen.mjs --check && node tools/gen-silly/gen.mjs --check && node tools/gen-glyphs/gen.mjs --check",
+    "check": "tsc -p . && node tools/check-ascii.mjs && node tools/check-docs.mjs && node tools/check-commands.mjs && node tools/check-stories.mjs && node tools/check-ids.mjs && npm run --silent test && node tools/sync-settings.mjs --check && node tools/sync-zones.mjs --check && node tools/sync-side.mjs --check && node tools/help-catalog.mjs --check && node tools/admin-catalog.mjs --check && node tools/gen-news.mjs --check && node tools/gen-rain/textures.mjs --check && node tools/gen-rain/fogs.mjs --check && node tools/gen-rain/sounds.mjs --check && node tools/gen-sky/gen.mjs --check && node tools/gen-translucent/generate.mjs --check && node tools/gen-platypus/gen.mjs --check && node tools/gen-build/gen.mjs --check && node tools/gen-silly/gen.mjs --check && node tools/gen-glyphs/gen.mjs --check",
     "build": "node tools/build.mjs",
     "bundle": "node tools/bundle.mjs",
     "gen:rain": "node tools/gen-rain/textures.mjs && node tools/gen-rain/fogs.mjs && node tools/gen-rain/sounds.mjs",
@@ -12,7 +12,8 @@
     "gen:platypus": "node tools/gen-platypus/gen.mjs",
     "gen:build": "node tools/gen-build/gen.mjs",
     "gen:silly": "node tools/gen-silly/gen.mjs",
-    "gen:glyphs": "node tools/gen-glyphs/gen.mjs"
+    "gen:glyphs": "node tools/gen-glyphs/gen.mjs",
+    "test": "node --test --test-reporter=dot \"tools/**/*.test.mjs\""
   },
   "devDependencies": {
     "@minecraft/server": "2.1.0",
