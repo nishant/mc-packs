@@ -158,6 +158,17 @@ if (namespaces.size > 1) {
 
 /** Language files (texts/en_US.lang ...): merged by putting one pack's lines after the other's. */
 const LANG = /^texts\/[^/]+\.lang$/;
+/** key -> value of a .lang file's lines (comments and blank lines skipped; a "##" comment after a value is cut). @param {string} text */
+function langKeys(text) {
+  const out = new Map();
+  for (const raw of text.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("##")) continue;
+    const eq = line.indexOf("=");
+    if (eq > 0) out.set(line.slice(0, eq), line.slice(eq + 1).replace(/\s*##.*$/, "").trim());
+  }
+  return out;
+}
 /** JSON files the game reads as one merged list, so two packs may each add entries to them. */
 const MERGEABLE = /^(sounds\.json|sounds\/sound_definitions\.json|blocks\.json|biomes_client\.json|textures\/(item_texture|terrain_texture|flipbook_textures)\.json|texts\/languages\.json)$/;
 
@@ -228,6 +239,10 @@ for (const pack of selected) {
         // Language files are lines of key=value: two packs' lines simply follow each other.
         const text = existing.data.toString("utf8").replace(/\n*$/, "\n");
         const more = data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf ? data.subarray(3) : data; // no BOM mid-file
+        // The game keeps the last line for a key: a key two packs define differently changes one pack's text quietly.
+        const keys = langKeys(text);
+        for (const [key, value] of langKeys(more.toString("utf8")))
+          if (keys.has(key) && keys.get(key) !== value) console.warn(`warning: ${out}: ${key} is defined differently in ${existing.from} and ${folder}; ${folder}'s wins`);
         files.set(out, { data: Buffer.concat([Buffer.from(text), more]), from: `${existing.from} + ${folder}` });
         continue;
       }
