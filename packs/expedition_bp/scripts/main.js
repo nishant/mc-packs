@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -1981,7 +1981,7 @@ function buff(run, mob, opts = {}) {
  */
 function spawnMob(run, typeId, at, opts = {}) {
   try {
-    const mob = overworld().spawnEntity(/** @type {any} */ (typeId), at);
+    const mob = spawnFresh(overworld(), typeId, at);
     mob.addTag(MOB_TAG);
     mob.addTag(`realm:exp_run:${run.id}`);
     if (opts.champion) {
@@ -2078,7 +2078,7 @@ function spawnBoss(run) {
   const rm = run.lay.rooms[run.room];
   const c = wmid(run, rm, rm.bossAt ?? { u: 0, v: 2, y: 1 });
   try {
-    const boss = overworld().spawnEntity(/** @type {any} */ (d.boss.mob), c);
+    const boss = spawnFresh(overworld(), d.boss.mob, c);
     boss.nameTag = `§c${d.boss.name}`;
     boss.addTag(MOB_TAG);
     boss.addTag(`realm:exp_run:${run.id}`);
@@ -2663,7 +2663,7 @@ function takeBoon(run, p, id) {
   if (b.flag === "wolves") {
     for (let k = 0; k < 2; k++) {
       try {
-        const w = overworld().spawnEntity("minecraft:wolf", { x: p.location.x + (k ? 1 : -1), y: p.location.y, z: p.location.z });
+        const w = spawnFresh(overworld(), "minecraft:wolf", { x: p.location.x + (k ? 1 : -1), y: p.location.y, z: p.location.z });
         w.getComponent("minecraft:tameable")?.tame(p);
         w.addTag(PET_TAG);
         w.addTag(`realm:exp_run:${run.id}`);
@@ -2902,7 +2902,7 @@ function tickTraps(run, here) {
       const side = { x: -dir.z, z: dir.x };
       for (let k = -1; k <= 1; k++) {
         try {
-          const a = overworld().spawnEntity("minecraft:arrow", { x: hz.x + dir.x * 0.6 + side.x * k * 0.9, y: hz.y + 0.2, z: hz.z + dir.z * 0.6 + side.z * k * 0.9 });
+          const a = spawnFresh(overworld(), "minecraft:arrow", { x: hz.x + dir.x * 0.6 + side.x * k * 0.9, y: hz.y + 0.2, z: hz.z + dir.z * 0.6 + side.z * k * 0.9 });
           a.applyImpulse({ x: dir.x * 1.6, y: 0.05, z: dir.z * 1.6 });
         } catch {
           // can't
