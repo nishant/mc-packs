@@ -83,8 +83,10 @@ system.runInterval(() => {
   }
   if (get("enabled") !== true) return;
   beginRun();
-  const tracking = runs % TRACKER_RUNS === 0;
+  let k = 0;
   for (const player of world.getAllPlayers()) {
+    // Every 2 seconds per player, half the players each second (so a full server's tracker isn't drawn in one tick).
+    const tracking = (runs + k++) % TRACKER_RUNS === 0;
     try {
       wanderHousekeeping(player);
       wanderAuto(player);
