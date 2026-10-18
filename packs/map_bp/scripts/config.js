@@ -51,10 +51,10 @@ export const CONFIG = {
   intervalTicks: 10,
 
   /**
-   * How much script time the minimap may use a tick, for everyone together: "low" (about 1.7 ms a tick at most),
-   * "normal" (about 2.9 ms) or "high" (about 4.4 ms). The drawing, terrain pictures, passes and the terrain scanner
-   * each get this share of their budget (0.6, 1 or 1.5 times the constants at the top of scripts/main.js). Lower
-   * costs the server less; with many players moving at once each one's strip and radar then come a little later.
+   * How much script time the minimap may use a tick, for everyone together: "low" (about 2.0 ms a tick at most),
+   * "normal" (about 2.9 ms) or "high" (about 4.4 ms). "low" keeps the drawing budget (so strips and radars never fade)
+   * and halves the terrain pictures and the terrain scanner and cuts the passes to 0.6: with many players the radar's
+   * land and mob dots lag a little more. "high" is 1.5 times every budget. See the constants at the top of scripts/main.js.
    */
   budgetLevel: "normal",
 };

@@ -1310,8 +1310,13 @@ const passBudget = new Budget(0.5, 6, 2);
 /** Player id -> tick of their last pass. @type {Map<string, number>} */
 const passAt = new Map();
 
-/** budgetLevel: the share of every budget above (perTick, max and tickMax alike). */
-const BUDGET_LEVELS = { low: 0.6, normal: 1, high: 1.5 };
+/**
+ * budgetLevel: each budget's share of its normal size (perTick, max and tickMax alike), in the order drawing, terrain
+ * pictures, passes, scanner. "low" keeps the drawing budget: with many players it is what keeps every strip and radar
+ * from fading (one refresh per player every REFRESH ticks fills about 1 ms a tick at 100 players); the terrain pictures,
+ * passes and scanner give: the radar's land and mob markers lag more, about 2.0 ms a tick in all instead of 2.9.
+ */
+const BUDGET_LEVELS = { low: [1, 0.5, 0.6, 0.5], normal: [1, 1, 1, 1], high: [1.5, 1.5, 1.5, 1.5] };
 /** @type {[Budget, number, number, number][]} each budget with its normal perTick, max and tickMax */
 const BUDGETS = [drawBudget, rebuildBudget, passBudget, scanBudget].map((b) => [b, b.perTick, b.max, b.tickMax]);
 let budgetLevel = "";
@@ -1320,8 +1325,9 @@ function applyBudgetLevel() {
   const level = String(get("budgetLevel"));
   if (level === budgetLevel) return;
   budgetLevel = level;
-  const k = BUDGET_LEVELS[/** @type {keyof typeof BUDGET_LEVELS} */ (level)] ?? 1;
-  for (const [b, perTick, max, tickMax] of BUDGETS) {
+  const ks = BUDGET_LEVELS[/** @type {keyof typeof BUDGET_LEVELS} */ (level)] ?? BUDGET_LEVELS.normal;
+  for (const [i, [b, perTick, max, tickMax]] of BUDGETS.entries()) {
+    const k = ks[i];
     b.perTick = perTick * k;
     b.max = max * k;
     b.tickMax = tickMax * k;

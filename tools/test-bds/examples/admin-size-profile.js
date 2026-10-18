@@ -86,7 +86,7 @@ export default async function (t) {
   let ask = await tap(page, "Large server");
   t.assert(ask?.type === "message" && title(ask) === "Apply Large server?", `a confirmation with the list came first (got "${title(ask)}")`);
   t.log(plain(ask.body));
-  t.check(/^These 8 settings change, for the whole world:\nMinimap: Minimap script time a tick: Normal \(about 2\.9 ms a tick\) -> Low \(about 1\.7 ms a tick\)\nMinimap: Largest mob range players may pick \(blocks\): 32 -> 24\n/.test(plain(ask.body)), "it lists each change, old -> new, in menu words");
+  t.check(/^These 8 settings change, for the whole world:\nMinimap: Minimap script time a tick: Normal \(about 2\.9 ms a tick\) -> Low \(about 2 ms a tick\)\nMinimap: Largest mob range players may pick \(blocks\): 32 -> 24\n/.test(plain(ask.body)), "it lists each change, old -> new, in menu words");
   page = await tap(ask, 1);
   t.check(title(page) === "Operator Tools", `Cancel goes back (got "${title(page)}")`);
   v = await values();
@@ -101,14 +101,14 @@ export default async function (t) {
   v = await values();
   t.check(!matches(v, LARGE).length, `every option has its Large server value (${matches(v, LARGE).join("; ")})`);
   ms = await mapState();
-  t.check(ms.budgetLevel === "low" && Math.abs(ms.perTick - 1.74) < 0.01, `the Minimap's budgets are low (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
+  t.check(ms.budgetLevel === "low" && Math.abs(ms.perTick - 2.0) < 0.01, `the Minimap's budgets are low (${ms.budgetLevel}, ${ms.perTick} ms a tick)`);
   t.check(title(page) === "Operator Tools" && lines(page).some((/** @type {string} */ b) => b.startsWith("[x] Server Size")), `Operator Tools comes back with the size checked off (${lines(page).filter((/** @type {string} */ b) => b.includes("Server Size")).join("")})`);
 
   // 6. The size page now says Large; Small Realm puts every option back.
   page = await tap(page, "Server size");
   t.check(/Now: Large server/.test(plain(page.body)) && lines(page).some((/** @type {string} */ b) => b.startsWith("Large server (now)")), "the size page says Large server now");
   ask = await tap(page, "Small Realm");
-  t.check(/^These 8 settings change, for the whole world:\nMinimap: Minimap script time a tick: Low \(about 1\.7 ms a tick\) -> Normal/.test(plain(ask.body)), "Small Realm lists the way back");
+  t.check(/^These 8 settings change, for the whole world:\nMinimap: Minimap script time a tick: Low \(about 2 ms a tick\) -> Normal/.test(plain(ask.body)), "Small Realm lists the way back");
   const back = t.waitMessage(op, /Server size: Small Realm\. Changed 8 settings\./, { pack: "admin_bp", timeout: 100 });
   page = await tap(ask, 0);
   await back;

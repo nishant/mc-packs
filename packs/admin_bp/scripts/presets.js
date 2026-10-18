@@ -417,7 +417,7 @@ export const SETUP = [
  * @type {{ pack: string, key: string, large: boolean | number | string, why: string }[]}
  */
 export const SIZE_OPTIONS = [
-  { pack: "map_bp", key: "budgetLevel", large: "low", why: "the heaviest pack: its budgets are for everyone together, about 1.7 ms a tick instead of 2.9" },
+  { pack: "map_bp", key: "budgetLevel", large: "low", why: "the heaviest pack: its budgets are for everyone together, about 2.0 ms a tick instead of 2.9" },
   { pack: "map_bp", key: "mobRadiusMax", large: 24, why: "each mob search covers less ground, so the budgeted searches come round sooner" },
   { pack: "elite_bp", key: "maxAlive", large: 16, why: "8 champions for 100 players spread out is too few; each costs little" },
   { pack: "expedition_bp", key: "slots", large: 3, why: "3 dungeons of 4 players instead of 1; about 0.1 ms a tick per run going" },
