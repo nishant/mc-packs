@@ -5,7 +5,7 @@
 // the player holds only their committed index. Old JSON pages are read once and migrated on use.
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
-import { get, getFor, setFor } from "./settings.js";
+import { get, getFor, onChange, setFor } from "./settings.js";
 import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
@@ -821,7 +821,7 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   queuedButtons.delete(player.id);
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [buttonState, snapshots, lastTotal, lastEnforce]) m.delete(playerId);
+  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff]) m.delete(playerId);
   recoveryWarned.delete(playerId);
   dead.delete(playerId);
   queuedButtons.delete(playerId);
@@ -992,14 +992,58 @@ function tickPlayer(player, withAutoStore) {
   if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) autoStore(player);
 }
 
+/** @type {Map<string, { until: number, text: string, logged: number }>} a player whose last tick failed waits before the next try */
+const backoff = new Map();
+/** Ticks a failed player waits (a page save that can't stage here retries when they move), and how often the same warning repeats. */
+const RETRY_TICKS = 40;
+const WARN_TICKS = 1200;
+
+/**
+ * When each player's inventory (or a setting of this pack) last changed. A player whose inventory changed
+ * in the last second is looked at every 2 ticks (button clicks, and every 10 ticks pickups to auto-store);
+ * a quiet one every 5 s, spread over the ticks, without the page scan, which a quiet inventory can't need
+ * (that runs every 25 s anyway, in case an event was missed). A look costs 0.1 to 0.4 ms, so idle players
+ * have to be looked at rarely.
+ * @type {Map<string, number>}
+ */
+const changedAt = new Map();
+const ACTIVE_TICKS = 20;
+world.afterEvents.playerInventoryItemChange?.subscribe(({ player }) => {
+  if (player) changedAt.set(player.id, system.currentTick);
+});
+world.afterEvents.playerSpawn.subscribe(({ player }) => changedAt.set(player.id, system.currentTick));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => changedAt.delete(playerId));
+// A new page count or button choice shows at once, not at the next quiet look.
+onChange((key, player) => {
+  const now = system.currentTick;
+  if (player) changedAt.set(player.id, now);
+  else for (const p of world.getAllPlayers()) changedAt.set(p.id, now);
+});
+
+/** Beats (2 ticks each) between looks at a quiet player, and between a quiet player's page scans. */
+const QUIET_BEATS = 50;
+const QUIET_SCAN_BEATS = 250;
+
 let beat = 0;
 system.runInterval(() => {
-  const withAutoStore = ++beat % 5 === 0;
+  ++beat;
+  const now = system.currentTick;
+  let i = 0;
   for (const player of world.getAllPlayers()) {
+    const turn = (beat + i++) % QUIET_BEATS === 0;
+    const wait = backoff.get(player.id);
+    if (wait && now < wait.until) continue;
+    const active = now - (changedAt.get(player.id) ?? -Infinity) <= ACTIVE_TICKS || !buttonState.has(player.id);
+    if (!active && !turn) continue;
+    const withAutoStore = active ? beat % 5 === 0 : (beat + i - 1) % QUIET_SCAN_BEATS === 0;
     try {
       tickPlayer(player, withAutoStore);
+      if (wait) backoff.delete(player.id);
     } catch (e) {
-      console.warn(`[stash] ${e}`);
+      const text = String(e);
+      const repeat = wait?.text === text && now - wait.logged < WARN_TICKS;
+      if (!repeat) console.warn(`[stash] ${text}`);
+      backoff.set(player.id, { until: now + RETRY_TICKS, text, logged: repeat && wait ? wait.logged : now });
     }
   }
 }, 2);

@@ -33,7 +33,7 @@ const mc = {
   failLoad: false,
   metadataThrow: new Set(),
   loads: 0,
-  eventDelay: 0,
+  eventDelay: 1,
   changes: [],
   prefs: new Map(),
   forms: [],
@@ -217,6 +217,12 @@ function makePlayer() {
     getBlock: () => ({}),
     spawnItem: (item, location) => mc.spawned.push({ item, location }),
     spawnEntity(type, at) { return storageEntity(this, at, type); },
+    runCommand(command) {
+      const m = /^structure load "([^"]+)" (-?\d+) (-?\d+) (-?\d+) 0_degrees none true false$/.exec(command);
+      assert.ok(m, `unexpected command ${command}`);
+      mc.server.world.structureManager.place(m[1], this, { x: +m[2], y: +m[3], z: +m[4] });
+      return { successCount: 1 };
+    },
     getEntities(query = {}) {
       return mc.entities.filter((e) => e.dimension === this && (!query.type || query.type === e.typeId));
     },
@@ -294,7 +300,16 @@ mc.ui = {
   ModalFormData: Form,
   FormCancelationReason: { UserBusy: "UserBusy" },
 };
-mc.settings = { get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
+/** Like settings.js, a changed preference tells the onChange listeners (for the player it belongs to). */
+const prefListeners = [];
+const prefsSet = mc.prefs.set.bind(mc.prefs);
+mc.prefs.set = (k, v) => {
+  prefsSet(k, v);
+  const player = mc.players.find((p) => k.startsWith(`${p.id}:`));
+  for (const fn of prefListeners) fn(k.slice(k.indexOf(":") + 1), player);
+  return mc.prefs;
+};
+mc.settings = { onChange: (fn) => prefListeners.push(fn), get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
 
 /** One engine tick: queued system.run callbacks first, then (every other tick) the script's interval. */
 function advance(ticks = 1) {
@@ -315,7 +330,7 @@ function fire(name, event) {
 
 const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, StructureSaveMode, system, world } = m;`);
 const uiUrl = dataUrl(`const m = globalThis.__mc.ui; export const { ActionFormData, FormCancelationReason, ModalFormData } = m;`);
-const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, setFor } = m;`);
+const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, onChange, setFor } = m;`);
 const storeSource = readFileSync(new URL("../packs/stash_bp/scripts/page-store.js", import.meta.url), "utf8")
   .replace('"@minecraft/server"', JSON.stringify(serverUrl));
 const storeUrl = dataUrl(storeSource);
@@ -401,7 +416,7 @@ for (const autoStore of [false, true]) test(`delayed script echoes and consecuti
     advance(5);
     check(1);
   } finally {
-    mc.eventDelay = 0;
+    mc.eventDelay = 1; // the default: an inventory change is reported on the next tick, as in the game
     mc.changes = [];
     mc.players = all;
   }
@@ -1152,11 +1167,11 @@ test("the script's own button writes are not clicks", () => {
   assert.equal(curPage(p), 2);
 });
 
-test("a button left on the cursor is cleared by the next tick even without an event", () => {
+test("a button left on the cursor is cleared within 5 s even without an event", () => {
   const p = joined();
-  advance(2);
+  advance(40);
   p.cursor.item = stack(BTN_MENU);
-  advance(2);
+  advance(100);
   assert.equal(p.cursor.item, undefined);
 });
 
