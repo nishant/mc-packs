@@ -351,7 +351,7 @@
           "anchor_from": "top_right",
           "anchor_to": "top_right",
           "size": [
-            112.7,
+            100.8,
             105.8
           ],
           "controls": [
@@ -361,8 +361,8 @@
                 "texture": "textures/ui/Black",
                 "alpha": 0.85,
                 "size": [
-                  110.7,
-                  102.79285714285716
+                  98.8,
+                  103.8
                 ],
                 "anchor_from": "center",
                 "anchor_to": "center",
@@ -373,8 +373,8 @@
               "radar_clip": {
                 "type": "panel",
                 "size": [
-                  110.7,
-                  102.79285714285716
+                  98.8,
+                  103.8
                 ],
                 "clips_children": true,
                 "anchor_from": "center",
@@ -389,7 +389,7 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.6325714285714287,
+                      "font_scale_factor": 0.5414893617021277,
                       "line_padding": 7.7753571428571435,
                       "shadow": false,
                       "localize": false,
@@ -402,8 +402,8 @@
                       "anchor_from": "top_left",
                       "anchor_to": "top_left",
                       "offset": [
-                        0,
-                        0
+                        1.0720744680851055,
+                        1
                       ],
                       "layer": 2,
                       "bindings": [
@@ -428,7 +428,7 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.6325714285714287,
+                      "font_scale_factor": 0.5414893617021277,
                       "line_padding": 7.7753571428571435,
                       "shadow": false,
                       "localize": false,
@@ -441,8 +441,8 @@
                       "anchor_from": "top_left",
                       "anchor_to": "top_left",
                       "offset": [
-                        0.5930357142857143,
-                        0
+                        1.3428191489361694,
+                        1
                       ],
                       "layer": 3,
                       "bindings": [
@@ -466,7 +466,7 @@
                 "type": "image",
                 "texture": "textures/ui/radar_frame",
                 "size": [
-                  112.7,
+                  100.8,
                   105.8
                 ],
                 "anchor_from": "center",
