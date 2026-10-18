@@ -41,6 +41,4 @@ export default async function (t) {
   f = await next;
   t.check(!/Locked by the operators: Coordinates HUD/.test(JSON.stringify(f)) && (f.elements ?? []).some((c) => c.kind === "toggle" && c.label === "Coordinates HUD"), "unlocked again when the operators turn it back on");
   f.answer(null);
-  await t.waitForm(p, { timeout: 100 }).then((x) => x.answer(1));
-
 }

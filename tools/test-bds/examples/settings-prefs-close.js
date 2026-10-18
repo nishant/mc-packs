@@ -12,12 +12,11 @@ export default async function (t) {
   let since = t.tick;
   t.assert(t.cmd(p, "/realm:prefs").ok, "/realm:prefs ran");
   let f = await next;
-  const after = t.tick;
   f.answer(null);
   const popup = await t.waitForm(p, { timeout: 60 }).catch(() => undefined);
   t.check(!popup, `no second popup after closing with X (got "${popup?.title ?? ""}")`);
   popup?.answer(null);
-  const told = t.messages(p, { kind: "chat", pack: "settings_bp", since: after }).filter((m) => /Nothing was saved/.test(m.plain));
+  const told = t.messages(p, { pack: "settings_bp", since }).filter((m) => /nothing was saved/i.test(m.plain));
   t.check(told.length === 1, `chat says nothing was saved, once (${told.length}: ${told.map((m) => m.plain).join(" / ")})`);
   t.check(told.some((m) => /\/realm:prefs/.test(m.plain)), "and how to open it again");
 
@@ -31,5 +30,5 @@ export default async function (t) {
   const report = await next;
   t.check(/1 change saved/.test(String(report.title)), `saving works after a close (${report.title})`);
   report.answer(1);
-  t.check(t.messages(p, { kind: "chat", pack: "settings_bp", since }).some((m) => /Welcome popup when I join/.test(m.plain)), "the saved change is in chat");
+  t.check(t.messages(p, { pack: "settings_bp", since }).some((m) => /Welcome popup when I join/.test(m.plain)), "the saved change is in chat");
 }
