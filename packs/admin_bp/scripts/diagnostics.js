@@ -205,8 +205,8 @@ async function forgetPack(player, ctx, p) {
   const sharedNote = (p.shared ?? 0) > 1 ? " Only its own entries go: the other packs in this add-on keep theirs." : "";
   const text =
     `Delete everything ${name} (${plain(p.pack)}) saved in the world: ${p.props ?? 0} entr${p.props === 1 ? "y" : "ies"}, ${kb(p.bytes ?? 0)}. ` +
-    `Its settings, records and progress stored there are gone for good; it starts over as if newly installed.${sharedNote}\n\n` +
-    "Not deleted: scoreboards and tags (every pack shares them) and data saved on players.\n\n" +
+    `Its settings, records and progress stored there are gone for good, and so is anything it kept for players there (such as stored inventory pages or letters); it starts over as if newly installed.${sharedNote}\n\n` +
+    "Not deleted: scoreboards and tags (every pack shares them), structures it saved, and data saved on players.\n\n" +
     `${name} keeps running from memory but saves nothing more until you run /reload or restart the server: do that next.`;
   const res = await ctx.show(player, new MessageFormData().title("Forget saved data?").body(text).button1("Forget it").button2("Cancel"));
   if (res?.selection !== 0) return;

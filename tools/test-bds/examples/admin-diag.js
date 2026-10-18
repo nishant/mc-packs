@@ -113,6 +113,7 @@ export default async function (t) {
   t.log(text);
   t.check(/Delete everything Nicknames \(nick_bp\) saved in the world: \d+ entries/.test(text), "the confirmation names the pack and how much goes");
   t.check(/Not deleted: scoreboards and tags/.test(text) && /\/reload or restart/.test(text), "it says scoreboards and tags stay, and to reload");
+  t.check(/stored inventory pages or letters/.test(text), "it warns that items the pack keeps for players go too");
   list = await tap(ask, 1);
   t.check(title(list) === "Pack diagnostics", "Cancel goes back to the list");
   send("realm:diag_ping", { id: "p4" });
