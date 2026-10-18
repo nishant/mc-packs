@@ -1000,7 +1000,7 @@ const HEARTH_AND_TABLE = {
         { text: `${BE}And Quill's doing this from a warden cell, if you can believe it. Booked the chef by letter. Paid in advance, too, the cheek of it. You can lock up a trader, sailor, but you can't lock up the trade.`, when: { "g:quill": "exposed" } },
       ],
       reward: { levels: 4, crowns: 45, items: [{ item: "minecraft:golden_carrot", amount: 6 }] },
-      hint: "Champions are the tougher, named monsters that roam the realm; with the Cooking pack installed, each drops a Champion's Heart when it falls. Wait for a thunderstorm and stay outdoors within 48 blocks of the lighthouse for 90 seconds. Any 3 fish count.",
+      hint: "Champions are the tougher, named monsters that roam the realm; with the Cooking pack installed, each drops a Champion's Heart when it falls; without the Kitchen and Champions packs, Grandmother Gristle at the Ruined Watchtower stands in for the hearts. Wait for a thunderstorm and stay outdoors within 48 blocks of the lighthouse for 90 seconds. Any 3 fish count.",
     },
     {
       id: "starwright",
