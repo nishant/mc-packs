@@ -160,8 +160,22 @@ export function removeActor(id, effect = false) {
   }
 }
 
+/** Calls of updateActorLabels in a row with no story character to label. */
+let idleSyncs = 0;
+/** With nobody to label, the helpers are swept only this often (in calls, every 2 ticks: 5 seconds). */
+const IDLE_SYNC_EVERY = 50;
+
 /** Syncs all active story character nameplate helpers with active observers. */
 export function updateActorLabels() {
+  const targets = [];
+  for (const [id, a] of actors) {
+    if (a.role === "add" || !a.opts.name || !a.ent.isValid) continue;
+    targets.push({ id, entity: a.ent, name: a.opts.name, suppressedName: a.marker ?? actorMarker(id) });
+  }
+  // Nobody to label (the usual case): the first sync removes the last helpers, later ones only sweep for strays now
+  // and then, instead of reading every player and every dimension's helpers every 2 ticks.
+  if (targets.length) idleSyncs = 0;
+  else if (idleSyncs++ % IDLE_SYNC_EVERY !== 0) return;
   const dims = DIMENSIONS.flatMap((id) => {
     try {
       return [world.getDimension(id)];
@@ -169,11 +183,6 @@ export function updateActorLabels() {
       return [];
     }
   });
-  const targets = [];
-  for (const [id, a] of actors) {
-    if (a.role === "add" || !a.opts.name || !a.ent.isValid) continue;
-    targets.push({ id, entity: a.ent, name: a.opts.name, suppressedName: a.marker ?? actorMarker(id) });
-  }
   nameLabels.sync(targets, world.getAllPlayers(), dims);
 }
 
