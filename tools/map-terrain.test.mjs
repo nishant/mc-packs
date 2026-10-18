@@ -474,6 +474,13 @@ test("time budgets add their share each tick, save up to their most and spend at
   assert.ok(b.ok && b.room > 0 && b.room <= 1);
   for (let i = 0; i < 20; i++) b.tick();
   assert.equal(b.left, 2, "savings stop at max");
+  b.spend(3600000);
+  assert.equal(b.left, -2, "a clock step or a long hitch leaves a debt of at most max");
+  for (let i = 0; i < 5; i++) b.tick();
+  assert.ok(b.ok, "so the work resumes within max / perTick ticks");
+  b.tick();
+  b.spend(-3600000);
+  assert.ok(b.used >= 0 && b.left <= 2, "a clock step back gives nothing");
 });
 
 test("the ground ahead of a fast viewer is listed nearest that point first, at most `limit`, missing before stale", () => {
