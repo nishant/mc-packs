@@ -809,6 +809,14 @@ export function timeWait(obj) {
   const t = world.getTimeOfDay();
   if (a <= b ? t >= a && t < b : t >= a || t < b) return undefined;
   const what = a >= 12000 && a < 16000 ? "nightfall" : a >= 16000 && a < 20000 ? "midnight" : a < 1000 || a >= 23000 ? "dawn" : "the right time of day";
+  // With the daylight cycle off (common on servers that keep it day) the time never comes by itself: no countdown.
+  let cycle = true;
+  try {
+    cycle = world.gameRules.doDayLightCycle;
+  } catch {
+    // can't tell: count down
+  }
+  if (!cycle) return `wait for ${what} (the time of day is stopped on this world)`;
   return `wait for ${what} (in about ${Math.max(1, Math.ceil((((a - t + 24000) % 24000) / 1200)))} min)`;
 }
 
