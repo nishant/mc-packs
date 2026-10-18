@@ -879,13 +879,53 @@ function findForeign(o, size, top) {
   return undefined;
 }
 
+/**
+ * World spawn on the ground. `getDefaultSpawnLocation()` answers y 32767 for a spawn with no fixed height (most
+ * worlds): a teleport there drops a player from the top of the sky. Where its chunk isn't loaded, y 320 (see `land`).
+ */
+function worldSpawn() {
+  const s = world.getDefaultSpawnLocation();
+  if (s.y >= -64 && s.y < 320) return { x: s.x + 0.5, y: s.y, z: s.z + 0.5 };
+  try {
+    const t = overworld().getTopmostBlock({ x: s.x, z: s.z });
+    if (t && t.y < 319) return { x: s.x + 0.5, y: t.y + 1, z: s.z + 0.5 };
+  } catch {
+    // not loaded
+  }
+  return { x: s.x + 0.5, y: 320, z: s.z + 0.5 };
+}
+
+/**
+ * Sends a player to world spawn on the ground: when its chunk isn't loaded yet they wait high up with Slow Falling,
+ * and are put on the ground once it is (tried for 10 seconds).
+ * @param {Player} p
+ */
+function toWorldSpawn(p) {
+  const at = worldSpawn();
+  p.teleport(at, { dimension: overworld() });
+  if (at.y < 320) return;
+  p.addEffect("slow_falling", 300, { amplifier: 0, showParticles: false });
+  const settle = (/** @type {number} */ tries) =>
+    system.runTimeout(() => {
+      if (!p.isValid) return;
+      const here = worldSpawn();
+      if (here.y < 320) {
+        p.teleport(here, { dimension: overworld() });
+        p.removeEffect("slow_falling");
+      } else if (tries > 1) settle(tries - 1);
+    }, 10);
+  settle(20);
+}
+
 /** The surface above the site: where strays found in the box at reset are put. @param {Vector3} o @param {number} size @param {number} top */
 function surface(o, size, top) {
   const x = o.x + Math.floor(size / 2);
   const z = o.z + Math.floor(size / 2);
   try {
     const t = overworld().getTopmostBlock({ x, z });
-    if (t && t.y > o.y + top + 1) {
+    // Under the box counts as outside too: in a flat world (or over a deep valley) the ground is below the dungeon.
+    if (t && t.y < 319 && t.y < o.y - 2) return { x: x + 0.5, y: t.y + 1, z: z + 0.5 };
+    if (t && t.y < 319 && t.y > o.y + top + 1) {
       // getTopmostBlock skips water (it answers a lake or sea bed): over water, the water's surface instead.
       let s = t;
       for (let i = 0; i < 64; i++) {
@@ -898,7 +938,7 @@ function surface(o, size, top) {
   } catch {
     // unloaded
   }
-  return world.getDefaultSpawnLocation();
+  return worldSpawn();
 }
 
 /**
@@ -937,7 +977,8 @@ async function resetBox(rec) {
           teleportBack(e, ret);
           e.sendMessage("§eThe expedition dungeon was closed, so you were sent back to where you started.");
         } else {
-          e.teleport(out, { dimension: dim });
+          if (out.y >= 320) toWorldSpawn(e);
+          else e.teleport(out, { dimension: dim });
           e.sendMessage("§eThe expedition dungeon was closed, so you were moved to the surface.");
         }
       } else if (e.hasTag(MOB_TAG) || e.hasTag(PET_TAG) || LITTER.has(e.typeId) || DUNGEON_MOBS.has(e.typeId)) e.remove();
@@ -1463,7 +1504,8 @@ function clearBox(run) {
       if (!e.isValid) continue;
       const keep = e instanceof Player || LITTER.has(e.typeId) || !!e.nameTag || !!e.getComponent("minecraft:is_tamed");
       if (!keep) continue; // wild cave mobs are left to the rock, as any cave-in would
-      e.teleport(out, { dimension: dim });
+      if (e instanceof Player && out.y >= 320) toWorldSpawn(e);
+      else e.teleport(out, { dimension: dim });
       if (e instanceof Player) e.sendMessage("§eAn expedition dungeon is being built where you were, so you were moved to the surface.");
     }
   } catch (e) {
@@ -1784,7 +1826,7 @@ function teleportBack(p, ret) {
     dim = undefined;
   }
   if (dim && typeof ret.x === "number" && typeof ret.y === "number" && typeof ret.z === "number") p.teleport({ x: ret.x, y: ret.y, z: ret.z }, { dimension: dim });
-  else p.teleport(world.getDefaultSpawnLocation(), { dimension: overworld() });
+  else toWorldSpawn(p);
   p.setDynamicProperty(PROP_RETURN, undefined);
   dropBuffs(p);
   homecoming(p);
