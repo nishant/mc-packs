@@ -10,7 +10,7 @@ import { CONFIG } from "./config.js";
  * @typedef {{
  *   key: string, type: "bool" | "int" | "float" | "enum" | "text", label: string, help?: string,
  *   value: any, default: any, min?: number, max?: number, step?: number, choices?: string[], names?: string[],
- *   scope: "world" | "player", restart?: boolean, invert?: boolean
+ *   scope: "world" | "player", restart?: boolean, invert?: boolean, locked?: string
  * }} Option
  * @typedef {{ pack: string, title: string, options: Option[] }} Pack
  * @typedef {{ pack: Pack, option: Option }} Slot one input of a form
@@ -141,6 +141,7 @@ function onGrid(o, v) {
 
 /** A fractional setting that isn't 0-1 (seat reach 1 to 5 in 0.5s): its values, for a dropdown. undefined = slider. @param {Option} o */
 function choicesOf(o) {
+  if ((o.type === "int" || o.type === "float") && Array.isArray(o.choices) && o.choices.length) return o.choices.map(Number);
   if (o.type !== "float" || isPercent(o) || o.min === undefined || o.max === undefined) return undefined;
   const step = o.step ?? 0.1, out = [];
   for (let v = o.min; v <= o.max + 1e-9 && out.length < 100; v = onGrid(o, v + step)) out.push(v);
@@ -510,18 +511,38 @@ async function prefsForm(player) {
     return false;
   }
   const form = new ModalFormData().title("§lMy preferences").submitButton("Save");
+  form.label("§7Changes apply when you press §fSave§7 at the bottom. Closing with X keeps your settings as they were.");
   /** @type {(Slot | null)[]} */
-  const slots = [];
+  const slots = [null];
   for (const pack of packs) {
     form.label(`§l§6${pack.title}`);
     slots.push(null);
     for (const option of pack.options.filter((o) => o.scope === "player")) {
+      if (option.locked) {
+        // Set by the operators: shown, not a control, so nobody changes something that does nothing.
+        form.label(`§7${option.label}: §f${fmt(option, option.value)}\n§8Locked by the operators: ${option.locked}`);
+        slots.push(null);
+        continue;
+      }
       addControl(form, option);
       slots.push({ pack, option });
     }
   }
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return false;
+  if (!player.isValid) return false;
+  if (!res || res.canceled) {
+    if (res?.cancelationReason !== FormCancelationReason.UserClosed) return false;
+    // Closed with X: say that nothing was saved, and offer the way back.
+    const back = await show(
+      player,
+      new MessageFormData()
+        .title("§lNothing was saved")
+        .body("You closed My preferences with X, so nothing you changed there was saved.\n\nTo change a setting, open it again, make the change and press §lSave§r at the bottom.")
+        .button1("Back to my preferences")
+        .button2("Close")
+    );
+    return !!back && !back.canceled && back.selection === 0 && player.isValid;
+  }
   const read = answersOf(res, slots);
   if (!read) {
     player.sendMessage("§cCouldn't read the form, so nothing was saved.");

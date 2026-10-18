@@ -2,6 +2,7 @@
 // options with get() / getFor() and shares the same eb:* dynamic properties used by Effortless Building's in-game settings.
 import { Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { isOp } from "./utils/Permissions.js";
 
 const PACK = "build_bp";
 const PREFIX = "build";
@@ -22,6 +23,17 @@ const writeWorld = (prop) => (/** @type {any} */ v) => {
     world.setDynamicProperty(prop, v);
   } catch {}
 };
+
+/**
+ * Why a player can't use Easy Building at all right now (operators only, or a tag they don't have), for /realm:prefs.
+ * @param {Player} p
+ */
+function cantBuild(p) {
+  if (get("operatorsOnly") === true && !isOp(p)) return "Only operators can use Easy Building on this realm";
+  const tag = String(get("requiredTag") ?? "");
+  if (get("tagRequired") === true && !isOp(p) && !p.hasTag(tag)) return `Easy Building needs the tag "${tag}", which operators give`;
+  return undefined;
+}
 
 /** @type {Option[]} */
 const OPTIONS = [
@@ -141,6 +153,8 @@ const OPTIONS = [
     key: "previewMode",
     type: "enum",
     scope: "player",
+    lock: [["enabled", false]],
+    locked: (p) => cantBuild(p),
     prop: "eb:previewMode",
     default: "outline",
     label: "Build preview style",
@@ -151,6 +165,8 @@ const OPTIONS = [
     key: "destroyPreviewMode",
     type: "enum",
     scope: "player",
+    lock: [["enabled", false], ["allowDestroy", false]],
+    locked: (p) => cantBuild(p),
     prop: "eb:destroyPreviewMode",
     default: "outline",
     label: "Destroy preview style",
@@ -161,30 +177,35 @@ const OPTIONS = [
     key: "previewQuality",
     type: "int",
     scope: "player",
+    lock: [["enabled", false]],
+    locked: (p) => cantBuild(p) ?? (get("configTagRequired") === true && !p.hasTag(String(get("requiredTag") ?? "")) ? `Only players with the tag "${get("requiredTag")}" can change it` : undefined),
     prop: "eb:previewQuality",
     default: 1,
     label: "Preview refresh interval (ticks)",
     min: 1,
     max: 20,
     step: 1,
+    choices: ["1", "2", "3", "4", "5", "10", "20"],
   },
-  { key: "deferShapeCalc", type: "bool", scope: "player", prop: "eb:deferShapeCalc", default: true, label: "Defer shape calculation while aiming" },
-  { key: "flickPreview", type: "bool", scope: "player", prop: "eb:flickPreview", default: false, label: "Flick preview (only flash when aim moves)" },
-  { key: "simpleModes", type: "bool", scope: "player", prop: "eb:simpleModes", default: false, label: "Simple mode list (Line, Wall, Floor, Cube)" },
-  { key: "buildSpeed", type: "int", scope: "player", prop: "eb:buildSpeed", default: 20, label: "Build speed (wave ticks, 1 = instant)", min: 1, max: 100, step: 1 },
-  { key: "maxBlocks", type: "int", scope: "player", prop: "eb:maxBlocks", base: "maxBlocksCap", label: "My max blocks per build", min: 64, max: 300000, step: 64 },
-  { key: "replaceBlocks", type: "bool", scope: "player", prop: "eb:replaceBlocks", default: true, label: "Replace blocks in Creative mode" },
-  { key: "infiniteReach", type: "bool", scope: "player", prop: "eb:infiniteReach", default: false, label: "Infinite Reach" },
-  { key: "infiniteReachDistance", type: "int", scope: "player", prop: "eb:infiniteReachDistance", default: 64, label: "Infinite Reach distance (blocks)", min: 4, max: 256, step: 4 },
-  { key: "airBuildReach", type: "int", scope: "player", prop: "eb:airBuildReach", default: 4, label: "Air Build distance (blocks)", min: 1, max: 64, step: 1 },
-  { key: "destroyDrops", type: "bool", scope: "player", prop: "eb:destroyDrops", default: true, label: "Collect drops in Destroy mode" },
-  { key: "undoThreshold", type: "int", scope: "player", prop: "eb:undoThreshold", default: 200, label: "Undo block limit (0 = disabled)", min: 0, max: 1000, step: 50 },
-  { key: "floatingUI", type: "bool", scope: "player", prop: "eb:floatingUI", default: true, label: "Floating 3D panels" },
-  { key: "cursor", type: "bool", scope: "player", prop: "eb:cursor", default: true, label: "Aim cursor on floating panels" },
+  { key: "deferShapeCalc", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:deferShapeCalc", default: true, label: "Defer shape calculation while aiming" },
+  { key: "flickPreview", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:flickPreview", default: false, label: "Flick preview (only flash when aim moves)" },
+  { key: "simpleModes", type: "bool", scope: "player", lock: [["enabled", false], ["modeComplexity", "simple"], ["modeComplexity", "advanced"]], locked: (p) => cantBuild(p), prop: "eb:simpleModes", default: false, label: "Simple mode list (Line, Wall, Floor, Cube)" },
+  { key: "buildSpeed", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:buildSpeed", default: 20, label: "Build speed (wave ticks, 1 = instant)", min: 1, max: 100, step: 1 },
+  { key: "maxBlocks", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:maxBlocks", base: "maxBlocksCap", label: "My max blocks per build", min: 64, max: 300000, step: 64 },
+  { key: "replaceBlocks", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:replaceBlocks", default: true, label: "Replace blocks in Creative mode" },
+  { key: "infiniteReach", type: "bool", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReach", default: false, label: "Infinite Reach" },
+  { key: "infiniteReachDistance", type: "int", scope: "player", lock: [["enabled", false], ["allowInfiniteReach", false]], locked: (p) => cantBuild(p), prop: "eb:infiniteReachDistance", default: 64, label: "Infinite Reach distance (blocks)", min: 4, max: 256, step: 4 },
+  { key: "airBuildReach", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:airBuildReach", default: 4, label: "Air Build distance (blocks)", min: 1, max: 64, step: 1 },
+  { key: "destroyDrops", type: "bool", scope: "player", lock: [["enabled", false], ["allowDestroy", false]], locked: (p) => cantBuild(p), prop: "eb:destroyDrops", default: true, label: "Collect drops in Destroy mode" },
+  { key: "undoThreshold", type: "int", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:undoThreshold", default: 200, label: "Undo block limit (0 = disabled)", min: 0, max: 1000, step: 50 },
+  { key: "floatingUI", type: "bool", scope: "player", lock: [["enabled", false], ["plainMenusForAll", true]], locked: (p) => cantBuild(p), prop: "eb:floatingUI", default: true, label: "Floating 3D panels" },
+  { key: "cursor", type: "bool", scope: "player", lock: [["enabled", false], ["plainMenusForAll", true]], locked: (p) => cantBuild(p), prop: "eb:cursor", default: true, label: "Aim cursor on floating panels" },
   {
     key: "panelSize",
     type: "enum",
     scope: "player",
+    lock: [["enabled", false], ["plainMenusForAll", true]],
+    locked: (p) => cantBuild(p),
     prop: "eb:panelSize",
     default: "normal",
     label: "Floating panel size",
@@ -195,6 +216,8 @@ const OPTIONS = [
     key: "coachSide",
     type: "enum",
     scope: "player",
+    lock: [["enabled", false], ["plainMenusForAll", true]],
+    locked: (p) => cantBuild(p),
     prop: "eb:coachSide",
     default: "right",
     label: "Live Coach side",
@@ -205,15 +228,17 @@ const OPTIONS = [
     key: "panelSounds",
     type: "enum",
     scope: "player",
+    lock: [["enabled", false], ["plainMenusForAll", true]],
+    locked: (p) => cantBuild(p),
     prop: "eb:panelSounds",
     default: "normal",
     label: "Floating panel sounds",
     choices: ["normal", "quiet", "off"],
     names: ["Normal", "Quiet", "Off"],
   },
-  { key: "swapBookActions", type: "bool", scope: "player", prop: "eb:swapBookActions", default: false, label: "Swap Building Book right-click and left-click" },
-  { key: "fovZoomEnabled", type: "bool", scope: "player", prop: "eb:fovZoomEnabled", default: true, label: "Selection FOV zoom when aiming far away" },
-  { key: "hintsEnabled", type: "bool", scope: "player", prop: "eb:hintsEnabled", default: true, label: "Show gameplay hints" },
+  { key: "swapBookActions", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:swapBookActions", default: false, label: "Swap Building Book right-click and left-click" },
+  { key: "fovZoomEnabled", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:fovZoomEnabled", default: true, label: "Selection FOV zoom when aiming far away" },
+  { key: "hintsEnabled", type: "bool", scope: "player", lock: [["enabled", false]], locked: (p) => cantBuild(p), prop: "eb:hintsEnabled", default: true, label: "Show gameplay hints" },
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
@@ -239,13 +264,17 @@ const OPTIONS = [
  * @property {number} [min]
  * @property {number} [max]
  * @property {number} [step]
- * @property {string[]} [choices] enum only
+ * @property {string[]} [choices] enum; or int/float: the only values allowed, as text ("1", "2", "5")
  * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
  * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
  * @property {string} [prop] player only: its own dynamic property instead of `<PREFIX>:pref`
+ * @property {[string, unknown][]} [lock] player only: world options that make this preference do nothing, each with
+ *   the value that does it ([["enabled", false]]); /realm:prefs then shows it as set by the operators
+ * @property {(player: Player) => string | undefined} [locked] player only: why it can't change for this player now, when
+ *   that isn't a plain world value (a tag the player lacks...)
  * @property {() => unknown} [read] world only, saved elsewhere: the saved value, or undefined
  * @property {(value: unknown) => void} [write] world only, saved elsewhere: save it (undefined = back to config.js)
  */
@@ -276,6 +305,7 @@ function problem(opt, v) {
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
+      if (opt.choices && !opt.choices.includes(String(v))) return `must be one of ${opt.choices.join(", ")}`;
       if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
@@ -453,6 +483,25 @@ function changed(key, player) {
 // Realm Settings protocol
 // ---------------------------------------------------------------------------
 
+/**
+ * Why a player's preference does nothing right now because of the operators, in words for /realm:prefs ("Coordinates
+ * HUD is Disabled for the whole realm"), or undefined when the player's choice counts.
+ * @param {Option} o @param {Player} player
+ */
+function lockedFor(o, player) {
+  for (const [key, value] of o.lock ?? []) {
+    if (get(key) !== value) continue;
+    const w = optionFor("world", key);
+    const shown = typeof value === "boolean" ? (w?.invert ? !value : value) ? "Enabled" : "Disabled" : w?.type === "enum" && w.names && w.choices ? w.names[w.choices.indexOf(String(value))] ?? String(value) : String(value);
+    return `${w?.label ?? key} is ${shown} for the whole realm`;
+  }
+  try {
+    return o.locked?.(player);
+  } catch {
+    return undefined;
+  }
+}
+
 /** @param {Player | undefined} player @returns {object[]} the options, with their current values */
 function describe(player) {
   return OPTIONS.filter((o) => o.scope === "world" || player).map((o) => {
@@ -472,6 +521,7 @@ function describe(player) {
       invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
+      locked: isWorld ? undefined : lockedFor(o, /** @type {Player} */ (player)),
     };
   });
 }
