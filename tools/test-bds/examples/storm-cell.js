@@ -7,7 +7,10 @@ export default async function (t) {
   t.system.afterEvents.scriptEventReceive.subscribe((e) => {
     if (e.id === "realm:storm_cell") reports.push(JSON.parse(e.message));
   }, { namespaces: ["realm"] });
-  const p = await t.player("Chaser", { op: true });
+  // Away from the world spawn: no lightning lands within avoidSpawn (64) blocks of it, and the cell forms only 48 to 96
+  // blocks from the operator, so a player standing at the spawn would see most strikes skipped.
+  const sp = t.world.getDefaultSpawnLocation();
+  const p = await t.player("Chaser", { op: true, x: sp.x + 300, z: sp.z });
   if (t.phase === 1) {
     t.assert(t.cmd(p, "/realm:storm_cell true").ok, "/realm:storm_cell true ran");
     const note = await t.waitMessage(p, /storm cell is forming to the/, { timeout: 60 });
