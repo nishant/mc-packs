@@ -1,8 +1,11 @@
 // Treasure Maps: a player who comes close to the end of the last leg (so the pack starts looking for a chest spot) and
 // leaves before the search is done (flies on, teleports home) keeps the treasure where it was: the search saw only
 // unloaded land, which is no reason to move the treasure ("the map's ink shifts") or hand it over washed up.
-// Needs the test copy of maps_bp that maps-cleanup.js describes in its header (/tmp/mc: a 3-second cleanup and the
-// rvtest hook that reads and writes hunts), then:
+// Needs the same test copy of maps_bp as maps-cleanup.js (a 3-second cleanup and tools/test-bds/hooks/maps-rvtest.js):
+//   mkdir -p /tmp/mc && rm -rf /tmp/mc/maps_bp && cp -r packs/maps_bp /tmp/mc/
+//   sed -i 's/^const CLEAR_DELAY = 30000;/const CLEAR_DELAY = 3000;/' /tmp/mc/maps_bp/scripts/cleanup.js
+//   grep -q '^const CLEAR_DELAY = 3000;' /tmp/mc/maps_bp/scripts/cleanup.js
+//   cat tools/test-bds/hooks/maps-rvtest.js >> /tmp/mc/maps_bp/scripts/main.js
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/mc --scenario tools/test-bds/examples/maps-leave.js --timeout 600
 
 export default async function (t) {

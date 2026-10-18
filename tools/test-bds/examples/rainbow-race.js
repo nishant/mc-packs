@@ -1,11 +1,10 @@
 // Rainbows: forced rainbow, fixed end, restart, the race for the pot, a second player too late, a safe zone at the
 // end, no spot at all; nothing drawn (no particles), and the realm:rainbow_pot broadcasts for the Minimap follow
-// the pot (its spot while unfound, {} once found). Needs a copy of rainbow_bp with a test hook (packs can't read
-// each other's dynamic properties):
-//   mkdir -p /tmp/rb && cp -r packs/rainbow_bp /tmp/rb/
-//   append to /tmp/rb/rainbow_bp/scripts/main.js: a wrapper around Player.prototype.spawnParticle that counts
-//   calls per `${player.name}/${id}`, and a scriptEventReceive handler (namespace "rvtest") that answers
-//   rvtest:pot with rvtest:pot_r {pot, counts, busy}
+// the pot (its spot while unfound, {} once found). Needs a copy of rainbow_bp with the test hook
+// tools/test-bds/hooks/rainbow-rvtest.js (it counts particles per player and answers rvtest:pot with
+// rvtest:pot_r {pot, counts, busy}; packs can't read each other's dynamic properties). The suite runs these:
+//   mkdir -p /tmp/rb && rm -rf /tmp/rb/rainbow_bp && cp -r packs/rainbow_bp /tmp/rb/
+//   cat tools/test-bds/hooks/rainbow-rvtest.js >> /tmp/rb/rainbow_bp/scripts/main.js
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/rb --scenario tools/test-bds/examples/rainbow-race.js --timeout 400
 
 export default async function (t) {
