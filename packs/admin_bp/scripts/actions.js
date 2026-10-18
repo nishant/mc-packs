@@ -101,7 +101,8 @@ export function showTitle(players, title, subtitle, seconds) {
   for (const p of players) {
     if (!p.isValid) continue;
     system.sendScriptEvent("realm:title", JSON.stringify({ player: p.id, ticks, from: "admin_bp" }));
-    p.onScreenDisplay.setTitle(text, { fadeInDuration: TITLE_FADE_IN, stayDuration: stay, fadeOutDuration: TITLE_FADE_OUT, ...(sub ? { subtitle: sub } : {}) });
+    // No subtitle: one space, or the screen keeps the last title's subtitle (the title protocol's rule).
+    p.onScreenDisplay.setTitle(text, { fadeInDuration: TITLE_FADE_IN, stayDuration: stay, fadeOutDuration: TITLE_FADE_OUT, subtitle: sub || " " });
     n++;
   }
   return n;

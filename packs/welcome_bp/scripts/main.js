@@ -42,6 +42,17 @@ function getSettings() {
   }
 }
 
+/** What operators saved, without the defaults filled in. @returns {Partial<WelcomeSettings>} */
+function savedOverrides() {
+  const raw = world.getDynamicProperty(PROP_SETTINGS);
+  try {
+    const saved = typeof raw === "string" ? JSON.parse(raw) : {};
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * @param {Partial<WelcomeSettings> | undefined} overrides
  * @param {boolean} [reshow] count it as a new revision, so "show once" shows it to everyone again
@@ -212,17 +223,25 @@ async function openEditor(player) {
   const str = (/** @type {unknown} */ v, /** @type {string} */ fallback) =>
     typeof v === "string" && v.trim() !== "" ? v : fallback;
 
-  saveSettings(
-    {
-      title: str(title, DEFAULTS.title),
-      body: unescapeNewlines(str(body, escapeNewlines(DEFAULTS.body))),
-      button: str(button, DEFAULTS.button),
-      showOnce: showOnce === true,
-      chat: chat === true,
-      screenTitle: screenTitle === true,
-    },
-    reshow !== false
-  );
+  /** @type {WelcomeSettings} */
+  const edited = {
+    ...s,
+    title: str(title, DEFAULTS.title),
+    body: unescapeNewlines(str(body, escapeNewlines(DEFAULTS.body))),
+    button: str(button, DEFAULTS.button),
+    showOnce: showOnce === true,
+    chat: chat === true,
+    screenTitle: screenTitle === true,
+  };
+  // Only what this operator changed: another operator's save, or a switch flipped in /realm:config, while this
+  // editor was open stays (the editor opened with the values of then).
+  const now = savedOverrides();
+  for (const key of /** @type {(keyof WelcomeSettings)[]} */ (Object.keys(edited))) {
+    if (edited[key] === s[key]) continue;
+    if (edited[key] === DEFAULTS[key]) delete now[key]; // back to config.js: a later change there applies
+    else /** @type {any} */ (now)[key] = edited[key];
+  }
+  saveSettings(Object.keys(now).length ? now : undefined, reshow !== false);
   player.sendMessage(
     `§aWelcome message saved${reshow === false ? " quietly" : ""}.§r Run §b/realm:welcome§r to preview it.`
   );

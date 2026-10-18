@@ -694,16 +694,21 @@ const KNOWN_LORE_PREFIXES = [
   ["Use it to open the admin menu:", "every realm command in one place,"],
 ];
 
-/** @param {ItemStack | undefined} it the real item, made by this pack (current or legacy pack marker/fingerprint, even if recolored or anvil-renamed) */
+/**
+ * The real item, made by this pack (current or legacy pack marker/fingerprint, even if recolored or anvil-renamed).
+ * Also one made of another item than `itemType` (a world that changed it, or an older copy): it's locked in the
+ * inventory and can't be dropped, so it must count, be replaced and never be doubled. Only its exact lore counts then.
+ * @param {ItemStack | undefined} it
+ */
 const isRealItem = (it) => {
-  if (!it || it.typeId !== CONFIG.itemType) return false;
+  if (!it) return false;
   try {
     const lore = it.getLore();
     if (!lore.length) return false;
     if (lore.includes(MARK) || OLD_MARKS.some((m) => lore.includes(m))) return true;
     const stripped = lore.map((l) => plain(l).trim());
-    if (stripped.some((l) => REAL_MARKS.has(l))) return true;
-    return KNOWN_LORE_PREFIXES.some((prefix) => prefix.every((line, idx) => stripped[idx] === line));
+    if (KNOWN_LORE_PREFIXES.some((prefix) => prefix.every((line, idx) => stripped[idx] === line))) return true;
+    return it.typeId === CONFIG.itemType && stripped.some((l) => REAL_MARKS.has(l));
   } catch {
     return false;
   }
@@ -736,7 +741,7 @@ function needsNormalize(item) {
     const lore = item.getLore();
     const sameLore = lore.length === LORE.length && lore.every((l, idx) => l === LORE[idx]);
     const locked = item.lockMode === ItemLockMode.inventory;
-    return item.amount !== 1 || item.nameTag !== `§r§6${TITLE}` || !sameLore || !item.keepOnDeath || !locked;
+    return item.typeId !== CONFIG.itemType || item.amount !== 1 || item.nameTag !== `§r§6${TITLE}` || !sameLore || !item.keepOnDeath || !locked;
   } catch {
     return true;
   }
@@ -744,6 +749,7 @@ function needsNormalize(item) {
 
 /** @param {ItemStack} item @returns {ItemStack} */
 function normalizedItem(item) {
+  if (item.typeId !== CONFIG.itemType) return makeItem(); // made of an older itemType: a fresh one of the current
   const copy = typeof item.clone === "function" ? item.clone() : makeItem();
   copy.amount = 1;
   copy.nameTag = `§r§6${TITLE}`;
@@ -971,6 +977,23 @@ function giveItem(player, tell) {
   return true;
 }
 
+const HINT_PROP = "admin:setupHint"; // player: true once told where the setup checklist is
+
+/**
+ * First run on a new world: an operator's first item comes with where the one-time setup jobs are (townsfolk,
+ * towns, safe zones...), once per operator, so a new server owner doesn't have to find them in the docs.
+ * @param {Player} player
+ */
+function setupHint(player) {
+  try {
+    if (player.getDynamicProperty(HINT_PROP) === true || !hasRealItem(player)) return;
+    player.setDynamicProperty(HINT_PROP, true);
+  } catch {
+    return;
+  }
+  player.sendMessage(`§6[${TITLE}] §rSetting up a new world? Open the item, then §6Operator Tools§r (the last button): its server setup checklist has every one-time job, such as placing the townsfolk, towns and safe zones.`);
+}
+
 /** Takes the real item from someone who isn't an operator (only while the item is for operators only). @param {Player} player */
 function takeItem(player) {
   const inv = inventory(player);
@@ -1054,6 +1077,16 @@ function check(player) {
   } else {
     reconcileItems(player);
   }
+  // Also an owner who joined first and was made an operator afterwards (usual on a new dedicated server).
+  if (isOp(player)) setupHint(player);
+}
+
+/** @param {Player} player */
+function hasRealItem(player) {
+  const inv = inventory(player);
+  if (!inv) return false;
+  for (let i = 0; i < inv.size; i++) if (isRealItem(inv.getItem(i))) return true;
+  return false;
 }
 
 /** Schedules a reconcile on the next tick when a Realm Configuration item changes in the inventory. @param {Player} player */
@@ -1123,16 +1156,30 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 
 let seconds = 0;
+/** Whether the last round of checks is still going (a round never overlaps the next one). */
+let checking = false;
 system.runInterval(() => {
-  if (++seconds < Math.max(5, Number(get("checkSeconds")) || 30)) return;
+  if (++seconds < Math.max(5, Number(get("checkSeconds")) || 30) || checking) return;
   seconds = 0;
-  for (const p of world.getAllPlayers()) {
-    try {
-      check(p);
-    } catch (e) {
-      console.warn(`[admin] ${e}`);
-    }
-  }
+  checking = true;
+  // One player per tick: a check reads the whole inventory (about 0.2 ms a player), so with every player on the same
+  // tick a big server would hitch every checkSeconds.
+  system.runJob(
+    (function* () {
+      try {
+        for (const p of world.getAllPlayers()) {
+          try {
+            check(p);
+          } catch (e) {
+            console.warn(`[admin] ${e}`);
+          }
+          yield;
+        }
+      } finally {
+        checking = false;
+      }
+    })()
+  );
 }, 20);
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {

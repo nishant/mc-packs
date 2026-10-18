@@ -112,6 +112,9 @@ const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 // Unlocking and wearing
 // ---------------------------------------------------------------------------
 
+/** Player id + title already logged as not added (the list was full). @type {Set<string>} */
+const toldFull = new Set();
+
 /**
  * Records a title; true when it's new. Repeats are ignored quietly (packs may send them again).
  * @param {string} id @param {unknown} text @param {string} [name] the gamertag, when known
@@ -123,7 +126,10 @@ function unlockTitle(id, text, name) {
   if (name) d.n = name;
   if (d.t.some((t) => t.toLowerCase() === title.toLowerCase())) return false;
   if (d.t.length >= MAX_TITLES) {
-    console.warn(`[titles] ${id} has ${MAX_TITLES} titles already; ${title} not added`);
+    // Once per player and title: a built-in title reached with a full list would log it every second.
+    const key = `${id}|${title}`;
+    if (!toldFull.has(key)) console.warn(`[titles] ${id} has ${MAX_TITLES} titles already; ${title} not added`);
+    toldFull.add(key);
     return false;
   }
   d.t.push(title);
@@ -295,6 +301,11 @@ system.runInterval(() => {
   if (system.currentTick - lastTrail < get("trailTicks")) return;
   lastTrail = system.currentTick;
   if (!enabled() || get("trails") !== true) return;
+  // Nobody online chose a trail (the usual case): don't fetch every player 5 times a second for nothing. The cache
+  // holds everyone online (the stats count loads them every second).
+  let any = false;
+  for (const d of cache.values()) if (d.tr) any = true;
+  if (!any) return;
   const players = world.getAllPlayers();
   if (!players.length) return;
   let budget = Math.max(1, get("trailBudget"));
