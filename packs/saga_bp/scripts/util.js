@@ -230,5 +230,5 @@ export async function dialog(player, title, header, pages, buttons) {
 /** Air, water or a plant you can walk through. @param {import("@minecraft/server").Block} b */
 export function open(b) {
   if (b.isAir || b.isLiquid) return true;
-  return /grass$|short_grass|tall_grass|fern|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of|sapling|vine|snow_layer|seagrass|kelp|torch|carpet|rail|button|lever|dead_bush|sweet_berry|mushroom$/.test(b.typeId);
+  return /grass$|short_grass|tall_grass|fern|flower|tulip|poppy|dandelion|orchid|allium|bluet|daisy|cornflower|lily_of|sapling|vine|snow_layer|seagrass|kelp|torch|carpet|rail|button|lever|dead_?bush|sweet_berry|mushroom$/.test(b.typeId);
 }
