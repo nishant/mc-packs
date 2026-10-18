@@ -33,7 +33,7 @@ const mc = {
   failLoad: false,
   metadataThrow: new Set(),
   loads: 0,
-  eventDelay: 0,
+  eventDelay: 1,
   changes: [],
   prefs: new Map(),
   forms: [],
@@ -407,7 +407,7 @@ for (const autoStore of [false, true]) test(`delayed script echoes and consecuti
     advance(5);
     check(1);
   } finally {
-    mc.eventDelay = 0;
+    mc.eventDelay = 1; // the default: an inventory change is reported on the next tick, as in the game
     mc.changes = [];
     mc.players = all;
   }
@@ -1072,7 +1072,7 @@ test("full 25-to-1 overflow retries have a bounded native snapshot read budget",
     assert.ok(mc.loads - before <= 24 * 11, `at most one 24-page retry per 20 ticks, got ${mc.loads - before} reads`);
     assert.ok(p.bar.length - notes <= 11, "overflow warnings follow the same retry budget");
     p.container.setItem(10, undefined);
-    advance(100); // a quiet player (no inventory event) is looked at every 5 s
+    advance(20);
     assert.equal(p.container.getItem(10)?.amount, 64, "making room returns exactly one full stack");
   } finally {
     mc.pages = 5;
