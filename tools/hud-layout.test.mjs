@@ -230,3 +230,43 @@ test("the story's quest box shows next to the place the player picked, from its 
   assert.equal(middle.controls[1]["realm_quest_middle@hud.realm_quest_slot"].$quest_code, "§s§q§9");
   assert.equal(new Set(codes).size, 8);
 });
+
+test("every Side HUD cut matches the side boxes protocol and the minimap's text fits its slots", () => {
+  const side = fs.readFileSync(new URL("./side-shared.js", import.meta.url), "utf8");
+  const num = (name) => Number(side.match(new RegExp(`const ${name} = (\\d+);`))[1]);
+  const SEG = num("SEG_BYTES");
+  const RADAR_SEG = num("RADAR_SEG_BYTES");
+  const MARK = JSON.parse(side.match(/export const MARK = ("[^"]+");/)[1]);
+  const markBytes = Buffer.byteLength(MARK);
+  const QUEST_SEG = num("QUEST_SEG_BYTES");
+  const slots = [...JSON.parse(side.match(/export const SLOTS = (\[[^\]]+\]);/)[1].replace(/'/g, '"')), "top", "radar", "quest"];
+  assert.ok(side.includes('export const ALL_SLOTS = [...SLOTS, "top", "radar", "quest"];'), "the subtitle order this test follows");
+  const skip = (k) => `%.${markBytes + SEG * k + 1}s`;
+  const json = JSON.stringify(ui);
+  for (const [k, name] of slots.entries()) {
+    if (name === "radar" || name === "quest") continue;
+    const m = json.match(new RegExp(`"realm_${name}@hud\\.realm_(?:pinned_)?slot":\\{"\\$skip":"([^"]+)"`));
+    assert.ok(m, `${name} has a cell`);
+    assert.equal(m[1], skip(k), `${name} is cut at its own segment`);
+  }
+  // The radar: its segment starts after the ten others and holds RADAR_SEG - 1 bytes of text.
+  const meshes = ui.realm_radar_panel.controls[0].radar_widget.controls.find((c) => c.radar_clip).radar_clip.controls;
+  for (const [i, c] of meshes.entries()) {
+    const src = c[`radar_mesh_${i}`].bindings.at(-1).source_property_name;
+    assert.ok(src.includes(skip(10)) && src.includes(`%.${RADAR_SEG - 1}s`), "the radar is cut at its own segment");
+  }
+  // The quest box: its segment starts after the radar's.
+  assert.equal(ui["realm_quest_slot@hud.realm_slot"].$skip, `%.${markBytes + SEG * 10 + RADAR_SEG + 1}s`, "the quest box is cut at its own segment");
+  assert.equal(ui["realm_quest_slot@hud.realm_slot"].$slot_slice, `%.${QUEST_SEG - 1}s`);
+  assert.equal(markBytes + SEG * 10 + RADAR_SEG + QUEST_SEG, 3473, "the whole subtitle");
+  // What the minimap sends must fit: the radar's rows (3-byte glyphs, a newline between rows) and the strip's two lines.
+  const map = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
+  const R = Number(map.match(/const R = (\d+);/)[1]);
+  const CELLS = Number(map.match(/const CELLS = (\d+);/)[1]);
+  const size = 2 * R + 1;
+  assert.ok(size * size * 3 + (size - 1) <= RADAR_SEG - 1, `a full radar fits its slot (${size * size * 3 + size - 1} bytes)`);
+  assert.equal(size, 21, "the measured 21-glyph grid (8.5 x 9 units a glyph) the radar widget is sized for");
+  const spacer = JSON.parse(map.match(/const SPACER = ("[^"]+");/)[1]);
+  assert.ok(map.includes("const LINE2_BYTES = 159 - CELLS * 3 - SPACER.length - 1;"), "the strip's second line takes what is left of the slot");
+  assert.ok(CELLS * 3 + spacer.length + 1 < SEG - 1, "the strip and its spacer leave room for a second line");
+});

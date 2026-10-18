@@ -14,8 +14,8 @@ test("all four radar directions survive crowded edge markers at every heading", 
   const source = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
   const fn = source.match(/function radarOf\([\s\S]*?\n\}/)[0];
   const radarOf = vm.runInNewContext(`(${fn})`, {
-    G, R: 10, RADAR_SIZE: 21, RADAR_CELLS: 441, OVERWORLD: "minecraft:overworld",
-    gridBuf: Array(441), prioBuf: new Float64Array(441), rowStrs: Array(21),
+    G, R: 10, RADAR_SIZE: 21, ROW: 22, RADAR_PIECES: 461, OVERWORLD: "minecraft:overworld", TERRAIN_TURN: 2,
+    EMPTY_ROWS: Array.from({ length: 461 }, (_, i) => (i % 22 === 21 ? "\n" : G.Q_EMPTY)), prioBuf: new Float64Array(461), terrainBaseMemo: new Map(),
     YOU: Array.from({ length: 8 }, (_, i) => G[`Q_YOU_${i}`]),
     FRIEND_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_FRIEND_${i}`]),
     PARTY_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_PARTY_${i}`]),
@@ -379,8 +379,8 @@ test("the actual viewer planner retains its roof probe and stops reading after a
   const playerStore = new Map();
   const scanDone = new Map();
   const planFor = vm.runInNewContext(`(${planner})`, {
-    terrain: w, playerStore, scanDone, prefsOf: () => ({ radar: true, terrain: true, north: false, radius: 24 }),
-    headingOf: () => 90, scanMemo: terrain.scanMemo, planScan, colKey, MISS_RETRY: terrain.MISS_RETRY, SCAN_MAX_AGE: 2400, R: HALF,
+    terrain: w, playerStore, scanDone, terrainBaseMemo: new Map(), lastPose: new Map(), scanPlans: new Map(), planTurn: { left: Infinity, made: 0 }, PLAN_MIN_AGE: 4, TERRAIN_TURN: 2, prefsOf: () => ({ radar: true, terrain: true, north: false, radius: 24 }),
+    headingOf: () => 90, aheadPicks: terrain.aheadPicks, colKey, MISS_RETRY: terrain.MISS_RETRY, SCAN_MAX_AGE: 2400, R: HALF,
   });
   let moving = true;
   const player = {
@@ -396,7 +396,7 @@ test("the actual viewer planner retains its roof probe and stops reading after a
       w.put(store, pick.wx, pick.wz, { kind: store.id.includes("|layer") ? "cave_floor" : "stone", y: store.id.includes("|layer") ? 63 : 80, depth: 0 }, now, pick.resolution);
     }).get(player.id) ?? 0;
     peak = Math.max(peak, spent);
-    if (!plan.picks.length && !plan.store.miss.size) scanDone.set(player.id, plan.memo);
+    if (plan.pos >= plan.picks.length && !plan.missed) scanDone.set(player.id, plan.memo);
     assert.ok(w.store(OW).cols.size <= 6000);
     return spent;
   };
@@ -440,14 +440,90 @@ test("another viewer's detail cannot evict an active exact roof at saturation", 
   for (let i = 1; i < 2000; i++) w.put(surface, i + 10000, 10000, roof, 1, 1);
   for (let i = 0; i < 4000; i++) w.put(surface, i * 4 + 100000, 100000, roof, 1);
   const source = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8").match(/function planFor\(player, now\) \{[\s\S]*?\n\}/)[0];
+  const playerStore = new Map();
   const planFor = vm.runInNewContext(`(${source})`, {
-    terrain: w, playerStore: new Map(), scanDone: new Map(), prefsOf: () => ({ radar: true, terrain: true, north: false, radius: 24 }),
-    headingOf: () => 90, scanMemo: terrain.scanMemo, planScan, colKey, MISS_RETRY: terrain.MISS_RETRY, SCAN_MAX_AGE: 2400, R: HALF,
+    terrain: w, playerStore, scanDone: new Map(), terrainBaseMemo: new Map(), lastPose: new Map(), scanPlans: new Map(), planTurn: { left: Infinity, made: 0 }, PLAN_MIN_AGE: 4, TERRAIN_TURN: 2, prefsOf: () => ({ radar: true, terrain: true, north: false, radius: 24 }),
+    headingOf: () => 90, aheadPicks: terrain.aheadPicks, colKey, MISS_RETRY: terrain.MISS_RETRY, SCAN_MAX_AGE: 2400, R: HALF,
   });
   const player = { id: "caver", isValid: true, dimension: { id: OW }, location: { x: 0, y: 64, z: 0 }, getVelocity: () => ({ x: 0, z: 0 }) };
   for (let now = 2; now <= 40; now++) {
-    assert.equal(planFor(player, now).roof, true, "a different moving viewer cannot make this caver briefly surface");
+    planFor(player, now);
+    assert.equal(playerStore.get(player.id).id, `${OW}|layer64`, "a different moving viewer cannot make this caver briefly surface");
     w.put(surface, now + 5000, 5000, roof, now, 1);
     assert.equal(surface.cols.size, 6000);
   }
+});
+
+test("time budgets add their share each tick, save up to their most and spend at most their tick's most", async () => {
+  const { Budget } = await import("../packs/map_bp/scripts/budget.js");
+  const b = new Budget(0.5, 2, 1);
+  assert.equal(b.left, 2, "starts with its savings full (a quiet server)");
+  b.tick();
+  assert.ok(b.ok);
+  b.spend(1);
+  assert.equal(b.ok, false, "a tick spends at most tickMax, whatever is saved");
+  b.tick();
+  assert.equal(b.left, 1.5);
+  b.spend(3);
+  assert.equal(b.left, -1.5, "a long piece of work is charged in full");
+  b.tick();
+  b.tick();
+  b.tick();
+  assert.equal(b.ok, false, "and paid back before more work");
+  b.tick();
+  assert.ok(b.ok && b.room > 0 && b.room <= 1);
+  for (let i = 0; i < 20; i++) b.tick();
+  assert.equal(b.left, 2, "savings stop at max");
+});
+
+test("the ground ahead of a fast viewer is listed nearest that point first, at most `limit`, missing before stale", () => {
+  const w = new TerrainWorld();
+  const s = w.store(OW);
+  const all = terrain.aheadPicks(s, 101.5, -40.2, 34, 3000, 2400, 9999);
+  assert.ok(all.length > 200, `the whole reach (${all.length})`);
+  for (const p of all) assert.equal(colKey(p.wx, p.wz), p.key, "keys are the store's own");
+  assert.equal(all[0].key, colKey(101.5, -40.2), "the point itself first");
+  w.put(s, all[0].wx, all[0].wz, { kind: "grass", y: 70, depth: 0 }, 3000);
+  w.put(s, all[1].wx, all[1].wz, { kind: "grass", y: 70, depth: 0 }, 100);
+  w.miss(s, all[2].wx, all[2].wz, 2998);
+  const some = terrain.aheadPicks(s, 101.5, -40.2, 34, 3000, 2400, 5);
+  assert.equal(some.length, 5);
+  assert.ok(!some.some((p) => p.key === all[0].key), "a fresh column is not read again");
+  assert.ok(!some.some((p) => p.key === all[2].key), "a column that just failed waits for its retry");
+  const rest = terrain.aheadPicks(s, 101.5, -40.2, 34, 3000, 2400, 9999);
+  assert.equal(rest.at(-1).key, all[1].key, "a stale column comes after every missing one");
+});
+
+test("a built radar lists exactly the columns its own picture samples, and markers never stay behind", () => {
+  const source = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
+  const fn = source.match(/function radarOf\([\s\S]*?\n\}/)[0];
+  const w = new TerrainWorld();
+  const store = w.store(OW);
+  const ctx = {
+    G, R: 10, RADAR_SIZE: 21, ROW: 22, RADAR_PIECES: 461, OVERWORLD: OW, TERRAIN_TURN: 2, COL: terrain.COL,
+    KEY_BIAS: terrain.KEY_BIAS, KEY_SPAN: terrain.KEY_SPAN, MISS_RETRY: terrain.MISS_RETRY, SCAN_MAX_AGE: 2400, STALE_EVERY: 200,
+    EMPTY_ROWS: Array.from({ length: 461 }, (_, i) => (i % 22 === 21 ? "\n" : G.Q_EMPTY)), prioBuf: new Float64Array(461), terrainBaseMemo: new Map(),
+    YOU: Array.from({ length: 8 }, (_, i) => G[`Q_YOU_${i}`]), FRIEND_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_FRIEND_${i}`]),
+    PARTY_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_PARTY_${i}`]), STAR_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_STAR_${i}`]),
+    KINDS: { mob: { q: G.Q_MOB, p: 7 } }, terrain: w, storeFor: () => store, terrainVerOf: () => `${store.id}#${w.viewVer(store, 0, 0, 999)}`,
+    colKey, glyphAt, sampleCoord: terrain.sampleCoord, radarRebuilds: 0, radarStale: false,
+  };
+  const radarOf = vm.runInNewContext(`(${fn})`, ctx);
+  const at = { x: 40.4, z: -17.6 };
+  radarOf(37, [], 24, false, at, OW, true, "p", true, 10);
+  const memo = ctx.terrainBaseMemo.get("p");
+  const want = viewColumns({ x: Math.round(at.x), z: Math.round(at.z) }, 38, false, 24);
+  assert.deepEqual(new Set(memo.need.map((p) => p.key)), want, "the list is the picture's own columns (coarse, and exact near the player)");
+  assert.equal(memo.need.length, want.size, "no column twice");
+  assert.ok(memo.need.findIndex((p) => p.resolution === 1) > memo.need.findLastIndex((p) => p.resolution !== 1), "the coarse picture first");
+  for (const p of memo.need) w.put(store, p.wx, p.wz, ground(p.wx, p.wz), 10, p.resolution);
+  radarOf(37, [], 24, false, at, OW, true, "p", true, 11);
+  assert.equal(ctx.terrainBaseMemo.get("p").need.length, 0, "nothing left to read");
+  const one = radarOf(37, [{ kind: "mob", x: at.x + 5, z: at.z, clamp: true }], 24, false, at, OW, true, "p", true, 12);
+  const two = radarOf(37, [{ kind: "mob", x: at.x - 9, z: at.z + 4, clamp: true }], 24, false, at, OW, true, "p", true, 12);
+  assert.equal([...one].filter((c) => c === G.Q_MOB).length, 1);
+  assert.equal([...two].filter((c) => c === G.Q_MOB).length, 1, "the marker moved: the old cell shows its terrain again");
+  assert.equal(two.split("\n").length, 21);
+  const stale = radarOf(81, [], 24, false, at, OW, true, "p", false, 13);
+  assert.ok(ctx.radarStale && stale.split("\n").length === 21, "without time to build the terrain again, the last picture is drawn and flagged");
 });

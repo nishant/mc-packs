@@ -3,10 +3,14 @@
 // glyph page in Side HUD, hud_rp) sent in the Side HUD title (side.js: the strip in slot "top", the radar in
 // slot "radar" as the part "map/radar"). The land itself is Bedrock's own locator map, held in the offhand.
 //
-// Every intervalTicks per player who has the strip or the radar on (the pass): one entity search for monsters
-// within their mob radius (the nearest maxMobs), one for realm:npc within npcRange; everything else is arithmetic
-// on what other packs broadcast. In between, every tick, the strip and radar are drawn again from the pass's
-// markers for players who turned or moved (at most TURN_BUDGET titles a tick), so the compass follows the view.
+// Every intervalTicks per player who has the strip or the radar on (the pass, spread over the ticks between): one
+// entity search for monsters within their mob radius (the nearest maxMobs), one for realm:npc within npcRange;
+// everything else is arithmetic on what other packs broadcast. In between, every tick, the strip and radar are drawn
+// again from the pass's markers for players who turned or moved, so the compass follows the view; only a part whose
+// text changed is sent. The terrain under the radar is read by a scanner and drawn from what it stored.
+// The cost is capped, not the player count: each kind of work (drawing, building a radar's terrain picture, passes,
+// the scanner) has a time budget a tick (budget.js; about 3 ms a tick in all, saved up when there's little to do).
+// With many players moving at once each one's strip and radar come a few ticks later, the longest-waiting first.
 // The broadcasts (each message under 2048 characters, long lists in parts):
 //   realm:npc_places      { part, parts, folk: [{ id, n, dim, x, z }] }            <- Townsfolk; realm:npc_places_ping {}
 //   realm:waystones_known { player, part, parts, list: [{ i, n, dim, x, z }] }     <- Waystones; realm:waystones_known_ping { player? }
@@ -25,11 +29,12 @@
 // See "Minimap" in docs/PACKS.md.
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
+import { Budget } from "./budget.js";
 import { CONFIG } from "./config.js";
 import { G } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
-import { cellWorld, colKey, glyphAt, MISS_RETRY, planScan, readColumn, sampleResolution, scanMemo, spendBudget, TerrainWorld } from "./terrain.js";
+import { aheadPicks, colKey, COL, glyphAt, KEY_BIAS, KEY_SPAN, MISS_RETRY, readColumn, sampleCoord, spendBudget, TerrainWorld } from "./terrain.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -56,6 +61,7 @@ const DEG = 5;
 const R = 10; // the radar: 21 x 21 cells (441 pixels), you in the middle
 const HOLD = 40; // a readout stays this long without an update (ticks)
 const REFRESH = 30; // an unchanged readout is sent again after this many ticks (before HOLD runs out)
+/** Players outside your party show within this many blocks (party mates anywhere in your dimension). */
 const OTHERS_RANGE = 128;
 const ARRIVED_TICKS = 60;
 const NAME_MAX = 24;
@@ -238,6 +244,7 @@ function setWaypoint(player, wp) {
   }
   lastSent.delete(player.id);
   views.delete(player.id);
+  passAt.delete(player.id); // drawn again from a new pass next tick
 }
 /** @param {Player} player @returns {Spot[]} */
 function marksOf(player) {
@@ -316,17 +323,19 @@ onChange((_key, player) => {
   else prefCache.clear();
   if (player) {
     const s = lastSent.get(player.id);
-    if (s) s.key = "";
-    views.delete(player.id); // drawn again from scratch at the next pass
+    if (s) s.ctext = s.rtext = "";
+    views.delete(player.id); // drawn again from scratch at the next pass (next tick)
+    passAt.delete(player.id);
   } else {
-    for (const s of lastSent.values()) s.key = "";
+    for (const s of lastSent.values()) s.ctext = s.rtext = "";
     views.clear();
+    passAt.clear();
   }
 });
 
-/** What was last sent to each player: the text and when. @type {Map<string, { key: string, at: number, compass: boolean, radar: boolean }>} */
+/** What was last sent to each player, each part on its own: the strip's text and when, the radar's text and when. @type {Map<string, { ctext: string, cat: number, rtext: string, rat: number, compass: boolean, radar: boolean }>} */
 const lastSent = new Map();
-/** One shared render snapshot drives both compass and radar (realm:map_debug). @type {Map<string, { strip: string, line2: string, radar: string, dest?: string, target?: Spot, pose: Vector3 & { dim: string, heading: number, radius: number, north: boolean } }>} */
+/** One shared render snapshot drives both compass and radar (realm:map_debug). @type {Map<string, { strip: string, line2: string, radar: string, dest?: string, target?: Spot, at: Vector3, dim: string, heading: number, radius: number, north: boolean }>} */
 const lastText = new Map();
 let costMs = 0;
 /** Of costMs, the time spent sending the title (side.js: two realm:side events and setTitle). */
@@ -457,7 +466,7 @@ function gather(player, seen, pr) {
   for (const s of seen) {
     if (s.id === player.id || s.dim !== dim.id) continue;
     if (tag && s.party === tag) add("party", s.x, s.z, true);
-    else if (others) add("other", s.x, s.z, true);
+    else if (others && Math.hypot(s.x - at.x, s.z - at.z) <= OTHERS_RANGE) add("other", s.x, s.z, true);
   }
   const range = Number(get("placeRange")) || 256;
   for (const c of camps.values()) if (c.dim === dim.id && Math.abs(c.x - at.x) <= range && Math.abs(c.z - at.z) <= range) add("camp", c.x + 0.5, c.z + 0.5, false);
@@ -529,7 +538,13 @@ function stripOf(heading, markers, at) {
 // The terrain is world data kept by terrain.js: one surface store per dimension, shared by everyone, and one
 // store per underground layer (the height a roofed player stands at), shared by those at that height.
 const terrain = new TerrainWorld(6000, 24);
-/** Per-player memoized 441-cell terrain base array so stationary/slow players do 0 trig or Map lookups in radarOf. @type {Map<string, { key: string, base: string[] }>} */
+/**
+ * Per player: the radar's terrain (`base`, in the pieces layout) for one pose and terrain version, and the text being
+ * drawn from it (`rows`: the base plus this draw's markers, which `touched` lists, so the next draw puts back only
+ * those). A player who doesn't move or turn far enough for the terrain to change costs no terrain lookups.
+ * `need` is what the scanner should read for it (missing columns nearest first, then stale ones), made at `needAt`.
+ * @type {Map<string, { key: string, base: string[], rows: string[], touched: number[], need: import("./terrain.js").Pick[], needAt: number, needStore?: import("./terrain.js").Store }>}
+ */
 const terrainBaseMemo = new Map();
 /** The store each player's radar reads, set by the scan every tick (roofed players read their layer). @type {Map<string, import("./terrain.js").Store>} */
 const playerStore = new Map();
@@ -538,66 +553,138 @@ const storeFor = (id, dimId) => {
   const s = playerStore.get(id);
   return s && s.id.startsWith(`${dimId}|`) ? s : terrain.store(dimId, undefined);
 };
-/** What a viewer's picture depends on; it changes whenever a read changed the store they look at (any viewer's read). @param {string} id @param {string} dimId */
-const terrainVerOf = (id, dimId) => {
+/**
+ * What a viewer's picture depends on: their store and the versions of the regions their radar reaches, so a read
+ * near them redraws it and another viewer's reads far away don't.
+ * @param {string} id @param {string} dimId @param {{ x: number, z: number }} at @param {number} radius
+ */
+const terrainVerOf = (id, dimId, at, radius) => {
   const s = storeFor(id, dimId);
-  return `${s.id}#${s.ver}`;
+  return `${s.id}#${terrain.viewVer(s, at.x, at.z, radius * 1.5 + 8)}`;
 };
 
 /** In-progress readers are shared by store/key just like completed samples. */
 const pendingTerrain = new Map();
 
+/**
+ * A block changed: forget its column in every store of the dimension. Its region's version goes up, so the radars
+ * near it are built again and list it for the scanner.
+ * @param {import("@minecraft/server").Block} block
+ */
+function blockChanged(block) {
+  terrain.invalidate(block.dimension.id, block.location.x, block.location.z);
+  pendingTerrain.clear();
+}
 world.afterEvents.playerPlaceBlock.subscribe(({ block }) => {
   try {
-    terrain.invalidate(block.dimension.id, block.location.x, block.location.z);
-    pendingTerrain.clear();
-    scanDone.clear();
+    blockChanged(block);
   } catch {
     // ignore
   }
 });
 world.afterEvents.playerBreakBlock.subscribe(({ block }) => {
   try {
-    terrain.invalidate(block.dimension.id, block.location.x, block.location.z);
-    pendingTerrain.clear();
-    scanDone.clear();
+    blockChanged(block);
   } catch {
     // ignore
   }
 });
 
-// Terrain scanner, every tick like the compass. Each viewer's missing columns (from the radar's own turned grid,
-// so the 45-degree corners count, the middle and the ground ahead alternating) are read from a reading budget the
-// viewers share evenly (SCAN_TOTAL a tick, SCAN_EACH at most for one). A column read for one is stored for all
-// viewers of that store, and a store's version bumps when it changes, so every affected viewer redraws.
-const SCAN_TOTAL = 96;
-const SCAN_EACH = 48;
+// Terrain scanner, every tick like the compass. Each viewer's missing columns are read from a reading budget the
+// viewers share evenly (at most SCAN_TOTAL a tick and SCAN_EACH for one, within scanBudget's time). A column read for
+// one is stored for all viewers of that store, and the version of its region bumps, so every viewer near it redraws.
+// Which columns a viewer needs (the plan, kept and resumed tick after tick): walking or standing, the list their
+// radar made of what its picture misses when it was last built (radarOf: nothing extra to work out; exact near-field
+// columns only once they stop); moving fast, that list alternating with the ground ahead (aheadPicks: the radar's
+// whole reach around the point `lead` blocks ahead; at most PLAN_EACH_TICK viewers a tick, not sooner than
+// PLAN_MIN_AGE ticks after their last plan). A viewer is
+// checked right after their radar was built or when they move fast (planNow), else every PLAN_EVERY ticks
+// (the roof probe, reads that failed).
+const SCAN_TOTAL = 48;
+const SCAN_EACH = 24;
+/** The scanner's time: planning checks and reads (a read is one native block query or ray, ~0.1 ms). */
+const scanBudget = new Budget(1, 30, 4);
+/** What one read took lately (ms), to fit the reads to the time left. */
+let readCost = 0.06;
+let readMsSum = 0;
+let readOpsSum = 0;
 const SCAN_MAX_AGE = 2400;
-/** Per player: what the last complete plan looked like, so a still viewer with nothing left to read costs nothing. @type {Map<string, string>} */
-const scanDone = new Map();
+const PLAN_EACH_TICK = 2;
+const PLAN_EVERY = 20;
+/** Viewers to check first: their radar was just built (a new list of what it misses) or they move fast. @type {Set<string>} */
+const planNow = new Set();
+/** Viewers whose reads failed (unloaded chunks), and when to check them again. @type {Map<string, number>} */
+const retryAt = new Map();
+/** Where each viewer was at their last check (their speed when the game reports none, as for a teleporting flier). @type {Map<string, { x: number, z: number, tick: number }>} */
+const lastPose = new Map();
+const PLAN_MIN_AGE = 4;
+/** Columns kept per store at least, and per viewer of it (40 viewers spread out need more than the minimum). */
+const STORE_MIN = 6000;
+const STORE_PER_VIEWER = 300;
+/** @typedef {{ id: string, store: import("./terrain.js").Store, picks: import("./terrain.js").Pick[], dim: import("@minecraft/server").Dimension, py: number, roof: boolean, at: number, pos: number, missed: number, missRun: number, x: number, z: number }} ScanPlan */
+/** Per player: the plan being read, resumed every tick. @type {Map<string, ScanPlan>} */
+const scanPlans = new Map();
+/** How many viewers may still be planned again this tick (set by the scanner each tick). */
+const planTurn = { left: PLAN_EACH_TICK, made: 0 };
 let scanReads = 0;
 let scanTicks = 0;
 let scanMs = 0;
 let scanFirst = 0;
 let scanPeak = 0;
 let scanEachPeak = 0;
+/** Of scanMs, the time spent planning (which columns each viewer still needs). */
+let scanPlanMs = 0;
+
 system.runInterval(() => {
   if (get("enabled") !== true) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** @type {{ id: string, store: import("./terrain.js").Store, picks: import("./terrain.js").Pick[], dim: import("@minecraft/server").Dimension, py: number, roof: boolean, memo: string }[]} */
-  const plans = [];
-  for (const player of world.getAllPlayers()) {
+  scanBudget.tick();
+  const all = world.getAllPlayers();
+  planTurn.left = PLAN_EACH_TICK;
+  // Each viewer is checked (moved, turned, a new list from their radar, the roof) every PLAN_EVERY ticks, a share of
+  // them each tick, taking turns; the plans in between are read from where they stopped.
+  const n = all.length;
+  const checks = Math.min(n, Math.max(1, Math.ceil(n / PLAN_EVERY)));
+  for (const [id, at] of retryAt) {
+    if (at > now) continue;
+    retryAt.delete(id);
+    planNow.add(id);
+  }
+  for (const id of planNow) {
+    if (!scanBudget.ok) break;
+    planNow.delete(id);
+    const player = all.find((p) => p.id === id);
+    if (!player) continue;
+    const t = Date.now();
     try {
-      const plan = planFor(player, now);
-      if (plan) plans.push(plan);
+      planFor(player, now);
     } catch {
       // unloaded chunk or player left
     }
+    scanBudget.spend(Date.now() - t);
   }
-  if (plans.length) {
-    scanFirst = (scanFirst + 1) % plans.length;
-    const spent = spendBudget(plans, SCAN_TOTAL, SCAN_EACH, scanFirst, now, (plan, pick) => {
+  let checked = 0;
+  for (; checked < checks && scanBudget.ok; checked++) {
+    const t = Date.now();
+    try {
+      planFor(all[(checked + scanFirst) % n], now);
+    } catch {
+      // unloaded chunk or player left
+    }
+    scanBudget.spend(Date.now() - t);
+  }
+  if (n) scanFirst = (scanFirst + checked) % n;
+  /** @type {ScanPlan[]} */
+  const plans = [];
+  for (const plan of scanPlans.values()) if (plan.pos < plan.picks.length) plans.push(plan);
+  terrain.maxCols = Math.max(STORE_MIN, scanPlans.size * STORE_PER_VIEWER);
+  scanPlanMs += Date.now() - t0;
+  const total = Math.min(SCAN_TOTAL, Math.floor(scanBudget.room / readCost));
+  if (plans.length && total > 0) {
+    const tRead = Date.now();
+    const readsBefore = scanReads;
+    const spent = spendBudget(plans, total, SCAN_EACH, now % plans.length, now, (plan, pick) => {
       const store = pick.store ?? plan.store;
       const key = `${store.id}|${pick.key}`;
       try {
@@ -616,27 +703,56 @@ system.runInterval(() => {
         }
         terrain.put(store, pick.wx, pick.wz, next.value, now, pick.resolution);
         pendingTerrain.delete(key);
+        plan.missRun = 0;
       } catch {
         // unloaded chunk: keep what was known, ask again in a few ticks
         pendingTerrain.delete(key);
         terrain.miss(store, pick.wx, pick.wz, now, pick.resolution);
+        plan.missed++;
+        // Several in a row: the area isn't loaded (a teleport, a join). Stop here and try the whole plan again in
+        // MISS_RETRY ticks, instead of spending the budget on reads that fail.
+        if (++plan.missRun >= 4) {
+          plan.pos = plan.picks.length;
+          plan.missRun = 0;
+        }
       }
     });
-    scanPeak = Math.max(scanPeak, [...spent.values()].reduce((a, b) => a + b, 0));
-    scanEachPeak = Math.max(scanEachPeak, ...spent.values());
-    for (const p of plans) if (!p.picks.length && !p.store.miss.size) scanDone.set(p.id, p.memo);
+    let sum = 0;
+    for (const v of spent.values()) {
+      sum += v;
+      if (v > scanEachPeak) scanEachPeak = v;
+    }
+    if (sum > scanPeak) scanPeak = sum;
+    for (const p of plans) {
+      if (p.pos < p.picks.length) continue;
+      if (p.missed && !retryAt.has(p.id)) retryAt.set(p.id, now + MISS_RETRY);
+    }
+    const took = Date.now() - tRead;
+    scanBudget.spend(took);
+    // Learn what a read costs from ticks with many of them (a tick's fixed work would inflate a few).
+    const ops = scanReads - readsBefore;
+    if (ops >= 8) {
+      readMsSum += took;
+      readOpsSum += ops;
+      if (readOpsSum >= 200) {
+        readCost = Math.min(0.5, Math.max(0.02, readMsSum / readOpsSum));
+        readMsSum /= 2;
+        readOpsSum /= 2;
+      }
+    }
   }
   for (const [key, job] of pendingTerrain) if (now - job.tick > 20) pendingTerrain.delete(key);
   scanMs += Date.now() - t0;
   scanTicks++;
 }, 1);
 
-/** @param {Player} player @param {number} now */
+/** @param {Player} player @param {number} now @returns {ScanPlan | undefined} */
 function planFor(player, now) {
   if (!player.isValid) return undefined;
   const pr = prefsOf(player);
   if (!pr.radar || !pr.terrain) {
     playerStore.delete(player.id);
+    scanPlans.delete(player.id);
     return undefined;
   }
   const dim = player.dimension;
@@ -647,62 +763,193 @@ function planFor(player, now) {
   const py = Math.floor(at.y);
   const store = terrain.store(dim.id, roof ? py : undefined);
   playerStore.set(player.id, store);
-  const heading = headingOf(player);
-  const vel = player.getVelocity?.() ?? { x: 0, z: 0 };
+  // Where the radar draws its terrain from (radarOf: whole blocks).
+  const pose = { x: Math.round(at.x), z: Math.round(at.z) };
+  // How fast they move: the game's velocity, or what they covered since the last check (a teleporting flier or a
+  // minecart has little velocity of its own).
+  const got = player.getVelocity?.() ?? { x: 0, z: 0 };
+  const prev = lastPose.get(player.id);
+  lastPose.set(player.id, { x: at.x, z: at.z, tick: now });
+  const dt = prev ? now - prev.tick : 0;
+  const moved = prev && dt > 0 && dt <= 40 ? { x: (at.x - prev.x) / dt, z: (at.z - prev.z) / dt } : { x: 0, z: 0 };
+  const vel = Math.abs(moved.x) + Math.abs(moved.z) > Math.abs(got.x) + Math.abs(got.z) && Math.abs(moved.x) + Math.abs(moved.z) < 16 ? moved : got;
   const lead = { x: Math.max(-28, Math.min(28, vel.x * 8)), z: Math.max(-28, Math.min(28, vel.z * 8)) };
-  const memo = scanMemo({ storeId: store.id, ver: store.ver, at, heading, north: pr.north, radius: pr.radius, now, lead });
   // Roof detection uses an exact surface sample from this same budget, never an extra per-viewer native read.
   const origin = colKey(at.x, at.z, 1);
   const missed = surface.miss.get(origin);
   const probe = (!top || now - top.tick > 100) && (missed === undefined || now - missed >= MISS_RETRY);
-  if (!probe && scanDone.get(player.id) === memo) return undefined;
-  const picks = planScan({ world: terrain, store, at, heading, north: pr.north, radius: pr.radius, half: R, lead, now, maxAge: SCAN_MAX_AGE });
-  if (probe) picks.unshift({ wx: Math.floor(at.x), wz: Math.floor(at.z), key: origin, resolution: 1, store: surface });
-  return { id: player.id, store, picks, dim, py, roof, memo };
+  /** @type {import("./terrain.js").Pick} */
+  const probePick = { wx: Math.floor(at.x), wz: Math.floor(at.z), key: origin, resolution: 1, store: surface, since: now };
+  const old = scanPlans.get(player.id);
+  const same = !!old && old.store === store;
+  const fast = Math.abs(lead.x) + Math.abs(lead.z) >= 4;
+  // Walking or standing: the radar lists what its own picture is missing whenever it is built (radarOf), so planning
+  // costs nothing extra. Flying or riding fast: plan the ground ahead too (aheadPicks, PLAN_EACH_TICK viewers a tick).
+  const drawn = terrainBaseMemo.get(player.id);
+  /** @type {import("./terrain.js").Pick[] | undefined} */
+  let picks;
+  if (!fast) {
+    // Walking, exact block columns near the player (the near field) are left for when they stop: each step needs a
+    // dozen new ones, which with many players walking would take most of the reading budget. Until then the near
+    // field shows the coarse samples, as it does before they are read.
+    const walking = Math.abs(vel.x) + Math.abs(vel.z) > 0.1;
+    if (drawn && drawn.needStore === store && drawn.needAt > (same ? old.at : -1)) picks = walking ? drawn.need.filter((p) => p.resolution !== 1) : drawn.need.slice();
+    // Reads that failed (an unloaded chunk) are asked again MISS_RETRY ticks later.
+    else if (same && old.missed > 0 && old.pos >= old.picks.length && now - old.at >= MISS_RETRY) {
+      picks = old.picks.filter((p) => !(p.store ?? store).cols.has(p.key));
+    }
+  } else {
+    // Moving fast: what the radar listed (the view now) and, alternating with it, the ground ahead (the radar's whole
+    // reach around the point `lead` blocks ahead), planned again every PLAN_MIN_AGE ticks.
+    const left = same && old.pos < old.picks.length;
+    if ((!left || now - old.at >= PLAN_MIN_AGE) && planTurn.left > 0) {
+      planTurn.left--;
+      const listed = drawn && drawn.needStore === store ? drawn.need.filter((p) => p.resolution !== 1 && !p.stale) : [];
+      const ahead = aheadPicks(store, pose.x + lead.x, pose.z + lead.z, pr.radius * 1.5, now, SCAN_MAX_AGE, 96);
+      picks = [];
+      for (let i = 0; i < listed.length || i < ahead.length; i++) {
+        if (i < listed.length) picks.push(listed[i]);
+        if (i < ahead.length) picks.push(ahead[i]);
+      }
+    }
+  }
+  if (!picks) {
+    if (!old || !same) {
+      if (!probe) return undefined;
+      picks = [];
+    } else {
+      // Keep reading the current plan; the roof probe goes first.
+      if (probe && old.picks[old.pos]?.key !== origin) old.picks.splice(old.pos, 0, probePick);
+      old.dim = dim;
+      old.py = py;
+      old.roof = roof;
+      return old.pos < old.picks.length ? old : undefined;
+    }
+  }
+  if (probe) picks.unshift(probePick);
+  /** @type {ScanPlan} */
+  const plan = { id: player.id, store, picks, dim, py, roof, missRun: 0, at: fast || !drawn || drawn.needAt <= (same ? old.at : -1) ? now : drawn.needAt, pos: 0, missed: 0, x: at.x, z: at.z };
+  scanPlans.set(player.id, plan);
+  planTurn.made++;
+  return plan;
 }
 
 const RADAR_SIZE = 2 * R + 1;
-const RADAR_CELLS = RADAR_SIZE * RADAR_SIZE;
-const EMPTY_BASE = /** @type {string[]} */ (Array(RADAR_CELLS).fill(G.Q_EMPTY));
-const gridBuf = /** @type {string[]} */ (Array(RADAR_CELLS));
-const prioBuf = new Float64Array(RADAR_CELLS);
-const rowStrs = /** @type {string[]} */ (Array(RADAR_SIZE));
+/** The radar text is kept as its pieces, row by row: each row's 21 glyphs, then "\n" (none after the last row). */
+const ROW = RADAR_SIZE + 1;
+const RADAR_PIECES = RADAR_SIZE * ROW - 1;
+const EMPTY_ROWS = /** @type {string[]} */ (Array(RADAR_PIECES).fill("\n"));
+for (let r = 0; r < RADAR_SIZE; r++) for (let c = 0; c < RADAR_SIZE; c++) EMPTY_ROWS[r * ROW + c] = G.Q_EMPTY;
+/** Marker priorities by piece, all 0 between calls (each call puts back the ones it set). */
+const prioBuf = new Float64Array(RADAR_PIECES);
+/** Terrain pictures built so far (each costs about 0.8 ms; the redraw spends REBUILDS_PER_TICK of them a tick). */
+let radarRebuilds = 0;
+/** Whether the last radarOf drew on an out-of-date terrain picture (no time to build it again). */
+let radarStale = false;
+/** The radar is built again this often anyway, so columns that went stale are found (and read again). */
+const STALE_EVERY = 200;
+/** The terrain grid turns in steps of this many degrees and moves in whole blocks (an edge cell moves under a block). */
+const TERRAIN_TURN = 2;
 
 /**
  * The radar: 21 x 21 cells, the player in the middle, `radius` blocks to the edge; north up or turned so ahead is up.
  * The destination, party mates and online friends beyond the edge sit on it as directional arrows.
  * @param {number} heading @param {Marker[]} markers @param {number} radius @param {boolean} north @param {{ x: number, z: number }} at the player
  * @param {string} [dimId] @param {boolean} [useTerrain] @param {string} [playerId]
+ * @param {boolean} [rebuild] false: if the terrain would have to be built again, draw on the last one (no time left; radarStale)
+ * @param {number} [now] the tick (stale columns, failed reads)
  */
-function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerrain = false, playerId = "") {
+function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerrain = false, playerId = "", rebuild = true, now = 0) {
   const h = (heading * Math.PI) / 180;
   const cos = Math.cos(h);
   const sin = Math.sin(h);
   const cell = radius / R;
   const store = useTerrain ? storeFor(playerId, dimId) : undefined;
-  if (!store || !store.cols.size) {
-    for (let i = 0; i < RADAR_CELLS; i++) gridBuf[i] = G.Q_EMPTY;
-  } else {
-    const memoKey = `${store.id}#${store.ver}|${Math.round(at.x * 2)}|${Math.round(at.z * 2)}|${north ? 0 : Math.round(heading)}|${radius}`;
-    const hit = playerId ? terrainBaseMemo.get(playerId) : undefined;
-    if (hit && hit.key === memoKey) {
-      const b = hit.base;
-      for (let i = 0; i < RADAR_CELLS; i++) gridBuf[i] = b[i];
+  let memo = playerId ? terrainBaseMemo.get(playerId) : undefined;
+  if (!memo) {
+    memo = { key: "", base: EMPTY_ROWS.slice(), rows: EMPTY_ROWS.slice(), touched: [], need: [], needAt: -1 };
+    if (playerId) terrainBaseMemo.set(playerId, memo);
+  }
+  const { base, rows, touched } = memo;
+  const tx = Math.round(at.x);
+  const tz = Math.round(at.z);
+  const th = north ? 0 : Math.round(heading / TERRAIN_TURN) * TERRAIN_TURN;
+  // Built again when the pose (whole blocks, TERRAIN_TURN degrees) or the land near the player changed, and every
+  // STALE_EVERY ticks so columns older than SCAN_MAX_AGE are found and read again.
+  const key = !store ? "empty" : `${terrainVerOf(playerId, dimId, at, radius)}|${tx}|${tz}|${th}|${radius}|${Math.floor(now / STALE_EVERY)}`;
+  radarStale = false;
+  if (memo.key !== key && !rebuild && memo.key && key !== "empty") {
+    // No time to build the terrain again: this tick's markers go on the last picture (radarStale tells the caller).
+    radarStale = true;
+    for (const i of touched) rows[i] = base[i];
+  } else if (memo.key !== key) {
+    if (!store) {
+      for (let i = 0; i < RADAR_PIECES; i++) base[i] = EMPTY_ROWS[i];
     } else {
-      const base = /** @type {string[]} */ (Array(RADAR_CELLS));
-      let idx = 0;
+      radarRebuilds++;
+      const cols = store.cols;
+      const miss = store.miss;
+      /** What the scanner should read for this picture (planFor): missing columns, then stale ones. @type {(import("./terrain.js").Pick & { d: number, stale: boolean })[]} */
+      const need = [];
+      /** @type {Set<number>} */
+      const listed = new Set();
+      /** @param {number} k @param {number} wx @param {number} wz @param {number} resolution @param {number} d @param {boolean} stale */
+      const want = (k, wx, wz, resolution, d, stale) => {
+        if (listed.has(k)) return;
+        const m = miss.get(k);
+        if (m !== undefined && now - m < MISS_RETRY) return;
+        listed.add(k);
+        need.push({ wx: sampleCoord(wx, resolution), wz: sampleCoord(wz, resolution), key: k, resolution, d: d + (resolution === 1 ? 1e6 : 0), stale });
+      };
+      const tcos = Math.cos((th * Math.PI) / 180);
+      const tsin = Math.sin((th * Math.PI) / 180);
+      // cellWorld, sampleResolution and the coarse colKey and glyphAt, inline: this runs for every cell of every
+      // rebuilt radar. Neighboring cells often sample the same 4 x 4 column: the last one is kept.
+      let lastKey = -1;
+      let lastGlyph = G.Q_EMPTY;
       for (let row = -R; row <= R; row++) {
+        const sy = row * cell;
+        let idx = (row + R) * ROW;
         for (let col = -R; col <= R; col++) {
-          const w = cellWorld(at, cos, sin, north, col * cell, row * cell);
-          base[idx] = glyphAt(terrain, store, w.x, w.z, sampleResolution(col * cell, row * cell));
-          gridBuf[idx] = base[idx];
-          idx++;
+          const sx = col * cell;
+          const d = sx * sx + sy * sy;
+          const wx = north ? tx + sx : tx + sx * tcos - sy * tsin;
+          const wz = north ? tz + sy : tz + sx * tsin + sy * tcos;
+          const k = (Math.floor(wx / COL) + KEY_BIAS) * KEY_SPAN + Math.floor(wz / COL) + KEY_BIAS;
+          if (k !== lastKey) {
+            const c = cols.get(k);
+            if (!c) want(k, wx, wz, COL, d, false);
+            else if (now - c.tick > SCAN_MAX_AGE) want(k, wx, wz, COL, d, true);
+            lastGlyph = !c || c.kind === "empty" ? G.Q_EMPTY : c.glyph ?? glyphAt(terrain, store, wx, wz, COL);
+            lastKey = k;
+          }
+          if (d <= 36) {
+            // The near field: exact block columns (thin roofs), over the coarse base until they are read.
+            const kf = colKey(wx, wz, 1);
+            const f = kf < 0 ? undefined : cols.get(kf);
+            if (!f) {
+              if (kf >= 0) want(kf, wx, wz, 1, d, false);
+              base[idx++] = lastGlyph;
+            } else {
+              if (now - f.tick > SCAN_MAX_AGE) want(kf, wx, wz, 1, d, true);
+              base[idx++] = glyphAt(terrain, store, wx, wz, 1);
+            }
+            continue;
+          }
+          base[idx++] = lastGlyph;
         }
       }
-      if (playerId) terrainBaseMemo.set(playerId, { key: memoKey, base });
+      need.sort((a, b) => Number(a.stale) - Number(b.stale) || a.d - b.d);
+      memo.need = need;
+      memo.needAt = now;
+      memo.needStore = store;
     }
+    for (let i = 0; i < RADAR_PIECES; i++) rows[i] = base[i];
+    memo.key = key;
+  } else {
+    for (const i of touched) rows[i] = base[i];
   }
-  prioBuf.fill(0);
+  touched.length = 0;
   /** Screen offset (right, down) of a world offset. @param {number} dx @param {number} dz */
   const screen = (dx, dz) => (north ? [dx, dz] : [dx * cos + dz * sin, -dx * sin + dz * cos]);
   /** @param {number} sx @param {number} sy @param {string} g @param {number} p @param {boolean} clamp @param {string} [kind] */
@@ -721,17 +968,18 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
       else if (kind === "other") glyph = FRIEND_ARR[dirIdx] ?? g;
     }
     if (c === 0 && r === 0) return; // the player's own cell
-    let idx = (r + R) * RADAR_SIZE + (c + R);
+    let idx = (r + R) * ROW + (c + R);
     if (p <= prioBuf[idx]) {
       if (prioBuf[idx] !== 100 || p >= 100) return;
       // A protected direction badge keeps its cell; an edge marker uses the next cell along the same edge.
       const neighbors = Math.abs(c) === R ? [[c, r - 1], [c, r + 1]] : [[c - 1, r], [c + 1, r]];
       const free = neighbors.find(([nc, nr]) => Math.abs(nc) <= R && Math.abs(nr) <= R &&
-        p > prioBuf[(nr + R) * RADAR_SIZE + (nc + R)]);
+        p > prioBuf[(nr + R) * ROW + (nc + R)]);
       if (!free) return;
-      idx = (free[1] + R) * RADAR_SIZE + (free[0] + R);
+      idx = (free[1] + R) * ROW + (free[0] + R);
     }
-    gridBuf[idx] = glyph;
+    rows[idx] = glyph;
+    if (!prioBuf[idx]) touched.push(idx);
     prioBuf[idx] = p;
   };
   // Protect all four directions from markers (fixed up/right/down/left when north is up).
@@ -763,14 +1011,10 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     const [sx, sy] = screen(dx, dz);
     place(sx, sy, k.q, 10 + k.p - Math.min(Math.hypot(dx, dz), 999) / 1000, m.kind === "star" || m.kind === "party" || m.kind === "other" || m.kind === "rainbow", m.kind);
   }
-  gridBuf[R * RADAR_SIZE + R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
-  for (let r = 0; r < RADAR_SIZE; r++) {
-    let s = "";
-    const rowOff = r * RADAR_SIZE;
-    for (let c = 0; c < RADAR_SIZE; c++) s += gridBuf[rowOff + c];
-    rowStrs[r] = s;
-  }
-  return rowStrs.join("\n");
+  rows[R * ROW + R] = north ? YOU[Math.round(heading / 45) % 8] : YOU[0];
+  touched.push(R * ROW + R);
+  for (const i of touched) prioBuf[i] = 0;
+  return rows.join("");
 }
 
 /** The last second lines built, by their parts (they rarely change). @type {Map<string, string>} */
@@ -802,7 +1046,7 @@ function line2Of(region, dest) {
 /**
  * What the last pass found for a player, so the strip and radar can turn with them every tick in between: the
  * markers, the second line, which parts show, and the heading and place they were last drawn for.
- * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string }} View
+ * @typedef {{ player: Player, markers: Marker[], second: string, compass: boolean, radar: boolean, radius: number, north: boolean, terrain: boolean, dest?: string, target?: Spot, dim: string, px: number, pz: number, heading: number, x: number, y: number, z: number, tv?: string, drawn?: number, lag?: boolean, fresh?: number, dirty?: boolean }} View
  */
 /** @type {Map<string, View>} */
 const views = new Map();
@@ -853,16 +1097,21 @@ function pass(player, all, seen, now) {
   const region = dimId === OVERWORLD ? regions.get(player.id) ?? "" : `In ${DIM_NAMES[dimId] ?? "another dimension"}`;
   /** @type {View} */
   const view = { player, markers, second: showCompass ? line2(region, destText) : "", compass: showCompass, radar: showRadar, radius: pr.radius, north: pr.north, terrain: pr.terrain, dest: dest?.spot?.n, target: dest?.spot, dim: player.dimension.id, px: player.location.x, pz: player.location.z, heading: 0, x: 0, y: 0, z: 0 };
+  const old = views.get(player.id);
+  if (old && old.dim === view.dim) Object.assign(view, { heading: old.heading, x: old.x, y: old.y, z: old.z, tv: old.tv, drawn: old.drawn, fresh: old.fresh });
+  // Drawn by the per-tick redraw, within its budget (next tick unless many players are waiting).
+  view.dirty = true;
   views.set(player.id, view);
-  render(player, view, now, true);
   costMs += Date.now() - t0;
   costPlayers++;
 }
 
 /**
- * Draws the strip and radar for where the player faces and stands now, from the last pass's markers. Sent when
- * the text changed; with `refresh` (the pass) also when it's REFRESH ticks old, so it never fades.
+ * Draws the strip and radar for where the player faces and stands now, from the last pass's markers. Each part is
+ * sent only when its text changed, or with `refresh` when it is REFRESH ticks old (so it never fades); the title
+ * is drawn once for both.
  * @param {Player} player @param {View} v @param {number} now @param {boolean} refresh
+ * @returns {boolean} whether anything was sent
  */
 function render(player, v, now, refresh) {
   const heading = headingOf(player);
@@ -871,51 +1120,113 @@ function render(player, v, now, refresh) {
   v.x = at.x;
   v.y = at.y;
   v.z = at.z;
-  v.tv = terrainVerOf(player.id, v.dim);
+  v.drawn = now;
+  v.dirty = false;
   const strip = v.compass ? stripOf(heading, v.markers, at) : "";
-  const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id) : "";
-  lastText.set(player.id, { strip, line2: v.second, radar, dest: v.dest, target: v.target, pose: { ...at, dim: v.dim, heading, radius: v.radius, north: v.north } });
+  // The terrain picture is the costly part: built again only while the tick's budget lasts. Without budget the radar
+  // keeps its last text (terrain and markers from the same moment) and is due again next tick (`lag`).
+  const before = radarRebuilds;
+  const tr = Date.now();
+  const radar = v.radar ? radarOf(heading, v.markers, v.radius, v.north, at, v.dim, v.terrain, player.id, rebuildBudget.ok, now) : "";
+  const tookRadar = Date.now() - tr;
+  if (radarRebuilds > before) {
+    planNow.add(player.id); // a new list of what the radar misses
+    rebuildBudget.spend(tookRadar);
+    drawBudget.spend(-tookRadar); // render() charges its whole time to drawBudget; the rebuild was charged here
+  }
+  radarMs += tookRadar;
+  v.lag = v.radar && radarStale;
+  if (!v.lag) {
+    v.fresh = now;
+    v.tv = terrainVerOf(player.id, v.dim, at, v.radius);
+  }
+  // What realm:map_debug reports (kept as references; the pose object is made only when asked).
+  let shot = lastText.get(player.id);
+  if (!shot) lastText.set(player.id, (shot = { strip, line2: v.second, radar, dest: v.dest, target: v.target, at, dim: v.dim, heading, radius: v.radius, north: v.north }));
+  else Object.assign(shot, { strip, line2: v.second, radar, dest: v.dest, target: v.target, at, dim: v.dim, heading, radius: v.radius, north: v.north });
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
-  const key = `${compassText}|${radar}`;
+  if (side.held(player)) return false;
   const sent = lastSent.get(player.id);
-  if (side.held(player) || (sent && sent.key === key && (!refresh || now - sent.at < REFRESH))) return false;
+  let showC = v.compass && (!sent || !sent.compass || sent.ctext !== compassText || (refresh && now - sent.cat >= REFRESH));
+  let showR = v.radar && (!sent || !sent.radar || sent.rtext !== radar || (refresh && now - sent.rat >= REFRESH));
+  // A part sent anyway takes the other along once that one is half-way to its refresh, so the two stay in step and
+  // a still player's refresh is one title, not one per part.
+  if (sent && showC && !showR && v.radar && sent.radar && now - sent.rat >= REFRESH / 2) showR = true;
+  if (sent && showR && !showC && v.compass && sent.compass && now - sent.cat >= REFRESH / 2) showC = true;
+  const offC = !v.compass && !!sent?.compass;
+  const offR = !v.radar && !!sent?.radar;
+  if (!showC && !showR && !offC && !offR) return false;
   const t1 = Date.now();
-  if (v.compass) side.show(player, "top", compassText, HOLD, "", false);
-  else if (sent?.compass) side.clear(player, "", false);
-  if (v.radar) side.show(player, "radar", radar, HOLD, "radar", false);
-  else if (sent?.radar) side.clear(player, "radar", false);
+  if (showC) side.show(player, "top", compassText, HOLD, "", false);
+  else if (offC) side.clear(player, "", false);
+  if (showR) side.show(player, "radar", radar, HOLD, "radar", false);
+  else if (offR) side.clear(player, "radar", false);
   side.redraw(player);
-  lastSent.set(player.id, { key, at: now, compass: v.compass, radar: v.radar });
+  lastSent.set(player.id, {
+    ctext: v.compass ? compassText : "", cat: showC ? now : sent?.cat ?? now,
+    rtext: v.radar ? radar : "", rat: showR ? now : sent?.rat ?? now,
+    compass: v.compass, radar: v.radar,
+  });
   drawMs += Date.now() - t1;
   return true;
 }
 
-/** Turning by less than this (degrees) or moving less than this (blocks) between ticks doesn't redraw. */
-const TURN_MIN = 0.5;
-const MOVE_MIN = 0.25;
+/**
+ * Turning by less than this (degrees) or moving less than this (blocks) since the last draw doesn't redraw: a strip
+ * cell is 5 degrees and a radar cell 2.4 blocks or more (a marker 20 blocks away moves a cell every ~6 degrees), so
+ * smaller steps hardly ever change the text, and building it is the cost.
+ */
+const TURN_MIN = 2;
+const MOVE_MIN = 0.5;
 /** Moved farther than this (blocks) since the pass: a teleport, so the markers wait for the next pass. */
 const FAR_MOVE = 256;
 /**
- * Titles sent per tick at most by the per-tick redraw. Each one is also a realm:side message that every other pack
- * with side boxes reads (about 0.06 ms each, measured), so with many players turning at once the ones drawn longest
- * ago go first and the rest follow a tick later.
+ * Titles sent per tick at most by the per-tick redraw. Each one is also two realm:side messages that every other
+ * pack with side boxes reads, so with many players turning at once the ones drawn longest ago go first and the rest
+ * follow a tick later.
  */
 const TURN_BUDGET = 8;
+/** Strips and radars built per tick at most (building one whose text didn't change is the cost without the send). */
+const RENDER_BUDGET = 10;
+/** Players whose turning and moving is checked a tick (all of them up to this many, else taking turns). */
+const TURN_CHECKS = 12;
+let turnFirst = 0;
+/**
+ * The redraw's time: building strips and radars and sending them (drawBudget), and building a radar's terrain
+ * picture again (rebuildBudget, ~1 ms each). With many players moving at once a player's strip comes a few ticks
+ * later and their terrain picture lags (it is drawn with the markers of the same moment), instead of the server.
+ */
+const drawBudget = new Budget(1, 8, 3);
+const rebuildBudget = new Budget(0.4, 6, 2);
 let turnMs = 0;
 let turnTicks = 0;
 let turnDraws = 0;
 let turnSends = 0;
+/** Sends by the per-tick redraw that refreshed an unchanged part before it faded (not counted in turnSends). */
+let refreshSends = 0;
+/** Of turnMs, the time spent finding who is due. */
+let turnCheckMs = 0;
+let radarMs = 0;
 
 // Every tick between passes: the strip and radar turn with the player (the pass, every intervalTicks, finds what's
-// around). Only players who turned or moved are drawn again, and only a changed text is sent.
+// around). Only players who turned or moved, or whose land nearby was read, are drawn again, and only a changed
+// part is sent; a part REFRESH ticks old is sent again so it never fades.
 system.runInterval(() => {
+  drawBudget.tick();
+  rebuildBudget.tick();
   if (!views.size) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** @type {{ p: Player, v: View, at: number }[]} */
+  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. @type {{ p: Player, v: View, refresh: boolean, moved: boolean }[]} */
   const due = [];
+  const n = views.size;
+  const checks = Math.min(n, TURN_CHECKS);
+  let k = -1;
   for (const v of views.values()) {
+    k++;
     const p = v.player;
+    // A new pass or a radar waiting for its terrain is always due; the others are looked at in turns.
+    if (!v.dirty && !v.lag && (k - turnFirst + n) % n >= checks) continue;
     try {
       if (!p.isValid) continue;
       // Another dimension (a portal) or far from where the pass looked (a teleport): wait for the next pass.
@@ -925,24 +1236,43 @@ system.runInterval(() => {
       }
       const at = p.location;
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
-      if (Math.abs(wrap(headingOf(p) - v.heading)) < TURN_MIN && Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) < MOVE_MIN && v.tv === terrainVerOf(p.id, v.dim)) continue;
-      due.push({ p, v, at: lastSent.get(p.id)?.at ?? 0 });
+      const sent = lastSent.get(p.id);
+      const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
+      const moved = refresh || !!v.dirty || Math.abs(wrap(headingOf(p) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      if (!moved && !v.lag) continue;
+      // Moving fast (flying, riding): the scanner plans ahead for them often.
+      if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
+      due.push({ p, v, refresh, moved });
     } catch (e) {
       console.warn(`[map] turn: ${e}`);
     }
   }
-  if (due.length > TURN_BUDGET) due.sort((a, b) => a.at - b.at);
+  if (n) turnFirst = (turnFirst + checks) % n;
+  turnCheckMs += Date.now() - t0;
+  // The longest-waiting first: a lagging radar waits since it was last up to date.
+  const waited = (/** @type {View} */ v) => (v.lag ? v.fresh ?? 0 : v.drawn ?? 0);
+  if (due.length > 1) due.sort((a, b) => waited(a.v) - waited(b.v));
   let sends = 0;
-  for (const { p, v } of due) {
-    if (sends >= TURN_BUDGET) break;
+  let built = 0;
+  const refreshBefore = refreshSends;
+  for (const { p, v, refresh, moved } of due) {
+    if (sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok) break;
+    // A radar waiting for its terrain, with nothing else new, waits for a rebuild in the budget.
+    if (!moved && !rebuildBudget.ok) continue;
+    const tr = Date.now();
     try {
       turnDraws++;
-      if (render(p, v, now, false)) sends++;
+      built++;
+      if (render(p, v, now, refresh)) {
+        sends++;
+        if (refresh) refreshSends++;
+      }
     } catch (e) {
       console.warn(`[map] turn: ${e}`);
     }
+    drawBudget.spend(Date.now() - tr);
   }
-  turnSends += sends;
+  turnSends += sends - refreshSends + refreshBefore;
   turnMs += Date.now() - t0;
   turnTicks++;
 }, 1);
@@ -968,31 +1298,58 @@ function arrival(player, dest) {
   return note;
 }
 
+// The passes: every player gets one every INTERVAL ticks, spread over the ticks in between (at most PASS_EACH a
+// tick, the longest-waiting first, so with many players a pass comes a little less often instead of all at once).
+// Everyone's place and party (for the others' markers) is looked up once per INTERVAL.
+const INTERVAL = Math.max(10, Math.round(Number(CONFIG.intervalTicks) || 10));
+const PASS_EACH = 2;
+/** The passes' time (two entity searches each, ~0.3-0.4 ms): with more than ~15 players a pass comes less often. */
+const passBudget = new Budget(0.5, 6, 2);
+/** Player id -> tick of their last pass. @type {Map<string, number>} */
+const passAt = new Map();
+/** @type {Seen[]} */
+let seen = [];
+let seenAt = -Infinity;
 system.runInterval(() => {
   const now = system.currentTick;
+  passBudget.tick();
   const all = world.getAllPlayers();
-  /** Every player's place and party once a pass, for the others' markers. @type {Seen[]} */
-  const seen = [];
-  for (const p of all) {
-    try {
-      const l = p.location;
-      seen.push({ id: p.id, dim: p.dimension.id, x: l.x, z: l.z, party: partyTag(p) });
-    } catch {
-      // left meanwhile
+  if (!all.length) return;
+  if (now - seenAt >= INTERVAL) {
+    seenAt = now;
+    seen = [];
+    for (const p of all) {
+      try {
+        const l = p.location;
+        seen.push({ id: p.id, dim: p.dimension.id, x: l.x, z: l.z, party: partyTag(p) });
+      } catch {
+        // left meanwhile
+      }
     }
+    costPasses++;
   }
-  for (const p of all) {
+  /** @type {Player[]} */
+  let due = [];
+  for (const p of all) if (now - (passAt.get(p.id) ?? -Infinity) >= INTERVAL) due.push(p);
+  if (!due.length) return;
+  const each = Math.min(PASS_EACH, Math.max(1, Math.ceil(all.length / INTERVAL)));
+  if (due.length > each) due = due.sort((a, b) => (passAt.get(a.id) ?? -Infinity) - (passAt.get(b.id) ?? -Infinity)).slice(0, each);
+  for (const p of due) {
+    if (!passBudget.ok) break;
+    passAt.set(p.id, now);
+    const t = Date.now();
     try {
       if (p.isValid) pass(p, all, seen, now);
     } catch (e) {
       console.warn(`[map] ${e}`);
     }
+    passBudget.spend(Date.now() - t);
   }
-  if (all.length) costPasses++;
-}, Math.max(10, Math.round(Number(CONFIG.intervalTicks) || 10)));
+}, 1);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanDone]) m.delete(playerId);
+  for (const m of [wpCache, marksCache, arrived, prefCache, lastSent, lastText, npcCache, regions, sites, waystones, tracks, deaths, views, terrainBaseMemo, playerStore, scanPlans, passAt, retryAt, lastPose]) m.delete(playerId);
+  planNow.delete(playerId);
 });
 
 // ---------------------------------------------------------------------------
@@ -1318,7 +1675,7 @@ function onEvent(id, m, source) {
         line2: t?.line2,
         radar: t?.radar,
         dest: t?.dest,
-        pose: t?.pose,
+        pose: t ? { ...t.at, dim: t.dim, heading: t.heading, radius: t.radius, north: t.north } : undefined,
         target: t?.target,
         wp: player ? waypointOf(player) ?? null : null,
         terrain: player ? {
@@ -1330,7 +1687,8 @@ function onEvent(id, m, source) {
             data: terrain.get(storeFor(player.id, player.dimension.id), s.x, s.z, s.resolution === 1 ? 1 : 4) ?? null,
           })) : [],
         } : undefined,
-        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak },
+        cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, rebuilds: radarRebuilds, turnCheckMs, radarMs, readCost },
+        budgets: { draw: drawBudget.left, rebuild: rebuildBudget.left, pass: passBudget.left, scan: scanBudget.left },
         known: { folk: folk.size, camps: camps.size, towns: towns.size, pot: pot ?? null, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
       });
       if (m.action === "cost") {
@@ -1347,6 +1705,12 @@ function onEvent(id, m, source) {
         scanMs = 0;
         scanPeak = 0;
         scanEachPeak = 0;
+        scanPlanMs = 0;
+        planTurn.made = 0;
+        refreshSends = 0;
+        radarRebuilds = 0;
+        turnCheckMs = 0;
+        radarMs = 0;
       }
       return;
     }

@@ -1,7 +1,9 @@
 // Minimap: the compass strip turns with the player every tick, not twice a second. A player turning 3 degrees a
 // tick gets a new strip (a map_bp title) on most ticks, and the strip on screen one tick after the last turn
 // already has north where they now face. A player standing still gets no new titles between passes. Then the
-// cost: 10 players turning every tick (at most 8 strips are sent a tick, the longest-waiting players first), the per-tick redraw timed by the pack (realm:map_debug "cost"), and the
+// cost: 10 players turning every tick (the redraw keeps to its time budget, about 1 ms a tick for drawing plus 0.4 ms
+// for terrain pictures, and at most 8 strips a tick; the longest-waiting players first, so each still gets a new strip
+// every few ticks), the per-tick redraw timed by the pack (realm:map_debug "cost"), and the
 // work each other pack's side.js copy does for one realm:side message (JSON.parse and the cleaning), timed here.
 //   node tools/test-bds/run.mjs --quiet --flat --only map_bp,hud_bp,mobhp_bp,elytra_bp --scenario tools/test-bds/examples/map-turn.js --timeout 600
 const MARK = "§s§2§r";
@@ -92,6 +94,7 @@ export default async function (t) {
   for (let i = 0; i < 9; i++) crowd.push(await t.player(`Turner${i}`, { x: i * 20, z: 40, settle: 2 }));
   await t.wait(40);
   send("realm:map_debug", { player: p.id, action: "cost" });
+  const turnFrom = t.tick;
   const n = 200;
   for (let i = 0; i < n; i++) {
     for (const [k, q] of crowd.entries()) face(q, 180 + i * (2 + k * 0.5));
@@ -105,7 +108,19 @@ export default async function (t) {
   t.log(`per tick: ${c.turnMs} ms over ${c.turnTicks} ticks = ${(c.turnMs / Math.max(1, c.turnTicks)).toFixed(3)} ms a tick; ${c.turnDraws} strips built, ${c.turnSends} sent (${(c.turnSends / Math.max(1, c.turnTicks)).toFixed(1)} a tick)`);
   // At most TURN_BUDGET (8) titles a tick: 10 players all turning nonstop share them, the longest-waiting first.
   t.check(c.turnSends <= c.turnTicks * 8, `at most 8 strips sent a tick (${c.turnSends} in ${c.turnTicks} ticks)`);
-  t.check(c.turnSends >= c.turnTicks * 6, `the budget is used while everyone turns (${c.turnSends} in ${c.turnTicks} ticks)`);
+  // The time budget, not a count, limits the redraw now: 1 ms a tick for drawing and 0.4 for terrain pictures (a
+  // tick may spend a little more while saved-up time lasts), so it never takes the server with it.
+  const perTick = c.turnMs / Math.max(1, c.turnTicks);
+  t.check(perTick < 3, `the per-tick redraw keeps to its time budget with 10 players turning nonstop (${perTick.toFixed(3)} ms a tick)`);
+  // Shared fairly: everyone turning gets a new strip every few ticks (the longest-waiting first).
+  let worstGap = 0;
+  for (const q of crowd) {
+    const at = titles(q, turnFrom + 20).map((m) => m.tick).filter((x) => x <= turnFrom + n);
+    for (let i = 1; i < at.length; i++) worstGap = Math.max(worstGap, at[i] - at[i - 1]);
+    if (!at.length) worstGap = Infinity;
+  }
+  t.log(`longest wait for a new strip while all 10 turn: ${worstGap} ticks`);
+  t.check(worstGap <= 30, `every turning player gets a new strip at least every 30 ticks (${worstGap})`);
   // Measured 2.2 to 2.6 ms per sent strip (17 to 21 ms a tick at 8 sends) on the shared dev machine (October 2026);
   // a send is a title command, which dominates the cost, so the bound is per send and the per-tick total follows the budget.
   const perSend = c.turnMs / Math.max(1, c.turnSends);
@@ -115,9 +130,10 @@ export default async function (t) {
   if (c.scanPeak !== undefined) t.check(c.scanPeak <= 96 && c.scanEachPeak <= 48, "rotating viewers retain the shared real-operation budget");
   t.check(perSend < 4, `each strip sent costs under 4 ms with 10 players turning nonstop (${perSend.toFixed(2)} ms)`);
 
-  // The same 10 players standing still (after the last of them got their final strip): the per-tick check only
+  // The same 10 players standing still (after the last of them got their final strip and terrain picture, which
+  // may lag while everyone turns, and the exact near-field columns read once they stopped): the per-tick check only
   // reads their rotation and place.
-  await t.wait(10);
+  await t.wait(120);
   send("realm:map_debug", { player: p.id, action: "cost" });
   await t.wait(100);
   since = t.tick;

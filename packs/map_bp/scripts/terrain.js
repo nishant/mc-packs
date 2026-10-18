@@ -7,15 +7,22 @@
 import { G } from "./glyphs.js";
 
 export const COL = 4;
-/** @typedef {{ wx: number, wz: number, key: number, resolution?: number, store?: Store }} Pick */
+/** `since`: stored at or after this tick counts as done (default: when the plan was made). @typedef {{ wx: number, wz: number, key: number, resolution?: number, store?: Store, since?: number, stale?: boolean }} Pick */
 /** @typedef {{ kind: string, y: number, depth: number, tick: number, glyph?: string }} Col */
-/** @typedef {{ id: string, cols: Map<number, Col>, fine: Set<number>, coarse: Set<number>, ver: number, used: number, miss: Map<number, number> }} Store */
+/** `regions`: a version per REGION x REGION blocks, so a viewer redraws only for changes near it. @typedef {{ id: string, cols: Map<number, Col>, fine: Set<number>, coarse: Set<number>, ver: number, used: number, miss: Map<number, number>, regions: Map<number, number> }} Store */
 
 /** Ticks before a column whose chunk wasn't loaded is read again. */
 export const MISS_RETRY = 5;
+/** Blocks a side of one region version (Store.regions). */
+export const REGION = 64;
+/** @param {number} wx @param {number} wz */
+const regionKey = (wx, wz) => (Math.floor(wx / REGION) + 2 ** 20) * 2 ** 21 + (Math.floor(wz / REGION) + 2 ** 20);
 
 const BIAS = 2 ** 24; // the world is 60 million blocks wide: 7.5 million columns a side, far less than 2^24
 const SPAN = 2 ** 25;
+/** colKey's coarse key is (floor(wx / COL) + KEY_BIAS) * KEY_SPAN + floor(wz / COL) + KEY_BIAS (for callers that inline it). */
+export const KEY_BIAS = BIAS;
+export const KEY_SPAN = SPAN;
 /**
  * The key of the 4 x 4 column holding a block position, or -1 when it is beyond any real world (nothing is stored).
  * @param {number} wx @param {number} wz
@@ -54,7 +61,7 @@ export class TerrainWorld {
     let s = this.stores.get(id);
     if (!s) {
       if (layer !== undefined) this.#dropOldLayer();
-      s = { id, cols: new Map(), fine: new Set(), coarse: new Set(), ver: 0, used: 0, miss: new Map() };
+      s = { id, cols: new Map(), fine: new Set(), coarse: new Set(), ver: 0, used: 0, miss: new Map(), regions: new Map() };
       this.stores.set(id, s);
     }
     s.used = ++this.clock;
@@ -114,8 +121,28 @@ export class TerrainWorld {
     if (resolution === 1) s.fine.add(k);
     else s.coarse.add(k);
     this.#shadeNeighbors(s, wx, wz, resolution);
-    s.ver++;
+    this.#bump(s, wx, wz, resolution);
     return true;
+  }
+  /** A column changed: the store's version and its region's (and the shaded neighbors' region) go up. @param {Store} s @param {number} wx @param {number} wz @param {number} resolution */
+  #bump(s, wx, wz, resolution) {
+    s.ver++;
+    const k = regionKey(wx, wz);
+    s.regions.set(k, (s.regions.get(k) ?? 0) + 1);
+    const k2 = regionKey(wx + resolution, wz + resolution);
+    if (k2 !== k) s.regions.set(k2, (s.regions.get(k2) ?? 0) + 1);
+  }
+  /**
+   * What a viewer's picture depends on: the sum of the region versions within `reach` blocks of (x, z). It only goes
+   * up, and only when a column near the viewer changed (another viewer's reads far away leave it alone).
+   * @param {Store} s @param {number} x @param {number} z @param {number} reach
+   */
+  viewVer(s, x, z, reach) {
+    let n = 0;
+    const x0 = Math.floor((x - reach) / REGION), x1 = Math.floor((x + reach) / REGION);
+    const z0 = Math.floor((z - reach) / REGION), z1 = Math.floor((z + reach) / REGION);
+    for (let rx = x0; rx <= x1; rx++) for (let rz = z0; rz <= z1; rz++) n += s.regions.get((rx + 2 ** 20) * 2 ** 21 + (rz + 2 ** 20)) ?? 0;
+    return n;
   }
   /**
    * A read failed (the chunk isn't loaded): nothing is stored, what was known stays, and the column is asked again
@@ -144,7 +171,7 @@ export class TerrainWorld {
       this.#shadeNeighbors(s, wx, wz, COL);
       this.#shadeNeighbors(s, wx, wz, 1);
       if (changed) {
-        s.ver++;
+        this.#bump(s, wx, wz, 1);
         n++;
       }
     }
@@ -184,29 +211,38 @@ export function planScan({ world, store, at, heading, north, radius, half, lead,
   const list = [];
   const lx = at.x + lead.x;
   const lz = at.z + lead.z;
-  /** @param {{ x: number, z: number }} from @param {number} stride */
-  const grid = (from, stride) => {
-    for (let r = -half; r <= half; r += stride) {
-      for (let c = -half; c <= half; c += stride) {
-        const p = cellWorld(from, cos, sin, north, c * cell, r * cell);
+  /**
+   * One candidate column: skipped at once when it is known and fresh (most are, so no Set or object for those).
+   * @param {number} px @param {number} pz @param {number} resolution
+   */
+  const consider = (px, pz, resolution) => {
+    const key = colKey(px, pz, resolution);
+    if (key < 0) return;
+    const have = store.cols.get(key);
+    if (have && now - have.tick <= maxAge) return;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const missed = store.miss.get(key);
+    if (missed !== undefined && now - missed < MISS_RETRY) return;
+    list.push({ wx: sampleCoord(px, resolution), wz: sampleCoord(pz, resolution), resolution, key, d: (px - at.x) ** 2 + (pz - at.z) ** 2, a: (px - lx) ** 2 + (pz - lz) ** 2, stale: !!have });
+  };
+  /** The radar's cells around `from` (cellWorld and sampleResolution, inline). @param {number} fx @param {number} fz @param {boolean} near */
+  const grid = (fx, fz, near) => {
+    for (let r = -half; r <= half; r++) {
+      const sy = r * cell;
+      for (let c = -half; c <= half; c++) {
+        const sx = c * cell;
+        const px = north ? fx + sx : fx + sx * cos - sy * sin;
+        const pz = north ? fz + sy : fz + sx * sin + sy * cos;
         // Always fill a canonical coarse base first. Near-field exact details then replace that known terrain;
         // prefetch needs only the base, not exact future blocks a fast flier may never stand on.
-        const resolutions = from === at && sampleResolution(c * cell, r * cell) === 1 ? [COL, 1] : [COL];
-        for (const resolution of resolutions) {
-          const key = colKey(p.x, p.z, resolution);
-          if (key < 0 || seen.has(key)) continue;
-          seen.add(key);
-          const have = store.cols.get(key);
-          if (have && now - have.tick <= maxAge) continue;
-          const missed = store.miss.get(key);
-          if (missed !== undefined && now - missed < MISS_RETRY) continue;
-          list.push({ wx: sampleCoord(p.x, resolution), wz: sampleCoord(p.z, resolution), resolution, key, d: (p.x - at.x) ** 2 + (p.z - at.z) ** 2, a: (p.x - lx) ** 2 + (p.z - lz) ** 2, stale: !!have });
-        }
+        consider(px, pz, COL);
+        if (near && sx * sx + sy * sy <= 36) consider(px, pz, 1);
       }
     }
   };
-  grid(at, 1);
-  if (ahead) grid({ x: lx, z: lz }, 1);
+  grid(at.x, at.z, true);
+  if (ahead) grid(lx, lz, false);
   const byCenter = list.filter((e) => !e.stale).sort((a, b) => Number(a.resolution === 1) - Number(b.resolution === 1) || a.d - b.d);
   const byAhead = ahead ? list.filter((e) => !e.stale && e.resolution !== 1).sort((a, b) => a.a - b.a) : [];
   const stale = list.filter((e) => e.stale).sort((a, b) => a.d - b.d);
@@ -230,22 +266,73 @@ export function planScan({ world, store, at, heading, north, radius, half, lead,
   return out;
 }
 
+/** Coarse column offsets within a disc, nearest first, by disc radius in columns. @type {Map<number, Int32Array>} */
+const discs = new Map();
+/** @param {number} r radius in columns */
+function discOffsets(r) {
+  let d = discs.get(r);
+  if (d) return d;
+  /** @type {[number, number, number][]} */
+  const list = [];
+  for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (dx * dx + dz * dz <= r * r) list.push([dx, dz, dx * dx + dz * dz]);
+  list.sort((a, b) => a[2] - b[2]);
+  d = new Int32Array(list.length * 2);
+  list.forEach(([dx, dz], i) => {
+    d[i * 2] = dx;
+    d[i * 2 + 1] = dz;
+  });
+  discs.set(r, d);
+  return d;
+}
+
+/**
+ * The coarse columns a fast viewer will need around a point ahead of them (any heading: the radar's whole reach
+ * there), nearest that point first, missing ones before stale ones; at most `limit`. Much cheaper than planScan:
+ * one lookup per column, and it stops once it has `limit` missing ones.
+ * @param {Store} store @param {number} x @param {number} z the point ahead @param {number} reach blocks around it
+ * @param {number} now @param {number} maxAge @param {number} limit
+ * @returns {Pick[]}
+ */
+export function aheadPicks(store, x, z, reach, now, maxAge, limit) {
+  const offs = discOffsets(Math.ceil(reach / COL));
+  const cx = Math.floor(x / COL);
+  const cz = Math.floor(z / COL);
+  /** @type {Pick[]} */
+  const out = [];
+  /** @type {Pick[]} */
+  const stale = [];
+  for (let i = 0; i < offs.length && out.length < limit; i += 2) {
+    const qx = cx + offs[i];
+    const qz = cz + offs[i + 1];
+    const key = (qx + BIAS) * SPAN + qz + BIAS;
+    const have = store.cols.get(key);
+    if (have && now - have.tick <= maxAge) continue;
+    const missed = store.miss.get(key);
+    if (missed !== undefined && now - missed < MISS_RETRY) continue;
+    (have ? stale : out).push({ wx: qx * COL + COL / 2, wz: qz * COL + COL / 2, key, resolution: COL });
+  }
+  for (const p of stale) if (out.length < limit) out.push(p);
+  return out;
+}
+
 /**
  * Spends one tick's reading budget on every viewer's plan in turns, so each gets the same share and the unused
- * share of those who need less goes to the rest. A column another viewer's turn already stored this tick (same store)
- * costs nothing.
- * @template {{ id: string, store: Store, picks: Pick[] }} P
+ * share of those who need less goes to the rest. A column stored since the plan was made (`at`, this tick when
+ * missing), by any viewer of the same store, costs nothing. A plan kept over several ticks resumes where it
+ * stopped (`pos`, written back).
+ * @template {{ id: string, store: Store, picks: Pick[], pos?: number, at?: number }} P
  * @param {P[]} plans
  * @param {number} total reads all viewers share @param {number} each reads one viewer gets at most
  * @param {number} first which viewer goes first (turns over from tick to tick, so the odd read isn't always theirs)
  * @param {number} now the tick, which `read` stamps on what it stores
  * @param {(plan: P, pick: Pick) => boolean | void} read false: one operation ran, column still pending; otherwise finished
+ *   (it may set plan.pos past the end to stop reading that plan)
  * @returns {Map<string, number>} reads per viewer
  */
 export function spendBudget(plans, total, each, first, now, read) {
   /** @type {Map<string, number>} */
   const spent = new Map();
-  const next = new Array(plans.length).fill(0);
+  const next = plans.map((p) => p.pos ?? 0);
   let left = total;
   let progress = true;
   while (left > 0 && progress) {
@@ -258,11 +345,14 @@ export function spendBudget(plans, total, each, first, now, read) {
       while (next[i] < plan.picks.length) {
         const pick = plan.picks[next[i]];
         const store = pick.store ?? plan.store;
-        if (store.cols.get(pick.key)?.tick === now || store.miss.get(pick.key) === now) {
+        const since = pick.since ?? plan.at ?? now;
+        if ((store.cols.get(pick.key)?.tick ?? -Infinity) >= since || (store.miss.get(pick.key) ?? -Infinity) >= since) {
           next[i]++;
           continue;
         }
         if (read(plan, pick) !== false) next[i]++;
+        // A read may give up on the rest of its plan (raising plan.pos), as when its area isn't loaded.
+        if (plan.pos !== undefined && plan.pos > next[i]) next[i] = plan.pos;
         spent.set(plan.id, used + 1);
         left--;
         progress = true;
@@ -270,6 +360,7 @@ export function spendBudget(plans, total, each, first, now, read) {
       }
     }
   }
+  for (let i = 0; i < plans.length; i++) plans[i].pos = next[i];
   return spent;
 }
 
@@ -322,6 +413,17 @@ export function glyphAt(world, store, wx, wz, resolution = COL) {
   return cur.glyph = dh >= 2 ? set[2] : dh <= -2 ? set[1] : set[0];
 }
 
+/** Passable plants the column reader looks under, by block id (learned once per id). @type {Map<string, boolean>} */
+const plants = new Map();
+/** @param {string} id */
+function plant(id) {
+  let p = plants.get(id);
+  if (p === undefined) {
+    p = !id.includes("leaves") && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|lily_of_the_valley|rose_bush|peony|lilac|dead_bush/.test(id);
+    if (plants.size < 2000) plants.set(id, p);
+  }
+  return p;
+}
 /** @param {string} id */
 const water = (id) => /^(minecraft:)?(water|flowing_water|kelp|seagrass|bubble_column)$/.test(id);
 /** @param {import("@minecraft/server").Block | undefined} block */
@@ -357,7 +459,7 @@ export function* readColumn(dim, x, z, layer) {
     { includeLiquidBlocks: true, includePassableBlocks: true, maxDistance: range.max - range.min },
   )?.block);
   // At most two passable plant blocks; no column-height JS scan or recursion.
-  for (let i = 0; i < 2 && !block.typeId.includes("leaves") && /short_grass|tall_grass|fern|flower|dandelion|poppy|tulip|orchid|allium|bluet|daisy|lily_of_the_valley|rose_bush|peony|lilac|dead_bush/.test(block.typeId); i++) {
+  for (let i = 0; i < 2 && plant(block.typeId); i++) {
     const y = block.location.y - 1;
     block = available(yield () => dim.getBlock({ x, y, z }));
   }
@@ -369,6 +471,15 @@ export function* readColumn(dim, x, z, layer) {
     const b3 = available(yield () => dim.getBlock({ x, y: y - 3, z }));
     return { kind: "water", y, depth: water(b3.typeId) ? 3 : 2 };
   }
+  return { kind: kindOf(id), y, depth: 0 };
+}
+
+/** Block id -> radar material, learned once per id (the tests run for every column read). @type {Map<string, string>} */
+const kinds = new Map();
+/** @param {string} id */
+function kindOf(id) {
+  const hit = kinds.get(id);
+  if (hit) return hit;
   let kind = "grass";
   if (/lava|magma/.test(id)) kind = "lava";
   else if (/sandstone/.test(id)) kind = "sandstone";
@@ -394,14 +505,16 @@ export function* readColumn(dim, x, z, layer) {
   else if (/:(sand)$/.test(id)) kind = "sand";
   else if (/leaves|_log|bamboo|vine/.test(id)) kind = "forest";
   else if (/stone|andesite|diorite|granite|calcite|dripstone|ore/.test(id)) kind = "stone";
-  return { kind, y, depth: 0 };
+  if (kinds.size < 2000) kinds.set(id, kind);
+  return kind;
 }
 
 /**
  * What a finished scan depended on. It uses the radar's own geometry (half blocks, whole degrees), so any move or
- * turn that draws different columns plans the scan again.
- * @param {{ storeId: string, ver: number, at: { x: number, z: number }, heading: number, north: boolean, radius: number, now: number, lead: { x: number, z: number } }} s
+ * turn that draws different columns plans the scan again. Other viewers' reads don't: a column they store is
+ * simply skipped (and the time bucket brings back stale or evicted ones every 100 ticks).
+ * @param {{ storeId: string, ver?: number, at: { x: number, z: number }, heading: number, north: boolean, radius: number, now: number, lead: { x: number, z: number } }} s
  */
 export function scanMemo(s) {
-  return `${s.storeId}#${s.ver}|${Math.round(s.at.x * 2)}|${Math.round(s.at.z * 2)}|${s.north ? 0 : Math.round(s.heading)}|${s.radius}|${Math.floor(s.now / 100)}|${Math.round(s.lead.x / 4)}|${Math.round(s.lead.z / 4)}`;
+  return `${s.storeId}|${Math.round(s.at.x * 2)}|${Math.round(s.at.z * 2)}|${s.north ? 0 : Math.round(s.heading)}|${s.radius}|${Math.floor(s.now / 100)}|${Math.round(s.lead.x / 4)}|${Math.round(s.lead.z / 4)}`;
 }

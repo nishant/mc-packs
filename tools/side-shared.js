@@ -74,11 +74,20 @@ const bytesOf = (ch) => {
   return c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
 };
 
-/** UTF-8 bytes of a string. @param {string} s */
+const ASCII = /[\x00-\x7f]+/g;
+const TWO_BYTES = /[\x80-\u07ff]+/g;
+const NOT_SURROGATE = /[^\ud800-\udfff]+/g;
+/**
+ * UTF-8 bytes of a string. It runs on every readout drawn (the minimap's radar is ~480 characters), so it counts
+ * with native regex passes, about ten times faster than a loop here: every unit is 1 byte, plus 1 from U+0080,
+ * plus 1 more from U+0800; a surrogate pair (2 + 2 units) is 4 bytes, so each surrogate gives one back.
+ * @param {string} s
+ */
 export function byteLength(s) {
-  let n = 0;
-  for (const ch of s) n += bytesOf(ch);
-  return n;
+  const wide = s.replace(ASCII, "");
+  if (!wide) return s.length;
+  const wider = wide.replace(TWO_BYTES, "");
+  return s.length + wide.length + wider.length - (wider ? wider.replace(NOT_SURROGATE, "").length : 0);
 }
 
 /**
@@ -89,8 +98,13 @@ export function byteLength(s) {
 export function clean(text, maxBytes = TEXT_BYTES) {
   const raw = String(text);
   if (raw.length * 3 <= maxBytes && !raw.includes("~") && !raw.includes("\r") && !raw.includes("§")) return raw;
-  let s = raw.split(MARK).join("").replace(/[~\r]/g, "");
-  if (s.length * 3 <= maxBytes && !s.endsWith("§")) return s;
+  let s = raw.includes(MARK) ? raw.split(MARK).join("") : raw;
+  if (s.includes("~") || s.includes("\r")) s = s.replace(/[~\r]/g, "");
+  // Most readouts (the minimap's radar is ~1.3 KB of glyphs and § codes) already fit: one counting pass, no copy.
+  if (s.length * 3 <= maxBytes || byteLength(s) <= maxBytes) {
+    while (s.endsWith("§")) s = s.slice(0, -1);
+    return s;
+  }
   let out = "";
   let n = 0;
   for (const ch of s) {
@@ -133,7 +147,7 @@ export function compose(texts) {
   return out;
 }
 
-/** @typedef {{ from: string, text: string, until: number }} Entry */
+/** `raw`: another pack's text as it arrived, cleaned only when this copy draws it. @typedef {{ from: string, text: string, until: number, raw?: boolean }} Entry */
 /** player id -> slot -> what shows there. @type {Map<string, Map<string, Entry>>} */
 const picture = new Map();
 /** player id -> tick this pack last drew the title. @type {Map<string, number>} */
@@ -177,13 +191,22 @@ export function holdTitle(player, ticks) {
   system.sendScriptEvent("realm:title", JSON.stringify({ player: player.id, ticks: t, from: me || "?" }));
 }
 
-/** @param {string} playerId @param {string} from @param {string} slot @param {string} text @param {number} until */
-function apply(playerId, from, slot, text, until) {
+/** @param {string} playerId @param {string} from @param {string} slot @param {string} text @param {number} until @param {boolean} [raw] not cleaned yet */
+function apply(playerId, from, slot, text, until, raw = false) {
   let slots = picture.get(playerId);
   if (!slots) picture.set(playerId, (slots = new Map()));
   for (const [s, e] of slots) if (e.from === from) slots.delete(s);
-  if (text && isAnySlot(slot)) slots.set(slot, { from, text, until });
+  if (text && isAnySlot(slot)) slots.set(slot, raw ? { from, text, until, raw } : { from, text, until });
   if (!slots.size) picture.delete(playerId);
+}
+
+/** An entry's text, cleaned the first time this copy needs it. @param {string} slot @param {Entry} e */
+function textOf(slot, e) {
+  if (e.raw) {
+    e.text = clean(e.text, segBytesOf(slot) - 1);
+    e.raw = false;
+  }
+  return e.text;
 }
 
 /** Drops readouts that ran out. @param {string} playerId @param {number} now @returns {boolean} whether one of ours ran out */
@@ -218,7 +241,7 @@ function draw(player) {
     const texts = {};
     let last = now;
     for (const [s, e] of slots) {
-      texts[s] = e.text;
+      texts[s] = textOf(s, e);
       last = Math.max(last, e.until);
     }
     player.onScreenDisplay.setTitle(MARK, { subtitle: compose(texts), fadeInDuration: 0, stayDuration: last - now + 2, fadeOutDuration: 0 });
@@ -280,14 +303,17 @@ export function sideBoxes(from) {
       prune(player.id, system.currentTick);
       /** @type {Record<string, string>} */
       const texts = {};
-      for (const [s, e] of picture.get(player.id) ?? []) texts[s] = e.text;
+      for (const [s, e] of picture.get(player.id) ?? []) texts[s] = textOf(s, e);
       return compose(texts);
     },
   };
 }
 
+// Every pack with side boxes reads every readout (the minimap sends two a draw): only the id is looked at before
+// parsing, and another pack's text is kept as it came (cleaned when this copy draws it, which most never do).
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
+    if (id !== "realm:side" && id !== "realm:title") return;
     if (id === "realm:title" && me) {
       try {
         const m = JSON.parse(message);
@@ -298,13 +324,20 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
       return;
     }
-    if (id !== "realm:side" || !me) return;
+    if (!me) return;
+    // Our own readouts come back to us too: skip them without parsing (a JSON string value can't hold `"from":"`
+    // unescaped, so the first one is the key).
+    const f = message.indexOf('"from":"');
+    if (f >= 0) {
+      const end = message.indexOf('"', f + 8);
+      if (end > 0 && mine(message.slice(f + 8, end))) return;
+    }
     try {
       const m = JSON.parse(message);
       if (!m || typeof m.player !== "string" || typeof m.from !== "string" || mine(m.from) || typeof m.slot !== "string") return;
       const ticks = Math.min(Math.max(Number(m.ticks) || 0, 0), MAX_TICKS);
       const sent = typeof m.tick === "number" ? m.tick : system.currentTick;
-      apply(m.player, m.from, m.slot, typeof m.text === "string" ? clean(m.text, segBytesOf(m.slot) - 1) : "", system.currentTick + ticks);
+      apply(m.player, m.from, m.slot, typeof m.text === "string" ? m.text : "", system.currentTick + ticks, true);
       // Our last title may have crossed theirs (events arrive a little later): draw again with both.
       if ((drewAt.get(m.player) ?? -Infinity) >= sent - CROSS_TICKS) {
         const p = playerById(m.player);
