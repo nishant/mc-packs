@@ -62,7 +62,8 @@ if (check) {
   }
   const [x, y, z] = manifest.header.version;
   if (committed && committed.join(".") === manifest.header.version.join(".")) {
-    const bumped = raw.replace(`"version": [${x}, ${y}, ${z}]`, `"version": [${x}, ${y}, ${z + 1}]`);
+    // Any spacing inside the brackets (a hand bump may leave "[1,  7,  65]").
+    const bumped = raw.replace(new RegExp(`"version": \\[\\s*${x},\\s*${y},\\s*${z}\\s*\\]`), `"version": [${x}, ${y}, ${z + 1}]`);
     if (bumped === raw) {
       console.error("couldn't find the header version in packs/news_bp/manifest.json to bump it: bump it by hand");
       process.exit(1);
