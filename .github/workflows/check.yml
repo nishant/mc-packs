@@ -1,0 +1,23 @@
+# Runs every repo check and builds every pack on each pull request and push to master, so nothing reaches the
+# Realm (or a public server) without `npm run check` and `npm run build` passing. The BDS scenarios stay local
+# (tools/test-bds/suite.mjs): they need a 200 MB server download and several minutes of a real server.
+name: check
+on:
+  pull_request:
+  push:
+    branches: [master]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # check-versions compares each pack with its merge-base on origin/master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
