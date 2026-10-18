@@ -1,7 +1,8 @@
 // Expeditions under load (for --profile): parties of 4 play Nightmare runs at the same time (slots 3), standing in
 // each room while its waves come (Resistance keeps them alive), moving on every `room` seconds, while the other
 // players idle at spawn. Checks only that every run stays active and its mobs stay under the cap.
-//   node tools/test-bds/run.mjs --quiet --no-relay --profile --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-perf.js --arg players=40 --arg seconds=120 --timeout 1500
+//   node tools/test-bds/run.mjs --quiet --flat --only expedition_bp --scenario tools/test-bds/examples/expedition-perf.js --arg players=8 --arg seconds=30 --timeout 900
+// For the audit's numbers add `--no-relay --profile` and `--arg players=40 --arg seconds=120 --timeout 1500`.
 // Arguments: players (default 10), parties (default: as many full parties of 4 as fit, at most 3), level (default
 // 12 = Nightmare 10), seconds (default 120, after every run is active), room (default 20).
 const cfg = (t, key, value) => t.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: `t${key}`, pack: "expedition_bp", key, value }));
