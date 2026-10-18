@@ -78,6 +78,7 @@ const NEAR_RESEND_SQ = NEAR_RESEND_RANGE * NEAR_RESEND_RANGE;
  * on their load event already, so this is only a backstop: every 10th sync (1 s at a sync every 2 ticks). */
 const SWEEP_EVERY = 10;
 const NEAR_RESEND_STEPS = [1, 3]; // syncs after a new viewer enters within 20 blocks, then 3 syncs more
+const RESEND_TICKS = [20, 60]; // with `syncTicks`: 1 s after a new viewer enters within 20 blocks, then 3 s more
 
 /**
  * Creates a world-fixed nameplate helper manager for one pack's label entity type.
@@ -88,8 +89,10 @@ const NEAR_RESEND_STEPS = [1, 3]; // syncs after a new viewer enters within 20 b
  *   labelIdTag?: string,
  *   observerRange?: number,
  *   headOffset?: number,
- *   spectatorsExcluded?: boolean
- * }} opts `spectatorsExcluded`: the observers given to sync never include spectators (the caller asked
+ *   spectatorsExcluded?: boolean,
+ *   syncTicks?: number
+ * }} opts `syncTicks`: how often the caller syncs, in ticks; the resends after a new viewer comes near are then 1 s
+ * and 3 s more later (without it they come 1 sync and 3 syncs later). `spectatorsExcluded`: the observers given to sync never include spectators (the caller asked
  * world.getPlayers to leave them out), so their game mode isn't read again on every sync
  */
 export function createNameLabels(opts) {
@@ -101,7 +104,9 @@ export function createNameLabels(opts) {
     observerRange = OBSERVER_RANGE,
     headOffset = HEAD_OFFSET,
     spectatorsExcluded = false,
+    syncTicks,
   } = opts;
+  const resendSteps = syncTicks ? RESEND_TICKS.map((t) => Math.max(1, Math.round(t / syncTicks))) : NEAR_RESEND_STEPS;
   /**
    * @type {Map<string, {
    *   target: Entity,
@@ -303,8 +308,7 @@ export function createNameLabels(opts) {
         // Bedrock's client caches a creature's default name ("NPC") when the entity spawns in the same packet
         // batch as its nameTag or before a newly joined viewer enters range. When a new viewer enters within
         // 20 blocks, toggle BOTH the helper caption and the native suppressed nameTag between their base and
-        // `§r`-suffixed variants 1 sync and 3 more syncs later (0.5 s and 1.5 s at the townsfolk's sync every 10 ticks;
-        // 0.1 s and 0.3 s at the wanderers' every 2) so the client receives a fresh
+        // `§r`-suffixed variants 1 s and 3 s more later (with `syncTicks`; else 1 sync and 3 more syncs later) so the client receives a fresh
         // actor-data update packet for both entities without flashing a canonical name on the native entity.
         // Notice `name.endsWith("§r")` when the caller (`npc_bp`/`caravan_bp` watchName) already drives its
         // own 1 s / 3 s resend toggle: follow the caller's toggle instead of opposing it.
@@ -313,7 +317,7 @@ export function createNameLabels(opts) {
         const prevIds = entry.nearViewers;
         if (!prevIds || [...nearIds].some((id) => !prevIds.has(id))) {
           entry.resendStage = 0;
-          entry.resendTicks = NEAR_RESEND_STEPS[0];
+          entry.resendTicks = resendSteps[0];
         } else if (entry.baseName !== undefined && entry.baseName !== baseName) {
           // Caption changed (e.g. speech line started/ended): already sends a fresh packet, reset alt variant.
           entry.useAltVariant = false;
@@ -323,7 +327,7 @@ export function createNameLabels(opts) {
             entry.useAltVariant = !entry.useAltVariant;
             const nextStage = (entry.resendStage ?? 0) + 1;
             entry.resendStage = nextStage;
-            entry.resendTicks = nextStage < NEAR_RESEND_STEPS.length ? NEAR_RESEND_STEPS[nextStage] : undefined;
+            entry.resendTicks = nextStage < resendSteps.length ? resendSteps[nextStage] : undefined;
           }
         }
         entry.nearViewers = nearIds;

@@ -48,6 +48,7 @@ const nameLabels = createNameLabels({
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
   spectatorsExcluded: true,
+  syncTicks: 10, // LABEL_TICKS
 });
 
 const HOUR = 3600000;
@@ -98,7 +99,7 @@ let ready = false;
 let spots = [];
 /** @type {Visit | undefined} */
 let visit;
-/** @type {Map<number, { missing: number, labelForm?: string, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }>} trader index -> runtime state */
+/** @type {Map<number, { missing: number, yaw?: number }>} trader index -> runtime state */
 const traderState = new Map();
 
 /** @param {unknown} v */
@@ -469,8 +470,7 @@ function dressTrader(entity, i, vis) {
   const name = traderTag(vis, i);
   let st = traderState.get(i);
   if (!st) traderState.set(i, (st = { missing: 0 }));
-  if (!st.labelForm || (st.labelForm !== name && st.labelForm !== `${name}§r`)) st.labelForm = name;
-  if (!isSuppressedName(entity.nameTag) && entity.nameTag !== st.labelForm) entity.nameTag = st.labelForm;
+  if (!isSuppressedName(entity.nameTag) && entity.nameTag !== name) entity.nameTag = name;
 }
 
 /** Syncs all active caravan trader nameplate helpers with active observers. */
@@ -490,10 +490,7 @@ function updateLabels() {
     visit.traders.forEach((tr, i) => {
       const entity = entityById(tr.eid);
       if (!entity) return;
-      const base = traderTag(/** @type {Visit} */ (visit), i);
-      const st = traderState.get(i);
-      const name = st?.labelForm && (st.labelForm === base || st.labelForm === `${base}§r`) ? st.labelForm : base;
-      targets.push({ id: String(i), entity, name });
+      targets.push({ id: String(i), entity, name: traderTag(/** @type {Visit} */ (visit), i) });
     });
   }
   nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
@@ -638,35 +635,8 @@ function fromSkin(vis, i, dim, at) {
 }
 
 // The name above a trader's head: a player's game can show a minecraft:npc as "NPC" (its default name) although its
-// name was set, until the name changes again while they watch. So when a player comes near, the name is sent again
-// a moment later, switching between two forms that look the same (as Townsfolk does).
-const NAME_RANGE = 20; // players this close count as watching
-const RENAME_TICKS = [20, 60]; // resends after a player comes near: 1 s, then 3 s more
-
-/** Every loop: a player new within NAME_RANGE of a trader gets its name sent again. @param {Visit} vis */
-function watchNames(vis) {
-  vis.traders.forEach((tr, i) => {
-    const entity = entityById(tr.eid);
-    if (!entity) return;
-    let st = traderState.get(i);
-    if (!st) traderState.set(i, (st = { missing: 0 }));
-    const ids = new Set(entity.dimension.getPlayers({ location: entity.location, maxDistance: NAME_RANGE }).map((p) => p.id));
-    const seen = st.viewers;
-    if (!seen || [...ids].some((id) => !seen.has(id))) {
-      st.renameAt = system.currentTick + RENAME_TICKS[0];
-      st.renames = 0;
-    }
-    st.viewers = ids;
-    if (st.renameAt !== undefined && system.currentTick >= st.renameAt) {
-      const name = traderTag(vis, i);
-      st.labelForm = st.labelForm === name ? `${name}§r` : name;
-      updateLabels();
-      const n = (st.renames ?? 0) + 1;
-      st.renames = n;
-      st.renameAt = n < RENAME_TICKS.length ? system.currentTick + RENAME_TICKS[n] : undefined;
-    }
-  });
-}
+// name was set, until the name changes again while they watch. name-labels.js carries the name on a helper and, when
+// a player comes within 20 blocks, sends it again 1 s and 3 s later (as for the townsfolk).
 
 /** Places the caravan once its spot is loaded, and brings back missing traders. Runs every 2 s during a visit. @param {Visit} vis */
 function keepCaravan(vis) {
@@ -814,7 +784,6 @@ world.afterEvents.worldLoad.subscribe(() => {
     try {
       if (loops % KEEP_EVERY === 0) upkeep();
       else if (visit) faceTraders(visit);
-      if (visit) watchNames(visit);
     } catch (e) {
       console.warn(`[caravan] ${e}`);
     }
