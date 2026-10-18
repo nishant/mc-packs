@@ -124,14 +124,15 @@ async function welcome(player, { force = false } = {}) {
     });
   }
 
-  const seen = await showPopup(player, settings);
+  // The popup alone is each player's to turn off (/realm:prefs): the chat welcome and the title still come.
+  const popup = force || getFor(player, "popup") !== false;
+  const seen = popup ? await showPopup(player, settings) : true;
   if (seen && player.isValid) player.setDynamicProperty(PROP_SEEN, revision);
 }
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   // initialSpawn is true when the player joins, false on respawn after death.
   if (!initialSpawn) return;
-  if (getFor(player, "popup") === false) return; // turned off in /realm:prefs; /realm:welcome still shows it
   system.runTimeout(() => {
     welcome(player).catch((e) => console.warn(`[welcome] ${e}`));
   }, DEFAULTS.delayTicks); // not editable in game, so always config.js's

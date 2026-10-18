@@ -5,11 +5,13 @@
 //
 // Slots: Right 1-4 and Left 1-4 (top to bottom), and Middle (just under the crosshair), which players pick for
 // a pack's readout; then two that only the minimap (map_bp) writes: Top (the compass strip at the top center)
-// and Radar (above the left boxes). The only text the server can send the HUD besides the action bar is the
-// title and the subtitle, so every slot travels in one subtitle:
+// and Radar (above the left boxes); then Quest, the story tracker's big box (saga_bp), which shows at whichever of
+// the nine places its text starts with: questCode(slot), so it can sit next to that place's own small box. The
+// only text the server can send the HUD besides the action bar is the title and the subtitle, so every slot
+// travels in one subtitle:
 //
 //   title    = MARK                                     ("§s§2§r": color codes only, invisible on its own)
-//   subtitle = MARK + seg(right1) + ... + seg(radar)     (in ALL_SLOTS order: 11 segments, 2961 bytes)
+//   subtitle = MARK + seg(right1) + ... + seg(quest)     (in ALL_SLOTS order: 12 segments, 3473 bytes)
 //   seg      = sep (1 byte: " " or "\n") + text + "~" * (0..2) + "§r" * n    exactly SEG_BYTES UTF-8 bytes
 //   empty    = " " + "§r" * 53
 //
@@ -36,8 +38,8 @@ export const MARK = "§s§2§r";
 const CLEAR = "§s§0§r";
 /** The slots players pick from, in subtitle order. */
 export const SLOTS = ["right1", "right2", "right3", "right4", "left1", "left2", "left3", "left4", "middle"];
-/** Every slot in subtitle order: the nine, then the minimap's compass strip and radar. Must match hud_rp/ui/hud_screen.json. */
-export const ALL_SLOTS = [...SLOTS, "top", "radar"];
+/** Every slot in subtitle order: the nine, the minimap's compass strip and radar, then the story's quest box. Must match hud_rp/ui/hud_screen.json. */
+export const ALL_SLOTS = [...SLOTS, "top", "radar", "quest"];
 /** How each of SLOTS reads in menus. */
 export const SLOT_NAMES = ["Right 1 (top)", "Right 2", "Right 3", "Right 4 (bottom)", "Left 1 (top)", "Left 2", "Left 3", "Left 4 (bottom)", "Middle of the screen"];
 const SEG_BYTES = 160;
@@ -45,6 +47,16 @@ const SEG_BYTES = 160;
 export const TEXT_BYTES = SEG_BYTES - 1;
 const RADAR_SEG_BYTES = 1352;
 export const RADAR_TEXT_BYTES = RADAR_SEG_BYTES - 1;
+const QUEST_SEG_BYTES = 512;
+/** Bytes of text the quest box holds, its questCode included. */
+export const QUEST_TEXT_BYTES = QUEST_SEG_BYTES - 1;
+/** Segment bytes of a slot. @param {string} slot */
+const segBytesOf = (slot) => (slot === "radar" ? RADAR_SEG_BYTES : slot === "quest" ? QUEST_SEG_BYTES : SEG_BYTES);
+/**
+ * What the quest box's text starts with to show at one of the nine places ("§s§q§1" for Right 1 ... "§s§q§9" for
+ * Middle): color codes only, invisible. @param {string} slot one of SLOTS
+ */
+export const questCode = (slot) => `§s§q§${SLOTS.indexOf(slot) + 1}`;
 const MAX_TICKS = 1200;
 /** Longest real title a hold covers (a story scene line can stay 20 seconds). */
 const MAX_HOLD = 600;
@@ -118,6 +130,7 @@ export function segment(text, sep, segBytes = SEG_BYTES) {
 
 const EMPTY_SEG = segment("", " ", SEG_BYTES);
 const EMPTY_RADAR_SEG = segment("", " ", RADAR_SEG_BYTES);
+const EMPTY_QUEST_SEG = segment("", " ", QUEST_SEG_BYTES);
 
 /** The subtitle for a set of slot texts. @param {Record<string, string>} texts slot -> cleaned text */
 export function compose(texts) {
@@ -125,8 +138,8 @@ export function compose(texts) {
   let first = true;
   for (const slot of ALL_SLOTS) {
     const text = texts[slot] ?? "";
-    const segBytes = slot === "radar" ? RADAR_SEG_BYTES : SEG_BYTES;
-    if (!text) out += slot === "radar" ? EMPTY_RADAR_SEG : EMPTY_SEG;
+    const segBytes = segBytesOf(slot);
+    if (!text) out += slot === "radar" ? EMPTY_RADAR_SEG : slot === "quest" ? EMPTY_QUEST_SEG : EMPTY_SEG;
     else {
       out += segment(text, first ? " " : "\n", segBytes);
       first = false;
@@ -191,7 +204,7 @@ function apply(playerId, from, slot, text, until, raw = false) {
 /** An entry's text, cleaned the first time this copy needs it. @param {string} slot @param {Entry} e */
 function textOf(slot, e) {
   if (e.raw) {
-    e.text = clean(e.text, slot === "radar" ? RADAR_TEXT_BYTES : TEXT_BYTES);
+    e.text = clean(e.text, segBytesOf(slot) - 1);
     e.raw = false;
   }
   return e.text;
@@ -257,7 +270,7 @@ export function sideBoxes(from) {
     show(player, slot, text, ticks, part = "", now = true) {
       if (!isAnySlot(slot)) return;
       const from = part ? `${me}/${part}` : me;
-      const t = clean(text, slot === "radar" ? RADAR_TEXT_BYTES : TEXT_BYTES);
+      const t = clean(text, segBytesOf(slot) - 1);
       const span = Math.min(Math.max(Math.round(ticks), 1), MAX_TICKS);
       const tick = system.currentTick;
       apply(player.id, from, slot, t, tick + span);

@@ -150,7 +150,7 @@ export default async function (t) {
   const o4 = await offersAt(ann, "tobin");
   t.check(o4.includes("info:one_that_got_away"), `Ann has Got Away (offers: ${o4})`);
   since = t.tick;
-  await t.waitUntil(() => [ann, bob].every((p) => boxes(p, since).some((b) => b.split("\n")[0] === "Drowned Bell" && b.includes("Got Away"))), {
+  await t.waitUntil(() => [ann, bob].every((p) => boxes(p, since).some((b) => /^Drowned Bell:/.test(b.split("\n")[0]) && b.includes("Got Away"))), {
     timeout: 200,
     message: `both trackers follow the party chapter with Got Away under it (Bob: ${JSON.stringify(boxes(bob, since).slice(-1))})`,
   });

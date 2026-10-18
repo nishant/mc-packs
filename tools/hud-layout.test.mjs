@@ -59,8 +59,8 @@ test("readout groups center inside separate unobstructed regions, never the mini
 
 test("the full native rotating scoreboard joins the left group without a one-row budget", () => {
   assert.ok(ui.root_panel.modifications.some((m) => m.operation === "remove" && m.control_name === "sidebar"));
-  assert.deepEqual(names(stack("left")), ["realm_left1", "realm_left2", "realm_left3", "realm_left4", "realm_sidebar"]);
-  assert.deepEqual(names(stack("right")), ["realm_right1", "realm_right2", "realm_right3", "realm_right4"]);
+  assert.deepEqual(names(stack("left")), ["realm_left1", "realm_quest_left1", "realm_left2", "realm_quest_left2", "realm_left3", "realm_quest_left3", "realm_left4", "realm_quest_left4", "realm_sidebar"]);
+  assert.deepEqual(names(stack("right")), ["realm_right1", "realm_quest_right1", "realm_right2", "realm_quest_right2", "realm_right3", "realm_quest_right3", "realm_right4", "realm_quest_right4"]);
   assert.deepEqual(ui.realm_sidebar_slot.size, ["100%", "100%c"]);
   const child = ui.realm_sidebar_slot.controls[0]["sidebar@scoreboard.scoreboard_sidebar"];
   assert.deepEqual([child.anchor_from, child.anchor_to], ["top_left", "top_left"]);
@@ -91,7 +91,7 @@ test("numbered selections retain ordering with natural content height and unifor
   assert.equal(ui.realm_slot_text.font_scale_factor, "$slot_scale");
   assert.equal(ui.realm_slot["$slot_scale|default"], undefined, "native template itself is untouched");
   for (const [side, first] of [["right", 0], ["left", 4]]) {
-    const cells = stack(side).controls.slice(0, 4);
+    const cells = stack(side).controls.filter((c) => Object.keys(c)[0].includes("pinned_slot"));
     for (const [i, c] of cells.entries()) {
       const [key, value] = Object.entries(c)[0];
       assert.equal(key, `realm_${side}${i + 1}@hud.realm_pinned_slot`);
@@ -208,6 +208,29 @@ test("generated map art keeps the thin frame and player-only emphasis", () => {
   assert.ok(luma(0xd2) - luma(0xd1) > 75);
 });
 
+test("the story's quest box shows next to the place the player picked, from its own 512-byte segment", () => {
+  const quest = ui["realm_quest_slot@hud.realm_slot"];
+  assert.equal(quest.$skip, `%.${9 + 160 * 10 + 1352 + 1}s`, "after the nine boxes, the strip and the radar");
+  assert.equal(quest.$slot_slice, "%.511s");
+  assert.deepEqual(quest.$slot_max, [200, 110], "about 10 rows: taller than a numbered box");
+  assert.match(quest.bindings.at(-1).source_property_name, /%\.9s/);
+  assert.match(quest.bindings.at(-1).source_property_name, /\$quest_code/);
+  const codes = [];
+  for (const [side, first] of [["right", 1], ["left", 5]]) {
+    const list = stack(side).controls;
+    for (let i = 1; i <= 4; i++) {
+      const k = list.findIndex((c) => Object.keys(c)[0] === `realm_quest_${side}${i}@hud.realm_quest_slot`);
+      assert.ok(k > 0, `${side}${i} has a quest box`);
+      assert.equal(Object.keys(list[k - 1])[0], `realm_${side}${i}@hud.realm_pinned_slot`, "right under its own numbered box");
+      codes.push(list[k][`realm_quest_${side}${i}@hud.realm_quest_slot`].$quest_code);
+      assert.equal(codes.at(-1), `§s§q§${first + i - 1}`);
+    }
+  }
+  const middle = area.realm_side_middle.controls[0].realm_middle_stack;
+  assert.equal(middle.controls[1]["realm_quest_middle@hud.realm_quest_slot"].$quest_code, "§s§q§9");
+  assert.equal(new Set(codes).size, 8);
+});
+
 test("every Side HUD cut matches the side boxes protocol and the minimap's text fits its slots", () => {
   const side = fs.readFileSync(new URL("./side-shared.js", import.meta.url), "utf8");
   const num = (name) => Number(side.match(new RegExp(`const ${name} = (\\d+);`))[1]);
@@ -215,12 +238,13 @@ test("every Side HUD cut matches the side boxes protocol and the minimap's text 
   const RADAR_SEG = num("RADAR_SEG_BYTES");
   const MARK = JSON.parse(side.match(/export const MARK = ("[^"]+");/)[1]);
   const markBytes = Buffer.byteLength(MARK);
-  const slots = [...JSON.parse(side.match(/export const SLOTS = (\[[^\]]+\]);/)[1].replace(/'/g, '"')), "top", "radar"];
-  assert.equal(slots.length, 11);
+  const QUEST_SEG = num("QUEST_SEG_BYTES");
+  const slots = [...JSON.parse(side.match(/export const SLOTS = (\[[^\]]+\]);/)[1].replace(/'/g, '"')), "top", "radar", "quest"];
+  assert.ok(side.includes('export const ALL_SLOTS = [...SLOTS, "top", "radar", "quest"];'), "the subtitle order this test follows");
   const skip = (k) => `%.${markBytes + SEG * k + 1}s`;
   const json = JSON.stringify(ui);
   for (const [k, name] of slots.entries()) {
-    if (name === "radar") continue;
+    if (name === "radar" || name === "quest") continue;
     const m = json.match(new RegExp(`"realm_${name}@hud\\.realm_(?:pinned_)?slot":\\{"\\$skip":"([^"]+)"`));
     assert.ok(m, `${name} has a cell`);
     assert.equal(m[1], skip(k), `${name} is cut at its own segment`);
@@ -231,7 +255,10 @@ test("every Side HUD cut matches the side boxes protocol and the minimap's text 
     const src = c[`radar_mesh_${i}`].bindings.at(-1).source_property_name;
     assert.ok(src.includes(skip(10)) && src.includes(`%.${RADAR_SEG - 1}s`), "the radar is cut at its own segment");
   }
-  assert.equal(markBytes + SEG * 10 + RADAR_SEG, 2961, "the whole subtitle (map.js checks the same on a server)");
+  // The quest box: its segment starts after the radar's.
+  assert.equal(ui["realm_quest_slot@hud.realm_slot"].$skip, `%.${markBytes + SEG * 10 + RADAR_SEG + 1}s`, "the quest box is cut at its own segment");
+  assert.equal(ui["realm_quest_slot@hud.realm_slot"].$slot_slice, `%.${QUEST_SEG - 1}s`);
+  assert.equal(markBytes + SEG * 10 + RADAR_SEG + QUEST_SEG, 3473, "the whole subtitle");
   // What the minimap sends must fit: the radar's rows (3-byte glyphs, a newline between rows) and the strip's two lines.
   const map = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
   const R = Number(map.match(/const R = (\d+);/)[1]);
