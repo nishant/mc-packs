@@ -15,6 +15,7 @@ import {
   saveTask,
   sound,
   spawnAround,
+  spawnFresh,
   wait,
 } from "./helpers.js";
 
@@ -120,7 +121,7 @@ async function runArena(p, seconds) {
   mobs.forEach((type, i) => {
     try {
       const [dx, dz] = corners[i];
-      const e = dim.spawnEntity(type, { x: state.center.x + dx, y: state.center.y, z: state.center.z + dz });
+      const e = spawnFresh(dim, type, { x: state.center.x + dx, y: state.center.y, z: state.center.z + dz });
       e.addTag(ARENA_TAG);
       e.addTag(`${ARENA_TAG}:${state.task}`);
     } catch (e) {

@@ -31,6 +31,7 @@ import {
   sightSpot,
   sound,
   spawnAround,
+  spawnFresh,
   spotNear,
   standable,
   strike,
@@ -130,7 +131,7 @@ const CHAMP_MOBS = ["minecraft:zombie", "minecraft:husk", "minecraft:skeleton", 
 
 /** The deck's own champion, when the Champions pack isn't there. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at */
 function deckChampion(dim, at) {
-  const e = dim.spawnEntity("minecraft:vindicator", at);
+  const e = spawnFresh(dim, "minecraft:vindicator", at);
   e.nameTag = "§cThe Deck's Champion";
   e.addTag("domt:boss");
   effect(e, "minecraft:health_boost", 3600, 4);
@@ -257,7 +258,7 @@ function spawnAbove(p, type, n, up, r) {
     const loc = { x: at.x + between(-r, r), y: at.y + up, z: at.z + between(-r, r) };
     const b = blockAt(dim, loc);
     if (!b || !b.isAir) continue;
-    attempt(() => out.push(dim.spawnEntity(type, loc)));
+    attempt(() => out.push(spawnFresh(dim, type, loc)));
   }
   return out;
 }
