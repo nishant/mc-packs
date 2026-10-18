@@ -1564,7 +1564,7 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 - **Full inboxes:** an inbox holds 50 letters (`inboxLimit`). When a letter arrives in a full inbox, the oldest letters its owner has already read are dropped to make room. If every letter in it is still unread, the letter isn't sent: the form comes back, filled in, with `Alex's mailbox is full of unread letters. Try again once they've read some.` at the top, so you can pick someone else or keep the text.
 - **Reading** a letter shows who sent it and when (`3h ago (2026-10-06 14:05 UTC)`), and marks it read. **Reply** opens the letter form with the sender picked and the subject `Re: ...`.
 - **Sent** keeps your last 30 letters (`sentLimit`), each marked `read`, `not read yet` or `deleted` (by the recipient). **Remove from Sent** removes your copy only; the recipient keeps theirs.
-- **No items:** letters can't carry items, because an item's full data can't be stored safely by an add-on. To send items, use the [Player Mailroom](https://mc.nish.software/mailroom/) build (the mail menu points to `mc.nish.software/mailroom`).
+- **No items:** letters can't carry items, because an item's full data can't be stored safely by an add-on. To send items, use the [Player Mailroom](https://mc.nish.software/mailroom/) build (the mail menu points to `mc.nish.software/mailroom`; another realm can change or remove that line with `itemsHint`).
 - **Letters from the realm:** other packs can send letters (a townsfolk writes when you become Close with them, in [Townsfolk](#townsfolk--npc_bp)). They show the sender's name (`From: Old Tobin`), have no **Reply** button, skip the wait between letters and keep no Sent copy; one to a full inbox of unread letters isn't delivered.
 
 ### Commands
@@ -1585,6 +1585,7 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 | `notifyDelaySeconds` | `8` | Seconds after joining before that line, so it comes after the welcome and news popups |
 | `sendCooldownSeconds` | `10` | Seconds a player waits between two letters. `0` = no wait (0–120 in game) |
 | `maxRoster` | `400` | Most players remembered as recipients; the ones seen longest ago are forgotten first. Their letters stay |
+| `itemsHint` | `"To send items, use the Player Mailroom build (mc.nish.software/mailroom)."` | The mail menu's line on how to send items. `""` = no line |
 
 Operators can change `inboxLimit`, `sentLimit`, `notifyOnJoin` and `sendCooldownSeconds` in game with `/realm:config`. Each player can switch the join notice off or on for themselves with **Unread letters notice on join** in `/realm:prefs`, which follows `notifyOnJoin` until they choose. The rest stays in `config.js`.
 
