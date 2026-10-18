@@ -351,6 +351,7 @@ function trackQuest(player, e) {
   for (const mate of partyMates(player)) {
     if (!entries(mate).some((x) => x.story.id === id && !x.fav)) continue;
     const ms = sagaOf(mate);
+    if (ms.tr === id && !untracked(ms, id)) continue; // follows it already
     ms.tr = id;
     showAgain(ms, id);
     markDirty(mate);
@@ -406,8 +407,11 @@ function trackButtons(player, e) {
   const saga = sagaOf(player);
   /** @type {[string, () => void][]} */
   const out = [];
+  // Tracked already, but a party mate on the same story follows another quest: tracking it again shares it with them.
+  const mateElsewhere = !e.fav && partyMates(player).some((m) => sagaOf(m).tr !== e.story.id && entries(m).some((x) => x.story.id === e.story.id && !x.fav));
   if (saga.tr !== e.story.id)
     out.push([`Track this quest\n§8${untracked(saga, e.story.id) ? "Show it in the tracker again" : "The tracker follows it"}${!e.fav && partyMates(player).length ? ", for your party too" : ""}`, () => trackQuest(player, e)]);
+  else if (mateElsewhere) out.push(["Track this quest\n§8For your party too", () => trackQuest(player, e)]);
   if (!untracked(saga, e.story.id)) out.push(["Stop tracking\n§8Hide it from the tracker and map", () => untrackQuest(player, e)]);
   return out;
 }
