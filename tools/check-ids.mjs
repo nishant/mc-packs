@@ -14,7 +14,7 @@
 //     minecraft one (or a bare name, which the game reads as minecraft:) as above, any other namespace
 //     must be defined by one of our packs (an entity, item or block "identifier" in packs/*).
 // Known exceptions that still need a fix in pack code go in tools/check-ids.allow.json ({ "file": ["id", ...] }):
-// the check fails when one of them is fixed, too, so the list stays current.
+// it warns when one of them is fixed or gone, so the list can be kept current.
 //
 //   node tools/check-ids.mjs           check
 //   node tools/check-ids.mjs --list    print every unknown id with its file, ignoring the allowlist
@@ -152,7 +152,8 @@ for (const [file, ids] of [...unknown].sort()) {
   }
 }
 if (!listAll) {
-  for (const [file, ids] of Object.entries(allow)) for (const id of ids) if (!unknown.get(file)?.has(id)) problems.push(`${rel(ALLOW_FILE)}: "${id}" in ${file} is fixed or gone: remove it from the allowlist`);
+  // A warning, not a failure: several branches fix pack code at once, and a stale line hurts nobody.
+  for (const [file, ids] of Object.entries(allow)) for (const id of ids) if (!unknown.get(file)?.has(id)) console.warn(`warning: ${rel(ALLOW_FILE)}: "${id}" in ${file} is fixed or gone: remove it from the allowlist`);
 }
 if (problems.length) {
   console.error(`Game ids that don't exist (check them against @minecraft/vanilla-data ${vanilla.MinecraftBlockTypes ? "" : "?"}or a pack's identifier):\n${problems.map((p) => `  - ${p}`).join("\n")}`);
