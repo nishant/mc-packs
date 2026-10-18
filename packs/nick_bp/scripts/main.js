@@ -16,6 +16,7 @@ import { get, onChange } from "./settings.js";
 /** @typedef {{ n: string, c: string, g: string }} Nick nickname, color code (one character after §), gamertag when last seen */
 
 const KEY_PREFIX = "nick:p:"; // world property per player: nick:p:<player id> -> Nick
+const SEEN_PREFIX = "nick:g:"; // world property per gamertag ever seen here: nick:g:<lowercase gamertag> -> player id
 const NAME_RULE = /^[A-Za-z0-9_ ]{3,16}$/;
 const DISABLED = "Nicknames are disabled on this realm. An operator can enable them in /realm:config (Nicknames).";
 
@@ -128,7 +129,18 @@ const refreshAll = () => world.getAllPlayers().forEach((p) => refresh(p));
 system.runInterval(refreshAll, 10);
 onChange(() => refreshAll());
 
-world.afterEvents.playerSpawn.subscribe(({ player }) => {
+/** Remembers a gamertag, so nobody can take it as a nickname while its player is offline. @param {Player} player */
+function noteGamertag(player) {
+  const key = SEEN_PREFIX + player.name.toLowerCase();
+  try {
+    if (world.getDynamicProperty(key) !== player.id) world.setDynamicProperty(key, player.id);
+  } catch (e) {
+    console.warn(`[nick] ${e}`);
+  }
+}
+
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+  if (initialSpawn) noteGamertag(player);
   // Keep the saved gamertag current, for the operators' list.
   const nick = nicks().get(player.id);
   if (nick && nick.g !== player.name) save(player.id, { ...nick, g: player.name });
@@ -166,6 +178,12 @@ function problem(player, name) {
   const lower = name.toLowerCase();
   for (const p of world.getAllPlayers()) {
     if (p.id !== player.id && p.name.toLowerCase() === lower) return `${p.name} is someone else's gamertag.`;
+  }
+  try {
+    const owner = world.getDynamicProperty(SEEN_PREFIX + lower);
+    if (typeof owner === "string" && owner !== player.id) return `${name} is someone else's gamertag.`; // a player who is offline now
+  } catch {
+    // not readable: the checks below still run
   }
   for (const [id, nick] of nicks()) {
     if (id === player.id) continue;
