@@ -26,9 +26,14 @@ export class Budget {
   get room() {
     return Math.max(0, Math.min(this.left, this.tickMax - this.used));
   }
-  /** @param {number} ms what some work took */
+  /**
+   * A debt is kept to at most `max`, and a clock step back is ignored: a hitch (a long garbage collection, or the
+   * system clock stepping forward during the work) must not stop this kind of work for minutes or hours.
+   * @param {number} ms what some work took (negative gives back time charged elsewhere)
+   */
   spend(ms) {
-    this.left -= ms;
+    if (!Number.isFinite(ms) || ms < -1000) ms = 0;
+    this.left = Math.max(-this.max, this.left - ms);
     this.used += ms;
   }
 }
