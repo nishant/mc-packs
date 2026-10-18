@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { decode } from "./gen-rain/png.mjs";
 
 const ui = JSON.parse(fs.readFileSync(new URL("../packs/hud_rp/ui/hud_screen.json", import.meta.url), "utf8"));
@@ -38,19 +39,21 @@ test("right stack order: reserve, radar, four slots, sidebar", () => {
 
 test("left and right stacks start below the compass band", () => {
   const top = byName("realm_side_top");
-  const topH = top.offset[1] + top.controls[0]["realm_top@hud.realm_slot"]["$slot_max"][1];
+  const topH = top.offset[1] + top.controls[0]["realm_top@hud.realm_slot"]["$slot_max"][1] + 4;
   for (const [n, spacer] of [["realm_side_right", "realm_reserve_r"], ["realm_side_left", "realm_reserve_l"]]) {
     const stack = byName(n);
     const reserve = stack.controls.find((c) => Object.keys(c)[0].startsWith(spacer))[`${spacer}@hud.realm_reserve`];
-    assert.ok(stack.offset[1] + reserve["$reserve_h"] >= topH, `${n} overlaps compass`);
+    assert.deepEqual(ui.realm_reserve.size, [1, 44], "spacer dimensions must be literal, not the failed scalar-alias path");
+    assert.equal(reserve.$reserve_h, undefined);
+    assert.ok(stack.offset[1] + ui.realm_reserve.size[1] >= topH + 2, `${n} overlaps compass`);
   }
   assert.ok(byName("realm_side_middle").offset[1] >= topH);
+  assert.deepEqual(byName("realm_side_box").offset, [-4, 48]);
+  assert.equal(byName("realm_side_box").anchor_to, "top_right");
 });
 
-test("the reserve spacer is visible only while the compass slot is", () => {
-  const b = ui.realm_reserve.bindings.at(-1).source_property_name;
-  assert.match(b, /%\.1450s/);
-  assert.match(b, /§s§2§r/);
+test("the compass band remains reserved when compass/title visibility changes", () => {
+  assert.equal(ui.realm_reserve.bindings, undefined, "no conditional collapse can move content into the compass band");
 });
 
 test("a full-width right slot anchors the inherited content-width sidebar, not a centered stack child", () => {
@@ -78,7 +81,7 @@ test("unused auxiliary widgets collapse and overflowing stacks are constrained t
   assert.equal(right.clips_children, undefined, "a half-width clip would cut off wider natural content");
   assert.equal(ui.realm_side_area.clips_children, true);
   assert.deepEqual(right.max_size, ["100% - 8px", "100% - 8px"]);
-  for (const widget of [ui.realm_radar_panel, ui.realm_reserve, ui.realm_sidebar_slot]) {
+  for (const widget of [ui.realm_radar_panel, ui.realm_sidebar_slot]) {
     assert.ok(widget.bindings.some((b) => b.target_property_name === "#visible" || b.binding_name_override === "#visible"), "auxiliary widgets collapse when hidden");
   }
 });
@@ -86,8 +89,8 @@ test("unused auxiliary widgets collapse and overflowing stacks are constrained t
 test("numbered slots retain compact cells through the last occupied position on either side", () => {
   const pinned = ui["realm_pinned_slot@hud.realm_slot"];
   assert.ok(pinned, "numbered slots need a fixed-height wrapper instead of a collapsing readout");
-  assert.deepEqual(pinned.size, ["100%", "25% - 41.025px"]);
-  assert.deepEqual(ui["realm_left_pinned_slot@hud.realm_pinned_slot"].size, ["100%", "25% - 14px"]);
+  assert.deepEqual(pinned.size, ["100%", "25% - 42px"]);
+  assert.deepEqual(ui["realm_left_pinned_slot@hud.realm_pinned_slot"].size, ["100%", "25% - 15px"]);
   assert.equal(pinned["$pin_height|default"], undefined, "client scalar size aliases collapse to the minimum; use literal dimensions");
   assert.equal(byName("realm_side_left").$pin_height, undefined);
   assert.deepEqual(pinned.min_size, ["100%", 16], "one native-font line plus padding");
@@ -163,7 +166,7 @@ test("compact cells bound content and keep default Right 4 and sidebar space on 
   const cell = ui["realm_pinned_slot@hud.realm_slot"];
   assert.ok(cell);
   for (const viewportHeight of [180, 240, 360, 480, 720]) {
-    for (const compass of [0, 40]) for (const radar of [0, ui.realm_radar_panel.size[1]]) {
+    for (const compass of [ui.realm_reserve.size[1]]) for (const radar of [0, ui.realm_radar_panel.size[1]]) {
       for (const side of ["left", "right"]) {
         const origin = byName(`realm_side_${side}`).offset[1] + compass + (side === "right" ? radar : 0);
         const pitch = cellHeight(side, viewportHeight);
@@ -177,7 +180,7 @@ test("compact cells bound content and keep default Right 4 and sidebar space on 
         if (viewportHeight >= 240 && side === "right")
           assert.ok(origin + 4 * pitch + 16 <= viewportHeight - 4 + 1e-9, "leave at least one scoreboard row below four active cells");
       }
-      assert.ok(Math.abs(cellHeight("right", 240) - 16.975) < 1e-9);
+      assert.equal(cellHeight("right", 240), 16);
       assert.equal(cellHeight("right", 360), 32);
       assert.equal(cellHeight("left", 240), 32);
       assert.ok(4 + 40 + ui.realm_radar_panel.size[1] + 3 * cellHeight("right", 180) > 180,
@@ -210,24 +213,57 @@ test("the actual clip ancestor contains padded right slots and natural sidebars 
   }
 });
 
-test("radar geometry scales 1.15 without changing byte slices or compass position", () => {
+test("radar reclaims its border for terrain without changing outer size or subtitle slices", () => {
   const panel = ui.realm_radar_panel;
   const widget = panel.controls[0].radar_widget;
   const children = Object.fromEntries(widget.controls.map((c) => Object.entries(c)[0]));
   assert.deepEqual(widget.size, [112.7, 105.8]);
   assert.deepEqual(children.radar_border.size, widget.size);
-  assert.deepEqual(children.radar_shade.size, widget.size);
-  assert.deepEqual(children.radar_clip.size, [96.6, 89.7]);
+  assert.equal(children.radar_shade, undefined, "no vignette may darken the reclaimed edge or compass badges");
+  assert.deepEqual(children.radar_clip.size, [110.7, 102.79285714285716]);
   assert.deepEqual(children.radar_bg.size, children.radar_clip.size);
-  assert.equal(panel.size[1], 108.1);
+  assert.equal(panel.size[1], 108);
+  assert.ok(children.radar_clip.size[0] * children.radar_clip.size[1] >= 1.3 * 96.6 * 89.7, "at least 30% more map area, not a larger outer frame");
+  const scale = 110.7 / 96.6;
   for (const [i, c] of children.radar_clip.controls.entries()) {
     const mesh = c[`radar_mesh_${i}`];
-    assert.equal(mesh.font_scale_factor, 0.552);
-    assert.equal(mesh.line_padding, 6.785);
-    assert.equal(mesh.offset[0], i ? 0.5175 : 0);
+    assert.ok(Math.abs(mesh.font_scale_factor - 0.552 * scale) < 1e-9);
+    assert.ok(Math.abs(mesh.line_padding - 6.785 * scale) < 1e-9);
+    assert.ok(Math.abs(mesh.offset[0] - (i ? 0.5175 * scale : 0)) < 1e-9);
     assert.match(mesh.bindings.at(-1).source_property_name, /%\.1351s/);
     assert.match(mesh.bindings.at(-1).source_property_name, /%\.1610s/);
   }
+});
+
+test("generated frame is one pixel thin and only real-player radar markers grow", () => {
+  const font = decode(fs.readFileSync(new URL("../packs/hud_rp/font/glyph_F3.png", import.meta.url)));
+  const frame = decode(fs.readFileSync(new URL("../packs/hud_rp/textures/ui/radar_frame.png", import.meta.url)));
+  for (let y = 1; y < frame.height - 1; y++) for (let x = 1; x < frame.width - 1; x++)
+    assert.equal(frame.data[(y * frame.width + x) * 4 + 3], 0, "thick frame does not consume the terrain window");
+  assert.equal(crypto.createHash("sha256").update(font.data.subarray(0, 256 * 48 * 4)).digest("hex"),
+    "ebe32002d650c0b2698de595c7f22dbe4fc5e66498af1c35c9aded3228d4635f", "compass strip art remains byte-identical");
+  const pixels = (cell) => {
+    const data = [];
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const i = (((cell >> 4) * 16 + y) * font.width + (cell % 16) * 16 + x) * 4;
+      data.push(...font.data.slice(i, i + 4));
+    }
+    return Buffer.from(data);
+  };
+  for (const [cell, hash] of [[0x30, "62414901d52eaf22012057186fb80a30989279428d30d08accc3631e1f1737ee"],
+    [0x31, "79b0bf24b1d6ef05caeb1e4484e1997ebbcce39f07cbe0e4ca87e54d376ef02d"],
+    [0x32, "b3ae4f03886c68503e1e743aa3a67dfc5adc8053c59d03a246016e406fdbe787"]])
+    assert.equal(crypto.createHash("sha256").update(pixels(cell)).digest("hex"), hash, "NPC/mob/wanderer art does not grow");
+  const count = (cell, predicate) => {
+    const data = pixels(cell);
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) if (predicate(data[i], data[i + 1], data[i + 2])) n++;
+    return n;
+  };
+  const white = (r, g, b) => r > 220 && g > 220 && b > 220;
+  assert.ok(count(0x37, white) > 26, "other-player marker grows beyond baseline");
+  assert.ok(count(0x40, white) > 34, "self arrow grows beyond baseline");
+  assert.ok(count(0x33, (r, g, b) => r < 100 && g > 110 && b > 200) > 48, "real party-player marker grows beyond baseline");
 });
 
 test("original glyph art has stronger measured elevation contrast and proportionate frame assets", () => {

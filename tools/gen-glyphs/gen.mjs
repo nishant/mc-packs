@@ -119,10 +119,10 @@ const star = (/** @type {number} */ r) => Array.from({ length: 10 }, (_, i) => {
 });
 const TENT = [[8, 2.5], [14, 13], [2, 13]];
 const DIAMOND = [[8, 2], [13.5, 8], [8, 14], [2.5, 8]];
-/** The radar's player arrow, turned `deg` clockwise from north. @param {number} deg */
-function arrow(deg) {
+/** The radar's player arrow, turned `deg` clockwise from north. @param {number} deg @param {number} [scale] */
+function arrow(deg, scale = 1) {
   const a = (deg * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
-  return [[0, -6.5], [5, 6], [0, 3], [-5, 6]].map(([x, y]) => [8 + x * cos - y * sin, 8 + x * sin + y * cos]);
+  return [[0, -6.5], [5, 6], [0, 3], [-5, 6]].map(([x, y]) => [8 + scale * (x * cos - y * sin), 8 + scale * (x * sin + y * cos)]);
 }
 const LEFT = [[2, 8], [12, 2.5], [12, 13.5]];
 const RIGHT = [[14, 8], [4, 2.5], [4, 13.5]];
@@ -217,7 +217,9 @@ MARKS.forEach(([name, what, draw], i) => {
   // Row 3: the same markers on a radar square.
   glyph(`Q_${name}`, 0x30 + i, `radar: ${what}`, (img, ox, oy) => {
     square(img, ox, oy);
-    draw(img, ox, oy, c);
+    if (name === "OTHER") rimmedDisc(img, ox, oy, 8, 7.5, 3.8, c);
+    else if (name === "PARTY") rimmedDisc(img, ox, oy, 8, 7.5, 4.8, c);
+    else draw(img, ox, oy, c);
   });
 });
 glyph("Q_EMPTY", 0x38, "radar: empty", (img, ox, oy) => square(img, ox, oy));
@@ -236,7 +238,7 @@ for (const [i, l] of ["N", "E", "S", "W"].entries()) {
 for (let k = 0; k < 8; k++)
   glyph(`Q_YOU_${k}`, 0x40 + k, `radar: you, facing ${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][k]}`, (img, ox, oy) => {
     square(img, ox, oy);
-    rimmedPoly(img, ox, oy, arrow(k * 45), WHITE);
+    rimmedPoly(img, ox, oy, arrow(k * 45, 1.08), WHITE);
   });
 // Row 5: inline icons for the strip's second line (no baseline, no square).
 glyph("I_STAR", 0x50, "inline: the destination star", (img, ox, oy) => rimmedPoly(img, ox, oy, star(6.8), COLOR.star));
@@ -321,11 +323,11 @@ const FRIEND_ARROW = /** @type {RGBA} */ ([110, 235, 255, 255]);
 for (let k = 0; k < 8; k++) {
   glyph(`Q_FRIEND_${k}`, 0x90 + k, `radar: off-map friend arrow, facing ${DIRS[k]}`, (img, ox, oy) => {
     square(img, ox, oy);
-    rimmedPoly(img, ox, oy, arrow(k * 45), FRIEND_ARROW);
+    rimmedPoly(img, ox, oy, arrow(k * 45, 1.08), FRIEND_ARROW);
   });
   glyph(`Q_PARTY_${k}`, 0x98 + k, `radar: off-map party arrow, facing ${DIRS[k]}`, (img, ox, oy) => {
     square(img, ox, oy);
-    rimmedPoly(img, ox, oy, arrow(k * 45), COLOR.party);
+    rimmedPoly(img, ox, oy, arrow(k * 45, 1.08), COLOR.party);
   });
   glyph(`Q_STAR_${k}`, 0xa0 + k, `radar: off-map destination arrow, facing ${DIRS[k]}`, (img, ox, oy) => {
     square(img, ox, oy);
@@ -549,7 +551,7 @@ function render(sheet) {
   const dim = /** @type {RGBA} */ ([0, 0, 0, 120]);
   rect(img, 9, 3, 9 + 25 * CELL + 5, 3 + CELL + 3, dim);
   strip.forEach((g, i) => blit(g, 12 + i * CELL, 5));
-  // The 21x21 radar on the upper right below the compass strip (at 6x6 px per cell = 126x126 px inside a sleek dark frame).
+  // The 21x21 radar below the compass, with a one-pixel boundary instead of a wide dark frame.
   const grid = [
     ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_STAR_0", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
     ["Q_FOREST_HI", "Q_FOREST_HI", "Q_FOREST", "Q_CHERRY", "Q_CHERRY", "Q_FOREST", "Q_GRASS_HI", "Q_GRASS_HI", "Q_GRASS", "Q_GRASS", "Q_ROUTE", "Q_GRASS", "Q_GRASS", "Q_SAND_HI", "Q_SAND", "Q_WATER_SHALLOW", "Q_WATER", "Q_WATER", "Q_WATER_DEEP", "Q_WATER_DEEP", "Q_WATER_DEEP"],
@@ -575,9 +577,10 @@ function render(sheet) {
   ];
   const rx0 = W - 12 - 21 * MINI, ry0 = CELL + 24;
   const frame = /** @type {RGBA} */ ([10, 14, 18, 210]);
-  rect(img, rx0 - 4, ry0 - 4, rx0 + 21 * MINI + 3, ry0 + 21 * MINI + 19, frame);
+  rect(img, rx0 - 1, ry0 - 1, rx0 + 21 * MINI, ry0 + 21 * MINI, frame);
   grid.forEach((row, r) => row.forEach((g, c) => blitMini(g, rx0 + c * MINI, ry0 + r * MINI)));
-  // 2-line coordinates and biome info plate below the 21x21 minimap inside the frame.
+  // Separate information plate below the map, not a border around the terrain.
+  rect(img, rx0, ry0 + 21 * MINI + 3, rx0 + 21 * MINI - 1, ry0 + 21 * MINI + 18, frame);
   rect(img, rx0, ry0 + 21 * MINI + 2, rx0 + 21 * MINI - 1, ry0 + 21 * MINI + 2, [45, 52, 62, 255]);
   rect(img, rx0 + 2, ry0 + 21 * MINI + 5, rx0 + 6, ry0 + 21 * MINI + 8, COLOR.star);
   rect(img, rx0 + 10, ry0 + 21 * MINI + 5, rx0 + 78, ry0 + 21 * MINI + 8, WHITE);
@@ -664,48 +667,21 @@ function packIcon() {
 }
 
 const RADAR_SCALE = 1.15;
-const RADAR_W = Math.round(98 * RADAR_SCALE), RADAR_H = Math.round(92 * RADAR_SCALE), RADAR_MARGIN = Math.round(7 * RADAR_SCALE);
-/** The radar's enlarged frame, retaining the original art and palette. */
+const RADAR_W = Math.round(98 * RADAR_SCALE), RADAR_H = Math.round(92 * RADAR_SCALE);
+/** A single-pixel boundary leaves the interior available for map terrain. */
 function radarFrame() {
-  const W = RADAR_W, H = RADAR_H, M = RADAR_MARGIN;
+  const W = RADAR_W, H = RADAR_H;
   const img = blank(W, H);
-  const inWindow = (x, y) => x >= M && x < W - M && y >= M && y < H - M;
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!inWindow(x, y)) put(img, x, y, [18, 20, 22, 238]);
-  rect(img, 0, 0, W - 1, 0, [8, 8, 8, 255]);
-  rect(img, 0, H - 1, W - 1, H - 1, [8, 8, 8, 255]);
-  rect(img, 0, 0, 0, H - 1, [8, 8, 8, 255]);
-  rect(img, W - 1, 0, W - 1, H - 1, [8, 8, 8, 255]);
-  rect(img, 2, 2, W - 3, 2, [120, 124, 128, 200]);
-  rect(img, 2, H - 3, W - 3, H - 3, [60, 62, 66, 220]);
-  rect(img, 2, 2, 2, H - 3, [120, 124, 128, 200]);
-  rect(img, W - 3, 2, W - 3, H - 3, [60, 62, 66, 220]);
-  rect(img, M - 1, M - 1, W - M, M - 1, LINE);
-  rect(img, M - 1, H - M, W - M, H - M, LINE);
-  rect(img, M - 1, M - 1, M - 1, H - M, LINE);
-  rect(img, W - M, M - 1, W - M, H - M, LINE);
-  for (const [cx, cy, sx, sy] of [[M - 1, M - 1, 1, 1], [W - M, M - 1, -1, 1], [M - 1, H - M, 1, -1], [W - M, H - M, -1, -1]]) {
-    for (let k = 0; k < 6; k++) {
-      put(img, cx + sx * k, cy, WHITE);
-      put(img, cx, cy + sy * k, WHITE);
-    }
-  }
+  rect(img, 0, 0, W - 1, 0, RIM);
+  rect(img, 0, H - 1, W - 1, H - 1, RIM);
+  rect(img, 0, 0, 0, H - 1, RIM);
+  rect(img, W - 1, 0, W - 1, H - 1, RIM);
   return img;
 }
 
-/** A soft dark vignette over the map window so the glyph edge fades into the frame. */
+/** Transparent compatibility asset; the map no longer uses an edge-darkening vignette. */
 function radarShade() {
-  const W = RADAR_W, H = RADAR_H, M = RADAR_MARGIN;
-  const img = blank(W, H);
-  const hw = (W - 2 * M) / 2, hh = (H - 2 * M) / 2;
-  for (let y = M; y < H - M; y++) {
-    for (let x = M; x < W - M; x++) {
-      const nx = Math.abs(x + 0.5 - W / 2) / hw, ny = Math.abs(y + 0.5 - H / 2) / hh;
-      const e = Math.max(nx, ny);
-      const a = e <= 0.7 ? 0 : Math.round(110 * ((e - 0.7) / 0.3) ** 2);
-      put(img, x, y, [0, 0, 0, a]);
-    }
-  }
-  return img;
+  return blank(RADAR_W, RADAR_H);
 }
 
 const sheet = page();

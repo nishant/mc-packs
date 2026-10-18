@@ -10,6 +10,33 @@ import { cellWorld, colKey, glyphAt, planScan, sampleResolution, spendBudget, Te
 import * as terrain from "../packs/map_bp/scripts/terrain.js";
 
 const HALF = 10;
+test("all four radar directions survive crowded edge markers at every heading", () => {
+  const source = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8");
+  const fn = source.match(/function radarOf\([\s\S]*?\n\}/)[0];
+  const radarOf = vm.runInNewContext(`(${fn})`, {
+    G, R: 10, RADAR_SIZE: 21, RADAR_CELLS: 441, OVERWORLD: "minecraft:overworld",
+    gridBuf: Array(441), prioBuf: new Float64Array(441), rowStrs: Array(21),
+    YOU: Array.from({ length: 8 }, (_, i) => G[`Q_YOU_${i}`]),
+    FRIEND_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_FRIEND_${i}`]),
+    PARTY_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_PARTY_${i}`]),
+    STAR_ARR: Array.from({ length: 8 }, (_, i) => G[`Q_STAR_${i}`]),
+    KINDS: { other: { q: G.Q_OTHER, p: 5 }, mob: { q: G.Q_MOB, p: 6 } },
+  });
+  const markers = [[0, -200], [200, 0], [0, 200], [-200, 0]].map(([x, z]) => ({ kind: "other", x, z }));
+  markers.push({ kind: "mob", x: 5, z: 5 });
+  for (const north of [false, true]) for (let heading = 0; heading < 360; heading += 15) {
+    const radar = radarOf(heading, markers, 24, north, { x: 0, z: 0 });
+    const rows = radar.split("\n");
+    assert.equal(rows.length, 21);
+    assert.ok(rows.every((row) => [...row].length === 21), "grid/coverage is unchanged");
+    assert.ok(Buffer.byteLength(radar) <= 1351, "existing subtitle protocol still fits");
+    for (const cardinal of [G.Q_NORTH, G.Q_EAST, G.Q_SOUTH, G.Q_WEST])
+      assert.equal([...radar].filter((c) => c === cardinal).length, 1, `${heading}/${north}: cardinal is never overwritten`);
+    const playerArrows = Array.from({ length: 8 }, (_, i) => G[`Q_FRIEND_${i}`]);
+    assert.equal([...radar].filter((c) => playerArrows.includes(c)).length, 4, "players sharing a cardinal cell remain beside its label");
+    assert.ok(radar.includes(G.Q_MOB), "ordinary interior mob marker remains");
+  }
+});
 const OW = "minecraft:overworld";
 /** The ground at a column: grass, with a lake from x = 200 on and a stone ridge for z > 300. */
 const ground = (x, z) => (x >= 200 ? { kind: "water", y: 62, depth: 2 } : z > 300 ? { kind: "stone", y: 90, depth: 0 } : { kind: "grass", y: 70, depth: 0 });

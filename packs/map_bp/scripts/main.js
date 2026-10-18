@@ -721,12 +721,20 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
       else if (kind === "other") glyph = FRIEND_ARR[dirIdx] ?? g;
     }
     if (c === 0 && r === 0) return; // the player's own cell
-    const idx = (r + R) * RADAR_SIZE + (c + R);
-    if (p <= prioBuf[idx]) return;
+    let idx = (r + R) * RADAR_SIZE + (c + R);
+    if (p <= prioBuf[idx]) {
+      if (prioBuf[idx] !== 100 || p >= 100) return;
+      // A protected direction badge keeps its cell; an edge marker uses the next cell along the same edge.
+      const neighbors = Math.abs(c) === R ? [[c, r - 1], [c, r + 1]] : [[c - 1, r], [c + 1, r]];
+      const free = neighbors.find(([nc, nr]) => Math.abs(nc) <= R && Math.abs(nr) <= R &&
+        p > prioBuf[(nr + R) * RADAR_SIZE + (nc + R)]);
+      if (!free) return;
+      idx = (free[1] + R) * RADAR_SIZE + (free[0] + R);
+    }
     gridBuf[idx] = glyph;
     prioBuf[idx] = p;
   };
-  // The four compass points sit on the edge and turn with the view (fixed up/right/down/left when north is up).
+  // Protect all four directions from markers (fixed up/right/down/left when north is up).
   for (const [dx, dz, g] of /** @type {[number, number, string][]} */ ([
     [0, -radius * 2, G.Q_NORTH],
     [radius * 2, 0, G.Q_EAST],
@@ -734,7 +742,7 @@ function radarOf(heading, markers, radius, north, at, dimId = OVERWORLD, useTerr
     [-radius * 2, 0, G.Q_WEST],
   ])) {
     const [sx, sy] = screen(dx, dz);
-    place(sx, sy, g, 1, true);
+    place(sx, sy, g, 100, true);
   }
   const star = markers.find((m) => m.kind === "star");
   if (star) {

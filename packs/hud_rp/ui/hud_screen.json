@@ -285,7 +285,7 @@
   "realm_pinned_slot@hud.realm_slot": {
     "size": [
       "100%",
-      "25% - 41.025px"
+      "25% - 42px"
     ],
     "min_size": ["100%", 16],
     "max_size": ["100%", 32],
@@ -335,13 +335,13 @@
     ]
   },
   "realm_left_pinned_slot@hud.realm_pinned_slot": {
-    "size": ["100%", "25% - 14px"]
+    "size": ["100%", "25% - 15px"]
   },
   "realm_radar_panel": {
     "type": "panel",
     "size": [
       "100%",
-      108.1
+      108
     ],
     "$radar_empty|default": "~§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r",
     "controls": [
@@ -361,8 +361,8 @@
                 "texture": "textures/ui/Black",
                 "alpha": 0.85,
                 "size": [
-                  96.6,
-                  89.7
+                  110.7,
+                  102.79285714285716
                 ],
                 "anchor_from": "center",
                 "anchor_to": "center",
@@ -373,8 +373,8 @@
               "radar_clip": {
                 "type": "panel",
                 "size": [
-                  96.6,
-                  89.7
+                  110.7,
+                  102.79285714285716
                 ],
                 "clips_children": true,
                 "anchor_from": "center",
@@ -389,8 +389,8 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.552,
-                      "line_padding": 6.785,
+                      "font_scale_factor": 0.6325714285714287,
+                      "line_padding": 7.7753571428571435,
                       "shadow": false,
                       "localize": false,
                       "color": [
@@ -428,8 +428,8 @@
                         "default"
                       ],
                       "font_size": "small",
-                      "font_scale_factor": 0.552,
-                      "line_padding": 6.785,
+                      "font_scale_factor": 0.6325714285714287,
+                      "line_padding": 7.7753571428571435,
                       "shadow": false,
                       "localize": false,
                       "color": [
@@ -441,7 +441,7 @@
                       "anchor_from": "top_left",
                       "anchor_to": "top_left",
                       "offset": [
-                        0.5175,
+                        0.5930357142857143,
                         0
                       ],
                       "layer": 3,
@@ -459,19 +459,6 @@
                     }
                   }
                 ]
-              }
-            },
-            {
-              "radar_shade": {
-                "type": "image",
-                "texture": "textures/ui/radar_shade",
-                "size": [
-                  112.7,
-                  105.8
-                ],
-                "anchor_from": "center",
-                "anchor_to": "center",
-                "layer": 4
               }
             },
             {
@@ -537,23 +524,7 @@
     "type": "panel",
     "size": [
       1,
-      "$reserve_h|default"
-    ],
-    "$reserve_h|default": 40,
-    "bindings": [
-      {
-        "binding_name": "#hud_title_text_string",
-        "binding_type": "global"
-      },
-      {
-        "binding_name": "#hud_subtitle_text_string",
-        "binding_type": "global"
-      },
-      {
-        "binding_type": "view",
-        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (('%.159s' * (#hud_subtitle_text_string - ('%.1450s' * #hud_subtitle_text_string))) = '§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r§r')))",
-        "target_property_name": "#visible"
-      }
+      44
     ]
   },
   "realm_side_area": {
@@ -583,9 +554,7 @@
           ],
           "controls": [
             {
-              "realm_reserve_r@hud.realm_reserve": {
-                "$reserve_h": 40
-              }
+              "realm_reserve_r@hud.realm_reserve": {}
             },
             {
               "realm_radar@hud.realm_radar_panel": {}
@@ -638,9 +607,7 @@
           ],
           "controls": [
             {
-              "realm_reserve_l@hud.realm_reserve": {
-                "$reserve_h": 40
-              }
+              "realm_reserve_l@hud.realm_reserve": {}
             },
             {
               "realm_left1@hud.realm_left_pinned_slot": {
@@ -690,7 +657,7 @@
           "anchor_to": "top_middle",
           "offset": [
             0,
-            44
+            48
           ],
           "controls": [
             {
@@ -737,11 +704,11 @@
           "type": "image",
           "texture": "textures/ui/Black",
           "alpha": 0.55,
-          "anchor_from": "right_middle",
-          "anchor_to": "bottom_right",
+          "anchor_from": "top_right",
+          "anchor_to": "top_right",
           "offset": [
-            -1,
-            -60
+            -4,
+            48
           ],
           "size": [
             "100%c + 6px",
