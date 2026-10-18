@@ -463,7 +463,7 @@ function explore(player, spawn) {
   // climb from the bed to the water's surface.
   // Only over a sea bed: on land the topmost block is right under the player's feet (as it is for a diver standing on
   // the bed, so there the water at their feet counts).
-  if (overworld && top && (headroom < -1 || (headroom === -1 && feetId !== undefined && /water/.test(feetId)))) {
+  if (overworld && top && (headroom < -1 || (headroom === -1 && feetId !== undefined && /water|kelp|seagrass/.test(feetId)))) {
     let s = top;
     try {
       let sId = "";
