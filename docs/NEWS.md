@@ -7,6 +7,13 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## World-fixed character names
+
+- Townsfolk, caravan traders, wanderers, and story characters now use one world-fixed name helper above the character's head instead of viewer-relative projected labels.
+- While a helper is active, the character's native caption uses invisible format codes to avoid drawing the same name twice. Native captions and helper names are resent when a new viewer approaches.
+- If a helper cannot be created, the character keeps its ordinary readable name. Transformation ownership stays tied to an exact hidden marker.
+- The final near-player rejoin cache-refresh correction passed native tests, but its latest 5-block production client view was not recaptured. Exact client draw distance and remaining visual acceptance are not guaranteed by server tests.
+
 ## Caravan traders, chest marks and menu titles
 
 - Each caravan trader now sells goods of their own: 5 each, and no two traders sell the same thing, so visit all three.
