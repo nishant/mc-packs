@@ -55,11 +55,13 @@ const nameLabels = createNameLabels({
   ownerTag: OWNER_TAG,
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
+  spectatorsExcluded: true,
 });
 
 const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot
 const MISSING_EVERY = 4; // loops between checks for a missing NPC (2 s)
 const MISSING_CHECKS = 3; // checks in a row before a missing NPC is spawned again (6 s): its chunk may still be loading
+const LABEL_TICKS = 10; // how often the name labels are synced
 const AUDIT_TICKS = 200; // every 10 s, look for duplicates, leftovers and changed names
 const OFFER_TICKS = 4; // how long other packs have to answer realm:npc_talk
 const MAX_OFFERS = 16;
@@ -434,7 +436,7 @@ function updateLabels() {
     if (!t || !entity) continue;
     targets.push({ id: rec.id, entity, name: labelTextFor(t) });
   }
-  nameLabels.sync(targets, () => world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /** Sends the name again (when no idle line is showing). @param {Entity} entity @param {Townsfolk} t */
@@ -724,7 +726,9 @@ world.afterEvents.worldLoad.subscribe(() => {
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
   system.runInterval(loop, LOOP_TICKS);
-  system.runInterval(updateLabels, 2);
+  // Every half second: they stand still (a speech line or a resend redraws at once), and each sync reads every
+  // player near them (about 1 ms with 12 of them and 40 players around).
+  system.runInterval(updateLabels, LABEL_TICKS);
   system.runInterval(auditAll, AUDIT_TICKS);
   // Other packs are loaded by now: the calendar, and each online player's affinity (after a /reload).
   system.runTimeout(() => {

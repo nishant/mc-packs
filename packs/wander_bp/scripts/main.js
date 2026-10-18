@@ -51,6 +51,7 @@ const nameLabels = createNameLabels({
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
   observerRange: 36,
+  spectatorsExcluded: true,
 });
 
 const LOOP_TICKS = 20; // upkeep: timers, camps, sparkles, keep ghosts in place
@@ -698,7 +699,7 @@ function updateLabels() {
     const id = `camp:${wid}`;
     if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
   }
-  nameLabels.sync(targets, () => world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /**

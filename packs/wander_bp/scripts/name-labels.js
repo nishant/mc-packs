@@ -77,7 +77,7 @@ const NEAR_RESEND_SQ = NEAR_RESEND_RANGE * NEAR_RESEND_RANGE;
 /** Syncs between scans of whole dimensions for strays (a helper the tracked list lost). Loaded strays are removed
  * on their load event already, so this is only a backstop: every 10th sync (1 s at a sync every 2 ticks). */
 const SWEEP_EVERY = 10;
-const NEAR_RESEND_STEPS = [1, 3]; // sync steps after a new viewer enters within 20 blocks (~1 s, then ~3 s more)
+const NEAR_RESEND_STEPS = [1, 3]; // syncs after a new viewer enters within 20 blocks, then 3 syncs more
 
 /**
  * Creates a world-fixed nameplate helper manager for one pack's label entity type.
@@ -87,8 +87,10 @@ const NEAR_RESEND_STEPS = [1, 3]; // sync steps after a new viewer enters within
  *   labelTag?: string,
  *   labelIdTag?: string,
  *   observerRange?: number,
- *   headOffset?: number
- * }} opts
+ *   headOffset?: number,
+ *   spectatorsExcluded?: boolean
+ * }} opts `spectatorsExcluded`: the observers given to sync never include spectators (the caller asked
+ * world.getPlayers to leave them out), so their game mode isn't read again on every sync
  */
 export function createNameLabels(opts) {
   const {
@@ -98,6 +100,7 @@ export function createNameLabels(opts) {
     labelIdTag = "realm:label_target:",
     observerRange = OBSERVER_RANGE,
     headOffset = HEAD_OFFSET,
+    spectatorsExcluded = false,
   } = opts;
   /**
    * @type {Map<string, {
@@ -108,8 +111,10 @@ export function createNameLabels(opts) {
    *   nearViewers?: Set<string>,
    *   resendTicks?: number,
    *   resendStage?: number,
-   *   useAltVariant?: boolean
-   * }>}
+   *   useAltVariant?: boolean,
+   *   caption?: string,
+   *   at?: { x: number, y: number, z: number }
+   * }>} `caption` and `at`: what was last written to the helper, so a sync with nothing new reads nothing back
    */
   const tracked = new Map();
   /** @type {Set<string>} */
@@ -239,8 +244,8 @@ export function createNameLabels(opts) {
     const activeObservers = [];
     for (const p of observers) {
       try {
-        if (!p || p.isValid === false) continue;
-        if (typeof p.getGameMode === "function" && String(p.getGameMode()).toLowerCase() === "spectator") continue;
+        if (!p || (!spectatorsExcluded && p.isValid === false)) continue; // a fresh getPlayers list holds only valid players
+        if (!spectatorsExcluded && typeof p.getGameMode === "function" && String(p.getGameMode()).toLowerCase() === "spectator") continue;
         const l = p.location;
         activeObservers.push({ dimId: p.dimension.id, x: l.x, y: l.y, z: l.z, id: String(p.id ?? p.name ?? "") });
       } catch {
@@ -261,7 +266,8 @@ export function createNameLabels(opts) {
       const fallback = suppressed === SUPPRESSED_NAME ? name : `${name}${suppressed}`;
       try {
         if (!target.isValid) continue;
-        const loc = target.location;
+        // Distances from its head (one read for both): a block and a half off its feet matters nothing at 20 blocks.
+        const loc = target.getHeadLocation();
         const dim = target.dimension;
         const dimId = dim.id;
         let near = false;
@@ -277,11 +283,10 @@ export function createNameLabels(opts) {
           restoreFallback(target, fallback);
           continue;
         }
-        const head = target.getHeadLocation();
-        const anchor = { x: head.x, y: head.y + headOffset, z: head.z };
+        const anchor = { x: loc.x, y: loc.y + headOffset, z: loc.z };
 
         let entry = tracked.get(key);
-        if (entry && (!entry.helper.isValid || entry.target.id !== target.id || entry.helper.dimension.id !== dimId)) {
+        if (entry && (!entry.helper.isValid || entry.target.id !== target.id || entry.dimId !== dimId)) {
           remove(entry.helper);
           tracked.delete(key);
           entry = undefined;
@@ -298,7 +303,8 @@ export function createNameLabels(opts) {
         // Bedrock's client caches a creature's default name ("NPC") when the entity spawns in the same packet
         // batch as its nameTag or before a newly joined viewer enters range. When a new viewer enters within
         // 20 blocks, toggle BOTH the helper caption and the native suppressed nameTag between their base and
-        // `§r`-suffixed variants after 1 step (~1 s) and 3 steps (~3 s) so the client receives a fresh
+        // `§r`-suffixed variants 1 sync and 3 more syncs later (0.5 s and 1.5 s at the townsfolk's sync every 10 ticks;
+        // 0.1 s and 0.3 s at the wanderers' every 2) so the client receives a fresh
         // actor-data update packet for both entities without flashing a canonical name on the native entity.
         // Notice `name.endsWith("§r")` when the caller (`npc_bp`/`caravan_bp` watchName) already drives its
         // own 1 s / 3 s resend toggle: follow the caller's toggle instead of opposing it.
@@ -327,13 +333,21 @@ export function createNameLabels(opts) {
         const helperWanted = useAlt ? `${baseName}§r` : baseName;
         const targetWanted = useAlt ? `${suppressed}§r` : suppressed;
 
-        if (entry.helper.nameTag !== helperWanted) entry.helper.nameTag = helperWanted;
-        const hloc = entry.helper.location;
-        if (Math.hypot(hloc.x - anchor.x, hloc.y - anchor.y, hloc.z - anchor.z) > 0.01) {
-          entry.helper.teleport(anchor);
+        // What was written last is trusted between sweeps; a sweep sync reads the helper back in case something
+        // else renamed or moved it.
+        if (sweepNow) {
+          entry.caption = entry.helper.nameTag;
+          entry.at = entry.helper.location;
         }
-        if (!entry.helper.isValid || entry.helper.nameTag !== helperWanted) {
-          throw new Error(`helper ${labelType} failed caption sync`);
+        if (entry.caption !== helperWanted) {
+          entry.helper.nameTag = helperWanted;
+          if (entry.helper.nameTag !== helperWanted) throw new Error(`helper ${labelType} failed caption sync`);
+          entry.caption = helperWanted;
+        }
+        const hloc = entry.at;
+        if (!hloc || Math.hypot(hloc.x - anchor.x, hloc.y - anchor.y, hloc.z - anchor.z) > 0.01) {
+          entry.helper.teleport(anchor);
+          entry.at = anchor;
         }
         if (target.nameTag !== targetWanted) target.nameTag = targetWanted;
         wanted.add(key);

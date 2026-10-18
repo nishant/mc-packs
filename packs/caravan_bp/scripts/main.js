@@ -47,6 +47,7 @@ const nameLabels = createNameLabels({
   ownerTag: OWNER_TAG,
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
+  spectatorsExcluded: true,
 });
 
 const HOUR = 3600000;
@@ -54,6 +55,7 @@ const DAY = 24 * HOUR;
 const LOOP_TICKS = 10; // traders turning to players
 const KEEP_EVERY = 4; // loops between upkeep: schedule, spawning, missing traders (2 s)
 const MISSING_CHECKS = 3; // upkeeps in a row a trader must be missing before it's spawned again
+const LABEL_TICKS = 10; // how often the name labels are synced
 const AUDIT_TICKS = 200;
 const MAX_SPOTS = 20;
 const BUY_MAX = 16;
@@ -494,7 +496,7 @@ function updateLabels() {
       targets.push({ id: String(i), entity, name });
     });
   }
-  nameLabels.sync(targets, () => world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */
@@ -817,7 +819,9 @@ world.afterEvents.worldLoad.subscribe(() => {
       console.warn(`[caravan] ${e}`);
     }
   }, LOOP_TICKS);
-  system.runInterval(updateLabels, 2);
+  // Every half second: they stand still (a speech line or a resend redraws at once), and each sync reads every
+  // player near them (about 1 ms with 12 of them and 40 players around).
+  system.runInterval(updateLabels, LABEL_TICKS);
   system.runInterval(auditAll, AUDIT_TICKS);
 });
 
