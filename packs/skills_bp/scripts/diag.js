@@ -1,7 +1,7 @@
 // Generated from tools/diag-shared.js by node tools/sync-diag.mjs: edit that file, not this copy.
 // Pack diagnostics for operators: script cost and saved data per pack, and removing a pack's saved data.
-// Synced into every behavior pack as scripts/diag.js by tools/sync-diag.mjs, with PACK and VERSION filled in
-// from the pack's folder and manifest header.version. Each pack's main.js imports "./diag.js" FIRST: ES
+// Synced into every behavior pack as scripts/diag.js by tools/sync-diag.mjs, with PACK, VERSION and NAME filled
+// in from the pack's folder and manifest header (version, name). Each pack's main.js imports "./diag.js" FIRST: ES
 // modules run in import order, so everything the pack's other modules hand to the game afterwards is wrapped.
 //
 // What it wraps (the same approach as tools/test-bds/lib/profile.js, which it runs inside of when present):
@@ -20,7 +20,7 @@
 // "unclaimed". Alone in its context, a pack owns its whole storage.
 //
 // Protocol (realm: script events, JSON, every message under 2048 characters):
-//   realm:diag_ping {id, ticks?}     every pack replies realm:diag_pong {id, pack, version, bytes, props,
+//   realm:diag_ping {id, ticks?}     every pack replies realm:diag_pong {id, pack, name, version, bytes, props,
 //                                    big, bigKey, forgotten?, shared?, total?}; with ticks (1-1200) the
 //                                    reply waits for a profiling window of that many ticks and adds
 //                                    {ticks, ms, calls, mpt (ms per tick), top: [{k, ms, n}] (two biggest)}
@@ -37,12 +37,13 @@ import { CustomCommandRegistry, System, World, system, world } from "@minecraft/
 
 const PACK = "skills_bp";
 const VERSION = "1.1.3";
+const NAME = "Skills";
 
 const API = 1;
 const MAX_TICKS = 1200;
 /** @typedef {{ ms: number, calls: number }} Cb */
 /**
- * @typedef {{ pack: string, version: string, ms: number, calls: number, cbs: Map<string, Cb>, forgotten: boolean, warned: boolean }} Rec
+ * @typedef {{ pack: string, name: string, version: string, ms: number, calls: number, cbs: Map<string, Cb>, forgotten: boolean, warned: boolean }} Rec
  * @typedef {{ start: number, end: number, ids: string[] }} Win
  * @typedef {{
  *   api: number, on: boolean, multi: boolean, track: boolean, cur: Rec | null, packs: Map<string, Rec>,
@@ -55,7 +56,7 @@ const G = /** @type {any} */ (globalThis);
 /** @type {State} */
 const S = G.__realmDiag ?? (G.__realmDiag = install());
 /** @type {Rec} */
-const REC = S.packs.get(PACK) ?? { pack: PACK, version: VERSION, ms: 0, calls: 0, cbs: new Map(), forgotten: false, warned: false };
+const REC = S.packs.get(PACK) ?? { pack: PACK, name: NAME, version: VERSION, ms: 0, calls: 0, cbs: new Map(), forgotten: false, warned: false };
 S.packs.set(PACK, REC);
 S.multi = S.packs.size > 1;
 S.track = S.on || S.multi;
@@ -368,7 +369,7 @@ function pongAll(st, rid, ticks) {
   const { per, total } = storage(st);
   for (const [rec, e] of per) {
     /** @type {Record<string, unknown>} */
-    const msg = { id: rid, pack: rec.pack, version: rec.version, bytes: e.bytes, props: e.props, big: e.big, bigKey: e.bigKey.slice(0, 80) };
+    const msg = { id: rid, pack: rec.pack, name: rec.name.slice(0, 40), version: rec.version, bytes: e.bytes, props: e.props, big: e.big, bigKey: e.bigKey.slice(0, 80) };
     if (rec.forgotten) msg.forgotten = true;
     if (st.packs.size > 1) {
       msg.shared = st.packs.size;

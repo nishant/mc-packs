@@ -65,7 +65,8 @@ function fakeServer() {
 async function loadCopy(dir, pack, version = "1.0.0") {
   const src = SRC.replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;")
     .replace('const PACK = "__PACK__";', `const PACK = ${JSON.stringify(pack)};`)
-    .replace('const VERSION = "__VERSION__";', `const VERSION = ${JSON.stringify(version)};`);
+    .replace('const VERSION = "__VERSION__";', `const VERSION = ${JSON.stringify(version)};`)
+    .replace('const NAME = "__NAME__";', `const NAME = ${JSON.stringify(pack.toUpperCase())};`);
   mkdirSync(join(dir, pack), { recursive: true });
   const file = join(dir, pack, "diag.js");
   writeFileSync(file, src);
@@ -113,6 +114,7 @@ test("two packs in one script context: keys, callbacks, profiling and forget sta
   const b = list.find((p) => p.pack === "b_bp");
   assert.equal(list.length, 2, "one pong per pack");
   assert.equal(a.version, "1.2.3");
+  assert.equal(a.name, "A_BP");
   assert.equal(a.props, 3, "a:old, a:join, a:later");
   assert.equal(b.props, 2, "b:cfg, b:tick");
   assert.equal(a.bigKey, "a:old");

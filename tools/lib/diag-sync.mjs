@@ -1,5 +1,5 @@
 // Copies tools/diag-shared.js (pack diagnostics: see the top of that file) into every behavior pack with
-// scripts as scripts/diag.js, with the pack's folder (PACK) and manifest header.version (VERSION) filled in,
+// scripts as scripts/diag.js, with the pack's folder (PACK) and manifest header.version (VERSION) and name (NAME) filled in,
 // and makes "./diag.js" the first import of the pack's scripts/main.js. Used by tools/sync-diag.mjs and by the
 // generators that bump a pack's version (help-catalog.mjs, gen-news.mjs), so a bump never leaves a stale copy.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,7 +21,7 @@ export function diagFor(folder) {
   const shared = readFileSync(join(root, "tools", "diag-shared.js"), "utf8");
   const manifest = JSON.parse(readFileSync(join(root, "packs", folder, "manifest.json"), "utf8"));
   const version = (manifest.header?.version ?? []).join(".");
-  const out = shared.replace('const PACK = "__PACK__";', `const PACK = ${JSON.stringify(folder)};`).replace('const VERSION = "__VERSION__";', `const VERSION = ${JSON.stringify(version)};`);
+  const out = shared.replace('const PACK = "__PACK__";', `const PACK = ${JSON.stringify(folder)};`).replace('const VERSION = "__VERSION__";', `const VERSION = ${JSON.stringify(version)};`).replace('const NAME = "__NAME__";', `const NAME = ${JSON.stringify(String(manifest.header?.name ?? folder))};`);
   if (out === shared) throw new Error("tools/diag-shared.js lost its PACK/VERSION placeholders");
   return HEADER + out;
 }
