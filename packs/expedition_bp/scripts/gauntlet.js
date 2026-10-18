@@ -47,6 +47,25 @@ export function makeItem(id, count = 1, opts = {}) {
   return it;
 }
 
+/**
+ * Spawns an entity and makes sure the game handed back the new one: a world whose entity ids repeat (an old
+ * level.dat put back) can return an entity that already exists, such as a dropped item or someone's minecart, and
+ * tagging, filling or later removing that one would lose it. Throws when it keeps happening.
+ * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
+ */
+export function spawnFresh(dim, type, at) {
+  const want = type.includes(":") ? type : `minecraft:${type}`;
+  for (let k = 0; k < 8; k++) {
+    const e = dim.spawnEntity(/** @type {any} */ (type), at);
+    // The type alone isn't enough: someone's chest minecart or pet wolf is the same type. A new entity stands where
+    // it was spawned, untagged, in the dimension asked for.
+    if (e.typeId !== want || e.dimension.id !== dim.id) continue;
+    const l = e.location;
+    if (Math.abs(l.x - at.x) < 0.5 && Math.abs(l.z - at.z) < 0.5 && Math.abs(l.y - at.y) < 1.5 && !e.getTags().length) return e;
+  }
+  throw new Error(`spawnEntity(${type}) kept returning another entity`);
+}
+
 /** The best gear tier for a level: iron, diamond from Nightmare 8, netherite from Nightmare 15. @param {number} L */
 const metal = (L) => (L >= 17 ? "netherite" : L >= 10 ? "diamond" : "iron");
 
@@ -217,7 +236,7 @@ export function saveStash(p, dim, at) {
       return true;
     }
     for (let c = 0; c * CART < SLOTS; c++) {
-      const cart = dim.spawnEntity("minecraft:chest_minecart", { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
+      const cart = spawnFresh(dim, "minecraft:chest_minecart", { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
       cart.addTag(STASH_TAG);
       cart.addTag(tag);
       cart.addTag(`${STASH_TAG}_part_${c}`);
@@ -445,7 +464,7 @@ export function saveParcel(owner, kind, items, dim, at) {
   const carts = [];
   try {
     for (let c = 0; c * CART < keep.length; c++) {
-      const cart = dim.spawnEntity("minecraft:chest_minecart", { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
+      const cart = spawnFresh(dim, "minecraft:chest_minecart", { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
       cart.addTag(PARCEL_TAG);
       cart.addTag(tag);
       carts.push(cart);
