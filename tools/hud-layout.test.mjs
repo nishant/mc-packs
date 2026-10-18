@@ -9,6 +9,15 @@ const ui = JSON.parse(fs.readFileSync(new URL("../packs/hud_rp/ui/hud_screen.jso
 const area = ui.realm_side_area.controls.map((c) => Object.entries(c)[0]);
 const byName = (n) => area.find(([k]) => k === n)?.[1];
 const names = (stack) => stack.controls.map((c) => Object.keys(c)[0].split("@")[0]);
+const cellHeight = (side, viewportHeight) => {
+  const cell = ui["realm_pinned_slot@hud.realm_slot"];
+  const stack = byName(`realm_side_${side}`);
+  assert.deepEqual(stack.size, ["50%", "100% - 8px"], "percentage cells require a viewport-sized parent, not content-sized feedback");
+  const expression = stack.$pin_height ?? cell["$pin_height|default"];
+  const match = expression.match(/^25% - ([\d.]+)px$/);
+  assert.ok(match, "cell height is a quarter of the viewport parent minus fixed UI reserves");
+  return Math.max(cell.min_size[1], Math.min(cell.max_size[1], (viewportHeight - 8) / 4 - Number(match[1])));
+};
 
 test("vanilla sidebar leaves root_panel and joins the right stack last", () => {
   const mods = ui.root_panel.modifications;
@@ -74,13 +83,21 @@ test("unused auxiliary widgets collapse and overflowing stacks are constrained t
   }
 });
 
-test("numbered slots retain 66-unit cells through the last occupied position on either side", () => {
+test("numbered slots retain compact cells through the last occupied position on either side", () => {
   const pinned = ui["realm_pinned_slot@hud.realm_slot"];
   assert.ok(pinned, "numbered slots need a fixed-height wrapper instead of a collapsing readout");
-  assert.deepEqual(pinned.size, ["100%", 66]);
-  assert.equal(66, ui.realm_slot["$slot_max|default"][1] + 4 + 2, "allow full multiline text, background padding and spacing");
+  assert.deepEqual(pinned.size, ["100%", "$pin_height"]);
+  assert.deepEqual(pinned.min_size, ["100%", 16], "one native-font line plus padding");
+  assert.deepEqual(pinned.max_size, ["100%", 32], "do not reserve a six-line gap");
   const content = pinned.controls[0]["realm_content@hud.realm_slot"];
   assert.deepEqual([content.anchor_from, content.anchor_to], ["top_left", "top_left"]);
+  assert.deepEqual(content.size, ["100%", "100%"]);
+  const box = content.controls[0]["realm_slot_box@hud.realm_slot_box"];
+  assert.deepEqual(box.size, ["100%c + 6px", "100% - 2px"]);
+  assert.equal(box.clips_children, true, "long readouts must not overlap their neighbors");
+  assert.deepEqual(box.$slot_max, [200, "100% - 4px"]);
+  const label = box.controls[0]["realm_slot_text@hud.realm_slot_text"];
+  assert.deepEqual([label.anchor_from, label.anchor_to, label.offset], ["top_middle", "top_middle", [0, 2]]);
   assert.equal(content.bindings, undefined, "the inner readout retains its own empty-text visibility");
   assert.equal(pinned.bindings.at(-1).source_property_name,
     "((#hud_title_text_string = '§s§2§r') and (not (($pin_slice * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $pin_empty)))");
@@ -131,29 +148,37 @@ test("numbered slots retain 66-unit cells through the last occupied position on 
         const tail = sliceBytes(Buffer.from(subtitle).subarray(skip).toString(), slot.$pin_slice ?? pinned["$pin_slice|default"]);
         const visible = tail !== Array(4 - i).fill(empty).join(" ");
         assert.equal(visible, Boolean(mask >> i), `${side} ${mask}: cell ${i + 1}`);
-        if (mask & (1 << i)) assert.equal(height, i * 66, `${side} ${i + 1} never rises into a gap`);
-        if (visible) height += pinned.size[1];
+        if (mask & (1 << i)) assert.equal(height, i * cellHeight(side, 360), `${side} ${i + 1} never rises into a gap`);
+        if (visible) height += cellHeight(side, 360);
       }
-      assert.equal(height, mask ? (32 - Math.clz32(mask)) * 66 : 0, "unused trailing cells do not push the sidebar down");
+      assert.equal(height, mask ? (32 - Math.clz32(mask)) * cellHeight(side, 360) : 0, "unused trailing cells do not push the sidebar down");
     }
   }
 });
 
-test("pinned cells do not shrink or overlap at different GUI viewport heights", () => {
+test("compact cells bound content and keep default Right 4 and sidebar space on normal GUI viewports", () => {
   const cell = ui["realm_pinned_slot@hud.realm_slot"];
   assert.ok(cell);
   for (const viewportHeight of [180, 240, 360, 480, 720]) {
     for (const compass of [0, 40]) for (const radar of [0, ui.realm_radar_panel.size[1]]) {
       for (const side of ["left", "right"]) {
         const origin = byName(`realm_side_${side}`).offset[1] + compass + (side === "right" ? radar : 0);
+        const pitch = cellHeight(side, viewportHeight);
+        assert.ok(pitch >= 16 && pitch <= 32);
         for (let i = 0; i < 4; i++) {
-          const top = origin + i * cell.size[1];
-          const backgroundBottom = top + ui.realm_slot["$slot_max|default"][1] + 4;
-          assert.ok(backgroundBottom <= top + cell.size[1], "maximum content never reaches the next cell");
-          const visibleHeight = Math.max(0, Math.min(backgroundBottom, viewportHeight) - Math.min(top, viewportHeight));
-          assert.ok(visibleHeight >= 0 && visibleHeight <= 64 + 1e-9, "viewport clips rather than compacts the cell");
+          const top = origin + i * pitch;
+          const backgroundBottom = top + pitch - 2;
+          assert.ok(backgroundBottom < top + pitch, "clipped content stops before the next cell");
+          if (viewportHeight >= 240 || side === "left") assert.ok(backgroundBottom <= viewportHeight - 4, `${side} slot ${i + 1} fits ${viewportHeight}`);
         }
+        if (viewportHeight >= 240 && side === "right")
+          assert.ok(origin + 4 * pitch + 16 <= viewportHeight - 4 + 1e-9, "leave at least one scoreboard row below four active cells");
       }
+      assert.ok(Math.abs(cellHeight("right", 240) - 16.975) < 1e-9);
+      assert.equal(cellHeight("right", 360), 32);
+      assert.equal(cellHeight("left", 240), 32);
+      assert.ok(4 + 40 + ui.realm_radar_panel.size[1] + 3 * cellHeight("right", 180) > 180,
+        "180-unit default radar+compass is explicitly below the severe minimum-height limit");
     }
   }
   for (const name of ["realm_side_top", "realm_side_middle"]) {
