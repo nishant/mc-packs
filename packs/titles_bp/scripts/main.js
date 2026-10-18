@@ -295,6 +295,11 @@ system.runInterval(() => {
   if (system.currentTick - lastTrail < get("trailTicks")) return;
   lastTrail = system.currentTick;
   if (!enabled() || get("trails") !== true) return;
+  // Nobody online chose a trail (the usual case): don't fetch every player 5 times a second for nothing. The cache
+  // holds everyone online (the stats count loads them every second).
+  let any = false;
+  for (const d of cache.values()) if (d.tr) any = true;
+  if (!any) return;
   const players = world.getAllPlayers();
   if (!players.length) return;
   let budget = Math.max(1, get("trailBudget"));
