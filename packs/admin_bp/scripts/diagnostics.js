@@ -18,7 +18,7 @@ export const MAX_SECONDS = 60;
 
 /**
  * @typedef {{ id: string, pack: string, name?: string, version?: string, bytes?: number, props?: number, big?: number, bigKey?: string,
- *   forgotten?: boolean, shared?: number, total?: number, ticks?: number, ms?: number, calls?: number, mpt?: number,
+ *   forgotten?: boolean, shared?: number, total?: number, unowned?: number, unownedProps?: number, ticks?: number, ms?: number, calls?: number, mpt?: number,
  *   top?: { k: string, ms: number, n: number }[] }} Pong
  * @typedef {{ id: string, pack: string, ok: boolean, removed?: number, bytes?: number, error?: string }} Forgot
  * @typedef {{ show: (player: import("@minecraft/server").Player, form: any) => Promise<any>,
@@ -141,8 +141,9 @@ async function listPage(player, ctx, got, expected, secs, back) {
   if (flagged) body += ` ${flagged} pack${flagged === 1 ? " is" : "s are"} red.`;
   const shared = list.find((p) => (p.shared ?? 0) > 1);
   if (shared) {
-    const claimed = list.filter((p) => (p.shared ?? 0) > 1).reduce((s, p) => s + (p.bytes ?? 0), 0);
-    body += `\n§7${shared.shared} packs share one add-on (a bundle) and its saved data: ${kb(shared.total ?? 0)} in all, ${kb(Math.max(0, (shared.total ?? 0) - claimed))} not used by any pack since the last reload.§r`;
+    const n = shared.unownedProps ?? 0;
+    body += `\n§7${shared.shared} packs share one add-on (a bundle) and its saved data: ${kb(shared.total ?? 0)} in all.`;
+    body += n ? ` ${n} entr${n === 1 ? "y" : "ies"} (${kb(shared.unowned ?? 0)}) no pack has used since the last reload: from a removed pack, or one that reads them later.§r` : "§r";
   }
   if (!list.length) body += "\n\n§eNo pack answered. Packs from before this version don't take part.";
   form.body(body);

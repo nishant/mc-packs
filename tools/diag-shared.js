@@ -20,7 +20,9 @@
 //
 // Protocol (realm: script events, JSON, every message under 2048 characters):
 //   realm:diag_ping {id, ticks?}     every pack replies realm:diag_pong {id, pack, name, version, bytes, props,
-//                                    big, bigKey, forgotten?, shared?, total?}; with ticks (1-1200) the
+//                                    big, bigKey, forgotten?, and in a bundle: shared (packs in this context),
+//                                    total (bytes of the whole storage), unowned/unownedProps (keys no pack
+//                                    read or wrote since the last reload)}; with ticks (1-1200) the
 //                                    reply waits for a profiling window of that many ticks and adds
 //                                    {ticks, ms, calls, mpt (ms per tick), top: [{k, ms, n}] (two biggest)}
 //   realm:diag_forget {id, pack, confirm: "FORGET <pack>"}
@@ -335,6 +337,7 @@ function storage(st) {
   const per = new Map();
   for (const rec of st.packs.values()) per.set(rec, { bytes: 0, props: 0, big: 0, bigKey: "", keys: [] });
   let total = 0;
+  const unowned = { bytes: 0, props: 0 };
   /** @type {string[]} */
   let ids = [];
   try {
@@ -346,7 +349,7 @@ function storage(st) {
   for (const k of ids) {
     const rec = ownerOfKey(st, k);
     const e = rec && per.get(rec);
-    if (!e) continue;
+    if (!e && st.packs.size === 1) continue;
     let v;
     try {
       v = call(st.orig.get, k);
@@ -354,6 +357,11 @@ function storage(st) {
       continue;
     }
     const n = sizeOf(k, v);
+    if (!e) {
+      unowned.bytes += n;
+      unowned.props++;
+      continue;
+    }
     e.bytes += n;
     e.props++;
     e.keys.push(k);
@@ -363,7 +371,7 @@ function storage(st) {
     }
   }
   if (st.packs.size === 1) for (const e of per.values()) e.bytes = total; // the exact count when the storage is this pack's alone
-  return { per, total };
+  return { per, total, unowned };
 }
 
 /** @param {string} id @param {object} msg */
@@ -375,7 +383,7 @@ function send(id, msg) {
 
 /** @param {State} st @param {string} rid @param {number | undefined} ticks */
 function pongAll(st, rid, ticks) {
-  const { per, total } = storage(st);
+  const { per, total, unowned } = storage(st);
   for (const [rec, e] of per) {
     /** @type {Record<string, unknown>} */
     const msg = { id: rid, pack: rec.pack, name: rec.name.slice(0, 40), version: rec.version, bytes: e.bytes, props: e.props, big: e.big, bigKey: e.bigKey.slice(0, 80) };
@@ -383,6 +391,8 @@ function pongAll(st, rid, ticks) {
     if (st.packs.size > 1) {
       msg.shared = st.packs.size;
       msg.total = total;
+      msg.unowned = unowned.bytes;
+      msg.unownedProps = unowned.props;
     }
     if (ticks !== undefined) {
       const top = [...rec.cbs.entries()].sort((a, b) => b[1].ms - a[1].ms || b[1].calls - a[1].calls).slice(0, 2);

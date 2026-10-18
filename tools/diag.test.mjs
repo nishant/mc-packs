@@ -121,6 +121,8 @@ test("two packs in one script context: keys, callbacks, profiling and forget sta
   assert.ok(a.big >= 30000);
   assert.equal(a.shared, 2);
   assert.ok(a.total > a.bytes + b.bytes, "zz:stale is in the total but nobody's");
+  assert.equal(a.unownedProps, 1);
+  assert.equal(a.unowned, "zz:stale".length + 1);
 
   system.sendScriptEvent("realm:diag_ping", JSON.stringify({ id: "q2", ticks: 10 }));
   mc.step(14);
