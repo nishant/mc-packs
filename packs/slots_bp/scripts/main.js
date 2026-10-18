@@ -583,6 +583,7 @@ function giveItem(p) {
 }
 
 world.beforeEvents.itemUse.subscribe((ev) => {
+  if (ev.cancel) return; // another pack already stopped it
   try {
     if (!isMachineItem(ev.itemStack)) return;
     ev.cancel = true;
