@@ -122,7 +122,7 @@ export default async function (t) {
     await hit(a);
     let m = await t.waitUntil(() => boxes(a, since).find((x) => x.pack === "mobhp_bp"), { timeout: 20, message: `mobhp draws in ${slot}` });
     let d = decode(m.subtitle);
-    t.check(d.bytes === 2961, `subtitle is 2961 bytes: nine boxes, the minimap's strip and 21x21 radar (${d.bytes})`);
+    t.check(d.bytes === 3473, `subtitle is 3473 bytes: nine boxes, the minimap's strip, the 21x21 radar and the quest box (${d.bytes})`);
     t.check(/Cow\s+§f\d+\/10/.test(d.out[slot]), `mobhp in ${slot}: "${d.out[slot]}"`);
     // Warmer / Colder
     await set("maps_bp", "where", slot, a);
@@ -244,11 +244,11 @@ export default async function (t) {
   since = t.tick;
   await set("hud_bp", "where", "hotbar", a);
   await t.waitUntil(() => sides.find((s) => s.tick >= since && s.m.from === "hud" && s.m.text === ""), { timeout: 20, message: "the HUD leaves its box" });
-  await t.waitUntil(() => t.messages(a, { kind: "actionbar", pack: "hud_bp", since }).find((m) => /XYZ/.test(m.plain)), { timeout: 60, message: "the HUD on the hotbar" });
+  await t.waitUntil(() => t.messages(a, { kind: "actionbar", pack: "hud_bp", since }).find((m) => /X -?\d+  Y -?\d+/.test(m.plain)), { timeout: 60, message: "the HUD on the hotbar" });
   await set("hud_bp", "where", "left4", a);
   since = t.tick;
   const h = await t.waitUntil(() => boxes(a, since).find((m) => m.pack === "hud_bp"), { timeout: 40, message: "the HUD back in a box" });
-  t.check(/XYZ/.test(decode(h.subtitle).out.left4), "HUD in left4");
+  t.check(/X -?\d+  Y -?\d+/.test(decode(h.subtitle).out.left4.replace(/§./g, "")), "HUD in left4");
   t.check(sides.every((s) => JSON.stringify(s.m).length < 2048), "every realm:side under 2048");
   for (const pig of pigs) try { pig.remove(); } catch {}
 }
