@@ -14,7 +14,7 @@ export default async function (t) {
   }, { namespaces: ["realm"] });
   const ann = await t.player("Ann", { op: true });
   const send = (id, msg) => sys.sendScriptEvent(id, JSON.stringify(msg));
-  const tracker = (since) => sides.filter((s) => s.tick >= since && s.m.player === ann.id && s.m.from === "saga" && s.m.slot === "right4").map((s) => String(s.m.text));
+  const tracker = (since) => sides.filter((s) => s.tick >= since && s.m.player === ann.id && s.m.from === "saga" && s.m.slot === "quest").map((s) => String(s.m.text));
   /** Talks to an NPC (played by the scenario) and accepts what it offers. */
   async function accept(npc, key) {
     let next = t.waitForm(ann, { timeout: 300 });
@@ -39,8 +39,8 @@ export default async function (t) {
   const box = await t.waitUntil(() => tracker(since).find((s) => s.includes("Got Away") && s.includes("Drowned Bell")), { timeout: 80, message: `both quests in the box; wrote ${JSON.stringify(tracker(since))}` });
   t.log(`box: ${JSON.stringify(box)}`);
   const lines = box.split("\n");
-  t.check(lines[0].replace(/§./g, "") === "Got Away", `the newest quest on top: ${JSON.stringify(lines[0])}`);
-  t.check(lines[1].includes("Catch 8 fish"), `its step under it: ${JSON.stringify(lines[1])}`);
+  t.check(/^Got Away: /.test(lines[0].replace(/§./g, "")), `the newest quest and its chapter on top: ${JSON.stringify(lines[0])}`);
+  t.check(lines.some((l) => l.includes("Catch 8 fish")), `its steps under it: ${JSON.stringify(lines)}`);
   t.check(lines.some((l) => l.startsWith("§3Drowned Bell§7: ") && /drowned|fishing/i.test(l)), `the Drowned Bell on its own row with its step: ${JSON.stringify(lines)}`);
-  t.check(unescape(encodeURIComponent(box)).length <= 159, `fits the box (${unescape(encodeURIComponent(box)).length} bytes)`);
+  t.check(unescape(encodeURIComponent(box)).length <= 511, `fits the quest box (${unescape(encodeURIComponent(box)).length} bytes)`);
 }
