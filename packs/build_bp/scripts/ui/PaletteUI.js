@@ -10,6 +10,7 @@ import { t } from "../utils/Text.js";
 import { smallIcon, usesFloatingUI, showForm } from "../utils/CustomUI.js";
 import { showHintOnce } from "../utils/Hints.js";
 import { openPanel } from "../core/EntityPanel.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 
 const CATEGORIES = [
     { id: "source", icon: "textures/effortless_building/palette_source"  },
@@ -151,6 +152,7 @@ export function choosePaletteOption(player, cat, id) {
     }
 
     if (src !== "disable") {
+        lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(
             t("eb.palette.bar",
                 t(`eb.palette.source.${src}`),

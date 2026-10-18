@@ -4,6 +4,7 @@ import { allPlayers } from "../utils/Items.js";
 import { getState } from "./PlayerState.js";
 import { t } from "../utils/Text.js";
 import { ensureChunkLoaders, releaseChunkLoaders } from "./ChunkLoader.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 const DEFAULT_SPEED    = 2500;
 const GLOBAL_MAX_TICK  = 50000;
 const NOTIFY_EVERY     = 20;
@@ -97,6 +98,7 @@ export function startPlacementQueue() {
                 const cx = Math.round(sx / n);
                 const cy = Math.round(sy / n);
                 const cz = Math.round(sz / n);
+                lockActionBar(player.id, 1500);
                 player.onScreenDisplay.setActionBar(
                     n === 1
                         ? t("eb.queue.waiting_one", cx, cy, cz)

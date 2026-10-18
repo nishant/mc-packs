@@ -1,28 +1,5 @@
 {
   "comment": "setActionBar call sites with no realm:actionbar request in their function or a helper (file -> function names). build_bp (social-world track): notes from the Effortless Building port that skip lockActionBar. elytra_bp triggerNosRocket: the NOS hint. hud_bp and stats_bp (anonymous): the Coordinates HUD and the stats ticker are the lowest steady lines, which only listen and wait (by design, but their redraw could announce a rank too); stats_bp clearTicker and hud_bp onChange clear the bar with an empty string, which can wipe another pack note. stash_bp (top level): the default hook that main.js replaces. Remove a line with its fix.",
-  "packs/build_bp/scripts/core/BlockPlacer.js": [
-    "placeBlocks"
-  ],
-  "packs/build_bp/scripts/core/Clipboard.js": [
-    "executePaste"
-  ],
-  "packs/build_bp/scripts/core/PlacementQueue.js": [
-    "startPlacementQueue"
-  ],
-  "packs/build_bp/scripts/core/UndoRedo.js": [
-    "performRedo",
-    "performUndo"
-  ],
-  "packs/build_bp/scripts/ui/ModifiersUI.js": [
-    "centerMirrorHere",
-    "centerRadialHere"
-  ],
-  "packs/build_bp/scripts/ui/PaletteUI.js": [
-    "choosePaletteOption"
-  ],
-  "packs/build_bp/scripts/ui/SettingsUI.js": [
-    "showSettingsPanel"
-  ],
   "packs/elytra_bp/scripts/main.js": [
     "triggerNosRocket"
   ],
