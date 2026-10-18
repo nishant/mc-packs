@@ -5,7 +5,9 @@
 //  2. relays Player.sendMessage / World.sendMessage / title and action bar text to the harness
 //     test pack (script event "harness:relay"), so scenarios can read what players are told;
 //  3. answers forms shown to simulated players (they cannot click): the form is described to the
-//     harness, which replies with the scenario's answer or a cancel.
+//     harness, which replies with the scenario's answer or a cancel;
+//  4. fails the run when the pack sends a realm: script event of 2048 characters or more (the documented
+//     limit; BDS 1.26 delivers longer ones, so without this a too-long message only breaks on a Realm).
 // The PACK, HAS_UI and UI import lines are filled in when the shim is generated.
 import { world, system, Player, World, ScreenDisplay } from "@minecraft/server";
 import { SimulatedPlayer } from "@minecraft/server-gametest";
@@ -44,13 +46,31 @@ function safeJson(v) {
   }
 }
 
+// The pack's own sendScriptEvent calls are checked (4.); the shim's relay uses the original.
+const SystemProto = Object.getPrototypeOf(system);
+const rawSend = SystemProto.sendScriptEvent;
+const LIMIT = 2048;
+try {
+  SystemProto.sendScriptEvent = function (id, message, ...rest) {
+    if (typeof id === "string" && id.startsWith("realm:") && typeof message === "string" && message.length >= LIMIT) {
+      // console.error is a script error to run.mjs: the run fails (exit 2) unless the scenario allows it.
+      console.error(`[harness-shim] ${PACK} sent script event ${id} with ${message.length} characters (the limit is under ${LIMIT}): ${message.slice(0, 120)}`);
+      try { rawSend.call(this, "harness:limit", JSON.stringify({ pack: PACK, id, length: message.length })); } catch (e) { /* restricted context */ }
+    }
+    return rawSend.call(this, id, message, ...rest);
+  };
+} catch (e) {
+  console.warn("[harness-shim] could not patch sendScriptEvent: " + e);
+}
+
 function sendNow(id, payload) {
-  // Script event messages are limited to 2048 characters: split into parts.
+  // Script event messages are limited to 2048 characters: split into parts (the escaping of the JSON slice
+  // can make a part longer than MAX, which BDS still delivers; harness: ids aren't checked).
   const s = safeJson(payload);
   const key = PACK + ":" + ++seq;
   const n = Math.max(1, Math.ceil(s.length / MAX));
   for (let i = 0; i < n; i++) {
-    system.sendScriptEvent(id, safeJson({ k: key, i, n, d: s.slice(i * MAX, (i + 1) * MAX) }));
+    rawSend.call(system, id, safeJson({ k: key, i, n, d: s.slice(i * MAX, (i + 1) * MAX) }));
   }
 }
 

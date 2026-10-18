@@ -1,0 +1,12 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Harness limit probe",
+    "description": "Test pack for harness-event-limit.js: sends realm:test_long messages of a given length",
+    "uuid": "9c1e8f3a-2b4d-4e6f-8a1b-3c5d7e9f0a11",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 21, 100]
+  },
+  "modules": [{ "type": "script", "language": "javascript", "uuid": "9c1e8f3a-2b4d-4e6f-8a1b-3c5d7e9f0a12", "version": [1, 0, 0], "entry": "scripts/main.js" }],
+  "dependencies": [{ "module_name": "@minecraft/server", "version": "2.1.0" }]
+}
