@@ -1042,7 +1042,7 @@ const BEA = {
       id: "galley",
       title: "Galley Hands",
       intro: [
-        `${BE}Last night on the Marigold. Twenty years ago. We'd come through a gale off the Serpent Rocks and everyone was alive and I cooked for sixty like it was a wedding. Best supper of my life.`,
+        `${BE}Last night on the Saltwife. Twenty years ago. We'd come through a gale off the Serpent Rocks and everyone was alive and I cooked for sixty like it was a wedding. Best supper of my life.`,
         `${BE}I want to cook it again. Once. Fish pie, potato bread, cocoa pudding. First, the basics. Cod and potatoes, eight each. Good ones. I'll know.`,
         { text: `${BE}Marty's chopping for me now. He cries at every onion. He's going to cry so much at this.`, when: { "hearth_and_table.marty": "hired" } },
       ],
@@ -1066,7 +1066,7 @@ const BEA = {
         { type: "fish", label: "Catch 5 salmon", items: ["minecraft:salmon"], count: 5 },
         { type: "deliver", label: "Bring Bea 3 cocoa beans", npc: "bea", item: "minecraft:cocoa_beans", count: 3 },
       ],
-      outro: [`${BE}Oh, these fought. I can tell. Look at the color. We're nearly there, sailor. Nearly at the Marigold.`],
+      outro: [`${BE}Oh, these fought. I can tell. Look at the color. We're nearly there, sailor. Nearly at the Saltwife.`],
       reward: { levels: 4, crowns: 40 },
       hint: "Salmon bite in rivers and cold oceans. Cocoa beans grow on jungle trees.",
     },
@@ -1082,13 +1082,13 @@ const BEA = {
       ],
       outro: [
         "Supper is loud. Tobin tells the Gnasher story. Reyes sits down, and then is too full to stand up. Elsie hums. Bea stands at the head of the table with her ladle like a captain on a deck, and for an hour the inn is a ship that made it through the storm.",
-        `${BE}There. That's the Marigold's supper. I'll never cook it again. Once is right. Here. My good ladle. NOBODY touches my good ladle. You do now. Don't make me regret it, sailor.`,
+        `${BE}There. That's the Saltwife's supper. I'll never cook it again. Once is right. Here. My good ladle. NOBODY touches my good ladle. You do now. Don't make me regret it, sailor.`,
       ],
       reward: {
         levels: 5,
         crowns: 60,
         items: [{ item: "minecraft:bowl", amount: 1, name: "Bea's Good Ladle", lore: ["NOBODY touches it.", "Except you."] }],
-        codex: { id: "marigold_supper", title: "The Marigold's Supper", text: "Bea's last night at sea, on the Marigold, after a gale off the Serpent Rocks, she cooked for sixty like it was a wedding. Twenty years later she cooked it once more, for the crew she has now, and gave away her good ladle." },
+        codex: { id: "marigold_supper", title: "The Saltwife's Supper", text: "Bea's last night at sea, on the Saltwife, after a gale off the Serpent Rocks, she cooked for sixty like it was a wedding. Twenty years later she cooked it once more, for the crew she has now, and gave away her good ladle." },
       },
       hint: "Talk to Old Tobin, Elsie and Warden Reyes, then go back to Bea.",
     },
