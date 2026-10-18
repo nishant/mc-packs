@@ -1,7 +1,7 @@
 // The story tracker lists every quest going: Ann is on "The Drowned Choir" (Drowned Bell) and accepts Old Tobin's
 // "The One That Got Away" after it. The box follows the newest (Got Away, its step in white) and still lists the
 // Drowned Bell under it, on one row with its own next step; tracking the Drowned Bell swaps them round.
-//   node tools/test-bds/run.mjs --quiet --only saga_bp --scenario tools/test-bds/examples/saga-quest-log.js --timeout 300
+//   node tools/test-bds/run.mjs --quiet --only saga_bp --scenario tools/test-bds/examples/saga-untrack.js --timeout 300
 export default async function (t) {
   const sys = t.system;
   /** @type {{ tick: number, m: any }[]} */
