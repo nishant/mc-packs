@@ -281,7 +281,15 @@ function clock(ms) {
 /** "Crypt (Nightmare 5)" @param {Dungeon} d @param {number} L */
 const dungeonLabel = (d, L) => `${d.name} (${levelName(L)})`;
 /** @param {string} id */
-const online = (id) => world.getAllPlayers().find((p) => p.id === id);
+/** An online player by id (one lookup, not a scan of every player). @param {string} id @returns {Player | undefined} */
+const online = (id) => {
+  try {
+    const e = world.getEntity(id);
+    return e instanceof Player && e.isValid ? e : undefined;
+  } catch {
+    return undefined;
+  }
+};
 /** @param {string} id */
 const dungeonById = (id) => CONFIG.dungeons.find((d) => d.id === id);
 const maxTier = () => clamp(Math.floor(Number(get("maxTier")) || 20), 1, 20);
@@ -3033,28 +3041,25 @@ function inZone(run, rm, p) {
 }
 
 /**
- * Mobs the room needs dead that ended up somewhere else in the dungeon (an enderman's or a shulker's teleport,
- * a vex through a wall) are brought back once they've been away from the room, and from everyone, for 3 seconds:
+ * A mob the room needs dead that ended up somewhere else in the dungeon (an enderman's or a shulker's teleport,
+ * a vex through a wall) is brought back once it has been away from the room, and from everyone, for 3 seconds:
  * otherwise one in a room behind closed bars would hold the door shut for good.
- * @param {Run} run @param {Room} rm @param {Entity[]} list @param {Player[]} all @param {{ u: number, v: number, y: number }} [to]
+ * @param {Run} run @param {Room} rm @param {Entity} m a living mob @param {Vector3} loc where it is @param {Vector3[]} locs where the members are
+ * @param {{ u: number, v: number, y: number }} [to]
  */
-function bringBack(run, rm, list, all, to) {
-  for (const m of list) {
-    if (!alive(m)) continue;
-    const loc = m.location;
-    if (inRoom(run, rm, loc) || all.some((p) => Math.hypot(p.location.x - loc.x, p.location.y - loc.y, p.location.z - loc.z) < 8)) {
-      run.strays.delete(m.id);
-      continue;
-    }
-    const t = (run.strays.get(m.id) ?? 0) + LOOP_TICKS;
-    run.strays.set(m.id, t);
-    if (t < 60 && inBox(run.o, run.size, run.top, loc, 1)) continue;
+function stray(run, rm, m, loc, locs, to) {
+  if (inRoom(run, rm, loc) || locs.some((p) => Math.hypot(p.x - loc.x, p.y - loc.y, p.z - loc.z) < 8)) {
     run.strays.delete(m.id);
-    try {
-      m.teleport(to ? wmid(run, rm, to) : spawnSpot(run, run.room));
-    } catch {
-      // gone
-    }
+    return;
+  }
+  const t = (run.strays.get(m.id) ?? 0) + LOOP_TICKS;
+  run.strays.set(m.id, t);
+  if (t < 60 && inBox(run.o, run.size, run.top, loc, 1)) return;
+  run.strays.delete(m.id);
+  try {
+    m.teleport(to ? wmid(run, rm, to) : spawnSpot(run, run.room));
+  } catch {
+    // gone
   }
 }
 
@@ -3082,9 +3087,10 @@ function tickRun(run, players) {
   if (run.phase === "finishing") {
     if (now >= run.finishAt) endRun(run, "§aThe expedition is over. Welcome back!").catch((e) => console.warn(`[expedition] ${e}`));
     else if (beat % 2 === 0) {
+      const line = `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`;
       for (const id of run.members.keys()) {
         const p = players.get(id);
-        if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(run.clearMs)} §7| ${objective(run)}`, true);
+        if (p) actionbar(p, line, true);
       }
     }
     return;
@@ -3094,8 +3100,20 @@ function tickRun(run, players) {
     return;
   }
   const rm = run.lay.rooms[run.room];
-  const all = [...run.members.keys()].map((id) => players.get(id)).filter((p) => !!p && p.dimension.id === OVERWORLD);
-  const here = all.filter((p) => inRoom(run, rm, /** @type {Player} */ (p).location));
+  /** @type {Player[]} */
+  const all = [];
+  /** @type {Vector3[]} where each of `all` is, read once for this loop */
+  const locs = [];
+  /** @type {Player[]} */
+  const here = [];
+  for (const id of run.members.keys()) {
+    const p = players.get(id);
+    if (!p || p.dimension.id !== OVERWORLD) continue;
+    const loc = p.location;
+    all.push(p);
+    locs.push(loc);
+    if (inRoom(run, rm, loc)) here.push(p);
+  }
   if (!run.roomActive && here.length) {
     run.roomActive = true;
     run.hazards = [];
@@ -3139,9 +3157,18 @@ function tickRun(run, players) {
       } else if (!run.nextWaveAt && now >= run.awaitUntil) {
         // Mobs that wandered out of the dungeon (or got stuck in a wall outside it) don't hold the door shut;
         // ones elsewhere in it are brought back.
-        for (const m of run.mobs) if (alive(m) && !inBox(run.o, run.size, run.top, m.location, 1)) m.remove();
-        bringBack(run, rm, run.mobs, /** @type {Player[]} */ (all));
-        if (!run.mobs.some(alive)) {
+        let left = 0;
+        for (const m of run.mobs) {
+          if (!alive(m)) continue;
+          const loc = m.location;
+          if (!inBox(run.o, run.size, run.top, loc, 1)) {
+            m.remove();
+            continue;
+          }
+          left++;
+          stray(run, rm, m, loc, locs);
+        }
+        if (!left) {
           run.wave++;
           if (run.wave < run.waves) run.nextWaveAt = now + 40;
           else clearRoom(run);
@@ -3190,7 +3217,7 @@ function tickRun(run, players) {
         run.bossGone = boss && alive(boss) ? 0 : run.bossGone + LOOP_TICKS;
         if (run.bossGone >= 60) finish(run); // gone without a death event (removed by a command): still a win
         else if (boss && alive(boss)) {
-          bringBack(run, rm, [boss], /** @type {Player[]} */ (all), rm.bossAt ?? { u: 0, v: 2, y: 1 });
+          stray(run, rm, boss, boss.location, locs, rm.bossAt ?? { u: 0, v: 2, y: 1 });
           const hp = boss.getComponent("minecraft:health");
           if (hp && !run.bossHalf && run.level >= 1 && hp.currentValue < hp.effectiveMax / 2) {
             run.bossHalf = true;
@@ -3239,10 +3266,10 @@ function tickRun(run, players) {
   }
   tickAffixes(run, all.map((p) => /** @type {Player} */ (p)));
   if (beat % 2 === 0) {
-    const t = clock(gameMs() - run.started);
+    const line = `§e${run.dungeon.name} ${levelShort(run.level)} §f${clock(gameMs() - run.started)}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`;
     for (const id of run.members.keys()) {
       const p = players.get(id);
-      if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${t}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`, true);
+      if (p) actionbar(p, line, true);
     }
   }
 }
@@ -3265,7 +3292,15 @@ system.runInterval(() => {
   beat++;
   if (!runs.size) return;
   /** @type {Map<string, Player>} */
-  const players = new Map(world.getAllPlayers().map((p) => [p.id, p]));
+  /** @type {Map<string, Player>} */
+  const players = new Map();
+  for (const run of runs.values()) {
+    if (run.phase !== "active" && run.phase !== "finishing") continue;
+    for (const id of run.members.keys()) {
+      const p = online(id);
+      if (p) players.set(id, p);
+    }
+  }
   for (const run of [...runs.values()]) {
     if (run.phase !== "active" && run.phase !== "finishing") continue;
     try {
