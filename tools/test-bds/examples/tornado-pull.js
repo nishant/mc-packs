@@ -1,6 +1,7 @@
-// Tornadoes: an operator spawns one 40 blocks ahead, a cow and a dropped item near the funnel are pulled in
-// (the cow gets Slow Falling, the item moves), players within 150 blocks are warned, the menu answers where it
-// is, and "End the tornado" stops it with the all-clear for everyone who was warned.
+// Tornadoes: an operator spawns one 40 blocks ahead, a player next to the funnel is sucked up and launched (Slow
+// Falling once shot out the top), a cow next to it is left alone (players only, as documented),
+// players within 150 blocks are warned, the menu answers where it is, and "End the tornado" stops it with the
+// all-clear for everyone who was warned.
 // node tools/test-bds/run.mjs --quiet --only tornado_bp --scenario tools/test-bds/examples/tornado-pull.js --timeout 300
 export default async function (t) {
   const p = await t.player("Chaser", { op: true });
@@ -25,16 +26,21 @@ export default async function (t) {
   const where = await t.waitMessage(p, /Tornado! \d+m to the/, { timeout: 60 });
   t.log(`where: ${where.plain}`);
 
-  // A cow and a dropped item 4 blocks from the funnel (inside pullRadius 12) are pulled: the cow gets Slow Falling
-  // (the pack gives it to every mob it moves), the item moves.
-  const cow = t.dimension.spawnEntity("minecraft:cow", { x: tx + 4, y: top.location.y + 1, z: tz });
-  const item = t.dimension.spawnItem(new t.mc.ItemStack("minecraft:stick", 1), { x: tx - 4, y: top.location.y + 1, z: tz });
-  const itemAt = { ...item.location };
-  await t.wait(40);
-  t.check(cow.isValid && !!cow.getEffect("slow_falling"), "a cow near the funnel is pulled (has Slow Falling)");
-  const moved = item.isValid ? Math.hypot(item.location.x - itemAt.x, item.location.z - itemAt.z) : -1;
-  t.log(`item moved ${moved.toFixed(2)} blocks`);
-  t.check(moved > 0.5, "a dropped item near the funnel moves");
+  // A player 3 blocks from the funnel is pulled in, spun up and shot out the top: Slow Falling about 4.5 s later.
+  // A cow just as close is never touched (players only): it gets no Slow Falling. (Dropped items aren't checked: a
+  // spawned item keeps sliding on its own, so its position says nothing about the funnel.)
+  const rider = await t.player("Rider", { x: tx + 3, z: tz, settle: 1 });
+  const cow = t.dimension.spawnEntity("minecraft:cow", { x: tx + 3, y: top.location.y + 1, z: tz + 1 });
+  cow.addEffect("slowness", 400, { amplifier: 255, showParticles: false }); // no wandering off on its own
+  let highest = rider.location.y;
+  const startY = rider.location.y;
+  await t.waitUntil(() => {
+    if (rider.isValid) highest = Math.max(highest, rider.location.y);
+    return rider.isValid && !!rider.getEffect("slow_falling");
+  }, { timeout: 200, message: "the player next to the funnel is launched (Slow Falling)" });
+  t.log(`rider rose ${(highest - startY).toFixed(1)} blocks`);
+  t.check(highest - startY > 10, "the rider was spun up the funnel (rose more than 10 blocks)");
+  t.check(cow.isValid && !cow.getEffect("slow_falling"), "the cow next to the funnel is left alone (no Slow Falling)");
 
   // A second player within 150 blocks is warned too, and gets the all-clear when the operator ends it from the menu.
   const w = await t.player("Watcher", { x: here.x + 30, z: here.z });
