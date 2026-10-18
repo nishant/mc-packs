@@ -1,7 +1,7 @@
 // Story Questlines operator tools check operator rights again on the press, not only when the menu opened: an operator
 // opens /realm:saga > Operator tools > Reset a player's stories, picks Tester, loses operator rights while the "Reset
 // stories?" question is open, then presses Reset: nothing is reset and they are told why. The same for a story place's
-// page (/realm:saga_places): Remove after losing rights removes nothing.
+// page (/realm:saga_places): Remove after losing rights removes nothing, and neither does Yes on its question.
 //   node tools/test-bds/run.mjs --quiet --only saga_bp --scenario tools/test-bds/examples/saga-op-deop.js --timeout 300
 export default async function (t) {
   const sys = t.system;
@@ -71,4 +71,22 @@ export default async function (t) {
   t.check(!asked, "no Remove question after losing rights");
   t.op(op);
   t.check(await lighthouseSet(), "the lighthouse is still set");
+
+  // Rights taken away while Remove's "Are you sure?" question is open: Yes removes nothing.
+  next = t.waitForm(op, { title: "Story places" });
+  t.assert(t.cmd(op, "/realm:saga_places").ok, "/realm:saga_places ran again");
+  f = await next;
+  next = t.waitForm(op, { title: "Story place" });
+  f.answer(f.buttons.findIndex((b) => /Lighthouse/i.test(b)));
+  f = await next;
+  next = t.waitForm(op, { title: "Are you sure?" });
+  f.answer("Remove");
+  f = await next;
+  t.deop(op);
+  since = t.tick;
+  f.answer("Yes");
+  t.check(!!(await t.waitMessage(op, /Only operators/, { since, timeout: 100 }).catch(() => undefined)), "told only operators can change places after Yes");
+  await t.wait(10);
+  t.op(op);
+  t.check(await lighthouseSet(), "the lighthouse is still set after a de-op during the question");
 }

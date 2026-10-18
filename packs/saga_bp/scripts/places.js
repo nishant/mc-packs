@@ -925,7 +925,14 @@ export function setHere(player, name) {
 /** @param {Player} player @param {string} question */
 async function confirm(player, question) {
   const res = await show(player, new ActionFormData().title("Are you sure?").body(question).button("Yes").button("No"));
-  return !!res && !res.canceled && res.selection === 0;
+  if (!res || res.canceled || res.selection !== 0) return false;
+  // Rights may have been taken away while the question was open.
+  if (!player.isValid) return false;
+  if (!isOp(player)) {
+    player.sendMessage("§c[Story] Only operators can change story places.");
+    return false;
+  }
+  return true;
 }
 
 /** One place's page in the operators' menu. @param {Player} player @param {string} name */
