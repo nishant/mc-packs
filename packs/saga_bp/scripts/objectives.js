@@ -20,6 +20,7 @@ import {
   orMates,
   pagesFor,
   progressOf,
+  reached,
   requires,
   sagaOf,
   partyViews,
@@ -29,7 +30,7 @@ import {
 } from "./data.js";
 import { featureSpot, infoOf, locate, placeSpot, placesOf } from "./places.js";
 import { get, getFor } from "./settings.js";
-import { holdTitle, isSlot, sideBoxes } from "./side.js";
+import { holdTitle, isSlot, questCode, sideBoxes } from "./side.js";
 import { STORIES } from "./stories.js";
 import { FAVORS, WANDERERS } from "./stories/index.js";
 import { DIMENSIONS, OVERWORLD, PACK, across, busy, clock, dialog, dist3, exclusive, groundAt, itemName, npcName, online, open as openBlock, plain, send, show, wait, waterTop } from "./util.js";
@@ -304,7 +305,8 @@ export const side = sideBoxes("saga");
 export function showLine(player, text, ticks, steady) {
   const where = getFor(player, "trackerAt");
   if (isSlot(where)) {
-    side.show(player, where, text, ticks);
+    // Side HUD's quest box, next to the box the player picked (the questCode says which).
+    side.show(player, "quest", questCode(where) + text, ticks);
     return;
   }
   send("realm:actionbar", steady ? { player: player.id, ticks, from: PACK, steady } : { player: player.id, ticks, from: PACK });
@@ -411,7 +413,7 @@ function byType(player) {
  * Objectives a helper does for their party mates (on a party quest, party.js): not the ones that are about the
  * mate themselves (a story character to meet, an escort, a riddle, items in their own pack...). @type {Set<string>}
  */
-const SOLO = new Set(["meet", "inspect", "stealth", "escort", "lead", "defend", "follow", "vision", "answer", "collect", "wait", "sleep", "wear"]);
+const SOLO = new Set(["meet", "inspect", "stealth", "escort", "lead", "defend", "follow", "vision", "answer", "wait", "sleep", "wear"]);
 /** Does this objective count for the player? Always, but on a party quest only what a helper can do. @param {Entry} e @param {Objective} obj */
 export const helps = (e, obj) => !e.pq || (!SOLO.has(obj.type) && !obj.race);
 
@@ -784,6 +786,20 @@ export function weatherWait(obj) {
   const due = weatherPlan?.next.find((s) => s.at > now && (s.weather === "Thunder" || (want === "rain" && s.weather === "Rain")));
   const what = want === "thunder" ? "a thunderstorm" : "rain";
   return due ? `wait for ${what} (due in about ${Math.max(1, Math.ceil((due.at - now) / 60000))} min)` : `wait for ${what}`;
+}
+
+/**
+ * "wait for nightfall (in about 4 min)" while a vigil's time of day hasn't come, else undefined. A Minecraft day is
+ * 24000 ticks, 20 minutes.
+ * @param {Objective} obj
+ */
+export function timeWait(obj) {
+  if ((obj.type !== "survive" && obj.type !== "vigil") || !obj.timeOfDay) return undefined;
+  const [a, b] = obj.timeOfDay;
+  const t = world.getTimeOfDay();
+  if (a <= b ? t >= a && t < b : t >= a || t < b) return undefined;
+  const what = a >= 12000 && a < 16000 ? "nightfall" : a >= 16000 && a < 20000 ? "midnight" : a < 1000 || a >= 23000 ? "dawn" : "the right time of day";
+  return `wait for ${what} (in about ${Math.max(1, Math.ceil((((a - t + 24000) % 24000) / 1200)))} min)`;
 }
 
 /** Nothing over the player's head (the sky can see them). @param {Player} player */
@@ -2859,7 +2875,10 @@ export function tickPlayer(player, list) {
             break;
           }
           case "collect":
-            if (counts && (obj.item || obj.name)) bump(player, e, i, countItem(player, obj.item, obj.name), true);
+            if (!counts || !(obj.item || obj.name)) break;
+            bump(player, e, i, countItem(player, obj.item, obj.name), true);
+            // Done: party mates on the same chapter nearby have it done too (the party's main chapter: party.js).
+            if (reached(e, i)) share(player, new Set([objKey(e, i)]), "collect", (o) => target(o), new Set([player.id]));
             break;
           case "survive": {
             if (counts) weatherHelp(player, e, i, obj);

@@ -27,6 +27,8 @@ import { getModeHandler, MODE_LIST } from "./modes/ModeRegistry.js";
 import { placeBlocks, ALWAYS_REPLACEABLE, UNPLACEABLE } from "./core/BlockPlacer.js";
 import { destroyBlocks, isDiggingTool, canMineWithTool } from "./core/BlockDestroyer.js";
 import { startPreviewLoop, getTargetPos, getTargetBlock, getStep3HeightTarget, clearPreviewCache, clearDeferHintState, getLastPreviewTargetPos } from "./core/Preview.js";
+import { onChange } from "./settings.js";
+import { getMenuStyle } from "./utils/CustomUI.js";
 import { startPlacementQueue, setPlayerBuildSpeed, removePlayerBuildSpeed } from "./core/PlacementQueue.js";
 import { startModifierVisualizerLoop } from "./core/ModifierVisualizer.js";
 import { startVanillaModifierHook } from "./core/VanillaModifierHook.js";
@@ -873,3 +875,17 @@ system.runInterval(() => {
         } catch { }
     }
 }, 1);
+
+// /realm:prefs changes apply right away: the build speed's queue limit (otherwise set at spawn and in the book's
+// settings), and the menu style's old switch (eb:customUI), which would otherwise outrank the new one.
+onChange((key, player) => {
+    if (!player?.isValid) return;
+    if (key === "buildSpeed") setPlayerBuildSpeed(player.id, waveToQueueSpeed(getBuildSpeed(player)));
+    if (key === "floatingUI") {
+        try { player.setDynamicProperty("eb:customUI", undefined); } catch {}
+    }
+});
+// Players with the old menu switch move to the new one as they join, so /realm:prefs shows what they have.
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+    if (initialSpawn) getMenuStyle(player);
+});

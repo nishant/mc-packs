@@ -35,6 +35,13 @@ export function getMenuStyle(player) {
         legacy   = player.getDynamicProperty(DP_CUSTOM_UI);
     } catch {}
     if (typeof floating === "boolean") return floating ? "floating" : "plain";
+    if (typeof legacy === "boolean") {
+        // The old switch: move it to the one /realm:prefs shows, so that menu reads and sets what counts.
+        try {
+            player.setDynamicProperty(DP_FLOATING_UI, legacy);
+            player.setDynamicProperty(DP_CUSTOM_UI, undefined);
+        } catch {}
+    }
     return legacy === false ? "plain" : "floating";
 }
 

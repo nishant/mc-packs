@@ -7,6 +7,27 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Hotbar refill reaches every inventory page
+
+- Used your last rocket (or block, food, pearl...) in the hotbar? If the inventory page you're on has no more, Hotbar Refill now takes the fullest matching stack from your other inventory pages, and the bar says which page it came from.
+
+## Clearer preferences
+
+- /realm:prefs: a setting the operators turned off for the whole realm now shows as gray text with the reason ("Locked by the operators: Coordinates HUD is Disabled for the whole realm") instead of a switch that does nothing.
+- Changes apply when you press Save at the bottom. Closing with X now says "Nothing was saved" and offers Back to my preferences.
+- Easy Building: a build speed changed in /realm:prefs works on your next build (no rejoin), Floating 3D panels always shows what you really have, the preview refresh is a list of the speeds that work, and your max blocks per build is what the menu says.
+- Turning off the welcome popup no longer hides the welcome message in chat.
+
+## A full quest box and smoother parties
+
+- The story tracker has its own bigger box now (bottom right by default). It shows the quest and chapter, every step as a checklist ([>] the one it points at, [ ] still to do, [x] done) with where each one is, and says when steps go in any order.
+- Nothing gets cut off after the first line any more: long steps keep their distance and direction, and anything that doesn't fit says "+2 more in /realm:saga".
+- Night watches say what they wait for: "wait for nightfall (in about 4 min)" or "step out under the open sky".
+- Parties: items to have on you (a compass, paper...) now count for the whole party, so one report to the questgiver finishes the chapter for everyone and you move on together.
+- The box shows who shares a quest: "Party: all progress shared with Bob. One report counts for all."
+- The coordinates HUD above the hotbar is one clear line in sections: X 120  Y 64  Z -340 | Facing NE | Day 12 6:30 AM. Party mates and the stats ticker join it as more sections.
+- Fixed: in a party, the coordinates HUD disappeared while a mate was nearby.
+
 ## Neater side HUDs and a clearer minimap
 
 - Mob health and the Elytra HUD default to the left, with the rotating scoreboard. Existing choices in /realm:prefs and realm settings are kept.

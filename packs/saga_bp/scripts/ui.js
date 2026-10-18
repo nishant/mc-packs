@@ -34,6 +34,7 @@ import {
   pagesFor,
   partyViews,
   progressOf,
+  reached,
   requires,
   sagaOf,
   stateOf,
@@ -43,12 +44,12 @@ import {
   today,
   wanderShape,
 } from "./data.js";
-import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, outdoors, ownUntil, progressed, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, TRACKER_STEADY, weatherWait } from "./objectives.js";
-import { canTake, partyMates, partyTick, reporters, takers } from "./party.js";
+import { askAnswer, askSky, completeStep, counting, crownsOf, endScene, endScenesOf, helps, holdUntil, outdoors, ownUntil, progressed, radiusOf, reportTo, reward, sceneFocus, showLine, side, skyFocus, takeCrowns, timeText, timeWait, TRACKER_STEADY, weatherWait } from "./objectives.js";
+import { canTake, partyMates, partyTick, reporters, takers, together } from "./party.js";
 import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn, placesMenu, placesOf } from "./places.js";
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
-import { SLOTS, SLOT_NAMES, TEXT_BYTES, byteLength, isSlot } from "./side.js";
+import { QUEST_TEXT_BYTES, SLOTS, SLOT_NAMES, byteLength, isSlot, questCode } from "./side.js";
 import { PACK, across, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, plain, send, show } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
@@ -143,11 +144,25 @@ function objectiveLines(player, e, saga) {
     else if (loc) line += ` §7(${loc.label} ${bearing(player, loc, radiusOf(obj))})`;
     const sky = skyFocus(player.id, e, i);
     if (sky) line += `\n  §e${sky.text}: get within ${sky.near} blocks of ${sky.spot} (${bearing(player, sky, sky.near)}), ${clock(sky.left)} left.`;
-    const wait = weatherWait(obj);
+    const wait = weatherWait(obj) ?? timeWait(obj);
     if (wait) line += `\n  §7${wait[0].toUpperCase()}${wait.slice(1)}.`;
     out.push(`${line}§r`);
   });
+  const how = orderNote(player, e, saga);
+  if (how) out.unshift(how);
   return out;
+}
+
+/**
+ * How a chapter's steps go, above its objective lines: in any order or one at a time, and who in the party shares
+ * them. "" for a single step out of a party.
+ * @param {Player} player @param {Entry} e @param {Saga} saga
+ */
+function orderNote(player, e, saga) {
+  const steps = e.chapter.objectives.filter((o) => !o.optional && objApplies(e, o, saga)).length;
+  const order = steps < 2 ? "" : e.chapter.sequential ? "§7These steps go one at a time, in order." : "§7Do these steps in any order.";
+  const party = partyLine(player, e);
+  return [order, party].filter(Boolean).join(" ");
 }
 
 /** One short line: what to do next (the "current step"). @param {Player} player @param {Entry} e @param {Saga} saga */
@@ -1154,6 +1169,8 @@ async function hostileTalk(player, wid) {
  */
 /** @type {Pointed | undefined} */
 let pointed;
+/** The objective the tracker line just computed points at, or -1. */
+let pointedAt = -1;
 
 /** A townsfolk (or a Recurring Wanderer's camp) as a tracker target. @param {Player} player @param {string} npc @param {string} label @returns {Pointed} */
 function npcTarget(player, npc, label) {
@@ -1167,11 +1184,13 @@ function npcTarget(player, npc, label) {
 /** The tracker line for one entry, or undefined when there's nothing to point at. @param {Player} player @param {Entry} e @param {Saga} saga */
 function trackLine(player, e, saga) {
   pointed = undefined;
+  pointedAt = -1;
   // A sky event to chase comes first: it doesn't last.
   for (let i = 0; i < e.chapter.objectives.length; i++) {
     const sky = active(e, i, saga) ? skyFocus(player.id, e, i) : undefined;
     if (sky) {
       pointed = { label: sky.text, dim: sky.dim, x: sky.x, z: sky.z };
+      pointedAt = i;
       return `§e${sky.text}: §fget within ${sky.near} blocks ${bearing(player, sky, sky.near)} §c${clock(sky.left)} left`;
     }
   }
@@ -1193,11 +1212,16 @@ function pointAt(player, e, saga, optional) {
   let timed;
   /** @type {Pointed | undefined} */
   let bestAt;
+  let bestI = -1;
+  let timedI = -1;
   e.chapter.objectives.forEach((obj, i) => {
     if (!!obj.optional !== optional || !active(e, i, saga)) return;
     const label = labelOf(e, i, saga);
     const t = timeText(e, i);
-    if (t && !timed) timed = `§f${label} §c${t}`;
+    if (t && !timed) {
+      timed = `§f${label} §c${t}`;
+      timedI = i;
+    }
     const focus = sceneFocus(player.id, e, i);
     /** @type {Loc | string | undefined} */
     let loc = focus ?? locate(obj);
@@ -1208,20 +1232,30 @@ function pointAt(player, e, saga, optional) {
       if (bestD === Infinity && !best) {
         best = `§f${label}${towardNpc(player, obj.npc)}`;
         bestAt = npcTarget(player, obj.npc, label);
+        bestI = i;
       }
       return;
     }
     if (loc === undefined) {
       const wait = weatherWait(obj); // the label already counts down the seconds
-      if (!best) best = `§f${label}${wait ? ` §7- ${wait}` : ""}`;
+      if (!best) {
+        best = `§f${label}${wait ? ` §7- ${wait}` : ""}`;
+        bestI = i;
+      }
       return;
     }
     if (typeof loc === "string") {
-      if (bestD === Infinity) best = isCamp(loc) ? `§7${placeLabel(loc)} is gone: find them on the road` : `§7${placeLabel(loc)} isn't set yet`;
+      if (bestD === Infinity) {
+        best = isCamp(loc) ? `§7${placeLabel(loc)} is gone: find them on the road` : `§7${placeLabel(loc)} isn't set yet`;
+        bestI = i;
+      }
       return;
     }
     if (hidden(e, obj) && !focus) {
-      if (bestD === Infinity) best = `§f${label} §7(hint available)`;
+      if (bestD === Infinity) {
+        best = `§f${label} §7(hint available)`;
+        bestI = i;
+      }
       return;
     }
     const d = loc.dim === player.dimension.id ? across(player.location, loc) : 1e9;
@@ -1229,9 +1263,11 @@ function pointAt(player, e, saga, optional) {
       bestD = d;
       best = `§f${loc.label} ${bearing(player, loc, radiusOf(obj))}${watchText(player, e, i, obj, d <= radiusOf(obj))}`;
       bestAt = { label: loc.label, dim: loc.dim, x: loc.x, z: loc.z };
+      bestI = i;
     }
   });
   pointed = bestAt;
+  pointedAt = timed ? timedI : bestI;
   return timed ?? best;
 }
 
@@ -1244,7 +1280,7 @@ function pointAt(player, e, saga, optional) {
 function watchText(player, e, i, obj, here) {
   if (obj.type !== "survive" && obj.type !== "vigil") return "";
   const left = target(obj) - progressOf(e, i);
-  const wait = weatherWait(obj) ?? (left > 0 && here && (obj.type === "survive" || obj.outdoors) && !outdoors(player) ? "step out under the open sky" : undefined);
+  const wait = weatherWait(obj) ?? timeWait(obj) ?? (left > 0 && here && (obj.type === "survive" || obj.outdoors) && !outdoors(player) ? "step out under the open sky" : undefined);
   return `${left > 0 ? ` §e${left} s left` : ""}${wait ? ` §7- ${wait}` : ""}`;
 }
 
@@ -1288,6 +1324,7 @@ export function track(player, list, shown = true) {
   let line;
   /** @type {Entry | undefined} */
   let shownE;
+  let shownAt = -1;
   /** @type {Pointed | undefined} */
   let target;
   /** @type {{ e: Entry, text: string }[]} the other quests going, each with its own tracker line */
@@ -1301,21 +1338,27 @@ export function track(player, list, shown = true) {
     }
     line = text;
     shownE = e;
+    shownAt = pointedAt;
     target = pointed ? { ...pointed, label: `${e.story.short}: ${pointed.label}` } : undefined;
   }
   sendTrack(player, target);
   if (!shown || !line || !shownE) return;
   // Our own note is showing, or (above the hotbar) another pack's (a quest, a bounty, mob health): don't write over it.
   if (system.currentTick < (ownUntil.get(player.id) ?? 0)) return;
-  // Wait while another pack's note holds the same spot: the action bar (realm:actionbar) or our Side HUD box (realm:side).
+  // Above the hotbar: wait while another pack's note holds it (realm:actionbar). The quest box is the story's own.
   const where = getFor(player, "trackerAt");
-  if (where === "hotbar" ? system.currentTick < (holdUntil.get(player.id) ?? 0) : side.taken(player, where)) return;
-  showLine(player, isSlot(where) ? questBox(shownE, saga, line, others) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
+  if (where === "hotbar" && system.currentTick < (holdUntil.get(player.id) ?? 0)) return;
+  showLine(player, isSlot(where) ? questBox(player, shownE, saga, line, shownAt, others) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
 }
 
-/** A Side HUD box: 200 x 60 pixels of the default font, about 32 characters a row and 6 rows; more gets cut off. */
+/**
+ * The quest box (Side HUD's big story box, the "quest" segment): 200 pixels of the default font wide, about 32
+ * characters a row, and up to 110 pixels high, about 10 rows; more gets cut off.
+ */
 const BOX_COLS = 32;
-const BOX_ROWS = 6;
+const BOX_ROWS = 10;
+/** Bytes of quest box text, after the questCode that says where it shows. */
+const BOX_BYTES = QUEST_TEXT_BYTES - byteLength(questCode("right1"));
 
 /** Rows a line takes in a box, wrapped at spaces like the game does (color codes take no room). @param {string} line */
 function rowsOf(line) {
@@ -1349,49 +1392,134 @@ function fitRows(line, rows) {
 }
 
 /**
- * The tracker in a Side HUD box: a small quest log. The followed quest's name in aqua and the step the tracker points
- * at in white; then every other quest going, one row each (its name in dark aqua and its own next step in gray);
- * then, with room left, the followed chapter's other open steps in gray (each counting down). Laid out to fit the
- * box: the name takes a row, the step up to 3 (2 when other quests follow), each other step up to 2, cut at a word
- * with "..." when longer, and the last row says "+2 more" when quests or steps don't fit (in rows, or in the box's
- * bytes).
- * @param {Entry} e @param {Saga} saga @param {string} first the tracker's line for the quest
+ * A label and its tail (where it is, what it waits for) in `rows` rows: the label is cut at a word to make room, so
+ * the tail always shows (unless it doesn't fit on its own). @param {string} label @param {string} tail @param {number} rows
+ */
+function fitTail(label, tail, rows) {
+  if (!tail || rowsOf(label + tail) <= rows) return fitRows(label + tail, rows);
+  const words = label.split(" ");
+  while (words.length > 1) {
+    words.pop();
+    const cut = `${words.join(" ").replace(/[\s,:;(-]+$/, "")}...${tail}`;
+    if (rowsOf(cut) <= rows) return cut;
+  }
+  return fitRows(label + tail, rows);
+}
+
+/**
+ * Where one open objective is, for its row in the quest box: " §eNE 240m", " §eMara NE 40m", " §c1:20 left",
+ * " §7(hint available)", or "" when it has no place.
+ * @param {Player} player @param {Entry} e @param {number} i @param {Saga} saga
+ */
+function whereOf(player, e, i, saga) {
+  const obj = e.chapter.objectives[i];
+  const sky = active(e, i, saga) ? skyFocus(player.id, e, i) : undefined;
+  if (sky) return ` §e${sky.text}: within ${sky.near} blocks ${bearing(player, sky, sky.near)} §c${clock(sky.left)} left`;
+  let out = "";
+  const t = timeText(e, i);
+  if (t) out += ` §c${t}`;
+  if (obj.npc && (obj.type === "talk" || obj.type === "deliver" || obj.type === "answer")) return `${out} §e${towardNpc(player, obj.npc).trim() || `(${npcName(obj.npc)}: /realm:npc)`}`;
+  const focus = sceneFocus(player.id, e, i);
+  /** @type {Loc | string | undefined} */
+  let loc = focus ?? locate(obj);
+  if (!focus && obj.type === "follow") loc = locate(obj.from, "where the trail starts");
+  if (!focus && obj.type === "escort" && obj.from) loc = locate(obj.from, obj.who?.name ?? "the start");
+  if (!focus && obj.type === "lead") loc = locate(obj.spawnAt, obj.name ? plain(obj.name) : itemName(obj.mob ?? "")) ?? locate(obj.to, "the pen");
+  if (typeof loc === "string") out += isCamp(loc) ? ` §7(${placeLabel(loc)} is gone: find them on the road)` : ` §7(${placeLabel(loc)} isn't set yet)`;
+  else if (loc && hidden(e, obj) && !focus) out += " §7(hint available)";
+  else if (loc) {
+    const d = loc.dim === player.dimension.id ? across(player.location, loc) : Infinity;
+    const b = bearing(player, loc, radiusOf(obj));
+    out += `${b === "here" ? " §a(you're here)" : ` §e${b}`}${watchText(player, e, i, obj, d <= radiusOf(obj))}`;
+  } else {
+    const wait = weatherWait(obj);
+    if (wait) out += ` §7- ${wait}`;
+  }
+  return out;
+}
+
+/**
+ * The party line of the quest box: who shares this chapter's progress, or "" out of a party (or when it's each
+ * player's own story).
+ * @param {Player} player @param {Entry} e
+ */
+function partyLine(player, e) {
+  if (!together(e.story)) return "";
+  const mates = partyMates(player);
+  if (!mates.length) return "";
+  if (e.pq) return "§3Party quest: you finished it, so you're helping. Your party reports back.";
+  if (e.story.kind === "main") {
+    const view = partyViews.get(player.id);
+    const on = mates.filter((p) => partyViews.get(p.id)?.chapter.id === e.chapter.id);
+    if (!view || !on.length) return "";
+    return `§3Party: all progress shared with ${listNames(on.map((p) => p.name))}. One report counts for all.`;
+  }
+  return `§3Party: mates within ${Number(get("partyRange")) || 64} blocks share progress.`;
+}
+
+/**
+ * The tracker in Side HUD's quest box: the quest and its chapter, every step of the chapter as a checklist (the one
+ * the tracker points at first, then the other open ones with where they are, steps that come later, and the ones done),
+ * whether they go in any order or one at a time, who in the party shares it, and the other quests going, one row
+ * each. When it doesn't all fit (in rows, or in the box's bytes), the least useful rows go first and the last row says
+ * how many more there are; the story log (/realm:saga) has everything.
+ * @param {Player} player @param {Entry} e @param {Saga} saga @param {string} first the tracker's line for the quest
+ * @param {number} at the objective the tracker points at, or -1
  * @param {{ e: Entry, text: string }[]} [others] the other quests going, with their tracker lines
  */
-function questBox(e, saga, first, others = []) {
-  const head = fitRows(`§b${e.story.short}§r`, 1);
-  const main = fitRows(first, Math.min(others.length ? 2 : 3, BOX_ROWS - 1));
-  const lines = [head, main];
-  let used = rowsOf(head) + rowsOf(main);
-  /** @type {{ text: string, rows: number, quest: boolean }[]} */
-  const rest = others.map((o) => ({ text: `§3${o.e.story.short}§7: ${plain(o.text)}`, rows: 1, quest: true }));
-  if (!chapterDone(e, saga))
-    e.chapter.objectives.forEach((obj, i) => {
-      if (obj.optional || !active(e, i, saga)) return;
-      const label = labelOf(e, i, saga);
-      if (!first.includes(label)) rest.push({ text: `§7- ${label}`, rows: 2, quest: false });
-    });
-  /** "+2 more quests", "+1 more step", or "+3 more" for both. @param {number} from */
-  const more = (from) => {
-    const left = rest.slice(from);
-    const q = left.filter((x) => x.quest).length;
-    const n = left.length;
-    return `§7+${n} more${q === n ? (n === 1 ? " quest" : " quests") : q === 0 ? (n === 1 ? " step" : " steps") : ""}`;
-  };
-  for (let k = 0; k < rest.length; k++) {
-    const after = rest.length - k - 1;
-    // Keep a row for "+N more" while more follow.
-    const room = BOX_ROWS - used - (after ? 1 : 0);
-    const line = room > 0 ? fitRows(rest[k].text, Math.min(rest[k].rows, room)) : "";
-    const text = [...lines, line].join("\n") + (after ? `\n${more(k + 1)}` : "");
-    if (!line || byteLength(text) > TEXT_BYTES) {
-      if (used < BOX_ROWS) lines.push(more(k));
-      break;
-    }
-    lines.push(line);
-    used += rowsOf(line);
+function questBox(player, e, saga, first, at, others = []) {
+  /** @type {{ text: string, tail: string, rows: number, prio: number, kind: "step" | "quest" | "other" }[]} */
+  const items = [];
+  const add = (/** @type {string} */ text, rows = 1, prio = 5, kind = /** @type {"step" | "quest" | "other"} */ ("other"), tail = "") => items.push({ text, tail, rows, prio, kind });
+  add(`§b${e.story.short}§7: ${e.chapter.title}`, 2, 10);
+  const done = chapterDone(e, saga);
+  if (done) add(`§6> ${plain(first)}`, 2, 9);
+  const steps = e.chapter.objectives.map((obj, i) => ({ obj, i })).filter(({ obj }) => !obj.optional && objApplies(e, obj, saga));
+  if (!done) {
+    const open = steps.filter(({ i }) => !objDone(e, i, saga));
+    if (steps.length > 1) add(e.chapter.sequential ? "§7Steps, one at a time, in order:" : open.length > 1 ? "§7Steps, in any order:" : "§7Steps:", 1, 7);
+    else if (!steps.length) add(`§f> ${plain(first)}`, 2, 9);
   }
-  return clipTo(lines.join("\n"), TEXT_BYTES);
+  // Open steps: the one the tracker points at first.
+  const order = [...steps].sort((a, b) => (a.i === at ? -1 : b.i === at ? 1 : 0));
+  for (const { obj, i } of order) {
+    if (reached(e, i) || objDone(e, i, saga)) continue;
+    if (!active(e, i, saga)) add(`§8[ ] Then: ${labelOf(e, i, saga)}`, 1, 4, "step");
+    else add(`${i === at ? "§e[>] §f" : "§f[ ] "}${labelOf(e, i, saga)}`, i === at ? 4 : 2, i === at ? 9 : 8, "step", whereOf(player, e, i, saga));
+  }
+  e.chapter.objectives.forEach((obj, i) => {
+    if (obj.optional && objApplies(e, obj, saga) && active(e, i, saga)) add(`§7[ ] ${labelOf(e, i, saga)}`, 1, 3, "step", whereOf(player, e, i, saga));
+  });
+  for (const { obj, i } of steps) if (reached(e, i)) add(`§a[x] §7${obj.label}`, 1, 2, "step");
+  const party = partyLine(player, e);
+  if (party) add(party, 2, 6);
+  for (const o of others) add(`§3${o.e.story.short}§7: ${plain(o.text)}`, 1, 1, "quest");
+  // Fit: drop the lowest rows (the last of equals) until the rows and bytes fit, with one row saying what's left out.
+  /** "+2 more quests", "+1 more step", or "+3 more" for both. @param {typeof items} left */
+  const more = (left) => {
+    const q = left.filter((x) => x.kind === "quest").length;
+    const n = left.length;
+    return `§7+${n} more${q === n ? (n === 1 ? " quest" : " quests") : q === 0 ? (n === 1 ? " step" : " steps") : ""} in /realm:saga`;
+  };
+  const shown = items.map((x) => ({ ...x, full: x.text, text: fitTail(x.text, x.tail, x.rows) }));
+  /** @type {typeof items} */
+  const dropped = [];
+  const render = () => [...shown.map((x) => x.text), ...(dropped.length ? [more(dropped)] : [])].join("\n");
+  const rows = () => shown.reduce((n, x) => n + rowsOf(x.text), 0) + (dropped.length ? 1 : 0);
+  while (shown.length > 1 && (rows() > BOX_ROWS || byteLength(render()) > BOX_BYTES)) {
+    // Too many rows: a two-row line below the top ones goes down to one row first (the last such line).
+    let squeeze = -1;
+    if (rows() > BOX_ROWS) for (let k = shown.length - 1; k >= 0 && squeeze < 0; k--) if (shown[k].prio < 9 && rowsOf(shown[k].text) > 1) squeeze = k;
+    if (squeeze >= 0) {
+      shown[squeeze].text = fitTail(shown[squeeze].full, shown[squeeze].tail, 1);
+      continue;
+    }
+    let low = 0;
+    for (let k = 1; k < shown.length; k++) if (shown[k].prio <= shown[low].prio) low = k;
+    dropped.push(shown[low]);
+    shown.splice(low, 1);
+  }
+  return clipTo(render(), BOX_BYTES);
 }
 
 /** Text cut to a number of UTF-8 bytes on a whole character, with no dangling "§". @param {string} text @param {number} max */
