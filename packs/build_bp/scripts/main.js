@@ -1,4 +1,5 @@
 // @ts-nocheck
+import "./diag.js";
 import {
     world, system, ItemStack, Player,
     BlockPermutation,

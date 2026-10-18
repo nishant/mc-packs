@@ -354,7 +354,7 @@ async function createAdminHarness() {
     fs.writeFileSync(
       serverStub,
       `const m = globalThis.__adminMock;
-export const { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, EntityComponentTypes, EquipmentSlot, GameMode, ItemLockMode, ItemStack, ItemTypes, Player, TimeOfDay, WeatherType, system, world } = m;\n`
+export const { CommandPermissionLevel, CustomCommandParamType, CustomCommandRegistry, CustomCommandStatus, EntityComponentTypes, EquipmentSlot, GameMode, ItemLockMode, ItemStack, ItemTypes, Player, System, TimeOfDay, WeatherType, World, system, world } = m;\n`
     );
     fs.writeFileSync(
       uiStub,
@@ -362,7 +362,7 @@ export const { CommandPermissionLevel, CustomCommandParamType, CustomCommandStat
 export const { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } = m;\n`
     );
 
-    for (const file of ["config.js", "settings.js", "actions.js", "catalog.js", "presets.js", "zones.js", "main.js"]) {
+    for (const file of ["config.js", "settings.js", "actions.js", "catalog.js", "presets.js", "zones.js", "diag.js", "diagnostics.js", "setup.js", "main.js"]) {
       const src = fs.readFileSync(path.join(adminDir, file), "utf8");
       const rewritten = src
         .replaceAll('"@minecraft/server"', JSON.stringify(pathToFileURL(serverStub).href))

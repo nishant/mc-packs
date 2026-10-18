@@ -13,6 +13,7 @@
 //   realm:place_ready  { name, state, dim, x, y?, z, wid? }                  <- story places and camps
 //   realm:poi          { kind, dim, x, z }                                   <- Atlas sites (anchors), when it comes
 // See "Wanderers of the Wilds" in docs/PACKS.md.
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, GameMode, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";

@@ -6,6 +6,7 @@
 //   places.js      story places, building their prefabs (prefabs.js), snapshots, the places menu
 //   ui.js          offers, dialogues, hints, rewards, tracker, the story log menu
 //   party.js       a party's shared main story (one chapter at a time, progress shared)
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ageAdds, expireAdds, sweep, tendActors } from "./actors.js";
 import { calendar, entries, finished, flagOf, flush, flushAll, forget, installed, invalidate, markDirty, objKey, sagaOf, stateOf, storyById } from "./data.js";

@@ -1,3 +1,4 @@
+import "./diag.js";
 import { Block, CommandPermissionLevel, CustomCommandStatus, Dimension, Player, ScriptEventSource, SignSide, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";

@@ -1,14 +1,14 @@
-// Realm Configuration (admin_bp), first run on a new world: an operator's first Realm Configuration item comes with
-// one chat line that points to Operator Tools' server setup checklist; players who aren't operators don't get it,
-// and an operator gets it once (not again after a rejoin or a second item).
+// Realm Configuration (admin_bp), first run on a new world: an operator gets one chat line that points to Set up this
+// world (Operator Tools, /realm:admin_setup); players who aren't operators don't get it, and an operator gets it once
+// (not again after a second item). admin-setup-wizard.js covers the wizard itself.
 //   node tools/test-bds/run.mjs --quiet --only admin_bp --scenario tools/test-bds/examples/admin-setup-hint.js --timeout 300
 export default async function (t) {
   const guest = await t.player("Guest");
   const op = await t.player("Boss", { op: true });
   await t.wait(70); // the item is handed out 40 ticks after spawn
-  const hint = (p) => t.messages(p, { kind: "chat", pack: "admin_bp" }).filter((m) => /setup checklist/i.test(m.plain));
-  t.check(hint(op).length === 1, `the operator hears about the setup checklist once (${hint(op).length})`);
-  t.check(hint(op).every((m) => /Operator Tools/.test(m.plain)), `it says where it is (${hint(op)[0]?.plain})`);
+  const hint = (p) => t.messages(p, { kind: "chat", pack: "admin_bp" }).filter((m) => /Set up this world/.test(m.plain));
+  t.check(hint(op).length === 1, `the operator hears about Set up this world once (${hint(op).length})`);
+  t.check(hint(op).every((m) => /Operator Tools/.test(m.plain) && /\/realm:admin_setup/.test(m.plain)), `it says where it is (${hint(op)[0]?.plain})`);
   t.check(hint(guest).length === 0, `the player who isn't an operator doesn't (${hint(guest).length})`);
 
   // Lose the item and get a new one: no second hint.

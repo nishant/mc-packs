@@ -9,6 +9,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { syncDiag } from "./lib/diag-sync.mjs";
 
 const root = join(import.meta.dirname, "..");
 const newsPath = join(root, "docs", "NEWS.md");
@@ -69,6 +70,7 @@ if (check) {
       process.exit(1);
     }
     writeFileSync(manifestPath, bumped);
+    syncDiag({ folders: ["news_bp"] }); // its scripts/diag.js carries the version
     console.log(`wrote news_bp/scripts/release.js ("${title}"); news_bp is now ${x}.${y}.${z + 1}`);
   } else console.log(`wrote news_bp/scripts/release.js ("${title}")`);
 }

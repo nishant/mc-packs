@@ -9,7 +9,8 @@
 // again from the pass's markers for players who turned or moved, so the compass follows the view; only a part whose
 // text changed is sent. The terrain under the radar is read by a scanner and drawn from what it stored.
 // The cost is capped, not the player count: each kind of work (drawing, building a radar's terrain picture, passes,
-// the scanner) has a time budget a tick (budget.js; about 3 ms a tick in all, saved up when there's little to do).
+// the scanner) has a time budget a tick (budget.js; about 3 ms a tick in all at budgetLevel "normal", saved up when
+// there's little to do).
 // With many players moving at once each one's strip and radar come a few ticks later, the longest-waiting first.
 // The broadcasts (each message under 2048 characters, long lists in parts):
 //   realm:npc_places      { part, parts, folk: [{ id, n, dim, x, z }] }            <- Townsfolk; realm:npc_places_ping {}
@@ -27,6 +28,7 @@
 //   realm:map_debug       { player, action: "state" | "cost" } (operators, tests)  -> realm:map_state
 // Party mates are the online players with the same `realm_party:<code>` tag (Parties).
 // See "Minimap" in docs/PACKS.md.
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { Budget } from "./budget.js";
@@ -1307,6 +1309,36 @@ const PASS_EACH = 2;
 const passBudget = new Budget(0.5, 6, 2);
 /** Player id -> tick of their last pass. @type {Map<string, number>} */
 const passAt = new Map();
+
+/**
+ * budgetLevel: each budget's share of its normal size (perTick, max and tickMax alike), in the order drawing, terrain
+ * pictures, passes, scanner. "low" keeps the drawing budget: with many players it is what keeps every strip and radar
+ * from fading (one refresh per player every REFRESH ticks fills about 1 ms a tick at 100 players); the terrain pictures,
+ * passes and scanner give: the radar's land and mob markers lag more, about 2.0 ms a tick in all instead of 2.9.
+ */
+const BUDGET_LEVELS = { low: [1, 0.5, 0.6, 0.5], normal: [1, 1, 1, 1], high: [1.5, 1.5, 1.5, 1.5] };
+/** @type {[Budget, number, number, number][]} each budget with its normal perTick, max and tickMax */
+const BUDGETS = [drawBudget, rebuildBudget, passBudget, scanBudget].map((b) => [b, b.perTick, b.max, b.tickMax]);
+let budgetLevel = "";
+/** Sets the budgets to budgetLevel's share (at load and when an operator changes it). */
+function applyBudgetLevel() {
+  const level = String(get("budgetLevel"));
+  if (level === budgetLevel) return;
+  budgetLevel = level;
+  const ks = BUDGET_LEVELS[/** @type {keyof typeof BUDGET_LEVELS} */ (level)] ?? BUDGET_LEVELS.normal;
+  for (const [i, [b, perTick, max, tickMax]] of BUDGETS.entries()) {
+    const k = ks[i];
+    b.perTick = perTick * k;
+    b.max = max * k;
+    b.tickMax = tickMax * k;
+    b.left = Math.min(b.left, b.max);
+  }
+}
+applyBudgetLevel();
+world.afterEvents.worldLoad.subscribe(() => applyBudgetLevel()); // a saved level can't be read before the world loads
+onChange((key) => {
+  if (key === "budgetLevel" || key === "*") applyBudgetLevel();
+});
 /** @type {Seen[]} */
 let seen = [];
 let seenAt = -Infinity;
@@ -1689,6 +1721,8 @@ function onEvent(id, m, source) {
         } : undefined,
         cost: { ms: costMs, drawMs, passes: costPasses, players: costPlayers, turnMs, turnTicks, turnDraws, turnSends, scanReads, scanTicks, scanMs, scanPeak, scanEachPeak, scanPlanMs, plansMade: planTurn.made, refreshSends, rebuilds: radarRebuilds, turnCheckMs, radarMs, readCost },
         budgets: { draw: drawBudget.left, rebuild: rebuildBudget.left, pass: passBudget.left, scan: scanBudget.left },
+        budgetLevel,
+        perTick: BUDGETS.reduce((n, [b]) => n + b.perTick, 0),
         known: { folk: folk.size, camps: camps.size, towns: towns.size, pot: pot ?? null, waystones: player ? waystones.get(player.id)?.length ?? 0 : 0, sites: player ? sites.get(player.id)?.length ?? 0 : 0, region: player ? regions.get(player.id) ?? "" : "", death: player ? !!deaths.get(player.id) : false, track: player ? tracks.get(player.id)?.n ?? "" : "", deathAt: player ? deaths.get(player.id) ?? null : null },
       });
       if (m.action === "cost") {
