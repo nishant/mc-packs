@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
@@ -580,6 +580,26 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
     handler("party_chat", (p, /** @type {string} */ text) => chat(p, String(text ?? "")))
   );
 });
+
+// Scenario tests (BDS harness): fill the world with `fill` parties of two offline players, as on a big server after a
+// few months. Only from the server console: /scriptevent realm:party_test {"fill":400}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:party_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const m = JSON.parse(ev.message);
+      const n = Math.max(0, Math.min(2000, Math.floor(Number(m?.fill) || 0)));
+      for (let i = 0; i < n; i++) {
+        const a = `-${4294967000 - 2 * i}`;
+        parties().set(newCode(), { l: a, m: [[a, `OfflinePlayer${i}a`], [`-${4294966999 - 2 * i}`, `OfflinePlayer${i}b`]] });
+      }
+      save();
+    } catch (e) {
+      console.warn(`[party] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
