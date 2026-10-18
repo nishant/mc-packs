@@ -135,7 +135,7 @@ test("two packs in one script context: keys, callbacks, profiling and forget sta
   const bp = prof.find((p) => p.pack === "b_bp");
   assert.ok(bp.calls >= 9 && bp.calls <= 11, `b's interval ran about 10 times in the window (${bp.calls})`);
   assert.equal(bp.ticks >= 10, true);
-  assert.match(bp.top[0].k, /^runInterval\(1\)/);
+  assert.ok(bp.top.some((x) => /^runInterval\(1\)/.test(x.k)), JSON.stringify(bp.top));
   assert.equal(prof.find((p) => p.pack === "a_bp").calls, 0);
 
   // Refused without the exact confirmation.

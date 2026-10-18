@@ -70,8 +70,8 @@ S.cur = REC; // the rest of this pack's modules evaluate next: what they hand ov
 
 /** @returns {State} */
 function install() {
-  const sp = /** @type {any} */ (System.prototype);
-  const wp = /** @type {any} */ (World.prototype);
+  const sp = /** @type {any} */ (System?.prototype ?? {}); // missing outside the game (a tool loading the pack)
+  const wp = /** @type {any} */ (World?.prototype ?? {});
   /** @type {State} */
   const st = {
     api: API, on: false, multi: false, cur: null, packs: new Map(), keyOwner: new Map(), prefixOwner: new Map(), win: null,
@@ -176,7 +176,7 @@ const label = (kind, fn, where) => `${kind}${fn && fn.name && fn.name !== "anony
 
 /** @param {State} st */
 function patchSystem(st) {
-  const proto = /** @type {any} */ (System.prototype);
+  const proto = /** @type {any} */ (System?.prototype ?? {});
   const o = { run: proto.run, runTimeout: proto.runTimeout, runInterval: proto.runInterval, runJob: proto.runJob };
   if (![o.run, o.runTimeout, o.runInterval, o.runJob].every((f) => typeof f === "function")) return; // not the real game (a tool loading the pack)
   /** @param {string} kind @param {Function} cb @param {boolean} rare */
@@ -339,7 +339,7 @@ function claim(st, k) {
 
 /** @param {State} st */
 function patchProps(st) {
-  const wp = /** @type {any} */ (World.prototype);
+  const wp = /** @type {any} */ (World?.prototype ?? {});
   if (typeof st.orig.get !== "function" || typeof st.orig.set !== "function") return;
   wp.getDynamicProperty = function (/** @type {string} */ k) {
     if (!st.keyOwner.has(k)) claim(st, k);
