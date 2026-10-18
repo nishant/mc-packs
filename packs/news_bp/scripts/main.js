@@ -41,10 +41,37 @@ const writeJson = (prop, value) => world.setDynamicProperty(prop, JSON.stringify
 /** @returns {{ title: string, body: string }} */
 const getNews = () => ({ ...DEFAULTS.news, ...readJson(PROP_NEWS, {}) });
 
+/** @type {Set<string> | undefined} the pack folders that answered the last realm:help_ping (undefined: not asked yet) */
+let installedPacks;
+/** @type {Set<Set<string>>} answer sets of pings still waiting */
+const pongs = new Set();
+
+/** Asks which packs are installed (each answers /realm:help's ping with its folder). */
+async function askInstalled() {
+  /** @type {Set<string>} */
+  const got = new Set(["news_bp"]);
+  pongs.add(got);
+  try {
+    system.sendScriptEvent("realm:help_ping", "");
+    await system.waitTicks(10);
+  } finally {
+    pongs.delete(got);
+  }
+  installedPacks = got;
+}
+
+/** The default tips for the packs installed here (all of them before the first answer). */
+const defaultTips = () =>
+  DEFAULTS.tips
+    .map((t) => (typeof t === "string" ? { text: t, pack: undefined } : t))
+    .filter((t) => t && typeof t.text === "string" && t.text.trim() && (!t.pack || !installedPacks || installedPacks.has(t.pack)))
+    .map((t) => t.text);
+
 /** @returns {string[]} a copy, safe to change */
 function getTips() {
-  const tips = readJson(PROP_TIPS, DEFAULTS.tips);
-  return Array.isArray(tips) ? tips.filter((t) => typeof t === "string" && t.trim()) : [...DEFAULTS.tips];
+  /** @type {unknown} */
+  const tips = readJson(PROP_TIPS, undefined);
+  return Array.isArray(tips) ? tips.filter((/** @type {unknown} */ t) => typeof t === "string" && t.trim()) : defaultTips();
 }
 
 /**
@@ -211,11 +238,12 @@ system.runInterval(() => {
   const settings = getTipSettings();
   if (!settings.enabled || world.getAllPlayers().length === 0) return;
   if (++minutesSinceTip < settings.intervalMinutes) return;
-  broadcastTip();
+  broadcastTip().catch((e) => console.warn(`[news] ${e}`));
 }, 1200);
 
-function broadcastTip() {
+async function broadcastTip() {
   minutesSinceTip = 0;
+  await askInstalled(); // packs can be added or removed while the world runs
   const tips = getTips();
   if (tips.length === 0) return;
   world.sendMessage(CONFIG.tipPrefix + tips[tipIndex++ % tips.length]);
@@ -304,6 +332,8 @@ async function editNews(player) {
 
 /** @param {Player} player */
 async function tipsMenu(player) {
+  if (!installedPacks) await askInstalled();
+  if (!player.isValid) return;
   const tips = getTips();
   const settings = getTipSettings();
   const form = new ActionFormData()
@@ -326,7 +356,7 @@ async function tipsMenu(player) {
 
   if (res.selection === 0) await editTip(player, -1);
   else if (res.selection === 1) await tipSettings(player);
-  else if (res.selection === 2) broadcastTip();
+  else if (res.selection === 2) await broadcastTip();
   else await editTip(player, res.selection - 3);
 }
 
@@ -561,8 +591,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
-  ({ id }) => {
+  ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "news_bp");
+    else if (id === "realm:help_pong") for (const got of pongs) got.add(message); // askInstalled
   },
   { namespaces: ["realm"] }
 );
