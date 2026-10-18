@@ -1,3 +1,4 @@
+// Generated from tools/name-labels-shared.js by node tools/sync-labels.mjs: edit that file, not this copy.
 // Single-carrier world-fixed nameplate helpers for owned NPCs and characters.
 // Native entity nameTag is set to SUPPRESSED_NAME ("§r") so the client hides the native 5-block nameplate
 // without triggering the "NPC" fallback or an empty background pill, while keeping a non-empty nameTag so
