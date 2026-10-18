@@ -310,8 +310,8 @@ export function createNameLabels(opts) {
         // 20 blocks, toggle BOTH the helper caption and the native suppressed nameTag between their base and
         // `§r`-suffixed variants 1 s and 3 s more later (with `syncTicks`; else 1 sync and 3 more syncs later) so the client receives a fresh
         // actor-data update packet for both entities without flashing a canonical name on the native entity.
-        // Notice `name.endsWith("§r")` when the caller (`npc_bp`/`caravan_bp` watchName) already drives its
-        // own 1 s / 3 s resend toggle: follow the caller's toggle instead of opposing it.
+        // A caption that already ends in `§r` (a caller's own variant) is taken as the alternate form: the toggle
+        // follows it instead of opposing it. No caller toggles on its own today; the resend lives only here.
         const callerAlt = name.endsWith("§r");
         const baseName = callerAlt ? name.slice(0, -2) : name;
         const prevIds = entry.nearViewers;
