@@ -160,7 +160,14 @@ async function showNews(player, header = "") {
 function applyRelease() {
   if (!CONFIG.releaseNews || !RELEASE.id || !RELEASE.body.trim()) return;
   try {
-    if (world.getDynamicProperty(PROP_RELEASE) === RELEASE.id) return;
+    const last = world.getDynamicProperty(PROP_RELEASE);
+    if (last === RELEASE.id) return;
+    if (last === undefined && getRevision() === 0 && world.getDynamicProperty(PROP_NEWS) === undefined) {
+      // A new world, or the pack just added: what changed since the last update means nothing here yet. The next
+      // update's news is the first to pop up.
+      world.setDynamicProperty(PROP_RELEASE, RELEASE.id);
+      return;
+    }
     writeJson(PROP_NEWS, { title: RELEASE.title ? `§l§b${RELEASE.title}` : DEFAULTS.news.title, body: RELEASE.body });
     world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
     world.setDynamicProperty(PROP_RELEASE, RELEASE.id);
