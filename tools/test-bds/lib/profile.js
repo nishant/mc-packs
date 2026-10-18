@@ -49,11 +49,11 @@ function record(key, ms) {
   if (ms > c.max) c.max = ms;
 }
 
-/** "file:line" of the first stack frame outside the harness files. */
+/** "file:line" of the first stack frame outside the harness files (and the pack's scripts/diag.js, which wraps the same calls). */
 function site() {
   const stack = String(new Error().stack || "").split("\n");
   for (const l of stack) {
-    if (!l.trim() || l.includes("__harness_")) continue;
+    if (!l.trim() || l.includes("__harness_") || l.includes("diag.js")) continue; // diag.js: the pack's own diagnostics wrapper
     const m = /\(([^()]*)\)\s*$/.exec(l) || /at (\S+)\s*$/.exec(l);
     if (m) return m[1];
   }

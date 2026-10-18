@@ -20,7 +20,7 @@ const listAll = process.argv.includes("--list");
 const walk = (/** @type {string} */ dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
 const rel = (/** @type {string} */ f) => relative(root, f).split(sep).join("/");
 /** Shared copies are checked once, in tools/*-shared.js (they are generated into every pack). */
-const SHARED = /\/scripts\/(settings|zones|side)\.js$/;
+const SHARED = /\/scripts\/(settings|zones|side|diag)\.js$/;
 
 /** The text of a call's arguments, from the "(" at `open`, balanced over (), [], {} and strings. @param {string} src @param {number} open */
 function argsAt(src, open) {
