@@ -369,7 +369,8 @@ function paramForm(player, cmd, note) {
 async function openCommand(player, cmd, note, back, ran) {
   if (!cmd.params.length) {
     if (needsConfirm(cmd.name) && !(await confirm(player, `${nameOf(cmd)}: run /${cmd.name}?\n\n${cmd.description}`))) return back?.();
-    ran?.(exec(player, cmd.name, nameOf(cmd)));
+    const ok = exec(player, cmd.name, nameOf(cmd)); // not inside ran?.(): without `ran` that would skip the call
+    ran?.(ok);
     return resume(player, back);
   }
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -398,7 +399,8 @@ async function openCommand(player, cmd, note, back, ran) {
     const line = [cmd.name, ...args].join(" ");
     const everyone = args.includes("@a");
     if ((needsConfirm(cmd.name) || everyone) && !(await confirm(player, `${nameOf(cmd)}: run /${line}?${everyone ? "\n\nThis is for everyone online." : ""}\n\n${cmd.description}`))) return back?.();
-    ran?.(exec(player, line, nameOf(cmd)));
+    const ok = exec(player, line, nameOf(cmd));
+    ran?.(ok);
     return resume(player, back);
   }
   return back?.();
