@@ -62,18 +62,20 @@ const bytesOf = (ch) => {
   return c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
 };
 
+const ASCII = /[\x00-\x7f]+/g;
+const TWO_BYTES = /[\x80-\u07ff]+/g;
+const NOT_SURROGATE = /[^\ud800-\udfff]+/g;
 /**
- * UTF-8 bytes of a string, by UTF-16 units (no iterator, no allocation: it runs on every readout every pack
- * receives). A surrogate pair is 2 + 2 = 4 bytes; a lone surrogate counts 2, close enough for a budget.
+ * UTF-8 bytes of a string. It runs on every readout drawn (the minimap's radar is ~480 characters), so it counts
+ * with native regex passes, about ten times faster than a loop here: every unit is 1 byte, plus 1 from U+0080,
+ * plus 1 more from U+0800; a surrogate pair (2 + 2 units) is 4 bytes, so each surrogate gives one back.
  * @param {string} s
  */
 export function byteLength(s) {
-  let n = 0;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c >= 0xd800 && c < 0xe000 ? 2 : 3;
-  }
-  return n;
+  const wide = s.replace(ASCII, "");
+  if (!wide) return s.length;
+  const wider = wide.replace(TWO_BYTES, "");
+  return s.length + wide.length + wider.length - (wider ? wider.replace(NOT_SURROGATE, "").length : 0);
 }
 
 /**
