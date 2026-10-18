@@ -26,7 +26,7 @@ const ITEM_PROP = "slots:machine";
 const PROP_STATS = "slots:stats"; // player: JSON Stats
 const PROP_DAY = "slots:day"; // player: JSON { day, crowns, emeralds } net loss today
 const PROP_BLOCK = "slots:block"; // player: time (ms) the self-block ends; -1 = until an operator lifts it
-const PROP_MACHINES = "slots:machines"; // world: JSON [{ d, x, y, z }]
+const PROP_MACHINES = "slots:machines"; // world: JSON [{ d, x, y, z, t? }] (t: the block's id when it was made a machine)
 const PROP_TOTALS = "slots:totals"; // world: JSON Totals
 const DAY = 86400000;
 const SPIN_TICKS = [20, 30, 40]; // the tick each reel stops on
@@ -35,7 +35,7 @@ const MAX_MACHINES = 100;
 /** @typedef {"crowns" | "emeralds"} Currency */
 /** @typedef {{ spins: number, crowns: { staked: number, won: number }, emeralds: { staked: number, won: number }, best: number, bestCur: string, jackpots: number }} Stats */
 /** @typedef {{ spins: number, crownsIn: number, crownsOut: number, emeraldsIn: number, emeraldsOut: number, jackpots: number }} Totals */
-/** @typedef {{ d: string, x: number, y: number, z: number }} Machine */
+/** @typedef {{ d: string, x: number, y: number, z: number, t?: string }} Machine */
 
 /** 12345 -> "12,345". @param {number} n */
 const fmt = (n) => String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -626,7 +626,7 @@ function placeMachine(p) {
   if (machineAt(d, at)) return p.sendMessage("§7That block is already a slot machine.");
   const list = machines();
   if (list.length >= MAX_MACHINES) return p.sendMessage(`§cThere are already ${MAX_MACHINES} machines. Remove one first.`);
-  list.push({ d, x: at.x, y: at.y, z: at.z });
+  list.push({ d, x: at.x, y: at.y, z: at.z, t: block.typeId });
   saveMachines(list);
   p.sendMessage(`§aThat ${block.typeId.replace(/^minecraft:/, "").replace(/_/g, " ")} is now a slot machine. §7Players tap it to play. Sneak-tap in creative mode to use the block normally.`);
 }
@@ -652,7 +652,17 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
   if (ev.cancel) return; // another pack refused the tap (e.g. a land claim)
   const { block, player } = ev;
-  if (!machineAt(block.dimension.id, block.location)) return;
+  const m = machineAt(block.dimension.id, block.location);
+  if (!m) return;
+  if (m.t !== block.typeId) {
+    // Blown up, pushed away or replaced without being broken by a player: a different block now, not a machine.
+    // (A machine made before the id was kept learns it on its first tap.)
+    const d = block.dimension.id;
+    const t = block.typeId;
+    const same = (/** @type {{ d: string, x: number, y: number, z: number }} */ x) => x.d === d && x.x === m.x && x.y === m.y && x.z === m.z;
+    system.run(() => saveMachines(m.t === undefined ? machines().map((x) => (same(x) ? { ...x, t } : x)) : machines().filter((x) => !same(x))));
+    if (m.t !== undefined) return;
+  }
   if (player.isSneaking && player.getGameMode() === "Creative") return;
   ev.cancel = true;
   // Holding use repeats the event: open once per tap (by time, which works on every device).

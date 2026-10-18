@@ -4404,7 +4404,7 @@ Operators can change `enabled`, `currencies.crowns`, `currencies.emeralds`, `dai
 | `slots:stats` | Player | JSON: spins, Crowns and emeralds staked and won, the biggest win and jackpots |
 | `slots:day` | Player | JSON `{ day, crowns, emeralds }`: the UTC day and that day's net loss per currency, for the daily limit |
 | `slots:block` | Player | When the player's self-block ends (milliseconds since 1970), or `-1` until an operator lifts it |
-| `slots:machines` | World | JSON list of machine blocks, `[{ d, x, y, z }]` (at most 100) |
+| `slots:machines` | World | JSON list of machine blocks, `[{ d, x, y, z, t }]` (at most 100; `t` is the block's id: a machine whose block was blown up or replaced is forgotten on the next tap) |
 | `slots:totals` | World | JSON: all spins, Crowns and emeralds staked and paid out, jackpots |
 | `slots:machine` | Item | `true` on a Slot Machine item (a carrot on a stick named `Slot Machine`) |
 | `slots:cfg` | World | Settings changed in `/realm:config` |
