@@ -2,7 +2,7 @@
 //   node tools/test-bds/run.mjs --quiet --only mobhp_bp --scenario tools/test-bds/examples/mobhp-overhead.js --timeout 300
 // Checks: the health becomes the mob's name tag and comes off after holdTicks; a second player hitting it sees
 // the mob's own name in a box; named mobs and players keep their names (the box instead, also when the realm
-// default isn't a box); a killing blow writes no name and shows 0/x in the box; two players overhead on one mob;
+// default isn't a box); a killing blow writes no name and shows "defeated" in the box; two players overhead on one mob;
 // a mob that changes dimension mid-display; a restart mid-display (phase 2).
 const MARK = "§s§2§r";
 
@@ -107,7 +107,7 @@ export default async function (t) {
   await hit(doomed, a, 50);
   const mk = await t.waitUntil(() => boxes(a, since)[0], { timeout: 10, message: "box for the killing blow" });
   t.world.afterEvents.entityDie.unsubscribe(sub);
-  t.check(/Chicken  §f0\/4/.test(mk.subtitle), `killing blow box: ${mk.subtitle.slice(6, 40)}`);
+  t.check(/Chicken  §7defeated/.test(mk.subtitle), `killing blow box says defeated: ${mk.subtitle.slice(6, 40)}`);
   t.check(!/\d+\/\d+/.test(nameAtDeath), `no health name on the dying mob ("${nameAtDeath}")`);
 
   // A mob that unloads mid-display is untagged by entityLoad when it loads again; not tested here: on this

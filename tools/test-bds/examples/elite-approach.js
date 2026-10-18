@@ -16,11 +16,16 @@ export default async function (t) {
     t.system.sendScriptEvent("realm:champion_spawn", JSON.stringify({ x: far.x, y: far.y, z: far.z, mob, trait: "shielded", tag }));
   };
   const find = (tag) => t.dimension.getEntities({ tags: [tag] })[0];
+  // For the "no approach" cases: the spider's own random stroll (with the champion's buffs) covered 8-11 blocks in
+  // 10 s in some runs, sometimes toward the player, so those checks failed by chance. Slowness stops its own walking;
+  // the approach moves it by teleport, so it would still show.
+  const hold = (e) => e.addEffect("slowness", 2000, { amplifier: 255, showParticles: false });
 
   // 1. Survival player: the champion closes in.
   p.setGameMode(t.mc.GameMode.Survival);
   spawn("realm:test_a");
   const a = await t.waitUntil(() => find("realm:test_a"), { timeout: 60, message: "champion spawned" });
+  hold(a); // held too: this proves the approach still moves a held champion
   const d0 = flat(a);
   await t.seconds(12);
   const d1 = flat(a);
@@ -37,6 +42,7 @@ export default async function (t) {
   p.setGameMode(t.mc.GameMode.Creative);
   spawn("realm:test_b");
   const b = await t.waitUntil(() => find("realm:test_b"), { timeout: 60, message: "second champion spawned" });
+  hold(b);
   const b0 = flat(b);
   await t.seconds(10);
   const b1 = flat(b);
@@ -50,6 +56,7 @@ export default async function (t) {
   await t.wait(5);
   spawn("realm:test_c");
   const c = await t.waitUntil(() => find("realm:test_c"), { timeout: 60, message: "third champion spawned" });
+  hold(c);
   const c0 = flat(c);
   await t.seconds(10);
   const c1 = flat(c);

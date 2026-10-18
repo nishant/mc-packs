@@ -616,8 +616,10 @@ function storm(champ) {
   const at = { x: x + 0.5, y: surf.y + 1, z: z + 0.5 };
   const spawn = world.getDefaultSpawnLocation();
   const nearSpawn = Math.hypot(x - spawn.x, z - spawn.z) < CONFIG.avoidSpawn;
-  if (nearSpawn || nearBuilt(dim, x, z)) {
-    // Near builds (or the spawn area) it only crackles: lightning would set them on fire.
+  // Safe zones, land claims and towns are protected: lightning there would start fires and turn villagers into
+  // witches and pigs into piglins.
+  if (nearSpawn || isProtected(dim.id, x + 0.5, z + 0.5) || nearBuilt(dim, x, z)) {
+    // Near builds (or the spawn area, or in a safe zone) it only crackles: lightning would set them on fire.
     dim.playSound("ambient.weather.thunder", at, { volume: 0.6, pitch: 1.4 });
     return;
   }

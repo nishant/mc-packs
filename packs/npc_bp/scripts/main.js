@@ -16,7 +16,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
-import { createNameLabels, isSuppressedName, SUPPRESSED_NAME } from "./name-labels.js";
+import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -55,11 +55,14 @@ const nameLabels = createNameLabels({
   ownerTag: OWNER_TAG,
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
+  spectatorsExcluded: true,
+  syncTicks: 10, // LABEL_TICKS
 });
 
 const LOOP_TICKS = 10; // facing, idle lines and keeping them on their spot
 const MISSING_EVERY = 4; // loops between checks for a missing NPC (2 s)
 const MISSING_CHECKS = 3; // checks in a row before a missing NPC is spawned again (6 s): its chunk may still be loading
+const LABEL_TICKS = 10; // how often the name labels are synced
 const AUDIT_TICKS = 200; // every 10 s, look for duplicates, leftovers and changed names
 const OFFER_TICKS = 4; // how long other packs have to answer realm:npc_talk
 const MAX_OFFERS = 16;
@@ -79,7 +82,7 @@ const TURN_MIN = 4; // smaller differences aren't worth a teleport
  * (ids stay the same across loads), so any other entity with its tags is a duplicate or a leftover.
  * @typedef {{ id: string, dim: string, x: number, y: number, z: number, yaw: number, eid?: string }} Placed
  */
-/** @typedef {{ missing: number, nextIdle: number, speech: number, speechLine?: string, labelForm?: string, yaw?: number, viewers?: Set<string>, renameAt?: number, renames?: number }} State */
+/** @typedef {{ missing: number, nextIdle: number, speech: number, speechLine?: string, yaw?: number }} State */
 /** @typedef {{ pack: string, key: string, label: string, order: number }} Offer */
 
 const folk = new Map(CONFIG.townsfolk.map((t) => [t.id, t]));
@@ -95,8 +98,6 @@ const states = new Map();
 
 /** @param {Townsfolk} t "§eMara §7the Cartographer": the name above its head */
 const displayName = (t) => `§e${t.name}${t.title ? ` §7${t.title}` : ""}`;
-/** Its name, or the same name with a trailing §r (looks the same: the form a name resend switches to). @param {string} tag @param {Townsfolk} t */
-const isName = (tag, t) => tag === displayName(t) || tag === `${displayName(t)}§r`;
 /** @param {Townsfolk} t "Mara the Cartographer" */
 const plainName = (t) => (t.title ? `${t.name} ${t.title}` : t.name);
 
@@ -398,34 +399,34 @@ function dress(entity, t) {
   for (const tag of want) if (!entity.hasTag(tag)) entity.addTag(tag);
   const st = stateOf(t.id);
   if (system.currentTick >= st.speech) st.speechLine = undefined;
-  if (!st.labelForm || !isName(st.labelForm, t)) st.labelForm = displayName(t);
   const wantText = labelTextFor(t);
   if (!isSuppressedName(entity.nameTag) && entity.nameTag !== wantText) entity.nameTag = wantText;
 }
 
 // The name above an NPC's head: a world-fixed helper entity (realm:npc_label, always_show=true) carries the
 // canonical name or speech line at headLocation + 0.4y while the native NPC's nameTag is "§r" (suppressing the
-// native 5-block label and "NPC" fallback). When a player comes near, the helper name is resent a moment later.
+// native 5-block label and "NPC" fallback). When a player comes within 20 blocks, name-labels.js sends the name
+// again 1 s and 3 s later (the one resend for every pack that uses it).
 const NAME_RANGE = 20; // players this close count as watching
-const RENAME_TICKS = [20, 60]; // resends after a player comes near: 1 s, then 3 s more
 
 /** Current text for the townsfolk's world-fixed nameplate helper. @param {Townsfolk} t */
 function labelTextFor(t) {
   const st = stateOf(t.id);
   if (system.currentTick < st.speech && st.speechLine) return st.speechLine;
-  return st.labelForm && isName(st.labelForm, t) ? st.labelForm : displayName(t);
+  return displayName(t);
 }
 
 /** Syncs all placed townsfolk nameplate helpers with active observers. */
 function updateLabels() {
   if (!ready) return;
-  const dims = DIMENSIONS.flatMap((id) => {
-    try {
-      return [world.getDimension(id)];
-    } catch {
-      return [];
-    }
-  });
+  const dims = () =>
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    });
   const targets = [];
   for (const rec of list) {
     const t = folk.get(rec.id);
@@ -433,47 +434,21 @@ function updateLabels() {
     if (!t || !entity) continue;
     targets.push({ id: rec.id, entity, name: labelTextFor(t) });
   }
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
-/** Sends the name again (when no idle line is showing). @param {Entity} entity @param {Townsfolk} t */
-function resendName(entity, t) {
-  const st = stateOf(t.id);
-  if (system.currentTick < st.speech) return; // a line is up: its end puts the name back, a change too
-  const name = displayName(t);
-  st.labelForm = st.labelForm === name ? `${name}§r` : name;
-  updateLabels();
-}
 
-/** Every loop: a player new within NAME_RANGE gets the name sent again. @param {Entity} entity @param {Townsfolk} t */
-function watchName(entity, t) {
-  const st = stateOf(t.id);
-  const ids = new Set(entity.dimension.getPlayers({ location: entity.location, maxDistance: NAME_RANGE }).map((p) => p.id));
-  const seen = st.viewers;
-  if (!seen || [...ids].some((id) => !seen.has(id))) {
-    st.renameAt = system.currentTick + RENAME_TICKS[0];
-    st.renames = 0;
-  }
-  st.viewers = ids;
-  if (st.renameAt !== undefined && system.currentTick >= st.renameAt) {
-    resendName(entity, t);
-    const n = (st.renames ?? 0) + 1;
-    st.renames = n;
-    st.renameAt = n < RENAME_TICKS.length ? system.currentTick + RENAME_TICKS[n] : undefined;
-  }
-}
 
 /** @param {Placed} rec @param {Townsfolk} t @param {Vector3} at */
 function spawn(rec, t, at) {
   const dim = world.getDimension(rec.dim);
   if (liftSaved(rec)) at = anchorOf(rec);
-  const entity = fromSkin(rec, dim, at) ?? dim.spawnEntity(NPC_TYPE, at);
+  const entity = fromSkin(rec, dim, at) ?? spawnChecked(dim, NPC_TYPE, at);
   dress(entity, t);
   entity.teleport(at, { rotation: { x: 0, y: rec.yaw } });
   rec.eid = entity.id;
   const st = stateOf(t.id);
   st.yaw = rec.yaw;
-  st.viewers = undefined; // everyone near counts as new: the name is sent again in a moment
   save();
   return entity;
 }
@@ -520,8 +495,6 @@ world.afterEvents.entityLoad.subscribe(({ entity }) => {
     }
     if (entity.typeId !== NPC_TYPE) return;
     audit(entity);
-    const id = entity.isValid ? idOf(entity) : undefined;
-    if (id && placedOf(id)?.eid === entity.id) stateOf(id).viewers = undefined; // loaded again: send the name again soon
   } catch (e) {
     console.warn(`[npc] ${e}`);
   }
@@ -687,10 +660,7 @@ function loop() {
     try {
       if (!players.some((p) => p.dimension.id === rec.dim && dist(p.location, rec) <= activeRange)) {
         const st = states.get(rec.id);
-        if (st) {
-          st.missing = 0;
-          st.viewers = undefined;
-        }
+        if (st) st.missing = 0;
         continue;
       }
       const entity = entityOf(rec);
@@ -700,7 +670,6 @@ function loop() {
       }
       stateOf(rec.id).missing = 0;
       behave(rec, t, entity, lively);
-      watchName(entity, t);
     } catch (e) {
       console.warn(`[npc] ${rec.id}: ${e}`); // usually an unloaded chunk
     }
@@ -723,7 +692,9 @@ world.afterEvents.worldLoad.subscribe(() => {
   // A line left above an NPC by a restart mid-speech is put back by the audit.
   auditAll();
   system.runInterval(loop, LOOP_TICKS);
-  system.runInterval(updateLabels, 2);
+  // Every half second: they stand still (a speech line or a resend redraws at once), and each sync reads every
+  // player near them (about 1 ms with 12 of them and 40 players around).
+  system.runInterval(updateLabels, LABEL_TICKS);
   system.runInterval(auditAll, AUDIT_TICKS);
   // Other packs are loaded by now: the calendar, and each online player's affinity (after a /reload).
   system.runTimeout(() => {

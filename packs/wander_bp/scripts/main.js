@@ -17,7 +17,7 @@ import { CommandPermissionLevel, CustomCommandStatus, EquipmentSlot, GameMode, P
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOKS, NAMED, NAMED_GREETINGS, SAILOR_LOOK } from "./lines.js";
-import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
+import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get, getFor } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
 
@@ -51,6 +51,7 @@ const nameLabels = createNameLabels({
   labelTag: LABEL_TAG,
   labelIdTag: LABEL_ID_TAG,
   observerRange: 36,
+  spectatorsExcluded: true,
 });
 
 const LOOP_TICKS = 20; // upkeep: timers, camps, sparkles, keep ghosts in place
@@ -650,7 +651,7 @@ world.beforeEvents.effectAdd.subscribe((ev) => {
 function spawnWanderer(dim, rec, type, camp, look) {
   try {
     // A villager starts as a village's newcomer (no job yet, a random skin, the biome's clothes), then takes their look.
-    const ent = dim.spawnEntity(/** @type {any} */ (type), { x: rec.x, y: rec.y, z: rec.z }, type === VILLAGER ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
+    const ent = spawnChecked(dim, type, { x: rec.x, y: rec.y, z: rec.z }, type === VILLAGER ? { spawnEvent: "minecraft:spawn_from_village" } : undefined);
     for (const tag of [OWNER_TAG, NPC_TAG, ID_TAG + `w_${rec.w}`, (camp ? CAMP_TAG : ROAD_TAG) + rec.w]) ent.addTag(tag);
     const key = `${camp ? "camp" : "road"}:${rec.w}`;
     ent.nameTag = `${wandererLabel(rec.w, rec.n)}${wandererMarker(key)}`;
@@ -678,13 +679,14 @@ const wandererMarker = (key) => encodeHiddenMarker("b4", key);
 /** Syncs all active road and camp wanderer nameplate helpers with active observers. */
 function updateLabels() {
   if (!ready) return;
-  const dims = DIMENSIONS.flatMap((id) => {
-    try {
-      return [world.getDimension(id)];
-    } catch {
-      return [];
-    }
-  });
+  const dims = () =>
+    DIMENSIONS.flatMap((id) => {
+      try {
+        return [world.getDimension(id)];
+      } catch {
+        return [];
+      }
+    });
   const targets = [];
   for (const rec of Object.values(live)) {
     const ent = entityById(rec.e);
@@ -697,7 +699,7 @@ function updateLabels() {
     const id = `camp:${wid}`;
     if (ent && n) targets.push({ id, entity: ent, name: wandererLabel(wid, n.name), suppressedName: wandererMarker(id) });
   }
-  nameLabels.sync(targets, world.getAllPlayers(), dims);
+  nameLabels.sync(targets, () => world.getPlayers({ excludeGameModes: [GameMode.Spectator] }), dims);
 }
 
 /**

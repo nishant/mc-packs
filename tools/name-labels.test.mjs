@@ -312,7 +312,12 @@ test("townsfolk still resend their helper names for near viewers within 20 block
   const npcMain = readFileSync(new URL("../packs/npc_bp/scripts/main.js", import.meta.url), "utf8");
   const caravanMain = readFileSync(new URL("../packs/caravan_bp/scripts/main.js", import.meta.url), "utf8");
   assert.match(npcMain, /const NAME_RANGE = 20;/);
-  assert.match(npcMain, /getPlayers\(\{ location: entity\.location, maxDistance: NAME_RANGE \}\)/);
+  // One resend design: name-labels.js resends for every pack; townsfolk and traders give their sync interval so it
+  // comes 1 s and 3 s later, and they keep no resend of their own.
+  for (const src of [npcMain, caravanMain]) {
+    assert.match(src, /syncTicks: 10/);
+    assert.doesNotMatch(src, /RENAME_TICKS|labelForm|watchName/);
+  }
   assert.match(npcMain, /nameLabels\.removeFor\(id\)/);
   assert.match(caravanMain, /nameLabels\.removeFor\(String\(i\)\)/);
 
@@ -446,7 +451,7 @@ test("the townsfolk idle loop skips entity and block work beyond its active rang
   const main = readFileSync(new URL("../packs/npc_bp/scripts/main.js", import.meta.url), "utf8");
   const source = main.slice(main.indexOf("let loops = 0;"), main.indexOf("world.afterEvents.worldLoad.subscribe("));
   let entityReads = 0;
-  const state = { missing: 2, viewers: new Set(["player"]) };
+  const state = { missing: 2 };
   const context = {
     get: (key) => ({ enabled: true, faceRange: 8 })[key],
     NAME_RANGE: 20,
@@ -466,5 +471,59 @@ test("the townsfolk idle loop skips entity and block work beyond its active rang
   runInNewContext(`${source}\nfor (let i = 0; i < 8; i++) loop();`, context);
   assert.equal(entityReads, 0);
   assert.equal(state.missing, 0);
-  assert.equal(state.viewers, undefined);
+});
+
+test("a spawn that hands back another entity (repeating entity ids) is never tagged or named as a helper", () => {
+  const { dimensions, target, viewer } = probeWorld();
+  const labels = createNameLabels({ labelType: "realm:npc_label", ownerTag: "realm:npc_owner:npc_bp", labelTag: "realm:npc_label", labelIdTag: "realm:npc_label_id:" });
+  // An existing dropped item comes back from every spawnEntity call.
+  const item = { id: "item-1", typeId: "minecraft:item", nameTag: "", isValid: true, tags: [], location: { x: 0, y: 6, z: 0 }, dimension: dimensions[0],
+    addTag(tag) { this.tags.push(tag); }, teleport(at) { this.location = { ...at }; }, remove() { this.isValid = false; } };
+  const origSpawn = dimensions[0].spawnEntity.bind(dimensions[0]);
+  dimensions[0].spawnEntity = () => item;
+  const origWarn = console.warn;
+  console.warn = () => {};
+  try {
+    labels.sync([{ id: "ida", entity: target, name: "§eIda §7the Blacksmith" }], [viewer(5)], dimensions);
+  } finally {
+    console.warn = origWarn;
+  }
+  assert.deepEqual(item.tags, [], "the item got no helper tags");
+  assert.equal(item.nameTag, "", "the item was not named");
+  assert.equal(item.isValid, true, "the item is not ours to remove");
+  assert.equal(target.nameTag, "§eIda §7the Blacksmith", "the target keeps its own name while no helper exists");
+  dimensions[0].spawnEntity = origSpawn;
+  labels.sync([{ id: "ida", entity: target, name: "§eIda §7the Blacksmith" }], [viewer(5)], dimensions);
+  assert.equal(dimensions[0].getEntities({ type: "realm:npc_label" }).length, 1, "a real helper once spawning works");
+});
+
+test("stray helpers in whole dimensions are swept only every 10th sync; loaded strays still go at once", () => {
+  const { dimensions, target, viewer } = probeWorld();
+  const labels = createNameLabels({ labelType: "realm:npc_label" });
+  let scans = 0;
+  const orig = dimensions[0].getEntities.bind(dimensions[0]);
+  dimensions[0].getEntities = (q) => {
+    scans++;
+    return orig(q);
+  };
+  for (let i = 0; i < 20; i++) labels.sync([{ id: "ida", entity: target, name: "Ida" }], [viewer(5)], dimensions);
+  assert.equal(scans, 2, "two dimension scans in 20 syncs");
+  dimensions[0].getEntities = orig;
+});
+
+test("with syncTicks the resend after a new near viewer comes 1 s and 3 s later in game time", () => {
+  const { dimensions, target } = probeWorld();
+  const labels = createNameLabels({ labelType: "realm:npc_label", syncTicks: 10 });
+  const v = (id, x) => ({ id, isValid: true, dimension: dimensions[0], location: { x, y: 4, z: 0 }, getGameMode: () => "survival" });
+  const sync = (vs) => labels.sync([{ id: "ida", entity: target, name: "Ida" }], vs, dimensions);
+  sync([v("a", 5)]);
+  const [helper] = dimensions[0].getEntities({ type: "realm:npc_label" });
+  const seen = [];
+  sync([v("a", 5), v("b", 6)]); // b comes near
+  for (let i = 0; i < 10; i++) {
+    sync([v("a", 5), v("b", 6)]);
+    seen.push(helper.nameTag);
+  }
+  // Syncs every 10 ticks: the look-alike form after 2 syncs (1 s), back after 6 more (3 s).
+  assert.deepEqual(seen.map((n) => n.endsWith("§r")), [false, true, true, true, true, true, true, false, false, false]);
 });
