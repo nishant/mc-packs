@@ -43,7 +43,10 @@ export default async function (t) {
   t.check(noteAt.m.slot !== "quest", `the wave note is not in the quest box (slot ${noteAt.m.slot}, from ${noteAt.m.from})`);
   // While the note shows (60 ticks), the quest box keeps the quest.
   await t.wait(70);
-  const box = ours(noteAt.tick).filter((s) => s.m.slot === "quest" && s.m.from === "saga");
-  t.log(`quest box writes while the note showed: ${box.length}; last ${JSON.stringify(box[box.length - 1]?.m.text)}`);
-  t.check(box.length > 0 && box.every((s) => /Watch|Wardens/.test(String(s.m.text)) && !/wave 1 of/.test(String(s.m.text))), "the quest box keeps showing the quest while the note shows");
+  // (The box is sent only when it changes: the last write up to now, before or during the note, is what shows.)
+  const box = ours(0).filter((s) => s.m.slot === "quest" && s.m.from === "saga");
+  const last = box[box.length - 1];
+  t.log(`quest box writes: ${box.length}; last (tick ${last?.tick}, note at ${noteAt.tick}) ${JSON.stringify(last?.m.text)}`);
+  t.check(!!last && /Watch|Wardens/.test(String(last.m.text)) && !/wave 1 of/.test(String(last.m.text)) && last.tick + last.m.ticks > noteAt.tick + 60, "the quest box keeps showing the quest while the note shows");
+  t.check(!box.some((s) => /wave 1 of/.test(String(s.m.text))), "the note never went into the quest box");
 }
