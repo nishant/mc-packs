@@ -86,12 +86,13 @@ function recordOf(player) {
   return r;
 }
 
-function flush() {
-  for (const id of dirty) {
+/** Saves changed records: every one, or only these players'. @param {Iterable<string>} [ids] */
+function flush(ids = [...dirty]) {
+  for (const id of ids) {
+    if (!dirty.delete(id)) continue;
     const r = records().get(id);
     if (r) world.setDynamicProperty(RECORD_PREFIX + id, JSON.stringify(r));
   }
-  dirty.clear();
 }
 
 /** @param {Player} player @param {Stat} stat @param {number} [n] */
@@ -143,7 +144,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pending.delete(playerId);
   try {
-    flush();
+    flush([playerId]);
   } catch (e) {
     console.warn(`[milestones] ${e}`);
   }
@@ -214,19 +215,26 @@ function check(player) {
   player.playSound("random.levelup", { pitch: 1, volume: 0.9 });
 }
 
+// Each player is checked (and their record saved) every checkSeconds, a share of the players each second, so a full
+// server doesn't check and save everyone on the same tick.
 let elapsed = 0;
 system.runInterval(() => {
-  if (++elapsed < Math.max(1, CONFIG.checkSeconds)) return;
-  elapsed = 0;
-  for (const player of world.getAllPlayers()) {
+  const every = Math.max(1, CONFIG.checkSeconds);
+  const turn = elapsed++ % every;
+  const players = world.getAllPlayers();
+  /** @type {string[]} */
+  const ids = [];
+  for (let i = turn; i < players.length; i += every) {
+    const player = players[i];
     try {
       check(player);
+      ids.push(player.id);
     } catch (e) {
       console.warn(`[milestones] ${e}`);
     }
   }
   try {
-    flush();
+    flush(ids);
   } catch (e) {
     console.warn(`[milestones] ${e}`);
   }
