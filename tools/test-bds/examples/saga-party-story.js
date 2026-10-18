@@ -31,7 +31,7 @@ export default async function (t) {
       if (last) return;
     }
   };
-  // The story tracker's box (realm:side from saga): its first line is the quest it follows, other quests get a row each.
+  // The story tracker's quest box (realm:side from saga): its first line is the quest it follows ("Last Map: Pins in an Old Map"), other quests get a row each.
   /** @type {{ tick: number, m: any }[]} */
   const sides = [];
   sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
@@ -54,7 +54,7 @@ export default async function (t) {
   since = t.tick;
   await choose(ann, "mara", "start:last_map");
   await t.waitMessage(ann, /Pins in an Old Map/, { since, timeout: 300 });
-  await t.waitUntil(() => trackerSays(ann, /^Last Map$/, since), { timeout: 200, message: "the tracker follows the newest chapter (Last Map)" });
+  await t.waitUntil(() => trackerSays(ann, /^Last Map:/, since), { timeout: 200, message: "the tracker follows the newest chapter (Last Map)" });
 
   const trackFromMenu = async (p) => {
     t.answerForm(p, "Current quests", "Drowned Bell", (f) => f.buttons.findIndex((b) => /Track/.test(b)), "OK", "Back", "Close");
@@ -64,7 +64,7 @@ export default async function (t) {
   await trackFromMenu(ann);
   await t.waitMessage(ann, /Tracking The Drowned Bell/, { since, timeout: 300 });
   const tracked = t.tick;
-  await t.waitUntil(() => trackerSays(ann, /^Drowned Bell$/, tracked), { timeout: 200, message: "the tracker follows the tracked quest" });
+  await t.waitUntil(() => trackerSays(ann, /^Drowned Bell:/, tracked), { timeout: 200, message: "the tracker follows the tracked quest" });
   t.log("1. solo tracking: OK");
 
   // --- 2. Party: Bob (no progress) joins Ann -----------------------------------------------------------------
