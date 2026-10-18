@@ -1208,10 +1208,23 @@ function partyMates(leader) {
     .map((e) => e.p);
 }
 
+/**
+ * Is a slot's dungeon far enough from world spawn? Slot 0 is at the site, checked when it was set; the slots east
+ * of it (`slots` above 1) can come close to a spawn east of the site, so they're checked here: even the smallest
+ * box (100 wide) must keep `avoidSpawn` from it.
+ * @param {{ x: number, z: number }} at the site @param {number} slot
+ */
+function slotFits(at, slot) {
+  if (slot === 0) return true;
+  const spawn = world.getDefaultSpawnLocation();
+  return Math.hypot(at.x + slot * SPACING - spawn.x, at.z - spawn.z) >= CONFIG.avoidSpawn + 50;
+}
+
 /** @returns {number | undefined} */
 function freeSlot() {
   const slots = Math.max(1, Math.min(3, get("slots")));
-  for (let s = 0; s < slots; s++) if (!runs.has(s) && !pending.has(s)) return s;
+  const at = site();
+  for (let s = 0; s < slots; s++) if (!runs.has(s) && !pending.has(s) && (!at || slotFits(at, s))) return s;
   return undefined;
 }
 
@@ -4130,6 +4143,10 @@ function setSite(player, x, z) {
     const o = originFor({ x: sx, z: sz }, slot, size);
     const { from, to } = box(o, size, top);
     const label = slots > 1 ? `Dungeon ${slot + 1} (${from.x}, ${from.z} to ${to.x}, ${to.z})` : `The dungeon area (${from.x}, ${from.y}, ${from.z} to ${to.x}, ${to.y}, ${to.z})`;
+    if (!slotFits({ x: sx, z: sz }, slot)) {
+      notes.push(`§e${label} would come within ${avoid} blocks of world spawn, so it's never used: expeditions run in the other dungeons. To use it, pick a site farther from spawn (each next dungeon is ${SPACING} blocks east of the one before).`);
+      continue;
+    }
     let found;
     try {
       found = findForeign(o, size, top);
