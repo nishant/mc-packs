@@ -1290,7 +1290,29 @@ function watchText(player, e, i, obj, here) {
 
 /** What realm:track last sent for each player (JSON). @type {Map<string, string>} */
 const trackSent = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => trackSent.delete(playerId));
+/**
+ * What each player's quest box last showed and the tick it runs out: an unchanged box is sent again only shortly before
+ * it runs out, since every side-box pack parses every realm:side. @type {Map<string, { text: string, until: number }>}
+ */
+const boxSent = new Map();
+/** How long one quest box write lasts (ticks); the tracker runs every 40. */
+const BOX_TICKS = 300;
+/** An unchanged box is written again when this little of it is left (more than one tracker run). */
+const BOX_RENEW = 60;
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  trackSent.delete(playerId);
+  boxSent.delete(playerId);
+});
+
+/** Takes the player's quest box down, if this pack drew one. @param {Player} player */
+export function clearBox(player) {
+  if (!boxSent.delete(player.id)) return;
+  try {
+    side.clear(player);
+  } catch {
+    // left meanwhile
+  }
+}
 
 /**
  * The tracker's target for the Minimap (map_bp), when it changed: realm:track { player, label, dim?, x?, z?, npc? },
@@ -1346,13 +1368,24 @@ export function track(player, list, shown = true) {
     target = pointed ? { ...pointed, label: `${e.story.short}: ${pointed.label}` } : undefined;
   }
   sendTrack(player, target);
+  const where = getFor(player, "trackerAt");
+  if (!shown || !line || !shownE || !isSlot(where)) clearBox(player);
   if (!shown || !line || !shownE) return;
   // Our own note is showing, or (above the hotbar) another pack's (a quest, a bounty, mob health): don't write over it.
-  if (system.currentTick < (ownUntil.get(player.id) ?? 0)) return;
+  const now = system.currentTick;
+  if (now < (ownUntil.get(player.id) ?? 0)) {
+    boxSent.delete(player.id); // the note took the box's place: draw the box afresh after it
+    return;
+  }
   // Above the hotbar: wait while another pack's note holds it (realm:actionbar). The quest box is the story's own.
-  const where = getFor(player, "trackerAt");
-  if (where === "hotbar" && system.currentTick < (holdUntil.get(player.id) ?? 0)) return;
-  showLine(player, isSlot(where) ? questBox(player, shownE, saga, line, shownAt, others) : `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
+  if (where === "hotbar" && now < (holdUntil.get(player.id) ?? 0)) return;
+  if (!isSlot(where)) return showLine(player, `§b${shownE.story.short}: ${line}`, 50, TRACKER_STEADY);
+  const box = questBox(player, shownE, saga, line, shownAt, others);
+  const key = `${where}|${box}`;
+  const sent = boxSent.get(player.id);
+  if (sent && sent.text === key && sent.until - now > BOX_RENEW) return;
+  boxSent.set(player.id, { text: key, until: now + BOX_TICKS });
+  showLine(player, box, BOX_TICKS, TRACKER_STEADY);
 }
 
 /**
