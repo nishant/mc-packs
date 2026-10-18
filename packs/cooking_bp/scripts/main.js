@@ -475,7 +475,7 @@ function cook(player, d, times, pot) {
   const pid = player.id;
   // The ingredients are gone now: the dish is owed until it is handed over, so a restart or a script
   // reload mid-cook hands it over on the next join instead of losing it.
-  owe(pid, d, n);
+  const owed = owe(pid, d, n);
   cooking.add(pid);
   const ticks = Math.max(1, Math.round(CONFIG.cookSeconds * 20));
   const top = { x: pot.loc.x + 0.5, y: pot.loc.y + 1.1, z: pot.loc.z + 0.5 };
@@ -492,22 +492,26 @@ function cook(player, d, times, pot) {
     if (t < ticks) return;
     system.clearRun(run);
     cooking.delete(pid);
-    finish(player, pid, d, n, pot, top);
+    finish(player, pid, d, n, pot, top, owed);
   }, 5);
   return undefined;
 }
 
-/** @param {Player} player @param {string} pid the player's id @param {Dish} d @param {number} n @param {Pot} pot @param {Vector3} top */
-function finish(player, pid, d, n, pot, top) {
+/** @param {Player} player @param {string} pid the player's id @param {Dish} d @param {number} n @param {Pot} pot @param {Vector3} top @param {boolean} owed the dish was saved as owed when the pot started */
+function finish(player, pid, d, n, pot, top, owed) {
   try {
     world.getDimension(pot.dim).spawnParticle("minecraft:villager_happy", top);
   } catch {
     // unloaded
   }
   // The cook left and nobody is near the pot: nowhere to drop the dishes, so they stay owed for the next join.
-  if (!player.isValid && !isLoaded(pot)) return;
-  // Only what is still owed: a cook who left and came back mid-cook already got it on joining.
-  const due = settle(pid, d, n);
+  if (!player.isValid && !isLoaded(pot)) {
+    if (!owed) owe(pid, d, n);
+    return;
+  }
+  // Only what is still owed: a cook who left and came back mid-cook already got it on joining. If saving
+  // it as owed failed, nothing could hand it over early, so all of it is due.
+  const due = owed ? settle(pid, d, n) : n;
   if (due) deliver(player, d, due, pot);
 }
 
@@ -531,14 +535,20 @@ function isLoaded(pot) {
   }
 }
 
-/** @param {string} pid @param {Dish} d @param {number} n batches */
+/** @param {string} pid @param {Dish} d @param {number} n batches @returns {boolean} whether it was saved */
 function owe(pid, d, n) {
   const all = loadJson(world, PROP_OWED);
   const map = all && typeof all === "object" ? all : {};
   const mine = map[pid] && typeof map[pid] === "object" ? map[pid] : {};
   mine[d.id] = (Number(mine[d.id]) || 0) + n;
   map[pid] = mine;
-  saveJson(world, PROP_OWED, map);
+  try {
+    world.setDynamicProperty(PROP_OWED, JSON.stringify(map));
+    return true;
+  } catch (e) {
+    console.warn(`[cooking] save ${PROP_OWED}: ${e}`);
+    return false;
+  }
 }
 
 /** Takes up to `n` batches of `d` off what `pid` is owed; returns how many were owed. @param {string} pid @param {Dish} d @param {number} n */
