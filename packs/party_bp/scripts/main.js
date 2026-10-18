@@ -262,12 +262,18 @@ function leave(player) {
   player.sendMessage("§dYou left the party.");
 }
 
+/** Tick each player last sent a party chat message: one a second at most. @type {Map<string, number>} */
+const lastChat = new Map();
+
 /** @param {Player} player @param {string} text */
 function chat(player, text) {
   const code = partyOf(player.id);
   if (!code) return player.sendMessage("§cYou're not in a party. Start one with /realm:party");
   const msg = text.replace(/§/g, "").trim().slice(0, get("chatMaxLength"));
   if (!msg) return player.sendMessage('§cType a message: /realm:party_chat "see you there"');
+  const now = system.currentTick;
+  if (now - (lastChat.get(player.id) ?? -Infinity) < 20) return player.sendMessage("§7Slow down: one party message a second.");
+  lastChat.set(player.id, now);
   tell(code, `§d[Party] ${player.name}: §f${msg}`);
 }
 
@@ -400,6 +406,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  lastChat.delete(playerId);
   invites.delete(playerId);
   barHeld.delete(playerId);
 });

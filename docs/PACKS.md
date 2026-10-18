@@ -3424,7 +3424,7 @@ Team up with up to five friends. Party mates see each other's health, distance a
 | `/realm:party_invite <player>` | Everyone | Invites an online player (gamertag or nickname; quote names with spaces) to your party, starting one if you have none. The invite lasts 120 seconds (default, `inviteSeconds`) |
 | `/realm:party_accept` | Everyone | Joins the party you were last invited to |
 | `/realm:party_leave` | Everyone | Leaves your party; the next member leads if you led it |
-| `/realm:party_chat <message>` | Everyone | Sends a message only your party sees, as `[Party] Name: message`. Put it in double quotes for more than one word |
+| `/realm:party_chat <message>` | Everyone | Sends a message only your party sees, as `[Party] Name: message`. Put it in double quotes for more than one word. One message a second at most (a faster one says `Slow down: one party message a second.`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
