@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, WeatherType, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Dimension, ItemStack, Player, ScriptEventSource, WeatherType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
@@ -141,6 +141,7 @@ function form(player, min, max, forced) {
     forced,
   };
   journaled = new Set();
+  cellNo++;
   nextStrike = between(CONFIG.strikeSecondsMin, CONFIG.strikeSecondsMax);
   saveCell();
   const c = cell;
@@ -411,6 +412,25 @@ world.afterEvents.entitySpawn.subscribe(({ entity }) => {
   }
 });
 
+// Town news: Storm Glass collected from a lightning rod is Townsfolk gossip, each player once per storm cell and at
+// most one piece per in-game hour from this pack.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+let cellNo = 0; // counts the cells formed this session
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** A stack of the shared Storm Glass item. @param {number} n */
 function stormGlass(n) {
   const stack = new ItemStack("minecraft:prismarine_crystals", n);
@@ -442,6 +462,7 @@ function collect(player, rod) {
   if (rest) player.dimension.spawnItem(rest, player.location);
   player.sendMessage(`§bYou collect ${n} Storm Glass from the lightning rod${extra ? ` (${extra} more from your Calling and relics)` : ""}.${rest ? " §7It dropped at your feet: your inventory is full." : ""}`);
   player.playSound("random.orb", { pitch: 1.5 });
+  gossip(`${cellNo}:${player.id}`, { kind: "storm_haul", player: player.id, name: player.name, n });
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
@@ -680,6 +701,23 @@ world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendS
 world.afterEvents.playerLeave.subscribe(({ playerId }) => stormSet.delete(playerId));
 /** A Calling talent's number for the player (0 without it). @param {Player} player @param {string} key */
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
+
+// Scenario tests (BDS harness): a player taps a charged rod (simulated players' taps can't reach it). Only from the
+// server console: /scriptevent realm:storm_test {"action":"collect","player":"<name>","x":0,"y":64,"z":0}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:storm_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const m = JSON.parse(ev.message);
+      const player = world.getAllPlayers().find((p) => p.name === m?.player);
+      const rod = player ? rodAt(player.dimension.id, { x: Math.floor(m.x), y: Math.floor(m.y), z: Math.floor(m.z) }) : undefined;
+      if (player && rod && m.action === "collect") collect(player, rod);
+    } catch (e) {
+      console.warn(`[storm] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
