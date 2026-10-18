@@ -1,5 +1,5 @@
 {
-  "comment": "Ids check-ids.mjs flags that pack code still has. Each one needs a fix in its pack (owning track): remove it here in the same commit as the fix; check-ids fails when a listed id is gone. Most are Java Edition names from the Effortless Building port (build_bp) or pre-1.21 names (leaves, log) kept beside the current one; translucent_bp/entities/player.json is a vanilla copy (sulfur_cube_archetype is a damage domain, not an entity); eb:destroy is a build mode id compared with typeId.",
+  "comment": "Ids check-ids.mjs flags that pack code still has. Each one needs a fix in its pack (owning track): remove it here in the same commit as the fix; check-ids warns when a listed id is gone. Most are Java Edition names from the Effortless Building port (build_bp) or pre-1.21 names (leaves, log) kept beside the current one; translucent_bp/entities/player.json is a vanilla copy (sulfur_cube_archetype is a damage domain, not an entity); eb:destroy is a build mode id compared with typeId.",
   "packs/build_bp/scripts/core/BlockDestroyer.js": [
     "minecraft:chain",
     "minecraft:deepslate_lit_redstone_ore",
