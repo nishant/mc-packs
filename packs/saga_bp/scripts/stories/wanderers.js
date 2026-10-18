@@ -38,7 +38,7 @@ const DUSK = /** @type {[number, number]} */ ([11500, 13500]);
 const DAWN = /** @type {[number, number]} */ ([22500, 1500]);
 const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 const FLOWERS = ["minecraft:poppy", "minecraft:dandelion", "minecraft:cornflower", "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:allium", "minecraft:lily_of_the_valley", "minecraft:blue_orchid"];
-const SAPLINGS = ["minecraft:oak_sapling", "minecraft:spruce_sapling", "minecraft:birch_sapling", "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling", "minecraft:cherry_sapling"];
+const SAPLINGS = ["minecraft:oak_sapling", "minecraft:spruce_sapling", "minecraft:birch_sapling", "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling", "minecraft:cherry_sapling", "minecraft:pale_oak_sapling", "minecraft:mangrove_propagule"];
 const MONSTERS = ["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:skeleton", "minecraft:stray", "minecraft:spider", "minecraft:creeper", "minecraft:witch", "minecraft:slime", "minecraft:enderman", "minecraft:bogged"];
 
 /** @type {Story} */

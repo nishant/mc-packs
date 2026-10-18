@@ -24,7 +24,8 @@ const NIGHT = /** @type {[number, number]} */ ([13000, 23000]);
 const MIDNIGHT = /** @type {[number, number]} */ ([17000, 20000]);
 const SQUARE = { x: 10, z: -14 };
 const FLOWERS = ["minecraft:poppy", "minecraft:dandelion", "minecraft:cornflower", "minecraft:oxeye_daisy", "minecraft:azure_bluet", "minecraft:allium", "minecraft:lily_of_the_valley", "minecraft:blue_orchid"];
-const CANDLES = ["minecraft:candle", "minecraft:white_candle", "minecraft:light_gray_candle", "minecraft:gray_candle", "minecraft:yellow_candle", "minecraft:orange_candle", "minecraft:red_candle", "minecraft:blue_candle"];
+/** Every candle color: any candle a player places counts. */
+const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 const NIGHT_MOBS = ["minecraft:zombie", "minecraft:skeleton", "minecraft:spider", "minecraft:creeper", "minecraft:husk", "minecraft:stray", "minecraft:drowned"];
 
 /** @type {Story} */

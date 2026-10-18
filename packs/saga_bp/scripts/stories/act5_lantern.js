@@ -42,6 +42,15 @@ const DEEP = "§5A voice from below:§r ";
 
 /** @type {Who} */ const PIP = { id: "pip", name: "Pip", entity: "minecraft:villager_v2" };
 const GATE = "hollow_gate";
+/** What a barricade can be built of: every wooden fence, the common walls and plain stone. */
+const BARRICADE = [
+  ...["oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo", "pale_oak", "crimson", "warped"].map((w) => `minecraft:${w}_fence`),
+  "minecraft:nether_brick_fence",
+  ...["cobblestone", "mossy_cobblestone", "stone_brick", "mossy_stone_brick", "cobbled_deepslate", "deepslate_brick", "brick", "andesite", "granite", "diorite"].map((w) => `minecraft:${w}_wall`),
+  "minecraft:cobblestone",
+  "minecraft:stone_bricks",
+  "minecraft:cobbled_deepslate",
+];
 const SAPLINGS = [
   "minecraft:oak_sapling",
   "minecraft:spruce_sapling",
@@ -50,18 +59,11 @@ const SAPLINGS = [
   "minecraft:acacia_sapling",
   "minecraft:dark_oak_sapling",
   "minecraft:cherry_sapling",
+  "minecraft:pale_oak_sapling",
   "minecraft:mangrove_propagule",
 ];
-const CANDLES = [
-  "minecraft:candle",
-  "minecraft:white_candle",
-  "minecraft:yellow_candle",
-  "minecraft:orange_candle",
-  "minecraft:light_gray_candle",
-  "minecraft:gray_candle",
-  "minecraft:red_candle",
-  "minecraft:blue_candle",
-];
+/** Every candle color: any candle a player places counts. */
+const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 
 /** @type {Story[]} */
 export const STORIES = [
@@ -355,7 +357,7 @@ export const STORIES = [
             place: "lighthouse",
             radius: 32,
             count: 32,
-            blocks: ["minecraft:cobblestone_wall", "minecraft:oak_fence", "minecraft:spruce_fence", "minecraft:cobblestone", "minecraft:stone_bricks", "minecraft:cobbled_deepslate"],
+            blocks: BARRICADE,
           },
           {
             type: "defeat",

@@ -27,23 +27,11 @@ const FLOWERS = [
   "minecraft:lily_of_the_valley",
   "minecraft:blue_orchid",
 ];
+/** Clear and every stained glass, blocks and panes: any of them mends a window. */
 const GLASS = [
   "minecraft:glass",
   "minecraft:glass_pane",
-  "minecraft:white_stained_glass",
-  "minecraft:yellow_stained_glass",
-  "minecraft:orange_stained_glass",
-  "minecraft:red_stained_glass",
-  "minecraft:blue_stained_glass",
-  "minecraft:light_blue_stained_glass",
-  "minecraft:purple_stained_glass",
-  "minecraft:green_stained_glass",
-  "minecraft:white_stained_glass_pane",
-  "minecraft:yellow_stained_glass_pane",
-  "minecraft:red_stained_glass_pane",
-  "minecraft:blue_stained_glass_pane",
-  "minecraft:light_blue_stained_glass_pane",
-  "minecraft:purple_stained_glass_pane",
+  ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].flatMap((c) => [`minecraft:${c}_stained_glass`, `minecraft:${c}_stained_glass_pane`]),
 ];
 const SILENCE = { "drowned_bell.bell": "silence" };
 const RING = { "drowned_bell.bell": "ring" };
