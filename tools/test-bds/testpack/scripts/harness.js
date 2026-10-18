@@ -271,6 +271,8 @@ function makeT(cfg) {
   const t = {
     mc, gt, world, system,
     config: cfg,
+    /** run.mjs --arg key=value pairs (strings). */
+    args: cfg.args || {},
     packs: cfg.packs || [],
     get tick() { return system.currentTick; },
     get dimension() { return world.getDimension("overworld"); },

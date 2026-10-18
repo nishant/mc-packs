@@ -49,6 +49,7 @@ const SPECIAL = {
   "domt-champion": { args: ["--only", "domt_bp,elite_bp", "--timeout", "600"], note: "header also asks for a run with --only domt_bp" },
   "npc-name-capability": { args: ["--flat", "--only", "npc_bp,build_rp", "--strict"], note: "capability probe (header's native run)" },
   "saga-lighthouse": { args: ["--flat", "--only", "saga_bp", "--timeout", "300"], note: "no command in header" },
+  "perf-soak": { args: ["--no-relay", "--profile", "--profile-every", "0", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short soak (6 players, 60 s)" },
   "stash-pages-persistence": { runner: "stash-persistence.mjs", note: "custom runner stash-persistence.mjs" },
 };
 // Headers whose test copy is a plain shell recipe: it is run first. Other --packs scenarios

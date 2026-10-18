@@ -24,6 +24,7 @@ const USAGE = `usage: node run.mjs --packs <dir> [options]
   --keep               keep the temp server folder
   --log <file>         log file (default logs/<time>-<pid>.log next to run.mjs)
   --quiet              print only harness lines, warnings and errors (the log has everything)
+  --arg key=value      passed to the scenario as t.args.key (repeatable)
   --no-relay           do not relay pack messages to the scenario (t.messages stays empty; forms still work)
   --profile            time every pack's callbacks during the scenario and report per pack (see README)
   --profile-every <s>  with --profile: also print an interim report every s seconds (default 60, 0 = off)
@@ -39,7 +40,7 @@ try {
       prop: { type: "string", multiple: true, default: [] }, "allow-error": { type: "string", multiple: true, default: [] },
       strict: { type: "boolean", default: false }, "no-shim": { type: "boolean", default: false },
       keep: { type: "boolean", default: false }, log: { type: "string" }, quiet: { type: "boolean", default: false },
-      "no-relay": { type: "boolean", default: false },
+      arg: { type: "string", multiple: true, default: [] }, "no-relay": { type: "boolean", default: false },
       profile: { type: "boolean", default: false }, "profile-every": { type: "string", default: "60" }, "profile-json": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -64,7 +65,9 @@ const logFile = path.resolve(args.log || path.join(process.env.BDS_HARNESS_LOGS 
 fs.mkdirSync(path.dirname(logFile), { recursive: true });
 const logStream = fs.createWriteStream(logFile);
 const say = (s) => { console.log(s); logStream.write(s + "\n"); };
-const profile = args.profile ? new Profile({ say, everyS: Number(args["profile-every"]) || 0, json: path.resolve(args["profile-json"] || logFile.replace(/\.log$/, "") + ".profile.json"), scenario: scenarioFile }) : null;
+const scenarioArgs = {};
+for (const kv of args.arg) { const i = kv.indexOf("="); if (i > 0) scenarioArgs[kv.slice(0, i)] = kv.slice(i + 1); else scenarioArgs[kv] = "true"; }
+const profile = args.profile ? new Profile({ say, everyS: Number(args["profile-every"]) || 0, json: path.resolve(args["profile-json"] || logFile.replace(/\.log$/, "") + ".profile.json"), scenario: scenarioFile, args: scenarioArgs }) : null;
 
 // ---------------------------------------------------------------------------
 // Prepare
@@ -182,7 +185,7 @@ function maybeStart() {
   if (startSent || !serverStarted || !ready) return;
   startSent = true;
   phase = runPhase > 1 ? `scenario ${runPhase}` : "scenario";
-  const cfg = { packs: packs.map((p) => p.folder), idleTicks: Number(args.ticks), phase: runPhase };
+  const cfg = { packs: packs.map((p) => p.folder), idleTicks: Number(args.ticks), phase: runPhase, args: scenarioArgs };
   bds.send(`scriptevent harness:start ${JSON.stringify(cfg)}`);
 }
 

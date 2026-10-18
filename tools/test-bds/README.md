@@ -46,6 +46,7 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--keep` | off | Keep the temp server folder (path printed at the end). |
 | `--log <file>` | `logs/...` | Where to write the full log. |
 | `--quiet` | off | Print only harness lines, warnings and errors. Recommended. |
+| `--arg key=value` | | Passed to the scenario as `t.args.key` (a string), repeatable. |
 | `--no-relay` | off | The shim does not relay pack messages (`t.messages()` stays empty; forms still work). For profiling. |
 | `--profile` | off | Time every pack's callbacks during the scenario (see "Profiling" below). |
 | `--profile-every <s>` | 60 | With `--profile`: also print an interim report every s seconds (0 = off). |
@@ -85,8 +86,12 @@ shim's relay (a script event per message), so profile with `--no-relay`. The sim
 the scenario itself also cost server time that no pack is charged for.
 
 ```bash
-node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/smoke.js
+node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/perf-soak.js --arg players=10 --arg seconds=300 --timeout 900
 ```
+
+`examples/perf-soak.js` spreads `players` simulated players around spawn in groups (two near spawn,
+the others 240+ blocks apart, two in a pool, two in the Nether), makes them walk, look around, sneak
+and jump, and run a few common commands for `seconds` (see its header for the other arguments).
 
 ## Running every example (`suite.mjs`)
 
