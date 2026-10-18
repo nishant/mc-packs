@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, ItemLockMode, ItemTypes, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, ItemLockMode, ItemTypes, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -515,6 +515,26 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Scenario tests (BDS harness): every open goal gets `donors` more contributors (offline players, 1 item each), as a
+// long goal on a big server does. Only from the server console: /scriptevent realm:goals_test {"donors":900}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:goals_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const n = Math.max(0, Math.min(5000, Math.floor(Number(JSON.parse(ev.message)?.donors) || 0)));
+      for (const g of goals().values()) {
+        if (g.done) continue;
+        for (let i = 0; i < n; i++) g.c[`-${4294900000 - i}`] = [`DonorWithALongName${i}`, 1];
+        g.got += n;
+        save(g);
+      }
+    } catch (e) {
+      console.warn(`[goals] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
