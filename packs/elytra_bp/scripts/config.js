@@ -5,7 +5,7 @@ export const CONFIG = {
    * action bar above the hotbar). The boxes show at the same time as the other packs' boxes, and other add-ons
    * that redraw the action bar all the time can't cover them. Without Side HUD the text shows in the middle.
    */
-  showAt: "right2",
+  showAt: "left2",
 
   /** The gliding HUD for the whole realm. Disabled: nobody sees it, and /realm:elytra says so. */
   enabled: true,

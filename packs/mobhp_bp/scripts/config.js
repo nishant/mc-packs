@@ -3,11 +3,11 @@ export const CONFIG = {
    * Where it shows for players who haven't chosen in /realm:prefs: one of the Side HUD boxes (Realm Resources)
    * "right1".."right4", "left1".."left4" (top to bottom) or "middle" (under the crosshair); "overhead" (a name
    * tag above the hit mob for holdTicks, which everyone nearby sees; players and mobs with a name show in
-   * "right1" instead); or "hotbar" (the action bar above the hotbar). The boxes show at the same time as the
+   * "left1" instead); or "hotbar" (the action bar above the hotbar). The boxes show at the same time as the
    * other packs' boxes, and other add-ons that redraw the action bar all the time can't cover them.
    * Without Side HUD the boxes' text shows in the middle of the screen.
    */
-  showAt: "right1",
+  showAt: "left1",
 
   /** Mob health on the action bar for the whole realm. Disabled: nobody sees it, whatever they chose. */
   enabled: true,
