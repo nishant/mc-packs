@@ -16,9 +16,18 @@ for (const f of walk(join(root, "tools"))) {
   if (!name.startsWith("check-") && src.includes('"--check"') && !check.includes(`node ${rel} --check`)) problems.push(`${rel} has a --check that npm run check doesn't run: add "node ${rel} --check"`);
   if (/^check-[\w-]+\.mjs$/.test(name) && !check.includes(`node ${rel}`)) problems.push(`${rel} isn't run by npm run check`);
 }
+// Each BDS scenario's header command runs the scenario itself (the suite runs that command; a copy-paste slip ran
+// saga-quest-log.js from saga-untrack.js's header).
+const examples = join(root, "tools", "test-bds", "examples");
+for (const f of readdirSync(examples).filter((x) => x.endsWith(".js"))) {
+  const head = readFileSync(join(examples, f), "utf8").split("\n").slice(0, 60).filter((l) => /^\s*\/\//.test(l)).join("\n");
+  for (const m of head.matchAll(/node tools\/test-bds\/run\.mjs[^\n]*?--scenario\s+(\S+)/g)) {
+    if (m[1] !== `tools/test-bds/examples/${f}`) problems.push(`tools/test-bds/examples/${f}: its header runs ${m[1]}`);
+  }
+}
 if (!/npm run (--silent )?test\b/.test(check)) problems.push("npm run check doesn't run the unit tests (npm run test)");
 if (problems.length) {
   console.error(`npm run check is missing steps:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
   process.exit(1);
 }
-console.log("npm run check runs every generator's --check, every check tool and the unit tests.");
+console.log("npm run check runs every generator's --check, every check tool and the unit tests; every BDS scenario header runs its own file.");
