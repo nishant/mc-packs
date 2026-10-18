@@ -7,6 +7,13 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Clearer preferences
+
+- /realm:prefs: a setting the operators turned off for the whole realm now shows as gray text with the reason ("Locked by the operators: Coordinates HUD is Disabled for the whole realm") instead of a switch that does nothing.
+- Changes apply when you press Save at the bottom. Closing with X now says "Nothing was saved" and offers Back to my preferences.
+- Easy Building: a build speed changed in /realm:prefs works on your next build (no rejoin), Floating 3D panels always shows what you really have, the preview refresh is a list of the speeds that work, and your max blocks per build is what the menu says.
+- Turning off the welcome popup no longer hides the welcome message in chat.
+
 ## A full quest box and smoother parties
 
 - The story tracker has its own bigger box now (bottom right by default). It shows the quest and chapter, every step as a checklist ([>] the one it points at, [ ] still to do, [x] done) with where each one is, and says when steps go in any order.

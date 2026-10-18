@@ -39,7 +39,7 @@ export const PACKS = [
     "summary": "Change the packs' settings in game: operators set them for everyone with §e/realm:config§r, and every player picks their own preferences with §e/realm:prefs§r.",
     "steps": [
       {
-        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r. A summary pops up with how many changes were saved and each one as before -> after, for example §e1 change saved§r and §ePhantom Opt-out > Phantoms near me: Enabled -> Disabled§r (chat gets the same). Tap §lBack to my preferences§r to change more, or §lDone§r.",
+        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r at the bottom: nothing applies until you do. A preference the operators have overridden for the whole realm shows as gray text instead of a switch, with its value and why, such as §eCoordinates HUD: Disabled§r / §eLocked by the operators: Coordinates HUD is Disabled for the whole realm§r (or §eEasy Building needs the tag \"builder\", which operators give§r). Close with X and a popup says §eNothing was saved§r, with §lBack to my preferences§r and §lClose§r (the game doesn't hand back what was on a form closed with X, so changes made there have to be made again). A summary pops up with how many changes were saved and each one as before -> after, for example §e1 change saved§r and §ePhantom Opt-out > Phantoms near me: Enabled -> Disabled§r (chat gets the same). Tap §lBack to my preferences§r to change more, or §lDone§r.",
         "ops": false
       },
       {
@@ -145,7 +145,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:welcome§r (or §e/realm:welcome_show§r) any time to see it again. Don't want the popup when you join? Disable §lWelcome popup when I join§r in §e/realm:prefs§r.",
+        "text": "Run §e/realm:welcome§r (or §e/realm:welcome_show§r) any time to see it again. Don't want the popup when you join? Disable §lWelcome popup when I join§r in §e/realm:prefs§r; the chat welcome and the title still come (before 1.5.3 that switch turned them off too).",
         "ops": false
       },
       {

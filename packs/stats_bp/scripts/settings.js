@@ -47,13 +47,13 @@ export const OPTIONS = [
   { key: "tickerValueColor", type: "enum", scope: "world", label: "Ticker number color (players start with)", ...colors },
   ...STATS.map((s) => /** @type {Option} */ ({ key: `tickerShows.${s.id}`, type: "bool", scope: "world", label: `Ticker shows ${s.label} (players start with)` })),
 
-  { key: "ticker", type: "bool", scope: "player", base: "tickerDefaultOn", label: "Stats ticker above my hotbar", help: "Your own stats, one at a time or all on one line. The same switch as /realm:stats_ticker" },
-  { key: "tickerMode", type: "enum", scope: "player", base: "tickerMode", label: "Ticker shows", ...mode },
-  { key: "tickerSeconds", type: "int", scope: "player", base: "tickerSeconds", label: "Ticker seconds per stat", min: 2, max: 60, step: 1 },
-  { key: "tickerStyle", type: "enum", scope: "player", base: "tickerStyle", label: "Ticker style", ...style },
-  { key: "tickerLabelColor", type: "enum", scope: "player", base: "tickerLabelColor", label: "Ticker name color", help: opacity, ...colors },
-  { key: "tickerValueColor", type: "enum", scope: "player", base: "tickerValueColor", label: "Ticker number color", help: opacity, ...colors },
-  ...STATS.map((s) => /** @type {Option} */ ({ key: `tickerShows.${s.id}`, type: "bool", scope: "player", base: `tickerShows.${s.id}`, label: `Ticker shows ${s.label}` })),
+  { key: "ticker", type: "bool", scope: "player", lock: [["tickerEnabled", false]], base: "tickerDefaultOn", label: "Stats ticker above my hotbar", help: "Your own stats, one at a time or all on one line. The same switch as /realm:stats_ticker" },
+  { key: "tickerMode", type: "enum", scope: "player", lock: [["tickerEnabled", false]], base: "tickerMode", label: "Ticker shows", ...mode },
+  { key: "tickerSeconds", type: "int", scope: "player", lock: [["tickerEnabled", false]], base: "tickerSeconds", label: "Ticker seconds per stat", min: 2, max: 60, step: 1 },
+  { key: "tickerStyle", type: "enum", scope: "player", lock: [["tickerEnabled", false]], base: "tickerStyle", label: "Ticker style", ...style },
+  { key: "tickerLabelColor", type: "enum", scope: "player", lock: [["tickerEnabled", false]], base: "tickerLabelColor", label: "Ticker name color", help: opacity, ...colors },
+  { key: "tickerValueColor", type: "enum", scope: "player", lock: [["tickerEnabled", false]], base: "tickerValueColor", label: "Ticker number color", help: opacity, ...colors },
+  ...STATS.map((s) => /** @type {Option} */ ({ key: `tickerShows.${s.id}`, type: "bool", scope: "player", lock: [["tickerEnabled", false]], base: `tickerShows.${s.id}`, label: `Ticker shows ${s.label}` })),
 ];
 
 // ---- Shared: the same in every pack. Edit tools/settings-shared.js, then run node tools/sync-settings.mjs ----
@@ -79,13 +79,17 @@ export const OPTIONS = [
  * @property {number} [min]
  * @property {number} [max]
  * @property {number} [step]
- * @property {string[]} [choices] enum only
+ * @property {string[]} [choices] enum; or int/float: the only values allowed, as text ("1", "2", "5")
  * @property {string[]} [names] enum only: how each choice reads in the menu, in the same order (default: the choice itself)
  * @property {boolean} [invert] bool only: the value is stored as "off" but the menu shows the switch as "enabled", so it reads without a double negative
  * @property {boolean} [restart] read only when the world starts: shown, but not editable in game
  * @property {string} [base] player only: the world option a player starts with
  * @property {unknown} [default] player only, without `base`: what a player starts with
  * @property {string} [prop] player only: its own dynamic property instead of `<PREFIX>:pref`
+ * @property {[string, unknown][]} [lock] player only: world options that make this preference do nothing, each with
+ *   the value that does it ([["enabled", false]]); /realm:prefs then shows it as set by the operators
+ * @property {(player: Player) => string | undefined} [locked] player only: why it can't change for this player now, when
+ *   that isn't a plain world value (a tag the player lacks...)
  * @property {() => unknown} [read] world only, saved elsewhere: the saved value, or undefined
  * @property {(value: unknown) => void} [write] world only, saved elsewhere: save it (undefined = back to config.js)
  */
@@ -116,6 +120,7 @@ function problem(opt, v) {
     case "float":
       if (typeof v !== "number" || !Number.isFinite(v)) return "must be a number";
       if (opt.type === "int" && !Number.isInteger(v)) return "must be a whole number";
+      if (opt.choices && !opt.choices.includes(String(v))) return `must be one of ${opt.choices.join(", ")}`;
       if ((opt.min !== undefined && v < opt.min) || (opt.max !== undefined && v > opt.max)) return `must be ${opt.min ?? "..."} to ${opt.max ?? "..."}`;
       return undefined;
     case "enum":
@@ -293,6 +298,25 @@ function changed(key, player) {
 // Realm Settings protocol
 // ---------------------------------------------------------------------------
 
+/**
+ * Why a player's preference does nothing right now because of the operators, in words for /realm:prefs ("Coordinates
+ * HUD is Disabled for the whole realm"), or undefined when the player's choice counts.
+ * @param {Option} o @param {Player} player
+ */
+function lockedFor(o, player) {
+  for (const [key, value] of o.lock ?? []) {
+    if (get(key) !== value) continue;
+    const w = optionFor("world", key);
+    const shown = typeof value === "boolean" ? (w?.invert ? !value : value) ? "Enabled" : "Disabled" : w?.type === "enum" && w.names && w.choices ? w.names[w.choices.indexOf(String(value))] ?? String(value) : String(value);
+    return `${w?.label ?? key} is ${shown} for the whole realm`;
+  }
+  try {
+    return o.locked?.(player);
+  } catch {
+    return undefined;
+  }
+}
+
 /** @param {Player | undefined} player @returns {object[]} the options, with their current values */
 function describe(player) {
   return OPTIONS.filter((o) => o.scope === "world" || player).map((o) => {
@@ -312,6 +336,7 @@ function describe(player) {
       invert: o.invert || undefined,
       scope: o.scope,
       restart: o.restart || undefined,
+      locked: isWorld ? undefined : lockedFor(o, /** @type {Player} */ (player)),
     };
   });
 }
