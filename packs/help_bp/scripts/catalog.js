@@ -39,7 +39,7 @@ export const PACKS = [
     "summary": "Change the packs' settings in game: operators set them for everyone with §e/realm:config§r, and every player picks their own preferences with §e/realm:prefs§r.",
     "steps": [
       {
-        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r. A summary pops up with how many changes were saved and each one as before -> after, for example §e1 change saved§r and §ePhantom Opt-out > Phantoms near me: Enabled -> Disabled§r (chat gets the same). Tap §lBack to my preferences§r to change more, or §lDone§r.",
+        "text": "Run §e/realm:prefs§r to open §lMy preferences§r: one form with your own choices from every installed pack, such as whether you get durability warnings, phantoms or the rain extras, what sneak-tapping a chest does, and whether chat announces you going AFK. Every switch is named for what it does: on means §lEnabled§r. Change what you like and tap §lSave§r at the bottom: nothing applies until you do. A preference the operators have overridden for the whole realm shows as gray text instead of a switch, with its value and why, such as §eCoordinates HUD: Disabled§r / §eLocked by the operators: Coordinates HUD is Disabled for the whole realm§r (or §eEasy Building needs the tag \"builder\", which operators give§r). Close with X and a popup says §eNothing was saved§r, with §lBack to my preferences§r and §lClose§r (the game doesn't hand back what was on a form closed with X, so changes made there have to be made again). A summary pops up with how many changes were saved and each one as before -> after, for example §e1 change saved§r and §ePhantom Opt-out > Phantoms near me: Enabled -> Disabled§r (chat gets the same). Tap §lBack to my preferences§r to change more, or §lDone§r.",
         "ops": false
       },
       {
@@ -145,7 +145,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Run §e/realm:welcome§r (or §e/realm:welcome_show§r) any time to see it again. Don't want the popup when you join? Disable §lWelcome popup when I join§r in §e/realm:prefs§r.",
+        "text": "Run §e/realm:welcome§r (or §e/realm:welcome_show§r) any time to see it again. Don't want the popup when you join? Disable §lWelcome popup when I join§r in §e/realm:prefs§r; the chat welcome and the title still come (before 1.5.3 that switch turned them off too).",
         "ops": false
       },
       {
@@ -520,6 +520,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lHotbar refill from other pages:§r with Hotbar Refill on, a hotbar stack you use up is refilled from another page when the page you're on has none (§erealm:refill_need§r §e{ player, slot, id, name?, lore? }§r: the fullest stack on another page with the same item, name and lore moves into that empty hotbar slot, in one saved step like a page switch).",
+        "ops": false
+      },
+      {
         "text": "§lAuto-store:§r when the page you are on is full (or down to its last free slot), the stack you just picked up moves to another page by itself, and the bar says §e[Page #2] Auto-stored 12x Cobblestone (96 slots left)§r.",
         "ops": false
       },
@@ -720,7 +724,7 @@ export const PACKS = [
     "summary": "Your own coordinates, the direction you're facing and the day and time, on the bar above the hotbar (or in a Side HUD box, if you prefer), for players who enable it. Handy for building, mapping and meeting up without opening a map.",
     "steps": [
       {
-        "text": "Run §e/realm:hud§r. Above your hotbar you now see §eXYZ 120 64 -340  Facing NE  Day 12 at 6:30 AM§r, updated as you move. Only you see yours.",
+        "text": "Run §e/realm:hud§r. Above your hotbar you now see one line in sections, §eX 120  Y 64  Z -340  |  Facing NE  |  Day 12  6:30 AM§r, updated as you move. Only you see yours.",
         "ops": false
       },
       {
@@ -1395,7 +1399,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker uses §lRight 4§r in the centered right-side readout group below the fixed minimap: quest name in aqua (§eDrowned Bell§r), then the next step/direction in white (§eLighthouse NE 240m§r). The compact side box retains two useful lines; open §e/realm:saga§r for the complete quest log and other open steps. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r. The rotating Stats scoreboard is on the left, not beneath the quest.",
+        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker is a quest box at §lRight 4§r (bottom right, below the minimap), up to about 10 rows: the quest and chapter in aqua (§eDrowned Bell: Salt and Silence§r), whether the steps go §eSteps, in any order:§r or §eSteps, one at a time, in order:§r, then every step as a checklist: §e[>]§r the one the tracker points at, §e[ ]§r the other open ones, each with where it is (§eNE 240m§r, §e(you're here)§r, §ewait for nightfall (in about 4 min)§r), §e[ ] Then:§r steps that come later, §e[x]§r steps done. In a party a line says who shares it (§eParty: all progress shared with Bob. One report counts for all.§r). Other quests going get a row each under it. §e/realm:saga§r has the full quest log. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r. The rotating Stats scoreboard is on the left, not beneath the quest.",
         "ops": false
       },
       {
@@ -1423,7 +1427,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "In a party (Parties), the main story is shared. The party works on one main-story chapter at a time: the next one of the member online who is furthest behind. Everyone on it shares its progress, wherever they are: counts add up, time spent and distance ridden count for whoever is furthest along, a timed step only once someone finishes it in time, and a step one member finishes is done for all. A step only reaches mates it applies to: an either/or step done one way never finishes another way for a mate. One member accepting the party's chapter accepts it for every mate on it: the others watch the conversation in a popup that closes by itself, and chat lists the steps (§e[Party] Ann accepted The Drowned Bell, \"Salt and Silence\" for the party.§r). One report back counts for every mate who finished it too, with their own rewards, and a choice made there is made for everyone (chat says what was chosen), unless it doesn't fit a mate's own story (they chose another way earlier) or costs Crowns: then that mate is told and takes it on or reports back themselves. A mate with a step of their own still to do (items to have) reports back themselves. When one of you starts a side story, mates who could start it too get §eParty: join a story?§r (Join / Not now, for 60 seconds). In a party the tracker keeps the party's chapter on top, unless you tracked another quest. Members who are past it get it as a party quest (§eParty: The Drowned Bell§r in Current quests, on the tracker): what they do for it (defeating, mining, fishing, delivering, talking, reaching places, keeping watch...) counts for the others, and their own main story waits, saved, until the party catches up. Steps about one player themselves (meeting a character, escorts, defenses, riddles, items to have) are for the members on the chapter. Offline members don't hold the party up, and neither does a member who can't start their next main story yet (it needs something else first): they help, and chat tells them what they need. Leaving the party gives you your own story back. Side stories and favors are your own; mates within 64 blocks on the same chapter still share defeat, survive and reach progress.",
+        "text": "In a party (Parties), the main story is shared. The party works on one main-story chapter at a time: the next one of the member online who is furthest behind. Everyone on it shares its progress, wherever they are: counts add up, time spent and distance ridden count for whoever is furthest along, a timed step only once someone finishes it in time, and a step one member finishes is done for all. A step only reaches mates it applies to: an either/or step done one way never finishes another way for a mate. One member accepting the party's chapter accepts it for every mate on it: the others watch the conversation in a popup that closes by itself, and chat lists the steps (§e[Party] Ann accepted The Drowned Bell, \"Salt and Silence\" for the party.§r). One report back counts for every mate who finished it too, with their own rewards, and a choice made there is made for everyone (chat says what was chosen), unless it doesn't fit a mate's own story (they chose another way earlier) or costs Crowns: then that mate is told and takes it on or reports back themselves. Items to have on you count for the party too: once one member carries them, the step is done for everyone on the chapter. A mate who still has a step of their own reports back themselves. When one of you starts a side story, mates who could start it too get §eParty: join a story?§r (Join / Not now, for 60 seconds). In a party the tracker keeps the party's chapter on top, unless you tracked another quest. Members who are past it get it as a party quest (§eParty: The Drowned Bell§r in Current quests, on the tracker): what they do for it (defeating, mining, fishing, delivering, talking, reaching places, keeping watch...) counts for the others, and their own main story waits, saved, until the party catches up. Steps about one player themselves (meeting a character, escorts, defenses, riddles) are for the members on the chapter. Offline members don't hold the party up, and neither does a member who can't start their next main story yet (it needs something else first): they help, and chat tells them what they need. Leaving the party gives you your own story back. Side stories and favors are your own; mates within 64 blocks on the same chapter still share defeat, survive, reach and items-to-have progress.",
         "ops": false
       },
       {
