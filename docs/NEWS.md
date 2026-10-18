@@ -7,6 +7,12 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Quest spot outline repair
+
+- Fixed the particle inputs for story destination boxes, interaction blocks and clue outlines.
+- Quest guides keep their Easy Building-style block faces: amber to walk to, green when inside and cyan to tap.
+- Outlines stay personal and enabled by default. Show quest spot outlines in /realm:prefs switches them off.
+
 ## World-fixed character names
 
 - Townsfolk, caravan traders, wanderers, and story characters now use one world-fixed name helper above the character's head instead of viewer-relative projected labels.

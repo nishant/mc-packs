@@ -1435,7 +1435,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lQuest spot outlines:§r the exact block or box a quest needs shows as a semi-clear colored outline, only for you (drawn by the Easy Building Guides resource pack). §lAmber§r is a standing box to walk to: the block under you, a 3x3 of floor tiles and, for steps with a zone (a vigil, a survive, a defense or a placing), a ring of tiles at its edge; also the escort and lead drop-off and the stealth goal. It turns §lemerald green§r while you stand inside it. §lCyan§r is a block to tap: the bell, altar or brazier of an Interact step, and the block of an Inspect clue (which also gets amber corner brackets in its air space). They show within about 40 blocks of the spot. Don't want them? Disable §lShow quest spot outlines§r in §e/realm:prefs§r.",
+        "text": "§lQuest spot outlines:§r the exact block or box a quest needs shows as a semi-clear colored outline, only for you (drawn by the Easy Building Guides resource pack, using the same axis-aligned block-face rendering as Easy Building). §lAmber§r is a standing box to walk to: the block under you, a 3x3 of floor tiles and, for steps with a zone (a vigil, a survive, a defense or a placing), a ring of tiles at its edge; also the escort and lead drop-off and the stealth goal. It turns §lemerald green§r while you stand inside it. §lCyan§r is a block to tap: the bell, altar or brazier of an Interact step, and the block of an Inspect clue (which also gets amber corner brackets in its air space). They show within about 40 blocks of the spot, refresh every second and are enabled by default. Don't want them? Disable §lShow quest spot outlines§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
