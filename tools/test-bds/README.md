@@ -46,11 +46,47 @@ log file path (the full BDS output, `logs/<time>-<pid>.log` next to `run.mjs`).
 | `--keep` | off | Keep the temp server folder (path printed at the end). |
 | `--log <file>` | `logs/...` | Where to write the full log. |
 | `--quiet` | off | Print only harness lines, warnings and errors. Recommended. |
+| `--no-relay` | off | The shim does not relay pack messages (`t.messages()` stays empty; forms still work). For profiling. |
+| `--profile` | off | Time every pack's callbacks during the scenario (see "Profiling" below). |
+| `--profile-every <s>` | 60 | With `--profile`: also print an interim report every s seconds (0 = off). |
+| `--profile-json <file>` | log + `.profile.json` | With `--profile`: where the JSON report goes. |
 | `-h`, `--help` | | Print the usage and exit. |
 
 Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or `/home/user/bds` on Linux; downloaded by `setup.mjs` if
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
 `logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
+
+## Profiling (`--profile`)
+
+`--profile` adds `lib/profile.js` to every shimmed behavior pack (after the shim, before the pack's
+entry, in the temp copy only). It wraps the callbacks a pack hands to the game, calls them with the
+same `this` and arguments and returns their result, so the pack behaves the same:
+`system.run`/`runTimeout`/`runInterval`, each step of a `runJob` generator, every
+`world`/`system` `beforeEvents`/`afterEvents` subscription (unsubscribe takes the pack's own function
+as before) and custom command callbacks. It also counts `setDynamicProperty` writes (world, entity,
+item, and the characters written), `setActionBar`, `setTitle` and `runCommand` calls. Each callback
+is named by its kind and the `file:line` that handed it over (`runInterval(20) @ main.js:148`). The
+window starts when the scenario starts (startup and module loading are not measured) and ends when
+it finishes; with `t.restart()` only the last phase is reported. The test pack also measures the
+wall time between ticks (TPS, tick interval p95), and on Linux `run.mjs` reads `bedrock_server`'s CPU
+time and memory from `/proc`.
+
+The summary then lists, per pack sorted by cost: ms/tick (average), the p95 and max of a tick's ms,
+calls/tick, `setDynamicProperty`, `setActionBar`, `setTitle` and `runCommand` per tick and the top
+callback; the JSON report (`--profile-json`) has the top 5 callbacks of each pack, and the
+whole-bundle per-tick total (packs summed tick by tick: p50, p95, p99, max).
+
+Limits: Bedrock scripting has no high-resolution clock, so times are `Date.now()` differences: a
+single call reads 0 or 1 ms, but sums over many calls are unbiased, and per-tick p95 values are whole
+milliseconds. Code after an `await` in an async callback runs as a promise continuation and is not
+counted. A pack that triggers another pack's before-event handler synchronously is charged for it as
+well. With message relaying on, a pack's `sendMessage`/`setActionBar`/`setTitle` time includes the
+shim's relay (a script event per message), so profile with `--no-relay`. The simulated players and
+the scenario itself also cost server time that no pack is charged for.
+
+```bash
+node tools/test-bds/run.mjs --quiet --no-relay --profile --scenario tools/test-bds/examples/smoke.js
+```
 
 ## Running every example (`suite.mjs`)
 

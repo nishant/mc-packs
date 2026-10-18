@@ -7,6 +7,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { HERE, IS_WIN, BDS_BIN, makeServerDir, writeProps, baseProps, freePort, startBds, stopBds, ensureTemplate, bdsDir } from "./lib/server.mjs";
 import { findPacks, installBehaviorPack, installResourcePack, installHarnessPack, HARNESS_PACK } from "./lib/packs.mjs";
+import { Profile } from "./lib/profile-report.mjs";
 
 const USAGE = `usage: node run.mjs --packs <dir> [options]
   --packs <dir>        folder containing pack folders (default: ../../packs from this script, if present)
@@ -22,7 +23,11 @@ const USAGE = `usage: node run.mjs --packs <dir> [options]
   --no-shim            do not wrap packs with the shim (simulated players become invisible to them)
   --keep               keep the temp server folder
   --log <file>         log file (default logs/<time>-<pid>.log next to run.mjs)
-  --quiet              print only harness lines, warnings and errors (the log has everything)`;
+  --quiet              print only harness lines, warnings and errors (the log has everything)
+  --no-relay           do not relay pack messages to the scenario (t.messages stays empty; forms still work)
+  --profile            time every pack's callbacks during the scenario and report per pack (see README)
+  --profile-every <s>  with --profile: also print an interim report every s seconds (default 60, 0 = off)
+  --profile-json <f>   with --profile: where to write the JSON report (default: the log file + .profile.json)`;
 
 let args;
 try {
@@ -34,6 +39,8 @@ try {
       prop: { type: "string", multiple: true, default: [] }, "allow-error": { type: "string", multiple: true, default: [] },
       strict: { type: "boolean", default: false }, "no-shim": { type: "boolean", default: false },
       keep: { type: "boolean", default: false }, log: { type: "string" }, quiet: { type: "boolean", default: false },
+      "no-relay": { type: "boolean", default: false },
+      profile: { type: "boolean", default: false }, "profile-every": { type: "string", default: "60" }, "profile-json": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   }).values;
@@ -57,6 +64,7 @@ const logFile = path.resolve(args.log || path.join(process.env.BDS_HARNESS_LOGS 
 fs.mkdirSync(path.dirname(logFile), { recursive: true });
 const logStream = fs.createWriteStream(logFile);
 const say = (s) => { console.log(s); logStream.write(s + "\n"); };
+const profile = args.profile ? new Profile({ say, everyS: Number(args["profile-every"]) || 0, json: path.resolve(args["profile-json"] || logFile.replace(/\.log$/, "") + ".profile.json"), scenario: scenarioFile }) : null;
 
 // ---------------------------------------------------------------------------
 // Prepare
@@ -103,7 +111,7 @@ try {
   writeProps(serverDir, baseProps(port, extra));
   const world = path.join(serverDir, "worlds", "world");
   fs.cpSync(template, world, { recursive: true });
-  const bpList = bps.map((p) => installBehaviorPack(p, serverDir, { shim: !args["no-shim"] }));
+  const bpList = bps.map((p) => installBehaviorPack(p, serverDir, { shim: !args["no-shim"], profile: !!profile, relay: !args["no-relay"] }));
   bpList.push(installHarnessPack(serverDir, scenarioFile));
   const rpList = rps.map((p) => installResourcePack(p, serverDir));
   fs.writeFileSync(path.join(world, "world_behavior_packs.json"), JSON.stringify(bpList, null, 2));
@@ -146,7 +154,7 @@ function attribute(text) {
 function onHarness(obj) {
   switch (obj.type) {
     case "ready": ready = true; maybeStart(); return "";
-    case "start": timings.scenarioStart = secs(); return `[scenario] started at ${secs()} s`;
+    case "start": timings.scenarioStart = secs(); if (profile) profile.start(bds); return `[scenario] started at ${secs()} s`;
     case "log": scenarioLines.push(obj.msg); return `[scenario] ${obj.msg}`;
     case "check": scenarioLines.push(`${obj.ok ? "ok" : "FAILED"}: ${obj.msg}`); return `[scenario] ${obj.ok ? "ok" : "FAILED"}: ${obj.msg}`;
     case "player": return `[scenario] spawned simulated player ${obj.name} at ${obj.location.x} ${obj.location.y} ${obj.location.z}${obj.standingOn ? ` on ${obj.standingOn}` : ""}`;
@@ -164,7 +172,7 @@ function onHarness(obj) {
       }
       done = obj;
       timings.scenarioDone = secs();
-      setTimeout(finish, 1000);
+      if (profile) { profile.finalDump(); setTimeout(finish, 5000); } else setTimeout(finish, 1000);
       return `[scenario] done: ${obj.ok ? "PASS" : "FAIL"} - ${obj.msg}`;
     default: return `[scenario] ${JSON.stringify(obj)}`;
   }
@@ -191,6 +199,7 @@ function onLine(line) {
   const [, , level, text] = m;
   lastRecord = null;
   if (NOISE.some((r) => r.test(text))) return;
+  if (profile && profile.onLine(text)) return;
   const h = /\[Scripting\] HARNESS (\{.*\})\s*$/.exec(text);
   if (h) {
     let obj;
@@ -257,6 +266,7 @@ async function finish(reason) {
   if (finished) return;
   finished = true;
   clearTimeout(timer);
+  if (profile) profile.stop();
   if (bds.proc.exitCode === null) await stopBds(bds);
   summary(reason);
 }
@@ -307,6 +317,7 @@ function summary(reason) {
     L.push("scenario messages:");
     for (const s of scenarioLines.slice(-40)) L.push(`  ${s}`);
   }
+  if (profile) L.push(...profile.report());
   L.push(`log: ${logFile}`);
   if (args.keep) L.push(`server folder kept: ${serverDir}`);
   L.push("=".repeat(72));

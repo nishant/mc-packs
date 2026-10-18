@@ -42,28 +42,45 @@ export function findPacks(dir, only) {
   return all.filter((p) => want.includes(p.folder));
 }
 
-function shimSource(folder, hasUi) {
+function shimSource(folder, hasUi, relay) {
   const tpl = fs.readFileSync(path.join(HERE, "lib", "shim.js"), "utf8");
   return tpl
     .replace("__UI_IMPORT__", hasUi ? 'import * as ui from "@minecraft/server-ui";' : "const ui = undefined;")
     .replace("const PACK = __PACK__;", `const PACK = ${JSON.stringify(folder)};`)
-    .replace("const HAS_UI = __HAS_UI__;", `const HAS_UI = ${hasUi ? "true" : "false"};`);
+    .replace("const HAS_UI = __HAS_UI__;", `const HAS_UI = ${hasUi ? "true" : "false"};`)
+    .replace("const RELAY = __RELAY__;", `const RELAY = ${relay ? "true" : "false"};`);
 }
 
-/** Copies a behavior pack and wraps its script entry with the shim. Returns notes. */
-export function installBehaviorPack(pack, serverDir, { shim = true } = {}) {
+function profileSource(folder) {
+  return fs.readFileSync(path.join(HERE, "lib", "profile.js"), "utf8").replace("const PACK = __PACK__;", `const PACK = ${JSON.stringify(folder)};`);
+}
+
+/**
+ * Copies a behavior pack and wraps its script entry with the shim (and, with `profile`, the
+ * profiler, imported after the shim so the shim's own listeners are not timed). `relay: false`
+ * stops the shim relaying messages (forms are still answered). Returns the world pack entry.
+ */
+export function installBehaviorPack(pack, serverDir, { shim = true, profile = false, relay = true } = {}) {
   const dest = path.join(serverDir, "development_behavior_packs", pack.folder);
   fs.cpSync(pack.dir, dest, { recursive: true });
   const manifest = JSON.parse(JSON.stringify(pack.manifest));
   const script = (manifest.modules || []).find((m) => m.type === "script");
-  if (shim && script && script.entry) {
+  if ((shim || profile) && script && script.entry) {
     const deps = (manifest.dependencies ||= []);
-    if (!deps.some((d) => d.module_name === GAMETEST.module_name)) deps.push({ ...GAMETEST });
+    if (shim && !deps.some((d) => d.module_name === GAMETEST.module_name)) deps.push({ ...GAMETEST });
     const hasUi = deps.some((d) => d.module_name === "@minecraft/server-ui");
     const entryDir = path.posix.dirname(script.entry);
     const base = path.posix.basename(script.entry);
-    fs.writeFileSync(path.join(dest, entryDir, "__harness_shim.js"), shimSource(pack.folder, hasUi));
-    fs.writeFileSync(path.join(dest, entryDir, "__harness_entry.js"), `import "./__harness_shim.js";\nimport "./${base}";\n`);
+    let entry = "";
+    if (shim) {
+      fs.writeFileSync(path.join(dest, entryDir, "__harness_shim.js"), shimSource(pack.folder, hasUi, relay));
+      entry += `import "./__harness_shim.js";\n`;
+    }
+    if (profile) {
+      fs.writeFileSync(path.join(dest, entryDir, "__harness_profile.js"), profileSource(pack.folder));
+      entry += `import "./__harness_profile.js";\n`;
+    }
+    fs.writeFileSync(path.join(dest, entryDir, "__harness_entry.js"), `${entry}import "./${base}";\n`);
     script.entry = path.posix.join(entryDir, "__harness_entry.js");
     fs.writeFileSync(path.join(dest, "manifest.json"), JSON.stringify(manifest, null, 2));
   }

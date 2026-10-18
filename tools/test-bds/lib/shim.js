@@ -13,6 +13,7 @@ __UI_IMPORT__
 
 const PACK = __PACK__;
 const HAS_UI = __HAS_UI__;
+const RELAY = __RELAY__; // false with run.mjs --no-relay: messages are not relayed (forms still are)
 const MAX = 1800;
 let seq = 0;
 
@@ -69,6 +70,7 @@ function nameOf(p) {
 }
 
 function patch(proto, method, kind, toFn) {
+  if (!RELAY) return;
   const orig = proto && proto[method];
   if (typeof orig !== "function") return;
   try {
@@ -90,7 +92,7 @@ patch(World.prototype, "sendMessage", "broadcast", () => "*");
 const screenOwner = new WeakMap();
 try {
   const desc = Object.getOwnPropertyDescriptor(Player.prototype, "onScreenDisplay");
-  if (desc && desc.get) {
+  if (RELAY && desc && desc.get) {
     Object.defineProperty(Player.prototype, "onScreenDisplay", {
       configurable: true,
       get() {
