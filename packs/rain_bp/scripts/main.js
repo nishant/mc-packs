@@ -205,7 +205,8 @@ function update(player, st) {
   const dry = !!here && dryGround(here, feet);
   // No storm fog where it doesn't rain (sand, terracotta, snow, ice): it would cover Realistic Rain's snow fog, and
   // each step's push would land on top of Regional Weather's sandstorm or blizzard fog there.
-  const fog = off || dry ? 0 : storm.level;
+  // Nor in the Nether or the End (no storm there; a /fog push would only cost a command).
+  const fog = off || dry || !overworld ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
   if (off || !overworld) {
     leave(player, st); // no haze in the Nether or the End: it would replace their own volumetric fog
@@ -470,7 +471,7 @@ function applyChoice(player) {
     st.spots = [];
     leave(player, st);
   }
-  const fog = off ? 0 : storm.level;
+  const fog = off || player.dimension.id !== OVERWORLD ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
   wake();
 }
