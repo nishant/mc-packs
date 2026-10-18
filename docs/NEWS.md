@@ -10,8 +10,8 @@ entries below as a changelog.
 ## Pinned HUD positions
 
 - Left and Right positions 1-4 now keep their numbered places. A readout in position 4 leaves room for positions 1-3 even when they are empty.
-- Each position has room for multiline text, so shorter readouts do not pull later ones upward. Empty gaps have no background.
-- The scoreboard follows the last occupied right position. Lower positions can be clipped on short screens or at larger GUI scales; choose an earlier position or smaller GUI scale if needed.
+- Positions use compact, screen-sized cells instead of reserving six lines for every gap. Long readouts stay inside their cell; open /realm:saga for full quest details.
+- The scoreboard follows the last occupied right position. Very short screens can still run out of space with the radar on; use a left position, hide the radar or use a smaller GUI scale if needed.
 
 ## World-fixed character names
 
