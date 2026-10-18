@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { world, system, Player } from "@minecraft/server";
-import { heldItem, isTutorialBook } from "../utils/Items.js";
+import { heldItemCached, idleSkip, IDLE_EVERY, isTutorialBook, allPlayers } from "../utils/Items.js";
 import { GUIDE_SPREADS, GUIDE_CHAPTER_SPREADS, GUIDE_LANGUAGES } from "./GuideBookData.js";
 import { getBookLanguage, hasBookLanguage } from "./Settings.js";
 import { hasPicker, isPickerPinned, openPicker, closePicker, removePicker, pickerClick } from "./LanguagePicker.js";
@@ -216,13 +216,21 @@ export function startGuideBook() {
     });
 
     let checks = 0;
+    /** Players with the tutorial book in hand, open or choosing its language. */
+    const guideBusy = new WeakSet();
     system.runInterval(() => {
         const online = new Set();
-        for (const player of world.getAllPlayers()) {
+        const all = allPlayers();
+        for (let i = 0; i < all.length; i++) {
+            const player = all[i];
             online.add(player.id);
+            // No tutorial book in hand, open or picking a language: looked at every few checks only.
+            if (idleSkip(player, i, guideBusy)) continue;
             try {
-                const holding = isTutorialBook(heldItem(player));
+                const holding = isTutorialBook(heldItemCached(player, IDLE_EVERY));
                 const book    = books.get(player.id);
+                if (holding || book || hasPicker(player.id)) guideBusy.add(player);
+                else guideBusy.delete(player);
 
                 if (!holding) {
                     heldChecks.delete(player.id);

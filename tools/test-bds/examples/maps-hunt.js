@@ -1,8 +1,7 @@
 // Treasure Maps: a whole hunt the way a player would do it. Run with
 //   node tools/test-bds/run.mjs --quiet --only maps_bp --scenario tools/test-bds/examples/maps-hunt.js --timeout 900
-// The harness keeps action bar text but not subtitles, so test a copy whose map line shows above the hotbar:
-//   mkdir -p /tmp/mp && cp -r packs/maps_bp /tmp/mp/ && sed -i 's/showAt: "right3"/showAt: "hotbar"/' /tmp/mp/maps_bp/scripts/config.js
-//   node tools/test-bds/run.mjs --quiet --packs /tmp/mp --scenario tools/test-bds/examples/maps-hunt.js --timeout 900
+// The harness keeps action bar text but not subtitles, so the scenario first moves the map line above the hotbar
+// (realm:cfg_set showAt=hotbar), which needs no test copy of the pack.
 // A simulated player gets a map, works out each clue from its words (headings, compass steps, coordinate
 // puzzles), goes there, finds the marker the pack builds (cairn, flag or standing stone) and reaches it for
 // the next clue; on the last leg it finds the buried chest and stands on it. Checks the map only says
@@ -131,6 +130,15 @@ function arcSpots(est) {
 export default async function (t) {
   const dim = t.dimension;
   const p = await t.player("Hunter", { op: true });
+  {
+    const acks = [];
+    t.mc.system.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
+      if (id === "realm:cfg_ack") acks.push(JSON.parse(message));
+    }, { namespaces: ["realm"] });
+    t.mc.system.sendScriptEvent("realm:cfg_set", JSON.stringify({ id: "mh-showat", pack: "maps_bp", key: "showAt", value: "hotbar" }));
+    const ack = await t.waitUntil(() => acks.find((x) => x.id === "mh-showat"), { timeout: 40, message: "ack showAt" });
+    t.assert(ack.ok, "map line moved above the hotbar (showAt=hotbar)");
+  }
   let areas = [];
   let areaN = 0;
   const clearAreas = () => { for (const a of areas) t.server(`/tickingarea remove ${a}`); areas = []; };

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { world, system } from "@minecraft/server";
 import { getState, getMirrorState, getRadialState, getArrayState } from "./PlayerState.js";
+import { idleSkip, allPlayers } from "../utils/Items.js";
 
 const OFFSET   = 0.525;
 const VIEW_CLIP = 24;
@@ -126,7 +127,7 @@ function drawHorizontalArms(player, mirror) {
 export function startModifierVisualizerLoop() {
 
     system.runInterval(() => {
-        for (const player of world.getAllPlayers()) {
+        for (const player of allPlayers()) {
             try {
                 const mirror = getMirrorState(player);
                 const radial = getRadialState(player);
@@ -143,11 +144,17 @@ export function startModifierVisualizerLoop() {
         }
     }, 20);
 
+    // Players with a mirror on are followed every tick; the others are looked at every few ticks only.
+    const mirrorBusy = new WeakSet();
     system.runInterval(() => {
-        for (const player of world.getAllPlayers()) {
+        const all = allPlayers();
+        for (let i = 0; i < all.length; i++) {
+            const player = all[i];
+            if (idleSkip(player, i, mirrorBusy)) continue;
             try {
                 const mirror = getMirrorState(player);
-                if (!mirror.enabled || !(mirror.axisX || mirror.axisZ)) continue;
+                if (!mirror.enabled || !(mirror.axisX || mirror.axisZ)) { mirrorBusy.delete(player); continue; }
+                mirrorBusy.add(player);
 
                 const py = Math.floor(player.location.y);
                 if (lastY.get(player.id) === py) continue;

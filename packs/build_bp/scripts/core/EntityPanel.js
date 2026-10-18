@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { world, system, Player } from "@minecraft/server";
+import { allPlayers } from "../utils/Items.js";
 import { PANELS, PANEL_CURSOR_LIFT, PANEL_TIP_ABOVE } from "./EntityPanelData.js";
 import { getCursor, setCursor as saveCursor, getCursorTipSeen, setCursorTipSeen, getPanelScale } from "./Settings.js";
 import { panelSound as sound, scaleEntity, panelLanguage } from "../utils/PanelSound.js";
@@ -431,7 +432,7 @@ export function startEntityPanels() {
     system.runInterval(() => {
         while (leaving.length > 0 && system.currentTick >= leaving[0].removeAt) remove(leaving.shift().entity);
         if (panels.size > 0) {
-            const online = new Map(world.getAllPlayers().map(player => [player.id, player]));
+            const online = new Map(allPlayers().map(player => [player.id, player]));
             for (const [playerId, panel] of panels) {
                 try {
                     const player = online.get(playerId);

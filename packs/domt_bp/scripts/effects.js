@@ -31,6 +31,7 @@ import {
   sightSpot,
   sound,
   spawnAround,
+  spawnFresh,
   spotNear,
   standable,
   strike,
@@ -130,7 +131,7 @@ const CHAMP_MOBS = ["minecraft:zombie", "minecraft:husk", "minecraft:skeleton", 
 
 /** The deck's own champion, when the Champions pack isn't there. @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at */
 function deckChampion(dim, at) {
-  const e = dim.spawnEntity("minecraft:vindicator", at);
+  const e = spawnFresh(dim, "minecraft:vindicator", at);
   e.nameTag = "§cThe Deck's Champion";
   e.addTag("domt:boss");
   effect(e, "minecraft:health_boost", 3600, 4);
@@ -257,7 +258,7 @@ function spawnAbove(p, type, n, up, r) {
     const loc = { x: at.x + between(-r, r), y: at.y + up, z: at.z + between(-r, r) };
     const b = blockAt(dim, loc);
     if (!b || !b.isAir) continue;
-    attempt(() => out.push(dim.spawnEntity(type, loc)));
+    attempt(() => out.push(spawnFresh(dim, type, loc)));
   }
   return out;
 }
@@ -926,7 +927,16 @@ export const CARDS = [
     run: ({ player }) => {
       const [horse] = spawnAround(player, "minecraft:horse", 1, 3, 5);
       if (!horse) return false;
-      attempt(() => horse.getComponent("minecraft:tamemount")?.tameToPlayer(true, player));
+      const tame = () =>
+        attempt(() => {
+          if (horse.isValid && player.isValid) horse.getComponent("minecraft:tamemount")?.tameToPlayer(true, player);
+        });
+      if (horse.getComponent("minecraft:tamemount")) tame();
+      else {
+        // One horse in five spawns as a foal, which can't be tamed or ridden: grow it up first (applies next tick).
+        attempt(() => horse.triggerEvent("minecraft:ageable_grow_up"));
+        system.runTimeout(tame, 2);
+      }
       give(player, "minecraft:saddle", 1);
     },
   },
