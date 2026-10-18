@@ -64,20 +64,100 @@ test("a full-width right slot anchors the inherited content-width sidebar, not a
   }
 });
 
-test("hidden right widgets collapse and overflowing stacks are constrained to the viewport", () => {
+test("unused auxiliary widgets collapse and overflowing stacks are constrained to the viewport", () => {
   const right = byName("realm_side_right");
   assert.equal(right.clips_children, undefined, "a half-width clip would cut off wider natural content");
   assert.equal(ui.realm_side_area.clips_children, true);
   assert.deepEqual(right.max_size, ["100% - 8px", "100% - 8px"]);
-  for (const widget of [ui.realm_radar_panel, ui.realm_slot, ui.realm_reserve, ui.realm_sidebar_slot]) {
-    assert.ok(widget.bindings.some((b) => b.target_property_name === "#visible" || b.binding_name_override === "#visible"), "stack height uses native visible-child collapse");
+  for (const widget of [ui.realm_radar_panel, ui.realm_reserve, ui.realm_sidebar_slot]) {
+    assert.ok(widget.bindings.some((b) => b.target_property_name === "#visible" || b.binding_name_override === "#visible"), "auxiliary widgets collapse when hidden");
   }
-  const heights = [40, ui.realm_radar_panel.size[1], 64, 64, 64, 64, 160];
-  for (let mask = 0; mask < 128; mask++) {
-    const content = heights.reduce((sum, h, i) => sum + ((mask >> i) & 1 ? h : 0), 0);
-    const constrained = Math.min(content, 240 - 8);
-    assert.ok(constrained + right.offset[1] <= 240);
-    if (!mask) assert.equal(content, 0, "all hidden leaves no reserved blank column");
+});
+
+test("numbered slots retain 66-unit cells through the last occupied position on either side", () => {
+  const pinned = ui["realm_pinned_slot@hud.realm_slot"];
+  assert.ok(pinned, "numbered slots need a fixed-height wrapper instead of a collapsing readout");
+  assert.deepEqual(pinned.size, ["100%", 66]);
+  assert.equal(66, ui.realm_slot["$slot_max|default"][1] + 4 + 2, "allow full multiline text, background padding and spacing");
+  const content = pinned.controls[0]["realm_content@hud.realm_slot"];
+  assert.deepEqual([content.anchor_from, content.anchor_to], ["top_left", "top_left"]);
+  assert.equal(content.bindings, undefined, "the inner readout retains its own empty-text visibility");
+  assert.equal(pinned.bindings.at(-1).source_property_name,
+    "((#hud_title_text_string = '§s§2§r') and (not (($pin_slice * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $pin_empty)))");
+  assert.equal(pinned["$pin_slice|default"], "%.159s");
+  assert.equal(pinned["$pin_empty|default"], "$slot_empty");
+  assert.equal(ui.realm_slot.bindings.at(-1).source_property_name,
+    "((#hud_title_text_string = '§s§2§r') and (not (($slot_slice * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $slot_empty)))");
+  const empty = ui.realm_slot["$slot_empty|default"];
+  const sliceBytes = (text, format) => Buffer.from(text).subarray(0, Number(format.match(/\d+/)[0])).toString();
+  const segment = (text, separator) => {
+    const remaining = 159 - Buffer.byteLength(text);
+    return separator + text + "~".repeat(remaining % 3) + "§r".repeat(Math.floor(remaining / 3));
+  };
+  for (const [side, start] of [["right", 0], ["left", 4]]) {
+    const slots = byName(`realm_side_${side}`).controls
+      .filter((c) => Object.keys(c)[0].startsWith(`realm_${side}`))
+      .map((c) => {
+        const [key, value] = Object.entries(c)[0];
+        assert.ok(key.endsWith("@hud.realm_pinned_slot"), key);
+        return value;
+      });
+    assert.equal(slots.length, 4);
+    for (const [i, slot] of slots.entries()) {
+      assert.equal(slot.$skip, `%.${10 + (start + i) * 160}s`);
+      assert.equal(slot.$pin_slice ?? pinned["$pin_slice|default"], `%.${(4 - i) * 160 - 1}s`);
+      const expectedEmpty = i === 3 ? undefined : `(${Array(4 - i).fill("$slot_empty").join(" + ' ' + ")})`;
+      assert.equal(slot.$pin_empty, expectedEmpty);
+      assert.equal(slot.$slot_anchor ?? ui.realm_slot["$slot_anchor|default"], `top_${side}`);
+      assert.equal(slot.$slot_align ?? ui.realm_slot["$slot_align|default"], side);
+    }
+    for (let mask = 0; mask < 16; mask++) for (const text of ["Short", "One\nTwo\nThree\nFour\nFive\nSix", "§6Colored§r", "x".repeat(159)]) {
+      const texts = Array(11).fill("");
+      // Other columns, compass and radar must not reserve numbered cells on this side.
+      texts[start ? 0 : 4] = "Other side";
+      texts[8] = "Middle";
+      texts[9] = "Compass";
+      texts[10] = "Radar";
+      for (let i = 0; i < 4; i++) if (mask & (1 << i)) texts[start + i] = text;
+      let first = true;
+      const subtitle = "§s§2§r" + texts.map((text) => {
+        const separator = !text || first ? " " : "\n";
+        if (text) first = false;
+        return segment(text, separator);
+      }).join("");
+      let height = 0;
+      for (const [i, slot] of slots.entries()) {
+        const skip = Buffer.byteLength(sliceBytes(subtitle, slot.$skip));
+        const tail = sliceBytes(Buffer.from(subtitle).subarray(skip).toString(), slot.$pin_slice ?? pinned["$pin_slice|default"]);
+        const visible = tail !== Array(4 - i).fill(empty).join(" ");
+        assert.equal(visible, Boolean(mask >> i), `${side} ${mask}: cell ${i + 1}`);
+        if (mask & (1 << i)) assert.equal(height, i * 66, `${side} ${i + 1} never rises into a gap`);
+        if (visible) height += pinned.size[1];
+      }
+      assert.equal(height, mask ? (32 - Math.clz32(mask)) * 66 : 0, "unused trailing cells do not push the sidebar down");
+    }
+  }
+});
+
+test("pinned cells do not shrink or overlap at different GUI viewport heights", () => {
+  const cell = ui["realm_pinned_slot@hud.realm_slot"];
+  assert.ok(cell);
+  for (const viewportHeight of [180, 240, 360, 480, 720]) {
+    for (const compass of [0, 40]) for (const radar of [0, ui.realm_radar_panel.size[1]]) {
+      for (const side of ["left", "right"]) {
+        const origin = byName(`realm_side_${side}`).offset[1] + compass + (side === "right" ? radar : 0);
+        for (let i = 0; i < 4; i++) {
+          const top = origin + i * cell.size[1];
+          const backgroundBottom = top + ui.realm_slot["$slot_max|default"][1] + 4;
+          assert.ok(backgroundBottom <= top + cell.size[1], "maximum content never reaches the next cell");
+          const visibleHeight = Math.max(0, Math.min(backgroundBottom, viewportHeight) - Math.min(top, viewportHeight));
+          assert.ok(visibleHeight >= 0 && visibleHeight <= 64 + 1e-9, "viewport clips rather than compacts the cell");
+        }
+      }
+    }
+  }
+  for (const name of ["realm_side_top", "realm_side_middle"]) {
+    assert.ok(Object.keys(byName(name).controls[0])[0].endsWith("@hud.realm_slot"), `${name} stays content-sized`);
   }
 });
 
