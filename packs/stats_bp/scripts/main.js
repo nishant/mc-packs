@@ -265,7 +265,7 @@ function tickerText(player, t) {
   const one = (stat) => {
     if (!full) return `${lc}${stat.short} ${vc}${fmt(stat, scoreOf(stat.id, player.name))}`;
     const list = ranked(stat.id);
-    const rank = list.findIndex((s) => s.participant.displayName === player.name) + 1;
+    const rank = placeOf(stat.id, player.name) + 1;
     // A ranked player's score is in the list already (read this tick); an unranked one has 0 or none.
     const score = rank > 0 ? list[rank - 1].score : scoreOf(stat.id, player.name);
     return `${lc}${stat.label} ${vc}${fmt(stat, score)}${rank > 0 ? ` ${lc}#${rank} of ${list.length}` : ""}`;
@@ -388,26 +388,49 @@ async function show(player, form) {
 /** @param {Player} player */
 const isOp = (player) => player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
 
+/** @typedef {{ name: string, score: number }} Ranked a name on a stat's board and its score */
+
 /**
  * Ranked lists worked out this tick: getScores() reads every participant, so the ticker ranks all players from one
- * read per stat a tick instead of one per player per stat.
- * @type {Map<string, { tick: number, list: import("@minecraft/server").ScoreboardScoreInfo[] }>}
+ * read per stat a tick instead of one per player per stat. Each participant's name, score and type are read once
+ * (every read is a call into the game), and `rank` finds a name's place without walking the list: on a big server the
+ * boards hold everyone who ever played, and walking them for each ticker cost about 16 ms a second with 40 players
+ * and 1,000 names.
+ * @type {Map<string, { tick: number, list: Ranked[], rank: Map<string, number> }>}
  */
 const rankedCache = new Map();
 
 /** @param {string} id */
-function ranked(id) {
+function rankedInfo(id) {
   const now = system.currentTick;
   const cached = rankedCache.get(id);
-  if (cached && cached.tick === now) return cached.list;
-  const list = objective(id)
-    .getScores()
+  if (cached && cached.tick === now) return cached;
+  /** @type {Ranked[]} */
+  const list = [];
+  for (const s of objective(id).getScores()) {
+    const score = s.score;
+    if (score <= 0) continue;
+    const who = s.participant;
     // Skip entity participants: v1.0.0 scores not migrated yet (the player hasn't rejoined), shown as "Player Offline".
-    .filter((s) => s.score > 0 && s.participant.type !== ScoreboardIdentityType.Player)
-    .sort((a, b) => b.score - a.score);
-  rankedCache.set(id, { tick: now, list });
-  return list;
+    if (who.type === ScoreboardIdentityType.Player) continue;
+    list.push({ name: who.displayName, score });
+  }
+  list.sort((a, b) => b.score - a.score);
+  /** @type {Map<string, number>} */
+  const rank = new Map();
+  list.forEach((r, i) => {
+    if (!rank.has(r.name)) rank.set(r.name, i);
+  });
+  const info = { tick: now, list, rank };
+  rankedCache.set(id, info);
+  return info;
 }
+
+/** @param {string} id */
+const ranked = (id) => rankedInfo(id).list;
+
+/** A name's place on a stat's board (0 = first), or -1 when it isn't on it. @param {string} id @param {string} name */
+const placeOf = (id, name) => rankedInfo(id).rank.get(name) ?? -1;
 
 /** @param {boolean} on */
 const state = (on) => (on ? "Enabled" : "Disabled");
@@ -504,7 +527,7 @@ async function myStats(player) {
   const lines = STATS.map((stat) => {
     const list = ranked(stat.id);
     const score = scoreOf(stat.id, player.name);
-    const rank = list.findIndex((s) => s.participant.displayName === player.name) + 1;
+    const rank = placeOf(stat.id, player.name) + 1;
     return `§7${stat.label}:§r ${fmt(stat, score)}${rank > 0 ? ` §8(#${rank} of ${list.length})` : ""}`;
   });
   const first = player.getDynamicProperty(PROP_FIRST_JOIN);
@@ -541,11 +564,11 @@ async function leaderboard(player, stat) {
   const medals = ["§6§l1.§r", "§7§l2.§r", "§c§l3.§r"];
   const size = get("leaderboardSize");
   const lines = list.slice(0, size).map((s, i) => {
-    const me = s.participant.displayName === player.name;
+    const me = s.name === player.name;
     const place = medals[i] ?? `§8${i + 1}.`;
-    return `${place} ${me ? "§b§l" : "§r"}${s.participant.displayName}§r  ${fmt(stat, s.score)}`;
+    return `${place} ${me ? "§b§l" : "§r"}${s.name}§r  ${fmt(stat, s.score)}`;
   });
-  const myRank = list.findIndex((s) => s.participant.displayName === player.name);
+  const myRank = placeOf(stat.id, player.name);
   if (myRank >= size) {
     lines.push("§8...", `§8${myRank + 1}. §b${player.name}§r  ${fmt(stat, list[myRank].score)}`);
   }
