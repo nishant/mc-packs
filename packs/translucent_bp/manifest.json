@@ -4,7 +4,7 @@
     "name": "Translucent Tools Switch",
     "description": "Each player chooses see-through or solid tools (Translucent Tools) in /realm:prefs.",
     "uuid": "ed64393c-ff78-466d-b0f0-4a3f42c217d0",
-    "version": [1, 0, 1],
+    "version": [1,  0,  1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

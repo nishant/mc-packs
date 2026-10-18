@@ -4,7 +4,7 @@
     "name": "Slot Machine",
     "description": "Spin three reels for Crowns or emeralds, with an honest pay table, daily loss limits and a self-block. /realm:slots",
     "uuid": "760ff06f-b4dd-4530-a956-5254747337b3",
-    "version": [1, 0, 7],
+    "version": [1,  0,  7],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
