@@ -2,7 +2,8 @@
 // behavior packs (each pack's scripts/ under scripts/<folder>/, one generated scripts/main.js importing them all),
 // so the packs share one script context and ONE dynamic property storage, like the Realm Bundle. It adds a probe
 // pack (probe_bp) that saves a 25 KB entry, writes more on request, and starts an interval from an `await`
-// continuation (diag.js must find its owner from the call stack).
+// continuation and a runTimeout loop that hands itself over again (diag.js must find their owner from the call
+// stack).
 //   node tools/test-bds/hooks/diag-bundle.mjs <out dir> admin_bp,nick_bp
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +37,9 @@ system.runTimeout(async () => {
   await Promise.resolve();
   system.runInterval(() => { late++; }, 2); // handed over from an await continuation
 }, 10);
+let loops = 0;
+const loop = () => { loops++; system.runTimeout(loop, 3); }; // re-handed over from inside its own callback
+system.runTimeout(loop, 3);
 system.afterEvents.scriptEventReceive.subscribe(({ id }) => {
   if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "probe_bp");
 }, { namespaces: ["realm"] });

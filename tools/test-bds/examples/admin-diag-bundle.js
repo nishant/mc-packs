@@ -44,6 +44,7 @@ export default async function (t) {
   t.check(/runInterval\(10\) refreshAll/.test(keys("nick_bp")), "Nicknames' interval is counted as Nicknames'");
   t.check(!/refreshAll/.test(keys("admin_bp")) && !/refreshAll/.test(keys("probe_bp")), "and not as anyone else's");
   t.check(/runInterval\(2\)/.test(keys("probe_bp")) && b2.probe_bp.calls >= 25, `an interval started after an await is the probe's (${b2.probe_bp.calls} calls)`);
+  t.check(b2.probe_bp.calls >= 40, `so is a runTimeout loop that hands itself over from its own callback (${b2.probe_bp.calls} calls: about 30 + 20)`);
 
   // The list flags the big entry and explains the shared storage.
   async function tap(/** @type {any} */ form, /** @type {any} */ answer, timeout = 100) {

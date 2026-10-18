@@ -7,17 +7,20 @@
 // What it wraps (the same approach as tools/test-bds/lib/profile.js, which it runs inside of when present):
 // system.run / runTimeout / runInterval / runJob (each generator step), every world/system beforeEvents and
 // afterEvents subscribe, and custom command callbacks. While profiling is off a wrapper costs one boolean
-// check (`S.track`) and a call. World.prototype.get/setDynamicProperty are wrapped too, to learn which pack
-// owns which key (needed in a bundle) and to stop a forgotten pack writing its old data back.
+// check (`S.on`) and one plain call (measured on BDS: about 0.1 microseconds). World.prototype.get/
+// setDynamicProperty are wrapped too, to learn which pack owns which key (needed in a bundle) and to stop a
+// forgotten pack writing its old data back.
 //
 // One script context can hold several packs: the Realm Bundle merges every behavior pack into one add-on,
 // so they share one JS context and ONE dynamic property storage. The first copy to run installs the
 // patches and keeps the state on globalThis; every copy registers its pack there. Ownership in a shared
-// context: a callback belongs to the pack whose code handed it over (the pack being evaluated, or the
-// pack whose wrapped callback is running; a registration from an `await` continuation falls back to the
-// call stack's file path); a world property key belongs to the first pack that read or wrote it, else to
-// the pack owning its prefix (text before the first ":"). Keys nobody touched since the last reload are
-// "unclaimed". Alone in its context, a pack owns its whole storage.
+// context, decided once per registration or key, never per call: a callback belongs to the pack whose module
+// is being evaluated, else to the pack in the call stack (a bundle's files are scripts/<folder>/...; walked
+// for intervals, subscriptions and commands always, for run/runTimeout/runJob only while profiling, since
+// those are many and short-lived). A world property key belongs to the pack being evaluated when it is first
+// read or written, else to the pack already using its prefix (text before the first ":"), else to the pack in
+// the call stack. Keys nobody touched since the last reload are "unowned". Alone in its context, a pack owns
+// its whole storage.
 //
 // Protocol (realm: script events, JSON, every message under 2048 characters):
 //   realm:diag_ping {id, ticks?}     every pack replies realm:diag_pong {id, pack, name, version, bytes, props,
@@ -50,7 +53,7 @@ const MAX_TICKS = 1200;
  * @typedef {{ pack: string, name: string, version: string, ms: number, calls: number, cbs: Map<string, Cb>, forgotten: boolean, warned: boolean }} Rec
  * @typedef {{ start: number, end: number, ids: string[] }} Win
  * @typedef {{
- *   api: number, on: boolean, multi: boolean, track: boolean, cur: Rec | null, packs: Map<string, Rec>,
+ *   api: number, on: boolean, multi: boolean, cur: Rec | null, packs: Map<string, Rec>,
  *   keyOwner: Map<string, Rec>, prefixOwner: Map<string, Rec | null>, win: Win | null,
  *   carrier: Function | null, own: Function | null, ser: { sig: any, sub: Function, unsub: Function } | null,
  *   orig: { run: Function, runTimeout: Function, get: Function, set: Function, ids: Function, clear: Function }
@@ -64,7 +67,6 @@ const S = G.__realmDiag ?? (G.__realmDiag = install());
 const REC = S.packs.get(PACK) ?? { pack: PACK, name: NAME, version: VERSION, ms: 0, calls: 0, cbs: new Map(), forgotten: false, warned: false };
 S.packs.set(PACK, REC);
 S.multi = S.packs.size > 1;
-S.track = S.on || S.multi;
 S.cur = REC; // the rest of this pack's modules evaluate next: what they hand over is this pack's
 
 /** @returns {State} */
@@ -73,7 +75,7 @@ function install() {
   const wp = /** @type {any} */ (World.prototype);
   /** @type {State} */
   const st = {
-    api: API, on: false, multi: false, track: false, cur: null, packs: new Map(), keyOwner: new Map(), prefixOwner: new Map(), win: null,
+    api: API, on: false, multi: false, cur: null, packs: new Map(), keyOwner: new Map(), prefixOwner: new Map(), win: null,
     carrier: null, own: null, ser: null,
     orig: { run: sp.run, runTimeout: sp.runTimeout, get: wp.getDynamicProperty, set: wp.setDynamicProperty, ids: wp.getDynamicPropertyIds, clear: wp.clearDynamicProperties },
   };
@@ -143,28 +145,29 @@ function note(rec, key, ms) {
  * @param {State} st @param {Function} fn @param {Rec | null} rec @param {string} key
  * @returns {Function}
  */
-function wrap(st, fn, rec, key) {
+function wrap(st, fn, rec, key, many = false) {
   if (typeof fn !== "function") return fn;
-  /** @this {any} @param {any[]} a */
-  const w = function (...a) {
-    if (!st.track) return fn.apply(this, a);
-    const prev = st.cur;
-    if (rec) st.cur = rec;
-    if (!st.on || !rec) {
-      try {
-        return fn.apply(this, a);
-      } finally {
-        st.cur = prev;
+  // The game calls event and run callbacks with one argument (or none) and no `this`: a plain one-argument
+  // call is about 0.1 microseconds, a rest-and-apply wrapper four times that. Commands take many arguments.
+  const w = many
+    ? function (/** @type {any[]} */ ...a) {
+        if (!st.on || !rec) return fn(...a);
+        const t = Date.now();
+        try {
+          return fn(...a);
+        } finally {
+          note(rec, key, Date.now() - t);
+        }
       }
-    }
-    const t = Date.now();
-    try {
-      return fn.apply(this, a);
-    } finally {
-      note(rec, key, Date.now() - t);
-      st.cur = prev;
-    }
-  };
+    : function (/** @type {any} */ ev) {
+        if (!st.on || !rec) return fn(ev);
+        const t = Date.now();
+        try {
+          return fn(ev);
+        } finally {
+          note(rec, key, Date.now() - t);
+        }
+      };
   if (inner) inner.set(w, fn);
   return w;
 }
@@ -201,16 +204,13 @@ function patchSystem(st) {
     function* step() {
       while (true) {
         let r;
-        if (!st.track) r = gen.next();
+        if (!st.on || !rec) r = gen.next();
         else {
-          const prev = st.cur;
-          if (rec) st.cur = rec;
-          const t = st.on && rec ? Date.now() : -1;
+          const t = Date.now();
           try {
             r = gen.next();
           } finally {
-            if (t >= 0 && rec) note(rec, key, Date.now() - t);
-            st.cur = prev;
+            note(rec, key, Date.now() - t);
           }
         }
         if (r.done) return r.value;
@@ -297,7 +297,7 @@ function patchCommands(st) {
   const o = proto.registerCommand;
   proto.registerCommand = function (/** @type {any} */ def, /** @type {Function} */ cb) {
     const where = site();
-    return o.call(this, def, wrap(st, cb, owner(st, true, where), `command ${def && def.name}`));
+    return o.call(this, def, wrap(st, cb, owner(st, true, where), `command ${def && def.name}`, true));
   };
 }
 
@@ -327,21 +327,27 @@ function ownerOfKey(st, k) {
   return st.keyOwner.get(k) ?? st.prefixOwner.get(prefixOf(k)) ?? null;
 }
 
+/**
+ * The owner of a key seen for the first time: the pack being evaluated, else the pack using its prefix, else the
+ * pack in the call stack (a bundle's files are scripts/<folder>/...). One stack walk per new prefix at most.
+ * @param {State} st @param {string} k @returns {Rec | null}
+ */
+function claim(st, k) {
+  const o = st.cur ?? st.prefixOwner.get(prefixOf(k)) ?? owner(st, true, st.packs.size > 1 ? site() : "");
+  if (o) learn(st, k, o);
+  return o;
+}
+
 /** @param {State} st */
 function patchProps(st) {
   const wp = /** @type {any} */ (World.prototype);
   if (typeof st.orig.get !== "function" || typeof st.orig.set !== "function") return;
   wp.getDynamicProperty = function (/** @type {string} */ k) {
-    const c = st.cur;
-    if (c && !st.keyOwner.has(k)) learn(st, k, c);
+    if (!st.keyOwner.has(k)) claim(st, k);
     return st.orig.get.call(this, k);
   };
   wp.setDynamicProperty = function (/** @type {string} */ k, /** @type {any} */ v) {
-    let o = st.keyOwner.get(k);
-    if (!o) {
-      o = st.cur ?? ownerOfKey(st, k) ?? undefined;
-      if (o) learn(st, k, o);
-    }
+    const o = st.keyOwner.get(k) ?? claim(st, k);
     if (o && o.forgotten && v !== undefined) {
       if (!o.warned) {
         o.warned = true;
@@ -453,7 +459,6 @@ function startWindow(st) {
     rec.cbs.clear();
   }
   st.on = true;
-  st.track = true;
 }
 
 /** @param {State} st */
@@ -464,7 +469,6 @@ function endWindow(st) {
   if (left > 0) return void st.orig.runTimeout.call(system, () => endWindow(st), left);
   st.win = null;
   st.on = false;
-  st.track = st.multi;
   const ticks = Math.max(1, system.currentTick - win.start);
   for (const id of win.ids) pongAll(st, id, ticks);
 }
