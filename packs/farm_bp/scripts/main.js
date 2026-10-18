@@ -45,6 +45,7 @@ const describe = (f) =>
 
 /** @param {Player} player */
 const canEdit = (player) => CONFIG.everyoneCanAdd || player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+const NO_EDIT = "§cOnly operators can add or remove farms here.";
 
 /**
  * Runs a command in a dimension. Returns true if it succeeded at least once.
@@ -66,6 +67,7 @@ function tryCommand(dimension, command) {
 /** @param {Player} player @param {string} name @param {number} radius */
 function addFarm(player, name, radius) {
   if (!player.isValid) return; // left before the command's next tick
+  if (!canEdit(player)) return player.sendMessage(NO_EDIT); // de-opped since the menu or the command opened
   const list = getFarms();
   if (list.some((f) => f.name === name)) return player.sendMessage(`§cThere is already a farm "${name}".`);
   const maxAreas = get("maxAreas");
@@ -86,6 +88,7 @@ function addFarm(player, name, radius) {
 /** @param {Player} player @param {string} name */
 function removeFarm(player, name) {
   if (!player.isValid) return;
+  if (!canEdit(player)) return player.sendMessage(NO_EDIT);
   const list = getFarms();
   const farm = list.find((f) => f.name === name);
   if (!farm) return player.sendMessage(`§cNo farm "${name}". /realm:farm lists them.`);
