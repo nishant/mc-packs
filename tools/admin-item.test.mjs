@@ -275,7 +275,14 @@ class MockSystem {
     this.intervals.push({ fn, ticks });
     return this.intervals.length;
   }
+  runJob(gen) {
+    this.queue.push(() => {
+      for (const _ of gen);
+    });
+    return this.queue.length;
+  }
   clearRun() {}
+  clearJob() {}
   sendScriptEvent(id, message) {
     for (const fn of this.scriptEvents) fn({ id, message });
   }
