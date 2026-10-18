@@ -300,7 +300,16 @@ mc.ui = {
   ModalFormData: Form,
   FormCancelationReason: { UserBusy: "UserBusy" },
 };
-mc.settings = { onChange: () => {}, get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
+/** Like settings.js, a changed preference tells the onChange listeners (for the player it belongs to). */
+const prefListeners = [];
+const prefsSet = mc.prefs.set.bind(mc.prefs);
+mc.prefs.set = (k, v) => {
+  prefsSet(k, v);
+  const player = mc.players.find((p) => k.startsWith(`${p.id}:`));
+  for (const fn of prefListeners) fn(k.slice(k.indexOf(":") + 1), player);
+  return mc.prefs;
+};
+mc.settings = { onChange: (fn) => prefListeners.push(fn), get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
 
 /** One engine tick: queued system.run callbacks first, then (every other tick) the script's interval. */
 function advance(ticks = 1) {
