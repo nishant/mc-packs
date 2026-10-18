@@ -4,7 +4,7 @@
     "name": "Kitchen",
     "description": "Cook dishes with long, gentle buffs (and a few that roll for a surprise) at a cooking pot: learn recipes from Bea the Cook, find rare ingredients on champions. /realm:cooking",
     "uuid": "e29e9f03-026d-4e78-8458-fa76134e5d08",
-    "version": [1, 1, 7],
+    "version": [1,  1,  7],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
