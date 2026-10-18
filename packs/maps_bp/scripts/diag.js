@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "maps_bp";
-const VERSION = "1.8.6";
+const VERSION = "1.8.7";
 const NAME = "Treasure Maps & Riddles";
 
 const API = 1;

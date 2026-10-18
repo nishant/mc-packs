@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "leaves_bp";
-const VERSION = "1.0.2";
+const VERSION = "1.0.3";
 const NAME = "Fast Leaf Decay";
 
 const API = 1;

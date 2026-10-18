@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "help_bp";
-const VERSION = "1.1.67";
+const VERSION = "1.1.68";
 const NAME = "Realm Help";
 
 const API = 1;

@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "platypus_bp";
-const VERSION = "1.1.1";
+const VERSION = "1.1.2";
 const NAME = "Platypus";
 
 const API = 1;

@@ -4,7 +4,7 @@
     "name": "Atlas of the Realm",
     "description": "Named regions with banners, and wayside sites out in the wilds: shrines, Starwright tablets, Choir cairns, camps, wrecks. /realm:atlas",
     "uuid": "33dc1611-7485-403f-ab51-309f1e8e55ea",
-    "version": [1,  1,  3],
+    "version": [1, 1, 4],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

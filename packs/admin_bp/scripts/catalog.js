@@ -7,14 +7,16 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 174 commands in 64 packs */
+/** @type {Pack[]} 176 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
     pack: "Realm Configuration",
     commands: [
       {"name":"realm:admin_item","description":"Realm Configuration: get the menu item again (operators: give it to other players too)","permission":"any","params":[{"name":"player","type":"PlayerSelector","optional":true}]},
+      {"name":"realm:admin_setup","description":"Set up this world: a guided walk through the one-time setup jobs across the packs (townsfolk, a town, safe zones, server size...), each with what it's for and a button that does it (operators)","permission":"op","params":[]},
       {"name":"realm:admin_title","description":"Show a title (and subtitle) that the Minimap compass and the side boxes leave alone: use it instead of /title. Default everyone online, 5 seconds","permission":"op","params":[{"name":"title","type":"String","optional":false},{"name":"subtitle","type":"String","optional":true},{"name":"seconds","type":"Integer","optional":true},{"name":"player","type":"PlayerSelector","optional":true}]},
+      {"name":"realm:diag","description":"Pack diagnostics: measure every pack's script time for a few seconds, then list the packs with their saved data; a pack's page can forget its saved data (operators). Default 10 seconds","permission":"op","params":[{"name":"seconds","type":"Integer","optional":true}]},
     ],
   },
   {

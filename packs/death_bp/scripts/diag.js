@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "death_bp";
-const VERSION = "1.3.2";
+const VERSION = "1.3.3";
 const NAME = "Death Point";
 
 const API = 1;

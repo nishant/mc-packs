@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "guard_bp";
-const VERSION = "1.4.4";
+const VERSION = "1.4.5";
 const NAME = "Creeper Guard";
 
 const API = 1;

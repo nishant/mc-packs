@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "rainbow_bp";
-const VERSION = "1.4.2";
+const VERSION = "1.4.3";
 const NAME = "Rainbows & the Pot of Gold";
 
 const API = 1;

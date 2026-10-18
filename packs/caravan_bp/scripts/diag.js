@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "caravan_bp";
-const VERSION = "1.2.2";
+const VERSION = "1.2.3";
 const NAME = "Merchant Caravan";
 
 const API = 1;

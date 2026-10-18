@@ -43,7 +43,7 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "zones_bp";
-const VERSION = "1.0.5";
+const VERSION = "1.0.6";
 const NAME = "Safe Zones";
 
 const API = 1;
