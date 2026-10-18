@@ -52,6 +52,23 @@ Environment: `BDS_DIR` (pristine BDS, default `%USERPROFILE%\.bds` on Windows or
 missing), `BDS_HARNESS_CACHE` (world templates, default `.cache/`), `BDS_HARNESS_LOGS` (default
 `logs/`), `BDS_HARNESS_TMP` (temp servers, default the OS temp dir).
 
+## Running every example (`suite.mjs`)
+
+`node tools/test-bds/suite.mjs --jobs 2 --retry` runs every scenario in `examples/` with the command
+from its own header (the first `node tools/test-bds/run.mjs ...` line; the scenario path is always the
+file itself) and prints `scenario | result | seconds | first failure line`, then the totals. Results:
+`pass`, `fail`, `flaky` (failed, then passed when rerun alone with `--retry`), `timeout`, `skipped`.
+Headers that build a test copy with a plain shell recipe (claims-bundle-taps, storm-rod-claims,
+rain-roof, rain-seabed, title-hold, rook-map-race, saga-world-events) get the recipe run first, with
+`/tmp/` moved to a folder of the suite run; maps-cleanup, maps-leave and rainbow-race describe their
+hook in prose and are skipped ("needs hook copy"). A few have no plain command and are listed in
+`SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the
+npc-name-capability probe, saga-lighthouse, and stash-pages-persistence through `stash-persistence.mjs`).
+Options: `--jobs N` (default 2; each run is CPU bound), `--filter <regex>` (scenario names),
+`--retry`, `--json <out>`, `--list` (print each plan and exit). Logs go to
+`logs/suite-<time>/<scenario>.out` (run.mjs output) and `.log` (full BDS log). The exit code is 1 when
+anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
+
 ## Inventory persistence regression
 
 `node tools/test-bds/stash-persistence.mjs` stages a test-only copy of `stash_bp` and runs
