@@ -1547,7 +1547,7 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 
 ### How to use
 
-1. Run `/realm:mail` and pick **Write a letter**. Choose who it's for (everyone who has joined since the pack was added, with `(online)` after the ones playing now), type a subject and the letter, and press **Send**. Minecraft's text boxes hold only 100 characters each, so the letter has several boxes (6 for the default 600 characters): a full box runs straight on into the next, and after a box that isn't full the next one starts a new line. You can also type `\n` for a new line.
+1. Run `/realm:mail` and pick **Write a letter**. Choose who it's for from the list (online players, with `(online)` after their names, and those seen most recently: 60 names at most), or, once more players have joined than the list holds, type a name in **Or type their name** (the whole name, or enough of it to match one player; offline players get it when they're back; a typed name wins over the list). A name nobody has brings the form back with `No player called "..." has joined the realm.` Then type a subject and the letter, and press **Send**. Minecraft's text boxes hold only 100 characters each, so the letter has several boxes (6 for the default 600 characters): a full box runs straight on into the next, and after a box that isn't full the next one starts a new line. You can also type `\n` for a new line.
 2. **Write to your whole party:** in a [party](#parties--party_bp), the first choice in the list is **My party (Bob, Dan)**: it sends a copy of the letter to every mate, offline ones included.
 3. If they're online, they see `New letter from Sam: "Hello!". Read it with /realm:mail` in chat. If not, the letter waits: the next time they join, chat says `You have 2 unread letters: /realm:mail`.
 4. **Read your letters:** `/realm:mail` → **Inbox**. New letters are marked `[New]`. Open one to read it, then **Reply** or **Delete** it. **Delete all read letters** clears out the rest and shows the inbox again.
@@ -1606,6 +1606,7 @@ Operators can change `inboxLimit`, `sentLimit`, `notifyOnJoin` and `sendCooldown
 - The unread notice is sent `notifyDelaySeconds` after joining. A letter to someone online reaches them straight away with a chat line and a sound.
 - The forms are `ActionFormData` and `ModalFormData` from `@minecraft/server-ui`.
 - **Letters from other packs:** `realm:mail_send` `{ to, from, subject, body }`: `to` a player id or name from the roster, `from` any name to show as the sender, the subject and letter shortened to `subjectLength` and `bodyLength`. The letter has no writer id (`f` is empty), so it can't be answered; it makes room in a full inbox the same way, and the recipient gets the usual chat line if online.
+- **Test hook:** `realm:mail_test` `{ roster: n }` adds n long-gone players to the roster. It only works from the server console, and it changes the world's saved data: for tests only.
 
 ---
 
@@ -1764,7 +1765,7 @@ Realm achievements in tiers: play 1, 10 and 100 hours, mine 1,000, 10,000 and 10
 
 1. Play: milestones count on their own. Reaching one tells everyone in chat, for example `Sam reached a milestone: Miner II (Mine 10,000 blocks)`, with a sound.
 2. Run `/realm:milestones` to see yours: each milestone with the tier you have, a progress bar toward the next one and what it takes (`Mine 100,000 blocks`).
-3. Pick **Another player's milestones** to see anyone who has played since the pack was added, online or not.
+3. Pick **Another player's milestones** to see up to 50 players who have played since the pack was added: online players first, then those with the most milestones.
 4. **Operators:** to keep unlocks out of public chat, disable **Announce unlocks to everyone** in `/realm:config` → **Milestones**; then only the player is told. The milestones and their tiers are `milestones` in `config.js`.
 
 ### What players see
@@ -1784,7 +1785,7 @@ Realm achievements in tiers: play 1, 10 and 100 hours, mine 1,000, 10,000 and 10
 
 - **Counting** follows the Stats pack's rules: playtime and distance pause while a player has the `afk` tag (`afkTag`), teleports (faster than `maxSpeed`) and respawns don't add distance, and arrows count for the shooter.
 - **With the Stats pack** installed, a milestone uses the larger of the Stats pack's number and this pack's own count, so players who had stats before Milestones was added get credit for them. Without it, this pack's own count is used.
-- **Unlocking** is checked every 10 seconds (`checkSeconds`), and when you open the menu. Unlocking several at once gives one line: `Sam reached milestones: Miner I (Mine 1,000 blocks), Builder I (Place 1,000 blocks)`. The player hears a level-up sound and everyone else a chime.
+- **Unlocking:** each player is checked every 10 seconds (`checkSeconds`; a share of the players each second), and when you open the menu. Unlocking several at once gives one line: `Sam reached milestones: Miner I (Mine 1,000 blocks), Builder I (Place 1,000 blocks)`. The player hears a level-up sound and everyone else a chime.
 - **The first check** after the pack is added (or a player's first join) tells only that player what they already have, `Milestones you already have: Regular I (Play 1 hour), ...`, so a veteran's history doesn't flood chat.
 - **The menu** says `5 of 24 unlocked`, then each milestone: its tier (`Miner II`, `next: Miner III`), a bar and `12,345 / 100,000`, or `(every tier)` once all are done.
 
@@ -1792,7 +1793,7 @@ Realm achievements in tiers: play 1, 10 and 100 hours, mine 1,000, 10,000 and 10
 
 | Command | Who | What it does |
 |---|---|---|
-| `/realm:milestones` | Everyone | Shows your milestones with progress toward the next tier, and **Another player's milestones** for anyone who has played since the pack was added. Unlocks are announced to everyone (default enabled, `announce`) |
+| `/realm:milestones` | Everyone | Shows your milestones with progress toward the next tier, and **Another player's milestones** (up to 50 players who have played since the pack was added, online first, then the most milestones). Unlocks are announced to everyone (default enabled, `announce`) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -1819,7 +1820,8 @@ The Stats pack's scoreboards (`stats_mined` and the rest) are only read, never w
 
 - Counting uses the same events as the Stats pack: `afterEvents.playerBreakBlock`, `playerPlaceBlock`, `entityDie`, `playerSpawn` (joins), and a once-a-second loop for playtime and distance (gliding counts as elytra distance).
 - The Stats pack's numbers are read from its scoreboard objectives `stats_<stat>`, where scores are kept under each player's name. The packs don't import each other: without those objectives, the pack uses its own counts only.
-- Counts are kept in memory and saved every `checkSeconds` and whenever a player leaves.
+- Counts are kept in memory and each player's are saved when they're checked and when they leave.
+- **Test hook:** `realm:milestones_test` `{ fill: n }` adds n offline players' records. It only works from the server console, and it changes the world's saved data: for tests only.
 
 ---
 
@@ -1842,7 +1844,7 @@ Shared goals for the whole realm, like 10,000 cobblestone for the Colosseum. Ope
 - **A full container** stops the donation: `The goal's chest at 120, 64, -340 (overworld) is full, so the rest stayed with you. An operator needs to empty it or link a bigger one.` What already went in still counts.
 - **The container must be loaded:** someone has to be near it (the same area as you, usually). Otherwise: `The goal's chest at 120, 64, -340 (overworld) isn't loaded. Go closer to it and try again.` If it was broken: `The goal's chest ... is gone. Ask an operator to link the goal to a new one.`
 - **Announcements** (`announce`): a new goal (`New community goal: Colosseum, 10,000 Cobblestone. Donate with /realm:goals`), and `Community goal Colosseum: 50 percent there (5,000 / 10,000 Cobblestone). /realm:goals to help` at each quarter. Reaching the goal finishes it and says `Community goal Colosseum reached: 10,000 Cobblestone! Top contributors: Sam 4,200, Alex 3,100, Kim 900. Thanks, everyone!`; with announcements disabled, only the donor who finished it sees that.
-- **A goal's page** shows the bar and `2,340 / 10,000 (23 percent)`, where its chest is, `You gave: 320`, and the top 5 contributors (`topContributors`).
+- **A goal's page** shows the bar and `2,340 / 10,000 (23 percent)`, where its chest is, `You gave: 320`, and the top 5 contributors (`topContributors`). A goal with hundreds of contributors keeps the 400 who gave most by name and adds up the rest as Others, so its total and top list stay right (a player added up there starts a new count if they give again).
 - **Only donations count:** items put into the chest by hand, or by hoppers, don't add to the goal, and items taken out don't lower it. An operator can lock the chest with Quick Stack & Sort so only they can take from it; donations still go in.
 
 ### Commands
@@ -1868,7 +1870,7 @@ Operators can change `announce`, `topContributors` and `keepNamedItems` in game 
 
 | Key | Scope | Contents |
 |---|---|---|
-| `goals:g:<id>` | World | One per goal: JSON `{ id, n, item, target, got, dim, x, y, z, c, by, at, done, m }`, its name, item id, target and progress, the container's dimension and position, contributions by player id (`{ "<id>": [name, amount] }`), who added it and when, whether it's finished, and the last quarter announced |
+| `goals:g:<id>` | World | One per goal: JSON `{ id, n, item, target, got, dim, x, y, z, c, by, at, done, m }`, its name, item id, target and progress, the container's dimension and position, contributions by player id (`{ "<id>": [name, amount] }`, plus `"*": ["Others", amount]` once there are too many to keep by name), who added it and when, whether it's finished, and the last quarter announced |
 | `goals:next` | World | The next goal id |
 | `goals:cfg` | World | Settings changed in `/realm:config` |
 
@@ -1876,6 +1878,8 @@ Operators can change `announce`, `topContributors` and `keepNamedItems` in game 
 
 - `/realm:goals_add` finds the container with `getBlockFromViewDirection` and stores its position; the goal is linked to that block, so a double chest counts as one container.
 - Donating goes through the player's 36 inventory slots and moves each matching stack with the native `Container.transferItem`, which fills matching stacks in the container first, then empty slots. When a goal needs fewer than a whole stack, a copy of that many goes in with `addItem` and the stack is reduced by what went in. Progress is counted from what actually left the inventory, so nothing is counted twice or lost.
+- **Tip for operators:** the goal's chest is an ordinary container; protect it with a [Land Claim](#land-claims--claims_bp) so nobody takes donations out to give them again.
+- **Test hook:** `realm:goals_test` `{ donors: n }` adds n offline contributors to every open goal. It only works from the server console, and it changes the world's saved data: for tests only.
 - Goals are read into memory once and kept in step as they change.
 
 ---
@@ -1943,7 +1947,7 @@ When too many dropped items pile up (a broken farm, a big explosion), the realm 
 
 1. Nothing to set up. If more than 500 dropped items (`threshold`) lie around, chat says `Clearing 612 dropped items in 30 s: pick up what you need`. Pick up anything you want to keep. 10 seconds before, chat reminds everyone: `Clearing dropped items in 10 s: pick up what you need`.
 2. 30 seconds later they're removed, and chat says `Cleared 580 dropped items. (32 kept: renamed, rare, enchanted, with lore, or near a player or a recent death)`.
-3. Items renamed on an anvil, enchanted items, items with lore, shulker boxes, elytra, nether stars, totems, enchanted books and the other items in `keepItems`, items within 4 blocks of a player (`nearPlayerRadius`), and items within 8 blocks of where a player died in the last 5 minutes (`keepDeathDropsMinutes`) are never cleared.
+3. Items renamed on an anvil, enchanted items, items with lore, shulker boxes, bundles, elytra, nether stars, totems, enchanted books and the other items in `keepItems`, items within 4 blocks of a player (`nearPlayerRadius`), and items within 8 blocks of where a player died in the last 5 minutes (`keepDeathDropsMinutes`) are never cleared.
 4. Run `/realm:cleanup` to see how many dropped items there are in each dimension.
 5. **Operators:** `/realm:cleanup` opens a menu to clear now, clear after a warning, or call off a coming cleanup. Change the threshold, timing and what's kept in `/realm:config` → **Lag Cleanup**, or disable **Automatic cleanup** there.
 
@@ -1973,7 +1977,7 @@ When too many dropped items pile up (a broken farm, a big explosion), the realm 
 | `keepNearPlayers` | `true` | Keep items lying near a player |
 | `nearPlayerRadius` | `4` | Blocks around each player where items are kept (1–16 in game) |
 | `keepDeathDropsMinutes` | `5` | Keep items within 8 blocks of where a player died for this many minutes after the death; `0` = don't (0–30 in game) |
-| `keepItems` | `shulker_box`, `minecraft:elytra`, `minecraft:nether_star`, `minecraft:totem_of_undying`, `minecraft:dragon_egg`, `minecraft:beacon`, `minecraft:heavy_core`, `minecraft:enchanted_book` | Item ids never cleared. An entry matches any id ending with it, so `shulker_box` covers every color. Renamed and enchanted items and items with lore are always kept as well |
+| `keepItems` | `shulker_box`, `bundle`, `minecraft:elytra`, `minecraft:nether_star`, `minecraft:totem_of_undying`, `minecraft:dragon_egg`, `minecraft:beacon`, `minecraft:heavy_core`, `minecraft:enchanted_book` | Item ids never cleared. An entry matches any id ending with it, so `shulker_box` and `bundle` cover every color. Renamed and enchanted items and items with lore are always kept as well |
 
 Operators can change `enabled`, `threshold`, `checkSeconds`, `warnSeconds`, `keepNearPlayers`, `nearPlayerRadius` and `keepDeathDropsMinutes` in game with `/realm:config`; they apply from the next count. `keepItems` stays in `config.js`.
 
@@ -3440,7 +3444,7 @@ Operators can change `enabled`, `maxSize`, `inviteSeconds`, `partyHud`, `hudRang
 
 | Key | Scope | Contents |
 |---|---|---|
-| `party:data` | World | JSON `{ <code>: { l, m } }`: each party's leader (player id) and members as `[player id, gamertag when last seen]`, in joining order. Kept under 30,000 characters: if it grows past that, parties of one whose member is offline are forgotten |
+| `party:p:<code>` | World | One per party: JSON `{ l, m }`, the leader (player id) and the members as `[player id, gamertag when last seen]`, in joining order. Worlds saved by older versions kept every party in `party:data`; it is moved to these when the world loads and then removed (an older Parties version can't read them back) |
 | `realm_party:<code>` | Player tag | On every member while they're in that party, for other packs to read |
 | `party:pref` | Player | JSON of the player's own `partyHud` choice from `/realm:prefs` |
 | `party:cfg` | World | Settings changed in `/realm:config` |
@@ -3463,9 +3467,10 @@ Pending invites are kept in memory only: they end when the realm restarts.
   - [Minimap](#minimap--map_bp): shows party mates.
 - The pack puts every online player's tag right when they join and every 2 seconds, so a tag left from a party they were removed from goes away.
 - After any change (start, join, leave, remove) the pack sends the script event `realm:party_changed` `{ code }`.
-- **Member lists:** after every membership change, and when a member joins with a new gamertag, the pack also sends `realm:party_members` `{ code, l, m: [[player id, gamertag], ...] }`: the party's leader (player id) and every member, offline ones included, with gamertags shortened to 32 characters. An empty `m` means the party is gone (also for parties of one forgotten to stay under the save limit). Every party is sent once about 2 seconds after the world loads, and again whenever another pack sends `realm:party_members_ping` `{}`. It's one message per party, at most about 700 characters. [Land Claims](#land-claims--claims_bp) and [Realm Mail](#realm-mail--mail_bp) use it.
+- **Member lists:** after every membership change, and when a member joins with a new gamertag, the pack also sends `realm:party_members` `{ code, l, m: [[player id, gamertag], ...] }`: the party's leader (player id) and every member, offline ones included, with gamertags shortened to 32 characters. An empty `m` means the party is gone. Each party is saved on its own, so a server can have any number of parties. Every party is sent once about 2 seconds after the world loads, and again whenever another pack sends `realm:party_members_ping` `{}`. It's one message per party, at most about 700 characters. [Land Claims](#land-claims--claims_bp) and [Realm Mail](#realm-mail--mail_bp) use it.
 - Parties are read into memory once and saved whenever they change. The HUD runs every 40 ticks; it's a few distance sums per member.
 - `/realm:party_chat` takes one command argument, so a message of several words needs double quotes; the menu's **Send a message** box doesn't.
+- **Test hook** (for the dedicated server tests): the script event `realm:party_test` `{ fill: n }` adds n parties of two offline players, `{ report: "<code>" }` says in chat how many parties there are and who is in that one, `{ legacy: "<code>" }` saves one the old way. It only works from the server console, and it changes the world's saved data: for tests only.
 
 ---
 
@@ -3768,7 +3773,7 @@ Operators can change `enabled`, `rewards` and `notes` in game with `/realm:confi
 ### How it works
 
 - **Mobs:** `afterEvents.entityDie` with a player as the damaging entity. Things that aren't mobs (armor stands, townsfolk NPCs, end crystals, boats, minecarts, paintings, item frames, leash knots) never make an entry.
-- **Places, rain and thunder:** every 2 seconds each player's dimension, height and distance from world spawn are checked, plus one `getTopmostBlock` and two `getBlock` lookups for biomes (one more over deep water). Weather comes from `weatherChange` and is saved as `journal:weather`.
+- **Places, rain and thunder:** every 4 seconds (one in 10 players every 8 ticks, so they're spread out) each player's dimension, height and distance from world spawn are checked, plus one `getTopmostBlock` and two `getBlock` lookups for biomes (and a climb through the water over a sea bed, also for a diver standing on it). A player still on the same block only gets the rain and thunder check. The deepest, highest and farthest are saved with the next entry, within 30 seconds, or when the player leaves. Weather comes from `weatherChange` and is saved as `journal:weather`.
 - **Fish:** a fishing hook belongs to the nearest player when it appears. A catch is an item that appears within 2 blocks of the hook while it's reeled in (the hook goes within 4 ticks of the item appearing), from a hook that was in water and out for at least 1.5 seconds, the same check as [Skills](#skills--skills_bp). An item that appears at a player's head (dropped, not caught) never counts, so dropping a fish next to your hook doesn't add it.
 - **Other packs** add entries with `realm:journal` `{ player, page, entry, label }` (pages `mobs`, `places`, `fish`, `weather`, `relics`, `story`, `wanderers`). Those that aren't in `config.js` show under `Also found (N)`: up to 100 per page, the newest kept (the oldest goes to make room, also when the journal nears its save limit). One that went to make room and is found again comes back quietly, without another `Journal: New entry` note (the journal remembers the last 100 dropped per page). The pack also listens to `realm:sky_event` (only kinds on the Weather page) and `realm:moon` (`blood`, `harvest`: everyone in the overworld).
 - Finishing a page adds the levels, adds Crowns to the `crowns` scoreboard and sends `realm:title_unlock` `{ player, title, from: "journal_bp" }`.
@@ -5326,13 +5331,13 @@ Effortless Building v5.0 ported directly into the Realm: build lines, walls, flo
 |---|---|---|
 | `enabled` | `true` | Easy Building for the whole realm. Disabled: commands say so and placing blocks builds nothing extra |
 | `operatorsOnly` | `false` | Only operators can use the building tools |
-| `maxBlocksCap` | `50000` | Maximum blocks per build allowed on the realm (64 to 300000 in game); Woodwrights with Builder's Eye ([Skills](#skills--skills_bp)) get up to 25% more |
+| `maxBlocksCap` | `50000` | Maximum blocks per build allowed on the realm (64 to 300000 in game); Woodwrights with Builder's Eye ([Skills](#skills--skills_bp)) get up to 25% more. Players who never chose a limit get this cap, so on a public server keep it low (the default) and raise it only together with `operatorsOnly` or `tagRequired` |
 | `modeComplexity` | `"player"` | Mode list complexity: `"player"` (players choose Simple or All modes), `"simple"` (Force Simple: Disable, Line, Wall, Floor, Cube), or `"advanced"` (Force All 15 modes) |
 | `tagRequired` | `false` | Require a player tag (`requiredTag`) to use Effortless Building (operators are always allowed) |
 | `requiredTag` | `"admin"` | The tag name required when `tagRequired` is enabled |
 | `allowDestroy` | `true` | Allow Destroy mode when right-clicking with a pickaxe, axe or shovel |
 | `destroyCreativeOnly` | `false` | Restrict Destroy mode to Creative mode only |
-| `allowInfiniteReach` | `true` | Allow players to enable Infinite Reach to place and destroy at a distance in midair |
+| `allowInfiniteReach` | `true` | Allow players to enable Infinite Reach to place and destroy at a distance in midair (on a public server, consider disabling it: big builds at a distance are a lag tool in the wrong hands) |
 | `maxReachCap` | `64` | Longest Infinite Reach distance players may pick, in blocks (0 = no cap, up to 256) |
 | `autoGiveBook` | `false` | Automatically give the Building Book and Tutorial Book to new players on their first spawn |
 | `configTagRequired` | `false` | Restrict changing Preview Quality to players with `requiredTag` |
@@ -5352,6 +5357,11 @@ Operators can change every option in game with `/realm:config` (**Easy Building*
 | `eb:clip_meta`, `eb:clip_<slot>_<chunk>` | Player | Saved clipboard slots and auto-saved copy/cut data |
 | `eb:undo_n`, `eb:undo_<i>`, `eb:redo_n`, `eb:redo_<i>` | Player | Persistent undo and redo snapshots |
 | `eb:previewMode`, `eb:destroyPreviewMode`, `eb:previewQuality`, `eb:deferShapeCalc`, `eb:flickPreview`, `eb:simpleModes`, `eb:buildSpeed`, `eb:maxBlocks`, `eb:replaceBlocks`, `eb:infiniteReach`, `eb:infiniteReachDistance`, `eb:airBuildReach`, `eb:destroyDrops`, `eb:undoThreshold`, `eb:floatingUI`, `eb:cursor`, `eb:panelSize`, `eb:coachSide`, `eb:panelSounds`, `eb:swapBookActions`, `eb:fovZoomEnabled`, `eb:hintsEnabled`, `eb:bookLanguage` | Player | Per-player preferences shared between `/realm:prefs` and `/realm:build_settings`. Without `eb:maxBlocks` a player gets the realm cap (`maxBlocksCap`), as `/realm:prefs` shows (before 3.0.3 it was the lower of 50,000 and the cap). A build speed changed in `/realm:prefs` applies to the next build (before, at the next join). The old menu switch `eb:customUI` moves to `eb:floatingUI` when a player joins, so **Floating 3D panels** in `/realm:prefs` shows and sets what counts. **Preview refresh interval** offers only the speeds the pack has (1, 2, 3, 4, 5, 10, 20 ticks); preferences that do nothing for a player (Easy Building off, operators only, a missing tag, Destroy mode or Infinite Reach not allowed, plain menus for everyone, a forced mode list) show as locked there |
+
+### How it works
+
+- **Idle players cost little:** with building off and no Building Book in hand, the pack looks at a player only every 5 ticks (spread over the ticks), and at once after a hotbar slot or inventory change; holding the Building Book, a block with a mode on, a mirror or an open guide is followed every tick.
+- **The line above the hotbar** (mode prompts, sizes, the paste countdown) is a steady line of the action bar protocol (rank 30, see [How the packs work together](#how-the-packs-work-together)): it announces itself with `realm:actionbar` at most every 10 ticks while it shows, and most of its one-off notes (`Built 15 blocks`) send a request first (a few from the Effortless Building port, such as the undo and paste notes, don't yet).
 
 ---
 
