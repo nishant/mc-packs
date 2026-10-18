@@ -72,9 +72,12 @@ function install() {
     orig: { run: sp.run, runTimeout: sp.runTimeout, get: wp.getDynamicProperty, set: wp.setDynamicProperty, ids: wp.getDynamicPropertyIds, clear: wp.clearDynamicProperties },
   };
   // Subscribed before the signals are wrapped, so it is never timed. One listener answers for every pack here.
-  system.afterEvents.scriptEventReceive.subscribe((ev) => {
-    if (ev.id === "realm:diag_ping" || ev.id === "realm:diag_forget") handle(st, ev.id, ev.message);
-  }, { namespaces: ["realm"] });
+  system.afterEvents.scriptEventReceive.subscribe(
+    function diagListener(ev) {
+      if (ev.id === "realm:diag_ping" || ev.id === "realm:diag_forget") handle(st, ev.id, ev.message);
+    },
+    { namespaces: ["realm"] }
+  );
   try {
     patchSystem(st);
     for (const [owner, prefix] of /** @type {[any, string][]} */ ([[world.beforeEvents, "world.before"], [world.afterEvents, "world.after"], [system.beforeEvents, "system.before"], [system.afterEvents, "system.after"]])) patchSignals(st, owner, prefix);
@@ -84,9 +87,11 @@ function install() {
     console.warn(`[diag] could not install: ${e}`);
   }
   // Module evaluation is over by the first tick: from then on only a running callback says whose code runs.
-  st.orig.run.call(system, () => {
-    if (st.multi) st.cur = null;
-  });
+  if (typeof st.orig.run === "function") {
+    st.orig.run.call(system, () => {
+      if (st.multi) st.cur = null;
+    });
+  }
   return st;
 }
 
@@ -96,6 +101,8 @@ function install() {
 
 /** @type {WeakMap<Function, Function>} original callback -> wrapper (for unsubscribe) */
 const wrapped = G.__realmDiagWrapped ?? (G.__realmDiagWrapped = new WeakMap());
+/** Under the test harness profiler (tools/test-bds/lib/profile.js) only: wrapper -> the pack's function, for its labels. @type {WeakMap<Function, Function> | undefined} */
+const inner = G.__harnessProfile ? (G.__realmDiagInner ??= new WeakMap()) : undefined;
 
 /** "file:line" of the first stack frame outside this file and the test harness. */
 function site() {
@@ -156,6 +163,7 @@ function wrap(st, fn, rec, key) {
       st.cur = prev;
     }
   };
+  if (inner) inner.set(w, fn);
   return w;
 }
 
@@ -166,6 +174,7 @@ const label = (kind, fn, where) => `${kind}${fn && fn.name && fn.name !== "anony
 function patchSystem(st) {
   const proto = /** @type {any} */ (System.prototype);
   const o = { run: proto.run, runTimeout: proto.runTimeout, runInterval: proto.runInterval, runJob: proto.runJob };
+  if (![o.run, o.runTimeout, o.runInterval, o.runJob].every((f) => typeof f === "function")) return; // not the real game (a tool loading the pack)
   /** @param {string} kind @param {Function} cb @param {boolean} rare */
   const w = (kind, cb, rare) => {
     // A short-lived run/runTimeout handed over while profiling is off is named by its kind only: no stack
@@ -283,6 +292,7 @@ function ownerOfKey(st, k) {
 /** @param {State} st */
 function patchProps(st) {
   const wp = /** @type {any} */ (World.prototype);
+  if (typeof st.orig.get !== "function" || typeof st.orig.set !== "function") return;
   wp.getDynamicProperty = function (/** @type {string} */ k) {
     const c = st.cur;
     if (c && !st.keyOwner.has(k)) learn(st, k, c);

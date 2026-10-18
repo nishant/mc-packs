@@ -53,7 +53,8 @@ function record(key, ms) {
 function site() {
   const stack = String(new Error().stack || "").split("\n");
   for (const l of stack) {
-    if (!l.trim() || l.includes("__harness_") || l.includes("diag.js")) continue; // diag.js: the pack's own diagnostics wrapper
+    // diag.js: the pack's own diagnostics wrapper (it hands the game its wrapper through these patched calls)
+    if (!l.trim() || l.includes("__harness_") || l.includes("diag.js") || /\(native\)\s*$/.test(l)) continue;
     const m = /\(([^()]*)\)\s*$/.exec(l) || /at (\S+)\s*$/.exec(l);
     if (m) return m[1];
   }
@@ -72,7 +73,13 @@ function timed(fn, key) {
   return w;
 }
 
+// A pack's scripts/diag.js wraps callbacks before they get here: it records its wrapper -> the pack's own
+// function while this flag is set, so labels keep the pack's function name.
+/** @type {any} */ (globalThis).__harnessProfile = true;
+const inner = (fn) => (fn && globalThis.__realmDiagInner?.get(fn)) || fn;
+
 function label(kind, fn) {
+  fn = inner(fn);
   const name = fn && fn.name && fn.name !== "anonymous" ? " " + fn.name : "";
   return `${kind}${name} @ ${site()}`;
 }
