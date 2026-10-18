@@ -79,6 +79,24 @@ function send(id, data) {
   }
 }
 
+// Town news: Townsfolk gossip at most once per in-game hour from this pack, each event once, so a busy server
+// doesn't flood the townsfolk.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 // Crowns: the shared `crowns` scoreboard (the Crowns pack shows balances; any pack may pay or charge).
 function crownsObjective() {
   const sb = world.scoreboard;
@@ -1044,6 +1062,7 @@ function found(player, hunt, inChest) {
   if (CONFIG.reputation > 0) send("realm:rep_add", { player: player.id, guild: "wayfarers", amount: CONFIG.reputation, reason: "Treasure map" });
   send("realm:journal", { player: player.id, page: "places", entry: "treasure", label: "Buried treasure" });
   if (CONFIG.skillXp > 0) send("realm:skill_xp", { player: player.id, skill: "exploration", amount: CONFIG.skillXp });
+  gossip(`${player.id}:${hunt.id}`, { kind: "treasure", player: player.id, name: player.name });
   if (CONFIG.relics.length && Math.random() < CONFIG.relicChance) {
     send("realm:relic_give", { player: player.id, relic: any(CONFIG.relics) });
     player.sendMessage("§dSomething old and strange glints among the coins...");

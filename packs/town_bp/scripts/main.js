@@ -353,6 +353,26 @@ const ranking = (pr) =>
     .filter(([, , n]) => n > 0)
     .sort((a, b) => b[2] - a[2]);
 
+// Town news: a finished project is Townsfolk gossip about the top contributor (at most one piece per in-game hour
+// from this pack, each project once) and a letter through Realm Mail to the contributors who are offline (the
+// biggest LETTERS_MAX), so they hear of it before they next join.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+const LETTERS_MAX = 10;
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 /** @param {Town} t @param {Project} p @param {Progress} pr */
 function finishProject(t, p, pr) {
   const ranked = ranking(pr);
@@ -370,12 +390,20 @@ function finishProject(t, p, pr) {
   /** @type {[string, string, string]} */
   const quest = [`town_${t.id}_${p.id}`, `Town project: ${p.name} (${t.n})`, guildFor(p)];
   // Townsfolk gossip (Hearth & Hearsay) about the top contributor.
-  if (ranked[0]) send("realm:gossip", { kind: "town_project", player: ranked[0][0], name: ranked[0][1], place: `${p.name} in ${t.n}` });
-  ranked.forEach(([id], i) => {
+  if (ranked[0]) gossip(`${t.id}:${p.id}`, { kind: "town_project", player: ranked[0][0], name: ranked[0][1], place: `${p.name} in ${t.n}` });
+  let letters = 0;
+  ranked.forEach(([id, name, n], i) => {
     const crowns = CONFIG.topCrowns[i] ?? 0;
     const pl = online(id);
     if (pl) payNow(pl, crowns, [quest], `${p.name}, ${t.n}`);
-    else owe(id, crowns, quest);
+    else {
+      owe(id, crowns, quest);
+      if (letters++ >= LETTERS_MAX) return;
+      const body =
+        `${name},\n\n${t.n} finished its ${p.name} while you were away. You delivered ${fmt(n)} items for it` +
+        `${i === 0 ? ", more than anyone" : ""}.${crowns > 0 ? ` Your ${fmt(crowns)} Crowns wait for you when you next come by.` : ""}\n\nThank you!\n\n- ${t.n}`;
+      send("realm:mail_send", { to: id, from: `${t.n}`.replace(/§./g, "").slice(0, 32), subject: `${p.name} is finished`.slice(0, 40), body: body.slice(0, 600) });
+    }
   });
   build(t, p, true);
   levelUp(t);
@@ -1797,6 +1825,10 @@ system.afterEvents.scriptEventReceive.subscribe(
       } else if (m.action === "finish") {
         const pr = progressOf(t, p);
         if (pr.done) return tell("already finished");
+        // "donors": that many offline contributors (5 items each, as on a big server); "give": the player's own items.
+        const donors = Math.max(0, Math.min(500, Math.floor(Number(m.donors) || 0)));
+        for (let i = 0; i < donors; i++) pr.c[`-${4294970000 - i}`] = [`Away${i}`, 5];
+        if (player && Number(m.give) > 0) pr.c[player.id] = [player.name, Math.floor(Number(m.give))];
         pr.got = { ...p.needs };
         pr.done = 1;
         saveProgress(t, p, pr);

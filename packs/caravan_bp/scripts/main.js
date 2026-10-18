@@ -9,6 +9,7 @@ import {
   ItemStack,
   Player,
   StructureSaveMode,
+  ScriptEventSource,
   system,
   world,
 } from "@minecraft/server";
@@ -167,6 +168,24 @@ function broadcast(msg) {
       // left meanwhile
     }
   }
+}
+
+// Town news: a caravan arriving is Townsfolk gossip about nobody in particular (no `player`), at most once per
+// in-game hour, once per visit.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -410,6 +429,7 @@ function arrive(slot) {
     "realm:sky_event",
     JSON.stringify({ kind: "caravan", dim: spot.dim, x: Math.floor(spot.x), z: Math.floor(spot.z), text: `A merchant caravan arrived at ${where}` }),
   );
+  gossip(`visit:${visit.v}`, { kind: "caravan", place: spot.name.replace(/§./g, "").slice(0, 48) });
   upkeep();
 }
 
@@ -1202,6 +1222,20 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Scenario tests (BDS harness): the caravan leaves now. Only from the server console:
+// /scriptevent realm:caravan_test {"action":"depart"}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:caravan_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      if (JSON.parse(ev.message)?.action === "depart" && visit) depart(false);
+    } catch (e) {
+      console.warn(`[caravan] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
