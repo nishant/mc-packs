@@ -176,6 +176,24 @@ const rewardText = () => {
   return [levels ? `${levels} level${levels === 1 ? "" : "s"}` : "", crowns ? `${crowns} Crowns` : ""].filter(Boolean).join(" and ");
 };
 
+// Town news: a Blood Moon survived is one piece of Townsfolk gossip (about one survivor, with how many there were),
+// not one per survivor, and at most one per in-game hour from this pack.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** @param {string[]} alive */
 function rewardSurvivors(alive) {
   const levels = Math.max(0, Math.floor(Number(get("blood.rewardLevels")) || 0));
@@ -188,7 +206,6 @@ function rewardSurvivors(alive) {
       if (levels) p.addLevels(levels);
       if (crowns && addCrowns(p, crowns)) p.sendMessage(`§6+${crowns} Crowns §7(Blood Moon survived)`);
       p.playSound("random.levelup", { volume: 0.8 });
-      system.sendScriptEvent("realm:gossip", JSON.stringify({ kind: "blood_moon", player: p.id, name: p.name })); // Townsfolk gossip
       if (title && p.getDynamicProperty(PROP_SURVIVOR) !== true) {
         p.setDynamicProperty(PROP_SURVIVOR, true);
         system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: p.id, title, from: "moon_bp" }));
@@ -197,6 +214,9 @@ function rewardSurvivors(alive) {
       console.warn(`[moon] reward: ${e}`);
     }
   }
+  const survivors = world.getAllPlayers().filter((p) => alive.includes(p.id));
+  const one = survivors[Math.floor(Math.random() * survivors.length)];
+  if (one) gossip(`blood:${world.getDay()}`, { kind: "blood_moon", player: one.id, name: one.name, n: survivors.length });
 }
 
 function crownsObjective() {
