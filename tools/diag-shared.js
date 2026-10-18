@@ -79,6 +79,16 @@ function install() {
     orig: { run: sp.run, runTimeout: sp.runTimeout, get: wp.getDynamicProperty, set: wp.setDynamicProperty, ids: wp.getDynamicPropertyIds, clear: wp.clearDynamicProperties },
   };
   try {
+    // Commands (and anything else handed over in startup) are registered after every module has run, while
+    // st.cur still names the last pack evaluated: from here on a bundle names the owner from the call stack.
+    // Subscribed before patchSignals, so it is not wrapped, and first, so it runs before every pack's handler.
+    system?.beforeEvents?.startup?.subscribe?.(() => {
+      if (st.multi) st.cur = null;
+    });
+  } catch {
+    // no startup event (a tool loading the pack)
+  }
+  try {
     patchSystem(st);
     for (const [owner, prefix] of /** @type {[any, string][]} */ ([[world.beforeEvents, "world.before"], [world.afterEvents, "world.after"], [system.beforeEvents, "system.before"], [system.afterEvents, "system.after"]])) patchSignals(st, owner, prefix);
     patchCommands(st);
