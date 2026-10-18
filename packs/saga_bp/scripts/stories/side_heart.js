@@ -871,7 +871,7 @@ const MOSS = {
         `${MO}Stand watch in my yard one night. Put down whatever climbs out. Let them see you protect them. Maybe they'll come round. I did, mostly.`,
       ],
       objectives: [{ type: "defeat", label: "Defeat 5 monsters at the Old Graveyard at night", mobs: NIGHT_MOBS, count: 5, night: true, place: "graveyard", radius: 32 }],
-      outro: [`${MO}Mrs. Abernathy says you'll do. Old Pell wants it on record he still doesn't like you. Noted, Pell.`],
+      outro: [`${MO}Mrs. Abernathy says you'll do. Old Grimsby wants it on record he still doesn't like you. Noted, Grimsby.`],
       reward: { levels: 2, crowns: 20 },
       hint: "Defeat 5 monsters within 32 blocks of the Old Graveyard at night.",
     },
