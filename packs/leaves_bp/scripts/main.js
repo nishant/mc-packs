@@ -31,9 +31,9 @@ const UNKNOWN = 5; // unloaded or outside the world: treated as if it held a log
 const enabled = () => get("enabled") === true;
 
 /** @param {string} id */
-const isLeaf = (id) => id.endsWith("_leaves") || id === "minecraft:azalea_leaves_flowered" || id === "minecraft:leaves" || id === "minecraft:leaves2";
+const isLeaf = (id) => id.endsWith("_leaves") || id === "minecraft:azalea_leaves_flowered";
 /** Logs and wood, stripped or not: what keeps leaves alive. @param {string} id */
-const isLog = (id) => id.endsWith("_log") || id.endsWith("_wood") || id === "minecraft:log" || id === "minecraft:log2";
+const isLog = (id) => id.endsWith("_log") || id.endsWith("_wood");
 
 /** @type {Check[]} */
 const pending = [];
