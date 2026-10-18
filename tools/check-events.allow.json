@@ -1,0 +1,4 @@
+{
+  "comment": "Script event sends check-events.mjs flags: a payload built from a list or player text with nothing splitting it. Each needs a cap or {part, parts} in its pack (owning track); remove the line with the fix.",
+  "packs/refill_bp/scripts/main.js": ["realm:refill_need"]
+}
