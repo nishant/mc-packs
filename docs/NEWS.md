@@ -7,6 +7,12 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Pinned HUD positions
+
+- Left and Right positions 1-4 now keep their numbered places. A readout in position 4 leaves room for positions 1-3 even when they are empty.
+- Each position has room for multiline text, so shorter readouts do not pull later ones upward. Empty gaps have no background.
+- The scoreboard follows the last occupied right position. Lower positions can be clipped on short screens or at larger GUI scales; choose an earlier position or smaller GUI scale if needed.
+
 ## World-fixed character names
 
 - Townsfolk, caravan traders, wanderers, and story characters now use one world-fixed name helper above the character's head instead of viewer-relative projected labels.

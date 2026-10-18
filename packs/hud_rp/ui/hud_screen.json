@@ -282,6 +282,37 @@
       }
     ]
   },
+  "realm_pinned_slot@hud.realm_slot": {
+    "size": [
+      "100%",
+      66
+    ],
+    "$pin_slice|default": "%.159s",
+    "$pin_empty|default": "$slot_empty",
+    "controls": [
+      {
+        "realm_content@hud.realm_slot": {
+          "anchor_from": "top_left",
+          "anchor_to": "top_left"
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "binding_name": "#hud_title_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_name": "#hud_subtitle_text_string",
+        "binding_type": "global"
+      },
+      {
+        "binding_type": "view",
+        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (($pin_slice * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $pin_empty)))",
+        "target_property_name": "#visible"
+      }
+    ]
+  },
   "realm_radar_panel": {
     "type": "panel",
     "size": [
@@ -536,22 +567,28 @@
               "realm_radar@hud.realm_radar_panel": {}
             },
             {
-              "realm_right1@hud.realm_slot": {
-                "$skip": "%.10s"
+              "realm_right1@hud.realm_pinned_slot": {
+                "$skip": "%.10s",
+                "$pin_slice": "%.639s",
+                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)"
               }
             },
             {
-              "realm_right2@hud.realm_slot": {
-                "$skip": "%.170s"
+              "realm_right2@hud.realm_pinned_slot": {
+                "$skip": "%.170s",
+                "$pin_slice": "%.479s",
+                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)"
               }
             },
             {
-              "realm_right3@hud.realm_slot": {
-                "$skip": "%.330s"
+              "realm_right3@hud.realm_pinned_slot": {
+                "$skip": "%.330s",
+                "$pin_slice": "%.319s",
+                "$pin_empty": "($slot_empty + ' ' + $slot_empty)"
               }
             },
             {
-              "realm_right4@hud.realm_slot": {
+              "realm_right4@hud.realm_pinned_slot": {
                 "$skip": "%.490s"
               }
             },
@@ -582,28 +619,34 @@
               }
             },
             {
-              "realm_left1@hud.realm_slot": {
+              "realm_left1@hud.realm_pinned_slot": {
                 "$skip": "%.650s",
+                "$pin_slice": "%.639s",
+                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)",
                 "$slot_anchor": "top_left",
                 "$slot_align": "left"
               }
             },
             {
-              "realm_left2@hud.realm_slot": {
+              "realm_left2@hud.realm_pinned_slot": {
                 "$skip": "%.810s",
+                "$pin_slice": "%.479s",
+                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)",
                 "$slot_anchor": "top_left",
                 "$slot_align": "left"
               }
             },
             {
-              "realm_left3@hud.realm_slot": {
+              "realm_left3@hud.realm_pinned_slot": {
                 "$skip": "%.970s",
+                "$pin_slice": "%.319s",
+                "$pin_empty": "($slot_empty + ' ' + $slot_empty)",
                 "$slot_anchor": "top_left",
                 "$slot_align": "left"
               }
             },
             {
-              "realm_left4@hud.realm_slot": {
+              "realm_left4@hud.realm_pinned_slot": {
                 "$skip": "%.1130s",
                 "$slot_anchor": "top_left",
                 "$slot_align": "left"
