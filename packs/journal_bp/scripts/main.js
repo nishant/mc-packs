@@ -489,10 +489,10 @@ function explore(player, spawn) {
   if (overworld) weatherOver(player, headroom);
 }
 
-// Each player every 4 seconds, spread over the 40 runs in between (one in 40 players a run), so a full server doesn't
-// look everyone up on the same tick. Each look is a few calls into the game, and so is the list of players (about
-// 0.5 ms with 40 online): it is read once a round, not every run.
-const SPREAD = 40;
+// Each player every 4 seconds, spread over the 10 runs in between (one in 10 players a run, every 8 ticks), so a full
+// server doesn't look everyone up on the same tick. Each look is a few calls into the game, and so is the list of
+// players: it is read once a round, not every run.
+const SPREAD = 10;
 let turn = 0;
 /** @type {Player[]} */
 let round = [];
@@ -512,7 +512,7 @@ system.runInterval(() => {
       console.warn(`[journal] ${e}`);
     }
   }
-}, 2);
+}, 8);
 
 // ---------------------------------------------------------------------------
 // Fish: a hook belongs to the player nearest to it when it appears. A catch is an item that appears
