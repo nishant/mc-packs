@@ -3356,7 +3356,6 @@ system.runInterval(() => {
   beat++;
   if (!runs.size) return;
   /** @type {Map<string, Player>} */
-  /** @type {Map<string, Player>} */
   const players = new Map();
   for (const run of runs.values()) {
     if (run.phase !== "active" && run.phase !== "finishing") continue;
