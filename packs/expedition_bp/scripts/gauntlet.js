@@ -57,7 +57,11 @@ export function spawnFresh(dim, type, at) {
   const want = type.includes(":") ? type : `minecraft:${type}`;
   for (let k = 0; k < 8; k++) {
     const e = dim.spawnEntity(/** @type {any} */ (type), at);
-    if (e.typeId === want) return e;
+    // The type alone isn't enough: someone's chest minecart or pet wolf is the same type. A new entity stands where
+    // it was spawned, untagged, in the dimension asked for.
+    if (e.typeId !== want || e.dimension.id !== dim.id) continue;
+    const l = e.location;
+    if (Math.abs(l.x - at.x) < 0.5 && Math.abs(l.z - at.z) < 0.5 && Math.abs(l.y - at.y) < 1.5 && !e.getTags().length) return e;
   }
   throw new Error(`spawnEntity(${type}) kept returning another entity`);
 }
