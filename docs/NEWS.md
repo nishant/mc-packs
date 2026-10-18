@@ -7,11 +7,12 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
-## Pinned HUD and a clearer minimap
+## Neater side HUDs and a clearer minimap
 
-- Left and Right positions 1-4 now keep their numbered places. A readout in position 4 leaves room for positions 1-3 even when they are empty.
-- Positions use compact, screen-sized cells instead of reserving six lines for every gap. Long readouts stay inside their cell; open /realm:saga for full quest details.
-- The scoreboard follows the last occupied right position. Very short screens can still run out of space with the radar on; use a left position, hide the radar or use a smaller GUI scale if needed.
+- Mob health and the Elytra HUD default to the left, with the rotating scoreboard. Existing choices in /realm:prefs and realm settings are kept.
+- Readouts stack in numbered order and center vertically on each side. Empty positions collapse to keep the group compact; long readouts stay inside their cell.
+- The minimap stays at its approved top-right position. Right-side readouts center below it; the original top compass is unchanged.
+- The full native scoreboard height counts toward the left group. If a very tall board or large GUI scale cannot fit, use /realm:stats, hide optional readouts or choose a smaller GUI scale.
 - All readout boxes, the radar and scoreboard leave the compass band clear, even when the compass is hidden.
 - The minimap uses its old thick black border space for terrain instead, with a thin boundary and no dark edge shading.
 - N, E, S and W stay visible when markers share their position. Your arrow and real-player markers are slightly larger; NPC and mob icon sizes are unchanged relative to map cells.

@@ -285,12 +285,8 @@
   "realm_pinned_slot@hud.realm_slot": {
     "size": [
       "100%",
-      "25% - 42px"
+      32
     ],
-    "min_size": ["100%", 16],
-    "max_size": ["100%", 32],
-    "$pin_slice|default": "%.159s",
-    "$pin_empty|default": "$slot_empty",
     "controls": [
       {
         "realm_content@hud.realm_slot": {
@@ -317,25 +313,7 @@
           ]
         }
       }
-    ],
-    "bindings": [
-      {
-        "binding_name": "#hud_title_text_string",
-        "binding_type": "global"
-      },
-      {
-        "binding_name": "#hud_subtitle_text_string",
-        "binding_type": "global"
-      },
-      {
-        "binding_type": "view",
-        "source_property_name": "((#hud_title_text_string = '§s§2§r') and (not (($pin_slice * (#hud_subtitle_text_string - ($skip * #hud_subtitle_text_string))) = $pin_empty)))",
-        "target_property_name": "#visible"
-      }
     ]
-  },
-  "realm_left_pinned_slot@hud.realm_pinned_slot": {
-    "size": ["100%", "25% - 15px"]
   },
   "realm_radar_panel": {
     "type": "panel",
@@ -497,13 +475,13 @@
   "realm_sidebar_slot": {
     "type": "panel",
     "size": ["100%", "100%c"],
-    "anchor_from": "top_right",
-    "anchor_to": "top_right",
+    "anchor_from": "top_left",
+    "anchor_to": "top_left",
     "controls": [
       {
         "sidebar@scoreboard.scoreboard_sidebar": {
-          "anchor_from": "top_right",
-          "anchor_to": "top_right",
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
           "bindings": [
             {
               "binding_name": "#scoreboard_sidebar_visible",
@@ -520,13 +498,6 @@
       }
     ]
   },
-  "realm_reserve": {
-    "type": "panel",
-    "size": [
-      1,
-      44
-    ]
-  },
   "realm_side_area": {
     "type": "panel",
     "clips_children": true,
@@ -537,110 +508,73 @@
     "layer": 2,
     "controls": [
       {
-        "realm_side_right": {
-          "type": "stack_panel",
-          "orientation": "vertical",
-          "use_child_anchors": true,
-          "max_size": ["100% - 8px", "100% - 8px"],
-          "size": [
-            "50%",
-            "100% - 8px"
-          ],
+        "realm_side_radar": {
+          "type": "panel",
+          "size": ["50%", 108],
           "anchor_from": "top_right",
           "anchor_to": "top_right",
-          "offset": [
-            -4,
-            4
-          ],
+          "offset": [-4, 48],
           "controls": [
             {
-              "realm_reserve_r@hud.realm_reserve": {}
-            },
-            {
               "realm_radar@hud.realm_radar_panel": {}
-            },
+            }
+          ]
+        }
+      },
+      {
+        "realm_side_right": {
+          "type": "panel",
+          "size": ["100% - 8px", "100% - 160px"],
+          "clips_children": true,
+          "anchor_from": "top_right",
+          "anchor_to": "top_right",
+          "offset": [-4, 156],
+          "controls": [
             {
-              "realm_right1@hud.realm_pinned_slot": {
-                "$skip": "%.10s",
-                "$pin_slice": "%.639s",
-                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)"
+              "realm_right_stack": {
+                "type": "stack_panel",
+                "orientation": "vertical",
+                "use_child_anchors": true,
+                "size": ["50%", "100%c"],
+                "max_size": ["100%", "100%"],
+                "anchor_from": "right_middle",
+                "anchor_to": "right_middle",
+                "controls": [
+                  { "realm_right1@hud.realm_pinned_slot": { "$skip": "%.10s" } },
+                  { "realm_right2@hud.realm_pinned_slot": { "$skip": "%.170s" } },
+                  { "realm_right3@hud.realm_pinned_slot": { "$skip": "%.330s" } },
+                  { "realm_right4@hud.realm_pinned_slot": { "$skip": "%.490s" } }
+                ]
               }
-            },
-            {
-              "realm_right2@hud.realm_pinned_slot": {
-                "$skip": "%.170s",
-                "$pin_slice": "%.479s",
-                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)"
-              }
-            },
-            {
-              "realm_right3@hud.realm_pinned_slot": {
-                "$skip": "%.330s",
-                "$pin_slice": "%.319s",
-                "$pin_empty": "($slot_empty + ' ' + $slot_empty)"
-              }
-            },
-            {
-              "realm_right4@hud.realm_pinned_slot": {
-                "$skip": "%.490s"
-              }
-            },
-            {
-              "realm_sidebar@hud.realm_sidebar_slot": {}
             }
           ]
         }
       },
       {
         "realm_side_left": {
-          "type": "stack_panel",
-          "orientation": "vertical",
-          "size": [
-            "50%",
-            "100% - 8px"
-          ],
+          "type": "panel",
+          "size": ["100% - 8px", "100% - 52px"],
+          "clips_children": true,
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "offset": [
-            4,
-            4
-          ],
+          "offset": [4, 48],
           "controls": [
             {
-              "realm_reserve_l@hud.realm_reserve": {}
-            },
-            {
-              "realm_left1@hud.realm_left_pinned_slot": {
-                "$skip": "%.650s",
-                "$pin_slice": "%.639s",
-                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)",
-                "$slot_anchor": "top_left",
-                "$slot_align": "left"
-              }
-            },
-            {
-              "realm_left2@hud.realm_left_pinned_slot": {
-                "$skip": "%.810s",
-                "$pin_slice": "%.479s",
-                "$pin_empty": "($slot_empty + ' ' + $slot_empty + ' ' + $slot_empty)",
-                "$slot_anchor": "top_left",
-                "$slot_align": "left"
-              }
-            },
-            {
-              "realm_left3@hud.realm_left_pinned_slot": {
-                "$skip": "%.970s",
-                "$pin_slice": "%.319s",
-                "$pin_empty": "($slot_empty + ' ' + $slot_empty)",
-                "$slot_anchor": "top_left",
-                "$slot_align": "left"
-              }
-            },
-            {
-              "realm_left4@hud.realm_left_pinned_slot": {
-                "$skip": "%.1130s",
-                "$slot_anchor": "top_left",
-                "$slot_align": "left"
+              "realm_left_stack": {
+                "type": "stack_panel",
+                "orientation": "vertical",
+                "use_child_anchors": true,
+                "size": ["50%", "100%c"],
+                "max_size": ["100%", "100%"],
+                "anchor_from": "left_middle",
+                "anchor_to": "left_middle",
+                "controls": [
+                  { "realm_left1@hud.realm_pinned_slot": { "$skip": "%.650s", "$slot_anchor": "top_left", "$slot_align": "left" } },
+                  { "realm_left2@hud.realm_pinned_slot": { "$skip": "%.810s", "$slot_anchor": "top_left", "$slot_align": "left" } },
+                  { "realm_left3@hud.realm_pinned_slot": { "$skip": "%.970s", "$slot_anchor": "top_left", "$slot_align": "left" } },
+                  { "realm_left4@hud.realm_pinned_slot": { "$skip": "%.1130s", "$slot_anchor": "top_left", "$slot_align": "left" } },
+                  { "realm_sidebar@hud.realm_sidebar_slot": {} }
+                ]
               }
             }
           ]

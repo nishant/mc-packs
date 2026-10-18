@@ -37,7 +37,7 @@ function plainName(entity) {
 
 const side = sideBoxes("mobhp");
 /** The box mob health uses when "Above the mob" can't be used (players, named mobs). */
-const FALLBACK_SLOT = "right1";
+const FALLBACK_SLOT = "left1";
 
 /**
  * attacker id -> the readout of their last hit this tick. A sweep or a blast can hurt many mobs at once: only

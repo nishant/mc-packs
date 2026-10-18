@@ -732,7 +732,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Want it off the hotbar bar, where other packs' notes push it aside? Set §lWhere my HUD shows§r in §e/realm:prefs§r to one of the side boxes (§lRight 1§r to §lRight 4§r, §lLeft 1§r to §lLeft 4§r). Pick one no other pack of yours uses (Mob Health uses Right 1, the Elytra HUD Right 2, Warmer / Colder Right 3 and the story tracker Right 4 unless you changed them).",
+        "text": "Want it off the hotbar bar, where other packs' notes push it aside? Set §lWhere my HUD shows§r in §e/realm:prefs§r to one of the side boxes (§lRight 1§r to §lRight 4§r, §lLeft 1§r to §lLeft 4§r). Pick one no other pack of yours uses (Mob Health now defaults to Left 1, the Elytra HUD Left 2, Warmer / Colder Right 3 and the story tracker Right 4; existing saved choices are kept).",
         "ops": false
       },
       {
@@ -753,10 +753,10 @@ export const PACKS = [
     "folder": "mobhp_bp",
     "topic": "mobhp",
     "name": "Mob Health",
-    "summary": "Hit a mob and its name and health show in a small box on the right side of your screen (or in another box, above the mob's head, or above your hotbar, if you prefer), so you know how close it is to going down.",
+    "summary": "Hit a mob and its name and health show in a small box on the left side of your screen (or in your existing chosen box, above the mob's head, or above your hotbar), so you know how close it is to going down.",
     "steps": [
       {
-        "text": "Nothing to set up: hit a mob with anything, or shoot it, and the top box on the right side of your screen (§lRight 1§r) shows something like §eZombie  14/20 HP ||||||||||§r (a killing blow shows §eZombie  defeated§r; it's the mob's health, not a quest counter) with the bar in color. Only you see it.",
+        "text": "Nothing to set up: hit a mob with anything, or shoot it, and §lLeft 1§r in the centered left-side group shows something like §eZombie  14/20 HP ||||||||||§r (a killing blow shows §eZombie  defeated§r; it's the mob's health, not a quest counter) with the bar in color. Only you see it. Existing realm or player placement choices are not reset.",
         "ops": false
       },
       {
@@ -785,10 +785,10 @@ export const PACKS = [
     "folder": "elytra_bp",
     "topic": "elytra",
     "name": "Elytra HUD",
-    "summary": "While you glide, a small box on the right side of your screen (or another box, or the line above your hotbar, if you prefer) shows your speed, height, how much durability your elytra has left and how many firework rockets and §lNOS Rockets§r you carry. This pack also adds the §lNOS Rocket§r (§ecustom:nos_rocket§r), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles. It also adds the §lMusic Disc - Run Away§r (§ecustom:music_disc_run_away§r), a custom music disc that plays in a Jukebox or in your hand.",
+    "summary": "While you glide, a small box on the left side of your screen (or your existing chosen box, or the line above your hotbar) shows your speed, height, how much durability your elytra has left and how many firework rockets and §lNOS Rockets§r you carry. This pack also adds the §lNOS Rocket§r (§ecustom:nos_rocket§r), a high-powered nitrous Elytra booster crafted from 8 gunpowder around 1 firework rocket that delivers roughly 3.5x the forward acceleration burst of a normal firework rocket with cyan/blue and orange flame particles. It also adds the §lMusic Disc - Run Away§r (§ecustom:music_disc_run_away§r), a custom music disc that plays in a Jukebox or in your hand.",
     "steps": [
       {
-        "text": "Put on an elytra and glide. In the second box on the right side of the screen (§lRight 2§r) you see something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12  NOS 4§r, updated 4 times a second. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
+        "text": "Put on an elytra and glide. §lLeft 2§r in the centered left-side group shows something like §e31.4 blocks/s  Y 142§r and under it §eElytra 87%  Rockets 12  NOS 4§r, updated 4 times a second. Existing realm and player placement choices are kept. Prefer another place? §lWhere my Elytra HUD shows§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
@@ -1395,7 +1395,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker in the bottom box on the right side of the screen (§lRight 4§r, just above the scoreboard) is a small quest log: the quest's name in aqua on top (§eDrowned Bell§r), under it the step to do next in white with where to go (§eLighthouse NE 240m§r) or who to report to, then every other quest you have going on a row of its own (§eGot Away: Catch 7 more fish with a rod§r), then the chapter's other open steps in gray. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r.",
+        "text": "Chat lists the chapter's objectives. Do them in any order (a few boss chapters go one step at a time). The tracker uses §lRight 4§r in the centered right-side readout group below the fixed minimap: quest name in aqua (§eDrowned Bell§r), then the next step/direction in white (§eLighthouse NE 240m§r). The compact side box retains two useful lines; open §e/realm:saga§r for the complete quest log and other open steps. Counts go down as you go, within a second of each kill: after 6 of 12, §eDefeat 12 drowned§r reads §eDefeat 6 more drowned§r. The rotating Stats scoreboard is on the left, not beneath the quest.",
         "ops": false
       },
       {

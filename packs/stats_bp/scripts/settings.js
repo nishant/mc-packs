@@ -29,7 +29,7 @@ export const OPTIONS = [
     type: "enum",
     scope: "world",
     label: "Sidebar (everyone sees the same one)",
-    help: "The scoreboard on the right of the screen. Bedrock shows one sidebar to everyone, so players can't hide it; each can use the stats ticker instead. The same as /realm:stats_sidebar",
+    help: "The shared scoreboard (on the left with Realm Resources). Bedrock shows one sidebar to everyone, so players can't hide it; each can use the stats ticker instead. The same as /realm:stats_sidebar",
     choices: ["off", "cycle", ...STATS.map((s) => s.id)],
     names: ["Hidden", "Rotate through the stats", ...STATS.map((s) => s.label)],
     read: () => world.getDynamicProperty(PROP_SIDEBAR),
