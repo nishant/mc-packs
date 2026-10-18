@@ -821,7 +821,7 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
   queuedButtons.delete(player.id);
 });
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [buttonState, snapshots, lastTotal, lastEnforce]) m.delete(playerId);
+  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff]) m.delete(playerId);
   recoveryWarned.delete(playerId);
   dead.delete(playerId);
   queuedButtons.delete(playerId);
@@ -959,14 +959,27 @@ function tickPlayer(player, withAutoStore) {
   if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) autoStore(player);
 }
 
+/** @type {Map<string, { until: number, text: string, logged: number }>} a player whose last tick failed waits before the next try */
+const backoff = new Map();
+/** Ticks a failed player waits (a page save that can't stage here retries when they move), and how often the same warning repeats. */
+const RETRY_TICKS = 40;
+const WARN_TICKS = 1200;
+
 let beat = 0;
 system.runInterval(() => {
   const withAutoStore = ++beat % 5 === 0;
+  const now = system.currentTick;
   for (const player of world.getAllPlayers()) {
+    const wait = backoff.get(player.id);
+    if (wait && now < wait.until) continue;
     try {
       tickPlayer(player, withAutoStore);
+      if (wait) backoff.delete(player.id);
     } catch (e) {
-      console.warn(`[stash] ${e}`);
+      const text = String(e);
+      const repeat = wait?.text === text && now - wait.logged < WARN_TICKS;
+      if (!repeat) console.warn(`[stash] ${text}`);
+      backoff.set(player.id, { until: now + RETRY_TICKS, text, logged: repeat && wait ? wait.logged : now });
     }
   }
 }, 2);
