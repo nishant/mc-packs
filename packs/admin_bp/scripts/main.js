@@ -1156,16 +1156,30 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 
 let seconds = 0;
+/** Whether the last round of checks is still going (a round never overlaps the next one). */
+let checking = false;
 system.runInterval(() => {
-  if (++seconds < Math.max(5, Number(get("checkSeconds")) || 30)) return;
+  if (++seconds < Math.max(5, Number(get("checkSeconds")) || 30) || checking) return;
   seconds = 0;
-  for (const p of world.getAllPlayers()) {
-    try {
-      check(p);
-    } catch (e) {
-      console.warn(`[admin] ${e}`);
-    }
-  }
+  checking = true;
+  // One player per tick: a check reads the whole inventory (about 0.2 ms a player), so with every player on the same
+  // tick a big server would hitch every checkSeconds.
+  system.runJob(
+    (function* () {
+      try {
+        for (const p of world.getAllPlayers()) {
+          try {
+            check(p);
+          } catch (e) {
+            console.warn(`[admin] ${e}`);
+          }
+          yield;
+        }
+      } finally {
+        checking = false;
+      }
+    })()
+  );
 }, 20);
 
 world.afterEvents.itemUse.subscribe(({ source, itemStack }) => {
