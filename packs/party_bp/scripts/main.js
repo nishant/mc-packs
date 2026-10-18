@@ -3,7 +3,8 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 
-// Parties are kept in one world property, so members who are offline stay in theirs. Every member
+// Each party is one world property (party:p:<code>), so members who are offline stay in theirs and however many
+// parties a big server collects, none gets near a property's size limit. Every member
 // carries the tag `realm_party:<code>` while they're in a party: other packs share credit through it
 // (same tag, same dimension, within 64 blocks), and this pack puts the tag right whenever a player
 // joins and every 2 seconds, so a player kicked while offline loses it on their next visit.
@@ -12,11 +13,11 @@ import { get, getFor } from "./settings.js";
 
 /** @typedef {{ l: string, m: [string, string][] }} Party leader id; members as [player id, gamertag when last seen], in joining order */
 
-const PROP = "party:data"; // world: JSON { <code>: Party }
+const PREFIX = "party:p:"; // world: one JSON Party per party, keyed by its code
+const LEGACY = "party:data"; // world, older versions: JSON { <code>: Party } of every party (moved to PREFIX on load)
 const TAG = "realm_party:";
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O or 1/I
 const HUD_TICKS = 40;
-const SAVE_LIMIT = 30000; // a string property holds at most about 32,000 characters
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const DIMENSION_NAMES = /** @type {Record<string, string>} */ ({
   "minecraft:overworld": "the Overworld",
@@ -33,59 +34,75 @@ const enabled = () => get("enabled") === true;
 
 /** @type {Map<string, Party> | undefined} */
 let cache;
+/** player id -> party code, rebuilt after every change. @type {Map<string, string> | undefined} */
+let index;
+
+/** @param {unknown} p @returns {Party | undefined} */
+function parse(p) {
+  const any = /** @type {any} */ (p);
+  if (!any || typeof any.l !== "string" || !Array.isArray(any.m)) return undefined;
+  /** @type {[string, string][]} */
+  const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => [m[0], String(m[1] ?? "")]);
+  if (!members.length) return undefined;
+  return { l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
+}
 
 /** @returns {Map<string, Party>} code -> party */
 function parties() {
   if (cache) return cache;
   /** @type {Map<string, Party>} */
   const map = new Map();
-  let raw;
+  let ids;
   try {
-    raw = world.getDynamicProperty(PROP);
+    ids = world.getDynamicPropertyIds();
   } catch {
     return map; // the world isn't loaded yet: read again next time
   }
-  try {
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
-    for (const [code, p] of Object.entries(parsed ?? {})) {
-      if (!p || typeof p.l !== "string" || !Array.isArray(p.m)) continue;
-      /** @type {[string, string][]} */
-      const members = p.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => [m[0], String(m[1] ?? "")]);
-      if (!members.length) continue;
-      const leader = members.some((m) => m[0] === p.l) ? p.l : members[0][0];
-      map.set(code, { l: leader, m: members });
+  for (const key of ids) {
+    if (!key.startsWith(PREFIX)) continue;
+    try {
+      const raw = world.getDynamicProperty(key);
+      const p = parse(typeof raw === "string" ? JSON.parse(raw) : undefined);
+      if (p) map.set(key.slice(PREFIX.length), p);
+    } catch {
+      console.warn(`[party] ${key} is corrupt; that party is gone`);
     }
-  } catch {
-    console.warn(`[party] ${PROP} is corrupt; starting with no parties`);
   }
+  // Worlds from older versions kept every party in one property: move each to its own, then drop the old one.
+  try {
+    const raw = world.getDynamicProperty(LEGACY);
+    if (typeof raw === "string") {
+      for (const [code, p] of Object.entries(JSON.parse(raw) ?? {})) {
+        const party = parse(p);
+        if (!party || map.has(code)) continue;
+        map.set(code, party);
+        world.setDynamicProperty(PREFIX + code, JSON.stringify(party));
+      }
+      world.setDynamicProperty(LEGACY, undefined);
+    }
+  } catch (e) {
+    console.warn(`[party] ${LEGACY}: ${e}`);
+  }
+  index = undefined;
   return (cache = map);
 }
 
-/** Saves every party and tells other packs which one changed. @param {string} [code] */
-function save(code) {
-  const all = parties();
+/** Writes one party (or removes it once it's gone), without telling anyone. @param {string} code */
+function write(code) {
+  index = undefined;
+  const p = parties().get(code);
   try {
-    let json = JSON.stringify(Object.fromEntries(all));
-    if (json.length > SAVE_LIMIT) {
-      // Room for more: forget parties of one whose only member is offline (they'd start a new one).
-      const here = new Set(world.getAllPlayers().map((p) => p.id));
-      for (const [c, p] of all) {
-        if (p.m.length < 2 && !here.has(p.m[0][0])) {
-          all.delete(c);
-          if (c !== code) sendMembers(c); // gone: other packs forget it
-        }
-      }
-      json = JSON.stringify(Object.fromEntries(all));
-    }
-    if (json.length > SAVE_LIMIT) throw new Error(`too many parties (${json.length} characters)`);
-    world.setDynamicProperty(PROP, all.size ? json : undefined);
+    world.setDynamicProperty(PREFIX + code, p ? JSON.stringify(p) : undefined);
   } catch (e) {
-    console.warn(`[party] save: ${e}`);
+    console.warn(`[party] save ${code}: ${e}`);
   }
-  if (code) {
-    system.sendScriptEvent("realm:party_changed", JSON.stringify({ code }));
-    sendMembers(code);
-  }
+}
+
+/** Saves a party and tells other packs it changed. @param {string} code */
+function save(code) {
+  write(code);
+  system.sendScriptEvent("realm:party_changed", JSON.stringify({ code }));
+  sendMembers(code);
 }
 
 // Other packs that need the whole party, offline members included (Land Claims, Realm Mail), hear its member list:
@@ -111,8 +128,12 @@ system.runTimeout(() => {
 
 /** The code of the player's party, or undefined. @param {string} id */
 function partyOf(id) {
-  for (const [code, p] of parties()) if (p.m.some((m) => m[0] === id)) return code;
-  return undefined;
+  const all = parties();
+  if (!index) {
+    index = new Map();
+    for (const [code, p] of all) for (const [member] of p.m) index.set(member, code);
+  }
+  return index.get(id);
 }
 
 function newCode() {
@@ -370,7 +391,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     const me = p?.m.find((m) => m[0] === player.id);
     if (code && me && me[1] !== player.name) {
       me[1] = player.name; // keep the saved gamertag current for offline lists
-      save();
+      write(code);
       sendMembers(code);
     }
   } catch (e) {
@@ -581,19 +602,31 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
   );
 });
 
-// Scenario tests (BDS harness): fill the world with `fill` parties of two offline players, as on a big server after a
-// few months. Only from the server console: /scriptevent realm:party_test {"fill":400}
+// Scenario tests (BDS harness), only from the server console: `fill` the world with that many parties of two offline
+// players (a big server after a few months), save one party (`legacy`: its code) the way older versions did (read
+// after the next restart), or `report` in chat how many parties there are and whether that code is one.
+// /scriptevent realm:party_test {"fill":400}
 system.afterEvents.scriptEventReceive.subscribe(
   (ev) => {
     if (ev.id !== "realm:party_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
       const m = JSON.parse(ev.message);
+      if (typeof m?.legacy === "string") {
+        world.setDynamicProperty(LEGACY, JSON.stringify({ [m.legacy]: { l: "-4294960000", m: [["-4294960000", "OldLeader"], ["-4294960001", "OldFriend"]] } }));
+        return;
+      }
+      if (typeof m?.report === "string") {
+        const p = parties().get(m.report);
+        world.sendMessage(`party_test: ${parties().size} parties; ${m.report} ${p ? `has ${p.m.map((x) => x[1]).join(", ")}` : "is missing"}`);
+        return;
+      }
       const n = Math.max(0, Math.min(2000, Math.floor(Number(m?.fill) || 0)));
       for (let i = 0; i < n; i++) {
         const a = `-${4294967000 - 2 * i}`;
-        parties().set(newCode(), { l: a, m: [[a, `OfflinePlayer${i}a`], [`-${4294966999 - 2 * i}`, `OfflinePlayer${i}b`]] });
+        const code = newCode();
+        parties().set(code, { l: a, m: [[a, `OfflinePlayer${i}a`], [`-${4294966999 - 2 * i}`, `OfflinePlayer${i}b`]] });
+        write(code);
       }
-      save();
     } catch (e) {
       console.warn(`[party] test: ${e}`);
     }
