@@ -282,6 +282,9 @@ world.afterEvents.worldLoad.subscribe(() => {
     if (!(night?.a && night.s === "harvest")) restoreTicks(); // a Harvest Moon cut short
     if (!(night?.a && night.s === "blood")) removeMobs();
     lastTime = t;
+    // The player-made block list takes about 40 ms to build: here, while the world loads, rather than in the middle
+    // of the first Blood Moon wave.
+    system.runTimeout(() => playerMadeBlocks(), 60);
   } catch (e) {
     console.warn(`[moon] ${e}`);
   }
