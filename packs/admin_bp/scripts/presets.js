@@ -112,6 +112,7 @@ export const OP_TEXT = "§c";
 export const NAMES = {
   "realm:admin_item": ["Get the Menu Item", "Yours again, or for others"],
   "realm:admin_title": ["Show a Title", "Big text the HUD won't cover"],
+  "realm:diag": ["Pack diagnostics", "Script time, saved data"],
   "realm:afk": ["Go AFK", "Move to come back"],
   "realm:bounty": ["Bounty Board Menu", "Today's bounties and boards"],
   "realm:bounty_board": ["Make Bounty Board", "From the lectern you look at"],
@@ -311,6 +312,7 @@ export const PARAMS = {
     seconds: { label: "Seconds on screen", kind: "slider", min: 1, max: 25, step: 1, default: 5 },
     player: { label: "Show it to", everyone: true },
   },
+  "realm:diag": { seconds: { label: "Seconds to measure", kind: "slider", min: 1, max: 60, step: 1, default: 10 } },
   "realm:caravan_spot": { name: { label: "Spot name (empty: Spot 1, Spot 2...)" } },
   "realm:champions_spawn": { "realm:champion_trait": { label: "Trait (leave out: random)" } },
   "realm:crowns_give": { player: { label: "Give Crowns to", everyone: true }, amount: { label: "Crowns (negative takes them)", kind: "text", default: 100 } },

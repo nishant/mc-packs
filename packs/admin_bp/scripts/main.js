@@ -15,6 +15,7 @@ import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData }
 import { ACTIONS, TITLE_MAX_SECONDS, showTitle } from "./actions.js";
 import { ENUMS, PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
+import { DEFAULT_SECONDS, MAX_SECONDS, diagnostics } from "./diagnostics.js";
 import { GROUPS, LINE, NAMES, OP_COLOR, OP_TEXT, PARAMS, SETUP, needsConfirm, textWidth } from "./presets.js";
 import { get, onChange } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
@@ -620,6 +621,7 @@ async function opsPage(player, back) {
   /** @type {Entry[]} */
   const entries = [{ header: "Quick actions" }, { text: "§7Vanilla things you would otherwise type. They work without cheats." }];
   for (const a of ACTIONS) entries.push({ label: button(a.title, a.hint, true), open: () => openAction(player, a, again) });
+  entries.push({ label: button("Pack diagnostics", "Script time, saved data", true), open: () => diagnostics(player, diagCtx, DEFAULT_SECONDS, again) });
 
   /** @type {Entry[]} */
   const setup = [];
@@ -633,10 +635,13 @@ async function opsPage(player, back) {
   }
   if (setup.length) entries.push({ header: "Server setup checklist" }, { text: "§7One-time jobs across the packs. §2[x]§7 means its pack says it's done; the others can't be checked from here." }, ...setup);
 
-  const own = cmds.filter((c) => OWN_PAGE.has(c.folder) && !ACTIONS.some((a) => a.title === nameOf(c))); // Show a Title is a quick action already
+  const own = cmds.filter((c) => OWN_PAGE.has(c.folder) && c.name !== "realm:diag" && !ACTIONS.some((a) => a.title === nameOf(c))); // Show a Title and Pack diagnostics are quick actions already
   if (own.length) entries.push({ header: TITLE }, ...cmdEntries(player, own, again));
   await list(player, "Operator Tools", `${OP_TEXT}Red§r = operators only: everything on this page is.`, entries, back);
 }
+
+/** What Pack diagnostics (diagnostics.js) uses from this file. @type {import("./diagnostics.js").Ctx} */
+const diagCtx = { show, installed, names: new Map(PACKS.map((p) => [p.folder, p.pack])) };
 
 /** @type {Set<string>} players with the menu open */
 const open = new Set();
@@ -1236,6 +1241,26 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
         const list = targets ?? world.getAllPlayers();
         const n = showTitle(list, title, subtitle ?? "", seconds ?? 5);
         player?.sendMessage(`§7[${TITLE}] Title shown to ${n} player${n === 1 ? "" : "s"} for ${seconds ?? 5} s.`);
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:diag",
+      description: `Pack diagnostics: measure every pack's script time for a few seconds, then list the packs with their saved data; a pack's page can forget its saved data (operators). Default ${DEFAULT_SECONDS} seconds`,
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      optionalParameters: [{ name: "seconds", type: CustomCommandParamType.Integer }],
+    },
+    (origin, /** @type {number | undefined} */ seconds) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      if (!isOp(player)) return { status: CustomCommandStatus.Failure, message: "Pack diagnostics is for operators." };
+      if (seconds !== undefined && (seconds < 1 || seconds > MAX_SECONDS)) return { status: CustomCommandStatus.Failure, message: `Seconds: 1 to ${MAX_SECONDS}.` };
+      system.run(() => {
+        diagnostics(player, diagCtx, seconds ?? DEFAULT_SECONDS).catch((/** @type {unknown} */ e) => console.warn(`[admin] ${e}`));
       });
       return { status: CustomCommandStatus.Success };
     }
