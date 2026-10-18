@@ -876,6 +876,7 @@ const PRIVATE_RANGE = 16; // a Confidant's warm words to a Hollow-Crowned player
 const FLAG_LIMIT = 64; // most flags kept from realm:npc_flags
 const GOSSIP_KIND = /^[a-z][a-z0-9_]{0,23}$/;
 const GOSSIP_REPEAT_MS = 30 * 60000; // the same news about the same player within 30 minutes replaces the older one
+const GOSSIP_PER_KIND = 4; // most pieces of one kind kept at once, so one busy pack can't push every other piece out
 
 /** @typedef {[number, number, number, number, number]} Aff points, last talk day, last gift day, bits, last keepsake day (UTC days) */
 /** @typedef {{ i: number, k: string, p: string, n: string, pl?: string, x?: number, t: number, c?: number }} Gossip */
@@ -1209,20 +1210,34 @@ const gossipAlive = () => {
   return gossip.filter((g) => g.t >= cutoff);
 };
 
-/** realm:gossip from another pack: one piece of news about a player. @param {any} msg */
+/**
+ * realm:gossip from another pack: one piece of news about a player, or town news about nobody in particular (no
+ * `player`, e.g. a caravan arriving). Within 30 minutes the same news replaces the older piece: the same kind about
+ * the same player, or the same place about the same player (a champion and the bounty on it are one story). At most
+ * GOSSIP_PER_KIND pieces of a kind and `gossipMax` in all are kept; the oldest go first.
+ * @param {any} msg
+ */
 function hearGossip(msg) {
-  if (!msg || typeof msg.kind !== "string" || !GOSSIP_KIND.test(msg.kind) || typeof msg.player !== "string" || !msg.player) return;
-  const subject = world.getAllPlayers().find((p) => p.id === msg.player || p.name === msg.player);
-  const name = typeof msg.name === "string" && msg.name.trim() ? msg.name.trim().slice(0, 32) : subject?.name;
-  if (!name) return;
-  const pid = subject?.id ?? msg.player;
+  if (!msg || typeof msg.kind !== "string" || !GOSSIP_KIND.test(msg.kind)) return;
+  const town = msg.player === undefined || msg.player === "";
+  if (!town && typeof msg.player !== "string") return;
+  const subject = town ? undefined : world.getAllPlayers().find((p) => p.id === msg.player || p.name === msg.player);
+  const name = town ? "" : typeof msg.name === "string" && msg.name.trim() ? msg.name.trim().replace(/§./g, "").slice(0, 32) : subject?.name;
+  if (!town && !name) return;
+  const pid = town ? "" : (subject?.id ?? msg.player);
   const now = Date.now();
   /** @type {Gossip} */
-  const g = { i: gossipNext++, k: msg.kind, p: pid.slice(0, 40), n: name, t: now };
+  const g = { i: gossipNext++, k: msg.kind, p: pid.slice(0, 40), n: name ?? "", t: now };
   if (typeof msg.place === "string" && msg.place.trim()) g.pl = msg.place.trim().replace(/§./g, "").slice(0, 48);
   if (isNum(msg.n)) g.x = Math.round(msg.n);
   if (subject && crowned(subject)) g.c = 1;
-  gossip = gossipAlive().filter((o) => !(o.k === g.k && o.p === g.p && now - o.t < GOSSIP_REPEAT_MS));
+  const same = (/** @type {Gossip} */ o) => o.p === g.p && now - o.t < GOSSIP_REPEAT_MS && (o.k === g.k || (!!g.p && !!g.pl && o.pl === g.pl));
+  gossip = gossipAlive().filter((o) => !same(o));
+  const ofKind = gossip.filter((o) => o.k === g.k);
+  if (ofKind.length >= GOSSIP_PER_KIND) {
+    const drop = new Set(ofKind.slice(0, ofKind.length - GOSSIP_PER_KIND + 1));
+    gossip = gossip.filter((o) => !drop.has(o));
+  }
   gossip.push(g);
   gossip = gossip.slice(-Math.max(1, Number(CONFIG.gossipMax) || 24));
   saveGossip();
@@ -1254,8 +1269,8 @@ function gossipLine(player, t) {
   const heard = heardOf(player);
   const g = alive.filter((x) => !heard.includes(x.i)).sort((a, b) => b.i - a.i)[0];
   if (!g) return undefined;
-  const self = g.p === player.id;
-  const pool = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? GOSSIP.other)];
+  const self = !!g.p && g.p === player.id; // town news (no player) is never about the listener
+  const pool = [...(HEARTH[t.id]?.gossip?.[g.k] ?? []), ...(GOSSIP[g.k] ?? (g.p ? GOSSIP.other : GOSSIP.news))];
   const pair = pick(pool);
   if (!pair) return undefined;
   const kept = heard.filter((i) => alive.some((x) => x.i === i));
@@ -2206,12 +2221,23 @@ function questDone(msg) {
 // realm:npc_debug { player, action: "tap", npc, sneak? } (operators and test scenarios; /scriptevent needs operator
 // rights): a tap on that townsfolk by that player (id or name), as if they tapped it (sneak: a gift). Simulated
 // players' taps fire no interact events, so the test scenarios tap this way.
+// { action: "gossip" } answers realm:npc_gossip { count, kinds: { kind: count }, last: [[kind, name, place], ...] }
+// (the newest 6), so a scenario can see what the town remembers.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message, sourceEntity }) => {
     if (id !== "realm:npc_debug" || !ready) return;
     if (sourceEntity instanceof Player && sourceEntity.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return;
     try {
       const m = JSON.parse(message);
+      if (m?.action === "gossip") {
+        const alive = gossipAlive();
+        /** @type {Record<string, number>} */
+        const kinds = {};
+        for (const g of alive) kinds[g.k] = (kinds[g.k] ?? 0) + 1;
+        const last = alive.slice(-6).map((g) => [g.k, g.n.slice(0, 16), (g.pl ?? "").slice(0, 24)]);
+        system.sendScriptEvent("realm:npc_gossip", JSON.stringify({ count: alive.length, kinds, last }));
+        return;
+      }
       if (!m || m.action !== "tap" || typeof m.npc !== "string" || typeof m.player !== "string") return;
       const player = world.getAllPlayers().find((p) => p.id === m.player || p.name === m.player);
       const rec = placedOf(m.npc);
