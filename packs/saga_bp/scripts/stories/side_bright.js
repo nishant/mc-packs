@@ -1126,7 +1126,7 @@ const HEARTH_AND_TABLE = {
         journal: { entry: "hearth_and_table", label: "Hearth and Table" },
       },
       rep: [{ guild: "growers", amount: 20 }],
-      hint: "Wren's Meadow is near world spawn; meet Chef Marcel there. Then serve Mayor Bram: a Champion's Heart Stew and 2 Glow Berry Tarts from the Cooking pack's kitchen, or, the old way, 2 rabbit stews and 8 golden carrots.",
+      hint: "Wren's Meadow is {band:meadow} blocks from spawn; the tracker points the way. Meet Chef Marcel there. Then serve Mayor Bram: a Champion's Heart Stew (2 rabbit stews without the Champions pack) and 2 Glow Berry Tarts from the Cooking pack's kitchen, or, the old way, 2 rabbit stews and 8 golden carrots.",
     },
   ],
 };
