@@ -61,7 +61,8 @@ export default async function (t) {
   await t.wait(30);
   own.useItemInSlotOnBlock(0, box, Direction.Up);
   await t.wait(20);
+  // The ejected disc pops out on top of the jukebox: either player, standing 2 blocks away, may pick it up.
   let picked = 0;
-  for (let i = 0; i < inv.size; i++) if (inv.getItem(i)?.typeId === DISC) picked++;
+  for (const c of [inv, vinv]) for (let i = 0; i < c.size; i++) if (c.getItem(i)?.typeId === DISC) picked++;
   t.check(discs() + picked === 1, `the owner's tap ejects the disc (${discs()} on the ground, ${picked} picked up)`);
 }
