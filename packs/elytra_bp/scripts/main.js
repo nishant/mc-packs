@@ -488,6 +488,7 @@ function insertDisc(player, block) {
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
+  if (event.cancel) return; // another pack refused the tap (someone else's land claim): the disc stays in
   const block = event.block;
   if (block.typeId !== "minecraft:jukebox") return;
   const player = event.player;
