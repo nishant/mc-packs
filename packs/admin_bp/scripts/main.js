@@ -694,16 +694,21 @@ const KNOWN_LORE_PREFIXES = [
   ["Use it to open the admin menu:", "every realm command in one place,"],
 ];
 
-/** @param {ItemStack | undefined} it the real item, made by this pack (current or legacy pack marker/fingerprint, even if recolored or anvil-renamed) */
+/**
+ * The real item, made by this pack (current or legacy pack marker/fingerprint, even if recolored or anvil-renamed).
+ * Also one made of another item than `itemType` (a world that changed it, or an older copy): it's locked in the
+ * inventory and can't be dropped, so it must count, be replaced and never be doubled. Only its exact lore counts then.
+ * @param {ItemStack | undefined} it
+ */
 const isRealItem = (it) => {
-  if (!it || it.typeId !== CONFIG.itemType) return false;
+  if (!it) return false;
   try {
     const lore = it.getLore();
     if (!lore.length) return false;
     if (lore.includes(MARK) || OLD_MARKS.some((m) => lore.includes(m))) return true;
     const stripped = lore.map((l) => plain(l).trim());
-    if (stripped.some((l) => REAL_MARKS.has(l))) return true;
-    return KNOWN_LORE_PREFIXES.some((prefix) => prefix.every((line, idx) => stripped[idx] === line));
+    if (KNOWN_LORE_PREFIXES.some((prefix) => prefix.every((line, idx) => stripped[idx] === line))) return true;
+    return it.typeId === CONFIG.itemType && stripped.some((l) => REAL_MARKS.has(l));
   } catch {
     return false;
   }
@@ -736,7 +741,7 @@ function needsNormalize(item) {
     const lore = item.getLore();
     const sameLore = lore.length === LORE.length && lore.every((l, idx) => l === LORE[idx]);
     const locked = item.lockMode === ItemLockMode.inventory;
-    return item.amount !== 1 || item.nameTag !== `§r§6${TITLE}` || !sameLore || !item.keepOnDeath || !locked;
+    return item.typeId !== CONFIG.itemType || item.amount !== 1 || item.nameTag !== `§r§6${TITLE}` || !sameLore || !item.keepOnDeath || !locked;
   } catch {
     return true;
   }
@@ -744,6 +749,7 @@ function needsNormalize(item) {
 
 /** @param {ItemStack} item @returns {ItemStack} */
 function normalizedItem(item) {
+  if (item.typeId !== CONFIG.itemType) return makeItem(); // made of an older itemType: a fresh one of the current
   const copy = typeof item.clone === "function" ? item.clone() : makeItem();
   copy.amount = 1;
   copy.nameTag = `§r§6${TITLE}`;
