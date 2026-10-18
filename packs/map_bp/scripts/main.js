@@ -1384,13 +1384,20 @@ function giveMap(player) {
     player.sendMessage("§c[Map] The map couldn't be given. Try again.");
     return;
   }
+  let named = false;
   for (let i = 0; i < inv.size; i++) {
     const it = inv.getItem(i);
     if (!it || it.typeId !== "minecraft:empty_map" || it.nameTag || before.has(i)) continue;
     it.nameTag = "§eMara's Field Map";
     it.setLore(["§7Hold it in your other hand", "§7(offhand) and use it once:", "§7the land and your arrow show", "§7in the corner of your view."]);
     inv.setItem(i, it);
+    named = true;
     break;
+  }
+  if (!named) {
+    // It stacked onto empty maps the player already had, so no slot holds it alone to name.
+    player.sendMessage("§e[Map] The map was added to your empty maps. §7It works the same: use one once, then hold it in your offhand. For the named Field Map, put your empty maps away and run /realm:map again.");
+    return;
   }
   player.sendMessage("§a[Map] Mara's Field Map is in your inventory. §7Use it once to draw the land around you, then hold it in your offhand to keep it in view.");
 }
