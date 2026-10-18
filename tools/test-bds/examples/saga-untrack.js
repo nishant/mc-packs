@@ -12,9 +12,18 @@ export default async function (t) {
       sides.push({ tick: sys.currentTick, m: JSON.parse(message) });
     } catch {}
   }, { namespaces: ["realm"] });
+  // The Minimap target (realm:track goes only when it changes): listened to from before Ann joins, so the last one is what the map shows.
+  const tracks = [];
+  sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
+    if (id !== "realm:track") return;
+    try {
+      tracks.push({ tick: sys.currentTick, m: JSON.parse(message) });
+    } catch {}
+  }, { namespaces: ["realm"] });
   const ann = await t.player("Ann", { op: true });
   const send = (id, msg) => sys.sendScriptEvent(id, JSON.stringify(msg));
-  const tracker = (since) => sides.filter((s) => s.tick >= since && s.m.player === ann.id && s.m.from === "saga" && s.m.slot === "right4").map((s) => String(s.m.text));
+  // The story tracker's box: Side HUD's quest box (slot "quest", since 1.16), or a small box before that.
+  const tracker = (since) => sides.filter((s) => s.tick >= since && s.m.player === ann.id && s.m.from === "saga" && s.m.text).map((s) => String(s.m.text));
   /** Talks to an NPC (played by the scenario) and accepts what it offers. */
   async function accept(npc, key) {
     let next = t.waitForm(ann, { timeout: 300 });
@@ -38,13 +47,6 @@ export default async function (t) {
   since = t.tick;
   const box = await t.waitUntil(() => tracker(since).find((s) => s.includes("Got Away") && s.includes("Drowned Bell")), { timeout: 80, message: `both quests in the box; wrote ${JSON.stringify(tracker(since))}` });
   t.log(`box: ${JSON.stringify(box)}`);
-  const tracks = [];
-  sys.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {
-    if (id !== "realm:track") return;
-    try {
-      tracks.push({ tick: sys.currentTick, m: JSON.parse(message) });
-    } catch {}
-  }, { namespaces: ["realm"] });
   /** /realm:saga_log, pick a quest, press a button. */
   async function logPress(quest, button) {
     const f1 = t.waitForm(ann, { timeout: 200 });

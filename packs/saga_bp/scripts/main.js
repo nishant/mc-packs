@@ -43,7 +43,7 @@ import { get, getFor } from "./settings.js";
 import { initFar } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS, WANDERERS, WANDER_TEMPLATES } from "./stories/index.js";
-import { choose, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
+import { choose, clearBox, currentPage, hintOps, missingPlaces, offersAt, resetPlayer, showMenu, tidyFavors, resendTracks, sendTrack, track, wanderAuto } from "./ui.js";
 import { onWanderGone, onWanderSpawn, onWanderTurn, sendWanderState, wanderForget, wanderHousekeeping, wanderJoined, wanderPing } from "./wander.js";
 import { PACK, busy, online, send } from "./util.js";
 
@@ -83,14 +83,17 @@ system.runInterval(() => {
   }
   if (get("enabled") !== true) return;
   beginRun();
-  const tracking = runs % TRACKER_RUNS === 0;
+  let k = 0;
   for (const player of world.getAllPlayers()) {
+    // Every 2 seconds per player, half the players each second (so a full server's tracker isn't drawn in one tick).
+    const tracking = (runs + k++) % TRACKER_RUNS === 0;
     try {
       wanderHousekeeping(player);
       wanderAuto(player);
       const list = entries(player);
       if (!list.length) {
         if (tracking) sendTrack(player, undefined);
+        clearBox(player);
         continue;
       }
       const saga = sagaOf(player);

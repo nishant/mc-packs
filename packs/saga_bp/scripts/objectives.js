@@ -313,8 +313,18 @@ export function showLine(player, text, ticks, steady) {
   player.onScreenDisplay.setActionBar(text);
 }
 
-/** A progress note; the tracker waits while it shows. @param {Player} player @param {string} text @param {number} ticks */
+/**
+ * A progress note. With the tracker in a Side HUD box it shows in the small box at the place the player picked (a
+ * second readout, "saga/note"), so the quest box beside it stays; when another pack's readout is in that box, or above
+ * the hotbar, it takes the tracker's place and the tracker waits while it shows.
+ * @param {Player} player @param {string} text @param {number} ticks
+ */
 export function note(player, text, ticks = 40) {
+  const where = getFor(player, "trackerAt");
+  if (isSlot(where) && !side.taken(player, where)) {
+    side.show(player, where, text, ticks, "note");
+    return;
+  }
   ownUntil.set(player.id, system.currentTick + ticks);
   showLine(player, text, ticks);
 }
@@ -799,6 +809,14 @@ export function timeWait(obj) {
   const t = world.getTimeOfDay();
   if (a <= b ? t >= a && t < b : t >= a || t < b) return undefined;
   const what = a >= 12000 && a < 16000 ? "nightfall" : a >= 16000 && a < 20000 ? "midnight" : a < 1000 || a >= 23000 ? "dawn" : "the right time of day";
+  // With the daylight cycle off (common on servers that keep it day) the time never comes by itself: no countdown.
+  let cycle = true;
+  try {
+    cycle = world.gameRules.doDayLightCycle;
+  } catch {
+    // can't tell: count down
+  }
+  if (!cycle) return `wait for ${what} (the time of day is stopped on this world)`;
   return `wait for ${what} (in about ${Math.max(1, Math.ceil((((a - t + 24000) % 24000) / 1200)))} min)`;
 }
 
@@ -2836,6 +2854,18 @@ function weatherHelp(player, e, i, obj) {
 /** Last riding position per player, for ride distance. @type {Map<string, { x: number, z: number, d: number }>} */
 const rides = new Map();
 
+/** Players whose inventory changed since their collect steps were last counted. @type {Set<string>} */
+const invChanged = new Set();
+/** When each player's collect steps were last all counted (tick). @type {Map<string, number>} */
+const collectedAt = new Map();
+/** The collect steps (objective keys) counted since then. @type {Map<string, Set<string>>} */
+const collectSeen = new Map();
+/** Collect steps are counted again at least this often (ticks), in case an inventory change wasn't reported. */
+const COLLECT_RECOUNT = 200;
+world.afterEvents.playerInventoryItemChange.subscribe(({ player }) => {
+  invChanged.add(player.id);
+});
+
 /** Survive objectives credited this second (each player once, mates included). @type {Set<string>} */
 let survived = new Set();
 
@@ -2844,6 +2874,9 @@ let survived = new Set();
  * @param {Player} player @param {Entry[]} list
  */
 export function tickPlayer(player, list) {
+  /** @type {string[]} collect steps counted this second */
+  const collected = [];
+  const recount = invChanged.has(player.id) || system.currentTick - (collectedAt.get(player.id) ?? -Infinity) >= COLLECT_RECOUNT;
   const saga = sagaOf(player);
   const counts = counting(player);
   const dim = player.dimension.id;
@@ -2876,6 +2909,12 @@ export function tickPlayer(player, list) {
           }
           case "collect":
             if (!counts || !(obj.item || obj.name)) break;
+            {
+              // Counted again only when the inventory changed (or every 10 seconds, or for a step not counted yet).
+              const key = objKey(e, i);
+              if (!recount && collectSeen.get(player.id)?.has(key)) break;
+              collected.push(key);
+            }
             bump(player, e, i, countItem(player, obj.item, obj.name), true);
             // Done: party mates on the same chapter nearby have it done too (the party's main chapter: party.js).
             if (reached(e, i)) share(player, new Set([objKey(e, i)]), "collect", (o) => target(o), new Set([player.id]));
@@ -2996,6 +3035,16 @@ export function tickPlayer(player, list) {
       }
     });
   }
+  if (collected.length) {
+    let seen = collectSeen.get(player.id);
+    if (!seen) collectSeen.set(player.id, (seen = new Set()));
+    if (recount) {
+      seen.clear();
+      invChanged.delete(player.id);
+      collectedAt.set(player.id, system.currentTick);
+    }
+    for (const k of collected) seen.add(k);
+  }
   // A dream after sleeping, once awake.
   const dream = dreams.get(player.id);
   if (dream && !player.isSleeping && !busy.has(player.id)) {
@@ -3115,6 +3164,9 @@ export function playerGone(pid) {
   lastUse.delete(pid);
   askCool.delete(pid);
   dreams.delete(pid);
+  invChanged.delete(pid);
+  collectedAt.delete(pid);
+  collectSeen.delete(pid);
   holdUntil.delete(pid);
   ownUntil.delete(pid);
   for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
