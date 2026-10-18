@@ -927,7 +927,16 @@ export const CARDS = [
     run: ({ player }) => {
       const [horse] = spawnAround(player, "minecraft:horse", 1, 3, 5);
       if (!horse) return false;
-      attempt(() => horse.getComponent("minecraft:tamemount")?.tameToPlayer(true, player));
+      const tame = () =>
+        attempt(() => {
+          if (horse.isValid && player.isValid) horse.getComponent("minecraft:tamemount")?.tameToPlayer(true, player);
+        });
+      if (horse.getComponent("minecraft:tamemount")) tame();
+      else {
+        // One horse in five spawns as a foal, which can't be tamed or ridden: grow it up first (applies next tick).
+        attempt(() => horse.triggerEvent("minecraft:ageable_grow_up"));
+        system.runTimeout(tame, 2);
+      }
       give(player, "minecraft:saddle", 1);
     },
   },
