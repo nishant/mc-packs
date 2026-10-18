@@ -1,4 +1,4 @@
-import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
@@ -291,16 +291,26 @@ async function showRecord(player, id) {
   ]);
 }
 
+/** Most players the "Whose milestones?" list shows: a big server's hundreds of names would make a list nobody can use. */
+const LIST_MAX = 50;
+
 /** @param {Player} player */
 async function pickPlayer(player) {
   const online = new Set(world.getAllPlayers().map((p) => p.id));
-  const list = [...records().entries()]
-    .filter(([id]) => id !== player.id)
-    .sort(([a, x], [b, y]) => Number(online.has(b)) - Number(online.has(a)) || x.n.localeCompare(y.n));
+  const all = [...records().entries()].filter(([id]) => id !== player.id);
+  // Online players first, then the most milestones (the ones worth a look), then by name.
+  const list = all
+    .sort(([a, x], [b, y]) => Number(online.has(b)) - Number(online.has(a)) || unlockedCount(y) - unlockedCount(x) || x.n.localeCompare(y.n))
+    .slice(0, LIST_MAX);
+  const body = !all.length
+    ? "Nobody else has played since milestones were added."
+    : all.length > list.length
+      ? `${list.length} of the ${all.length} players who have played since milestones were added: online players first, then the most milestones.`
+      : "Everyone who has played since milestones were added, online players first.";
   await menu(
     player,
     "§lWhose milestones?",
-    list.length ? "Everyone who has played since milestones were added, online players first." : "Nobody else has played since milestones were added.",
+    body,
     [
       ...list.map(([id, r]) => ({
         text: `${r.n}${online.has(id) ? " §a(online)" : ""}\n§8${unlockedCount(r)} of ${totalTiers} unlocked`,
@@ -334,6 +344,26 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     },
   );
 });
+
+// Scenario tests (BDS harness): `fill` the world with that many records of players who are offline, as on a big server.
+// Only from the server console: /scriptevent realm:milestones_test {"fill":80}
+system.afterEvents.scriptEventReceive.subscribe(
+  (ev) => {
+    if (ev.id !== "realm:milestones_test" || ev.sourceType !== ScriptEventSource.Server) return;
+    try {
+      const n = Math.max(0, Math.min(2000, Math.floor(Number(JSON.parse(ev.message)?.fill) || 0)));
+      for (let i = 0; i < n; i++) {
+        const id = `-${4294960000 - i}`;
+        records().set(id, { n: `Offline${i}`, c: { joins: i % 20 }, g: { joins: i % 20 >= 10 ? 1 : 0 } });
+        dirty.add(id);
+      }
+      flush();
+    } catch (e) {
+      console.warn(`[milestones] test: ${e}`);
+    }
+  },
+  { namespaces: ["realm"] },
+);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
