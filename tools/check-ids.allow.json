@@ -24,25 +24,6 @@
   "packs/build_bp/scripts/main.js": [
     "eb:destroy"
   ],
-  "packs/death_bp/scripts/main.js": [
-    "minecraft:cave_air",
-    "minecraft:dead_bush",
-    "minecraft:magma_block",
-    "minecraft:void_air"
-  ],
-  "packs/domt_bp/scripts/events.js": [
-    "minecraft:rooted_dirt"
-  ],
-  "packs/leaves_bp/scripts/main.js": [
-    "minecraft:leaves",
-    "minecraft:leaves2",
-    "minecraft:log",
-    "minecraft:log2"
-  ],
-  "packs/relics_bp/scripts/main.js": [
-    "minecraft:glow_item_frame",
-    "minecraft:item_frame"
-  ],
   "packs/translucent_bp/entities/player.json": [
     "minecraft:sulfur_cube_archetype"
   ]
