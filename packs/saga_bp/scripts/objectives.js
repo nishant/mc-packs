@@ -313,8 +313,18 @@ export function showLine(player, text, ticks, steady) {
   player.onScreenDisplay.setActionBar(text);
 }
 
-/** A progress note; the tracker waits while it shows. @param {Player} player @param {string} text @param {number} ticks */
+/**
+ * A progress note. With the tracker in a Side HUD box it shows in the small box at the place the player picked (a
+ * second readout, "saga/note"), so the quest box beside it stays; when another pack's readout is in that box, or above
+ * the hotbar, it takes the tracker's place and the tracker waits while it shows.
+ * @param {Player} player @param {string} text @param {number} ticks
+ */
 export function note(player, text, ticks = 40) {
+  const where = getFor(player, "trackerAt");
+  if (isSlot(where) && !side.taken(player, where)) {
+    side.show(player, where, text, ticks, "note");
+    return;
+  }
   ownUntil.set(player.id, system.currentTick + ticks);
   showLine(player, text, ticks);
 }
