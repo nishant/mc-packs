@@ -119,7 +119,8 @@ export function setAdminMaxBlocksCap(value) {
 }
 export function getMaxBlocks(player) {
     const adminCap = getAdminMaxBlocksCap();
-    let base = Math.min(DEFAULT_MAX_BLOCKS, adminCap);
+    // No choice saved: the cap, which is also what /realm:prefs shows (and what it saves as "no choice").
+    let base = adminCap;
     try {
         const val = player.getDynamicProperty(DP_MAX_BLOCKS);
         if (typeof val === "number" && val >= 1) base = Math.min(Math.floor(val), adminCap);
