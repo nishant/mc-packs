@@ -48,6 +48,23 @@ export default async function (t) {
   t.check(nick2.calls >= 3, `Nicknames' twice-a-second refresh was counted (${nick2.calls} calls)`);
   t.check(Array.isArray(nick2.top) && nick2.top.length > 0 && /runInterval\(10\)/.test(nick2.top.map((x) => x.k).join(" ")), `its top callbacks name the interval (${JSON.stringify(nick2.top)})`);
 
+  // 2b. Two operators at once: a shorter request made while a longer one runs is answered when its own time is up,
+  // and a longer one made later doesn't hold back the first.
+  const t0 = t.system.currentTick;
+  send("realm:diag_ping", { id: "w1", ticks: 20 });
+  await t.wait(5);
+  send("realm:diag_ping", { id: "w2", ticks: 100 });
+  await answers("w1", 2, 60);
+  const w1At = t.system.currentTick - t0;
+  t.check(w1At < 40, `the first request is answered after its own 20 ticks (${w1At}), not the later one's 100`);
+  t.check(!got.some((g) => g.id === "w2"), "the longer one is still measuring");
+  send("realm:diag_ping", { id: "w3", ticks: 10 });
+  await answers("w3", 2, 40);
+  t.check(!got.some((g) => g.id === "w2"), `a short request inside the long one is answered first (${t.system.currentTick - t0})`);
+  const w2 = await answers("w2", 2, 140);
+  const w2At = t.system.currentTick - t0;
+  t.check(w2At >= 100 && w2.every((g) => g.ticks >= 95), `the long one ends at its own time (${w2At}, ${w2[0].ticks} ticks)`);
+
   // 3. A forget without the exact confirmation is refused and deletes nothing.
   send("realm:diag_forget", { id: "f1", pack: "nick_bp" });
   send("realm:diag_forget", { id: "f2", pack: "nick_bp", confirm: "FORGET admin_bp" });

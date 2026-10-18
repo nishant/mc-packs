@@ -51,7 +51,7 @@ const MAX_TICKS = 1200;
 /** @typedef {{ ms: number, calls: number }} Cb */
 /**
  * @typedef {{ pack: string, name: string, version: string, ms: number, calls: number, cbs: Map<string, Cb>, forgotten: boolean, warned: boolean }} Rec
- * @typedef {{ start: number, end: number, ids: string[] }} Win
+ * @typedef {{ start: number, next: number, ids: { rid: string, end: number }[] }} Win
  * @typedef {{
  *   api: number, on: boolean, multi: boolean, cur: Rec | null, packs: Map<string, Rec>,
  *   keyOwner: Map<string, Rec>, prefixOwner: Map<string, Rec | null>, win: Win | null,
@@ -475,12 +475,27 @@ function startWindow(st) {
 function endWindow(st) {
   const win = st.win;
   if (!win) return;
-  const left = win.end - system.currentTick;
-  if (left > 0) return void st.orig.runTimeout.call(system, () => endWindow(st), left);
-  st.win = null;
-  st.on = false;
-  const ticks = Math.max(1, system.currentTick - win.start);
-  for (const id of win.ids) pongAll(st, id, ticks);
+  const now = system.currentTick;
+  // Overlapping requests (two operators at once) share one window, but each is answered when its own time is up:
+  // a later, longer request must not keep the first operator waiting past its answer time.
+  const due = win.ids.filter((x) => x.end <= now);
+  win.ids = win.ids.filter((x) => x.end > now);
+  if (!win.ids.length) {
+    st.win = null;
+    st.on = false;
+  }
+  const ticks = Math.max(1, now - win.start);
+  for (const x of due) pongAll(st, x.rid, ticks);
+  if (win.ids.length) schedule(st, win, Math.min(...win.ids.map((x) => x.end)));
+}
+
+/** Makes sure the window is checked again at tick `at`. @param {State} st @param {Win} win @param {number} at */
+function schedule(st, win, at) {
+  if (win.next > system.currentTick && win.next <= at) return; // already due by then
+  win.next = at;
+  st.orig.runTimeout.call(system, () => {
+    if (st.win === win && win.next === at) endWindow(st);
+  }, Math.max(1, at - system.currentTick));
 }
 
 /** @param {State} st @param {string} rid @param {unknown} pack @param {unknown} confirm */
@@ -520,14 +535,13 @@ function handle(st, id, message) {
     const n = Math.floor(Number(m.ticks));
     if (!(n > 0)) return pongAll(st, rid, undefined);
     const ticks = Math.min(MAX_TICKS, n);
-    if (st.win) {
-      st.win.end = Math.max(st.win.end, system.currentTick + ticks);
-      st.win.ids.push(rid);
-      return;
+    const end = system.currentTick + ticks;
+    if (!st.win) {
+      startWindow(st);
+      st.win = { start: system.currentTick, next: 0, ids: [] };
     }
-    startWindow(st);
-    st.win = { start: system.currentTick, end: system.currentTick + ticks, ids: [rid] };
-    st.orig.runTimeout.call(system, () => endWindow(st), ticks);
+    if (st.win.ids.length < 20) st.win.ids.push({ rid, end }); // bounded: a flood of pings can't grow it
+    schedule(st, st.win, Math.min(...st.win.ids.map((x) => x.end)));
   } finally {
     st.cur = prev;
   }
