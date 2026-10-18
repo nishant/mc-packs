@@ -718,7 +718,7 @@ const HOB = {
       ],
       objectives: [
         { type: "talk", label: "Tell Quill that Hob is coming", npc: "quill" },
-        { type: "answer", label: "Answer Hob's riddle", npc: "w_hob", question: `${HO}What has a bottom at the top, a hole in its middle, and goes to every house but never comes inside?`, answers: ["a pot", "pot", "a cooking pot", "a pan", "pan", "a bucket", "bucket", "a cauldron", "cauldron"] },
+        { type: "answer", label: "Answer Hob's riddle", npc: "w_hob", question: `${HO}What has a bottom at the top, a hole in its middle, and goes to every house but never comes inside?`, answers: ["a pot", "pot", "a cooking pot", "a pan", "pan", "a bucket", "bucket", "a cauldron", "cauldron", "a road", "road", "the road", "a path", "path", "the path"] },
       ],
       outro: [
         `${HO}A pot! Of course a pot! Everything's a pot, if you look at it right. Quill's going to hate it.`,
