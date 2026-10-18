@@ -4,7 +4,7 @@
     "name": "Milestones",
     "description": "Realm achievements in tiers for time played, blocks mined and placed, distance, mob kills and more, announced in chat. /realm:milestones",
     "uuid": "d76a32ff-8a08-4e6f-abd5-ace129fbaf28",
-    "version": [1,  0,  1],
+    "version": [1, 0, 1],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

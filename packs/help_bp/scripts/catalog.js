@@ -520,6 +520,10 @@ export const PACKS = [
         "ops": false
       },
       {
+        "text": "§lHotbar refill from other pages:§r with Hotbar Refill on, a hotbar stack you use up is refilled from another page when the page you're on has none (§erealm:refill_need§r §e{ player, slot, id, name?, lore? }§r: the fullest stack on another page with the same item, name and lore moves into that empty hotbar slot, in one saved step like a page switch).",
+        "ops": false
+      },
+      {
         "text": "§lAuto-store:§r when the page you are on is full (or down to its last free slot), the stack you just picked up moves to another page by itself, and the bar says §e[Page #2] Auto-stored 12x Cobblestone (96 slots left)§r.",
         "ops": false
       },
