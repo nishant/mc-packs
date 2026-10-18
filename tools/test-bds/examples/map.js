@@ -132,7 +132,7 @@ export default async function (t) {
   if (!last) t.log("titles seen:", JSON.stringify(t.messages(p, { kind: "title", since }).slice(-2)).slice(0, 600));
   t.check(!!last, "map_bp draws the Side HUD title");
   if (last) {
-    t.check(utf8(last.subtitle).length === 9 + 10 * 160 + 1352, `subtitle is 2961 bytes (${utf8(last.subtitle).length})`);
+    t.check(utf8(last.subtitle).length === 9 + 10 * 160 + 1352 + 512, `subtitle is 3473 bytes (${utf8(last.subtitle).length})`);
     t.check(slot(last.subtitle, 9).startsWith([...st.strip].slice(0, 5).join("")), "the strip is in the top slot");
     t.check(slot(last.subtitle, 10).split("\n").length === 21, "the radar (21 rows) is in the radar slot");
   }

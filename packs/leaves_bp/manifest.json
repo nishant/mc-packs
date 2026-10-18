@@ -4,7 +4,7 @@
     "name": "Fast Leaf Decay",
     "description": "Leaves left without a log drop within a few seconds after you chop a tree, with their usual saplings, sticks and apples.",
     "uuid": "3e22fb71-2ead-432f-be86-5880288df9d3",
-    "version": [1, 0, 1],
+    "version": [1,  0,  2],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

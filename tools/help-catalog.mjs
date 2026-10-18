@@ -144,7 +144,8 @@ if (check) {
       const [x, y, z] = manifest.header.version;
       // Edit the text, not a re-serialized object, so the manifest keeps its formatting.
       const raw = readFileSync(manifestPath, "utf8");
-      const bumped = raw.replace(`"version": [${x}, ${y}, ${z}],\n    "min_engine_version"`, `"version": [${x}, ${y}, ${z + 1}],\n    "min_engine_version"`);
+      // Any spacing inside the brackets (a hand bump may leave "[1,  1,  66]").
+      const bumped = raw.replace(new RegExp(`"version": \\[\\s*${x},\\s*${y},\\s*${z}\\s*\\],(\\s*)"min_engine_version"`), `"version": [${x}, ${y}, ${z + 1}],$1"min_engine_version"`);
       if (bumped === raw) {
         console.error(`couldn't find the header version in packs/${HELP}/manifest.json to bump it: bump it by hand`);
         process.exit(1);

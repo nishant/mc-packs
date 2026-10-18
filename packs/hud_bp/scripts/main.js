@@ -53,13 +53,21 @@ function extraLines(playerId, now) {
   return [...lines].sort((a, b) => a[0].localeCompare(b[0])).map(([, line]) => line.text);
 }
 
-/** @param {Player} player @param {number} now @param {string} [gap] before the day and time: a new line in a side box */
-function hudText(player, now, gap = "  ") {
+/** Between the sections of the one line above the hotbar. */
+const SEP = "  §8|  ";
+
+/**
+ * The HUD's text: above the hotbar one line in sections (`X 163  Y 70  Z 169  |  Facing NE  |  Day 4  6:20 AM  |
+ * <other packs' lines>`); in a side box, a line each.
+ * @param {Player} player @param {number} now @param {boolean} [inBox]
+ */
+function hudText(player, now, inBox = false) {
   const at = player.location;
-  let text = `§7XYZ §f${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)}  §7Facing §f${facing(player)}`;
-  if (getFor(player, "showTime") === true) text += `${gap}§7Day §f${world.getDay() + 1} §7at §f${clock()}`;
-  for (const line of extraLines(player.id, now)) text += `§r\n${line}`;
-  return text;
+  const parts = [`§7X §f${Math.floor(at.x)}  §7Y §f${Math.floor(at.y)}  §7Z §f${Math.floor(at.z)}`, `§7Facing §e${facing(player)}`];
+  if (getFor(player, "showTime") === true) parts.push(`§7Day §f${world.getDay() + 1}  §f${clock()}`);
+  const extras = extraLines(player.id, now);
+  if (inBox) return [`${parts[0]}  ${parts[1]}`, ...parts.slice(2), ...extras].join("§r\n");
+  return [...parts, ...extras].map((x) => `${x}§r`).join(SEP);
 }
 
 // Who sees the HUD, for packs that add a line under it: sent when it changes, every 5 seconds, and on realm:hud_ping.
@@ -88,7 +96,7 @@ system.runInterval(() => {
       const inBox = isSlot(where);
       // Notes above the hotbar from other packs (realm:actionbar) only pause the HUD when it's there too.
       if (!inBox && (pausedUntil.get(player.id) ?? 0) > now) continue;
-      const text = hudText(player, now, inBox ? "\n" : "  ");
+      const text = hudText(player, now, inBox);
       const key = `${where}|${text}`;
       const last = shown.get(player.id);
       if (last && last.text === key && now - last.at < (inBox ? BOX_REFRESH : CONFIG.refreshTicks)) continue;

@@ -102,7 +102,11 @@ function refill(player, slot, gone, broke) {
   const inv = player.getComponent("minecraft:inventory")?.container;
   if (!inv || !inv.isValid || inv.getItem(slot)) return; // something else went into the slot meanwhile
   const from = sourceSlot(inv, gone, broke);
-  if (from < 0) return;
+  if (from < 0) {
+    // None on this inventory page: Quick Stack & Sort's other pages may hold one (it moves it in, or nothing happens).
+    if (!broke) system.sendScriptEvent("realm:refill_need", JSON.stringify({ player: player.id, slot, id: gone.typeId, name: gone.nameTag, lore: gone.getLore() }));
+    return;
+  }
   // A native swap with the empty slot: the stack moves whole, with every bit of its data.
   inv.swapItems(from, slot, inv);
 }
