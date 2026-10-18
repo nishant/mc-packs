@@ -67,7 +67,7 @@ export const CONFIG = {
   /** Expansive Inventory: the three page buttons in the top row's last three slots (15, 16 and 17). Each player can change it in /realm:prefs. */
   invButtons: true,
 
-  /** Expansive Inventory: when a page is full, new stacks are stored on another page. Each player can change it in /realm:prefs. */
+  /** Expansive Inventory: new pickups fill earlier pages first, with overflow routing when this page fills. Each player can change it in /realm:prefs. */
   autoStore: true,
 
   /** Minimum time between uses per player, in ticks (20 = 1 s). */

@@ -3,7 +3,7 @@
 //
 // The active page lives in the real inventory. Inactive pages are native World structure snapshots;
 // the player holds only their committed index. Old JSON pages are read once and migrated on use.
-import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
+import { CommandPermissionLevel, EnchantmentType, EquipmentSlot, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, setFor } from "./settings.js";
 import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, stateOf } from "./page-store.js";
@@ -418,7 +418,7 @@ function usedOnPage(inv) {
 const switching = new Set();
 /** @type {Set<string>} */
 const recoveryWarned = new Set();
-/** @type {Map<string, { page: number, keys: Map<string, number> }>} what each player's page held at the last auto-store look */
+/** @type {Map<string, { page: number, slots: Map<number, ItemStack> }>} carried inventory and cursor at the last pickup look */
 const snapshots = new Map();
 /**
  * Saves the active page and shows another. The page being left is saved and read back before anything
@@ -842,83 +842,148 @@ const lastEnforce = new Map();
 /** What a stack counts as when looking for new pickups: its item and name, not its amount. @param {ItemStack} item */
 const keyOf = (item) => `${item.typeId}|${item.nameTag ?? ""}|${item.getLore().join("/")}`;
 
-/** How many empty slots this page has, and how many stacks of each kind. @param {import("@minecraft/server").Container} inv */
-function lookAtPage(inv) {
-  /** @type {Map<string, number>} */
-  const keys = new Map();
-  let empty = 0;
-  for (const s of STORAGE_SLOTS) {
-    const item = inv.getItem(s);
-    if (!item) empty++;
-    else if (!isButton(item)) keys.set(keyOf(item), (keys.get(keyOf(item)) ?? 0) + 1);
+/** Include hotbar, cursor and equipment so moving carried items cannot masquerade as a pickup. @param {Player} player */
+function pickupLook(player) {
+  const inv = invOf(player);
+  const cursor = player.getComponent("minecraft:cursor_inventory");
+  if (!inv || !cursor) throw new Error("inventory or cursor is unavailable");
+  const slots = new Map(carried(inv).filter((e) => !isButton(e.item)).map((e) => [e.s, e.item.clone()]));
+  if (cursor.item && !isButton(cursor.item)) slots.set(-1, cursor.item.clone());
+  const equipment = player.getComponent("minecraft:equippable");
+  for (const [i, slot] of [EquipmentSlot.Head, EquipmentSlot.Chest, EquipmentSlot.Legs, EquipmentSlot.Feet, EquipmentSlot.Offhand].entries()) {
+    const item = equipment?.getEquipment(slot);
+    if (item && !isButton(item)) slots.set(-2 - i, item.clone());
   }
-  return { empty, keys };
-}
-
-/** Free slots across every page the player has. @param {Player} player @param {import("@minecraft/server").Container} inv */
-function freeEverywhere(player, inv) {
-  const total = totalPages(player);
-  const cur = curPage(player);
-  let free = PAGE_SIZE - usedOnPage(inv);
-  for (let p = 1; p <= total; p++) if (p !== cur) free += PAGE_SIZE - Math.min(PAGE_SIZE, readPage(player, p)?.length ?? PAGE_SIZE);
-  return free;
+  return { page: curPage(player), slots };
 }
 
 /**
- * When the page is full or down to one free slot, the newest stack moves to another page, so the player never
- * stops picking things up. A stack is "new" when the page holds more stacks of its kind than at the last look.
+ * Page priority wins over a later page's partial stack. Load each visited hidden image once per operation.
+ * @param {Player} player @param {ItemStack} item @param {number[]} destinations
+ * @param {Map<number, Rec[]>} images @param {Map<number, Rec[]>} edits
+ */
+function fillPages(player, item, destinations, images, edits) {
+  let left = item.amount;
+  for (const page of destinations) {
+    let entries = images.get(page);
+    if (!entries) {
+      entries = readPage(player, page);
+      if (!entries) throw new Error(`page ${page} can't be read; nothing moved`);
+      images.set(page, entries);
+    }
+    const moved = addToEntries(entries, { ...toRecord(item), n: left }, "fill");
+    if (moved) edits.set(page, entries);
+    left -= moved;
+    if (!left) break;
+  }
+  return left;
+}
+
+/** Fill earlier pages in page/slot order, without sorting or touching the hotbar or cursor. @param {Player} player */
+export function fillEarlierPages(player) {
+  try {
+    if (!player.isValid || dead.has(player.id) || switching.has(player.id) || queuedButtons.has(player.id) || reconciling.has(player.id)) throw new Error("inventory is busy; try again");
+    if (!inventoryReady(player)) throw new Error("inventory recovery is pending; tell an operator");
+    const inv = invOf(player);
+    if (!inv) throw new Error("player inventory is unavailable");
+    ensureLayout(player);
+    const total = totalPages(player);
+    const cur = curPage(player);
+    /** @type {Map<number, Rec[]>} */
+    const images = new Map();
+    const active = carried(inv).filter((e) => STORAGE_SLOTS.includes(e.s) && !isButton(e.item)).map((e) => ({ s: e.s, ...toRecord(e.item) }));
+    images.set(cur, active);
+    /** @type {Map<number, Rec[]>} */
+    const edits = new Map();
+    let moved = 0;
+    for (let page = 2; page <= total; page++) {
+      let entries = images.get(page);
+      if (!entries) {
+        entries = readPage(player, page);
+        if (!entries) throw new Error(`page ${page} can't be read; nothing moved`);
+        images.set(page, entries);
+      }
+      for (const entry of [...entries].sort((a, b) => a.s - b.s)) {
+        const item = deserializeStack(entry);
+        if (!item) throw new Error(`can't restore ${entry.id}`);
+        const left = fillPages(player, item, Array.from({ length: page - 1 }, (_, i) => i + 1), images, edits);
+        if (left === entry.n) continue;
+        moved += entry.n - left;
+        if (left) entry.n = left;
+        else entries.splice(entries.indexOf(entry), 1);
+        edits.set(page, entries);
+      }
+    }
+    if (moved) {
+      const after = carried(inv).filter((e) => !STORAGE_SLOTS.includes(e.s));
+      after.push(...nativeEntries(active));
+      edits.delete(cur);
+      commitPages(player, edits, after);
+    }
+    snapshots.delete(player.id);
+    hooks.bar(player, moved ? `§aFilled earlier pages: moved ${moved} items. Hotbar unchanged` : "§7Nothing to fill: no later-page items fit on earlier pages");
+  } catch (e) {
+    console.warn(`[stash] filling earlier pages: ${e}`);
+    hooks.bar(player, `§cPages not filled: ${e}`);
+  }
+}
+
+/**
+ * Only positive slot deltas with no observed departure of that kind are attributable new items.
+ * Ambiguous moves are left alone. Earlier pages fill first; near-full pages retain overflow routing.
  * @param {Player} player
  */
 function autoStore(player) {
   const inv = invOf(player);
-  if (!inv || switching.has(player.id)) return;
+  if (!inv || switching.has(player.id) || queuedButtons.has(player.id) || reconciling.has(player.id)) {
+    snapshots.delete(player.id);
+    return;
+  }
   const total = totalPages(player);
   const cur = curPage(player);
-  const now = lookAtPage(inv);
+  const now = pickupLook(player);
   const before = snapshots.get(player.id);
-  snapshots.set(player.id, { page: cur, keys: now.keys });
-  if (!before || before.page !== cur || now.empty > 1) return;
-
-  /** @type {number[]} */
-  const others = [];
-  for (let p = 1; p <= total; p++) if (p !== cur) others.push(p);
-  /** @type {Map<string, number>} */
-  const extra = new Map();
-  for (const [k, n] of now.keys) if (n > (before.keys.get(k) ?? 0)) extra.set(k, n - (before.keys.get(k) ?? 0));
-  if (!extra.size) return;
-
+  snapshots.set(player.id, now);
+  if (!before || before.page !== cur) return;
+  const disturbed = new Set();
+  for (const [slot, old] of before.slots) {
+    const item = now.slots.get(slot);
+    if (!item || keyOf(item) !== keyOf(old) || item.amount < old.amount) disturbed.add(keyOf(old));
+  }
+  const destinations = [];
+  for (let p = 1; p < cur; p++) destinations.push(p);
+  if (PAGE_SIZE - usedOnPage(inv) <= 1) for (let p = cur + 1; p <= total; p++) destinations.push(p);
+  if (!destinations.length) return;
+  /** @type {Map<number, Rec[]>} */
+  const images = new Map();
+  /** @type {Map<number, Rec[]>} */
+  const edits = new Map();
+  const after = new Map(carried(inv).map((e) => [e.s, e.item]));
   let movedCount = 0;
-  let name = "";
-  /** @type {Map<number, number>} */
-  const perPage = new Map();
-  let empty = now.empty;
-  for (let i = STORAGE_SLOTS.length - 1; i >= 0 && extra.size && empty < 2; i--) {
-    const s = STORAGE_SLOTS[i];
-    const item = inv.getItem(s);
-    if (!item || isButton(item)) continue;
-    const key = keyOf(item);
-    const want = extra.get(key);
-    if (!want) continue;
-    extra.set(key, want - 1);
-    if (want - 1 <= 0) extra.delete(key);
-    const { rem, moved, edits } = storeOnPages(player, item, others);
-    let n = 0;
-    for (const [p, c] of moved) {
-      n += c;
-      perPage.set(p, (perPage.get(p) ?? 0) + c);
-    }
-    if (!n) continue;
-    const after = carried(inv).filter((e) => e.s !== s);
-    if (rem) after.push({ s, item: rem });
-    commitPages(player, edits, after);
-    if (!rem) empty++;
-    movedCount += n;
-    name = item.nameTag ?? pretty(item.typeId);
+  for (const s of STORAGE_SLOTS) {
+    const item = now.slots.get(s);
+    if (!item || disturbed.has(keyOf(item))) continue;
+    const old = before.slots.get(s);
+    if (old && !old.isStackableWith(item)) continue;
+    const delta = item.amount - (old?.amount ?? 0);
+    if (delta <= 0) continue;
+    const pickup = item.clone();
+    pickup.amount = delta;
+    const left = fillPages(player, pickup, destinations, images, edits);
+    const moved = delta - left;
+    if (!moved) continue;
+    const remain = item.amount - moved;
+    if (remain) {
+      const copy = item.clone();
+      copy.amount = remain;
+      after.set(s, copy);
+    } else after.delete(s);
+    movedCount += moved;
   }
   if (!movedCount) return;
-  snapshots.set(player.id, { page: cur, keys: lookAtPage(inv).keys });
-  const dest = [...perPage.entries()].sort((a, b) => b[1] - a[1])[0][0];
-  hooks.bar(player, `§8[§bPage #${dest}§8] §7Auto-stored §f${movedCount}x ${name} §7(${freeEverywhere(player, inv)} slots left)`);
+  commitPages(player, edits, [...after].map(([s, item]) => ({ s, item })));
+  snapshots.set(player.id, pickupLook(player));
+  hooks.bar(player, `§7Auto-stored ${movedCount} new items, earliest pages first`);
 }
 
 /** @param {Player} player @param {boolean} withAutoStore */
@@ -956,7 +1021,15 @@ function tickPlayer(player, withAutoStore) {
     pollButtons(player);
     if (withAutoStore) sweepStrays(player, inv);
   }
-  if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) autoStore(player);
+  if (total > 1 && withAutoStore && getFor(player, "autoStore") !== false) {
+    try { autoStore(player); }
+    catch (e) {
+      snapshots.delete(player.id);
+      console.warn(`[stash] auto-store: ${e}`);
+      hooks.bar(player, `§cPickups not auto-stored: ${e}`);
+    }
+  }
+  else if (total <= 1 || getFor(player, "autoStore") === false) snapshots.delete(player.id);
 }
 
 let beat = 0;
@@ -1099,6 +1172,8 @@ function inventoryMenu(player) {
       }
       form.button("Scan all items across pages\n§8Find which page holds an item");
       actions.push(() => scanMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
+      form.button("Fill earlier pages\n§8Pull items forward without sorting; keep hotbar");
+      actions.push(() => fillEarlierPages(player));
     }
     form.button("Sort this page\n§8Merge stacks, order by item");
     actions.push(() => hooks.sort(player));
@@ -1162,7 +1237,7 @@ async function settingsMenu(player) {
     .title("§lInventory settings")
     .toggle("Expansive inventory (extra pages)", { defaultValue: getFor(player, "invOff") !== true, tooltip: "Off: a normal 27-slot inventory with no buttons. Items on other pages move back to your inventory" })
     .toggle("In-inventory page buttons", { defaultValue: getFor(player, "invButtons") !== false, tooltip: "The three buttons in the top row of your inventory" })
-    .toggle("Auto-store pickups into other pages", { defaultValue: getFor(player, "autoStore") !== false, tooltip: "When this page is full, new stacks move to another page" });
+    .toggle("Auto-store pickups into earlier pages", { defaultValue: getFor(player, "autoStore") !== false, tooltip: "Fill the earliest page first; keep overflow pickup room when this page fills" });
   if (op) {
     let own = 0;
     try {

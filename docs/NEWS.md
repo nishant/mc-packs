@@ -7,6 +7,12 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Fill earlier inventory pages
+
+- New inventory pickups fill earlier pages first, topping up compatible stacks before using that page's free slots. Your hotbar stays as it is.
+- Choose Fill earlier pages in /realm:inv to pull existing later-page items forward without alphabetically sorting them, even with auto-store disabled.
+- Both actions keep native item data and leave your active page, cursor and page controls alone.
+
 ## World-fixed character names
 
 - Townsfolk, caravan traders, wanderers, and story characters now use one world-fixed name helper above the character's head instead of viewer-relative projected labels.

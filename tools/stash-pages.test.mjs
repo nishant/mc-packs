@@ -196,6 +196,7 @@ function makePlayer() {
     location: { x: 1, y: 64, z: 1 },
     container,
     cursor,
+    equipment: new Map(),
     bar: [],
     onScreenDisplay: { setActionBar: (t) => player.bar.push(t) },
     playSound() {},
@@ -208,6 +209,7 @@ function makePlayer() {
     getComponent(name) {
       if (name === "minecraft:inventory") return { container };
       if (name === "minecraft:cursor_inventory") return cursor;
+      if (name === "minecraft:equippable") return { getEquipment: (slot) => player.equipment.get(slot) };
       return undefined;
     },
   };
@@ -234,6 +236,7 @@ const subscribable = (name) => ({
 mc.server = {
   CommandPermissionLevel: { GameDirectors: 2 },
   PlayerInventoryType: { Inventory: "Inventory", Hotbar: "Hotbar" },
+  EquipmentSlot: { Head: "Head", Chest: "Chest", Legs: "Legs", Feet: "Feet", Offhand: "Offhand" },
   EnchantmentType,
   ItemLockMode: { inventory: "inventory", slot: "slot", none: "none" },
   ItemStack,
@@ -313,7 +316,7 @@ function fire(name, event) {
   for (const fn of mc.after[name] ?? []) fn(event);
 }
 
-const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, StructureSaveMode, system, world } = m;`);
+const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, EquipmentSlot, ItemLockMode, ItemStack, Player, PlayerInventoryType, StructureSaveMode, system, world } = m;`);
 const uiUrl = dataUrl(`const m = globalThis.__mc.ui; export const { ActionFormData, FormCancelationReason, ModalFormData } = m;`);
 const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, setFor } = m;`);
 const storeSource = readFileSync(new URL("../packs/stash_bp/scripts/page-store.js", import.meta.url), "utf8")
@@ -343,6 +346,213 @@ function joined() {
 }
 const slotTypes = (p) => STORAGE_SLOTS.map((s) => p.container.getItem(s)?.typeId);
 const filled = (p) => STORAGE_SLOTS.filter((s) => p.container.getItem(s));
+
+test("page fill routes only new pickup amounts to the earliest page even with ample live space", () => {
+  const p = joined();
+  p.container.setItem(9, stack("minecraft:diamond", 60));
+  switchPage(p, 3);
+  p.container.setItem(10, stack("minecraft:diamond", 20));
+  advance(20);
+  p.container.setItem(10, stack("minecraft:diamond", 27));
+  advance(20);
+  assert.equal(p.container.getItem(10)?.amount, 20, "pre-existing partial stack stays");
+  assert.equal(curPage(p), 3);
+  switchPage(p, 1);
+  assert.equal(p.container.getItem(9)?.amount, 64);
+  assert.equal(p.container.getItem(10)?.amount, 3, "page 1 free slot precedes page 2");
+});
+
+test("page fill ignores hotbar and cursor relocations and performs no idle native restores", () => {
+  const p = joined();
+  switchPage(p, 3);
+  p.container.setItem(0, stack("minecraft:emerald", 7));
+  p.cursor.item = stack("minecraft:gold_ingot", 8);
+  advance(20);
+  const loads = mc.loads;
+  advance(40);
+  assert.equal(mc.loads, loads);
+  p.container.setItem(9, p.container.getItem(0));
+  p.container.setItem(0, undefined);
+  p.container.setItem(10, p.cursor.item);
+  p.cursor.item = undefined;
+  advance(20);
+  assert.equal(p.container.getItem(9)?.amount, 7);
+  assert.equal(p.container.getItem(10)?.amount, 8);
+});
+
+test("page fill does not mistake unequipping armor or offhand for a new pickup", () => {
+  const p = joined();
+  switchPage(p, 3);
+  p.equipment.set("Head", stack("minecraft:diamond_helmet"));
+  p.equipment.set("Offhand", stack("minecraft:totem_of_undying"));
+  advance(20);
+  p.container.setItem(9, p.equipment.get("Head"));
+  p.container.setItem(10, p.equipment.get("Offhand"));
+  p.equipment.clear();
+  advance(20);
+  assert.equal(p.container.getItem(9)?.typeId, "minecraft:diamond_helmet");
+  assert.equal(p.container.getItem(10)?.typeId, "minecraft:totem_of_undying");
+});
+
+test("manual page fill preserves order, opaque data, hotbar, controls and active page", () => {
+  const p = joined();
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  p.container.setItem(9, stack("minecraft:diamond", 60));
+  switchPage(p, 3);
+  p.container.setItem(0, stack("minecraft:apple", 5));
+  p.container.setItem(9, stack("minecraft:diamond", 9));
+  const box = stack("minecraft:white_shulker_box");
+  box.contents = [{ type: "minecraft:diamond", amount: 17 }];
+  box.setDynamicProperty("test:owner", "native");
+  p.container.setItem(10, box);
+  p.cursor.item = stack("minecraft:emerald", 4);
+  assert.equal(typeof pages.fillEarlierPages, "function", "manual fill action exists");
+  pages.fillEarlierPages(p);
+  assert.equal(curPage(p), 3);
+  assert.equal(p.container.getItem(0)?.amount, 5);
+  assert.equal(p.cursor.item?.amount, 4);
+  assert.equal(p.container.getItem(16)?.typeId, BTN_MENU);
+  assert.equal(filled(p).length, 0);
+  switchPage(p, 1);
+  assert.equal(p.container.getItem(9)?.amount, 64);
+  assert.equal(p.container.getItem(10)?.amount, 5);
+  assert.deepEqual(p.container.getItem(11)?.contents, box.contents);
+  assert.equal(p.container.getItem(11)?.getDynamicProperty("test:owner"), "native");
+});
+
+test("manual page fill fails atomically on snapshot failure", () => {
+  const p = joined();
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  switchPage(p, 2);
+  p.container.setItem(9, stack("minecraft:emerald", 9));
+  assert.equal(typeof pages.fillEarlierPages, "function");
+  mc.failSave = true;
+  try { pages.fillEarlierPages(p); } finally { mc.failSave = false; }
+  assert.equal(p.container.getItem(9)?.amount, 9);
+  assert.ok(p.bar.some((text) => /not filled/i.test(text)));
+  switchPage(p, 1);
+  assert.equal(filled(p).length, 0);
+});
+
+test("page fill respects disable and re-enable without routing existing stacks", () => {
+  const p = joined();
+  switchPage(p, 3);
+  advance(20);
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  p.container.setItem(9, stack("minecraft:diamond", 12));
+  advance(20);
+  mc.prefs.set(`${p.id}:autoStore`, true);
+  advance(20);
+  assert.equal(p.container.getItem(9)?.amount, 12);
+  p.container.setItem(9, stack("minecraft:diamond", 15));
+  advance(20);
+  assert.equal(p.container.getItem(9)?.amount, 12);
+});
+
+test("manual page fill uses page and slot order rather than item names", () => {
+  const p = joined();
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  switchPage(p, 2);
+  p.container.setItem(35, stack("minecraft:zombie_head", 2));
+  p.container.setItem(9, stack("minecraft:stone", 3));
+  switchPage(p, 3);
+  p.container.setItem(9, stack("minecraft:apple", 4));
+  pages.fillEarlierPages(p);
+  switchPage(p, 1);
+  assert.deepEqual(slotTypes(p).slice(0, 3), ["minecraft:stone", "minecraft:zombie_head", "minecraft:apple"]);
+  assert.equal(filled(p).length, 3);
+  const loads = mc.loads;
+  pages.fillEarlierPages(p);
+  assert.ok(p.bar.at(-1).includes("Nothing to fill"));
+  assert.ok(mc.loads - loads <= 4, "one read per hidden page");
+});
+
+test("page fill keeps incompatible native stack data separate", () => {
+  const p = joined();
+  const named = stack("minecraft:diamond", 50);
+  named.setLore(["different"]);
+  p.container.setItem(9, named);
+  switchPage(p, 2);
+  advance(20);
+  const pickup = stack("minecraft:diamond", 6);
+  pickup.setLore(["one/two"]);
+  p.container.setItem(9, pickup);
+  advance(20);
+  assert.equal(p.container.getItem(9), undefined);
+  switchPage(p, 1);
+  assert.equal(p.container.getItem(9)?.amount, 50);
+  assert.deepEqual(p.container.getItem(10)?.getLore(), ["one/two"]);
+});
+
+test("manual page fill rolls back active and multiple hidden pages on final commit failure", () => {
+  const p = joined();
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  switchPage(p, 2);
+  p.container.setItem(9, stack("minecraft:emerald", 9));
+  switchPage(p, 3);
+  p.container.setItem(9, stack("minecraft:diamond", 7));
+  const original = p.setDynamicProperty.bind(p);
+  let calls = 0;
+  p.setDynamicProperty = (key, value) => {
+    if (key === "stash:native" && ++calls === 2) throw new Error("injected final fill index failure");
+    original(key, value);
+  };
+  pages.fillEarlierPages(p);
+  p.setDynamicProperty = original;
+  assert.equal(curPage(p), 3);
+  assert.equal(p.container.getItem(9)?.amount, 7);
+  assert.ok(p.bar.at(-1).includes("not filled"));
+  switchPage(p, 1);
+  assert.equal(filled(p).length, 0);
+  switchPage(p, 2);
+  assert.equal(p.container.getItem(9)?.amount, 9);
+});
+
+for (const empty of [0, 1, 2]) test(`page fill retains overflow threshold with ${empty} free slots`, () => {
+  const p = joined();
+  const count = STORAGE_SLOTS.length - empty - 1;
+  for (let i = 0; i < count; i++) p.container.setItem(STORAGE_SLOTS[i], stack("minecraft:cobblestone", 64));
+  advance(20);
+  p.container.setItem(STORAGE_SLOTS[count], stack("minecraft:gold_ingot", 9));
+  advance(20);
+  assert.equal(p.container.getItem(STORAGE_SLOTS[count])?.amount, empty <= 1 ? undefined : 9);
+  assert.equal(curPage(p), 1);
+  switchPage(p, 2);
+  assert.equal(p.container.getItem(9)?.amount, empty <= 1 ? 9 : undefined);
+});
+
+test("automatic page fill rolls back a split pickup and does not retry stale attribution", () => {
+  const p = joined();
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  for (const [page, amount] of [[1, 60], [2, 62]]) {
+    switchPage(p, page);
+    p.container.setItem(9, stack("minecraft:diamond", amount));
+    for (const slot of STORAGE_SLOTS.slice(1)) p.container.setItem(slot, stack("minecraft:cobblestone", 64));
+  }
+  switchPage(p, 3);
+  p.container.setItem(9, stack("minecraft:diamond", 20));
+  advance(20);
+  mc.prefs.set(`${p.id}:autoStore`, true);
+  advance(20);
+  const original = p.setDynamicProperty.bind(p);
+  let calls = 0;
+  p.setDynamicProperty = (key, value) => {
+    if (key === "stash:native" && ++calls === 2) throw new Error("injected automatic index failure");
+    original(key, value);
+  };
+  p.container.setItem(9, stack("minecraft:diamond", 30));
+  advance(20);
+  p.setDynamicProperty = original;
+  assert.equal(p.container.getItem(9)?.amount, 30);
+  assert.ok(p.bar.at(-1).includes("not auto-stored"));
+  advance(20);
+  assert.equal(p.container.getItem(9)?.amount, 30, "failed pickup is not retried as a fresh addition");
+  mc.prefs.set(`${p.id}:autoStore`, false);
+  switchPage(p, 1);
+  assert.equal(p.container.getItem(9)?.amount, 60);
+  switchPage(p, 2);
+  assert.equal(p.container.getItem(9)?.amount, 62);
+});
 /** A click on a button, the way the inventory screen delivers it: the button ends up on the cursor. */
 function pickUpButton(p, slot) {
   const button = p.container.getItem(slot);
@@ -537,14 +747,14 @@ test("UserBusy retry actions stay aligned with a rebuilt page-count-dependent bu
   let sorted = 0;
   pages.initPages({ bar: (player, text) => player.bar.push(text), sort: () => sorted++, stash() {} });
   try {
-    mc.formResponses.set(p.id, [{ canceled: true, cancelationReason: "UserBusy" }, { canceled: false, selection: 4 }]);
+    mc.formResponses.set(p.id, [{ canceled: true, cancelationReason: "UserBusy" }, { canceled: false, selection: 5 }]);
     const opening = pages.openInvMenu(p);
     await Promise.resolve();
     mc.pages = 2;
     advance(20);
     await opening;
     const shown = mc.forms.filter((e) => e.player === p).at(-1).form;
-    assert.match(shown.buttons[4], /^Sort this page/);
+    assert.match(shown.buttons[5], /^Sort this page/);
     assert.equal(sorted, 1, "new Sort button must not execute the old Page #4 action");
     assert.equal(curPage(p), 1);
   } finally {

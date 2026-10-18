@@ -493,7 +493,7 @@ export const PACKS = [
     "folder": "stash_bp",
     "topic": "stash",
     "name": "Quick Stack & Sort",
-    "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory. The inventory itself has §l5 pages§r (the Expansive Inventory): three buttons together at the top right flip between them, and when a page fills up, new pickups are stored on another page by themselves.",
+    "summary": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into the storage that already holds each item (like Terraria), or sort your inventory. The inventory itself has §l5 pages§r (the Expansive Inventory): three buttons together at the top right flip between them. New pickups fill earlier pages first, and §lFill earlier pages§r pulls later-page items forward without alphabetically sorting them.",
     "steps": [
       {
         "text": "§lOpen the menu:§r sneak and tap a chest, trapped chest, copper chest, barrel, shulker box or ender chest with an empty hand, or holding a tool, weapon or armor. It doesn't open; a §lQuick Stack & Sort§r menu does, with these buttons:\n  - §lSort this chest§r (or barrel, shulker box...): its stacks merge and sort, and the bar above the hotbar says §eSorted 31 stacks§r.\n  - §lLock this chest:§r only you can open, sort or break it. Once it's yours, the button reads §lShare or unlock§r: share it with players who are online, stop sharing, or unlock it.\n  - §lQuick stack my inventory:§r the same as §e/realm:stash§r, below.\n  - §lSort my inventory:§r the same as §e/realm:sort§r, below.",
@@ -520,7 +520,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lAuto-store:§r when the page you are on is full (or down to its last free slot), the stack you just picked up moves to another page by itself, and the bar says §e[Page #2] Auto-stored 12x Cobblestone (96 slots left)§r.",
+        "text": "§lFill pages:§r new pickups use compatible partial stacks, then free slots on the earliest available earlier page, even while your current page has room. Only newly added amounts move, not the old part of a stack. When your current page is full or down to one free slot, overflow can also use later pages. The bar reports §eAuto-stored 12 new items, earliest pages first§r. To pull existing items forward, choose §lFill earlier pages§r in §e/realm:inv§r: later pages are processed in page and slot order, without alphabetical sorting. It reports how many items moved, when nothing fits, or why it could not finish. Both actions leave your hotbar, cursor, page controls and active page unchanged.",
         "ops": false
       },
       {

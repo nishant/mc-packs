@@ -242,9 +242,9 @@ export default async function (t) {
     const countRetryOpening = t.waitForm(rapid);
     t.assert(t.cmd(rapid, "/realm:inv_pages 2").ok, "change page count while menu is UserBusy");
     const countRetry = await countRetryOpening;
-    t.assert(/^Page #2 of 2/.test(countRetry.body) && countRetry.buttons[4].startsWith("Sort this page"), "busy retry rebuilds page-count-dependent action indices");
+    t.assert(/^Page #2 of 2/.test(countRetry.body) && countRetry.buttons[4].startsWith("Fill earlier pages") && countRetry.buttons[5].startsWith("Sort this page"), "busy retry rebuilds page-count-dependent action indices");
     const sorted = t.waitMessage(rapid, /Sorted .* in your inventory/, { kind: "actionbar", pack: "stash_bp" });
-    countRetry.answer(4);
+    countRetry.answer(5);
     await sorted;
     t.assert(current() === 2, "rebuilt Sort selection executes Sort, not stale Page #4");
     t.assert(events > 0, "engine actually emitted native control-slot change events");
