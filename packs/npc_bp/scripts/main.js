@@ -1653,7 +1653,9 @@ function fromSkin(rec, dim, at) {
   try {
     const tags = [OWNER_TAG, ID_TAG + rec.id];
     const before = new Set(dim.getEntities({ type: NPC_TYPE, tags }).map((e) => e.id));
-    world.structureManager.place(SKIN_PREFIX + rec.id, dim, { x: Math.floor(at.x), y: Math.floor(at.y), z: Math.floor(at.z) }, { includeBlocks: false, includeEntities: true });
+    // The structure command, not world.structureManager.place(): that can put the entity into the Overworld at the
+    // same coordinates while a player is in the Nether or the End (BDS 1.26).
+    dim.runCommand(`structure load "${SKIN_PREFIX + rec.id}" ${Math.floor(at.x)} ${Math.floor(at.y)} ${Math.floor(at.z)} 0_degrees none true false`);
     const fresh = dim.getEntities({ type: NPC_TYPE, tags, location: at, maxDistance: 4 }).filter((e) => !before.has(e.id));
     if (!fresh.length) return undefined;
     for (const e of fresh.slice(1)) e.remove();
