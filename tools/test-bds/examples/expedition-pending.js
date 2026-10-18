@@ -32,7 +32,7 @@ export default async function (t) {
   t.check(t.messages(p).some((m) => /couldn't be loaded to fill it in/.test(m.plain)), "operators are told the box couldn't be loaded");
   // A ticking area is free again; someone wants to start.
   t.server("/tickingarea remove dummy_9");
-  t.answerForm(p, "Start an expedition", "Crypt", 0, "Back");
+  t.answerForm(p, "Start an expedition");
   t.cmd(p, "/realm:expedition");
   await t.wait(60);
   const said = [...t.messages(p).map((m) => m.plain), ...t.forms(p).map((f) => f.body ?? "")].filter((m) => /in progress|being filled in/i.test(m));
