@@ -131,8 +131,9 @@ export default async function (t) {
   t.check(perSend < 4, `each strip sent costs under 4 ms with 10 players turning nonstop (${perSend.toFixed(2)} ms)`);
 
   // The same 10 players standing still (after the last of them got their final strip and terrain picture, which
-  // may lag while everyone turns): the per-tick check only reads their rotation and place.
-  await t.wait(60);
+  // may lag while everyone turns, and the exact near-field columns read once they stopped): the per-tick check only
+  // reads their rotation and place.
+  await t.wait(120);
   send("realm:map_debug", { player: p.id, action: "cost" });
   await t.wait(100);
   since = t.tick;

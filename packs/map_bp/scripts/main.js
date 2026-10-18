@@ -9,7 +9,7 @@
 // again from the pass's markers for players who turned or moved, so the compass follows the view; only a part whose
 // text changed is sent. The terrain under the radar is read by a scanner and drawn from what it stored.
 // The cost is capped, not the player count: each kind of work (drawing, building a radar's terrain picture, passes,
-// the scanner) has a time budget a tick (budget.js; about 2.3 ms a tick in all, saved up when there's little to do).
+// the scanner) has a time budget a tick (budget.js; about 3 ms a tick in all, saved up when there's little to do).
 // With many players moving at once each one's strip and radar come a few ticks later, the longest-waiting first.
 // The broadcasts (each message under 2048 characters, long lists in parts):
 //   realm:npc_places      { part, parts, folk: [{ id, n, dim, x, z }] }            <- Townsfolk; realm:npc_places_ping {}
@@ -1303,8 +1303,8 @@ function arrival(player, dest) {
 // Everyone's place and party (for the others' markers) is looked up once per INTERVAL.
 const INTERVAL = Math.max(10, Math.round(Number(CONFIG.intervalTicks) || 10));
 const PASS_EACH = 2;
-/** The passes' time (two entity searches each, ~0.5 ms): with many players a pass comes less often. */
-const passBudget = new Budget(0.3, 6, 2);
+/** The passes' time (two entity searches each, ~0.3-0.4 ms): with more than ~15 players a pass comes less often. */
+const passBudget = new Budget(0.5, 6, 2);
 /** Player id -> tick of their last pass. @type {Map<string, number>} */
 const passAt = new Map();
 /** @type {Seen[]} */
