@@ -267,6 +267,12 @@ const prettyId = (id) =>
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+/**
+ * Game time in milliseconds (ticks x 50): the run clock, its time limit and the clear times count game time, so a
+ * lagging server (fewer than 20 ticks a second) doesn't eat the party's time; at full speed it's the wall clock.
+ */
+const gameMs = () => system.currentTick * 50;
+
 /** 372000 -> "6:12". @param {number} ms */
 function clock(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -1163,7 +1169,7 @@ function runOf(playerId) {
 
 /** "Ann's party, Crypt N5, 6:12" @param {Run} run */
 function statusLine(run) {
-  const t = run.phase === "active" || run.phase === "finishing" ? `, ${clock(run.phase === "finishing" ? run.clearMs : Date.now() - run.started)}` : "";
+  const t = run.phase === "active" || run.phase === "finishing" ? `, ${clock(run.phase === "finishing" ? run.clearMs : gameMs() - run.started)}` : "";
   const what = run.phase === "gathering" || run.phase === "building" ? ", getting ready" : run.phase === "resetting" ? ", closing up" : "";
   return `${run.leaderName}'s party, ${run.dungeon.name} ${levelShort(run.level)}${t}${what}`;
 }
@@ -1529,7 +1535,7 @@ async function prepare(run) {
   }
   run.phase = "active";
   run.sigilItem = undefined; // used up for good
-  run.started = Date.now() + 500;
+  run.started = gameMs() + 500;
   run.deadline = run.started + run.limitMin * 60000;
   saveRun(run);
   system.runTimeout(() => {
@@ -1847,7 +1853,7 @@ function dropMember(run, id) {
 /** Remembers a run that ended without a clear. @param {Run} run @param {string[]} names */
 function recordFail(run, names) {
   /** @type {HistoryEntry} */
-  const h = { d: run.dungeon.id, l: run.level, ok: false, t: Date.now() - run.started, n: names.join(", ") || run.leaderName, at: Date.now(), a: run.affixes };
+  const h = { d: run.dungeon.id, l: run.level, ok: false, t: gameMs() - run.started, n: names.join(", ") || run.leaderName, at: Date.now(), a: run.affixes };
   if (run.long) h.g = run.lay.n;
   addHistory(h);
   for (const id of run.members.keys()) {
@@ -2187,7 +2193,7 @@ function bossAdds(run, count) {
 function finish(run) {
   if (run.phase !== "active") return;
   run.phase = "finishing";
-  run.clearMs = Date.now() - run.started;
+  run.clearMs = gameMs() - run.started;
   run.finishAt = system.currentTick + get("exitSeconds") * 20;
   run.finishCap = run.finishAt + 2400; // opening a chest near the end adds time, up to 2 minutes more
   for (const m of [...run.mobs, ...run.extra]) if (m.isValid) m.remove();
@@ -2624,7 +2630,7 @@ function shrineChoice(run, i, choice, who) {
     tell(run, `§a${name} took the Blessing of ${b.name}: ${b.desc.toLowerCase()}.`);
     if (b.id === "fortune") run.fortune = true;
     else {
-      const ticks = Math.max(200, Math.floor((run.deadline - Date.now()) / 50));
+      const ticks = Math.max(200, Math.floor((run.deadline - gameMs()) / 50));
       for (const p of present(run)) {
         try {
           p.addEffect(b.effect, ticks, { amplifier: b.amp, showParticles: false });
@@ -2748,7 +2754,7 @@ function takeBoon(run, p, id) {
 
 /** (Re)applies a player's boon effects, strongest of each, until the run's time is up. @param {Run} run @param {Player} p */
 function boonBuffs(run, p) {
-  const ticks = Math.max(200, Math.floor((run.deadline - Date.now()) / 50));
+  const ticks = Math.max(200, Math.floor((run.deadline - gameMs()) / 50));
   const mine = buffs.get(p.id) ?? [];
   for (const [effect, amp] of boonEffects(run.boons.get(p.id) ?? [])) {
     try {
@@ -3083,7 +3089,7 @@ function tickRun(run, players) {
     }
     return;
   }
-  if (Date.now() > run.deadline) {
+  if (gameMs() > run.deadline) {
     endRun(run, `§cTime's up! The ${run.dungeon.name} wasn't cleared within ${run.limitMin} minutes.`).catch((e) => console.warn(`[expedition] ${e}`));
     return;
   }
@@ -3233,7 +3239,7 @@ function tickRun(run, players) {
   }
   tickAffixes(run, all.map((p) => /** @type {Player} */ (p)));
   if (beat % 2 === 0) {
-    const t = clock(Date.now() - run.started);
+    const t = clock(gameMs() - run.started);
     for (const id of run.members.keys()) {
       const p = players.get(id);
       if (p) actionbar(p, `§e${run.dungeon.name} ${levelShort(run.level)} §f${t}/${run.limitMin}:00 §7| ${objective(run)}${affixLine}`, true);
@@ -3746,7 +3752,7 @@ async function runMenu(player, run) {
   const names = [...run.members.values()].map((m) => m.name).join(", ");
   const body = [
     `§e${dungeonLabel(run.dungeon, run.level)}§r`,
-    run.phase === "active" ? `Time: ${clock(Date.now() - run.started)} of ${run.limitMin}:00\n${objective(run)}` : run.phase === "finishing" ? `Cleared in ${clock(run.clearMs)}! ${objective(run)}` : "Getting ready...",
+    run.phase === "active" ? `Time: ${clock(gameMs() - run.started)} of ${run.limitMin}:00\n${objective(run)}` : run.phase === "finishing" ? `Cleared in ${clock(run.clearMs)}! ${objective(run)}` : "Getting ready...",
     run.affixes.length ? `Affixes:\n${run.affixes.map((a) => `${affixOf(a)?.color}${affixOf(a)?.name}§r: ${affixOf(a)?.desc}`).join("\n")}` : "No affixes.",
     `Party: ${names}`,
     run.long ? `Your boons: ${(run.boons.get(player.id) ?? []).map((id) => boonOf(id)?.name ?? id).join(", ") || "none yet"}` : "",
