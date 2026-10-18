@@ -2,6 +2,7 @@
 // platypus_rp). This script adds what JSON can't: nausea when a platypus bites a player, a chat line when a Perry
 // spawns, hearts when you feed one, grown-up platypuses from before breeding existed, and /realm:platypus to find the
 // nearest ones.
+import "./diag.js";
 import {
   CommandPermissionLevel,
   GameMode,

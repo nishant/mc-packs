@@ -19,6 +19,7 @@
 //   realm:atlas_site         { player, site: [label, x, z, region] }  -> one more found site
 //   realm:atlas_ping         { player? }                              <- send the region and sites again
 // See "Atlas of the Realm" in docs/PACKS.md.
+import "./diag.js";
 import { BlockPermutation, CommandPermissionLevel, CustomCommandStatus, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";

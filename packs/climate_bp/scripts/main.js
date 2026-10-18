@@ -1,3 +1,4 @@
+import "./diag.js";
 import { BlockVolume, CommandPermissionLevel, CustomCommandStatus, Dimension, EquipmentSlot, GameMode, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";

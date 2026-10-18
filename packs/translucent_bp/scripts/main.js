@@ -1,6 +1,7 @@
 // Translucent Tools Switch: each player's "Translucent tools" choice (/realm:prefs) becomes the client-synced player
 // property `realm:solid_tools` (defined in entities/player.json). The Translucent Tools resource pack reads it in its
 // attachables and draws that player's held tools see-through (false) or solid (true).
+import "./diag.js";
 import { Player, system, world } from "@minecraft/server";
 import { getFor, onChange } from "./settings.js";
 

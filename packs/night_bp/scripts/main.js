@@ -1,3 +1,4 @@
+import "./diag.js";
 import { ButtonState, CommandPermissionLevel, CustomCommandStatus, Dimension, InputButton, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";

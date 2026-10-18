@@ -1,3 +1,4 @@
+import "./diag.js";
 import {
   BlockPermutation,
   CommandPermissionLevel,

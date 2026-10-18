@@ -27,6 +27,7 @@
 //   realm:map_debug       { player, action: "state" | "cost" } (operators, tests)  -> realm:map_state
 // Party mates are the online players with the same `realm_party:<code>` tag (Parties).
 // See "Minimap" in docs/PACKS.md.
+import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { Budget } from "./budget.js";

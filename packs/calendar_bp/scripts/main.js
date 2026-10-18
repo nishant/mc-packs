@@ -17,6 +17,7 @@
 //   realm:gossip, realm:rep_add, realm:skill_xp, realm:title_unlock, realm:trail_unlock, realm:recipe_learn, realm:sky_request
 //   realm:calendar_debug  { action, ... } (console, scripts, operators) -> realm:calendar_state
 // See "Realm Calendar" in docs/PACKS.md.
+import "./diag.js";
 import { BlockPermutation, CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, GameMode, ItemStack, Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
