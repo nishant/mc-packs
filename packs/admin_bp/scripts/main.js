@@ -977,6 +977,23 @@ function giveItem(player, tell) {
   return true;
 }
 
+const HINT_PROP = "admin:setupHint"; // player: true once told where the setup checklist is
+
+/**
+ * First run on a new world: an operator's first item comes with where the one-time setup jobs are (townsfolk,
+ * towns, safe zones...), once per operator, so a new server owner doesn't have to find them in the docs.
+ * @param {Player} player
+ */
+function setupHint(player) {
+  try {
+    if (player.getDynamicProperty(HINT_PROP) === true || !hasRealItem(player)) return;
+    player.setDynamicProperty(HINT_PROP, true);
+  } catch {
+    return;
+  }
+  player.sendMessage(`§6[${TITLE}] §rSetting up a new world? Open the item, then §6Operator Tools§r (the last button): its server setup checklist has every one-time job, such as placing the townsfolk, towns and safe zones.`);
+}
+
 /** Takes the real item from someone who isn't an operator (only while the item is for operators only). @param {Player} player */
 function takeItem(player) {
   const inv = inventory(player);
@@ -1060,6 +1077,16 @@ function check(player) {
   } else {
     reconcileItems(player);
   }
+  // Also an owner who joined first and was made an operator afterwards (usual on a new dedicated server).
+  if (isOp(player)) setupHint(player);
+}
+
+/** @param {Player} player */
+function hasRealItem(player) {
+  const inv = inventory(player);
+  if (!inv) return false;
+  for (let i = 0; i < inv.size; i++) if (isRealItem(inv.getItem(i))) return true;
+  return false;
 }
 
 /** Schedules a reconcile on the next tick when a Realm Configuration item changes in the inventory. @param {Player} player */
