@@ -96,6 +96,28 @@ function sourceSlot(inv, gone, broke) {
   return best;
 }
 
+/** Lore characters sent in realm:refill_need at most (a message must stay under 2048 characters); the hash matches the whole lore. */
+const MAX_CHARS = 1500;
+/** The first lines of a lore that fit in `max` characters. @param {string[]} lore @param {number} max */
+function capLore(lore, max) {
+  const out = [];
+  let n = 0;
+  for (const line of lore) {
+    const size = JSON.stringify(line).length; // as it goes into the message, quotes and all
+    if (n + size > max) break;
+    out.push(line);
+    n += size;
+  }
+  return out;
+}
+/** FNV-1a of the lore as JSON (Quick Stack & Sort computes the same to match it). @param {string[]} lore */
+function loreHash(lore) {
+  const text = JSON.stringify(lore);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h;
+}
+
 /** @param {Player} player @param {number} slot @param {ItemStack} gone @param {boolean} broke */
 function refill(player, slot, gone, broke) {
   if (!player.isValid || !refillsFor(player)) return;
@@ -104,7 +126,11 @@ function refill(player, slot, gone, broke) {
   const from = sourceSlot(inv, gone, broke);
   if (from < 0) {
     // None on this inventory page: Quick Stack & Sort's other pages may hold one (it moves it in, or nothing happens).
-    if (!broke) system.sendScriptEvent("realm:refill_need", JSON.stringify({ player: player.id, slot, id: gone.typeId, name: gone.nameTag, lore: gone.getLore() }));
+    // Not for a player who just died: the stack would drop with the death loot.
+    if (!broke && (player.getComponent("minecraft:health")?.currentValue ?? 1) > 0) {
+      const lore = gone.getLore();
+      system.sendScriptEvent("realm:refill_need", JSON.stringify({ player: player.id, slot, id: gone.typeId, name: gone.nameTag, lore: capLore(lore, MAX_CHARS), loreHash: loreHash(lore) }));
+    }
     return;
   }
   // A native swap with the empty slot: the stack moves whole, with every bit of its data.

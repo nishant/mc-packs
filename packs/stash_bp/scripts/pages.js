@@ -653,6 +653,11 @@ const reconciling = new Set();
 const buttonState = new Map();
 /** @type {Set<string>} */
 const dead = new Set();
+/**
+ * Items whose data (potion, level, pattern, color) the id, name and lore don't show: never refilled from another page.
+ * Not rockets: refilling them mid-glide is the point, even if a Flight 1 stack can stand in for a Flight 3 one.
+ */
+const HIDDEN_DATA = /^minecraft:(firework_star|arrow|ominous_bottle|[a-z_]*banner)$/;
 
 /**
  * A button was clicked (it left its slot): save anything real that took its place, put the buttons back,
@@ -924,15 +929,16 @@ function autoStore(player) {
 /**
  * Hotbar Refill ran out of a stack and found none like it on this page (realm:refill_need): the fullest stack like it on
  * another page goes into the empty hotbar slot. "Like it": the same item, name and lore, as Hotbar Refill matches them.
- * @param {Player} player @param {number} slot hotbar slot 0-8 @param {{ id: string, name?: string, lore?: string[] }} want
+ * Not for items whose kind hides data the API can't compare (an arrow's potion, a banner's pattern),
+ * and not for a player who just died (the stack would drop with the death loot).
+ * @param {Player} player @param {number} slot hotbar slot 0-8 @param {{ id: string, name?: string, sameLore: (lore: string[]) => boolean }} want
  * @returns {{ n: number, page: number } | undefined} what came, from where
  */
 export function refillFromPages(player, slot, want) {
   const inv = invOf(player);
-  if (!inv || switching.has(player.id) || !inventoryReady(player) || !HOTBAR.includes(slot) || inv.getItem(slot)) return undefined;
+  if (!inv || dead.has(player.id) || HIDDEN_DATA.test(want.id) || switching.has(player.id) || !inventoryReady(player) || !HOTBAR.includes(slot) || inv.getItem(slot)) return undefined;
   const total = totalPages(player);
   const cur = curPage(player);
-  const lore = JSON.stringify(want.lore ?? []);
   /** @type {{ page: number, entries: Rec[], k: number, n: number } | undefined} */
   let best;
   for (let p = 1; p <= total; p++) {
@@ -942,7 +948,7 @@ export function refillFromPages(player, slot, want) {
     entries.forEach((e, k) => {
       if (e.id !== want.id || (e.name ?? undefined) !== (want.name ?? undefined)) return;
       const item = deserializeStack(e);
-      if (!item || item.lockMode !== ItemLockMode.none || JSON.stringify(item.getLore()) !== lore) return;
+      if (!item || item.lockMode !== ItemLockMode.none || !want.sameLore(item.getLore())) return;
       if (!best || e.n > best.n) best = { page: p, entries, k, n: e.n };
     });
   }

@@ -1103,9 +1103,17 @@ const prettyId = (id) => {
   return s[0].toUpperCase() + s.slice(1);
 };
 
+/** FNV-1a of a lore as JSON, as Hotbar Refill computes it for realm:refill_need. @param {string[]} lore */
+function loreHash(lore) {
+  const text = JSON.stringify(lore);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return h;
+}
+
 /**
  * Hotbar Refill (refill_bp) used up a stack and found no spare on the open inventory page:
- *   realm:refill_need { player, slot, id, name?, lore? }
+ *   realm:refill_need { player, slot, id, name?, lore?, loreHash? } (lore: its first 1500 characters; loreHash: all of it)
  * A spare on another page moves into the empty hotbar slot, and the bar says from where.
  * @param {string} message
  */
@@ -1114,8 +1122,11 @@ function refillNeed(message) {
     const m = JSON.parse(message);
     if (!m || typeof m.player !== "string" || typeof m.id !== "string" || !Number.isInteger(m.slot)) return;
     const player = world.getAllPlayers().find((p) => p.id === m.player);
-    if (!player) return;
-    const got = refillFromPages(player, m.slot, { id: m.id, name: typeof m.name === "string" ? m.name : undefined, lore: Array.isArray(m.lore) ? m.lore.map(String) : undefined });
+    if (!player || (player.getComponent("minecraft:health")?.currentValue ?? 1) <= 0) return; // dead: it would drop with the loot
+    // Hotbar Refill sends the start of a long lore and a hash of all of it (an older one: the whole lore).
+    const lore = JSON.stringify(Array.isArray(m.lore) ? m.lore.map(String) : []);
+    const sameLore = typeof m.loreHash === "number" ? (/** @type {string[]} */ l) => loreHash(l) === m.loreHash : (/** @type {string[]} */ l) => JSON.stringify(l) === lore;
+    const got = refillFromPages(player, m.slot, { id: m.id, name: typeof m.name === "string" ? m.name : undefined, sameLore });
     if (!got) return;
     bar(player, `§8[§bPage #${got.page}§8] §7Refilled §f${got.n}x ${m.name ?? prettyId(m.id)}§7 into your hotbar`);
   } catch (e) {
