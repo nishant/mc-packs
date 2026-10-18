@@ -59,7 +59,7 @@ for (const folder of readdirSync(join(root, "packs")).sort()) {
 }
 // English language files are game text too (item names, the Building Book's notes): the same rule. Other
 // languages keep their own letters. Known lines waiting for a fix: LANG_KNOWN (the count may only go down).
-const LANG_KNOWN = { "build_rp/texts/en_US.lang": 31 }; // Effortless Building's port: ❗ – · ⏳ (social-world track)
+const LANG_KNOWN = {};
 for (const folder of readdirSync(join(root, "packs")).sort()) {
   const file = join(root, "packs", folder, "texts", "en_US.lang");
   if (!existsSync(file)) continue;

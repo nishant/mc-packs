@@ -769,6 +769,7 @@ function useSigil(player, stack, slot) {
 }
 
 world.beforeEvents.itemUse.subscribe((ev) => {
+  if (ev.cancel) return; // another pack already stopped it
   try {
     if (!isSigil(ev.itemStack)) return;
     ev.cancel = true;
@@ -782,6 +783,7 @@ world.beforeEvents.itemUse.subscribe((ev) => {
 });
 
 world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return; // another pack already stopped it
   try {
     if (!isSigil(ev.itemStack)) return;
     ev.cancel = true; // never into a jukebox, never placed against anything

@@ -43,7 +43,10 @@ function stateOf(player) {
   return st;
 }
 
-world.afterEvents.playerLeave.subscribe(({ playerId }) => players.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  players.delete(playerId);
+  for (const key of journaled) if (key.endsWith(`:${playerId}`)) journaled.delete(key);
+});
 
 // ---------------------------------------------------------------------------
 // Weather and night

@@ -109,15 +109,29 @@ function save(code) {
 // Other packs that need the whole party, offline members included (Land Claims, Realm Mail), hear its member list:
 //   realm:party_members      { code, l, m: [[player id, gamertag], ...] }  after every change (m empty: the party is gone)
 //   realm:party_members_ping {}                                          → realm:party_members for every party
-// One message per party (at most 12 members, well under 2048 characters). Also sent for every party once the world loads.
+// One message per party (at most 12 members, well under 2048 characters). Also sent for every party once the world loads
+// (spread over a few ticks).
 /** @param {string} code */
 function sendMembers(code) {
   const p = parties().get(code);
   const msg = { code, l: p?.l ?? "", m: (p?.m ?? []).map(([id, name]) => [id, name.slice(0, 32)]) };
   system.sendScriptEvent("realm:party_members", JSON.stringify(msg));
 }
+/** Every party's list, spread over ticks by the game's job budget (a world with many parties isn't sent in one tick). */
 function sendAllMembers() {
-  for (const code of parties().keys()) sendMembers(code);
+  const codes = [...parties().keys()];
+  system.runJob(
+    (function* () {
+      for (const code of codes) {
+        try {
+          sendMembers(code);
+        } catch (e) {
+          console.warn(`[party] members: ${e}`);
+        }
+        yield;
+      }
+    })()
+  );
 }
 system.runTimeout(() => {
   try {
@@ -263,12 +277,18 @@ function leave(player) {
   player.sendMessage("§dYou left the party.");
 }
 
+/** Tick each player last sent a party chat message: one a second at most. @type {Map<string, number>} */
+const lastChat = new Map();
+
 /** @param {Player} player @param {string} text */
 function chat(player, text) {
   const code = partyOf(player.id);
   if (!code) return player.sendMessage("§cYou're not in a party. Start one with /realm:party");
   const msg = text.replace(/§/g, "").trim().slice(0, get("chatMaxLength"));
   if (!msg) return player.sendMessage('§cType a message: /realm:party_chat "see you there"');
+  const now = system.currentTick;
+  if (now - (lastChat.get(player.id) ?? -Infinity) < 20) return player.sendMessage("§7Slow down: one party message a second.");
+  lastChat.set(player.id, now);
   tell(code, `§d[Party] ${player.name}: §f${msg}`);
 }
 
@@ -401,6 +421,7 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 });
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  lastChat.delete(playerId);
   invites.delete(playerId);
   barHeld.delete(playerId);
 });

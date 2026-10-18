@@ -17,13 +17,17 @@ export default async function (t) {
   const startY = rider.location.y;
   let highest = startY;
   // Up, then all the way down (the funnel may grab them again on the way: that's fine, they must still land).
+  // A simulated player's entityDie may not fire: health 0 counts as dying too.
+  const dead = () => died || (rider.isValid && (rider.getComponent("health")?.currentValue ?? 1) <= 0);
   await t.waitUntil(() => {
+    if (dead()) died = true;
     if (died || !rider.isValid) return true;
     highest = Math.max(highest, rider.location.y);
     return highest - startY > 30 && rider.isOnGround;
   }, { timeout: 900, message: "the rider went up and came back down" });
   t.log(`rose ${(highest - startY).toFixed(1)} blocks; health ${rider.isValid ? rider.getComponent("health").currentValue : "-"}`);
   t.check(highest - startY > 30, "the rider was launched high");
+  if (dead()) died = true;
   t.check(!died, "the rider lands alive");
   t.check(!died && rider.isValid && rider.getComponent("health").currentValue >= 18, "the landing doesn't hurt (Slow Falling until the ground)");
 }

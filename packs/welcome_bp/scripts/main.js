@@ -220,6 +220,9 @@ async function openEditor(player) {
   const [showOnce, chat, screenTitle, reshow] = response.formValues.filter((v) => typeof v === "boolean");
   const title = strings[0];
   const body = strings.slice(1, -1).join("");
+  // The saved settings must stay under the 32 KB a world property holds (with room for the rest).
+  if (typeof body === "string" && body.length > 20000)
+    return player.sendMessage(`§cNot saved: the body has ${body.length} characters, more than 20000. Shorten it and save again.`);
   const button = strings.at(-1);
   const str = (/** @type {unknown} */ v, /** @type {string} */ fallback) =>
     typeof v === "string" && v.trim() !== "" ? v : fallback;

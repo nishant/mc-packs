@@ -73,6 +73,11 @@ world.afterEvents.entitySpawn.subscribe(({ entity, cause }) => {
 // adult group yet (marked by mark_variant 1), so it couldn't breed. Give it one when it spawns or its chunk loads.
 /** @param {import("@minecraft/server").Entity} entity */
 function growUpOld(entity) {
+  try {
+    if (entity.typeId !== PLATYPUS) return; // most loads and spawns: nothing scheduled
+  } catch {
+    return;
+  }
   system.run(() => {
     try {
       if (!entity.isValid || entity.typeId !== PLATYPUS) return;

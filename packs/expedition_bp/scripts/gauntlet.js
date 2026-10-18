@@ -327,6 +327,14 @@ async function cartsOf(p, rec, save, want) {
     }
     return carts;
   };
+  /**
+   * The carts of one placing are used; copies in another dimension (an older version placed them with
+   * world.structureManager.place(), which can put a structure's entities into the Overworld) are emptied and removed.
+   * @param {string} keep
+   */
+  const dropStrays = (keep) => {
+    for (const d of DIMS) if (d !== keep) for (const cart of find(d)) removeCart(cart);
+  };
   if (rec.placed && rec.at) {
     let dim;
     try {
@@ -337,7 +345,19 @@ async function cartsOf(p, rec, save, want) {
     if (!dim || !loadedAt(dim, rec.at)) return undefined; // where they were put down isn't loaded: later
     const carts = await look(rec.at.d);
     if (!carts) return undefined;
-    if (carts.length) return carts;
+    if (carts.length) {
+      dropStrays(rec.at.d);
+      return carts;
+    }
+    // Put down by an older version into the wrong dimension (the Overworld at the same spot) and loaded there: use those.
+    for (const d of DIMS) {
+      if (d === rec.at.d) continue;
+      const there = find(d);
+      if (there.length >= want) {
+        dropStrays(d);
+        return there;
+      }
+    }
   }
   if (!world.structureManager.get(rec.id)) return null;
   for (let t = 0; t < 20; t++) {
@@ -347,13 +367,53 @@ async function cartsOf(p, rec, save, want) {
       const dim = p.dimension;
       // Marked before placing: if the carts appear and anything stops us, they're searched for, never placed twice.
       save({ ...rec, placed: true, at: { ...at, d: dim.id } });
-      world.structureManager.place(rec.id, dim, at, { includeBlocks: false, includeEntities: true });
+      placeCarts(rec.id, dim, at);
       const carts = await look(dim.id);
+      if (carts?.length) dropStrays(dim.id);
       return carts?.length ? carts : undefined;
     }
     await wait(5);
   }
   return undefined;
+}
+
+const DIMS = ["minecraft:overworld", "minecraft:nether", "minecraft:the_end"];
+
+/**
+ * Puts a stash's or parcel's carts down. world.structureManager.place() can put a structure's entities into the
+ * Overworld at the same coordinates while a player is in the Nether or the End (BDS 1.26, as stash_bp found); the
+ * structure command places them in the dimension it runs in.
+ * @param {string} id @param {import("@minecraft/server").Dimension} dim @param {import("@minecraft/server").Vector3} at
+ */
+function placeCarts(id, dim, at) {
+  try {
+    dim.runCommand(`structure load "${id}" ${at.x} ${at.y} ${at.z} 0_degrees none true false`);
+  } catch (e) {
+    console.warn(`[expedition] structure load ${id}: ${e}`);
+  }
+}
+
+/** Empties a cart and takes it away (remove() never drops what it holds). @param {import("@minecraft/server").Entity} cart */
+function removeCart(cart) {
+  try {
+    cart.getComponent("minecraft:inventory")?.container?.clearAll();
+    cart.remove();
+  } catch {
+    // gone
+  }
+}
+
+/**
+ * A stash or parcel cart that loads (an unloaded chunk until now) after its items were handed over, its structure
+ * deleted: a copy left by an older version in the wrong dimension. Emptied and removed, so nobody loots it.
+ * @param {import("@minecraft/server").Entity} entity
+ */
+export function dropStrayCart(entity) {
+  if (entity.typeId !== "minecraft:chest_minecart") return;
+  for (const tag of entity.getTags()) {
+    const m = /^realm:exp_(stash|parcel)_(\d+)$/.exec(tag);
+    if (m && !world.structureManager.get(`expedition:${m[1]}_${m[2]}`)) return removeCart(entity);
+  }
 }
 
 /**

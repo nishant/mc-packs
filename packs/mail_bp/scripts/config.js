@@ -26,4 +26,7 @@ export const CONFIG = {
 
   /** Most players remembered as recipients; the ones seen longest ago are forgotten first (their letters stay). */
   maxRoster: 400,
+
+  /** A line in the mail menu on how to send items (letters carry words only). "" = no line. */
+  itemsHint: "To send items, use the Player Mailroom build (mc.nish.software/mailroom).",
 };

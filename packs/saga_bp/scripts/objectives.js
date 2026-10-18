@@ -1351,6 +1351,7 @@ function isTamed(ent) {
 }
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return; // another pack already stopped this tap
   const { player, target } = ev;
   try {
     const a = actors.get(target.id);
@@ -3170,6 +3171,7 @@ export function playerGone(pid) {
   holdUntil.delete(pid);
   ownUntil.delete(pid);
   for (const k of [...tended.keys()]) if (k.startsWith(`${pid}|`) || k.startsWith(`tame|${pid}|`)) tended.delete(k);
+  for (const k of [...weatherAsked.keys()]) if (k.startsWith(`${pid}|`)) weatherAsked.delete(k);
 }
 
 /** Every dimension's story champions this pack spawned are removed at world load. */

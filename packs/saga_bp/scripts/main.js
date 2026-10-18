@@ -50,6 +50,12 @@ import { PACK, busy, online, send } from "./util.js";
 
 const LOOP_TICKS = 20; // the player loop runs once a second
 const TRACKER_RUNS = 2; // the tracker every 2 runs
+/** A player's fixed turn among the TRACKER_RUNS runs, from a hash (FNV-1a) of their id. @param {string} id */
+function idSlot(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return (h >>> 16) % TRACKER_RUNS;
+}
 const SAVE_RUNS = 5; // unsaved progress is written every 5 seconds
 const PACK_SCAN_TICKS = 40; // installed packs: answers to realm:help_ping are collected for 2 seconds
 const PACK_SCAN_EVERY = 12000; // ...every 10 minutes
@@ -84,10 +90,10 @@ system.runInterval(() => {
   }
   if (get("enabled") !== true) return;
   beginRun();
-  let k = 0;
   for (const player of world.getAllPlayers()) {
     // Every 2 seconds per player, half the players each second (so a full server's tracker isn't drawn in one tick).
-    const tracking = (runs + k++) % TRACKER_RUNS === 0;
+    // Split by the player's id, not their place in the list, so someone joining never shifts another's turn.
+    const tracking = (runs + idSlot(player.id)) % TRACKER_RUNS === 0;
     try {
       wanderHousekeeping(player);
       wanderAuto(player);

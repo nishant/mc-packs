@@ -1,6 +1,6 @@
 // Champions: a Stormcaller's lightning stays out of safe zones, land claims and towns (any provider's realm:zones
 // list): a player inside one hears it crackle, but no bolt lands there (a bolt sets fires and turns villagers into
-// witches and pigs into piglins). Outside a zone it strikes as before. Not --flat: strikes there only crackle (the build check reads 4 blocks down, below the floor). About 1 minute:
+// witches and pigs into piglins). Outside a zone it strikes as before. About 1 minute (elite-storm-flat.js covers superflat):
 //   node tools/test-bds/run.mjs --quiet --only elite_bp --scenario tools/test-bds/examples/elite-storm-zones.js --timeout 300
 export default async function (t) {
   t.server("/gamerule domobspawning false");

@@ -8,6 +8,7 @@ const PROP_WEATHER = "rain:weather"; // world: overworld weather from the last c
 // is the "off" preference in settings.js, which /realm:prefs changes too.
 
 const OVERWORLD = "minecraft:overworld";
+const MUFFLED_TAG = "realm:rain_muffled"; // on a player whose game rain is stopped (indoors in the rain)
 const MIST = "realm:rain_mist"; // particles, fogs and sounds come from the Realistic Rain resource pack
 const DRIP = "realm:rain_drip";
 const FOG_ID = "rain_storm"; // ids of our /fog entries, so only ours are ever removed
@@ -44,9 +45,9 @@ const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]
 /** @typedef {"out" | "in" | "none"} Place where the player hears the weather from: outdoors (or under a tree), indoors, or out of its reach */
 /**
  * @typedef {{ group: number, fog: number, haze: number, spots: Vector3[], scannedAt?: Vector3, dripDebt: number, mistDebt: number,
- *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean, open: boolean, covered: number }} State muffle: stop the game's rain
+ *   windIn: number, roofIn: number, bedIn: number, insideIn: number, place: Place, muffle: boolean, open: boolean, covered: number, tagged: boolean }} State muffle: stop the game's rain
  *   for this player; open: the game's rain played unmuffled for them at the last update (it rained and they were in its
- *   reach); covered: updates in a row with a roof overhead
+ *   reach); covered: updates in a row with a roof overhead; tagged: the player carries MUFFLED_TAG
  */
 /** @typedef {{ level: number, stepIn: number }} Roll a fog that rolls in or out in steps */
 
@@ -72,7 +73,14 @@ function extrasOff(player) {
 /** @param {Player} player @returns {State} */
 function stateOf(player) {
   let st = players.get(player.id);
-  if (!st) players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false, open: false, covered: 0 }));
+  if (!st) {
+    players.set(player.id, (st = { group: nextGroup++ % GROUPS, fog: 0, haze: 0, spots: [], dripDebt: 0, mistDebt: 0, windIn: 0, roofIn: 0, bedIn: 0, insideIn: 0, place: "none", muffle: false, open: false, covered: 0, tagged: false }));
+    try {
+      if (player.hasTag(MUFFLED_TAG)) player.removeTag(MUFFLED_TAG); // left over from before a restart or a leave
+    } catch {
+      // gone
+    }
+  }
   return st;
 }
 
@@ -133,6 +141,7 @@ function tick() {
   step(storm, get("stormFog.enabled") && weather === WeatherType.Thunder ? STORM_FOGS.length : 0, STORM_FOGS.length, CONFIG.stormFog.fadeSeconds, dt);
   step(haze, get("haze.enabled") && raining ? HAZE_FOGS.length : 0, HAZE_FOGS.length, CONFIG.haze.fadeSeconds, dt);
   const group = run++ % GROUPS;
+  let anyMuffled = false;
   for (const player of world.getAllPlayers()) {
     const st = stateOf(player);
     if (st.group === group) {
@@ -144,7 +153,25 @@ function tick() {
     }
     // Muffled rain indoors: the game starts a rain clip every 2-4 ticks, wherever you are. Stopping them every run
     // (4 times a second) leaves only clips under 0.25 s old, still in Realistic Rain's 0.8 s fade-in, so nearly silent.
-    if (st.muffle && raining) stopSound(player, RAIN);
+    // The muffled players carry a tag, so one command stops it for all of them.
+    const muffled = st.muffle && raining;
+    if (muffled) anyMuffled = true;
+    if (muffled !== st.tagged) {
+      try {
+        if (muffled) player.addTag(MUFFLED_TAG);
+        else player.removeTag(MUFFLED_TAG);
+        st.tagged = muffled;
+      } catch {
+        // gone
+      }
+    }
+  }
+  if (anyMuffled) {
+    try {
+      world.getDimension(OVERWORLD).runCommand(`stopsound @a[tag=${MUFFLED_TAG}] ${RAIN}`);
+    } catch (e) {
+      console.warn(`[rain] /stopsound: ${e}`);
+    }
   }
   if (!needsLoop() && loop !== undefined) {
     system.clearRun(loop);
@@ -179,7 +206,8 @@ function update(player, st) {
   const dry = !!here && dryGround(here, feet);
   // No storm fog where it doesn't rain (sand, terracotta, snow, ice): it would cover Realistic Rain's snow fog, and
   // each step's push would land on top of Regional Weather's sandstorm or blizzard fog there.
-  const fog = off || dry ? 0 : storm.level;
+  // Nor in the Nether or the End (no storm there; a /fog push would only cost a command).
+  const fog = off || dry || !overworld ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
   if (off || !overworld) {
     leave(player, st); // no haze in the Nether or the End: it would replace their own volumetric fog
@@ -444,7 +472,7 @@ function applyChoice(player) {
     st.spots = [];
     leave(player, st);
   }
-  const fog = off ? 0 : storm.level;
+  const fog = off || player.dimension.id !== OVERWORLD ? 0 : storm.level;
   if (st.fog !== fog) setFog(player, st, fog);
   wake();
 }

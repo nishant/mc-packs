@@ -440,6 +440,19 @@ function addPending(pid, d) {
   saveJson(world, PROP_PENDING, map);
 }
 
+// After a /reload, the players still online get what finished cooking meanwhile (others when they join).
+world.afterEvents.worldLoad.subscribe(() =>
+  system.runTimeout(() => {
+    for (const player of world.getAllPlayers()) {
+      try {
+        applyOwed(player);
+      } catch (e) {
+        console.warn(`[cooking] owed: ${e}`);
+      }
+    }
+  }, 100)
+);
+
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   if (!initialSpawn) return;
   system.runTimeout(() => {

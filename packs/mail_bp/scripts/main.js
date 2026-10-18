@@ -237,7 +237,10 @@ async function menu(player, title, body, actions) {
 
 /** @type {Map<string, number>} player id -> when they last sent (ms) */
 const lastSent = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => lastSent.delete(playerId));
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+  // A cooldown still running stays, so leaving and rejoining doesn't skip it.
+  if (Date.now() - (lastSent.get(playerId) ?? 0) >= get("sendCooldownSeconds") * 1000) lastSent.delete(playerId);
+});
 
 /** Minecraft's text boxes keep at most this many characters, so a long letter is written over several boxes. */
 const BOX = 100;
@@ -509,7 +512,7 @@ async function mainMenu(player) {
   const total = inboxOf(player.id).length;
   const body = [
     n ? `§eYou have ${n} unread letter${n === 1 ? "" : "s"}.§r` : "No unread letters.",
-    "Write to anyone who has joined the realm. Letters to offline players wait for them. Letters carry words only: to send items, use the Player Mailroom build (mc.nish.software/mailroom).",
+    `Write to anyone who has joined the realm. Letters to offline players wait for them. Letters carry words only.${CONFIG.itemsHint ? ` ${CONFIG.itemsHint}` : ""}`,
   ].join("\n\n");
   await menu(player, "§lRealm Mail", body, [
     { text: `Inbox\n§8${total} letter${total === 1 ? "" : "s"}, ${n} unread`, run: () => inbox(player) },

@@ -5,6 +5,7 @@ import { t } from "../utils/Text.js";
 import { smallIcon, usesFloatingUI, showForm } from "../utils/CustomUI.js";
 import { showHintOnce } from "../utils/Hints.js";
 import { openPanel } from "../core/EntityPanel.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 
 function on()   { return t("eb.common.on");  }
 function off()  { return t("eb.common.off"); }
@@ -13,6 +14,7 @@ function tog(v) { return v ? on() : off(); }
 export function centerMirrorHere(player) {
     const loc = player.location;
     setMirrorState(player, { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) });
+    lockActionBar(player.id, 1500);
     player.onScreenDisplay.setActionBar(
         t("eb.modifiers.mirror.pos_set", Math.floor(loc.x), Math.floor(loc.y), Math.floor(loc.z))
     );
@@ -21,6 +23,7 @@ export function centerMirrorHere(player) {
 export function centerRadialHere(player) {
     const loc = player.location;
     setRadialState(player, { x: Math.floor(loc.x), y: Math.floor(loc.y), z: Math.floor(loc.z) });
+    lockActionBar(player.id, 1500);
     player.onScreenDisplay.setActionBar(
         t("eb.modifiers.radial.pos_set", Math.floor(loc.x), Math.floor(loc.y), Math.floor(loc.z))
     );

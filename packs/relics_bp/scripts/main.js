@@ -1043,7 +1043,7 @@ function stormReading(player, trend = false) {
 
 const NOT_TARGETS = ["minecraft:item", "minecraft:xp_orb", "minecraft:arrow", "minecraft:thrown_trident", "minecraft:fishing_hook", "minecraft:lightning_bolt"];
 const STRIKE_CLEAR = 5; // blocks around a strike that must be free of players, villagers, pets and townsfolk
-const PROTECTED_TYPES = new Set(["minecraft:villager", "minecraft:villager_v2", "minecraft:wandering_trader", "minecraft:npc", "minecraft:armor_stand", "minecraft:item_frame", "minecraft:glow_item_frame", "minecraft:painting"]);
+const PROTECTED_TYPES = new Set(["minecraft:villager", "minecraft:villager_v2", "minecraft:wandering_trader", "minecraft:npc", "minecraft:armor_stand", "minecraft:painting"]);
 const FIRE_CHECKS = [1, 5, 15, 40, 80]; // ticks after a strike when its fire is put out
 const USE_DEBOUNCE = 4; // ticks: one tap can arrive as several events (use, interact with a block, start using)
 

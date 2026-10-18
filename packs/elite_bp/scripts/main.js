@@ -533,11 +533,12 @@ function nearBuilt(dim, x, z) {
 
 /** @param {Dimension} dim @param {number} x @param {number} z */
 function scanBuilt(dim, x, z) {
+  const floor = dim.heightRange.min; // superflat: the ground is a few blocks above it, and below it nothing can be read
   for (let dx = -4; dx <= 4; dx++) {
     for (let dz = -4; dz <= 4; dz++) {
       const top = dim.getTopmostBlock({ x: x + dx, z: z + dz });
       if (!top) return true;
-      for (let y = top.y; y >= top.y - 4; y--) {
+      for (let y = top.y; y >= Math.max(top.y - 4, floor); y--) {
         const b = dim.getBlock({ x: x + dx, y, z: z + dz });
         if (!b) return true;
         if (BUILT.test(b.typeId)) return true;

@@ -394,7 +394,7 @@ export const HEARTH = {
     ],
     idle: ["Shh. He's napping. Permanently.", "*leans on a shovel, humming*", "Soil's good this year. Rich.", "Somebody's knocking. Underground. Rude."],
     topics: [
-      { label: "Talking to the dead", text: "\"Somebody has to. They've got all the time in the world and nobody visits. I tell them the news. Mrs. Abernathy likes the weather. Old Pell only wants to hear about cheese.\"" },
+      { label: "Talking to the dead", text: "\"Somebody has to. They've got all the time in the world and nobody visits. I tell them the news. Mrs. Abernathy likes the weather. Old Grimsby only wants to hear about cheese.\"" },
       { label: "Why gravedigging?", text: "\"My father dug, his father dug. Family business. Nobody ever complains about the service. Repeat customers are rare, though.\"" },
       { label: "Are you ever scared here?", text: "\"Of the dead? No. The dead are polite. The living leave the gate open and track mud on the flowers. Scared of them, sometimes.\"" },
     ],

@@ -11,7 +11,7 @@ const FACE_OFFSETS = {
 function isAirLike(block) {
     if (!block) return true;
     const id = block.typeId;
-    return id === "minecraft:air" || id === "minecraft:cave_air" || id === "minecraft:void_air";
+    return id === "minecraft:air";
 }
 export const AirBuildMode = {
     airBuild: true,

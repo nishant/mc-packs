@@ -9,6 +9,7 @@ import { captureSnapshot, recordSnapshot } from "./UndoRedo.js";
 import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern } from "./Palette.js";
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 export const UNPLACEABLE = new Set([
     "minecraft:undyed_shulker_box",
     "minecraft:white_bed", "minecraft:orange_bed", "minecraft:magenta_bed",
@@ -28,8 +29,8 @@ export const ALWAYS_REPLACEABLE = new Set([
     "minecraft:short_dry_grass", "minecraft:tall_dry_grass",
     "minecraft:bush",
     "minecraft:nether_sprouts",
-    "minecraft:seagrass", "minecraft:tall_seagrass",
-    "minecraft:kelp", "minecraft:kelp_plant",
+    "minecraft:seagrass",
+    "minecraft:kelp",
     "minecraft:dandelion", "minecraft:poppy",
     "minecraft:blue_orchid", "minecraft:allium",
     "minecraft:azure_bluet", "minecraft:red_tulip",
@@ -119,6 +120,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
     const snapshot = captureSnapshot(dim, toPlace, typeId, blockStates ?? {}, perPosTypeIds, undoThreshold);
     if (snapshot) snapshot.survival = !creative;
     if (!snapshot) {
+        lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(t("eb.place.undo_disabled"));
     }
     let basePerm;

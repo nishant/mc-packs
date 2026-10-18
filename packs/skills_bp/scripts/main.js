@@ -503,7 +503,9 @@ world.afterEvents.playerBreakBlock.subscribe(({ player, block, brokenBlockPermut
 });
 
 // A tap that resets a grown crop to its first stage is a harvest too (the Right-click Harvest pack).
-world.beforeEvents.playerInteractWithBlock.subscribe(({ player, block, isFirstEvent }) => {
+world.beforeEvents.playerInteractWithBlock.subscribe((ev) => {
+  if (ev.cancel) return; // another pack already stopped it
+  const { player, block, isFirstEvent } = ev;
   if (!isFirstEvent) return;
   const crop = crops.get(block.typeId);
   if (!crop || crop.state === undefined || !ripe(block.permutation)) return;
@@ -802,12 +804,19 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   calling.forget(playerId);
 });
 
+/** A player's second (0-29) to save their explored chunks, from a hash of their id. @param {string} id */
+function saveSlot(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return (h >>> 8) % 30;
+}
+
 let seconds = 0;
 system.runInterval(() => {
   seconds++;
   for (const player of world.getAllPlayers()) {
     try {
-      if (seconds % 30 === 0) saveVisited(player);
+      if ((seconds + saveSlot(player.id)) % 30 === 0) saveVisited(player); // every 30 s, a share of the players each second
       if (!active(player)) {
         travel.delete(player.id);
         continue;

@@ -1534,16 +1534,29 @@ system.runInterval(() => {
   }
 }, TETHER_TICKS);
 
+// Each player is rolled once per scheduleTicks, on a second of their own (from a hash of their id): a full server's
+// rolls are spread over the period instead of all landing on one tick.
+const ROLL_TICKS = Math.max(200, Math.floor(Number(CONFIG.scheduleTicks)) || 1200);
+const ROLL_SLOTS = Math.max(1, Math.round(ROLL_TICKS / 20));
+let rollRun = 0;
+/** @param {string} id */
+function rollSlot(id) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return (h >>> 8) % ROLL_SLOTS;
+}
 system.runInterval(() => {
+  const slot = rollRun++ % ROLL_SLOTS;
   if (!ready || get("enabled") !== true) return;
   for (const p of world.getAllPlayers()) {
+    if (rollSlot(p.id) !== slot) continue;
     try {
       roll(p);
     } catch (e) {
       console.warn(`[wander] ${e}`);
     }
   }
-}, Math.max(200, Math.floor(Number(CONFIG.scheduleTicks)) || 1200));
+}, Math.max(1, Math.round(ROLL_TICKS / ROLL_SLOTS)));
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   pcache.delete(playerId);

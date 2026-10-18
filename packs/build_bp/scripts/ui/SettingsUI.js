@@ -48,6 +48,7 @@ import { GUIDE_LANGUAGES } from "../core/GuideBookData.js";
 import { changeBookLanguage } from "../core/GuideBook.js";
 import { usesFloatingUI } from "../utils/CustomUI.js";
 import { openPanel } from "../core/EntityPanel.js";
+import { lockActionBar } from "../utils/ActionBar.js";
 
 const QUALITY_KEYS = { 1: "smooth", 2: "sharp", 3: "crisp", 4: "balanced", 5: "responsive", 10: "lite", 20: "minimal" };
 
@@ -284,6 +285,7 @@ async function showSettingsPanel(player, catId, lastSetting = null) {
         const id = PRESET_IDS[sel];
         if (!id) return;
         applyPreset(player, id);
+        lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(t("eb.onboarding.tier_applied", t(`eb.onboarding.tier.${id}`)));
         await showSettingsPanel(player, catId);
         return;

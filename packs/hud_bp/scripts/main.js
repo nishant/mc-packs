@@ -128,7 +128,8 @@ onChange((key, player) => {
     shown.delete(p.id);
     // Off, or moved: the next round draws it again where it belongs.
     if (had?.inBox) side.clear(p);
-    else if (had && !hudFor(p)) p.onScreenDisplay.setActionBar("");
+    // Not while another pack's note is up (it goes away by itself): an empty bar would wipe it.
+    else if (had && !hudFor(p) && (pausedUntil.get(p.id) ?? 0) <= system.currentTick) p.onScreenDisplay.setActionBar("");
   }
   sendState(seeingNow());
 });

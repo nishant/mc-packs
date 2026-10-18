@@ -17,7 +17,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { RARITY, boonEffects, boonOf, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
+import { RARITY, boonEffects, boonOf, dropStrayCart, giveKit, hasParcels, isRunGear, openParcels, restoreStash, rollBoons, saveParcel, saveStash, spawnFresh, stashOf, stripRunGear } from "./gauntlet.js";
 import { get } from "./settings.js";
 import {
   AFFIXES,
@@ -3357,7 +3357,6 @@ system.runInterval(() => {
   beat++;
   if (!runs.size) return;
   /** @type {Map<string, Player>} */
-  /** @type {Map<string, Player>} */
   const players = new Map();
   for (const run of runs.values()) {
     if (run.phase !== "active" && run.phase !== "finishing") continue;
@@ -3683,8 +3682,10 @@ world.afterEvents.playerSpawn.subscribe(({ player }) => {
 });
 
 // A Wolf Pack wolf that followed its owner out of a run and loads again later (an unloaded chunk then) goes away.
+// A stash or parcel cart left in the wrong dimension by an older version goes away once its items were handed over.
 world.afterEvents.entityLoad.subscribe(({ entity }) => {
   try {
+    dropStrayCart(entity);
     if (entity.typeId !== "minecraft:wolf" || !entity.hasTag(PET_TAG)) return;
     const tag = entity.getTags().find((t) => t.startsWith("realm:exp_run:"));
     const run = [...runs.values()].find((r) => tag === `realm:exp_run:${r.id}`);

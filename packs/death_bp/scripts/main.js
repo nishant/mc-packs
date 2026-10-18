@@ -21,7 +21,6 @@ const PASSABLE = new Set([
   "minecraft:fern",
   "minecraft:large_fern",
   "minecraft:deadbush",
-  "minecraft:dead_bush",
   "minecraft:short_dry_grass",
   "minecraft:tall_dry_grass",
   "minecraft:bush",
@@ -54,7 +53,6 @@ const BAD_GROUND = new Set([
   "minecraft:lava",
   "minecraft:flowing_lava",
   "minecraft:magma",
-  "minecraft:magma_block",
   "minecraft:fire",
   "minecraft:soul_fire",
   "minecraft:campfire",
@@ -216,7 +214,7 @@ function blockAt(dim, x, y, z, seen) {
   return id;
 }
 
-const AIRS = new Set(["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]);
+const AIRS = new Set(["minecraft:air"]);
 const LIQUIDS = new Set(["minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava", "minecraft:bubble_column"]);
 
 /**
