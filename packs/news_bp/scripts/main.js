@@ -236,8 +236,10 @@ async function editNews(player) {
   let draft = "";
   /** @type {import("@minecraft/server-ui").ModalFormResponse | undefined} */
   let res;
+  /** What the editor opened with, so a save changes only what this operator changed. */
+  let opened = getNews();
   for (let attempt = 1; attempt <= 20 && player.isValid; attempt++) {
-    const news = getNews();
+    const news = (opened = getNews());
     draft = getDraft(player);
     const parts = splitBody(escapeNewlines(draft || news.body));
     const form = new ModalFormData()
@@ -278,16 +280,19 @@ async function editNews(player) {
     player.sendMessage("§7Draft discarded.§r The news is unchanged.");
     return;
   }
-  const title = strings[0];
-  const body = strings.slice(1).join("");
+  const title = typeof strings[0] === "string" && strings[0].trim() ? strings[0] : DEFAULTS.news.title;
+  const body = unescapeNewlines(strings.slice(1).join(""));
+  // Another operator may have saved news while this editor was open: keep what they wrote in the part this one
+  // left alone (a draft is always saved: that's what this editor was for).
+  const now = getNews();
   writeJson(PROP_NEWS, {
-    title: typeof title === "string" && title.trim() ? title : DEFAULTS.news.title,
-    body: unescapeNewlines(body),
+    title: title !== opened.title ? title : now.title,
+    body: draft || body !== opened.body ? body : now.body,
   });
   if (announce === true) {
     world.setDynamicProperty(PROP_REVISION, getRevision() + 1);
     // Online players would otherwise only hear about it on their next join.
-    if (body.trim() !== "") world.sendMessage("§bRealm news updated.§r Run §b/realm:news§r to read it.");
+    if (getNews().body.trim() !== "") world.sendMessage("§bRealm news updated.§r Run §b/realm:news§r to read it.");
   }
 
   player.sendMessage(
