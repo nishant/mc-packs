@@ -15,7 +15,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { buttonSlots, initPages, openInvMenu, setOpPages } from "./pages.js";
+import { buttonSlots, initPages, openInvMenu, refillFromPages, setOpPages } from "./pages.js";
 import { get, getFor } from "./settings.js";
 
 const containerTypes = new Set(CONFIG.containerTypes);
@@ -1097,10 +1097,37 @@ world.afterEvents.worldLoad.subscribe(() =>
   system.runTimeout(() => system.sendScriptEvent("realm:access_check", JSON.stringify({ id: "hello", player: "", spots: [] })), 60)
 );
 
+/** "minecraft:firework_rocket" as "Firework rocket". @param {string} id */
+const prettyId = (id) => {
+  const s = id.replace(/^[^:]*:/, "").replaceAll("_", " ");
+  return s[0].toUpperCase() + s.slice(1);
+};
+
+/**
+ * Hotbar Refill (refill_bp) used up a stack and found no spare on the open inventory page:
+ *   realm:refill_need { player, slot, id, name?, lore? }
+ * A spare on another page moves into the empty hotbar slot, and the bar says from where.
+ * @param {string} message
+ */
+function refillNeed(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string" || typeof m.id !== "string" || !Number.isInteger(m.slot)) return;
+    const player = world.getAllPlayers().find((p) => p.id === m.player);
+    if (!player) return;
+    const got = refillFromPages(player, m.slot, { id: m.id, name: typeof m.name === "string" ? m.name : undefined, lore: Array.isArray(m.lore) ? m.lore.map(String) : undefined });
+    if (!got) return;
+    bar(player, `§8[§bPage #${got.page}§8] §7Refilled §f${got.n}x ${m.name ?? prettyId(m.id)}§7 into your hotbar`);
+  } catch (e) {
+    console.warn(`[stash] refill: ${e}`);
+  }
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stash_bp");
+    else if (id === "realm:refill_need") refillNeed(message);
     else if (id === "realm:access_check" || id === "realm:access_check_result") {
       try {
         if (id === "realm:access_check") answerAccess(message);

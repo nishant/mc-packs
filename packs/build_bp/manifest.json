@@ -4,7 +4,7 @@
     "name": "Easy Building",
     "description": "Effortless Building v5.0 for the Realm: interactive 2-click and 3-click multi-block shapes, 3D floating panels and quick wheel, live block outlines, mirror/array/radial modifiers, block palettes, Air Build, copy/cut/paste, destroy mode, live Coach and Tutorial Book. /realm:build",
     "uuid": "7cecc8a2-a1ca-4f4d-a828-871169ed7e31",
-    "version": [3,  0,  3],
+    "version": [3, 0, 3],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [

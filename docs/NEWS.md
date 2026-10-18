@@ -7,6 +7,10 @@ Write for players, in plain ASCII (no curly quotes, dashes or emoji), short line
 entries below as a changelog.
 
 
+## Hotbar refill reaches every inventory page
+
+- Used your last rocket (or block, food, pearl...) in the hotbar? If the inventory page you're on has no more, Hotbar Refill now takes the fullest matching stack from your other inventory pages, and the bar says which page it came from.
+
 ## Clearer preferences
 
 - /realm:prefs: a setting the operators turned off for the whole realm now shows as gray text with the reason ("Locked by the operators: Coordinates HUD is Disabled for the whole realm") instead of a switch that does nothing.

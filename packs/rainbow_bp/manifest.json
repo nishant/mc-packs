@@ -4,7 +4,7 @@
     "name": "Rainbows & the Pot of Gold",
     "description": "After rain on a morning or evening, a rainbow can appear; race to its end for a pot of gold. /realm:rainbow",
     "uuid": "332934a2-cb8a-433e-9f87-e05878976d81",
-    "version": [1,  4,  2],
+    "version": [1, 4, 2],
     "min_engine_version": [1, 21, 100]
   },
   "modules": [
