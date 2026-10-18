@@ -570,7 +570,11 @@ function spawnWave(p) {
     const id = pickMob(safe);
     if (!id) continue;
     try {
-      const mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
+      // A world whose entity ids repeat (an old level.dat put back) can hand back an existing entity (a pet, an
+      // item): tagged, dawn would remove it. Leave that one alone and spawn again.
+      let mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
+      for (let k = 0; k < 3 && mob.typeId !== id; k++) mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
+      if (mob.typeId !== id) continue;
       mob.addTag(MOB_TAG);
     } catch (e) {
       console.warn(`[moon] spawn ${id}: ${e}`);
