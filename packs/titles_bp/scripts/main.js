@@ -112,6 +112,9 @@ const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 // Unlocking and wearing
 // ---------------------------------------------------------------------------
 
+/** Player id + title already logged as not added (the list was full). @type {Set<string>} */
+const toldFull = new Set();
+
 /**
  * Records a title; true when it's new. Repeats are ignored quietly (packs may send them again).
  * @param {string} id @param {unknown} text @param {string} [name] the gamertag, when known
@@ -123,7 +126,10 @@ function unlockTitle(id, text, name) {
   if (name) d.n = name;
   if (d.t.some((t) => t.toLowerCase() === title.toLowerCase())) return false;
   if (d.t.length >= MAX_TITLES) {
-    console.warn(`[titles] ${id} has ${MAX_TITLES} titles already; ${title} not added`);
+    // Once per player and title: a built-in title reached with a full list would log it every second.
+    const key = `${id}|${title}`;
+    if (!toldFull.has(key)) console.warn(`[titles] ${id} has ${MAX_TITLES} titles already; ${title} not added`);
+    toldFull.add(key);
     return false;
   }
   d.t.push(title);
