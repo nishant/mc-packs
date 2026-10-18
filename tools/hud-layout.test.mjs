@@ -13,7 +13,7 @@ const cellHeight = (side, viewportHeight) => {
   const cell = ui["realm_pinned_slot@hud.realm_slot"];
   const stack = byName(`realm_side_${side}`);
   assert.deepEqual(stack.size, ["50%", "100% - 8px"], "percentage cells require a viewport-sized parent, not content-sized feedback");
-  const expression = stack.$pin_height ?? cell["$pin_height|default"];
+  const expression = side === "left" ? ui["realm_left_pinned_slot@hud.realm_pinned_slot"].size[1] : cell.size[1];
   const match = expression.match(/^25% - ([\d.]+)px$/);
   assert.ok(match, "cell height is a quarter of the viewport parent minus fixed UI reserves");
   return Math.max(cell.min_size[1], Math.min(cell.max_size[1], (viewportHeight - 8) / 4 - Number(match[1])));
@@ -86,7 +86,10 @@ test("unused auxiliary widgets collapse and overflowing stacks are constrained t
 test("numbered slots retain compact cells through the last occupied position on either side", () => {
   const pinned = ui["realm_pinned_slot@hud.realm_slot"];
   assert.ok(pinned, "numbered slots need a fixed-height wrapper instead of a collapsing readout");
-  assert.deepEqual(pinned.size, ["100%", "$pin_height"]);
+  assert.deepEqual(pinned.size, ["100%", "25% - 41.025px"]);
+  assert.deepEqual(ui["realm_left_pinned_slot@hud.realm_pinned_slot"].size, ["100%", "25% - 14px"]);
+  assert.equal(pinned["$pin_height|default"], undefined, "client scalar size aliases collapse to the minimum; use literal dimensions");
+  assert.equal(byName("realm_side_left").$pin_height, undefined);
   assert.deepEqual(pinned.min_size, ["100%", 16], "one native-font line plus padding");
   assert.deepEqual(pinned.max_size, ["100%", 32], "do not reserve a six-line gap");
   const content = pinned.controls[0]["realm_content@hud.realm_slot"];
@@ -116,7 +119,7 @@ test("numbered slots retain compact cells through the last occupied position on 
       .filter((c) => Object.keys(c)[0].startsWith(`realm_${side}`))
       .map((c) => {
         const [key, value] = Object.entries(c)[0];
-        assert.ok(key.endsWith("@hud.realm_pinned_slot"), key);
+        assert.ok(key.endsWith(side === "left" ? "@hud.realm_left_pinned_slot" : "@hud.realm_pinned_slot"), key);
         return value;
       });
     assert.equal(slots.length, 4);
