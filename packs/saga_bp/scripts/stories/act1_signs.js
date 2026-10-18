@@ -24,7 +24,7 @@ const E = "§eElsie:§r ";
 const BE = "§eBea:§r ";
 const W = "§eWren:§r ";
 const R = "§eReyes:§r ";
-const C = "§8The Cantor:§r ";
+const C = "§7The Cantor:§r ";
 
 const SILENCE = { "drowned_bell.bell": "silence" };
 const RING = { "drowned_bell.bell": "ring" };
@@ -486,10 +486,10 @@ export const STORIES = [
             dark: true,
             scenes: [
               { title: "The Gray Ring", text: "Gray hoods, a dozen or more, stand in a circle around a cracked bell half sunk in the earth. Hollis stands among them in his nightshirt, swaying. None of them look at him. All of them are humming.", seconds: 6 },
-              { title: "The Cantor", text: "A tall figure in a hood darker than the rest lifts one hand, and the humming stops. §8The Cantor:§r Sisters. Brothers. The Lantern comes home. We have counted the nights, as we were taught.", seconds: 6 },
-              { text: "§8The Cantor:§r Forty winters ago, one faithful man rang the broken note, and the sky broke with it. He was not finished. The sky was mended badly, with seals and lies. On the Lantern night, we finish his song.", sound: "block.bell.hit", seconds: 7 },
-              { text: "§8The Cantor:§r Nothing lost. §7The circle answers: Nothing missed.§r §8The Cantor:§r The grieving will not grieve. The drowned will come home. All of it, all of us, held in the quiet forever.", seconds: 7 },
-              { text: "§8The Cantor:§r And the little keeper hears our master now, every night. He will learn the rhythm. He will ring it for us. Won't you, Brother?\n\nAnd Hollis, eyes open, asleep, nods.", sound: "mob.warden.listening", seconds: 7 },
+              { title: "The Cantor", text: "A tall figure in a hood darker than the rest lifts one hand, and the humming stops. §7The Cantor:§r Sisters. Brothers. The Lantern comes home. We have counted the nights, as we were taught.", seconds: 6 },
+              { text: "§7The Cantor:§r Forty winters ago, one faithful man rang the broken note, and the sky broke with it. He was not finished. The sky was mended badly, with seals and lies. On the Lantern night, we finish his song.", sound: "block.bell.hit", seconds: 7 },
+              { text: "§7The Cantor:§r Nothing lost. §7The circle answers: Nothing missed.§r §7The Cantor:§r The grieving will not grieve. The drowned will come home. All of it, all of us, held in the quiet forever.", seconds: 7 },
+              { text: "§7The Cantor:§r And the little keeper hears our master now, every night. He will learn the rhythm. He will ring it for us. Won't you, Brother?\n\nAnd Hollis, eyes open, asleep, nods.", sound: "mob.warden.listening", seconds: 7 },
             ],
           },
         ],
