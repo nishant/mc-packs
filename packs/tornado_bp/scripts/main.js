@@ -586,15 +586,45 @@ function launchOutTop(p, angle, t, top) {
     }, delay);
   }
 
-  const seconds = CONFIG.slowFallingSeconds;
-  system.runTimeout(() => {
+  // Slow Falling from near the apex, for at least slowFallingSeconds and then until they land: a launch can carry a
+  // player 100 blocks up, far more than 8 seconds of Slow Falling cover, and the fall after it would kill them.
+  if (CONFIG.slowFallingSeconds > 0) {
+    landing.set(p.id, { player: p, from: system.currentTick + 28, until: system.currentTick + 28 + LANDING_MAX_TICKS });
+    if (landingLoop === undefined) landingLoop = system.runInterval(cushion, 10);
+  }
+}
+
+const LANDING_MAX_TICKS = 1200; // Slow Falling is kept up for at most a minute after a launch
+/** Launched players still on their way down. @type {Map<string, { player: Player, from: number, until: number }>} */
+const landing = new Map();
+/** @type {number | undefined} */
+let landingLoop;
+
+/** Every 10 ticks, for launched players only: Slow Falling until they're back on the ground (or in water). */
+function cushion() {
+  const now = system.currentTick;
+  for (const [id, l] of landing) {
+    const p = l.player;
+    if (now < l.from) continue;
     try {
-      if (p.isValid && seconds > 0) p.addEffect("slow_falling", seconds * 20, { showParticles: false });
+      if (!p.isValid || now > l.until || (now - l.from >= CONFIG.slowFallingSeconds * 20 && (p.isOnGround || p.isInWater))) {
+        landing.delete(id);
+        continue;
+      }
+      const sf = p.getEffect("slow_falling");
+      // Topped up a little ahead, never shortened: a longer Slow Falling (a potion) stays as it is.
+      if (!sf || sf.duration < 30) p.addEffect("slow_falling", now - l.from < 20 ? CONFIG.slowFallingSeconds * 20 : 40, { showParticles: false });
     } catch (e) {
+      landing.delete(id);
       console.warn(`[tornado] ${e}`);
     }
-  }, 28);
+  }
+  if (!landing.size && landingLoop !== undefined) {
+    system.clearRun(landingLoop);
+    landingLoop = undefined;
+  }
 }
+world.afterEvents.playerLeave.subscribe(({ playerId }) => landing.delete(playerId));
 
 // ---------------------------------------------------------------------------
 // Storm Glass where it dies down
