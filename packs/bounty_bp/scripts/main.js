@@ -636,6 +636,25 @@ function partyMates(p) {
     .map((o) => o.id);
 }
 
+// Town news: a claimed champion bounty is Townsfolk gossip about who claimed it (at most one piece per in-game hour
+// from this pack, each bounty once; Townsfolk merges it with Champions' own gossip about the same kill) and the title
+// "Bounty Hunter" (the Titles pack keeps it once, so the first claim is the one that counts).
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** @param {Hunt} h @param {string} killerId @param {string[]} helperIds */
 function claim(h, killerId, helperIds) {
   const killer = online(killerId);
@@ -660,6 +679,8 @@ function claim(h, killerId, helperIds) {
     if (CONFIG.rewards.helperRep > 0) system.sendScriptEvent("realm:rep_add", JSON.stringify({ player: id, guild: "wardens", amount: CONFIG.rewards.helperRep, reason: why }));
   }
   killer?.playSound("random.levelup", { pitch: 1, volume: 1 });
+  system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: killerId, title: "Bounty Hunter", from: "bounty_bp" }));
+  gossip(`${day().d}:${h.id}`, { kind: "bounty", player: killerId, name: killer?.name, place: String(h.name).replace(/§./g, "") });
   const extra = helpers.size ? ` §7(with ${helpers.size} helper${helpers.size === 1 ? "" : "s"})` : "";
   for (const p of world.getAllPlayers()) p.sendMessage(`§6[Bounty] ${h.by} claimed the bounty on ${h.name}!${extra}`);
 }
