@@ -1,0 +1,73 @@
+{
+  "comment": "Ids check-ids.mjs flags that pack code still has. Each one needs a fix in its pack (owning track): remove it here in the same commit as the fix; check-ids fails when a listed id is gone. Most are Java Edition names from the Effortless Building port (build_bp) or pre-1.21 names (leaves, log) kept beside the current one; translucent_bp/entities/player.json is a vanilla copy (sulfur_cube_archetype is a damage domain, not an entity); eb:destroy is a build mode id compared with typeId.",
+  "packs/build_bp/scripts/core/BlockDestroyer.js": [
+    "minecraft:chain",
+    "minecraft:deepslate_lit_redstone_ore",
+    "minecraft:end_gateway",
+    "minecraft:glowing_obsidian",
+    "minecraft:grass",
+    "minecraft:lava_cauldron",
+    "minecraft:light",
+    "minecraft:nether_portal",
+    "minecraft:nether_quartz_ore",
+    "minecraft:note_block",
+    "minecraft:powder_snow_cauldron",
+    "minecraft:rooted_dirt",
+    "minecraft:water_cauldron",
+    "minecraft:waxed_copper_block"
+  ],
+  "packs/build_bp/scripts/core/BlockPlacer.js": [
+    "minecraft:black_bed",
+    "minecraft:blue_bed",
+    "minecraft:brown_bed",
+    "minecraft:cyan_bed",
+    "minecraft:gray_bed",
+    "minecraft:green_bed",
+    "minecraft:kelp_plant",
+    "minecraft:light_blue_bed",
+    "minecraft:light_gray_bed",
+    "minecraft:lime_bed",
+    "minecraft:magenta_bed",
+    "minecraft:orange_bed",
+    "minecraft:pink_bed",
+    "minecraft:purple_bed",
+    "minecraft:red_bed",
+    "minecraft:tall_seagrass",
+    "minecraft:white_bed",
+    "minecraft:yellow_bed"
+  ],
+  "packs/build_bp/scripts/core/Preview.js": [
+    "minecraft:note_block",
+    "minecraft:oak_door",
+    "minecraft:oak_trapdoor"
+  ],
+  "packs/build_bp/scripts/main.js": [
+    "eb:destroy"
+  ],
+  "packs/build_bp/scripts/modes/AirBuildMode.js": [
+    "minecraft:cave_air",
+    "minecraft:void_air"
+  ],
+  "packs/death_bp/scripts/main.js": [
+    "minecraft:cave_air",
+    "minecraft:dead_bush",
+    "minecraft:magma_block",
+    "minecraft:void_air"
+  ],
+  "packs/domt_bp/scripts/events.js": [
+    "minecraft:rooted_dirt"
+  ],
+  "packs/leaves_bp/scripts/main.js": [
+    "minecraft:leaves",
+    "minecraft:leaves2",
+    "minecraft:log",
+    "minecraft:log2"
+  ],
+  "packs/relics_bp/scripts/main.js": [
+    "minecraft:glow_item_frame",
+    "minecraft:item_frame"
+  ],
+  "packs/translucent_bp/entities/player.json": [
+    "minecraft:sulfur_cube_archetype"
+  ]
+}
