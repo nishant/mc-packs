@@ -2,16 +2,20 @@
 // Runs every scenario in examples/ with the command from its own header comment, a few at a time,
 // and prints a table: scenario | result | seconds | first failure line.
 //   node tools/test-bds/suite.mjs [--jobs 2] [--filter <regex>] [--retry] [--json <out>] [--list]
+//   node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json <out>]
 // Results: pass, fail, flaky (failed, then passed when rerun alone with --retry), timeout, skipped.
+// --perf runs only the perf-soak scenario once per player count (with run.mjs --profile, one after another) and
+// prints ms/tick per pack side by side with the budget (whole bundle < 5 ms/tick at 40 players, a typical pack
+// <= 0.15, the Minimap and HUD <= 1); --perf-only installs just those packs.
 // Logs: tools/test-bds/logs/suite-<time>/<scenario>.out (run.mjs output) and .log (full BDS log).
 // Exit code: 0 when nothing failed or timed out (flaky and skipped count as ok), 1 otherwise.
 //
 // Each scenario's command is the first "node tools/test-bds/run.mjs ..." line in its header; the
-// scenario path is always the file itself. Scenarios whose header gives no plain command are
-// handled in SPECIAL below. Headers that build a test copy of packs with a shell recipe (lines like
-// "//   mkdir -p /tmp/x && cp -r packs/x_bp /tmp/x/") get the recipe run first, with /tmp/ moved to a
-// folder of this suite run so parallel runs do not collide; those whose test hook is only described
-// in prose are skipped ("needs hook copy").
+// scenario path is always the file itself, and a header whose command runs another file fails (a copy-paste
+// slip). Scenarios whose header gives no plain command are handled in SPECIAL below. Headers that build a test
+// copy of packs with a shell recipe (lines like "//   mkdir -p /tmp/x && cp -r packs/x_bp /tmp/x/", test hooks
+// from tools/test-bds/hooks/) get the recipe run first, with /tmp/ moved to a folder of this suite run so
+// parallel runs do not collide; a --packs header without such a recipe is skipped ("needs hook copy").
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -29,6 +33,7 @@ try {
     options: {
       jobs: { type: "string", default: "2" }, filter: { type: "string" }, retry: { type: "boolean", default: false },
       json: { type: "string" }, list: { type: "boolean", default: false }, help: { type: "boolean", short: "h", default: false },
+      perf: { type: "string" }, "perf-seconds": { type: "string", default: "120" }, "perf-only": { type: "string" },
     },
   }).values;
 } catch (e) {
@@ -36,7 +41,7 @@ try {
   process.exit(64);
 }
 if (args.help) {
-  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 19).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(0);
 }
 const JOBS = Math.max(1, Number(args.jobs) || 2);
@@ -52,10 +57,8 @@ const SPECIAL = {
   "perf-soak": { args: ["--no-relay", "--profile", "--profile-every", "0", "--arg", "players=6", "--arg", "seconds=60", "--timeout", "400"], note: "short soak (6 players, 60 s)" },
   "stash-pages-persistence": { runner: "stash-persistence.mjs", note: "custom runner stash-persistence.mjs" },
 };
-// Headers whose test copy is a plain shell recipe: it is run first. Other --packs scenarios
-// (maps-cleanup, maps-leave, rainbow-race: hook described in prose) are skipped.
-const RECIPES = new Set(["claims-bundle-taps", "storm-rod-claims", "rain-roof", "rain-seabed", "title-hold", "rook-map-race", "saga-world-events"]);
-const RECIPE_START = /^\/\/ {3}(S=|mkdir |rm |cp |sed |cat |printf |for |node -e )/;
+// A --packs header's test copy is built by the plain shell lines just above its command (run first).
+const RECIPE_START = /^\/\/ {3}(S=|mkdir |rm |cp |sed |cat |printf |for |grep |node -e )/;
 
 function headerComments(text) {
   const lines = text.split("\n");
@@ -102,7 +105,7 @@ function plan(file, hookRoot) {
   const recipeStart = header.findIndex((l, i) => i < cmdIdx && RECIPE_START.test(l));
   const packsIdx = words.indexOf("--packs");
   if (packsIdx >= 0) {
-    if (recipeStart < 0 || !RECIPES.has(name)) { p.skip = "skipped: needs hook copy (hook described in prose)"; return p; }
+    if (recipeStart < 0) { p.skip = "skipped: needs hook copy (no shell recipe in the header)"; return p; }
     const recipeLines = header.slice(recipeStart, cmdIdx);
     if (!recipeLines.every((l) => l.startsWith("//   "))) { p.skip = "skipped: needs hook copy (recipe not plain shell)"; return p; }
     const tmp = path.join(hookRoot, name) + "/";
@@ -115,7 +118,7 @@ function plan(file, hookRoot) {
   const si = words.indexOf("--scenario");
   if (si >= 0) {
     const given = path.resolve(ROOT, words[si + 1]);
-    if (given !== file) p.notes.push(`header runs ${path.relative(ROOT, given)}; ran ${name}.js instead`);
+    if (given !== file) { p.headerBug = `header runs ${path.relative(ROOT, given)}, not ${name}.js: fix the header`; p.notes.push(p.headerBug); }
     words.splice(si, 2);
   }
   if (!words.includes("--quiet")) words.unshift("--quiet");
@@ -183,6 +186,50 @@ function runOne(p, logDir, tag = "") {
   });
 }
 
+/** --perf: perf-soak once per player count, one at a time, then ms/tick per pack side by side against the budget. */
+async function perf() {
+  const counts = String(args.perf).split(",").map((x) => Math.max(1, Math.floor(Number(x)))).filter(Number.isFinite);
+  const seconds = Math.max(10, Number(args["perf-seconds"]) || 120);
+  fs.mkdirSync(logDir, { recursive: true });
+  const soak = path.join(EXAMPLES, "perf-soak.js");
+  /** @type {Map<number, any>} */
+  const reports = new Map();
+  for (const n of counts) {
+    const json = path.join(logDir, `perf-${n}.json`);
+    // Spawning takes about a second per player on top of the soak itself; ticks run slow under load.
+    const timeout = Math.round(120 + n * 2 + seconds * 6);
+    const p = { name: `perf-${n}`, args: ["--quiet", "--no-relay", "--profile", "--profile-every", "0", "--profile-json", json, ...(args["perf-only"] ? ["--only", args["perf-only"]] : []), "--arg", `players=${n}`, "--arg", `seconds=${seconds}`, "--timeout", String(timeout), "--scenario", soak], notes: [] };
+    console.log(`[suite] perf: ${n} players, ${seconds} s of game time${args["perf-only"] ? `, packs ${args["perf-only"]}` : ""}`);
+    const r = await runOne(p, logDir);
+    console.log(`[suite] perf ${n}: ${r.result} (${r.seconds.toFixed(0)} s)${r.failure ? ` - ${r.failure.slice(0, 160)}` : ""}`);
+    try { reports.set(n, JSON.parse(fs.readFileSync(json, "utf8"))); } catch (e) { console.log(`[suite] perf ${n}: no profile report (${e.message})`); }
+  }
+  if (!reports.size) process.exit(1);
+  const ns = [...reports.keys()];
+  const packs = new Set();
+  for (const rep of reports.values()) for (const pk of rep.packs) packs.add(pk.pack);
+  const ms = (rep, pack) => rep?.packs.find((x) => x.pack === pack)?.msPerTick;
+  const last = reports.get(ns[ns.length - 1]);
+  const rows = [...packs].sort((a, b) => (ms(last, b) ?? 0) - (ms(last, a) ?? 0));
+  const HEAVY = new Set(["map_bp", "hud_bp"]);
+  const budget = (pack) => (HEAVY.has(pack) ? 1 : 0.15);
+  const f3 = (x) => (x === undefined ? "-" : x.toFixed(3));
+  const w = Math.max(12, ...rows.map((r) => r.length));
+  const L = ["", `${"pack".padEnd(w)} | ${ns.map((n) => `@${n} ms/tick`.padStart(13)).join(" | ")} | budget | over at`, `${"-".repeat(w)}-|${ns.map(() => "-".repeat(15)).join("|")}|--------|--------`];
+  L.push(`${"whole bundle".padEnd(w)} | ${ns.map((n) => f3(reports.get(n).bundle?.msPerTick).padStart(13)).join(" | ")} | ${"5".padStart(6)} | ${ns.filter((n) => n >= 40 && reports.get(n).bundle?.msPerTick > 5).join(",") || "-"}`);
+  L.push(`${"server TPS".padEnd(w)} | ${ns.map((n) => (reports.get(n).server?.tps ?? 0).toFixed(1).padStart(13)).join(" | ")} |        |`);
+  for (const pack of rows) {
+    const over = ns.filter((n) => (ms(reports.get(n), pack) ?? 0) > budget(pack));
+    L.push(`${pack.padEnd(w)} | ${ns.map((n) => f3(ms(reports.get(n), pack)).padStart(13)).join(" | ")} | ${String(budget(pack)).padStart(6)} | ${over.join(",") || "-"}`);
+  }
+  L.push("", `reports: ${ns.map((n) => path.join(logDir, `perf-${n}.json`)).join(", ")}`);
+  console.log(L.join("\n"));
+  if (args.json) {
+    fs.mkdirSync(path.dirname(path.resolve(args.json)), { recursive: true });
+    fs.writeFileSync(args.json, JSON.stringify({ date: new Date().toISOString(), seconds, only: args["perf-only"] ?? null, perf: Object.fromEntries([...reports].map(([n, r]) => [n, { bundle: r.bundle, server: r.server, packs: Object.fromEntries(r.packs.map((x) => [x.pack, x.msPerTick])) }])) }, null, 2));
+  }
+}
+
 async function pool(items, n, fn) {
   const queue = [...items];
   const workers = Array.from({ length: Math.min(n, queue.length) }, async () => {
@@ -203,6 +250,11 @@ if (args.list) {
   process.exit(0);
 }
 
+if (args.perf) {
+  await perf();
+  process.exit(0);
+}
+
 fs.mkdirSync(logDir, { recursive: true });
 console.log(`[suite] ${plans.length} scenarios, ${JOBS} at a time${args.retry ? ", failures retried alone" : ""}; logs ${logDir}`);
 const t0 = Date.now();
@@ -212,7 +264,7 @@ const runnable = plans.filter((p) => !p.skip);
 for (const p of plans.filter((p) => p.skip)) results.set(p.name, { name: p.name, result: "skipped", seconds: 0, failure: p.skip, notes: p.notes });
 
 await pool(runnable, JOBS, async (p) => {
-  const r = await runOne(p, logDir);
+  const r = p.headerBug ? { result: "fail", code: 64, seconds: 0, failure: p.headerBug } : await runOne(p, logDir);
   results.set(p.name, { name: p.name, ...r, notes: p.notes });
   console.log(`[suite] ${++doneCount}/${runnable.length} ${p.name}: ${r.result} (${r.seconds.toFixed(0)} s)${r.failure ? ` - ${r.failure.slice(0, 160)}` : ""}`);
 });

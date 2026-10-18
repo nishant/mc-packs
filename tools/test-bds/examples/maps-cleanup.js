@@ -1,12 +1,10 @@
 // Treasure Maps: Warmer / Colder range, markers and chests put back, two hunters at one spot, restart, legacy maps.
-// Needs a copy of maps_bp with a 3-second cleanup delay and a small test hook that reads and writes hunts
-// (packs can't read each other's dynamic properties):
-//   mkdir -p /tmp/mc && cp -r packs/maps_bp /tmp/mc/
+// Needs a copy of maps_bp with a 3-second cleanup delay and the test hook tools/test-bds/hooks/maps-rvtest.js, which
+// reads and writes hunts and undo records (packs can't read each other's dynamic properties). The suite runs these:
+//   mkdir -p /tmp/mc && rm -rf /tmp/mc/maps_bp && cp -r packs/maps_bp /tmp/mc/
 //   sed -i 's/^const CLEAR_DELAY = 30000;/const CLEAR_DELAY = 3000;/' /tmp/mc/maps_bp/scripts/cleanup.js
-//   append to /tmp/mc/maps_bp/scripts/main.js a scriptEventReceive handler (namespace "rvtest") that answers
-//     rvtest:get <name>              -> rvtest:hunts {name, hunts: huntsOf(player)}
-//     rvtest:set {name, hunts}       -> cache.delete(id); setDynamicProperty(PROP_HUNTS, ...); rvtest:ok <name>
-//     rvtest:undo                    -> rvtest:undo_r <record JSON> for each id in maps:undo, then rvtest:undo_end
+//   grep -q '^const CLEAR_DELAY = 3000;' /tmp/mc/maps_bp/scripts/cleanup.js
+//   cat tools/test-bds/hooks/maps-rvtest.js >> /tmp/mc/maps_bp/scripts/main.js
 //   node tools/test-bds/run.mjs --quiet --packs /tmp/mc --scenario tools/test-bds/examples/maps-cleanup.js --timeout 600
 const OW = "minecraft:overworld";
 

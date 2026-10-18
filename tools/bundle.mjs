@@ -29,8 +29,6 @@ import { namespaceOf, registeredNames } from "./lib/commands.mjs";
 
 const root = join(import.meta.dirname, "..");
 
-// Realm News shows the newest docs/NEWS.md entry: refresh it before bundling.
-execFileSync(process.execPath, [join(root, "tools", "gen-news.mjs")], { stdio: ["ignore", 2, 2] }); // stderr: stdout may be JSON
 const packsDir = join(root, "packs");
 const distDir = join(root, "dist");
 /** Behavior packs that stay their own add-on: --all leaves them out. */
@@ -116,6 +114,11 @@ if (args.list) {
 }
 
 if (!args.all && !args.resources && !args.packs) fail("pass --all, --resources, --packs a,b,c, or --list");
+
+// Realm News shows the newest docs/NEWS.md entry: refresh it before bundling (not for --list, which only reads:
+// pack-docs.mjs and publish-packs.mjs in hosting call it, and a listing must not write news_bp or bump it).
+execFileSync(process.execPath, [join(root, "tools", "gen-news.mjs")], { stdio: ["ignore", 2, 2] }); // stderr: stdout may be JSON
+packs.splice(0, packs.length, ...loadPacks()); // news_bp's manifest may have just been bumped
 
 /** @type {Pack[]} */
 let selected;

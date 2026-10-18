@@ -99,16 +99,29 @@ and jump, and run a few common commands for `seconds` (see its header for the ot
 from its own header (the first `node tools/test-bds/run.mjs ...` line; the scenario path is always the
 file itself) and prints `scenario | result | seconds | first failure line`, then the totals. Results:
 `pass`, `fail`, `flaky` (failed, then passed when rerun alone with `--retry`), `timeout`, `skipped`.
-Headers that build a test copy with a plain shell recipe (claims-bundle-taps, storm-rod-claims,
-rain-roof, rain-seabed, title-hold, rook-map-race, saga-world-events) get the recipe run first, with
-`/tmp/` moved to a folder of the suite run; maps-cleanup, maps-leave and rainbow-race describe their
-hook in prose and are skipped ("needs hook copy"). A few have no plain command and are listed in
+Headers that build a test copy with a plain shell recipe (the lines just above the command: `mkdir`,
+`cp`, `sed`, `grep`, `cat`...) get the recipe run first, with `/tmp/` moved to a folder of the suite run.
+Test hooks that a scenario needs inside a pack (packs can't read each other's dynamic properties) live in
+`hooks/` and are appended to the test copy by the recipe (`hooks/maps-rvtest.js` for maps-cleanup and
+maps-leave, `hooks/rainbow-rvtest.js` for rainbow-race, the `hooks/limit_bp` probe pack for
+harness-event-limit); a `--packs` header without a recipe is skipped ("needs hook copy"). A header whose
+command runs another scenario file fails (and `npm run check` catches it too). A few have no plain command and are listed in
 `SPECIAL` in `suite.mjs` (smoke and restart with every pack, forms, domt-champion, the
 npc-name-capability probe, saga-lighthouse, and stash-pages-persistence through `stash-persistence.mjs`).
 Options: `--jobs N` (default 2; each run is CPU bound), `--filter <regex>` (scenario names),
 `--retry`, `--json <out>`, `--list` (print each plan and exit). Logs go to
 `logs/suite-<time>/<scenario>.out` (run.mjs output) and `.log` (full BDS log). The exit code is 1 when
 anything failed or timed out. The whole suite takes a few hours at `--jobs 2`.
+
+`node tools/test-bds/suite.mjs --perf 10,40 [--perf-seconds 120] [--perf-only a_bp,b_bp] [--json out]` runs
+only `perf-soak.js`, once per player count (one at a time, with `--profile`), and prints ms/tick per pack side by
+side with the budget: the whole bundle under 5 ms/tick at 40 players, a typical pack at most 0.15, the Minimap
+(`map_bp`) and HUD (`hud_bp`) at most 1. The JSON reports land in the suite's log folder.
+
+The shim also checks the script event rule: a pack that sends a `realm:` script event of 2048 characters or
+more logs a `[harness-shim] ... sent script event ... with N characters` script error, so the run fails (BDS
+1.26 delivers any length, so only a Realm would notice). Scenarios can listen for `harness:limit`
+`{pack, id, length}` too (`examples/harness-event-limit.js`).
 
 ## Inventory persistence regression
 
