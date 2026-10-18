@@ -287,7 +287,8 @@ const toHud = (playerId, text) => system.sendScriptEvent("realm:hud_line", JSON.
 /** Takes the ticker off the screen. @param {Player} player @param {{ text: string, via?: "bar" | "hud" }} t */
 function clearTicker(player, t) {
   if (t.via === "hud") toHud(player.id, "");
-  else if (t.via === "bar" && t.text) player.onScreenDisplay.setActionBar("");
+  // Not while another pack's note is up (it goes away by itself): an empty bar would wipe it.
+  else if (t.via === "bar" && t.text && (pausedUntil.get(player.id) ?? 0) <= system.currentTick) player.onScreenDisplay.setActionBar("");
 }
 
 system.runInterval(() => {
