@@ -897,7 +897,7 @@ async function resetBox(rec) {
   const { o, size, top } = extent(rec);
   addArea(rec.slot, o, size, top); // already there unless the world restarted without it
   if (!(await waitLoaded(o, size, 60))) {
-    console.warn(`[expedition] slot ${rec.slot}: the dungeon area didn't load; it will be reset after the next restart or /realm:expedition_reset`);
+    console.warn(`[expedition] slot ${rec.slot}: the dungeon area did not load; it is tried again every minute`);
     return false;
   }
   const dim = overworld();
@@ -1279,7 +1279,13 @@ function cantStart(leader) {
   if (get("enabled") !== true) return "§cNew expeditions are disabled on this realm right now.";
   if (!site()) return "§cThe operators haven't picked an expedition site yet (/realm:expedition_site).";
   if (runOf(leader.id)) return "§cYou're already on an expedition.";
-  if (freeSlot() === undefined) return `§eAn expedition is in progress (${[...runs.values()].map(statusLine).join("; ")}). Try again when it's over.`;
+  if (freeSlot() === undefined) {
+    if (!runs.size) {
+      resetPending().catch((e) => console.warn(`[expedition] ${e}`));
+      return "§eThe last expedition's dungeon is still being filled in. Try again in a minute.";
+    }
+    return `§eAn expedition is in progress (${[...runs.values()].map(statusLine).join("; ")}). Try again when it's over.`;
+  }
   return "";
 }
 
@@ -1889,8 +1895,47 @@ async function endRun(run, why) {
   }
   runs.delete(run.slot);
   if (ok) writeJson(PROP_RUN + run.slot, undefined);
-  else pending.set(run.slot, rec); // tried again by /realm:expedition_reset or after a restart
+  else pending.set(run.slot, rec); // tried again every minute (resetPending), by /realm:expedition_reset and after a restart
 }
+
+/** The reset of the boxes still waiting for one, while it runs. @type {Promise<void> | undefined} */
+let resettingPending;
+/** Slots whose operators were told their box couldn't be filled in yet. @type {Set<number>} */
+const toldPending = new Set();
+
+/**
+ * Fills in the boxes that still wait for it (cut short by a restart, or not loaded at the end of their run): after a
+ * restart, every minute while any wait, when someone wants to start one, and from /realm:expedition_reset. A slot
+ * stays closed until its box is reset, so it's never left waiting for a restart. One reset at a time.
+ */
+function resetPending() {
+  if (resettingPending) return resettingPending;
+  if (!pending.size) return Promise.resolve();
+  resettingPending = (async () => {
+    for (const [slot, rec] of [...pending]) {
+      try {
+        if (await resetBox(rec)) {
+          writeJson(PROP_RUN + slot, undefined);
+          pending.delete(slot);
+          toldPending.delete(slot);
+          continue;
+        }
+      } catch (e) {
+        console.warn(`[expedition] reset slot ${slot}: ${e}`);
+      }
+      if (toldPending.has(slot)) continue;
+      toldPending.add(slot);
+      for (const p of world.getAllPlayers())
+        if (isOp(p)) p.sendMessage(`§e[Expeditions] Dungeon ${slot + 1} couldn't be loaded to fill it in (the world may have its 10 ticking areas: /tickingarea list). It's tried again every minute; no run starts there until then.`);
+    }
+  })().finally(() => {
+    resettingPending = undefined;
+  });
+  return resettingPending;
+}
+system.runInterval(() => {
+  if (pending.size && !resettingPending) resetPending().catch((e) => console.warn(`[expedition] ${e}`));
+}, 1200);
 
 /** Removes a run's Wolf Pack wolves. @param {Run} run */
 function removePets(run) {
@@ -3688,16 +3733,7 @@ world.afterEvents.worldLoad.subscribe(() => {
     } catch {
       // nothing loaded
     }
-    for (const [slot, rec] of [...pending]) {
-      try {
-        if (await resetBox(rec)) {
-          writeJson(PROP_RUN + slot, undefined);
-          pending.delete(slot);
-        }
-      } catch (e) {
-        console.warn(`[expedition] reset after restart: ${e}`);
-      }
-    }
+    await resetPending();
   }, 100);
 });
 
@@ -4173,13 +4209,9 @@ async function opReset(player) {
   const list = [...runs.values()];
   if (!list.length && !pending.size) return player.sendMessage("§7No expedition is running, and every dungeon area is already reset.");
   for (const run of list) await endRun(run, `§cAn operator (${player.name}) ended the expedition.`);
-  for (const [slot, rec] of [...pending]) {
-    if (await resetBox(rec)) {
-      writeJson(PROP_RUN + slot, undefined);
-      pending.delete(slot);
-    }
-  }
-  player.sendMessage(pending.size ? "§eEnded. Some dungeon areas couldn't be loaded to reset; they'll be tried again after a restart." : "§aExpeditions ended and the dungeon areas reset.");
+  await resetPending();
+  if (!player.isValid) return;
+  player.sendMessage(pending.size ? "§eEnded. Some dungeon areas couldn't be loaded to reset; they're tried again every minute." : "§aExpeditions ended and the dungeon areas reset.");
 }
 
 // ---------------------------------------------------------------------------
