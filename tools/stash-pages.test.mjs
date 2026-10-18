@@ -300,7 +300,7 @@ mc.ui = {
   ModalFormData: Form,
   FormCancelationReason: { UserBusy: "UserBusy" },
 };
-mc.settings = { get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
+mc.settings = { onChange: () => {}, get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
 
 /** One engine tick: queued system.run callbacks first, then (every other tick) the script's interval. */
 function advance(ticks = 1) {
@@ -321,7 +321,7 @@ function fire(name, event) {
 
 const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, StructureSaveMode, system, world } = m;`);
 const uiUrl = dataUrl(`const m = globalThis.__mc.ui; export const { ActionFormData, FormCancelationReason, ModalFormData } = m;`);
-const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, setFor } = m;`);
+const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, onChange, setFor } = m;`);
 const storeSource = readFileSync(new URL("../packs/stash_bp/scripts/page-store.js", import.meta.url), "utf8")
   .replace('"@minecraft/server"', JSON.stringify(serverUrl));
 const storeUrl = dataUrl(storeSource);
@@ -1072,7 +1072,7 @@ test("full 25-to-1 overflow retries have a bounded native snapshot read budget",
     assert.ok(mc.loads - before <= 24 * 11, `at most one 24-page retry per 20 ticks, got ${mc.loads - before} reads`);
     assert.ok(p.bar.length - notes <= 11, "overflow warnings follow the same retry budget");
     p.container.setItem(10, undefined);
-    advance(20);
+    advance(100); // a quiet player (no inventory event) is looked at every 5 s
     assert.equal(p.container.getItem(10)?.amount, 64, "making room returns exactly one full stack");
   } finally {
     mc.pages = 5;
@@ -1158,11 +1158,11 @@ test("the script's own button writes are not clicks", () => {
   assert.equal(curPage(p), 2);
 });
 
-test("a button left on the cursor is cleared by the next tick even without an event", () => {
+test("a button left on the cursor is cleared within 5 s even without an event", () => {
   const p = joined();
-  advance(2);
+  advance(40);
   p.cursor.item = stack(BTN_MENU);
-  advance(2);
+  advance(100);
   assert.equal(p.cursor.item, undefined);
 });
 
