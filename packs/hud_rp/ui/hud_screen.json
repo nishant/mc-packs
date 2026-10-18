@@ -285,32 +285,13 @@
   "realm_pinned_slot@hud.realm_slot": {
     "size": [
       "100%",
-      32
+      "100%c + 4px"
     ],
+    "$slot_max": [200, 26],
     "controls": [
       {
-        "realm_content@hud.realm_slot": {
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "size": ["100%", "100%"],
-          "controls": [
-            {
-              "realm_slot_box@hud.realm_slot_box": {
-                "size": ["100%c + 6px", "100% - 2px"],
-                "clips_children": true,
-                "$slot_max": [200, "100% - 4px"],
-                "controls": [
-                  {
-                    "realm_slot_text@hud.realm_slot_text": {
-                      "anchor_from": "top_middle",
-                      "anchor_to": "top_middle",
-                      "offset": [0, 2]
-                    }
-                  }
-                ]
-              }
-            }
-          ]
+        "realm_slot_box@hud.realm_slot_box": {
+          "clips_children": true
         }
       }
     ]

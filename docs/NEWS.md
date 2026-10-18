@@ -10,7 +10,8 @@ entries below as a changelog.
 ## Neater side HUDs and a clearer minimap
 
 - Mob health and the Elytra HUD default to the left, with the rotating scoreboard. Existing choices in /realm:prefs and realm settings are kept.
-- Readouts stack in numbered order and center vertically on each side. Empty positions collapse to keep the group compact; long readouts stay inside their cell.
+- Story readouts stay on the right and the real rotating Stats board stays on the left. Side readouts use their natural text height with the same small gap, not oversized blank cells.
+- Readouts stack in numbered order and center vertically on each side. Empty positions collapse; native text, colors and useful two-line values stay unchanged.
 - The minimap stays at its approved top-right position. Right-side readouts center below it; the original top compass is unchanged.
 - The full native scoreboard height counts toward the left group. If a very tall board or large GUI scale cannot fit, use /realm:stats, hide optional readouts or choose a smaller GUI scale.
 - All readout boxes, the radar and scoreboard leave the compass band clear, even when the compass is hidden.

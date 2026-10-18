@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { decode } from "./gen-rain/png.mjs";
 import { CONFIG as mobhp } from "../packs/mobhp_bp/scripts/config.js";
 import { CONFIG as elytra } from "../packs/elytra_bp/scripts/config.js";
+import { CONFIG as saga } from "../packs/saga_bp/scripts/config.js";
 
 const ui = JSON.parse(fs.readFileSync(new URL("../packs/hud_rp/ui/hud_screen.json", import.meta.url), "utf8"));
 const area = Object.fromEntries(ui.realm_side_area.controls.map((c) => Object.entries(c)[0]));
@@ -71,21 +72,22 @@ test("the full native rotating scoreboard joins the left group without a one-row
 test("new defaults put health and flight left without resetting saved preferences or changing content", () => {
   assert.equal(mobhp.showAt, "left1");
   assert.equal(elytra.showAt, "left2");
+  assert.equal(saga.trackerAt, "right4", "story stays on the right; native rotating board stays in the left group");
   const source = fs.readFileSync(new URL("../packs/mobhp_bp/scripts/main.js", import.meta.url), "utf8");
   assert.match(source, /const FALLBACK_SLOT = "left1"/);
   assert.match(source, /getFor\(attacker, "where"\)/, "explicit player choice still wins");
   assert.ok(!JSON.stringify(ui).includes("Mob health slot"), "fixture labels never enter production");
 });
 
-test("numbered selections retain stable ordering and fixed occupied heights, with centered empty slots collapsed", () => {
+test("numbered selections retain ordering with natural content height and uniform small gaps", () => {
   const cell = ui["realm_pinned_slot@hud.realm_slot"];
-  assert.deepEqual(cell.size, ["100%", 32]);
+  assert.deepEqual(cell.size, ["100%", "100%c + 4px"], "no reserved blank second row for a one-line readout");
   assert.equal(cell.bindings, undefined, "inherit own-slot visibility; latest centered-stack design supersedes empty gaps");
   assert.equal(cell["$pin_height|default"], undefined);
-  const content = cell.controls[0]["realm_content@hud.realm_slot"];
-  const box = content.controls[0]["realm_slot_box@hud.realm_slot_box"];
+  assert.deepEqual(cell.$slot_max, [200, 26], "keep useful native two-line text and its previous maximum");
+  const box = cell.controls[0]["realm_slot_box@hud.realm_slot_box"];
   assert.equal(box.clips_children, true);
-  assert.deepEqual(box.$slot_max, [200, "100% - 4px"]);
+  assert.equal(box.size, undefined, "retain Nish's content-sized background template");
   assert.equal(ui.realm_slot_text.font_scale_factor, "$slot_scale");
   assert.equal(ui.realm_slot["$slot_scale|default"], undefined, "native template itself is untouched");
   for (const [side, first] of [["right", 0], ["left", 4]]) {
@@ -98,7 +100,9 @@ test("numbered selections retain stable ordering and fixed occupied heights, wit
     }
     for (let mask = 0; mask < 16; mask++) {
       const visible = cells.filter((_, i) => mask & (1 << i));
-      assert.equal(visible.length * cell.size[1], mask.toString(2).replace(/0/g, "").length * 32);
+      const heights = [9, 18, 9, 18];
+      const total = heights.reduce((sum, h, i) => sum + (mask & (1 << i) ? h + 4 + 4 : 0), 0);
+      assert.ok(total <= visible.length * 26, "normal one/two-line readouts reserve no oversized blank cells");
       assert.deepEqual(visible.map((c) => Object.keys(c)[0]), cells.map((c) => Object.keys(c)[0]).filter((_, i) => mask & (1 << i)));
     }
   }
@@ -107,20 +111,22 @@ test("numbered selections retain stable ordering and fixed occupied heights, wit
 test("centering budgets the actual board and gives explicit finite-height boundaries", () => {
   for (const height of [180, 240, 360, 480]) for (const board of [0, 40, 80, 120, 160]) {
     const leftAvailable = height - 52;
-    const leftContent = 2 * 32 + board;
+    const leftContent = (9 + 8) + (18 + 8) + board;
     const rightAvailable = height - 160;
-    const rightContent = 2 * 32;
+    const rightContent = (9 + 8) + (18 + 8);
     for (const [top, available, content] of [[48, leftAvailable, leftContent], [156, rightAvailable, rightContent]]) {
       const measured = Math.min(available, content);
       const groupTop = top + (available - measured) / 2;
       assert.ok(groupTop >= top);
       if (content <= available) assert.ok(groupTop + content <= height - 4);
     }
-    if (height >= 240 && board <= 120) assert.ok(leftContent <= leftAvailable, "normal default left group includes a full 120-unit board");
+    if (height >= 240 && board <= 140) assert.ok(leftContent <= leftAvailable, "normal default left group includes a full 140-unit board");
     if (height >= 240) assert.ok(rightContent <= rightAvailable, "two default right readouts fit below the fixed map");
   }
-  assert.ok(64 > 180 - 160, "severely short right viewport cannot display two full readouts");
-  assert.ok(64 + 160 > 240 - 52, "unbounded tall scoreboard has an explicit fallback, not a false fit claim");
+  assert.ok(43 > 180 - 160, "severely short right viewport cannot display two full readouts");
+  assert.ok(43 + 160 > 240 - 52, "unbounded tall scoreboard has an explicit fallback, not a false fit claim");
+  assert.ok(2 * (26 + 8) + 120 <= 240 - 52, "even two maximum readouts budget the full 120-unit native board");
+  assert.ok(2 * (26 + 8) <= 240 - 160, "maximum-height right defaults still fit below the unchanged map");
 });
 
 test("full-width clipping ancestors preserve natural-width side content and edge margins", () => {
