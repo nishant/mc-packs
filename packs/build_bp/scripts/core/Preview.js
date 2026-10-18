@@ -40,7 +40,7 @@ const BIG_PREVIEW_TIER = 5;
 const WOOD_BLOCK_IDS = new Set([
     "minecraft:oak_log","minecraft:oak_planks","minecraft:oak_wood",
     "minecraft:stripped_oak_log","minecraft:stripped_oak_wood",
-    "minecraft:oak_stairs","minecraft:oak_slab","minecraft:oak_door","minecraft:oak_trapdoor",
+    "minecraft:oak_stairs","minecraft:oak_slab","minecraft:wooden_door","minecraft:trapdoor",
     "minecraft:spruce_log","minecraft:spruce_planks","minecraft:spruce_wood",
     "minecraft:stripped_spruce_log","minecraft:stripped_spruce_wood",
     "minecraft:spruce_stairs","minecraft:spruce_slab","minecraft:spruce_door","minecraft:spruce_trapdoor",
@@ -78,7 +78,7 @@ const WOOD_BLOCK_IDS = new Set([
     "minecraft:smithing_table","minecraft:cartography_table","minecraft:fletching_table",
     "minecraft:beehive","minecraft:bookshelf","minecraft:barrel",
     "minecraft:lectern","minecraft:loom","minecraft:chiseled_bookshelf",
-    "minecraft:note_block","minecraft:scaffolding",
+    "minecraft:noteblock","minecraft:scaffolding",
 ]);
 function isWood(typeId) { return WOOD_BLOCK_IDS.has(typeId); }
 const lastPreviewTarget    = new Map();
