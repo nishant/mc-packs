@@ -472,8 +472,11 @@ function cook(player, d, times, pot) {
   const n = Math.min(Math.floor(times), servingsNow(player, d), Math.max(1, CONFIG.maxBatch));
   if (n < 1) return `Missing: ${missingText(player, d.needs)}`;
   if (!takeNeeds(player, d.needs, n)) return "Your ingredients moved. Try again.";
-  cooking.add(player.id);
   const pid = player.id;
+  // The ingredients are gone now: the dish is owed until it is handed over, so a restart or a script
+  // reload mid-cook hands it over on the next join instead of losing it.
+  owe(pid, d, n);
+  cooking.add(pid);
   const ticks = Math.max(1, Math.round(CONFIG.cookSeconds * 20));
   const top = { x: pot.loc.x + 0.5, y: pot.loc.y + 1.1, z: pot.loc.z + 0.5 };
   let t = 0;
@@ -501,9 +504,11 @@ function finish(player, pid, d, n, pot, top) {
   } catch {
     // unloaded
   }
-  // The cook left and nobody is near the pot: nowhere to drop the dishes, so they wait for the next join.
-  if (!player.isValid && !isLoaded(pot)) return owe(pid, d, n);
-  deliver(player, d, n, pot);
+  // The cook left and nobody is near the pot: nowhere to drop the dishes, so they stay owed for the next join.
+  if (!player.isValid && !isLoaded(pot)) return;
+  // Only what is still owed: a cook who left and came back mid-cook already got it on joining.
+  const due = settle(pid, d, n);
+  if (due) deliver(player, d, due, pot);
 }
 
 /** Gives `n` batches of `d` (and what it gives back); drops them at the pot if the player is gone. @param {Player} player @param {Dish} d @param {number} n @param {Pot} [pot] */
@@ -536,7 +541,21 @@ function owe(pid, d, n) {
   saveJson(world, PROP_OWED, map);
 }
 
-/** Dishes that finished cooking after the player left. @param {Player} player */
+/** Takes up to `n` batches of `d` off what `pid` is owed; returns how many were owed. @param {string} pid @param {Dish} d @param {number} n */
+function settle(pid, d, n) {
+  const all = loadJson(world, PROP_OWED);
+  const mine = all && typeof all === "object" && all[pid] && typeof all[pid] === "object" ? all[pid] : undefined;
+  const have = Math.floor(Number(mine?.[d.id]) || 0);
+  const due = Math.max(0, Math.min(n, have));
+  if (!due || !mine) return 0;
+  if (have - due > 0) mine[d.id] = have - due;
+  else delete mine[d.id];
+  if (!Object.keys(mine).length) delete all[pid];
+  saveJson(world, PROP_OWED, Object.keys(all).length ? all : undefined);
+  return due;
+}
+
+/** Dishes that finished cooking after the player left (or that a restart interrupted). @param {Player} player */
 function applyOwed(player) {
   const all = loadJson(world, PROP_OWED);
   if (!all || typeof all !== "object" || !all[player.id] || typeof all[player.id] !== "object") return;
@@ -1158,6 +1177,7 @@ const HANDLED = new Set([
   "realm:ingredient_give",
   "realm:cooking_cook",
   "realm:cooking_eat",
+  "realm:cooking_owed_ping",
 ]);
 
 system.afterEvents.scriptEventReceive.subscribe(
@@ -1172,6 +1192,14 @@ system.afterEvents.scriptEventReceive.subscribe(
     }
     if (!msg || typeof msg !== "object") return;
     try {
+      if (id === "realm:cooking_owed_ping") {
+        // Tests: how many players are owed dishes and how many batches in all.
+        const all = loadJson(world, PROP_OWED);
+        const lists = all && typeof all === "object" ? Object.values(all) : [];
+        const batches = lists.reduce((sum, m) => sum + Object.values(m ?? {}).reduce((a, b) => a + (Math.floor(Number(b)) || 0), 0), 0);
+        send("realm:cooking_owed", { players: lists.length, batches });
+        return;
+      }
       switch (id) {
         case "realm:npc_talk":
           if (typeof msg.req !== "string" || !Array.isArray(msg.roles) || !msg.roles.includes(CONFIG.chefRole)) return;
