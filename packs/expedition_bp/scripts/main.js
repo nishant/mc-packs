@@ -1234,6 +1234,26 @@ function slotFits(at, slot) {
   return Math.hypot(at.x + slot * SPACING - spawn.x, at.z - spawn.z) >= CONFIG.avoidSpawn + 50;
 }
 
+/** Players who wanted to start while every dungeon was taken: told when one is free. player id -> tick they asked. @type {Map<string, number>} */
+const waiting = new Map();
+
+/** A run's slot is free again (its box reset, or it never got one): anyone waiting is told. @param {number} slot */
+function freeRun(slot) {
+  runs.delete(slot);
+  system.run(slotFreed);
+}
+
+/** Tells the players waiting for a dungeon that one is free (only those who asked in the last 30 minutes). */
+function slotFreed() {
+  if (!waiting.size || freeSlot() === undefined || get("enabled") !== true) return;
+  const now = system.currentTick;
+  for (const [id, at] of [...waiting]) {
+    waiting.delete(id);
+    const p = now - at < 36000 ? online(id) : undefined;
+    if (p && !runOf(id)) p.sendMessage("§aAn expedition dungeon is free now: /realm:expedition to start one.");
+  }
+}
+
 /** @returns {number | undefined} */
 function freeSlot() {
   const slots = Math.max(1, Math.min(3, get("slots")));
@@ -1298,7 +1318,8 @@ function cantStart(leader) {
       resetPending().catch((e) => console.warn(`[expedition] ${e}`));
       return "§eThe last expedition's dungeon is still being filled in. Try again in a minute.";
     }
-    return `§eAn expedition is in progress (${[...runs.values()].map(statusLine).join("; ")}). Try again when it's over.`;
+    waiting.set(leader.id, system.currentTick);
+    return `§eAn expedition is in progress (${[...runs.values()].map(statusLine).join("; ")}). You'll be told when a dungeon is free.`;
   }
   return "";
 }
@@ -1415,7 +1436,7 @@ async function start(leader, d, L, affixes, sigilLine, g) {
     });
     if (!leader.isValid) run.members.delete(leader.id);
     if (!run.members.size) {
-      runs.delete(slot);
+      freeRun(slot);
       refundSigil(run);
       return;
     }
@@ -1424,7 +1445,7 @@ async function start(leader, d, L, affixes, sigilLine, g) {
     console.warn(`[expedition] start: ${e}`);
     tell(run, "§cSomething went wrong preparing the expedition. Try again in a moment.");
     refundSigil(run);
-    if (run.phase === "gathering") runs.delete(slot);
+    if (run.phase === "gathering") freeRun(slot);
     else await endRun(run, "");
   }
 }
@@ -1464,7 +1485,7 @@ async function prepare(run) {
   if (!loaded) {
     tell(run, "§cThe dungeon area couldn't be loaded (the world may already have 10 ticking areas). Ask an operator to check /tickingarea list.");
     removeArea(run.slot);
-    runs.delete(run.slot);
+    freeRun(run.slot);
     refundSigil(run);
     return;
   }
@@ -1480,7 +1501,7 @@ async function prepare(run) {
     for (const p of world.getAllPlayers()) if (isOp(p)) p.sendMessage(`§c[Expeditions] Slot ${run.slot + 1}: found ${prettyId(foreign.type)} at ${where} in the dungeon area. Dungeons only replace natural underground blocks: pick another site with /realm:expedition_site.`);
     console.warn(`[expedition] slot ${run.slot}: ${foreign.type} at ${where}`);
     removeArea(run.slot);
-    runs.delete(run.slot);
+    freeRun(run.slot);
     refundSigil(run);
     return;
   }
@@ -1895,7 +1916,7 @@ async function endRun(run, why) {
   removePets(run);
   if (!wasBuilt) {
     if (wasBuilding) removeArea(run.slot);
-    runs.delete(run.slot);
+    freeRun(run.slot);
     return;
   }
   saveRun(run);
@@ -1907,7 +1928,7 @@ async function endRun(run, why) {
   } catch (e) {
     console.warn(`[expedition] reset: ${e}`);
   }
-  runs.delete(run.slot);
+  freeRun(run.slot);
   if (ok) writeJson(PROP_RUN + run.slot, undefined);
   else pending.set(run.slot, rec); // tried again every minute (resetPending), by /realm:expedition_reset and after a restart
 }
@@ -1932,6 +1953,7 @@ function resetPending() {
           writeJson(PROP_RUN + slot, undefined);
           pending.delete(slot);
           toldPending.delete(slot);
+          system.run(slotFreed);
           continue;
         }
       } catch (e) {
