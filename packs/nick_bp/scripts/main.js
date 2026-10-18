@@ -253,6 +253,7 @@ async function allNicks(player) {
   );
   if (!sure || sure.canceled || !player.isValid) return;
   if (sure.selection !== 0) return allNicks(player);
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can clear other players' nicknames."); // de-opped while the menu was open
   save(id, undefined);
   const target = world.getAllPlayers().find((p) => p.id === id);
   if (target) {
