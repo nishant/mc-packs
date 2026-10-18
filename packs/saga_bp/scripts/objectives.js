@@ -1351,6 +1351,7 @@ function isTamed(ent) {
 }
 
 world.beforeEvents.playerInteractWithEntity.subscribe((ev) => {
+  if (ev.cancel) return; // another pack already stopped this tap
   const { player, target } = ev;
   try {
     const a = actors.get(target.id);
