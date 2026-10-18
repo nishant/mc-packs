@@ -217,6 +217,12 @@ function makePlayer() {
     getBlock: () => ({}),
     spawnItem: (item, location) => mc.spawned.push({ item, location }),
     spawnEntity(type, at) { return storageEntity(this, at, type); },
+    runCommand(command) {
+      const m = /^structure load "([^"]+)" (-?\d+) (-?\d+) (-?\d+) 0_degrees none true false$/.exec(command);
+      assert.ok(m, `unexpected command ${command}`);
+      mc.server.world.structureManager.place(m[1], this, { x: +m[2], y: +m[3], z: +m[4] });
+      return { successCount: 1 };
+    },
     getEntities(query = {}) {
       return mc.entities.filter((e) => e.dimension === this && (!query.type || query.type === e.typeId));
     },

@@ -12,6 +12,18 @@ const ENTITY = "realm:stash_page_store";
 
 export class InventoryRecoveryError extends Error {}
 
+// Storage entities exist only inside one synchronous save or load, so any that spawns or loads later
+// is a stray (older versions leaked them into the Overworld from the Nether and the End).
+for (const signal of [world.afterEvents.entityLoad, world.afterEvents.entitySpawn]) {
+  signal?.subscribe(({ entity }) => {
+    try {
+      if (entity.isValid && entity.typeId === ENTITY) removeStage(entity);
+    } catch {
+      // already gone
+    }
+  });
+}
+
 /** @param {Player} player @returns {State} */
 export function stateOf(player) {
   const raw = player.getDynamicProperty(STATE);
@@ -48,15 +60,57 @@ function signature(item) {
   return JSON.stringify([item.typeId, item.amount, item.nameTag, item.getLore(), item.keepOnDeath, item.lockMode, item.getCanPlaceOn(), item.getCanDestroy(), damage, ench, color, props]);
 }
 
-/** @param {Player} player */
+/** Heights above the player tried for the staging spot, then the same a few blocks to the side. */
+const STAGE_UP = [24, 16, 32, 8];
+const STAGE_SIDE = [0, 3, -3];
+
+/**
+ * Any storage entity found outside a synchronous save or load is a stray: the structure is the only
+ * durable copy, so removing a stray never loses an item (remove() never drops its inventory).
+ * @param {import("@minecraft/server").Entity[]} entities @returns {boolean} true when only strays were there
+ */
+function clearStrays(entities) {
+  if (entities.some((e) => e.typeId !== ENTITY)) return false;
+  for (const e of entities) removeStage(e);
+  return true;
+}
+
+/**
+ * A loaded, empty block near the player to stage the storage entity in. Busy spots (a bat, a dropped
+ * item) are skipped for the next candidate instead of failing the whole save.
+ * @param {Player} player
+ */
 function stageAt(player) {
   const dim = player.dimension;
-  const y = Math.max(dim.heightRange.min + 2, Math.min(dim.heightRange.max - 3, Math.floor(player.location.y) + 24));
-  const at = { x: Math.floor(player.location.x), y, z: Math.floor(player.location.z) };
-  if (!dim.getBlock(at)) throw new Error("storage staging chunk is not loaded");
-  // Do not accidentally snapshot another entity (players included).
-  if (dim.getEntities({ location: { x: at.x + 0.5, y: at.y + 0.5, z: at.z + 0.5 }, maxDistance: 2 }).length) throw new Error("storage staging space is occupied");
-  return { dim, at };
+  const { min, max } = dim.heightRange;
+  let loaded = false;
+  for (const up of STAGE_UP) {
+    const y = Math.max(min + 2, Math.min(max - 3, Math.floor(player.location.y) + up));
+    for (const side of STAGE_SIDE) {
+      const at = { x: Math.floor(player.location.x) + side, y, z: Math.floor(player.location.z) };
+      try {
+        if (!dim.getBlock(at)) continue;
+      } catch {
+        continue;
+      }
+      loaded = true;
+      // Do not accidentally snapshot another entity (players included).
+      const near = dim.getEntities({ location: { x: at.x + 0.5, y: at.y + 0.5, z: at.z + 0.5 }, maxDistance: 2 });
+      if (!near.length || clearStrays(near)) return { dim, at };
+    }
+  }
+  throw new Error(loaded ? "storage staging space is occupied" : "storage staging chunk is not loaded");
+}
+
+/**
+ * world.structureManager.place() puts a structure's entities into the wrong dimension while a player is
+ * in the Nether or the End (BDS 1.26: they land in the Overworld at the same coordinates). The
+ * structure command places them where it is told.
+ * @param {string} id @param {import("@minecraft/server").Dimension} dim @param {{ x: number, y: number, z: number }} at
+ */
+function placeStage(id, dim, at) {
+  const result = dim.runCommand(`structure load "${id}" ${at.x} ${at.y} ${at.z} 0_degrees none true false`);
+  if (!result.successCount) throw new Error("native page snapshot could not be placed");
 }
 
 /** @param {import("@minecraft/server").Entity} entity */
@@ -80,7 +134,7 @@ export function loadSnapshot(player, ref) {
   /** @type {import("@minecraft/server").Entity[]} */
   let placed = [];
   try {
-    world.structureManager.place(ref.id, dim, at, { includeBlocks: false, includeEntities: true });
+    placeStage(ref.id, dim, at);
     placed = dim.getEntities({ type: ENTITY, location: { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, maxDistance: 2 });
     if (placed.length !== 1) throw new Error("native page snapshot did not restore exactly one storage entity");
     const box = inventory(placed[0]);
