@@ -102,6 +102,24 @@ function groundAt(dim, x, z) {
   }
 }
 
+// Town news: riding a tornado out the top is Townsfolk gossip, one rider per tornado and at most one piece per
+// in-game hour from this pack.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  system.sendScriptEvent("realm:gossip", JSON.stringify(msg));
+  return true;
+}
+
 /** @param {Player} player */
 function sendJournal(player) {
   system.sendScriptEvent("realm:journal", JSON.stringify({ player: player.id, page: "weather", entry: "tornado", label: "Tornado" }));
@@ -585,6 +603,7 @@ function launchOutTop(p, angle, t, top) {
 
   p.applyKnockback({ x: outX * horiz, z: outZ * horiz }, vert);
   p.playSound("mob.breeze.shoot", { location: p.location, volume: 1.2, pitch: 0.75 });
+  gossip(`tornado:${t.endsAt}`, { kind: "tornado", player: p.id, name: p.name });
   try {
     molang().setFloat("variable.radius", 4.5);
     p.spawnParticle(DEBRIS, p.location, molang());
