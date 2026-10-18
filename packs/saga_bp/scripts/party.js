@@ -119,12 +119,11 @@ export function frontier(saga, player) {
 
 /**
  * How an objective's progress is shared in a party: "add" (everyone's counts add up), "max" (time spent: the
- * furthest along), "done" (once one member did it, it's done for all), or undefined (each their own: items in
- * your own inventory).
+ * furthest along), or "done" (once one member did it, it's done for all: items to have on you, too).
  * @param {Objective} obj
  */
 function modeOf(obj) {
-  if (obj.type === "collect") return undefined;
+  if (obj.type === "collect") return "done";
   // Timed steps (each member's own clock) and races: only a finished one is shared.
   if (obj.race || obj.within) return "done";
   // Time spent, and distance ridden (two in one boat both ride it): whoever is furthest along.

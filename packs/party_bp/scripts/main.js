@@ -287,14 +287,26 @@ function status(viewer, id) {
 
 /** player id -> tick until which another pack's note (`realm:actionbar`) holds the bar. */
 const barHeld = new Map();
+/** Players who see the Coordinates HUD (its realm:hud_state), and when it last said so: their party line goes under it. */
+let hudPlayers = new Set();
+let hudHeard = -Infinity;
+/** The Coordinates HUD repeats its state every 5 seconds: after 10 without one, it's gone. */
+const HUD_STALE_TICKS = 200;
 
 // Other packs' notes and steady lines (an expedition's run line, the Elytra HUD) hold the bar: the
 // party line waits, so the two don't take turns.
 system.afterEvents.scriptEventReceive.subscribe(
   ({ id, message }) => {
-    if (id !== "realm:actionbar") return;
+    if (id !== "realm:actionbar" && id !== "realm:hud_state") return;
     try {
       const m = JSON.parse(message);
+      if (id === "realm:hud_state") {
+        if (m && Array.isArray(m.players)) {
+          hudPlayers = new Set(m.players.map(String));
+          hudHeard = system.currentTick;
+        }
+        return;
+      }
       if (!m || typeof m.player !== "string" || m.from === "party_bp") return;
       // The longest hold wins: a short request doesn't cut a long note short.
       const until = system.currentTick + Math.min(200, Math.max(0, Number(m.ticks) || 0));
@@ -326,12 +338,19 @@ system.runInterval(() => {
         const w = where(player, mate);
         if (w.dist <= get("hudRange")) near.push({ mate, w });
       }
-      if (!near.length || (barHeld.get(player.id) ?? 0) > system.currentTick) continue;
+      if (!near.length) continue;
       near.sort((a, b) => a.w.dist - b.w.dist);
       const text = near
         .slice(0, Math.max(1, get("hudMates")))
         .map(({ mate, w }) => `§d${mate.name} §c${health(mate)}hp §f${w.text}`)
         .join(" §7| ");
+      // The Coordinates HUD is on for this player: the party line goes under it (realm:hud_line), as Stats' does,
+      // so the two don't fight over the bar (it waits for notes itself).
+      if (hudPlayers.has(player.id) && system.currentTick - hudHeard < HUD_STALE_TICKS) {
+        system.sendScriptEvent("realm:hud_line", JSON.stringify({ player: player.id, key: "party", text, ticks: HUD_TICKS + 20 }));
+        continue;
+      }
+      if ((barHeld.get(player.id) ?? 0) > system.currentTick) continue;
       // Ask the Coordinates HUD, if installed, to step aside until the next update. `background`: a steady
       // line, so other packs' steady lines (an expedition's) needn't wait for it.
       system.sendScriptEvent("realm:actionbar", JSON.stringify({ player: player.id, ticks: HUD_TICKS + 10, from: "party_bp", background: true }));

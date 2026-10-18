@@ -1,7 +1,7 @@
 // Counting down: the story tracker's Side HUD box is a mini quest log whose steps count down, Mob Health says "HP" and
 // "defeated", and a Daily Quests kill note counts down too. Run with
 //   node tools/test-bds/run.mjs --quiet --only saga_bp,mobhp_bp,quests_bp --scenario tools/test-bds/examples/saga-countdown.js --timeout 300
-// Checks, for a player on "The Drowned Choir" (defeat 12 drowned, fish 5) with the tracker in its default box (right4):
+// Checks, for a player on "The Drowned Choir" (defeat 12 drowned, fish 5) with the tracker in its quest box (next to the default Right 4):
 // 1. One drowned down: within 2 seconds the box reads "Drowned Bell" on its first line, "Defeat 11 more drowned", and
 //    the other open step in gray, "- Catch 5 things with a fishing rod".
 // 2. Six down: "Defeat 6 more drowned", and no quarter note ("6/12") written over the box.
@@ -22,7 +22,7 @@ export default async function (t) {
   const send = (id, msg) => sys.sendScriptEvent(id, JSON.stringify(msg));
   /** What a pack wrote to Ann's boxes since a tick. */
   const wrote = (from, since, slot) => sides.filter((s) => s.tick >= since && s.m.player === ann.id && s.m.from === from && (!slot || s.m.slot === slot)).map((s) => String(s.m.text));
-  const tracker = (since) => wrote("saga", since, "right4");
+  const tracker = (since) => wrote("saga", since, "quest"); // the quest box, next to Right 4
 
   // Start "The Drowned Choir" (the scenario plays Warden Reyes: realm:npc_choose, no Townsfolk pack).
   send("realm:saga_debug", { player: "Ann", action: "jump", story: "drowned_bell", chapter: "choir" });
@@ -53,8 +53,9 @@ export default async function (t) {
   const box1 = await t.waitUntil(() => tracker(since).find((s) => s.includes("Defeat 11 more drowned")), { timeout: 40, message: `tracker box counts down after 1 kill; wrote ${JSON.stringify(tracker(since))}` });
   t.log(`1. box after 1 kill: ${JSON.stringify(box1)}`);
   const lines = box1.split("\n");
-  t.check(lines[0].replace(/§./g, "") === "Drowned Bell" && lines[0].startsWith("§b"), `first line is the story's short name in aqua: ${JSON.stringify(lines[0])}`);
-  t.check(lines.includes("§7- Catch 5 things with a fishing rod"), `gray line for the fishing step: ${JSON.stringify(lines)}`);
+  t.check(lines[0].replace(/§./g, "") === "Drowned Bell: The Drowned Choir" && lines[0].startsWith("§s§q§4§b"), `first line is the story's short name in aqua and the chapter: ${JSON.stringify(lines[0])}`);
+  t.check(lines.includes("§7Steps, in any order:"), `says the steps go in any order: ${JSON.stringify(lines)}`);
+  t.check(lines.includes("§f[ ] Catch 5 things with a fishing rod"), `a checklist row for the fishing step: ${JSON.stringify(lines)}`);
 
   // --- 2. Six drowned: no quarter note over the box ---------------------------------------------------------
   const before6 = t.tick;
