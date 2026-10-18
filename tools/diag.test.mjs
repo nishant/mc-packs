@@ -96,6 +96,8 @@ test("two packs in one script context: keys, callbacks, profiling and forget sta
   });
   await loadCopy(dir, "b_bp", "2.0.0");
   world.setDynamicProperty("b:cfg", "{}");
+  let bEvents = 0;
+  system.afterEvents.scriptEventReceive.subscribe(() => bEvents++, { namespaces: ["realm"] }); // carries the protocol
   let bRuns = 0;
   system.runInterval(() => {
     bRuns++;
@@ -103,6 +105,7 @@ test("two packs in one script context: keys, callbacks, profiling and forget sta
   }, 1);
 
   mc.step(1); // module evaluation is over
+  assert.equal(system.afterEvents.scriptEventReceive.subs.length, 1, "no listener of diag's own: b's carries the protocol");
   for (const cb of world.afterEvents.playerJoin.subs) cb({});
   mc.step(2);
   assert.ok(world.props.has("a:later"));
@@ -113,6 +116,7 @@ test("two packs in one script context: keys, callbacks, profiling and forget sta
   const a = list.find((p) => p.pack === "a_bp");
   const b = list.find((p) => p.pack === "b_bp");
   assert.equal(list.length, 2, "one pong per pack");
+  assert.ok(bEvents >= 1, "b's listener still gets the events");
   assert.equal(a.version, "1.2.3");
   assert.equal(a.name, "A_BP");
   assert.equal(a.props, 3, "a:old, a:join, a:later");
@@ -182,4 +186,5 @@ test("a pack alone in its context owns its whole storage and clears all of it", 
   world.setDynamicProperty("solo:x", "again");
   assert.equal(world.props.size, 0, "writes are ignored until the next reload");
   world.setDynamicProperty("solo:x", undefined); // a delete is harmless
+  assert.equal(system.afterEvents.scriptEventReceive.subs.length, 1, "with no pack listener, diag listens itself");
 });

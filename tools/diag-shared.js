@@ -32,6 +32,8 @@
 //                                    (its caches in memory would write old data back), and replies
 //                                    realm:diag_forgot {id, pack, ok, removed, bytes} or {id, pack, ok: false,
 //                                    error}. Scoreboards, tags and data saved on players are not touched.
+// No listener of its own: the first realm: scriptEventReceive listener a pack subscribes carries the protocol
+// (diag.js subscribes one itself only if no pack did by the first tick, or after that one is unsubscribed).
 // Time is Date.now() (Bedrock has no finer clock): one call reads 0 or 1 ms, sums over many calls are fair.
 // Time after an `await` inside an async callback is not counted (it runs outside the wrapper).
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
@@ -49,6 +51,7 @@ const MAX_TICKS = 1200;
  * @typedef {{
  *   api: number, on: boolean, multi: boolean, track: boolean, cur: Rec | null, packs: Map<string, Rec>,
  *   keyOwner: Map<string, Rec>, prefixOwner: Map<string, Rec | null>, win: Win | null,
+ *   carrier: Function | null, own: Function | null, ser: { sig: any, sub: Function, unsub: Function } | null,
  *   orig: { run: Function, runTimeout: Function, get: Function, set: Function, ids: Function, clear: Function }
  * }} State
  */
@@ -70,15 +73,9 @@ function install() {
   /** @type {State} */
   const st = {
     api: API, on: false, multi: false, track: false, cur: null, packs: new Map(), keyOwner: new Map(), prefixOwner: new Map(), win: null,
+    carrier: null, own: null, ser: null,
     orig: { run: sp.run, runTimeout: sp.runTimeout, get: wp.getDynamicProperty, set: wp.setDynamicProperty, ids: wp.getDynamicPropertyIds, clear: wp.clearDynamicProperties },
   };
-  // Subscribed before the signals are wrapped, so it is never timed. One listener answers for every pack here.
-  system.afterEvents.scriptEventReceive.subscribe(
-    function diagListener(ev) {
-      if (ev.id === "realm:diag_ping" || ev.id === "realm:diag_forget") handle(st, ev.id, ev.message);
-    },
-    { namespaces: ["realm"] }
-  );
   try {
     patchSystem(st);
     for (const [owner, prefix] of /** @type {[any, string][]} */ ([[world.beforeEvents, "world.before"], [world.afterEvents, "world.after"], [system.beforeEvents, "system.before"], [system.afterEvents, "system.after"]])) patchSignals(st, owner, prefix);
@@ -88,9 +85,12 @@ function install() {
     console.warn(`[diag] could not install: ${e}`);
   }
   // Module evaluation is over by the first tick: from then on only a running callback says whose code runs.
+  // By then a pack has normally subscribed a realm: listener that carries the protocol (see patchSignals);
+  // if none did, diag.js listens itself.
   if (typeof st.orig.run === "function") {
     st.orig.run.call(system, () => {
       if (st.multi) st.cur = null;
+      if (!st.carrier) listen(st);
     });
   }
   return st;
@@ -235,22 +235,58 @@ function patchSignals(st, owner_, prefix) {
     if (!sig || typeof sig.subscribe !== "function") continue;
     const sub = sig.subscribe;
     const unsub = sig.unsubscribe;
+    const ser = prefix === "system.after" && name === "scriptEventReceive";
+    if (ser) st.ser = { sig, sub, unsub };
     try {
       sig.subscribe = function (/** @type {Function} */ cb, /** @type {any[]} */ ...rest) {
         const where = site();
-        const w = wrap(st, cb, owner(st, true, where), label(`${prefix}.${name}`, cb, where));
+        let w = wrap(st, cb, owner(st, true, where), label(`${prefix}.${name}`, cb, where));
+        // The first realm: listener a pack subscribes also carries the diag protocol: one id comparison in a
+        // call the game makes anyway, instead of one more listener per pack that every realm: event wakes.
+        if (ser && !st.carrier && typeof cb === "function" && carries(rest[0])) {
+          const base = w;
+          /** @this {any} @param {any} ev */
+          w = function (ev) {
+            const id = ev.id;
+            if (id === "realm:diag_ping" || id === "realm:diag_forget") handle(st, id, ev.message);
+            return base.call(this, ev);
+          };
+          if (inner) inner.set(w, cb);
+          st.carrier = cb;
+          if (st.own && typeof unsub === "function") {
+            unsub.call(sig, st.own);
+            st.own = null;
+          }
+        }
         if (typeof cb === "function") wrapped.set(cb, w);
         return sub.call(this, w, ...rest);
       };
       if (typeof unsub === "function") {
         sig.unsubscribe = function (/** @type {Function} */ cb, /** @type {any[]} */ ...rest) {
-          return unsub.call(this, (cb && wrapped.get(cb)) || cb, ...rest);
+          const r = unsub.call(this, (cb && wrapped.get(cb)) || cb, ...rest);
+          if (ser && cb && cb === st.carrier) {
+            st.carrier = null;
+            listen(st);
+          }
+          return r;
         };
       }
     } catch (e) {
       console.warn(`[diag] could not wrap ${prefix}.${name}: ${e}`);
     }
   }
+}
+
+/** Whether a scriptEventReceive subscription's options let realm: events through. @param {any} opts */
+const carries = (opts) => !opts || !Array.isArray(opts.namespaces) || opts.namespaces.includes("realm");
+
+/** diag.js's own listener, when no pack listener carries the protocol. Never timed. @param {State} st */
+function listen(st) {
+  if (st.own || !st.ser) return;
+  st.own = function diagListener(/** @type {any} */ ev) {
+    if (ev.id === "realm:diag_ping" || ev.id === "realm:diag_forget") handle(st, ev.id, ev.message);
+  };
+  st.ser.sub.call(st.ser.sig, st.own, { namespaces: ["realm"] });
 }
 
 /** @param {State} st */
