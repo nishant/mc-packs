@@ -13,6 +13,7 @@ const SPARK = "realm:sky_spark";
 const FRAME_TICKS = 2; // the funnel is redrawn and players are spun every 2 ticks
 const FRAMES_PER_SECOND = 20 / FRAME_TICKS;
 const NEAR = 64; // beyond this, players get half the rings
+const SHARED_FROM = 2; // with this many players within NEAR, the funnel is drawn once for all of them
 const REDRAW_FRAMES = 5; // each ring lives ~1.05-1.55s and every ring is redrawn every 5 frames (0.5s), so there are no gaps
 const WIND_RANGE = 48;
 const RUMBLE_RANGE = 100;
@@ -243,7 +244,7 @@ function frame() {
     t.frame++;
     move(t);
     if (t.frame % FRAMES_PER_SECOND === 0) everySecond(t, dim);
-    draw(t);
+    draw(t, dim);
     pull(t, dim);
   } catch (e) {
     console.warn(`[tornado] ${e}`);
@@ -375,50 +376,74 @@ function funnelAxis(t, f, top) {
   };
 }
 
-/** The funnel, for each player near it (Player.spawnParticle: each player gets only their own). @param {Tornado} t */
-function draw(t) {
+/**
+ * The funnel. With one player near (within NEAR) each viewer gets their own copy (Player.spawnParticle), half the rings
+ * beyond NEAR. With more players near it, it's drawn once for all of them (Dimension.spawnParticle, the same rings), so
+ * a crowd watching costs no more than one player: only viewers beyond NEAR still get their own, lighter copy.
+ * @param {Tornado} t @param {Dimension} dim
+ */
+function draw(t, dim) {
   const density = get("density");
   const top = Math.max(12, Math.min(CONFIG.height, 318 - t.y));
-  for (const { player, dist } of t.viewers) {
-    if (!player.isValid) continue;
-    const rings = Math.max(5, Math.round(get("rings") * density * (dist > NEAR ? 0.5 : 1)));
-    const slice = Math.ceil(rings / REDRAW_FRAMES);
+  let near = 0;
+  for (const v of t.viewers) if (v.dist <= NEAR && v.player.isValid) near++;
+  const shared = near >= SHARED_FROM;
+  if (shared) {
     try {
-      for (let k = 0; k < slice; k++) {
-        const i = (t.frame * slice + k) % rings;
-        const f = (i + Math.random() * 0.7) / rings; // 0 at the ground, 1 at the top
-        const axis = funnelAxis(t, f, top);
-        molang().setFloat("variable.radius", funnelRadius(f));
-        molang().setFloat("variable.spin", 8.0 - 4.5 * f);
-        molang().setFloat("variable.height", f);
-        player.spawnParticle(RING, axis, molang());
-      }
-      // Keep the ground contact dust whirl and upper storm collar anchored without excess emitters
-      if (t.frame % 2 === 0) {
-        molang().setFloat("variable.radius", 3.2);
-        molang().setFloat("variable.spin", 8.8);
-        molang().setFloat("variable.height", 0.02);
-        player.spawnParticle(RING, { x: t.x, y: t.y + 0.35, z: t.z }, molang());
-      } else {
-        const topAxis = funnelAxis(t, 0.94, top);
-        molang().setFloat("variable.radius", funnelRadius(0.94));
-        molang().setFloat("variable.spin", 3.5);
-        molang().setFloat("variable.height", 0.94);
-        player.spawnParticle(RING, topAxis, molang());
-      }
-      if (dist <= NEAR && t.frame % 2 === 0) {
-        molang().setFloat("variable.radius", rand(1.8, 3.8));
-        player.spawnParticle(DEBRIS, { x: t.x + rand(-1.2, 1.2), y: t.y + rand(0.2, 2.0), z: t.z + rand(-1.2, 1.2) }, molang());
-      }
-      if (dist <= NEAR && t.frame % 4 === 0) {
-        const collarAxis = funnelAxis(t, rand(0.78, 0.96), top);
-        const ang = Math.random() * Math.PI * 2;
-        const r = rand(1.5, 5.0);
-        player.spawnParticle(SPARK, { x: collarAxis.x + Math.cos(ang) * r, y: collarAxis.y, z: collarAxis.z + Math.sin(ang) * r });
-      }
+      drawSlice(t, top, Math.max(5, Math.round(get("rings") * density)), true, (id, at, vars) => dim.spawnParticle(id, at, vars));
+    } catch {
+      // An unloaded chunk or the edge of the world: skip this frame.
+    }
+  }
+  for (const { player, dist } of t.viewers) {
+    if (!player.isValid || (shared && dist <= NEAR)) continue;
+    const rings = Math.max(5, Math.round(get("rings") * density * (dist > NEAR ? 0.5 : 1)));
+    try {
+      drawSlice(t, top, rings, dist <= NEAR, (id, at, vars) => player.spawnParticle(id, at, vars));
     } catch {
       // An unloaded chunk or the edge of the world: skip this player for this frame.
     }
+  }
+}
+
+/**
+ * One frame's slice of the funnel: a fifth of the rings, the ground skirt or the storm collar, and up close the debris
+ * and sparks. @param {Tornado} t @param {number} top @param {number} rings @param {boolean} close
+ * @param {(id: string, at: Vector3, vars?: MolangVariableMap) => void} spawn
+ */
+function drawSlice(t, top, rings, close, spawn) {
+  const slice = Math.ceil(rings / REDRAW_FRAMES);
+  for (let k = 0; k < slice; k++) {
+    const i = (t.frame * slice + k) % rings;
+    const f = (i + Math.random() * 0.7) / rings; // 0 at the ground, 1 at the top
+    const axis = funnelAxis(t, f, top);
+    molang().setFloat("variable.radius", funnelRadius(f));
+    molang().setFloat("variable.spin", 8.0 - 4.5 * f);
+    molang().setFloat("variable.height", f);
+    spawn(RING, axis, molang());
+  }
+  // Keep the ground contact dust whirl and upper storm collar anchored without excess emitters
+  if (t.frame % 2 === 0) {
+    molang().setFloat("variable.radius", 3.2);
+    molang().setFloat("variable.spin", 8.8);
+    molang().setFloat("variable.height", 0.02);
+    spawn(RING, { x: t.x, y: t.y + 0.35, z: t.z }, molang());
+  } else {
+    const topAxis = funnelAxis(t, 0.94, top);
+    molang().setFloat("variable.radius", funnelRadius(0.94));
+    molang().setFloat("variable.spin", 3.5);
+    molang().setFloat("variable.height", 0.94);
+    spawn(RING, topAxis, molang());
+  }
+  if (close && t.frame % 2 === 0) {
+    molang().setFloat("variable.radius", rand(1.8, 3.8));
+    spawn(DEBRIS, { x: t.x + rand(-1.2, 1.2), y: t.y + rand(0.2, 2.0), z: t.z + rand(-1.2, 1.2) }, molang());
+  }
+  if (close && t.frame % 4 === 0) {
+    const collarAxis = funnelAxis(t, rand(0.78, 0.96), top);
+    const ang = Math.random() * Math.PI * 2;
+    const r = rand(1.5, 5.0);
+    spawn(SPARK, { x: collarAxis.x + Math.cos(ang) * r, y: collarAxis.y, z: collarAxis.z + Math.sin(ang) * r });
   }
 }
 
