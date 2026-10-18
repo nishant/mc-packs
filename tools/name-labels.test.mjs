@@ -468,3 +468,27 @@ test("the townsfolk idle loop skips entity and block work beyond its active rang
   assert.equal(state.missing, 0);
   assert.equal(state.viewers, undefined);
 });
+
+test("a spawn that hands back another entity (repeating entity ids) is never tagged or named as a helper", () => {
+  const { dimensions, target, viewer } = probeWorld();
+  const labels = createNameLabels({ labelType: "realm:npc_label", ownerTag: "realm:npc_owner:npc_bp", labelTag: "realm:npc_label", labelIdTag: "realm:npc_label_id:" });
+  // An existing dropped item comes back from every spawnEntity call.
+  const item = { id: "item-1", typeId: "minecraft:item", nameTag: "", isValid: true, tags: [], location: { x: 0, y: 6, z: 0 }, dimension: dimensions[0],
+    addTag(tag) { this.tags.push(tag); }, teleport(at) { this.location = { ...at }; }, remove() { this.isValid = false; } };
+  const origSpawn = dimensions[0].spawnEntity.bind(dimensions[0]);
+  dimensions[0].spawnEntity = () => item;
+  const origWarn = console.warn;
+  console.warn = () => {};
+  try {
+    labels.sync([{ id: "ida", entity: target, name: "§eIda §7the Blacksmith" }], [viewer(5)], dimensions);
+  } finally {
+    console.warn = origWarn;
+  }
+  assert.deepEqual(item.tags, [], "the item got no helper tags");
+  assert.equal(item.nameTag, "", "the item was not named");
+  assert.equal(item.isValid, true, "the item is not ours to remove");
+  assert.equal(target.nameTag, "§eIda §7the Blacksmith", "the target keeps its own name while no helper exists");
+  dimensions[0].spawnEntity = origSpawn;
+  labels.sync([{ id: "ida", entity: target, name: "§eIda §7the Blacksmith" }], [viewer(5)], dimensions);
+  assert.equal(dimensions[0].getEntities({ type: "realm:npc_label" }).length, 1, "a real helper once spawning works");
+});

@@ -13,7 +13,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { createNameLabels, isSuppressedName, SUPPRESSED_NAME } from "./name-labels.js";
+import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
 
 // A visit is one saved object: where the caravan is, until when, its traders' entity ids and what's left
@@ -498,7 +498,7 @@ function updateLabels() {
 
 /** @param {Visit} vis @param {number} i @param {Dimension} dim @param {Vector3} at */
 function spawnTrader(vis, i, dim, at) {
-  const entity = fromSkin(vis, i, dim, at) ?? dim.spawnEntity(NPC_TYPE, at);
+  const entity = fromSkin(vis, i, dim, at) ?? spawnChecked(dim, NPC_TYPE, at);
   dressTrader(entity, i, vis);
   vis.traders[i].eid = entity.id;
   saveVisit();
@@ -726,7 +726,7 @@ function keepCaravan(vis) {
       const at = standable(dim, { x: vis.spot.x + (n % 2 ? 2 : -2), y: vis.spot.y, z: vis.spot.z - 3 - n }) ?? { x: vis.spot.x, y: vis.spot.y, z: vis.spot.z };
       for (const type of LLAMA_TYPES) {
         try {
-          const llama = dim.spawnEntity(type, at);
+          const llama = spawnChecked(dim, type, at);
           for (const tag of [TAG, VISIT_TAG + vis.v, LLAMA_TAG]) llama.addTag(tag);
           llama.nameTag = "§7Caravan Llama"; // named mobs never despawn
           ids.push(llama.id);

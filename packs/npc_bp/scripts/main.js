@@ -16,7 +16,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { CALENDAR, FESTIVAL_LINES, GOSSIP, HEARTH, LEVEL_NAMES, REACTIONS } from "./hearth.js";
-import { createNameLabels, isSuppressedName, SUPPRESSED_NAME } from "./name-labels.js";
+import { createNameLabels, isSuppressedName, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get } from "./settings.js";
 
 // Townsfolk are vanilla minecraft:npc entities (invulnerable, they don't wander, and operators can pick one of
@@ -467,7 +467,7 @@ function watchName(entity, t) {
 function spawn(rec, t, at) {
   const dim = world.getDimension(rec.dim);
   if (liftSaved(rec)) at = anchorOf(rec);
-  const entity = fromSkin(rec, dim, at) ?? dim.spawnEntity(NPC_TYPE, at);
+  const entity = fromSkin(rec, dim, at) ?? spawnChecked(dim, NPC_TYPE, at);
   dress(entity, t);
   entity.teleport(at, { rotation: { x: 0, y: rec.yaw } });
   rec.eid = entity.id;

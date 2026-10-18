@@ -55,6 +55,22 @@ export function matchesHiddenMarker(actual, marker, canonicalName) {
   return false;
 }
 
+/**
+ * Spawns an entity and checks what came back: in a world whose entity ids repeat (an old level.dat put back),
+ * `spawnEntity` can hand back an entity that already exists (a dropped item, someone's pet), and tagging or naming
+ * that one would take it over. Spawns again (the next id is usually free) and throws if it never gets the type.
+ * The wrong entity is left alone: it isn't ours to remove.
+ * @param {Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at @param {any} [opts]
+ * @returns {Entity}
+ */
+export function spawnChecked(dim, type, at, opts) {
+  for (let k = 0; k < 4; k++) {
+    const e = opts ? dim.spawnEntity(/** @type {any} */ (type), at, opts) : dim.spawnEntity(/** @type {any} */ (type), at);
+    if (e && e.isValid && e.typeId === type) return e;
+  }
+  throw new Error(`spawnEntity(${type}) kept returning another entity`);
+}
+
 const NEAR_RESEND_RANGE = 20;
 const NEAR_RESEND_STEPS = [1, 3]; // sync steps after a new viewer enters within 20 blocks (~1 s, then ~3 s more)
 
@@ -241,8 +257,7 @@ export function createNameLabels(opts) {
           entry = undefined;
         }
         if (!entry) {
-          const helper = dim.spawnEntity(/** @type {any} */ (labelType), anchor);
-          if (!helper || !helper.isValid) throw new Error(`helper ${labelType} invalid on spawn`);
+          const helper = spawnChecked(dim, labelType, anchor);
           if (ownerTag) helper.addTag(ownerTag);
           if (labelTag) helper.addTag(labelTag);
           if (labelIdTag) helper.addTag(labelIdTag + key);
