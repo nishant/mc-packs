@@ -36,8 +36,6 @@ export default async function (t) {
   t.check(b1.nick_bp.unownedProps === 0, `no entry is left without an owner (${b1.nick_bp.unownedProps})`);
 
   send("realm:diag_ping", { id: "b2", ticks: 60 });
-  await t.wait(2);
-  for (let i = 0; i < 60; i++) t.cmd(op, "/realm:nick"); // registered in startup, after every pack's modules ran
   const b2 = await answers("b2", 3, 140);
   const keys = (/** @type {string} */ p) => (b2[p].top ?? []).map((/** @type {any} */ x) => x.k).join(" | ");
   t.log(`admin: ${keys("admin_bp")}`);
@@ -45,8 +43,16 @@ export default async function (t) {
   t.log(`probe: ${keys("probe_bp")}`);
   t.check(/runInterval\(10\) refreshAll/.test(keys("nick_bp")), "Nicknames' interval is counted as Nicknames'");
   t.check(!/refreshAll/.test(keys("admin_bp")) && !/refreshAll/.test(keys("probe_bp")), "and not as anyone else's");
-  t.check(!/command realm:nick/.test(keys("probe_bp")) && !/command realm:nick/.test(keys("admin_bp")), "Nicknames' command is not counted as the last pack's (the probe's)");
-  t.check(b2.nick_bp.calls >= 60, `Nicknames' command calls are its own (${b2.nick_bp.calls} calls)`);
+
+  // Commands are registered in startup, after every pack's modules ran: still each pack's own, not the last one's.
+  send("realm:diag_ping", { id: "c1", ticks: 30 });
+  await t.wait(2);
+  for (let i = 0; i < 60; i++) t.cmd(op, "/realm:nick");
+  const c1 = await answers("c1", 3, 100);
+  const ckeys = (/** @type {string} */ p) => (c1[p].top ?? []).map((/** @type {any} */ x) => x.k).join(" | ");
+  t.log(`commands: nick ${ckeys("nick_bp")}; probe ${ckeys("probe_bp")}`);
+  t.check(/command realm:nick/.test(ckeys("nick_bp")), "Nicknames' command is counted as Nicknames'");
+  t.check(!/command realm:nick/.test(ckeys("probe_bp")) && !/command realm:nick/.test(ckeys("admin_bp")), "and not as the last pack's (the probe's)");
   t.check(/runInterval\(2\)/.test(keys("probe_bp")) && b2.probe_bp.calls >= 25, `an interval started after an await is the probe's (${b2.probe_bp.calls} calls)`);
   t.check(b2.probe_bp.calls >= 40, `so is a runTimeout loop that hands itself over from its own callback (${b2.probe_bp.calls} calls: about 30 + 20)`);
 
