@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { world, system, Player } from "@minecraft/server";
-import { heldItem, isTutorialBook } from "../utils/Items.js";
+import { heldItemCached, isTutorialBook } from "../utils/Items.js";
 import { GUIDE_SPREADS, GUIDE_CHAPTER_SPREADS, GUIDE_LANGUAGES } from "./GuideBookData.js";
 import { getBookLanguage, hasBookLanguage } from "./Settings.js";
 import { hasPicker, isPickerPinned, openPicker, closePicker, removePicker, pickerClick } from "./LanguagePicker.js";
@@ -221,7 +221,7 @@ export function startGuideBook() {
         for (const player of world.getAllPlayers()) {
             online.add(player.id);
             try {
-                const holding = isTutorialBook(heldItem(player));
+                const holding = isTutorialBook(heldItemCached(player, 5));
                 const book    = books.get(player.id);
 
                 if (!holding) {

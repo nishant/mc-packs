@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ItemStack } from "@minecraft/server";
+import { ItemStack, system, world } from "@minecraft/server";
 
 export const BOOK_ID          = "eb:building_book";
 export const LEGACY_BOOK_ID   = "realm:building_book";
@@ -33,6 +33,28 @@ export function heldItem(player) {
             ?.container?.getItem(player.selectedSlotIndex) ?? null;
     } catch { return null; }
 }
+
+/** player id -> the last read of the selected slot: { tick, slot, item } */
+const heldCache = new Map();
+/**
+ * The item in the player's selected slot, shared by the per-tick loops (preview, double-sneak, tutorial book) so the
+ * inventory is read once a tick at most. With maxAge, a read up to that many ticks old is reused unless it found a
+ * building or tutorial book (those stay fresh every tick); a hotbar slot change always reads again.
+ */
+export function heldItemCached(player, maxAge = 0) {
+    const now = system.currentTick;
+    const c = heldCache.get(player.id);
+    if (c && c.slot === player.selectedSlotIndex
+        && (c.tick === now || (now - c.tick <= maxAge && !isBook(c.item) && !isTutorialBook(c.item)))) return c.item;
+    const item = heldItem(player);
+    heldCache.set(player.id, { tick: now, slot: player.selectedSlotIndex, item });
+    return item;
+}
+try {
+    world.afterEvents.playerHotbarSelectedSlotChange.subscribe(({ player }) => heldCache.delete(player.id));
+    world.afterEvents.playerInventoryItemChange.subscribe(({ player }) => heldCache.delete(player.id));
+    world.afterEvents.playerLeave.subscribe(({ playerId }) => heldCache.delete(playerId));
+} catch {}
 
 export function hasItem(player, typeId) {
     try {

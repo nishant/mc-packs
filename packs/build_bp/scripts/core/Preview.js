@@ -6,12 +6,15 @@ import { getModeHandler, MODE_OPTIONS } from "../modes/ModeRegistry.js";
 import { FACE_OFFSETS, smartOutline, wireframePositions, skeletonAABB, boxEdges, sampledBoxEdges, catmullRomSpline, aabbBounds } from "../utils/GeometryUtils.js";
 import { getModeOption } from "../utils/ModeOptions.js";
 import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
-import { BOOK_ID, TUTORIAL_BOOK_ID } from "../utils/Items.js";
+import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached } from "../utils/Items.js";
+
+/** Ticks a hand read is reused for a player whose building is off (a slot change reads again at once). */
+const IDLE_HELD_TICKS = 5;
 import { ALWAYS_REPLACEABLE } from "./BlockPlacer.js";
 import { getPaletteMode, getDistributionMode } from "./Palette.js";
 import { isCreative } from "../utils/InventoryUtils.js";
 import { t, rawtext } from "../utils/Text.js";
-import { isActionBarLocked, notifySteadyActionBar } from "../utils/ActionBar.js";
+import { isActionBarLocked, steadyBar } from "../utils/ActionBar.js";
 import { showHintOnce } from "../utils/Hints.js";
 import { recordTick, tpsText } from "../utils/Tps.js";
 import { getAirBuildTarget } from "../modes/AirBuildMode.js";
@@ -302,12 +305,11 @@ export function startPreviewLoop() {
         for (const player of world.getAllPlayers()) {
             try {
 
-                const inHand = player.getComponent("minecraft:inventory")
-                    ?.container?.getItem(player.selectedSlotIndex);
+                // Players with building off (most of them, most of the time) look at their hand every few ticks only.
+                const inHand = heldItemCached(player, getState(player).mode === "disable" ? IDLE_HELD_TICKS : 0);
                 if (inHand?.typeId === BOOK_ID || inHand?.typeId === TUTORIAL_BOOK_ID) {
                     if (!isActionBarLocked(player.id)) {
-                        notifySteadyActionBar(player.id, 30);
-                        player.onScreenDisplay.setActionBar(
+                        steadyBar(player,
                             inHand.typeId === TUTORIAL_BOOK_ID
                                 ? t("eb.bar.tutorial_book_controls")
                                 : t(getSwapBookActions(player) ? "eb.bar.book_controls_swapped" : "eb.bar.book_controls")
@@ -357,8 +359,7 @@ export function startPreviewLoop() {
                 if (state.mode === "air_build") {
                     const previewMode = infiniteReach ? "outline" : getPreviewMode(player);
                     if (!infiniteReach && previewMode === "disable") continue;
-                    const inv  = player.getComponent("minecraft:inventory");
-                    const held = inv?.container?.getItem(player.selectedSlotIndex);
+                    const held = heldItemCached(player);
                     if (!held) continue;
                     const reach  = getAirBuildReach(player);
                     const target = getAirBuildTarget(player, reach);
@@ -368,7 +369,7 @@ export function startPreviewLoop() {
                     } catch {  }
                     const particleId = (previewMode === "outline" || previewMode === "corner_outline") ? CONTROLLER : PARTICLE;
                     spawnParticles(player.dimension, [target], particleId);
-                    if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(
+                    if (!isActionBarLocked(player.id)) steadyBar(player,
                         t("eb.preview.air_build", target.x, target.y, target.z)
                     );
                     continue;
@@ -400,7 +401,7 @@ export function startPreviewLoop() {
                         const suppressBar  = Date.now() - (state.lastPasteAt ?? 0) < 1000;
                         if (cached?.key === cacheKey) {
                             if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
-                            if (!suppressBar && !isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(cached.actionBar);
+                            if (!suppressBar && !isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                             continue;
                         }
 
@@ -450,7 +451,7 @@ export function startPreviewLoop() {
                               );
                         previewCache.set(player.id, { key: cacheKey, preview, particleId: previewParticle, actionBar });
                         spawnParticles(dim, preview, previewParticle);
-                        if (!suppressBar && !isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(actionBar);
+                        if (!suppressBar && !isActionBarLocked(player.id)) steadyBar(player, actionBar);
                         continue;
                     }
 
@@ -473,7 +474,7 @@ export function startPreviewLoop() {
                         const cached       = previewCache.get(player.id);
                         if (cached?.key === cacheKey) {
                             if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
-                            if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(cached.actionBar);
+                            if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                             continue;
                         }
                         let x1, x2, y1, y2, z1, z2;
@@ -508,7 +509,7 @@ export function startPreviewLoop() {
                         );
                         previewCache.set(player.id, { key: cacheKey, preview, particleId, actionBar });
                         spawnParticles(dim, preview, particleId);
-                        if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(actionBar);
+                        if (!isActionBarLocked(player.id)) steadyBar(player, actionBar);
                         continue;
                     }
 
@@ -517,7 +518,7 @@ export function startPreviewLoop() {
                         : (getTargetPos(player) ?? getTargetBlock(player));
                     if (idleTarget) {
                         spawnParticles(dim, [idleTarget], CONTROLLER);
-                        if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(
+                        if (!isActionBarLocked(player.id)) steadyBar(player,
                             t(player.isSneaking
                                 ? "eb.preview.copy_corner1_sneak"
                                 : "eb.preview.copy_corner1")
@@ -541,11 +542,10 @@ export function startPreviewLoop() {
                         if (!isActionBarLocked(player.id)) {
                             const idleHandler = getModeHandler(state.mode);
                             const idleTotal   = idleHandler?.steps === 3 ? 3 : 2;
-                            const idleHeld    = player.getComponent("minecraft:inventory")
-                                ?.container?.getItem(player.selectedSlotIndex);
+                            const idleHeld    = heldItemCached(player);
                             const idlePalette = getPaletteMode(player);
                             const idlePalOn   = idlePalette && idlePalette !== "disable";
-                            player.onScreenDisplay.setActionBar(rawtext(
+                            steadyBar(player, rawtext(
                                 idleHeld
                                     ? t("eb.preview.idle_start", t(`eb.mode.${state.mode}`), 1, idleTotal)
                                     : t("eb.preview.idle_need_item", t(`eb.mode.${state.mode}`)),
@@ -576,7 +576,7 @@ export function startPreviewLoop() {
                     if (!target) continue;
                     const particleId = (previewMode === "outline" || previewMode === "corner_outline") ? CONTROLLER : PARTICLE;
                     spawnParticles(player.dimension, [target], particleId);
-                    if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(
+                    if (!isActionBarLocked(player.id)) steadyBar(player,
                         t(isDestroyPending ? "eb.preview.no_anchor_destroy" : "eb.preview.no_anchor_build",
                             t(`eb.mode.${state.mode}`), target.x, target.y, target.z)
                     );
@@ -690,7 +690,7 @@ export function startPreviewLoop() {
 
                 if (sameAim && cached.settled) {
                     if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
-                    player.onScreenDisplay.setActionBar(cached.actionBar);
+                    steadyBar(player, cached.actionBar);
                     continue;
                 }
 
@@ -720,7 +720,7 @@ export function startPreviewLoop() {
 
                 if (sameAim && !settled) {
                     if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
-                    if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(cached.actionBar);
+                    if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                     continue;
                 }
 
@@ -810,7 +810,7 @@ export function startPreviewLoop() {
                         preview: boxPreview, particleId: boxParticle, actionBar: boxActionBar,
                     });
                     if (flickHold) spawnParticles(dim, boxPreview, boxParticle);
-                    if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(boxActionBar);
+                    if (!isActionBarLocked(player.id)) steadyBar(player, boxActionBar);
 
                     if (!deferHintDone.has(player.id)) {
                         const draws = (deferHintDraws.get(player.id) ?? 0) + 1;
@@ -843,7 +843,7 @@ export function startPreviewLoop() {
                             previewCache.set(player.id, { ...cachedSpline, key: splineCacheKey, actionBar: warnBar });
                             spawnParticles(dim, cachedSpline.preview, cachedSpline.particleId);
                         }
-                        if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(warnBar);
+                        if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
                         continue;
                     }
                     const preview = splinePositions;
@@ -856,12 +856,12 @@ export function startPreviewLoop() {
                     );
                     if (cachedSpline?.key === splineCacheKey) {
                         if (flickHold) spawnParticles(dim, cachedSpline.preview, cachedSpline.particleId);
-                        if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(cachedSpline.actionBar);
+                        if (!isActionBarLocked(player.id)) steadyBar(player, cachedSpline.actionBar);
                     } else {
                         const bezierParticleId = preview.length <= 200 ? CONTROLLER : PARTICLE;
                         previewCache.set(player.id, { key: splineCacheKey, contextKey: bezierContextKey, preview, particleId: bezierParticleId, actionBar });
                         spawnParticles(dim, preview, bezierParticleId);
-                        if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(actionBar);
+                        if (!isActionBarLocked(player.id)) steadyBar(player, actionBar);
                     }
                     continue;
                 }
@@ -902,7 +902,7 @@ export function startPreviewLoop() {
                         previewCache.set(player.id, { ...last, key: cacheKey, settled: true, actionBar: warnBar });
                         spawnParticles(dim, last.preview, last.particleId);
                     }
-                    if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(warnBar);
+                    if (!isActionBarLocked(player.id)) steadyBar(player, warnBar);
                     continue;
                 }
                 let minX = Infinity, maxX = -Infinity;
@@ -960,7 +960,7 @@ export function startPreviewLoop() {
                             t(`eb.palette.dist.${paletteDist}`)),
                     ] : []),
                 );
-                if (!isActionBarLocked(player.id)) player.onScreenDisplay.setActionBar(actionBar);
+                if (!isActionBarLocked(player.id)) steadyBar(player, actionBar);
                 const isCornerOutline = previewMode === "corner_outline";
                 const isOutline       = isDestroy || previewMode === "outline" || isCornerOutline;
                 let preview;

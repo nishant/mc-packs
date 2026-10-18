@@ -40,7 +40,7 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook } from "./utils/Items.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached } from "./utils/Items.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
 
 const GETBOOK_COST = 5;
@@ -840,9 +840,8 @@ system.runInterval(() => {
 system.runInterval(() => {
     for (const player of world.getAllPlayers()) {
         try {
-            const inv = player.getComponent("minecraft:inventory")?.container;
-            if (!inv) { prevSneakState.delete(player.id); continue; }
-            const item = inv.getItem(player.selectedSlotIndex);
+            // Shared with the preview loop; a held book is read every tick, anything else every few.
+            const item = heldItemCached(player, 5);
             if (!isBook(item)) { prevSneakState.delete(player.id); continue; }
             const isSneaking  = player.isSneaking;
             const wasSneaking = prevSneakState.get(player.id) ?? false;
