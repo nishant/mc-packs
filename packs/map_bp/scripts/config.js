@@ -49,4 +49,12 @@ export const CONFIG = {
 
   /** How often (ticks) the markers, destination and region are looked up again. The strip and radar turn with you every tick in between. Read when the world starts. */
   intervalTicks: 10,
+
+  /**
+   * How much script time the minimap may use a tick, for everyone together: "low" (about 1.7 ms a tick at most),
+   * "normal" (about 2.9 ms) or "high" (about 4.4 ms). The drawing, terrain pictures, passes and the terrain scanner
+   * each get this share of their budget (0.6, 1 or 1.5 times the constants at the top of scripts/main.js). Lower
+   * costs the server less; with many players moving at once each one's strip and radar then come a little later.
+   */
+  budgetLevel: "normal",
 };
