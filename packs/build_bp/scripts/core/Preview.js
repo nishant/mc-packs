@@ -696,7 +696,7 @@ export function startPreviewLoop() {
 
                 if (sameAim && cached.settled) {
                     if (flickHold) spawnParticles(dim, cached.preview, cached.particleId);
-                    steadyBar(player, cached.actionBar);
+                    if (!isActionBarLocked(player.id)) steadyBar(player, cached.actionBar);
                     continue;
                 }
 
