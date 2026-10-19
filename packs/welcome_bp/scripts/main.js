@@ -7,7 +7,7 @@ import {
   world,
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
-import { DEFAULTS, GENERIC } from "./config.js";
+import { DEFAULTS, GENERIC, LEGACY_REALM } from "./config.js";
 import { getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -16,7 +16,7 @@ import { onScriptEvent } from "./script-events.js";
 const PROP_SETTINGS = "welcome:settings"; // world: JSON overrides saved by /realm:welcome_edit (and /realm:config, see settings.js)
 const PROP_REVISION = "welcome:revision"; // world: bumped on every save
 const PROP_SEEN = "welcome:seen"; // player: revision they last saw
-const PROP_PROFILE = "welcome:profile"; // world: "realm" (the built-in Realm text) or "generic" (built from the installed packs), decided once
+const PROP_MIGRATED = "welcome:migrated"; // world: 1 once the Realm's old saved welcome has been moved to the default
 
 // The client rejects forms while it's still loading, or has chat/inventory open
 // (UserBusy). Keep retrying for ~30s before giving up.
@@ -24,64 +24,68 @@ const RETRY_INTERVAL_TICKS = 20;
 const MAX_ATTEMPTS = 30;
 
 // ---------------------------------------------------------------------------
-// Which default text: the Realm's, or one built from the installed packs
+// One-time move of the Realm's old saved welcome to the default
 // ---------------------------------------------------------------------------
 
-/** Saved data other packs write by themselves when a world loads, before any player has played: not a sign of an older world. */
-const BOOT_PREFIXES = ["diag:", "settings:", "admin:", "news:", "help:", "realm:", "weather:"];
-/** The same, for single keys (a pack that writes one key at load but keeps player data under the same prefix; find:mig is Chest Finder's load-time marker, saved even in an empty world). */
-const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last", "find:mig"]);
+const stripCodes = (/** @type {string} */ s) => s.replace(/§./g, "");
 
 /**
- * Decided once, when the world loads (before any player joins and so before packs write player data):
- * "generic" only when nothing is saved but this kind of load-time data; anything else (saved text, any
- * player or progress data, a key nobody here recognizes) is an older world and keeps the built-in Realm text.
- * @returns {"realm" | "generic" | undefined} undefined when the world can't be read now
+ * Once per world (welcome:migrated): the Realm's old saved welcome (the Old Tobin and Mara text with house rules)
+ * is dropped so the default shows. Only a saved body with LEGACY_REALM.sentence goes, plus its title and button
+ * when they are still the old built-in ones; every other saved field, and every other saved text, stays. A welcome
+ * saved after this runs is never touched.
  */
-function decide() {
-  const saved = world.getDynamicProperty(PROP_PROFILE);
-  if (saved === "realm" || saved === "generic") return saved;
-  let kind = /** @type {"realm" | "generic"} */ ("realm");
-  try {
-    const ids = world.getDynamicPropertyIds().filter((k) => k !== PROP_PROFILE);
-    if (ids.every((k) => BOOT_PREFIXES.some((p) => k.startsWith(p)) || BOOT_KEYS.has(k))) kind = "generic";
-  } catch {
-    return undefined;
+function migrate() {
+  if (world.getDynamicProperty(PROP_MIGRATED) === 1) return;
+  const raw = world.getDynamicProperty(PROP_SETTINGS);
+  if (typeof raw === "string") {
+    let saved;
+    try {
+      saved = JSON.parse(raw);
+    } catch {
+      saved = undefined;
+    }
+    if (saved && typeof saved === "object" && !Array.isArray(saved) && typeof saved.body === "string" && stripCodes(saved.body).includes(LEGACY_REALM.sentence)) {
+      delete saved.body;
+      if (saved.title === LEGACY_REALM.title) delete saved.title;
+      if (saved.button === LEGACY_REALM.button) delete saved.button;
+      saveSettings(Object.keys(saved).length ? saved : undefined);
+    }
   }
-  world.setDynamicProperty(PROP_PROFILE, kind);
-  return kind;
-}
-
-/** @returns {"realm" | "generic"} the saved decision; before the world loaded, the built-in text and nothing saved */
-function profile() {
-  const saved = world.getDynamicProperty(PROP_PROFILE);
-  return saved === "generic" ? "generic" : "realm";
+  world.setDynamicProperty(PROP_MIGRATED, 1);
 }
 
 world.afterEvents.worldLoad.subscribe(() => {
-  decide();
+  migrate();
 });
-
 /** @type {Set<string>} the pack folders that answered the last realm:help_ping */
 let installed = new Set(["welcome_bp"]);
 let askedAt = -Infinity;
 /** @type {Set<Set<string>>} answer sets of pings still waiting */
 const pongs = new Set();
 
+/** @type {Promise<void> | undefined} the ping in flight: a join during it waits for the same answer */
+let asking;
+
 /** Asks which packs are installed (each answers /realm:help's ping with its folder), at most once a minute. */
-async function askInstalled() {
-  if (system.currentTick - askedAt < 1200) return;
+function askInstalled() {
+  if (asking) return asking;
+  if (system.currentTick - askedAt < 1200) return Promise.resolve();
   askedAt = system.currentTick;
-  /** @type {Set<string>} */
-  const got = new Set(["welcome_bp"]);
-  pongs.add(got);
-  try {
-    system.sendScriptEvent("realm:help_ping", "");
-    await system.waitTicks(10);
-  } finally {
-    pongs.delete(got);
-  }
-  installed = got;
+  asking = (async () => {
+    /** @type {Set<string>} */
+    const got = new Set(["welcome_bp"]);
+    pongs.add(got);
+    try {
+      system.sendScriptEvent("realm:help_ping", "");
+      await system.waitTicks(10);
+      installed = got;
+    } finally {
+      pongs.delete(got);
+      asking = undefined;
+    }
+  })();
+  return asking;
 }
 
 onScriptEvent(
@@ -92,17 +96,40 @@ onScriptEvent(
   },
 );
 
-/** The default text of a world that is not the Realm: one line for each installed pack that has one. */
-function genericText() {
-  const lines = Object.keys(GENERIC.lines)
+/**
+ * The default welcome, the same in every world: the world, what the installed packs add, where to go next.
+ * @returns {{ heading: string, paragraphs: string[] }[]}
+ */
+function defaultSections() {
+  const intro = [GENERIC.greeting];
+  if (installed.has("saga_bp")) {
+    intro.push(GENERIC.story);
+    if (installed.has("npc_bp")) intro.push(GENERIC.storyStart);
+  } else intro.push(GENERIC.noStory);
+  const features = Object.keys(GENERIC.lines)
     .filter((pack) => installed.has(pack))
     .map((pack) => `§7-§r ${GENERIC.lines[pack]}`);
-  return `${GENERIC.intro}\n\n${lines.length ? `§l§6== What's here ==§r\n${lines.join("\n")}\n\n` : ""}${GENERIC.closing}`;
+  const next = Object.keys(GENERIC.next)
+    .filter((pack) => installed.has(pack))
+    .map((pack) => GENERIC.next[pack]);
+  next.push(GENERIC.operators);
+  return [
+    { heading: GENERIC.heading.world, paragraphs: intro },
+    ...(features.length ? [{ heading: GENERIC.heading.features, paragraphs: [features.join("\n")] }] : []),
+    { heading: GENERIC.heading.next, paragraphs: [next.join("\n")] },
+  ];
 }
 
-/** The defaults this world falls back to: config.js's, with the title and body of its profile. @returns {WelcomeSettings} */
+/** The default as one text, for the chat copy and the editor. */
+function defaultBody() {
+  return defaultSections()
+    .map((s) => `§l§6${s.heading}§r\n${s.paragraphs.join("\n\n")}`)
+    .join("\n\n");
+}
+
+/** The defaults this world falls back to: config.js's, with the title and the body built from the installed packs. @returns {WelcomeSettings} */
 function effectiveDefaults() {
-  return profile() === "generic" ? { ...DEFAULTS, title: GENERIC.title, body: genericText() } : { ...DEFAULTS };
+  return { ...DEFAULTS, body: defaultBody() };
 }
 
 // ---------------------------------------------------------------------------
@@ -177,10 +204,16 @@ function fillPlaceholders(text, player) {
 async function showPopup(player, settings, attempt = 1) {
   if (!player.isValid) return false;
 
-  const form = new ActionFormData()
-    .title(fillPlaceholders(settings.title, player))
-    .body(fillPlaceholders(settings.body, player))
-    .button(settings.button);
+  const form = new ActionFormData().title(fillPlaceholders(settings.title, player));
+  if (typeof savedOverrides().body === "string") form.body(fillPlaceholders(settings.body, player));
+  else {
+    // The default: one scrolling form, a bold gold label for each section and a label for each paragraph.
+    for (const s of defaultSections()) {
+      form.label(`§l§6${s.heading}`);
+      for (const text of s.paragraphs) form.label(fillPlaceholders(text, player));
+    }
+  }
+  form.button(settings.button);
 
   const response = await form.show(player);
 
@@ -201,7 +234,8 @@ async function showPopup(player, settings, attempt = 1) {
  */
 async function welcome(player, { force = false } = {}) {
   if (!player.isValid) return; // left during the join delay
-  if (profile() === "generic" && typeof savedOverrides().body !== "string") await askInstalled();
+  migrate();
+  if (typeof savedOverrides().body !== "string") await askInstalled();
   if (!player.isValid) return;
   const settings = getSettings();
   const revision = getRevision();
@@ -276,7 +310,8 @@ function splitBody(text) {
 
 /** @param {Player} player */
 async function openEditor(player) {
-  if (profile() === "generic") await askInstalled();
+  migrate();
+  await askInstalled();
   if (!player.isValid) return;
   const DEF = effectiveDefaults();
   const s = getSettings();
