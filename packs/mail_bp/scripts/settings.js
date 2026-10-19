@@ -11,6 +11,9 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "inboxLimit", type: "int", scope: "world", label: "Letters per inbox", help: "When a full inbox gets a letter, its oldest read letters are dropped first", min: 10, max: 200, step: 10 },
+  { key: "systemInboxLimit", type: "int", scope: "world", label: "Pack letters per inbox", help: "Letters from townsfolk and goals; a newer one pushes out the oldest. Letters from players are never pushed out", min: 1, max: 50, step: 1 },
+  { key: "systemLetterDays", type: "int", scope: "world", label: "Days a pack letter is kept", help: "Read or not, then it is deleted", min: 1, max: 365, step: 1 },
+  { key: "systemReserve", type: "int", scope: "world", label: "Letters kept free for players", help: "Pack letters stop arriving when the realm holds 5000 minus this", min: 0, max: 4000, step: 100 },
   { key: "sentLimit", type: "int", scope: "world", label: "Letters kept in Sent", min: 0, max: 100, step: 10 },
   { key: "notifyOnJoin", type: "bool", scope: "world", label: "Unread letters notice on join", help: "A chat line on joining for players with unread letters" },
   { key: "sendCooldownSeconds", type: "int", scope: "world", label: "Seconds between letters", help: "Per player. 0 = no wait", min: 0, max: 120, step: 5 },

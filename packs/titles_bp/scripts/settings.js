@@ -10,6 +10,7 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
+  { key: "forgetAfterDays", type: "int", scope: "world", label: "Forget titles after (days)", help: "A player not seen for this long loses their saved titles, trails and stats. 0 = never", min: 0, max: 3650, step: 5 },
   { key: "enabled", type: "bool", scope: "world", label: "Built-in titles and trails", help: "Disabled: no trails, built-in titles stop counting; other packs' titles are still recorded" },
   { key: "trails", type: "bool", scope: "world", label: "Trails", help: "Particle trails behind players who chose one" },
   { key: "trailTicks", type: "int", scope: "world", label: "Trail puff every (ticks)", help: "20 ticks = 1 second", min: 2, max: 20, step: 1 },

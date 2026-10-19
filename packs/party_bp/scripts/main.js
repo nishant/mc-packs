@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { memberOf, planParty, stale, unknownFields } from "./prune.js";
 
 // Each party is one world property (party:p:<code>), so members who are offline stay in theirs and however many
 // parties a big server collects, none gets near a property's size limit. Every member
@@ -13,7 +14,7 @@ import { onScriptEvent } from "./script-events.js";
 //
 // The stable Script API can't stop damage before it happens, so party mates can still hurt each other.
 
-/** @typedef {{ l: string, m: [string, string][] }} Party leader id; members as [player id, gamertag when last seen], in joining order */
+/** @typedef {{ l: string, m: [string, string, number?][] }} Party leader id; members as [player id, gamertag when last seen, when last seen (ms; 0 or none = not yet known)], in joining order */
 
 const PREFIX = "party:p:"; // world: one JSON Party per party, keyed by its code
 const LEGACY = "party:data"; // world, older versions: JSON { <code>: Party } of every party (moved to PREFIX on load)
@@ -43,10 +44,10 @@ let index;
 function parse(p) {
   const any = /** @type {any} */ (p);
   if (!any || typeof any.l !== "string" || !Array.isArray(any.m)) return undefined;
-  /** @type {[string, string][]} */
-  const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => [m[0], String(m[1] ?? "")]);
+  /** @type {[string, string, number?][]} */
+  const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => memberOf(m));
   if (!members.length) return undefined;
-  return { l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
+  return { ...unknownFields(any, ["l", "m"]), l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
 }
 
 /** @returns {Map<string, Party>} code -> party */
@@ -189,7 +190,7 @@ function tell(code, text) {
 /** @param {Player} player @returns {string} the new party's code */
 function create(player) {
   const code = newCode();
-  parties().set(code, { l: player.id, m: [[player.id, player.name]] });
+  parties().set(code, { l: player.id, m: [[player.id, player.name, Date.now()]] });
   save(code);
   syncTag(player);
   return code;
@@ -200,7 +201,7 @@ function join(player, code) {
   const p = parties().get(code);
   if (!p) return;
   tell(code, `§d[Party] ${player.name} joined the party.`);
-  p.m.push([player.id, player.name]);
+  p.m.push([player.id, player.name, Date.now()]);
   save(code);
   syncTag(player);
 }
@@ -411,8 +412,9 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     const code = partyOf(player.id);
     const p = code ? parties().get(code) : undefined;
     const me = p?.m.find((m) => m[0] === player.id);
-    if (code && me && me[1] !== player.name) {
+    if (code && me && (me[1] !== player.name || stale(me[2], Date.now()))) {
       me[1] = player.name; // keep the saved gamertag current for offline lists
+      me[2] = Date.now();
       write(code);
       sendMembers(code);
     }
@@ -420,6 +422,31 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     console.warn(`[party] ${e}`);
   }
 });
+
+/** Deletes parties of one member nobody has played in for `forgetSoloAfterDays`, and starts the clock for members with no saved time. */
+function* forgetOld() {
+  for (const code of [...parties().keys()]) {
+    // Read again for each party: the job yields between them, and a player may join or the setting change.
+    const days = Number(get("forgetSoloAfterDays"));
+    const now = Date.now();
+    try {
+      const p = parties().get(code);
+      if (p) {
+        const plan = planParty(p, now, (id) => !!online(id), days);
+        if (plan.drop) {
+          parties().delete(code);
+          console.warn(`[party] deleted party ${code}: its only member was not seen for over ${days} days`);
+          save(code);
+        } else if (plan.changed) write(code);
+      }
+    } catch (e) {
+      console.warn(`[party] ${e}`);
+    }
+    yield;
+  }
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1600);
+system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   lastChat.delete(playerId);

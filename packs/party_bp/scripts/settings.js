@@ -10,6 +10,7 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
+  { key: "forgetSoloAfterDays", type: "int", scope: "world", label: "Delete solo parties after (days)", help: "A party of one nobody played in for this long is deleted. 0 = never", min: 0, max: 3650, step: 5 },
   { key: "enabled", type: "bool", scope: "world", label: "Parties", help: "Disabled: no party commands or HUD; parties are kept" },
   { key: "maxSize", type: "int", scope: "world", label: "Party size", help: "Most players in a party, leader included", min: 2, max: 12, step: 1 },
   { key: "inviteSeconds", type: "int", scope: "world", label: "Invites last (seconds)", min: 30, max: 600, step: 30 },
