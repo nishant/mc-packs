@@ -571,7 +571,7 @@ async function purgeMenu(player) {
   if (!isOp(player)) return;
   const res = await show(player, new ModalFormData().title("§lDelete letters").textField("Gamertag of the writer", "Steve").submitButton("Find"));
   if (!res || res.canceled || !player.isValid) return;
-  const typed = noCodes(String(res.formValues?.find((v) => typeof v === "string") ?? "")).trim();
+  const typed = String(noCodes(String(res.formValues?.find((v) => typeof v === "string") ?? ""))).trim();
   if (!typed) return;
   const want = typed.toLowerCase();
   const all = [...letters().values()].filter((l) => l.f);
