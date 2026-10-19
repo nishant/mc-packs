@@ -8,8 +8,13 @@ export const CLEARED = ["map:wp", "map:marks"]; // player: what a reset clears; 
 /** @param {unknown} v @returns {number} */
 export const generationOf = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 
-/** @param {unknown} current the world's saved generation */
-export const nextGeneration = (current) => generationOf(current) + 1;
+/**
+ * The next generation: at least the world's saved one plus 1, and at least the clock in seconds. The clock keeps it
+ * above every generation players saved even if the world's number was forgotten (/realm:diag), so the next reset
+ * does not skip them. (A clock set back behind an earlier reset can still do that.)
+ * @param {unknown} current the world's saved generation @param {number} [nowMs]
+ */
+export const nextGeneration = (current, nowMs = Date.now()) => Math.max(generationOf(current) + 1, Math.floor(nowMs / 1000));
 
 /** Only the word "confirm" (any case) runs the reset. @param {unknown} arg */
 export const confirmed = (arg) => typeof arg === "string" && arg.trim().toLowerCase() === "confirm";
