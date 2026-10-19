@@ -39,7 +39,7 @@
 /** @typedef {{ x: number, z: number }} Offset */
 
 /**
- * Where something is: a named place, fixed coordinates or an offset from world spawn.
+ * Where something is: a named place, fixed coordinates or an offset: from the town when within 300 blocks, else from world spawn.
  * @typedef {object} Where
  * @property {string} [place]
  * @property {At} [at]

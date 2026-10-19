@@ -5,7 +5,7 @@ import { Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData } from "@minecraft/server-ui";
 import { CAMPS, PREFABS, buildSteps, footprint, prefabInfo, rotate, siteOk } from "./prefabs.js";
 import { get } from "./settings.js";
-import { farDist, farOffset, refresh as refreshFar, setPlaceDist } from "./scale.js";
+import { KNEE, farDist, farOffset, refresh as refreshFar, setPlaceDist } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
 import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, lifecycle, num, send, show, wait } from "./util.js";
@@ -117,6 +117,7 @@ export const placeLabel = (name) => {
  * built camp's x, y, z is where its wanderer stands. @param {string} name @param {string} [state]
  */
 export function placeReady(name, state) {
+  if (name === TOWN) return; // a map anchor for story spots, not a place other packs show
   const rec = placesOf()[name];
   /** @type {Record<string, unknown>} */
   const msg = { name };
@@ -195,9 +196,19 @@ function spawnXZ() {
   }
 }
 
+/** The place an operator sets (`/realm:saga_place town`) where the town is; the near-spawn story spots are counted from it. */
+export const TOWN = "town";
+
+/** The town's x/z: the operator's `town` place in the overworld, else world spawn. */
+export function townXZ() {
+  const t = placesOf()[TOWN];
+  return t && t.dim === OVERWORLD ? { x: Math.floor(t.x), z: Math.floor(t.z) } : spawnXZ();
+}
+
 /**
  * Where a location (an objective, or a `from`/`to`/`spawnAt`) is: a Loc, the name of a place nobody
- * has set (a string), or undefined when it names no location.
+ * has set (a string), or undefined when it names no location. An `offset` within KNEE blocks (the town's
+ * square, farms, the forge) is counted from the town; a farther one stays counted from world spawn.
  * @param {Where | Objective | undefined} w @param {string} [label] @returns {Loc | string | undefined}
  */
 export function locate(w, label) {
@@ -209,7 +220,7 @@ export function locate(w, label) {
   }
   if (w.at) return { dim: w.at.dim ?? OVERWORLD, x: w.at.x, z: w.at.z, label: w.mark ?? label ?? "the spot" };
   if (w.offset) {
-    const s = spawnXZ();
+    const s = Math.hypot(w.offset.x, w.offset.z) <= KNEE ? townXZ() : spawnXZ();
     const o = farOffset(w.offset);
     return { dim: OVERWORLD, x: s.x + o.x, z: s.z + o.z, label: w.mark ?? label ?? "the spot" };
   }
@@ -910,6 +921,10 @@ export function statusOf(rec) {
  * @param {Player} player @param {string} name
  */
 export function setHere(player, name) {
+  if (name === TOWN && player.dimension.id !== OVERWORLD) {
+    player.sendMessage("§c[Story] The town has to be in the Overworld: its story spots are counted from there.");
+    return;
+  }
   const old = placesOf()[name];
   if (old?.b) {
     restore(old);
@@ -984,7 +999,7 @@ async function placePage(player, name) {
           player.sendMessage(`§a[Story] Removed ${named(name)}.`);
         },
       ]);
-    if (rec && !isCamp(name))
+    if (rec && !isCamp(name) && name !== TOWN)
       actions.push([
         "Relocate",
         async () => {
