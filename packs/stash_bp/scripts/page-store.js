@@ -49,8 +49,12 @@ function writeState(player, state) {
   if (player.getDynamicProperty(STATE) !== text) throw new Error("page index readback failed");
 }
 
-/** @param {ItemStack | undefined} item */
-function signature(item) {
+/**
+ * What the readback checks compare: everything the API lets a script read about a stack. It can't see opaque
+ * native data (a shulker box's contents), so it only confirms a stack is the one that was meant; it never rebuilds one.
+ * @param {ItemStack | undefined} item
+ */
+export function signature(item) {
   if (!item) return "";
   const damage = item.getComponent("minecraft:durability")?.damage;
   const ench = item.getComponent("minecraft:enchantable")?.getEnchantments().map((e) => [e.type.id, e.level]);
