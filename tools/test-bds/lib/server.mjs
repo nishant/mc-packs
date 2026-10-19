@@ -114,12 +114,68 @@ function udpFree(port) {
     s.bind(port, "0.0.0.0", () => s.close(() => resolve(true)));
   });
 }
-export async function freePort() {
-  for (let i = 0; i < 200; i++) {
-    const p = 20000 + 2 * Math.floor(Math.random() * 19000);
-    if ((await tcpFree(p)) && (await udpFree(p)) && (await tcpFree(p + 1)) && (await udpFree(p + 1))) return p;
+/** The OS has the port (and the one above it, the IPv6 port) free for TCP and UDP. */
+export async function portPairFree(p) {
+  return (await tcpFree(p)) && (await udpFree(p)) && (await tcpFree(p + 1)) && (await udpFree(p + 1));
+}
+/** Whether a process with this id exists (signal 0 sends nothing). EPERM means it exists but is not ours. */
+export function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
+}
+
+const PORT_LOCK_STALE_MS = 12 * 3600 * 1000;
+function portsDir() { return path.join(cacheDir(), "ports"); }
+
+/** Takes a lock file with O_EXCL; a lock whose owner is gone (or very old) is replaced. Returns false when it is held. */
+function takeLockFile(file, info, staleMs) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fs.writeFileSync(file, JSON.stringify(info), { flag: "wx" });
+      return true;
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      let held;
+      try { held = JSON.parse(fs.readFileSync(file, "utf8")); } catch { held = null; }
+      const st = fs.statSync(file, { throwIfNoEntry: false });
+      if (!st) continue; // released between our attempt and the look: try again
+      const age = Date.now() - st.mtimeMs;
+      const stale = held ? !pidAlive(held.pid) || age > staleMs : age > 5000;
+      if (!stale) return false;
+      fs.rmSync(file, { force: true });
+    }
+  }
+  return false;
+}
+
+/**
+ * Picks a TCP/UDP port pair (port, port + 1) that the OS has free and no other harness process has reserved: the
+ * reservation is a lock file in the cache that names this process, so two runs that look at the same moment cannot
+ * both take it. release() frees it. A reservation of a dead process is reused.
+ */
+export async function reservePort({ token = `${process.pid}`, isFree = portPairFree, random = Math.random, tries = 400 } = {}) {
+  fs.mkdirSync(portsDir(), { recursive: true });
+  let p = 20000 + 2 * Math.floor(random() * 19000);
+  for (let i = 0; i < tries; i++, p = p + 2 > 39998 ? 20000 : p + 2) {
+    const a = path.join(portsDir(), `${p}.lock`), b = path.join(portsDir(), `${p + 1}.lock`);
+    const info = { pid: process.pid, token, at: new Date().toISOString() };
+    if (!takeLockFile(a, info, PORT_LOCK_STALE_MS)) continue;
+    if (!takeLockFile(b, info, PORT_LOCK_STALE_MS)) { fs.rmSync(a, { force: true }); continue; }
+    if (await isFree(p)) return { port: p, release: () => { fs.rmSync(a, { force: true }); fs.rmSync(b, { force: true }); } };
+    fs.rmSync(a, { force: true });
+    fs.rmSync(b, { force: true });
   }
   throw new Error("no free port found");
+}
+export async function freePort() {
+  const r = await reservePort();
+  r.release();
+  return r.port;
+}
+
+/** server.owner.json in a run's server folder: which harness process started which bedrock_server. */
+export function recordOwner(dir, info) {
+  fs.writeFileSync(path.join(dir, "server.owner.json"), JSON.stringify({ harnessPid: process.pid, startedAt: new Date().toISOString(), ...info }, null, 2));
 }
 
 /**
@@ -146,7 +202,7 @@ export function startBds(dir, onLine) {
   proc.stderr.on("data", feed);
   const exited = new Promise((resolve) => proc.on("exit", (code, sig) => { if (buf) onLine(buf); buf = ""; resolve(code ?? (sig ? 128 : 0)); }));
   const send = (cmd) => { try { proc.stdin.write(cmd + "\n"); } catch (e) { /* closed */ } };
-  return { proc, send, exited };
+  return { proc, send, exited, pid: proc.pid };
 }
 
 export async function stopBds(bds, graceMs = 15000) {
@@ -176,26 +232,118 @@ export function patchLevelDat(file, { flat = false } = {}) {
   r.commandblockoutput = byte(0);
   r.LANBroadcast = byte(0);
   r.LANBroadcastIntent = byte(0);
-  if (flat) r.Generator = { type: T.INT, value: 2 };
+  if (flat) {
+    r.Generator = { type: T.INT, value: 2 };
+    setSpawn(r, FLAT_SPAWN);
+  }
   fs.writeFileSync(file, writeLevelDat(d));
 }
 
-export async function ensureTemplate({ seed, flat, log = () => {} }) {
-  const key = flat ? "flat" : `seed-${seed}`;
-  const dest = path.join(cacheDir(), "worlds", `${BDS_VERSION}-${key}`);
-  if (fs.existsSync(path.join(dest, "level.dat"))) return dest;
-  log(`[harness] generating world template ${key} (once; cached in ${dest})`);
+/** Flat worlds get a random world spawn (261,5 on one cache, 0,0 on another); scenarios that need 0,0 want it fixed. */
+export const FLAT_SPAWN = { x: 0, y: -60, z: 0 };
+function setSpawn(root, spawn) {
+  root.SpawnX = { type: T.INT, value: spawn.x };
+  root.SpawnY = { type: T.INT, value: spawn.y };
+  root.SpawnZ = { type: T.INT, value: spawn.z };
+}
+export function readSpawn(file) {
+  const r = readLevelDat(fs.readFileSync(file)).root;
+  return r.SpawnX && r.SpawnY && r.SpawnZ ? { x: r.SpawnX.value, y: r.SpawnY.value, z: r.SpawnZ.value } : null;
+}
+/** Writes the world spawn into a level.dat. */
+export function pinSpawn(file, spawn = FLAT_SPAWN) {
+  const d = readLevelDat(fs.readFileSync(file));
+  setSpawn(d.root, spawn);
+  fs.writeFileSync(file, writeLevelDat(d));
+}
+
+export const TEMPLATE_SCHEMA = 2;
+const MARKER = "template.ready.json";
+export const templateKey = ({ seed, flat }) => (flat ? "flat" : `seed-${seed}`);
+export const templatePath = (key) => path.join(cacheDir(), "worlds", `${BDS_VERSION}-${key}`);
+
+function readMarker(dest) {
+  try { return JSON.parse(fs.readFileSync(path.join(dest, MARKER), "utf8")); } catch { return null; }
+}
+function writeMarker(dir, info) {
+  fs.writeFileSync(path.join(dir, MARKER), JSON.stringify({ schema: TEMPLATE_SCHEMA, bds: BDS_VERSION, createdAt: new Date().toISOString(), ...info }, null, 2));
+}
+
+/** A template is only used when its ready marker says it was finished, and (flat) its spawn is the pinned one. */
+export function isTemplateReady(dest, { flat = false } = {}) {
+  const m = readMarker(dest);
+  if (!m || m.schema !== TEMPLATE_SCHEMA || m.bds !== BDS_VERSION) return false;
+  const level = path.join(dest, "level.dat");
+  if (!fs.existsSync(level)) return false;
+  if (flat) {
+    try {
+      const s = readSpawn(level);
+      return !!s && s.x === FLAT_SPAWN.x && s.y === FLAT_SPAWN.y && s.z === FLAT_SPAWN.z;
+    } catch { return false; }
+  }
+  return true;
+}
+
+/** Copies a ready template into a run's world folder (not its ready marker) and pins a flat world's spawn there too. */
+export function copyTemplate(template, world, { flat = false } = {}) {
+  fs.cpSync(template, world, { recursive: true, filter: (src) => path.basename(src) !== MARKER });
+  if (flat) {
+    pinSpawn(path.join(world, "level.dat"), FLAT_SPAWN);
+    const s = readSpawn(path.join(world, "level.dat"));
+    if (!s || s.x !== FLAT_SPAWN.x || s.z !== FLAT_SPAWN.z) throw new Error(`could not pin the flat world spawn (read back ${JSON.stringify(s)})`);
+  }
+}
+
+/** A template folder from before the ready marker existed: finished (it was published by one rename), so keep it. */
+function adoptLegacyTemplate(dest, { flat, key }) {
+  const level = path.join(dest, "level.dat");
+  if (!fs.existsSync(level)) return false;
+  try { readLevelDat(fs.readFileSync(level)); } catch { return false; }
+  if (!flat && !fs.existsSync(path.join(dest, "db", "CURRENT"))) return false;
+  if (flat) pinSpawn(level, FLAT_SPAWN);
+  writeMarker(dest, { key, flat, adoptedLegacy: true, ...(flat ? { spawn: FLAT_SPAWN } : {}) });
+  return true;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function removeDir(dir) { fs.rmSync(dir, { recursive: true, force: true }); }
+
+/**
+ * The template generator that crashed (or was killed) left its lock behind: remove it, its staging folder and its
+ * temp server folder, but never a process (a bedrock_server it started is only reported: stop it by its pid).
+ */
+function reapStaleLock(lock, dest, { staleLockMs, log }) {
+  let owner = null;
+  try { owner = JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8")); } catch { owner = null; }
+  const st = fs.statSync(lock, { throwIfNoEntry: false });
+  if (!st) return true; // released while we looked
+  const age = Date.now() - st.mtimeMs;
+  if (owner ? pidAlive(owner.pid) : age < staleLockMs) return false;
+  log(`[harness] removing the stale template lock ${lock} (${owner ? `owner pid ${owner.pid} is gone` : "no owner record"})`);
+  if (owner?.staging && owner.staging.startsWith(`${dest}.tmp-`)) removeDir(owner.staging);
+  if (owner?.serverDir && path.resolve(path.dirname(owner.serverDir)) === tmpRoot() && path.basename(owner.serverDir).startsWith("bds-template-")) removeDir(owner.serverDir);
+  if (owner?.bdsPid && pidAlive(owner.bdsPid)) log(`[harness] warning: template bedrock_server pid ${owner.bdsPid} from the dead owner may still be running; stop that pid yourself (nothing is stopped by name)`);
+  removeDir(lock);
+  return true;
+}
+
+/** Generates a world with a throwaway BDS and copies the finished, patched world into staging. */
+async function generateTemplateWorld({ seed, flat, staging, log, onProgress }) {
   const dir = makeServerDir("bds-template-");
+  onProgress({ serverDir: dir });
+  const reservation = await reservePort();
   try {
-    const port = await freePort();
+    const port = reservation.port;
     writeProps(dir, baseProps(port, { "level-seed": flat ? "" : String(seed) }));
     let started = false, failed = "";
     const bds = startBds(dir, (line) => {
       if (line.includes("Server started.")) started = true;
       if (/ERROR\].*(Exiting program|may be in use)/.test(line)) failed = line;
     });
+    onProgress({ bdsPid: bds.proc.pid, port });
+    recordOwner(dir, { role: "template", bdsPid: bds.proc.pid, port });
     const t0 = Date.now();
-    while (!started && !failed && Date.now() - t0 < 120000 && bds.proc.exitCode === null) await new Promise((r) => setTimeout(r, 200));
+    while (!started && !failed && Date.now() - t0 < 120000 && bds.proc.exitCode === null) await sleep(200);
     if (!started) {
       try { IS_WIN ? bds.proc.kill() : bds.proc.kill("SIGKILL"); } catch (e) { /* gone */ }
       await bds.exited;
@@ -206,12 +354,59 @@ export async function ensureTemplate({ seed, flat, log = () => {} }) {
     patchLevelDat(path.join(world, "level.dat"), { flat });
     fs.rmSync(path.join(world, "level.dat_old"), { force: true });
     if (flat) fs.rmSync(path.join(world, "db"), { recursive: true, force: true });
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    const staging = `${dest}.tmp-${process.pid}`;
     fs.cpSync(world, staging, { recursive: true });
-    try { fs.renameSync(staging, dest); } catch (e) { fs.rmSync(staging, { recursive: true, force: true }); if (!fs.existsSync(dest)) throw e; }
-    return dest;
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    reservation.release();
+    removeDir(dir);
+  }
+}
+
+/**
+ * Returns the cached world template for (seed, flat), generating it when needed. One process generates at a time
+ * (an exclusive lock folder with an owner record); the others wait and use its result. The finished template is built
+ * in a staging folder, marked ready, and published with one rename, so a half-built template is never consumed. A
+ * lock left by a crashed owner is cleaned up (its staging folder and temp server folder too).
+ * `generate({ staging, seed, flat, log, onProgress })` fills the staging folder; tests pass their own.
+ */
+export async function ensureTemplate({ seed, flat, log = () => {}, generate = generateTemplateWorld, lockTimeoutMs = 20 * 60 * 1000, pollMs = 200, staleLockMs = 30000, token = `${process.pid}-${Date.now().toString(36)}` }) {
+  const key = templateKey({ seed, flat });
+  const dest = templatePath(key);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const lock = `${dest}.lock`;
+  const deadline = Date.now() + lockTimeoutMs;
+  for (;;) {
+    if (isTemplateReady(dest, { flat })) return dest;
+    try {
+      fs.mkdirSync(lock);
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      if (reapStaleLock(lock, dest, { staleLockMs, log })) continue;
+      if (Date.now() > deadline) throw new Error(`timed out after ${Math.round(lockTimeoutMs / 1000)} s waiting for the template lock ${lock} (owner record: ${path.join(lock, "owner.json")})`);
+      await sleep(pollMs);
+      continue;
+    }
+    const staging = `${dest}.tmp-${token}`;
+    const owner = { pid: process.pid, token, key, startedAt: new Date().toISOString(), staging };
+    const save = () => fs.writeFileSync(path.join(lock, "owner.json"), JSON.stringify(owner));
+    try {
+      save();
+      if (isTemplateReady(dest, { flat })) return dest;
+      if (fs.existsSync(dest)) {
+        if (adoptLegacyTemplate(dest, { flat, key })) { log(`[harness] adopted the existing world template ${key} (${dest})`); return dest; }
+        log(`[harness] removing an unfinished or unusable world template folder ${dest}`);
+        removeDir(dest);
+      }
+      removeDir(staging);
+      log(`[harness] generating world template ${key} (once; cached in ${dest})`);
+      await generate({ staging, seed, flat, log, onProgress: (info) => { Object.assign(owner, info); save(); } });
+      if (!fs.existsSync(path.join(staging, "level.dat"))) throw new Error(`the template generator left no level.dat in ${staging}`);
+      if (flat) pinSpawn(path.join(staging, "level.dat"), FLAT_SPAWN);
+      writeMarker(staging, { key, flat, ownerPid: process.pid, token, ...(flat ? { spawn: FLAT_SPAWN } : {}) });
+      fs.renameSync(staging, dest);
+      return dest;
+    } finally {
+      removeDir(staging);
+      removeDir(lock);
+    }
   }
 }

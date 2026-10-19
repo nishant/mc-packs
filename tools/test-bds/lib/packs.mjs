@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { HERE } from "./server.mjs";
+import { extractZip } from "./unzip.mjs";
 
 const GAMETEST = { module_name: "@minecraft/server-gametest", version: "1.0.0-beta" };
 export const HARNESS_PACK = {
@@ -40,6 +41,39 @@ export function findPacks(dir, only) {
   const missing = want.filter((w) => !all.some((p) => p.folder === w));
   if (missing.length) throw new Error(`--only: no pack folder(s) ${missing.join(", ")} in ${dir}`);
   return all.filter((p) => want.includes(p.folder));
+}
+
+/** The pack folders a behavior bundle's generated scripts/main.js imports (tools/bundle.mjs: import "./<folder>/<entry>"). */
+export function bundleMembers(dir) {
+  const main = path.join(dir, "scripts", "main.js");
+  if (!fs.existsSync(main)) return [];
+  return [...new Set([...fs.readFileSync(main, "utf8").matchAll(/^import "\.\/([^/"]+)\//gm)].map((m) => m[1]))];
+}
+
+/**
+ * A bundle from tools/bundle.mjs (an .mcpack/.zip file, extracted into workDir, or an unpacked folder) as ONE pack, so
+ * every member shares one script context and one dynamic property store, as on the Realm. Behavior bundles must really
+ * merge at least two packs under one script entry.
+ */
+export function loadBundle(source, workDir) {
+  const abs = path.resolve(source);
+  if (!fs.existsSync(abs)) throw new Error(`no such bundle: ${abs} (build it with: node tools/bundle.mjs --all)`);
+  let dir = abs;
+  if (fs.statSync(abs).isFile()) {
+    dir = path.join(workDir, path.basename(abs).replace(/\.(mcpack|zip)$/i, ""));
+    fs.rmSync(dir, { recursive: true, force: true });
+    extractZip(abs, dir);
+  }
+  const manifest = readJson(path.join(dir, "manifest.json"));
+  const types = (manifest.modules || []).map((m) => m.type);
+  const kind = types.includes("resources") ? "rp" : "bp";
+  const members = kind === "bp" ? bundleMembers(dir) : [];
+  if (kind === "bp") {
+    const scripts = (manifest.modules || []).filter((m) => m.type === "script");
+    if (scripts.length !== 1) throw new Error(`${abs}: a behavior bundle has exactly one script module (found ${scripts.length})`);
+    if (members.length < 2) throw new Error(`${abs}: scripts/main.js imports ${members.length} pack(s): that is not a merged bundle`);
+  }
+  return { folder: path.basename(dir), dir, manifest, kind, name: manifest.header?.name ?? path.basename(dir), members, bundle: true };
 }
 
 function shimSource(folder, hasUi, relay) {
@@ -98,6 +132,7 @@ export function installHarnessPack(serverDir, scenarioFile) {
   const dest = path.join(serverDir, "development_behavior_packs", HARNESS_PACK.folder);
   fs.mkdirSync(path.join(dest, "scripts"), { recursive: true });
   fs.copyFileSync(path.join(HERE, "testpack", "scripts", "harness.js"), path.join(dest, "scripts", "harness.js"));
+  fs.copyFileSync(path.join(HERE, "lib", "tickingarea.js"), path.join(dest, "scripts", "tickingarea.js"));
   fs.copyFileSync(scenarioFile, path.join(dest, "scripts", "scenario.js"));
   const manifest = {
     format_version: 2,
