@@ -84,3 +84,49 @@ export function evaluateLegacyLog(text, declared) {
   }
   return { ok: reasons.length === 0, reasons, evidence: "log lines only: retention during the window is not visible", declared };
 }
+
+export const BUDGET_PLAYERS = 40; // the contract population for every verdict below (CLAUDE.md Performance)
+export const BUNDLE_BUDGET_MS = 5; // the whole bundle stays under this: 5.000 fails
+export const HEAVY_PACKS = new Set(["map_bp", "hud_bp"]);
+/** ms per tick a pack may use at BUDGET_PLAYERS: 1 for the Minimap and the HUDs, 0.15 for the rest (inclusive). */
+export const packBudget = (pack) => (HEAVY_PACKS.has(pack) ? 1 : 0.15);
+
+/**
+ * The budget verdict of `suite.mjs --perf`, from the profile JSON of each player count. Fails closed: a count whose
+ * scenario did not pass, whose population was not valid, or whose steady-window figures are missing or not finite is
+ * INVALID (never budgeted, never OVER). Budgets are judged on the steady soak window only (never the spawn ramp) and
+ * only at BUDGET_PLAYERS; other counts are reported, with no verdict, and no 5 ms budget exists for them.
+ * @param {Map<number, { result?: string, report?: any }>} counts player count -> the scenario result and its profile JSON
+ * @param {{ only?: string[] }} [opts] the packs the run was limited to (every one of them must have a figure)
+ * @returns {{ ok: boolean, invalid: string[], over: string[], steady: Map<number, { bundle: number | null, packs: Map<string, number | null> }> }}
+ */
+export function evaluatePerfBudgets(counts, { only } = {}) {
+  const invalid = [];
+  const over = [];
+  const steady = new Map();
+  const finite = (v) => typeof v === "number" && Number.isFinite(v);
+  const names = new Set(only ?? []);
+  for (const { report } of counts.values()) for (const p of report?.packs ?? []) names.add(p.pack);
+  for (const [n, { result, report }] of counts) {
+    if (result !== undefined && result !== "pass") invalid.push(`${n} players: the scenario ${result}`);
+    if (!report) {
+      invalid.push(`${n} players: no profile report`);
+      continue;
+    }
+    if (!report.acceptance?.ok) {
+      invalid.push(`${n} players: not a valid ${n}-player measurement - ${report.acceptance ? report.acceptance.reasons.join("; ") : "no acceptance verdict (no perf-workload report)"}`);
+      continue;
+    }
+    if (result !== undefined && result !== "pass") continue;
+    const bundle = report.bundle?.steadyWindow?.avg;
+    const packs = new Map([...names].map((name) => [name, report.packs?.find((p) => p.pack === name)?.steadyMsPerTick]));
+    steady.set(n, { bundle: finite(bundle) ? bundle : null, packs: new Map([...packs].map(([k, v]) => [k, finite(v) ? v : null])) });
+    const missing = [...packs].filter(([, v]) => !finite(v)).map(([k]) => k);
+    if (!finite(bundle)) invalid.push(`${n} players: no steady-window bundle figure`);
+    if (missing.length) invalid.push(`${n} players: no steady-window figure for ${missing.join(", ")}`);
+    if (n !== BUDGET_PLAYERS || !finite(bundle) || missing.length) continue;
+    if (bundle >= BUNDLE_BUDGET_MS) over.push(`whole bundle @${n}: ${bundle.toFixed(3)} ms/tick, budget under ${BUNDLE_BUDGET_MS}`);
+    for (const [pack, v] of packs) if (v > packBudget(pack)) over.push(`${pack} @${n}: ${v.toFixed(3)} ms/tick, budget ${packBudget(pack)}`);
+  }
+  return { ok: !invalid.length && !over.length && counts.size > 0, invalid, over, steady };
+}
