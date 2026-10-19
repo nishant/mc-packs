@@ -154,3 +154,89 @@ test("O44: dying while the setup wizard waits for the installed-pack ping shows 
   await sim.settle(260);
   assert.ok(sim.shown.length <= before + 0, "no step page after the death");
 });
+
+async function manyPacks(count) {
+  const sim = await world();
+  const op = sim.join("Op", { op: true });
+  const sys = sim.server.system;
+  const orig = sys.sendScriptEvent;
+  const forgets = [];
+  sys.sendScriptEvent = (id, message) => {
+    orig(id, message);
+    let m = {};
+    try {
+      m = JSON.parse(message);
+    } catch {
+      // not a JSON message
+    }
+    if (id === "realm:diag_ping") {
+      for (let i = 0; i < count; i++) {
+        const pack = `p${String(i).padStart(2, "0")}_bp`;
+        orig("realm:diag_pong", JSON.stringify({ id: m.id, pack, name: `Pack${i}`, version: "1.0.0", props: 3, bytes: 4096, mpt: 1 - i * 0.01, ticks: 20 }));
+      }
+    }
+    if (id === "realm:diag_forget") forgets.push(m);
+  };
+  /** Forgets the pack at list position `i` (position = descending script time) and closes the form shown after. */
+  const forget = async (i) => {
+    sim.run("realm:diag", op, 1);
+    await sim.nextForm(3000);
+    sim.answer({ selection: i });
+    await sim.nextForm(300);
+    sim.answer({ selection: 0 });
+    await sim.nextForm(300);
+    sim.answer({ selection: 0 });
+    await sim.until(() => sim.pending.length === 0 || /Pack diagnostics/.test(sim.pending[0].form.titleText), 600);
+    await sim.settle(250);
+  };
+  return { sim, op, orig, forgets, forget };
+}
+
+test("O45: 17 distinct packs waiting cap at 16: the 17th forget is refused and nothing is sent", async () => {
+  const { sim, op, forgets, forget } = await manyPacks(17);
+  for (let i = 0; i < 16; i++) {
+    await forget(i);
+    sim.pending.length = 0;
+  }
+  assert.equal(forgets.length, 16);
+  const before = op.messages.length;
+  await forget(16);
+  assert.equal(forgets.length, 16, "the 17th is not sent");
+  assert.ok(op.messages.slice(before).some((t) => /Too many forgets/.test(t)), op.messages.slice(before).join(" | "));
+});
+
+test("O45: a forget older than 12000 ticks expires: a stale reply is not accepted, and a new forget is sent", async () => {
+  const { sim, op, orig, forgets, forget } = await manyPacks(2);
+  await forget(0);
+  sim.pending.length = 0;
+  assert.equal(forgets.length, 1);
+  await sim.settle(12001);
+  orig("realm:diag_forgot", JSON.stringify({ id: forgets[0].id, pack: "p00_bp", ok: true, removed: 3, bytes: 4096 }));
+  await sim.settle(5);
+  assert.ok(!op.messages.some((t) => /forgot 3/.test(t)), "an expired answer is not reported as a success");
+  await forget(0);
+  assert.equal(forgets.length, 2, "a new forget for the pack is allowed after expiry");
+});
+
+test("O45: a late answer updates the open pack record: its page shows no Forget button and no stale size", async () => {
+  const { sim, op, orig, forgets, forget } = await manyPacks(1);
+  sim.run("realm:diag", op, 1);
+  await sim.nextForm(3000);
+  sim.answer({ selection: 0 });
+  await sim.nextForm(300);
+  sim.answer({ selection: 0 });
+  await sim.nextForm(300);
+  sim.answer({ selection: 0 });
+  await sim.until(() => forgets.length === 1, 100);
+  await sim.settle(260);
+  const list = await sim.nextForm(300);
+  assert.match(list.form.titleText, /Pack diagnostics/);
+  orig("realm:diag_forgot", JSON.stringify({ id: forgets[0].id, pack: "p00_bp", ok: true, removed: 3, bytes: 4096 }));
+  await sim.settle(3);
+  sim.answer({ selection: 0 });
+  const page = await sim.nextForm(300);
+  assert.ok(!page.form.buttons.some((b) => /Forget this pack/.test(b)), page.form.buttons.join(" | "));
+  assert.match(page.form.bodyText, /forgotten/);
+  assert.match(page.form.bodyText, /0 entries, 0 B/);
+  void forget;
+});

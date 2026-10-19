@@ -75,6 +75,7 @@ onScriptEvent(
     if (!w || w.pack !== m.pack) return;
     if (w.waiting) return void forgets.set(m.id, m);
     pending.delete(m.id);
+    if (system.currentTick - w.at > PENDING_TICKS) return;
     lateAnswer(w, m);
   },
 );
