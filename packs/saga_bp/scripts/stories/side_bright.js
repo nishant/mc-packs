@@ -50,6 +50,7 @@ const FENCES = [
   "minecraft:cherry_fence",
   "minecraft:bamboo_fence",
   "minecraft:pale_oak_fence",
+  "minecraft:poplar_fence",
   "minecraft:crimson_fence",
   "minecraft:warped_fence",
 ];

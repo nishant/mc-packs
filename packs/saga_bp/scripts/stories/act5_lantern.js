@@ -44,7 +44,7 @@ const DEEP = "§5A voice from below:§r ";
 const GATE = "hollow_gate";
 /** What a barricade can be built of: every wooden fence, the common walls and plain stone. */
 const BARRICADE = [
-  ...["oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo", "pale_oak", "crimson", "warped"].map((w) => `minecraft:${w}_fence`),
+  ...["oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo", "pale_oak", "poplar", "crimson", "warped"].map((w) => `minecraft:${w}_fence`),
   "minecraft:nether_brick_fence",
   ...["cobblestone", "mossy_cobblestone", "stone_brick", "mossy_stone_brick", "cobbled_deepslate", "deepslate_brick", "brick", "andesite", "granite", "diorite"].map((w) => `minecraft:${w}_wall`),
   "minecraft:cobblestone",
@@ -60,6 +60,8 @@ const SAPLINGS = [
   "minecraft:dark_oak_sapling",
   "minecraft:cherry_sapling",
   "minecraft:pale_oak_sapling",
+  "minecraft:bamboo_sapling",
+  "minecraft:poplar_sapling",
   "minecraft:mangrove_propagule",
 ];
 /** Every candle color: any candle a player places counts. */
@@ -176,7 +178,7 @@ export const STORIES = [
           },
         ],
         reward: { levels: 5, crowns: 80, items: [{ item: "minecraft:firework_rocket", amount: 16 }] },
-        hint: "Smugglers' Cove is the hidden dock on the coast; the tracker points there. Tap 4 barrels in the cove. Any boat counts for the ride: put one in the water and row anywhere until the counter fills, then talk to Quill.",
+        hint: "Smugglers' Cove is the hidden dock on the coast; the tracker points there. Tap 4 barrels in the cove; if they are gone, place a barrel of your own within 16 blocks of the cove and open it (every tap counts, so one barrel is enough). Any boat counts for the ride: put one in the water and row anywhere until the counter fills, then talk to Quill.",
       },
 
       // 3. Allies: Vesna (only if she was freed) ---------------------------------------------
@@ -781,7 +783,7 @@ export const STORIES = [
             text: "Once every forty winters the comet the Starwrights called the Lantern crosses the sky, and its light relights the three Seals that bind the Hollow. At the Sky Seal, at the top of the night, the light waited for one person to decide where it would go.",
           },
         },
-        hint: "The Sky Seal floats high above the clouds (about y 220): pillar up, use elytra or build a stair. Hit the end rods on its crown, then stay there in the open around midnight. Which endings you can choose depends on what you've done: A Room at the Inn, your promise to Elsie, and how hard your heart has been.",
+        hint: "The Sky Seal floats high above the clouds (about y 220): pillar up, use elytra or build a stair. Hit the end rods on its crown (if they are gone, place end rods of your own within 16 blocks of the crown; a blaze rod over a popped chorus fruit crafts 4), then stay there in the open around midnight. Which endings you can choose depends on what you've done: A Room at the Inn, your promise to Elsie, and how hard your heart has been.",
       },
 
       // 10a. Dawn: Relight the Lantern -------------------------------------------------------

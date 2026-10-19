@@ -315,7 +315,7 @@ export const STORIES = [
           },
         },
         rep: [{ guild: "wayfarers", amount: 15 }],
-        hint: "Any leather chestplate works (8 leather at a crafting table). The Smugglers' Cove is on the coast; your tracker points there. With the disguise on, dockhands only notice you when you're very close, so crouch past them. The barrel is at the back of the cave.",
+        hint: "Any leather chestplate works (8 leather at a crafting table). The Smugglers' Cove is on the coast; your tracker points there. With the disguise on, dockhands only notice you when you're very close, so crouch past them. The barrel is at the back of the cave; if every barrel there has been mined out, place a barrel of your own within 10 blocks of the cave and open it instead.",
       },
 
       // 4b. Raid on the Cove (exposed)
@@ -695,7 +695,7 @@ export const STORIES = [
             text: "The Herald called Hollis into the sea with the Choir's song: come down, the bell is waiting. Hollis saw a man in a keeper's robe beneath the water, holding out his hand and saying his name like he loved him.",
           },
         },
-        hint: "Dragging him out: stay near the lighthouse shore and kill the drowned before they reach Hollis. Singing: ring the bell at the Old Chapel three times, then stay inside the chapel grounds at night for two minutes. Bring light and armor either way.",
+        hint: "Dragging him out: stay near the lighthouse shore and kill the drowned before they reach Hollis. Singing: ring the bell at the Old Chapel three times (if it is gone, place a bell of your own within 10 blocks of the chapel and ring that one), then stay inside the chapel grounds at night for two minutes. Bring light and armor either way.",
       },
 
       // 10. The Gray Ring Burns
@@ -795,7 +795,7 @@ export const STORIES = [
           { guild: "wardens", amount: 25, when: WARDENS },
           { guild: "wayfarers", amount: 25, when: ALONE },
         ],
-        hint: "The Gray Ring is far out; your tracker points there. Talk to the hooded Cantor by the cracked bell first, then fight inside the ring of stones; the Cantor appears after the singers fall and summons vexes, so kill her fast. Strike the cracked bell in the middle three times. Bring a shield, food and a totem if you have one.",
+        hint: "The Gray Ring is far out; your tracker points there. Talk to the hooded Cantor by the cracked bell first, then fight inside the ring of stones; the Cantor appears after the singers fall and summons vexes, so kill her fast. Strike the cracked bell in the middle three times; if it has been mined out, place a bell of your own within 8 blocks of the ring's center and strike that one. Bring a shield, food and a totem if you have one.",
       },
 
       // 11. What the Mayor Knew

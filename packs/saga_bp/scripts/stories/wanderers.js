@@ -38,7 +38,7 @@ const DUSK = /** @type {[number, number]} */ ([11500, 13500]);
 const DAWN = /** @type {[number, number]} */ ([22500, 1500]);
 const CANDLES = ["minecraft:candle", ...["white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"].map((c) => `minecraft:${c}_candle`)];
 const FLOWERS = ["minecraft:poppy", "minecraft:dandelion", "minecraft:cornflower", "minecraft:azure_bluet", "minecraft:oxeye_daisy", "minecraft:allium", "minecraft:lily_of_the_valley", "minecraft:blue_orchid"];
-const SAPLINGS = ["minecraft:oak_sapling", "minecraft:spruce_sapling", "minecraft:birch_sapling", "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling", "minecraft:cherry_sapling", "minecraft:pale_oak_sapling", "minecraft:mangrove_propagule"];
+const SAPLINGS = ["minecraft:oak_sapling", "minecraft:spruce_sapling", "minecraft:birch_sapling", "minecraft:jungle_sapling", "minecraft:acacia_sapling", "minecraft:dark_oak_sapling", "minecraft:cherry_sapling", "minecraft:pale_oak_sapling", "minecraft:bamboo_sapling", "minecraft:poplar_sapling", "minecraft:mangrove_propagule"];
 const MONSTERS = ["minecraft:zombie", "minecraft:husk", "minecraft:drowned", "minecraft:skeleton", "minecraft:stray", "minecraft:spider", "minecraft:creeper", "minecraft:witch", "minecraft:slime", "minecraft:enderman", "minecraft:bogged"];
 
 /** @type {Story} */
@@ -99,7 +99,7 @@ const PELL = {
       ],
       reward: { levels: 3, crowns: 40 },
       rep: [{ guild: "wayfarers", amount: 10 }],
-      hint: "The Old Chapel is a story place: the tracker points to it. Walking, Pell follows your path once you walk up to him at his camp; keep monsters off him.",
+      hint: "The Old Chapel is a story place: the tracker points to it. Walking, Pell follows your path once you walk up to him at his camp; keep monsters off him. Going ahead instead, light a candle in the chapel; if its candles are gone, place a candle of your own within 10 blocks of the chapel and tap it.",
     },
     {
       id: "vigil",
@@ -236,7 +236,7 @@ const ANWEN = {
       ],
       reward: { levels: 8, crowns: 130, title: "Keeper of the Survey", relicRoll: ROLL, items: [{ item: "minecraft:compass", amount: 1, name: "§bAnwen's Compass", lore: ["§7North is still north."] }], codex: { id: "w_anwen", title: "The Last Survey", text: "Anwen was a sky surveyor, one of the people who measured the Lantern's road across the sky every forty years and marked three places on the ground where its light must fall. Three marks on a line, and the line points home. She kept measuring long after she died, and wrote on the old stones: still true." } },
       rep: [{ guild: "wayfarers", amount: 20 }],
-      hint: "The lodestone stands in the middle of the Stargazer's Ruin: tap or hit it. The vision plays when you stand in the ruin.",
+      hint: "The lodestone stands in the middle of the Stargazer's Ruin: tap or hit it. If it has been mined out, place a lodestone of your own within 8 blocks of the ruin's center (8 chiseled stone bricks around a netherite ingot craft one). The vision plays when you stand in the ruin.",
     },
   ],
 };
