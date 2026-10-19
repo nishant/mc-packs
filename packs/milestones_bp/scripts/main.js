@@ -14,7 +14,7 @@ const RECORD_PREFIX = "milestones:p:";
 
 /** @typedef {typeof CONFIG.milestones[number]} Milestone */
 /** @typedef {Milestone["stat"]} Stat */
-/** @typedef {{ n: string, c: Record<string, number>, g?: Record<string, number> }} Rec */
+/** @typedef {{ n: string, c: Record<string, number>, g?: Record<string, number>, tf?: 1 }} Rec */
 
 /** How each stat reads. playtime is counted in minutes and shown in hours. */
 /** @type {Record<Stat, { scale: number, goal: (n: string) => string, have: (n: string) => string }>} */
@@ -222,9 +222,14 @@ function check(player) {
   const first = !r.g;
   const got = (r.g ??= {});
   if (!backfilled.has(player.id)) {
-    // Once a session: top tiers reached before the titles existed (the Titles pack keeps each title once).
     backfilled.add(player.id);
-    for (const m of milestones) if ((got[m.id] ?? 0) >= m.tiers.length) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: title(m, m.tiers.length), from: "milestones_bp" }));
+    // Saved on the record (tf), not just this session: old top tiers are sent once, then a later join
+    // does not send them again. A new top tier still goes through topTier below. Unknown fields stay.
+    if (!r.tf) {
+      for (const m of milestones) if ((got[m.id] ?? 0) >= m.tiers.length) system.sendScriptEvent("realm:title_unlock", JSON.stringify({ player: player.id, title: title(m, m.tiers.length), from: "milestones_bp" }));
+      r.tf = 1;
+      dirty.add(player.id);
+    }
   }
   /** @type {string[]} */
   const unlocked = [];
