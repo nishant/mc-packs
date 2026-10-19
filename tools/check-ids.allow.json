@@ -3,24 +3,6 @@
   "packs/build_bp/scripts/core/BlockDestroyer.js": [
     "minecraft:end_gateway"
   ],
-  "packs/build_bp/scripts/core/BlockPlacer.js": [
-    "minecraft:black_bed",
-    "minecraft:blue_bed",
-    "minecraft:brown_bed",
-    "minecraft:cyan_bed",
-    "minecraft:gray_bed",
-    "minecraft:green_bed",
-    "minecraft:light_blue_bed",
-    "minecraft:light_gray_bed",
-    "minecraft:lime_bed",
-    "minecraft:magenta_bed",
-    "minecraft:orange_bed",
-    "minecraft:pink_bed",
-    "minecraft:purple_bed",
-    "minecraft:red_bed",
-    "minecraft:white_bed",
-    "minecraft:yellow_bed"
-  ],
   "packs/build_bp/scripts/main.js": [
     "eb:destroy"
   ],
@@ -105,23 +87,7 @@
     "dead_bush"
   ],
   "reasons": {
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:black_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:blue_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:brown_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:cyan_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:gray_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:green_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:light_blue_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:light_gray_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:lime_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:magenta_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:orange_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:pink_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:purple_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:red_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:white_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockPlacer.js|minecraft:yellow_bed": "Java color-bed id. Bedrock has one minecraft:bed, so this special case never runs. W9/O47 owns the BlockPlacer rewrite. Not a universal minecraft: exception.",
-    "packs/build_bp/scripts/core/BlockDestroyer.js|minecraft:end_gateway": "Unconfirmed Java-style id in BlockDestroyer. W9/O49 owns this pack line. Kept until that edit; not silenced by a prefix exception.",
+    "packs/build_bp/scripts/core/BlockDestroyer.js|minecraft:end_gateway": "Pinned vanilla-data has no minecraft:end_gateway. Kept unbreakable until a native BlockTypes or command resolve proves the id invalid. Not a guess that it can be destroyed.",
     "packs/build_bp/scripts/main.js|eb:destroy": "Build mode id compared with typeId. It is not an entity, item, or block. Known false positive until the comparison is narrowed.",
     "packs/translucent_bp/entities/player.json|minecraft:sulfur_cube_archetype": "Vanilla player.json damage domain copied from Mojang, not an entity id. False positive. Do not delete the vanilla copy to silence it.",
     "packs/atlas_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",

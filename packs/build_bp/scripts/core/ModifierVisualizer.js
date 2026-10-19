@@ -2,6 +2,9 @@
 import { world, system } from "@minecraft/server";
 import { getState, getMirrorState, getRadialState, getArrayState } from "./PlayerState.js";
 import { idleSkip, allPlayers } from "../utils/Items.js";
+import { createIdleClock } from "../utils/idle-cadence.js";
+import { holdsBuildTool } from "../utils/build-tool.js";
+import { beginVisualizationTick, forgetHolder, isVisualizationHolder, visualizationIdle } from "../utils/tool-gate.js";
 
 const OFFSET   = 0.525;
 const VIEW_CLIP = 24;
@@ -127,7 +130,12 @@ function drawHorizontalArms(player, mirror) {
 export function startModifierVisualizerLoop() {
 
     system.runInterval(() => {
-        for (const player of allPlayers()) {
+        if (visualizationIdle()) return;
+        const all = allPlayers();
+        if (!beginVisualizationTick(all, holdsBuildTool)) return;
+        for (const player of all) {
+            if (!isVisualizationHolder(player.id)) continue;
+            if (!holdsBuildTool(player)) { forgetHolder(player.id); continue; }
             try {
                 const mirror = getMirrorState(player);
                 const radial = getRadialState(player);
@@ -146,11 +154,17 @@ export function startModifierVisualizerLoop() {
 
     // Players with a mirror on are followed every tick; the others are looked at every few ticks only.
     const mirrorBusy = new WeakSet();
+    const mirrorClock = createIdleClock();
     system.runInterval(() => {
+        if (visualizationIdle()) return;
         const all = allPlayers();
+        if (!beginVisualizationTick(all, holdsBuildTool)) return;
+        const phase = mirrorClock.tick();
         for (let i = 0; i < all.length; i++) {
             const player = all[i];
-            if (idleSkip(player, i, mirrorBusy)) continue;
+            if (!isVisualizationHolder(player.id)) continue;
+            if (idleSkip(player, i, mirrorBusy, phase)) continue;
+            if (!holdsBuildTool(player)) { forgetHolder(player.id); mirrorBusy.delete(player); continue; }
             try {
                 const mirror = getMirrorState(player);
                 if (!mirror.enabled || !(mirror.axisX || mirror.axisZ)) { mirrorBusy.delete(player); continue; }

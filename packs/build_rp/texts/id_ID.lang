@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§cAdmin§r - Mode Hancur: Hanya Kreatif\n§7
 eb.settings.admin_allow_inf_reach=§cAdmin§r - Izinkan Jangkauan Tak Terbatas\n§7Nonaktif: Jangkauan Tak Terbatas dinonaktifkan secara global
 eb.settings.admin_max_reach_cap=§cAdmin§r - Maks. Jarak Jangkauan Tak Terbatas\n§7Saat ini: §e%1  §70 = tidak ada batas
 eb.settings.admin_max_blocks_cap=§cAdmin§r - Batas Blok Maks (per pemain)\n§7Saat ini: §e%1  §7Batas keras: §e%2
+eb.settings.admin_default_max_blocks=§cAdmin§r - Batas blok bawaan (per bangunan)\n§7Pemain tanpa batas tersimpan. Saat ini: §e%1  §7Batas keras: §e%2
+eb.set.admin_default_blocks=Batas blok bawaan
 eb.settings.admin_auto_give_book=§cAdmin§r - Berikan Buku Bangunan Otomatis\n§7Aktif: pemain otomatis mendapat buku saat bergabung
 eb.settings.admin_config_tag=Batasi /config ke tag yang diperlukan\n§7Jika AKTIF, hanya pemain dengan tag yang diperlukan yang dapat menggunakan /config.
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §rKamu menerima §6Buku Bangunan§r da
 eb.help.title=Bantuan
 eb.help.body=§fBuku §6Tutorial§f menjelaskan semuanya dengan gambar. Pegang di tanganmu dan buku itu terbuka di depanmu.
 eb.help.btn.book=§lBuku Tutorial§r\n§8Ambil, atau lihat cara membukanya
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§lPenyiapan Cepat§r\n§8Sesuaikan addon dengan perangkatmu
 eb.help.book_hold=§a[EB] §rKamu sudah punya buku §6Tutorial§r. Pegang di tanganmu dan buku itu terbuka di depanmu.
 eb.help.book_given=§a[EB] §rIni buku §6Tutorial§r. Pegang di tanganmu dan buku itu terbuka di depanmu.
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=Beri Buku Saat Masuk
 eb.set.admin_lock_quality=Kunci Kualitas Pratinjau
 eb.set.admin_vanilla_menus=Menu Biasa untuk Semua
 eb.set.book_language=Bahasa Buku
-eb.set.book_language.tip=Bahasa Buku\n§7Bahasa buku Tutorial serta\n§7petunjuk dan pelajaran di menu melayang.
 eb.help.btn.language=§lBahasa Buku§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=Bahasa
 eb.palette.dist.dissolve_x=Larut X

@@ -154,6 +154,8 @@ eb.settings.admin_destroy_creative=§cایڈمن§r - ڈسٹرائے موڈ: ص�
 eb.settings.admin_allow_inf_reach=§cایڈمن§r - لامحدود رسائی کی اجازت دیں\n§7جب بند ہو، تمام کھلاڑیوں کے لیے لامحدود رسائی غیر فعال ہے
 eb.settings.admin_max_reach_cap=§cایڈمن§r - زیادہ سے زیادہ لامحدود رسائی فاصلہ\n§7موجودہ: §e%1  §70 = کوئی حد نہیں
 eb.settings.admin_max_blocks_cap=§cایڈمن§r - زیادہ سے زیادہ بلاکس کی حد (فی کھلاڑی)\n§7موجودہ: §e%1  §7آخری حد: §e%2
+eb.settings.admin_default_max_blocks=§cایڈمن§r - طے شدہ بلاکس (فی تعمیر)\n§7محفوظ حد کے بغیر کھلاڑی. موجودہ: §e%1  §7آخری حد: §e%2
+eb.set.admin_default_blocks=طے شدہ بلاکس
 eb.settings.admin_auto_give_book=§cایڈمن§r - خودکار بلڈنگ بک دینا\n§7جب آن ہو، کھلاڑیوں کو شامل ہونے پر بک ملتی ہے
 eb.settings.admin_config_tag=eb:config کو مطلوبہ ٹیگ تک محدود کریں\n§7اگر یہ آن ہے تو صرف مطلوبہ ٹیگ والے کھلاڑی ہی /config استعمال کر سکتے ہیں۔
 
@@ -397,7 +399,6 @@ eb.join.welcome=§a[Effortless Building] §rآپ کو §6بلڈنگ بک§r او
 eb.help.title=مدد
 eb.help.body=§f§6ٹیوٹوریل§f بک سب کچھ تصویروں سے سمجھاتی ہے۔ اسے ہاتھ میں لیں اور یہ آپ کے سامنے کھل جاتی ہے۔
 eb.help.btn.book=§lٹیوٹوریل بک§r\n§8اسے حاصل کریں، یا دیکھیں کیسے کھلتی ہے
-eb.help.btn.guided=§lGuided First Build§r\n§8A 30 second walkthrough
 eb.help.btn.setup=§lفوری سیٹ اپ§r\n§8ایڈ آن کو اپنی ڈیوائس کے مطابق کریں
 eb.help.book_hold=§a[EB] §rآپ کے پاس §6ٹیوٹوریل§r بک پہلے سے ہے۔ اسے ہاتھ میں لیں اور یہ آپ کے سامنے کھل جاتی ہے۔
 eb.help.book_given=§a[EB] §rیہ رہی §6ٹیوٹوریل§r بک۔ اسے ہاتھ میں لیں اور یہ آپ کے سامنے کھل جاتی ہے۔
@@ -449,7 +450,6 @@ eb.set.admin_auto_give_book=شامل ہونے پر بکس دیں
 eb.set.admin_lock_quality=پیش نظارہ کا معیار مقفل کریں
 eb.set.admin_vanilla_menus=سب کے لیے سادہ مینو
 eb.set.book_language=بک کی زبان
-eb.set.book_language.tip=بک کی زبان\n§7ٹیوٹوریل بک کی اور تیرتے مینو کے\n§7اشاروں اور اسباق کی زبان۔
 eb.help.btn.language=§lبک کی زبان§r\n§8English, Español, Deutsch, 日本語 ...
 entity.eb:language_picker.name=زبان
 eb.palette.dist.dissolve_x=تحلیل X
