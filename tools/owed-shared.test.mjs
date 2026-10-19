@@ -340,3 +340,8 @@ test("town normalizeOwed keeps fields it does not know", () => {
   const src = readFileSync(join(root, "packs", "town_bp", "scripts", "main.js"), "utf8");
   assert.match(src, /return \{ \.\.\.o, cr:/);
 });
+test("cooking owed test hook reports an oversize answer as an error, never over 2048 characters", () => {
+  const src = readFileSync(join(root, "packs", "cooking_bp", "scripts", "main.js"), "utf8");
+  assert.match(src, /text\.length < 2000\) send\("realm:cooking_owed_test_report", full\)/);
+  assert.match(src, /error: "too long", length: text\.length/);
+});

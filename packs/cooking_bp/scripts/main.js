@@ -1254,12 +1254,19 @@ onScriptEvent(
         const values = {};
         for (const pid of ids) values[pid] = owedStore.get(pid);
         const legacy = world.getDynamicProperty("cooking:owed");
-        send("realm:cooking_owed_test_report", {
+        const full = {
           keys: world.getDynamicPropertyIds().filter((k) => k.startsWith("cooking:owed")).slice(0, 20),
           index: ids,
           values,
           legacy: typeof legacy === "string" ? JSON.parse(legacy) : null,
-        });
+        };
+        // A script event message is limited to 2048 characters: a report that does not fit says so instead of being cut.
+        const text = JSON.stringify(full);
+        if (text.length < 2000) send("realm:cooking_owed_test_report", full);
+        else {
+          console.warn(`[cooking] owed test report is ${text.length} characters, too long to send`);
+          send("realm:cooking_owed_test_report", { error: "too long", length: text.length });
+        }
         return;
       }
       if (id === "realm:cooking_owed_ping") {
