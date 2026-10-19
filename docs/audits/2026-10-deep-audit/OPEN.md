@@ -61,11 +61,29 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 - O27 Land Claims: tamed and farm animals, fire and liquids where the stable API allows (say what it can't do:
   pistons, endermen), a "visitors may open doors" switch, an operator audit list.
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not run, not PASS:**
+  `protectAnimals` and `protectedAnimals` cover leash, ride, feed, milk, shear, name, sit and tame through
+  cancellable interactions only. Animal damage, fire, external fluid flow, pistons and endermen are NOT protected:
+  stable 2.1 has no cancelable event for them. There is no tame-owner getter, so any tamed animal in a claim is
+  covered. The door switch and audit list were not re-verified in this batch.
 - O28 Chest Finder privacy (index only containers the player opened, owns or that are shared).
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:** the
+  `privateIndex` setting (default `true`) indexes only what the player opened, owns or shares. Worlds that already
+  had an index migrate to `false` once.
 - O29 Mail and party moderation: block list, operator purge by sender, per-sender unread cap, party chat mute and
   a 1 s cooldown; prune long-gone parties.
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:** Realm Mail
+  `senderUnreadCap` (default `5`, 0 = no cap) and `blockListMax` (default `30`). Party mute covers only
+  `/realm:party_chat` and the party form: stable 2.1 has no chatSend beforeEvent. The cooldown and purge were not
+  re-verified in this batch.
 - O30 Crowns ledger (`/realm:crowns_audit`, last 200 pays and gives) and a daily pay limit per player.
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:** the audit
+  form shows the newest 50 of the last 200 entries (times UTC). `dailyPayLimit` (default `250000`, 0 = no limit)
+  caps pays per player per UTC day.
 - O31 Reserved nickname list (Admin, Owner, Server, operators' gamertags).
+  **Code done in W5 at `376cf33a7c278cb0788a2e81105af9bb8cbd46f1`; native acceptance queued, not PASS:**
+  `reservedNames` (default `"Admin, Owner, Server"`) and `reservedGamertags` (default `""`). Online operators
+  auto-reserve their gamertag. A never-seen offline operator is NOT reservable without `reservedGamertags`.
 
 ## T6. Story portability (saga_bp)
 
@@ -171,8 +189,13 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 - O58 Recurring `[elite] InvalidEntityError ... dimension` (console.warn catches around elite main.js 167, 176, 433,
   437, 646) and one `[moon] InvalidEntityError hasTag`: an isValid gap in a hot path.
+  **Code done in `6f85410bf00df1a220c3378eae2179522ea07045`, merged via `653ec2fc6ae9ebe295181399922d6398a0b257af`:**
+  InvalidEntity guards in elite and moon, plus `tools/invalid-entity-guards.test.mjs`. Native log check not run.
 - O59 `spawnFresh` exists as separate copies in elite, saga, atlas, domt, expedition, calendar and moon: one shared
   module with a sync tool (C14); the moon copy already broke once (5018ece).
+  **Code done in `fe651846b4154b90ba84cd8c4b7fc26d68bb03d1`: one shared `tools/spawn-shared.js`, synchronous, 8 attempts
+  by default. It checks dimension, position tolerance and no tags, and is wired into all 7 consumers. Only calendar
+  (4 attempts, throws) and moon (4 attempts, warns) are player-facing. Native run queued, not run, not PASS.
 - O60 Harness: `--flat` world templates get a random spawn point (meteor-edge and expedition-nether-carts depend on
   0,0), and a template race with `--jobs > 1` on a fresh cache (tools/test-bds/lib/server.mjs). Fresh Windows W0
   also reproduced 13 failing hook recipes with mangled backslashes/paths; resolve those in W12a, not by skipping
@@ -215,6 +238,12 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   checkpoint was canceled by user-directed decoupling: no source pin, GUI join or W2 acceptance is inferred.
   Final merged review/CI/matched-suite/soak gates remain.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
+  **Code done in `d00a41dcdd676698ef7af36a8f7ac77a342127f4`; partial by design, native forget scenario not run, not PASS.**
+  `announceFromLevel` (default `"0"`) limits only the chat line. A forget deletes orphaned `expedition:parcel_<n>`
+  structures and defers in-flight hand-overs (40-tick retries). PLAYER-owned `expedition:stash_<n>` structures are
+  deliberately retained: stash refs live in player properties and offline players can't be enumerated, so deleting
+  one early loses native inventory. Saves stay blocked until `/reload`. No global protection, full cleanup or
+  native PASS is claimed.
 
 ## T13. Owner-reported bugs from the live Realm (October 19; screenshots in `media/`)
 
@@ -250,8 +279,10 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   Move to page uses one reusable transactional stack/row transfer, validates capacity before mutation and keeps native
   metadata, controls, hotbar and cursor. Genuine native RED/GREEN covers a full-page refusal, real shulker contents,
   potion auxiliary data, enchantments, Nether/End and no leaked stores. Two physical restarts preserve a twice-moved
-  opaque row exactly once, using the documented test-only simulated-ID adapter. W3/O17 and PR86 routing/index work
-  remain open and must reuse this primitive; real inventory mouse/touch acceptance remains W2.
+  opaque row exactly once, using the documented test-only simulated-ID adapter. The W3/O17 routing and index work
+  remains open and must reuse this primitive. PR86 was closed unmerged under O67 (commit `5413ec948b1dfc3d9f3450027021cfef82344aa6`);
+  that closure decision is recorded at O67 and is separate from any replacement proof. Real inventory mouse/touch
+  acceptance remains W2.
 - O74 (blocker) Signs in the Sky "Fallen Light" can't be finished: the crater's amethyst was mined out by players who
   finished it first, so a party mate catching up has nothing to gather. Reset or regrow per accept, or accept any
   shards; audit every step that depends on blocks built once.

@@ -17,6 +17,16 @@ entries below as a changelog.
 - Building beds keeps paired halves and one-item accounting. The normal default stays 50000 blocks; the operator Large server profile uses 2000, operator-only tools and no Infinite Reach.
 - Story quests: operators can set where the town is with /realm:saga_place town. With the daylight cycle stopped, night and time-of-day windows no longer block quest progress, a bed tap counts as sleep, and wait steps count 20 real minutes a day. A story says when it needs a pack that was removed, and Gristle's fight still counts without Champions. Kitchen dishes carry their own name, so a renamed dish can't pass for another.
 - Operators can take titles away with /realm:titles_take or the give-or-take form. The nickname list has pages and search. New worlds greet players with a generic welcome; older Realms keep their text. Slow pack-data deletions now report when they finish, and setup pages stop when you leave, die or respawn.
+- Land claims can protect tamed and farm animals from leashing, riding, feeding, milking, shearing, naming, sitting and taming. Animal damage, fire, flowing liquids, pistons and endermen are not stopped by a claim.
+- Chest Finder indexes only the containers you opened, own or share. Worlds that already had an index switch to this once.
+- Realm Mail limits how many unread letters one sender can leave you (senderUnreadCap, default 5). Party chat can be muted; it covers /realm:party_chat and the party form only.
+- Crowns: /realm:crowns_audit shows the newest 50 of the last 200 pays and gives, in UTC. A daily pay limit (dailyPayLimit, default 250000) caps what each player can pay in a UTC day.
+- Nicknames: Admin, Owner and Server are reserved (reservedNames). Online operators reserve their gamertag automatically; an operator who has never joined needs reservedGamertags.
+- Expeditions: the chat line announcing a clear can start at a chosen level (announceFromLevel, default 0). Forgetting an expedition removes its parcel structures; player stash structures are kept, because offline owners cannot be listed. Saves wait for /reload.
+- Essentials+ tips no longer come back by themselves on a Realm that never saved its tip list; /realm:news_tips adds them back.
+- The Parties migration cannot be rolled back.
+- Operators see the setup reminder once.
+- Nickname protection for an offline gamertag starts at that player's next join.
 - Town news is quieter: champions, sieges, fairs, legendary fish, meteors, nightmare expeditions, new guild Masters, Starlit relics and new Callings are told at most once an hour per pack, with the same rewards. News about nobody no longer shows a blank name, and milestone titles you already earned are not offered again on every join.
 
 ## Clear quests and safer inventory pages

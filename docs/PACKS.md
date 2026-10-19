@@ -1111,6 +1111,7 @@ Answers "which chest has the iron?" for a shared base: it remembers what each co
 | `maxContainers` | `2000` | Most containers remembered; the ones seen longest ago are forgotten first |
 | `maxResults` | `20` | Rows in the results menu |
 | `highlightSeconds` | `10` | How long the bright arrow and direction line show |
+| `privateIndex` | `true` | Players find only containers they opened themselves (or that were shared with them). `false` = the old world-wide index, where anyone finds any remembered container they may open. A world that already had an index before this option was added is set to `false` once, so it keeps the world-wide index until an operator turns this on |
 | `containerTypes` | chest, trapped chest, copper chest (all 8: every stage, waxed or not), barrel, placed shulker boxes (all 17 colors) | Block ids that are remembered and searched. Ids this game version doesn't have are skipped |
 
 Operators can change `liveScanRadius`, `maxResults` and `highlightSeconds` in game with `/realm:config`; they apply to the next search.
@@ -1156,7 +1157,7 @@ Claim the land around your base so other players can't break, place or open anyt
 - **Operators** can't build in other players' claims unless **Operators can build in any claim** is enabled (`operatorsBypass`), so a realm where everyone is an operator still gets protection. They can always remove a claim.
 - **Containers in a claim** are also kept from other players' [Quick Stack & Sort](#quick-stack--sort--stash_bp) (`/realm:stash` puts nothing in them) and [Chest Finder](#chest-finder--find_bp) (`/realm:find` doesn't list them).
 - **Other packs' blocks in a claim** follow the same rule, since tapping them is refused like any other tap: only the claim's players can collect a charged lightning rod's Storm Glass ([Storm Chasing](#storm-chasing--storm_bp)), sit on its stairs and slabs ([Chairs](#chairs--chairs_bp)), cook in its pots ([Kitchen](#kitchen--cooking_bp)), play its slot machines ([Slot Machine](#slot-machine--slots_bp)) or use its waystones ([Waystones & Inns](#waystones--inns--waystone_bp)).
-- **What a claim doesn't stop:** mobs, hurting animals or pets, fire spreading, lava or water flowing in, pistons pushing blocks in from outside, hoppers or minecarts pulling items across the border, and hits: punching an armor stand to break it, or punching the item out of an item frame, isn't stopped (only tapping them is).
+- **What a claim doesn't stop:** mobs, hurting animals or pets (the stable API can't cancel damage, so `protectAnimals` covers leashing, riding, feeding, milking, shearing, naming, sitting and taming, not hits), fire spreading, lava or water flowing in, pistons pushing blocks in from outside, hoppers or minecarts pulling items across the border, and hits: punching an armor stand to break it, or punching the item out of an item frame, isn't stopped (only tapping them is).
 
 ### Commands
 
@@ -1176,6 +1177,8 @@ Claim the land around your base so other players can't break, place or open anyt
 | `protectWorldEvents` | `true` | Claims are safe zones: meteors, tornadoes, storm lightning and other world events break no blocks in them |
 | `operatorsBypass` | `false` | Operators can build, break and open things in anyone's claim |
 | `protectedEntities` | `armor_stand`, `chest_minecart`, `hopper_minecart`, `chest_boat` | Entities only a claim's players can use inside it |
+| `protectAnimals` | `true` | Others can't leash, ride, feed, milk, shear, name or tame the animals in `protectedAnimals` inside a claim (a tame pet's owner can't be read in the stable API, so any tamed animal in a claim is covered). Doesn't stop damage. `false` = anyone can use them |
+| `protectedAnimals` | cow, mooshroom, sheep, pig, chicken, goat, horse, donkey, mule, llama, camel, wolf, cat, parrot, trader llama, skeleton horse, zombie horse, fox, axolotl, allay, rabbit, bee, frog, sniffer, armadillo, turtle, panda, ocelot, strider | Which animals `protectAnimals` covers (`minecraft:` ids) |
 | `borderSeconds` | `10` | How long **Show claim borders** draws them |
 
 Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `protectWorldEvents` and `operatorsBypass` in game with `/realm:config`. The rest stays in `config.js`. The realm has room for 500 claims in all.
@@ -1640,6 +1643,8 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 | `sendCooldownSeconds` | `10` | Seconds a player waits between two letters. `0` = no wait (0–120 in game) |
 | `maxRoster` | `400` | Most players remembered as recipients; the ones seen longest ago are forgotten first. Their letters stay |
 | `itemsHint` | `"To send items, use the Player Mailroom build (mc.nish.software/mailroom)."` | The mail menu's line on how to send items. `""` = no line |
+| `senderUnreadCap` | `5` | Most unread letters from one player that one inbox holds; they can send again once some are read or deleted. `0` = no cap (menu range 0 to 50). Letters from packs aren't counted |
+| `blockListMax` | `30` | Most players one player can block (config only). A blocked player's letters aren't delivered; letters from packs still are |
 
 Operators can change `inboxLimit`, `systemInboxLimit`, `systemLetterDays`, `systemReserve`, `sentLimit`, `notifyOnJoin` and `sendCooldownSeconds` in game with `/realm:config`; changes apply without a restart. Each player can switch the join notice off or on for themselves with **Unread letters notice on join** in `/realm:prefs`, which follows `notifyOnJoin` until they choose. The rest stays in `config.js`.
 
@@ -1698,6 +1703,8 @@ Pick a nickname and a color to show above your head instead of your gamertag. Ch
 | `enabled` | `true` | Players can set nicknames. Disabled: everyone shows their gamertag; nicknames are kept |
 | `showGamertag` | `true` | Show the gamertag in gray on a second line under the nickname |
 | `forgetGamertagsAfterDays` | `365` | Forget remembered gamertags after this many real inactive days; `0` disables pruning. Online players are skipped, saved nicknames stay, and untimestamped legacy records start counting when first observed |
+| `reservedNames` | `"Admin, Owner, Server"` | Nicknames players can't take (comma separated; any case, spaces and underscores ignored, so "Ad min" is "Admin"). Operators may use them. Saved nicknames are kept |
+| `reservedGamertags` | `""` | Gamertags reserved even while their player is offline or has never joined (comma separated), so nobody else can take them. The game doesn't tell packs who the operators are, so list the offline ones here. A player may still use their own gamertag. Online operators are reserved automatically; never-seen offline operators need this list |
 | `afkTag` | `afk` | The tag the AFK pack gives AFK players. Keep it the same as AFK `tag` |
 | `afkPrefix` | `§7[AFK]§r ` | Shown before a nickname while the player has `afkTag`. Keep it the same as AFK `nameTagPrefix` |
 
@@ -2290,9 +2297,10 @@ The realm's currency. Crowns are paid by other packs (quests, bounties, stories 
 |---|---|---|
 | `/realm:crowns` | Everyone | The Crowns menu: balance and top list, pay a player, the market (where it's open anywhere, default off, `marketAnywhere`), and for operators, give Crowns |
 | `/realm:crowns_balance` | Everyone | Your balance, rank and the top 10 (`topCount`) |
-| `/realm:crowns_pay <player> <amount>` | Everyone | Pays one online player from your balance (1 to 100,000, `maxPay`) |
+| `/realm:crowns_pay <player> <amount>` | Everyone | Pays one online player from your balance (1 to 100,000, `maxPay`), up to `dailyPayLimit` a UTC day |
 | `/realm:crowns_market` | Everyone | Opens the market if it's open anywhere (disabled by default, `marketAnywhere`); otherwise tells you to visit Quill the Trader (`merchantName`) |
 | `/realm:crowns_give <player> <amount>` | Operators | Gives Crowns to the players picked (`@a` works); a negative amount takes them, down to 0. A balance tops out at 2,147,483,647, so a give stops there (the reply says `(the most a balance can hold)`) |
+| `/realm:crowns_audit` | Operators and Game Directors | A form with the newest 50 of the last 200 pays and gives, newest first (times in UTC) |
 
 ### Configuration (`scripts/config.js` → `CONFIG`)
 
@@ -2305,6 +2313,7 @@ The realm's currency. Crowns are paid by other packs (quests, bounties, stories 
 | `merchantRole` | `"merchant"` | The townsfolk role that offers the market (Quill the Trader has it) |
 | `merchantName` | `"Quill the Trader"` | Who `/realm:crowns_market` sends players to |
 | `maxPay` | `100000` | Most Crowns one `/realm:crowns_pay` can send |
+| `dailyPayLimit` | `250000` | Most Crowns one player can send with `/realm:crowns_pay` per UTC day (it resets at midnight UTC). `0` = no limit (menu range 0 to 1,000,000) |
 | `topCount` | `10` | How many players the top list shows |
 | `sell` | 24 items (above) | What the market buys: `{ item, per, price, name?, lore? }`, `per` items for `price` Crowns. With `lore`, only items whose first lore line is exactly that; without it, only items with no lore |
 | `buy` | 9 items (above) | What the market sells: `{ item, amount, price, name? }`, `amount` items for `price` Crowns |
@@ -5187,6 +5196,7 @@ Dungeon runs for you and your [party](#parties--party_bp), in the spirit of Diab
 | `boonEvery` | `5` | A Gauntlet has a sanctuary (pick one of three boons) every this many rooms (3 to 8); a Gauntlet too short for that still gets one, in the room right before the boss |
 | `loadoutDefault` | `false` | The Gauntlet preview starts with **Fixed loadout** enabled; the leader can still switch it |
 | `gauntletKit` | the kit above | The Fixed loadout starter kit: `{ item, count, from, to, slot, ench }` (`from`/`to` levels as for `mobs`; `slot` is `head`, `chest`, `legs`, `feet` or `offhand`; `ench` is `{ <enchantment id>: level }`). Everything in the kit (food, arrows and blocks too) is run gear and stays in the dungeon |
+| `announceFromLevel` | `0` | Chat line for a clear only from this level up (0: every clear; the menu names each level, 0 to 22 = Easy, Normal, Hard, Nightmare 1 to 20). Only the chat line changes: rewards, XP and progress are the same |
 | `tierBoardSize` | `20` | Players kept on the Highest tiers board |
 | `historySize` | `20` | Runs kept in the world's run history and in each player's |
 | `maxTier` | `20` | Highest Nightmare tier (1 to 20) |
@@ -5235,6 +5245,8 @@ Once a stored-items cart has actually been found, its saved record remembers tha
 | `expedition:buffs` | Player | JSON list of the effects a run gave the player (shrine blessing, boons), taken away when they leave the run, also after a restart |
 | `expedition:prog` | Player | JSON `{ u, b, c, r }`: the highest Nightmare tier unlocked, the highest level cleared, clears, the player's recent runs |
 | `expedition:rolls` | Player | JSON `{ <level>: [affix ids] }`: the affixes shown for each Nightmare level, kept until that run starts or they're rerolled (so reopening the menu doesn't reroll) |
+
+Forgetting this pack's saved data (`/realm:diag`) deletes its world entries and its parcel structures (orphaned parcels are cleaned up). It keeps the `expedition:stash_<n>` structures: a stash is named on the owner's player data, and offline players can't be listed, so deleting one early would lose the items inside. A stash is removed only when its owner's items are handed back, so a forget can leave stash chests in the world. Hand-overs still in flight are retried until they finish. After a forget the pack saves nothing until you run `/reload` or restart the server.
 | `expedition:cfg` | World | Settings changed in `/realm:config` |
 | `realm:exp_mob`, `realm:exp_run:<id>`, `realm:exp_champ`, `realm:exp_called`, `realm:exp_ch_<id>`, `realm:bounty:exp_<id>`, `realm:exp_pet` | Entity tags | On the dungeon's mobs (champions, mobs that called for help, champions asked of the Champions pack; the last one on the boss only) and a Wolf Pack's wolves (`realm:exp_pet`). Leftovers are removed when the world starts |
 | `realm_expedition` | Player tag | On every player in a running expedition, from the moment they're taken in until they're out of it (leave, die, leave the game, the run ends; one who was offline loses it when they next spawn, also after a restart). Other packs read it (the Deck of Many Things' The Swap) |
