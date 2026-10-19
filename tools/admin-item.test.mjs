@@ -224,12 +224,18 @@ class MockWorld {
   constructor() {
     this.props = new Map();
     this.players = [];
+    const signal = (field) => {
+      const handlers = [];
+      this[field] = (event) => { for (const handler of handlers) handler(event); };
+      return { subscribe: (handler) => { handlers.push(handler); return handler; } };
+    };
     this.afterEvents = {
-      worldLoad: { subscribe: (fn) => (this._onWorldLoad = fn) },
-      playerLeave: { subscribe: (fn) => (this._onLeave = fn) },
-      playerSpawn: { subscribe: (fn) => (this._onSpawn = fn) },
-      playerInventoryItemChange: { subscribe: (fn) => (this._onInvChange = fn) },
-      itemUse: { subscribe: (fn) => (this._onItemUse = fn) },
+      worldLoad: signal("_onWorldLoad"),
+      playerLeave: signal("_onLeave"),
+      playerSpawn: signal("_onSpawn"),
+      playerInventoryItemChange: signal("_onInvChange"),
+      itemUse: signal("_onItemUse"),
+      entityDie: signal("_onDie"),
     };
     MockWorld._current = this;
   }
@@ -370,7 +376,7 @@ export const { CommandPermissionLevel, CustomCommandParamType, CustomCommandRegi
 export const { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } = m;\n`
     );
 
-    for (const file of ["config.js", "settings.js", "actions.js", "catalog.js", "presets.js", "zones.js", "script-events.js", "diag.js", "diagnostics.js", "setup.js", "main.js"]) {
+    for (const file of ["config.js", "settings.js", "actions.js", "catalog.js", "presets.js", "zones.js", "script-events.js", "diag.js", "diagnostics.js", "lifecycle.js", "setup.js", "main.js"]) {
       const src = fs.readFileSync(path.join(adminDir, file), "utf8");
       const rewritten = src
         .replaceAll('"@minecraft/server"', JSON.stringify(pathToFileURL(serverStub).href))
