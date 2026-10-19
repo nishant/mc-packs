@@ -194,8 +194,9 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 - O59 `spawnFresh` exists as separate copies in elite, saga, atlas, domt, expedition, calendar and moon: one shared
   module with a sync tool (C14); the moon copy already broke once (5018ece).
   **Code done in `fe651846b4154b90ba84cd8c4b7fc26d68bb03d1`: one shared `tools/spawn-shared.js`, synchronous, 8 attempts
-  by default. It checks dimension, position tolerance and no tags, and is wired into all 7 consumers. Only calendar
-  (4 attempts, throws) and moon (4 attempts, warns) are player-facing. Native run queued, not run, not PASS.
+  by default. Only `fresh: true` (used by expedition) also checks position, dimension and tags; every other caller
+  verifies type. It is wired into all 7 consumers. Calendar (4 attempts, throws) and moon (4 attempts, warns) are
+  player-facing. Native run queued, not run, not PASS.
 - O60 Harness: `--flat` world templates get a random spawn point (meteor-edge and expedition-nether-carts depend on
   0,0), and a template race with `--jobs > 1` on a fresh cache (tools/test-bds/lib/server.mjs). Fresh Windows W0
   also reproduced 13 failing hook recipes with mangled backslashes/paths; resolve those in W12a, not by skipping
@@ -238,9 +239,11 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   checkpoint was canceled by user-directed decoupling: no source pin, GUI join or W2 acceptance is inferred.
   Final merged review/CI/matched-suite/soak gates remain.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
-  **Code done in `d00a41dcdd676698ef7af36a8f7ac77a342127f4`; partial by design, native forget scenario not run, not PASS.**
+  **Code done in `d00a41dcdd676698ef7af36a8f7ac77a342127f4`; partial by design. Official strict native PASS on
+  `971e5533` (16.6 s, 0 errors, `tools/test-bds/examples/expedition-forget.js`): orphaned parcels deleted, stash and
+  foreign structures kept, exactly one ok answer. No other native PASS is claimed.**
   `announceFromLevel` (default `"0"`) limits only the chat line. A forget deletes orphaned `expedition:parcel_<n>`
-  structures and defers in-flight hand-overs (40-tick retries). PLAYER-owned `expedition:stash_<n>` structures are
+  structures. The cleanup sweep waits for in-flight hand-overs and rechecks every 40 ticks; it is not a delivery retry. PLAYER-owned `expedition:stash_<n>` structures are
   deliberately retained: stash refs live in player properties and offline players can't be enumerated, so deleting
   one early loses native inventory. Saves stay blocked until `/reload`. No global protection, full cleanup or
   native PASS is claimed.
@@ -280,7 +283,8 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   metadata, controls, hotbar and cursor. Genuine native RED/GREEN covers a full-page refusal, real shulker contents,
   potion auxiliary data, enchantments, Nether/End and no leaked stores. Two physical restarts preserve a twice-moved
   opaque row exactly once, using the documented test-only simulated-ID adapter. The W3/O17 routing and index work
-  remains open and must reuse this primitive. PR86 was closed unmerged under O67 (commit `5413ec948b1dfc3d9f3450027021cfef82344aa6`);
+  is code done at `d7390b7c24a8b31934c1177f65eac297f5b22612` (earlier-page routing, snapshot-bound index) and reuses this
+  primitive; its measured acceptance remains W1. PR86 was closed unmerged under O67 (commit `5413ec948b1dfc3d9f3450027021cfef82344aa6`);
   that closure decision is recorded at O67 and is separate from any replacement proof. Real inventory mouse/touch
   acceptance remains W2.
 - O74 (blocker) Signs in the Sky "Fallen Light" can't be finished: the crater's amethyst was mined out by players who

@@ -1121,7 +1121,8 @@ Operators can change `liveScanRadius`, `maxResults` and `highlightSeconds` in ga
 | Key | Scope | Contents |
 |---|---|---|
 | `find:cfg` | World | Settings changed in `/realm:config` |
-| `find:idx:0`, `find:idx:1`, … | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId } }`, ids without the `minecraft:` prefix. Written at most once every 30 seconds, and whenever a player leaves |
+| `find:mig` | World | Set once the world's index mode (private or world-wide) was decided. Old worlds keep the world-wide index until an operator changes `privateIndex` |
+| `find:idx:0`, `find:idx:1`, ... | World | The index as JSON shards under 30,000 characters each: `{ "<dimension>:<x>,<y>,<z>": { t: [[itemId, count], …], at: epochMs, b: blockId, w: [openers], o: [placers] } }`, ids without the `minecraft:` prefix. `w` (who opened it) and `o` (who placed it) are kept separately, up to 8 each. Written at most once every 30 seconds, and whenever a player leaves |
 
 ### How it works
 
@@ -1139,8 +1140,8 @@ Claim the land around your base so other players can't break, place or open anyt
 ### How to use
 
 1. Once an operator has enabled land claims, stand in the middle of your base and run `/realm:claim`, then pick **Claim this land**. You get 33 × 33 blocks around you (default radius 16, `radius`), from the bottom of the world to the top, and green sparkles show its borders.
-2. Inside it, only you and the players you share it with can break or place blocks, open chests, doors and furnaces, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees `This land is claimed by Sam`.
-3. **Share it:** `/realm:claim` → **My claim: 120, -340** → **Share with Alex** (players online now). In a [party](#parties--party_bp), **Share with my party** shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first).
+2. Inside it, only you and the players you share it with can break or place blocks, open chests, furnaces and doors, press buttons, pour buckets, or use armor stands and chest minecarts or boats. Anyone else sees `This land is claimed by Sam`.
+3. **Share it:** `/realm:claim` → **My claim: 120, -340** → **Share with Alex** (players online now). In a [party](#parties--party_bp), **Share with my party** shares it with everyone in your party, now and later, in one tap. The same menu stops sharing, shows its borders or removes the claim (it asks first). The same menu has **Visitors may open doors**, which lets visitors open doors, trapdoors and gates (off by default).
 4. **Where are the borders?** `/realm:claim` → **Show claim borders** sparkles the edges of every claim near you for 10 seconds (asking again starts over). Walking in or out of one says `Entering Sam's claim` / `Leaving Sam's claim` above the hotbar.
 5. Claims are safe zones for world events too: meteors, storm lightning and the other world-event packs break no blocks in them (see [Safe Zones](#safe-zones--zones_bp)).
 6. **Operators:** enable it in `/realm:config` → **Land Claims** → **Land claims**, and set the claim size and how many each player gets there. `/realm:claim` → **All claims (operator)** lists every claim to remove any of them. **Protect claims from world events** (`protectWorldEvents`) turns the safe zone part off.
@@ -1187,7 +1188,7 @@ Operators can change `enabled`, `radius`, `maxClaims`, `protectExplosions`, `pro
 
 | Key | Scope | Contents |
 |---|---|---|
-| `claims:c:<id>` | World | One per claim: JSON `{ id, o, n, dim, x, z, r, s, pt?, pc? }`, the owner's id and name, the dimension, the center, the radius, the players it's shared with (`[{ i, n }]`), whether it's shared with the owner's party (`pt`) and the owner's party code (`pc`, `""` for none; access also needs the owner and the player on the Parties pack's current member list). The owner's and shared players' names are updated when they join with a new gamertag |
+| `claims:c:<id>` | World | One per claim: JSON `{ id, o, n, dim, x, z, r, s, pt?, pc? }`, the owner's id and name, the dimension, the center, the radius, the players it's shared with (`[{ i, n }]`), whether it's shared with the owner's party (`pt`) and the owner's party code (`pc`, `""` for none; access also needs the owner and the player on the Parties pack's current member list). The owner's and shared players' names are updated when they join with a new gamertag. `dr` (true when set) lets visitors open doors, trapdoors and gates. `lv` is the owner's last visit (ms), saved on join and leave and refreshed about every 60 seconds while they play; when it's missing the claim shows the owner's last visit as unknown |
 | `claims:next` | World | The next claim id |
 | `claims:cfg` | World | Settings changed in `/realm:config` |
 
@@ -1605,9 +1606,10 @@ Write letters to anyone who has played on the realm, online or not. Letters to o
 2. **Write to your whole party:** in a [party](#parties--party_bp), the first choice in the list is **My party (Bob, Dan)**: it sends a copy of the letter to every mate, offline ones included.
 3. If they're online, they see `New letter from Sam: "Hello!". Read it with /realm:mail` in chat. If not, the letter waits: the next time they join, chat says `You have 2 unread letters: /realm:mail`.
 4. **Read your letters:** `/realm:mail` → **Inbox**. New letters are marked `[New]`. Open one to read it, then **Reply** or **Delete** it. **Delete all read letters** clears out the rest and shows the inbox again.
-5. **See what you sent:** `/realm:mail` → **Sent** shows your recent letters and whether each was read yet.
-6. Don't want the chat line on joining? Disable **Unread letters notice on join** in `/realm:prefs`.
-7. **Operators:** `/realm:config` → **Realm Mail** sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining.
+5. **Block a sender:** open one of their letters and tap **Block sender** (their later letters to you aren't delivered). **Blocked players** in `/realm:mail` lists who you've blocked; tap a name to unblock it.
+6. **See what you sent:** `/realm:mail` → **Sent** shows your recent letters and whether each was read yet.
+7. Don't want the chat line on joining? Disable **Unread letters notice on join** in `/realm:prefs`.
+8. **Operators:** `/realm:config` → **Realm Mail** sets how many letters an inbox holds, how many are kept in Sent, the wait between letters, and whether players are told about unread letters on joining. `/realm:mail` → **Delete letters from a player** (operators only) finds a writer by gamertag and removes all their letters from every inbox and Sent list after you confirm; it can't be undone.
 
 ### What players see
 
@@ -1655,6 +1657,7 @@ Operators can change `inboxLimit`, `systemInboxLimit`, `systemLetterDays`, `syst
 | `mail:l:<id>` | World | One per letter: JSON `{ id, f, fn, t, tn, s, b, at, r, di, ds }`, the writer's and recipient's ids and names, subject, letter, when it was sent (ms), read, deleted from the inbox, removed from Sent. Removed once both the recipient deleted it and it left the writer's Sent list |
 | `mail:next` | World | The next letter id |
 | `mail:roster` | World | JSON list of players who have joined: `[{ i, n, t }]`, id, name and last join (ms), newest first, up to `maxRoster` |
+| `mail:b:<id>` | World | One per recipient who blocks senders: JSON list `[{ i, n }]` of blocked players (id and name), up to `blockListMax` (default 30) |
 | `mail:pref` | Player | JSON of the player's own `joinNotice` choice from `/realm:prefs` |
 | `mail:cfg` | World | Settings changed in `/realm:config` |
 
@@ -2328,6 +2331,8 @@ Operators can change `dailyBonus`, `startBalance`, `marketAnywhere` and `marketE
 | `crowns:joined` | Player | `true` once the starting balance was given |
 | `crowns:bonus` | Player | The UTC day number (days since 1970) of the last daily bonus |
 | `crowns:names` | World | JSON `{ scoreboard id: name }` of up to 800 players, so the top list shows names of players who are offline |
+| `crowns:paid` | Player | JSON `[UTC day, Crowns sent that day]`, the player's paid-out total for the current day, used to enforce the daily pay limit |
+| `crowns:ledger` | World | The newest 200 payment entries, capped at 30,000 UTF-8 bytes; each entry is `[time (ms), "p" or "g", from, to, amount, ...]` |
 | `crowns:cfg` | World | Settings changed in `/realm:config` |
 
 ### How it works
@@ -3481,7 +3486,7 @@ Team up with up to five friends. Party mates see each other's health, distance a
 2. The invited player sees `[Party] Ann invited you to their party.` and joins with `/realm:party_accept`, or with the **Accept Ann's invite** button in `/realm:party`. An invite lasts 2 minutes.
 3. While a mate is within 128 blocks in the same dimension, the bar above your hotbar shows them every 2 seconds: `Ann 18hp 40m NE | Bob 9hp 120m S` (health, distance in blocks, and which way to look). Don't want it? Disable **Party HUD** in `/realm:prefs`.
 4. Talk to the party only: `/realm:party_chat "meet at the portal"` (in quotes for more than one word), or **Send a message** in `/realm:party`. Everyone in the party who is online sees `[Party] Ann: meet at the portal`.
-5. Run `/realm:party` to see every member with their health and where they are (or `offline`), and to invite more players. The leader can also **Remove a member**. Leave with `/realm:party_leave` or **Leave the party**.
+5. Run `/realm:party` to see every member with their health and where they are (or `offline`), and to invite more players. The leader can also **Remove a member** or **Mute or unmute a member** (a muted member can still read the party chat, but their messages aren't sent, and they see `The party leader muted you: your party messages aren't sent.`; the leader can't be muted). Leave with `/realm:party_leave` or **Leave the party**.
 6. **Operators:** `/realm:config` → **Parties** switches parties on or off and sets the party size, how long invites last and the HUD's range.
 
 ### What players see
@@ -3527,6 +3532,7 @@ Operators can change `enabled`, `maxSize`, `inviteSeconds`, `partyHud`, `hudRang
 | `party:p:<code>` | World | One per party: JSON `{ l, m }`, the leader (player id) and members as `[player id, gamertag, last-seen milliseconds]`, in joining order. Unknown record fields and extra tuple values are retained. Missing times start when observed, never at the epoch. Older `party:data` migrates to these records and is removed; an older Parties version cannot read them back |
 | `realm_party:<code>` | Player tag | On every member while they're in that party, for other packs to read |
 | `party:pref` | Player | JSON of the player's own `partyHud` choice from `/realm:prefs` |
+| `mu` (inside `party:p:<code>`) | World | Ids of members the leader muted in party chat (only current members count; the leader is never muted). Stored as the party record's `mu` list and removed when empty |
 | `party:cfg` | World | Settings changed in `/realm:config` |
 
 Pending invites are kept in memory only: they end when the realm restarts.
@@ -5246,8 +5252,9 @@ Once a stored-items cart has actually been found, its saved record remembers tha
 | `expedition:prog` | Player | JSON `{ u, b, c, r }`: the highest Nightmare tier unlocked, the highest level cleared, clears, the player's recent runs |
 | `expedition:rolls` | Player | JSON `{ <level>: [affix ids] }`: the affixes shown for each Nightmare level, kept until that run starts or they're rerolled (so reopening the menu doesn't reroll) |
 
-Forgetting this pack's saved data (`/realm:diag`) deletes its world entries and its parcel structures (orphaned parcels are cleaned up). It keeps the `expedition:stash_<n>` structures: a stash is named on the owner's player data, and offline players can't be listed, so deleting one early would lose the items inside. A stash is removed only when its owner's items are handed back, so a forget can leave stash chests in the world. Hand-overs still in flight are retried until they finish. After a forget the pack saves nothing until you run `/reload` or restart the server.
 | `expedition:cfg` | World | Settings changed in `/realm:config` |
+
+Forgetting this pack's saved data (`/realm:diag`) deletes its world entries and its parcel structures (orphaned parcels are cleaned up). It keeps the `expedition:stash_<n>` structures: a stash is named on the owner's player data, and offline players can't be listed, so deleting one early would lose the items inside. A stash is removed only when its owner's items are handed back, so a forget can leave stash chests in the world. The cleanup sweep waits for hand-overs still in flight and rechecks every 40 ticks; it isn't a delivery retry. After a forget the pack saves nothing until you run `/reload` or restart the server.
 | `realm:exp_mob`, `realm:exp_run:<id>`, `realm:exp_champ`, `realm:exp_called`, `realm:exp_ch_<id>`, `realm:bounty:exp_<id>`, `realm:exp_pet` | Entity tags | On the dungeon's mobs (champions, mobs that called for help, champions asked of the Champions pack; the last one on the boss only) and a Wolf Pack's wolves (`realm:exp_pet`). Leftovers are removed when the world starts |
 | `realm_expedition` | Player tag | On every player in a running expedition, from the moment they're taken in until they're out of it (leave, die, leave the game, the run ends; one who was offline loses it when they next spawn, also after a restart). Other packs read it (the Deck of Many Things' The Swap) |
 | `realm_exp_<slot>` | Ticking area | Keeps the dungeon loaded while it's built, played and filled in; removed afterward |
@@ -6754,7 +6761,7 @@ Delivery takes an entry before granting its reward so a restart cannot blindly p
 
 **The access check** (Quick Stack & Sort and Chest Finder ask; Land Claims and Quick Stack & Sort's chest locks answer; JSON script events, each under 2048 characters):
 
-- **`realm:access_check`** `{ id, player, spots: [[dim, x, y, z], ...] }`: which of these containers (at most 40 a message; `dim` is the full dimension id, like `minecraft:overworld`, and x, y, z are block coordinates) may this player not open? Every protection pack answers, even when nothing is closed, with **`realm:access_check_result`** `{ id, from, closed: [i, ...] }`, the indexes of the closed spots in that message. An asker waits for every pack that has answered before (2 seconds at most), or 5 ticks if none has yet; each asker sends a hello (`id: "hello"`, no spots) 3 seconds after the world loads so it learns who answers.
+- **`realm:access_check`** `{ id, player, spots: [[dim, x, y, z], ...] }`: which of these containers (at most 40 a message; `dim` is the full dimension id, like `minecraft:overworld`, and x, y, z are block coordinates) may this player not open? Every protection pack answers, even when nothing is closed, with **`realm:access_check_result`** `{ id, from, closed: [i, ...] }`, the indexes of the closed spots in that message. An asker waits for every pack that has answered before (2 seconds at most), or 5 ticks if none has yet; each asker sends a hello (`id: "hello"`, no spots) 3 seconds after the world loads so it learns who answers. Stash and Land Claims also send **`ours`**: the indexes of the spots the asker owns or is shared on (Land Claims also counts a claim shared through the asker's party; an operator gets no bypass here). Chest Finder lists an `ours` container even if it hasn't indexed it yet. `closed` and `ours` never overlap; a spot in neither list has no rule from that pack, so another pack may still close it.
 
 **The Hearth & Hearsay events** (Townsfolk and the packs around it; JSON script events, each under 2048 characters):
 
