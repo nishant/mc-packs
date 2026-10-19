@@ -5,7 +5,7 @@ import { Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { ActionFormData } from "@minecraft/server-ui";
 import { CAMPS, PREFABS, buildSteps, footprint, prefabInfo, rotate, siteOk } from "./prefabs.js";
 import { get } from "./settings.js";
-import { KNEE, farDist, farOffset, refresh as refreshFar, setPlaceDist } from "./scale.js";
+import { farDist, farOffset, refresh as refreshFar, setPlaceDist } from "./scale.js";
 import { PLACES, STORIES } from "./stories.js";
 import { FAVORS } from "./stories/index.js";
 import { OVERWORLD, across, coords, dimName, groundAt, hash, isOp, itemName, lifecycle, num, send, show, wait } from "./util.js";
@@ -205,10 +205,35 @@ export function townXZ() {
   return t && t.dim === OVERWORLD ? { x: Math.floor(t.x), z: Math.floor(t.z) } : spawnXZ();
 }
 
+/** The stories set in and around the town: every `offset` in them (the square, farms, the forge, Pip's whole route) is counted from the town, so a story's spots never split between two anchors. */
+export const TOWN_STORIES = ["mayors_burden", "singing_forge", "heart_bram", "fest_judge", "fest_speech", "act2_choir", "lost_lambs"];
+
+/** @type {WeakSet<object> | undefined} */
+let townOffsets;
+
+/** Whether an offset belongs to a town story. @param {object} offset */
+function townAnchored(offset) {
+  if (!townOffsets) {
+    townOffsets = new WeakSet();
+    const seen = new Set();
+    /** @param {any} v */
+    const walk = (v) => {
+      if (!v || typeof v !== "object" || seen.has(v)) return;
+      seen.add(v);
+      for (const [k, x] of Object.entries(v)) {
+        if (k === "offset" && x && typeof x === "object") townOffsets?.add(x);
+        walk(x);
+      }
+    };
+    for (const s of STORIES) if (TOWN_STORIES.includes(s.id)) walk(s);
+  }
+  return townOffsets.has(offset);
+}
+
 /**
  * Where a location (an objective, or a `from`/`to`/`spawnAt`) is: a Loc, the name of a place nobody
- * has set (a string), or undefined when it names no location. An `offset` within KNEE blocks (the town's
- * square, farms, the forge) is counted from the town; a farther one stays counted from world spawn.
+ * has set (a string), or undefined when it names no location. An `offset` in a town story
+ * (TOWN_STORIES) is counted from the town; any other stays counted from world spawn.
  * @param {Where | Objective | undefined} w @param {string} [label] @returns {Loc | string | undefined}
  */
 export function locate(w, label) {
@@ -220,7 +245,7 @@ export function locate(w, label) {
   }
   if (w.at) return { dim: w.at.dim ?? OVERWORLD, x: w.at.x, z: w.at.z, label: w.mark ?? label ?? "the spot" };
   if (w.offset) {
-    const s = Math.hypot(w.offset.x, w.offset.z) <= KNEE ? townXZ() : spawnXZ();
+    const s = townAnchored(w.offset) ? townXZ() : spawnXZ();
     const o = farOffset(w.offset);
     return { dim: OVERWORLD, x: s.x + o.x, z: s.z + o.z, label: w.mark ?? label ?? "the spot" };
   }
@@ -889,7 +914,7 @@ export async function previewBuild(player, name, at) {
 
 /** Which stories (and favors) use a place. @param {string} name */
 export const usedBy = (name) => [
-  ...STORIES.filter((s) => s.chapters.some((c) => c.objectives.some((o) => placesIn(o).includes(name)))).map((s) => s.title),
+  ...STORIES.filter((s) => (name === TOWN && TOWN_STORIES.includes(s.id)) || s.chapters.some((c) => c.objectives.some((o) => placesIn(o).includes(name)))).map((s) => s.title),
   ...(FAVORS.some((f) => f.objective && placesIn(f.objective).includes(name)) ? ["Daily favors"] : []),
 ];
 

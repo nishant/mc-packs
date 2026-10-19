@@ -20,7 +20,7 @@ const RUNG = { "drowned_bell.bell": "ring" };
 const SHARED = { "last_map.map": "share" };
 const KEPT = { "last_map.map": "keep" };
 
-// Offsets within 300 blocks are from the town (`/realm:saga_place town`, default world spawn); farther ones are from world spawn (the tracker names them with `mark`).
+// Offsets in the town stories (TOWN_STORIES in places.js) are from the town (`/realm:saga_place town`, default world spawn); every other offset is from world spawn (the tracker names them with `mark`).
 const OUTPOST = { x: -640, z: 520 };
 const FARM = { x: 260, z: -310 };
 const RED_CAMP = { x: 520, z: -560 };
@@ -706,7 +706,7 @@ const MAYORS_BURDEN = {
       ],
       reward: { levels: 3, crowns: 35 },
       rep: [{ guild: "growers", amount: 5 }],
-      hint: "Both farms are a little over 200 blocks southeast of spawn, on the tracker. Hattie and Garrow appear when you get close; talk to each. Then place 12 fences of any wood within 16 blocks of the disputed field between the two farms.",
+      hint: "Both farms are a little over 200 blocks southeast of town, on the tracker. Hattie and Garrow appear when you get close; talk to each. Then place 12 fences of any wood within 16 blocks of the disputed field between the two farms.",
     },
     {
       id: "unveiling",
