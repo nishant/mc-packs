@@ -86,3 +86,14 @@ test("findBash on Windows takes Git for Windows' bash and never the WSL launcher
   assert.equal(findBash({ platform: "linux", env: {}, exists }), "bash");
   assert.throws(() => findBash({ platform: "linux", env: { BDS_HARNESS_BASH: "/nope/bash" }, exists }), /does not exist/);
 });
+
+test("CRLF scenario headers stage the same shell program as LF headers", () => {
+  const recipe = [
+    "mkdir -p /tmp/probe",
+    "node tools/test-bds/hooks/stats-prefs.mjs /tmp/probe/packs",
+    "cat > /tmp/probe/hook.js <<'HOOK'",
+    "console.log('fixture');",
+    "HOOK",
+  ].join("\n");
+  assert.equal(stageRecipe(recipe.replace(/\n/g, "\r\n"), "/tmp/stage's path"), stageRecipe(recipe, "/tmp/stage's path"));
+});

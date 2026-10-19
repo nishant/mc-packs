@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-const workflow = fs.readFileSync(new URL("../.github/workflows/check.yml", import.meta.url), "utf8");
+const workflow = fs.readFileSync(new URL("../.github/workflows/check.yml", import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const smoke = workflow.slice(workflow.indexOf("  bds-smoke:"));
 
 test("BDS paths do not use runner context in job-level env before a runner exists", () => {
