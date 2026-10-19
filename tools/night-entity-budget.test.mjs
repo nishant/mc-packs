@@ -9,7 +9,7 @@ import test from "node:test";
 import vm from "node:vm";
 
 const root = process.env.NIGHT_SRC_ROOT ? process.env.NIGHT_SRC_ROOT : new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-const read = (p) => readFileSync(`${root}/${p}`, "utf8");
+const read = (p) => readFileSync(`${root}/${p}`, "utf8").replace(/\r\n/g, "\n");
 const elite = read("packs/elite_bp/scripts/main.js");
 const wander = read("packs/wander_bp/scripts/main.js");
 
