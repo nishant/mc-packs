@@ -10,6 +10,7 @@ const BASE = CONFIG;
 
 /** @type {Option[]} */
 const OPTIONS = [
+  { key: "forgetGamertagsAfterDays", type: "int", scope: "world", label: "Forget gamertags after (days)", help: "A gamertag nobody used for this long stops being reserved. Nicknames are kept. 0 = never", min: 0, max: 3650, step: 5 },
   { key: "enabled", type: "bool", scope: "world", label: "Nicknames", help: "Players can show a nickname above their head with /realm:nick. Disabled: gamertags again, nicknames are kept" },
   { key: "showGamertag", type: "bool", scope: "world", label: "Gamertag under nicknames", help: "A second, gray line with the player's gamertag" },
 ];

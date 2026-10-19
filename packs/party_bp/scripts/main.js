@@ -4,7 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { planParty, stale } from "./prune.js";
+import { memberOf, planParty, stale, unknownFields } from "./prune.js";
 
 // Each party is one world property (party:p:<code>), so members who are offline stay in theirs and however many
 // parties a big server collects, none gets near a property's size limit. Every member
@@ -45,9 +45,9 @@ function parse(p) {
   const any = /** @type {any} */ (p);
   if (!any || typeof any.l !== "string" || !Array.isArray(any.m)) return undefined;
   /** @type {[string, string, number?][]} */
-  const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => [m[0], String(m[1] ?? ""), typeof m[2] === "number" && Number.isFinite(m[2]) && m[2] > 0 ? m[2] : 0]);
+  const members = any.m.filter((/** @type {any} */ m) => Array.isArray(m) && typeof m[0] === "string").map((/** @type {any[]} */ m) => memberOf(m));
   if (!members.length) return undefined;
-  return { l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
+  return { ...unknownFields(any, ["l", "m"]), l: members.some((m) => m[0] === any.l) ? any.l : members[0][0], m: members };
 }
 
 /** @returns {Map<string, Party>} code -> party */
@@ -425,9 +425,10 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 /** Deletes parties of one member nobody has played in for `forgetSoloAfterDays`, and starts the clock for members with no saved time. */
 function* forgetOld() {
-  const days = Number(CONFIG.forgetSoloAfterDays);
-  const now = Date.now();
   for (const code of [...parties().keys()]) {
+    // Read again for each party: the job yields between them, and a player may join or the setting change.
+    const days = Number(get("forgetSoloAfterDays"));
+    const now = Date.now();
     try {
       const p = parties().get(code);
       if (p) {

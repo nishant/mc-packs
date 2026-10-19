@@ -4,7 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { stale, verdict } from "./prune.js";
+import { savedForm, stale, sweepRecords, unknownFields } from "./prune.js";
 
 // Each player's titles, trails and built-in stats are one world property, `titles:p:<player id>`, so
 // other packs can unlock titles for players who are offline and operators can give titles to them.
@@ -74,6 +74,7 @@ function parse(v) {
   const strings = (/** @type {any} */ a) => (Array.isArray(a) ? a.filter((x) => typeof x === "string") : []);
   const num = (/** @type {any} */ x) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : 0);
   return {
+    ...unknownFields(v, ["n", "t", "r", "tr", "s", "ls"]),
     n: typeof v?.n === "string" ? v.n : "",
     t: strings(v?.t),
     r: strings(v?.r).filter((r) => TRAILS[r]),
@@ -103,7 +104,7 @@ function save(id) {
   if (!d) return;
   dirty.delete(id);
   try {
-    world.setDynamicProperty(KEY_PREFIX + id, JSON.stringify({ ...d, s: { d: Math.floor(d.s.d), n: Math.floor(d.s.n), w: Math.floor(d.s.w) } }));
+    world.setDynamicProperty(KEY_PREFIX + id, JSON.stringify(savedForm({ ...d, s: { d: Math.floor(d.s.d), n: Math.floor(d.s.n), w: Math.floor(d.s.w) } })));
   } catch (e) {
     console.warn(`[titles] save: ${e}`);
   }
@@ -253,38 +254,27 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
 
 /** Deletes the saved titles, trails and stats of players not seen for `forgetAfterDays`. A record with no time starts counting now. */
 function* forgetOld() {
-  const days = Number(CONFIG.forgetAfterDays);
-  if (!(days > 0)) return;
+  if (!(Number(get("forgetAfterDays")) > 0)) return;
   let keys;
   try {
     keys = world.getDynamicPropertyIds().filter((k) => k.startsWith(KEY_PREFIX));
   } catch {
     return;
   }
-  const here = new Set(world.getAllPlayers().map((p) => p.id));
-  const now = Date.now();
-  for (const key of keys) {
-    const id = key.slice(KEY_PREFIX.length);
-    try {
-      if (!here.has(id) && !cache.has(id)) {
-        const raw = world.getDynamicProperty(key);
-        const v = typeof raw === "string" ? JSON.parse(raw) : undefined;
-        if (v && typeof v === "object") {
-          const verdictNow = verdict(v.ls, now, days);
-          if (verdictNow === "start") world.setDynamicProperty(key, JSON.stringify({ ...v, ls: now }));
-          else if (verdictNow === "drop") {
-            world.setDynamicProperty(key, undefined);
-            console.warn(`[titles] forgot ${v.n || id}: not seen for over ${days} days (${Array.isArray(v.t) ? v.t.length : 0} titles)`);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(`[titles] ${e}`);
-    }
-    yield;
-  }
-}
-system.runTimeout(() => system.runJob(forgetOld()), 1400);
+  yield* sweepRecords({
+    keys: () => keys,
+    raw: (key) => world.getDynamicProperty(key),
+    online: (key) => cache.has(key.slice(KEY_PREFIX.length)) || world.getAllPlayers().some((p) => p.id === key.slice(KEY_PREFIX.length)),
+    days: () => Number(get("forgetAfterDays")),
+    now: () => Date.now(),
+    start: (key, v, now) => world.setDynamicProperty(key, JSON.stringify({ ...v, ls: now })),
+    drop: (key, v, days) => {
+      world.setDynamicProperty(key, undefined);
+      console.warn(`[titles] forgot ${v.n || key.slice(KEY_PREFIX.length)}: not seen for over ${days} days (${Array.isArray(v.t) ? v.t.length : 0} titles)`);
+    },
+    warn: (e) => console.warn(`[titles] ${e}`),
+  });
+}system.runTimeout(() => system.runJob(forgetOld()), 1400);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {

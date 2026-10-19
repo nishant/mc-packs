@@ -4,7 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
-import { stale, verdict } from "./prune.js";
+import { stale, sweepGamertags } from "./prune.js";
 
 // A nickname shows above the player's head (Player.nameTag). The stable Script API has no chat
 // events, so chat, the player list and death messages keep the gamertag.
@@ -147,36 +147,29 @@ function noteGamertag(player) {
 
 /** Forgets the gamertags of players not seen for `forgetGamertagsAfterDays` (their nicknames stay). A player with no saved time starts counting now. */
 function* forgetOld() {
-  const days = Number(CONFIG.forgetGamertagsAfterDays);
-  if (!(days > 0)) return;
-  const online = new Set(world.getAllPlayers().map((p) => p.id));
+  if (!(Number(get("forgetGamertagsAfterDays")) > 0)) return;
   let ids;
   try {
     ids = world.getDynamicPropertyIds().filter((k) => k.startsWith(SEEN_PREFIX));
   } catch {
     return;
   }
-  const now = Date.now();
-  for (const key of ids) {
-    try {
-      const owner = world.getDynamicProperty(key);
-      if (typeof owner === "string" && !online.has(owner)) {
-        const seen = world.getDynamicProperty(TIME_PREFIX + owner);
-        const v = verdict(seen, now, days);
-        if (v === "start") world.setDynamicProperty(TIME_PREFIX + owner, now);
-        else if (v === "drop") {
-          world.setDynamicProperty(key, undefined);
-          world.setDynamicProperty(TIME_PREFIX + owner, undefined);
-          console.warn(`[nick] forgot the gamertag ${key.slice(SEEN_PREFIX.length)}: not seen for over ${days} days`);
-        }
-      }
-    } catch (e) {
-      console.warn(`[nick] ${e}`);
-    }
-    yield;
-  }
-}
-system.runTimeout(() => system.runJob(forgetOld()), 1200);
+  yield* sweepGamertags({
+    keys: () => ids,
+    owner: (key) => world.getDynamicProperty(key),
+    online: (id) => world.getAllPlayers().some((p) => p.id === id),
+    seen: (id) => world.getDynamicProperty(TIME_PREFIX + id),
+    days: () => Number(get("forgetGamertagsAfterDays")),
+    now: () => Date.now(),
+    start: (id, now) => world.setDynamicProperty(TIME_PREFIX + id, now),
+    drop: (key, id, days) => {
+      world.setDynamicProperty(key, undefined);
+      world.setDynamicProperty(TIME_PREFIX + id, undefined);
+      console.warn(`[nick] forgot the gamertag ${key.slice(SEEN_PREFIX.length)}: not seen for over ${days} days`);
+    },
+    warn: (e) => console.warn(`[nick] ${e}`),
+  });
+}system.runTimeout(() => system.runJob(forgetOld()), 1200);
 system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {

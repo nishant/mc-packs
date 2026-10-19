@@ -34,3 +34,14 @@ export function planParty(party, now, isOnline, days) {
 
 /** Writes at most one refresh a day per player. @param {unknown} seen @param {number} now */
 export const stale = (seen, now) => typeof seen !== "number" || !Number.isFinite(seen) || seen <= 0 || now - seen > DAY || seen > now;
+
+/** The fields of a saved party this pack doesn't know, kept as they are. @param {unknown} v @param {string[]} known @returns {Record<string, unknown>} */
+export function unknownFields(v, known) {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  return Object.fromEntries(Object.entries(v).filter(([k]) => !known.includes(k)));
+}
+
+/** A member tuple as [id, name, seen, ...whatever else was saved after those]. @param {any[]} m @returns {any[]} */
+export function memberOf(m) {
+  return [m[0], String(m[1] ?? ""), typeof m[2] === "number" && Number.isFinite(m[2]) && m[2] > 0 ? m[2] : 0, ...m.slice(3)];
+}

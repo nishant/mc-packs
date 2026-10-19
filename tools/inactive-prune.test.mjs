@@ -65,3 +65,90 @@ test("the three packs declare conservative defaults", () => {
   assert.match(readFileSync("packs/titles_bp/scripts/config.js", "utf8"), /forgetAfterDays: 365/);
   assert.match(readFileSync("packs/party_bp/scripts/config.js", "utf8"), /forgetSoloAfterDays: 180/);
 });
+
+test("nick: the sweep rereads days, online and the saved time for every entry after each pause", async () => {
+  const { sweepGamertags } = await load("nick_bp");
+  const world = { "seen:a": "A", "seen:b": "B", "seen:c": "C", "time:A": NOW - 400 * DAY, "time:B": NOW - 400 * DAY, "time:C": NOW - 400 * DAY };
+  let days = 365;
+  const online = new Set();
+  const dropped = [];
+  const job = sweepGamertags({
+    keys: () => ["seen:a", "seen:b", "seen:c"],
+    owner: (k) => world[k],
+    online: (id) => online.has(id),
+    seen: (id) => world[`time:${id}`],
+    days: () => days,
+    now: () => NOW,
+    start: (id, now) => (world[`time:${id}`] = now),
+    drop: (k) => dropped.push(k),
+    warn: (e) => assert.fail(String(e)),
+  });
+  job.next(); // a is gone
+  world["time:B"] = NOW; // B joined during the pause and was saved
+  online.add("C"); // C is online now
+  job.next();
+  job.next();
+  assert.deepEqual(dropped, ["seen:a"]);
+  const off = sweepGamertags({ ...{ keys: () => ["seen:a"], owner: (k) => world[k], online: () => false, seen: () => NOW - 999 * DAY, days: () => 0, now: () => NOW, start() {}, drop: (k) => dropped.push(`off:${k}`), warn() {} } });
+  off.next();
+  assert.deepEqual(dropped, ["seen:a"], "a setting of 0 disables the sweep even mid-run");
+  days = 0;
+});
+
+test("titles: the sweep rereads online, cache and the saved record per entry; a record with no time starts counting", async () => {
+  const { sweepRecords } = await load("titles_bp");
+  const rec = (ls) => JSON.stringify({ n: "x", t: ["T"], ls });
+  const world = { "p:a": rec(NOW - 400 * DAY), "p:b": rec(NOW - 400 * DAY), "p:c": rec(NOW - 400 * DAY), "p:d": JSON.stringify({ n: "d", t: [] }) };
+  const online = new Set();
+  const dropped = [];
+  const started = [];
+  const job = sweepRecords({
+    keys: () => ["p:a", "p:b", "p:c", "p:d"],
+    raw: (k) => world[k],
+    online: (k) => online.has(k),
+    days: () => 365,
+    now: () => NOW,
+    start: (k) => started.push(k),
+    drop: (k) => dropped.push(k),
+    warn: (e) => assert.fail(String(e)),
+  });
+  job.next();
+  world["p:b"] = rec(NOW); // joined and saved during the pause
+  online.add("p:c");
+  job.next();
+  job.next();
+  job.next();
+  assert.deepEqual(dropped, ["p:a"]);
+  assert.deepEqual(started, ["p:d"]);
+});
+
+test("titles: unknown record fields survive, and an unknown last-seen is never written as 0", async () => {
+  const { unknownFields, savedForm } = await load("titles_bp");
+  assert.deepEqual(unknownFields({ n: "a", future: { x: 1 }, z: 2 }, ["n"]), { future: { x: 1 }, z: 2 });
+  assert.deepEqual(unknownFields([1], ["n"]), {});
+  assert.equal("ls" in savedForm({ n: "a", ls: 0 }), false);
+  assert.equal("ls" in savedForm({ n: "a", ls: NaN }), false);
+  assert.equal(savedForm({ n: "a", ls: NOW }).ls, NOW);
+  const src = readFileSync("packs/titles_bp/scripts/main.js", "utf8");
+  assert.match(src, /\.\.\.unknownFields\(v, /);
+  assert.match(src, /savedForm\(/);
+});
+
+test("party: extra tuple elements and unknown party fields survive", async () => {
+  const { memberOf, unknownFields } = await load("party_bp");
+  assert.deepEqual(memberOf(["id", "Ann", NOW, "extra", 7]), ["id", "Ann", NOW, "extra", 7]);
+  assert.deepEqual(memberOf(["id"]), ["id", "", 0]);
+  assert.deepEqual(unknownFields({ l: "a", m: [], mode: "open" }, ["l", "m"]), { mode: "open" });
+  const src = readFileSync("packs/party_bp/scripts/main.js", "utf8");
+  assert.match(src, /\.\.\.unknownFields\(any, /);
+  assert.match(src, /memberOf\(m\)/);
+});
+
+test("the forget jobs read the live settings, which operators can change", () => {
+  for (const [pack, key] of [["nick_bp", "forgetGamertagsAfterDays"], ["titles_bp", "forgetAfterDays"], ["party_bp", "forgetSoloAfterDays"]]) {
+    const src = readFileSync(`packs/${pack}/scripts/main.js`, "utf8");
+    assert.doesNotMatch(src, new RegExp(`CONFIG\\.${key}`), pack);
+    assert.match(src, new RegExp(`get\\("${key}"\\)`), pack);
+    assert.match(readFileSync(`packs/${pack}/scripts/settings.js`, "utf8"), new RegExp(`key: "${key}"`), pack);
+  }
+});
