@@ -9,6 +9,19 @@ const root = join(import.meta.dirname, "..", "..");
 const HEADER = "// Generated from tools/diag-shared.js by node tools/sync-diag.mjs: edit that file, not this copy.\n";
 const IMPORT = 'import "./diag.js";';
 
+/** Declared world namespace, plus Easy Building's native legacy world settings. @param {string} folder */
+function prefixesFor(folder) {
+  const file = join(root, "packs", folder, "scripts", "settings.js");
+  const prefixes = [];
+  if (existsSync(file)) {
+    const prefix = /\bconst PREFIX = ["']([^"']+)["'];/.exec(readFileSync(file, "utf8"))?.[1];
+    if (!prefix) throw new Error(`${folder}: settings.js has no declared PREFIX for diagnostics`);
+    prefixes.push(prefix);
+  }
+  if (folder === "build_bp") prefixes.push("eb");
+  return prefixes;
+}
+
 /** Every pack folder that gets a copy: behavior packs with a scripts/main.js. */
 export function diagPacks() {
   return readdirSync(join(root, "packs"))
@@ -21,8 +34,8 @@ export function diagFor(folder) {
   const shared = readFileSync(join(root, "tools", "diag-shared.js"), "utf8");
   const manifest = JSON.parse(readFileSync(join(root, "packs", folder, "manifest.json"), "utf8"));
   const version = (manifest.header?.version ?? []).join(".");
-  const out = shared.replace('const PACK = "__PACK__";', `const PACK = ${JSON.stringify(folder)};`).replace('const VERSION = "__VERSION__";', `const VERSION = ${JSON.stringify(version)};`).replace('const NAME = "__NAME__";', `const NAME = ${JSON.stringify(String(manifest.header?.name ?? folder))};`);
-  if (out === shared) throw new Error("tools/diag-shared.js lost its PACK/VERSION placeholders");
+  const out = shared.replace('const PACK = "__PACK__";', `const PACK = ${JSON.stringify(folder)};`).replace('const VERSION = "__VERSION__";', `const VERSION = ${JSON.stringify(version)};`).replace('const NAME = "__NAME__";', `const NAME = ${JSON.stringify(String(manifest.header?.name ?? folder))};`).replace("const PREFIXES = [];", `const PREFIXES = ${JSON.stringify(prefixesFor(folder))};`);
+  if (out === shared || !shared.includes("const PREFIXES = [];")) throw new Error("tools/diag-shared.js lost its PACK/VERSION/PREFIXES placeholders");
   return HEADER + out;
 }
 
