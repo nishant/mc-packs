@@ -147,6 +147,10 @@ make a comparison pass. What the profiler measures: time inside the callbacks ea
 `await` inside an async callback is not attributed (see `lib/profile.js`), and a run of separate packs sums separate script
 contexts, whereas `--bundle --profile` measures the real merged context as one row.
 
+Population setup yields one tick after removing temporary ticking areas before adding the next loader. This settles
+area removal without changing the declared population, group/spread, water/Nether placement or steady window.
+Use the same setup version for the frozen before packs and candidate packs; retain invalid population attempts.
+
 The shim also checks the script event rule: a pack that sends a `realm:` script event of 2048 characters or
 more logs a `[harness-shim] ... sent script event ... with N characters` script error, so the run fails (BDS
 1.26 delivers any length, so only a Realm would notice). Scenarios can listen for `harness:limit`
