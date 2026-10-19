@@ -65,6 +65,9 @@ class ItemStack {
   get maxAmount() {
     return UNSTACKABLE.test(this.typeId) ? 1 : 64;
   }
+  get isStackable() {
+    return this.maxAmount > 1;
+  }
   clone() {
     const c = new ItemStack(this.typeId, this.amount);
     for (const k of ["nameTag", "keepOnDeath", "lockMode", "damage", "color", "contents"]) c[k] = this[k];
@@ -195,6 +198,8 @@ function makePlayer() {
     id: `p${nextId++}`,
     typeId: "minecraft:player",
     isValid: true,
+    isSneaking: false,
+    name: `Player${nextId}`,
     commandPermissionLevel: 0,
     location: { x: 1, y: 64, z: 1 },
     container,
@@ -289,6 +294,20 @@ mc.server = {
     },
   },
 };
+mc.dimensions = new Map();
+mc.defaults = {};
+Object.assign(mc.server, {
+  Block: class {},
+  BlockTypes: { get: () => ({}) },
+  BlockVolume: class {},
+  Container: class {},
+  Dimension: class {},
+  CustomCommandParamType: { Integer: "Integer" },
+  CustomCommandStatus: { Success: 0, Failure: 1 },
+  Direction: { Down: "Down", Up: "Up", North: "North", South: "South", West: "West", East: "East" },
+});
+mc.server.world.getDimension = (id) => mc.dimensions.get(id);
+mc.server.world.getDynamicPropertyIds = () => [...mc.worldProps.keys()];
 class Form {
   constructor() { this.buttons = []; }
   title(text) { this.heading = text; return this; }
@@ -318,7 +337,12 @@ mc.prefs.set = (k, v) => {
   for (const fn of prefListeners) fn(k.slice(k.indexOf(":") + 1), player);
   return mc.prefs;
 };
-mc.settings = { onChange: (fn) => prefListeners.push(fn), get: (k) => (k === "pages" ? mc.pages : undefined), getFor: (p, k) => mc.prefs.get(`${p.id}:${k}`), setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v) };
+mc.settings = {
+  onChange: (fn) => prefListeners.push(fn),
+  get: (k) => (k === "pages" ? mc.pages : mc.defaults[k]),
+  getFor: (p, k) => (mc.prefs.has(`${p.id}:${k}`) ? mc.prefs.get(`${p.id}:${k}`) : mc.defaults[k]),
+  setFor: (p, k, v) => mc.prefs.set(`${p.id}:${k}`, v),
+};
 
 /** One engine tick: queued system.run callbacks first, then (every other tick) the script's interval. */
 function advance(ticks = 1) {
@@ -340,6 +364,19 @@ function fire(name, event) {
 const serverUrl = dataUrl(`const m = globalThis.__mc.server; export const { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, StructureSaveMode, system, world } = m;`);
 const uiUrl = dataUrl(`const m = globalThis.__mc.ui; export const { ActionFormData, FormCancelationReason, ModalFormData } = m;`);
 const settingsUrl = dataUrl(`const m = globalThis.__mc.settings; export const { get, getFor, onChange, setFor } = m;`);
+// main.js (the sneak-tap) gets the same model, the real config.js defaults, and a stand-in for pages.js.
+const configUrl = dataUrl(readFileSync(new URL("../packs/stash_bp/scripts/config.js", import.meta.url), "utf8"));
+const { CONFIG } = await import(configUrl);
+Object.assign(mc.defaults, Object.fromEntries(["sneakTap", "sortHotbar", "locks", "cooldownTicks", "stashNamedItems", "stashGear", "maxLocks"].map((k) => [k, CONFIG[k]])));
+const mainServerUrl = dataUrl(`const m = globalThis.__mc.server; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, Direction, ItemStack, Player, system, world } = m;`);
+const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const refillFromPages = () => undefined; export const setOpPages = () => ({ ok: true, message: "" });`);
+const mainSource = readFileSync(new URL("../packs/stash_bp/scripts/main.js", import.meta.url), "utf8")
+  .replace('import "./diag.js";', "")
+  .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
+  .replace('"@minecraft/server"', JSON.stringify(mainServerUrl))
+  .replace('"./config.js"', JSON.stringify(configUrl))
+  .replace('"./pages.js"', JSON.stringify(pagesStubUrl))
+  .replace('"./settings.js"', JSON.stringify(settingsUrl));
 const storeSource = readFileSync(new URL("../packs/stash_bp/scripts/page-store.js", import.meta.url), "utf8")
   .replace('"@minecraft/server"', JSON.stringify(serverUrl));
 const storeUrl = dataUrl(storeSource);
@@ -1860,3 +1897,367 @@ test("the inventory menu offers Move to page next to the scan, and keeps its oth
     pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
   }
 });
+
+// ---------------------------------------------------------------------------
+// O72: sneak-tapping a container (main.js's playerInteractWithBlock handler, driven with real event objects)
+// ---------------------------------------------------------------------------
+
+const settle = () => new Promise((r) => setImmediate(r));
+let mainCopies = 0;
+/** A fresh copy of main.js (lock cache, cooldowns and access answers start empty); returns what removes its listeners again. */
+async function loadMain() {
+  const before = Object.fromEntries(Object.entries(mc.after).map(([k, v]) => [k, v.length]));
+  const intervals = mc.intervals.length;
+  await import(dataUrl(`${mainSource}\n// copy ${++mainCopies}`));
+  return () => {
+    for (const k of Object.keys(mc.after)) mc.after[k].length = before[k] ?? 0;
+    mc.intervals.length = intervals;
+  };
+}
+
+class ChestBox {
+  constructor(size = 27) {
+    this.slots = new Array(size).fill(undefined);
+    this.failSwap = false;
+  }
+  get size() {
+    return this.slots.length;
+  }
+  getItem(s) {
+    return this.slots[s];
+  }
+  setItem(s, item) {
+    this.slots[s] = item;
+  }
+  getSlot(s) {
+    const slots = this.slots;
+    return { get amount() { return slots[s].amount; }, set amount(v) { slots[s].amount = v; } };
+  }
+  swapItems(a, b) {
+    if (this.failSwap) throw new Error("injected swap failure");
+    [this.slots[a], this.slots[b]] = [this.slots[b], this.slots[a]];
+  }
+}
+function overworld() {
+  const dim = { id: "minecraft:overworld", blocks: new Map(), getBlock(at) { return this.blocks.get(`${at.x},${at.y},${at.z}`); } };
+  mc.dimensions.set(dim.id, dim);
+  return dim;
+}
+function placeContainer(dim, at, typeId = "minecraft:chest", contents = []) {
+  const box = new ChestBox();
+  contents.forEach(([id, n], i) => box.setItem(i, stack(id, n)));
+  const block = { typeId, location: at, ...at, dimension: dim, isAir: false, isLiquid: false, permutation: { getAllStates: () => ({}) }, getComponent: (/** @type {string} */ n) => (n === "minecraft:inventory" ? { container: box } : undefined), offset: () => undefined };
+  dim.blocks.set(`${at.x},${at.y},${at.z}`, block);
+  return { block, box };
+}
+const contentsOf = (/** @type {ChestBox} */ box) => box.slots.filter(Boolean).map((i) => `${i.typeId.replace("minecraft:", "")}:${i.amount}`);
+/** A player who is not run through the inventory pages' timer. */
+function visitor(pref) {
+  const p = makePlayer();
+  mc.players = mc.players.filter((x) => x !== p);
+  if (pref) mc.prefs.set(`${p.id}:sneakTap`, pref);
+  return p;
+}
+const HANDS = { empty: undefined, tool: () => stack("minecraft:diamond_pickaxe"), torch: () => stack("minecraft:torch", 16) };
+const MESS = [["minecraft:stone", 5], ["minecraft:dirt", 10], ["minecraft:stone", 7], ["minecraft:dirt", 3]];
+const UNSORTED = MESS.map(([id, n]) => `${id.replace("minecraft:", "")}:${n}`);
+const SORTED = ["dirt:13", "stone:12"];
+
+/** Every script event sent so far is delivered to the packs' listeners, and so are the answers, until it goes quiet. */
+function bus() {
+  let seen = mc.events.length;
+  return () => {
+    while (seen < mc.events.length) {
+      const { id, message } = mc.events[seen++];
+      for (const fn of mc.after["system:scriptEventReceive"] ?? []) fn({ id, message });
+    }
+  };
+}
+
+/**
+ * Land Claims as far as a tap and an access check go: a claim (block position -> owner id) keeps everyone else out. Like claims_bp
+ * it never looks at event.cancel. `where` is where its listener stands next to Quick Stack & Sort's: "before" or "after".
+ */
+function fakeClaims(/** @type {Map<string, string>} */ claim, /** @type {"before" | "after"} */ where) {
+  const taps = (mc.after["before:playerInteractWithBlock"] ??= []);
+  const listeners = (mc.after["system:scriptEventReceive"] ??= []);
+  const tap = (/** @type {any} */ event) => {
+    const owner = claim.get(`${event.block.x},${event.block.y},${event.block.z}`);
+    if (owner && owner !== event.player.id) event.cancel = true;
+  };
+  const answer = (/** @type {any} */ { id, message }) => {
+    if (id !== "realm:access_check") return;
+    const q = JSON.parse(message);
+    const closed = q.spots.flatMap((/** @type {any[]} */ s, /** @type {number} */ i) => {
+      const owner = claim.get(`${s[1]},${s[2]},${s[3]}`);
+      return owner && owner !== q.player ? [i] : [];
+    });
+    mc.events.push({ id: "realm:access_check_result", message: JSON.stringify({ id: q.id, from: "claims_bp", closed }) });
+  };
+  if (where === "before") taps.unshift(tap);
+  else taps.push(tap);
+  listeners.push(answer);
+  return () => {
+    taps.splice(taps.indexOf(tap), 1);
+    listeners.splice(listeners.indexOf(answer), 1);
+  };
+}
+
+/** The world has loaded: every pack that answers access checks has said so (the "hello" a second after load). */
+async function worldLoaded(/** @type {() => void} */ pump) {
+  fire("worldLoad", {});
+  advance(1);
+  pump();
+  await settle();
+}
+
+/** One sneak-tap on a block with this in the hand: the before event goes to every listener in order, then the next ticks run what they deferred. */
+async function sneakTap(/** @type {any} */ p, /** @type {any} */ block, /** @type {any} */ hand, /** @type {() => void} */ pump, options = {}) {
+  p.isSneaking = options.sneaking ?? true;
+  const event = { player: p, block, itemStack: typeof hand === "function" ? hand() : hand, isFirstEvent: options.first ?? true, blockFace: "Up", cancel: false };
+  fire("before:playerInteractWithBlock", event);
+  for (let i = 0; i < 4; i++) {
+    advance(1);
+    pump();
+    await settle();
+  }
+  return event;
+}
+const shownBy = (/** @type {any} */ p) => mc.forms.filter((e) => e.player === p);
+
+/** Runs a scenario against a fresh main.js with a chest in a world of its own. */
+async function inChestWorld(/** @type {(world: { dim: any, pump: () => void }) => Promise<void>} */ run) {
+  const forgetLocks = () => {
+    for (const k of [...mc.worldProps.keys()]) if (k.startsWith("stash:lock:")) mc.worldProps.delete(k);
+  };
+  forgetLocks();
+  const unload = await loadMain();
+  const dim = overworld();
+  const pump = bus();
+  try {
+    await run({ dim, pump });
+  } finally {
+    unload();
+    forgetLocks();
+    mc.dimensions.clear();
+    mc.formResponses.clear();
+  }
+}
+
+test("an empty-hand sneak-tap on a container sorts it right away, with the realm's default preference", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor();
+    assert.equal(mc.settings.getFor(p, "sneakTap"), CONFIG.sneakTap, "the player never chose: the realm's default applies");
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    const event = await sneakTap(p, block, HANDS.empty, pump);
+    assert.equal(event.cancel, true, "the chest doesn't open");
+    assert.deepEqual(contentsOf(box), SORTED);
+    assert.match(p.bar.at(-1), /Sorted 2 stacks/);
+    assert.equal(shownBy(p).length, 0, "no menu in the way");
+  }));
+
+for (const kind of ["minecraft:chest", "minecraft:trapped_chest", "minecraft:barrel", "minecraft:copper_chest", "minecraft:white_shulker_box"]) {
+  test(`an empty-hand sneak-tap sorts a ${kind.replace("minecraft:", "")} for a player who chose the menu too`, () =>
+    inChestWorld(async ({ dim, pump }) => {
+      const p = visitor("menu");
+      const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, kind, MESS);
+      const event = await sneakTap(p, block, HANDS.empty, pump);
+      assert.equal(event.cancel, true);
+      assert.deepEqual(contentsOf(box), SORTED);
+    }));
+}
+
+test("a tool, weapon or armor in hand opens the menu for the menu preference, and its Sort button sorts", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor("menu");
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    mc.formResponses.set(p.id, [pick("Sort this chest")]);
+    const event = await sneakTap(p, block, HANDS.tool, pump);
+    assert.equal(event.cancel, true);
+    assert.equal(shownBy(p).length, 1);
+    assert.match(shownBy(p)[0].form.heading, /Quick Stack & Sort/);
+    assert.ok(shownBy(p)[0].form.buttons.some((b) => b.startsWith("Sort this chest")));
+    assert.deepEqual(contentsOf(box), SORTED);
+  }));
+
+test("the sort preference sorts at once with an empty hand and with gear in hand", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor("sort");
+    for (const hand of [HANDS.empty, HANDS.tool]) {
+      const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+      advance(25);
+      const event = await sneakTap(p, block, hand, pump);
+      assert.equal(event.cancel, true);
+      assert.deepEqual(contentsOf(box), SORTED);
+    }
+    assert.equal(shownBy(p).length, 0);
+  }));
+
+test("an ender chest tapped with an empty hand shows the menu without a Sort button (it can't be sorted)", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor("menu");
+    const { block } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:ender_chest");
+    const event = await sneakTap(p, block, HANDS.empty, pump);
+    assert.equal(event.cancel, true);
+    assert.equal(shownBy(p).length, 1);
+    assert.ok(!shownBy(p)[0].form.buttons.some((b) => /^Sort this/.test(b)));
+    assert.ok(shownBy(p)[0].form.buttons.some((b) => /^Quick stack my inventory/.test(b)));
+  }));
+
+test("anything else in hand, no sneaking, or the off preference leaves the tap and the chest alone", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    for (const [pref, hand, sneaking] of /** @type {Array<[string, any, boolean]>} */ ([["menu", HANDS.torch, true], ["sort", HANDS.torch, true], ["menu", HANDS.empty, false], ["sort", HANDS.tool, false], ["off", HANDS.empty, true], ["off", HANDS.tool, true]])) {
+      const p = visitor(pref);
+      const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+      const event = await sneakTap(p, block, hand, pump, { sneaking });
+      assert.equal(event.cancel, false, `${pref} ${typeof hand} sneaking ${sneaking}`);
+      assert.deepEqual(contentsOf(box), UNSORTED);
+      assert.equal(shownBy(p).length, 0);
+    }
+  }));
+
+test("a block that isn't a container, and a held-down tap that repeats, never sort", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor("sort");
+    const table = placeContainer(dim, { x: 6, y: 64, z: 6 }, "minecraft:crafting_table");
+    assert.equal((await sneakTap(p, table.block, HANDS.empty, pump)).cancel, false);
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    const repeat = await sneakTap(p, block, HANDS.empty, pump, { first: false });
+    assert.equal(repeat.cancel, true, "the repeat is swallowed so the chest doesn't open");
+    assert.deepEqual(contentsOf(box), UNSORTED);
+  }));
+
+test("a tap another pack already canceled (Land Claims ahead of this pack in the bundle) does nothing at all", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const owner = visitor("sort");
+    const guest = visitor("sort");
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    const stop = fakeClaims(new Map([["5,64,5", owner.id]]), "before");
+    try {
+      await worldLoaded(pump);
+      const event = await sneakTap(guest, block, HANDS.empty, pump);
+      assert.equal(event.cancel, true);
+      assert.deepEqual(contentsOf(box), UNSORTED, "the chest in someone else's claim is not sorted");
+      assert.equal(shownBy(guest).length, 0);
+      assert.deepEqual(guest.bar, [], "and says nothing: Land Claims already told the player");
+      advance(25);
+      assert.equal((await sneakTap(owner, block, HANDS.empty, pump)).cancel, true);
+      assert.deepEqual(contentsOf(box), SORTED, "the claim's owner sorts it");
+    } finally {
+      stop();
+    }
+  }));
+
+test("Land Claims listening after this pack: the tap is judged by the access check, not by the cancel it never saw", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const owner = visitor("sort");
+    const guest = visitor("sort");
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    const stop = fakeClaims(new Map([["5,64,5", owner.id]]), "after");
+    try {
+      await worldLoaded(pump);
+      const event = await sneakTap(guest, block, HANDS.empty, pump);
+      assert.equal(event.cancel, true);
+      assert.deepEqual(contentsOf(box), UNSORTED, "a chest in someone else's claim is not sorted");
+      assert.match(guest.bar.at(-1), /isn't yours to open/);
+      advance(25);
+      assert.equal((await sneakTap(owner, block, HANDS.empty, pump)).cancel, true);
+      assert.deepEqual(contentsOf(box), SORTED, "the claim's owner still sorts it, a few ticks after the tap");
+    } finally {
+      stop();
+    }
+  }));
+
+test("Land Claims listening after this pack: its owner's gear-in-hand tap shows the menu, a visitor's shows nothing and can't lock it", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const owner = visitor("menu");
+    const guest = visitor("menu");
+    const { block } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    const stop = fakeClaims(new Map([["5,64,5", owner.id]]), "after");
+    try {
+      await worldLoaded(pump);
+      mc.formResponses.set(guest.id, [pick("Lock this chest")]);
+      await sneakTap(guest, block, HANDS.tool, pump);
+      assert.equal(shownBy(guest).length, 0, "no menu to see inside, lock or sort a chest that isn't theirs");
+      assert.ok(![...mc.worldProps.keys()].some((k) => k.startsWith("stash:lock:")), "nothing was locked in the owner's claim");
+      assert.match(guest.bar.at(-1), /isn't yours to open/);
+      advance(25);
+      await sneakTap(owner, block, HANDS.tool, pump);
+      assert.equal(shownBy(owner).length, 1);
+    } finally {
+      stop();
+    }
+  }));
+
+test("a locked container: its owner sorts it, anyone else's tap does nothing", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const owner = visitor("menu");
+    const guest = visitor();
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    mc.formResponses.set(owner.id, [pick("Lock this chest")]);
+    await sneakTap(owner, block, HANDS.tool, pump);
+    assert.ok([...mc.worldProps.keys()].some((k) => k.startsWith("stash:lock:")), "the owner locked it");
+    advance(25);
+    const asked = shownBy(guest).length;
+    const empty = await sneakTap(guest, block, HANDS.empty, pump);
+    assert.equal(empty.cancel, true, "the chest stays shut for them");
+    assert.deepEqual(contentsOf(box), UNSORTED, "and unsorted");
+    assert.match(guest.bar.at(-1), /Locked by/);
+    assert.equal(shownBy(guest).length, asked, "an empty hand gets no menu: there is nothing in it to sort");
+    advance(25);
+    const geared = await sneakTap(guest, block, HANDS.tool, pump);
+    assert.equal(geared.cancel, true);
+    assert.deepEqual(contentsOf(box), UNSORTED);
+    assert.equal(shownBy(guest).length, asked + 1, "gear in hand still shows who locked it, with only the inventory buttons");
+    assert.match(shownBy(guest).at(-1).form.text, /locked by/);
+    assert.ok(!shownBy(guest).at(-1).form.buttons.some((b) => /^(Sort this|Lock this|Share or unlock)/.test(b)));
+    advance(25);
+    assert.equal((await sneakTap(owner, block, HANDS.empty, pump)).cancel, true);
+    assert.deepEqual(contentsOf(box), SORTED, "the owner's empty hand sorts it");
+  }));
+
+test("a second tap within the cooldown says so instead of silently doing nothing", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor("sort");
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    const first = await sneakTap(p, block, HANDS.empty, pump);
+    assert.deepEqual(contentsOf(box), SORTED);
+    box.setItem(2, stack("minecraft:cobblestone", 4));
+    const again = await sneakTap(p, block, HANDS.empty, pump);
+    assert.equal(first.cancel && again.cancel, true);
+    assert.deepEqual(contentsOf(box), [...SORTED, "cobblestone:4"], "not sorted again");
+    assert.match(p.bar.at(-1), /Too fast/);
+    advance(25);
+    await sneakTap(p, block, HANDS.empty, pump);
+    assert.deepEqual(contentsOf(box), ["cobblestone:4", ...SORTED]);
+  }));
+
+test("a tap that throws lets the container open as usual, and a sort that fails tells the player", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor("sort");
+    const broken = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    Object.defineProperty(broken.block, "typeId", { get() { throw new Error("chunk not loaded"); } });
+    const event = await sneakTap(p, broken.block, HANDS.empty, pump);
+    assert.equal(event.cancel, false);
+    const { block, box } = placeContainer(dim, { x: 7, y: 64, z: 7 }, "minecraft:chest", MESS);
+    box.failSwap = true;
+    advance(25);
+    const failed = await sneakTap(p, block, HANDS.empty, pump);
+    assert.equal(failed.cancel, true);
+    assert.match(p.bar.at(-1), /Couldn't sort that chest/);
+  }));
+
+test("with no Land Claims installed the sort still happens within a few ticks of the tap", () =>
+  inChestWorld(async ({ dim, pump }) => {
+    const p = visitor("sort");
+    const { block, box } = placeContainer(dim, { x: 5, y: 64, z: 5 }, "minecraft:chest", MESS);
+    await worldLoaded(pump);
+    p.isSneaking = true;
+    fire("before:playerInteractWithBlock", { player: p, block, itemStack: undefined, isFirstEvent: true, blockFace: "Up", cancel: false });
+    for (let ticks = 1; ticks <= 3; ticks++) {
+      advance(1);
+      pump();
+      await settle();
+    }
+    assert.deepEqual(contentsOf(box), SORTED, "sorted by the third tick: one tick to ask, one to be answered");
+  }));

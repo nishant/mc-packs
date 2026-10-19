@@ -665,13 +665,83 @@ async function show(player, form, attempts = 20) {
   return undefined;
 }
 
+/** "chest", "barrel"...: what is at this spot, for a message. @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at */
+function kindAt(dimension, at) {
+  try {
+    const id = dimension.getBlock(at)?.typeId;
+    return id ? nameOf(id).toLowerCase() : "container";
+  } catch {
+    return "container";
+  }
+}
+
 /**
- * Sort this container, quick stack, or sort your inventory.
+ * Whether a pack that keeps players out of containers (Land Claims, or this pack's chest locks) says this one is closed to
+ * the player. Asked every time instead of trusting event.cancel: a pack that listens after this one can't have canceled the tap yet.
+ * @param {Player} player @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at
+ */
+async function closedTo(player, dimension, at) {
+  const closed = await closedSpots(player.id, [[dimension.id, at.x, at.y, at.z]]);
+  return closed.size > 0;
+}
+
+/**
+ * Sorts the container at `at`, if the player may still use it: not locked since the tap, and not closed to them by the access
+ * check. A failure is told to the player, never swallowed.
+ * @param {Player} player @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at
+ */
+async function sortContainer(player, dimension, at) {
+  try {
+    /** @returns {Block | undefined} */
+    const usable = () => {
+      const block = dimension.getBlock(at);
+      if (!block || !containerTypes.has(block.typeId)) return undefined;
+      if (lockedOut(player, block)) {
+        const l = lockAt(block);
+        if (l) bar(player, `§cLocked by ${l.n}`);
+        return undefined;
+      }
+      return block;
+    };
+    if (!usable()) return;
+    if (await closedTo(player, dimension, at)) {
+      if (player.isValid) bar(player, `§cThat ${kindAt(dimension, at)} isn't yours to open, so it isn't sorted`);
+      return;
+    }
+    if (!player.isValid) return;
+    const block = usable();
+    if (block) sortBlock(player, block);
+  } catch (e) {
+    console.warn(`[stash] ${e}`);
+    if (player.isValid) bar(player, `§cCouldn't sort that ${kindAt(dimension, at)}. Try again`);
+  }
+}
+
+/**
+ * The sneak-tap menu with a tool in hand (or an ender chest): sort this container, quick stack, or sort your inventory.
  * @param {Player} player @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at the tapped block
  */
 async function openMenu(player, dimension, at) {
+  if (menuOpen.has(player.id)) return;
+  menuOpen.add(player.id);
+  try {
+    // Nothing of a container that isn't theirs to open: no sight of it, no sort, no lock. (Someone else's lock on it is the one
+    // exception: that menu is how a player learns who locked it, and offers only the inventory buttons.)
+    const block = dimension.getBlock(at);
+    if (!(block && lockedOut(player, block)) && (await closedTo(player, dimension, at))) {
+      if (player.isValid) bar(player, `§cThat ${kindAt(dimension, at)} isn't yours to open`);
+      return;
+    }
+    if (player.isValid) await showMenu(player, dimension, at);
+  } finally {
+    menuOpen.delete(player.id);
+  }
+}
+
+/** @param {Player} player @param {Dimension} dimension @param {import("@minecraft/server").Vector3} at the tapped block */
+async function showMenu(player, dimension, at) {
   const block = dimension.getBlock(at);
-  if (!block || menuOpen.has(player.id)) return;
+  if (!block) return;
   const name = nameOf(block.typeId);
   const lockOn = locksOn() && containerTypes.has(block.typeId);
   const l = lockOn ? lockAt(block) : undefined;
@@ -693,10 +763,7 @@ async function openMenu(player, dimension, at) {
   if (container) {
     actions.push({
       text: `Sort this ${name.toLowerCase()}\n§8Merge stacks, order by item`,
-      run: (p) => {
-        const b = dimension.getBlock(at);
-        if (b && containerTypes.has(b.typeId)) sortBlock(p, b);
-      },
+      run: (p) => void sortContainer(p, dimension, at),
     });
   }
   if (lockOn && !l) {
@@ -726,29 +793,39 @@ async function openMenu(player, dimension, at) {
   const form = new ActionFormData().title("§lQuick Stack & Sort").body(body.join("\n"));
   for (const a of actions) form.button(a.text);
 
-  menuOpen.add(player.id);
-  try {
-    // Only a short retry: a menu popping up long after the tap would be a surprise.
-    const res = await show(player, form, 3);
-    if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-    const chosen = actions[res.selection];
-    if (chosen?.free) {
-      chosen.run(player);
-      return;
-    }
-    if (!ready(player)) {
-      bar(player, "§7Too fast. Try again in a moment.");
-      return;
-    }
-    actions[res.selection]?.run(player);
-  } finally {
-    menuOpen.delete(player.id);
+  // Only a short retry: a menu popping up long after the tap would be a surprise.
+  const res = await show(player, form, 3);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const chosen = actions[res.selection];
+  if (chosen?.free) {
+    chosen.run(player);
+    return;
   }
+  if (!ready(player)) {
+    bar(player, "§7Too fast. Try again in a moment.");
+    return;
+  }
+  actions[res.selection]?.run(player);
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
-  const { player, block, itemStack, isFirstEvent, blockFace } = event;
   if (event.cancel) return; // another pack (Land Claims) already refused this tap
+  try {
+    tapped(event);
+  } catch (e) {
+    console.warn(`[stash] tap: ${e}`); // the tap stays unhandled, so the container opens as usual
+  }
+});
+
+/**
+ * What sneaking and tapping a container does. With an empty hand it sorts the container at once; holding a tool, weapon or armor
+ * it opens the menu (sort, lock, quick stack), unless the player's or the realm's choice is to sort whatever they hold, or nothing.
+ * An ender chest can't be sorted, so it always gets the menu. Anything else in hand keeps its usual sneak-tap use. Either way the
+ * container doesn't open, and a container someone else locked stays shut for everyone else.
+ * @param {import("@minecraft/server").PlayerInteractWithBlockBeforeEvent} event
+ */
+function tapped(event) {
+  const { player, block, itemStack, isFirstEvent, blockFace } = event;
   if (locksOn()) {
     const near = lockNextToPlacement(player, block, blockFace, itemStack);
     if (near) {
@@ -758,36 +835,33 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => {
     }
   }
   const tap = getFor(player, "sneakTap"); // the realm's choice, or the player's own from /realm:prefs
-  const menuTap = player.isSneaking && freeHand(itemStack) && tap === "menu";
+  const handsFree = player.isSneaking && freeHand(itemStack);
+  const container = containerTypes.has(block.typeId);
+  const sorts = handsFree && tap !== "off" && container && (tap === "sort" || !itemStack);
+  const menu = handsFree && tap === "menu" && !sorts && (container || block.typeId === ENDER_CHEST);
   // Someone else's locked container doesn't open; the sneak-tap menu still shows (who locked it, inventory buttons).
-  if (!menuTap && containerTypes.has(block.typeId) && lockedOut(player, block)) {
+  if (!menu && container && lockedOut(player, block)) {
     event.cancel = true;
     const l = lockAt(block);
     if (isFirstEvent && l) sayLocked(player, l);
     return;
   }
-  if (!player.isSneaking || !freeHand(itemStack)) return;
-  if (tap === "off") return;
-  const menu = tap === "menu";
-  if (!containerTypes.has(block.typeId) && !(menu && block.typeId === ENDER_CHEST)) return;
+  if (!sorts && !menu) return;
   event.cancel = true; // the sneak-tap replaces opening it
-  if (!isFirstEvent || (!menu && !ready(player))) return;
+  if (!isFirstEvent) return;
   const { x, y, z } = block.location;
   const { dimension } = block;
+  if (sorts && !ready(player)) {
+    system.run(() => {
+      if (player.isValid) bar(player, "§7Too fast. Try again in a moment.");
+    });
+    return;
+  }
   system.run(() => {
     if (!player.isValid) return;
-    if (menu) {
-      openMenu(player, dimension, { x, y, z }).catch((e) => console.warn(`[stash] ${e}`));
-      return;
-    }
-    try {
-      const b = dimension.getBlock({ x, y, z });
-      if (b && containerTypes.has(b.typeId)) sortBlock(player, b);
-    } catch (e) {
-      console.warn(`[stash] ${e}`);
-    }
+    (sorts ? sortContainer(player, dimension, { x, y, z }) : openMenu(player, dimension, { x, y, z })).catch((e) => console.warn(`[stash] ${e}`));
   });
-});
+}
 
 // ---------------------------------------------------------------------------
 // Help
@@ -808,11 +882,12 @@ async function showHelp(player) {
     form.label(
       tap === "menu"
         ? [
-            `Sneak and tap a ${storageKinds(player)} with an empty hand, or holding a tool, weapon or armor. It doesn't open; this menu does:`,
-            "§e- Sort this chest§r (or barrel, shulker box...): merges partial stacks of the same item, then orders the slots by item, the biggest stack first, empty slots last.",
+            `Sneak and tap a ${storageKinds(player)} with an empty hand to sort it at once: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`,
+            `Sneak and tap it holding a tool, weapon or armor instead, and this menu opens:`,
+            "§e- Sort this chest§r (or barrel, shulker box...): the same as the empty-hand sort.",
             "§e- Quick stack my inventory§r: the same as §e/realm:stash§r.",
             "§e- Sort my inventory§r: the same as §e/realm:sort§r.",
-            "§7An ender chest's menu has no Sort button: add-ons can't see inside one. Holding anything else (a block, a hopper, honeycomb) keeps its usual sneak-tap use.",
+            "§7An ender chest always opens this menu, with no Sort button: add-ons can't see inside one. Holding anything else (a block, a hopper, honeycomb) keeps its usual sneak-tap use.",
           ].join("\n")
         : `Sneak and tap a ${storageKinds(player)} with an empty hand, or holding a tool, weapon or armor, to sort it: it doesn't open; partial stacks merge, then the slots are ordered by item, the biggest stack first. The bar above the hotbar says §eSorted 31 stacks§r.`
     );
@@ -822,7 +897,7 @@ async function showHelp(player) {
     form.divider().label("§l§6Chest locks");
     form.label(
       [
-        "§e- Lock this chest§r (or barrel, shulker box...) in the sneak-tap menu: only you can open, sort, break or quick stack into it. Both halves of a double chest are locked.",
+        "§e- Lock this chest§r (or barrel, shulker box...) in the sneak-tap menu (sneak-tap holding a tool): only you can open, sort, break or quick stack into it. Both halves of a double chest are locked.",
         `§e- Share or unlock§r: share it with up to ${CONFIG.maxShared} players who are online, stop sharing, or unlock it.`,
         "Others who tap it see §cLocked by <name>§r. Nobody else can put a hopper under it or a chest next to it, and explosions don't break it.",
         `§7Up to ${get("maxLocks")} locked containers each. Operators can remove any lock from the menu. A hopper that was already under it still empties it.`,
