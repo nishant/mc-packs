@@ -1139,8 +1139,10 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     const night = isNight();
     const where = at;
     const d = dim;
+    // A story mob that came for a `defeat` with `spawn` counts even if the fight drifted past the edge.
+    const spawned = actor?.role === "add";
     /** @param {Objective} obj */
-    const amountFor = (obj) => (!obj.champion && !obj.bounty && (!obj.mobs?.length || obj.mobs.includes(type)) && (!obj.night || night) && inArea(obj, where, d) ? 1 : 0);
+    const amountFor = (obj) => (!obj.champion && !obj.bounty && (!obj.mobs?.length || obj.mobs.includes(type)) && (!obj.night || night) && (inArea(obj, where, d) || (spawned && !!obj.spawn)) ? 1 : 0);
     share(killer, advance(killer, "defeat", amountFor), "defeat", amountFor, new Set([killer.id]));
   } catch (e) {
     console.warn(`[saga] ${e}`);
@@ -1862,6 +1864,42 @@ function spotted(s, player, gd, sp, obj) {
   } catch {
     // unloaded
   }
+}
+
+// ---- defeat with spawn -------------------------------------------------
+
+/**
+ * A `defeat` at a place whose mobs never come there by themselves (the Choir, vexes, bogged): with `spawn`, a group
+ * of them comes when the player is in the area and keeps coming, `count` alive at a time (never more than are left
+ * to defeat), topped up every `every` seconds. They go when the player leaves (the scene ends).
+ * @param {Player} player @param {Entry} e @param {number} i @param {Objective} obj
+ */
+function defeatSpawnTick(player, e, i, obj) {
+  const sp = obj.spawn;
+  const loc = locate(obj);
+  if (!sp || !loc || typeof loc === "string" || loc.pending || player.dimension.id !== loc.dim) return;
+  const r = radiusOf(obj);
+  const d = across(player.location, loc);
+  // A little past the edge the fight goes on (the scene and its mobs stay); farther, it ends next run.
+  if (d > r + 24) return;
+  const s = sceneFor(player, e, i, "defeat");
+  const now = system.currentTick;
+  const mobs = actorsOf(player.id, s.key, "add").filter((a) => a.ent.isValid);
+  // In a fight they don't time out (expireAdds).
+  for (const a of mobs) a.born = now;
+  if (d > r || (obj.night && !isNight()) || now < (s.data.next ?? 0)) return;
+  const left = target(obj) - progressOf(e, i);
+  const want = Math.min(Math.max(1, sp.count ?? 3), left) - mobs.length;
+  if (want <= 0) return;
+  const center = withY(loc);
+  if (!center) return;
+  if (!s.data.warned) {
+    s.data.warned = true;
+    player.sendMessage(`§c[Story] ${sp.warn ?? "They're here. Fight!"}`);
+    player.playSound("raid.horn", { volume: 0.5, pitch: 1.2 });
+  }
+  s.data.next = now + Math.max(5, sp.every ?? 20) * 20;
+  spawnGroup(player, world.getDimension(loc.dim), center, { mobs: sp.mobs ?? obj.mobs ?? [], count: want }, s.key, 6, Math.max(8, Math.min(16, r / 2)));
 }
 
 // ---- escort ------------------------------------------------------------
@@ -3017,6 +3055,7 @@ export function tickPlayer(player, list) {
           case "defeat":
             if (obj.champion && counts) championNear(player, obj);
             else if (obj.race && counts) raceTick(player, e, i, obj);
+            else if (obj.spawn && counts) defeatSpawnTick(player, e, i, obj);
             break;
           case "meet":
             meetTick(player, e, i, obj);

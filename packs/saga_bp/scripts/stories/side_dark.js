@@ -800,7 +800,7 @@ const VESNA_BARGAIN = {
           detectSneak: 4,
           onSpotted: "ambush",
         },
-        { type: "defeat", label: "Escape the waking reeds (defeat 6 bogged within 3 minutes)", mobs: ["minecraft:bogged"], count: 6, place: "witch_hut", radius: 32, within: 180 },
+        { type: "defeat", label: "Escape the waking reeds (defeat 6 bogged within 3 minutes)", mobs: ["minecraft:bogged"], count: 6, place: "witch_hut", radius: 32, within: 180, spawn: { count: 3, every: 15, warn: "The reeds stand up. They are not reeds. They are bogged, and they are awake." } },
       ],
       outro: [
         "In the middle of the reeds, half sunk in black mud, sits a lump of bog iron the size of a heart. It is warm. It is beating. When you pull it free, the whole Fen groans like a ship's timbers.",
