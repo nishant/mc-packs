@@ -114,7 +114,7 @@ function bed({ cycle = false, counting = true, steps = [{ e: {}, i: 7, obj: { ty
 
 test("a bed tap with time stopped finishes the open sleep step and queues its vision", () => {
   const b = bed();
-  b.bedWhileStopped({ id: "p1" }, { typeId: "minecraft:red_bed" });
+  b.bedWhileStopped({ id: "p1" }, { typeId: "minecraft:bed" });
   assert.deepEqual(b.bumps, [[7, 1]]);
   assert.equal(b.dreams.get("p1").length, 1, "the dream plays once the player is up, through the dream queue");
 });
@@ -122,11 +122,11 @@ test("a bed tap with time stopped finishes the open sleep step and queues its vi
 test("a bed tap while the clock runs, a non-bed tap or a player who is not counting does nothing", () => {
   const p = { id: "p1" };
   const run = bed({ cycle: true });
-  run.bedWhileStopped(p, { typeId: "minecraft:red_bed" });
+  run.bedWhileStopped(p, { typeId: "minecraft:bed" });
   const chest = bed();
   chest.bedWhileStopped(p, { typeId: "minecraft:chest" });
   const away = bed({ counting: false });
-  away.bedWhileStopped(p, { typeId: "minecraft:red_bed" });
+  away.bedWhileStopped(p, { typeId: "minecraft:bed" });
   assert.deepEqual([run.bumps, chest.bumps, away.bumps], [[], [], []]);
 });
 

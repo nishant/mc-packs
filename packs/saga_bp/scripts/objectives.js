@@ -1453,7 +1453,7 @@ function used(player, item) {
 }
 
 /** Is a block a bed? @param {string} id */
-const isBed = (id) => id.endsWith("_bed");
+const isBed = (id) => id === "minecraft:bed" || (!id.startsWith("minecraft:") && id.endsWith("_bed"));
 
 /**
  * With the daylight cycle off, vanilla refuses the bed by day, so `isSleeping` never turns true: a tap on a

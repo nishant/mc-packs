@@ -91,6 +91,29 @@ test("over the limit even after the allowed trim: refused, and nothing in the sa
   assert.match(p.said[0], /not added/);
 });
 
+// The real reward() -> grantCodex -> markDirty -> flush(), writing through player.setDynamicProperty.
+const flow = runInNewContext(
+  `const SAVE_LIMIT = 30000; const PROP_PLAYER = "saga:player";\n${slice(data, "const cache = new Map();", "export function flushAll")}\n${slice(objectives, "export function reward(", "function crownsObjective")}\n({ cache, reward, flush })`,
+  { sagaOf: (p) => flow.cache.get(p.id), send() {}, giveItem() {}, plain: (s) => s, itemName: (s) => s, addCrowns: () => false, console: { warn() {} }, Math },
+);
+
+test("reward() with a codex entry on a nearly full save flushes a trimmed save under 30000 bytes that keeps the new entry", () => {
+  const saga = nearFull();
+  saga.cx = codex(40);
+  saga.ut = ["wv:one", "wv:two"];
+  const writes = [];
+  const p = { id: "p1", name: "P", isValid: true, said: [], sendMessage(m) { this.said.push(m); }, setDynamicProperty: (k, v) => writes.push([k, v]) };
+  flow.cache.set("p1", saga);
+  flow.reward(p, { codex: { id: "new_entry", title: "New" } }, "test");
+  flow.flush("p1");
+  assert.equal(writes.length, 1);
+  assert.ok(save.byteLength(writes[0][1]) <= 30000, `${save.byteLength(writes[0][1])} bytes`);
+  const out = JSON.parse(writes[0][1]);
+  assert.ok(out.cx.includes("new_entry"));
+  assert.deepEqual(out.s, saga.s);
+  assert.match(p.said[0], /New entry/);
+});
+
 test("a roomy save and a repeated entry behave as before", () => {
   const saga = { s: {}, cx: ["a"] };
   const p = player();
