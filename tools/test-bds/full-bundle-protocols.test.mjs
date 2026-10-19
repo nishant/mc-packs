@@ -227,6 +227,22 @@ test("the storm rod is placed by a native use, not setType", () => {
   assert.match(storm, /owner collects the glass/);
 });
 
+test("chairs must match the stair, and expedition and npc claims stay within what was exercised", () => {
+  const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
+  const stair = scenario.slice(scenario.indexOf("Chairs asks"), scenario.indexOf("Slots, after claims"));
+  assert.ok(stair.indexOf("chairs matched the visitor stair") > 0);
+  assert.ok(stair.indexOf("chairs matched the owner stair") > stair.indexOf("chairs matched the visitor stair"));
+  assert.match(stair, /row\(r, "chairs_bp"\)\?\.after === true/);
+  assert.doesNotMatch(stair, /cold-start|hello race/i);
+  const rest = scenario.slice(scenario.indexOf("Break and entity"));
+  assert.match(rest, /no active run/);
+  assert.match(rest, /does not prove expedition honors cancel/);
+  assert.match(rest, /armor stand is not a townsfolk/);
+  assert.match(rest, /no initial ev\.cancel guard/);
+  assert.doesNotMatch(rest, /expedition \(after claims\) saw the break cancel/);
+  assert.doesNotMatch(rest, /npc_bp \(after claims\) saw the entity cancel/);
+});
+
 test("a Windows and a POSIX stack both name the pack that subscribed", () => {
   const dir = scratch("c13-stack-");
   const packed = path.join(dir, "src");

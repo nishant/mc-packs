@@ -135,6 +135,7 @@ export default async function (t) {
   t.check(contents() !== unsorted, `callback-replay: the owner still sorts the chest (${contents()})`);
 
   // Chairs asks realm:access_check because it runs before claims. Production still requires an empty hand and isFirstEvent.
+  // The access hello at 60 ticks is already past. after===true proves the handler matched the stair, not merely that nobody sat.
   const stair = { x: base.x + 6, y: base.y, z: base.z };
   dim.getBlock({ x: stair.x, y: stair.y - 1, z: stair.z }).setType("minecraft:stone");
   for (let dy = 1; dy <= 2; dy++) dim.getBlock({ x: stair.x, y: stair.y + dy, z: stair.z }).setType("minecraft:air");
@@ -145,11 +146,13 @@ export default async function (t) {
   await t.wait(5);
   r = await replay(visitor, stair, { hand: "empty", sneaking: false });
   await t.wait(50);
+  t.check(row(r, "chairs_bp")?.after === true, "chairs matched the visitor stair (set cancel), not a silent no-op");
   t.check(!riding(visitor), "callback-replay: a visitor does not sit on a stair in the claim (chairs asked access_check)");
   standAt(op, stair);
   await t.wait(5);
   r = await replay(op, stair, { hand: "empty", sneaking: false });
   await t.wait(50);
+  t.check(row(r, "chairs_bp")?.after === true, "chairs matched the owner stair (set cancel), not a silent no-op");
   t.check(riding(op), "callback-replay: the owner sits, so realm:seat from the bundle was used");
   t.server("/ride Owner stop_riding");
   await t.wait(5);
@@ -263,20 +266,24 @@ export default async function (t) {
   const got = t.messages(op, { since }).find((m) => /Storm Glass/.test(m.plain));
   t.check(!!got && glass(op) > 0, `callback-replay: the owner collects the glass (${glass(op)}${got ? `, ${got.plain}` : ""})`);
 
-  // Break and entity interact: same shared event object, still callback-replay.
+  // Break and entity interact stay callback-replay of the shared event object.
+  // No dungeon is started. expedition_bp returns at once when there is no active run, so entry cancel state
+  // does not prove expedition honors cancel on a block it would otherwise refuse.
+  // npc_bp has no initial ev.cancel guard. An armor stand is not a townsfolk, so this does not prove a claim
+  // stops a talk. That production gap is recorded for the lead and is not edited here.
   const stone = { x: base.x + 3, y: base.y - 1, z: base.z + 3 };
   dim.getBlock(stone).setType("minecraft:stone");
-  r = await replay(visitor, stone, { signal: "playerBreakBlock" });
+  r = await replay(visitor, stone, { signal: "playerBreakBlock", sneaking: false });
   t.check(row(r, "claims_bp")?.after === true, "callback-replay break: claims cancels");
   t.check(before(r, "calendar_bp") >= 0 && before(r, "calendar_bp") < before(r, "claims_bp"), "calendar_bp (before claims) is on the break signal");
   t.check(row(r, "calendar_bp")?.before === false, "calendar did not see the claim cancel");
-  t.check(before(r, "expedition_bp") > before(r, "claims_bp") && row(r, "expedition_bp")?.before === true, "expedition (after claims) saw the break cancel");
+  t.check(before(r, "expedition_bp") > before(r, "claims_bp") && row(r, "expedition_bp")?.before === true, "expedition_bp was entered with cancel already true; no active run, so this does not prove expedition honors cancel");
   t.check(dim.getBlock(stone).typeId === "minecraft:stone", "callback-replay does not itself break the block");
   const stand = dim.spawnEntity("minecraft:armor_stand", { x: base.x + 5.5, y: base.y, z: base.z + 5.5 });
   t.assert(stand?.isValid, "armor stand spawned");
-  r = await replay(visitor, { x: base.x + 5, y: base.y, z: base.z + 5 }, { signal: "playerInteractWithEntity", entity: "minecraft:armor_stand" });
+  r = await replay(visitor, { x: base.x + 5, y: base.y, z: base.z + 5 }, { signal: "playerInteractWithEntity", entity: "minecraft:armor_stand", sneaking: false });
   t.check(row(r, "claims_bp")?.after === true, "callback-replay entity: claims cancels an armor stand in the claim");
-  t.check(before(r, "npc_bp") > before(r, "claims_bp") && row(r, "npc_bp")?.before === true, "npc_bp (after claims) saw the entity cancel");
+  t.check(before(r, "npc_bp") > before(r, "claims_bp") && row(r, "npc_bp")?.before === true, "npc_bp was entered with cancel already true; an armor stand is not a townsfolk, and npc_bp has no initial ev.cancel guard");
 
   // Honest native attempt. A zero count is not a pass of the engine path.
   const hitsBefore = await nativeCount(t, send, native, "playerInteractWithBlock");
