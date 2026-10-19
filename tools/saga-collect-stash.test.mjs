@@ -96,7 +96,8 @@ function fixture(obj) {
         engine.reply?.(JSON.stringify({ player: player.id, item: s.msg.item, name: s.msg.name, rows }));
       }
     },
-    changed: () => engine.changed?.(JSON.stringify({ player: player.id })),
+    changed: (rev) => engine.changed?.(JSON.stringify({ player: player.id, rev })),
+    reply: (body) => engine.reply?.(JSON.stringify({ player: player.id, ...body })),
     count: () => engine.countItem(player, obj.item, obj.name),
     progress: () => st.o[0],
   };
@@ -167,4 +168,46 @@ test("a reply for another player or without rows changes nothing and never throw
     f.answer(undefined);
     f.answer("junk");
   });
+});
+
+const HEART = { type: "collect", name: "Champion's Heart", count: 2, label: "Hearts" };
+
+test("a name-only step (no item) asks the stash and counts matching saved stacks", () => {
+  const f = fixture(HEART);
+  f.hold(f.stack("minecraft:emerald", 1, "Champion's Heart"));
+  f.tick();
+  assert.equal(f.sent[0]?.id, "realm:stash_count_ask");
+  assert.equal(f.sent[0].msg.item, undefined);
+  assert.equal(f.sent[0].msg.name, "Champion's Heart");
+  f.reply({ name: "Champion's Heart", rev: "a", part: 1, parts: 1, rows: [{ id: "minecraft:emerald", name: "Champion's Heart", n: 1 }, { id: "minecraft:emerald", name: "Other", n: 5 }] });
+  f.tick();
+  assert.equal(f.progress(), 2);
+  assert.equal(f.finishes(), 1);
+});
+
+test("a multipart answer is used only when every part of one revision arrived", () => {
+  const f = fixture(SHARDS);
+  f.hold(f.stack("minecraft:amethyst_shard", 1));
+  f.tick();
+  f.reply({ item: SHARDS.item, rev: "a", part: 1, parts: 3, rows: [{ id: SHARDS.item, n: 2 }] });
+  f.tick();
+  assert.equal(f.progress(), undefined, "still waiting for parts 2 and 3");
+  f.reply({ item: SHARDS.item, rev: "a", part: 3, parts: 3, rows: [{ id: SHARDS.item, name: "x", n: 1 }, { id: SHARDS.item, n: 2 }] });
+  f.reply({ item: SHARDS.item, rev: "a", part: 2, parts: 3, rows: [{ id: SHARDS.item, n: 2 }] });
+  f.tick();
+  assert.equal(f.progress(), 8, "1 live + 2 + 2 + 1 + 2: every row of every part counts");
+});
+
+test("a reply computed before a change is stale once the notice names a newer revision", () => {
+  const f = fixture(SHARDS);
+  f.hold(f.stack("minecraft:amethyst_shard", 1));
+  f.tick();
+  f.changed("b");
+  f.reply({ item: SHARDS.item, rev: "a", part: 1, parts: 1, rows: [{ id: SHARDS.item, n: 6 }] });
+  f.tick();
+  assert.equal(f.progress(), undefined, "the stale reply is dropped, nothing counted yet");
+  f.tick(20);
+  f.reply({ item: SHARDS.item, rev: "b", part: 1, parts: 1, rows: [{ id: SHARDS.item, n: 3 }] });
+  f.tick();
+  assert.equal(f.progress(), 4);
 });

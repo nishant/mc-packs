@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { buttonSlots, initPages, openInvMenu, recoverInventory, refillFromPages, setOpPages, storedCount } from "./pages.js";
+import { buttonSlots, initPages, openInvMenu, recoverInventory, refillFromPages, revisionOf, setOpPages, storedCount } from "./pages.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -1231,9 +1231,13 @@ function refillNeed(message) {
 
 /**
  * Saga's collect steps ask what the saved pages hold, because page routing moves pickups off the active page:
- *   realm:stash_count_ask { player, item?, name? }  ->  realm:stash_count { player, item?, name?, rows: [{ id, name?, lore?, n }] }
- * One row per name and lore of the item on saved pages (never the active page, which the asker counts itself). A page that
- * can't be read sends no answer, so the asker keeps waiting rather than counting zero. Rows stay under 2048 characters.
+ *   realm:stash_count_ask { player, item?, name? }
+ *     ->  realm:stash_count { player, item?, name?, rev, part, parts, rows: [{ id, name?, lore?, n }] }
+ * One row per name and lore on saved pages (never the active page, which the asker counts itself); a step with only a
+ * name gets every named stack and matches the name itself. rev is the committed revision of the saved pages. Rows are
+ * split over as many messages as they need (each under 2048 characters, part 1..parts): no row is ever dropped, and the
+ * asker uses the rows only when all parts of one revision arrived. A page that can't be read sends no answer, so the
+ * asker keeps waiting rather than counting zero.
  * @param {string} message
  */
 function stashCountAsk(message) {
@@ -1242,16 +1246,21 @@ function stashCountAsk(message) {
     if (!m || typeof m.player !== "string") return;
     const player = world.getAllPlayers().find((p) => p.id === m.player);
     if (!player) return;
-    // A step that names no item can't be matched against the index: nothing is counted from saved pages for it.
-    let rows = typeof m.item === "string" ? storedCount(player, m.item) : [];
+    const item = typeof m.item === "string" ? m.item : undefined;
+    const name = typeof m.name === "string" ? m.name : undefined;
+    const rows = item !== undefined || name !== undefined ? storedCount(player, item, name) : [];
     if (!rows) return;
-    const wire = (/** @type {{ id: string, name?: string, lore?: string[], n: number }[]} */ list) => JSON.stringify({ player: m.player, item: m.item, name: m.name, rows: list.map((r) => ({ ...r, lore: (r.lore?.join("\n").length ?? 0) > 200 ? undefined : r.lore })) });
-    let text = wire(rows);
-    while (text.length >= 2000 && rows.length > 1) {
-      rows = rows.slice(0, rows.length - 1);
-      text = wire(rows);
+    const rev = revisionOf(player);
+    const row = (/** @type {import("./pages.js").CountRow} */ r) => ({ id: r.id, name: r.name, lore: r.lore, n: r.n });
+    const wire = (/** @type {unknown[]} */ list, part = 1, parts = 1) => JSON.stringify({ player: m.player, item, name, rev, part, parts, rows: list });
+    /** @type {unknown[][]} */
+    const chunks = [[]];
+    for (const r of rows.map(row)) {
+      const cur = /** @type {unknown[]} */ (chunks[chunks.length - 1]);
+      if (cur.length && wire([...cur, r], 99, 99).length >= 1900) chunks.push([r]);
+      else cur.push(r);
     }
-    system.sendScriptEvent("realm:stash_count", text);
+    chunks.forEach((c, i) => system.sendScriptEvent("realm:stash_count", wire(c, i + 1, chunks.length)));
   } catch (e) {
     console.warn(`[stash] count: ${e}`);
   }

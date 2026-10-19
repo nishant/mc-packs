@@ -591,15 +591,21 @@ export function countItem(player, item, name) {
 /**
  * Items Expansive Inventory (stash_bp) keeps on saved pages count toward a collect step, which would otherwise never see
  * what its page routing moved off the active page. It asks (realm:stash_count_ask { player, item?, name? }) and
- * stash_bp answers with realm:stash_count { player, item?, name?, rows: [{ id, name?, lore?, n }] }, one row per kind
- * on saved pages; a realm:stash_changed { player } says the saved pages changed. countItem is untouched: deliveries
- * and every other reader still see only the live inventory. Without stash_bp nothing answers: after one wait of
- * STASH_WAIT ticks the step counts the live inventory alone.
+ * stash_bp answers with realm:stash_count { player, item?, name?, rev, part, parts, rows: [{ id, name?, lore?, n }] },
+ * one row per kind on saved pages, split over `parts` messages; a realm:stash_changed { player, rev } says the saved
+ * pages changed. A step with only a name is asked too: the rows are matched here with the same rules as live items.
+ * Parts of one revision are assembled and used only when complete; a reply of an older revision than the last notice
+ * is stale and dropped. countItem is untouched: deliveries and every other reader still see only the live inventory.
+ * Without stash_bp nothing answers: after one wait of STASH_WAIT ticks the step counts the live inventory alone.
  * @type {Map<string, { id: string, name?: string, lore?: string[], n: number }[]>}
  */
 const stashRows = new Map();
 /** When each unanswered ask was sent (tick). @type {Map<string, number>} */
 const stashAsked = new Map();
+/** Parts of an answer received so far. @type {Map<string, { rev?: string, parts: number, got: Map<number, { id: string, name?: string, lore?: string[], n: number }[]> }>} */
+const stashParts = new Map();
+/** The newest committed revision a notice named, per player. @type {Map<string, string>} */
+const stashRev = new Map();
 /** Ticks to wait for an answer before counting without it. */
 const STASH_WAIT = 40;
 
@@ -625,6 +631,7 @@ function collectCount(player, obj) {
     }
     if (now - asked < STASH_WAIT) return undefined;
     stashAsked.delete(key);
+    stashParts.delete(key);
     rows = [];
     stashRows.set(key, rows);
   }
@@ -643,16 +650,32 @@ function stashCountReply(message) {
     const m = JSON.parse(message);
     if (!m || typeof m.player !== "string" || !Array.isArray(m.rows)) return;
     const key = `${m.player}|${typeof m.item === "string" ? m.item : ""}|${typeof m.name === "string" ? m.name : ""}`;
+    const rev = typeof m.rev === "string" ? m.rev : undefined;
+    const known = stashRev.get(m.player);
+    if (known !== undefined && rev !== known) return;
+    const parts = Number.isInteger(m.parts) && m.parts > 1 ? m.parts : 1;
+    const part = Number.isInteger(m.part) && m.part >= 1 && m.part <= parts ? m.part : 1;
     const rows = [];
     for (const r of m.rows) {
       if (r && typeof r.id === "string" && Number.isInteger(r.n) && r.n > 0) {
         rows.push({ id: r.id, name: typeof r.name === "string" ? r.name : undefined, lore: Array.isArray(r.lore) ? r.lore.map(String) : undefined, n: r.n });
       }
     }
+    let pending = stashParts.get(key);
+    if (!pending || pending.rev !== rev || pending.parts !== parts) {
+      pending = { rev, parts, got: new Map() };
+      stashParts.set(key, pending);
+    }
+    pending.got.set(part, rows);
+    if (pending.got.size < parts) return;
+    stashParts.delete(key);
+    /** @type {typeof rows} */
+    const all = [];
+    for (let i = 1; i <= parts; i++) all.push(.../** @type {typeof rows} */ (pending.got.get(i)));
     const was = JSON.stringify(stashRows.get(key));
-    stashRows.set(key, rows);
+    stashRows.set(key, all);
     stashAsked.delete(key);
-    if (was !== JSON.stringify(rows)) invChanged.add(m.player);
+    if (was !== JSON.stringify(all)) invChanged.add(m.player);
   } catch {
     // an unreadable answer is ignored; the step keeps what it had
   }
@@ -663,8 +686,8 @@ function stashChanged(message) {
   try {
     const m = JSON.parse(message);
     if (!m || typeof m.player !== "string") return;
-    for (const key of [...stashRows.keys()]) if (key.startsWith(`${m.player}|`)) stashRows.delete(key);
-    for (const key of [...stashAsked.keys()]) if (key.startsWith(`${m.player}|`)) stashAsked.delete(key);
+    if (typeof m.rev === "string") stashRev.set(m.player, m.rev);
+    for (const map of [stashRows, stashAsked, stashParts]) for (const key of [...map.keys()]) if (key.startsWith(`${m.player}|`)) map.delete(key);
     invChanged.add(m.player);
   } catch {
     // ignored

@@ -253,26 +253,54 @@ function nativeEntries(entries) {
   });
 }
 
-/** Tells packs that count items (Saga's collect steps) that what the saved pages hold changed. @param {Player} player */
+/**
+ * The committed revision of a player's saved pages: it changes whenever any page's snapshot does (a page ref id is
+ * never reused). It rides on every notice and every reply, so a reply computed before a change can be told from one
+ * after it. @param {Player} player @returns {string | undefined}
+ */
+export function revisionOf(player) {
+  try {
+    const state = stateOf(player);
+    return `${Object.entries(state.pages).map(([p, r]) => `${p}=${r.id}`).join(",")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Tells packs that count items (Saga's collect steps) that what the saved pages hold changed, with the new revision. @param {Player} player */
 function announceChange(player) {
   try {
-    system.sendScriptEvent("realm:stash_changed", JSON.stringify({ player: player.id }));
+    system.sendScriptEvent("realm:stash_changed", JSON.stringify({ player: player.id, rev: revisionOf(player) }));
   } catch {
     // a notice that can't be sent only delays a recount
   }
 }
 
-/** @type {Map<string, { sig: string, rows: Map<string, { id: string, name?: string, lore?: string[], n: number }[]> }>} per player: what each item id has on saved pages, valid while the page refs are the same */
+/** @typedef {{ id: string, name?: string, lore?: string[], n: number, x?: boolean }} CountRow x: its lore was too long to send */
+
+/** @type {Map<string, { sig: string, rows: Map<string, CountRow[]> }>} per player: what each ask has on saved pages, valid while the page refs are the same */
 const storedCache = new Map();
 
+/** Could a saved page hold a named stack? False only when the committed index says it holds none. @param {Player} player @param {number} page */
+function mayHoldNamed(player, page) {
+  try {
+    const kinds = indexedEntries(stateOf(player), page);
+    return !kinds || kinds.some((k) => k.name !== undefined && k.name !== "");
+  } catch {
+    return true;
+  }
+}
+
 /**
- * What the player's saved pages (not the active one) hold of an item, as one row per name and lore, for
- * realm:stash_count. Only pages the committed index says may hold the item are read, and the answer is kept until a
- * page changes. Undefined when a page can't be read, so a caller waits rather than counting it as empty.
- * @param {Player} player @param {string} id
- * @returns {{ id: string, name?: string, lore?: string[], n: number }[] | undefined}
+ * What the player's saved pages (not the active one) hold of an item and/or custom name, as one row per kind, name and
+ * lore, for realm:stash_count. A step with an item reads only pages the committed index says may hold it; a step with
+ * only a name reads the pages that may hold any named stack, and every named stack goes out (the asker matches the name,
+ * the way it does for live items). The answer is kept until a page changes. Undefined when a page can't be read, so a
+ * caller waits rather than counting it as empty.
+ * @param {Player} player @param {string | undefined} id @param {string} [name]
+ * @returns {CountRow[] | undefined}
  */
-export function storedCount(player, id) {
+export function storedCount(player, id, name) {
   let state;
   try {
     state = stateOf(player);
@@ -296,27 +324,29 @@ export function storedCount(player, id) {
     cache = { sig, rows: new Map() };
     storedCache.set(player.id, cache);
   }
-  const known = cache.rows.get(id);
+  const ask = id === undefined ? `\u0000${name ?? ""}` : id;
+  const known = cache.rows.get(ask);
   if (known) return known;
-  /** @type {Map<string, { id: string, name?: string, lore?: string[], n: number }>} */
+  /** @type {Map<string, CountRow>} */
   const out = new Map();
   for (const p of [...pagesNow].sort((a, b) => a - b)) {
-    if (p === cur || !mayHold(player, p, id)) continue;
+    if (p === cur || !(id === undefined ? mayHoldNamed(player, p) : mayHold(player, p, id))) continue;
     const entries = readPage(player, p);
     if (!entries) return undefined;
     for (const e of entries) {
-      if (e.id !== id) continue;
+      if (id !== undefined ? e.id !== id : !e.name) continue;
       const item = deserializeStack(e);
       if (!item) return undefined;
       const lore = item.getLore();
-      const key = `${e.name ?? ""}|${JSON.stringify(lore)}`;
-      const row = out.get(key) ?? { id, name: e.name, lore: lore.length ? lore : undefined, n: 0 };
+      const long = lore.join("\n").length > 200;
+      const key = `${e.id}|${e.name ?? ""}|${JSON.stringify(long ? [] : lore)}|${long}`;
+      const row = out.get(key) ?? { id: e.id, name: e.name, lore: lore.length && !long ? lore : undefined, n: 0, x: long ? true : undefined };
       row.n += e.n;
       out.set(key, row);
     }
   }
   const rows = [...out.values()];
-  cache.rows.set(id, rows);
+  cache.rows.set(ask, rows);
   return rows;
 }
 
