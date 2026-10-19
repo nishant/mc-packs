@@ -546,7 +546,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 
 // realm:mail_send { to, from, subject, body }: a letter from another pack (a townsfolk, the realm). `to` is a
 // player id or name from the roster, `from` any display name. No send cooldown and no Sent copy; it isn't
-// delivered when the recipient's inbox is full of unread letters (the oldest read ones make room first).
+// delivered when the recipient's inbox has no room that the oldest read pack letters can free: a letter from a player is never dropped for it.
 onScriptEvent(
   "realm:mail_send",
   ({ id, message }) => {
@@ -561,21 +561,12 @@ onScriptEvent(
       const subject = clean(m.subject, Math.min(BOX, CONFIG.subjectLength), false).text || "(no subject)";
       const body = clean(m.body, CONFIG.bodyLength, true).text;
       if (!body) return;
-      const plan = planSystemLetter(letters().values(), to.i, Date.now(), { systemInboxLimit: CONFIG.systemInboxLimit, systemLetterDays: CONFIG.systemLetterDays, systemReserve: CONFIG.systemReserve, maxLetters: MAX_LETTERS });
+      const plan = planSystemLetter(letters().values(), to.i, Date.now(), { systemInboxLimit: get("systemInboxLimit"), systemLetterDays: get("systemLetterDays"), systemReserve: get("systemReserve"), inboxLimit: get("inboxLimit"), maxLetters: MAX_LETTERS });
       for (const id of plan.drop) {
         const old = letters().get(id);
         if (old) save({ ...old, di: 1, ds: 1 });
       }
-      if (!plan.ok) return console.warn(`[mail] mail_send: ${plan.reason} (kept free for players)`);
-      const inbox = inboxOf(to.i);
-      const limit = get("inboxLimit");
-      const read = inbox.filter((l) => l.r).reverse();
-      if (inbox.length - read.length >= limit) return console.warn(`[mail] mail_send: ${to.n}'s inbox is full of unread letters`);
-      for (let n = inbox.length; n >= limit; n--) {
-        const old = /** @type {Letter} */ (read.shift());
-        save({ ...old, di: 1 });
-      }
-      const next = world.getDynamicProperty(PROP_NEXT);
+      if (!plan.ok) return console.warn(`[mail] mail_send: ${plan.reason} (${to.n}'s letters from players are kept)`);      const next = world.getDynamicProperty(PROP_NEXT);
       const lid = typeof next === "number" ? next : 1;
       world.setDynamicProperty(PROP_NEXT, lid + 1);
       save({ id: lid, f: "", fn: from, t: to.i, tn: to.n, s: subject, b: body, at: Date.now(), r: 0, di: 0, ds: 1 });

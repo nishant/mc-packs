@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
 const { planSystemLetter, isSystem } = await import(pathToFileURL(resolve("packs/mail_bp/scripts/policy.js")).href);
-const P = { systemInboxLimit: 20, systemLetterDays: 30, systemReserve: 1000, maxLetters: 5000 };
+const P = { systemInboxLimit: 20, systemLetterDays: 30, systemReserve: 1000, maxLetters: 5000, inboxLimit: 50 };
 const NOW = 1_800_000_000_000;
 const DAY = 86400000;
 
@@ -46,7 +46,7 @@ test("a player letter is still accepted when pack letters hit their ceiling", ()
 test("a newer pack letter pushes out the oldest pack letter of that inbox, never a player letter", () => {
   const letters = [];
   for (let i = 1; i <= 20; i++) letters.push({ id: i, f: "", t: "a", at: NOW - 1000 + i, r: 0, di: 0 });
-  for (let i = 100; i < 160; i++) letters.push({ id: i, f: "steve-id", t: "a", at: NOW - 5 * DAY, r: 0, di: 0 });
+  for (let i = 100; i < 120; i++) letters.push({ id: i, f: "steve-id", t: "a", at: NOW - 5 * DAY, r: 0, di: 0 });
   const plan = planSystemLetter(letters, "a", NOW, P);
   assert.deepEqual(plan.drop, [1]);
   assert.ok(plan.ok);
@@ -76,4 +76,37 @@ test("unknown sender types are not classified as pack letters", () => {
   assert.equal(isSystem({ f: undefined }), false);
   assert.equal(isSystem({ f: null }), false);
   assert.equal(isSystem({}), false);
+});
+
+const full = (players, packs, readPacks = 0) => [
+  ...Array.from({ length: players }, (_, i) => ({ id: 100 + i, f: "pid", t: "a", at: NOW - 40 * DAY + i, r: 1, di: 0 })),
+  ...Array.from({ length: packs }, (_, i) => ({ id: 1 + i, f: "", t: "a", at: NOW - 10 * DAY + i, r: i < readPacks ? 1 : 0, di: 0 })),
+];
+
+test("a full mixed inbox (31 player + 19 pack letters) never loses a player letter to a pack letter", () => {
+  const plan = planSystemLetter(full(31, 19, 19), "a", NOW, P);
+  assert.equal(plan.ok, true);
+  assert.deepEqual(plan.drop, [1], "only the oldest pack letter makes room");
+});
+
+test("a pack letter into a full inbox pushes out the oldest read pack letters, not player letters", () => {
+  const plan = planSystemLetter(full(30, 20, 20), "a", NOW, { ...P, systemInboxLimit: 25 });
+  assert.equal(plan.ok, true);
+  assert.deepEqual(plan.drop, [1]);
+});
+
+test("a full inbox of player letters and unread pack letters refuses the pack letter and drops no player letter", () => {
+  const plan = planSystemLetter(full(30, 20, 0), "a", NOW, { ...P, systemInboxLimit: 25 });
+  assert.equal(plan.ok, false);
+  assert.ok(plan.drop.every((id) => id < 100));
+});
+
+test("mail_send reads the live settings and has no general eviction loop that can delete player letters", () => {
+  const main = readFileSync("packs/mail_bp/scripts/main.js", "utf8");
+  const h = main.slice(main.indexOf('"realm:mail_send"'), main.indexOf('"realm:mail_test"'));
+  assert.doesNotMatch(h, /CONFIG\.system/);
+  for (const k of ["systemInboxLimit", "systemLetterDays", "systemReserve", "inboxLimit"]) assert.match(h, new RegExp(`get\\("${k}"\\)`));
+  assert.doesNotMatch(h, /read\.shift\(\)/);
+  const set = readFileSync("packs/mail_bp/scripts/settings.js", "utf8");
+  for (const k of ["systemInboxLimit", "systemLetterDays", "systemReserve"]) assert.match(set, new RegExp(`key: "${k}"`));
 });

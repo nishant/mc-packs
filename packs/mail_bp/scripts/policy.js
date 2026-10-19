@@ -7,13 +7,13 @@ export const isSystem = (l) => l.f === "";
 
 /**
  * @typedef {{ id: number, f: string, t: string, at: number, r: number, di: number }} Mail
- * @typedef {{ systemInboxLimit: number, systemLetterDays: number, systemReserve: number, maxLetters: number }} Policy
+ * @typedef {{ systemInboxLimit: number, systemLetterDays: number, systemReserve: number, maxLetters: number, inboxLimit: number }} Policy
  */
 
 /**
  * What delivering one pack letter to `to` changes. A pack letter is not delivered once the realm holds
  * `maxLetters - systemReserve` letters, so players can always write. A letter with no usable sent time is never
- * counted as old.
+ * counted as old. The recipient's whole inbox (`inboxLimit`) is kept too, but only by dropping their oldest read pack\n * letters: a letter from a player is never dropped here, and the pack letter isn't delivered when that isn't enough.
  * @param {Iterable<Mail>} letters @param {string} to @param {number} now @param {Policy} policy
  * @returns {{ ok: boolean, drop: number[], reason?: string }} `drop`: ids to delete first (expired, and the recipient's oldest over the limit)
  */
@@ -29,10 +29,22 @@ export function planSystemLetter(letters, to, now, policy) {
   const mine = live.filter((l) => isSystem(l) && l.t === to && !l.di).sort((a, b) => (a.at || 0) - (b.at || 0) || a.id - b.id);
   const room = Math.max(1, policy.systemInboxLimit) - 1;
   const over = mine.slice(0, Math.max(0, mine.length - room));
+  const expired = [...drop];
   for (const l of over) {
     drop.push(l.id);
     gone.add(l.id);
   }
-  if (live.length - over.length >= ceiling) return { ok: false, drop, reason: "the realm's mail is full" };
+  const inbox = live.filter((l) => l.t === to && !l.di && !gone.has(l.id));
+  const roomTotal = Math.max(1, policy.inboxLimit) - 1;
+  const need = inbox.length - roomTotal;
+  if (need > 0) {
+    const spare = inbox.filter((l) => isSystem(l) && l.r).sort((a, b) => (a.at || 0) - (b.at || 0) || a.id - b.id);
+    if (spare.length < need) return { ok: false, drop: expired, reason: "the inbox is full of letters from players and unread ones" };
+    for (const l of spare.slice(0, need)) {
+      drop.push(l.id);
+      gone.add(l.id);
+    }
+  }
+  if (live.length - gone.size + expired.length >= ceiling) return { ok: false, drop, reason: "the realm's mail is full" };
   return { ok: true, drop };
 }
