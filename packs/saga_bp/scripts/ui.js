@@ -50,7 +50,7 @@ import { campName, ensurePlace, isCamp, leaveCamp, locate, placeLabel, placesIn,
 import { campCheck, campForChapter, startHostile, wandererOf } from "./wander.js";
 import { get, getFor } from "./settings.js";
 import { QUEST_TEXT_BYTES, SLOTS, SLOT_NAMES, byteLength, isSlot, questCode } from "./side.js";
-import { PACK, across, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, npcName, num, onCancel, online, plain, send, show } from "./util.js";
+import { PACK, across, alive, busy, clock, compass, coords, dialog, dimName, exclusive, isOp, itemName, lifecycle, npcName, num, plain, send, show, showOnce } from "./util.js";
 
 /** @typedef {import("./data.js").Entry} Entry */
 /** @typedef {import("./data.js").Saga} Saga */
@@ -472,12 +472,6 @@ function closeForms(p) {
   }
 }
 
-// A death, respawn, dimension change or leaving closes the party popups a player has open: one would hide the respawn screen.
-onCancel((id) => {
-  const p = popups.has(id) ? online(id) : undefined;
-  if (p) closeForms(p);
-});
-
 /** "- Catch 5 things with a fishing rod" lines: a chapter's required steps that apply for a player. @param {Chapter} chapter @param {Saga} saga @param {Story} story */
 const stepsFor = (chapter, saga, story) => chapter.objectives.filter((o) => !o.optional && matches(o.when, saga, story.id)).map((o) => `§e- ${o.label}§r`);
 
@@ -491,14 +485,14 @@ function listenIn(mates, title, body) {
   /** @type {{ p: Player, done: boolean }[]} */
   const open = [];
   for (const p of mates) {
-    if (!p.isValid || busy.has(p.id) || popups.has(p.id)) continue;
+    if (!alive(p) || busy.has(p.id) || popups.has(p.id)) continue;
     const h = { p, done: false };
     open.push(h);
     popups.add(p.id);
     const form = new ActionFormData().title(title).body(body).button("OK");
-    form
-      .show(p)
-      .catch(() => undefined)
+    // Ends (and the mark clears) when the mate answers, dies, leaves, changes dimension or LISTEN_TICKS pass.
+    showOnce(p, form, LISTEN_TICKS)
+      .catch((e) => console.warn(`[saga] listen-in popup: ${e}`))
       .then(() => {
         h.done = true;
         popups.delete(p.id);
@@ -565,22 +559,18 @@ function inviteSide(by, story, chapter, choice, mates) {
   const byName = by.name; // by may have left by the time a mate answers
   for (const p of mates) {
     p.sendMessage(`§b[Party] ${by.name} started ${story.title}, "${chapter.title}". Join in from the popup, or talk to ${npc} to start it too.`);
-    if (busy.has(p.id) || popups.has(p.id)) continue;
+    if (!alive(p) || busy.has(p.id) || popups.has(p.id)) continue;
     popups.add(p.id);
     void exclusive(p, async () => {
+      const stale = lifecycle(p);
       const steps = stepsFor(chapter, sagaOf(p), story);
       const form = new MessageFormData()
         .title("Party: join a story?")
         .body([`§b${by.name}§r started a story with ${npc}:`, `§e${story.title}, "${chapter.title}"§r`, "", ...steps, "", "Join, and you take it on too: progress near each other is shared, and one report back counts for everyone who finished it."].join("\n"))
         .button1("Join")
         .button2("Not now");
-      let answered = false;
-      const timer = system.runTimeout(() => {
-        if (!answered) closeForms(p);
-      }, INVITE_TICKS);
-      const res = await form.show(p).catch(() => undefined);
-      answered = true;
-      system.clearRun(timer);
+      const res = await showOnce(p, form, INVITE_TICKS);
+      if (stale()) return; // died, left, changed dimension or was cancelled meanwhile: nothing is accepted or said
       if (!res || res.canceled || res.selection !== 0 || !p.isValid) {
         if (res?.canceled && res.cancelationReason === FormCancelationReason.UserBusy) return;
         p.sendMessage(`§7[Party] Not now: ${npc} can start ${story.title} for you any time.`);
@@ -764,10 +754,11 @@ async function showHint(player, e) {
  * @param {Player} player @param {Story} story
  */
 export async function chapterInfo(player, story) {
+  const stale = lifecycle(player);
   /** @type {[Entry, number] | undefined} a riddle picked from this page, asked once the page is gone */
   let pending;
   await exclusive(player, async () => {
-    while (player.isValid) {
+    while (!stale()) {
       const saga = sagaOf(player);
       const e = entries(player).find((x) => x.story.id === story.id);
       // A party quest (party.js) shows the party's chapter, not the player's own.
@@ -806,11 +797,12 @@ export async function chapterInfo(player, story) {
     }
   });
   // Asked here, not scheduled, so a menu that opened this page comes back after the riddle.
-  if (pending) await askAnswer(player, ...pending);
+  if (pending && !stale()) await askAnswer(player, ...pending);
 }
 
 /** The outro, the choice, the rewards. In a party, one report counts for every mate who finished the chapter too. @param {Player} player @param {Story} story */
 export async function endChapter(player, story) {
+  const stale = lifecycle(player);
   /** @type {Story | undefined} */
   let continueWith;
   await exclusive(player, async () => {
@@ -878,7 +870,7 @@ export async function endChapter(player, story) {
     }
   });
   // The same NPC tells the next chapter: go straight on (Not now is always there).
-  if (continueWith && player.isValid) await startChapter(player, continueWith);
+  if (continueWith && !stale()) await startChapter(player, continueWith);
 }
 
 /**
@@ -1143,6 +1135,7 @@ export function wanderAuto(player) {
 
 /** A disguised hostile talks: its tell is in the pages. The toll man wants paying. @param {Player} player @param {string} wid */
 async function hostileTalk(player, wid) {
+  const stale = lifecycle(player);
   /** @type {boolean} */
   let fight = false;
   await exclusive(player, async () => {
@@ -1166,7 +1159,7 @@ async function hostileTalk(player, wid) {
     if (pick === 0) player.sendMessage(`§c[Story] You don't have ${h.toll.crowns} Crowns. "Then we'll take it out of your hide."`);
     fight = true;
   });
-  if (fight && player.isValid) startHostile(player, false);
+  if (fight && !stale()) startHostile(player, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -1637,7 +1630,8 @@ function sortStories(player) {
 
 /** @param {Player} player */
 export async function showMenu(player) {
-  while (player.isValid) {
+  const stale = lifecycle(player);
+  while (!stale()) {
     entries(player); // tidies chapters that vanished from the stories
     tidyFavors(player);
     const { saga, current, available, done } = sortStories(player);
@@ -1673,7 +1667,8 @@ export async function showMenu(player) {
 
 /** Current quests: main story first, then side stories, then favors. @param {Player} player */
 export async function currentPage(player) {
-  while (player.isValid) {
+  const stale = lifecycle(player);
+  while (!stale()) {
     const { saga, current } = sortStories(player);
     const list = entries(player);
     const favs = list.filter((e) => e.fav);
@@ -1736,7 +1731,8 @@ function questsDone(saga) {
  * @param {Player} player
  */
 async function finishedPage(player) {
-  while (player.isValid) {
+  const stale = lifecycle(player);
+  while (!stale()) {
     const { saga, done } = sortStories(player);
     const going = ORDERED.filter((s) => !done.includes(s) && s.chapters.some((c) => saga.s[s.id]?.dn.includes(c.id)));
     const quests = questsDone(saga);
@@ -1768,7 +1764,8 @@ async function finishedPage(player) {
 
 /** The codex: every lore entry found, readable. @param {Player} player */
 async function codexPage(player) {
-  while (player.isValid) {
+  const stale = lifecycle(player);
+  while (!stale()) {
     const saga = sagaOf(player);
     const ids = (saga.cx ?? []).filter((id) => codexById.has(id));
     if (!ids.length) {

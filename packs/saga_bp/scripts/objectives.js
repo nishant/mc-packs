@@ -2394,7 +2394,7 @@ export async function askAnswer(player, e, i) {
     const q = obj.question ? pagesFor([obj.question], saga, e.story.id, player.name)[0] ?? obj.label : obj.label;
     const form = new ModalFormData().title(e.story.title).textField(`${q}\n\n§7Type your answer (capitals and spaces don't matter):`, "Your answer").submitButton("Answer");
     const res = await show(player, form);
-    askCool.set(player.id, system.currentTick + 400);
+    if (alive(player)) askCool.set(player.id, system.currentTick + 400); // not for a player who left or died: no id written back, asked again at once after a respawn
     if (!res || res.canceled || !player.isValid) return;
     const input = String(res.formValues?.[0] ?? "");
     if (!input.trim()) return;

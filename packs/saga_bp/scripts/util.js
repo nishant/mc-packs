@@ -90,17 +90,17 @@ export const wait = (ticks) => new Promise((r) => system.runTimeout(() => r(unde
 // release a newer one's lock or act on its late answer.
 // ---------------------------------------------------------------------------
 
-/** A form nobody answers is given up on (and closed) after this long: 90 seconds. */
-export const FORM_TICKS = 1800;
+/** A form nobody answers is given up on (and closed) after this long: 45 seconds. Kept under the test harness's own 1200-tick fallback so a native run can tell the pack's recovery from the shim's. */
+export const FORM_TICKS = 900;
 /** How often an open form checks that its player is still the one it was shown to. */
 const WATCH_TICKS = 5;
 
-/** How often each player's interactions were cancelled; an operation started before a change is stale. @type {Map<string, number>} */
+/** Never reused, so an interaction that began before a cancel or a leave can't match a later counter. */
+let lastEpoch = 0;
+/** Each player's current epoch (set when an interaction starts, replaced by a cancel, dropped on leave): an operation started under an older one is stale. @type {Map<string, number>} */
 const epochs = new Map();
 /** Open forms by player: each looks at its player again when asked, so a death closes it now, not at the next check. @type {Map<string, Set<() => void>>} */
 const waiting = new Map();
-/** Other modules' own forms to close when a player's interactions are cancelled. @type {Set<(playerId: string) => void>} */
-const cancelHooks = new Set();
 
 /** Alive and in the world (a dead player stays valid until they respawn). @param {Player} player */
 export function alive(player) {
@@ -115,39 +115,32 @@ export function alive(player) {
 
 /**
  * Ties work to the player as they are now. The returned check is true once they died, left, changed dimension or had
- * their interactions cancelled (a respawn): whatever started before that must not act on a late answer.
+ * their interactions cancelled (a respawn, a form that timed out): whatever started before that, menus that would
+ * reopen a parent page included, must stop and not act on a late answer.
  * @param {Player} player @returns {() => boolean}
  */
 export function lifecycle(player) {
+  if (!alive(player)) return () => true;
   const id = player.id;
-  const epoch = epochs.get(id) ?? 0;
-  const dim = alive(player) ? player.dimension.id : undefined;
-  return () => dim === undefined || !alive(player) || (epochs.get(id) ?? 0) !== epoch || player.dimension.id !== dim;
+  let epoch = epochs.get(id);
+  if (epoch === undefined) epochs.set(id, (epoch = ++lastEpoch));
+  const dim = player.dimension.id;
+  return () => !alive(player) || epochs.get(id) !== epoch || player.dimension.id !== dim;
 }
 
 /**
- * Ends everything a player had going: the busy mark and the forms waiting on them. Death, respawn, dimension change
- * and leaving call it. An operation that started earlier ends without effect (show answers undefined, the lock stays
- * with whoever holds it now).
- * @param {string} playerId @param {boolean} [left] the player is gone for good: forget their counter
+ * Ends everything a player had going: the busy mark and the forms waiting on them. Death, respawn, dimension change,
+ * a form that timed out and leaving call it. An operation that started earlier ends without effect (show answers
+ * undefined, the lock stays with whoever holds it now).
+ * @param {string} playerId @param {boolean} [left] the player is gone for good: forget their epoch
  */
 export function cancelInteractions(playerId, left = false) {
   if (left) epochs.delete(playerId);
-  else epochs.set(playerId, (epochs.get(playerId) ?? 0) + 1);
+  else epochs.set(playerId, ++lastEpoch);
   holders.delete(playerId);
   busy.delete(playerId);
   for (const look of [...(waiting.get(playerId) ?? [])]) look();
-  for (const fn of cancelHooks) {
-    try {
-      fn(playerId);
-    } catch (e) {
-      console.warn(`[saga] cancel hook: ${e}`);
-    }
-  }
 }
-
-/** Runs `fn(playerId)` when a player's interactions are cancelled, for forms a module shows without `show`. @param {(playerId: string) => void} fn */
-export const onCancel = (fn) => void cancelHooks.add(fn);
 
 /** Closes the form on a player's screen: only called for a form our own `show` put there and has no answer to. @param {Player} player */
 function closeOwnForm(player) {
@@ -159,11 +152,12 @@ function closeOwnForm(player) {
 }
 
 /**
- * One form.show that stops waiting once the player can't use the form any more (their form is closed then) or
- * FORM_TICKS passed. Undefined when it gave up.
- * @param {Player} player @param {{ show(p: Player): Promise<any> }} form @param {() => boolean} stale
+ * One form.show that stops waiting once the player can't use the form any more (their form is closed then) or `limit`
+ * ticks passed (`cancelOnTimeout`: the player's other interactions end too, so a parent menu doesn't reopen for someone
+ * who isn't there). Undefined when it gave up.
+ * @param {Player} player @param {{ show(p: Player): Promise<any> }} form @param {() => boolean} stale @param {number} limit @param {boolean} cancelOnTimeout
  */
-async function answered(player, form, stale) {
+async function answered(player, form, stale, limit, cancelOnTimeout) {
   const id = player.id;
   /** @type {(why: string) => void} */
   let giveUp = () => {};
@@ -177,18 +171,19 @@ async function answered(player, form, stale) {
   if (!looks) waiting.set(id, (looks = new Set()));
   looks.add(look);
   const watch = system.runInterval(look, WATCH_TICKS);
-  const limit = system.runTimeout(() => giveUp("timeout"), FORM_TICKS);
+  const timer = system.runTimeout(() => giveUp("timeout"), limit);
   try {
     const shown = form.show(player);
     const out = await Promise.race([shown, gone]);
     if (typeof out !== "string") return out;
-    if (out === "timeout") console.warn(`[saga] gave up on a form nobody answered for ${FORM_TICKS} ticks (player ${id})`);
+    if (out === "timeout") console.warn(`[saga] gave up on a form nobody answered for ${limit} ticks (player ${id})`);
     closeOwnForm(player);
+    if (out === "timeout" && cancelOnTimeout) cancelInteractions(id);
     shown.then(undefined, (e) => console.warn(`[saga] a dropped form failed: ${e}`));
     return undefined;
   } finally {
     system.clearRun(watch);
-    system.clearRun(limit);
+    system.clearRun(timer);
     looks.delete(look);
     if (!looks.size && waiting.get(id) === looks) waiting.delete(id);
   }
@@ -196,8 +191,8 @@ async function answered(player, form, stale) {
 
 /**
  * Shows a form, retrying while the player is busy (chat or another menu just closed). Undefined when the player
- * died, left, changed dimension or had their interactions cancelled meanwhile, or nobody answered for FORM_TICKS:
- * a late answer is never acted on.
+ * died, left, changed dimension or had their interactions cancelled meanwhile, or nobody answered for FORM_TICKS
+ * (which ends the player's other pending interactions too): a late answer is never acted on.
  * @template {{ show(p: Player): Promise<any> }} F
  * @param {Player} player @param {F} form @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
  */
@@ -205,12 +200,26 @@ export async function show(player, form) {
   const stale = lifecycle(player);
   for (let attempt = 0; attempt < 20; attempt++) {
     if (stale()) return undefined;
-    const res = await answered(player, form, stale);
+    const res = await answered(player, form, stale, FORM_TICKS, true);
     if (!res || stale()) return undefined;
     if (!(res.canceled && res.cancelationReason === FormCancelationReason.UserBusy)) return res;
     await wait(10);
   }
   return undefined;
+}
+
+/**
+ * One try at a form with a time limit and no retry: for popups that may simply not open when the player is busy. Undefined
+ * when the player died, left, changed dimension or had their interactions cancelled meanwhile, or `limit` passed; a late
+ * answer is never returned. A popup that times out ends nothing else of the player's.
+ * @template {{ show(p: Player): Promise<any> }} F
+ * @param {Player} player @param {F} form @param {number} limit ticks @returns {Promise<Awaited<ReturnType<F["show"]>> | undefined>}
+ */
+export async function showOnce(player, form, limit) {
+  const stale = lifecycle(player);
+  if (stale()) return undefined;
+  const res = await answered(player, form, stale, limit, false);
+  return res && !stale() ? res : undefined;
 }
 
 /** Block-rounded coordinates "12 64 -300". @param {{ x: number, y?: number, z: number }} p */
