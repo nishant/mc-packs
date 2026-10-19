@@ -2428,6 +2428,57 @@ test("F4 index: a legacy page with no snapshot yet is empty and is not restored;
   assert.equal(pages.storedCount(p, "minecraft:emerald"), undefined, "corrupt legacy data is unknown, not empty");
 });
 
+test("F5 auto-store: a failed save leaves the pickup where it is and is not retried as new; later overflow needs the active page at 1 free slot or less", () => {
+  const p = joined();
+  mc.players = [p];
+  pages.initPages({ bar: (player, text) => player.bar.push(text), sort() {}, stash() {} });
+  try {
+  const fixed = (/** @type {number[]} */ free) => Object.fromEntries(STORAGE_SLOTS.filter((s) => !free.includes(s)).map((s) => [s, Object.assign(stack("minecraft:stone", 64), { lockMode: "slot" })]));
+  arrange(p, { 1: fixed([9]), 2: fixed([]) });
+  switchPage(p, 3);
+  advance(30);
+  const warns = p.bar.length;
+  mc.failSave = true;
+  try {
+    pickup(p, 20, stack("minecraft:iron_ingot", 5));
+  } finally {
+    mc.failSave = false;
+  }
+  assert.equal(p.container.getItem(20)?.amount, 5, "nothing moved on a failed save");
+  advance(130);
+  assert.equal(p.container.getItem(20)?.amount, 5, "the failed pickup is not retried as a new one");
+  assert.equal(savedPage(p, 1).size + savedPage(p, 2).size, 2 * STORAGE_SLOTS.length - 1, "pages 1 and 2 are untouched");
+  assert.ok(p.bar.slice(warns).some((t) => /Auto-store/.test(t)), "the player is told the pickup could not be stored");
+  pickup(p, 21, stack("minecraft:gold_ingot", 2));
+  assert.equal(p.container.getItem(21), undefined, "an earlier page with a free slot always takes a pickup");
+  assert.equal(savedPage(p, 1).get(9)?.typeId, "minecraft:gold_ingot");
+  pickup(p, 22, stack("minecraft:emerald", 1));
+  assert.equal(p.container.getItem(22)?.amount, 1, "pages 1 and 2 are full and the active page has room, so a later page is not used");
+  const open = STORAGE_SLOTS.filter((s) => !p.container.getItem(s));
+  for (const s of open.slice(1)) pickup(p, s, Object.assign(stack("minecraft:cobblestone", 1), { lockMode: "slot" }));
+  advance(130);
+  pickup(p, open[0], stack("minecraft:diamond", 1));
+  advance(100);
+  assert.equal(savedPage(p, 4).get(9)?.typeId, "minecraft:diamond");
+  } finally {
+    pages.initPages({ bar: (player, text) => player.onScreenDisplay.setActionBar(text), sort() {}, stash() {} });
+  }
+});
+
+test("F5 auto-store: a queued button gesture or a reconcile in flight stops auto-store for that tick", () => {
+  const p = joined();
+  mc.players = [p];
+  arrange(p, { 1: { 9: stack("minecraft:stone", 1) } });
+  switchPage(p, 2);
+  advance(30);
+  p.container.setItem(20, undefined);
+  p.container.setItem(17, undefined);
+  fire("playerInventoryItemChange", { player: p, slot: 17, beforeItemStack: stack(BTN_NEXT) });
+  p.container.setItem(21, stack("minecraft:emerald", 9));
+  advance(1);
+  assert.equal(p.container.getItem(21)?.amount ?? 9, 9, "no routing while the gesture is still queued");
+});
+
 test("F1 fill: a failed save changes nothing at all", () => {
   const p = joined();
   mc.players = [p];

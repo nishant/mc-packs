@@ -1200,7 +1200,7 @@ function mayHold(player, page, id) {
  */
 function autoStore(player) {
   const inv = invOf(player);
-  if (!inv || switching.has(player.id)) return;
+  if (!inv || switching.has(player.id) || queuedButtons.has(player.id) || reconciling.has(player.id)) return;
   const total = totalPages(player);
   const cur = curPage(player);
   const now = lookAtPage(inv);
@@ -1260,7 +1260,14 @@ function autoStore(player) {
   if (!movedCount) return;
   const after = carried(inv).filter((e) => !changed.has(e.s));
   for (const [s, item] of changed) if (item) after.push({ s, item });
-  commitPages(player, edits, after);
+  try {
+    commitPages(player, edits, after);
+  } catch (e) {
+    console.warn(`[stash] auto-store: ${e}`);
+    snapshots.delete(player.id); // the next look is a fresh baseline, so this pickup is never retried as new
+    hooks.bar(player, "§cAuto-store could not move your pickup. Nothing changed");
+    return;
+  }
   const look = lookAtPage(inv);
   snapshots.set(player.id, { page: cur, amounts: look.amounts, live: liveTotals(player, inv, look.amounts) });
   const dest = [...perPage.entries()].sort((a, b) => a[0] - b[0]).sort((a, b) => b[1] - a[1])[0][0];
