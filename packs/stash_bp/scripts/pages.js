@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, InventoryRecoveryError, inventoryReady, loadSnapshot, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -25,6 +25,8 @@ export const STORAGE_SLOTS = [9, 10, 11, 12, 13, 14, 18, 19, 20, 21, 22, 23, 24,
 const OLD_STORAGE_SLOTS = [10, 11, 12, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35];
 const OLD_BUTTON_SLOTS = [9, 13, 17];
 const HOTBAR = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+/** The three rows of a page as the inventory screen draws them: the top row has only its first six slots (the buttons take the rest). */
+const ROWS = [STORAGE_SLOTS.slice(0, 6), STORAGE_SLOTS.slice(6, 15), STORAGE_SLOTS.slice(15)];
 const PAGE_SIZE = STORAGE_SLOTS.length;
 
 const MAX_PAGES = 25;
@@ -254,9 +256,12 @@ function nativeEntries(entries) {
 /**
  * Builds immutable page images, then commits them together with the inventory.
  * Empty snapshots intentionally shadow legacy JSON so it can never be restored twice.
+ * `decorate` runs once on the index about to be written, so whatever else the index records (a content index)
+ * lands in the same single write; if it throws, nothing changes.
  * @param {Player} player @param {Map<number, Rec[]>} edits @param {import("./page-store.js").Entry[]} after @param {number} [cur]
+ * @param {(next: import("./page-store.js").State, edits: Map<number, Rec[]>) => void} [decorate]
  */
-function commitPages(player, edits, after, cur = curPage(player)) {
+function commitPages(player, edits, after, cur = curPage(player), decorate) {
   const old = stateOf(player);
   if (old.pending) throw new Error("inventory recovery is pending; tell an operator");
   const next = { ...old, cur, pages: { ...old.pages } };
@@ -269,6 +274,7 @@ function commitPages(player, edits, after, cur = curPage(player)) {
       created.push(ref);
       next.pages[page] = ref;
     }
+    decorate?.(next, edits);
     commitInventory(player, old, next, after);
   } catch (e) {
     const live = stateOf(player);
@@ -546,6 +552,152 @@ export function enforcePageCount(player) {
 }
 
 // ---------------------------------------------------------------------------
+// Moving stacks between pages
+// ---------------------------------------------------------------------------
+
+/**
+ * @typedef {"gone" | "busy" | "layout" | "recovery" | "invalid" | "same-page" | "empty" | "stale" | "slot-locked" | "unreadable" | "no-room" | "failed"} TransferCode
+ * @typedef {{ from?: number, slots: number[], to: number, partial?: boolean, expect?: Map<number, string>,
+ *   reason?: string, decorate?: (next: import("./page-store.js").State, edits: Map<number, Rec[]>) => void }} TransferRequest
+ * @typedef {{ ok: true, reason: string, from: number, to: number, stacks: number, items: number, left: { slot: number, amount: number }[] }} Transferred
+ * @typedef {{ ok: false, reason: string, code: TransferCode, message: string, fit?: number }} NotTransferred
+ */
+
+/**
+ * The one way stacks change pages. Takes stacks out of slots of one page and puts them on another (`from` defaults to
+ * the page being shown; either side may be any page the player has, never the same one), merging into matching
+ * stacks first and then taking empty slots in order. Planning happens on copies in memory: the request is refused
+ * before anything is written when a slot is empty, stale, locked to its slot, or the destination can't take every
+ * stack (`partial: true` instead moves what fits and returns what is left, slot by slot). Only after that is it one
+ * commitPages transaction: the page images and both inventory images are saved and read back before a live slot
+ * changes, a failure rolls back, and one write of the page index commits it. Stacks travel as native ItemStacks
+ * (clones), the hotbar, cursor and page buttons are never touched, and nothing is announced: a move is not a pickup.
+ *   slots   slots of the `from` page (9-14, 18-35), each at most once
+ *   expect  slot -> signature(): what the caller saw; any difference refuses the move ("stale")
+ *   reason  carried back in the result ("manual"; later callers may say "route" or "fill")
+ *   decorate  called once with the index about to be written (see commitPages)
+ * @param {Player} player @param {TransferRequest} request @returns {Transferred | NotTransferred}
+ */
+export function transferStacks(player, request) {
+  const reason = request.reason ?? "manual";
+  /** @param {TransferCode} code @param {string} message @param {{ fit?: number }} [extra] @returns {NotTransferred} */
+  const refuse = (code, message, extra) => ({ ok: false, reason, code, message, ...extra });
+  const id = player.id;
+  const inv = invOf(player);
+  if (!inv || !alive(player)) return refuse("gone", "You can't move items right now");
+  if (switching.has(id)) return refuse("busy", "Another inventory change is still running. Try again in a moment");
+  try {
+    if (stateOf(player).pending) return refuse("recovery", "Inventory recovery is safely saved and needs an operator");
+    ensureLayout(player);
+  } catch (e) {
+    return refuse("layout", `Items not moved: ${e}`);
+  }
+  switching.add(id);
+  try {
+    const total = totalPages(player);
+    const cur = curPage(player);
+    const from = request.from ?? cur;
+    const to = request.to;
+    const exists = (/** @type {number} */ p) => Number.isInteger(p) && p >= 1 && p <= total;
+    const wanted = [...request.slots].sort((a, b) => a - b);
+    if (cur > total || !exists(from) || !exists(to) || !wanted.length || new Set(wanted).size !== wanted.length || wanted.some((s) => !STORAGE_SLOTS.includes(s))) {
+      return refuse("invalid", "Choose a page you have, and slots of the page being moved from");
+    }
+    if (from === to) return refuse("same-page", `Those items are already on Page #${to}`);
+
+    /** @type {Map<number, Map<number, ItemStack>>} page -> slot -> stack, copies the plan changes freely */
+    const model = new Map();
+    /** @param {number} page @returns {Map<number, ItemStack> | undefined} */
+    const load = (page) => {
+      let slots = model.get(page);
+      if (slots) return slots;
+      slots = new Map();
+      if (page === cur) {
+        for (const s of STORAGE_SLOTS) {
+          const item = inv.getItem(s);
+          if (item && !isButton(item)) slots.set(s, item);
+        }
+      } else {
+        const entries = readPage(player, page);
+        if (!entries) return undefined;
+        for (const e of entries) {
+          const item = deserializeStack(e);
+          if (!item) throw new Error(`can't restore ${e.id}`);
+          slots.set(e.s, item);
+        }
+      }
+      model.set(page, slots);
+      return slots;
+    };
+    const source = load(from);
+    const target = load(to);
+    if (!source || !target) return refuse("unreadable", `Page #${source ? to : from} can't be read, so nothing was moved`);
+
+    const moving = [];
+    for (const slot of wanted) {
+      const item = source.get(slot);
+      if (!item) return refuse(request.expect ? "stale" : "empty", request.expect ? "That stack changed since the menu showed it. Nothing was moved" : "There is nothing in that slot");
+      if (request.expect && request.expect.get(slot) !== signature(item)) return refuse("stale", "That stack changed since the menu showed it. Nothing was moved");
+      if (item.lockMode === ItemLockMode.slot) return refuse("slot-locked", `${item.nameTag ?? pretty(item.typeId)} is locked to its slot, so nothing was moved`);
+      moving.push({ slot, item });
+    }
+
+    let fit = 0;
+    let stacks = 0;
+    let items = 0;
+    /** @type {{ slot: number, amount: number }[]} */
+    const left = [];
+    for (const { slot, item } of moving) {
+      const rem = placeIn(target, item, STORAGE_SLOTS);
+      if (!rem) {
+        fit++;
+        stacks++;
+        items += item.amount;
+        source.delete(slot);
+        continue;
+      }
+      if (!request.partial) continue; // counted below; nothing has been written
+      const placed = item.amount - rem.amount;
+      if (placed) {
+        stacks++;
+        items += placed;
+        source.set(slot, rem);
+      }
+      left.push({ slot, amount: rem.amount });
+    }
+    if ((!request.partial && fit < moving.length) || !items) {
+      return refuse("no-room", `Page #${to} has room for ${fit} of ${moving.length} stack${moving.length === 1 ? "" : "s"}. Nothing was moved`, { fit });
+    }
+    /** @type {Map<number, Rec[]>} */
+    const edits = new Map();
+    for (const page of [from, to]) {
+      if (page === cur) continue;
+      const slots = model.get(page) ?? new Map();
+      edits.set(page, [...slots].sort((a, b) => a[0] - b[0]).map(([s, item]) => ({ s, ...toRecord(item) })));
+    }
+    let after = carried(inv);
+    if (model.has(cur)) {
+      // Only the page's own stacks are rewritten: the hotbar, the buttons and anything else stays as it is.
+      after = after.filter((e) => isButton(e.item) || !STORAGE_SLOTS.includes(e.s));
+      for (const [s, item] of model.get(cur) ?? []) after.push({ s, item });
+    }
+    try {
+      commitPages(player, edits, after, cur, request.decorate);
+    } catch (e) {
+      console.warn(`[stash] moving items between pages: ${e}`);
+      return refuse(e instanceof InventoryRecoveryError ? "recovery" : "failed", `Items not moved: ${e}`);
+    }
+    snapshots.delete(id); // what the page held changed by our hand: not a pickup for auto-store to look for
+    return { ok: true, reason, from, to, stacks, items, left };
+  } catch (e) {
+    console.warn(`[stash] moving items between pages: ${e}`);
+    return refuse("failed", `Items not moved: ${e}`);
+  } finally {
+    switching.delete(id);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // The buttons in the inventory grid
 // ---------------------------------------------------------------------------
 
@@ -653,6 +805,27 @@ const reconciling = new Set();
 const buttonState = new Map();
 /** @type {Set<string>} */
 const dead = new Set();
+/** @type {Map<string, number>} player id → a number that changes when the player dies, respawns, leaves or changes dimension */
+const lifeGen = new Map();
+let lifeEpoch = 0;
+/** @param {string} id */
+const bumpLife = (id) => void lifeGen.set(id, ++lifeEpoch);
+/** An open menu keeps this from before its first form; a different one means the player went through something since. @param {Player} player */
+const lifeOf = (player) => lifeGen.get(player.id) ?? 0;
+/**
+ * Here and healthy: the checks every step after an `await` repeats. Death is read from health too, because some
+ * ways a player dies never emit entityDie.
+ * @param {Player} player
+ */
+function alive(player) {
+  try {
+    if (!player.isValid || dead.has(player.id)) return false;
+    const health = player.getComponent("minecraft:health");
+    return !health || health.currentValue > 0;
+  } catch {
+    return false;
+  }
+}
 /**
  * Items whose data (potion, level, pattern, color) the id, name and lore don't show: never refilled from another page.
  * Not rockets: refilling them mid-glide is the point, even if a Flight 1 stack can stand in for a Flight 3 one.
@@ -815,23 +988,27 @@ world.beforeEvents.itemUse.subscribe((event) => {
 world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
   if (deadEntity.typeId !== "minecraft:player") return;
   dead.add(deadEntity.id);
+  bumpLife(deadEntity.id);
   buttonState.delete(deadEntity.id);
   snapshots.delete(deadEntity.id);
   queuedButtons.delete(deadEntity.id);
 });
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
   dead.delete(player.id);
+  bumpLife(player.id);
   buttonState.delete(player.id);
   snapshots.delete(player.id);
   queuedButtons.delete(player.id);
 });
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => bumpLife(player.id));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
-  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff]) m.delete(playerId);
+  for (const m of [buttonState, snapshots, lastTotal, lastEnforce, backoff, lifeGen]) m.delete(playerId);
   recoveryWarned.delete(playerId);
   dead.delete(playerId);
   queuedButtons.delete(playerId);
   reconciling.delete(playerId);
   menuOpen.delete(playerId);
+  moveOpen.delete(playerId);
   switching.delete(playerId);
 });
 
@@ -1085,6 +1262,8 @@ export function setOpPages(player, count) {
 
 /** @type {Set<string>} */
 const menuOpen = new Set();
+/** @type {Set<string>} players with the Move to page menu open, so a second one doesn't stack on it */
+const moveOpen = new Set();
 
 /**
  * Shows a form, retrying while another screen (the inventory, chat) is still open.
@@ -1182,6 +1361,8 @@ function inventoryMenu(player) {
       }
       form.button("Scan all items across pages\n§8Find which page holds an item");
       actions.push(() => scanMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
+      form.button("Move to page\n§8Send a stack or a whole row to another page");
+      actions.push(() => openMoveMenu(player).catch((e) => console.warn(`[stash] ${e}`)));
     }
     form.button("Sort this page\n§8Merge stacks, order by item");
     actions.push(() => hooks.sort(player));
@@ -1236,6 +1417,112 @@ async function scanMenu(player) {
   }
   const pages = [...pick.pages].sort((a, b) => a - b);
   switchPage(player, pages.includes(cur) ? cur : pages[0]);
+}
+
+/** One line a button can show for a stack. @param {ItemStack} item */
+const stackLabel = (item) => `${(item.nameTag ?? pretty(item.typeId)).replace(/\s+/g, " ").slice(0, 32)} x${item.amount}`;
+/** @param {number} n @param {string} one */
+const plural = (n, one) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+/**
+ * Move to page: choose a stack or a whole row of the page being shown, then another page. The move is one
+ * transferStacks call at the end, after every await has been checked again: the player must be alive, in the same
+ * life (no death, respawn, leaving or dimension change since the menu opened) and still on the same page, and the
+ * stacks must be the ones that were listed. A page that filled up meanwhile refuses the whole row.
+ * @param {Player} player
+ */
+export async function openMoveMenu(player) {
+  if (moveOpen.has(player.id)) return;
+  moveOpen.add(player.id);
+  try {
+    await moveMenu(player);
+  } finally {
+    moveOpen.delete(player.id);
+  }
+}
+
+/** @param {Player} player */
+async function moveMenu(player) {
+  const life = lifeOf(player);
+  const here = () => alive(player) && lifeOf(player) === life;
+  const inv = invOf(player);
+  if (!inv || !here()) return;
+  try {
+    ensureLayout(player);
+  } catch (e) {
+    hooks.bar(player, `§cItems not moved: ${e}`);
+    return;
+  }
+  const total = totalPages(player);
+  const cur = curPage(player);
+  if (total < 2 || cur > total) {
+    hooks.bar(player, "§7You only have one page");
+    return;
+  }
+
+  // What the page holds right now, with the signature each stack has while the menu is open.
+  /** @type {{ slot: number, item: ItemStack, sig: string, row: number, spot: number }[]} */
+  const stacks = [];
+  ROWS.forEach((slots, r) =>
+    slots.forEach((slot, i) => {
+      const item = inv.getItem(slot);
+      if (item && !isButton(item)) stacks.push({ slot, item, sig: signature(item), row: r + 1, spot: i + 1 });
+    })
+  );
+  if (!stacks.length) {
+    hooks.bar(player, "§7Nothing on this page to move");
+    return;
+  }
+  const sigs = new Map(stacks.map((s) => [s.slot, s.sig]));
+
+  for (;;) {
+    const what = new ActionFormData()
+      .title("§lMove to page")
+      .body(`Page #${cur} of ${total}\nChoose a stack or a whole row. It goes to the page you pick next, whole, or nothing moves.\n§7The hotbar and the page buttons never move.`);
+    /** @type {number[][]} the slots each button stands for; the last button is Back */
+    const choices = [];
+    ROWS.forEach((_, r) => {
+      const own = stacks.filter((s) => s.row === r + 1);
+      if (!own.length) return;
+      what.button(`Whole row ${r + 1}: ${plural(own.length, "stack")}\n§8${own.reduce((n, s) => n + s.item.amount, 0)} items`);
+      choices.push(own.map((s) => s.slot));
+    });
+    for (const s of stacks) {
+      what.button(`${stackLabel(s.item)}\n§8Row ${s.row}, spot ${s.spot}`);
+      choices.push([s.slot]);
+    }
+    what.button("Back");
+    const picked = await showForm(player, what, 3);
+    if (!picked || picked.canceled || picked.selection === undefined || !here()) return;
+    const slots = choices[picked.selection];
+    if (!slots) {
+      openInvMenu(player).catch((e) => console.warn(`[stash] ${e}`));
+      return;
+    }
+
+    /** @type {number[]} */
+    const targets = [];
+    const where = new ActionFormData().title("§lMove to which page?").body(`Moving ${plural(slots.length, "stack")} from Page #${cur}. A page that can't take all of it refuses the move, and nothing changes.`);
+    for (let p = 1; p <= total; p++) {
+      if (p === cur) continue;
+      const held = readPage(player, p)?.length;
+      where.button(`Page #${p}\n§8${held === undefined ? "can't be read" : `${PAGE_SIZE - held} of ${PAGE_SIZE} slots free`}`);
+      targets.push(p);
+    }
+    where.button("Back");
+    const chosen = await showForm(player, where, 3);
+    if (!chosen || chosen.canceled || chosen.selection === undefined || !here()) return;
+    const to = targets[chosen.selection];
+    if (to === undefined) continue;
+
+    if (curPage(player) !== cur) {
+      hooks.bar(player, "§cYour page changed. Open Move to page again");
+      return;
+    }
+    const result = transferStacks(player, { from: cur, slots, to, expect: new Map(slots.map((s) => [s, sigs.get(s) ?? ""])), reason: "manual" });
+    hooks.bar(player, result.ok ? `§aMoved ${plural(result.stacks, "stack")} (${result.items} items) to Page #${to}` : `§c${result.message}`);
+    return;
+  }
 }
 
 /** @param {Player} player */
