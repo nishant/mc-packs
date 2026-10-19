@@ -9,6 +9,7 @@
 import { CommandPermissionLevel, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { OP_COLOR, SETUP, SIZES, SIZE_OPTIONS } from "./presets.js";
+import { alive, genOf } from "./lifecycle.js";
 import { offScriptEvent, onScriptEvent } from "./script-events.js";
 
 const TITLE = "Realm Configuration";
@@ -37,6 +38,7 @@ const COME_BACK_TICKS = 2400;
  *   nameOf: (c: Cmd) => string,
  *   button: (name: string, hint: string, op: boolean) => string,
  *   fit: (s: string, room?: number) => string,
+ *   clearResumed: (player: Player) => void,
  *   pingZones: () => void,
  *   allZones: () => Facts["zones"],
  *   answerTicks: () => number,
@@ -252,10 +254,18 @@ async function stepsFor(ctx, player) {
  * inventory. Comes back when that closes, up to COME_BACK_TICKS.
  * @param {Player} player @param {ActionFormData} form
  */
-async function showWaiting(player, form) {
+async function showWaiting(ctx, player, form) {
   const until = system.currentTick + COME_BACK_TICKS;
-  while (player.isValid) {
-    const res = /** @type {any} */ (await form.show(player));
+  const gen = genOf(player.id);
+  ctx.clearResumed(player); // this page waits for a busy client; it never gives up on the first busy answer
+  while (alive(player, gen)) {
+    let res;
+    try {
+      res = /** @type {any} */ (await form.show(player));
+    } catch {
+      return undefined;
+    }
+    if (!alive(player, gen)) return undefined;
     if (res.canceled && res.cancelationReason === FormCancelationReason.UserBusy && system.currentTick < until) {
       await system.waitTicks(20);
       continue;
@@ -278,7 +288,9 @@ function refuse(player) {
 export async function wizard(ctx, player, back) {
   if (!isOp(player)) return refuse(player);
   const steps = await stepsFor(ctx, player);
+  const gen = genOf(player.id);
   const f = await facts(ctx, player, true);
+  if (!alive(player, gen)) return;
   if (!isOp(player)) return refuse(player);
   const st = state();
   const marks = steps.map(({ step }) => ({ step, s: statusOf(step, f, st), skipped: !!st.s[step.id] }));
@@ -327,7 +339,9 @@ export async function wizard(ctx, player, back) {
 async function stepPage(ctx, player, steps, i, back) {
   if (!isOp(player)) return refuse(player);
   const { step, cmd, alt } = steps[i];
+  const gen = genOf(player.id);
   const f = await facts(ctx, player, step.id === "size");
+  if (!alive(player, gen)) return;
   if (!isOp(player)) return refuse(player);
   const st = state();
   const s = statusOf(step, f, st);
@@ -385,7 +399,7 @@ async function stepPage(ctx, player, steps, i, back) {
   }
   form.button("All steps\n§8The list, with what's done");
   opens.push(() => wizard(ctx, player, back));
-  const res = await showWaiting(player, form);
+  const res = await showWaiting(ctx, player, form);
   if (res?.selection === undefined) return;
   return opens[res.selection]?.();
 }

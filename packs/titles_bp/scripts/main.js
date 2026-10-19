@@ -105,9 +105,57 @@ function save(id) {
   dirty.delete(id);
   try {
     world.setDynamicProperty(KEY_PREFIX + id, JSON.stringify(savedForm({ ...d, s: { d: Math.floor(d.s.d), n: Math.floor(d.s.n), w: Math.floor(d.s.w) } })));
+    if (d.n) indexName(id, d.n, false);
   } catch (e) {
     console.warn(`[titles] save: ${e}`);
   }
+}
+
+// A lowercase gamertag -> player id index, so an offline name resolves without reading every record.
+const NAME_PREFIX = "titles:n:";
+const SCAN_CAP = 500; // records one name lookup may read when the index has no answer
+const nameKey = (/** @type {string} */ name) => NAME_PREFIX + name.trim().toLowerCase().slice(0, 64);
+/** Id + name pairs already indexed this session. @type {Set<string>} */
+const indexed = new Set();
+
+/** @param {string} id @param {string} name @param {boolean} replace a lookup that proved the holder replaces an older entry */
+function indexName(id, name, replace) {
+  const memo = `${id}|${name.toLowerCase()}`;
+  if (!replace && indexed.has(memo)) return;
+  const key = nameKey(name);
+  const have = world.getDynamicProperty(key);
+  if (have !== id && (replace || typeof have !== "string")) world.setDynamicProperty(key, id);
+  indexed.add(memo);
+}
+
+/** The saved gamertag of a record without keeping it in memory. @param {string} id @returns {string | undefined} */
+function peekName(id) {
+  const cached = cache.get(id);
+  if (cached) return cached.n;
+  try {
+    const raw = world.getDynamicProperty(KEY_PREFIX + id);
+    return typeof raw === "string" ? parse(JSON.parse(raw)).n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+let scanCursor = 0;
+/** Reads up to SCAN_CAP records, continuing where the last miss stopped, for the one called `want` (lowercase). @param {string} want */
+function scanForName(want) {
+  const ids = world.getDynamicPropertyIds().filter((k) => k.startsWith(KEY_PREFIX));
+  if (!ids.length) return undefined;
+  const reads = Math.min(SCAN_CAP, ids.length);
+  for (let i = 0; i < reads; i++) {
+    const id = /** @type {string} */ (ids[(scanCursor + i) % ids.length]).slice(KEY_PREFIX.length);
+    const name = peekName(id);
+    if (name && name.toLowerCase() === want) {
+      scanCursor = (scanCursor + i + 1) % ids.length;
+      return { id, name };
+    }
+  }
+  scanCursor = (scanCursor + reads) % ids.length;
+  return undefined;
 }
 
 /** @param {string} id */
@@ -270,6 +318,7 @@ function* forgetOld() {
     start: (key, v, now) => world.setDynamicProperty(key, JSON.stringify({ ...v, ls: now })),
     drop: (key, v, days) => {
       world.setDynamicProperty(key, undefined);
+      if (typeof v.n === "string" && v.n && world.getDynamicProperty(nameKey(v.n)) === key.slice(KEY_PREFIX.length)) world.setDynamicProperty(nameKey(v.n), undefined);
       console.warn(`[titles] forgot ${v.n || key.slice(KEY_PREFIX.length)}: not seen for over ${days} days (${Array.isArray(v.t) ? v.t.length : 0} titles)`);
     },
     warn: (e) => console.warn(`[titles] ${e}`),
@@ -467,22 +516,25 @@ async function mainMenu(player) {
 
 /** The menu's "Give a title or trail": the same as /realm:titles_give, asked in a form. @param {Player} op */
 async function giveForm(op) {
+  if (op.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return op.sendMessage("§cOnly operators can give or take titles and trails.");
   const online = world.getAllPlayers().map((p) => p.name).sort((a, b) => a.localeCompare(b));
   const res = await show(
     op,
     new ModalFormData()
-      .title("§lGive a title or trail")
+      .title("§lGive or take a title or trail")
       .dropdown("Player online", online)
       .textField("Or another player's name (offline players this pack has seen)", "")
       .textField(`Title, or a trail: ${Object.keys(TRAILS).map((k) => `trail:${k}`).join(", ")}`, "Dragon Slayer")
-      .submitButton("Give")
+      .toggle("Take it away instead of giving it", { defaultValue: false })
+      .submitButton("Do it")
   );
   if (!res || res.canceled || !res.formValues || !op.isValid) return;
   // Checked again: the player may have been de-opped while the form was open.
-  if (op.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return op.sendMessage("§cOnly operators can give titles and trails.");
-  const [pick, typed, what] = res.formValues;
+  if (op.commandPermissionLevel < CommandPermissionLevel.GameDirectors) return op.sendMessage("§cOnly operators can give or take titles and trails.");
+  const [pick, typed, what, takeIt] = res.formValues;
   const who = String(typed ?? "").trim() || online[Number(pick)] || "";
-  give(op, who, String(what ?? ""));
+  if (takeIt === true) take(op, who, String(what ?? ""));
+  else give(op, who, String(what ?? ""));
 }
 
 /** @param {Player} player */
@@ -547,13 +599,41 @@ function findPlayer(name) {
   if (exact) return { id: exact.id, name: exact.name };
   const starts = players.filter((p) => p.name.toLowerCase().startsWith(want));
   if (starts.length === 1) return { id: starts[0].id, name: starts[0].name };
-  for (const key of world.getDynamicPropertyIds()) {
-    if (!key.startsWith(KEY_PREFIX)) continue;
-    const id = key.slice(KEY_PREFIX.length);
-    const d = dataOf(id);
-    if (d.n.toLowerCase() === want) return { id, name: d.n };
+  const key = nameKey(want);
+  const hit = world.getDynamicProperty(key);
+  if (typeof hit === "string") {
+    const name = peekName(hit);
+    if (name && name.toLowerCase() === want) return { id: hit, name };
   }
-  return undefined;
+  const found = scanForName(want);
+  if (found) indexName(found.id, found.name, true);
+  return found;
+}
+
+/** @param {Player} op @param {string} who @param {string} what */
+function take(op, who, what) {
+  const target = findPlayer(who);
+  if (!target) return op.sendMessage(`§cNo player called "${who.replace(/§/g, "")}" (online, or seen by this pack). Put names with spaces in quotes.`);
+  const t = String(what ?? "").trim();
+  const d = dataOf(target.id);
+  if (/^trail:/i.test(t)) {
+    const trail = trailId(t);
+    if (!trail) return op.sendMessage(`§cTrails: ${Object.keys(TRAILS).map((k) => `trail:${k}`).join(", ")}`);
+    if (!d.r.includes(trail)) return op.sendMessage(`§7${target.name} doesn't have the ${TRAILS[trail].name} trail.`);
+    d.r = d.r.filter((r) => r !== trail);
+    if (d.tr === trail) d.tr = "";
+    save(target.id);
+    return op.sendMessage(`§aTook the ${TRAILS[trail].name} trail from ${target.name}.`);
+  }
+  const title = cleanTitle(t);
+  if (!title) return op.sendMessage("§cA title needs letters (plain text, no color codes).");
+  const at = d.t.findIndex((x) => x.toLowerCase() === title.toLowerCase());
+  if (at < 0) return op.sendMessage(`§7${target.name} doesn't have the title ${title}.`);
+  const [gone] = d.t.splice(at, 1);
+  save(target.id);
+  const player = online(target.id);
+  if (player && gone && worn(player).toLowerCase() === gone.toLowerCase()) wear(player, "");
+  op.sendMessage(`§aTook the title ${gone} from ${target.name}.`);
 }
 
 /** @param {Player} op @param {string} who @param {string} what */
@@ -607,6 +687,30 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
           give(player, String(who ?? ""), String(what ?? ""));
         } catch (e) {
           console.warn(`[titles] give: ${e}`);
+        }
+      });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:titles_take",
+      description: 'Operators: take a title (or a trail: "trail:cloud", leaves, ember, sparkle, hearts, glyphs, confetti, notes) away from a player, online or not',
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [
+        { name: "player", type: CustomCommandParamType.String },
+        { name: "title", type: CustomCommandParamType.String },
+      ],
+    },
+    (origin, /** @type {string} */ who, /** @type {string} */ what) => {
+      const player = origin.initiator ?? origin.sourceEntity;
+      if (!(player instanceof Player)) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      system.run(() => {
+        try {
+          take(player, String(who ?? ""), String(what ?? ""));
+        } catch (e) {
+          console.warn(`[titles] take: ${e}`);
         }
       });
       return { status: CustomCommandStatus.Success };

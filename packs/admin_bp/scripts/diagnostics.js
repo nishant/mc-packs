@@ -14,6 +14,8 @@ export const BUDGET_MS = 0.5;
 export const BIG_BYTES = 24 * 1024;
 /** How long packs get to answer once the profiling window is over. */
 export const ANSWER_TICKS = 40;
+/** How long a forget waits for its answer before saying it is still pending (ticks). */
+export const FORGET_TICKS = 200;
 export const DEFAULT_SECONDS = 10;
 export const MAX_SECONDS = 60;
 
@@ -30,9 +32,22 @@ export const MAX_SECONDS = 60;
 const pongs = new Map();
 /** @type {Map<string, Forgot>} */
 const forgets = new Map();
-/** @type {Set<string>} request ids waiting for a forget answer */
-const forgetWaits = new Set();
+/** Forgets sent and not answered yet, by request id: who asked and for which pack, so a late answer still reaches them. @type {Map<string, { pack: string, operator: string, operatorName: string, name: string, at: number, waiting: boolean }>} */
+const pending = new Map();
+const MAX_PENDING = 16;
+/** A forget with no answer after this long is dropped from the list (ticks). */
+export const PENDING_TICKS = 12000;
 let seq = 0;
+
+/** @param {{ pack: string, operator: string, operatorName: string, name: string }} w @param {Forgot} ans */
+function lateAnswer(w, ans) {
+  const who = world.getAllPlayers().find((pl) => pl.id === w.operator);
+  const text = ans.ok
+    ? `${w.name} forgot ${ans.removed ?? 0} saved entr${ans.removed === 1 ? "y" : "ies"} (${kb(ans.bytes ?? 0)}), after taking longer than expected. §eRun /reload or restart the server now.`
+    : `${w.name} didn't forget its data: ${plain(ans.error).slice(0, 200)}`;
+  console.warn(`[admin] late answer for ${w.operatorName}'s forget of ${w.pack}: ${ans.ok ? `${ans.removed ?? 0} entries, ${ans.bytes ?? 0} bytes` : "failed"}`);
+  if (who?.isValid) who.sendMessage(`${ans.ok ? "§7" : "§c"}[${TITLE}] ${text}`);
+}
 
 onScriptEvent(
   ["realm:diag_pong", "realm:diag_forgot"],
@@ -46,8 +61,12 @@ onScriptEvent(
       return;
     }
     if (!m || typeof m.id !== "string" || typeof m.pack !== "string") return;
-    if (id === "realm:diag_pong") pongs.get(m.id)?.set(m.pack, m);
-    else if (forgetWaits.has(m.id)) forgets.set(m.id, m);
+    if (id === "realm:diag_pong") return void pongs.get(m.id)?.set(m.pack, m);
+    const w = pending.get(m.id);
+    if (!w || w.pack !== m.pack) return;
+    if (w.waiting) return void forgets.set(m.id, m);
+    pending.delete(m.id);
+    lateAnswer(w, m);
   },
 );
 
@@ -214,17 +233,22 @@ async function forgetPack(player, ctx, p) {
   if (!player.isValid) return;
   if (!isOp(player)) return void player.sendMessage(`§c[${TITLE}] Nothing was deleted: you aren't an operator any more.`);
   const id = nextId();
-  forgetWaits.add(id);
+  for (const [k, w] of pending) if (!w.waiting && system.currentTick - w.at > PENDING_TICKS) pending.delete(k);
+  if ([...pending.values()].some((w) => w.pack === p.pack)) return void player.sendMessage(`§e[${TITLE}] A forget for ${name} is still waiting for its answer. Check again in a minute.`);
+  if (pending.size >= MAX_PENDING) return void player.sendMessage(`§e[${TITLE}] Too many forgets are waiting for an answer. Try again later.`);
+  const w = { pack: p.pack, operator: player.id, operatorName: player.name, name, at: system.currentTick, waiting: true };
+  pending.set(id, w);
   try {
     system.sendScriptEvent("realm:diag_forget", JSON.stringify({ id, pack: p.pack, confirm: `FORGET ${p.pack}` }));
-    for (let waited = 0; waited < ANSWER_TICKS && !forgets.has(id); waited += 2) await system.waitTicks(2);
+    for (let waited = 0; waited < FORGET_TICKS && !forgets.has(id); waited += 2) await system.waitTicks(2);
   } finally {
-    forgetWaits.delete(id);
+    w.waiting = false;
   }
   const ans = forgets.get(id);
   forgets.delete(id);
-  if (!player.isValid) return;
-  if (!ans) return void player.sendMessage(`§c[${TITLE}] ${name} didn't answer: nothing was deleted.`);
+  if (ans) pending.delete(id);
+  if (!player.isValid) return void (ans && lateAnswer(w, ans));
+  if (!ans) return void player.sendMessage(`§e[${TITLE}] ${name} hasn't answered yet: it may still have deleted its data. You'll get a line here when it does.`);
   if (!ans.ok) return void player.sendMessage(`§c[${TITLE}] ${name} didn't forget its data: ${plain(ans.error).slice(0, 200)}`);
   p.forgotten = true;
   p.props = 0;
