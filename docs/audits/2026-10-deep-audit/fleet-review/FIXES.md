@@ -49,9 +49,10 @@ Run this only after msftMyt's release of that branch is merged to `master` and p
 
 Severity order:
 1. F1-F4, the blockers and highs
-2. F5-F12, the mediums
-3. the lows
-4. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
+2. F5-F14, the mediums
+3. the lows (F15-F35)
+4. the living towns feature (F36-F41), after F1-F14
+5. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
 
 ## Blockers and highs
 
@@ -204,6 +205,106 @@ Severity order:
   Rewrite each so it fails on the old code for the right reason.
 - [ ] **F35 missing tests:** there is no native scenario for the moon cache (F5), the elite changes (O3, O58) or the
   build_bp gate (F7). Add them, with perf numbers where they are performance changes.
+
+## Feature: living towns (owner request, October 19)
+
+The owner added a second town and found two problems. Mayor Bram is one NPC for the whole world and only serves
+the town within 96 blocks of him, so a new town has no mayor. Nothing gets built until an operator sets every
+project spot by hand. The owner wants each town to grow on its own as players work with its mayor, and to feel
+alive. This is a feature across town_bp, npc_bp and wander_bp. Build it after F1-F14, and design it first:
+
+1. Write a short design note in this file under the feature, covering:
+   - saved data
+   - new options with their defaults
+   - entity counts
+   - per-tick cost
+   - migration of existing towns
+2. Then build it in steps, each with scenarios.
+
+Packs: town_bp (owner), npc_bp (the mayor townsfolk, the resident labels), wander_bp (reuse its villager spawning
+and the identity checks from the shared spawn module).
+
+- [ ] **F36 A mayor per town.**
+  - Every town gets its own mayor NPC: a named townsfolk generated for that town, with a name from a list, a
+    skin and the `mayor` role, created when the town is added and standing at the town's center or town hall.
+  - Mayor Bram stays the realm's main mayor (the story and the cast use `bram`) and the mayor of the first town.
+  - Each mayor offers **Town projects** for its own town only, wherever the player stands. The 96-block "nearest
+    town" rule is only a fallback for towns without a mayor.
+  - Existing worlds: Bram keeps his town. Every other town gets its mayor the next time a player comes near it.
+  - Mayors are townsfolk:
+    - they follow the same label design
+    - they keep their posts, save their skins and respawn if missing
+    - the "one of each" rule applies (one mayor per town)
+  - Operators can move or rename a town's mayor in `/realm:town`.
+  - Removing a town removes its mayor.
+  - Use namespaced ids (for example `mayor:<townId>`) so npc_bp's fixed cast ids and the stories are untouched.
+- [ ] **F37 Project spots chosen automatically.**
+  - When a town is added (and when it reaches a new level), town_bp picks a spot for each project of that level
+    within the town radius, so operators no longer have to set them.
+  - **Never touch a man-made block.** A build may only replace air, natural terrain (grass, dirt, sand, gravel,
+    stone, plants, snow, leaves only if no log is player-placed) and, for the dock, water.
+  - Reject any spot whose outline (the same outline the spot preview draws) or a 2-block margin around it contains:
+    - a block players place, such as planks, any crafted block, glass, wool, concrete, torches, doors, beds,
+      rails, chests and other containers, signs or farmland
+    - a claim (`realm:access_check`)
+    - another project
+    - a path
+    - a waystone
+    - a townsfolk's house
+  - Prefer flat ground near the center, roads between projects, the dock at the nearest shoreline, and the well
+    near the center. Face the build toward the center.
+  - If no valid spot exists, say so in the town menu and let operators set it by hand, as now. Operators can
+    still move any spot (Manage spots) and preview it before the build.
+  - Before a project is built, show its outline to players who are near it for a few seconds, so nobody is
+    surprised.
+- [ ] **F38 The town grows as players progress.**
+  - The mayor drives it. Talking to the mayor shows the town's story so far, what the next project is for ("a
+    well so the families can move in"), and the projects of the current level.
+  - Finishing a level unlocks the next, as now. Each finished project and level adds visible life (F39).
+  - Keep the existing projects, rewards and saved data. New towns pick spots per F37. Existing towns keep spots
+    already set and get automatic spots for the rest.
+- [ ] **F39 Residents move in.**
+  - Ordinary villagers (vanilla `minecraft:villager_v2` with professions, spawned the way wander_bp spawns its
+    villagers, checked with spawnFresh) move into a town as it grows. For example:
+    - 2 at Settlement with a well
+    - 4 at Village
+    - 6 at Town
+    - 8 at City
+    - 10 at Capital
+
+    These are options, with a hard cap per town and per world.
+  - Residents:
+    - stay inside the town radius
+    - get beds and job sites only from blocks the town builds (F37/F40), never by taking players' beds
+    - are named from a list
+    - are tagged as town residents, so other packs (cleanup, elite, Blood Moon) leave them alone
+  - If one dies, a new one moves in after a while, with a message ("A new family moved into Riverside").
+  - They don't trade by default: an option, since vanilla trading would bypass the Crowns economy.
+  - **Cost budget:** residents are vanilla mobs, so their AI cost is the game's. The script side must be event
+    driven (no per-tick loops over residents). Measure 2 towns at Capital at 10 players. Mob count is a known
+    Realm limit, so keep the per-world cap small (default 20) and document it in SERVER_SETUP.md.
+- [ ] **F40 Houses and small life.**
+  - Add a project kind "house": a small built-in cottage with a bed and a job-site block. A town builds one per
+    resident slot at levels 2+, at automatic spots (F37), so residents have homes.
+  - Add small touches when projects finish:
+    - lanterns along the town's paths
+    - a few animals in the garden pen
+    - the notice board listing new residents
+    - gossip from the town's mayor through `realm:gossip`
+  - Keep each touch cheap: blocks placed once, no per-tick work.
+- [ ] **F41 Docs and tests.**
+  - PACKS.md: Town Projects (How to use without the operator spot step, mayors, residents, houses, options,
+    saved data, cost) and Townsfolk (town mayors). Add Town Projects' new behavior to "How the packs work
+    together".
+  - Update the welcome feature list and SERVER_SETUP.md (the resident cap).
+  - Scenarios:
+    - adding a town creates its mayor
+    - spots are picked automatically and never overlap a placed block: build a planks cabin and a path, then
+      check the spots avoid them
+    - a finished level moves residents in, and a dead one is replaced
+    - two towns, each with its own mayor and projects
+    - Bram's town is unchanged on an existing world
+    - perf: 2 towns at Capital, 10 players
 
 ## What the reviews found sound (don't redo it)
 
