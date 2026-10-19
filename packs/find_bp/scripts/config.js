@@ -18,7 +18,7 @@ export const CONFIG = {
   /** Rows in the results menu. */
   maxResults: 20,
 
-  /** How long the particle column over a chosen container shows, in seconds. */
+  /** How long the bright marker and the direction line show, in seconds. */
   highlightSeconds: 10,
 
   /**
