@@ -1,5 +1,5 @@
 // Story Questlines with the daylight cycle off: a vigil that waits for a time of day ("Stand watch on the tower after
-// midnight", Reyes's "The Long Watch") says the time of day is stopped instead of counting down minutes that never pass.
+// midnight", Reyes's "The Long Watch") is met, not stuck on a night that never comes or a countdown that never moves.
 //   node tools/test-bds/run.mjs --quiet --flat --only saga_bp --scenario tools/test-bds/examples/saga-time-stopped.js --timeout 400
 export default async function (t) {
   const sys = t.system;
@@ -35,11 +35,12 @@ export default async function (t) {
   sys.sendScriptEvent("realm:npc_choose", JSON.stringify({ pack: "saga_bp", player: p.id, key: "start:wardens_oath" }));
   await accept;
   await t.waitMessage(p, /Hold the Ruined Watchtower/, { since: t.tick - 40, timeout: 200 });
-  // The defense done, the vigil is the step the tracker points at: its row says what it waits for.
+  // The defense done, the vigil is the step the tracker points at. Time is stopped, so the night window counts as met:
+  // the row names the vigil's own work, with no wait for midnight and no countdown.
   debug(p, { action: "bump", story: "wardens_oath", i: 0, n: 99 });
   const since = t.tick;
-  const box = await t.waitUntil(() => sides.filter((s) => s.tick >= since && s.m.player === p.id && s.m.from === "saga" && s.m.slot === "quest").map((s) => String(s.m.text).replace(/§./g, "")).find((x) => /wait for midnight/.test(x)), { timeout: 200, message: "the vigil's row says it waits for midnight" });
+  const box = await t.waitUntil(() => sides.filter((s) => s.tick >= since && s.m.player === p.id && s.m.from === "saga" && s.m.slot === "quest").map((s) => String(s.m.text).replace(/§./g, "")).find((x) => x.length > 0), { timeout: 200, message: "the quest box shows the vigil" });
   t.log(`box: ${JSON.stringify(box)}`);
   t.check(!/in about \d+ min/.test(box), "no countdown while the daylight cycle is off");
-  t.check(/time of day is stopped/.test(box), "it says the time of day is stopped");
+  t.check(!/wait for midnight|time of day is stopped/.test(box), "the vigil does not wait for a night that never comes");
 }

@@ -99,7 +99,7 @@ const LOST_LAMBS = {
         `${W}Here, these are from the good apple tree, the one Pudding hasn't found yet. Please don't tell Pudding. Can you come back tomorrow? Or now? Now is also good.`,
       ],
       reward: { levels: 2, crowns: 20, items: [{ item: "minecraft:apple", amount: 6 }, { item: "minecraft:lead", amount: 2 }] },
-      hint: "Clover is about 200 blocks southwest of world spawn; the tracker points to the bleating. Tie a lead on her (craft one from 4 string and a slime ball, or buy one from a wandering trader) and walk her back to Wren's Meadow.",
+      hint: "Clover is about 200 blocks southwest of town; the tracker points to the bleating. Tie a lead on her (craft one from 4 string and a slime ball, or buy one from a wandering trader) and walk her back to Wren's Meadow.",
     },
     {
       id: "cows",
@@ -223,7 +223,7 @@ const LOST_LAMBS = {
         `${W}She LIKES you. She never likes anybody. She threw a ladle at Mayor Bram once. A big ladle.`,
       ],
       reward: { levels: 3, crowns: 35, items: [{ item: "minecraft:carrot_on_a_stick", amount: 1 }, { item: "minecraft:golden_carrot", amount: 4 }] },
-      hint: "Use a carrot on any 3 pigs. Turnip waits about 230 blocks east of world spawn (the tracker points to the carrot crumbs). Once he's on your lead you have 5 minutes to walk him back to Wren's Meadow, or he slips away and you try again.",
+      hint: "Use a carrot on any 3 pigs. Turnip waits about 230 blocks east of town (the tracker points to the carrot crumbs). Once he's on your lead you have 5 minutes to walk him back to Wren's Meadow, or he slips away and you try again.",
     },
     {
       id: "shed",
@@ -953,7 +953,7 @@ const HEARTH_AND_TABLE = {
         { text: `${BE}Oh, and if you're out on a Harvest Moon night, pick me some Harvest Saffron off the ripe crops. A harvest festival dish with harvest saffron in it. Marcel's mustache will fall right off.`, when: { "pack:cooking_bp": "on", "pack:moon_bp": "on" } },
       ],
       objectives: [
-        { type: "collect", label: "Get 2 Champion's Hearts from fallen champions", name: "Champion's Heart", count: 2, when: HEARTS },
+        { type: "collect", label: "Get 2 Champion's Hearts from fallen champions", name: "Champion's Heart", count: 2, when: HEARTS, or: "heart" },
         { type: "survive", label: "Stay out at the lighthouse in a thunderstorm", place: "lighthouse", radius: 48, seconds: 90, weather: "thunder" },
         { type: "fish", label: "Catch 3 Storm Eels (any fish, best in a storm)", count: 3 },
         {
@@ -977,6 +977,7 @@ const HEARTH_AND_TABLE = {
           radius: 40,
           count: 1,
           set: { heart: "gristle" },
+          or: "heart",
           champion: { tag: "realm:saga:gristle", mob: "minecraft:spider", name: "Grandmother Gristle", health: 40, warn: "Something the size of a cart unfolds from the tower stones. Grandmother Gristle!", adds: { mobs: ["minecraft:spider"], count: 2 } },
           hint: "Grandmother Gristle nests at the Ruined Watchtower; the tracker points the way, and she comes out when you get close. Bring a sword, armor and food: two ordinary spiders come with her.",
         }, when: { "pack:cooking_bp": "off" } },
@@ -987,6 +988,7 @@ const HEARTH_AND_TABLE = {
           radius: 40,
           count: 1,
           set: { heart: "gristle" },
+          or: "heart",
           champion: { tag: "realm:saga:gristle", mob: "minecraft:spider", name: "Grandmother Gristle", health: 40, warn: "Something the size of a cart unfolds from the tower stones. Grandmother Gristle!", adds: { mobs: ["minecraft:spider"], count: 2 } },
           hint: "Grandmother Gristle nests at the Ruined Watchtower; the tracker points the way, and she comes out when you get close. Bring a sword, armor and food: two ordinary spiders come with her.",
         }, when: { "pack:cooking_bp": "on", "pack:elite_bp": "off" } },

@@ -35,6 +35,7 @@ import {
   skyEvent,
   skyHousekeeping,
   sweepChampions,
+  sweepLoadedChampion,
   talked,
   tickPlayer,
 } from "./objectives.js";
@@ -647,6 +648,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // ---------------------------------------------------------------------------
 // Housekeeping
 // ---------------------------------------------------------------------------
+
+// A champion that loads later than the startup sweep (a far chunk) and that this session did not spawn is removed too.
+world.afterEvents.entityLoad.subscribe((e) => sweepLoadedChampion(e.entity));
 
 world.afterEvents.worldLoad.subscribe(() => {
   initFar(STORIES, FAVORS, WANDERERS, WANDER_TEMPLATES);

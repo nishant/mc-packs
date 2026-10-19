@@ -14,6 +14,7 @@ import {
   currentChapter,
   currentStep,
   entries,
+  packsNeeded,
   favorById,
   favorOfDay,
   favorShape,
@@ -765,6 +766,8 @@ export async function chapterInfo(player, story) {
       const cur = e?.pq ? { chapter: e.chapter, index: e.index } : currentChapter(saga, story);
       if (!cur) return;
       const lines = [chapterHeader(saga, story, cur.index), toneTags(story)].filter(Boolean);
+      const needs = packsNeeded(story, saga);
+      if (needs.length) lines.push("", `§cNeeds ${needs.join(" and ")} to go on§7: that pack is not on this Realm.§r`);
       if (!e) {
         const starter = cur.chapter.npc ?? story.giver;
         lines.push("", onHold(player.id, story, cur.chapter.id) ? holdNote(player) : `§7Talk to ${npcName(starter)}${towardNpc(player, starter)} to begin this chapter.`);
@@ -1691,7 +1694,8 @@ export async function currentPage(player) {
     for (const story of stories) {
       const e = list.find((x) => x.story.id === story.id);
       const cur = currentChapter(saga, story);
-      const step = e ? stepLine(player, e, saga) : cur && onHold(player.id, story, cur.chapter.id) ? "Waiting for your party" : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
+      const needs = packsNeeded(story, saga);
+      const step = needs.length ? `Needs ${needs.join(" and ")} to go on` : e ? stepLine(player, e, saga) : cur && onHold(player.id, story, cur.chapter.id) ? "Waiting for your party" : needs.length ? `Needs ${needs.join(" and ")} to go on` : `Talk to ${npcName(cur?.chapter.npc ?? story.giver)} to go on`;
       form.button(`${mark(story.id)}${story.kind === "main" ? "§l" : ""}${e?.pq ? "Party: " : ""}${story.title}§r\n§8${plain(step).slice(0, 60)}`);
       acts.push(() => chapterInfo(player, story));
     }
