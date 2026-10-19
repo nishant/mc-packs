@@ -382,7 +382,7 @@ if (vanilla) {
     idOk("item", o.disguise?.item, at);
     for (const x of o.blocks ?? []) idOk("block", x, at);
     for (const x of [...(o.mobs ?? []), o.mob, o.champion?.mob, o.who?.entity, o.ward?.entity, o.guards?.mob]) idOk("entity", x, at);
-    for (const g of [o.champion?.adds, o.ambush, o.failSpawn, ...(o.waves ?? [])]) for (const x of g?.mobs ?? []) idOk("entity", x, at);
+    for (const g of [o.champion?.adds, o.ambush, o.spawn, o.failSpawn, ...(o.waves ?? [])]) for (const x of g?.mobs ?? []) idOk("entity", x, at);
   };
   /** @param {any} r @param {string} at */
   const rewardIds = (r, at) => {
