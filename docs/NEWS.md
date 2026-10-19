@@ -15,6 +15,9 @@ entries below as a changelog.
 - Inactive gamertag protection and earned title records expire after a year by default; solo parties after 180 days. Operators can set each retention to 0 to keep them indefinitely. Untimestamped old records start counting now.
 - /realm:map_reset confirm clears destinations and marks for online players now and offline players once on return. New marks survive stale menus.
 - Building beds keeps paired halves and one-item accounting. The normal default stays 50000 blocks; the operator Large server profile uses 2000, operator-only tools and no Infinite Reach.
+- Story quests: operators can set where the town is with /realm:saga_place town. With the daylight cycle stopped, night and time-of-day steps finish, a bed tap counts as sleep, and wait steps count 20 real minutes a day. A story says when it needs a pack that was removed, and Gristle's fight still counts without Champions. Kitchen dishes carry their own name, so a renamed dish can't pass for another.
+- Operators can take titles away with /realm:titles_take or the give-or-take form. The nickname list has pages and search. New worlds greet players with a generic welcome; older Realms keep their text. Slow pack-data deletions now report when they finish, and setup pages stop when you leave, die or respawn.
+- Town news is quieter: champions, sieges, fairs, legendary fish, meteors, nightmare expeditions, new guild Masters, Starlit relics and new Callings are told at most once an hour per pack, with the same rewards. News about nobody no longer shows a blank name, and milestone titles you already earned are not offered again on every join.
 
 ## Clear quests and safer inventory pages
 

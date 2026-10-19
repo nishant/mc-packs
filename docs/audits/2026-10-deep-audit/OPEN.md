@@ -69,13 +69,18 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T6. Story portability (saga_bp)
 
-- O32 Operator-set town anchor (`/realm:saga_place town`) for the 15 steps that assume the town is at world spawn.
-- O33 Stories with `doDaylightCycle` off (78 required steps can never finish).
-- O34 "needs <pack>" in the story log when a required pack was removed; Gristle's two-objective split (a `fallback:`
+- Wave 3a status (W6 `f500cb44`, core `c551f18c`; W8 core `470f8df3`; W10 core `ea39ff8e`, merge `4f93be85`; integrated at
+  `907fc492`). **Authoring proof only unless stated:** unit/source tests and review passed. Root's strict native Gristle
+  (28.0 s) and stopped-time vigil (16.5 s) PASS on W6 `f500cb44` with 0 script errors cover those two paths only; they do
+  NOT prove all 78 timesteps, the full native world, champion load or scan performance. Native W8 new-bundle ordering and
+  the manual checks stay UNVERIFIED. O52 Saga is DEFERRED (phase 3b, `ui.js`, another writer), not done.
+- O32 **DONE `779293a8` (authoring + native Gristle/vigil only).** `/realm:saga_place town` (Overworld, saved exact place, `usedBy` = the 7 town stories, default world spawn). Operator catalog gets the `town` value when root regenerates it. Original: Operator-set town anchor (`/realm:saga_place town`) for the 15 steps that assume the town is at world spawn.
+- O33 **DONE `3c45dbaa`, `0c487b9b`, `c551f18c` (authoring; vigil native PASS only).** Time windows/night are met while the cycle is stopped; classic and straw bed taps count as sleep/vision; wait steps count 20 real minutes a day only while the cycle is off, with no false ETA. Not all 78 steps were run natively. Original: Stories with `doDaylightCycle` off (78 required steps can never finish).
+- O34 **DONE `4286ed39`, `252a1892` (authoring; Gristle native PASS).** A started story shows the missing-pack `Needs <pack> to go on` line; Gristle's kill falls back with cooking on / elite off, or cooking off. Original: "needs <pack>" in the story log when a required pack was removed; Gristle's two-objective split (a `fallback:`
   objective or an OR in `when`), with a scenario for cooking on / elite off and a real kill.
-- O35 Match Kitchen dishes and Champion's Hearts by lore, not name only.
-- O36 Remove leftover fallback champions on entityLoad; second trim for saves past 30,000 characters.
-- O37 Rebuild closed PR #84's player-local `variable.life`, `variable.style` and `variable.color` outline
+- O35 **DONE `0247e293` (authoring).** Kitchen dishes carry a `Dish: <name>` lore line that stories check; dishes made before are still accepted, so a renamed old dish remains a known limit. Original: Match Kitchen dishes and Champion's Hearts by lore, not name only.
+- O36 **DONE `0b597924` (authoring; champion load not native-verified).** Stale champions are swept on entityLoad; saves past 30,000 UTF-8 bytes are trimmed in the allowed order and a codex entry that still doesn't fit is refused; unknown fields are kept. Original: Remove leftover fallback champions on entityLoad; second trim for saves past 30,000 characters.
+- O37 **DONE `a6bd9cd1`, `c8b0cd1b` (authoring).** Player-local `variable.life/style/color`; interact scan bounded to 256 blocks per scan, max 4 scans, so 1,024 blocks per tick. Tuning measurement NOT done. The escort test fix is test-side and claims nothing physical. Original: Rebuild closed PR #84's player-local `variable.life`, `variable.style` and `variable.color` outline
   bindings on latest master with regression coverage, then the interact outline scan as a runJob; steady escort
   facing (saga-escort flake). No dependency on merging the old PR remains.
 
@@ -106,18 +111,18 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T8. Operator tools
 
-- O41 Titles take-away (`/realm:titles_take`, a toggle in Give a title).
-- O42 Big-server lists: page or search the nickname list; index title holders by lowercase name.
-- O43 A generic default welcome for new servers (the owner keeps the live Realm's text).
-- O44 Set up this world: the `resumed` flag left set by `showWaiting` (one extra tap) and an unhandled rejection
+- O41 **DONE `209bd5f9`, `5b9b1d42` (authoring).** `/realm:titles_take <player:String> <title:String>` and a give-or-take form over offline holders. README row updated. Original: Titles take-away (`/realm:titles_take`, a toggle in Give a title).
+- O42 **DONE `209bd5f9`, `5b9b1d42` (authoring).** Nickname operator list pages of 20 with search; title holders indexed by lowercase name (`titles:n:`). Original: Big-server lists: page or search the nickname list; index title holders by lowercase name.
+- O43 **DONE `209bd5f9`, `5b9b1d42` (authoring).** A new world gets a generic welcome; a world with Realm or saved text keeps it. NEW CONFIG options are listed in PACKS with their code defaults. `welcome:profile` and the startup heuristic are tested on a fake-API harness; the full-bundle native path is UNVERIFIED. Original: A generic default welcome for new servers (the owner keeps the live Realm's text).
+- O44 **DONE `209bd5f9`, `5b9b1d42` (authoring).** The wizard's generation guards leave/death/respawn and busy pings. Original: Set up this world: the `resumed` flag left set by `showWaiting` (one extra tap) and an unhandled rejection
   when a player leaves mid-form.
-- O45 Pack diagnostics: a `diag_forgot` answer after 40 ticks shows "nothing was deleted" although it was; keys whose
+- O45 **DONE `5c8e727a` (canonical), `470f8df3` (authoring).** Untouched declared world prefixes have owners; unknown/ambiguous stay unowned; a late forget answer after 200 ticks, max 16 pending, 12,000-tick expiry. Native bundle behavior UNVERIFIED. Original: Pack diagnostics: a `diag_forgot` answer after 40 ticks shows "nothing was deleted" although it was; keys whose
   prefix no pack touched since reload stay unowned.
 
 ## T9. Easy Building (build_bp, build_rp)
 
 - O46 **OWNER-DIRECTED NO FURTHER WORK.** User reported talking to the owner and explicitly declined further licensing work. This is not independent legal verification; no new license/credit/grant/upstream copy or attribution removal.
-- O47 **CODE DONE `534e8fd902745e6dc11c06db5d53de5ef785742f`.** Real Bedrock ids, paired placement/claims/caps/clipboard/undo and public-main boundary fixed; 21 focused tests/type pass. Strict native main-pipeline Line/item/undo/redo PASS uses one actual anchor event and one explicitly test-only confirm invocation. Second native input/physical acceptance stays UNVERIFIED under W2; bounded all-mode runtime matrix retained separately.
+- O47 **PARTIAL (all-mode gap):** the Line-only native handler PASS does NOT satisfy the original every-build-mode requirement. The all-mode camera-setup gap ("yaw 0 not looking up") and a second physical input are UNVERIFIED; the handler proof is not a retail pixel or physical PASS. O47 **CODE DONE `534e8fd902745e6dc11c06db5d53de5ef785742f`.** Real Bedrock ids, paired placement/claims/caps/clipboard/undo and public-main boundary fixed; 21 focused tests/type pass. Strict native main-pipeline Line/item/undo/redo PASS uses one actual anchor event and one explicitly test-only confirm invocation. Second native input/physical acceptance stays UNVERIFIED under W2; bounded all-mode runtime matrix retained separately.
 - O48 **CODE DONE `534e8fd9`; W1 measurement REQUIRED.** Actual holder gate wired, dirty hints and negative resolve cache; unit zero-read counts are not a measured performance improvement.
 - O49 **DONE `d61e5441`, `534e8fd9`, `4636486919cba60811533890b1534f0060dd0197`.** Actionbar arbitration, per-loop cadence and native `noteblock` fixed. Actual BDS Script API resolves `end_gateway` although vanilla command grammar rejects it: keep unbreakable protection.
 - O50 **DONE `534e8fd9`.** Duplicate language keys removed with last-effective labels retained; new limit labels localized.
@@ -125,9 +130,9 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 
 ## T10. Town news follow-ups
 
-- O52 Rate-limit gossip at the source in elite, calendar (Siege, carve_off, regatta), fishing, meteor, expedition,
+- O52 **PARTIAL: non-Saga DONE `4b7c01a3` (authoring); Saga DEFERRED to phase 3b (not done).** At most one gossip per pack per 1,000 ticks, 64-key dedupe, dropped not queued; rewards unaffected. `calendar.js` expects a second siege_lost gossip within the hour, so that assertion needs updating at native time. Original: Rate-limit gossip at the source in elite, calendar (Siege, carve_off, regatta), fishing, meteor, expedition,
   guilds, relics, skills and saga.
-- O53 npc_bp shows an empty `{name}` for a non-town kind sent without `player`; milestones re-sends up to 9 title
+- O53 **DONE `4b7c01a3`, `ea39ff8e` (authoring).** Nameless fallback line in Townsfolk; milestones records gain `tf: 1` so a later join doesn't resend old top-tier titles. Original: npc_bp shows an empty `{name}` for a non-town kind sent without `player`; milestones re-sends up to 9 title
   unlocks on every join (save a flag); add a scenario for LETTERS_MAX 10.
 
 ## T11. Script events and the action bar (cross-pack)
