@@ -10,6 +10,7 @@ import { getState, getMirrorState, getArrayState, getRadialState, setMirrorState
 import { getPaletteMode, getDistributionMode, getWeightMode, getSmartPattern, setSmartPattern } from "../core/Palette.js";
 import { PRESET_IDS, applyPreset, activePreset } from "../core/Presets.js";
 import { system } from "@minecraft/server";
+import { lockActionBar } from "../utils/ActionBar.js";
 import { startCoach, isCoaching, setCoachMenuOpener, setCoachLessonsOpener, coachProgress } from "../core/Coach.js";
 import { changeBookLanguage } from "../core/GuideBook.js";
 import { getAllMeta, loadSlotMeta } from "../utils/ClipboardStore.js";
@@ -315,6 +316,7 @@ function settingsPanel(category) {
             }
             if (kind === "preset") {
                 applyPreset(player, arg);
+                lockActionBar(player.id, 1500);
                 player.onScreenDisplay.setActionBar(t("eb.onboarding.tier_applied", t(`eb.onboarding.tier.${arg}`)));
                 return;
             }

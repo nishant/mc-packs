@@ -707,10 +707,10 @@ world.afterEvents.playerPlaceBlock.subscribe(ev => {
         } catch { }
     }
     setAnchor(player, facePos, blockTypeId, states);
+    lockActionBar(player.id, 1000);
     player.onScreenDisplay.setActionBar(
         t("eb.bar.anchor_set", facePos.x, facePos.y, facePos.z)
     );
-    lockActionBar(player.id, 1000);
 });
 let swingSupported = false;
 try {
@@ -862,8 +862,8 @@ system.runInterval(() => {
                 if (state.mode !== "disable") {
                     savedModeBeforeToggle.set(player.id, state.mode);
                     setMode(player, "disable");
-                    player.onScreenDisplay.setActionBar(t("eb.bar.toggle_disabled"));
                     lockActionBar(player.id, 2000);
+                    player.onScreenDisplay.setActionBar(t("eb.bar.toggle_disabled"));
                 } else {
                     const saved = savedModeBeforeToggle.get(player.id);
                     if (saved) {
@@ -871,8 +871,8 @@ system.runInterval(() => {
                         setMode(player, saved);
                         const entry = MODE_LIST.find(m => m.id === saved);
                         const label = entry ? entry.label.replace(/§./g, "") : saved;
-                        player.onScreenDisplay.setActionBar(t("eb.bar.toggle_restored", label));
                         lockActionBar(player.id, 2000);
+                        player.onScreenDisplay.setActionBar(t("eb.bar.toggle_restored", label));
                     }
                 }
             } else {

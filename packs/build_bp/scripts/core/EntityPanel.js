@@ -145,8 +145,8 @@ function showTip(player, panel) {
     try { tip = panel.screen.hover(player, hoveredId(panel), panel.values, panel.local); } catch { return; }
     if (!tip) return;
     try {
-        player.onScreenDisplay.setActionBar(tip);
         lockActionBar(player.id, TIP_LOCK_MS);
+        player.onScreenDisplay.setActionBar(tip);
     } catch {}
 }
 
