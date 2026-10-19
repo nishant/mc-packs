@@ -38,7 +38,7 @@ import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
 import { aheadPicks, colKey, COL, glyphAt, KEY_BIAS, KEY_SPAN, MISS_RETRY, readColumn, sampleCoord, spendBudget, TerrainWorld } from "./terrain.js";
 import { onScriptEvent } from "./script-events.js";
-import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetPlayer, WORLD_GEN } from "./reset.js";
+import { confirmed, generationOf, needsReset, nextGeneration, PLAYER_GEN, resetPlayer, staleForm, WORLD_GEN } from "./reset.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -315,6 +315,12 @@ function applyReset(player) {
 /** @param {Player} player */
 function checkReset(player) {
   if (!resetChecked.has(player.id)) applyReset(player);
+}
+/** True (and says so) when an operator reset the map after `gen` was read, so a menu opened before it must not save what it shows. @param {number} gen @param {Player} player */
+function resetSince(gen, player) {
+  if (!staleForm(gen, currentGen())) return false;
+  if (player.isValid) player.sendMessage("§e[Map] An operator reset the map while this menu was open. Open it again.");
+  return true;
 }
 
 /**
@@ -1491,6 +1497,7 @@ function toggleCompass(player) {
 
 /** @param {Player} player */
 async function menu(player) {
+  const gen = currentGen();
   const all = world.getAllPlayers();
   const dest = destination(player, all, new Map());
   const wp = waypointOf(player);
@@ -1520,14 +1527,16 @@ async function menu(player) {
   form.button("Close");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || res.selection >= actions.length || !player.isValid) return;
+  if (resetSince(gen, player)) return;
   await actions[res.selection][1]();
 }
 
 /** @param {Player} player */
 async function markMenu(player) {
+  const gen = currentGen();
   const form = new ModalFormData().title("Mark this spot").textField("Name", "e.g. Iron cave", { defaultValue: `Spot ${marksOf(player).length + 1}` });
   const res = await show(player, form);
-  if (!res || res.canceled || !player.isValid) return;
+  if (!res || res.canceled || !player.isValid || resetSince(gen, player)) return;
   const vals = /** @type {unknown[]} */ (res.formValues ?? []).filter((v) => v !== undefined);
   player.sendMessage(markHere(player, String(vals[0] ?? "")));
 }
@@ -1564,24 +1573,25 @@ function choices(player) {
 /** @param {Player} player */
 async function pickMenu(player) {
   while (player.isValid) {
+    const gen = currentGen();
     const groups = choices(player);
     const form = new ActionFormData().title("Pick a destination").body("§7The gold star on your compass strip and radar points there. A destination clears when you arrive.");
     for (const [name, list] of groups) form.button(`${name}\n§8${list.length ? `${list.length} to pick from` : "None yet"}`);
     form.button("Back");
     const res = await show(player, form);
-    if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+    if (!res || res.canceled || res.selection === undefined || !player.isValid || resetSince(gen, player)) return;
     if (res.selection >= groups.length) return menu(player);
     const [name, list] = groups[res.selection];
     if (!list.length) {
       player.sendMessage(`§7[Map] ${name}: none yet.`);
       continue;
     }
-    if (await listMenu(player, name, list)) return;
+    if (await listMenu(player, name, list, gen)) return;
   }
 }
 
-/** @param {Player} player @param {string} title @param {Waypoint[]} list @returns {Promise<boolean>} whether one was picked (or the menu closed) */
-async function listMenu(player, title, list) {
+/** @param {Player} player @param {string} title @param {Waypoint[]} list @param {number} gen the reset generation `list` was read at @returns {Promise<boolean>} whether one was picked (or the menu closed) */
+async function listMenu(player, title, list, gen) {
   const sorted = [...list].sort((a, b) => distTo(player, a) - distTo(player, b)).slice(0, MENU_MAX);
   const marks = sorted[0]?.k === "mark";
   const form = new ActionFormData().title(title);
@@ -1590,6 +1600,7 @@ async function listMenu(player, title, list) {
   form.button("Back");
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return true;
+  if (resetSince(gen, player)) return true;
   if (marks && res.selection === sorted.length) {
     await forgetMenu(player);
     return false;
@@ -1603,12 +1614,13 @@ async function listMenu(player, title, list) {
 
 /** @param {Player} player */
 async function forgetMenu(player) {
+  const gen = currentGen();
   const list = marksOf(player);
   const form = new ActionFormData().title("Forget a spot");
   for (const m of list) form.button(`${m.n}\n§8${where(player, m)}`);
   form.button("Back");
   const res = await show(player, form);
-  if (!res || res.canceled || res.selection === undefined || res.selection >= list.length || !player.isValid) return;
+  if (!res || res.canceled || res.selection === undefined || res.selection >= list.length || !player.isValid || resetSince(gen, player)) return;
   const gone = list[res.selection];
   saveMarks(
     player,

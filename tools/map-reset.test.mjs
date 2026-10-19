@@ -83,3 +83,30 @@ test("the generation is recorded last, so a part-way failure is retried", () => 
   assert.equal(p.props["map:gen"], 1);
   assert.deepEqual(Object.keys(p.props).sort(), ["map:gen"]);
 });
+
+test("a form opened before a reset is stale, one opened after is not", () => {
+  assert.equal(R.staleForm(0, 1), true);
+  assert.equal(R.staleForm(1, 2), true);
+  assert.equal(R.staleForm(2, 2), false);
+  assert.equal(R.staleForm(undefined, 0), false);
+});
+
+test("a stale menu answer is dropped, so it can neither restore old marks nor wipe data saved after the reset", () => {
+  const p = fakePlayer({ "map:marks": "old" });
+  let world = 0;
+  const menu = (openedAt, save) => (R.staleForm(openedAt, world) ? "dropped" : (save(), "saved"));
+  const opened = world;
+  world = R.nextGeneration(world);
+  R.resetPlayer(p, world);
+  p.setDynamicProperty("map:marks", "new");
+  assert.equal(menu(opened, () => p.setDynamicProperty("map:marks", "old+edit")), "dropped");
+  assert.equal(p.props["map:marks"], "new");
+  assert.equal(menu(world, () => p.setDynamicProperty("map:marks", "new+edit")), "saved");
+});
+
+test("every map menu checks the reset generation after its form returns", () => {
+  const src = readFileSync("packs/map_bp/scripts/main.js", "utf8").split("\n");
+  const shows = src.map((l, i) => (/await show\(player, form\)/.test(l) ? i : -1)).filter((i) => i >= 0);
+  assert.ok(shows.length >= 4);
+  for (const i of shows) assert.match(src.slice(i, i + 3).join("\n"), /resetSince\(/, `line ${i + 1}`);
+});

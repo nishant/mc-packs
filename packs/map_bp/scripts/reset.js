@@ -17,6 +17,9 @@ export const confirmed = (arg) => typeof arg === "string" && arg.trim().toLowerC
 /** A player is reset when a reset has run that they haven't seen. @param {unknown} worldGen @param {unknown} playerGen */
 export const needsReset = (worldGen, playerGen) => generationOf(worldGen) > generationOf(playerGen);
 
+/** A form opened at one generation is stale once a reset has run since: its answer must not be saved. @param {unknown} opened @param {unknown} now */
+export const staleForm = (opened, now) => generationOf(opened) !== generationOf(now);
+
 /**
  * Clears the player's destination and marked spots, then records the generation (last, so a failure part way is
  * tried again next time). Returns true when something was cleared.
