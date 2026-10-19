@@ -1,29 +1,29 @@
 {
-  "comment": "Live O38 findings the checker cannot fix in story files. Each entry is one finding: exact code and at, reason at least 40 characters, no wildcards. A reason says the data is not fixed. Only the four OWNER-PENDING O64 reward-scale rows remain: the owner has not decided those amounts, so the story data keeps them. Categories with no live hit (finite-interact, partial-family, reused-name, reused-wanderer-id, ungated-pack-item, unknown-trait, prefab-gather) stay enforced and are not listed here.",
+  "comment": "Live O38 findings the checker cannot fix in story files. Each entry is one finding: exact code and at, reason at least 40 characters, no wildcards. A reason says the data is not fixed. The four reward-scale rows are the approved O64 finale exceptions (owner decision 2026-10-19: keep the finale rewards as written, intentionally generous; see docs/STORY_BIBLE.md). Categories with no live hit (finite-interact, partial-family, reused-name, reused-wanderer-id, ungated-pack-item, unknown-trait, prefab-gather) stay enforced and are not listed here.",
   "entries": [
     {
       "code": "reward-scale",
       "at": "act5_lantern/herald",
       "file": "packs/saga_bp/scripts/stories/act5_lantern.js:594",
-      "reason": "OWNER-PENDING O64, not rescaled. herald pays 10 levels, 200 Crowns, 1 totem and 6 diamonds, above main-chapter 8 levels / 120 Crowns. Preserve the amounts until the owner decides."
+      "reason": "Approved O64 finale exception: herald pays 10 levels, 200 Crowns, 1 totem and 6 diamonds, above main-chapter 8 levels / 120 Crowns. Owner decided to keep it as written, intentionally generous."
     },
     {
       "code": "reward-scale",
       "at": "act5_lantern/choice",
       "file": "packs/saga_bp/scripts/stories/act5_lantern.js:700",
-      "reason": "OWNER-PENDING O64, not rescaled. choice pays 8 levels and 150 Crowns, above main-chapter 40-120 Crowns. dawn_* follows, so this is not the act finale. Preserve the amounts."
+      "reason": "Approved O64 finale exception: choice pays 8 levels and 150 Crowns, above main-chapter 40-120 Crowns. dawn_* follows, so this is not the act finale. Owner decided to keep it as written."
     },
     {
       "code": "reward-scale",
       "at": "act5_lantern/dawn_relight",
       "file": "packs/saga_bp/scripts/stories/act5_lantern.js:791",
-      "reason": "OWNER-PENDING O64, not rescaled. dawn_relight pays 10 levels and 400 Crowns, plus an enchanted golden apple and 16 emeralds, above the act-finale cap of 300 Crowns. Preserve the amounts."
+      "reason": "Approved O64 finale exception: dawn_relight pays 10 levels and 400 Crowns, plus an enchanted golden apple and 16 emeralds, above the act-finale cap of 300 Crowns. Owner decided to keep it as written, intentionally generous."
     },
     {
       "code": "reward-scale",
       "at": "listening_deep/last_listen",
       "file": "packs/saga_bp/scripts/stories/side_deep.js:191",
-      "reason": "OWNER-PENDING O64, not rescaled. last_listen pays 10 levels, 200 Crowns, title Deep-Listener, 4 echo shards and 4 diamonds, above side scale 2-5 levels / 20-60 Crowns. Preserve the amounts."
+      "reason": "Approved O64 finale exception: last_listen pays 10 levels, 200 Crowns, title Deep-Listener, 4 echo shards and 4 diamonds, above side scale 2-5 levels / 20-60 Crowns. Owner decided to keep it as written."
     }
   ]
 }
