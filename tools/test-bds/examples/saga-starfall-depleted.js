@@ -172,9 +172,15 @@ export default async function (t) {
   t.server("/gamerule doMobSpawning false");
   t.server("/gamerule keepInventory true");
   // A circle ticking area accepts radius 1-4 only. Radius 6 is rejected, so the chunk never loads.
-  t.server("/tickingarea remove o74_crater");
-  const area = t.server("/tickingarea add circle 500 0 500 4 o74_crater true");
-  if (!area.ok) t.fail(`fixture ticking area was rejected: ${area.error ?? "command failed"}`);
+  // Create the owned area once. It persists with the world: v4 remove succeeded after restart, then
+  // the same-tick add returned successCount 0 with no exception because the name was not free yet.
+  // Later phases reuse that area. loadArea still waits until the crater chunks can be read.
+  if (t.phase === 1) {
+    const area = t.server("/tickingarea add circle 500 0 500 4 o74_crater true");
+    if (!area.ok) t.fail(`fixture ticking area was rejected: ${area.error ?? `successCount ${area.successCount ?? 0}`}`);
+  } else {
+    t.log(`reusing persisted ticking area o74_crater in phase ${t.phase}`);
+  }
   await t.loadArea(500, 500, { radius: 4 });
   // Players stand at x 515 and 517, outside the crater fill (488..512). A pad here keeps the fall from killing them.
   const pad = t.server("/fill 513 57 494 522 63 506 stone");
