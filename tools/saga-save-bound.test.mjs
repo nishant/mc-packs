@@ -13,7 +13,7 @@ const slice = (src, from, to) => {
 };
 
 const save = runInNewContext(
-  `const SAVE_LIMIT = 30000;\n${slice(data, "function byteLength", "/** Marks the player's progress")}\n({ byteLength, trimSave, saveRoom })`,
+  `const SAVE_LIMIT = 30000;\n${slice(data, "function byteLength", "/** Marks the player's progress")}\n({ byteLength, trimSave, saveRoom, codexFits })`,
   {},
 );
 
@@ -53,10 +53,60 @@ test("a save under the limit is untouched", () => {
   assert.deepEqual(JSON.parse(save.trimSave(saga)), copy);
 });
 
-test("no room left once trimming cannot make space: new codex entries are refused", () => {
-  const huge = { s: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`s${i}`, story(i)])), cx: [] };
-  assert.ok(save.saveRoom(huge) < 100);
-  assert.ok(save.saveRoom({ s: {} }) > 20000);
+const grant = runInNewContext(`${slice(objectives, "/**\n * Adds a codex entry unless", "function crownsObjective")}\n({ grantCodex })`, {
+  codexFits: save.codexFits,
+  markDirty: () => (grant.dirty += 1),
+  console: { warn() {} },
+});
+grant.dirty = 0;
+const player = () => ({ name: "P", said: [], sendMessage(m) { this.said.push(m); } });
+const nearFull = () => {
+  const saga = { s: {}, g: { keep: "x" }, cx: [], ut: [] };
+  let i = 0;
+  while (save.saveRoom(saga) > 120) saga.s[`s${i++}`] = { dn: ["a"], f: { k: "v".repeat(40) }, ch: {}, x: { unknown: i } };
+  return saga;
+};
+
+test("a nearly full save still takes a codex entry when the allowed trim makes room (old codex, finished favor, tracking list)", () => {
+  const saga = nearFull();
+  saga.cx = codex(40);
+  saga.ut = ["wv:one", "wv:two"];
+  assert.ok(save.saveRoom(saga) < 200, "the old check would have refused");
+  const p = player();
+  grant.grantCodex(p, saga, { id: "new_entry", title: "New" });
+  assert.ok(saga.cx.includes("new_entry"), "added");
+  assert.match(p.said[0], /New entry/);
+  const out = JSON.parse(save.trimSave(saga));
+  assert.ok(out.cx.includes("new_entry"), "the newest entry survives the flush trim");
+  assert.deepEqual(out.s, saga.s, "stories untouched");
+  assert.deepEqual(out.g, { keep: "x" }, "flags untouched");
+});
+
+test("over the limit even after the allowed trim: refused, and nothing in the save changes", () => {
+  const saga = { s: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`s${i}`, story(i)])), cx: codex(3), ut: ["wv:a"] };
+  const before = JSON.stringify(saga);
+  const p = player();
+  grant.grantCodex(p, saga, { id: "new_entry", title: "New" });
+  assert.equal(JSON.stringify(saga), before, "the real save is not trimmed or changed by the check");
+  assert.match(p.said[0], /not added/);
+});
+
+test("a roomy save and a repeated entry behave as before", () => {
+  const saga = { s: {}, cx: ["a"] };
+  const p = player();
+  grant.grantCodex(p, saga, { id: "b", title: "B" });
+  grant.grantCodex(p, saga, { id: "b", title: "B" });
+  assert.deepEqual(saga.cx, ["a", "b"]);
+  assert.equal(p.said.length, 1);
+});
+
+test("main.js keeps checkStories in worldLoad and subscribes entityLoad at the top level", () => {
+  const main = read("main.js");
+  const wl = main.slice(main.indexOf("world.afterEvents.worldLoad.subscribe"));
+  const body = wl.slice(0, wl.indexOf("\n});") + 4);
+  assert.match(body, /checkStories\(\);/);
+  assert.doesNotMatch(body, /entityLoad/);
+  assert.match(main, /^world\.afterEvents\.entityLoad\.subscribe\(\(e\) => sweepLoadedChampion\(e\.entity\)\);/m);
 });
 
 const champion = runInNewContext(`${slice(objectives, "const sessionChampions", "/** Every dimension's")}\n({ sessionChampions, staleChampion, trackChampion })`, {

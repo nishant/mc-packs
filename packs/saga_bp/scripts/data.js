@@ -360,6 +360,18 @@ export function saveRoom(saga) {
   return SAVE_LIMIT - byteLength(JSON.stringify(saga));
 }
 
+/**
+ * Would the save still fit with codex entry `id` added, after the trim flush() is allowed to do (the "stopped tracking" list,
+ * finished favors, the oldest codex entries)? Works on a copy: the real save is untouched. The new entry is the newest, so it is the last the trim drops.
+ * @param {Saga} saga @param {string} id
+ */
+export function codexFits(saga, id) {
+  const copy = JSON.parse(JSON.stringify(saga));
+  copy.cx = [...(copy.cx ?? []), id];
+  const json = trimSave(copy);
+  return byteLength(json) <= SAVE_LIMIT && copy.cx.includes(id);
+}
+
 /** Marks the player's progress to be saved (within a few seconds, or now). @param {Player} player @param {boolean} [now] */
 export function markDirty(player, now = false) {
   dirty.set(player.id, player);

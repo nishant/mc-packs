@@ -23,7 +23,7 @@ import {
   reached,
   requires,
   sagaOf,
-  saveRoom,
+  codexFits,
   partyViews,
   setFlag,
   target,
@@ -863,21 +863,26 @@ export function reward(player, r, source, penalty = 0) {
   if (r.skill && r.skill.amount > 0) send("realm:skill_xp", { player: player.id, skill: r.skill.skill, amount: Math.round(r.skill.amount * keep) });
   if (r.title) send("realm:title_unlock", { player: player.id, title: r.title, from: PACK });
   if (r.journal) send("realm:journal", { player: player.id, page: "story", entry: r.journal.entry, label: r.journal.label });
-  if (r.codex) {
-    const saga = sagaOf(player);
-    saga.cx ??= [];
-    if (!saga.cx.includes(r.codex.id)) {
-      if (saveRoom(saga) < 200) {
-        console.warn(`[saga] ${player.name}: codex entry ${r.codex.id} refused, the save is full`);
-        player.sendMessage(`§c[Codex] Your saved progress is full, so "${r.codex.title}" was not added.`);
-      } else {
-        saga.cx.push(r.codex.id);
-        markDirty(player);
-        player.sendMessage(`§d[Codex] New entry: ${r.codex.title} §7(read it in /realm:saga, Codex)`);
-      }
-    }
-  }
+  if (r.codex) grantCodex(player, sagaOf(player), r.codex);
   return given.join(", ") + (cut ? " (less for the hint)" : "");
+}
+
+/**
+ * Adds a codex entry unless the save could not hold it even after the trim flush() may do (the old tracking list, finished
+ * favors, the oldest codex entries), so a nearly full save still takes the newest entry. Stories, flags and the entry itself are never trimmed.
+ * @param {Player} player @param {Saga} saga @param {{ id: string, title: string }} codex
+ */
+export function grantCodex(player, saga, codex) {
+  saga.cx ??= [];
+  if (saga.cx.includes(codex.id)) return;
+  if (!codexFits(saga, codex.id)) {
+    console.warn(`[saga] ${player.name}: codex entry ${codex.id} refused, the save is full`);
+    player.sendMessage(`§c[Codex] Your saved progress is full, so "${codex.title}" was not added.`);
+    return;
+  }
+  saga.cx.push(codex.id);
+  markDirty(player);
+  player.sendMessage(`§d[Codex] New entry: ${codex.title} §7(read it in /realm:saga, Codex)`);
 }
 
 function crownsObjective() {
