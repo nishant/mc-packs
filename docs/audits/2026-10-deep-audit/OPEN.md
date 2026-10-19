@@ -166,6 +166,14 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 - O74 (blocker) Signs in the Sky "Fallen Light" can't be finished: the crater's amethyst was mined out by players who
   finished it first, so a party mate catching up has nothing to gather. Reset or regrow per accept, or accept any
   shards; audit every step that depends on blocks built once.
+  **Done in `68c15bc2417958881c69e0dba6389a6193ff881e`:** the intro and real hint explain another geode, shards
+  already carried, or a party mate. Collection already accepted those sources; no engine, terrain, item grant,
+  objective index or reward change was needed. The paired native scenario completes three phases and two real
+  BDS restarts: before has 61 passing engine/persistence/reward checks and only 2 guidance failures; fixed has
+  63/63 passes, with zero script errors in both. It covers a real built/depleted crater, a late solo player,
+  3 plus 5 party-provided shards, retained player edits, partial native saves and exactly-once rewards.
+  Simulated IDs and simple inventory/level/Crowns are explicitly adapted, not ordinary rejoin or opaque-item
+  persistence proof. The 183-step finite-gather inventory and adjacent interact risks remain assigned to W7/O38.
 - O75 (blocker) Softlock in Signs in the Sky at the Old Graveyard: tapping an empty spot while searching for clues
   froze movement, interaction and then the camera; after being killed there was no respawn screen until Escape.
   **Server-side fix done in `6e7352ba3744447d88df8d40f404909933821bc1` and

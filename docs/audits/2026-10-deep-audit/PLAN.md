@@ -412,7 +412,7 @@ today, so they go first. O74 and O75 are blockers: a quest that can't be finishe
 scenario that fails before and passes after. Where BDS can't show the effect (O69, O70), do a real-client check as
 in W2.
 
-- [ ] **O75 (blocker) Softlock in Signs in the Sky (act1_signs.js, the "Search the Old Graveyard for clues (4)" step
+- [x] **O75 (blocker) Softlock in Signs in the Sky (act1_signs.js, the "Search the Old Graveyard for clues (4)" step
   plus "Put down 6 zombies that rise in the graveyard at night").**
   - **What happened** (`media/graveyard-softlock.webp`, `media/graveyard-dead-no-respawn.webp`): the player tapped
     (left click) an empty spot in the Old Graveyard while searching for clues, with the zombies around.
@@ -430,7 +430,7 @@ in W2.
     (C17), with a safety timeout. A tap on empty ground does nothing. Grep all packs for camera.fade, camera.setCamera
     and input permissions, and apply the same rules (expedition_bp main.js:1629, waystone_bp main.js:627).
   - **Test:** a scenario that taps empty ground and a clue while a zombie hits the player and the player dies mid-reveal.
-- [ ] **O74 (blocker) A quest that can't be finished: Signs in the Sky, "Fallen Light"** (act1_signs.js:133, "Gather
+- [x] **O74 (blocker) A quest that can't be finished: Signs in the Sky, "Fallen Light"** (act1_signs.js:133, "Gather
   8 amethyst shards" at the Starfall Crater; `media/crater-mined-out.webp`).
   - The first players who did the quest mined out all the crater's amethyst. A party mate who started it later had
     nothing left to mine.
