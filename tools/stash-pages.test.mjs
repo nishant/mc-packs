@@ -1615,9 +1615,9 @@ test("a failed rollback quarantines the images, refuses more moves and survives 
 });
 
 /** A stuck journal on `p`, an operator standing on open ground, and the floor around them as air over stone. */
-function stuck() {
+function stuck(extra = {}) {
   const p = joined();
-  arrange(p, { 1: { 18: stack("minecraft:diamond", 3), 19: shulker("a"), 20: stack("minecraft:iron_ingot", 9) } });
+  arrange(p, { 1: { 18: stack("minecraft:diamond", 3), 19: shulker("a"), 20: stack("minecraft:iron_ingot", 9), ...extra } });
   const original = p.container.setItem.bind(p.container);
   let calls = 0;
   p.container.setItem = (s, item) => {
@@ -1627,6 +1627,7 @@ function stuck() {
   assert.equal(pages.transferStacks(p, { slots: [18, 19, 20], to: 2 }).code, "recovery");
   p.container.setItem = original;
   const op = visitor();
+  op.commandPermissionLevel = 2;
   const dim = overworld();
   op.dimension = dim;
   op.location = { x: 10.5, y: 64, z: 10.5 };
@@ -1637,6 +1638,70 @@ function stuck() {
   return { p, op, dim };
 }
 const chestsOf = (dim) => [...dim.blocks.values()].filter((b) => b.typeId === "minecraft:chest");
+
+test("F2 recover: only the pack's own buttons are left out; a real item in a reserved slot is exported", async () => {
+  const { p, op, dim } = stuck({ 15: stack("minecraft:emerald", 2), 16: stack(BTN_MENU, 1), 17: stack(BTN_NEXT, 1) });
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  const message = await pages.recoverInventory(op, p);
+  assert.match(message, /Exported 4 stacks/, message);
+  assert.match(message, /exists twice/);
+  const kinds = chestsOf(dim)[0].getComponent("minecraft:inventory").container.slots.filter(Boolean).map((i) => i.typeId);
+  assert.ok(kinds.includes("minecraft:emerald"), "the real item in a reserved slot is kept");
+  assert.ok(!kinds.includes(BTN_MENU) && !kinds.includes(BTN_NEXT), "no page button reaches a chest");
+});
+
+test("F2 recover: rechecks the operator and the exact journal after confirming", async () => {
+  const a = stuck();
+  mc.formResponses.set(a.op.id, [() => { a.op.commandPermissionLevel = 0; return { selection: 0 }; }]);
+  assert.match(await pages.recoverInventory(a.op, a.p), /no longer available/);
+  assert.equal(chestsOf(a.dim).length, 0);
+  const b = stuck();
+  mc.formResponses.set(b.op.id, [() => { b.op.isValid = false; return { selection: 0 }; }]);
+  assert.match(await pages.recoverInventory(b.op, b.p), /no longer available/);
+  const c = stuck();
+  mc.formResponses.set(c.op.id, [() => {
+    const s = JSON.parse(c.p.getDynamicProperty("stash:native"));
+    s.pending = { ...s.pending, before: { ...s.pending.before, id: s.pending.before.id + "x" } };
+    c.p.setDynamicProperty("stash:native", JSON.stringify(s));
+    return { selection: 0 };
+  }]);
+  assert.match(await pages.recoverInventory(c.op, c.p), /changed while you were deciding/);
+  assert.equal(chestsOf(c.dim).length, 0);
+  const d = stuck();
+  d.op.commandPermissionLevel = 0;
+  assert.match(await pages.recoverInventory(d.op, d.p), /Only an operator/);
+});
+
+test("F2 recover: a started export is never made again from another dimension, and a half-filled chest is finished once", async () => {
+  const { p, op, dim } = stuck();
+  const set = p.setDynamicProperty.bind(p);
+  set("stash:native", JSON.stringify({ ...JSON.parse(p.getDynamicProperty("stash:native")), pending: { ...nativeIndex(p).pending, out: { d: "minecraft:nether", p: [[5, 64, 5]] } } }));
+  const other = storage.exportPending(op, p);
+  assert.equal(other.ok, false);
+  assert.match(other.message, /finish it there/);
+  assert.equal(chestsOf(dim).length, 0, "no second set of chests");
+
+  const r = stuck();
+  const first = storage.exportPending(r.op, r.p);
+  assert.equal(first.ok, true);
+  const again = stuck();
+  const orig = again.p.setDynamicProperty.bind(again.p);
+  let fail = true;
+  again.p.setDynamicProperty = (k, v) => {
+    if (fail && k === "stash:native" && !JSON.parse(v).pending) throw new Error("crash");
+    orig(k, v);
+  };
+  assert.equal(storage.exportPending(again.op, again.p).ok, false);
+  const chest = chestsOf(again.dim)[0];
+  const box = chest.getComponent("minecraft:inventory").container;
+  const keep = box.getItem(0);
+  box.setItem(1, undefined);
+  fail = false;
+  assert.equal(storage.exportPending(again.op, again.p).ok, true);
+  assert.equal(chestsOf(again.dim).length, 1, "the same chest is finished, not duplicated");
+  assert.equal(box.getItem(0)?.typeId, keep?.typeId);
+  assert.ok(box.getItem(1), "the missing slot was refilled once");
+});
 
 test("O18: an operator confirms, the before-image lands in chests once, opaque stacks intact", async () => {
   const { p, op, dim } = stuck();

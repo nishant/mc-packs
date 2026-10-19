@@ -1854,20 +1854,24 @@ async function settingsMenu(player) {
  * @returns {Promise<string>}
  */
 export async function recoverInventory(operator, target) {
-  const first = pendingSummary(target);
+  const own = (/** @type {{ s: number, item: ItemStack | undefined }} */ e) => BUTTON_SLOTS.includes(e.s) && isButton(e.item);
+  if (!alive(operator) || !isOp(operator)) return "Only an operator who is here and healthy can recover an inventory.";
+  const first = pendingSummary(target, own);
   if (!first) return `${target.name} has nothing waiting for recovery.`;
   const form = new ActionFormData()
     .title("§lRecover inventory")
     .body(
       `${target.name}'s inventory move did not finish. Their saved before-image holds ${first.items} stacks.\n` +
         `Confirming puts those stacks into ${first.chests} chest(s) on empty floor next to you, then clears the journal. ` +
-        `Their current inventory is not touched, so check it first: items they still carry will exist twice.`
+        `Their current inventory is not touched, so inspect it and back up what matters first: items they still carry will exist twice.` +
+        (first.started ? "\nAn export was already started: it must be finished in the dimension where it began." : "")
     )
     .button("§cExport to chests")
     .button("Cancel");
   const res = /** @type {any} */ (await form.show(operator));
   if (res.canceled || res.selection !== 0) return "Canceled, nothing changed.";
-  const again = pendingSummary(target);
-  if (!again || again.items !== first.items) return "The journal changed while you were deciding; nothing was exported. Run it again.";
-  return exportPending(operator, target).message;
+  if (!alive(operator) || !isOp(operator) || !target.isValid) return "The operator or the player is no longer available; nothing was exported. Run it again.";
+  const again = pendingSummary(target, own);
+  if (!again || again.id !== first.id || again.items !== first.items) return "The journal changed while you were deciding; nothing was exported. Run it again.";
+  return exportPending(operator, target, own).message;
 }

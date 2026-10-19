@@ -414,11 +414,19 @@ export function inventoryReady(player) {
 const CHEST = "minecraft:chest";
 const CHEST_SLOTS = 27;
 
-/** What an operator is told before confirming, or undefined when nothing is pending. @param {Player} target */
-export function pendingSummary(target) {
+/** What an operator is told before confirming, or undefined when nothing is pending. @param {Player} target @param {(e: Entry) => boolean} [skip] entries the exporter leaves out (the pack's own buttons) */
+export function pendingSummary(target, skip) {
   const pending = stateOf(target).pending;
   if (!pending) return undefined;
-  return { items: pending.before.slots.length, chests: Math.max(1, Math.ceil(pending.before.slots.length / CHEST_SLOTS)), started: !!pending.out };
+  let items = pending.before.slots.length;
+  if (skip) {
+    try {
+      items = loadSnapshot(target, pending.before).filter((e) => !skip(e)).length;
+    } catch {
+      // the export reports an unreadable image itself
+    }
+  }
+  return { id: pending.before.id, items, chests: Math.max(1, Math.ceil(items / CHEST_SLOTS)), started: !!pending.out };
 }
 
 /** @param {import("@minecraft/server").Block | undefined} block @param {Entry[]} part */
@@ -434,21 +442,39 @@ function chestMatches(block, part) {
 }
 
 /**
+ * A chest whose filled slots all hold what the export put there (an export that stopped half way): finished in place,
+ * never touching a chest that holds anything else.
+ * @param {import("@minecraft/server").Block} block @param {Entry[]} part
+ */
+function chestIsPrefixOf(block, part) {
+  const box = block.getComponent("minecraft:inventory")?.container;
+  if (!box) return false;
+  for (let i = 0; i < CHEST_SLOTS; i++) {
+    const have = box.getItem(i);
+    if (have && signature(have) !== signature(part[i]?.item)) return false;
+  }
+  return true;
+}
+
+/**
  * Operator-confirmed export of a stuck recovery journal: the retained before-image goes into empty chests
  * beside the operator (air blocks only, nothing overwritten), then the journal is cleared and both images
  * discarded. The chest spots are journaled first, so a restart in between finishes the same export instead of
  * making a second copy. Opaque stacks are carried as ItemStacks and never rebuilt from signatures.
- * The target's live inventory is never touched.
- * @param {Player} operator @param {Player} target
+ * The target's live inventory is never touched. `skip` leaves out the pack's own page buttons (never real items).
+ * An export already started stays in the dimension it began in: from another dimension it is refused, so a second set
+ * of chests is never made.
+ * @param {Player} operator @param {Player} target @param {(e: Entry) => boolean} [skip]
  * @returns {{ ok: boolean, message: string }}
  */
-export function exportPending(operator, target) {
+export function exportPending(operator, target, skip) {
   const state = stateOf(target);
   const pending = state.pending;
   if (!pending) return { ok: false, message: "Nothing is waiting for recovery." };
   let entries;
   try {
     entries = loadSnapshot(target, pending.before);
+    if (skip) entries = entries.filter((e) => !skip(e));
   } catch (e) {
     return { ok: false, message: `The saved images could not be read, nothing changed (${e}).` };
   }
@@ -457,7 +483,8 @@ export function exportPending(operator, target) {
   if (!parts.length) parts.push([]);
   try {
     const dim = operator.dimension;
-    let spots = pending.out?.d === dim.id ? pending.out.p : undefined;
+    if (pending.out && pending.out.d !== dim.id) return { ok: false, message: `The export was started in ${pending.out.d}; finish it there. Nothing changed.` };
+    let spots = pending.out?.p;
     if (!spots) {
       spots = [];
       const o = operator.location;
@@ -481,8 +508,9 @@ export function exportPending(operator, target) {
     for (let i = 0; i < parts.length; i++) {
       const block = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] });
       if (chestMatches(block, parts[i])) continue;
-      if (!block?.isAir) return { ok: false, message: `The export spot ${spots[i].join(" ")} is taken by something else; nothing was overwritten. Ask for help.` };
-      block.setType(CHEST);
+      const partial = block?.typeId === CHEST && chestIsPrefixOf(block, parts[i]);
+      if (!block?.isAir && !partial) return { ok: false, message: `The export spot ${spots[i].join(" ")} is taken by something else; nothing was overwritten. Ask for help.` };
+      if (!partial) block.setType(CHEST);
       const box = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] })?.getComponent("minecraft:inventory")?.container;
       if (!box) throw new Error("chest inventory is unavailable");
       for (const e of parts[i]) box.setItem(e.s, e.item);
@@ -501,5 +529,5 @@ export function exportPending(operator, target) {
   }
   discardSnapshot(pending.before);
   discardSnapshot(pending.after);
-  return { ok: true, message: `Exported ${entries.length} stacks into ${parts.length} chest(s) next to you. ${target.name}'s journal is cleared.` };
+  return { ok: true, message: `Exported ${entries.length} stacks into ${parts.length} chest(s) next to you. ${target.name}'s journal is cleared. Anything they still carried now exists twice: inspect their inventory and the chests, and back up what you need.` };
 }
