@@ -9,6 +9,7 @@ import {
   CustomCommandStatus,
   Dimension,
   EquipmentSlot,
+  MolangVariableMap,
   Player,
   system,
   world,
@@ -434,33 +435,236 @@ async function pick(player, form, hits) {
   }
 }
 
-/** @type {Map<string, number>} player id → the run drawing their current mark */
-const marks = new Map();
-world.afterEvents.playerLeave.subscribe(({ playerId }) => marks.delete(playerId));
-
-// The mark's outline: points along the 12 edges of the container's block, 0.15 outside it on every side, so in a
-// wall of chests the front outline sits in the air in front of the wall (a column over the chest alone ends up
-// inside the chest above it). Each edge gets its ends and 3 points between: 8 corners + 36 = 44 points.
-const OUTLINE = (() => {
-  const lo = -0.15;
-  const hi = 1.15;
-  /** @type {{ x: number, y: number, z: number }[]} */
-  const pts = [];
-  const steps = [0.25, 0.5, 0.75].map((t) => lo + (hi - lo) * t);
-  for (const x of [lo, hi]) for (const y of [lo, hi]) for (const z of [lo, hi]) pts.push({ x, y, z });
-  for (const a of [lo, hi]) {
-    for (const b of [lo, hi]) {
-      for (const t of steps) {
-        pts.push({ x: t, y: a, z: b }, { x: a, y: t, z: b }, { x: a, y: b, z: t });
-      }
-    }
-  }
-  return pts;
-})();
+/** Bright yellow vanilla flame. Stands out on orange chests, oak signs and blue glass; no new asset. */
+export const MARK_COLOR = { red: 1, green: 0.95, blue: 0.2 };
+export const MARK_BEAM = "minecraft:colored_flame_particle";
+export const MARK_PULSE = "minecraft:basic_flame_particle";
+export const MARKER_CAP = 24;
+/** Above the story tracker (20), below build mode (30): a short search guide, not a flight or build line. */
+export const MARK_STEADY = 25;
+/** At least 3 redraws (every 10 ticks) so other steady lines keep waiting while the arrow shows. */
+export const MARK_HOLD = 30;
+const MARK_FROM = "find_bp";
 
 /**
- * An outline of green sparkles around the container and a particle column over it, every 10 ticks, that only this
- * player sees. A new mark replaces the player's previous one.
+ * @typedef {{ generation: number, run?: number }} Mark
+ * @typedef {{ next: number, byId: Map<string, Mark> }} Marks
+ */
+
+/** @returns {Marks} */
+export function createMarks() {
+  return { next: 1, byId: new Map() };
+}
+
+/** @param {Marks} marks @param {string} id */
+export function beginMark(marks, id) {
+  const generation = marks.next++;
+  const previous = marks.byId.get(id);
+  marks.byId.set(id, { generation });
+  return { generation, previousRun: previous?.run };
+}
+
+/** @param {Marks} marks @param {string} id @param {number} generation @param {number} run */
+export function claimRun(marks, id, generation, run) {
+  const mark = marks.byId.get(id);
+  if (!mark || mark.generation !== generation) return false;
+  mark.run = run;
+  return true;
+}
+
+/** @param {Marks} marks @param {string} id @param {number} generation */
+export function endMark(marks, id, generation) {
+  const mark = marks.byId.get(id);
+  if (!mark || mark.generation !== generation) return { ended: false, run: undefined };
+  marks.byId.delete(id);
+  return { ended: true, run: mark.run };
+}
+
+/** @param {Marks} marks @param {string} id */
+export function endPlayer(marks, id) {
+  const mark = marks.byId.get(id);
+  if (!mark) return { ended: false, run: undefined };
+  marks.byId.delete(id);
+  return { ended: true, run: mark.run, generation: mark.generation };
+}
+
+/**
+ * @param {{ valid: boolean, dead: boolean, sameDimension: boolean, tick: number, until: number, generation: number, current: number | undefined }} state
+ */
+export function markShouldDraw(state) {
+  return state.valid === true && state.dead !== true && state.sameDimension === true && state.tick <= state.until && state.generation === state.current;
+}
+
+/**
+ * Downward arrow above a sign on the chest face. Phase 1 adds a wider pulse. At most MARKER_CAP points.
+ * @param {number} phase @returns {{ x: number, y: number, z: number, particle: string }[]}
+ */
+export function markerDraw(phase) {
+  /** @type {{ x: number, y: number, z: number, particle: string }[]} */
+  const pts = [];
+  const beam = phase % 2 === 1 ? MARK_PULSE : MARK_BEAM;
+  for (let i = 0; i < 7; i++) pts.push({ x: 0.5, y: 2.6 + i * 0.45, z: 0.5, particle: beam });
+  const tipY = 1.85;
+  pts.push({ x: 0.5, y: tipY, z: 0.5, particle: MARK_PULSE });
+  for (const s of [0.35, 0.62]) {
+    const y = tipY + s * 0.85;
+    const particle = phase % 2 === 0 ? MARK_BEAM : MARK_PULSE;
+    pts.push(
+      { x: 0.5 - s, y, z: 0.5, particle },
+      { x: 0.5 + s, y, z: 0.5, particle },
+      { x: 0.5, y, z: 0.5 - s, particle },
+      { x: 0.5, y, z: 0.5 + s, particle }
+    );
+  }
+  if (phase % 2 === 1) {
+    const top = 2.6 + 6 * 0.45;
+    pts.push(
+      { x: 0.15, y: top, z: 0.5, particle: MARK_PULSE },
+      { x: 0.85, y: top, z: 0.5, particle: MARK_PULSE },
+      { x: 0.5, y: top, z: 0.15, particle: MARK_PULSE },
+      { x: 0.5, y: top, z: 0.85, particle: MARK_PULSE }
+    );
+  }
+  return pts.slice(0, MARKER_CAP);
+}
+
+/** @param {number} dx @param {number} dy @param {number} dz */
+export function markerGuide(dx, dy, dz) {
+  const dist = Math.max(0, Math.round(Math.hypot(dx, dy, dz)));
+  const dir = direction(dx, dz);
+  const up = Math.round(dy);
+  const vertical = up >= 2 ? `, ${up} above` : up <= -2 ? `, ${-up} below` : "";
+  return { dist, dir, vertical, text: `${dist} blocks ${dir}${vertical}` };
+}
+
+/** Searcher-only guide. Block name and direction, never the items or raw coordinates. @param {string} blockTitle @param {number} dx @param {number} dy @param {number} dz */
+export function markerText(blockTitle, dx, dy, dz) {
+  const name = String(blockTitle).replace(/[^\x20-\x7e]/g, "").slice(0, 48);
+  return `§e${name}§r ${markerGuide(dx, dy, dz).text}`;
+}
+
+/** @param {string} playerId @param {number} [ticks] */
+export function barPayload(playerId, ticks = MARK_HOLD) {
+  return { player: playerId, ticks, from: MARK_FROM, steady: MARK_STEADY };
+}
+
+/** True when this redraw must leave the bar alone. Notes and higher ranks hold; our own request does not. @param {any} msg */
+export function foreignBarHolds(msg, ourFrom = MARK_FROM, ourSteady = MARK_STEADY) {
+  if (!msg || typeof msg.player !== "string") return false;
+  if (msg.from === ourFrom || msg.background) return false;
+  if (Number.isFinite(msg.steady) && (msg.steady < ourSteady || (msg.steady === ourSteady && String(msg.from) > ourFrom))) return false;
+  return true;
+}
+
+const marks = createMarks();
+/** @type {Map<string, number>} */
+const heldAt = new Map();
+/** @type {Map<string, number>} */
+const barHeld = new Map();
+/** @type {MolangVariableMap | undefined} */
+let beamColor;
+
+function beamVars() {
+  if (!beamColor) {
+    beamColor = new MolangVariableMap();
+    beamColor.setColorRGB("variable.color", MARK_COLOR);
+  }
+  return beamColor;
+}
+
+/** @param {string} id */
+function releasePlayer(id) {
+  const ended = endPlayer(marks, id);
+  if (ended.run !== undefined) {
+    try {
+      system.clearRun(ended.run);
+    } catch {
+      // already cleared
+    }
+  }
+  heldAt.delete(id);
+  barHeld.delete(id);
+}
+
+world.afterEvents.playerLeave.subscribe(({ playerId }) => releasePlayer(playerId));
+world.afterEvents.entityDie.subscribe(({ deadEntity }) => {
+  if (deadEntity instanceof Player) releasePlayer(deadEntity.id);
+});
+world.afterEvents.playerDimensionChange.subscribe(({ player }) => {
+  if (player instanceof Player) releasePlayer(player.id);
+});
+
+/** @param {string} id @param {number} generation */
+function stopOwnedMark(id, generation) {
+  const ended = endMark(marks, id, generation);
+  if (!ended.ended || ended.run === undefined) return;
+  try {
+    system.clearRun(ended.run);
+  } catch {
+    // already cleared
+  }
+}
+
+/** @param {Player} player */
+function requestBar(player) {
+  system.sendScriptEvent("realm:actionbar", JSON.stringify(barPayload(player.id)));
+}
+
+/** @param {string} message */
+function noteForeignBar(message) {
+  const msg = JSON.parse(message);
+  if (!foreignBarHolds(msg)) return;
+  const until = system.currentTick + Math.min(200, Math.max(0, Number(msg.ticks) || 0));
+  if (until > (barHeld.get(msg.player) ?? 0)) barHeld.set(msg.player, until);
+}
+
+/**
+ * One redraw of the searcher's arrow and direction line. An old generation cannot clear a newer mark,
+ * and ending the mark never writes an empty action bar (that would erase another pack's note).
+ * @param {Player} player @param {Hit} h @param {string} id @param {number} generation @param {number} until
+ */
+function drawMark(player, h, id, generation, until) {
+  const current = marks.byId.get(id)?.generation;
+  let same = false;
+  let dead = !player.isValid;
+  if (player.isValid) {
+    try {
+      same = short(player.dimension.id) === h.dim;
+      const health = player.getComponent("minecraft:health");
+      if (health && health.currentValue <= 0) dead = true;
+    } catch {
+      dead = true;
+      same = false;
+    }
+  }
+  if (!markShouldDraw({ valid: player.isValid, dead, sameDimension: same, tick: system.currentTick, until, generation, current })) {
+    stopOwnedMark(id, generation);
+    return;
+  }
+  try {
+    const phase = Math.floor(system.currentTick / 10) % 2;
+    for (const p of markerDraw(phase)) {
+      const at = { x: h.x + p.x, y: h.y + p.y, z: h.z + p.z };
+      player.spawnParticle(p.particle, at, p.particle === MARK_BEAM ? beamVars() : undefined);
+    }
+  } catch {
+    // spot not loaded for this player
+  }
+  const now = system.currentTick;
+  if (now - (heldAt.get(id) ?? -Infinity) >= MARK_HOLD / 3) {
+    heldAt.set(id, now);
+    requestBar(player);
+  }
+  if ((barHeld.get(id) ?? 0) > now) return;
+  const dx = h.x + 0.5 - player.location.x;
+  const dy = h.y + 0.5 - player.location.y;
+  const dz = h.z + 0.5 - player.location.z;
+  player.onScreenDisplay.setActionBar(markerText(title(h.entry.b), dx, dy, dz));
+}
+
+/**
+ * A bright arrow over the container and a direction line, every 10 ticks, that only this player sees.
+ * A new mark replaces the player's previous one. Another dimension gets coordinates in chat only.
  * @param {Player} player @param {Hit} h
  */
 function highlight(player, h) {
@@ -473,22 +677,22 @@ function highlight(player, h) {
   player.sendMessage(`§e${title(h.entry.b)}§r at ${at}, marked for ${seconds} s.`);
   const until = system.currentTick + seconds * 20;
   const id = player.id;
-  const previous = marks.get(id);
-  if (previous !== undefined) system.clearRun(previous);
-  const run = system.runInterval(() => {
-    if (!player.isValid || system.currentTick > until || short(player.dimension.id) !== h.dim) {
-      system.clearRun(run);
-      if (marks.get(id) === run) marks.delete(id);
-      return;
-    }
+  const started = beginMark(marks, id);
+  if (started.previousRun !== undefined) {
     try {
-      for (const p of OUTLINE) player.spawnParticle("minecraft:villager_happy", { x: h.x + p.x, y: h.y + p.y, z: h.z + p.z });
-      for (let k = 0; k < 8; k++) player.spawnParticle("minecraft:endrod", { x: h.x + 0.5, y: h.y + 1.2 + k * 0.5, z: h.z + 0.5 });
+      system.clearRun(started.previousRun);
     } catch {
-      // spot not loaded for this player
+      // already cleared
     }
-  }, 10);
-  marks.set(id, run);
+  }
+  const run = system.runInterval(() => drawMark(player, h, id, started.generation, until), 10);
+  if (!claimRun(marks, id, started.generation, run)) {
+    try {
+      system.clearRun(run);
+    } catch {
+      // replaced before the run was stored
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +799,12 @@ system.afterEvents.scriptEventReceive.subscribe(
         accessResult(message);
       } catch (e) {
         console.warn(`[find] ${e}`);
+      }
+    } else if (id === "realm:actionbar") {
+      try {
+        noteForeignBar(message);
+      } catch {
+        // not ours
       }
     }
   },
