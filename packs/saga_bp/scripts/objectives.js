@@ -230,46 +230,84 @@ function drawStandingPad(player, dim, cx, cy, cz, color, ringRadius = 0) {
 const STAND_GUIDES = new Set(["reach", "vigil", "survive", "vision", "answer", "defend", "place"]);
 const ZONE_GUIDES = new Set(["vigil", "survive", "defend", "place"]);
 
-/** Up to 4 blocks of an interact objective near its spot, kept per scene. @param {SceneState} s @param {Player} player @param {Objective} obj @param {Loc} loc */
+/** Blocks one interact scan step looks at before it yields (a 12-block box is up to 10,625). */
+const SCAN_STEP = 256;
+/** Blocks the interact scans have looked at, for the profiler. */
+const interactScanStats = { blocks: 0, jobs: 0 };
+
+/**
+ * Looks for the wanted blocks around a spot, SCAN_STEP blocks per step (run with system.runJob). Stops early when
+ * alive() turns false. Fills out.found (nearest first, up to 4) and out.complete (false if a chunk wasn't loaded).
+ * @param {(p: {x:number,y:number,z:number}) => {typeId: string} | undefined} getBlock @param {Loc} loc @param {number} r @param {number} cy @param {number} dy @param {string[]} wanted
+ * @param {{ found: { x: number, y: number, z: number, type: string }[], complete: boolean }} out @param {() => boolean} alive
+ */
+function* scanInteract(getBlock, loc, r, cy, dy, wanted, out, alive) {
+  /** @type {{ x: number, y: number, z: number, type: string, d: number }[]} */
+  const found = [];
+  let complete = true;
+  let n = 0;
+  for (let x = Math.floor(loc.x - r); x <= Math.floor(loc.x + r); x++) {
+    for (let z = Math.floor(loc.z - r); z <= Math.floor(loc.z + r); z++) {
+      if (across({ x: x + 0.5, z: z + 0.5 }, loc) > r) continue;
+      for (let y = cy - dy; y <= cy + dy; y++) {
+        const b = getBlock({ x, y, z });
+        interactScanStats.blocks++;
+        if (!b) complete = false;
+        else if (wanted.includes(b.typeId)) found.push({ x, y, z, type: b.typeId, d: Math.hypot(x + 0.5 - loc.x, z + 0.5 - loc.z) + Math.abs(y - cy) });
+        if (++n % SCAN_STEP === 0) {
+          yield;
+          if (!alive()) return;
+        }
+      }
+    }
+  }
+  found.sort((a, b) => a.d - b.d);
+  out.found = found.slice(0, 4).map(({ x, y, z, type }) => ({ x, y, z, type }));
+  out.complete = complete;
+}
+
+/** Up to 4 blocks of an interact objective near its spot, kept per scene; the search runs in the background in small steps. @param {SceneState} s @param {Player} player @param {Objective} obj @param {Loc} loc */
 function interactBlocks(s, player, obj, loc) {
   const dim = player.dimension;
   /** @type {{ x: number, y: number, z: number, type?: string }[] | undefined} */
   let list = s.data.interactBlocks;
   if (list?.length && list.every((b) => !b.type || dim.getBlock(b)?.typeId === b.type)) return list;
   const now = system.currentTick;
+  const fallback = () => {
+    const gy = loc.y !== undefined ? Math.floor(loc.y) : Math.floor(groundAt(dim, loc.x, loc.z, player.location.y) ?? player.location.y) - 1;
+    return [{ x: Math.floor(loc.x), y: gy, z: Math.floor(loc.z) }];
+  };
+  if (s.data.interactJob) return list ?? fallback(); // a scan is still running
   if (list && now < (s.data.interactTry ?? 0)) return list;
   s.data.interactTry = now + 100;
+  const wanted = obj.blocks ?? [];
+  if (!wanted.length) {
+    s.data.interactBlocks = list = fallback();
+    return list;
+  }
   const r = Math.min(radiusOf(obj), 12);
   const cy = Math.floor(loc.y ?? player.location.y);
   const dy = loc.y === undefined ? 6 : Math.min(r, 8);
-  const wanted = obj.blocks ?? [];
-  /** @type {{ x: number, y: number, z: number, type: string, d: number }[]} */
-  const found = [];
-  let complete = true;
-  if (wanted.length) {
-    for (let x = Math.floor(loc.x - r); x <= Math.floor(loc.x + r); x++) {
-      for (let z = Math.floor(loc.z - r); z <= Math.floor(loc.z + r); z++) {
-        if (across({ x: x + 0.5, z: z + 0.5 }, loc) > r) continue;
-        for (let y = cy - dy; y <= cy + dy; y++) {
-          const b = dim.getBlock({ x, y, z });
-          if (!b) {
-            complete = false;
-            continue;
-          }
-          if (wanted.includes(b.typeId)) found.push({ x, y, z, type: b.typeId, d: Math.hypot(x + 0.5 - loc.x, z + 0.5 - loc.z) + Math.abs(y - cy) });
-        }
+  const token = {};
+  s.data.interactJob = token;
+  interactScanStats.jobs++;
+  const out = { found: /** @type {{ x: number, y: number, z: number, type: string }[]} */ ([]), complete: false };
+  const alive = () => s.data.interactJob === token;
+  system.runJob(
+    (function* () {
+      try {
+        yield* scanInteract((p) => dim.getBlock(p), loc, r, cy, dy, wanted, out, alive);
+        if (!alive()) return;
+        s.data.interactBlocks = out.found.length ? out.found : fallback();
+        if (!out.found.length && !out.complete) s.data.interactTry = system.currentTick + 40;
+      } catch {
+        s.data.interactTry = system.currentTick + 40; // the dimension unloaded mid-scan
+      } finally {
+        if (alive()) s.data.interactJob = undefined;
       }
-    }
-  }
-  found.sort((a, b) => a.d - b.d);
-  list = found.slice(0, 4).map(({ x, y, z, type }) => ({ x, y, z, type }));
-  if (!list.length) {
-    const gy = loc.y !== undefined ? Math.floor(loc.y) : Math.floor(groundAt(dim, loc.x, loc.z, player.location.y) ?? player.location.y) - 1;
-    list = [{ x: Math.floor(loc.x), y: gy, z: Math.floor(loc.z) }];
-    if (!complete) s.data.interactTry = now + 40;
-  }
-  s.data.interactBlocks = list;
-  return list;
+    })(),
+  );
+  return fallback();
 }
 
 /**

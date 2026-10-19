@@ -16,6 +16,7 @@ const colors = {
 
 function fixture({ enabled, inside = false, location = { x: 0, y: 64, z: 0 } } = {}) {
   const calls = [];
+  const scene = { data: {} };
   const dimension = {
     id: "minecraft:overworld",
     getBlock: () => ({ typeId: "minecraft:bell" }),
@@ -40,7 +41,7 @@ function fixture({ enabled, inside = false, location = { x: 0, y: 64, z: 0 } } =
     locate: (obj) => obj.loc, playerIn: () => inside,
     across: (a, b) => Math.hypot(a.x - b.x, a.z - b.z),
     groundAt: () => 64, onBed: () => false, alive: () => true,
-    system: { currentTick: 0 }, sceneFor: () => ({ data: {} }),
+    system: { currentTick: 0, runJob: (gen) => { for (const _ of gen); } }, sceneFor: () => scene,
     clueSpot: (_s, obj, k) => obj.clues[k], clueFound: () => assert.fail("fixture is not standing on a clue"),
   };
   const api = runInNewContext(`${radiusSource}\n${guideSource}\n${inspectSource}
@@ -112,7 +113,10 @@ test("zone guides keep the twelve-tile, capped-radius ring", () => {
 
 test("interaction targets keep cyan full outlines on at most four matching blocks", () => {
   const f = fixture();
-  f.questGuides(f.player, {}, 0, { type: "interact", radius: 1, blocks: ["minecraft:bell"], loc: f.loc });
+  const obj = { type: "interact", radius: 1, blocks: ["minecraft:bell"], loc: f.loc };
+  f.questGuides(f.player, {}, 0, obj); // the first draw uses the spot while the background scan runs
+  f.calls.length = 0;
+  f.questGuides(f.player, {}, 0, obj);
   assert.equal(f.calls.length, 24);
   assert.ok(f.calls.every((c) => c.vars.get("variable.style") === 0));
   assert.ok(f.calls.every((c) => JSON.stringify(tint(c)) === JSON.stringify(colors.cyan)));
