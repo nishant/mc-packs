@@ -102,6 +102,31 @@ export const isNight = () => {
   return t >= 13000 && t < 23000;
 };
 
+/** Does the time of day move? False with the daylight cycle off (servers that keep it day), when no timed step could ever finish. */
+export function timeMoves() {
+  try {
+    return world.gameRules.doDayLightCycle !== false;
+  } catch {
+    return true; // can't tell: assume it moves
+  }
+}
+
+/** Night for a night-only step: also met while time is stopped, so those steps can finish. */
+function nightMet() {
+  return !timeMoves() || isNight();
+}
+
+/** Is the time of day inside a step's `timeOfDay` window? No window, or time stopped: yes. @param {Objective} obj */
+function inWindow(obj) {
+  if (!obj.timeOfDay || !timeMoves()) return true;
+  const t = world.getTimeOfDay();
+  const [a, b] = obj.timeOfDay;
+  return a <= b ? t >= a && t < b : t >= a || t < b;
+}
+
+/** A Minecraft day in real time (ms): what a `wait` day counts as while the daylight cycle is off. */
+const DAY_MS = 20 * 60000;
+
 /** A location with a height: the saved y, or the ground there (undefined when not loaded). @param {Loc} loc */
 function withY(loc) {
   if (loc.y !== undefined) return { x: loc.x, y: loc.y, z: loc.z };
@@ -919,18 +944,10 @@ export function weatherWait(obj) {
  */
 export function timeWait(obj) {
   if ((obj.type !== "survive" && obj.type !== "vigil") || !obj.timeOfDay) return undefined;
-  const [a, b] = obj.timeOfDay;
+  if (inWindow(obj)) return undefined;
+  const [a] = obj.timeOfDay;
   const t = world.getTimeOfDay();
-  if (a <= b ? t >= a && t < b : t >= a || t < b) return undefined;
   const what = a >= 12000 && a < 16000 ? "nightfall" : a >= 16000 && a < 20000 ? "midnight" : a < 1000 || a >= 23000 ? "dawn" : "the right time of day";
-  // With the daylight cycle off (common on servers that keep it day) the time never comes by itself: no countdown.
-  let cycle = true;
-  try {
-    cycle = world.gameRules.doDayLightCycle;
-  } catch {
-    // can't tell: count down
-  }
-  if (!cycle) return `wait for ${what} (the time of day is stopped on this world)`;
   return `wait for ${what} (in about ${Math.max(1, Math.ceil((((a - t + 24000) % 24000) / 1200)))} min)`;
 }
 
@@ -1053,7 +1070,7 @@ function championNear(player, obj) {
   let at;
   const loc = locate(obj);
   if (loc === undefined) {
-    if (obj.night && !isNight()) return;
+    if (obj.night && !nightMet()) return;
     const p = player.location;
     const a = Math.random() * Math.PI * 2;
     const x = p.x + Math.cos(a) * 10;
@@ -1250,7 +1267,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity, damageSource }) => {
     }
     if (!(killer instanceof Player) || !at || !dim) return;
     const type = deadEntity.typeId;
-    const night = isNight();
+    const night = nightMet();
     const where = at;
     const d = dim;
     /** @param {Objective} obj */
@@ -3067,11 +3084,7 @@ export function tickPlayer(player, list) {
           case "vigil": {
             if (counts) weatherHelp(player, e, i, obj);
             if (!counts || !playerIn(player, obj) || !weatherOk(obj, dim)) break;
-            if (obj.timeOfDay) {
-              const t = world.getTimeOfDay();
-              const [a, b] = obj.timeOfDay;
-              if (!(a <= b ? t >= a && t < b : t >= a || t < b)) break;
-            }
+            if (!inWindow(obj)) break;
             if (obj.outdoors && !outdoors(player)) break;
             if (obj.sneaking && !sneaking(player)) break;
             bump(player, e, i, 1);
@@ -3110,11 +3123,7 @@ export function tickPlayer(player, list) {
             const x = (e.st.x ??= {});
             const k = String(i);
             if (obj.days) {
-              const now = world.getAbsoluteTime();
-              if (x[k] === undefined) {
-                x[k] = now;
-                markDirty(player);
-              } else if (now - x[k] >= obj.days * 24000) bump(player, e, i, 1);
+              if (waitDays(x, k, obj, world.getAbsoluteTime(), Date.now(), markDirty, player)) bump(player, e, i, 1);
             } else {
               const now = Date.now();
               if (x[k] === undefined) {
@@ -3265,6 +3274,28 @@ export function sceneFocus(pid, e, i) {
   return undefined;
 }
 
+/**
+ * One tick of a `wait` for days: `x[k]` is the world time it started at (kept as saved), `x[w<k>]` the real time (ms). With
+ * the daylight cycle off the world clock never moves, so the real clock counts instead, 20 minutes a day. True when done.
+ * @param {Record<string, any>} x @param {string} k @param {Objective} obj @param {number} absNow @param {number} msNow
+ * @param {(player: Player) => void} dirty @param {Player} player
+ */
+export function waitDays(x, k, obj, absNow, msNow, dirty, player) {
+  const w = `w${k}`;
+  if (x[k] === undefined) {
+    x[k] = absNow;
+    x[w] = msNow;
+    dirty(player);
+    return false;
+  }
+  if (x[w] === undefined && !timeMoves()) {
+    x[w] = msNow; // progress saved before the fallback existed: it counts from here
+    dirty(player);
+  }
+  const days = obj.days ?? 1;
+  return absNow - x[k] >= days * 24000 || (!timeMoves() && x[w] !== undefined && msNow - x[w] >= days * DAY_MS);
+}
+
 /** Seconds left on a timed objective (or a wait), or undefined. @param {Entry} e @param {number} i */
 export function timeLeft(e, i) {
   const obj = e.chapter.objectives[i];
@@ -3273,7 +3304,12 @@ export function timeLeft(e, i) {
   const race = obj.race && x ? /** @type {Record<string, any>} */ (x)[`r${i}`] : undefined;
   if (race) return Math.max(0, (race.u - Date.now()) / 1000);
   if (obj.type === "wait" && x?.[String(i)] !== undefined) {
-    if (obj.days) return ((obj.days * 24000 - (world.getAbsoluteTime() - x[String(i)])) / 20) * 1;
+    if (obj.days) {
+      const world_ = (obj.days * 24000 - (world.getAbsoluteTime() - x[String(i)])) / 20;
+      if (timeMoves()) return world_;
+      const from = x[`w${i}`] ?? Date.now();
+      return Math.max(0, Math.min(world_, (obj.days * DAY_MS - (Date.now() - from)) / 1000));
+    }
     return ((obj.minutes ?? 1) * 60000 - (Date.now() - x[String(i)])) / 1000;
   }
   return undefined;
