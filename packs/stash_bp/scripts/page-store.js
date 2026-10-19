@@ -137,6 +137,7 @@ function fitIndex(state) {
   if (byteLength(text) <= STATE_LIMIT || !state.idx) return state;
   const idx = { ...state.idx };
   const bySize = Object.keys(idx).sort((a, b) => JSON.stringify(idx[b]).length - JSON.stringify(idx[a]).length);
+  /** @type {State} */
   const fit = { ...state, idx };
   for (const n of bySize) {
     delete idx[n];

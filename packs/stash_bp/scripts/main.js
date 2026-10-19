@@ -1245,7 +1245,7 @@ function stashCountAsk(message) {
     // A step that names no item can't be matched against the index: nothing is counted from saved pages for it.
     let rows = typeof m.item === "string" ? storedCount(player, m.item) : [];
     if (!rows) return;
-    const wire = (/** @type {typeof rows} */ list) => JSON.stringify({ player: m.player, item: m.item, name: m.name, rows: list.map((r) => ({ ...r, lore: r.lore?.join("\n").length > 200 ? undefined : r.lore })) });
+    const wire = (/** @type {{ id: string, name?: string, lore?: string[], n: number }[]} */ list) => JSON.stringify({ player: m.player, item: m.item, name: m.name, rows: list.map((r) => ({ ...r, lore: (r.lore?.join("\n").length ?? 0) > 200 ? undefined : r.lore })) });
     let text = wire(rows);
     while (text.length >= 2000 && rows.length > 1) {
       rows = rows.slice(0, rows.length - 1);
