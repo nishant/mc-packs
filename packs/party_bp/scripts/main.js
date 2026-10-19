@@ -216,6 +216,11 @@ function remove(id, why) {
   if (!code) return;
   const p = /** @type {Party} */ (parties().get(code));
   p.m = p.m.filter((m) => m[0] !== id);
+  const anyP = /** @type {any} */ (p);
+  if (Array.isArray(anyP.mu)) {
+    anyP.mu = anyP.mu.filter((/** @type {unknown} */ x) => x !== id);
+    if (!anyP.mu.length) delete anyP.mu;
+  }
   if (!p.m.length) parties().delete(code);
   else if (p.l === id) {
     const next = p.m.find((m) => online(m[0])) ?? p.m[0];
@@ -279,6 +284,13 @@ function leave(player) {
   player.sendMessage("§dYou left the party.");
 }
 
+/** Ids of the members the leader muted (saved as the party's `mu`; only current members count). @param {string} code @returns {string[]} */
+function mutedIn(code) {
+  const p = /** @type {any} */ (parties().get(code));
+  if (!p || !Array.isArray(p.mu)) return [];
+  return p.mu.filter((/** @type {unknown} */ id) => typeof id === "string" && p.m.some((/** @type {any[]} */ m) => m[0] === id));
+}
+
 /** Tick each player last sent a party chat message: one a second at most. @type {Map<string, number>} */
 const lastChat = new Map();
 
@@ -288,6 +300,7 @@ function chat(player, text) {
   if (!code) return player.sendMessage("§cYou're not in a party. Start one with /realm:party");
   const msg = text.replace(/§/g, "").trim().slice(0, get("chatMaxLength"));
   if (!msg) return player.sendMessage('§cType a message: /realm:party_chat "see you there"');
+  if (mutedIn(code).includes(player.id)) return player.sendMessage("§cThe party leader muted you: your party messages aren't sent.");
   const now = system.currentTick;
   if (now - (lastChat.get(player.id) ?? -Infinity) < 20) return player.sendMessage("§7Slow down: one party message a second.");
   lastChat.set(player.id, now);
@@ -524,6 +537,10 @@ async function mainMenu(player) {
     form.button("Remove a member\n§8Leader only");
     actions.push(() => kickMenu(player));
   }
+  if (leader && p.m.length > 1) {
+    form.button("Mute or unmute a member\n§8Leader only");
+    actions.push(() => muteMenu(player));
+  }
   form.button("Leave the party");
   actions.push(() => leave(player));
   form.button("Close");
@@ -581,6 +598,33 @@ async function kickMenu(player) {
   remove(picked[0], `${player.name} removed ${picked[1]} from the party.`);
   online(picked[0])?.sendMessage(`§d${player.name} removed you from the party.`);
   player.sendMessage(`§dRemoved ${picked[1]}.`);
+}
+
+/** The leader toggles a member's party chat mute. @param {Player} player */
+async function muteMenu(player) {
+  const code = partyOf(player.id);
+  const p = code ? parties().get(code) : undefined;
+  if (!code || !p || p.l !== player.id) return;
+  const members = p.m.filter((m) => m[0] !== player.id);
+  if (!members.length) return;
+  const muted = mutedIn(code);
+  const form = new ActionFormData().title("§lMute a member").body("A muted member can still read the party chat but their messages aren't sent. Tap a member to mute or unmute them.");
+  for (const [id, name] of members) form.button(`${name}\n§8${muted.includes(id) ? "Muted: tap to unmute" : "Tap to mute"}`);
+  form.button("Back");
+  const res = await show(player, form);
+  if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
+  const picked = members[res.selection];
+  if (!picked) return mainMenu(player);
+  const now = /** @type {any} */ (parties().get(code));
+  if (!now || now.l !== player.id || !now.m.some((/** @type {any[]} */ m) => m[0] === picked[0])) return;
+  const list = mutedIn(code);
+  const was = list.includes(picked[0]);
+  const next = was ? list.filter((x) => x !== picked[0]) : [...list, picked[0]];
+  if (next.length) now.mu = next;
+  else delete now.mu;
+  save(code);
+  player.sendMessage(`§d${picked[1]} is ${was ? "unmuted" : "muted"} in the party chat.`);
+  online(picked[0])?.sendMessage(was ? "§dThe party leader unmuted you." : "§cThe party leader muted you in the party chat.");
 }
 
 // ---------------------------------------------------------------------------
