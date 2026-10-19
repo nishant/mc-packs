@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { world } from "@minecraft/server";
-import { get } from "../settings.js";
+import { get, syncBlockLimitPrefs } from "../settings.js";
 import { getCallingBonus } from "./Protection.js";
 import { applyBuildBonus, resolveCap, resolveDefaultMaxBlocks, resolvePlayerMaxBlocks } from "./block-limit.js";
 import { isOp } from "../utils/Permissions.js";
@@ -132,6 +132,7 @@ export function setDefaultMaxBlocks(value) {
     return v;
 }
 export function getMaxBlocks(player) {
+    syncBlockLimitPrefs(player);
     const cap = getAdminMaxBlocksCap();
     let saved;
     try { saved = player.getDynamicProperty(DP_MAX_BLOCKS); } catch {}

@@ -154,8 +154,8 @@ eb.settings.admin_destroy_creative=§cAdmin§r - Mode Hancur: Hanya Kreatif\n§7
 eb.settings.admin_allow_inf_reach=§cAdmin§r - Izinkan Jangkauan Tak Terbatas\n§7Nonaktif: Jangkauan Tak Terbatas dinonaktifkan secara global
 eb.settings.admin_max_reach_cap=§cAdmin§r - Maks. Jarak Jangkauan Tak Terbatas\n§7Saat ini: §e%1  §70 = tidak ada batas
 eb.settings.admin_max_blocks_cap=§cAdmin§r - Batas Blok Maks (per pemain)\n§7Saat ini: §e%1  §7Batas keras: §e%2
-eb.settings.admin_default_max_blocks=§cAdmin§r - Default blocks per build\n§7Players with no saved limit. Current: §e%1  §7Cap: §e%2
-eb.set.admin_default_blocks=Default blocks per build
+eb.settings.admin_default_max_blocks=§cAdmin§r - Batas blok bawaan (per bangunan)\n§7Pemain tanpa batas tersimpan. Saat ini: §e%1  §7Batas keras: §e%2
+eb.set.admin_default_blocks=Batas blok bawaan
 eb.settings.admin_auto_give_book=§cAdmin§r - Berikan Buku Bangunan Otomatis\n§7Aktif: pemain otomatis mendapat buku saat bergabung
 eb.settings.admin_config_tag=Batasi /config ke tag yang diperlukan\n§7Jika AKTIF, hanya pemain dengan tag yang diperlukan yang dapat menggunakan /config.
 

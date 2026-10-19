@@ -4,6 +4,7 @@
 
 export const IDLE_EVERY = 5;
 
+/** @returns {{ tick: () => number, phase: () => number }} */
 export function createIdleClock() {
     let phase = 0;
     return {
@@ -17,7 +18,13 @@ export function createIdleClock() {
     };
 }
 
-/** Busy players and a hand that just changed are never skipped. */
+/**
+ * Busy players and a hand that just changed are never skipped.
+ * @param {number} index
+ * @param {number} phase
+ * @param {boolean} busy
+ * @param {boolean} handFresh
+ */
 export function idleDue(index, phase, busy, handFresh) {
     if (busy || handFresh) return true;
     return (Number(phase) + index) % IDLE_EVERY === 0;

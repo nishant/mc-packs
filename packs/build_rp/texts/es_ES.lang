@@ -154,8 +154,8 @@ eb.settings.admin_destroy_creative=§cAdmin§r - Modo Destruir: Solo Creativo\n�
 eb.settings.admin_allow_inf_reach=§cAdmin§r - Permitir Alcance Infinito\n§7Cuando está desactivado, el Alcance Infinito está globalmente desactivado
 eb.settings.admin_max_reach_cap=§cAdmin§r - Distancia Máx. de Alcance Infinito\n§7Actual: §e%1  §70 = sin límite
 eb.settings.admin_max_blocks_cap=§cAdmin§r - Tope de bloques (por jugador)\n§7Actual: §e%1  §7Máximo: §e%2
-eb.settings.admin_default_max_blocks=§cAdmin§r - Default blocks per build\n§7Players with no saved limit. Current: §e%1  §7Cap: §e%2
-eb.set.admin_default_blocks=Default blocks per build
+eb.settings.admin_default_max_blocks=§cAdmin§r - Bloques predeterminados (por construccion)\n§7Jugadores sin limite guardado. Actual: §e%1  §7Máximo: §e%2
+eb.set.admin_default_blocks=Bloques predeterminados por construccion
 eb.settings.admin_auto_give_book=§cAdmin§r - Auto-Dar Libro de Construcción\n§7Cuando está activado, los jugadores reciben el libro al unirse
 eb.settings.admin_config_tag=Restringir /config a etiqueta requerida\n§7Si está ACTIVO, solo los jugadores con la etiqueta pueden usar /config.
 

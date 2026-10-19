@@ -154,8 +154,8 @@ eb.settings.admin_destroy_creative=§c管理者§r - 破壊モード: クリエ�
 eb.settings.admin_allow_inf_reach=§c管理者§r - 無限リーチを許可\n§7オフ: 無限リーチがグローバルに無効
 eb.settings.admin_max_reach_cap=§c管理者§r - 最大無限リーチ距離\n§7現在: §e%1  §70 = 制限なし
 eb.settings.admin_max_blocks_cap=§c管理者§r - 最大ブロック数の上限（プレイヤーごと）\n§7現在: §e%1  §7上限: §e%2
-eb.settings.admin_default_max_blocks=§cAdmin§r - Default blocks per build\n§7Players with no saved limit. Current: §e%1  §7Cap: §e%2
-eb.set.admin_default_blocks=Default blocks per build
+eb.settings.admin_default_max_blocks=§c管理者§r - 建築ごとの既定ブロック数\n§7保存した上限がないプレイヤー. 現在: §e%1  §7上限: §e%2
+eb.set.admin_default_blocks=既定のブロック数
 eb.settings.admin_auto_give_book=§c管理者§r - 建築の書を自動配布\n§7オン: プレイヤーが参加時に自動的に受け取る
 eb.settings.admin_config_tag=configコマンドを特定のタグに制限する\n§7ONの場合、必要なタグを持つプレイヤーのみが /config を使用できます。
 

@@ -41,8 +41,10 @@ import { t } from "./utils/Text.js";
 import { catmullRomSpline } from "./utils/GeometryUtils.js";
 import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
-import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, nextIdlePhase, IDLE_EVERY, allPlayers } from "./utils/Items.js";
+import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "./utils/Items.js";
+import { createIdleClock } from "./utils/idle-cadence.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
+import { bedPartnerPos, dropIncompleteBeds, expandDestroyForClaims, expandForClaims, isBedType } from "./core/beds.js";
 import { onScriptEvent } from "./script-events.js";
 
 const GETBOOK_COST = 5;
@@ -190,6 +192,29 @@ world.afterEvents.playerSpawn.subscribe(ev => {
         }, 40);
     }
 });
+function yawOf(player) {
+    try { return player.getRotation().y; } catch { return 0; }
+}
+function readPlaced(player, pos) {
+    try {
+        const block = player.dimension.getBlock(pos);
+        if (!block) return null;
+        return { typeId: block.typeId, states: block.permutation.getAllStates() };
+    } catch { return null; }
+}
+async function filterBuildPositions(player, positions, typeId, blockStates, isDestroy) {
+    const ready = isDestroy
+        ? expandDestroyForClaims(positions, (pos) => readPlaced(player, pos))
+        : expandForClaims(positions, typeId, blockStates, yawOf(player));
+    const filtered = await filterAllowedPositionsAsync(player, player.dimension.id, ready, true);
+    return dropIncompleteBeds(filtered ?? []);
+}
+async function placeAir(player, target, typeId, blockStates) {
+    if (!isBedType(typeId)) return placeBlocks(player, [target], target, typeId, blockStates, { immediate: true });
+    const kept = await filterBuildPositions(player, [target], typeId, blockStates, false);
+    if (!kept.length) return 0;
+    return placeBlocks(player, kept, target, typeId, blockStates, { immediate: true });
+}
 function confirmPlacement(player, fallbackTarget) {
     const state = getState(player);
     if (state.mode === "disable" || !state.anchor || !state.blockTypeId) return;
@@ -249,7 +274,7 @@ function confirmPlacement(player, fallbackTarget) {
             if (!rawPositions?.length) return;
             const modPositions = applyModifiers(player, rawPositions);
             if (!modPositions?.length) return;
-            const positions = await filterAllowedPositionsAsync(player, player.dimension.id, modPositions, true);
+            const positions = await filterBuildPositions(player, modPositions, typeId, blockStates, false);
             if (!positions?.length) return;
             const placed = placeBlocks(player, positions, anchor, typeId, blockStates);
             if (placed > 0) {
@@ -272,7 +297,7 @@ function confirmPlacement(player, fallbackTarget) {
         if (!rawPositions?.length) return;
         const modPositions = applyModifiers(player, rawPositions);
         if (!modPositions?.length) return;
-        const positions = await filterAllowedPositionsAsync(player, player.dimension.id, modPositions, true);
+        const positions = await filterBuildPositions(player, modPositions, typeId, blockStates, isDestroy);
         if (!positions?.length) return;
         if (isDestroy) {
             destroyBlocks(player, positions, (destroyed) => {
@@ -434,9 +459,9 @@ world.beforeEvents.playerInteractWithBlock.subscribe(ev => {
         if (distSq > reach * reach) return;
         const blockStates = getPlacementStatesFromFace(item.typeId, ev.blockFace, player);
         lastAirBuildMs.set(player.id, Date.now());
-        system.run(() => {
+        system.run(async () => {
             if (isInsidePlayer(player, facePos)) return;
-            const placed = placeBlocks(player, [facePos], facePos, item.typeId, blockStates, { immediate: true });
+            const placed = await placeAir(player, facePos, item.typeId, blockStates);
             if (placed > 0) {
                 player.onScreenDisplay.setActionBar(t("eb.bar.placed_one"));
                 coachEvent(player, "placed");
@@ -514,12 +539,14 @@ world.afterEvents.itemUse.subscribe(ev => {
         if (!target) return;
         if (isInsidePlayer(player, target)) return;
         const blockStates = getPlacementStatesFromAir(item.typeId, player);
-        const placed = placeBlocks(player, [target], target, item.typeId, blockStates, { immediate: true });
-        if (placed > 0) {
-            player.onScreenDisplay.setActionBar(t("eb.bar.placed_one"));
-            coachEvent(player, "placed");
-            lockActionBar(player.id, 300);
-        }
+        system.run(async () => {
+            const placed = await placeAir(player, target, item.typeId, blockStates);
+            if (placed > 0) {
+                player.onScreenDisplay.setActionBar(t("eb.bar.placed_one"));
+                coachEvent(player, "placed");
+                lockActionBar(player.id, 300);
+            }
+        });
         return;
     }
 
@@ -689,6 +716,15 @@ world.afterEvents.playerPlaceBlock.subscribe(ev => {
     const block = ev.block;
     if (block.typeId !== blockTypeId) return;
     const states = block.permutation.getAllStates();
+    if (isBedType(block.typeId)) {
+        const partner = bedPartnerPos(block.location, states);
+        if (partner) {
+            try {
+                const other = block.dimension.getBlock(partner);
+                if (other && isBedType(other.typeId)) other.setType("minecraft:air");
+            } catch {}
+        }
+    }
     try {
         if (prevPerm) block.setPermutation(prevPerm);
         else block.setType("minecraft:air");
@@ -841,9 +877,10 @@ system.runInterval(() => {
 }, 20);
 /** Players holding the Building Book: their sneaks are watched every tick, everyone else's hand every few ticks. */
 const sneakBusy = new WeakSet();
+const sneakClock = createIdleClock();
 system.runInterval(() => {
     const all = allPlayers();
-    const phase = nextIdlePhase();
+    const phase = sneakClock.tick();
     for (let i = 0; i < all.length; i++) {
         const player = all[i];
         if (idleSkip(player, i, sneakBusy, phase)) continue;

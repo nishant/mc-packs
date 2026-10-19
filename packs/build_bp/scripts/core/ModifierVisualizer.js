@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { world, system } from "@minecraft/server";
 import { getState, getMirrorState, getRadialState, getArrayState } from "./PlayerState.js";
-import { idleSkip, nextIdlePhase, allPlayers } from "../utils/Items.js";
-import { beginVisualizationTick } from "../utils/tool-gate.js";
+import { idleSkip, allPlayers } from "../utils/Items.js";
+import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
 
 const OFFSET   = 0.525;
@@ -130,8 +130,8 @@ export function startModifierVisualizerLoop() {
 
     system.runInterval(() => {
         const all = allPlayers();
-        if (!beginVisualizationTick(all, holdsBuildTool)) return;
         for (const player of all) {
+            if (!holdsBuildTool(player)) continue;
             try {
                 const mirror = getMirrorState(player);
                 const radial = getRadialState(player);
@@ -150,10 +150,10 @@ export function startModifierVisualizerLoop() {
 
     // Players with a mirror on are followed every tick; the others are looked at every few ticks only.
     const mirrorBusy = new WeakSet();
+    const mirrorClock = createIdleClock();
     system.runInterval(() => {
         const all = allPlayers();
-        if (!beginVisualizationTick(all, holdsBuildTool)) return;
-        const phase = nextIdlePhase();
+        const phase = mirrorClock.tick();
         for (let i = 0; i < all.length; i++) {
             const player = all[i];
             if (idleSkip(player, i, mirrorBusy, phase)) continue;

@@ -1,5 +1,8 @@
 {
   "comment": "Ids check-ids.mjs flags that pack code still has. Each id has its own reason. Remove the id and its reason in the same commit as the pack fix. A line without a specific reason does not suppress the finding. Most new lines are Java names in regexes or lists (dead_bush, note_block) or a sound missing from the pinned bedrock-samples list. Do not globally suppress a kind.",
+  "packs/build_bp/scripts/core/BlockDestroyer.js": [
+    "minecraft:end_gateway"
+  ],
   "packs/build_bp/scripts/main.js": [
     "eb:destroy"
   ],
@@ -84,6 +87,7 @@
     "dead_bush"
   ],
   "reasons": {
+    "packs/build_bp/scripts/core/BlockDestroyer.js|minecraft:end_gateway": "Pinned vanilla-data has no minecraft:end_gateway. Kept unbreakable until a native BlockTypes or command resolve proves the id invalid. Not a guess that it can be destroyed.",
     "packs/build_bp/scripts/main.js|eb:destroy": "Build mode id compared with typeId. It is not an entity, item, or block. Known false positive until the comparison is narrowed.",
     "packs/translucent_bp/entities/player.json|minecraft:sulfur_cube_archetype": "Vanilla player.json damage domain copied from Mojang, not an entity id. False positive. Do not delete the vanilla copy to silence it.",
     "packs/atlas_bp/scripts/main.js|dead_bush": "Java name dead_bush in a classifier regex or block list. Bedrock id is deadbush, often already beside it. The Java token never matches. Pack edit is outside W7. Not a universal prefix exception.",

@@ -10,7 +10,7 @@ import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern }
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
 import { lockActionBar } from "../utils/ActionBar.js";
-import { expandBeds, isBedType, directionFromStates, directionFromYaw, trimPlacement, placementItemCount } from "./beds.js";
+import { expandBeds, isBedType, directionFromStates, directionFromYaw, trimPlacement, placementItemCount, keepBedHalvesTogether } from "./beds.js";
 export const UNPLACEABLE = new Set([
     "minecraft:undyed_shulker_box",
 ]);
@@ -46,6 +46,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
     const yMin          = dimId === "minecraft:nether" || dimId === "minecraft:the_end" ? 0 : -64;
     const yMax          = dimId === "minecraft:nether" ? 127 : dimId === "minecraft:the_end" ? 255 : 319;
     const creative      = isCreative(player);
+    const survival      = !creative;
     const replaceBlocks = creative && getReplaceBlocks(player);
     let toPlace = filterSafeZonePositions(player, dim.id, positions, true).filter(p => {
         if (p.y < yMin || p.y > yMax) return false;
@@ -62,7 +63,8 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
     const cap = getMaxBlocks(player);
     const bedBuild = isBedType(typeId);
     if (!bedBuild && toPlace.length > cap) toPlace = toPlace.slice(0, cap);
-    const canPlaceBed = (p) => {
+    const canPlaceBed = (p, tid) => {
+        const want = tid || typeId;
         if (p.y < yMin || p.y > yMax) return false;
         if (!filterSafeZonePositions(player, dim.id, [p], true).length) return false;
         try {
@@ -71,7 +73,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
             const existing = block.typeId;
             if (!creative && existing === "minecraft:bedrock") return false;
             if (!replaceBlocks && !ALWAYS_REPLACEABLE.has(existing)) return false;
-            return existing !== typeId;
+            return existing !== want;
         } catch { return true; }
     };
     const palette      = getPaletteBlocks(player);
@@ -92,6 +94,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                 states: flipped,
                 direction: directionFromStates(flipped) ?? directionFromYaw(yaw),
                 _alreadyHalf: flipped.head_piece_bit === true,
+                _mx: pos._mx, _my: pos._my, _mz: pos._mz,
             };
         });
         const expanded = expandBeds(entries, canPlaceBed);
@@ -147,7 +150,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
     const perPosTypeIds  = assignments ? assignments.map(a => a.typeId) : null;
     const undoThreshold  = getUndoThreshold(player);
     const snapshot = captureSnapshot(dim, toPlace, typeId, blockStates ?? {}, perPosTypeIds, undoThreshold);
-    if (snapshot) snapshot.survival = !creative;
+    if (snapshot) snapshot.survival = survival;
     if (!snapshot) {
         lockActionBar(player.id, 1500);
         player.onScreenDisplay.setActionBar(t("eb.place.undo_disabled"));
@@ -307,12 +310,15 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
                 }
             }
             const shellList     = [...shellMap.keys()].sort((a, b) => a - b).map(k => shellMap.get(k));
-            const ordered       = shellList.flat();
+            const ordered       = keepBedHalvesTogether(shellList.flat());
             const perTick       = Math.min(64, Math.max(1, Math.ceil(ordered.length / waveTicks)));
             let idx             = 0;
             const runId = system.runInterval(() => {
                 try {
-                    const end = Math.min(idx + perTick, ordered.length);
+                    let end = Math.min(idx + perTick, ordered.length);
+                    const edge = ordered[end - 1];
+                    const next = ordered[end];
+                    if (edge && next && edge._bedGroup != null && edge._bedGroup === next._bedGroup) end++;
                     for (; idx < end; idx++) placeOne(ordered[idx]);
                     if (idx >= ordered.length) system.clearRun(runId);
                 } catch {

@@ -154,8 +154,8 @@ eb.settings.admin_destroy_creative=§c관리§r - 파괴 모드: 창의 전용\n
 eb.settings.admin_allow_inf_reach=§c관리§r - 무한 범위 허용\n§7끄기: 무한 범위 전역 비활성화
 eb.settings.admin_max_reach_cap=§c관리§r - 최대 무한 범위 거리\n§7현재: §e%1  §70 = 제한 없음
 eb.settings.admin_max_blocks_cap=§c관리자§r - 최대 블록 상한 (플레이어당)\n§7현재: §e%1  §7최대: §e%2
-eb.settings.admin_default_max_blocks=§cAdmin§r - Default blocks per build\n§7Players with no saved limit. Current: §e%1  §7Cap: §e%2
-eb.set.admin_default_blocks=Default blocks per build
+eb.settings.admin_default_max_blocks=§c관리자§r - 건축당 기본 블록 수\n§7저장된 한도가 없는 플레이어. 현재: §e%1  §7최대: §e%2
+eb.set.admin_default_blocks=기본 블록 수
 eb.settings.admin_auto_give_book=§c관리§r - 건축의 서 자동 지급\n§7켜기: 플레이어 참여 시 자동 지급
 eb.settings.admin_config_tag=config 명령어를 필수 태그로 제한\n§7켜져 있을 경우 필요한 태그를 가진 플레이어만 /config 를 사용할 수 있습니다.
 

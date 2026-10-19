@@ -6,9 +6,10 @@ import { getModeHandler, MODE_OPTIONS } from "../modes/ModeRegistry.js";
 import { FACE_OFFSETS, smartOutline, wireframePositions, skeletonAABB, boxEdges, sampledBoxEdges, catmullRomSpline, aabbBounds } from "../utils/GeometryUtils.js";
 import { getModeOption } from "../utils/ModeOptions.js";
 import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReach, getInfiniteReach, getInfiniteReachDistance, getReplaceBlocks, getMaxBlocks, getPreviewQuality, getSwapBookActions, getDeferShapeCalc, SHAPE_SETTLE_TICKS } from "./Settings.js";
-import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, nextIdlePhase, IDLE_EVERY, allPlayers } from "../utils/Items.js";
-import { beginVisualizationTick } from "../utils/tool-gate.js";
+import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
+import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
+import { getFlippedStates } from "../modifiers/MirrorModifier.js";
 import { expandBeds, isBedType, directionFromYaw, directionFromStates, bedPartnerPos } from "./beds.js";
 
 /** Players the preview looks at every tick: a mode on, or a book in hand. The others every IDLE_EVERY ticks. */
@@ -318,32 +319,40 @@ function previewDestroyBeds(positions, dim) {
     return out;
 }
 
-function previewBedPositions(positions, typeId, player) {
+function previewBedPositions(positions, typeId, player, blockStates) {
     if (!isBedType(typeId) || !positions?.length) return positions;
     let yaw = 0;
     try { yaw = player.getRotation().y; } catch { yaw = 0; }
-    const { positions: expanded } = expandBeds(positions.map((p) => ({
-        x: p.x, y: p.y, z: p.z, typeId,
-        direction: directionFromStates(p.states) ?? directionFromYaw(yaw),
-        states: p.states,
-        _alreadyHalf: p.states?.head_piece_bit === true,
-    })));
-    return expanded.map((p) => ({ x: p.x, y: p.y, z: p.z }));
+    const { positions: expanded } = expandBeds(positions.map((p) => {
+        const raw = p.states ?? p._resolvedStates ?? blockStates ?? {};
+        const flipped = (p._mx || p._my || p._mz) ? getFlippedStates(raw, !!p._mx, !!p._my, !!p._mz) : raw;
+        return {
+            x: p.x, y: p.y, z: p.z, typeId,
+            direction: directionFromStates(flipped) ?? directionFromYaw(yaw),
+            states: flipped,
+            _alreadyHalf: flipped?.head_piece_bit === true,
+        };
+    }));
+    return expanded.map((p) => ({ x: p.x, y: p.y, z: p.z, states: p._resolvedStates }));
 }
 
+const previewClock = createIdleClock();
 export function startPreviewLoop() {
     system.runInterval(() => {
         recordTick();
         tpsPart.text = `  §8-  ${tpsText()}`;
 
         const all = allPlayers();
-        if (!beginVisualizationTick(all, holdsBuildTool)) return;
-        const phase = nextIdlePhase();
+        const phase = previewClock.tick();
         for (let i = 0; i < all.length; i++) {
             const player = all[i];
-            // Players with building off and no book in hand (most of them, most of the time) every few ticks only.
-            if (idleSkip(player, i, previewBusy, phase)) continue;
-            if (!holdsBuildTool(player)) { previewBusy.delete(player); continue; }
+            const anchored = !!getState(player).anchor;
+            if (!anchored && idleSkip(player, i, previewBusy, phase, 1)) continue;
+            if (!holdsBuildTool(player)) {
+                if (anchored) clearAnchor(player);
+                previewBusy.delete(player);
+                continue;
+            }
             try {
                 const idle   = getState(player).mode === "disable";
                 const inHand = heldItemCached(player, idle ? IDLE_EVERY : 0);
@@ -937,7 +946,7 @@ export function startPreviewLoop() {
                     });
                 const shown = !positions.length ? positions
                     : isDestroy ? previewDestroyBeds(positions, dim)
-                    : previewBedPositions(positions, state.blockTypeId, player);
+                    : previewBedPositions(positions, state.blockTypeId, player, state.blockStates);
                 if (!shown.length) continue;
                 positions.length = 0;
                 for (const p of shown) positions.push(p);
@@ -1041,6 +1050,7 @@ export function startPreviewLoop() {
                             if (filtered.length) base = filtered;
                         }
                     }
+                    if (!isDestroy) base = previewBedPositions(base, state.blockTypeId, player, state.blockStates);
                     const wf = wireframePositions(base);
 
                     const count = wf.length;
@@ -1083,6 +1093,7 @@ export function startPreviewLoop() {
                             if (filtered.length) base = filtered;
                         }
                     }
+                    if (!isDestroy) base = previewBedPositions(base, state.blockTypeId, player, state.blockStates);
                     preview = adaptiveParticles(wireframePositions(base));
                 }
 

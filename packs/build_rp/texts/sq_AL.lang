@@ -154,8 +154,8 @@ eb.settings.admin_destroy_creative=§cAdministrues§r - Shkatërrimi: Vetëm Kre
 eb.settings.admin_allow_inf_reach=§cAdministrues§r - Lejo Gamën e Pafundme\n§7Joaktiv: Gama e Pafundme çaktivizohet globalisht
 eb.settings.admin_max_reach_cap=§cAdministrues§r - Distanca Max. e Gamës së Pafundme\n§7Aktuale: §e%1  §70 = pa kufi
 eb.settings.admin_max_blocks_cap=§cAdmin§r - Tavani i Blloqeve (për lojtar)\n§7Aktual: §e%1  §7Maksimumi: §e%2
-eb.settings.admin_default_max_blocks=§cAdmin§r - Default blocks per build\n§7Players with no saved limit. Current: §e%1  §7Cap: §e%2
-eb.set.admin_default_blocks=Default blocks per build
+eb.settings.admin_default_max_blocks=§cAdmin§r - Blloqe standarde për ndërtim\n§7Lojtarë pa limit të ruajtur. Aktual: §e%1  §7Maksimumi: §e%2
+eb.set.admin_default_blocks=Blloqe standarde për ndërtim
 eb.settings.admin_auto_give_book=§cAdministrues§r - Jep Automatikisht Librin e Ndërtimit\n§7Aktiv: lojtarët marrin librin kur hyjnë
 eb.settings.admin_config_tag=Kufizo /config në etiketën e kërkuar\n§7Nëse është AKTIV, vetëm lojtarët me etiketën e kërkuar mund të përdorin /config.
 

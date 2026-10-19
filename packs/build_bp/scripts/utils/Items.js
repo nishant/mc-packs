@@ -84,9 +84,10 @@ const idleClock = createIdleClock();
 export function nextIdlePhase() {
     return idleClock.tick();
 }
-export function idleSkip(player, index, busy, phase = playersTick) {
+export function idleSkip(player, index, busy, phase = playersTick, window = 1) {
     const now = playersTick; // the loops call allPlayers() first, this tick
-    const handFresh = (handTouched.get(player) ?? -Infinity) >= now - 1;
+    const span = Math.max(1, Number(window) || 1);
+    const handFresh = (handTouched.get(player) ?? -Infinity) >= now - span;
     return !idleDue(index, phase, busy.has(player), handFresh);
 }
 const touch = (player) => {
