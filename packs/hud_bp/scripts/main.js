@@ -73,17 +73,47 @@ function hudText(player, now, inBox = false) {
 }
 
 // Who sees the HUD, for packs that add a line under it: sent when it changes, every 5 seconds, and on realm:hud_ping.
-//   realm:hud_state {"players":["<player id>", ...]}
+//   realm:hud_state {"part":1,"parts":2,"seq":7,"players":["<player id>", ...]}
+// The whole list is sent as parts (numbered from 1, each under 2048 characters, one `seq` per publication); a
+// receiver replaces its list only when every part of one `seq` has arrived. No part/parts means one part.
 const STATE_EVERY = 100;
+const STATE_MESSAGE_LIMIT = 1900;
 let stateKey = "";
 let stateAt = -Infinity;
+let stateSeq = 0;
+
+/** @param {string} s */
+const utf8Length = (s) => {
+  let n = 0;
+  for (const ch of s) {
+    const c = /** @type {number} */ (ch.codePointAt(0));
+    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+  }
+  return n;
+};
+
+/** The realm:hud_state messages for a full list. @param {string[]} players @param {number} seq */
+function statePartMessages(players, seq) {
+  const envelope = (/** @type {string[]} */ list, /** @type {number} */ part, /** @type {number} */ parts) =>
+    JSON.stringify({ part, parts, seq, players: list });
+  /** @type {string[][]} */
+  const chunks = [[]];
+  for (const id of players) {
+    const last = /** @type {string[]} */ (chunks.at(-1));
+    if (utf8Length(envelope([id], 9999, 9999)) > STATE_MESSAGE_LIMIT) continue; // can't fit alone: never happens with real ids
+    if (last.length && utf8Length(envelope([...last, id], 9999, 9999)) > STATE_MESSAGE_LIMIT) chunks.push([id]);
+    else last.push(id);
+  }
+  return chunks.map((list, i) => envelope(list, i + 1, chunks.length));
+}
+
 /** @param {string[]} players @param {boolean} [now] send even if nothing changed */
 function sendState(players, now = false) {
   const key = players.join(",");
   if (!now && key === stateKey && system.currentTick - stateAt < STATE_EVERY) return;
   stateKey = key;
   stateAt = system.currentTick;
-  system.sendScriptEvent("realm:hud_state", JSON.stringify({ players: players.slice(0, 100) }));
+  for (const message of statePartMessages(players, ++stateSeq)) system.sendScriptEvent("realm:hud_state", message);
 }
 
 system.runInterval(() => {

@@ -31,7 +31,7 @@
 import "./diag.js";
 import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
-import { Budget } from "./budget.js";
+import { Budget, oldestDue } from "./budget.js";
 import { CONFIG } from "./config.js";
 import { G } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
@@ -684,12 +684,25 @@ let scanEachPeak = 0;
 /** Of scanMs, the time spent planning (which columns each viewer still needs). */
 let scanPlanMs = 0;
 
+let playersTick = -1;
+/** @type {Player[]} */
+let playersList = [];
+/** The online players, read from the game once a tick and shared by the scanner and the passes (callers don't change the list). */
+function playersNow() {
+  const tick = system.currentTick;
+  if (tick !== playersTick) {
+    playersList = world.getAllPlayers();
+    playersTick = tick;
+  }
+  return playersList;
+}
+
 system.runInterval(() => {
   if (get("enabled") !== true) return;
   const t0 = Date.now();
   const now = system.currentTick;
   scanBudget.tick();
-  const all = world.getAllPlayers();
+  const all = playersNow();
   planTurn.left = PLAN_EACH_TICK;
   // Each viewer is checked (moved, turned, a new list from their radar, the roof) every PLAN_EVERY ticks, a share of
   // them each tick, taking turns; the plans in between are read from where they stopped.
@@ -818,9 +831,13 @@ function planFor(player, now) {
   // minecart has little velocity of its own).
   const got = player.getVelocity?.() ?? { x: 0, z: 0 };
   const prev = lastPose.get(player.id);
-  lastPose.set(player.id, { x: at.x, z: at.z, tick: now });
   const dt = prev ? now - prev.tick : 0;
   const moved = prev && dt > 0 && dt <= 40 ? { x: (at.x - prev.x) / dt, z: (at.z - prev.z) / dt } : { x: 0, z: 0 };
+  if (prev) {
+    prev.x = at.x;
+    prev.z = at.z;
+    prev.tick = now;
+  } else lastPose.set(player.id, { x: at.x, z: at.z, tick: now });
   const vel = Math.abs(moved.x) + Math.abs(moved.z) > Math.abs(got.x) + Math.abs(got.z) && Math.abs(moved.x) + Math.abs(moved.z) < 16 ? moved : got;
   const lead = { x: Math.max(-28, Math.min(28, vel.x * 8)), z: Math.max(-28, Math.min(28, vel.z * 8)) };
   // Roof detection uses an exact surface sample from this same budget, never an extra per-viewer native read.
@@ -1160,11 +1177,10 @@ function pass(player, all, seen, now) {
  * sent only when its text changed, or with `refresh` when it is REFRESH ticks old (so it never fades); the title
  * is drawn once for both.
  * @param {Player} player @param {View} v @param {number} now @param {boolean} refresh
+ * @param {number} [heading] the facing the redraw's check already read (else read here, inside the draw budget) @param {{ x: number, y: number, z: number }} [at] the position it read
  * @returns {boolean} whether anything was sent
  */
-function render(player, v, now, refresh) {
-  const heading = headingOf(player);
-  const at = player.location;
+function render(player, v, now, refresh, heading = headingOf(player), at = player.location) {
   v.heading = heading;
   v.x = at.x;
   v.y = at.y;
@@ -1192,7 +1208,18 @@ function render(player, v, now, refresh) {
   // What realm:map_debug reports (kept as references; the pose object is made only when asked).
   let shot = lastText.get(player.id);
   if (!shot) lastText.set(player.id, (shot = { strip, line2: v.second, radar, dest: v.dest, target: v.target, at, dim: v.dim, heading, radius: v.radius, north: v.north }));
-  else Object.assign(shot, { strip, line2: v.second, radar, dest: v.dest, target: v.target, at, dim: v.dim, heading, radius: v.radius, north: v.north });
+  else {
+    shot.strip = strip;
+    shot.line2 = v.second;
+    shot.radar = radar;
+    shot.dest = v.dest;
+    shot.target = v.target;
+    shot.at = at;
+    shot.dim = v.dim;
+    shot.heading = heading;
+    shot.radius = v.radius;
+    shot.north = v.north;
+  }
   const compassText = v.second ? `${strip}${SPACER}\n${v.second}` : `${strip}${SPACER}`;
   if (side.held(player)) return false;
   const sent = lastSent.get(player.id);
@@ -1266,7 +1293,7 @@ system.runInterval(() => {
   if (!views.size) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. @type {{ p: Player, v: View, refresh: boolean, moved: boolean }[]} */
+  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `heading` and `at` are what the check read, so render() doesn't read them again. @type {{ p: Player, v: View, refresh: boolean, moved: boolean, heading: number | undefined, at: Vector3 }[]} */
   const due = [];
   const n = views.size;
   const checks = Math.min(n, TURN_CHECKS);
@@ -1287,11 +1314,13 @@ system.runInterval(() => {
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
       const sent = lastSent.get(p.id);
       const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
-      const moved = refresh || !!v.dirty || Math.abs(wrap(headingOf(p) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      /** @type {number | undefined} read only when the checks before it didn't already settle `moved` (as before); render() reads it otherwise, inside the draw budget */
+      let heading;
+      const moved = refresh || !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
       if (!moved && !v.lag) continue;
       // Moving fast (flying, riding): the scanner plans ahead for them often.
       if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
-      due.push({ p, v, refresh, moved });
+      due.push({ p, v, refresh, moved, heading, at });
     } catch (e) {
       console.warn(`[map] turn: ${e}`);
     }
@@ -1304,7 +1333,7 @@ system.runInterval(() => {
   let sends = 0;
   let built = 0;
   const refreshBefore = refreshSends;
-  for (const { p, v, refresh, moved } of due) {
+  for (const { p, v, refresh, moved, heading, at } of due) {
     if (sends >= TURN_BUDGET || built >= RENDER_BUDGET || !drawBudget.ok) break;
     // A radar waiting for its terrain, with nothing else new, waits for a rebuild in the budget.
     if (!moved && !rebuildBudget.ok) continue;
@@ -1312,7 +1341,7 @@ system.runInterval(() => {
     try {
       turnDraws++;
       built++;
-      if (render(p, v, now, refresh)) {
+      if (render(p, v, now, refresh, heading, at)) {
         sends++;
         if (refresh) refreshSends++;
       }
@@ -1392,7 +1421,7 @@ let seenAt = -Infinity;
 system.runInterval(() => {
   const now = system.currentTick;
   passBudget.tick();
-  const all = world.getAllPlayers();
+  const all = playersNow();
   if (!all.length) return;
   if (now - seenAt >= INTERVAL) {
     seenAt = now;
@@ -1407,18 +1436,17 @@ system.runInterval(() => {
     }
     costPasses++;
   }
-  /** @type {Player[]} */
-  let due = [];
-  for (const p of all) if (now - (passAt.get(p.id) ?? -Infinity) >= INTERVAL) due.push(p);
-  if (!due.length) return;
   const each = Math.min(PASS_EACH, Math.max(1, Math.ceil(all.length / INTERVAL)));
-  if (due.length > each) due = due.sort((a, b) => (passAt.get(a.id) ?? -Infinity) - (passAt.get(b.id) ?? -Infinity)).slice(0, each);
+  const due = oldestDue(all, passAt, now, INTERVAL, each);
+  if (!due.length) return;
   for (const p of due) {
     if (!passBudget.ok) break;
+    // The shared list can hold a player who left earlier this tick: no entry for them (playerLeave already ran).
+    if (!p.isValid) continue;
     passAt.set(p.id, now);
     const t = Date.now();
     try {
-      if (p.isValid) pass(p, all, seen, now);
+      pass(p, all, seen, now);
     } catch (e) {
       console.warn(`[map] ${e}`);
     }

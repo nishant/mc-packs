@@ -37,3 +37,30 @@ export class Budget {
     this.used += ms;
   }
 }
+
+/**
+ * The (at most `each`) items whose last turn was `interval` ticks ago or more, the longest-waiting first (never-served ones
+ * first of all, ties in list order); when no more than `each` are due, they come in list order. One lookup per item and no
+ * sorting of the whole list: with many players waiting on a small budget, the same few are picked every tick.
+ * @template {{ id: string }} T
+ * @param {readonly T[]} items @param {{ get(id: string): number | undefined }} lastAt @param {number} now @param {number} interval @param {number} each
+ * @returns {T[]}
+ */
+export function oldestDue(items, lastAt, now, interval, each) {
+  /** @type {{ item: T, at: number, i: number }[]} */
+  const best = [];
+  let due = 0;
+  for (let i = 0; i < items.length; i++) {
+    const at = lastAt.get(items[i].id) ?? -Infinity;
+    if (now - at < interval) continue;
+    due++;
+    // Strictly older than the one it displaces, so an equal one that came earlier in the list stays ahead.
+    let j = best.length;
+    while (j > 0 && at < best[j - 1].at) j--;
+    if (j >= each) continue;
+    best.splice(j, 0, { item: items[i], at, i });
+    if (best.length > each) best.pop();
+  }
+  if (due <= each) best.sort((a, b) => a.i - b.i);
+  return best.map((b) => b.item);
+}
