@@ -213,6 +213,35 @@ export default async function (t) {
   const under = (s) => ({ x: Math.floor(s.x), y: Math.floor(s.y) - 1, z: Math.floor(s.z) });
   const clueMessages = (since) => t.messages(p, { since }).filter((m) => /\[Clue \d\/4\]/.test(m.plain));
   const forms0 = t.forms(p).length;
+  /** Every damage event the player took: who dealt it and how, so the zombie case can tell a real hit from injected damage. */
+  const hurts = [];
+  t.world.afterEvents.entityHurt.subscribe(({ hurtEntity, damage, damageSource }) => {
+    try {
+      if (hurtEntity.typeId === "minecraft:player") hurts.push({ tick: sys.currentTick, damage, cause: damageSource.cause, by: damageSource.damagingEntity?.typeId });
+    } catch {}
+  });
+  /**
+   * SYNTHETIC reset, OLD SOURCE ONLY and never production recovery: after a probe's failure has been recorded, closes the
+   * forms the old source leaked and clears its stuck lock so the next independent probe can run. The fixed source gets no
+   * such cleanup: a leak there must fail the next probe.
+   */
+  const syntheticReset = async (why) => {
+    if (inbox.pong.cancel) return;
+    const open = t.forms(p).filter((f) => !f.answered);
+    const st = await ask(who);
+    if (!open.length && !st.busy) return;
+    t.log(`SYNTHETIC reset (old source only, not production recovery) after ${why}: ${open.length} unanswered form(s) closed, busy ${st.busy} cleared with sgs:cancel`);
+    for (const f of open) {
+      try {
+        f.answer(null);
+      } catch (e) {
+        t.log(`${why}: the harness refused to close a leaked form: ${e}`);
+      }
+    }
+    await t.wait(5);
+    send("sgs:cancel", who);
+    await t.wait(5);
+  };
 
   // ---- 1. unrelated ground does nothing; a tap next to a real clue finds it; chat keeps the whole text; no form ---------
   let since = t.tick;
@@ -229,36 +258,59 @@ export default async function (t) {
   send("sgs:tap", { ...who, ...under(spots[0]) });
   await t.wait(20);
   lifecycle("clue again", "n/a", clueMessages(since).length === 1 && (await ask(who)).progress === 1, "the same clue is not counted twice");
+  await syntheticReset("the clue tap");
 
-  // ---- 2. the owner's path: zombies closing in, a clue found by walking up to it, then dying ----------------------------
+  // ---- 2. the owner's path: zombies closing in, a clue found by walking up to it, a real zombie hit, dying ---------------
+  // Fixture-owned state first: the End probes left resistance and slow falling on the player, and nothing may keep a zombie from hurting them.
+  p.removeEffect("resistance");
+  p.removeEffect("slow_falling");
+  try {
+    p.setGameMode(t.mc.GameMode.Survival);
+  } catch (e) {
+    t.log(`could not restore Survival: ${e}`);
+  }
+  t.server("/difficulty normal");
   const zombies = [];
   const at1 = { x: spots[1].x, y: spots[1].y - 0.5, z: spots[1].z };
+  const fz = t.forms(p).length;
   since = t.tick; // before the teleport: the walk-up can find the clue at once
   p.teleport(at1);
-  for (const [dx, dz] of [[6, 0], [-6, 0], [0, 6]]) zombies.push(t.dimension.spawnEntity("minecraft:zombie", { x: at1.x + dx, y: at1.y, z: at1.z + dz }));
+  for (const [dx, dz] of [[3, 0], [-3, 0], [0, 3]]) zombies.push(t.dimension.spawnEntity("minecraft:zombie", { x: at1.x + dx, y: at1.y, z: at1.z + dz }));
   await poll(() => clueMessages(since).length > 0, 80);
   const discovered = clueMessages(since).length;
+  const dieBefore = (await ask(who)).native.die;
   p.getComponent("minecraft:health").setCurrentValue(2);
-  let killer = "a zombie's hit";
-  await poll(() => p.getComponent("minecraft:health").currentValue <= 0, 240);
+  const hurtFrom = hurts.length;
+  const zombieHit = () => hurts.slice(hurtFrom).find((h) => h.by === "minecraft:zombie");
+  let killer = "NATURAL zombie melee";
+  await poll(() => zombieHit(), 400);
+  if (!zombieHit()) {
+    // The simulated player did not get hit by the zombie AI in time: labelled, real zombie as the damaging entity, no natural melee claimed.
+    killer = "INJECTED applyDamage(entityAttack, damagingEntity: a real zombie)";
+    p.applyDamage(2, { cause: t.mc.EntityDamageCause.entityAttack, damagingEntity: zombies.find((z) => z.isValid) });
+  }
+  await poll(() => p.getComponent("minecraft:health").currentValue <= 0, 60);
   if (p.getComponent("minecraft:health").currentValue > 0) {
-    killer = "SimulatedPlayer.kill() (no zombie hit landed)";
+    killer += " + SimulatedPlayer.kill() (the damage did not kill)";
     p.kill();
   }
   await t.wait(15);
   for (const z of zombies) if (z.isValid) z.remove();
   s = await ask(who);
-  lifecycle("zombie death", s.native.die > 0 ? "NATIVE" : "WATCHDOG", discovered > 0 && s.health <= 0 && !s.busy && t.forms(p).length === forms0, `clue found by walking up ${discovered > 0}, killed by ${killer}, health ${s.health}, busy ${s.busy}, forms opened ${t.forms(p).length - forms0}, native entityDie ${s.native.die}`);
+  const hit = zombieHit();
+  lifecycle("zombie death", s.native.die > dieBefore ? "NATIVE" : "WATCHDOG", discovered > 0 && !!hit && s.health <= 0 && !s.busy && t.forms(p).length === fz, `clue found by walking up ${discovered > 0}, ${killer}, damage event ${hit ? `${hit.cause} ${hit.damage} by ${hit.by}` : "NONE"}, health ${s.health}, busy ${s.busy}, forms opened ${t.forms(p).length - fz}, native entityDie +${s.native.die - dieBefore}`);
   p.respawn();
   await t.wait(40);
   s = await ask(who);
   lifecycle("respawn", s.native.respawn > 0 ? "NATIVE" : "WATCHDOG", s.health > 0 && !s.busy, `health ${s.health}, busy ${s.busy}, native playerSpawn(respawn) ${s.native.respawn}, saved bits ${s.bits}`);
+  const fr = t.forms(p).length;
   since = t.tick;
   send("sgs:tap", { ...who, ...under(spots[2]) });
   const third = await poll(() => clueMessages(since)[0], 60);
   await t.wait(20);
   s = await ask(who);
-  lifecycle("after respawn", "n/a", !!third && s.progress >= 2 && !s.busy && t.forms(p).length === forms0, `a clue still counts after respawning: progress ${s.progress}, forms ${t.forms(p).length - forms0}`);
+  lifecycle("after respawn", "n/a", !!third && s.progress >= 2 && !s.busy && t.forms(p).length === fr, `a clue still counts after respawning: progress ${s.progress}, forms ${t.forms(p).length - fr}`);
+  await syntheticReset("the zombie death and respawn");
 
   // ---- 3. an open form of ours when the player dies, changes dimension or leaves ------------------------------------
   /** Opens the production probe form (exclusive + show) and returns the harness's form, left unanswered. */
@@ -281,6 +333,7 @@ export default async function (t) {
   p.respawn();
   await t.wait(40);
   await backHome();
+  await syntheticReset("the death with an open form");
 
   // dimension change with the form open (the End is already loaded and has its platform)
   form = await openHold("dimension");
@@ -290,6 +343,7 @@ export default async function (t) {
   s = await ask(who);
   lifecycle("dimension", s.native.dimension > 0 ? "NATIVE" : "WATCHDOG", end?.result === "undefined" && end.tick - mark <= 20 && !s.busy && !form.answered, `ended ${end ? end.tick - mark : "never"} ticks after the change (result ${end?.result}), busy ${s.busy}, native playerDimensionChange ${s.native.dimension}`);
   await backHome();
+  await syntheticReset("the dimension change with an open form");
 
   // UserBusy retries after a moment, UserClosed does not open it again
   const busyForm = await openHold("busy-closed");
