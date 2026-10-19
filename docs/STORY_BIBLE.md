@@ -619,6 +619,11 @@ story log): use it for every revelation so players can reread the story they've 
 an act finale 10 levels, 150-300 Crowns and a title or relic. Hints cost 25% of a chapter's levels
 and Crowns (`hintPenalty`).
 
+**Approved exception (owner decision, 2026-10-19, O64):** the Act 5 Lantern Night rewards (`herald`, `choice`,
+`dawn_relight`) and the deep side chapter's `last_listen` stay as written, above this scale on purpose, because the
+owner wants them intentionally generous. They are the only approved exceptions; no other reward moves to them.
+`tools/check-stories.allow.json` lists these four findings.
+
 ### Story relics (added to the Relics pack)
 
 The abilities below are the plan; the shipped ones differ in places (the Gray Choir Mask halves Choir

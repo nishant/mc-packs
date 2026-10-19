@@ -94,7 +94,7 @@ npm run bundle -- --all       # or: every behavior pack in one dist/realm_bundle
 npm run bundle -- --resources # and every resource pack in one dist/realm_resources.mcpack
 ```
 
-Open the `.mcpack` on a device with Minecraft, then go to **Realms → ✏️ Edit Realm → Behavior Packs** and activate it (**Resource Packs** for `realm_resources` or a single resource pack, at the top of the list). Use the individual packs **or** a bundle, never both. See [Installing](docs/PACKS.md#installing-on-a-realm) and [Bundling](docs/PACKS.md#bundling-packs-into-one).
+Open the `.mcpack` on a device with Minecraft, then go to **Realms → ✏️ Edit Realm → Behavior Packs** and activate it (**Resource Packs** for `realm_resources` or a single resource pack, at the top of the list). Use the individual packs **or** a bundle, never both. See [Installing](docs/PACKS.md#installing-on-a-realm) and [Bundling](docs/PACKS.md#bundling-packs-into-one). Public-release to-dos are in [docs/RELEASE_TODO.md](docs/RELEASE_TODO.md).
 
 With Claude, `/bundle-packs` asks which packs to include (**All packs** is the first option) and builds the bundle.
 
