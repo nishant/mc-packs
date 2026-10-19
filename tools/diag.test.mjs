@@ -9,6 +9,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { diagFor } from "./lib/diag-sync.mjs";
 
 const SRC = readFileSync(join(import.meta.dirname, "diag-shared.js"), "utf8");
 
@@ -62,11 +63,12 @@ function fakeServer() {
 }
 
 /** Writes one pack's copy of diag.js and imports it (a new module each time). @param {string} dir @param {string} pack */
-async function loadCopy(dir, pack, version = "1.0.0") {
+async function loadCopy(dir, pack, version = "1.0.0", prefixes = []) {
   const src = SRC.replace(/^import .* from "@minecraft\/server";$/m, "const { CustomCommandRegistry, System, World, system, world } = globalThis.__mcFake;")
     .replace('const PACK = "__PACK__";', `const PACK = ${JSON.stringify(pack)};`)
     .replace('const VERSION = "__VERSION__";', `const VERSION = ${JSON.stringify(version)};`)
-    .replace('const NAME = "__NAME__";', `const NAME = ${JSON.stringify(pack.toUpperCase())};`);
+    .replace('const NAME = "__NAME__";', `const NAME = ${JSON.stringify(pack.toUpperCase())};`)
+    .replace("const PREFIXES = [];", `const PREFIXES = ${JSON.stringify(prefixes)};`);
   mkdirSync(join(dir, pack), { recursive: true });
   const file = join(dir, pack, "diag.js");
   writeFileSync(file, src);
@@ -187,4 +189,68 @@ test("a pack alone in its context owns its whole storage and clears all of it", 
   assert.equal(world.props.size, 0, "writes are ignored until the next reload");
   world.setDynamicProperty("solo:x", undefined); // a delete is harmless
   assert.equal(system.afterEvents.scriptEventReceive.subs.length, 1, "with no pack listener, diag listens itself");
+});
+
+test("forget includes untouched saved keys from a declared namespace, not another pack or unknown data", async () => {
+  const mc = fakeServer();
+  globalThis.__mcFake = mc;
+  delete globalThis.__realmDiag;
+  delete globalThis.__realmDiagWrapped;
+  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  mc.world.props.set("a:untouched", "saved before startup");
+  mc.world.props.set("b:untouched", "another pack");
+  mc.world.props.set("unknown:legacy", "no declared owner");
+  await loadCopy(dir, "a_bp", "1.0.0", ["a"]);
+  await loadCopy(dir, "b_bp", "1.0.0", ["b"]);
+  mc.step(1);
+  mc.system.sendScriptEvent("realm:diag_forget", JSON.stringify({ id: "untouched", pack: "a_bp", confirm: "FORGET a_bp" }));
+  mc.step(2);
+  assert.equal(mc.world.props.has("a:untouched"), false, "an untouched key is still part of a's data");
+  assert.equal(mc.world.props.get("b:untouched"), "another pack");
+  assert.equal(mc.world.props.get("unknown:legacy"), "no declared owner");
+  assert.equal(pongs(mc, "realm:diag_forgot").find((p) => p.id === "untouched").removed, 1);
+});
+
+test("a foreign read during module startup cannot steal a declared namespace", async () => {
+  const mc = fakeServer();
+  globalThis.__mcFake = mc;
+  delete globalThis.__realmDiag;
+  delete globalThis.__realmDiagWrapped;
+  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  mc.world.props.set("b:old", "owned by b");
+  await loadCopy(dir, "b_bp", "1.0.0", ["b"]);
+  await loadCopy(dir, "a_bp", "1.0.0", ["a"]);
+  assert.equal(mc.world.getDynamicProperty("b:old"), "owned by b");
+  mc.step(1);
+  mc.system.sendScriptEvent("realm:diag_forget", JSON.stringify({ id: "foreign", pack: "a_bp", confirm: "FORGET a_bp" }));
+  mc.step(2);
+  assert.equal(mc.world.props.get("b:old"), "owned by b", "reading it did not transfer ownership to a");
+});
+
+test("a declared namespace collision never guesses the owner of an untouched key", async () => {
+  const mc = fakeServer();
+  globalThis.__mcFake = mc;
+  delete globalThis.__realmDiag;
+  delete globalThis.__realmDiagWrapped;
+  const dir = mkdtempSync(join(tmpdir(), "diag-"));
+  mc.world.props.set("shared:untouched", "keep ambiguous data");
+  await loadCopy(dir, "a_bp", "1.0.0", ["shared"]);
+  await loadCopy(dir, "b_bp", "1.0.0", ["shared"]);
+  mc.step(1);
+  mc.system.sendScriptEvent("realm:diag_forget", JSON.stringify({ id: "shared", pack: "a_bp", confirm: "FORGET a_bp" }));
+  mc.step(2);
+  assert.equal(mc.world.props.get("shared:untouched"), "keep ambiguous data");
+});
+
+test("generated diagnostics declare world namespaces, not item-only namespaces", () => {
+  for (const [pack, expected] of [
+    ["map_bp", ["map"]],
+    ["build_bp", ["build", "eb"]],
+    ["relics_bp", ["relics"]],
+    ["settings_bp", []],
+  ]) {
+    const declaration = /^const PREFIXES = (\[[^\n]*\]);$/m.exec(diagFor(pack));
+    assert.ok(declaration, `${pack} declares its ownership metadata`);
+    assert.deepEqual(JSON.parse(declaration[1]), expected, pack);
+  }
 });
