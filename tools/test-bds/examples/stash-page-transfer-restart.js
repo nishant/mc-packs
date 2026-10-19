@@ -32,8 +32,9 @@ export default async function (t) {
     t.assert(menu.buttons.some((b) => /^Move to page/.test(b)), "Move to page is available");
     const stacks = t.waitForm(p);
     menu.answer("Move to page");
-    const destination = t.waitForm(p);
-    (await stacks).answer("Whole row 1");
+    const stackForm = await stacks;
+    const destination = t.waitForm(p, { title: /Move to which page/ });
+    stackForm.answer("Whole row 1");
     (await destination).answer(`Page #${n}`);
     await t.waitMessage(p, new RegExp(`Moved 3 stacks \\(3 items\\) to Page #${n}`), { since, timeout: 200 });
     await t.wait(4);
@@ -89,8 +90,9 @@ export default async function (t) {
   t.assert(enchants.length === 1 && enchants[0].type.id === "sharpness" && enchants[0].level === 3, "moved sword enchantment survived");
   const opening = t.waitForm(p);
   t.cmd(p, "/realm:inv");
+  const menu = await opening;
   const scanned = t.waitForm(p);
-  (await opening).answer("Scan all items");
+  menu.answer("Scan all items");
   const scan = await scanned;
   const items = scan.buttons.filter((button) => / x\d+/.test(button));
   t.assert(items.length === 3 && items.every((button) => / x1\b/.test(button)), "all committed pages contain exactly one of each moved stack");
