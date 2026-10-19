@@ -168,6 +168,14 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   shards; audit every step that depends on blocks built once.
 - O75 (blocker) Softlock in Signs in the Sky at the Old Graveyard: tapping an empty spot while searching for clues
   froze movement, interaction and then the camera; after being killed there was no respawn screen until Escape.
+  **Server-side fix done in `6e7352ba3744447d88df8d40f404909933821bc1` and
+  `ce164b9ec609a4b1a1cdbc82b0cddc60742845ff`:** clue discovery is chat-only, pending conversations have owned
+  lifecycle cancellation and a safety timeout, and stale answers cannot accept or pay after death or travel
+  between dimensions. The native regression records 13 genuine failures before and 35/35 passes after, including
+  natural zombie melee/death, actual stale-report rewards, respawn, leave/rejoin IDs, dimensions and timeout
+  recovery before the shim fallback. The versioned candidate also passes this case in the affected Saga suite.
+  Camera/respawn-screen pixels and simultaneous unrelated add-on forms remain later private W2 human acceptance;
+  headless results do not certify them.
 
 ## Owner decisions (no task; for nishant)
 
