@@ -29,8 +29,8 @@ const MAX_ATTEMPTS = 30;
 
 /** Saved data other packs write by themselves when a world loads, before any player has played: not a sign of an older world. */
 const BOOT_PREFIXES = ["diag:", "settings:", "admin:", "news:", "help:", "realm:", "weather:"];
-/** The same, for single keys (a pack that writes one key at load but keeps player data under the same prefix). */
-const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last"]);
+/** The same, for single keys (a pack that writes one key at load but keeps player data under the same prefix; find:mig is Chest Finder's load-time marker, saved even in an empty world). */
+const BOOT_KEYS = new Set(["atlas:origin", "expedition:migrated", "bounty:day", "caravan:last", "find:mig"]);
 
 /**
  * Decided once, when the world loads (before any player joins and so before packs write player data):
