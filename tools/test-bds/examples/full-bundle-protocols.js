@@ -85,6 +85,7 @@ export default async function (t) {
     t.assert(r.mode === "callback-replay", `tap ${id} is labeled callback-replay (${r.mode})`);
     t.assert(!r.error, `callback-replay ${id} (${r.signal || extra.signal || "interact"}): ${r.error || "ok"}`);
     t.log(`callback-replay ${id} ${r.signal} cancel=${r.cancel} listeners=${r.listeners}`);
+    await t.wait(1);
     return r;
   };
   const row = (r, pack) => r.trace.find((x) => x.pack === pack);

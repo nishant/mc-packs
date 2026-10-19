@@ -178,6 +178,23 @@ test("native hit report counts only the requested signal", async () => {
   assert.doesNotMatch(src, /hits:\s*nativeHits\.length/);
 });
 
+test("replay sets sneaking only for the case and restores the baseline after deferred work", async () => {
+  const { c13TapSource } = await import("./full-bundle-protocols.mjs");
+  const src = c13TapSource();
+  assert.match(src, /sneakBaseline/);
+  assert.match(src, /player\.isSneaking = q\.sneaking === true/);
+  const setAt = src.indexOf("player.isSneaking = q.sneaking === true");
+  const callAt = src.indexOf("row.callback(event)");
+  const restoreAt = src.lastIndexOf("sneakBaseline.get");
+  assert.ok(setAt > 0 && setAt < callAt, "sneaking is set before production callbacks");
+  assert.ok(restoreAt > callAt, "baseline restore is queued after production callbacks");
+  assert.match(src.slice(callAt, restoreAt), /system\.run\(/);
+  assert.match(src, /sneakToken\.get\([^)]+\) !== /);
+  const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
+  const replayFn = scenario.slice(scenario.indexOf("const replay = async"), scenario.indexOf("const row ="));
+  assert.match(replayFn, /await t\.wait\(1\)/);
+});
+
 test("a Windows and a POSIX stack both name the pack that subscribed", () => {
   const dir = scratch("c13-stack-");
   const packed = path.join(dir, "src");
