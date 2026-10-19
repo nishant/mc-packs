@@ -1099,7 +1099,7 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // Access checks: which containers a player may not open, asked across packs
 // ---------------------------------------------------------------------------
 //   realm:access_check        { id, player, spots: [[dim, x, y, z], ...] }  (at most 40 spots per message)
-//   realm:access_check_result { id, from, closed: [i, ...] }                 (indexes into that message's spots)
+//   realm:access_check_result { id, from, closed: [i, ...], ours?: [i, ...] } (indexes into that message's spots)
 // Every pack that keeps players out of blocks answers every check, with nothing closed too, so an asker learns
 // who answers: this pack (someone else's locked container) and Land Claims (someone else's claim).
 
@@ -1164,6 +1164,8 @@ function answerAccess(message) {
   const pid = String(q.player ?? "");
   /** @type {number[]} */
   const closed = [];
+  /** @type {number[]} spots whose lock is the player's own or shared with them */
+  const ours = [];
   if (locksOn() && locks().size && Array.isArray(q.spots)) {
     /** @type {Map<string, (b: Block) => string | undefined>} one read per chest for the whole message, per dimension */
     const sigs = new Map();
@@ -1182,9 +1184,10 @@ function answerAccess(message) {
         }
       }
       if (lock && lock.o !== pid && !lock.s.some((w) => w.i === pid)) closed.push(i);
+      else if (lock) ours.push(i);
     });
   }
-  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "stash_bp", closed }));
+  system.sendScriptEvent("realm:access_check_result", JSON.stringify({ id: String(q.id ?? "").slice(0, 32), from: "stash_bp", closed, ours }));
 }
 
 // Learn early who answers access checks, so the first quick stack doesn't wait.
