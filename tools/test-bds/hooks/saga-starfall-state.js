@@ -1,6 +1,6 @@
 // Test-only identity adapter: preserve real saga:p bytes across simulated players' changing IDs.
 import { system, world } from "@minecraft/server";
-import { forget, markDirty, sagaOf, storyById } from "./data.js";
+import { forget, installed, markDirty, sagaOf, storyById } from "./data.js";
 import { countItem, crownsOf } from "./objectives.js";
 import { buildAt, placesOf } from "./places.js";
 
@@ -20,6 +20,7 @@ const snapshot = (player) => {
     playerId: player.id,
     progress: sagaOf(player).s.act1_signs,
     shards: countItem(player, "minecraft:amethyst_shard"),
+    packsReady: installed.ready === true,
     level: levelOf(player),
     crowns: crownsOf(player),
     hint: chapter.hint,
