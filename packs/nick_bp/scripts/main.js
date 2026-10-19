@@ -263,18 +263,51 @@ async function editMine(player, tried) {
   player.sendMessage(`§aYour nickname is now §${c.code}${name}§a.§r Chat still shows your gamertag.`);
 }
 
-/** Operators: every saved nickname, to clear any of them. @param {Player} player */
-async function allNicks(player) {
-  const list = [...nicks()].sort((a, b) => a[1].n.localeCompare(b[1].n));
+const PAGE_SIZE = 20; // nicknames per page of the operators' list: a form with hundreds of buttons is unusable and slow to send
+
+/**
+ * Operators: saved nicknames, a page at a time and searchable by nickname or gamertag, to clear any of them.
+ * @param {Player} player @param {number} [page] @param {string} [query]
+ */
+async function allNicks(player, page = 0, query = "") {
+  if (!isOp(player)) return player.sendMessage("§cOnly operators can see other players' nicknames.");
+  const want = query.trim().toLowerCase();
+  const list = [...nicks()]
+    .filter(([, nick]) => !want || nick.n.toLowerCase().includes(want) || nick.g.toLowerCase().includes(want))
+    .sort((a, b) => a[1].n.localeCompare(b[1].n));
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const at = Math.min(Math.max(0, page), pages - 1);
+  const shownHere = list.slice(at * PAGE_SIZE, (at + 1) * PAGE_SIZE);
   const form = new ActionFormData()
     .title("§lPlayers' nicknames")
-    .body(list.length ? "Tap a nickname to clear it." : "Nobody has a nickname.");
-  for (const [, nick] of list) form.button(`§${nick.c}${nick.n}§r\n§8${nick.g || "unknown gamertag"}`);
-  form.button("Back");
+    .body(
+      (list.length ? `Tap a nickname to clear it. ${list.length} ${want ? "match" : "saved"}${pages > 1 ? `, page ${at + 1} of ${pages}` : ""}.` : want ? "No nickname or gamertag matches." : "Nobody has a nickname.") +
+        (want ? `\n§7Search: ${query.trim().replace(/§/g, "")}` : "")
+    );
+  for (const [, nick] of shownHere) form.button(`§${nick.c}${nick.n}§r\n§8${nick.g || "unknown gamertag"}`);
+  const extra = /** @type {string[]} */ ([]);
+  extra.push("search");
+  if (want) extra.push("clear");
+  if (at > 0) extra.push("prev");
+  if (at < pages - 1) extra.push("next");
+  extra.push("back");
+  const labels = { search: "Search by name", clear: "Show everyone", prev: "Previous page", next: "Next page", back: "Back" };
+  for (const e of extra) form.button(labels[/** @type {keyof typeof labels} */ (e)]);
   const res = await show(player, form);
   if (!res || res.canceled || res.selection === undefined || !player.isValid) return;
-  const picked = list[res.selection];
-  if (!picked) return mainMenu(player);
+  const picked = shownHere[res.selection];
+  if (!picked) {
+    const action = extra[res.selection - shownHere.length];
+    if (action === "search") {
+      const ask = await show(player, new ModalFormData().title("§lSearch nicknames").textField("Part of a nickname or gamertag", "", { defaultValue: query }).submitButton("Search"));
+      if (!ask || ask.canceled || !player.isValid) return allNicks(player, at, query);
+      return allNicks(player, 0, String(ask.formValues?.[0] ?? "").slice(0, 32));
+    }
+    if (action === "clear") return allNicks(player, 0, "");
+    if (action === "prev") return allNicks(player, at - 1, query);
+    if (action === "next") return allNicks(player, at + 1, query);
+    return mainMenu(player);
+  }
   const [id, nick] = picked;
   const sure = await show(
     player,
@@ -285,8 +318,9 @@ async function allNicks(player) {
       .button("Back")
   );
   if (!sure || sure.canceled || !player.isValid) return;
-  if (sure.selection !== 0) return allNicks(player);
+  if (sure.selection !== 0) return allNicks(player, at, query);
   if (!isOp(player)) return player.sendMessage("§cOnly operators can clear other players' nicknames."); // de-opped while the menu was open
+  if (nicks().get(id) !== nick) return allNicks(player, at, query); // changed while the form was open: don't clear the wrong one
   save(id, undefined);
   const target = world.getAllPlayers().find((p) => p.id === id);
   if (target) {
@@ -294,7 +328,7 @@ async function allNicks(player) {
     if (target.id !== player.id) target.sendMessage("§7An operator cleared your nickname.");
   }
   player.sendMessage(`§7Cleared ${nick.n} (${nick.g || "unknown gamertag"}).`);
-  return allNicks(player);
+  return allNicks(player, at, query);
 }
 
 /** @param {Player} player */

@@ -3,6 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { SIZE_OPTIONS } from "../packs/admin_bp/scripts/presets.js";
+
+test("Large server uses the operator-only 2000-block public building preset with no Infinite Reach", () => {
+  const build = new Map(SIZE_OPTIONS.filter((option) => option.pack === "build_bp").map((option) => [option.key, option.large]));
+  assert.equal(build.get("maxBlocksCap"), 2000);
+  assert.equal(build.get("operatorsOnly"), true);
+  assert.equal(build.get("allowInfiniteReach"), false);
+});
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const adminDir = path.join(root, "packs/admin_bp/scripts");
@@ -216,12 +224,18 @@ class MockWorld {
   constructor() {
     this.props = new Map();
     this.players = [];
+    const signal = (field) => {
+      const handlers = [];
+      this[field] = (event) => { for (const handler of handlers) handler(event); };
+      return { subscribe: (handler) => { handlers.push(handler); return handler; } };
+    };
     this.afterEvents = {
-      worldLoad: { subscribe: (fn) => (this._onWorldLoad = fn) },
-      playerLeave: { subscribe: (fn) => (this._onLeave = fn) },
-      playerSpawn: { subscribe: (fn) => (this._onSpawn = fn) },
-      playerInventoryItemChange: { subscribe: (fn) => (this._onInvChange = fn) },
-      itemUse: { subscribe: (fn) => (this._onItemUse = fn) },
+      worldLoad: signal("_onWorldLoad"),
+      playerLeave: signal("_onLeave"),
+      playerSpawn: signal("_onSpawn"),
+      playerInventoryItemChange: signal("_onInvChange"),
+      itemUse: signal("_onItemUse"),
+      entityDie: signal("_onDie"),
     };
     MockWorld._current = this;
   }
@@ -362,7 +376,7 @@ export const { CommandPermissionLevel, CustomCommandParamType, CustomCommandRegi
 export const { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } = m;\n`
     );
 
-    for (const file of ["config.js", "settings.js", "actions.js", "catalog.js", "presets.js", "zones.js", "script-events.js", "diag.js", "diagnostics.js", "setup.js", "main.js"]) {
+    for (const file of ["config.js", "settings.js", "actions.js", "catalog.js", "presets.js", "zones.js", "script-events.js", "diag.js", "diagnostics.js", "lifecycle.js", "setup.js", "main.js"]) {
       const src = fs.readFileSync(path.join(adminDir, file), "utf8");
       const rewritten = src
         .replaceAll('"@minecraft/server"', JSON.stringify(pathToFileURL(serverStub).href))

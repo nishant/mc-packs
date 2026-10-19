@@ -4,25 +4,47 @@
     "name": "Quick Stack & Sort",
     "description": "Sneak-tap any chest, barrel or shulker box for a menu: sort it, lock it, quick stack into nearby storage, sort your inventory. /realm:stash /realm:sort /realm:stash_help",
     "uuid": "c4cceedd-39c2-4b29-8276-2a1cc1afe7b4",
-    "version": [1, 8, 3],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      1,
+      8,
+      5
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "data",
       "uuid": "a6d37198-47d6-4f63-91b7-36e98962a418",
-      "version": [1, 0, 0]
+      "version": [
+        1,
+        0,
+        0
+      ]
     },
     {
       "type": "script",
       "language": "javascript",
       "uuid": "c685332d-8a4e-461b-8c77-fb858e660dd8",
-      "version": [1, 0, 0],
+      "version": [
+        1,
+        0,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }
