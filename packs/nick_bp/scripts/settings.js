@@ -11,6 +11,8 @@ const BASE = CONFIG;
 /** @type {Option[]} */
 const OPTIONS = [
   { key: "forgetGamertagsAfterDays", type: "int", scope: "world", label: "Forget gamertags after (days)", help: "A gamertag nobody used for this long stops being reserved. Nicknames are kept. 0 = never", min: 0, max: 3650, step: 5 },
+  { key: "reservedNames", type: "text", scope: "world", label: "Reserved nicknames", help: "Comma separated; players can't take them (operators can). Saved nicknames are kept" },
+  { key: "reservedGamertags", type: "text", scope: "world", label: "Reserved operator gamertags", help: "Comma separated; nobody else can take them, even offline. The game can't tell which offline players are operators" },
   { key: "enabled", type: "bool", scope: "world", label: "Nicknames", help: "Players can show a nickname above their head with /realm:nick. Disabled: gamertags again, nicknames are kept" },
   { key: "showGamertag", type: "bool", scope: "world", label: "Gamertag under nicknames", help: "A second, gray line with the player's gamertag" },
 ];

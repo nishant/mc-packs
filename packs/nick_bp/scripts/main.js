@@ -22,6 +22,20 @@ const KEY_PREFIX = "nick:p:"; // world property per player: nick:p:<player id> -
 const SEEN_PREFIX = "nick:g:"; // world property per gamertag ever seen here: nick:g:<lowercase gamertag> -> player id
 const TIME_PREFIX = "nick:t:"; // world property per player: nick:t:<player id> -> when last seen (ms)
 const NAME_RULE = /^[A-Za-z0-9_ ]{3,16}$/;
+const LIST_MAX = 40; // entries read from a reserved list
+/** A name as compared with the reserved lists: lowercase, without spaces or underscores ("Ad min" and "Admin_" are "admin"). @param {string} s */
+const squash = (s) => s.toLowerCase().replace(/[ _]/g, "");
+/** @param {string} key "reservedNames" or "reservedGamertags" @returns {Set<string>} */
+function reservedSet(key) {
+  const v = get(key);
+  const out = new Set();
+  if (typeof v !== "string") return out;
+  for (const part of v.split(/[,\n]/).slice(0, LIST_MAX)) {
+    const s = squash(part.trim());
+    if (s) out.add(s);
+  }
+  return out;
+}
 const DISABLED = "Nicknames are disabled on this realm. An operator can enable them in /realm:config (Nicknames).";
 
 /** The colors to choose from: name, and the code after §. */
@@ -203,11 +217,25 @@ async function show(player, form) {
 }
 
 /**
+ * Is `name` a reserved word or a listed operator gamertag that this player may not take? Operators may use the reserved
+ * words; nobody is held back from their own gamertag. The game doesn't tell packs which offline players are operators,
+ * so only the listed gamertags (and every gamertag seen here) are protected while their owner is away.
+ * @param {Player} player @param {string} name
+ */
+function isReserved(player, name, op = isOp(player)) {
+  const key = squash(name);
+  if (key === squash(player.name)) return false;
+  if (reservedSet("reservedGamertags").has(key)) return true;
+  return !op && reservedSet("reservedNames").has(key);
+}
+
+/**
  * Why `name` can't be this player's nickname, or undefined.
  * @param {Player} player @param {string} name
  */
 function problem(player, name) {
   if (!NAME_RULE.test(name)) return "A nickname is 3 to 16 characters: letters A-Z, digits, spaces and _.";
+  if (isReserved(player, name)) return `${name} is a reserved name.`;
   const lower = name.toLowerCase();
   for (const p of world.getAllPlayers()) {
     if (p.id !== player.id && p.name.toLowerCase() === lower) return `${p.name} is someone else's gamertag.`;
@@ -265,6 +293,12 @@ async function editMine(player, tried) {
 
 const PAGE_SIZE = 20; // nicknames per page of the operators' list: a form with hundreds of buttons is unusable and slow to send
 
+/** A saved nickname that the reserved lists would refuse today (it is kept; operators can clear it). @param {Nick} nick */
+const reservedNow = (nick) => {
+  const key = squash(nick.n);
+  return key !== squash(nick.g) && (reservedSet("reservedNames").has(key) || reservedSet("reservedGamertags").has(key));
+};
+
 /**
  * Operators: saved nicknames, a page at a time and searchable by nickname or gamertag, to clear any of them.
  * @param {Player} player @param {number} [page] @param {string} [query]
@@ -284,7 +318,7 @@ async function allNicks(player, page = 0, query = "") {
       (list.length ? `Tap a nickname to clear it. ${list.length} ${want ? "match" : "saved"}${pages > 1 ? `, page ${at + 1} of ${pages}` : ""}.` : want ? "No nickname or gamertag matches." : "Nobody has a nickname.") +
         (want ? `\n§7Search: ${query.trim().replace(/§/g, "")}` : "")
     );
-  for (const [, nick] of shownHere) form.button(`§${nick.c}${nick.n}§r\n§8${nick.g || "unknown gamertag"}`);
+  for (const [, nick] of shownHere) form.button(`§${nick.c}${nick.n}§r${reservedNow(nick) ? " §c(reserved)" : ""}\n§8${nick.g || "unknown gamertag"}`);
   const extra = /** @type {string[]} */ ([]);
   extra.push("search");
   if (want) extra.push("clear");
