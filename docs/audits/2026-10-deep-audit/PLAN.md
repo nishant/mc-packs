@@ -2,7 +2,7 @@
 
 This is the work plan for the agent that finishes what the deep audit (mc-packs PR #92, hosting PR #105) left open. It
 covers the 10 follow-up tasks suggested at the end of the audit and every other open item found since. Nothing from
-`OPEN.md` (items O1-O67 plus the backlog) is left out: each item appears below in exactly one workstream, the owner
+`OPEN.md` (items O1-O75 plus the backlog) is left out: each item appears below in exactly one workstream, the owner
 decisions or the backlog. Finish every workstream, or record in `OPEN.md` why an item is not done.
 
 ## 0. Read first
@@ -73,6 +73,7 @@ merge `master` in.
 | Wave | Workstreams | Why this order |
 |---|---|---|
 | 0 | W0 preconditions | Baseline, msftMyt PRs, cleanup |
+| 1 (first) | W13 owner-reported bugs: O75 softlock and O74 the crater quest before anything else | Players hit these on the live Realm today; ship them as their own release before the rest of the plan |
 | 1 | W12a harness fixes, W11 script events and action bar, W7 checks | Tests and protocol that everything else measures with; W11 touches every pack's listener, so it goes first and alone among the pack editors |
 | 2 | W3 items, W4 stores, W9 Easy Building | Item safety first; W4 and W3 share stash and expedition but different files (agree on boundaries in the briefs) |
 | 3 | W6 story, W10 town news, W8 operator tools | saga_bp waits for msftMyt's PR #84 (W0); W8 and W4 both touch nick and titles, so W8 runs after W4 |
@@ -85,6 +86,11 @@ Pack overlap to plan around:
 - elite_bp: W1, W10, W12b.
 - expedition_bp: W1, W3, W12b.
 - mail_bp and party_bp: W4, W5.
+- stash_bp: W3 and W13 (O72, O73).
+- saga_bp: W6, W13 (O68, O74, O75).
+- stats_bp: W1 (O6), W13 (O71).
+- map_bp and hud_rp: W1, W2, W13 (O69).
+- find_bp: W5 (O28), W13 (O70).
 - nick_bp and titles_bp: W4, W5, W8.
 - stash_bp and refill_bp: W3.
 - build_bp and build_rp: W9, plus W11 for the action bar.
@@ -366,6 +372,80 @@ alone among the pack editors in its wave, because it touches every pack's main.j
 - [ ] **O62** Expeditions: an option to announce clears only from a chosen level (chat noise on big servers), and
   forget should also remove saved structures (stash and parcel structures stay behind today).
 
+### W13. Owner-reported bugs from the live Realm (October 19; wave 1, first)
+
+Reported by the owner from real play on the live Realm, with screenshots in `media/`. These are what players hit
+today, so they go first. O74 and O75 are blockers: a quest that can't be finished, and a softlock. Each fix needs a
+scenario that fails before and passes after. Where BDS can't show the effect (O69, O70), do a real-client check as
+in W2.
+
+- [ ] **O75 (blocker) Softlock in Signs in the Sky (act1_signs.js, the "Search the Old Graveyard for clues (4)" step
+  plus "Put down 6 zombies that rise in the graveyard at night").**
+  - **What happened** (`media/graveyard-softlock.webp`, `media/graveyard-dead-no-respawn.webp`): the player tapped
+    (left click) an empty spot in the Old Graveyard while searching for clues, with the zombies around.
+    - The player could no longer move or interact.
+    - Then the camera froze too.
+    - When another player killed them, no respawn screen appeared; pressing Escape brought it back.
+  - **Suspects:** whatever the clue tap runs, most likely the clue reveal in saga_bp objectives.js around :2286
+    (`player.camera.fade(...)`, next to a "no camera control" comment). Look for a fade or camera set that is never
+    cleared, input permissions that are never restored, or a modal or cutscene left waiting on a player who was hit,
+    died or was busy.
+  - **Fix:** every camera, input or fade change is cleared on finish, on death, on leave and on a dimension change
+    (C17), with a safety timeout. A tap on empty ground does nothing. Grep all packs for camera.fade, camera.setCamera
+    and input permissions, and apply the same rules (expedition_bp main.js:1629, waystone_bp main.js:627).
+  - **Test:** a scenario that taps empty ground and a clue while a zombie hits the player and the player dies mid-reveal.
+- [ ] **O74 (blocker) A quest that can't be finished: Signs in the Sky, "Fallen Light"** (act1_signs.js:133, "Gather
+  8 amethyst shards" at the Starfall Crater; `media/crater-mined-out.webp`).
+  - The first players who did the quest mined out all the crater's amethyst. A party mate who started it later had
+    nothing left to mine.
+  - Make every world-built gather step completable for each player who takes it:
+    - regrow or reset the crater's amethyst when someone accepts (or reaches) the step, or
+    - place a per-player supply, or
+    - credit shards a party mate already handed in, or
+    - accept other sources (any amethyst shards in the inventory) and say so in the hint.
+  - Audit every story step that depends on blocks the world builds once (crater, ruins, caches) for the same problem.
+    Add a check-stories rule for collect steps that rely on a built structure (W7).
+- [ ] **O68 The quest box cuts text off with "..."** (`media/quest-box-cut-off.png`, `media/crater-mined-out.webp`).
+  - Examples: "Party quest: you finished it, so you're helping. Your party...", and "[x] Touch the crater's...".
+  - Wrap long lines over more rows instead of truncating, within the box's row limit and byte budget (side-shared.js
+    slot sizes, saga ui.js quest box). If something still has to be cut, shorten the wording at the source.
+    Rewrite the party-quest line to fit, for example "Party quest: helping your party (you finished it)".
+  - Add a unit test that every story step label and status line fits.
+- [ ] **O69 Turning the Minimap off leaves a black square** (`media/graveyard-softlock.webp`,
+  `media/graveyard-dead-no-respawn.webp`, top right).
+  - Turned off through the realm preference, the radar's background panel still draws, an empty black box.
+  - When the Minimap is off (realm option or player preference), hide the whole radar element, background
+    included: send the empty radar segment the hud_rp binding hides on, and check `hud_screen.json`'s
+    visibility bindings.
+  - Same for the compass strip and the quest box when they are empty.
+- [ ] **O70 Chest Finder's mark is barely visible** (`media/chest-finder-faint.png`).
+  - The green `villager_happy` outline and `endrod` column (find_bp main.js:462-486) are lost against chests and signs.
+  - Make it obvious: a floating arrow or marker over the found container (a bright particle arrow pointing down, a
+    larger pulsing beam, or a glowing marker entity removed when the search ends), plus the direction and distance on
+    the action bar (with a `realm:actionbar` request) or a Minimap waypoint.
+  - Keep it visible only to the searching player, and clean it up on leave or when the search times out.
+- [ ] **O71 The stats ticker should be a personal preference, not only a realm option** (stats_bp config.js:17-24:
+  `tickerEnabled` realm-wide, `tickerDefaultOn: false`).
+  - The realm decides the default: on for this Realm.
+  - Each player can turn it off (or on) for themselves in `/realm:prefs` and `/realm:stats`.
+  - The realm option stays only as "allow the ticker".
+  - Migrate players who already chose. Update the Large server profile and PACKS.md.
+- [ ] **O72 Shift-clicking a chest doesn't sort it** (stash_bp; sneak taps are handled around main.js:761-769).
+  - Sneak-tapping a container with an empty hand should sort that chest's contents (the behavior Quick Stack &
+    Sort's docs describe).
+  - Find why it doesn't fire:
+    - The canceled-event rule (C13): is claims or another pack canceling the tap first?
+    - The `menuTap` branch taking it.
+    - A free-hand check that is too strict.
+  - Fix it, and add a scenario. Simulated players' empty-hand taps fire no interact events, so use the two-pack
+    mini-bundle approach from storm-rod-claims.js or test the handler directly.
+- [ ] **O73 Items can't be moved from one Expansive Inventory page to another.**
+  - Add a way to move items between pages: a "Move to page" action in the pages menu (move the selected slot or a
+    whole row), and/or putting an item on the page-flip slot sends it to the next page.
+  - Item-safety rules apply in full (C3, C9, C19): verify the target page accepts the stack before clearing it from
+    the source, and keep one committed index. Stay compatible with msftMyt's PR #86 ("Fill earlier inventory pages
+    without sorting") and with O17's page index (W3).
+
 ## 4. Integration, verification and publish (wave 6, lead)
 
 1. Merge every workstream into one integration branch. Rerun the cross-pack checks the audit's integration review used:
@@ -438,7 +518,7 @@ alone among the pack editors in its wave, because it touches every pack's main.j
 
 ## 7. Coverage check
 
-Every id O1-O67 in `OPEN.md` appears exactly once in sections 3 and 5 (O46 and O67 are listed in both, as an action
+Every id O1-O75 in `OPEN.md` appears exactly once in sections 3 and 5 (O46 and O67 are listed in both, as an action
 and as a decision). The 10 suggested tasks map like this:
 - 1 -> W1
 - 2 -> W2
@@ -451,7 +531,7 @@ and as a decision). The 10 suggested tasks map like this:
 - 9 -> W9
 - 10 -> W10
 
-W11, W12, W0, section 5 and section 6 hold everything found after those tasks were written. Before calling this plan
+W11, W12, W0, section 5 and section 6 hold everything found after those tasks were written; W13 holds the bugs the owner reported from the live Realm on October 19. Before calling this plan
 done, grep `OPEN.md` for every `O<n>` and confirm each one is marked.
 
 ## 8. Won't-fix decisions (all D rows from deferred.md)

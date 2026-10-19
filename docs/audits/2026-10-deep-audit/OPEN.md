@@ -139,6 +139,21 @@ and every item below is open. Each group is one follow-up task; ids (`O1`...) ar
   `tools/release.mjs` for the whole publish order.
 - O62 Expedition: an option to announce clears only from a chosen level; forget leaves saved structures behind.
 
+## T13. Owner-reported bugs from the live Realm (October 19; screenshots in `media/`)
+
+- O68 The quest box cuts text off with "..." ("Party quest: you finished it, so you're helping. Your party...",
+  "[x] Touch the crater's..."): wrap instead of truncating; shorten the party-quest line.
+- O69 Turning the Minimap off (realm preference) leaves a black square: hide the whole radar, background included.
+- O70 Chest Finder's mark is barely visible: add a floating arrow or another obvious marker, plus direction and distance.
+- O71 The stats ticker is realm-wide only: make it a per-player preference in /realm:prefs (realm default on).
+- O72 Shift-clicking (sneak-tapping) a chest doesn't sort it.
+- O73 Items can't be moved from one Expansive Inventory page to another.
+- O74 (blocker) Signs in the Sky "Fallen Light" can't be finished: the crater's amethyst was mined out by players who
+  finished it first, so a party mate catching up has nothing to gather. Reset or regrow per accept, or accept any
+  shards; audit every step that depends on blocks built once.
+- O75 (blocker) Softlock in Signs in the Sky at the Old Graveyard: tapping an empty spot while searching for clues
+  froze movement, interaction and then the camera; after being killed there was no respawn screen until Escape.
+
 ## Owner decisions (no task; for nishant)
 
 - O63 Public release packaging: ship build_bp and translucent_bp outside the bundle; slots_bp off by default; maybe
