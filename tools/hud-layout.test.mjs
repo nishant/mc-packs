@@ -232,6 +232,19 @@ test("the story's quest box shows next to the place the player picked, from its 
   assert.equal(new Set(codes).size, 8);
 });
 
+test("map_bp takes its compass and radar parts down when the Minimap is off, for the realm and for the player", () => {
+  const map = fs.readFileSync(new URL("../packs/map_bp/scripts/main.js", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  // Both off (realm option or the player's choices): both parts are cleared and the title drawn once more.
+  assert.match(map, /const showCompass = on && pr\.compass;\n\s+const showRadar = on && pr\.radar;/, "the realm option and the player's choice both count");
+  assert.match(map, /if \(!showCompass && !showRadar\) \{[\s\S]*?side\.clear\(player, "", false\);\n\s+side\.clear\(player, "radar", false\);\n\s+side\.redraw\(player\);/);
+  // One part off: that part alone is cleared.
+  assert.match(map, /else if \(offC\) side\.clear\(player, "", false\);/);
+  assert.match(map, /else if \(offR\) side\.clear\(player, "radar", false\);/);
+  // A changed choice forgets the text it sent (so the next draw is whole), but not which parts are on screen.
+  assert.match(map, /if \(s\) s\.ctext = s\.rtext = "";/);
+  assert.match(map, /for \(const s of lastSent\.values\(\)\) s\.ctext = s\.rtext = "";/);
+});
+
 test("every Side HUD cut matches the side boxes protocol and the minimap's text fits its slots", () => {
   const side = fs.readFileSync(new URL("./side-shared.js", import.meta.url), "utf8");
   const num = (name) => Number(side.match(new RegExp(`const ${name} = (\\d+);`))[1]);
