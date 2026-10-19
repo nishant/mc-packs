@@ -301,6 +301,77 @@ export function sagaOf(player) {
   return saga;
 }
 
+/** UTF-8 size of a string (the safe measure for a dynamic property: no more than 32,767). @param {string} s */
+function byteLength(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff) {
+      n += 4; // a surrogate pair
+      i++;
+    } else n += 3;
+  }
+  return n;
+}
+
+/**
+ * The save as JSON, kept under SAVE_LIMIT: past it, drop (in this order) the "stopped tracking" list, finished daily
+ * favors (oldest first), then the oldest codex entries. Stories, choices, flags, progress and any field this version
+ * doesn't know are never touched. @param {Saga} saga
+ */
+function trimSave(saga) {
+  let json = JSON.stringify(saga);
+  if (byteLength(json) <= SAVE_LIMIT) return json;
+  if (saga.ut) {
+    delete saga.ut;
+    json = JSON.stringify(saga);
+  }
+  if (byteLength(json) > SAVE_LIMIT && saga.fv) {
+    const old = Object.entries(saga.fv)
+      .filter(([, fs]) => !fs?.a || fs.c)
+      .sort((a, b) => (a[1]?.d ?? 0) - (b[1]?.d ?? 0));
+    for (const [npc] of old) {
+      delete saga.fv[npc];
+      json = JSON.stringify(saga);
+      if (byteLength(json) <= SAVE_LIMIT) break;
+    }
+  }
+  if (byteLength(json) > SAVE_LIMIT && saga.cx?.length) {
+    // Binary search for how many of the newest codex entries still fit.
+    const all = saga.cx;
+    let lo = 0;
+    let hi = all.length;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      saga.cx = all.slice(all.length - mid);
+      if (byteLength(JSON.stringify(saga)) <= SAVE_LIMIT) lo = mid;
+      else hi = mid - 1;
+    }
+    saga.cx = all.slice(all.length - lo);
+    json = JSON.stringify(saga);
+  }
+  return json;
+}
+
+/** Bytes left before the save hits SAVE_LIMIT, after trimming nothing. @param {Saga} saga */
+export function saveRoom(saga) {
+  return SAVE_LIMIT - byteLength(JSON.stringify(saga));
+}
+
+/**
+ * Would the save still fit with codex entry `id` added, after the trim flush() is allowed to do (the "stopped tracking" list,
+ * finished favors, the oldest codex entries)? Works on a copy: the real save is untouched. The new entry is the newest, so it is the last the trim drops.
+ * @param {Saga} saga @param {string} id
+ */
+export function codexFits(saga, id) {
+  const copy = JSON.parse(JSON.stringify(saga));
+  copy.cx = [...(copy.cx ?? []), id];
+  const json = trimSave(copy);
+  return byteLength(json) <= SAVE_LIMIT && copy.cx.includes(id);
+}
+
 /** Marks the player's progress to be saved (within a few seconds, or now). @param {Player} player @param {boolean} [now] */
 export function markDirty(player, now = false) {
   dirty.set(player.id, player);
@@ -319,13 +390,8 @@ export function flush(id) {
   const saga = cache.get(id);
   if (!player || !saga || !player.isValid) return;
   try {
-    let json = JSON.stringify(saga);
-    if (json.length > SAVE_LIMIT) {
-      // Too big: finished stories keep only their flags and choices.
-      for (const st of Object.values(saga.s)) if (st.fin) st.dn = [];
-      json = JSON.stringify(saga);
-      if (json.length > SAVE_LIMIT) console.warn(`[saga] ${player.name}'s progress is ${json.length} characters; some may not save`);
-    }
+    const json = trimSave(saga);
+    if (byteLength(json) > SAVE_LIMIT) console.warn(`[saga] ${player.name}'s progress is ${byteLength(json)} bytes; it may not save`);
     player.setDynamicProperty(PROP_PLAYER, json);
   } catch (e) {
     console.warn(`[saga] save: ${e}`);
@@ -536,6 +602,23 @@ export function currentChapter(saga, story) {
   }
   const index = story.chapters.findIndex((c) => !st?.dn.includes(c.id) && chapterApplies(c, saga, story));
   return index < 0 ? undefined : { chapter: story.chapters[index], index };
+}
+
+/**
+ * The packs a started story can't go on without: a `pack:<folder>` "on" in the story's `requires.flags` or in the
+ * `when` of its current (or next) chapter, for a pack that is gone (removed after the story began). Also while a
+ * chapter is accepted. [] before the first scan answered.
+ * @param {Story} story @param {Saga} saga
+ */
+export function packsNeeded(story, saga) {
+  const st = saga.s[story.id];
+  if (!installed.ready || !st || st.fin || !(st.a || st.dn.length)) return [];
+  const cur = story.chapters.find((c) => c.id === st.cur && !st.dn.includes(c.id)) ?? story.chapters.find((c) => !st.dn.includes(c.id));
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (const when of [story.requires?.flags, cur?.when])
+    for (const [k, v] of Object.entries(when ?? {})) if (k.startsWith("pack:") && v === "on" && !installed.set.has(k.slice(5))) out.add(k.slice(5));
+  return [...out];
 }
 
 /** "Chapter 3 of 9": the place among the chapters this player gets. @param {Saga} saga @param {Story} story @param {number} index */

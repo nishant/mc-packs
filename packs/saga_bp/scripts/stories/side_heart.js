@@ -499,7 +499,7 @@ const BRAM = {
         items: [{ item: "minecraft:leather_helmet", amount: 1, name: "The Mayoral Hat (Replica)", lore: ["Fits much better", "than the real one.", "Smells of nothing at all."] }],
         codex: { id: "bram_drawer", title: "The Locked Drawer", text: "Mayor Bram's father made the town forget the Long Storm, and never once visited his wife's grave. He left one letter, locked away, saying so. Bram read it, took flowers to his mother, and gave a speech about remembering." },
       },
-      hint: "Fireworks are crafted from paper and gunpowder. Use 3 within 16 blocks of the town square (just off world spawn).",
+      hint: "Fireworks are crafted from paper and gunpowder. Use 3 within 16 blocks of the town square.",
     },
   ],
 };

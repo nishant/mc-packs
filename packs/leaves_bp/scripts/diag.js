@@ -18,8 +18,8 @@
 // is being evaluated, else to the pack in the call stack (a bundle's files are scripts/<folder>/...; walked
 // for intervals, subscriptions and commands always, for run/runTimeout/runJob only while profiling, since
 // those are many and short-lived). A world property key belongs to the pack being evaluated when it is first
-// read or written, else to the pack already using its prefix (text before the first ":"), else to the pack in
-// the call stack. Keys nobody touched since the last reload are "unowned". Alone in its context, a pack owns
+// read or written, unless its declared namespace already identifies its owner. Declarations also cover saved
+// keys nobody touched since the last reload; unknown or ambiguous namespaces remain "unowned". Alone in its context, a pack owns
 // its whole storage.
 //
 // Protocol (realm: script events, JSON, every message under 2048 characters):
@@ -43,8 +43,10 @@
 import { CustomCommandRegistry, System, World, system, world } from "@minecraft/server";
 
 const PACK = "leaves_bp";
-const VERSION = "1.0.5";
+const VERSION = "1.0.6";
 const NAME = "Fast Leaf Decay";
+/** @type {string[]} */
+const PREFIXES = ["leaves"];
 
 const API = 1;
 const MAX_TICKS = 1200;
@@ -67,6 +69,11 @@ const S = G.__realmDiag ?? (G.__realmDiag = install());
 const REC = S.packs.get(PACK) ?? { pack: PACK, name: NAME, version: VERSION, ms: 0, calls: 0, cbs: new Map(), forgotten: false, warned: false };
 S.packs.set(PACK, REC);
 S.multi = S.packs.size > 1;
+for (const prefix of PREFIXES) {
+  const had = S.prefixOwner.get(prefix);
+  if (had === undefined) S.prefixOwner.set(prefix, REC);
+  else if (had !== REC) S.prefixOwner.set(prefix, null);
+}
 S.cur = REC; // the rest of this pack's modules evaluate next: what they hand over is this pack's
 
 /** @returns {State} */
@@ -338,12 +345,12 @@ function ownerOfKey(st, k) {
 }
 
 /**
- * The owner of a key seen for the first time: the pack being evaluated, else the pack using its prefix, else the
+ * The owner of a key seen for the first time: the pack using its prefix, else the pack being evaluated, else the
  * pack in the call stack (a bundle's files are scripts/<folder>/...). One stack walk per new prefix at most.
  * @param {State} st @param {string} k @returns {Rec | null}
  */
 function claim(st, k) {
-  const o = st.cur ?? st.prefixOwner.get(prefixOf(k)) ?? owner(st, true, st.packs.size > 1 ? site() : "");
+  const o = st.prefixOwner.get(prefixOf(k)) ?? st.cur ?? owner(st, true, st.packs.size > 1 ? site() : "");
   if (o) learn(st, k, o);
   return o;
 }

@@ -522,6 +522,24 @@ function festivalEnd(key) {
   if (fid === "midsummer_regatta") regattaResult(key);
 }
 
+// Town news: at most one piece per in-game hour from this pack, each event once. Dropped, not queued.
+// The seen list is process memory (cleared on script restart). Titles and Crowns stay outside this gate.
+const NEWS_GAP = 1000; // ticks, an in-game hour
+let newsAt = -NEWS_GAP;
+/** @type {Set<string>} */
+const newsSeen = new Set();
+
+/** @param {string} key @param {object} msg @returns {boolean} */
+function gossip(key, msg) {
+  const now = system.currentTick;
+  if (newsSeen.has(key) || now - newsAt < NEWS_GAP) return false;
+  newsAt = now;
+  newsSeen.add(key);
+  if (newsSeen.size > 64) newsSeen.delete(/** @type {string} */ (newsSeen.values().next().value));
+  send("realm:gossip", msg);
+  return true;
+}
+
 /** The carve-off's winner: the entry with the most votes (ties: the first entered). @param {string} key */
 function fairResult(key) {
   const fair = readJson(PROP_FAIR);
@@ -550,7 +568,7 @@ function fairResult(key) {
       : `§6[Lantern Fair] ${name} won the Pumpkin Carve-off with ${votes} vote${votes === 1 ? "" : "s"}!`,
   );
   send("realm:title_unlock", { player: best, title: "Pumpkin Champion" });
-  send("realm:gossip", { kind: "carve_off", player: best, name, n: votes });
+  gossip(`carve:${key}`, { kind: "carve_off", player: best, name, n: votes });
   fair.done = 1;
   writeJson(PROP_FAIR, fair);
 }
@@ -564,7 +582,7 @@ function regattaResult(key) {
   const [pid, name, ms] = b.top[0];
   world.sendMessage(`§e[Regatta] ${name} won the Midsummer Regatta with ${clock(ms)}!`);
   send("realm:title_unlock", { player: pid, title: "Regatta Champion" });
-  send("realm:gossip", { kind: "regatta", player: pid, name, place: clock(ms) });
+  gossip(`regatta:${key}`, { kind: "regatta", player: pid, name, place: clock(ms) });
 }
 
 // ---------------------------------------------------------------------------
@@ -1829,11 +1847,10 @@ function endSiege(result, noGround = false) {
     if (held) title(p, "§6The siege is broken", `§7${s.town.n} held`);
   }
   const who = Object.keys(s.who).filter((pid) => takesPart(s, pid));
+  const told = who.find((pid) => String(s.who[pid][0] ?? "").trim());
+  if (told) gossip(`siege:${s.id}:${result}`, { kind: held ? "siege" : "siege_lost", player: told, name: s.who[told][0], place: s.town.n, n: who.length });
   for (const pid of who) {
     const p = online(pid);
-    const name = s.who[pid][0];
-    if (held) send("realm:gossip", { kind: "siege", player: pid, name, place: s.town.n });
-    else send("realm:gossip", { kind: "siege_lost", player: pid, name, place: s.town.n });
     if (!p) continue;
     if (held) {
       addCrowns(p, int("heldCrowns"));

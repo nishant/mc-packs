@@ -182,7 +182,7 @@ const STATUSES = [
   { name: "seconds under way", text: " §eNE 240m §e90 s left", anchor: ["ui", "§e${left} s left"] },
   { name: "open sky", text: " §eNE 240m §e90 s left §7- step out under the open sky", anchor: ["ui", "step out under the open sky"] },
   { name: "storm due", text: " §eNE 240m §e90 s left §7- wait for a thunderstorm (due in about 120 min)", anchor: ["objectives", "(due in about ${Math.max(1, Math.ceil((due.at - now) / 60000))} min)"] },
-  { name: "time stopped", text: " §eNE 240m §e90 s left §7- wait for the right time of day (the time of day is stopped on this world)", anchor: ["objectives", "(the time of day is stopped on this world)"] },
+  { name: "night due", text: " §eNE 240m §e90 s left §7- wait for nightfall (in about 5 min)", anchor: ["objectives", "(in about ${Math.max(1, Math.ceil((((a - t + 24000) % 24000) / 1200)))} min)"] },
   { name: "weather wait", text: " §7- wait for a thunderstorm (due in about 120 min)", anchor: ["ui", "out += ` §7- ${wait}`;"] },
 ];
 const sources = { ui: uiSource, objectives: objectivesSource };
