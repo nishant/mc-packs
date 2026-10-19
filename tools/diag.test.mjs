@@ -191,6 +191,39 @@ test("a pack alone in its context owns its whole storage and clears all of it", 
   assert.equal(system.afterEvents.scriptEventReceive.subs.length, 1, "with no pack listener, diag listens itself");
 });
 
+test("a pack's forget cleanup runs after its properties are gone and its writes are blocked, and the one answer reports it", async () => {
+  for (const [label, hook, expect] of [
+    ["none", undefined, { ok: true }],
+    ["note", () => ({ note: "kept 2" }), { ok: true, note: "kept 2" }],
+    ["error", () => ({ error: "1 structure couldn't be deleted" }), { ok: false, error: "saved data forgotten, but 1 structure couldn't be deleted" }],
+    ["throws", () => { throw new Error("boom"); }, { ok: false, error: "saved data forgotten, but Error: boom" }],
+  ]) {
+    const mc = fakeServer();
+    globalThis.__mcFake = mc;
+    delete globalThis.__realmDiag;
+    delete globalThis.__realmDiagWrapped;
+    delete globalThis.__realmDiagForgetHooks;
+    const dir = mkdtempSync(join(tmpdir(), "diag-"));
+    const { system, world } = mc;
+    await loadCopy(dir, "solo_bp");
+    mc.step(1);
+    world.setDynamicProperty("solo:x", "abc");
+    const seen = [];
+    if (hook) globalThis.__realmDiagForgetHooks = { solo_bp: (info) => { seen.push({ props: world.props.size, info }); world.setDynamicProperty("solo:y", "late"); seen.push({ blocked: world.props.size === 0 }); return hook(); } };
+    system.sendScriptEvent("realm:diag_forget", JSON.stringify({ id: "f", pack: "solo_bp", confirm: "FORGET solo_bp" }));
+    mc.step(3);
+    const replies = pongs(mc, "realm:diag_forgot");
+    assert.equal(replies.length, 1, `${label}: exactly one answer`);
+    assert.deepEqual({ ...replies[0], id: undefined, pack: undefined, removed: undefined, bytes: undefined }, { ...expect, id: undefined, pack: undefined, removed: undefined, bytes: undefined }, label);
+    if (hook) {
+      assert.equal(seen[0].props, 0, `${label}: properties were already gone`);
+      assert.equal(seen[0].info.removed, 1);
+      assert.equal(seen[1].blocked, true, `${label}: the pack's writes were already blocked`);
+    }
+  }
+  delete globalThis.__realmDiagForgetHooks;
+});
+
 test("forget includes untouched saved keys from a declared namespace, not another pack or unknown data", async () => {
   const mc = fakeServer();
   globalThis.__mcFake = mc;

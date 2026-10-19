@@ -15,9 +15,9 @@ import {
   saveTask,
   sound,
   spawnAround,
-  spawnFresh,
   wait,
 } from "./helpers.js";
+import { spawnFresh } from "./spawn.js";
 
 /** @param {Player} p */
 const online = (p) => {

@@ -15,6 +15,7 @@ const OPTIONS = [
   { key: "maxParty", type: "int", scope: "world", label: "Most players in one expedition", min: 1, max: 4, step: 1 },
   { key: "timeLimitMinutes", type: "int", scope: "world", label: "Time limit for 7 rooms (minutes)", help: "Scaled by each run's room count; applies from the next run", min: 5, max: 60, step: 1 },
   { key: "exitSeconds", type: "int", scope: "world", label: "Seconds to collect the treasure", help: "Opening a chest near the end adds 20 more", min: 10, max: 300, step: 5 },
+  { key: "announceFromLevel", type: "enum", scope: "world", label: "Announce clears in chat from", help: "Only the chat line for everyone changes; the party's own message, rewards and progress stay the same", choices: Array.from({ length: 23 }, (_, i) => String(i)), names: ["Easy (every clear)", "Normal", "Hard", ...Array.from({ length: 20 }, (_, i) => `Nightmare ${i + 1}`)] },
   { key: "gauntletEnabled", type: "bool", scope: "world", label: "Gauntlets can start", help: "Long runs with boons" },
   { key: "gauntletRooms", type: "int", scope: "world", label: "Rooms in a Gauntlet", min: 10, max: 20, step: 1 },
   { key: "boonEvery", type: "int", scope: "world", label: "Rooms between Gauntlet sanctuaries", min: 3, max: 8, step: 1 },

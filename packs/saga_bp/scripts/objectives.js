@@ -2,7 +2,8 @@
 // (story characters, guards, escorts, wisps, defenses, visions, riddles).
 import { EquipmentSlot, GameMode, ItemStack, MolangVariableMap, Player, system, world } from "@minecraft/server";
 import { ModalFormData } from "@minecraft/server-ui";
-import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, spawnFresh, updateActorLabels } from "./actors.js";
+import { ACTOR, ADD, actorOf, actors, actorsOf, removeActor, removeActors, setLostHandler, spawnActor, updateActorLabels } from "./actors.js";
+import { spawnFresh } from "./spawn.js";
 import {
   active,
   applyChoice,

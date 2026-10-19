@@ -2,6 +2,7 @@
 // them where they should be, and cleaning them up. Imports only util.js.
 import { system, world } from "@minecraft/server";
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, SUPPRESSED_NAME } from "./name-labels.js";
+import { spawnFresh } from "./spawn.js";
 import { DIMENSIONS, dist3, hash } from "./util.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -72,21 +73,6 @@ function dress(ent, look) {
 }
 /** Dressed as they should be? The event's job is a type family ("become_sheperd" sets "shepherd"). @param {Entity} ent @param {string} look */
 const dressed = (ent, look) => ent.matches({ families: [look.replace("minecraft:become_", "").replace("sheperd", "shepherd")] });
-
-/**
- * Spawns a mob and checks what came back: a world whose entity ids repeat (an old level.dat put back) can hand back
- * an entity that already exists (a dropped item), and tagging that one would make a story mob that isn't there.
- * Spawns again (the next id is usually free); throws if it never gets the mob.
- * @param {Dimension} dim @param {string} type @param {Vector3} at @param {any} [opts]
- * @returns {Entity}
- */
-export function spawnFresh(dim, type, at, opts) {
-  for (let k = 0; k < 8; k++) {
-    const e = opts ? dim.spawnEntity(/** @type {any} */ (type), at, opts) : dim.spawnEntity(/** @type {any} */ (type), at);
-    if (e.typeId === type) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
-}
 
 /**
  * Spawns a story character or mob for a player's scene. Named, so it never despawns on its own.

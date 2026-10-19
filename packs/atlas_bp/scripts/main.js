@@ -28,6 +28,7 @@ import { PREFABS, turn } from "./prefabs.js";
 import { get, getFor } from "./settings.js";
 import { protectedBox } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -1379,19 +1380,6 @@ function noBanner(ent) {
   } catch {
     // nothing worn
   }
-}
-
-/**
- * spawnEntity, but never another entity: with reused entity ids it can hand back one that already exists (a dropped
- * item, a pet), which the fight would then tag and remove at its end. Retries, then throws.
- * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
- */
-function spawnFresh(dim, type, at) {
-  for (let k = 0; k < 8; k++) {
-    const e = dim.spawnEntity(/** @type {any} */ (type), at);
-    if (e.typeId === type) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
 }
 
 /** Spawns fight mobs around a site. @param {Fight} f @param {string[]} types @param {string} [name] */
