@@ -9,7 +9,7 @@ entries below as a changelog.
 
 ## Clues without interruptions
 
-- Signs in the Sky: graveyard clues now go straight to chat instead of opening a popup while you fight. Story conversations stop on death or travel, and an unanswered standard story menu closes after 45 seconds.
+- Story clues, including the graveyard clues in Signs in the Sky, now go straight to chat instead of opening a popup while you fight. Conversations stop on death, respawn, leaving or changing dimension. An unanswered standard story menu closes after 45 seconds.
 - Fallen Light: if the Starfall Crater is mined out, 8 amethyst shards from another geode, shards you already carry, or a party mate all count. You still visit the crater and touch its glowing heart. The shards are not taken.
 
 ## A smoother server for big crowds

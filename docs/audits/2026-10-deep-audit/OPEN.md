@@ -181,7 +181,7 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
 - O67 **Disposition done in `5413ec948b1dfc3d9f3450027021cfef82344aa6`:** the owner directed closing
   [#84](https://github.com/nishant/mc-packs/pull/84) and
   [#86](https://github.com/nishant/mc-packs/pull/86) **unmerged**, not updating or merging them.
-  Closed October 19, 2026, with heads `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce` and
+  Closed October 19, 2026 (UTC), with heads `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce` and
   `0e54ff14ea36bdba1e7bbb549d5dddd66e405788` archived with complete patches/tests. Branches retained.
   O37 and O17 still own implementation and verification of their preserved intentions; O73 shares the transfer
   design. Their feature work is not complete merely because the old PRs are closed.

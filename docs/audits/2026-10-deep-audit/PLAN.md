@@ -116,7 +116,7 @@ Pack overlap to plan around:
 - [x] Fetch both repos and every branch. List the open PRs in nishant/mc-packs and nishant/hosting.
   At W0 start: source `7eb5f72c`, hosting `f6b4972f`; source had only #84/#86 open, hosting had none.
 - [x] **O67 disposition only:** the owner directed closing #84 and #86 unmerged and carrying their intentions
-  into this audit. Both were archived and closed unmerged on October 19, 2026:
+  into this audit. Both were archived and closed unmerged on October 19, 2026 (UTC):
   [#84](https://github.com/nishant/mc-packs/pull/84), head `7801855e50d47decd7d1099b7ea6fb6cf6ae3bce`;
   [#86](https://github.com/nishant/mc-packs/pull/86), head `0e54ff14ea36bdba1e7bbb549d5dddd66e405788`.
   Their branches remain intact. W6/O37 and W3/O17 now implement and verify the preserved outcomes on current
