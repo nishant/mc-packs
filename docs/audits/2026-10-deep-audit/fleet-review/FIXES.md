@@ -251,6 +251,18 @@ and the identity checks from the shared spawn module).
     - a path
     - a waystone
     - a townsfolk's house
+  - **Terrain:** a spot may be leveled where a build needs it. Leveling may cut natural terrain down or fill it
+    up (with the surrounding natural block, for example grass on dirt), at most 3 blocks either way, inside the
+    build's footprint plus a 1-2 block apron graded as a gentle slope or steps back to the existing ground. It
+    never levels a man-made block, a claim, a path or a house.
+    - The town must keep its elevation: no clearing a whole area flat. Builds follow the land, as a well on a
+      rise, terraced houses or a dock down at the water. Choose spots in this order:
+      1. ground that needs the least leveling
+      2. ground that is already level
+      3. a different height level of the town, so the projects end up at varied heights
+    - Save the leveled ground with the build's before-image, so Remove spot puts the original terrain back.
+    - Test: a hillside town keeps a spread of build heights (more than one height level), and every apron joins
+      the ground with steps of at most 1 block.
   - Prefer flat ground near the center, roads between projects, the dock at the nearest shoreline, and the well
     near the center. Face the build toward the center.
   - If no valid spot exists, say so in the town menu and let operators set it by hand, as now. Operators can
