@@ -153,10 +153,11 @@ function takeLockFile(file, info, staleMs) {
  * reservation is a lock file in the cache that names this process, so two runs that look at the same moment cannot
  * both take it. release() frees it. A reservation of a dead process is reused.
  */
-export async function reservePort({ token = `${process.pid}`, isFree = portPairFree, random = Math.random, tries = 400 } = {}) {
+export async function reservePort({ token = `${process.pid}`, isFree = portPairFree, random = Math.random, tries = 400, fixed = null } = {}) {
   fs.mkdirSync(portsDir(), { recursive: true });
-  let p = 20000 + 2 * Math.floor(random() * 19000);
-  for (let i = 0; i < tries; i++, p = p + 2 > 39998 ? 20000 : p + 2) {
+  if (fixed !== null && !(Number.isInteger(fixed) && fixed >= 1024 && fixed <= 65534)) throw new Error(`server-port ${fixed} must be an integer from 1024 to 65534 (the next port is also used)`);
+  let p = fixed ?? 20000 + 2 * Math.floor(random() * 19000);
+  for (let i = 0; i < (fixed === null ? tries : 1); i++, p = p + 2 > 39998 ? 20000 : p + 2) {
     const a = path.join(portsDir(), `${p}.lock`), b = path.join(portsDir(), `${p + 1}.lock`);
     const info = { pid: process.pid, token, at: new Date().toISOString() };
     if (!takeLockFile(a, info, PORT_LOCK_STALE_MS)) continue;
@@ -165,7 +166,7 @@ export async function reservePort({ token = `${process.pid}`, isFree = portPairF
     fs.rmSync(a, { force: true });
     fs.rmSync(b, { force: true });
   }
-  throw new Error("no free port found");
+  throw new Error(fixed === null ? "no free port found" : `port ${fixed} (and ${fixed + 1}) is in use or reserved by another harness run`);
 }
 export async function freePort() {
   const r = await reservePort();

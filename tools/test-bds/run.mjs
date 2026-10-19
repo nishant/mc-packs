@@ -127,10 +127,12 @@ try {
   }
   const template = await ensureTemplate({ seed: args.seed, flat: args.flat, log: say });
   serverDir = makeServerDir();
-  reservation = await reservePort();
-  port = reservation.port;
   const extra = {};
   for (const kv of args.prop) { const i = kv.indexOf("="); if (i > 0) extra[kv.slice(0, i)] = kv.slice(i + 1); }
+  // --prop server-port=N pins the port (stash-persistence does): reserve exactly that pair, or fail clearly.
+  reservation = await reservePort(extra["server-port"] ? { fixed: Number(extra["server-port"]) } : {});
+  port = reservation.port;
+  if (extra["server-portv6"] && Number(extra["server-portv6"]) !== port + 1) throw new Error(`server-portv6 must be server-port + 1 (${port + 1}), not ${extra["server-portv6"]}`);
   writeProps(serverDir, baseProps(port, extra));
   const world = path.join(serverDir, "worlds", "world");
   copyTemplate(template, world, { flat: args.flat });

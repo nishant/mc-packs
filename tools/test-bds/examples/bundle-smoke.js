@@ -38,6 +38,9 @@ export default async function (t) {
 
   const noDiag = members.filter((m) => !diag.has(m));
   t.check(noDiag.length === 0, `every pack in the bundle answers realm:diag_ping with its own folder (${diag.size}/${members.length}${noDiag.length ? `; silent: ${noDiag.slice(0, 12).join(", ")}` : ""})`);
+  // diag.js keeps one registry per script context and reports its size as `shared`: all members in one registry is the one-context proof.
+  const sizes = [...new Set([...diag.values()].map((d) => d.shared))];
+  t.check(sizes.length === 1 && sizes[0] === members.length, `all ${members.length} packs share one diag registry, i.e. one script context (shared: ${sizes.join(", ") || "none"})`);
   const odd = [...diag.values()].filter((d) => typeof d.name !== "string" || typeof d.version !== "string" || !Number.isFinite(d.bytes ?? 0));
   t.check(odd.length === 0, `each diag answer names its pack, version and saved bytes (${odd.map((d) => d.pack).join(", ") || "all well-formed"})`);
 

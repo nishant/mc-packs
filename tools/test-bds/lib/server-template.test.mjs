@@ -167,6 +167,12 @@ test("reserves distinct port pairs for concurrent runs and reuses a dead run's r
   assert.equal(reused.port, busy);
   const skipped = await server.reservePort({ random: sameSpot, isFree: async () => true });
   assert.notEqual(skipped.port, busy, "a live reservation is never shared");
+  // A pinned port (--prop server-port=N) is reserved exactly, or refused when it is taken.
+  const pinned = await server.reservePort({ fixed: 31000, isFree: async () => true });
+  assert.equal(pinned.port, 31000);
+  await assert.rejects(() => server.reservePort({ fixed: 31000, isFree: async () => true }), /port 31000 \(and 31001\) is in use or reserved by another harness run/);
+  await assert.rejects(() => server.reservePort({ fixed: 80 }), /must be an integer from 1024 to 65534/);
+  pinned.release();
   reused.release();
   skipped.release();
   assert.deepEqual(fs.readdirSync(dir), []);

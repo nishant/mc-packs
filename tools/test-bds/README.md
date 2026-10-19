@@ -116,7 +116,7 @@ Headers that build a test copy with a plain shell recipe (the lines just above t
 run in the quoting context it sits in (unquoted, inside `'...'`, inside `"..."`, in a here-document), and `$S` quoted, so
 a folder with spaces, apostrophes or Windows backslashes works. A folder path with `"`, `$`, a backtick or a line break
 is refused with a clear message. `node tools/test-bds/suite.mjs --prepare-only [--filter <regex>] [--json out]` stages every
-recipe and checks the folder each run command points at, **without starting BDS** (about 3 s for all 18).
+recipe and checks the folder each run command points at, **without starting BDS** (about 3 s for all 17).
 Test hooks that a scenario needs inside a pack (packs can't read each other's dynamic properties) live in
 `hooks/` and are appended to the test copy by the recipe (`hooks/maps-rvtest.js` for maps-cleanup and
 maps-leave, `hooks/rainbow-rvtest.js` for rainbow-race, the `hooks/limit_bp` probe pack for
