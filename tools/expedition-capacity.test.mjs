@@ -9,7 +9,7 @@ import vm from "node:vm";
 
 const scripts = new URL("../packs/expedition_bp/scripts/", import.meta.url);
 const srcDir = process.env.EXPEDITION_SRC ? `${process.env.EXPEDITION_SRC}/` : undefined;
-const mainSource = readFileSync(srcDir ? `${srcDir}main.js` : new URL("main.js", scripts), "utf8");
+const mainSource = readFileSync(srcDir ? `${srcDir}main.js` : new URL("main.js", scripts), "utf8").replace(/\r\n/g, "\n");
 const begin = mainSource.indexOf("// expedition queue begin");
 const end = mainSource.indexOf("// expedition queue end");
 assert.ok(begin >= 0 && end > begin, "production queue block");
@@ -17,7 +17,11 @@ const block = mainSource.slice(begin, end);
 const fnSrc = (name) => {
   const m = new RegExp(`^(async )?function ${name}\\(`, "m").exec(mainSource);
   assert.ok(m, `production function ${name}`);
-  return mainSource.slice(m.index, mainSource.indexOf("\n}\n", m.index) + 3);
+  const close = mainSource.indexOf("\n}\n", m.index);
+  assert.ok(close > m.index, `production function ${name} has a closing brace`);
+  const src = mainSource.slice(m.index, close + 3);
+  assert.ok(src.length > 40, `production function ${name} is not empty`);
+  return src;
 };
 const forgetBegin = mainSource.indexOf("// forget hook begin");
 const forgetBlock = mainSource.slice(forgetBegin, mainSource.indexOf("// forget hook end"));
