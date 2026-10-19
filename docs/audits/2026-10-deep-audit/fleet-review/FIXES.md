@@ -50,7 +50,7 @@ Run this only after msftMyt's release of that branch is merged to `master` and p
 Severity order:
 1. F1-F4, the blockers and highs
 2. F5-F14, the mediums
-3. the lows (F15-F35)
+3. the lows (F15-F35), and F42 (wanderers rubber-banding, owner-reported; treat it as a medium)
 4. the living towns feature (F36-F41), after F1-F14
 5. owner decisions, which are asked, not decided (the owner's earlier answers are in `../OPEN.md`)
 
@@ -205,6 +205,34 @@ Severity order:
   Rewrite each so it fails on the old code for the right reason.
 - [ ] **F35 missing tests:** there is no native scenario for the moon cache (F5), the elite changes (O3, O58) or the
   build_bp gate (F7). Add them, with perf numbers where they are performance changes.
+
+- [ ] **F42 (medium, owner report October 19) Wanderers rubber-band: Hob Fairweather walks about 10 steps out of
+  his camp, snaps back, and does it again, over and over.**
+  - Code: wander_bp `main.js` `tether()` (around :810-835, `TETHER_MAX = 12` at :60). Walkers (`villager_v2` and
+    wandering traders) stroll with the vanilla AI. Past 12 blocks from home (or in water, lava, or down a hole),
+    they are teleported straight back to `home`. Nothing stops the vanilla AI from walking out again, so on open
+    ground they loop.
+  - Fix: keep them inside the area so the AI doesn't keep leaving it. Pick what the stable API supports, and
+    verify it on BDS:
+    - a soft radius: start steering back before the hard limit
+    - a lower movement speed outside the soft radius (the movement component's value), restored inside
+    - turn them toward home
+    - a camp boundary made of the camp's own blocks (fence, path edge) where it fits the camp's look
+    - make camp wanderers stand or sit at their camp (moving only within a few blocks), like townsfolk at their
+      posts
+  - Keep the teleport only as the last resort (water, lava, a hole, or far beyond the limit), with a cooldown, and
+    send them to a nearby free spot, not the exact center.
+  - **Check every other place that snaps an entity back** and fix the same pattern:
+    - caravan_bp traders and llamas
+    - npc_bp townsfolk posts (the "standing on the floor" lift and the respawn when missing)
+    - the four `name-labels.js` copies that move label helpers (`helper.teleport(anchor)`, :353)
+    - saga_bp actors and escorts
+    - platypus_bp, dolphin_bp, guard_bp, elite_bp champions and town_bp residents (F39, new)
+    - anything else that calls `teleport` on a non-player entity on a timer: `grep -rn "\.teleport(" packs/*/scripts`
+
+    For each, say whether it can loop and fix it.
+  - Test: a BDS scenario that places a camp wanderer on open flat ground for 5 minutes and counts snap-backs:
+    before, many; after, zero or nearly zero. The wanderer must still stay within the camp area.
 
 ## Feature: living towns (owner request, October 19)
 
