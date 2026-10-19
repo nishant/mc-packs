@@ -4,20 +4,38 @@
     "name": "Land Claims",
     "description": "Claim the land around your base so others can't break, place or open anything there. Off until an operator enables it. /realm:claim",
     "uuid": "de26b2d1-ca56-469f-ad77-71a6736cafd2",
-    "version": [1, 5, 5],
-    "min_engine_version": [1, 21, 100]
+    "version": [
+      1,
+      5,
+      6
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      100
+    ]
   },
   "modules": [
     {
       "type": "script",
       "language": "javascript",
       "uuid": "911d5c25-116f-406c-85f1-41a11f705a46",
-      "version": [1, 0, 0],
+      "version": [
+        1,
+        0,
+        0
+      ],
       "entry": "scripts/main.js"
     }
   ],
   "dependencies": [
-    { "module_name": "@minecraft/server", "version": "2.1.0" },
-    { "module_name": "@minecraft/server-ui", "version": "2.0.0" }
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.1.0"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
   ]
 }

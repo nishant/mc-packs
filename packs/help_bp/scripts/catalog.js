@@ -130,13 +130,13 @@ export const PACKS = [
         "usage": "/realm:admin_setup",
         "ops": true,
         "who": "Ops",
-        "text": "§lSet up this world§r: walks you through the one-time jobs a new world needs, one page each: what it is, why, whether it's done (the packs say so where they can: townsfolk placed, a town, a safe zone or town over world spawn, a waystone you know near spawn), a button that runs the step's own command, §lMark as done§r where no pack can tell, and §lSkip§r. Steps (only those of installed packs): place the Townsfolk, add a town, a safe zone at spawn, a caravan arrival spot, the bounty board, a first waystone at spawn, the expedition site, Server size, then the rest of the setup checklist. Ends with a summary (§eSetup finished: 3 done, 2 skipped.§r). Also the first button of §lOperator Tools§r"
+        "text": "§lSet up this world§r: walks you through the one-time jobs a new world needs, one page each: what it is, why, whether it's done (the packs say so where they can: townsfolk placed, a town, a safe zone or town over world spawn, a waystone you know near spawn), a button that runs the step's own command, §lMark as done§r where no pack can tell, and §lSkip§r. Steps (only those of installed packs): place the Townsfolk, add a town, a safe zone at spawn, a caravan arrival spot, the bounty board, a first waystone at spawn, the expedition site, Server size, then the rest of the setup checklist. Ends with a summary (§eSetup finished: 3 done, 2 skipped.§r). A page stops quietly when the operator leaves, dies or respawns; it never reopens forms or changes what a newer page set, and a page waiting for a busy client keeps waiting instead of giving up on the first busy answer. Also the first button of §lOperator Tools§r"
       },
       {
         "usage": "/realm:diag [seconds]",
         "ops": true,
         "who": "Ops",
-        "text": "§lPack diagnostics§r: measures every pack's script time for a few seconds (default 10, 1 to 60), then lists every pack that answered, slowest first, with its version, ms per tick and saved data. Red: over 0.5 ms per tick, or one saved entry over 24 KB (one entry can hold 32 KB). Packs that don't answer (an older version) are listed under §lNo answer§r. A pack's page shows what takes its time (its top two callbacks), its biggest saved entry, and §lForget this pack's saved data§r: after you confirm, the pack deletes everything it saved in the world (in a bundle only its own entries), including anything it kept for players there such as stored inventory pages or letters, and saves nothing more until you run §e/reload§r or restart. Scoreboards, tags, structures and data saved on players are kept. Also §lOperator Tools > Pack diagnostics§r"
+        "text": "§lPack diagnostics§r: measures every pack's script time for a few seconds (default 10, 1 to 60), then lists every pack that answered, slowest first, with its version, ms per tick and saved data. Red: over 0.5 ms per tick, or one saved entry over 24 KB (one entry can hold 32 KB). Packs that don't answer (an older version) are listed under §lNo answer§r. A pack's page shows what takes its time (its top two callbacks), its biggest saved entry, and §lForget this pack's saved data§r: after you confirm, the pack deletes everything it saved in the world (in a bundle only its own entries), including anything it kept for players there such as stored inventory pages or letters, and saves nothing more until you run §e/reload§r or restart. If the pack has not answered after 200 ticks, the page says §e<pack> hasn't answered yet: it may still have deleted its data§r and an answer that arrives later is reported to you in chat (§e... forgot N saved entries ..., after taking longer than expected. Run /reload or restart the server now.§r, or that it didn't). Up to 16 forgets wait at once, one per pack (a second says it is still waiting), and a forget with no answer after 12,000 ticks (10 minutes) is dropped and a later reply ignored. Scoreboards, tags, structures and data saved on players are kept. Also §lOperator Tools > Pack diagnostics§r"
       },
       {
         "usage": "/realm:admin_title <title> [subtitle] [seconds] [player]",
@@ -150,7 +150,7 @@ export const PACKS = [
     "folder": "welcome_bp",
     "topic": "welcome",
     "name": "Welcome Message",
-    "summary": "Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. Operators can edit the popup in-game.",
+    "summary": "Shows a popup when a player joins the Realm: by default a short introduction to the realm (the story, what there is to do, handy commands and the rules) under gold headings. A brand-new world with no other saved data gets a generic welcome instead (below). Operators can edit the popup in-game.",
     "steps": [
       {
         "text": "Join the realm. The welcome popup appears after about 2 seconds; tap its button (§eLet's go!§r by default) to close it.",
@@ -161,7 +161,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:welcome§r opens the §lWelcome Message§r menu instead: §eShow the welcome message§r, §eEdit the welcome message§r, §eReset to the defaults§r and §eSettings§r (which points to §e/realm:config§r -> Welcome Message). The edit and reset buttons do the same as the commands below. Run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type §e\\n§r for a new line. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text.",
+        "text": "§lOperators:§r §e/realm:welcome§r opens the §lWelcome Message§r menu instead: §eShow the welcome message§r, §eEdit the welcome message§r, §eReset to the defaults§r and §eSettings§r (which points to §e/realm:config§r -> Welcome Message). The edit and reset buttons do the same as the commands below. Run §e/realm:welcome_edit§r, change the title, body or button text and the switches, then submit. The body is split over boxes of 100 characters each (Minecraft's limit), joined in order; type §e\\n§r for a new line. Players see the new text on their next join (with \"show once\" on, each player sees it one more time, unless you turn off \"Show it again to players who've seen it\" for a typo fix). §e/realm:welcome_reset§r asks first, then goes back to the pack's default text. On a §lnew world§r (see §ewelcome:profile§r under Saved data) the default is a generic welcome: the title §eWelcome!§r, a greeting, one line for each installed pack that has one (stories, daily quests, expeditions, bounty board, skills, crowns, land claims, calendar, parties, mail, minimap, stats, journal, prefs; installed packs are asked at most once a minute), and a closing line pointing to §e/realm:help§r and §e/realm:welcome_edit§r. It names no town, character or rule. §e/realm:welcome_edit§r and §e/realm:welcome_reset§r use these defaults there. A world that already ran, and any text an operator saved, keep their text. Full native verification of the new-world path in the full bundle is UNVERIFIED.",
         "ops": true
       }
     ],
@@ -988,7 +988,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:nick§r -> §lPlayers' nicknames (operator)§r lists every saved nickname; tap one to clear it, even for players who are offline. To turn nicknames off for everyone, disable §lNicknames§r in §e/realm:config§r -> §lNicknames§r.",
+        "text": "§lOperators:§r §e/realm:nick§r -> §lPlayers' nicknames (operator)§r lists saved nicknames 20 to a page (§lPrevious page§r / §lNext page§r), with §lSearch by name§r (part of a nickname or gamertag) and §lShow everyone§r; tap one to clear it, even for players who are offline. If the nickname changed while the question was open, nothing is cleared. To turn nicknames off for everyone, disable §lNicknames§r in §e/realm:config§r -> §lNicknames§r.",
         "ops": true
       }
     ],
@@ -997,7 +997,7 @@ export const PACKS = [
         "usage": "/realm:nick",
         "ops": false,
         "who": "Everyone",
-        "text": "Set, change or remove your nickname and its color, shown above your head (3 to 16 letters, digits, spaces or §e_§r). Operators also get every saved nickname, to clear any of them. Works while nicknames are enabled (default enabled, §eenabled§r)"
+        "text": "Set, change or remove your nickname and its color, shown above your head (3 to 16 letters, digits, spaces or §e_§r). Operators also get the saved nicknames, 20 to a page and searchable, to clear any of them. Works while nicknames are enabled (default enabled, §eenabled§r)"
       }
     ]
   },
@@ -1463,11 +1463,11 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lQuest spot outlines:§r the exact block or box a quest needs shows as a semi-clear colored outline, only for you (drawn by the Easy Building Guides resource pack). §lAmber§r is a standing box to walk to: the block under you, a 3x3 of floor tiles and, for steps with a zone (a vigil, a survive, a defense or a placing), a ring of tiles at its edge; also the escort and lead drop-off and the stealth goal. It turns §lemerald green§r while you stand inside it. §lCyan§r is a block to tap: the bell, altar or brazier of an Interact step, and the block of an Inspect clue (which also gets amber corner brackets in its air space). They show within about 40 blocks of the spot. Don't want them? Disable §lShow quest spot outlines§r in §e/realm:prefs§r.",
+        "text": "§lQuest spot outlines:§r the exact block or box a quest needs shows as a semi-clear colored outline, only for you (drawn by the Easy Building Guides resource pack). §lAmber§r is a standing box to walk to: the block under you, a 3x3 of floor tiles and, for steps with a zone (a vigil, a survive, a defense or a placing), a ring of tiles at its edge; also the escort and lead drop-off and the stealth goal. It turns §lemerald green§r while you stand inside it. §lCyan§r is a block to tap: the bell, altar or brazier of an Interact step, and the block of an Inspect clue (which also gets amber corner brackets in its air space). They show within about 40 blocks of the spot. The outline colors follow your own life, style and color values, so another player's outline is never recolored by yours. A cyan block's search runs in the background (at most 256 blocks a tick for each search, 4 searches at once, so at most 1,024 blocks a tick for the whole pack): the first draw uses the spot itself and the exact blocks appear a moment later, and blocks found are kept even if part of the area was not loaded. Tuning this limit still needs a measurement on a real server; it is a cap, not a measured speedup. Don't want them? Disable §lShow quest spot outlines§r in §e/realm:prefs§r.",
         "ops": false
       },
       {
-        "text": "§lOperators:§r stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. §e/realm:saga_places§r (also in §e/realm:saga§r) lists every place with its status and lets you §lTeleport§r, §lSet here§r, §lBuild here§r (a green outline preview with Build here, Rotate, Look around and Cancel), §lRebuild§r, §lRemove§r (puts the terrain back exactly) and §lRelocate§r. §e/realm:saga_place <name>§r sets a spot where you stand without building. §lOperator tools§r in §e/realm:saga§r finish a stuck player's current step or reset their stories. §e/realm:config§r -> §lStory Questlines§r has the switches.",
+        "text": "§lOperators:§r stories need places (a lighthouse, an old chapel, the seals...). By default the pack picks a spot for a place the first time a chapter needs it and builds its building when a player comes within 64 blocks, saving the terrain first. §e/realm:saga_places§r (also in §e/realm:saga§r) lists every place with its status and lets you §lTeleport§r, §lSet here§r, §lBuild here§r (a green outline preview with Build here, Rotate, Look around and Cancel), §lRebuild§r, §lRemove§r (puts the terrain back exactly) and §lRelocate§r. §e/realm:saga_place <name>§r sets a spot where you stand without building. §lTown anchor:§r stand in the town square in the Overworld and run §e/realm:saga_place town§r (it saves where you stand and does not build anything). Seven town stories (§emayors_burden§r, §esinging_forge§r, §eheart_bram§r, §efest_judge§r, §efest_speech§r, §eact2_choir§r, §elost_lambs§r) count every near-town spot (the square, the farms, the forge, Pip's whole route) from that place; without it they use world spawn, as before. Every other story keeps counting from world spawn, and the hints name the place. The town can only be set in the Overworld. §lOperator tools§r in §e/realm:saga§r finish a stuck player's current step or reset their stories. §e/realm:config§r -> §lStory Questlines§r has the switches.",
         "ops": true
       }
     ],
@@ -1494,7 +1494,7 @@ export const PACKS = [
         "usage": "/realm:saga_place [name]",
         "ops": false,
         "who": "Operators",
-        "text": "Sets a story place where you stand, without a building (an earlier building of it is removed first). Without a name, lists the places in chat"
+        "text": "Sets a story place where you stand, without a building (an earlier building of it is removed first). Without a name, lists the places in chat. §etown§r (Overworld only) is the anchor for the seven town stories' near-town spots; it is not a place other packs show, and the list gives the stories that use it. No default location is stored: until set, world spawn is used"
       },
       {
         "usage": "/realm:saga_reset <player>",
@@ -1973,7 +1973,7 @@ export const PACKS = [
         "ops": false
       },
       {
-        "text": "§lOperators:§r §e/realm:titles§r also has §eGive a title or trail§r (pick a player online or type a name, then the title or §etrail:ember§r) and §eSettings§r (which points to §e/realm:config§r -> Titles & Trails). In chat, §e/realm:titles_give Steve \"Hero of the Realm\"§r gives a player a title, and §e/realm:titles_give Steve trail:ember§r a trail (players who are offline too, if they've played since the pack was added). §e/realm:config§r -> §lTitles & Trails§r switches the built-in titles and trails and sets how often trails puff.",
+        "text": "§lOperators:§r §e/realm:titles§r also has §eGive or take a title or trail§r (pick a player online or type a name, the title or §etrail:ember§r, and tick §lTake it away instead of giving it§r to remove it) and §eSettings§r (which points to §e/realm:config§r -> Titles & Trails). In chat, §e/realm:titles_give Steve \"Hero of the Realm\"§r gives a player a title, §e/realm:titles_give Steve trail:ember§r a trail, and §e/realm:titles_take Steve \"Hero of the Realm\"§r (or §etrail:ember§r) takes one away (players who are offline too, if they've played since the pack was added). Taking the title a player wears also clears it from under their name. §e/realm:config§r -> §lTitles & Trails§r switches the built-in titles and trails and sets how often trails puff.",
         "ops": true
       }
     ],
@@ -1982,13 +1982,19 @@ export const PACKS = [
         "usage": "/realm:titles",
         "ops": false,
         "who": "Everyone",
-        "text": "Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default §etrailTicks§r). Operators also get §eGive a title or trail§r (like §e/realm:titles_give§r) and §eSettings§r"
+        "text": "Shows your title, trail and progress toward the built-in titles; choose the title under your name and the trail that follows you (a puff every 4 ticks while moving, default §etrailTicks§r). Operators also get §eGive or take a title or trail§r (like §e/realm:titles_give§r and §e/realm:titles_take§r) and §eSettings§r"
       },
       {
         "usage": "/realm:titles_give <player> <title>",
         "ops": true,
         "who": "Ops",
         "text": "Gives a player a title (quote titles and names with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r, §etrail:hearts§r, §etrail:glyphs§r, §etrail:confetti§r or §etrail:notes§r. Works for offline players this pack has seen"
+      },
+      {
+        "usage": "/realm:titles_take <player:String> <title:String>",
+        "ops": true,
+        "who": "Ops",
+        "text": "Takes a title away from a player (quote names and titles with spaces), or a trail with §etrail:cloud§r, §etrail:leaves§r, §etrail:ember§r, §etrail:sparkle§r, §etrail:hearts§r, §etrail:glyphs§r, §etrail:confetti§r or §etrail:notes§r. Works for offline players this pack has seen. Says so, and changes nothing, when the player never had it; a player's worn title or active trail is cleared when it is the one taken."
       }
     ]
   },

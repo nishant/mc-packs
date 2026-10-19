@@ -7,7 +7,7 @@
  * @typedef {{ folder: string, pack: string, commands: Command[] }} Pack
  */
 
-/** @type {Pack[]} 178 commands in 64 packs */
+/** @type {Pack[]} 179 commands in 64 packs */
 export const PACKS = [
   {
     folder: "admin_bp",
@@ -506,6 +506,7 @@ export const PACKS = [
     commands: [
       {"name":"realm:titles","description":"Titles & Trails: choose the title under your name and the trail that follows you","permission":"any","params":[]},
       {"name":"realm:titles_give","description":"Operators: give a player a title (or a trail: \"trail:cloud\", leaves, ember, sparkle, hearts, glyphs, confetti, notes)","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
+      {"name":"realm:titles_take","description":"Operators: take a title (or a trail: \"trail:cloud\", leaves, ember, sparkle, hearts, glyphs, confetti, notes) away from a player, online or not","permission":"op","params":[{"name":"player","type":"String","optional":false},{"name":"title","type":"String","optional":false}]},
     ],
   },
   {
@@ -580,7 +581,7 @@ export const ENUMS = {
   "realm:moon_state": ["blood","harvest","normal"],
   "realm:npc_id": ["mara","tobin","reyes","elsie","bram","quill","ida","sol","hollis","moss","wren","bea"],
   "realm:relic_id": ["storm_staff","rain_charm","tide_boots","lantern_deep","storm_meter","compass_echoes","frost_band","sun_pendant","miners_lamp","wayfarer_boots","lantern_shard","choir_mask","hal_compass","vesna_charm","singing_blade","hollow_crown","keeper_lamp"],
-  "realm:saga_place_name": ["lighthouse","sunken_bell","old_chapel","graveyard","observatory","sea_cave","choir_ring","witch_hut","old_mine","watchtower","meadow","starfall","seal_tide","seal_stone","seal_sky","hollow_gate"],
+  "realm:saga_place_name": ["town","lighthouse","sunken_bell","old_chapel","graveyard","observatory","sea_cave","choir_ring","witch_hut","old_mine","watchtower","meadow","starfall","seal_tide","seal_stone","seal_sky","hollow_gate"],
   "realm:sidebar_stat": ["playtime","deaths","mobkills","pvpkills","mined","placed","travelled","flown","joins","cycle","off"],
   "realm:silly_book": ["random","grunt_birthday","hyper_jump","squeak","bubbles","rainbow_trail","hat_trick","disco","moo","confetti_swing","tiny_thunder","fish_slap","glow","duck","hiccups"],
   "realm:town_project": ["well","notice_board","lamps","garden","stall","dock","bell_tower"],
