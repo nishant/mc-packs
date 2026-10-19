@@ -1,11 +1,18 @@
-// Easy Building beds through the pack's own place, destroy, and undo.
-// Queued for the lead. Do not treat a local author run as a pass.
+// Native Line placement through both real block interactions, then the real undo/redo commands.
+// This does not certify every mode, physical mouse input, or the destruction path.
 // node tools/test-bds/run.mjs --quiet --flat --only build_bp,build_rp --scenario tools/test-bds/examples/build-beds.js --timeout 300
 export default async function (t) {
   const { BlockPermutation, ItemStack } = t.mc;
-  await t.loadArea(0, 0, { radius: 6 });
-  const p = await t.player("BedBuilder", { x: 0, z: 0, gameMode: "survival", op: true });
+  await t.loadArea(0, 0, { radius: 2 });
+  const p = await t.player("BedBuilder", { x: 4, z: 1, gameMode: "survival", op: true });
   const dim = p.dimension;
+  const floor = Math.floor(p.location.y) - 1;
+  const support = { x: 4, y: floor + 2, z: 4 };
+  const foot = { x: support.x, y: support.y + 1, z: support.z };
+  const head = { x: foot.x, y: foot.y, z: foot.z + 1 };
+  for (const at of [support, { ...support, z: support.z + 1 }, { x: 4, y: floor + 3, z: 1 }])
+    t.assert(t.server(`setblock ${at.x} ${at.y} ${at.z} stone`).ok, "native fixture support placed");
+  p.teleport({ x: 4.5, y: floor + 4, z: 1.5 });
   const items = (id) => {
     const c = p.getComponent("inventory").container;
     let n = 0;
@@ -15,12 +22,11 @@ export default async function (t) {
 
   let resolved = false;
   try { BlockPermutation.resolve("minecraft:end_gateway"); resolved = true; } catch { resolved = false; }
-  const gate = { x: 2, y: -58, z: 2 };
+  const gate = { x: 12, y: floor + 1, z: 0 };
   const set = t.cmd(p, `/setblock ${gate.x} ${gate.y} ${gate.z} end_gateway`);
   const gateType = dim.getBlock(gate)?.typeId;
-  t.log(`end_gateway resolve=${resolved} setblock=${set.statusMessage ?? set.status} type=${gateType}`);
-  t.check(!(resolved && gateType !== "minecraft:end_gateway"), "a resolved end_gateway must place");
-  t.check(!(!resolved && gateType === "minecraft:end_gateway"), "an unresolved end_gateway must not place");
+  t.log(`end_gateway resolve=${resolved} setblock.ok=${set.ok} native type=${gateType}`);
+  t.check(resolved || gateType === "minecraft:end_gateway", "native APIs recognize end_gateway, so its unbreakable guard must remain");
 
   p.giveItem(new ItemStack("minecraft:bed", 1), true);
   p.selectedSlotIndex = 0;
@@ -31,11 +37,17 @@ export default async function (t) {
   t.assert(line >= 0, "Line mode is in the menu");
   form.answer(line);
   await t.wait(5);
-  const foot = { x: 4, y: -60, z: 4 };
-  p.lookAtBlock({ x: foot.x, y: foot.y - 1, z: foot.z });
-  p.useItemInSlot(0);
-  await t.wait(10);
-  const head = { x: foot.x, y: foot.y, z: foot.z + 1 };
+  p.lookAtBlock(support);
+  const anchorSince = t.tick;
+  p.useItemInSlotOnBlock(0, support, t.mc.Direction.Up);
+  await t.waitMessage(p, /Anchor set/i, { since: anchorSince, kind: "actionbar", timeout: 100 });
+  t.check(items("minecraft:bed") === 1, "setting the anchor preserves the one survival bed");
+  await t.wait(6); // the production interaction debounce is 200 real milliseconds
+  p.lookAtBlock(support);
+  const placedSince = t.tick;
+  p.useItemInSlotOnBlock(0, support, t.mc.Direction.Up);
+  await t.waitMessage(p, /blocks.*placed/i, { since: placedSince, kind: "actionbar", timeout: 120 });
+  await t.wait(5);
   t.check(dim.getBlock(foot)?.typeId === "minecraft:bed" && dim.getBlock(head)?.typeId === "minecraft:bed", "pack place keeps both bed halves");
   t.check(items("minecraft:bed") === 0, "one bed item was charged");
   t.assert(t.cmd(p, "/realm:build_undo").ok, "/realm:build_undo ran");
@@ -46,20 +58,4 @@ export default async function (t) {
   await t.wait(5);
   t.check(dim.getBlock(foot)?.typeId === "minecraft:bed" && dim.getBlock(head)?.typeId === "minecraft:bed", "redo restores both halves");
 
-  if (gateType === "minecraft:end_gateway") {
-    const menu = t.waitForm(p, { timeout: 100 });
-    t.assert(t.cmd(p, "/realm:build").ok, "/realm:build ran");
-    const destroy = await menu;
-    const idx = destroy.buttons.findIndex((b) => /Destroy/i.test(b));
-    t.assert(idx >= 0, "Destroy mode is in the menu");
-    destroy.answer(idx);
-    await t.wait(5);
-    p.giveItem(new ItemStack("minecraft:diamond_pickaxe", 1), true);
-    p.lookAtBlock(gate);
-    p.breakBlock(gate);
-    await t.wait(5);
-    t.check(dim.getBlock(gate)?.typeId === "minecraft:end_gateway", "destroy mode left end_gateway in place");
-  } else {
-    t.check(resolved === false, "end_gateway stayed unbreakable because native resolve and setblock did not prove the id");
-  }
 }

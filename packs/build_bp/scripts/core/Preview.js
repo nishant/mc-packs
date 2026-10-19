@@ -9,6 +9,7 @@ import { getPreviewMode, getDestroyPreviewMode, getFlickPreview, getAirBuildReac
 import { BOOK_ID, TUTORIAL_BOOK_ID, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "../utils/Items.js";
 import { createIdleClock } from "../utils/idle-cadence.js";
 import { holdsBuildTool } from "../utils/build-tool.js";
+import { beginVisualizationTick, forgetHolder, isVisualizationHolder, visualizationIdle, visualizationReleased } from "../utils/tool-gate.js";
 import { getFlippedStates } from "../modifiers/MirrorModifier.js";
 import { expandBeds, isBedType, directionFromYaw, directionFromStates, bedPartnerPos } from "./beds.js";
 
@@ -342,13 +343,26 @@ export function startPreviewLoop() {
         recordTick();
         tpsPart.text = `  §8-  ${tpsText()}`;
 
+        if (visualizationIdle()) return;
         const all = allPlayers();
+        if (!beginVisualizationTick(all, holdsBuildTool)) {
+            for (const id of visualizationReleased()) {
+                const player = all.find((p) => p.id === id);
+                try { if (player && getState(player).anchor) clearAnchor(player); } catch {}
+            }
+            return;
+        }
         const phase = previewClock.tick();
         for (let i = 0; i < all.length; i++) {
             const player = all[i];
+            if (!isVisualizationHolder(player.id)) {
+                try { if (getState(player).anchor) clearAnchor(player); } catch {}
+                continue;
+            }
             const anchored = !!getState(player).anchor;
             if (!anchored && idleSkip(player, i, previewBusy, phase, 1)) continue;
             if (!holdsBuildTool(player)) {
+                forgetHolder(player.id);
                 if (anchored) clearAnchor(player);
                 previewBusy.delete(player);
                 continue;

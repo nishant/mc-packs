@@ -20,9 +20,12 @@ test("O47 color-bed ids are not a placeable special case", () => {
   assert.equal(src.includes("expandBeds"), true);
 });
 
-test("O49 end_gateway is not protected by a dead id", () => {
+test("O49 end_gateway stays unbreakable until a native resolve proves the id", () => {
   const src = read("packs/build_bp/scripts/core/BlockDestroyer.js");
-  assert.equal(src.includes("minecraft:end_gateway"), false);
+  assert.match(src, /UNBREAKABLE[\s\S]*"minecraft:end_gateway"/);
+  const allow = read("tools/check-ids.allow.json");
+  assert.match(allow, /minecraft:end_gateway/);
+  assert.match(allow, /Kept unbreakable until a native BlockTypes or command resolve proves the id invalid/);
 });
 
 test("O49 idle loops use a per-invocation clock", () => {
@@ -32,13 +35,18 @@ test("O49 idle loops use a per-invocation clock", () => {
     "packs/build_bp/scripts/core/GuideBook.js",
     "packs/build_bp/scripts/main.js",
   ]) {
-    assert.equal(read(rel).includes("nextIdlePhase"), true, rel);
+    const src = read(rel);
+    assert.equal(src.includes("createIdleClock"), true, rel);
+    assert.equal(src.includes("nextIdlePhase"), false, rel);
   }
 });
 
 test("O48 interval-1 visualization is gated on a held tool", () => {
   assert.equal(read("packs/build_bp/scripts/core/Preview.js").includes("beginVisualizationTick"), true);
   assert.equal(read("packs/build_bp/scripts/core/ModifierVisualizer.js").includes("beginVisualizationTick"), true);
+  assert.equal(read("packs/build_bp/scripts/core/Preview.js").includes("visualizationIdle"), true);
+  assert.equal(read("packs/build_bp/scripts/core/PlayerState.js").includes("markHolderDirty"), true);
+  assert.equal(read("packs/build_bp/scripts/utils/build-tool.js").includes("unplaceableIds"), true);
 });
 
 test("O51 an absent player limit is not the live cap", () => {

@@ -10,7 +10,7 @@ import { getPaletteBlocks, assignPalette, getDistributionMode, getSmartPattern }
 import { getPlacementStatesFromAir } from "../modes/AirBuildMode.js";
 import { filterSafeZonePositions, isBuildBlockedForPlayer } from "./Protection.js";
 import { lockActionBar } from "../utils/ActionBar.js";
-import { expandBeds, isBedType, directionFromStates, directionFromYaw, trimPlacement, placementItemCount, keepBedHalvesTogether } from "./beds.js";
+import { expandBeds, isBedType, directionFromStates, directionFromYaw, trimPlacement, placementItemCount, keepBedHalvesTogether, dropIncompleteBeds } from "./beds.js";
 export const UNPLACEABLE = new Set([
     "minecraft:undyed_shulker_box",
 ]);
@@ -60,6 +60,7 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
         }
         catch { return true; }
     });
+    if (toPlace.some(p => p._bedGroup != null)) toPlace = dropIncompleteBeds(toPlace);
     const cap = getMaxBlocks(player);
     const bedBuild = isBedType(typeId);
     if (!bedBuild && toPlace.length > cap) toPlace = toPlace.slice(0, cap);
@@ -83,7 +84,11 @@ export function placeBlocks(player, positions, anchor, typeId, blockStates, opti
         assignments = assignments.filter(a => !UNPLACEABLE.has(a.typeId));
         toPlace     = assignments.map(a => a.pos);
     }
-    if (bedBuild || (assignments && assignments.some(a => isBedType(a.typeId)))) {
+    const alreadyExpanded = toPlace.some(p => p._bedGroup != null);
+    if (alreadyExpanded) {
+        toPlace = trimPlacement(dropIncompleteBeds(toPlace), cap).positions;
+        if (assignments) assignments = toPlace.map(p => ({ pos: p, typeId: p.typeId ?? typeId }));
+    } else if (bedBuild || (assignments && assignments.some(a => isBedType(a.typeId)))) {
         let yaw = 0;
         try { yaw = player.getRotation().y; } catch { yaw = 0; }
         const entries = (assignments ?? toPlace.map(p => ({ pos: p, typeId }))).map(({ pos, typeId: tid }) => {

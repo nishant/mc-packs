@@ -202,7 +202,7 @@ function readPlaced(player, pos) {
         return { typeId: block.typeId, states: block.permutation.getAllStates() };
     } catch { return null; }
 }
-async function filterBuildPositions(player, positions, typeId, blockStates, isDestroy) {
+export async function filterBuildPositions(player, positions, typeId, blockStates, isDestroy) {
     const ready = isDestroy
         ? expandDestroyForClaims(positions, (pos) => readPlaced(player, pos))
         : expandForClaims(positions, typeId, blockStates, yawOf(player));

@@ -93,15 +93,115 @@ function keyOf(p) {
 }
 
 /**
+ * Mirror facing before a head offset is chosen. X swaps east/west. Z swaps north/south.
+ * @param {BedStates} states
+ * @param {boolean} mx
+ * @param {boolean} mz
+ * @returns {BedStates}
+ */
+function flipBedFacing(states, mx, mz) {
+    if (!mx && !mz) return states;
+    const s = { ...states };
+    if (s.direction !== undefined && s.direction !== null && s.direction !== "") {
+        const d = Number(s.direction);
+        if (Number.isInteger(d) && d >= 0 && d <= 3) {
+            let next = d;
+            if (mx && (next === 1 || next === 3)) next = next === 1 ? 3 : 1;
+            if (mz && (next === 0 || next === 2)) next = next === 0 ? 2 : 0;
+            s.direction = next;
+        }
+    }
+    const card = s["minecraft:cardinal_direction"];
+    if (typeof card === "string") {
+        let next = card;
+        if (mx && (next === "east" || next === "west")) next = next === "east" ? "west" : "east";
+        if (mz && (next === "north" || next === "south")) next = next === "north" ? "south" : "north";
+        s["minecraft:cardinal_direction"] = next;
+    }
+    return s;
+}
+
+/**
+ * A batch that already has a head is one paste, not a second expansion.
+ * Pair the halves, charge one item, and drop an orphan or a blocked partner.
+ * @param {BedEntry[]} entries
+ * @param {(pos: {x:number,y:number,z:number}, typeId: string) => boolean} [canPlace]
+ * @returns {{ positions: BedEntry[], dropped: number }}
+ */
+function pairExistingHalves(entries, canPlace) {
+    /** @type {BedEntry[]} */
+    const out = [];
+    const used = new Set();
+    let dropped = 0;
+    let group = 0;
+    for (let i = 0; i < entries.length; i++) {
+        if (used.has(i)) continue;
+        const entry = entries[i];
+        const typeId = entry.typeId ?? "";
+        if (!isBedType(typeId)) {
+            used.add(i);
+            out.push({ ...entry, _bedItems: entry._bedItems ?? 1, _bedBlocks: entry._bedBlocks ?? 1 });
+            continue;
+        }
+        const partner = bedPartnerPos(entry, entry.states ?? entry._resolvedStates);
+        let pair = -1;
+        if (partner) {
+            for (let j = 0; j < entries.length; j++) {
+                if (j === i || used.has(j)) continue;
+                const other = entries[j];
+                if ((other.typeId ?? "") !== typeId) continue;
+                if (other.x === partner.x && other.y === partner.y && other.z === partner.z) { pair = j; break; }
+            }
+        }
+        if (pair < 0) { dropped++; used.add(i); continue; }
+        const other = entries[pair];
+        if (canPlace && (!canPlace(entry, typeId) || !canPlace(other, typeId))) {
+            dropped++;
+            used.add(i);
+            used.add(pair);
+            continue;
+        }
+        const gid = ++group;
+        const foot = entry.states?.head_piece_bit === true ? other : entry;
+        const head = foot === entry ? other : entry;
+        const facing = foot.states ?? foot._resolvedStates;
+        const dir = directionFromStates(facing) ?? directionFromStates(head.states ?? head._resolvedStates);
+        const footStates = dir == null ? facing : bedStates(typeId, dir, false, facing);
+        const headFacing = head.states ?? head._resolvedStates;
+        const headStates = dir == null ? headFacing : bedStates(typeId, dir, true, headFacing);
+        out.push({
+            x: foot.x, y: foot.y, z: foot.z, typeId,
+            states: footStates, _resolvedStates: footStates,
+            _bedGroup: gid, _bedHead: false, _bedItems: 1, _bedBlocks: 1,
+        });
+        out.push({
+            x: head.x, y: head.y, z: head.z, typeId,
+            states: headStates, _resolvedStates: headStates,
+            _bedGroup: gid, _bedHead: true, _bedItems: 0, _bedBlocks: 1,
+        });
+        used.add(i);
+        used.add(pair);
+    }
+    return { positions: out, dropped };
+}
+
+/**
  * Turn bed feet into foot + head before the cap and the item count.
- * A batch that already has a head is left alone so a paste is not expanded twice.
+ * A batch that already has a head is paired, not expanded again.
+ * A batch that already has pair metadata is kept as that one expansion.
  * If either half cannot be placed, or the halves overlap something already kept, the whole bed is dropped.
  * Heads are not a second item.
  * @param {BedEntry[]} entries
  * @param {(pos: {x:number,y:number,z:number}, typeId: string) => boolean} [canPlace]
+ * @returns {{ positions: BedEntry[], dropped: number }}
  */
 export function expandBeds(entries, canPlace) {
+    if (entries.some((e) => e._bedGroup != null)) {
+        const kept = dropIncompleteBeds(entries);
+        return { positions: kept, dropped: Math.max(0, entries.length - kept.length) };
+    }
     const pasted = entries.some((e) => isBedType(e.typeId ?? "") && e.states?.head_piece_bit === true);
+    if (pasted) return pairExistingHalves(entries, canPlace);
     const out = [];
     const reserved = new Set();
     let dropped = 0;
@@ -221,14 +321,14 @@ export function expandForClaims(positions, typeId, blockStates, yaw) {
     if (!Array.isArray(positions) || !positions.length || !isBedType(typeId)) return positions ?? [];
     const dir = directionFromStates(blockStates) ?? directionFromYaw(yaw ?? 0);
     const entries = positions.map((p) => {
-        const states = p.states ?? p._resolvedStates ?? blockStates ?? {};
+        const raw = p.states ?? p._resolvedStates ?? blockStates ?? {};
+        const states = (p._mx || p._mz) ? flipBedFacing(raw, !!p._mx, !!p._mz) : raw;
         return {
             x: p.x, y: p.y, z: p.z,
             typeId: p.typeId && isBedType(p.typeId) ? p.typeId : typeId,
             states,
             direction: directionFromStates(states) ?? dir,
             _alreadyHalf: states.head_piece_bit === true,
-            _mx: p._mx, _my: p._my, _mz: p._mz,
         };
     });
     return expandBeds(entries).positions.map((p) => ({
@@ -240,19 +340,19 @@ export function expandForClaims(positions, typeId, blockStates, yaw) {
         _bedHead: p._bedHead,
         _bedItems: p._bedItems,
         _bedBlocks: p._bedBlocks,
-        _mx: p._mx, _my: p._my, _mz: p._mz,
     }));
 }
 
 /**
  * Drop a bed when the filter kept only one half. Other blocks stay.
- * @param {Array<{x:number,y:number,z:number,_bedGroup?: number}>} positions
+ * @param {BedEntry[]} positions
+ * @returns {BedEntry[]}
  */
 export function dropIncompleteBeds(positions) {
     if (!Array.isArray(positions)) return [];
-    /** @type {Map<number, Array<{x:number,y:number,z:number,_bedGroup?: number}>>} */
+    /** @type {Map<number, BedEntry[]>} */
     const groups = new Map();
-    /** @type {Array<{x:number,y:number,z:number,_bedGroup?: number}>} */
+    /** @type {BedEntry[]} */
     const kept = [];
     for (const pos of positions) {
         if (pos._bedGroup == null) { kept.push(pos); continue; }

@@ -114,6 +114,7 @@ export function getAdminMaxBlocksCap() {
 export function setAdminMaxBlocksCap(value) {
     const v = Math.max(1, Math.min(HARD_MAX_BLOCKS, Math.floor(value)));
     try { world.setDynamicProperty(DP_ADMIN_MAX_BLOCKS_CAP, v); } catch {}
+    syncBlockLimitPrefs();
     return v;
 }
 export function getDefaultMaxBlocks() {

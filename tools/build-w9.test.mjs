@@ -62,6 +62,9 @@ test("a paste that already has a head is not expanded again", () => {
     { x: 0, y: 0, z: 1, typeId: "minecraft:bed", states: { direction: 0, head_piece_bit: true } },
   ], () => true);
   assert.equal(pasted.positions.length, 2);
+  assert.equal(placementItemCount(pasted.positions), 1);
+  assert.equal(pasted.positions[0]._bedGroup, pasted.positions[1]._bedGroup);
+  assert.equal(pasted.positions[1]._bedHead, true);
 });
 
 test("a period-5 loop services every idle index, including after a leave", () => {

@@ -8,16 +8,20 @@ import { heldItemCached, isBook, isTutorialBook } from "./Items.js";
 
 /** @type {Set<string>} */
 const placeableIds = new Set();
+/** @type {Set<string>} */
+const unplaceableIds = new Set();
 
 /** @param {string} typeId */
 function placeable(typeId) {
     if (!typeId || typeId.startsWith("eb:") || typeId.startsWith("realm:")) return false;
     if (placeableIds.has(typeId)) return true;
+    if (unplaceableIds.has(typeId)) return false;
     try {
         BlockPermutation.resolve(typeId);
         placeableIds.add(typeId);
         return true;
     } catch {
+        unplaceableIds.add(typeId);
         return false;
     }
 }

@@ -13,7 +13,21 @@ function events() {
 }
 
 export class Player {}
-export class ActionFormData { show() { return Promise.resolve({ canceled: true }); } }
+const formQueue = [];
+export const shownForms = [];
+export function queueForm(response) { formQueue.push(response); }
+export class ActionFormData {
+  constructor() { this.buttons = []; this.titleText = ""; this.bodyText = ""; }
+  title(text) { this.titleText = text; return this; }
+  body(text) { this.bodyText = text; return this; }
+  button(label) { this.buttons.push(String(label)); return this; }
+  divider() { return this; }
+  show() {
+    shownForms.push(this);
+    const next = formQueue.shift();
+    return Promise.resolve(typeof next === "function" ? next(this) : (next ?? { canceled: true }));
+  }
+}
 export class ModalFormData { show() { return Promise.resolve({ canceled: true }); } }
 export const FormCancelationReason = { UserBusy: "UserBusy", UserClosed: "UserClosed" };
 export class CustomCommandRegistry {}
@@ -28,9 +42,14 @@ export class ItemStack {
 export const EquipmentSlot = { Mainhand: "Mainhand" };
 export const GameMode = { Survival: "Survival", Creative: "Creative", Adventure: "Adventure", Spectator: "Spectator" };
 export const CommandPermissionLevel = { GameDirectors: 3 };
+export const CustomCommandStatus = { Success: 0, Failure: 1 };
+let resolveCalls = 0;
+export function resolveCount() { return resolveCalls; }
+export function resetResolveCount() { resolveCalls = 0; }
 export const BlockPermutation = {
   resolve(typeId, states = {}) {
-    if (typeId === "minecraft:end_gateway") throw new Error("unknown block");
+    resolveCalls++;
+    if (typeId === "minecraft:end_gateway" || typeId === "minecraft:apple" || typeId === "minecraft:diamond_sword") throw new Error("unknown block");
     if (/_bed$/.test(String(typeId)) && typeId !== "minecraft:bed" && typeId !== "minecraft:straw_bed") {
       throw new Error("unknown block");
     }

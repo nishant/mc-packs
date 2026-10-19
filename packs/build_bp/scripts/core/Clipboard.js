@@ -48,18 +48,24 @@ function trimPasteEntries(entries, cap) {
                 if (entries[j].typeId === entry.typeId && samePos(entries[j].pos, partner)) { pair = j; break; }
             }
         }
-        const add = chargeUnits(entry.typeId, entry.permStates)
-            + (pair >= 0 ? chargeUnits(entries[pair].typeId, entries[pair].permStates) : 0);
-        if (items + Math.max(add, pair >= 0 ? 1 : 0) > cap) break;
+        if (isBedType(entry.typeId) && pair < 0) { used.add(i); continue; }
+        const blocks = pair >= 0 ? 2 : 1;
+        if (items + blocks > cap) break;
         const group = out.length + 1;
         if (pair >= 0) {
-            out.push({ ...entry, _bedGroup: group }, { ...entries[pair], _bedGroup: group });
+            const head = entry.permStates?.head_piece_bit === true;
+            const other = entries[pair];
+            const otherHead = other.permStates?.head_piece_bit === true;
+            out.push(
+                { ...entry, _bedGroup: group, _bedHead: head, _bedItems: head ? 0 : 1, _bedBlocks: 1 },
+                { ...other, _bedGroup: group, _bedHead: otherHead, _bedItems: otherHead ? 0 : 1, _bedBlocks: 1 },
+            );
             used.add(pair);
         } else {
             out.push(entry);
         }
         used.add(i);
-        items += add;
+        items += blocks;
     }
     return out;
 }
