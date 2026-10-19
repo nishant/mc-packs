@@ -6,7 +6,7 @@
 import { CommandPermissionLevel, EnchantmentType, ItemLockMode, ItemStack, Player, PlayerInventoryType, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { get, getFor, onChange, setFor } from "./settings.js";
-import { carried, commitInventory, discardSnapshot, indexedKinds, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
+import { carried, commitInventory, discardSnapshot, exportPending, indexedKinds, InventoryRecoveryError, inventoryReady, kindsOfRecs, loadSnapshot, parseKind, pendingSummary, pruneIndex, recordIndex, saveSnapshot, signature, stateOf } from "./page-store.js";
 
 export const BTN_PREV = "custom:inv_prev";
 export const BTN_MENU = "custom:inv_menu";
@@ -1776,4 +1776,29 @@ async function settingsMenu(player) {
     player.sendMessage(out.message);
   }
   hooks.bar(player, "§aInventory settings saved");
+}
+
+/**
+ * Operator recovery for a stuck inventory journal: the operator confirms what will happen, the summary is read
+ * again on submit (the journal may have changed or been cleared meanwhile), and only then is the export run.
+ * @param {Player} operator @param {Player} target
+ * @returns {Promise<string>}
+ */
+export async function recoverInventory(operator, target) {
+  const first = pendingSummary(target);
+  if (!first) return `${target.name} has nothing waiting for recovery.`;
+  const form = new ActionFormData()
+    .title("§lRecover inventory")
+    .body(
+      `${target.name}'s inventory move did not finish. Their saved before-image holds ${first.items} stacks.\n` +
+        `Confirming puts those stacks into ${first.chests} chest(s) on empty floor next to you, then clears the journal. ` +
+        `Their current inventory is not touched, so check it first: items they still carry will exist twice.`
+    )
+    .button("§cExport to chests")
+    .button("Cancel");
+  const res = /** @type {any} */ (await form.show(operator));
+  if (res.canceled || res.selection !== 0) return "Canceled, nothing changed.";
+  const again = pendingSummary(target);
+  if (!again || again.items !== first.items) return "The journal changed while you were deciding; nothing was exported. Run it again.";
+  return exportPending(operator, target).message;
 }

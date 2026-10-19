@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { buttonSlots, initPages, openInvMenu, refillFromPages, setOpPages, storedCount } from "./pages.js";
+import { buttonSlots, initPages, openInvMenu, recoverInventory, refillFromPages, setOpPages, storedCount } from "./pages.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -1057,6 +1057,24 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
           console.warn(`[stash] ${e}`);
         }
       });
+      return { status: CustomCommandStatus.Success };
+    }
+  );
+
+  customCommandRegistry.registerCommand(
+    {
+      name: "realm:inv_recover",
+      description: "Operators: recover a player's stuck inventory move. Asks you to confirm, then puts their saved items into chests next to you",
+      permissionLevel: CommandPermissionLevel.GameDirectors,
+      cheatsRequired: false,
+      mandatoryParameters: [{ name: "player", type: CustomCommandParamType.PlayerSelector }],
+    },
+    (origin, targets) => {
+      const player = originPlayer(origin);
+      if (!player) return { status: CustomCommandStatus.Failure, message: "Must be run by a player." };
+      if (!Array.isArray(targets) || targets.length !== 1) return { status: CustomCommandStatus.Failure, message: "Name exactly one player." };
+      const target = targets[0];
+      system.run(() => recoverInventory(player, target).then((m) => player.sendMessage(m), (e) => console.warn(`[stash] ${e}`)));
       return { status: CustomCommandStatus.Success };
     }
   );

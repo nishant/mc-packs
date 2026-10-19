@@ -5,7 +5,7 @@ import { StructureSaveMode, world } from "@minecraft/server";
 /** @typedef {import("@minecraft/server").Player} Player */
 /** @typedef {{ s: number, item: ItemStack }} Entry */
 /** @typedef {{ id: string, slots: number[], layout?: 2 }} Ref */
-/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number> }>, pending?: { before: Ref, after: Ref } }} State */
+/** @typedef {{ v: 1, cur: number, layout?: 2, pages: Record<string, Ref>, idx?: Record<string, { r: string, k: Record<string, number> }>, pending?: { before: Ref, after: Ref, out?: { d: string, p: [number, number, number][] } } }} State */
 const STATE = "stash:native";
 const NEXT = "stash:snapshot_next";
 const ENTITY = "realm:stash_page_store";
@@ -393,4 +393,97 @@ export function commitInventory(player, old, next, after) {
  */
 export function inventoryReady(player) {
   return !stateOf(player).pending;
+}
+
+const CHEST = "minecraft:chest";
+const CHEST_SLOTS = 27;
+
+/** What an operator is told before confirming, or undefined when nothing is pending. @param {Player} target */
+export function pendingSummary(target) {
+  const pending = stateOf(target).pending;
+  if (!pending) return undefined;
+  return { items: pending.before.slots.length, chests: Math.max(1, Math.ceil(pending.before.slots.length / CHEST_SLOTS)), started: !!pending.out };
+}
+
+/** @param {import("@minecraft/server").Block | undefined} block @param {Entry[]} part */
+function chestMatches(block, part) {
+  if (block?.typeId !== CHEST) return false;
+  const box = block.getComponent("minecraft:inventory")?.container;
+  if (!box) return false;
+  for (let i = 0; i < CHEST_SLOTS; i++) {
+    const want = part[i]?.item;
+    if (signature(box.getItem(i)) !== signature(want)) return false;
+  }
+  return true;
+}
+
+/**
+ * Operator-confirmed export of a stuck recovery journal: the retained before-image goes into empty chests
+ * beside the operator (air blocks only, nothing overwritten), then the journal is cleared and both images
+ * discarded. The chest spots are journaled first, so a restart in between finishes the same export instead of
+ * making a second copy. Opaque stacks are carried as ItemStacks and never rebuilt from signatures.
+ * The target's live inventory is never touched.
+ * @param {Player} operator @param {Player} target
+ * @returns {{ ok: boolean, message: string }}
+ */
+export function exportPending(operator, target) {
+  const state = stateOf(target);
+  const pending = state.pending;
+  if (!pending) return { ok: false, message: "Nothing is waiting for recovery." };
+  let entries;
+  try {
+    entries = loadSnapshot(target, pending.before);
+  } catch (e) {
+    return { ok: false, message: `The saved images could not be read, nothing changed (${e}).` };
+  }
+  const parts = [];
+  for (let i = 0; i < entries.length; i += CHEST_SLOTS) parts.push(entries.slice(i, i + CHEST_SLOTS).map((e, j) => ({ s: j, item: e.item })));
+  if (!parts.length) parts.push([]);
+  try {
+    const dim = operator.dimension;
+    let spots = pending.out?.d === dim.id ? pending.out.p : undefined;
+    if (!spots) {
+      spots = [];
+      const o = operator.location;
+      const bx = Math.floor(o.x);
+      const by = Math.floor(o.y);
+      const bz = Math.floor(o.z);
+      for (const r of [1, 2, 3, 4]) {
+        for (let dx = -r; dx <= r && spots.length < parts.length; dx++) {
+          for (let dz = -r; dz <= r && spots.length < parts.length; dz++) {
+            if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+            const at = { x: bx + dx, y: by, z: bz + dz };
+            if (dim.getBlock(at)?.isAir && dim.getBlock({ ...at, y: by - 1 })?.isAir === false) spots.push([at.x, at.y, at.z]);
+          }
+        }
+        if (spots.length >= parts.length) break;
+      }
+      if (spots.length < parts.length) return { ok: false, message: "There is no empty floor space next to you for the chests; move to open ground. Nothing changed." };
+      writeState(target, { ...state, pending: { ...pending, out: { d: dim.id, p: spots } } });
+    }
+    if (spots.length < parts.length) return { ok: false, message: "The saved export spots are incomplete; ask for help. Nothing changed." };
+    for (let i = 0; i < parts.length; i++) {
+      const block = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] });
+      if (chestMatches(block, parts[i])) continue;
+      if (!block?.isAir) return { ok: false, message: `The export spot ${spots[i].join(" ")} is taken by something else; nothing was overwritten. Ask for help.` };
+      block.setType(CHEST);
+      const box = dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] })?.getComponent("minecraft:inventory")?.container;
+      if (!box) throw new Error("chest inventory is unavailable");
+      for (const e of parts[i]) box.setItem(e.s, e.item);
+      if (!chestMatches(dim.getBlock({ x: spots[i][0], y: spots[i][1], z: spots[i][2] }), parts[i])) throw new Error("chest readback failed");
+    }
+  } catch (e) {
+    console.warn(`[stash] recovery export incomplete, journal kept: ${e}`);
+    return { ok: false, message: "The export did not finish. The saved images are kept; run it again." };
+  }
+  const { pending: _done, ...rest } = state;
+  try {
+    writeState(target, rest);
+  } catch (e) {
+    console.warn(`[stash] recovery journal not cleared, export is kept and will be recognized: ${e}`);
+    return { ok: false, message: "The chests are filled but the journal did not clear. Run it again; nothing will be copied twice." };
+  }
+  discardSnapshot(pending.before);
+  discardSnapshot(pending.after);
+  return { ok: true, message: `Exported ${entries.length} stacks into ${parts.length} chest(s) next to you. ${target.name}'s journal is cleared.` };
 }

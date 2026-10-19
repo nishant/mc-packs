@@ -372,7 +372,7 @@ Object.assign(mc.defaults, Object.fromEntries(["sneakTap", "sortHotbar", "locks"
 const mainServerUrl = dataUrl(`const m = globalThis.__mc.server; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, Direction, ItemStack, Player, system, world } = m;`);
 // The router keeps its handlers in module state: each copy of main.js gets its own copy of script-events.js (a pack loads once in the game).
 const eventsSource = readFileSync(new URL("../packs/stash_bp/scripts/script-events.js", import.meta.url), "utf8").replace('"@minecraft/server"', JSON.stringify(mainServerUrl));
-const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const refillFromPages = () => undefined; export const storedCount = () => []; export const setOpPages = () => ({ ok: true, message: "" });`);
+const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const recoverInventory = async () => ""; export const refillFromPages = () => undefined; export const storedCount = () => []; export const setOpPages = () => ({ ok: true, message: "" });`);
 const mainSource = readFileSync(new URL("../packs/stash_bp/scripts/main.js", import.meta.url), "utf8")
   .replace('import "./diag.js";', "")
   .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
@@ -1612,6 +1612,82 @@ test("a failed rollback quarantines the images, refuses more moves and survives 
     for (const k of Object.keys(mc.after)) mc.after[k].length = listeners[k] ?? 0;
   }
   assert.equal(mc.spawned.length, drops, "nothing dropped on the ground");
+});
+
+/** A stuck journal on `p`, an operator standing on open ground, and the floor around them as air over stone. */
+function stuck() {
+  const p = joined();
+  arrange(p, { 1: { 18: stack("minecraft:diamond", 3), 19: shulker("a"), 20: stack("minecraft:iron_ingot", 9) } });
+  const original = p.container.setItem.bind(p.container);
+  let calls = 0;
+  p.container.setItem = (s, item) => {
+    if (++calls >= 2) throw new Error("persistent inventory write failure");
+    original(s, item);
+  };
+  assert.equal(pages.transferStacks(p, { slots: [18, 19, 20], to: 2 }).code, "recovery");
+  p.container.setItem = original;
+  const op = visitor();
+  const dim = overworld();
+  op.dimension = dim;
+  op.location = { x: 10.5, y: 64, z: 10.5 };
+  for (let x = 4; x <= 16; x++) for (let z = 4; z <= 16; z++) {
+    dim.blocks.set(`${x},63,${z}`, { typeId: "minecraft:stone", isAir: false });
+    dim.blocks.set(`${x},64,${z}`, { typeId: "minecraft:air", isAir: true, setType(t) { placeContainer(dim, { x, y: 64, z }, t); } });
+  }
+  return { p, op, dim };
+}
+const chestsOf = (dim) => [...dim.blocks.values()].filter((b) => b.typeId === "minecraft:chest");
+
+test("O18: an operator confirms, the before-image lands in chests once, opaque stacks intact", async () => {
+  const { p, op, dim } = stuck();
+  const pending = nativeIndex(p).pending;
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  const message = await pages.recoverInventory(op, p);
+  assert.match(message, /Exported \d+ stacks into 1 chest/);
+  const chests = chestsOf(dim);
+  assert.equal(chests.length, 1);
+  const stacks = chests[0].getComponent("minecraft:inventory").container.slots.filter(Boolean);
+  const kinds = stacks.map((i) => i.typeId.replace("minecraft:", ""));
+  for (const k of ["diamond", "iron_ingot", "white_shulker_box"]) assert.ok(kinds.includes(k), k);
+  assert.deepEqual(stacks.find((i) => i.contents)?.contents, ["a"]);
+  assert.equal(nativeIndex(p).pending, undefined, "journal cleared");
+  assert.ok(!mc.structures.has(pending.before.id) && !mc.structures.has(pending.after.id));
+  assert.equal(storage.pendingSummary(p), undefined);
+  mc.formResponses.set(op.id, [{ selection: 0 }]);
+  assert.match(await pages.recoverInventory(op, p), /nothing waiting/);
+  assert.equal(chestsOf(dim).length, 1, "a second run copies nothing");
+});
+
+test("O18: canceling, or a journal that changed, exports nothing", async () => {
+  const { p, op, dim } = stuck();
+  mc.formResponses.set(op.id, [{ selection: 1 }]);
+  assert.match(await pages.recoverInventory(op, p), /Canceled/);
+  mc.formResponses.set(op.id, [() => { const s = JSON.parse(p.getDynamicProperty("stash:native")); delete s.pending; p.setDynamicProperty("stash:native", JSON.stringify(s)); return { selection: 0 }; }]);
+  assert.match(await pages.recoverInventory(op, p), /changed while you were deciding/);
+  assert.equal(chestsOf(dim).length, 0);
+});
+
+test("O18: never overwrites blocks, and a crash after the chests were filled finishes without a second copy", async () => {
+  const { p, op, dim } = stuck();
+  for (const b of dim.blocks.values()) if (b.isAir) b.isAir = false, b.typeId = "minecraft:dirt";
+  assert.equal(storage.exportPending(op, p).ok, false, "no room, nothing overwritten");
+  assert.equal(chestsOf(dim).length, 0);
+  assert.ok(nativeIndex(p).pending, "journal kept");
+
+  const fresh = stuck();
+  const set = fresh.p.setDynamicProperty.bind(fresh.p);
+  let failClear = true;
+  fresh.p.setDynamicProperty = (k, v) => {
+    if (failClear && k === "stash:native" && !JSON.parse(v).pending) throw new Error("injected crash before the journal cleared");
+    set(k, v);
+  };
+  assert.equal(storage.exportPending(fresh.op, fresh.p).ok, false);
+  assert.equal(chestsOf(fresh.dim).length, 1);
+  assert.ok(nativeIndex(fresh.p).pending?.out, "the chest spots were journaled first");
+  failClear = false;
+  assert.equal(storage.exportPending(fresh.op, fresh.p).ok, true);
+  assert.equal(chestsOf(fresh.dim).length, 1, "the retry recognized the filled chest");
+  assert.equal(nativeIndex(fresh.p).pending, undefined);
 });
 
 test("a completed move survives losing the script heap and is found again on its page", async () => {
