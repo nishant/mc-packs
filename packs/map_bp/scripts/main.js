@@ -1177,7 +1177,7 @@ function pass(player, all, seen, now) {
  * sent only when its text changed, or with `refresh` when it is REFRESH ticks old (so it never fades); the title
  * is drawn once for both.
  * @param {Player} player @param {View} v @param {number} now @param {boolean} refresh
- * @param {number} [heading] the facing the redraw's check already read (else read here) @param {{ x: number, y: number, z: number }} [at] the position it read
+ * @param {number} [heading] the facing the redraw's check already read (else read here, inside the draw budget) @param {{ x: number, y: number, z: number }} [at] the position it read
  * @returns {boolean} whether anything was sent
  */
 function render(player, v, now, refresh, heading = headingOf(player), at = player.location) {
@@ -1293,7 +1293,7 @@ system.runInterval(() => {
   if (!views.size) return;
   const t0 = Date.now();
   const now = system.currentTick;
-  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `heading` and `at` are what the check read, so render() doesn't read them again. @type {{ p: Player, v: View, refresh: boolean, moved: boolean, heading: number, at: Vector3 }[]} */
+  /** `moved`: turned, moved, a pass, a refresh or new land near them; else only a radar waiting for its terrain. `heading` and `at` are what the check read, so render() doesn't read them again. @type {{ p: Player, v: View, refresh: boolean, moved: boolean, heading: number | undefined, at: Vector3 }[]} */
   const due = [];
   const n = views.size;
   const checks = Math.min(n, TURN_CHECKS);
@@ -1314,8 +1314,9 @@ system.runInterval(() => {
       if (Math.abs(at.x - v.px) + Math.abs(at.z - v.pz) > FAR_MOVE) continue;
       const sent = lastSent.get(p.id);
       const refresh = !!sent && now - Math.min(sent.compass ? sent.cat : Infinity, sent.radar ? sent.rat : Infinity) >= REFRESH;
-      const heading = headingOf(p);
-      const moved = refresh || !!v.dirty || Math.abs(wrap(heading - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
+      /** @type {number | undefined} read only when the checks before it didn't already settle `moved` (as before); render() reads it otherwise, inside the draw budget */
+      let heading;
+      const moved = refresh || !!v.dirty || Math.abs(wrap((heading = headingOf(p)) - v.heading)) >= TURN_MIN || Math.abs(at.x - v.x) + Math.abs(at.y - v.y) + Math.abs(at.z - v.z) >= MOVE_MIN || (v.radar && v.terrain && v.tv !== terrainVerOf(p.id, v.dim, at, v.radius));
       if (!moved && !v.lag) continue;
       // Moving fast (flying, riding): the scanner plans ahead for them often.
       if (Math.abs(at.x - v.x) + Math.abs(at.z - v.z) > 0.6 * Math.max(1, now - (v.drawn ?? now))) planNow.add(p.id);
@@ -1440,10 +1441,12 @@ system.runInterval(() => {
   if (!due.length) return;
   for (const p of due) {
     if (!passBudget.ok) break;
+    // The shared list can hold a player who left earlier this tick: no entry for them (playerLeave already ran).
+    if (!p.isValid) continue;
     passAt.set(p.id, now);
     const t = Date.now();
     try {
-      if (p.isValid) pass(p, all, seen, now);
+      pass(p, all, seen, now);
     } catch (e) {
       console.warn(`[map] ${e}`);
     }
