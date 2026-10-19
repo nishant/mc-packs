@@ -31,6 +31,7 @@ const BUILT =
 
 /** @type {WeatherType} */
 let weather = WeatherType.Clear;
+let weatherSeen = false; // a weatherChange came in since the scripts started: newer than the saved weather and any plan
 /** @type {Cell | undefined} */
 let cell;
 let nextStrike = 0; // seconds until the next strike
@@ -70,11 +71,39 @@ function reading(player) {
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
   if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
+  weatherSeen = true;
   // A storm that just started gets its first cell 10 to 40 seconds in, not at once.
   if (newWeather === WeatherType.Thunder && weather !== WeatherType.Thunder) nextFormTick = Math.max(nextFormTick, system.currentTick + Math.floor(between(200, 800)));
   weather = newWeather;
   try {
     world.setDynamicProperty(PROP_WEATHER, newWeather);
+  } catch (e) {
+    console.warn(`[storm] ${e}`);
+  }
+});
+
+/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
+function planNow(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || m.off === true) return undefined;
+    const dim = m.dim ?? m.dimension;
+    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
+    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
+// realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there.
+onScriptEvent("realm:weather_plan", ({ message }) => {
+  if (weatherSeen) return; // the game's own report is newer
+  const now = planNow(message);
+  if (!now || now === weather) return;
+  weather = now;
+  try {
+    world.setDynamicProperty(PROP_WEATHER, now);
   } catch (e) {
     console.warn(`[storm] ${e}`);
   }
@@ -104,6 +133,8 @@ world.afterEvents.worldLoad.subscribe(() => {
   }
   nextFormTick = system.currentTick + 200;
   loadRods();
+  // Ask the Weather Almanac (if it's installed) for its plan a little later: every weather pack asks, and it answers once.
+  system.runTimeout(() => system.sendScriptEvent("realm:weather_ask", "{}"), 100);
 });
 
 // ---------------------------------------------------------------------------

@@ -54,6 +54,7 @@ const SIDES = [{ x: 1, z: 0 }, { x: -1, z: 0 }, { x: 0, z: 1 }, { x: 0, z: -1 }]
 
 /** @type {WeatherType} */
 let weather = WeatherType.Clear;
+let weatherSeen = false; // a weatherChange came in since the scripts started: newer than the saved weather and any plan
 /** @type {Roll} 0 = no storm fog, 1–3 = step in STORM_FOGS */
 const storm = { level: 0, stepIn: 0 };
 /** @type {Roll} 0 = no haze, 1–2 = step in HAZE_FOGS */
@@ -91,6 +92,7 @@ function stateOf(player) {
 
 world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
   if (dimension !== OVERWORLD && dimension !== "overworld") return; // the event names it "overworld" on BDS 1.26
+  weatherSeen = true;
   if (newWeather === WeatherType.Clear && weather !== WeatherType.Clear) dripSeconds = CONFIG.drips.afterRainSeconds;
   weather = newWeather;
   try {
@@ -101,9 +103,39 @@ world.afterEvents.weatherChange.subscribe(({ dimension, newWeather }) => {
   wake();
 });
 
+/** The overworld weather a realm:weather_plan names right now, or undefined (the Almanac is off, another dimension, garbage). @param {string} message */
+function planNow(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || m.off === true) return undefined;
+    const dim = m.dim ?? m.dimension;
+    if (typeof dim === "string" && dim.replace(/^minecraft:/, "") !== "overworld") return undefined;
+    return m.now === WeatherType.Clear || m.now === WeatherType.Rain || m.now === WeatherType.Thunder ? /** @type {WeatherType} */ (m.now) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The Weather Almanac (if it's installed) knows the weather now: it sends its plan when it changes and answers
+// realm:weather_ask. Until a real weatherChange has come in, a pack added in the middle of a storm takes it from there.
+onScriptEvent("realm:weather_plan", ({ message }) => {
+  if (weatherSeen) return; // the game's own report is newer
+  const now = planNow(message);
+  if (!now || now === weather) return;
+  weather = now;
+  try {
+    world.setDynamicProperty(PROP_WEATHER, now);
+  } catch (e) {
+    console.warn(`[rain] ${e}`);
+  }
+  wake();
+});
+
 world.afterEvents.worldLoad.subscribe(() => {
   const saved = world.getDynamicProperty(PROP_WEATHER);
   if (saved === WeatherType.Rain || saved === WeatherType.Thunder) weather = saved;
+  // Ask the Weather Almanac (if it's installed) for its plan a little later: every weather pack asks, and it answers once.
+  system.runTimeout(() => system.sendScriptEvent("realm:weather_ask", "{}"), 100);
   // After a script reload our fogs may still be on players we no longer track: clear them, the loop re-adds them.
   for (const player of world.getAllPlayers()) clearFogs(player);
   wake();

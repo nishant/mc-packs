@@ -506,11 +506,20 @@ function notices(players) {
 /** @param {string} id @returns {Player | undefined} */
 const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 
+/** One answer for every pack that asks within a few ticks of the others (all of them do, once the world has loaded). */
+const ASK_WINDOW = 10;
+let askPending = false;
+
 onScriptEvent(
   ["realm:weather_ask", "realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id === "realm:weather_ask") {
-      broadcast();
+      if (askPending) return;
+      askPending = true;
+      system.runTimeout(() => {
+        askPending = false;
+        broadcast();
+      }, ASK_WINDOW);
       return;
     }
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
