@@ -16,6 +16,7 @@ import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { isProtected } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -886,20 +887,6 @@ function shards(n) {
   s.nameTag = "§r§dRelic Shard";
   s.setLore(["§7Bring 8 to a relicsmith"]);
   return s;
-}
-
-/**
- * Spawns a mob and checks what came back: a world whose entity ids repeat (an old level.dat put back) can hand back
- * an entity that already exists (a dropped item), and tagging that one would make a champion that isn't there.
- * Spawns again (the next id is usually free); throws if it never gets the mob.
- * @param {Dimension} dim @param {string} type @param {Vector3} loc @param {any} [opts]
- */
-function spawnFresh(dim, type, loc, opts) {
-  for (let k = 0; k < 8; k++) {
-    const e = opts ? dim.spawnEntity(/** @type {any} */ (type), loc, opts) : dim.spawnEntity(/** @type {any} */ (type), loc);
-    if (e.typeId === type) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
 }
 
 /** Copies a Splitting champion leaves behind. @param {Dimension} dim @param {Vector3} at @param {string} mob */
