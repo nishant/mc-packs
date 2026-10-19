@@ -18,6 +18,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { isProtected } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Tonight is one world property, "moon:night" -> JSON { d: day number, s: state, a: 1 while the night is on,
 // alive: [player ids still in the running for the Blood Moon reward] }.
@@ -847,7 +848,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:sky_request"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "moon_bp");
     else if (id === "realm:sky_request") {
@@ -858,5 +860,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

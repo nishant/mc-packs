@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Dimension, Entity, ItemSta
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PACK = "fishing_bp";
 const PROP_WEATHER = "fishing:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -947,7 +948,8 @@ function inventoryOf(player) {
 // tobin, on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent */
 const tobinOff = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:affinity",
   ({ id, message }) => {
     if (id !== "realm:affinity") return;
     try {
@@ -959,7 +961,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 /** @param {Player} player */
 const tobinOffOf = (player) => Math.max(0, Math.min(50, tobinOff.get(player.id) ?? 0));
@@ -1217,7 +1218,8 @@ function opStartTournament(player) {
 /** The NPC each player last talked to, for the menu title. @type {Map<string, string>} */
 const lastNpc = new Map();
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     /** @type {any} */
@@ -1245,7 +1247,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[fishing] npc: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1334,7 +1335,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
 /** @type {Map<string, Record<string, number>>} */
 const callingBonus = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:calling",
   ({ id, message }) => {
     if (id !== "realm:calling") return;
     try {
@@ -1344,7 +1346,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -1355,9 +1356,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "fishing_bp");
   },
-  { namespaces: ["realm"] },
 );

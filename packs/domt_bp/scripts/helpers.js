@@ -1,5 +1,6 @@
 // Small tools the cards use: safe teleports, gifts, spawns, safe zones and timed block restores.
 import { Dimension, Entity, EntityDamageCause, EnchantmentTypes, ItemStack, Player, system, world } from "@minecraft/server";
+import { onScriptEvent } from "./script-events.js";
 
 // ---------------------------------------------------------------------------
 // Basics
@@ -558,7 +559,8 @@ function takeZones(msg) {
   } else incoming.set(msg.src, buf);
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:zones",
   ({ id, message }) => {
     if (id !== "realm:zones") return;
     try {
@@ -567,7 +569,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // malformed: ignore
     }
   },
-  { namespaces: ["realm"] },
 );
 system.runTimeout(() => attempt(() => system.sendScriptEvent("realm:zones_ping", "{}")), 120);
 

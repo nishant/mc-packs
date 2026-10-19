@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } fr
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { isSlot, sideBoxes } from "./side.js";
+import { onScriptEvent } from "./script-events.js";
 
 // The "on" and "showTime" preferences (player property "hud:pref") and the world options live in settings.js.
 
@@ -134,7 +135,8 @@ onChange((key, player) => {
   sendState(seeingNow());
 });
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:actionbar", "realm:hud_line", "realm:hud_ping"],
   ({ id, message }) => {
     if (id !== "realm:actionbar" && id !== "realm:hud_line" && id !== "realm:hud_ping") return;
     try {
@@ -166,7 +168,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not for us
     }
   },
-  { namespaces: ["realm"] }
 );
 
 system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
@@ -201,9 +202,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "hud_bp");
   },
-  { namespaces: ["realm"] }
 );

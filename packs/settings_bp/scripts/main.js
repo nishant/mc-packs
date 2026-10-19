@@ -2,6 +2,7 @@ import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Player, system, world } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
+import { onScriptEvent } from "./script-events.js";
 
 // This pack holds no other pack's data. It asks the installed packs what they can change
 // (realm:cfg_ping -> realm:cfg_schema), shows forms, and sends the changes back
@@ -27,7 +28,8 @@ const newId = () => `${system.currentTick.toString(36)}.${(counter++).toString(3
 /** @type {Map<string, (msg: any) => void>} request id → what to do with an answer */
 const waiting = new Map();
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:cfg_schema", "realm:cfg_ack"],
   ({ id, message }) => {
     if (id !== "realm:cfg_schema" && id !== "realm:cfg_ack") return;
     try {
@@ -37,7 +39,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[settings] ${e}`);
     }
   },
-  { namespaces: ["realm"] }
 );
 
 /**
@@ -614,9 +615,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "settings_bp");
   },
-  { namespaces: ["realm"] }
 );

@@ -2,6 +2,7 @@ import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, EntityInitializationCause, GameMode, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { getFor, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Player property "phantom:off" (true = off, false = on, only stored when it differs from defaultOff)
 // is the "off" preference in settings.js, which /realm:prefs changes too.
@@ -58,9 +59,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "phantom_bp");
   },
-  { namespaces: ["realm"] }
 );

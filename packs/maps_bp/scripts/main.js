@@ -7,6 +7,7 @@ import { FAR, FAR_KINDS, MARKERS, WOOLS, coarse, markerLooks, nearRiddle, treeOf
 import { isProtected, protectedBox } from "./zones.js";
 import { isSlot, sideBoxes } from "./side.js";
 import { ANY_WOOL, kindOf, record, release, startSweep } from "./cleanup.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PACK = "maps_bp";
 const PROP_HUNTS = "maps:hunts"; // player: JSON Hunt[]
@@ -305,7 +306,8 @@ function syncLegs(player, hunts) {
   if (!sent.size) legsSent.delete(player.id);
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:map_leg_ping", "realm:map_rival"],
   ({ id, message }) => {
     if (id === "realm:map_leg_ping") {
       legsSent.clear(); // every hunt's leg again within a second
@@ -325,7 +327,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /** @param {Player} player @returns {Hunt[]} */
@@ -1094,7 +1095,8 @@ function shareWithParty(player, crowns) {
 
 // Scenario tests (BDS harness): finds the treasure of a player's first hunt right away (a whole hunt takes minutes).
 // Only from the server console. /scriptevent realm:maps_test {"action":"found","player":"<name>"}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:maps_test",
   (ev) => {
     if (ev.id !== "realm:maps_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -1106,7 +1108,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[maps] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1117,7 +1118,8 @@ system.afterEvents.scriptEventReceive.subscribe(
 // mara, on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent */
 const maraOff = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:affinity",
   ({ id, message }) => {
     if (id !== "realm:affinity") return;
     try {
@@ -1129,7 +1131,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 /** @param {Player} player */
 const maraOffOf = (player) => Math.max(0, Math.min(50, maraOff.get(player.id) ?? 0));
@@ -1233,7 +1234,8 @@ async function showHunts(player) {
 /** The NPC each player last talked to, for the menu title. @type {Map<string, string>} */
 const lastNpc = new Map();
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     /** @type {any} */
@@ -1265,7 +1267,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[maps] npc: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1393,7 +1394,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
 /** @type {Map<string, Record<string, number>>} */
 const callingBonus = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:calling",
   ({ id, message }) => {
     if (id !== "realm:calling") return;
     try {
@@ -1403,7 +1405,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
@@ -1413,9 +1414,9 @@ const revealFor = (player) => Math.max(get("revealDistance"), Math.min(160, call
 const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player.id)?.[key]) || 0);
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "maps_bp");
   },
-  { namespaces: ["realm"] },
 );

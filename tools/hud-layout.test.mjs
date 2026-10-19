@@ -293,12 +293,13 @@ test("every Side HUD cut matches the side boxes protocol and the minimap's text 
 
 /** tools/side-shared.js run offline: the code that builds every subtitle the HUD cuts. */
 function loadSide() {
-  const source = fs.readFileSync(new URL("./side-shared.js", import.meta.url), "utf8").replace(/^import .*$/m, "").replace(/^export /gm, "");
+  const source = fs.readFileSync(new URL("./side-shared.js", import.meta.url), "utf8").replace(/^import .*$/gm, "").replace(/^export /gm, "");
   const none = () => {};
   const signal = { subscribe: none };
   const context = {
     system: { currentTick: 0, afterEvents: { scriptEventReceive: signal }, runInterval: none, sendScriptEvent: none },
     world: { afterEvents: { playerLeave: signal }, getAllPlayers: () => [] },
+    onScriptEvent: none,
   };
   return vm.runInNewContext(`${source}\n;({ MARK, SLOTS, ALL_SLOTS, SEG_BYTES, RADAR_SEG_BYTES, QUEST_SEG_BYTES, segment, compose, questCode })`, context);
 }

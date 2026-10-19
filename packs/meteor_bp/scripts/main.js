@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get, set } from "./settings.js";
 import { escapeZones, protectedBox, zoneProviders, zonesAt } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // World properties:
 //   "meteor:night"   JSON { n: day number, at: time of day of tonight's warning, or -1 for none }
@@ -923,7 +924,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:sky_request"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "meteor_bp");
     else if (id === "realm:sky_request") {
@@ -934,5 +936,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

@@ -2,6 +2,7 @@ import "./diag.js";
 import { CommandPermissionLevel, CustomCommandStatus, Dimension, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_WEATHER = "rain:weather"; // world: overworld weather from the last change ("Clear", "Rain" or "Thunder"); scripts can't read the current weather
 // Player property "rain:off" (true = extras off, false = on, only stored when it differs from defaultOff)
@@ -514,9 +515,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "rain_bp");
   },
-  { namespaces: ["realm"] }
 );

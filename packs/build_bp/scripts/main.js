@@ -43,6 +43,7 @@ import { getModeOption } from "./utils/ModeOptions.js";
 import { lockActionBar, cleanupActionBar } from "./utils/ActionBar.js";
 import { BOOK_ID, BOOK_NAME, BOOK_LORE, isBook, isTutorialBook, hasItem, giveBuildingBook, giveTutorialBook, heldItemCached, idleSkip, IDLE_EVERY, allPlayers } from "./utils/Items.js";
 import { filterAllowedPositionsAsync, refusal } from "./core/Protection.js";
+import { onScriptEvent } from "./script-events.js";
 
 const GETBOOK_COST = 5;
 const anchoredAtMs = new Map();
@@ -131,13 +132,13 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry: r }) => {
     command(r, "realm:build_redo", "Redo the last undone Effortless Building placement", performRedo);
 });
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+    "realm:help_ping",
     ({ id }) => {
         if (id === "realm:help_ping") {
             system.sendScriptEvent("realm:help_pong", "build_bp");
         }
     },
-    { namespaces: ["realm"] }
 );
 
 function welcome(player) {

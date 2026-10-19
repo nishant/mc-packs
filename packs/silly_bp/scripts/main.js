@@ -17,6 +17,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { initLibrarianBookLock } from "./librarian.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Silly enchants are lore lines on gear ("Silly: Hyper Jump"). They only make particles, sounds and
 // harmless bounces: nothing here changes damage, armor, speed, drops or durability. A Silly Book (an
@@ -953,12 +954,12 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:silly_trace"],
   ({ id, message, sourceType }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "silly_bp");
     else if (id === "realm:silly_trace" && sourceType === ScriptEventSource.Server) tracing = message.trim() === "on"; // console only
   },
-  { namespaces: ["realm"] },
 );
 
 initLibrarianBookLock({

@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
 import { protectedBox } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_WEATHER = "storm:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 const PROP_CELL = "storm:cell"; // world: JSON of the current storm cell, so it survives a restart
@@ -667,7 +668,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // sends it when a player joins or changes it, and again on realm:calling_ping (asked once the world has loaded).
 /** @type {Map<string, Record<string, number>>} */
 const callingBonus = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:calling",
   ({ id, message }) => {
     if (id !== "realm:calling") return;
     try {
@@ -677,14 +679,14 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:calling_ping", "{}"), 140));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => callingBonus.delete(playerId));
 // Relics: players with the Storm set (realm:relic_sets) get one more Storm Glass from a rod.
 /** @type {Set<string>} */
 const stormSet = new Set();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:relic_sets",
   ({ id, message }) => {
     if (id !== "realm:relic_sets") return;
     try {
@@ -696,7 +698,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 world.afterEvents.worldLoad.subscribe(() => system.runTimeout(() => system.sendScriptEvent("realm:relic_sets_ping", "{}"), 150));
 world.afterEvents.playerLeave.subscribe(({ playerId }) => stormSet.delete(playerId));
@@ -705,7 +706,8 @@ const callingValue = (player, key) => Math.max(0, Number(callingBonus.get(player
 
 // Scenario tests (BDS harness): a player taps a charged rod (simulated players' taps can't reach it). Only from the
 // server console: /scriptevent realm:storm_test {"action":"collect","player":"<name>","x":0,"y":64,"z":0}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:storm_test",
   (ev) => {
     if (ev.id !== "realm:storm_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -717,13 +719,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[storm] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "storm_bp");
   },
-  { namespaces: ["realm"] },
 );

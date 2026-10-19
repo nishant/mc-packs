@@ -2,6 +2,7 @@ import "./diag.js";
 import { Block, GameMode, ItemStack, Player, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {{ block: string, state: string, ripe: number, seed: string, sound: string }} Crop */
 
@@ -149,9 +150,9 @@ function damageHeldHoe(player) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "harvest_bp");
   },
-  { namespaces: ["realm"] }
 );

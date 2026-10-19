@@ -12,6 +12,7 @@ import {
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Balances live in the `crowns` scoreboard, so any pack can pay or charge Crowns without this one, and an
 // operator can see them with /scoreboard. This pack adds the player-facing side: balance and top list,
@@ -541,7 +542,8 @@ async function sellMenu(player) {
 // on a level change and when the player joins; kept in memory only.
 /** @type {Map<string, number>} player id -> percent off */
 const quillOff = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:affinity",
   ({ id, message }) => {
     if (id !== "realm:affinity") return;
     try {
@@ -553,7 +555,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /** A market price after Quill's friendship discount (rounded down). @param {Player} player @param {number} price */
@@ -615,7 +616,8 @@ function marketCommand(player) {
 }
 
 // The Townsfolk offer round: merchants offer the market.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     try {
@@ -632,7 +634,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // malformed: ignore
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -726,9 +727,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "crowns_bp");
   },
-  { namespaces: ["realm"] },
 );

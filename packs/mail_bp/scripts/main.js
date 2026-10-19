@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource,
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // One world property per letter: "mail:l:<id>" -> JSON Letter. A letter is one small property (a
 // subject and up to bodyLength characters), so no property gets near the 32 KB limit however many
@@ -28,7 +29,8 @@ const PARTY = "*party"; // draft.to for a letter to the whole party
 // after each change and on realm:party_members_ping). Kept in memory; asked for again when the world loads.
 /** @type {Map<string, [string, string][]>} party code -> [player id, gamertag] */
 const partyMembers = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:party_members",
   ({ id, message }) => {
     if (id !== "realm:party_members") return;
     try {
@@ -42,7 +44,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[mail] party_members: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 system.runTimeout(() => system.sendScriptEvent("realm:party_members_ping", "{}"), 60);
 
@@ -545,7 +546,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // realm:mail_send { to, from, subject, body }: a letter from another pack (a townsfolk, the realm). `to` is a
 // player id or name from the roster, `from` any display name. No send cooldown and no Sent copy; it isn't
 // delivered when the recipient's inbox is full of unread letters (the oldest read ones make room first).
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:mail_send",
   ({ id, message }) => {
     if (id !== "realm:mail_send") return;
     try {
@@ -580,12 +582,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[mail] mail_send: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // Scenario tests (BDS harness): add `roster` players who joined long ago (offline), as on a big server. Only from the
 // server console: /scriptevent realm:mail_test {"roster":300}
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:mail_test",
   (ev) => {
     if (ev.id !== "realm:mail_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -599,13 +601,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[mail] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "mail_bp");
   },
-  { namespaces: ["realm"] },
 );

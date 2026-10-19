@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandStatus, Player, ScriptEventSource,
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // One world property per player, so anyone's milestones can be shown while they're offline:
 // "milestones:p:<player id>" -> JSON { n: name, c: { stat: count }, g: { milestone id: tiers reached } }.
@@ -392,7 +393,8 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 // Scenario tests (BDS harness): `fill` the world with that many records of players who are offline, as on a big server.
 // Only from the server console: /scriptevent realm:milestones_test {"fill":80}
 // {"player":"<name>","stat":"joins","count":400} sets an online player's own count of a stat.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:milestones_test",
   (ev) => {
     if (ev.id !== "realm:milestones_test" || ev.sourceType !== ScriptEventSource.Server) return;
     try {
@@ -414,13 +416,12 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[milestones] test: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "milestones_bp");
   },
-  { namespaces: ["realm"] },
 );

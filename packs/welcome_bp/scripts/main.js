@@ -9,6 +9,7 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { DEFAULTS } from "./config.js";
 import { getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("./config.js").WelcomeSettings} WelcomeSettings */
 
@@ -382,9 +383,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "welcome_bp");
   },
-  { namespaces: ["realm"] }
 );

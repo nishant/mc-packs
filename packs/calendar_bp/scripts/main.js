@@ -25,6 +25,7 @@ import { ACTIVITIES, FESTIVALS, SEASON_DAYS, SEASONS, SIEGE_LINES, STOCK, TALES,
 import { get, onChange } from "./settings.js";
 import { holdTitle, sideBoxes } from "./side.js";
 import { escapeZones, protectedBox } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
 /** @typedef {import("@minecraft/server").Entity} Entity */
@@ -2287,7 +2288,8 @@ function onQuestDone(msg) {
 
 const EVENTS = new Set(["realm:calendar", "realm:calendar_ping", "realm:town_list", "realm:town_state_ping", "realm:quest_done", "realm:npc_gift", "realm:saga_progress", "realm:place_ready", "realm:claims_check_result", "realm:npc_talk", "realm:npc_choose", "realm:calendar_debug"]);
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_pong", "realm:actionbar", ...EVENTS],
   ({ id, message, sourceEntity }) => {
     if (id === "realm:help_pong") {
       scanning?.add(message.trim());
@@ -2352,7 +2354,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[calendar] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -2506,10 +2507,10 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:siege_ping"],
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "calendar_bp");
     else if (id === "realm:siege_ping") sendMarks();
   },
-  { namespaces: ["realm"] },
 );

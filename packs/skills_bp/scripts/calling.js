@@ -2,6 +2,7 @@ import { BlockVolume, EntityDamageCause, EquipmentSlot, ItemStack, Player, Weath
 import { ActionFormData, FormCancelationReason, MessageFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Callings (docs/RPG_DESIGN.md section 5): at a total skill level of `callings.unlockTotal` a player picks one of
 // six Callings. Each has an active ability on the Calling Sigil and a talent tree of 3 tiers x 3 talents. Everything
@@ -1055,7 +1056,15 @@ export function menuLabel(player) {
 // Script events and players coming and going
 // ---------------------------------------------------------------------------
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:help_pong",
+    "realm:calendar",
+    "realm:calling_ping",
+    "realm:npc_flags",
+    "realm:npc_talk",
+    "realm:npc_choose",
+  ],
   ({ id, message }) => {
     if (id === "realm:help_pong") {
       if (message === "npc_bp") townsfolk = true;
@@ -1097,7 +1106,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 let lastPing = -100;

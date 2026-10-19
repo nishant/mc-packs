@@ -32,6 +32,7 @@
 // While a hold lasts every copy keeps its picture but doesn't draw; when the last hold ends, each pack with a
 // readout for that player draws the title again, so the boxes come back.
 import { Player, system, world } from "@minecraft/server";
+import { onScriptEvent } from "./script-events.js";
 
 export const MARK = "§s§2§r";
 const CLEAR = "§s§0§r";
@@ -311,7 +312,8 @@ export function sideBoxes(from) {
 
 // Every pack with side boxes reads every readout (the minimap sends two a draw): only the id is looked at before
 // parsing, and another pack's text is kept as it came (cleaned when this copy draws it, which most never do).
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:side", "realm:title"],
   ({ id, message }) => {
     if (id !== "realm:side" && id !== "realm:title") return;
     if (id === "realm:title" && me) {
@@ -348,7 +350,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] }
 );
 
 // Readouts that run out: the pack that wrote one draws the title again without it. Real titles that end:

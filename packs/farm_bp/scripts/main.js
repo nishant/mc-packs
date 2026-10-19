@@ -10,6 +10,7 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_AREAS = "farm:areas"; // world: JSON Farm[] (the game keeps the ticking areas; this is for the menu)
 
@@ -266,9 +267,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "farm_bp");
   },
-  { namespaces: ["realm"] }
 );

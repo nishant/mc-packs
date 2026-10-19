@@ -175,9 +175,12 @@ const diagSrc = readFileSync(new URL("../packs/stats_bp/scripts/diag.js", import
   'from "@minecraft/server"',
   `from ${JSON.stringify(serverUrl)}`,
 );
+// One router for the whole pack: settings.js and main.js register their handlers in the same script-events.js, as in the game.
+const eventsUrl = dataUrl(readFileSync(new URL("../packs/stats_bp/scripts/script-events.js", import.meta.url), "utf8").replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`));
 const settingsUrl = dataUrl(
   readFileSync(new URL("../packs/stats_bp/scripts/settings.js", import.meta.url), "utf8")
     .replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`)
+    .replace('from "./script-events.js"', `from ${JSON.stringify(eventsUrl)}`)
     .replace('from "./config.js"', `from ${JSON.stringify(new URL("../packs/stats_bp/scripts/config.js", import.meta.url).href)}`)
         .replace('from "./stats.js"', `from ${JSON.stringify(new URL("../packs/stats_bp/scripts/stats.js", import.meta.url).href)}`),
 );
@@ -186,6 +189,7 @@ const mainSrc = readFileSync(new URL("../packs/stats_bp/scripts/main.js", import
   .replace('from "@minecraft/server"', `from ${JSON.stringify(serverUrl)}`)
   .replace('from "@minecraft/server-ui"', `from ${JSON.stringify(uiUrl)}`)
   .replace('from "./config.js"', `from ${JSON.stringify(new URL("../packs/stats_bp/scripts/config.js", import.meta.url).href)}`)
+  .replace('from "./script-events.js"', `from ${JSON.stringify(eventsUrl)}`)
   .replace('from "./settings.js"', `from ${JSON.stringify(settingsUrl)}`)
     .replace('from "./stats.js"', `from ${JSON.stringify(new URL("../packs/stats_bp/scripts/stats.js", import.meta.url).href)}`);
 const pack = await import(dataUrl(mainSrc));

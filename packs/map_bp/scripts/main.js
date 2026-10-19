@@ -37,6 +37,7 @@ import { G } from "./glyphs.js";
 import { get, getFor, onChange, setFor } from "./settings.js";
 import { sideBoxes } from "./side.js";
 import { aheadPicks, colKey, COL, glyphAt, KEY_BIAS, KEY_SPAN, MISS_RETRY, readColumn, sampleCoord, spendBudget, TerrainWorld } from "./terrain.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Vector3} Vector3 */
@@ -1758,7 +1759,8 @@ function onEvent(id, m, source) {
   }
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [...EVENTS],
   ({ id, message, sourceEntity }) => {
     if (!EVENTS.has(id)) return;
     try {
@@ -1768,7 +1770,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] }
 );
 
 /** Asks the packs that own the data to send it (for one player, or everyone). @param {string} [player] */
@@ -1872,9 +1873,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "map_bp");
   },
-  { namespaces: ["realm"] }
 );

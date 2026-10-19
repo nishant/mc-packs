@@ -14,6 +14,7 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // A relic is a vanilla item that doesn't stack, with a name, lore and the item dynamic property
 // `relic:id` (plus `relic:serial`, a number unique on this realm). An anvil can rename any item, but
@@ -1335,7 +1336,8 @@ const idaOff = new Map();
 const affinity = new Map();
 /** @type {Map<string, Record<string, string>>} */
 const storyFlags = new Map();
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:affinity", "realm:npc_flags"],
   ({ id, message }) => {
     if (id !== "realm:affinity" && id !== "realm:npc_flags") return;
     try {
@@ -1358,7 +1360,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 /** @param {Player} player */
 const idaOffOf = (player) => Math.max(0, Math.min(50, idaOff.get(player.id) ?? 0));
@@ -1813,7 +1814,8 @@ function parseSeals(list) {
   return out;
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [...HANDLED],
   ({ id, message }) => {
     if (!HANDLED.has(id)) return;
     /** @type {any} */
@@ -1890,7 +1892,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[relics] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1965,9 +1966,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "relics_bp");
   },
-  { namespaces: ["realm"] },
 );

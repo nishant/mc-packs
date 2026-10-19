@@ -49,6 +49,7 @@ import {
   topLevel,
   wrap,
 } from "./layout.js";
+import { onScriptEvent } from "./script-events.js";
 
 // An expedition is a dungeon generated from a seed and a level (Easy, Normal, Hard or Nightmare tiers
 // 1 to 20), deep underground under the site an operator picked, inside a sealed box of deepslate: a
@@ -350,7 +351,8 @@ const STEADY = 40;
 // Other packs' notes (durability, skill XP, mob health...) hold the bar for a moment: the run line waits.
 // Steady background lines (`background: true`, like the Party HUD) don't stop it, nor do lower steady lines
 // (`steady` below ours, or equal from a pack named after ours): those wait for the run line instead.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:actionbar",
   ({ id, message }) => {
     if (id !== "realm:actionbar") return;
     try {
@@ -363,7 +365,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /**
@@ -4108,7 +4109,8 @@ function callingsByName() {
   }
   return /** @type {Record<string, string>} */ (callingNames);
 }
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:calling",
   ({ id, message }) => {
     if (id !== "realm:calling") return;
     try {
@@ -4126,7 +4128,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours
     }
   },
-  { namespaces: ["realm"] },
 );
 /** "Ann, Bo" -> "Ann §7(Delver)§r, Bo": names on a board with their Calling. @param {string} names */
 function who(names) {
@@ -4514,7 +4515,8 @@ function debugState(message, may = true) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:expedition_debug"],
   ({ id, message, sourceEntity }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "expedition_bp");
     else if (id === "realm:expedition_debug") {
@@ -4526,5 +4528,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] },
 );

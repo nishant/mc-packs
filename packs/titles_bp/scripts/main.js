@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Ga
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Each player's titles, trails and built-in stats are one world property, `titles:p:<player id>`, so
 // other packs can unlock titles for players who are offline and operators can give titles to them.
@@ -175,7 +176,8 @@ function wear(player, title) {
   if (title) player.addTag(TITLE_TAG + title);
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:title_unlock", "realm:trail_unlock"],
   ({ id, message }) => {
     if (id !== "realm:title_unlock" && id !== "realm:trail_unlock") return;
     try {
@@ -188,7 +190,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not JSON: ignore
     }
   },
-  { namespaces: ["realm"] }
 );
 
 // ---------------------------------------------------------------------------
@@ -584,9 +585,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "titles_bp");
   },
-  { namespaces: ["realm"] }
 );

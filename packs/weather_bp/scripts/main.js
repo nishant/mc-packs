@@ -3,6 +3,7 @@ import { CommandPermissionLevel, CustomCommandParamType, CustomCommandStatus, Pl
 import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, getFor, onChange } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // The plan is a list of spells in real time: world property "weather:plan" -> JSON
 // { v: 2, s: [{ w: "Clear" | "Rain" | "Thunder", s: start ms, e: end ms }] }, the first one being now.
@@ -505,7 +506,8 @@ function notices(players) {
 /** @param {string} id @returns {Player | undefined} */
 const online = (id) => world.getAllPlayers().find((p) => p.id === id);
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:weather_ask", "realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id === "realm:weather_ask") {
       broadcast();
@@ -527,7 +529,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       // not ours, or malformed
     }
   },
-  { namespaces: ["realm"] }
 );
 
 // ---------------------------------------------------------------------------
@@ -727,7 +728,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:sky_request"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "weather_bp");
     else if (id === "realm:sky_request") {
@@ -738,5 +740,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

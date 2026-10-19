@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { PACKS } from "./catalog.js";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {typeof PACKS[number]} Pack */
 
@@ -17,13 +18,13 @@ const ALL = "all";
 /** @type {Set<Set<string>>} the answer sets of pings still waiting */
 const waiting = new Set();
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_pong", "realm:help_ping"],
   ({ id, message }) => {
     if (id === "realm:help_pong") for (const answers of waiting) answers.add(message);
     // Other packs ping too (the Realm Configuration menu lists /realm:help only while it's installed).
     else if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", SELF);
   },
-  { namespaces: ["realm"] }
 );
 
 /** @returns {Promise<Pack[]>} the installed packs, in docs order */

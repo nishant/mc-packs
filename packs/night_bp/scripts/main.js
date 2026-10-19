@@ -2,6 +2,7 @@ import "./diag.js";
 import { ButtonState, CommandPermissionLevel, CustomCommandStatus, Dimension, InputButton, MolangVariableMap, Player, WeatherType, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
 import { get, getFor, setFor } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_WEATHER = "night:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 const PROP_AURORA = "night:aurora"; // world: JSON { n: day number, on: boolean }, tonight's aurora roll
@@ -358,7 +359,8 @@ function skyRequest(message) {
 }
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_ping", "realm:sky_request"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "night_bp");
     else if (id === "realm:sky_request") {
@@ -369,5 +371,4 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] }
 );

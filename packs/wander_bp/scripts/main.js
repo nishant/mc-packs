@@ -21,6 +21,7 @@ import { EPITHETS, EPITHETS_FOR, FIRST_NAMES, GREETINGS, HOSTILE_GREETINGS, LOOK
 import { createNameLabels, encodeHiddenMarker, isSuppressedName, matchesHiddenMarker, spawnChecked, SUPPRESSED_NAME } from "./name-labels.js";
 import { get, getFor } from "./settings.js";
 import { allZones, pingZones } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 /** @typedef {import("@minecraft/server").Entity} Entity */
 /** @typedef {import("@minecraft/server").Dimension} Dimension */
@@ -1291,7 +1292,19 @@ function onPoi(msg) {
   sites.set(key, { dim: msg.dim, x: msg.x, z: msg.z });
 }
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  [
+    "realm:npc_offer",
+    "realm:wander_state",
+    "realm:wander_done",
+    "realm:wander_hide",
+    "realm:place_ready",
+    "realm:poi",
+    "realm:quest_done",
+    "realm:bounty_targets",
+    "realm:map_leg",
+    "realm:wander_debug",
+  ],
   ({ id, message, sourceEntity }) => {
     if (
       id !== "realm:npc_offer" &&
@@ -1344,7 +1357,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[wander] ${id}: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 /**
@@ -1568,9 +1580,9 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "wander_bp");
   },
-  { namespaces: ["realm"] },
 );

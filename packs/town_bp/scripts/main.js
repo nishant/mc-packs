@@ -17,6 +17,7 @@ import {
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData, uiManager } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get, onChange } from "./settings.js";
+import { onScriptEvent } from "./script-events.js";
 
 // One world property per town ("town:t:<id>": name, center, level, build spots) and one per project of
 // each town ("town:p:<town>:<project>": items delivered, contributors, finished, built), so a busy
@@ -1766,7 +1767,8 @@ world.afterEvents.worldLoad.subscribe(() =>
     send("realm:town_state_ping", {});
   }, 100),
 );
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:zones_ping", "realm:town_list_ping", "realm:town_state"],
   ({ id, message }) => {
     if (id === "realm:zones_ping" || id === "realm:town_list_ping") zonesChanged();
     else if (id === "realm:town_state") {
@@ -1779,7 +1781,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       }
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
@@ -1787,7 +1788,8 @@ system.afterEvents.scriptEventReceive.subscribe(
 //   /scriptevent realm:town_test {"action":"add|spot|finish|remove|rebuild|protect|zones|dump", "player"?, "town"?, "project"?, "name"?, "spot"?, "on"?}
 // ---------------------------------------------------------------------------
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:town_test",
   (ev) => {
     if (ev.id !== "realm:town_test") return;
     const src = ev.sourceEntity;
@@ -1839,14 +1841,14 @@ system.afterEvents.scriptEventReceive.subscribe(
       tell(`error: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 // ---------------------------------------------------------------------------
 // Townsfolk (npc_bp): mayors offer the nearest town's projects
 // ---------------------------------------------------------------------------
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:npc_talk", "realm:npc_choose"],
   ({ id, message }) => {
     if (id !== "realm:npc_talk" && id !== "realm:npc_choose") return;
     let msg;
@@ -1872,7 +1874,6 @@ system.afterEvents.scriptEventReceive.subscribe(
       console.warn(`[town] npc: ${e}`);
     }
   },
-  { namespaces: ["realm"] },
 );
 
 world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
@@ -1997,9 +1998,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "town_bp");
   },
-  { namespaces: ["realm"] },
 );

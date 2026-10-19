@@ -20,6 +20,7 @@ import { GROUPS, LINE, NAMES, OP_COLOR, OP_TEXT, PARAMS, SETUP, needsConfirm, te
 import { get, onChange } from "./settings.js";
 import { facts, markOf, remind, sizePage, state as setupState, statusOf, wizard } from "./setup.js";
 import { allZones, pingZones } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 // Realm Configuration: one item, one menu, every realm: command. Every player gets the item and sees the
 // commands they may use; operators see everything, their own entries in red. The commands come from
@@ -78,13 +79,13 @@ const listening = new Set();
 /** @type {{ tick: number, set: Set<string> | undefined }} */
 let installedCache = { tick: -1e9, set: undefined };
 
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  ["realm:help_pong", "realm:help_ping"],
   ({ id, message }) => {
     if (id === "realm:help_pong") for (const s of listening) s.add(message);
     // /realm:help lists this pack while it's installed: answer its ping with the folder name.
     else if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "admin_bp");
   },
-  { namespaces: ["realm"] }
 );
 
 /** The installed pack folders, or undefined if nobody answered (then every command shows). */

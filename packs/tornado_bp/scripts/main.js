@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { allZones, isProtected, protectedBox, zonesAt } from "./zones.js";
+import { onScriptEvent } from "./script-events.js";
 
 const PROP_WEATHER = "tornado:weather"; // world: overworld weather from the last change; scripts can't read the current weather
 
@@ -829,9 +830,9 @@ system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
 });
 
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
-system.afterEvents.scriptEventReceive.subscribe(
+onScriptEvent(
+  "realm:help_ping",
   ({ id }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "tornado_bp");
   },
-  { namespaces: ["realm"] }
 );
