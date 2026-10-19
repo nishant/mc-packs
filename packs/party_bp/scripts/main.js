@@ -361,6 +361,39 @@ let hudPlayers = new Set();
 let hudHeard = -Infinity;
 /** The Coordinates HUD repeats its state every 5 seconds: after 10 without one, it's gone. */
 const HUD_STALE_TICKS = 200;
+const HUD_PART_TIMEOUT = 100;
+/** The realm:hud_state list still arriving: one `seq`, its parts so far. @type {{ parts: number, seq: unknown, got: Map<number, string[]>, tick: number } | null} */
+let hudAssembly = null;
+
+/** Seq and tick of the last completed list: an older publication replayed late must not replace it. @type {{ seq: number, tick: number } | null} */
+let hudDone = null;
+
+/** Takes one realm:hud_state part; the player list is replaced only when every part of one publication is here. Malformed messages change nothing. @param {any} msg */
+function takeHudState(msg) {
+  if (!Array.isArray(msg.players)) return;
+  const now = system.currentTick;
+  const parts = msg.parts === undefined ? 1 : msg.parts;
+  const part = msg.part === undefined ? 1 : msg.part;
+  if (typeof parts !== "number" || typeof part !== "number" || !Number.isInteger(parts) || !Number.isInteger(part)) return;
+  if (!(parts >= 1 && parts <= 1000 && part >= 1 && part <= parts)) return;
+  const seq = typeof msg.seq === "number" && Number.isFinite(msg.seq) ? msg.seq : undefined;
+  // Older than what is already whole (or arriving): a late replay. After HUD_STALE_TICKS a restarted HUD's low numbers are accepted again.
+  if (seq !== undefined && hudDone && now - hudDone.tick <= HUD_STALE_TICKS && seq < hudDone.seq) return;
+  const ids = msg.players.map(String);
+  const finish = (/** @type {string[]} */ list) => {
+    hudAssembly = null;
+    hudPlayers = new Set(list);
+    hudHeard = now;
+    hudDone = seq === undefined ? null : { seq, tick: now };
+  };
+  if (parts === 1) return finish(ids);
+  let a = hudAssembly;
+  if (a && now - a.tick <= HUD_PART_TIMEOUT && typeof a.seq === "number" && seq !== undefined && seq < a.seq) return; // a late part of an older publication
+  if (!a || a.parts !== parts || a.seq !== seq || now - a.tick > HUD_PART_TIMEOUT) a = hudAssembly = { parts, seq, got: new Map(), tick: now };
+  a.got.set(part, ids);
+  if (a.got.size < parts) return;
+  finish([...a.got.values()].flat());
+}
 
 // Other packs' notes and steady lines (an expedition's run line, the Elytra HUD) hold the bar: the
 // party line waits, so the two don't take turns.
@@ -371,10 +404,7 @@ onScriptEvent(
     try {
       const m = JSON.parse(message);
       if (id === "realm:hud_state") {
-        if (m && Array.isArray(m.players)) {
-          hudPlayers = new Set(m.players.map(String));
-          hudHeard = system.currentTick;
-        }
+        if (m && typeof m === "object") takeHudState(m);
         return;
       }
       if (!m || typeof m.player !== "string" || m.from === "party_bp") return;
