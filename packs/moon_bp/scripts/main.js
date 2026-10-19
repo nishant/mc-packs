@@ -19,6 +19,7 @@ import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { isProtected } from "./zones.js";
 import { onScriptEvent } from "./script-events.js";
+import { spawnFresh } from "./spawn.js";
 
 // Tonight is one world property, "moon:night" -> JSON { d: day number, s: state, a: 1 while the night is on,
 // alive: [player ids still in the running for the Blood Moon reward] }.
@@ -628,14 +629,8 @@ function spawnWave(p) {
     const id = pickMob(safe);
     if (!id) continue;
     try {
-      // A world whose entity ids repeat (an old level.dat put back) can hand back an existing entity (a pet, an
-      // item): tagged, dawn would remove it. Leave that one alone and spawn again.
-      // typeId always has the namespace; a config id may be written without it ("zombie").
-      const want = id.includes(":") ? id : `minecraft:${id}`;
-      let mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
-      for (let k = 0; k < 3 && mob.typeId !== want; k++) mob = p.dimension.spawnEntity(id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 });
-      if (mob.typeId !== want) continue;
-      mob.addTag(MOB_TAG);
+      // Never an existing entity (a pet, an item): tagged, dawn would remove it.
+      spawnFresh(p.dimension, id, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 }, { attempts: 4 }).addTag(MOB_TAG);
     } catch (e) {
       console.warn(`[moon] spawn ${id}: ${e}`);
     }

@@ -11,6 +11,7 @@
 
 import { EnchantmentType, EquipmentSlot, ItemStack, Player, StructureSaveMode, system, world } from "@minecraft/server";
 import { CONFIG } from "./config.js";
+import { spawnFresh as spawnShared } from "./spawn.js";
 
 /** Lore line on kit and boon gear: taken away when the run ends. */
 export const RUN_LORE = "§8Expedition gear: stays in the dungeon";
@@ -93,23 +94,11 @@ export function makeItem(id, count = 1, opts = {}) {
 }
 
 /**
- * Spawns an entity and makes sure the game handed back the new one: a world whose entity ids repeat (an old
- * level.dat put back) can return an entity that already exists, such as a dropped item or someone's minecart, and
- * tagging, filling or later removing that one would lose it. Throws when it keeps happening.
+ * The shared spawnFresh (scripts/spawn.js) with the strict check: someone's chest minecart or pet wolf is the same type,
+ * so a new entity must also stand where it was spawned, untagged, in the dimension asked for.
  * @param {import("@minecraft/server").Dimension} dim @param {string} type @param {import("@minecraft/server").Vector3} at
  */
-export function spawnFresh(dim, type, at) {
-  const want = type.includes(":") ? type : `minecraft:${type}`;
-  for (let k = 0; k < 8; k++) {
-    const e = dim.spawnEntity(/** @type {any} */ (type), at);
-    // The type alone isn't enough: someone's chest minecart or pet wolf is the same type. A new entity stands where
-    // it was spawned, untagged, in the dimension asked for.
-    if (e.typeId !== want || e.dimension.id !== dim.id) continue;
-    const l = e.location;
-    if (Math.abs(l.x - at.x) < 0.5 && Math.abs(l.z - at.z) < 0.5 && Math.abs(l.y - at.y) < 1.5 && !e.getTags().length) return e;
-  }
-  throw new Error(`spawnEntity(${type}) kept returning another entity`);
-}
+export const spawnFresh = (dim, type, at) => spawnShared(dim, type, at, { fresh: true });
 
 /** The best gear tier for a level: iron, diamond from Nightmare 8, netherite from Nightmare 15. @param {number} L */
 const metal = (L) => (L >= 17 ? "netherite" : L >= 10 ? "diamond" : "iron");
