@@ -7,9 +7,9 @@
 //    first realm: listener and a pack's script event time is attributed to that pack, also for a late registration.
 // The real server (one context, 67 packs) is tools/test-bds/examples/script-events-dispatch.js.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
@@ -508,4 +508,142 @@ test("dropping a pack's last handler hands the diagnostics protocol back to diag
   system.sendScriptEvent("realm:diag_ping", JSON.stringify({ id: "z2" }));
   mc.step(2);
   assert.equal(pongs(mc).filter((p) => p.id === "z2").length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// 4. Every real pack, run
+// ---------------------------------------------------------------------------
+
+/** Anything else the game offers: callable, constructible, every property another one of itself. */
+const anything = new Proxy(function () {}, {
+  get: (_, key) => (key === Symbol.toPrimitive ? () => "" : key === "then" ? undefined : anything),
+  apply: () => anything,
+  construct: () => /** @type {any} */ (anything),
+  has: () => false,
+});
+
+/** A game for one pack: signals that record their subscribers, the script event bus and saved data. */
+function wholeGame() {
+  /** @type {Map<string, any[]>} */
+  const subs = new Map();
+  const signal = (/** @type {string} */ key) => ({
+    subscribe(/** @type {Function} */ cb, /** @type {any} */ options) {
+      if (!subs.has(key)) subs.set(key, []);
+      /** @type {any[]} */ (subs.get(key)).push(Object.assign(cb, { options }));
+      return cb;
+    },
+    unsubscribe(/** @type {Function} */ cb) {
+      const list = subs.get(key) ?? [];
+      if (list.includes(cb)) list.splice(list.indexOf(cb), 1);
+    },
+  });
+  const group = (/** @type {string} */ prefix) => new Proxy({}, { get: (target, name) => /** @type {any} */ (target)[name] ?? (/** @type {any} */ (target)[name] = signal(`${prefix}.${String(name)}`)) });
+  const props = new Map();
+  /** @type {{ id: string, message: string }[]} */
+  const sent = [];
+  /** @type {{ at: number, fn: Function }[]} */
+  let timers = [];
+  let tick = 0;
+  const open = (/** @type {object} */ base) => new Proxy(base, { get: (target, key) => (key in target ? /** @type {any} */ (target)[key] : anything) });
+  const system = open({
+    get currentTick() {
+      return tick;
+    },
+    run: (/** @type {Function} */ fn) => timers.push({ at: tick + 1, fn }),
+    runTimeout: (/** @type {Function} */ fn, /** @type {number} */ t = 1) => timers.push({ at: tick + Math.max(1, t), fn }),
+    runInterval: () => 1,
+    runJob: () => 1,
+    clearRun: () => {},
+    waitTicks: () => Promise.resolve(),
+    sendScriptEvent: (/** @type {string} */ id, /** @type {string} */ message) => {
+      sent.push({ id, message });
+    },
+    beforeEvents: group("system.before"),
+    afterEvents: group("system.after"),
+  });
+  const world = open({
+    beforeEvents: group("world.before"),
+    afterEvents: group("world.after"),
+    getDynamicProperty: (/** @type {string} */ k) => props.get(k),
+    setDynamicProperty: (/** @type {string} */ k, /** @type {unknown} */ v) => (v === undefined ? props.delete(k) : props.set(k, v)),
+    getDynamicPropertyIds: () => [...props.keys()],
+    getAllPlayers: () => [],
+    getTimeOfDay: () => 6000,
+    getDay: () => 1,
+  });
+  const deliver = (/** @type {string} */ id, /** @type {string} */ message = "{}") => {
+    for (const cb of [...(subs.get("system.after.scriptEventReceive") ?? [])]) {
+      if (cb.options?.namespaces && !cb.options.namespaces.includes(id.slice(0, id.indexOf(":")))) continue;
+      cb({ id, message, sourceType: "Server" });
+    }
+  };
+  const step = (/** @type {number} */ n = 1) => {
+    for (let i = 0; i < n; i++) {
+      tick++;
+      const due = timers.filter((t) => t.at <= tick);
+      timers = timers.filter((t) => t.at > tick);
+      for (const t of due) t.fn();
+    }
+  };
+  return { system, world, sent, subs, deliver, step, natives: () => subs.get("system.after.scriptEventReceive") ?? [] };
+}
+
+/** A pack's scripts (diag.js left out: the other tests cover it) written under `into` and run against a game of its own. @param {string} folder @param {string} into */
+async function runPack(folder, into) {
+  const game = wholeGame();
+  const g = /** @type {any} */ (globalThis);
+  g.__wholeGame = { WeatherType: { Clear: "Clear", Rain: "Rain", Thunder: "Thunder" }, ScriptEventSource: { Server: "Server", Entity: "Entity", Block: "Block", NPCDialogue: "NPCDialogue" }, system: game.system, world: game.world, anything };
+  const from = join(root, "packs", folder, "scripts");
+  const out = join(into, folder);
+  const files = walk(from).filter((f) => f.endsWith(".js"));
+  const names = (/** @type {string} */ src, /** @type {string} */ spec) => [...src.matchAll(new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*"${spec}"`, "g"))].flatMap((m) => m[1].split(",").map((x) => x.trim().split(/\s+as\s+/)[0]).filter(Boolean));
+  const sources = files.map((f) => readFileSync(f, "utf8"));
+  mkdirSync(out, { recursive: true });
+  const stub = (/** @type {string} */ name, /** @type {string[]} */ list) => {
+    writeFileSync(join(out, name), `const g = globalThis.__wholeGame; ${[...new Set(list)].map((n) => `export const ${n} = g[${JSON.stringify(n)}] ?? g.anything;`).join("\n")}\n`);
+    return JSON.stringify(pathToFileURL(join(out, name)).href);
+  };
+  const server = stub("__server.mjs", sources.flatMap((s) => names(s, "@minecraft/server")));
+  const ui = stub("__ui.mjs", sources.flatMap((s) => names(s, "@minecraft/server-ui")));
+  files.forEach((f, i) => {
+    const target = join(out, relative(from, f));
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, sources[i].replace('import "./diag.js";', "").replaceAll('"@minecraft/server"', server).replaceAll('"@minecraft/server-ui"', ui));
+  });
+  await import(pathToFileURL(join(out, "main.js")).href);
+  return game;
+}
+
+test("every behavior pack runs against a fake game with exactly one native script event listener, which answers /realm:help", async () => {
+  const into = mkdtempSync(join(root, "tools", ".tmp-events-test-"));
+  const problems = [];
+  let loaded = 0;
+  try {
+    for (const folder of packs) {
+      try {
+        const game = await runPack(folder, into);
+        loaded++;
+        const natives = game.natives();
+        if (natives.length !== 1) problems.push(`${folder}: ${natives.length} native scriptEventReceive listeners`);
+        else if (JSON.stringify(natives[0].options) !== '{"namespaces":["realm"]}') problems.push(`${folder}: its listener asks for ${JSON.stringify(natives[0].options)}`);
+        game.deliver("realm:help_ping", "");
+        game.step(2);
+        const pongs = game.sent.filter((s) => s.id === "realm:help_pong").map((s) => s.message);
+        if (pongs.length !== 1) problems.push(`${folder}: ${pongs.length} /realm:help answers`);
+        else if (folder !== "help_bp" && pongs[0] !== folder) problems.push(`${folder}: answers /realm:help as "${pongs[0]}"`);
+        if (folder !== "settings_bp") {
+          game.deliver("realm:cfg_ping", JSON.stringify({ id: "t1" }));
+          const schemas = game.sent.filter((s) => s.id === "realm:cfg_schema");
+          if (!schemas.length) problems.push(`${folder}: doesn't answer realm:cfg_ping`);
+          else if (JSON.parse(schemas[0].message).pack !== folder) problems.push(`${folder}: its settings answer names another pack`);
+        }
+      } catch (e) {
+        problems.push(`${folder}: couldn't run its main.js against the fake game: ${e}`);
+      }
+    }
+  } finally {
+    rmSync(into, { recursive: true, force: true });
+  }
+  assert.deepEqual(problems, []);
+  assert.equal(loaded, packs.length);
 });
