@@ -52,7 +52,8 @@ export default async function (t) {
     if (almanac) t.assert(t.cmd(p, "/realm:weather_set thunder 30").ok, "/realm:weather_set thunder 30 ran");
     else t.server("/weather thunder 1000000");
     await eventually(async () => allAre((await read()).values, "Thunder"), { timeout: 300, interval: 20, message: "every weather pack saves the thunderstorm from the weatherChange" });
-    t.assert(allAre((await read({ clear: KEYS })).values, "Thunder"), "(read just before clearing)");
+    t.assert(allAre((await read()).values, "Thunder"), "(read just before clearing)");
+    await read({ clear: KEYS });
     t.assert(allAre((await read()).values, null), "the saved weather is cleared: the packs know nothing of the storm that is still on");
     t.restart("storm on, packs without a saved weather");
   }
