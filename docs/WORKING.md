@@ -93,6 +93,8 @@ From two weeks of history (728 commits, 161 of them fixes): the same classes cam
 
 ## Audit pass (October 2026: every pack for public servers)
 
+Everything this audit left open (67 items in 12 task groups, plus owner decisions and a backlog) is in `docs/audits/2026-10-deep-audit/OPEN.md`, with the findings tables, triage, baseline and soak reports beside it. Start follow-up work there, and mark items done in it as they ship.
+
 The second full audit (after PR #38) judged everything against a public release: servers with 30 to 100+ players, strangers installing from the docs, worlds with no town. It found 5 blockers, 26 highs, 74 mediums and 125 lows; every blocker and high was fixed, and the deferred rest is triaged into docs-only, cheap fixes, follow-up tasks and won't-fix.
 
 - **Tracks** (one agent each, owning only its packs): infra (tools and the harness), saga engine, saga content, expedition, HUD (Minimap, Coordinates HUD, Side HUD), entities (townsfolk, caravan, wanderers, towns, champions, mobs), items (stash, refill, relics, chest finder, claims, cooking...), menus (admin, settings, help, news, welcome, nicknames, titles), weather and sky, and social split in two (progress: crowns, guilds, bounties, mail, parties, quests, goals, milestones, stats, skills; world: building, zones, cleanup, waystones, atlas, maps, the rest). Then two feature tracks (diagnostics and server setup, town news), a cheap-fixes track for the deferred list, and a docs pass.
