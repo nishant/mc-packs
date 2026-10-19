@@ -130,7 +130,8 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 | Minimap | `mobRadiusMax` | 32 | 24 | Each mob search covers about half the ground, so the budgeted searches come round sooner for many players |
 | Stats & Leaderboards | `tickerEnabled` | true | true | Both profiles allow each player's own ticker; disallowing it hides everybody without erasing choices |
 | Stats & Leaderboards | `tickerDefaultOn` | true | true | Players who never chose start on. A saved personal on/off choice wins even after later default changes |
-| Champions | `maxAlive` | 8 | 16 | A world-wide cap: 8 champions shared by 100 spread-out players means most never meet one. They cost little (about 0.04 ms a tick at 40 players) |
+| Champions | `maxAlive` | 80 (+ 0.8 per player) | 80 (planned; the preset still says 16) | A world-wide ceiling, scaled by players online (`maxAlivePerPlayer` 0.8): 1 player meets 1, 10 meet 8, 100 meet 80. Not measured at Large player counts yet |
+| Blood Moon | `blood.maxExtraWorld` | 0 (no limit) | 160 (planned; not in the preset yet) | Caps the Blood Moon extra monsters across every player and dimension, loaded ones only. Not measured at Large player counts yet |
 | Expeditions | `slots` | 1 | 3 | Three dungeons of 4 players at once instead of one; about 0.1 ms a tick per run going. Uses up to 3 of the world's 10 ticking areas while dungeons reset |
 | Easy Building | `maxBlocksCap` | 50,000 | 2,000 | Bound each public-server build; the separate `defaultMaxBlocks` stays 50,000 but is clamped to the cap |
 | Easy Building | `operatorsOnly` | Disabled | Enabled | Only operators use the building tools on the public-server profile |
@@ -140,6 +141,8 @@ listing every change (old -> new). **Small Realm** (up to about 10 players) is e
 | Realm Configuration | `checkSeconds` | 30 | 60 | The item check reads every inventory, about 0.2 ms per player: half as often |
 | Realm Mail | `sendCooldownSeconds` | 10 | 30 | Less letter spam among many strangers |
 | AFK + Smart Sleep | `sleep.percent` | 100 | 50 | With 30 or more players, all of them asleep at once never happens, so the night would never skip |
+
+The Expeditions values above are the ones in this release's Large preset. The Champions 80 and Blood Moon 160 values are planned: the preset in this release still says 16 for Champions and has no Blood Moon entry, and neither has a performance approval, so these numbers claim none.
 
 Measured with 40 simulated players, Large server took the whole bundle from 9.5 to 8.3 ms a tick (the Minimap from
 3.8 to 2.9 ms). Pick Small Realm again to put every value back. Each value can still be changed on its own in

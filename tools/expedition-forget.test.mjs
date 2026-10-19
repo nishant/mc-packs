@@ -74,7 +74,7 @@ async function setup({ ids, failDelete = [], keepAfterDelete = [], failList = fa
   delete globalThis.__realmDiagWrapped;
   delete globalThis.__realmDiagForgetHooks;
   const structures = new Set(ids);
-  const state = { handing, failDelete: [...failDelete] };
+  const state = { handing, failDelete: [...failDelete], cleared: [] };
   mc.world.structureManager = {
     getWorldStructureIds: () => {
       if (failList) throw new Error("list failed");
@@ -108,6 +108,10 @@ async function setup({ ids, failDelete = [], keepAfterDelete = [], failList = fa
     forgetStructures: gctx.api.forgetStructures,
     setSaving: gctx.api.setSaving,
     handingOver: () => state.handing,
+    clearQueue: (text) => {
+      state.cleared.push(text);
+      return 0;
+    },
     system: mc.system,
     world: mc.world,
   };
@@ -145,6 +149,7 @@ test("a confirmed forget deletes own parcels, keeps every stash and foreign stru
   assert.match(r[0].note, /2 parcel structures deleted/);
   assert.match(r[0].note, /2 stash structures stay/);
   assert.equal(w.mc.world.props.size, 0, "the saved world data is gone");
+  assert.equal(w.state.cleared.length, 1, "the line for a dungeon was closed");
 });
 
 test("structures that can't be deleted turn the one answer into a failure with the real count and error", async () => {
