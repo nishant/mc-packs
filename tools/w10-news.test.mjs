@@ -613,7 +613,7 @@ test("guard: playerless champion news is stored, not dropped, and the 24/4 caps 
 
 function milestoneSession(record, milestones, valueOf = () => 0) {
   const box = recorder();
-  const api = evalPack(pack("milestones_bp"), ["check", "topTier"], ["gossip"], {
+  const api = evalPack(pack("milestones_bp"), ["check", "topTier", "recheck"], ["gossip"], {
     ...box,
     recordOf: () => record,
     milestones,
@@ -628,7 +628,7 @@ function milestoneSession(record, milestones, valueOf = () => 0) {
     fmt: (n) => String(n),
     console,
   });
-  return { check: api.check, events: box.events };
+  return { check: api.check, recheck: api.recheck, events: box.events };
 }
 
 test("old top-tier titles are not sent again on the next join", () => {
@@ -643,6 +643,48 @@ test("old top-tier titles are not sent again on the next join", () => {
   assert.equal(record.tf, 1);
   assert.equal(record.legacy, 9, "unknown saved fields stay");
   assert.equal(record.g.m0, 3);
+});
+
+test("a recheck after the join flag sends no extra title", () => {
+  const milestones = Array.from({ length: 9 }, (_, i) => ({ id: "m" + i, stat: "mined", name: "Mile" + i, tiers: [1, 2, 3] }));
+  const record = { n: "Ada", c: { mined: 1 }, g: Object.fromEntries(milestones.map((m) => [m.id, 3])), legacy: 9 };
+  const player = { id: "ada", name: "Ada", sendMessage() {}, playSound() {} };
+  const session = milestoneSession(record, milestones);
+  session.check(player);
+  const sent = count(session.events, "realm:title_unlock");
+  session.recheck(player);
+  assert.equal(count(session.events, "realm:title_unlock"), sent, "recheck sent another title");
+  assert.equal(record.tf, 1);
+  assert.equal(record.legacy, 9);
+});
+
+test("the owning report reads the saved flag, not another add-on's store", () => {
+  const store = new Map([["milestones:p:ada", JSON.stringify({ n: "Ann", c: { joins: 400 }, g: { joins: 3 }, tf: 1, legacy: 9 })]]);
+  /** @type {{ id: string, payload: string }[]} */
+  const sent = [];
+  const api = evalPack(pack("milestones_bp"), ["reportSaved", "flush", "records", "recordReport", "boundedReport"], [], {
+    world: {
+      getDynamicProperty: (k) => store.get(k),
+      setDynamicProperty(k, v) { store.set(k, v); },
+      getDynamicPropertyIds: () => [...store.keys()],
+    },
+    system: { sendScriptEvent(id, payload) { sent.push({ id, payload }); } },
+    seedCache: new Map([["ada", { n: "Ann", c: {}, g: { joins: 3 } }]]),
+    seedDirty: new Set(),
+    console,
+  }, "let cache = seedCache;\nconst dirty = seedDirty;\nconst RECORD_PREFIX = 'milestones:p:';");
+  api.reportSaved({ id: "ada", name: "Ann" });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].id, "realm:milestones_test_report");
+  const msg = JSON.parse(sent[0].payload);
+  assert.equal(msg.tf, 1, "saved tf, not the in-memory record that lacks it");
+  assert.equal(msg.name, "Ann");
+  assert.equal(msg.joins, 3);
+  assert.equal(msg.player, "ada");
+  assert.equal(msg.legacy, undefined);
+  assert.equal(msg.error, undefined);
+  assert.equal(JSON.parse(api.boundedReport("x".repeat(2000))).error, "too long");
+  assert.equal(JSON.parse(api.boundedReport("x".repeat(2000))).length, 2000);
 });
 
 test("a new top tier still unlocks after the join flag is set", () => {
