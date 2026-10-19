@@ -57,8 +57,8 @@ let unsubs = 0;
 // The first frame that is neither this file nor a pack's diag.js: scripts/<pack>/<file>.
 const who = () => {
   for (const line of String(new Error().stack ?? "").split("\\n")) {
-    const m = /([A-Za-z0-9_]+_bp)\\/([A-Za-z0-9_.\\/-]+?\\.js)/.exec(line);
-    if (m && !/(^|\\/)diag\\.js$/.test(m[2])) return { pack: m[1], file: m[2] };
+    const m = /([A-Za-z0-9_]+_bp)[\\\\/]([A-Za-z0-9_.\\\\/-]+?\\.js)/.exec(line);
+    if (m && !/(^|[\\\\/])diag\\.js$/.test(m[2])) return { pack: m[1], file: m[2] };
   }
   return { pack: "?", file: "?" };
 };
