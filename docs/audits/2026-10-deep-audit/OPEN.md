@@ -321,7 +321,7 @@ Each group is one follow-up task; ids (`O1`...) are for reference in PRs.
   nickname protection for an offline gamertag starts at that player's next join.
   **Owner answer (2026-10-19):** all four Realm notes acknowledged; no changes; not repeated in reports.
 - O66 Upload both new bundles to the Realm together (diag.js and the shared copies changed in both).
-  **Owner answer (2026-10-19):** "It is assumed the Realm Bundle and Realm Resources get uploaded to the Realm after each release; the owner does it." Applied in `CLAUDE.md` ship step 4, `docs/WORKING.md` finishing step 7 and `docs/SERVER_SETUP.md` Updating, by `c440f6395810a788a3875c1d1354ea42e7efa7ec`. Attaching `.mcpack` files is no longer required; website completion does not wait on the upload.
+  **Owner answer (2026-10-19):** "It is assumed the Realm Bundle and Realm Resources get uploaded to the Realm after each release; the owner does it." Applied in `CLAUDE.md` ship step 4, `docs/WORKING.md` finishing step 7 and `docs/SERVER_SETUP.md` Updating, by `c440f6395810a788a3875c1d1354ea42e7efa7ec`. Attaching `.mcpack` files is no longer required; website completion does not wait on the upload. Hosting apply: `79cd7cbb320fd27753c2c185d796c42bd2039bd9` on branch `msftmyt-urgent-hosting-readiness` (`nishant/hosting`, CLAUDE.md step 4 only), reported by the hosting session; local commit, not yet merged to `master` or deployed.
 - O67 **Disposition done in `5413ec948b1dfc3d9f3450027021cfef82344aa6`:** the owner directed closing
   [#84](https://github.com/nishant/mc-packs/pull/84) and
   [#86](https://github.com/nishant/mc-packs/pull/86) **unmerged**, not updating or merging them.
