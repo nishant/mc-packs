@@ -48,13 +48,23 @@ export default async function (t) {
   t.check(report.packs === 68 && report.total === 68, `68 listeners: 67 packs plus the probe (${report.total} for ${report.packs})`);
   t.check(JSON.stringify(report.ns) === '["realm"]', `realm namespace only (${JSON.stringify(report.ns)})`);
 
-  at = mark();
+  const helpAt = t.tick;
+  const diagAt = mark();
   send("realm:help_ping", "");
   send("realm:diag_ping", { id: "c13" });
-  await t.wait(60);
-  const helps = of("realm:help_pong", at).map((e) => e.raw);
-  t.check(helps.length === 68 && new Set(helps).size === 68, `help answers once from 67 packs plus the probe (${helps.length})`);
-  const diags = of("realm:diag_pong", at).filter((e) => e.m?.id === "c13").map((e) => e.m);
+  const helpMembers = [...real, "probe_bp"];
+  let fence;
+  for (let i = 0; i < 16 && !fence?.complete; i++) {
+    const id = `h${i}`;
+    send("harness:c13_help", { id, at: helpAt, members: helpMembers, quiet: 5 });
+    await t.waitUntil(() => events.some((e) => e.id === "harness:c13_help_result" && e.m?.id === id), { timeout: 30, message: "c13_help" });
+    fence = events.find((e) => e.id === "harness:c13_help_result" && e.m?.id === id).m;
+    if (!fence.complete) await t.wait(5);
+  }
+  t.assert(fence?.complete, `help fence incomplete: pings ${fence?.pings ?? 0}, folders ${fence?.folders ?? 0}, missing ${JSON.stringify(fence?.missing || [])}, extra ${JSON.stringify(fence?.extra || [])}`);
+  t.check(fence.pings >= 1 && fence.folders === 68 && fence.min === fence.pings && fence.max === fence.pings && fence.missing.length === 0 && fence.extra.length === 0, `each of 68 packs answered once per observed ping (${fence.pings} help_ping, min ${fence.min}, max ${fence.max})`);
+  t.log(`help fence counted ${fence.pings} overlapping help_ping request(s); pongs are raw folder names with no request id`);
+  const diags = of("realm:diag_pong", diagAt).filter((e) => e.m?.id === "c13").map((e) => e.m);
   const shared = [...new Set(diags.map((d) => d.shared))];
   t.check(diags.length === 68 && shared.length === 1 && shared[0] === 68, `one diag registry of 68 (shared: ${shared.join(",") || "none"}, answers ${diags.length})`);
 
@@ -84,6 +94,7 @@ export default async function (t) {
     const r = results.find((x) => x.id === id);
     t.assert(r.mode === "callback-replay", `tap ${id} is labeled callback-replay (${r.mode})`);
     t.assert(!r.error, `callback-replay ${id} (${r.signal || extra.signal || "interact"}): ${r.error || "ok"}`);
+    if (r.unknown?.length) t.log(`unknown subscriber stacks: ${JSON.stringify(r.unknown).slice(0, 480)}`);
     t.log(`callback-replay ${id} ${r.signal} cancel=${r.cancel} listeners=${r.listeners}`);
     await t.wait(1);
     return r;

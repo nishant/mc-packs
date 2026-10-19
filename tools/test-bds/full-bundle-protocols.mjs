@@ -13,6 +13,50 @@ export function nativeHitReport(hits, signal) {
   return { hits: matching.length, rows: matching.slice(-12) };
 }
 
+/** First non-diag, non-test `<pack>_bp/<file>.js` frame. Bundle stacks omit `scripts/`. Unknown stacks are not renamed. */
+export function subscriberOf(stack = "") {
+  const skip = new Set(["__c13_tap", "__events_count", "probe_bp"]);
+  const lines = String(stack ?? "").split(/\r?\n/);
+  for (const line of lines) {
+    const normalized = line.replace(/\\/g, "/");
+    const m = /([A-Za-z0-9_]+_bp)\/([A-Za-z0-9_./-]+?\.js)/.exec(normalized);
+    if (!m || skip.has(m[1]) || /(^|\/)diag\.js$/.test(m[2])) continue;
+    return { pack: m[1], file: m[2], trace: "" };
+  }
+  return { pack: "?", file: "?", trace: lines.slice(0, 6).join(" | ").slice(0, 240) };
+}
+
+/**
+ * Pongs are raw folder names and have no request id, so overlapping help_ping bursts cannot be split.
+ * A fence is complete only when every expected folder answered once per observed ping, then stayed quiet.
+ */
+export function helpFence(events, members, at, now, quiet = 5) {
+  const expected = [...(members || [])];
+  const exp = new Set(expected);
+  const sorted = [...(events || [])]
+    .filter((e) => e && (e.id === "realm:help_ping" || e.id === "realm:help_pong"))
+    .sort((a, b) => a.tick - b.tick || (a.id === "realm:help_ping" ? -1 : 1));
+  const bursts = [];
+  let cur = null;
+  for (const e of sorted) {
+    if (!cur || e.tick - cur.end > quiet) {
+      cur = { start: e.tick, end: e.tick, pings: 0, counts: {} };
+      bursts.push(cur);
+    }
+    cur.end = Math.max(cur.end, e.tick);
+    if (e.id === "realm:help_ping") cur.pings += 1;
+    else cur.counts[String(e.raw ?? "")] = (cur.counts[String(e.raw ?? "")] ?? 0) + 1;
+  }
+  const burst = bursts.find((b) => at >= b.start && at <= b.end) || null;
+  if (!burst) return { complete: false, pings: 0, counts: {}, missing: expected.slice(0, 12), extra: [], quiet: false };
+  const names = Object.keys(burst.counts);
+  const missing = expected.filter((n) => burst.counts[n] !== burst.pings);
+  const extra = names.filter((n) => !exp.has(n));
+  const quietNow = now - burst.end >= quiet;
+  const complete = burst.pings >= 1 && missing.length === 0 && extra.length === 0 && names.length === expected.length && quietNow;
+  return { complete, pings: burst.pings, counts: burst.counts, missing: missing.slice(0, 12), extra: extra.slice(0, 12), quiet: quietNow, start: burst.start, end: burst.end };
+}
+
 export const STAGED_NAME = "realm_bundle";
 export const INSTRUMENT = ["__c13_tap", "__events_count", "probe_bp"];
 export const RUN_TIMEOUT = "1200";
@@ -39,23 +83,23 @@ export function c13TapSource() {
     "const nativeHits = [];",
     "const sneakBaseline = new Map();",
     "const sneakToken = new Map();",
+    "const unknownSubs = [];",
+    "const helpEvents = [];",
     "let sneakSeq = 0;",
-    nativeHitReport.toString().replace(/^function nativeHitReport/, "function nativeHitReport") + ";",
+    nativeHitReport.toString() + ";",
+    subscriberOf.toString() + ";",
+    helpFence.toString() + ";",
     `const SKIP = new Set(${skip});`,
-    "const packOf = (stack = String(new Error().stack ?? \"\")) => {",
-    "  const skip = new Set([\"__c13_tap\", \"__events_count\", \"probe_bp\"]);",
-    "  const re = /scripts[\\\\/]([A-Za-z0-9_]+)[\\\\/]/g;",
-    "  let m;",
-    "  while ((m = re.exec(stack))) if (!skip.has(m[1])) return m[1];",
-    "  return \"?\";",
-    "};",
+    "const packOf = (stack) => subscriberOf(stack ?? new Error().stack).pack;",
     "const watch = (signal, name) => {",
     "  if (!signal || typeof signal.subscribe !== \"function\") return;",
     "  const original = signal.subscribe.bind(signal);",
     "  const list = [];",
     "  signals[name] = list;",
     "  signal.subscribe = (callback, ...rest) => {",
-    "    const pack = packOf();",
+    "    const who = subscriberOf();",
+    "    const pack = who.pack;",
+    "    if (pack === \"?\" && unknownSubs.length < 8) unknownSubs.push(who.trace);",
     "    list.push({ pack, callback });",
     "    const native = (event) => {",
     "      const row = { signal: name, pack, tick: system.currentTick, before: !!(event && event.cancel), after: !!(event && event.cancel) };",
@@ -70,6 +114,11 @@ export function c13TapSource() {
     "watch(world.beforeEvents.playerBreakBlock, \"playerBreakBlock\");",
     "watch(world.beforeEvents.playerInteractWithEntity, \"playerInteractWithEntity\");",
     "watch(world.beforeEvents.itemUse, \"itemUse\");",
+    "system.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {",
+    "  if (id !== \"realm:help_ping\" && id !== \"realm:help_pong\") return;",
+    "  helpEvents.push({ id, raw: String(message ?? \"\"), tick: system.currentTick });",
+    "  if (helpEvents.length > 800) helpEvents.splice(0, helpEvents.length - 800);",
+    "}, { namespaces: [\"realm\"] });",
     "",
     "const itemOf = (hand, item) => {",
     "  if (item) return new ItemStack(item, 1);",
@@ -79,6 +128,17 @@ export function c13TapSource() {
     "};",
     "",
     "system.afterEvents.scriptEventReceive.subscribe(({ id, message }) => {",
+    "  if (id === \"harness:c13_help\") {",
+    "    const q = JSON.parse(message || \"{}\");",
+    "    const fence = helpFence(helpEvents, q.members || [], q.at, system.currentTick, q.quiet || 5);",
+    "    const values = Object.values(fence.counts);",
+    "    system.sendScriptEvent(\"harness:c13_help_result\", JSON.stringify({",
+    "      id: q.id, complete: fence.complete, pings: fence.pings, quiet: fence.quiet,",
+    "      folders: values.length, min: values.length ? Math.min(...values) : 0, max: values.length ? Math.max(...values) : 0,",
+    "      missing: fence.missing, extra: fence.extra,",
+    "    }));",
+    "    return;",
+    "  }",
     "  if (id === \"harness:c13_native\") {",
     "    const q = JSON.parse(message || \"{}\");",
     "    const report = nativeHitReport(nativeHits, q.signal);",
@@ -150,6 +210,7 @@ export function c13TapSource() {
     "    listeners: (signals[signal] || []).length,",
     "    order: (signals[signal] || []).map((r) => r.pack),",
     "    trace: brief.slice(0, 40),",
+    "    unknown: unknownSubs.slice(0, 4),",
     "  }));",
     "}, { namespaces: [\"harness\"] });",
     "",

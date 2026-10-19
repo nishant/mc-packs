@@ -262,13 +262,70 @@ test("the genuine bundle runner is registered and a suite skip is not coverage",
   assert.doesNotMatch(scenario, /skips this file/);
 });
 
+test("subscriber frames skip diag and do not require a scripts folder", async () => {
+  const mod = await import("./full-bundle-protocols.mjs");
+  assert.equal(typeof mod.subscriberOf, "function");
+  const bare = "Error\n    at chairs_bp/main.js:154:1";
+  assert.equal(mod.subscriberOf(bare).pack, "chairs_bp");
+  const diagFirst = [
+    "Error",
+    "    at subscribe (afk_bp/diag.js:88:5)",
+    "    at chairs_bp/script-events.js:12:3",
+    "    at chairs_bp/main.js:40:1",
+  ].join("\n");
+  const named = mod.subscriberOf(diagFirst);
+  assert.equal(named.pack, "chairs_bp");
+  assert.notEqual(named.pack, "afk_bp");
+  const win = "Error\n    at C:\\srv\\scripts\\__c13_tap\\main.js:10:1\n    at scripts\\claims_bp\\diag.js:4:1\n    at scripts\\claims_bp\\main.js:8:1";
+  assert.equal(mod.subscriberOf(win).pack, "claims_bp");
+  const unknown = mod.subscriberOf("Error\n    at subscribe (native)\n    at no folder here");
+  assert.equal(unknown.pack, "?");
+  assert.ok(unknown.trace.length > 0 && unknown.trace.length <= 240);
+  assert.doesNotMatch(unknown.trace, /chairs_bp/);
+  const src = mod.c13TapSource();
+  assert.match(src, /subscriberOf\(/);
+  assert.doesNotMatch(src, /scripts\[\\\\\/\]\(\[A-Za-z0-9_\]\+\)/);
+});
+
+test("overlapping help pings stay one counted burst, not a unique-name pass", async () => {
+  const mod = await import("./full-bundle-protocols.mjs");
+  assert.equal(typeof mod.helpFence, "function");
+  const members = ["probe_bp", "skills_bp"];
+  const overlapped = [
+    { id: "realm:help_ping", raw: "", tick: 120 },
+    { id: "realm:help_pong", raw: "skills_bp", tick: 120 },
+    { id: "realm:help_pong", raw: "probe_bp", tick: 120 },
+    { id: "realm:help_ping", raw: "", tick: 121 },
+    { id: "realm:help_pong", raw: "probe_bp", tick: 121 },
+    { id: "realm:help_pong", raw: "skills_bp", tick: 121 },
+  ];
+  const early = mod.helpFence(overlapped, members, 121, 122, 5);
+  assert.equal(early.complete, false);
+  assert.equal(early.pings, 2);
+  const done = mod.helpFence(overlapped, members, 121, 126, 5);
+  assert.equal(done.complete, true);
+  assert.equal(done.counts.skills_bp, 2);
+  assert.equal(done.counts.probe_bp, 2);
+  const oneEach = mod.helpFence([
+    { id: "realm:help_ping", raw: "", tick: 1 },
+    { id: "realm:help_ping", raw: "", tick: 2 },
+    { id: "realm:help_pong", raw: "skills_bp", tick: 2 },
+    { id: "realm:help_pong", raw: "probe_bp", tick: 2 },
+  ], members, 2, 20, 5);
+  assert.equal(oneEach.complete, false, "unique folders must not pass when each pack answered fewer times than the observed pings");
+  assert.ok(oneEach.missing.length > 0);
+  const scenario = fs.readFileSync(path.join(harness, "examples", "full-bundle-protocols.js"), "utf8");
+  assert.doesNotMatch(scenario, /helps\.length === 68 && new Set\(helps\)\.size === 68/);
+  assert.match(scenario, /once per observed ping/);
+});
+
 test("a Windows and a POSIX stack both name the pack that subscribed", () => {
   const dir = scratch("c13-stack-");
   const packed = path.join(dir, "src");
   writeBundle(packed);
   const report = stageFullBundleProtocols({ from: packed, outDir: path.join(dir, "out"), repoRoot: root });
   const tap = fs.readFileSync(path.join(report.packDir, "scripts", "__c13_tap", "main.js"), "utf8");
-  const start = tap.indexOf("const packOf");
+  const start = tap.indexOf("function subscriberOf");
   const fn = tap.slice(start, tap.indexOf("const watch"));
   const packOf = new Function(`${fn}; return packOf;`)();
   const win = "Error\n    at signal.subscribe (C:\\srv\\scripts\\__c13_tap\\main.js:10:1)\n    at scripts\\claims_bp\\diag.js:4:1\n    at scripts\\claims_bp\\main.js:8:1";
