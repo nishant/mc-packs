@@ -4,6 +4,7 @@ import { ActionFormData, FormCancelationReason, ModalFormData } from "@minecraft
 import { CONFIG } from "./config.js";
 import { get } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
+import { stale, verdict } from "./prune.js";
 
 // Each player's titles, trails and built-in stats are one world property, `titles:p:<player id>`, so
 // other packs can unlock titles for players who are offline and operators can give titles to them.
@@ -11,7 +12,7 @@ import { onScriptEvent } from "./script-events.js";
 // pack shows it under the name. Trails are particles from the Realm Skies resource pack: without it
 // installed they just don't show.
 
-/** @typedef {{ n: string, t: string[], r: string[], tr: string, s: { d: number, n: number, w: number } }} Data gamertag, titles, trails, chosen trail ("" = none), stats: distance, night seconds, storm seconds */
+/** @typedef {{ n: string, t: string[], r: string[], tr: string, s: { d: number, n: number, w: number }, ls: number }} Data gamertag, titles, trails, chosen trail ("" = none), stats: distance, night seconds, storm seconds, last seen (ms; 0 = not yet known) */
 
 const KEY_PREFIX = "titles:p:";
 const PROP_WEATHER = "titles:weather"; // world: overworld weather from the last change; scripts can't read the current weather
@@ -78,6 +79,7 @@ function parse(v) {
     r: strings(v?.r).filter((r) => TRAILS[r]),
     tr: typeof v?.tr === "string" && TRAILS[v.tr] ? v.tr : "",
     s: { d: num(v?.s?.d), n: num(v?.s?.n), w: num(v?.s?.w) },
+    ls: num(v?.ls),
   };
 }
 
@@ -241,11 +243,49 @@ world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
   lastSpot.delete(player.id); // respawning or joining isn't traveling
   if (!initialSpawn) return;
   const d = dataOf(player.id);
-  if (d.n !== player.name) {
+  const now = Date.now();
+  if (d.n !== player.name || stale(d.ls, now)) {
     d.n = player.name;
+    d.ls = now;
     save(player.id);
   }
 });
+
+/** Deletes the saved titles, trails and stats of players not seen for `forgetAfterDays`. A record with no time starts counting now. */
+function* forgetOld() {
+  const days = Number(CONFIG.forgetAfterDays);
+  if (!(days > 0)) return;
+  let keys;
+  try {
+    keys = world.getDynamicPropertyIds().filter((k) => k.startsWith(KEY_PREFIX));
+  } catch {
+    return;
+  }
+  const here = new Set(world.getAllPlayers().map((p) => p.id));
+  const now = Date.now();
+  for (const key of keys) {
+    const id = key.slice(KEY_PREFIX.length);
+    try {
+      if (!here.has(id) && !cache.has(id)) {
+        const raw = world.getDynamicProperty(key);
+        const v = typeof raw === "string" ? JSON.parse(raw) : undefined;
+        if (v && typeof v === "object") {
+          const verdictNow = verdict(v.ls, now, days);
+          if (verdictNow === "start") world.setDynamicProperty(key, JSON.stringify({ ...v, ls: now }));
+          else if (verdictNow === "drop") {
+            world.setDynamicProperty(key, undefined);
+            console.warn(`[titles] forgot ${v.n || id}: not seen for over ${days} days (${Array.isArray(v.t) ? v.t.length : 0} titles)`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[titles] ${e}`);
+    }
+    yield;
+  }
+}
+system.runTimeout(() => system.runJob(forgetOld()), 1400);
+system.runInterval(() => system.runJob(forgetOld()), 20 * 3600 * 6);
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
   if (dirty.has(playerId)) save(playerId);

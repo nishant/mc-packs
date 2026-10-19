@@ -19,4 +19,7 @@ export const CONFIG = {
 
   /** Longest party chat message, in characters. */
   chatMaxLength: 200,
+
+  /** A party with one member nobody has played in for this many days is deleted. Parties with two or more members are never deleted. 0 = never delete. */
+  forgetSoloAfterDays: 180,
 };
