@@ -587,6 +587,96 @@ export function countItem(player, item, name) {
   return n;
 }
 
+// stash-bridge:begin
+/**
+ * Items Expansive Inventory (stash_bp) keeps on saved pages count toward a collect step, which would otherwise never see
+ * what its page routing moved off the active page. It asks (realm:stash_count_ask { player, item?, name? }) and
+ * stash_bp answers with realm:stash_count { player, item?, name?, rows: [{ id, name?, lore?, n }] }, one row per kind
+ * on saved pages; a realm:stash_changed { player } says the saved pages changed. countItem is untouched: deliveries
+ * and every other reader still see only the live inventory. Without stash_bp nothing answers: after one wait of
+ * STASH_WAIT ticks the step counts the live inventory alone.
+ * @type {Map<string, { id: string, name?: string, lore?: string[], n: number }[]>}
+ */
+const stashRows = new Map();
+/** When each unanswered ask was sent (tick). @type {Map<string, number>} */
+const stashAsked = new Map();
+/** Ticks to wait for an answer before counting without it. */
+const STASH_WAIT = 40;
+
+/** @param {Player} player @param {Objective} obj */
+const stashKey = (player, obj) => `${player.id}|${obj.item ?? ""}|${obj.name ?? ""}`;
+
+/**
+ * What a collect step has: the live inventory plus the saved pages. Undefined while stash_bp's answer is pending,
+ * so a count taken between a page move and its answer can't make progress dip.
+ * @param {Player} player @param {Objective} obj @returns {number | undefined}
+ */
+function collectCount(player, obj) {
+  const live = countItem(player, obj.item, obj.name);
+  const key = stashKey(player, obj);
+  let rows = stashRows.get(key);
+  if (!rows) {
+    const now = system.currentTick;
+    const asked = stashAsked.get(key);
+    if (asked === undefined) {
+      stashAsked.set(key, now);
+      send("realm:stash_count_ask", { player: player.id, item: obj.item, name: obj.name });
+      return undefined;
+    }
+    if (now - asked < STASH_WAIT) return undefined;
+    stashAsked.delete(key);
+    rows = [];
+    stashRows.set(key, rows);
+  }
+  let hidden = 0;
+  for (const r of rows) {
+    const lore = r.lore ?? [];
+    const stack = /** @type {ItemStack} */ (/** @type {unknown} */ ({ typeId: r.id, nameTag: r.name, getLore: () => lore }));
+    if (same(stack, obj.item, obj.name)) hidden += r.n;
+  }
+  return live + hidden;
+}
+
+/** @param {string} message */
+function stashCountReply(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string" || !Array.isArray(m.rows)) return;
+    const key = `${m.player}|${typeof m.item === "string" ? m.item : ""}|${typeof m.name === "string" ? m.name : ""}`;
+    const rows = [];
+    for (const r of m.rows) {
+      if (r && typeof r.id === "string" && Number.isInteger(r.n) && r.n > 0) {
+        rows.push({ id: r.id, name: typeof r.name === "string" ? r.name : undefined, lore: Array.isArray(r.lore) ? r.lore.map(String) : undefined, n: r.n });
+      }
+    }
+    const was = JSON.stringify(stashRows.get(key));
+    stashRows.set(key, rows);
+    stashAsked.delete(key);
+    if (was !== JSON.stringify(rows)) invChanged.add(m.player);
+  } catch {
+    // an unreadable answer is ignored; the step keeps what it had
+  }
+}
+
+/** The saved pages changed: what stash_bp said before is stale until it answers again. @param {string} message */
+function stashChanged(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string") return;
+    for (const key of [...stashRows.keys()]) if (key.startsWith(`${m.player}|`)) stashRows.delete(key);
+    for (const key of [...stashAsked.keys()]) if (key.startsWith(`${m.player}|`)) stashAsked.delete(key);
+    invChanged.add(m.player);
+  } catch {
+    // ignored
+  }
+}
+// stash-bridge:end
+
+onScriptEvent(["realm:stash_count", "realm:stash_changed"], ({ id, message }) => {
+  if (id === "realm:stash_count") stashCountReply(message);
+  else if (id === "realm:stash_changed") stashChanged(message);
+});
+
 /**
  * Takes up to `max` of an item. Without `name`, renamed items are never taken; with it, only items
  * with that name are. Returns how many were taken.
@@ -2934,9 +3024,11 @@ export function tickPlayer(player, list) {
               // Counted again only when the inventory changed (or every 10 seconds, or for a step not counted yet).
               const key = objKey(e, i);
               if (!recount && collectSeen.get(player.id)?.has(key)) break;
+              const have = collectCount(player, obj);
+              if (have === undefined) break; // stash_bp's answer is pending: counted next second
               collected.push(key);
+              bump(player, e, i, have, true);
             }
-            bump(player, e, i, countItem(player, obj.item, obj.name), true);
             // Done: party mates on the same chapter nearby have it done too (the party's main chapter: party.js).
             if (reached(e, i)) share(player, new Set([objKey(e, i)]), "collect", (o) => target(o), new Set([player.id]));
             break;

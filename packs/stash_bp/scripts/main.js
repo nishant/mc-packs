@@ -16,7 +16,7 @@ import {
 } from "@minecraft/server";
 import { ActionFormData, FormCancelationReason } from "@minecraft/server-ui";
 import { CONFIG } from "./config.js";
-import { buttonSlots, initPages, openInvMenu, refillFromPages, setOpPages } from "./pages.js";
+import { buttonSlots, initPages, openInvMenu, refillFromPages, setOpPages, storedCount } from "./pages.js";
 import { get, getFor } from "./settings.js";
 import { onScriptEvent } from "./script-events.js";
 
@@ -1211,12 +1211,41 @@ function refillNeed(message) {
   }
 }
 
+/**
+ * Saga's collect steps ask what the saved pages hold, because page routing moves pickups off the active page:
+ *   realm:stash_count_ask { player, item?, name? }  ->  realm:stash_count { player, item?, name?, rows: [{ id, name?, lore?, n }] }
+ * One row per name and lore of the item on saved pages (never the active page, which the asker counts itself). A page that
+ * can't be read sends no answer, so the asker keeps waiting rather than counting zero. Rows stay under 2048 characters.
+ * @param {string} message
+ */
+function stashCountAsk(message) {
+  try {
+    const m = JSON.parse(message);
+    if (!m || typeof m.player !== "string") return;
+    const player = world.getAllPlayers().find((p) => p.id === m.player);
+    if (!player) return;
+    // A step that names no item can't be matched against the index: nothing is counted from saved pages for it.
+    let rows = typeof m.item === "string" ? storedCount(player, m.item) : [];
+    if (!rows) return;
+    const wire = (/** @type {typeof rows} */ list) => JSON.stringify({ player: m.player, item: m.item, name: m.name, rows: list.map((r) => ({ ...r, lore: r.lore?.join("\n").length > 200 ? undefined : r.lore })) });
+    let text = wire(rows);
+    while (text.length >= 2000 && rows.length > 1) {
+      rows = rows.slice(0, rows.length - 1);
+      text = wire(rows);
+    }
+    system.sendScriptEvent("realm:stash_count", text);
+  } catch (e) {
+    console.warn(`[stash] count: ${e}`);
+  }
+}
+
 // /realm:help lists this pack while it's installed: answer its ping with the folder name.
 onScriptEvent(
-  ["realm:help_ping", "realm:refill_need", "realm:access_check", "realm:access_check_result"],
+  ["realm:help_ping", "realm:refill_need", "realm:stash_count_ask", "realm:access_check", "realm:access_check_result"],
   ({ id, message }) => {
     if (id === "realm:help_ping") system.sendScriptEvent("realm:help_pong", "stash_bp");
     else if (id === "realm:refill_need") refillNeed(message);
+    else if (id === "realm:stash_count_ask") stashCountAsk(message);
     else if (id === "realm:access_check" || id === "realm:access_check_result") {
       try {
         if (id === "realm:access_check") answerAccess(message);

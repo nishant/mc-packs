@@ -253,6 +253,64 @@ function nativeEntries(entries) {
   });
 }
 
+/** Tells packs that count items (Saga's collect steps) that what the saved pages hold changed. @param {Player} player */
+function announceChange(player) {
+  try {
+    system.sendScriptEvent("realm:stash_changed", JSON.stringify({ player: player.id }));
+  } catch {
+    // a notice that can't be sent only delays a recount
+  }
+}
+
+/** @type {Map<string, { sig: string, rows: Map<string, { id: string, name?: string, lore?: string[], n: number }[]> }>} per player: what each item id has on saved pages, valid while the page refs are the same */
+const storedCache = new Map();
+
+/**
+ * What the player's saved pages (not the active one) hold of an item, as one row per name and lore, for
+ * realm:stash_count. Only pages the committed index says may hold the item are read, and the answer is kept until a
+ * page changes. Undefined when a page can't be read, so a caller waits rather than counting it as empty.
+ * @param {Player} player @param {string} id
+ * @returns {{ id: string, name?: string, lore?: string[], n: number }[] | undefined}
+ */
+export function storedCount(player, id) {
+  let state;
+  try {
+    state = stateOf(player);
+  } catch {
+    return undefined;
+  }
+  if (state.pending) return undefined;
+  const cur = curPage(player);
+  const sig = `${cur}|${Object.entries(state.pages).map(([p, r]) => `${p}:${r.id}`).join(",")}`;
+  let cache = storedCache.get(player.id);
+  if (!cache || cache.sig !== sig) {
+    cache = { sig, rows: new Map() };
+    storedCache.set(player.id, cache);
+  }
+  const known = cache.rows.get(id);
+  if (known) return known;
+  /** @type {Map<string, { id: string, name?: string, lore?: string[], n: number }>} */
+  const out = new Map();
+  for (const p of Object.keys(state.pages).map(Number)) {
+    if (p === cur || !mayHold(player, p, id)) continue;
+    const entries = readPage(player, p);
+    if (!entries) return undefined;
+    for (const e of entries) {
+      if (e.id !== id) continue;
+      const item = deserializeStack(e);
+      if (!item) return undefined;
+      const lore = item.getLore();
+      const key = `${e.name ?? ""}|${JSON.stringify(lore)}`;
+      const row = out.get(key) ?? { id, name: e.name, lore: lore.length ? lore : undefined, n: 0 };
+      row.n += e.n;
+      out.set(key, row);
+    }
+  }
+  const rows = [...out.values()];
+  cache.rows.set(id, rows);
+  return rows;
+}
+
 /**
  * Builds immutable page images, then commits them together with the inventory.
  * Empty snapshots intentionally shadow legacy JSON so it can never be restored twice.
@@ -278,6 +336,7 @@ function commitPages(player, edits, after, cur = curPage(player), decorate) {
     pruneIndex(next);
     decorate?.(next, edits);
     commitInventory(player, old, next, after);
+    if (edits.size) announceChange(player);
   } catch (e) {
     const live = stateOf(player);
     if (!(e instanceof InventoryRecoveryError) && !live.pending) for (const ref of created) if (!Object.values(live.pages).some((r) => r.id === ref.id)) discardSnapshot(ref);

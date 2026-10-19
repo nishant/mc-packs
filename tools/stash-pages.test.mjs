@@ -261,7 +261,7 @@ mc.server = {
     run: (fn) => mc.queue.push(fn),
     runInterval: (fn) => mc.intervals.push(fn),
     runTimeout: (fn) => mc.queue.push(fn),
-    sendScriptEvent: (id, message) => mc.events.push({ id, message }),
+    sendScriptEvent: (id, message) => (id === "realm:stash_changed" ? (mc.notes ??= []) : mc.events).push({ id, message }),
     afterEvents: new Proxy({}, { get: (_, name) => subscribable("system:" + String(name)) }),
     beforeEvents: new Proxy({}, { get: (_, name) => subscribable("system:before:" + String(name)) }),
   },
@@ -372,7 +372,7 @@ Object.assign(mc.defaults, Object.fromEntries(["sneakTap", "sortHotbar", "locks"
 const mainServerUrl = dataUrl(`const m = globalThis.__mc.server; export const { Block, BlockTypes, BlockVolume, CommandPermissionLevel, Container, CustomCommandParamType, CustomCommandStatus, Dimension, Direction, ItemStack, Player, system, world } = m;`);
 // The router keeps its handlers in module state: each copy of main.js gets its own copy of script-events.js (a pack loads once in the game).
 const eventsSource = readFileSync(new URL("../packs/stash_bp/scripts/script-events.js", import.meta.url), "utf8").replace('"@minecraft/server"', JSON.stringify(mainServerUrl));
-const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const refillFromPages = () => undefined; export const setOpPages = () => ({ ok: true, message: "" });`);
+const pagesStubUrl = dataUrl(`export const buttonSlots = () => new Set(); export const initPages = () => {}; export const openInvMenu = async () => {}; export const refillFromPages = () => undefined; export const storedCount = () => []; export const setOpPages = () => ({ ok: true, message: "" });`);
 const mainSource = readFileSync(new URL("../packs/stash_bp/scripts/main.js", import.meta.url), "utf8")
   .replace('import "./diag.js";', "")
   .replace('"@minecraft/server-ui"', JSON.stringify(uiUrl))
@@ -2101,6 +2101,29 @@ test("O17: the Expansive Inventory menu and the scan list restore no indexed pag
     mc.pages = 5;
     mc.players = all;
   }
+});
+
+test("saga bridge: storedCount reports saved pages only, reads each indexed page once per change, and a move announces itself", () => {
+  const p = joined();
+  mc.players = [p];
+  mc.notes = [];
+  const lored = stack("minecraft:amethyst_shard", 5);
+  lored.setLore(["x"]);
+  arrange(p, { 1: { 9: stack("minecraft:amethyst_shard", 5), 10: stack("minecraft:stone", 3) }, 2: { 9: lored, 10: stack("minecraft:amethyst_shard", 2) }, 3: { 9: stack("minecraft:emerald", 1) } });
+  mc.notes = [];
+  const shard = "minecraft:amethyst_shard";
+  p.container.setItem(20, stack(shard, 4));
+  const rows = pages.storedCount(p, shard);
+  assert.equal(rows.reduce((a, r) => a + r.n, 0), 7, "the active page (page 1) is the asker's to count");
+  assert.equal(rows.length, 2, "one row per lore");
+  const loads = mc.loads;
+  assert.deepEqual(pages.storedCount(p, shard), rows);
+  assert.equal(mc.loads, loads, "answered from the cache while no page changed");
+  assert.deepEqual(pages.storedCount(p, "minecraft:diamond"), []);
+  assert.equal(mc.loads, loads, "no indexed page holds a diamond, so none was read");
+  assert.equal(pages.transferStacks(p, { from: 1, to: 3, slots: [9] }).ok, true);
+  assert.equal(mc.notes.length > 0, true, "a move says the saved pages changed");
+  assert.equal(pages.storedCount(p, shard).reduce((a, r) => a + r.n, 0), 12, "page 1's 5 now sit on saved page 3");
 });
 
 test("O17: locked, named and variant stacks are never pulled by refill; many pages without a match stay untouched", () => {
